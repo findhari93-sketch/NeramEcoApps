@@ -377,7 +377,16 @@ export default function DesktopSidebar({ items, groups, homePath }: DesktopSideb
           <ListItemIcon
             sx={{ minWidth: 36, color: 'inherit', '& .MuiSvgIcon-root': { fontSize: '1.25rem' } }}
           >
-            {item.icon}
+            {/* The folder's own count (the Question Bank's reported questions),
+                so it shows whether the folder is open or closed. */}
+            <Badge
+              badgeContent={getBadgeCount(item.path)}
+              color="error"
+              max={99}
+              sx={{ '& .MuiBadge-badge': { fontSize: '0.625rem', height: 18, minWidth: 18, padding: '0 4px' } }}
+            >
+              {item.icon}
+            </Badge>
           </ListItemIcon>
           <ListItemText
             primary={item.label}

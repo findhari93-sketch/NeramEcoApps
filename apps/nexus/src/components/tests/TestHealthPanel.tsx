@@ -42,6 +42,7 @@ import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import StudentAvatar from '@/components/students/StudentAvatar';
 import { copyText, downloadText } from '@/lib/clipboard';
 import { buildHealthPrompt } from '@/lib/test-health';
+import { isQBReportTarget, qbReportLabel } from '@neram/database';
 import type { AffectedStudent, TestIssue, TestIssueStream } from '@/lib/test-health';
 
 const STREAM_META: Record<TestIssueStream, { label: string; icon: React.ReactNode }> = {
@@ -54,6 +55,8 @@ interface ReportRow {
   id: string;
   question_id: string;
   report_type: string | null;
+  /** Which part was reported. Absent on rows from before reports named one. */
+  target?: string | null;
   description: string | null;
   created_at: string;
 }
@@ -71,14 +74,6 @@ interface Toast {
   undo: boolean;
 }
 
-const REPORT_LABEL: Record<string, string> = {
-  wrong_answer: 'Answer looks wrong',
-  no_correct_option: 'No correct option',
-  question_error: 'Mistake in the question',
-  missing_solution: 'No solution given',
-  unclear_question: 'Question is unclear',
-  other: 'Other',
-};
 
 const FOCUS_RING = {
   '&.Mui-focusVisible': { outline: '3px solid', outlineColor: 'primary.main', outlineOffset: 2 },
@@ -509,7 +504,7 @@ export default function TestHealthPanel({
               <Box key={r.id} sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.75, mb: 0.5 }}>
                 <Chip
                   size="small"
-                  label={REPORT_LABEL[r.report_type || 'other'] || 'Other'}
+                  label={qbReportLabel(isQBReportTarget(r.target) ? r.target : null, r.report_type)}
                   variant="outlined"
                   sx={{ height: 18, fontSize: '0.62rem', fontWeight: 700, flexShrink: 0 }}
                 />

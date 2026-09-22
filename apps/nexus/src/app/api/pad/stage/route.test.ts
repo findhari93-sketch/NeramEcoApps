@@ -61,13 +61,18 @@ const SNAPSHOT: TeacherSnapshot = {
     correct_keys: ['B'],
     ungraded: false,
     label: null,
+    question_text: null,
+    image_url: null,
+    option_texts: null,
     opened_at: '2026-09-11T10:00:00Z',
     closed_at: '2026-09-11T10:01:00Z',
     revealed_at: '2026-09-11T10:02:00Z',
     answered_count: 23,
+    last_nudged_at: null,
   },
   counts: { enrolled: 31, answered: 23, silent: 5, absent: 3, correct: 15, incorrect: 8, answered_off_roster: 0 },
   groups: [{ value: 'B', count: 15 }],
+  skips: { total: 0, by_reason: {} },
   history: [],
 };
 

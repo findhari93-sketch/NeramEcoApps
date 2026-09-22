@@ -14,7 +14,8 @@
  *      TeamsTab.ReadWriteSelfForChat.All, so it can install and pin itself and
  *      nothing else. The plain ReadWrite permissions cannot install an app that
  *      carries resource-specific permissions, and ours does, which is why the
- *      install sends a consent set, and that set must equal the manifest's.
+ *      install sends a consent set, and that set must equal the manifest's
+ *      (Neram Pad Dev, which has fewer, is installed without one).
  *   2. Timing. A scheduled meeting's chat can refuse Graph until somebody joins,
  *      so a 404 on the first read is "not ready yet", reported as such for the
  *      sweep to retry, not a failure.
@@ -156,10 +157,17 @@ export async function ensureAnswerPadInMeeting(input: MeetingTabInput, deps: Mee
   if (!apps.response.ok) return refused(chatId, 'list apps', apps.response, 'chat_not_ready');
 
   if (!(await listsApp(apps.response, input.catalogAppId))) {
-    const install = await send('POST', '/installedApps', {
+    let install = await send('POST', '/installedApps', {
       'teamsApp@odata.bind': appBind,
       consentedPermissionSet: consentedPermissionSet(),
     });
+    // The consent set must equal the app's own permissions. The bot-free Neram
+    // Pad Dev package keeps only the delegated one, and Graph takes no consent
+    // set at all for an app like that, so a 400 on the full set gets one retry
+    // without it. Neram Assistant takes the first request as it is.
+    if (!('error' in install) && install.response.status === 400) {
+      install = await send('POST', '/installedApps', { 'teamsApp@odata.bind': appBind });
+    }
     if ('error' in install) return { outcome: 'failed', chatId, reason: install.error };
     // 409: somebody (or an overlapping sweep) installed it a moment ago, which is fine.
     // A 404 here means the chat answered but the app is not in the catalog.

@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Paper, Typography, alpha, useTheme, useMediaQuery } from '@neram/ui';
+import { Box, Paper, Typography, alpha, useTheme } from '@neram/ui';
 import type { NexusQBQuestionOption } from '@neram/database';
 import MathText from '@/components/common/MathText';
 
@@ -25,12 +25,10 @@ export default function MCQOptions({
   lang = 'en',
 }: MCQOptionsProps) {
   const theme = useTheme();
-  const isDesktop = useMediaQuery(theme.breakpoints.up('sm'));
 
   // Determine if options are short enough for 2-column layout
   const allShort =
     options.every((o) => (!o.text || o.text.length < 80) && !o.image_url);
-  const useGrid = allShort && isDesktop;
 
   const getOptionStyles = (optionId: string) => {
     const isSelected = optionId === selectedId;
@@ -80,20 +78,28 @@ export default function MCQOptions({
   const showFallbackHint = hindiActive && !hasAnyHindiOption;
 
   return (
-    <Box>
+    // Two columns when the OPTIONS have the room, not the window: beside the
+    // practice rail a 1024px window leaves the reader about 600px, and a
+    // viewport breakpoint split that into two cramped columns.
+    <Box sx={{ containerType: 'inline-size' }}>
       {showFallbackHint && (
         <Typography
           variant="caption"
           sx={{ color: 'text.disabled', mb: 0.5, display: 'block', fontStyle: 'italic' }}
         >
-          Hindi options not available — showing English
+          Hindi options are not available, showing English
         </Typography>
       )}
       <Box
+        role="radiogroup"
+        aria-label="Answer options"
         sx={{
           display: 'grid',
-          gridTemplateColumns: useGrid ? 'repeat(2, 1fr)' : '1fr',
+          gridTemplateColumns: 'minmax(0, 1fr)',
           gap: 1,
+          ...(allShort && {
+            '@container (min-width: 520px)': { gridTemplateColumns: 'repeat(2, minmax(0, 1fr))' },
+          }),
         }}
       >
       {options.map((option, idx) => {

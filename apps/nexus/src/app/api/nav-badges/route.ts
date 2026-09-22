@@ -3,7 +3,7 @@ import { listUnflipped } from '@neram/database/queries/nexus';
 import { getRequestUser } from '@/lib/study-materials';
 import { staffStudentIds } from '@/lib/sketchbook-access';
 import { countOwedDrawings } from '@/lib/owed-drawings';
-import { getSupabaseAdminClient } from '@neram/database';
+import { getOpenQBReportQuestionCount, getSupabaseAdminClient } from '@neram/database';
 import { httpStatusForError } from '@/lib/api-errors';
 
 /** How recently a reason has to have arrived to still count as news. */
@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
       const roster = staffStudentIds(user, null);
       roster.catch(() => {});
 
-      const [issues, owed, photoCount, freshReasons, sketchInbox] = await Promise.all([
+      const [issues, owed, photoCount, freshReasons, sketchInbox, qbReports] = await Promise.all([
         // Tickets in play, plus tickets carrying a reply nobody on the team has
         // read yet. One RPC rather than two head counts because PostgREST
         // cannot compare two columns, so `staff_seen_at < last_reply_at` has no
@@ -152,9 +152,18 @@ export async function GET(request: NextRequest) {
             return 0;
           }
         })(),
+
+        // Questions a student has reported a mistake in, still open. A shared
+        // queue like the issues inbox: any staff member closing a report clears
+        // it for everyone, so every staff member can drive it to zero. Zero
+        // rather than a failed sidebar if the reports table is unreachable.
+        Promise.resolve()
+          .then(() => getOpenQBReportQuestionCount(supabase))
+          .catch(() => 0),
       ]);
 
       badges.issues = issueBadgeTotal(issues.data);
+      badges.qb_reports = qbReports;
       badges.assignment_drawings = owed.assignment;
       badges.test_drawings = owed.test;
       badges.photo_review = typeof photoCount.data === 'number' ? photoCount.data : 0;

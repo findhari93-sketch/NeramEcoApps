@@ -14,6 +14,7 @@ import ClipboardPasteZone from './ClipboardPasteZone';
 import VoiceNotePlayer, { type VoiceProgressReport } from './voice/VoiceNotePlayer';
 import { compressImage } from '@/utils/imageCompression';
 import { measureImageQuality } from '@/lib/measure-image-quality';
+import type { ImageQuality } from '@/lib/image-quality';
 import { nextRotation, prevRotation, rotationTransform, type Rotation } from '@/lib/image-rotation';
 import { useCanCapturePhoto } from '@/hooks/useCanCapturePhoto';
 import type { VoiceFeedbackView } from '@/lib/drawing-voice-feedback';
@@ -45,7 +46,7 @@ interface DrawingSubmissionSheetProps {
    */
   submitUrl?: string;
   /** The body for `submitUrl`. Required when submitUrl is set. */
-  submitBody?: (uploadedUrl: string, selfNote: string | null, thumbnailUrl: string | null) => unknown;
+  submitBody?: (uploadedUrl: string, selfNote: string | null, thumbnailUrl: string | null, imageQuality: ImageQuality | null) => unknown;
   /**
    * Also upload a 400px JPEG and pass its URL as the third submitBody
    * argument. Grids that show many sketches load only the thumbnail.
@@ -216,7 +217,7 @@ export default function DrawingSubmissionSheet({
         },
         body: JSON.stringify(
           submitUrl && submitBody
-            ? submitBody(url, selfNote || null, thumbnailUrl)
+            ? submitBody(url, selfNote || null, thumbnailUrl, imageQuality)
             : {
                 question_id: questionId || null,
                 assignment_id: assignmentId || null,

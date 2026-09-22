@@ -2,63 +2,80 @@
 
 /**
  * The teacher's Answer Pad console, sized for the Teams meeting side panel
- * (about 320px wide) and usable up to a tablet.
+ * (about 320px wide) and usable up to a tablet, or in its own window (Pop out).
  *
  * One primary action at a time: ASK, then CLOSE, then choose the key and
- * REVEAL, then ASK again. While students are answering the console shows a
- * count only, never names or answers. Every button press is followed by a
- * fresh snapshot, so the screen always shows the server's state, including
- * after a refused or repeated press.
+ * REVEAL, then ASK again. The key can also wait: Decide later moves on to the
+ * next question, and the answer is set from Questions so far or from the class
+ * report after the class. While students are answering the console shows a
+ * count only, never names or answers. Every button press is followed by a fresh
+ * snapshot, so the screen always shows the server's state, including after a
+ * refused or repeated press.
  */
 
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type FormEvent, type MouseEvent, type ReactNode } from 'react';
 import {
   Alert,
   Box,
   Button,
   Chip,
   CircularProgress,
+  Collapse,
   Divider,
   IconButton,
+  ImageUploadField,
+  ListItemIcon,
+  ListItemText,
+  Menu,
+  MenuItem,
   Paper,
   Stack,
   TextField,
   ToggleButton,
+  Tooltip,
   Typography,
-  alpha,
   useTheme,
 } from '@neram/ui';
 import AddRounded from '@mui/icons-material/AddRounded';
 import CampaignRounded from '@mui/icons-material/CampaignRounded';
 import CancelRounded from '@mui/icons-material/CancelRounded';
 import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded';
+import EditRounded from '@mui/icons-material/EditRounded';
 import ErrorOutlineRounded from '@mui/icons-material/ErrorOutlineRounded';
+import ExpandMoreRounded from '@mui/icons-material/ExpandMoreRounded';
+import HelpOutlineRounded from '@mui/icons-material/HelpOutlineRounded';
 import HowToVoteRounded from '@mui/icons-material/HowToVoteRounded';
+import MoreVertRounded from '@mui/icons-material/MoreVertRounded';
 import NotificationsActiveRounded from '@mui/icons-material/NotificationsActiveRounded';
+import BackHandRounded from '@mui/icons-material/BackHandRounded';
+import OpenInNewRounded from '@mui/icons-material/OpenInNewRounded';
 import PersonOffRounded from '@mui/icons-material/PersonOffRounded';
 import RemoveRounded from '@mui/icons-material/RemoveRounded';
 import ReplayRounded from '@mui/icons-material/ReplayRounded';
+import ScheduleRounded from '@mui/icons-material/ScheduleRounded';
 import ScreenShareRounded from '@mui/icons-material/ScreenShareRounded';
 import StopCircleRounded from '@mui/icons-material/StopCircleRounded';
 import StopScreenShareRounded from '@mui/icons-material/StopScreenShareRounded';
-import VisibilityRounded from '@mui/icons-material/VisibilityRounded';
 import VolumeOffRounded from '@mui/icons-material/VolumeOffRounded';
-import { answerTypeLabel, displayAnswer, displayKeys } from '@/lib/pad/client/format';
-import { PadClientError, padFetch } from '@/lib/pad/client/pad-fetch';
+import { SKIP_REASON_LABELS, answerTypeLabel, displayKeys, nextLabel, promptTitle, skipSummary } from '@/lib/pad/client/format';
+import { PadClientError, padFetch, padUpload } from '@/lib/pad/client/pad-fetch';
 import type { PadHost } from '@/lib/pad/client/pad-host';
 import type { RealtimeState } from '@/lib/pad/client/poll-policy';
 import {
   consoleAnnouncement,
   deriveConsoleView,
   groupParticipation,
-  keyChoices,
+  groupsFromParticipation,
+  historyChipLabel,
   reminderMessage,
   revealSummary,
-  toggleKey,
   type ReminderResult,
   type SummaryItem,
 } from '@/lib/pad/client/teacher-view';
-import type { AnswerType, ParticipationRow, TeacherPrompt, TeacherSnapshot } from '@/lib/pad/client/types';
+import type { AnswerType, HistoryEntry, ParticipationRow, TeacherPrompt, TeacherSnapshot } from '@/lib/pad/client/types';
+import { nudgeResultMessage, type NudgeResult } from '@/lib/pad/nudge-message';
+import { compressImage } from '@/utils/imageCompression';
+import AnswerKeyPicker, { AnswerBars } from './AnswerKeyPicker';
 import LiveAnnouncement from './LiveAnnouncement';
 import { usePadSnapshot } from './usePadSnapshot';
 
@@ -80,10 +97,22 @@ function actionMessage(err: unknown): string {
   switch (err.code) {
     case 'INVALID_TRANSITION':
       return 'That question had already moved on. The screen now shows where it is.';
+    case 'NOT_LATEST_PROMPT':
+      return 'Only the newest question can be reopened.';
     case 'KEY_REQUIRED':
       return 'Choose the correct answer, or mark it as a poll, before revealing.';
     case 'INVALID_KEY':
       return 'That is not a valid answer for this question.';
+    case 'INVALID_INPUT':
+      return err.detail.field === 'label'
+        ? 'The question number can be up to 80 characters.'
+        : err.detail.field === 'text'
+          ? 'The question can be up to 500 characters.'
+          : err.detail.field === 'image' || err.detail.field === 'imageUrl'
+            ? 'That picture could not be used. Paste it again.'
+            : err.detail.field === 'options'
+              ? 'Each option can be up to 200 characters.'
+              : 'Something in that request was not right. Please try again.';
     case 'SESSION_NOT_LIVE':
       return 'This class has already ended.';
     case 'NOT_SESSION_TEACHER':
@@ -97,12 +126,42 @@ function actionMessage(err: unknown): string {
   }
 }
 
+/** What a failed picture upload says, in the upload field itself. */
+function pictureUploadMessage(err: unknown): string {
+  if (err instanceof PadClientError) {
+    if (err.offline) return 'No connection. Paste the picture again when you are back online.';
+    if (err.code === 'RATE_LIMITED') return 'This class has 60 pictures already.';
+    if (err.code === 'SESSION_NOT_LIVE') return 'This class has ended.';
+    if (err.code === 'INVALID_INPUT') return 'Use a PNG, JPEG or WebP picture up to 10 MB.';
+  }
+  return 'The picture could not be uploaded. Please try again.';
+}
+
+/** Seconds left until `untilMs`, ticking once a second while there are any. */
+function useSecondsLeft(untilMs: number | null): number {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!untilMs || untilMs <= Date.now()) return;
+    setNow(Date.now());
+    const timer = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(timer);
+  }, [untilMs]);
+  return untilMs ? Math.max(0, Math.ceil((untilMs - now) / 1_000)) : 0;
+}
+
+/** Nudging waits a minute between presses, as the database does. */
+const NUDGE_INTERVAL_MS = 60_000;
+
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' });
 }
 
-export default function TeacherConsole({ host }: { host: PadHost }) {
-  const [start, setStart] = useState<StartState>({ kind: 'starting' });
+/**
+ * @param sessionId set in the popped-out window: that session runs straight
+ *   away, with no start request (the window has no meeting to start one from).
+ */
+export default function TeacherConsole({ host, sessionId }: { host: PadHost; sessionId?: string }) {
+  const [start, setStart] = useState<StartState>(sessionId ? { kind: 'running', sessionId } : { kind: 'starting' });
 
   const startSession = useCallback(
     async (extra: { classroomId?: string; endExisting?: boolean } = {}) => {
@@ -129,8 +188,8 @@ export default function TeacherConsole({ host }: { host: PadHost }) {
   );
 
   useEffect(() => {
-    void startSession();
-  }, [startSession]);
+    if (!sessionId) void startSession();
+  }, [sessionId, startSession]);
 
   switch (start.kind) {
     case 'starting':
@@ -179,7 +238,7 @@ export default function TeacherConsole({ host }: { host: PadHost }) {
       );
 
     case 'running':
-      return <LiveConsole host={host} sessionId={start.sessionId} onStartAgain={() => startSession()} />;
+      return <LiveConsole host={host} sessionId={start.sessionId} onStartAgain={sessionId ? undefined : () => startSession()} />;
   }
 }
 
@@ -234,15 +293,73 @@ function useStoredState<T>(key: string, initial: T, valid: (value: unknown) => v
 const isAnswerType = (value: unknown): value is AnswerType => typeof value === 'string' && (ANSWER_TYPES as string[]).includes(value);
 const isOptionCount = (value: unknown): value is number => typeof value === 'number' && Number.isInteger(value) && value >= 2 && value <= 6;
 
-function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; sessionId: string; onStartAgain: () => void }) {
+/**
+ * Putting the class results on the meeting screen (the /pad/stage page: totals
+ * and the breakdown, never names). Only where Teams lets this person share,
+ * which means organizers and presenters. It replaces a screen share, so it
+ * lives in the console's menu rather than as a big button.
+ */
+function useStageShare(host: PadHost) {
+  const stage = host.stage;
+  const [allowed, setAllowed] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!stage) return;
+    let active = true;
+    void Promise.all([stage.canShare().catch(() => false), stage.isSharing().catch(() => false)]).then(([can, now]) => {
+      if (!active) return;
+      setAllowed(can);
+      setSharing(now);
+    });
+    return () => {
+      active = false;
+    };
+  }, [stage]);
+
+  const toggle = async () => {
+    if (!stage) return;
+    setBusy(true);
+    setProblem(null);
+    try {
+      if (sharing) {
+        await stage.stop();
+        setSharing(false);
+      } else {
+        await stage.share(`${window.location.origin}/pad/stage`);
+        setSharing(true);
+      }
+    } catch {
+      setProblem(sharing ? 'Sharing did not stop. Use Stop sharing on the meeting screen.' : 'The results could not be shared. Please try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return { allowed: !!stage && allowed, sharing, busy, problem, clearProblem: () => setProblem(null), toggle };
+}
+
+function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; sessionId: string; onStartAgain?: () => void }) {
   const { snapshot, error, realtime, refresh } = usePadSnapshot<TeacherSnapshot>({ host, sessionId, role: 'teacher' });
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [askType, setAskType] = useStoredState<AnswerType>('pad-ask-type', 'mcq', isAnswerType);
   const [optionCount, setOptionCount] = useStoredState<number>('pad-option-count', 4, isOptionCount);
-  const [endStep, setEndStep] = useState<null | { unrevealed: number | null }>(null);
+  const [askLabel, setAskLabel] = useState('');
+  const [askText, setAskText] = useState('');
+  const [askImage, setAskImage] = useState<string | null>(null);
+  const [askOptions, setAskOptions] = useState<string[]>([]);
+  const [nudge, setNudge] = useState<{ promptId: string; message: string; until: number | null } | null>(null);
+  const [endStep, setEndStep] = useState<null | { unrevealed: { title: string; count: number } | null }>(null);
   const [historyPromptId, setHistoryPromptId] = useState<string | null>(null);
   const [reminder, setReminder] = useState<string | null>(null);
+  /** Questions the teacher chose to answer later, so the console moves on to the next one. */
+  const [deferred, setDeferred] = useState<ReadonlySet<string>>(() => new Set());
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const share = useStageShare(host);
 
   const view = deriveConsoleView(snapshot);
 
@@ -268,6 +385,28 @@ function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; session
   const currentPromptId = snapshot?.prompt?.id ?? null;
   useEffect(() => setReminder(null), [currentPromptId]);
 
+  /** The question's picture: shrunk in the browser (a pasted screenshot is often several MB), then stored for this class. */
+  const uploadPicture = useCallback(
+    async (file: File) => {
+      try {
+        const shrunk = await compressImage(file, 1600, 0.85, 'question.jpg');
+        const { url } = await padUpload<{ url: string }>(host, `/api/pad/sessions/${sessionId}/image`, shrunk, shrunk.name);
+        return { url };
+      } catch (err) {
+        throw new Error(pictureUploadMessage(err));
+      }
+    },
+    [host, sessionId],
+  );
+
+  // The next question's number, suggested from the last one ("38" after "37"),
+  // replaced only when a new question is asked or a number is edited.
+  const history = snapshot?.history ?? [];
+  const lastEntry = history.length > 0 ? history[history.length - 1] : null;
+  const lastId = lastEntry?.id ?? null;
+  const lastLabel = lastEntry?.label ?? null;
+  useEffect(() => setAskLabel(nextLabel(lastLabel)), [lastId, lastLabel]);
+
   const remind = () =>
     act('remind', async () => {
       setReminder(null);
@@ -276,7 +415,50 @@ function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; session
     });
 
   const ask = () =>
-    act('ask', () => post('/api/pad/prompts/ask', { sessionId, answerType: askType, ...(askType === 'mcq' ? { optionCount } : {}) }));
+    act('ask', async () => {
+      const label = askLabel.trim();
+      const text = askText.trim();
+      // One entry per option, null where the teacher left it blank; nothing at all when every one is blank.
+      const optionTexts = Array.from({ length: optionCount }, (_, index) => askOptions[index]?.trim() || null);
+      const withOptions = askType === 'mcq' && optionTexts.some((entry) => entry);
+      await post('/api/pad/prompts/ask', {
+        sessionId,
+        answerType: askType,
+        ...(askType === 'mcq' ? { optionCount } : {}),
+        ...(label ? { label } : {}),
+        ...(text ? { text } : {}),
+        ...(askImage ? { imageUrl: askImage } : {}),
+        ...(withOptions ? { optionTexts } : {}),
+      });
+      setAskText('');
+      setAskImage(null);
+      setAskOptions([]);
+    });
+
+  const setPicture = (promptId: string, imageUrl: string | null) =>
+    act('picture', () => post(`/api/pad/prompts/${promptId}/picture`, { imageUrl }));
+
+  const nudgeClass = (promptId: string) =>
+    act('nudge', async () => {
+      try {
+        const result = await padFetch<NudgeResult>(host, `/api/pad/prompts/${promptId}/nudge`, { method: 'POST' });
+        setNudge({ promptId, message: nudgeResultMessage(result), until: Date.now() + NUDGE_INTERVAL_MS });
+      } catch (err) {
+        if (err instanceof PadClientError && err.code === 'RATE_LIMITED') {
+          const seconds = Number(err.detail.retry_after_seconds) || 60;
+          setNudge({ promptId, message: 'You nudged a moment ago.', until: Date.now() + seconds * 1_000 });
+          return;
+        }
+        throw err;
+      }
+    });
+
+  const saveDetails = (promptId: string, label: string | null, text: string | null) =>
+    act('details', () => post(`/api/pad/prompts/${promptId}/details`, { label, text }));
+
+  const setKeys = (promptId: string, keys: string[]) => act('key', () => post(`/api/pad/prompts/${promptId}/key`, { keys }));
+  const setPoll = (promptId: string) => act('key', () => post(`/api/pad/prompts/${promptId}/key`, { ungraded: true }));
+  const reveal = (promptId: string) => act('reveal', () => post(`/api/pad/prompts/${promptId}/reveal`));
 
   const endClass = (confirmUnrevealed: boolean) =>
     act('end', async () => {
@@ -285,12 +467,24 @@ function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; session
         setEndStep(null);
       } catch (err) {
         if (err instanceof PadClientError && err.code === 'UNREVEALED_PROMPT') {
-          setEndStep({ unrevealed: Number(err.detail.sequence) || null });
+          const sequence = Number(err.detail.sequence) || 0;
+          const label = typeof err.detail.label === 'string' ? err.detail.label : null;
+          setEndStep({ unrevealed: { title: promptTitle({ sequence, label }), count: Number(err.detail.count) || 1 } });
           return;
         }
         throw err;
       }
     });
+
+  const popOut = async () => {
+    setMenuAnchor(null);
+    if (!host.popOut) return;
+    try {
+      await host.popOut(sessionId);
+    } catch {
+      setActionError('The pad could not open in its own window. Keep using it here.');
+    }
+  };
 
   if (!snapshot) {
     return error ? (
@@ -303,12 +497,40 @@ function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; session
   }
 
   const session = snapshot.session;
-  const historyPrompt = historyPromptId ? snapshot.history.find((entry) => entry.id === historyPromptId) ?? null : null;
+  const nextSequence = Math.max(lastEntry?.sequence ?? 0, snapshot.prompt?.sequence ?? 0) + 1;
+  const askButton = askLabel.trim() ? `Ask ${promptTitle({ sequence: nextSequence, label: askLabel })}` : `Ask question ${nextSequence}`;
+  const anyRevealed = history.some((entry) => entry.state === 'revealed');
+  const showShareItem = share.allowed && (anyRevealed || share.sharing);
+  const historyPrompt = historyPromptId ? history.find((entry) => entry.id === historyPromptId) ?? null : null;
+  // A closed question waits for its answer once a newer one exists or the teacher said Decide later.
+  const waiting = (entry: HistoryEntry) => entry.state === 'closed' && (entry.id !== snapshot.prompt?.id || deferred.has(entry.id));
+
+  const askControls = (
+    <AskControls
+      answerType={askType}
+      optionCount={optionCount}
+      onAnswerType={setAskType}
+      onOptionCount={setOptionCount}
+      label={askLabel}
+      onLabel={setAskLabel}
+      text={askText}
+      onText={setAskText}
+      image={askImage}
+      onImage={setAskImage}
+      uploadPicture={uploadPicture}
+      options={askOptions}
+      onOptions={setAskOptions}
+      busy={busy === 'ask'}
+      disabled={busy !== null}
+      buttonLabel={askButton}
+      onAsk={ask}
+    />
+  );
 
   return (
     <Stack spacing={2} sx={{ width: '100%' }}>
-      <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1}>
-        <Box sx={{ minWidth: 0 }}>
+      <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={0.5}>
+        <Box sx={{ minWidth: 0, flex: 1 }}>
           <Typography variant="subtitle1" component="h1" fontWeight={800} sx={{ overflowWrap: 'anywhere', lineHeight: 1.3 }}>
             {session.classroom_name ?? 'Answer Pad'}
           </Typography>
@@ -316,12 +538,79 @@ function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; session
             {`Started ${formatTime(session.created_at)}`}
           </Typography>
         </Box>
+        {host.popOut && view.kind !== 'ended' && (
+          <Tooltip title="Open in its own window">
+            <IconButton aria-label="Open the Answer Pad in its own window" onClick={popOut} sx={{ width: 44, height: 44, flexShrink: 0 }}>
+              <OpenInNewRounded />
+            </IconButton>
+          </Tooltip>
+        )}
+        <IconButton
+          aria-label="More options"
+          aria-haspopup="menu"
+          aria-expanded={menuAnchor ? true : undefined}
+          onClick={(event: MouseEvent<HTMLElement>) => setMenuAnchor(event.currentTarget)}
+          sx={{ width: 44, height: 44, flexShrink: 0 }}
+        >
+          <MoreVertRounded />
+        </IconButton>
         {view.kind !== 'ended' && (
           <Button color="error" size="small" onClick={() => setEndStep({ unrevealed: null })} disabled={busy !== null} sx={{ minHeight: 44, flexShrink: 0 }}>
             End class
           </Button>
         )}
       </Stack>
+
+      <Menu anchorEl={menuAnchor} open={!!menuAnchor} onClose={() => setMenuAnchor(null)}>
+        {showShareItem && (
+          <MenuItem
+            disabled={share.busy}
+            onClick={() => {
+              setMenuAnchor(null);
+              void share.toggle();
+            }}
+            sx={{ minHeight: 48, whiteSpace: 'normal' }}
+          >
+            <ListItemIcon>{share.sharing ? <StopScreenShareRounded /> : <ScreenShareRounded />}</ListItemIcon>
+            <ListItemText
+              primary={share.sharing ? 'Stop showing results on the meeting screen' : 'Show results on the meeting screen'}
+              secondary={share.sharing ? null : 'This replaces your screen share'}
+            />
+          </MenuItem>
+        )}
+        <MenuItem
+          onClick={() => {
+            setMenuAnchor(null);
+            setHelpOpen(true);
+          }}
+          sx={{ minHeight: 48 }}
+        >
+          <ListItemIcon>
+            <HelpOutlineRounded />
+          </ListItemIcon>
+          <ListItemText primary="Using one screen?" />
+        </MenuItem>
+      </Menu>
+
+      {helpOpen && <OneScreenHelp canPopOut={!!host.popOut} onPopOut={popOut} onClose={() => setHelpOpen(false)} />}
+
+      {share.sharing && (
+        <Alert
+          severity="info"
+          action={
+            <Button color="inherit" size="small" onClick={() => void share.toggle()} disabled={share.busy} sx={{ minHeight: 44 }}>
+              Stop
+            </Button>
+          }
+        >
+          The results are on the meeting screen.
+        </Alert>
+      )}
+      {share.problem && (
+        <Alert severity="warning" onClose={share.clearProblem}>
+          {share.problem}
+        </Alert>
+      )}
 
       {endStep && (
         <Alert
@@ -337,9 +626,11 @@ function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; session
             </Stack>
           }
         >
-          {endStep.unrevealed !== null
-            ? `Question ${endStep.unrevealed} isn't revealed. It will not count towards anyone's score.`
-            : 'End the Answer Pad for this class?'}
+          {endStep.unrevealed === null
+            ? 'End the Answer Pad for this class?'
+            : endStep.unrevealed.count > 1
+              ? `${endStep.unrevealed.count} questions have no answer yet, starting with ${endStep.unrevealed.title}. You can set them later from the class report, and scores update then.`
+              : `${endStep.unrevealed.title} has no answer yet. You can set it later from the class report, and scores update then.`}
         </Alert>
       )}
 
@@ -357,28 +648,28 @@ function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; session
         {view.kind === 'ready' && (
           <Stack spacing={2}>
             <ReadinessPanel snapshot={snapshot} host={host} realtime={realtime} />
-            <AskControls
-              answerType={askType}
-              optionCount={optionCount}
-              onAnswerType={setAskType}
-              onOptionCount={setOptionCount}
-              busy={busy === 'ask'}
-              disabled={busy !== null}
-              label="Ask question 1"
-              onAsk={ask}
-            />
+            {askControls}
           </Stack>
         )}
 
         {view.kind === 'open' && (
           <OpenPanel
-            sequence={view.prompt.sequence}
+            prompt={view.prompt}
             answered={view.answered}
             enrolled={view.enrolled}
             offRoster={view.offRoster}
             busy={busy === 'close'}
             disabled={busy !== null}
             onClose={() => act('close', () => post(`/api/pad/prompts/${view.prompt.id}/close`))}
+            onDetails={(label, text) => saveDetails(view.prompt.id, label, text)}
+            skips={snapshot.skips}
+            lastNudgedAt={view.prompt.last_nudged_at}
+            serverTime={snapshot.server_time}
+            nudge={nudge?.promptId === view.prompt.id ? nudge : null}
+            nudging={busy === 'nudge'}
+            onNudge={() => nudgeClass(view.prompt.id)}
+            uploadPicture={uploadPicture}
+            onPicture={(imageUrl) => setPicture(view.prompt.id, imageUrl)}
             canRemind={snapshot.session.bot_in_meeting}
             reminding={busy === 'remind'}
             reminder={reminder}
@@ -386,74 +677,129 @@ function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; session
           />
         )}
 
-        {view.kind === 'closed' && (
-          <ClosedPanel
-            prompt={view.prompt}
-            groups={snapshot.groups}
-            decided={view.decided}
-            busy={busy}
-            onReopen={() => act('reopen', () => post(`/api/pad/prompts/${view.prompt.id}/reopen`))}
-            onKeys={(keys) => act('key', () => post(`/api/pad/prompts/${view.prompt.id}/key`, { keys }))}
-            onPoll={() => act('key', () => post(`/api/pad/prompts/${view.prompt.id}/key`, { ungraded: true }))}
-            onReveal={() => act('reveal', () => post(`/api/pad/prompts/${view.prompt.id}/reveal`))}
-          />
-        )}
+        {view.kind === 'closed' &&
+          (deferred.has(view.prompt.id) ? (
+            <Stack spacing={2}>
+              <Alert
+                severity="info"
+                icon={<ScheduleRounded />}
+                action={
+                  <Button
+                    color="inherit"
+                    size="small"
+                    onClick={() => setDeferred((current) => new Set([...current].filter((id) => id !== view.prompt.id)))}
+                    sx={{ minHeight: 44 }}
+                  >
+                    Set it now
+                  </Button>
+                }
+              >
+                {`${promptTitle(view.prompt)} is waiting for its answer. Set it from Questions so far, or from the class report after class.`}
+              </Alert>
+              {askControls}
+            </Stack>
+          ) : (
+            <ClosedPanel
+              prompt={view.prompt}
+              groups={snapshot.groups}
+              busy={busy}
+              onReopen={() => act('reopen', () => post(`/api/pad/prompts/${view.prompt.id}/reopen`))}
+              onDetails={(label, text) => saveDetails(view.prompt.id, label, text)}
+              onKeys={(keys) => setKeys(view.prompt.id, keys)}
+              onPoll={() => setPoll(view.prompt.id)}
+              onReveal={() => reveal(view.prompt.id)}
+              onDecideLater={() => setDeferred((current) => new Set([...current, view.prompt.id]))}
+            />
+          ))}
 
         {view.kind === 'revealed' && (
           <Stack spacing={2.5}>
-            <RevealedPanel host={host} prompt={view.prompt} snapshot={snapshot} onLabel={(label) => act('label', () => post(`/api/pad/prompts/${view.prompt.id}/label`, { label }))} busy={busy !== null} />
-            <Divider />
-            <AskControls
-              answerType={askType}
-              optionCount={optionCount}
-              onAnswerType={setAskType}
-              onOptionCount={setOptionCount}
-              busy={busy === 'ask'}
-              disabled={busy !== null}
-              label={`Ask question ${view.prompt.sequence + 1}`}
-              onAsk={ask}
+            <RevealedPanel
+              host={host}
+              prompt={view.prompt}
+              snapshot={snapshot}
+              busy={busy !== null}
+              onDetails={(label, text) => saveDetails(view.prompt.id, label, text)}
             />
+            <Divider />
+            {askControls}
           </Stack>
         )}
       </Box>
 
-      {snapshot.history.length > 1 && (
+      {history.length > 1 && (
         <Stack spacing={1}>
           <Typography variant="caption" color="text.secondary" component="h2">
             Questions so far
           </Typography>
           <Box component="nav" aria-label="Questions so far" sx={{ display: 'flex', gap: 1, overflowX: 'auto', pb: 0.5 }}>
-            {snapshot.history.map((entry) => {
-              const current = entry.id === snapshot.prompt?.id;
-              const label =
-                entry.state === 'revealed'
-                  ? entry.ungraded
-                    ? `Q${entry.sequence} poll`
-                    : `Q${entry.sequence} ${entry.correct} of ${entry.answered}`
-                  : `Q${entry.sequence} ${entry.state}`;
+            {history.map((entry) => {
+              const current = entry.id === snapshot.prompt?.id && !waiting(entry);
+              const openable = !current && (entry.state === 'revealed' || waiting(entry));
               return (
                 <Chip
                   key={entry.id}
-                  label={label}
+                  label={historyChipLabel(entry, waiting(entry))}
+                  icon={waiting(entry) ? <ScheduleRounded /> : undefined}
                   variant={current || entry.id === historyPromptId ? 'filled' : 'outlined'}
-                  color={current ? 'primary' : 'default'}
-                  onClick={!current && entry.state === 'revealed' ? () => setHistoryPromptId(entry.id === historyPromptId ? null : entry.id) : undefined}
+                  color={current ? 'primary' : waiting(entry) ? 'warning' : 'default'}
+                  onClick={openable ? () => setHistoryPromptId(entry.id === historyPromptId ? null : entry.id) : undefined}
                   sx={{ minHeight: 36, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}
                 />
               );
             })}
           </Box>
-          {historyPrompt && historyPrompt.id !== snapshot.prompt?.id && (
+          {historyPrompt && (historyPrompt.state === 'revealed' || waiting(historyPrompt)) && (
             <Paper variant="outlined" sx={{ p: 1.5 }}>
-              <Typography variant="subtitle2" fontWeight={700} gutterBottom>
-                {`Question ${historyPrompt.sequence}${historyPrompt.label ? `: ${historyPrompt.label}` : ''}`}
+              <Typography variant="subtitle2" component="h3" fontWeight={700} gutterBottom>
+                {waiting(historyPrompt) ? `Set the answer for ${promptTitle(historyPrompt)}` : promptTitle(historyPrompt)}
               </Typography>
-              <ParticipationDetails host={host} promptId={historyPrompt.id} ungraded={historyPrompt.ungraded} startOpen />
+              {historyPrompt.state === 'revealed' ? (
+                <ParticipationDetails host={host} promptId={historyPrompt.id} ungraded={historyPrompt.ungraded} startOpen />
+              ) : (
+                <LaterKeyPanel
+                  host={host}
+                  entry={historyPrompt}
+                  busy={busy}
+                  onKeys={(keys) => setKeys(historyPrompt.id, keys)}
+                  onPoll={() => setPoll(historyPrompt.id)}
+                  onReveal={() => reveal(historyPrompt.id)}
+                />
+              )}
             </Paper>
           )}
         </Stack>
       )}
     </Stack>
+  );
+}
+
+/**
+ * For a teacher on one monitor. Sharing a window rather than the screen keeps
+ * the pad private, and Pop out gives it a window of its own to sit beside the
+ * question.
+ */
+function OneScreenHelp({ canPopOut, onPopOut, onClose }: { canPopOut: boolean; onPopOut: () => void; onClose: () => void }) {
+  return (
+    <Alert severity="info" icon={<HelpOutlineRounded />} onClose={onClose}>
+      <Stack spacing={1}>
+        <Typography variant="body2" fontWeight={700}>
+          Using one screen?
+        </Typography>
+        <Typography variant="body2">
+          In Teams, choose Share, then Window, and pick the window with your question, such as the PDF. Students see only that
+          window, never this pad.
+        </Typography>
+        {canPopOut && (
+          <>
+            <Typography variant="body2">Pop out puts this pad in its own window, so you can place it beside the question.</Typography>
+            <Button variant="outlined" size="small" startIcon={<OpenInNewRounded />} onClick={onPopOut} sx={{ minHeight: 44, alignSelf: 'flex-start' }}>
+              Pop out
+            </Button>
+          </>
+        )}
+      </Stack>
+    </Alert>
   );
 }
 
@@ -508,22 +854,84 @@ function AskControls({
   optionCount,
   onAnswerType,
   onOptionCount,
+  label,
+  onLabel,
+  text,
+  onText,
+  image,
+  onImage,
+  uploadPicture,
+  options,
+  onOptions,
   busy,
   disabled,
-  label,
+  buttonLabel,
   onAsk,
 }: {
   answerType: AnswerType;
   optionCount: number;
   onAnswerType: (type: AnswerType) => void;
   onOptionCount: (count: number) => void;
+  /** The paper's question number, so every screen says Q.38. */
+  label: string;
+  onLabel: (label: string) => void;
+  /** The question itself, typed or dictated. Optional. */
+  text: string;
+  onText: (text: string) => void;
+  /** A picture of the question, usually a snip of the paper. Optional. */
+  image: string | null;
+  onImage: (url: string | null) => void;
+  uploadPicture: (file: File) => Promise<{ url: string }>;
+  /** Multiple choice only: text for each option, blank where the letter is enough. */
+  options: string[];
+  onOptions: (options: string[]) => void;
   busy: boolean;
   disabled: boolean;
-  label: string;
+  buttonLabel: string;
   onAsk: () => void;
 }) {
+  const [showOptions, setShowOptions] = useState(options.some((entry) => entry.trim()));
+  const letters = 'ABCDEF'.slice(0, optionCount).split('');
+  const setOption = (index: number, value: string) => {
+    const next = Array.from({ length: Math.max(optionCount, options.length) }, (_, i) => options[i] ?? '');
+    next[index] = value;
+    onOptions(next);
+  };
+
   return (
     <Stack spacing={1.5}>
+      <TextField
+        size="small"
+        label="Question no."
+        placeholder="e.g. 38"
+        value={label}
+        onChange={(event) => onLabel(event.target.value)}
+        inputProps={{ maxLength: 80, autoComplete: 'off' }}
+        helperText="As printed on the paper, so students know which question this is."
+      />
+      <TextField
+        size="small"
+        label="Question (optional)"
+        value={text}
+        onChange={(event) => onText(event.target.value)}
+        multiline
+        minRows={1}
+        maxRows={5}
+        inputProps={{ maxLength: 500 }}
+        helperText="Tip: press Windows + H to type by voice."
+      />
+      <ImageUploadField
+        label="Picture (optional)"
+        helperText="Win + Shift + S to snip the question, then Ctrl + V here."
+        value={image}
+        onChange={onImage}
+        upload={uploadPicture}
+        enableGlobalPaste
+        previewable
+        height={96}
+        disabled={disabled}
+      />
+
       {/* Toggle buttons in a labelled group: MUI marks the chosen one with aria-pressed. */}
       <Box role="group" aria-label="Answer type" sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1 }}>
         {ANSWER_TYPES.map((type) => (
@@ -541,13 +949,42 @@ function AskControls({
 
       {answerType === 'mcq' && (
         <Stack direction="row" alignItems="center" justifyContent="center" spacing={1}>
-          <IconButton aria-label="Fewer options" onClick={() => onOptionCount(Math.max(2, optionCount - 1))} disabled={optionCount <= 2} sx={{ width: 44, height: 44 }}>
+          <IconButton aria-label="Fewer answer options" onClick={() => onOptionCount(Math.max(2, optionCount - 1))} disabled={optionCount <= 2} sx={{ width: 44, height: 44 }}>
             <RemoveRounded />
           </IconButton>
           <Typography sx={{ minWidth: 88, textAlign: 'center', fontVariantNumeric: 'tabular-nums' }}>{`${optionCount} options`}</Typography>
-          <IconButton aria-label="More options" onClick={() => onOptionCount(Math.min(6, optionCount + 1))} disabled={optionCount >= 6} sx={{ width: 44, height: 44 }}>
+          <IconButton aria-label="More answer options" onClick={() => onOptionCount(Math.min(6, optionCount + 1))} disabled={optionCount >= 6} sx={{ width: 44, height: 44 }}>
             <AddRounded />
           </IconButton>
+        </Stack>
+      )}
+
+      {answerType === 'mcq' && (
+        <Stack spacing={1}>
+          <Button
+            variant="text"
+            size="small"
+            onClick={() => setShowOptions(!showOptions)}
+            aria-expanded={showOptions}
+            endIcon={<ExpandMoreRounded sx={{ transform: showOptions ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }} />}
+            sx={{ minHeight: 44, alignSelf: 'flex-start' }}
+          >
+            {showOptions ? 'Hide option text' : 'Add option text (optional)'}
+          </Button>
+          <Collapse in={showOptions} unmountOnExit>
+            <Stack spacing={1}>
+              {letters.map((letter, index) => (
+                <TextField
+                  key={letter}
+                  size="small"
+                  label={`Option ${letter}`}
+                  value={options[index] ?? ''}
+                  onChange={(event) => setOption(index, event.target.value)}
+                  inputProps={{ maxLength: 200 }}
+                />
+              ))}
+            </Stack>
+          </Collapse>
         </Stack>
       )}
 
@@ -557,43 +994,163 @@ function AskControls({
         onClick={onAsk}
         disabled={disabled}
         startIcon={busy ? <CircularProgress size={22} color="inherit" aria-hidden /> : <CampaignRounded />}
-        sx={{ minHeight: 64, fontSize: '1.25rem', fontWeight: 800, touchAction: 'manipulation' }}
+        sx={{ minHeight: 64, fontSize: '1.25rem', fontWeight: 800, touchAction: 'manipulation', overflowWrap: 'anywhere' }}
       >
-        {label}
+        {buttonLabel}
       </Button>
     </Stack>
   );
 }
 
+/** Edits the question number and text after the ASK, both together, as the teacher last saw them. */
+function DetailsEditor({
+  prompt,
+  busy,
+  onSave,
+  onDone,
+}: {
+  prompt: Pick<TeacherPrompt, 'label' | 'question_text'>;
+  busy: boolean;
+  onSave: (label: string | null, text: string | null) => void;
+  onDone: () => void;
+}) {
+  const [label, setLabel] = useState(prompt.label ?? '');
+  const [text, setText] = useState(prompt.question_text ?? '');
+  const unchanged = label.trim() === (prompt.label ?? '') && text.trim() === (prompt.question_text ?? '');
+
+  return (
+    <Stack
+      component="form"
+      spacing={1.25}
+      sx={{ width: '100%' }}
+      onSubmit={(event: FormEvent) => {
+        event.preventDefault();
+        onSave(label.trim() || null, text.trim() || null);
+        onDone();
+      }}
+    >
+      <TextField size="small" label="Question no." value={label} onChange={(event) => setLabel(event.target.value)} inputProps={{ maxLength: 80, autoComplete: 'off' }} autoFocus />
+      <TextField size="small" label="Question (optional)" value={text} onChange={(event) => setText(event.target.value)} multiline minRows={1} maxRows={5} inputProps={{ maxLength: 500 }} />
+      <Stack direction="row" spacing={1} justifyContent="flex-end">
+        <Button onClick={onDone} sx={{ minHeight: 44 }}>
+          Cancel
+        </Button>
+        <Button type="submit" variant="contained" disabled={busy || unchanged} sx={{ minHeight: 44 }}>
+          Save
+        </Button>
+      </Stack>
+    </Stack>
+  );
+}
+
+/** A question's name, its text when there is one, and the pencil that edits both. */
+function QuestionHeading({
+  prompt,
+  suffix,
+  busy,
+  onDetails,
+  action,
+}: {
+  prompt: Pick<TeacherPrompt, 'sequence' | 'label' | 'question_text'>;
+  suffix: string;
+  busy: boolean;
+  onDetails: (label: string | null, text: string | null) => void;
+  action?: ReactNode;
+}) {
+  const [editing, setEditing] = useState(false);
+  return (
+    <Stack spacing={1}>
+      <Stack direction="row" alignItems="center" spacing={0.5}>
+        <Typography variant="subtitle1" component="h2" fontWeight={800} sx={{ flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
+          {`${promptTitle(prompt)} ${suffix}`}
+        </Typography>
+        <IconButton aria-label="Edit question number and text" aria-expanded={editing} onClick={() => setEditing(!editing)} sx={{ width: 44, height: 44 }}>
+          <EditRounded fontSize="small" />
+        </IconButton>
+        {action}
+      </Stack>
+      {editing ? (
+        <DetailsEditor prompt={prompt} busy={busy} onSave={onDetails} onDone={() => setEditing(false)} />
+      ) : (
+        prompt.question_text && (
+          <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+            {prompt.question_text}
+          </Typography>
+        )
+      )}
+    </Stack>
+  );
+}
+
 function OpenPanel({
-  sequence,
+  prompt,
   answered,
   enrolled,
   offRoster,
   busy,
   disabled,
   onClose,
+  onDetails,
+  skips,
+  lastNudgedAt,
+  serverTime,
+  nudge,
+  nudging,
+  onNudge,
+  uploadPicture,
+  onPicture,
   canRemind,
   reminding,
   reminder,
   onRemind,
 }: {
-  sequence: number;
+  prompt: TeacherPrompt;
   answered: number;
   enrolled: number;
   offRoster: number;
   busy: boolean;
   disabled: boolean;
   onClose: () => void;
+  onDetails: (label: string | null, text: string | null) => void;
+  /** Who said why they cannot answer: counts only, never who. */
+  skips: TeacherSnapshot['skips'];
+  lastNudgedAt: string | null;
+  serverTime: string;
+  nudge: { message: string; until: number | null } | null;
+  nudging: boolean;
+  onNudge: () => void;
+  uploadPicture: (file: File) => Promise<{ url: string }>;
+  onPicture: (imageUrl: string | null) => void;
   /** Only with the bot in the meeting: it is the bot that sends the reminder. */
   canRemind: boolean;
   reminding: boolean;
   reminder: string | null;
   onRemind: () => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  // The minute between nudges, from this console's press or from the server's
+  // record (another console, or before a reload), measured on the server's clock.
+  const serverLimit = lastNudgedAt ? Date.now() + (Date.parse(lastNudgedAt) + NUDGE_INTERVAL_MS - Date.parse(serverTime)) : null;
+  const secondsLeft = useSecondsLeft(Math.max(nudge?.until ?? 0, serverLimit ?? 0) || null);
+  const waiting = Math.max(0, enrolled - answered - (skips?.total ?? 0));
+  const summary = skipSummary(skips);
   return (
     <Stack alignItems="center" spacing={1.5}>
-      <Chip color="success" label={`Question ${sequence} is open`} />
+      <Stack direction="row" alignItems="center" spacing={0.5}>
+        <Chip color="success" label={`${promptTitle(prompt)} is open`} />
+        <IconButton aria-label="Edit question number and text" aria-expanded={editing} onClick={() => setEditing(!editing)} sx={{ width: 44, height: 44 }}>
+          <EditRounded fontSize="small" />
+        </IconButton>
+      </Stack>
+      {editing ? (
+        <DetailsEditor prompt={prompt} busy={disabled} onSave={onDetails} onDone={() => setEditing(false)} />
+      ) : (
+        prompt.question_text && (
+          <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', textAlign: 'center' }}>
+            {prompt.question_text}
+          </Typography>
+        )
+      )}
       <Typography
         component="p"
         aria-label={`${answered} of ${enrolled} answered`}
@@ -612,6 +1169,11 @@ function OpenPanel({
           {`plus ${offRoster} not on the class list`}
         </Typography>
       )}
+      {summary && (
+        <Typography variant="body2" sx={{ textAlign: 'center', fontWeight: 600 }}>
+          {summary}
+        </Typography>
+      )}
       <Button
         fullWidth
         variant="contained"
@@ -623,6 +1185,23 @@ function OpenPanel({
       >
         Close answers
       </Button>
+      {waiting > 0 && (
+        <Button
+          fullWidth
+          variant="outlined"
+          onClick={onNudge}
+          disabled={disabled || secondsLeft > 0}
+          startIcon={nudging ? <CircularProgress size={18} color="inherit" aria-hidden /> : <BackHandRounded />}
+          sx={{ minHeight: 48, fontWeight: 700 }}
+        >
+          {secondsLeft > 0 ? `Nudge again in ${secondsLeft}s` : `Nudge the ${waiting} who haven't answered`}
+        </Button>
+      )}
+      {nudge && (
+        <Typography variant="body2" color="text.secondary" role="status" sx={{ textAlign: 'center' }}>
+          {nudge.message}
+        </Typography>
+      )}
       {canRemind && (
         <Button
           fullWidth
@@ -640,33 +1219,20 @@ function OpenPanel({
           {reminder}
         </Typography>
       )}
-    </Stack>
-  );
-}
-
-function AnswerBars({ prompt, groups }: { prompt: TeacherPrompt; groups: Array<{ value: string; count: number }> }) {
-  const theme = useTheme();
-  const rows =
-    prompt.answer_type === 'mcq' || prompt.answer_type === 'yesno'
-      ? keyChoices(prompt, groups).map(({ value, count }) => ({ value, count }))
-      : groups;
-  const max = Math.max(1, ...rows.map((row) => row.count));
-
-  if (rows.every((row) => row.count === 0)) {
-    return <Typography variant="body2" color="text.secondary">Nobody answered this one.</Typography>;
-  }
-
-  return (
-    <Stack spacing={0.75} role="list" aria-label="Answers given">
-      {rows.map((row) => (
-        <Stack key={row.value} direction="row" spacing={1} alignItems="center" role="listitem">
-          <Typography sx={{ width: 56, flexShrink: 0, fontWeight: 700, overflowWrap: 'anywhere' }}>{displayAnswer(prompt.answer_type, row.value)}</Typography>
-          <Box sx={{ flex: 1, height: 12, borderRadius: 6, bgcolor: alpha(theme.palette.text.primary, 0.08) }} aria-hidden>
-            <Box sx={{ width: `${(row.count / max) * 100}%`, height: '100%', borderRadius: 6, bgcolor: theme.palette.primary.main }} />
-          </Box>
-          <Typography sx={{ width: 32, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.count}</Typography>
-        </Stack>
-      ))}
+      <Box sx={{ width: '100%' }}>
+        <ImageUploadField
+          label={prompt.image_url ? 'Picture' : 'Add a picture'}
+          helperText="Win + Shift + S, then Ctrl + V. Students see it on their pad."
+          value={prompt.image_url}
+          onChange={onPicture}
+          upload={uploadPicture}
+          enableGlobalPaste
+          previewable
+          dense
+          height={96}
+          disabled={disabled}
+        />
+      </Box>
     </Stack>
   );
 }
@@ -674,117 +1240,94 @@ function AnswerBars({ prompt, groups }: { prompt: TeacherPrompt; groups: Array<{
 function ClosedPanel({
   prompt,
   groups,
-  decided,
   busy,
   onReopen,
+  onDetails,
+  onKeys,
+  onPoll,
+  onReveal,
+  onDecideLater,
+}: {
+  prompt: TeacherPrompt;
+  groups: Array<{ value: string; count: number }>;
+  busy: string | null;
+  onReopen: () => void;
+  onDetails: (label: string | null, text: string | null) => void;
+  onKeys: (keys: string[]) => void;
+  onPoll: () => void;
+  onReveal: () => void;
+  onDecideLater: () => void;
+}) {
+  return (
+    <Stack spacing={2}>
+      <QuestionHeading
+        prompt={prompt}
+        suffix="closed"
+        busy={busy !== null}
+        onDetails={onDetails}
+        action={
+          <Button size="small" startIcon={<ReplayRounded />} onClick={onReopen} disabled={busy !== null} sx={{ minHeight: 44, flexShrink: 0 }}>
+            Reopen
+          </Button>
+        }
+      />
+
+      <AnswerBars prompt={prompt} groups={groups} />
+
+      <AnswerKeyPicker prompt={prompt} groups={groups} busy={busy} onKeys={onKeys} onPoll={onPoll} onReveal={onReveal} />
+
+      <Button fullWidth variant="outlined" startIcon={<ScheduleRounded />} onClick={onDecideLater} disabled={busy !== null} sx={{ minHeight: 48, fontWeight: 700 }}>
+        Decide later, ask the next question
+      </Button>
+      <Typography variant="caption" color="text.secondary">
+        Not sure yet? Check it after class and set it from the class report. Scores update then.
+      </Typography>
+    </Stack>
+  );
+}
+
+/**
+ * The key picker for a question left for later. Its answers come from the
+ * named rows (allowed once a question is closed), counted the way the
+ * snapshot counts them.
+ */
+function LaterKeyPanel({
+  host,
+  entry,
+  busy,
   onKeys,
   onPoll,
   onReveal,
 }: {
-  prompt: TeacherPrompt;
-  groups: Array<{ value: string; count: number }>;
-  decided: boolean;
+  host: PadHost;
+  entry: HistoryEntry;
   busy: string | null;
-  onReopen: () => void;
   onKeys: (keys: string[]) => void;
   onPoll: () => void;
   onReveal: () => void;
 }) {
-  const [extraKey, setExtraKey] = useState('');
-  const choices = keyChoices(prompt, groups);
-  const typed = prompt.answer_type === 'numeric' || prompt.answer_type === 'text';
+  const [groups, setGroups] = useState<Array<{ value: string; count: number }> | null>(null);
+  const [failed, setFailed] = useState(false);
 
-  const addKey = (event: FormEvent) => {
-    event.preventDefault();
-    const value = extraKey.trim();
-    if (!value) return;
-    const next = toggleKey(prompt.ungraded ? null : prompt.correct_keys, value);
-    if (next) onKeys(next);
-    setExtraKey('');
-  };
+  useEffect(() => {
+    let active = true;
+    setGroups(null);
+    setFailed(false);
+    padFetch<{ rows: ParticipationRow[] }>(host, `/api/pad/prompts/${entry.id}/participation`)
+      .then((data) => active && setGroups(groupsFromParticipation(data.rows)))
+      .catch(() => active && setFailed(true));
+    return () => {
+      active = false;
+    };
+  }, [host, entry.id]);
+
+  if (failed) return <Alert severity="warning">The answers could not load. Try again in a moment.</Alert>;
+  if (!groups) return <CircularProgress size={24} aria-label="Loading the answers" />;
 
   return (
     <Stack spacing={2}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between">
-        <Typography variant="subtitle1" component="h2" fontWeight={800}>
-          {`Question ${prompt.sequence} closed`}
-        </Typography>
-        <Button size="small" startIcon={<ReplayRounded />} onClick={onReopen} disabled={busy !== null} sx={{ minHeight: 44 }}>
-          Reopen
-        </Button>
-      </Stack>
-
-      <AnswerBars prompt={prompt} groups={groups} />
-
-      <Stack spacing={1}>
-        <Typography variant="body2" fontWeight={700} id="pad-key-label">
-          Correct answer
-        </Typography>
-        <Box role="group" aria-labelledby="pad-key-label" sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(88px, 1fr))', gap: 1 }}>
-          {choices.map((choice) => {
-            // Tapping the only key does nothing: a graded question always keeps an answer.
-            const next = toggleKey(prompt.ungraded ? null : prompt.correct_keys, choice.value);
-            return (
-              <ToggleButton
-                key={choice.value}
-                value={choice.value}
-                selected={choice.selected}
-                disabled={busy !== null}
-                onChange={() => next && onKeys(next)}
-                aria-label={`${displayAnswer(prompt.answer_type, choice.value)}, ${choice.count} answered${choice.selected ? ', marked correct' : ''}`}
-                sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700, overflowWrap: 'anywhere' }}
-              >
-                {choice.selected && <CheckCircleRounded fontSize="small" sx={{ mr: 0.5 }} aria-hidden />}
-                {`${displayAnswer(prompt.answer_type, choice.value)} (${choice.count})`}
-              </ToggleButton>
-            );
-          })}
-        </Box>
-
-        {typed && (
-          <Stack component="form" direction="row" spacing={1} onSubmit={addKey}>
-            <TextField
-              size="small"
-              label="Another correct answer"
-              value={extraKey}
-              onChange={(event) => setExtraKey(event.target.value)}
-              inputProps={{ maxLength: 100, inputMode: prompt.answer_type === 'numeric' ? 'decimal' : 'text' }}
-              sx={{ flex: 1 }}
-            />
-            <Button type="submit" variant="outlined" disabled={busy !== null || !extraKey.trim()} sx={{ minHeight: 44 }}>
-              Add
-            </Button>
-          </Stack>
-        )}
-
-        <ToggleButton
-          value="poll"
-          selected={prompt.ungraded}
-          disabled={busy !== null || prompt.ungraded}
-          onChange={onPoll}
-          sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}
-        >
-          <HowToVoteRounded fontSize="small" sx={{ mr: 0.75 }} aria-hidden />
-          {"Poll, don't grade"}
-        </ToggleButton>
-      </Stack>
-
-      <Button
-        fullWidth
-        variant="contained"
-        size="large"
-        onClick={onReveal}
-        disabled={!decided || busy !== null}
-        startIcon={busy === 'reveal' ? <CircularProgress size={22} color="inherit" aria-hidden /> : <VisibilityRounded />}
-        sx={{ minHeight: 56, fontWeight: 800 }}
-      >
-        Reveal answer
-      </Button>
-      {!decided && (
-        <Typography variant="caption" color="text.secondary">
-          Choose the correct answer, or mark it as a poll, to reveal.
-        </Typography>
-      )}
+      <AnswerBars prompt={entry} groups={groups} />
+      <AnswerKeyPicker prompt={entry} groups={groups} busy={busy} onKeys={onKeys} onPoll={onPoll} onReveal={onReveal} />
     </Stack>
   );
 }
@@ -801,18 +1344,16 @@ function RevealedPanel({
   host,
   prompt,
   snapshot,
-  onLabel,
   busy,
+  onDetails,
 }: {
   host: PadHost;
   prompt: TeacherPrompt;
   snapshot: TeacherSnapshot;
-  onLabel: (label: string | null) => void;
   busy: boolean;
+  onDetails: (label: string | null, text: string | null) => void;
 }) {
   const theme = useTheme();
-  const [note, setNote] = useState(prompt.label ?? '');
-  useEffect(() => setNote(prompt.label ?? ''), [prompt.id, prompt.label]);
 
   const tone: Record<SummaryItem['key'], string> = {
     correct: theme.palette.success.main,
@@ -824,9 +1365,7 @@ function RevealedPanel({
 
   return (
     <Stack spacing={2}>
-      <Typography variant="subtitle1" component="h2" fontWeight={800}>
-        {`Question ${prompt.sequence} revealed`}
-      </Typography>
+      <QuestionHeading prompt={prompt} suffix="revealed" busy={busy} onDetails={onDetails} />
       {prompt.ungraded ? (
         <Chip icon={<HowToVoteRounded />} label="Poll, not graded" sx={{ alignSelf: 'flex-start' }} />
       ) : (
@@ -857,90 +1396,7 @@ function RevealedPanel({
         ))}
       </Box>
 
-      <ShareResultsButton host={host} />
-
       <ParticipationDetails host={host} promptId={prompt.id} ungraded={prompt.ungraded} startOpen={false} />
-
-      <Stack
-        component="form"
-        direction="row"
-        spacing={1}
-        onSubmit={(event: FormEvent) => {
-          event.preventDefault();
-          onLabel(note.trim() ? note.trim() : null);
-        }}
-      >
-        <TextField size="small" label="Add a note" value={note} onChange={(event) => setNote(event.target.value)} inputProps={{ maxLength: 80 }} sx={{ flex: 1 }} />
-        <Button type="submit" variant="outlined" disabled={busy || note.trim() === (prompt.label ?? '')} sx={{ minHeight: 44 }}>
-          Save
-        </Button>
-      </Stack>
-    </Stack>
-  );
-}
-
-/**
- * Puts the class results on the meeting screen for everyone (the /pad/stage
- * page: totals and the breakdown, never names). Shown only where Teams lets
- * this person share, which means organizers and presenters.
- */
-function ShareResultsButton({ host }: { host: PadHost }) {
-  const stage = host.stage;
-  const [allowed, setAllowed] = useState(false);
-  const [sharing, setSharing] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!stage) return;
-    let active = true;
-    void Promise.all([stage.canShare().catch(() => false), stage.isSharing().catch(() => false)]).then(([can, now]) => {
-      if (!active) return;
-      setAllowed(can);
-      setSharing(now);
-    });
-    return () => {
-      active = false;
-    };
-  }, [stage]);
-
-  if (!stage || !allowed) return null;
-
-  const toggle = async () => {
-    setBusy(true);
-    setProblem(null);
-    try {
-      if (sharing) {
-        await stage.stop();
-        setSharing(false);
-      } else {
-        await stage.share(`${window.location.origin}/pad/stage`);
-        setSharing(true);
-      }
-    } catch {
-      setProblem(sharing ? 'Sharing did not stop. Use Stop sharing on the meeting screen.' : 'The results could not be shared. Please try again.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Stack spacing={1}>
-      <Button
-        variant={sharing ? 'outlined' : 'contained'}
-        onClick={toggle}
-        disabled={busy}
-        startIcon={busy ? <CircularProgress size={20} color="inherit" aria-hidden /> : sharing ? <StopScreenShareRounded /> : <ScreenShareRounded />}
-        sx={{ minHeight: 48, fontWeight: 700 }}
-      >
-        {sharing ? 'Stop sharing' : 'Share results'}
-      </Button>
-      {!sharing && (
-        <Typography variant="caption" color="text.secondary">
-          {"Shows the class totals on everyone's screen, without names."}
-        </Typography>
-      )}
-      {problem && <Alert severity="warning">{problem}</Alert>}
     </Stack>
   );
 }
@@ -997,6 +1453,15 @@ function ParticipationDetails({ host, promptId, ungraded, startOpen }: { host: P
                     {row.answer && key !== 'correct' && (
                       <Typography variant="caption" color="text.secondary">{`answered ${row.answer}`}</Typography>
                     )}
+                    {row.skip_reason && (
+                      <Chip
+                        size="small"
+                        variant="outlined"
+                        color="warning"
+                        label={`Said: ${SKIP_REASON_LABELS[row.skip_reason]}${row.skip_note ? `, ${row.skip_note}` : ''}`}
+                        sx={{ maxWidth: '100%', height: 'auto', '& .MuiChip-label': { whiteSpace: 'normal', py: 0.25 } }}
+                      />
+                    )}
                     {row.joined_mid_prompt && <Chip size="small" variant="outlined" label="Joined mid-question" />}
                     {!row.on_roster && <Chip size="small" variant="outlined" label="Not on class list" />}
                   </Stack>
@@ -1010,17 +1475,25 @@ function ParticipationDetails({ host, promptId, ungraded, startOpen }: { host: P
   );
 }
 
-function EndedPanel({ snapshot, onStartAgain }: { snapshot: TeacherSnapshot; onStartAgain: () => void }) {
+function EndedPanel({ snapshot, onStartAgain }: { snapshot: TeacherSnapshot; onStartAgain?: () => void }) {
   const asked = snapshot.history.length;
+  const waitingCount = snapshot.history.filter((entry) => entry.state !== 'revealed').length;
   return (
     <Stack spacing={2}>
       <Alert severity="success">{asked === 0 ? 'Class ended. No questions were asked.' : `Class ended after ${asked} question${asked === 1 ? '' : 's'}.`}</Alert>
+      {waitingCount > 0 && (
+        <Alert severity="info" icon={<ScheduleRounded />}>
+          {`${waitingCount} question${waitingCount === 1 ? ' is' : 's are'} waiting for an answer. Set ${waitingCount === 1 ? 'it' : 'them'} from the class report.`}
+        </Alert>
+      )}
       <Button variant="contained" href={`/teacher/answer-pad/sessions/${snapshot.session.id}`} target="_blank" rel="noopener noreferrer" sx={{ minHeight: 48 }}>
         Open the class report
       </Button>
-      <Button variant="text" onClick={onStartAgain} sx={{ minHeight: 44 }}>
-        Start a new session
-      </Button>
+      {onStartAgain && (
+        <Button variant="text" onClick={onStartAgain} sx={{ minHeight: 44 }}>
+          Start a new session
+        </Button>
+      )}
     </Stack>
   );
 }

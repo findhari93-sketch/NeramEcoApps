@@ -114,11 +114,11 @@ describe('questionPopupUrl', () => {
 });
 
 describe('noticeForAsk', () => {
-  it('names the question and opens the answer pop-up, not the whole panel', async () => {
+  it('names the question as the paper does and opens the answer pop-up, not the whole panel', async () => {
     vi.stubEnv('PAD_TEAMS_TAB_ORIGIN', '');
-    await noticeForAsk('s1', 3, ORIGIN);
+    await noticeForAsk('s1', 'Q.38', ORIGIN);
     expect(mocks.send).toHaveBeenCalledWith(expect.anything(), ['29:a', '29:b'], {
-      title: 'Question 3 is open',
+      title: 'Q.38 is open',
       url: 'https://nexus.neramclasses.com/pad/teams/answer',
     });
   });
@@ -127,7 +127,7 @@ describe('noticeForAsk', () => {
     vi.useFakeTimers();
     mocks.send.mockReturnValue(new Promise(() => undefined));
     const done = vi.fn();
-    const pending = noticeForAsk('s1', 3, ORIGIN).then(done);
+    const pending = noticeForAsk('s1', 'Question 3', ORIGIN).then(done);
 
     await vi.advanceTimersByTimeAsync(2_499);
     expect(done).not.toHaveBeenCalled();
@@ -139,8 +139,8 @@ describe('noticeForAsk', () => {
   it('swallows any failure, so ASK still succeeds', async () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     mocks.rpc.mockResolvedValueOnce({ data: null, error: { message: 'relation "pad_bot_conversations" does not exist' } });
-    await expect(noticeForAsk('s1', 1, ORIGIN)).resolves.toBeUndefined();
-    expect(log).toHaveBeenCalledWith('[pad notify] question 1: could not send');
+    await expect(noticeForAsk('s1', 'Question 1', ORIGIN)).resolves.toBeUndefined();
+    expect(log).toHaveBeenCalledWith('[pad notify] Question 1: could not send');
   });
 });
 

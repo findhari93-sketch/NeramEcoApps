@@ -1,45 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyMsToken } from '@/lib/ms-verify';
-import {
-  getSupabaseAdminClient,
-  getStudentQBReports,
-  getTeacherQBReports,
-} from '@neram/database';
-
+import { verifyQBAccessAnyClassroom } from '@/lib/qb-auth';
+import { resolveStaffRole } from '@/lib/staff-capabilities';
+import { getQBReportQueue, getStudentQBReports, type QBReportQueueFilter } from '@neram/database';
 import { describeError } from '@/lib/api-errors';
+
+/**
+ * GET /api/question-bank/reports
+ *
+ * Staff: the Reports queue, grouped into problems, with counts for the stat
+ * cards (?status=open|resolved|dismissed, open by default). Managers count as
+ * staff here; the old `['teacher','admin'].includes(user_type)` check refused them.
+ *
+ * Students: their own reports, with the paper and number to recognise each by
+ * and what came of it.
+ */
+
+const FILTERS: QBReportQueueFilter[] = ['open', 'resolved', 'dismissed'];
 
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('Authorization');
-    if (!authHeader) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const access = await verifyQBAccessAnyClassroom(request.headers.get('Authorization'));
+    if (!access.ok) return access.response;
+    const caller = access.caller;
+
+    if (resolveStaffRole(caller) !== null) {
+      const asked = request.nextUrl.searchParams.get('status') as QBReportQueueFilter | null;
+      const filter = asked && FILTERS.includes(asked) ? asked : 'open';
+      const { items, counts } = await getQBReportQueue(filter);
+      return NextResponse.json({ data: items, counts });
     }
 
-    const msUser = await verifyMsToken(authHeader);
-    const supabase = getSupabaseAdminClient();
-
-    const { data: caller } = await supabase
-      .from('users')
-      .select('id, user_type')
-      .eq('ms_oid', msUser.oid)
-      .single();
-
-    if (!caller) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
-
-    // Students see their own reports; teachers/admins see all reports
-    if (['teacher', 'admin'].includes(caller.user_type ?? '')) {
-      const status = request.nextUrl.searchParams.get('status') || undefined;
-      const reports = await getTeacherQBReports(status ? { status } : undefined);
-      return NextResponse.json({ data: reports }, { status: 200 });
-    } else {
-      const reports = await getStudentQBReports(caller.id);
-      return NextResponse.json({ data: reports }, { status: 200 });
-    }
+    const reports = await getStudentQBReports(caller.id);
+    return NextResponse.json({ data: reports });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Internal server error';
     console.error('[QB API] Reports list error:', describeError(err));
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: 'Could not load reports' }, { status: 500 });
   }
 }

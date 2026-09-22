@@ -45,6 +45,8 @@ async function prompt(promptId: string) {
     revealed_at: string | null;
     sequence: number;
     option_count: number | null;
+    label: string | null;
+    question_text: string | null;
   };
 }
 
@@ -59,6 +61,8 @@ describe('migration and privileges', () => {
     'pad_join_attempts',
     'pad_bot_conversations',
     'pad_teams_users',
+    'pad_skip_reasons',
+    'pad_nudges',
   ];
 
   it('applies cleanly a second time and changes nothing, as a re-run deploy would', async () => {
@@ -231,20 +235,57 @@ describe('sessions', () => {
   it('asks for confirmation before ending with an unrevealed prompt, then closes it', async () => {
     const s = await liveSession();
     const promptId = await openPrompt(s);
-    expect(await t.end(s.teacherId, s.sessionId)).toEqual({ ok: false, code: 'UNREVEALED_PROMPT', sequence: 1 });
+    expect(await t.end(s.teacherId, s.sessionId)).toEqual({ ok: false, code: 'UNREVEALED_PROMPT', sequence: 1, label: null, count: 1 });
     expect(await t.end(s.teacherId, s.sessionId, true)).toEqual({ ok: true, changed: true });
     expect((await prompt(promptId)).state).toBe('closed');
     expect(await t.end(s.teacherId, s.sessionId, true)).toEqual({ ok: true, changed: false });
   });
 
-  it('refuses every transition once the session has ended', async () => {
+  it('counts every question still without an answer, and names the first by its reference', async () => {
+    const s = await liveSession();
+    const q1 = (await t.ask(s.teacherId, s.sessionId, 'mcq', 4, { label: '38' })).prompt_id;
+    await t.close(s.teacherId, q1);
+    await t.ask(s.teacherId, s.sessionId, 'mcq', 4, { label: '39' });
+    expect(await t.end(s.teacherId, s.sessionId)).toEqual({ ok: false, code: 'UNREVEALED_PROMPT', sequence: 1, label: '38', count: 2 });
+  });
+
+  it('refuses ASK and Reopen once the session has ended', async () => {
     const s = await liveSession();
     const promptId = await openPrompt(s);
     await t.end(s.teacherId, s.sessionId, true);
     expect(await t.ask(s.teacherId, s.sessionId)).toMatchObject({ ok: false, code: 'SESSION_NOT_LIVE' });
     expect(await t.reopen(s.teacherId, promptId)).toMatchObject({ ok: false, code: 'SESSION_NOT_LIVE' });
-    expect(await t.setKey(s.teacherId, promptId, ['A'])).toMatchObject({ ok: false, code: 'SESSION_NOT_LIVE' });
-    expect(await t.reveal(s.teacherId, promptId)).toMatchObject({ ok: false, code: 'SESSION_NOT_LIVE' });
+  });
+
+  // The teacher checks the answer after class (a search, or the class itself)
+  // and marks it from the class report; the scores follow.
+  it('still lets the session teacher set the key and reveal after the class has ended', async () => {
+    const s = await liveSession(2);
+    const promptId = await openPrompt(s);
+    await t.submit(s.students[0], promptId, 'C');
+    await t.submit(s.students[1], promptId, 'A');
+    await t.end(s.teacherId, s.sessionId, true);
+
+    // The report hands the key picker what it needs: the answers, counted.
+    const before = await t.report(s.teacherId, s.sessionId, s.students);
+    expect(before.prompts[0]).toMatchObject({
+      state: 'closed',
+      correct_keys: null,
+      groups: [
+        { value: 'A', count: 1 },
+        { value: 'C', count: 1 },
+      ],
+    });
+
+    const intruder = await t.user('teacher');
+    expect(await t.setKey(intruder, promptId, ['C'])).toMatchObject({ ok: false, code: 'NOT_SESSION_TEACHER' });
+    expect(await t.setKey(s.teacherId, promptId, ['C'])).toMatchObject({ ok: true, changed: true });
+    expect(await t.reveal(s.teacherId, promptId)).toMatchObject({ ok: true, changed: true, state: 'revealed' });
+
+    const mine = await t.studentSnapshot(s.students[0], s.sessionId);
+    expect(mine.my_response).toMatchObject({ answer: 'C', is_correct: true });
+    const events = await t.events(s.sessionId);
+    expect(events.find((e) => e.action === 'reveal')?.detail).toMatchObject({ after_class: true });
   });
 
   it('refuses to let another teacher end a session', async () => {
@@ -272,11 +313,87 @@ describe('ASK', () => {
     expect(n).toBe(1);
   });
 
-  it('refuses ASK while a prompt is CLOSED', async () => {
+  // "Decide later": the closed question keeps its answers and waits for a key.
+  it('asks the next question while an earlier one is CLOSED with no answer yet', async () => {
+    const s = await liveSession(1);
+    const q1 = await openPrompt(s);
+    await t.submit(s.students[0], q1, 'B');
+    await t.close(s.teacherId, q1);
+
+    const q2 = await t.ask(s.teacherId, s.sessionId);
+    expect(q2).toMatchObject({ ok: true, changed: true, sequence: 2, state: 'open' });
+    expect((await prompt(q1)).state).toBe('closed');
+
+    // Students see the newest question; the earlier one can still be settled.
+    expect((await t.studentSnapshot(s.students[0], s.sessionId)).prompt).toMatchObject({ id: q2.prompt_id, state: 'open' });
+    expect(await t.setKey(s.teacherId, q1, ['B'])).toMatchObject({ ok: true, changed: true });
+    expect(await t.reveal(s.teacherId, q1)).toMatchObject({ ok: true, state: 'revealed' });
+    expect((await prompt(q2.prompt_id)).state).toBe('open');
+  });
+
+  it('refuses to reopen a question once a newer one exists, since students only see the newest', async () => {
+    const s = await liveSession();
+    const q1 = await openPrompt(s);
+    await t.close(s.teacherId, q1);
+    const q2 = (await t.ask(s.teacherId, s.sessionId)).prompt_id;
+    expect(await t.reopen(s.teacherId, q1)).toEqual({ ok: false, code: 'NOT_LATEST_PROMPT' });
+    await t.close(s.teacherId, q2);
+    expect(await t.reopen(s.teacherId, q1)).toEqual({ ok: false, code: 'NOT_LATEST_PROMPT' });
+    expect(await t.reopen(s.teacherId, q2)).toMatchObject({ ok: true, changed: true, state: 'open' });
+  });
+
+  it("carries the teacher's reference and question text from ASK to every snapshot", async () => {
+    const s = await liveSession(1);
+    const asked = await t.ask(s.teacherId, s.sessionId, 'mcq', 4, {
+      label: '  38 ',
+      text: 'Which   statement is correct?\n\n\n\nPick one.',
+    });
+    expect(asked).toMatchObject({ ok: true, label: '38' });
+    const cleaned = 'Which statement is correct?\n\nPick one.';
+    expect(await prompt(asked.prompt_id)).toMatchObject({ label: '38', question_text: cleaned });
+
+    const student = await t.studentSnapshot(s.students[0], s.sessionId);
+    expect(student.prompt).toMatchObject({ label: '38', question_text: cleaned });
+    const teacher = await t.teacherSnapshot(s.teacherId, s.sessionId, s.students);
+    expect(teacher.prompt).toMatchObject({ label: '38', question_text: cleaned });
+    expect(teacher.history[0]).toMatchObject({ label: '38', option_count: 4 });
+  });
+
+  it('asks with neither a reference nor a question, as before', async () => {
+    const s = await liveSession();
+    const asked = await t.ask(s.teacherId, s.sessionId, 'mcq', 4, { label: '   ', text: '' });
+    expect(await prompt(asked.prompt_id)).toMatchObject({ label: null, question_text: null });
+  });
+
+  it('refuses a reference over 80 characters or a question over 500', async () => {
+    const s = await liveSession();
+    expect(await t.ask(s.teacherId, s.sessionId, 'mcq', 4, { label: 'x'.repeat(81) })).toMatchObject({
+      ok: false,
+      code: 'INVALID_INPUT',
+      field: 'label',
+    });
+    expect(await t.ask(s.teacherId, s.sessionId, 'mcq', 4, { text: 'x'.repeat(501) })).toMatchObject({
+      ok: false,
+      code: 'INVALID_INPUT',
+      field: 'text',
+    });
+  });
+
+  it('edits the reference and question text in any state, for the session teacher only', async () => {
     const s = await liveSession();
     const promptId = await openPrompt(s);
+    expect(await t.details(s.teacherId, promptId, 'Q38', 'Which one?')).toMatchObject({ ok: true, changed: true, version: 2 });
+    expect(await t.details(s.teacherId, promptId, 'Q38', 'Which one?')).toMatchObject({ ok: true, changed: false });
     await t.close(s.teacherId, promptId);
-    expect(await t.ask(s.teacherId, s.sessionId)).toEqual({ ok: false, code: 'INVALID_TRANSITION', state: 'closed' });
+    await t.setKey(s.teacherId, promptId, ['A']);
+    await t.reveal(s.teacherId, promptId);
+    expect(await t.details(s.teacherId, promptId, '38', null)).toMatchObject({ ok: true, changed: true });
+    expect(await prompt(promptId)).toMatchObject({ label: '38', question_text: null });
+
+    const intruder = await t.user('teacher');
+    expect(await t.details(intruder, promptId, '1', null)).toMatchObject({ ok: false, code: 'NOT_SESSION_TEACHER' });
+    expect(await t.details(s.teacherId, promptId, 'x'.repeat(81), null)).toMatchObject({ ok: false, field: 'label' });
+    expect(await t.details(s.teacherId, promptId, null, 'x'.repeat(501))).toMatchObject({ ok: false, field: 'text' });
   });
 
   it('numbers the next prompt after a Reveal', async () => {
@@ -563,7 +680,7 @@ describe('database guards, even for a caller holding the service key', () => {
     ).rejects.toThrow(/responses are immutable/);
   });
 
-  it('enforces one active prompt per session at the index level', async () => {
+  it('enforces one open prompt per session at the index level', async () => {
     const s = await liveSession();
     await openPrompt(s);
     await expect(
@@ -573,7 +690,7 @@ describe('database guards, even for a caller holding the service key', () => {
           s.sessionId,
         ]);
       }),
-    ).rejects.toThrow(/pad_prompts_one_active/);
+    ).rejects.toThrow(/pad_prompts_one_open/);
   });
 
   it('enforces no key while OPEN at the constraint level', async () => {

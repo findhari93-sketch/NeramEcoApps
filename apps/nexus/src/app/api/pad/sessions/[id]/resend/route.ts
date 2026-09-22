@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import { assertPadStaff, resolvePadCaller } from '@/lib/pad/caller';
+import { promptTitle } from '@/lib/pad/client/format';
 import { notifyQuestionOpen, questionPopupUrl } from '@/lib/pad/notify-session';
 import { PadRefusal, padErrorResponse, padJson } from '@/lib/pad/rpc';
 import { isUuid } from '@/lib/pad/session-binding';
@@ -41,14 +42,14 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const { data: prompt, error } = await padDb()
       .from('pad_prompts')
-      .select('sequence, state')
+      .select('sequence, label, state')
       .eq('session_id', params.id)
       .order('sequence', { ascending: false })
       .limit(1)
       .maybeSingle();
     if (error) throw error;
 
-    const title = prompt?.state === 'open' ? `Question ${prompt.sequence} is open` : 'Open the Answer Pad';
+    const title = prompt?.state === 'open' ? `${promptTitle(prompt)} is open` : 'Open the Answer Pad';
     const notice = await notifyQuestionOpen(params.id, { title, padUrl: questionPopupUrl(request.nextUrl.origin) });
     return padJson({ ...notice.delivery, notConnected: notice.notConnected, skipped: notice.skipped });
   } catch (err) {

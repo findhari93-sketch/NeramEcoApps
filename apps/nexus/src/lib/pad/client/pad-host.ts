@@ -11,6 +11,7 @@
  */
 
 import type { TeamsMeetingContext } from '../session-binding';
+import { consolePopOutUrl } from '../teams-tab';
 
 export type PadHostKind = 'teams' | 'browser' | 'test';
 export type PadTheme = 'light' | 'dark' | 'contrast';
@@ -39,6 +40,12 @@ export interface PadHost {
   onThemeChange(handler: (theme: PadTheme) => void): () => void;
   /** Absent outside a Teams meeting. */
   stage?: PadStageSharing;
+  /**
+   * Open the teacher console for this session in its own Teams window. Only in
+   * the meeting side panel of Teams desktop: Teams on the web can only show it
+   * as a modal over the meeting, which is worse than the panel.
+   */
+  popOut?: (sessionId: string) => Promise<void>;
 }
 
 export interface InjectedTestHost {
@@ -185,6 +192,42 @@ export function stageSharing(teams: TeamsJs): PadStageSharing | undefined {
   };
 }
 
+/** How long a pop-out request may take to fail before the console stops waiting. */
+const POP_OUT_SETTLE_MS = 1_500;
+
+interface PopOutContext {
+  app?: { appId?: { toString(): string }; host?: { clientType?: string } };
+  chat?: { id?: string };
+}
+
+/**
+ * The console's own window (Stageview Multi-window), or undefined where Teams
+ * cannot open one: not desktop, no app id in the context, or no stageView.
+ */
+export function consolePopOut(teams: TeamsJs, context: PopOutContext, origin: string): PadHost['popOut'] {
+  const appId = context.app?.appId?.toString();
+  if (!appId || context.app?.host?.clientType !== 'desktop') return undefined;
+  try {
+    if (!teams.stageView?.isSupported()) return undefined;
+  } catch {
+    return undefined;
+  }
+
+  return async (sessionId) => {
+    const opened = teams.stageView.open({
+      appId,
+      contentUrl: consolePopOutUrl(origin, sessionId),
+      websiteUrl: `${origin.replace(/\/+$/, '')}/pad`,
+      title: 'Answer Pad',
+      threadId: context.chat?.id,
+      openMode: teams.stageView.StageViewOpenMode.popout,
+    });
+    // TeamsJS may settle only when the window closes, so wait just long enough
+    // to hear a refusal, never for the window's whole life.
+    await Promise.race([opened, new Promise<void>((resolve) => setTimeout(resolve, POP_OUT_SETTLE_MS))]);
+  };
+}
+
 /**
  * Connect to Teams, or resolve null when the page is not running inside it.
  * TeamsJS is loaded on demand so the browser pages never download it.
@@ -230,6 +273,7 @@ export async function connectTeamsHost(): Promise<PadHost | null> {
     theme: themeFromTeams(context.app?.theme),
     // Only the side panel can put something on the meeting screen, and only in a meeting.
     stage: frame === 'sidePanel' && context.meeting?.id ? stageSharing(teams) : undefined,
+    popOut: frame === 'sidePanel' ? consolePopOut(teams, context, window.location.origin) : undefined,
     getToken: cachedTokenGetter(() => teams.authentication.getAuthToken()),
     onResume: (handler) => {
       resumeHandlers.add(handler);

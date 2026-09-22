@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
         studentIds: [f.userId],
         audience: 'staff',
         subject: 'Reconnect Teams to keep automatic reminders going',
-        plain: 'Nexus can no longer send reminders from your Teams. Open Sketchbooks, Class rhythm, and press Connect Teams again. Until then students get reminders on the Nexus bell only.',
+        plain: 'Nexus can no longer send reminders from your Teams. Open Sketchbooks, Class rhythm, and press Connect Teams again. Until then students get reminders as a Teams alert and on the Nexus bell.',
         eventType: 'sketch_digest',
         metadata: { teams_sender_problem: true },
         source: { kind: 'teams_sender_lost' },

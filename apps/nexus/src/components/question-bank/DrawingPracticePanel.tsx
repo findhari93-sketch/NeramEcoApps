@@ -31,6 +31,8 @@ import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import DrawingSubmissionSheet from '@/components/drawings/DrawingSubmissionSheet';
 import DrawingPartsView from './DrawingPartsView';
 import SolutionVideoPlayer from './SolutionVideoPlayer';
+import ReportMistakeLink from './ReportMistakeLink';
+import { reportTargetsFor } from '@/lib/report-targets';
 import { readDrawingParts } from '@/lib/drawing-parts';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import type { NexusQBQuestionDetail, QBDrawingState } from '@neram/database';
@@ -59,6 +61,8 @@ interface Props {
   classroomId?: string | null;
   /** The reader's language, for a question split into parts. */
   language?: 'en' | 'hi';
+  /** Offer "Report a mistake" under the solutions once they are open. Student screens only. */
+  allowReport?: boolean;
 }
 
 /**
@@ -66,7 +70,7 @@ interface Props {
  * here, each with its own solution behind the same gate, in place of the one
  * solution image. The caller skips its plain question text for such a question.
  */
-export default function DrawingPracticePanel({ question, classroomId, language = 'en' }: Props) {
+export default function DrawingPracticePanel({ question, classroomId, language = 'en', allowReport = false }: Props) {
   const router = useRouter();
   const { getToken } = useNexusAuthContext();
 
@@ -129,6 +133,9 @@ export default function DrawingPracticePanel({ question, classroomId, language =
   const solutionWords =
     hasImage && videoUrl ? 'solution image and video' : videoUrl ? 'solution video' : 'solution image';
   const solutionIsPlural = hasImage && Boolean(videoUrl);
+  const reportTargets = reportTargetsFor(question);
+  // Parts' solutions live in the parts view above; one link asks which part.
+  const partSolutionTargets = parts ? reportTargets.filter((t) => t.target !== 'question') : [];
 
   return (
     <Box sx={{ mb: 3 }}>
@@ -285,6 +292,15 @@ export default function DrawingPracticePanel({ question, classroomId, language =
                     src={question.solution_image_url}
                     alt="Solution, full size"
                   />
+                  {allowReport && (
+                    <ReportMistakeLink
+                      questionId={question.id}
+                      target="solution_image"
+                      targets={reportTargets}
+                      isMcq={false}
+                      source="drawing"
+                    />
+                  )}
                 </Box>
               )}
 
@@ -303,7 +319,29 @@ export default function DrawingPracticePanel({ question, classroomId, language =
                       Watch the solution video
                     </Button>
                   )}
+                  {allowReport && (
+                    <ReportMistakeLink
+                      questionId={question.id}
+                      target="video"
+                      targets={reportTargets}
+                      isMcq={false}
+                      source="drawing"
+                    />
+                  )}
                 </Box>
+              )}
+
+              {allowReport && partSolutionTargets.length > 0 && (
+                <ReportMistakeLink
+                  anyPart
+                  questionId={question.id}
+                  target={partSolutionTargets[0].target}
+                  partLabel={partSolutionTargets[0].partLabel}
+                  targets={reportTargets}
+                  isMcq={false}
+                  source="drawing"
+                  label="Report a mistake in a solution"
+                />
               )}
             </>
           )}

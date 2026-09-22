@@ -1,6 +1,7 @@
 // @ts-nocheck: sketchbook tables land in the generated types after the migration is applied; regenerate with pnpm supabase:gen:types
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import type { SketchbookReaction, NexusSketchbookFeature } from '../../types';
+import { SAME_SHEET_WINDOW_HOURS, fingerprintOf, isSameSheet } from './drawing-fingerprint';
 
 /**
  * Sketchbook data access. Every function here is service-role; the routes
@@ -36,6 +37,11 @@ export interface SketchbookSketchRow {
 
 export interface SketchbookInboxRow extends SketchbookSketchRow {
   student: { id: string; name: string | null; avatar_url: string | null; ms_oid: string | null };
+  /**
+   * Other rows on this page that are the same sheet (photo fingerprint), so the
+   * screen can drop the rest once a teacher handles one. Absent when none.
+   */
+  twin_ids?: string[];
 }
 
 export interface SketchbookFeatureFact {
@@ -333,6 +339,26 @@ export async function usersShareClassroom(
 
 // ── Flips ────────────────────────────────────────────────────────────────────
 
+/** Handled drawings this far either side of the candidates are enough to catch a re-upload. */
+const SAME_SHEET_WINDOW_MS = SAME_SHEET_WINDOW_HOURS * 3600 * 1000;
+/** Ceiling on the reference rows read for re-upload matching: a few students over four days. */
+const SAME_SHEET_REFERENCE_LIMIT = 500;
+
+/** Postgres "undefined column": an environment that has not had image_quality migrated in. */
+const isMissingColumn = (e: { code?: string; message?: string } | null) =>
+  !!e && (e.code === '42703' || /image_quality/.test(e.message || ''));
+
+/**
+ * The flip inbox: practice drawings still waiting for a look, newest first.
+ *
+ * Evaluated anywhere counts as evaluated. A drawing leaves EVERY teacher inbox
+ * once anyone reacted to it, commented on it, featured it or completed a
+ * review; only a Skip (or a passing glance) stays personal to the teacher who
+ * did it. It also leaves when it is a re-upload of a sheet that was already
+ * handled or sent to an assignment: same student, within SAME_SHEET_WINDOW_HOURS,
+ * matching photo fingerprint (drawing-fingerprint.ts). Before this, a sheet a
+ * teacher marked 4 stars in an assignment came back in Flip through as new work.
+ */
 export async function listUnflipped(
   teacherId: string,
   studentIds: string[],
@@ -351,35 +377,106 @@ export async function listUnflipped(
   const candidateLimit = Math.min(limit * 5, 200);
   // drawing_submissions has exactly one FK to users (student_id), so the
   // relationship is unambiguous and needs no !hint.
-  const { data: candidates, error: candidatesError } = await supabase
-    .from('drawing_submissions')
-    .select(`${SKETCH_COLUMNS}, student:users(id, name, avatar_url, ms_oid)`)
-    // Practice nobody has reviewed yet. Assignment and test drawings are owed
-    // work with their own homes and badges, and a reviewed drawing is not news.
-    .in('source_type', [...PRACTICE_SOURCE_TYPES])
-    .is('assignment_id', null)
-    .is('reviewed_at', null)
-    .in('student_id', studentIds)
-    .order('submitted_at', { ascending: false })
-    .limit(candidateLimit);
+  const candidatesQuery = (columns: string) =>
+    supabase
+      .from('drawing_submissions')
+      .select(`${columns}, student:users(id, name, avatar_url, ms_oid)`)
+      // Practice nobody has reacted to or reviewed yet. Assignment and test
+      // drawings are owed work with their own homes and badges, and a drawing a
+      // teacher already answered is not news to the next teacher.
+      .in('source_type', [...PRACTICE_SOURCE_TYPES])
+      .is('assignment_id', null)
+      .is('reviewed_at', null)
+      .is('reaction', null)
+      .in('student_id', studentIds)
+      .order('submitted_at', { ascending: false })
+      .limit(candidateLimit);
+  let { data: candidates, error: candidatesError } = await candidatesQuery(`${SKETCH_COLUMNS}, image_quality`);
+  if (isMissingColumn(candidatesError)) ({ data: candidates, error: candidatesError } = await candidatesQuery(SKETCH_COLUMNS));
   if (candidatesError) throw candidatesError;
-  const candidateRows = candidates || [];
+  const candidateRows = (candidates || []) as Array<SketchbookInboxRow & { image_quality?: unknown }>;
   if (candidateRows.length === 0) return { rows: [], remaining: 0 };
 
   const candidateIds = candidateRows.map((r) => r.id);
-  const { data: flips, error: flipsError } = await supabase
-    .from('nexus_sketchbook_flips')
-    .select('submission_id')
-    .eq('teacher_id', teacherId)
-    .in('submission_id', candidateIds);
-  if (flipsError) throw flipsError;
-  const flippedSet = new Set((flips || []).map((f) => f.submission_id));
+  const [flipsRes, commentsRes, featuresRes] = await Promise.all([
+    supabase.from('nexus_sketchbook_flips').select('submission_id').eq('teacher_id', teacherId).in('submission_id', candidateIds),
+    supabase.from('drawing_submission_comments').select('submission_id').eq('author_role', 'teacher').in('submission_id', candidateIds),
+    supabase.from('nexus_sketchbook_features').select('submission_id').is('unfeatured_at', null).in('submission_id', candidateIds),
+  ]);
+  if (flipsRes.error) throw flipsRes.error;
+  if (commentsRes.error) throw commentsRes.error;
+  if (featuresRes.error) throw featuresRes.error;
+  const flippedSet = new Set((flipsRes.data || []).map((f) => f.submission_id));
+  // Answered by any teacher: a comment or a live feature. A reaction or a
+  // completed review never reaches this point (the candidate query drops them).
+  const answered = new Set([...(commentsRes.data || []), ...(featuresRes.data || [])].map((r) => r.submission_id));
 
-  const unflippedInWindow = candidateRows.filter((r) => !flippedSet.has(r.id));
-  const rows = unflippedInWindow.slice(0, limit);
+  const fp = new Map<string, string>();
+  for (const r of candidateRows) {
+    const f = fingerprintOf(r.image_quality);
+    if (f) fp.set(r.id, f);
+  }
+  const reuploads = await findReuploads(supabase, candidateRows.filter((r) => fp.has(r.id)), fp, answered);
+
+  const unflippedInWindow = candidateRows.filter((r) => !flippedSet.has(r.id) && !answered.has(r.id) && !reuploads.has(r.id));
+  const page = unflippedInWindow.slice(0, limit);
+  const rows = page.map(({ image_quality: _quality, ...row }) => {
+    const mine = fp.get(row.id);
+    const twins = mine
+      ? page.filter((o) => o.id !== row.id && o.student_id === row.student_id && isSameSheet(mine, fp.get(o.id))).map((o) => o.id)
+      : [];
+    return (twins.length ? { ...row, twin_ids: twins } : row) as SketchbookInboxRow;
+  });
   // `remaining` counts only what is left unflipped within this bounded
   // candidate window, not across the student's entire sketchbook history.
   return { rows, remaining: Math.max(0, unflippedInWindow.length - rows.length) };
+}
+
+/**
+ * Candidates that are the same sheet as a drawing already handled: owed work
+ * (an assignment or exam copy, which is reviewed there), or a practice copy a
+ * teacher reacted to, reviewed, commented on or featured. Read only when some
+ * candidate has a fingerprint, so it costs nothing until photos carry one.
+ */
+async function findReuploads(
+  supabase: TypedSupabaseClient,
+  withFingerprint: Array<{ id: string; student_id: string; submitted_at: string }>,
+  fp: Map<string, string>,
+  answered: Set<string>,
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  if (withFingerprint.length === 0) return out;
+  const times = withFingerprint.map((r) => Date.parse(r.submitted_at));
+  const from = new Date(Math.min(...times) - SAME_SHEET_WINDOW_MS).toISOString();
+  const to = new Date(Math.max(...times) + SAME_SHEET_WINDOW_MS).toISOString();
+  const { data, error } = await supabase
+    .from('drawing_submissions')
+    .select('id, student_id, submitted_at, source_type, assignment_id, reaction, reviewed_at, image_quality')
+    .in('student_id', [...new Set(withFingerprint.map((r) => r.student_id))])
+    .gte('submitted_at', from)
+    .lte('submitted_at', to)
+    .limit(SAME_SHEET_REFERENCE_LIMIT);
+  if (error) {
+    // Matching is a courtesy on top of the inbox, never a reason to lose it.
+    if (isMissingColumn(error)) return out;
+    throw error;
+  }
+  const handled = (data || []).filter((r) =>
+    fingerprintOf(r.image_quality) &&
+    (r.assignment_id || r.source_type === 'assignment' || r.source_type === 'exam' || r.reaction || r.reviewed_at || answered.has(r.id)),
+  );
+  for (const c of withFingerprint) {
+    const at = Date.parse(c.submitted_at);
+    const mine = fp.get(c.id);
+    const twin = handled.find((r) =>
+      r.id !== c.id &&
+      r.student_id === c.student_id &&
+      Math.abs(Date.parse(r.submitted_at) - at) <= SAME_SHEET_WINDOW_MS &&
+      isSameSheet(mine, fingerprintOf(r.image_quality)),
+    );
+    if (twin) out.add(c.id);
+  }
+  return out;
 }
 
 export async function recordFlip(

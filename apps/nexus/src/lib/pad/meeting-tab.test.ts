@@ -109,6 +109,37 @@ describe('ensureAnswerPadInMeeting', () => {
     expect(bodyOf(fetchImpl, INSTALL)).toBeUndefined();
   });
 
+  it('retries without a consent set when Graph refuses the full one, as it does for the bot-free Neram Pad Dev', async () => {
+    const installs = [json(400, { error: { code: 'BadRequest', message: 'Permissions do not match' } }), empty(201)];
+    const fetchImpl = graph({
+      [TABS]: json(200, { value: [] }),
+      [APPS]: json(200, { value: [] }),
+      [INSTALL]: () => installs.shift()!(),
+      [PIN]: json(201, {}),
+    });
+
+    await expect(ensureAnswerPadInMeeting(INPUT, { token, fetchImpl })).resolves.toEqual({ outcome: 'added', chatId: CHAT });
+
+    const bodies = fetchImpl.mock.calls
+      .filter(([url, init]) => init?.method === 'POST' && String(url).endsWith('/installedApps'))
+      .map(([, init]) => JSON.parse(String(init?.body)));
+    expect(bodies).toEqual([
+      { 'teamsApp@odata.bind': `https://graph.microsoft.com/v1.0/appCatalogs/teamsApps/${CATALOG}`, consentedPermissionSet: consentedPermissionSet() },
+      { 'teamsApp@odata.bind': `https://graph.microsoft.com/v1.0/appCatalogs/teamsApps/${CATALOG}` },
+    ]);
+  });
+
+  it('fails when the retry without a consent set is refused too, and tries no third time', async () => {
+    const fetchImpl = graph({
+      [TABS]: json(200, { value: [] }),
+      [APPS]: json(200, { value: [] }),
+      [INSTALL]: json(400, { error: { message: 'Consent required' } }),
+    });
+    const result = await ensureAnswerPadInMeeting(INPUT, { token, fetchImpl });
+    expect(result).toMatchObject({ outcome: 'failed', reason: expect.stringContaining('install the app: 400') });
+    expect(fetchImpl.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(2);
+  });
+
   it('carries on when an overlapping run installed the app a moment earlier', async () => {
     const fetchImpl = graph({ [TABS]: json(200, { value: [] }), [APPS]: json(200, { value: [] }), [INSTALL]: empty(409), [PIN]: json(201, {}) });
     await expect(ensureAnswerPadInMeeting(INPUT, { token, fetchImpl })).resolves.toMatchObject({ outcome: 'added' });
@@ -132,6 +163,8 @@ describe('ensureAnswerPadInMeeting', () => {
     expect(result.outcome).toBe('permission_missing');
     expect(result.reason).toMatch(/^install the app: 403 .*Missing role permissions/);
     expect(result.reason).not.toContain('graph-token');
+    // Only a 400 earns the retry without a consent set.
+    expect(fetchImpl.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
   });
 
   it('treats a 404 after the chat answered as a failure, not a chat that is not ready', async () => {

@@ -13,11 +13,15 @@ function prompt(overrides: Partial<TeacherPrompt> = {}): TeacherPrompt {
     version: 1,
     correct_keys: null,
     ungraded: false,
-    label: 'Perspective drawing',
+    label: '38',
+    question_text: null,
+    image_url: null,
+    option_texts: null,
     opened_at: '2026-09-11T10:00:00Z',
     closed_at: null,
     revealed_at: null,
     answered_count: 19,
+    last_nudged_at: null,
     ...overrides,
   };
 }
@@ -51,14 +55,29 @@ function snap(overrides: Partial<TeacherSnapshot> = {}): TeacherSnapshot {
       { value: 'A', count: 6 },
       { value: 'D', count: 2 },
     ],
-    history: [{ id: 'p0', sequence: 2, label: 'Warm up', answer_type: 'yesno', state: 'revealed', ungraded: true, opened_at: '2026-09-11T09:58:00Z', answered: 20, correct: 0 }],
+    skips: { total: 0, by_reason: {} },
+    history: [
+      {
+        id: 'p0',
+        sequence: 2,
+        label: 'Warm up',
+        answer_type: 'yesno',
+        option_count: null,
+        state: 'revealed',
+        ungraded: true,
+        correct_keys: null,
+        opened_at: '2026-09-11T09:58:00Z',
+        answered: 20,
+        correct: 0,
+      },
+    ],
     ...overrides,
   };
 }
 
 const leaks = (value: unknown) => {
   const text = JSON.stringify(value);
-  return ['pad-teacher-secret', '999071', 'meeting-1', 'c1', 'b1', 'sc1', 'Perspective drawing', 'Warm up'].filter((secret) => text.includes(secret));
+  return ['pad-teacher-secret', '999071', 'meeting-1', 'c1', 'b1', 'sc1', 'Warm up'].filter((secret) => text.includes(secret));
 };
 
 describe('stageView', () => {
@@ -67,7 +86,7 @@ describe('stageView', () => {
     expect(view).toEqual({
       server_time: '2026-09-11T10:00:05Z',
       session: { id: 's1', status: 'live', classroom_name: 'NATA Evening Batch', hint_topic: 'pad-hint-x' },
-      prompt: { id: 'p1', sequence: 3, state: 'open', version: 1, answer_type: 'mcq', answered: 23, enrolled: 31, reveal: null },
+      prompt: { id: 'p1', sequence: 3, label: '38', state: 'open', version: 1, answer_type: 'mcq', answered: 23, enrolled: 31, reveal: null },
     });
     expect(leaks(view)).toEqual([]);
   });

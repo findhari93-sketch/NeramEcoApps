@@ -39,6 +39,8 @@ function report(overrides: Partial<SessionReport> = {}): SessionReport {
         id: 'p1',
         sequence: 1,
         label: 'Warm-up',
+        question_text: null,
+        image_url: null,
         answer_type: 'mcq',
         option_count: 4,
         state: 'revealed',
@@ -48,11 +50,18 @@ function report(overrides: Partial<SessionReport> = {}): SessionReport {
         closed_at: '2026-09-10T15:06:00Z',
         revealed_at: '2026-09-10T15:07:00Z',
         counts: COUNTS,
+        groups: [
+          { value: 'B', count: 1 },
+          { value: 'A', count: 1 },
+        ],
+        skips: {},
       },
       {
         id: 'p2',
         sequence: 2,
-        label: null,
+        label: '38',
+        question_text: 'Is the latitude measured from the equator?',
+        image_url: 'https://db.neramclasses.com/storage/v1/object/public/uploads/pad/s1/q38.jpg',
         answer_type: 'yesno',
         option_count: null,
         state: 'closed',
@@ -62,6 +71,11 @@ function report(overrides: Partial<SessionReport> = {}): SessionReport {
         closed_at: '2026-09-10T15:11:00Z',
         revealed_at: null,
         counts: COUNTS,
+        groups: [
+          { value: 'yes', count: 2 },
+          { value: 'no', count: 1 },
+        ],
+        skips: { dont_know: 1 },
       },
     ],
     students: [
@@ -96,19 +110,46 @@ describe('Answer Pad report page', () => {
     expect(await screen.findByRole('heading', { name: 'Answer Pad report' })).toBeTruthy();
     expect(mocks.fetch).toHaveBeenCalledWith('/api/pad/sessions/s1/report', expect.objectContaining({ headers: { Authorization: 'Bearer nexus-token' } }));
 
-    expect(screen.getByText('1 question was never revealed, so it is not graded.')).toBeTruthy();
+    expect(screen.getByText('1 question has no answer yet, so it is not graded. Set it below and every score updates.')).toBeTruthy();
     // Class score counts the class list only: Asha 1 of 1, the visitor is left out.
     expect(within(screen.getByText('Class score').parentElement as HTMLElement).getByText('100%')).toBeTruthy();
 
     const questions = screen.getByRole('table', { name: 'Each question, its answer and how the class responded' });
-    expect(within(questions).getByRole('rowheader', { name: 'Q1 Warm-up' })).toBeTruthy();
-    expect(within(questions).getByText('Not revealed')).toBeTruthy();
+    expect(within(questions).getByRole('rowheader', { name: 'Warm-up' })).toBeTruthy();
+    expect(within(questions).getByRole('rowheader', { name: /^Q\.38/ })).toBeTruthy();
+    expect(within(questions).getByRole('button', { name: 'Set the answer' })).toBeTruthy();
+    expect(within(questions).getByRole('button', { name: 'Show the picture for Q.38' })).toBeTruthy();
+    expect(within(questions).getByText("1 can't answer: 1 don't know")).toBeTruthy();
     expect(within(questions).getAllByText('2 of 3')).toHaveLength(2);
 
     const students = screen.getByRole('table', { name: "Each student's participation and score" });
     const bala = within(students).getByRole('row', { name: /Bala/ });
     expect(within(bala).getByText('No score')).toBeTruthy();
     expect(within(students).getByText('Not on class list')).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(/[–—]/);
+  });
+
+  // The teacher checked the answer after class; the report reveals it and reloads the scores.
+  it('sets the answer to a question left for later, after the class has ended', async () => {
+    mocks.fetch.mockImplementation(async (path: string) => {
+      if (path === '/api/pad/prompts/p2/key') return answer(200, { promptId: 'p2', state: 'closed', version: 3, changed: true });
+      return answer(200, report());
+    });
+    render(<AnswerPadReportPage />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Set the answer' }));
+    expect(screen.getByRole('heading', { name: 'Set the answer for Q.38' })).toBeTruthy();
+    expect(screen.getByText('Is the latitude measured from the equator?', { selector: 'p' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Yes, 2 answered' }));
+    await waitFor(() =>
+      expect(mocks.fetch).toHaveBeenCalledWith(
+        '/api/pad/prompts/p2/key',
+        expect.objectContaining({ method: 'POST', body: JSON.stringify({ keys: ['yes'] }) }),
+      ),
+    );
+    // Reloaded after the change, so the tables show the server's numbers.
+    await waitFor(() => expect(mocks.fetch.mock.calls.filter(([path]) => path === '/api/pad/sessions/s1/report')).toHaveLength(2));
     expect(document.body.textContent).not.toMatch(/[–—]/);
   });
 

@@ -84,12 +84,16 @@ async function withinBudget(work: Promise<void>, ms: number): Promise<void> {
   clearTimeout(timer);
 }
 
-/** The notice that goes out with ASK. Never throws, and never waits longer than its budget. */
-export async function noticeForAsk(sessionId: string, sequence: number, origin: string): Promise<void> {
-  const work = notifyQuestionOpen(sessionId, { title: `Question ${sequence} is open`, padUrl: questionPopupUrl(origin) }).then(
+/**
+ * The notice that goes out with ASK. `title` names the question as every screen
+ * does (promptTitle: "Q.38", or "Question 3"). Never throws, and never waits
+ * longer than its budget.
+ */
+export async function noticeForAsk(sessionId: string, title: string, origin: string): Promise<void> {
+  const work = notifyQuestionOpen(sessionId, { title: `${title} is open`, padUrl: questionPopupUrl(origin) }).then(
     () => undefined,
     (err: unknown) => {
-      console.error(`[pad notify] question ${sequence}: ${err instanceof Error ? err.message : 'could not send'}`);
+      console.error(`[pad notify] ${title}: ${err instanceof Error ? err.message : 'could not send'}`);
     },
   );
   await withinBudget(work, ASK_NOTICE_BUDGET_MS);

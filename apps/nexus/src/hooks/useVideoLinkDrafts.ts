@@ -136,15 +136,18 @@ export function useVideoLinkDrafts({
     [byId],
   );
 
-  /** Run the matcher over a paste and fill the matched rows in as drafts. */
-  const pasteText = useCallback(
-    (text: string, startAt?: number): VideoPasteSummary => {
-      const result = matchVideoLinks(text, matchRows, { startAt });
+  /**
+   * Put matched links in as drafts, the one path both a paste and "Find on
+   * YouTube" use: a link equal to what is saved leaves its row alone, and the
+   * rest become new or replacing drafts, with any earlier save error cleared.
+   */
+  const applyMatches = useCallback(
+    (matches: { questionId: string; url: string; unchanged: boolean }[]) => {
       let added = 0;
       let replaced = 0;
       let unchanged = 0;
       const next = new Map(drafts);
-      for (const match of result.matches) {
+      for (const match of matches) {
         const q = byId.get(match.questionId);
         if (match.unchanged) {
           unchanged += 1;
@@ -159,9 +162,19 @@ export function useVideoLinkDrafts({
       setErrors((prev) => {
         if (prev.size === 0) return prev;
         const cleared = new Map(prev);
-        result.matches.forEach((m) => cleared.delete(m.questionId));
+        matches.forEach((m) => cleared.delete(m.questionId));
         return cleared;
       });
+      return { added, replaced, unchanged };
+    },
+    [drafts, byId],
+  );
+
+  /** Run the matcher over a paste and fill the matched rows in as drafts. */
+  const pasteText = useCallback(
+    (text: string, startAt?: number): VideoPasteSummary => {
+      const result = matchVideoLinks(text, matchRows, { startAt });
+      const { added, replaced, unchanged } = applyMatches(result.matches);
       const pasted: VideoPasteSummary = {
         mode: result.mode,
         linkCount: result.linkCount,
@@ -174,8 +187,52 @@ export function useVideoLinkDrafts({
       setSummary(pasted);
       return pasted;
     },
-    [matchRows, drafts, byId],
+    [matchRows, applyMatches],
   );
+
+  /**
+   * Links found on YouTube for this paper (lib/youtube-solution-titles). The
+   * dialog has already shown what was skipped and why, so the summary here
+   * only counts what went in.
+   */
+  const fillFound = useCallback(
+    (fills: { questionId: string; number: number; url: string }[]): VideoPasteSummary => {
+      const { added, replaced, unchanged } = applyMatches(
+        fills.map((f) => {
+          const q = byId.get(f.questionId);
+          return { questionId: f.questionId, url: f.url, unchanged: !!q && sameSolutionVideo(savedOf(q), f.url) };
+        }),
+      );
+      const found: VideoPasteSummary = {
+        mode: 'labelled',
+        linkCount: fills.length,
+        added,
+        replaced,
+        unchanged,
+        unmatched: [],
+        duplicates: [],
+      };
+      setSummary(found);
+      return found;
+    },
+    [applyMatches, byId],
+  );
+
+  /** Drop one row's draft and keep what is saved: turning down one replacement. */
+  const revert = useCallback((questionId: string) => {
+    setDrafts((prev) => {
+      if (!prev.has(questionId)) return prev;
+      const next = new Map(prev);
+      next.delete(questionId);
+      return next;
+    });
+    setErrors((prev) => {
+      if (!prev.has(questionId)) return prev;
+      const next = new Map(prev);
+      next.delete(questionId);
+      return next;
+    });
+  }, []);
 
   const discard = useCallback(() => {
     setDrafts(new Map());
@@ -193,19 +250,20 @@ export function useVideoLinkDrafts({
     return { unsavedCount: drafts.size, invalidCount: invalid };
   }, [drafts]);
 
-  /** Questions that will have a video once the drafts are saved. */
-  const withVideoCount = useMemo(
-    () =>
-      questions.filter((q) => {
-        if (isSplitDrawing(q)) return solutionVideosOf(q).length > 0;
-        if (drafts.has(q.id)) {
-          const kind = classifySolutionVideo(drafts.get(q.id)).kind;
-          return kind === 'youtube' || kind === 'sharepoint';
-        }
-        return savedOf(q).trim() !== '';
-      }).length,
-    [questions, drafts],
+  /** Whether this question will have a video once the drafts are saved. */
+  const hasVideoNow = useCallback(
+    (q: NexusQBQuestion): boolean => {
+      if (isSplitDrawing(q)) return solutionVideosOf(q).length > 0;
+      if (drafts.has(q.id)) {
+        const kind = classifySolutionVideo(drafts.get(q.id)).kind;
+        return kind === 'youtube' || kind === 'sharepoint';
+      }
+      return savedOf(q).trim() !== '';
+    },
+    [drafts],
   );
+
+  const withVideoCount = useMemo(() => questions.filter(hasVideoNow).length, [questions, hasVideoNow]);
 
   const save = useCallback(async (): Promise<{ saved: number; failed: number; message?: string }> => {
     const links: { question_id: string; solution_video_url: string | null }[] = [];
@@ -285,6 +343,8 @@ export function useVideoLinkDrafts({
     errorFor,
     setDraft,
     pasteText,
+    fillFound,
+    revert,
     discard,
     dismissSummary,
     save,
@@ -292,6 +352,7 @@ export function useVideoLinkDrafts({
     summary,
     unsavedCount,
     invalidCount,
+    hasVideoNow,
     withVideoCount,
   };
 }

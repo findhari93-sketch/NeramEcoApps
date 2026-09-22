@@ -14,6 +14,7 @@ import RhythmRow, { type RhythmStudent } from './RhythmRow';
 import WeeklyGoalSheet from './WeeklyGoalSheet';
 import NudgeSheet from './NudgeSheet';
 import TeamsSenderCard from './TeamsSenderCard';
+import AutoRemindersNotice from './AutoRemindersNotice';
 
 interface RhythmPayload {
   goal: number;
@@ -147,6 +148,7 @@ export default function ClassRhythmList({ classroomId }: { classroomId: string }
         </Button>
       </Box>
 
+      <AutoRemindersNotice />
       <TeamsSenderCard classroomId={classroomId} />
 
       {noStudents ? (

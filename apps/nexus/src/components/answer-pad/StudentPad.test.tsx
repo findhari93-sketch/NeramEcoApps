@@ -42,7 +42,21 @@ const host: PadHost = {
 const SCORE = { correct: 0, wrong: 0, skipped: 0, absent: 0, total_graded: 0 };
 
 function prompt(overrides: Partial<StudentPrompt> = {}): StudentPrompt {
-  return { id: 'p1', sequence: 1, answer_type: 'mcq', option_count: 4, state: 'open', version: 1, ungraded: null, correct_keys: null, ...overrides };
+  return {
+    id: 'p1',
+    sequence: 1,
+    label: null,
+    question_text: null,
+    image_url: null,
+    option_texts: null,
+    answer_type: 'mcq',
+    option_count: 4,
+    state: 'open',
+    version: 1,
+    ungraded: null,
+    correct_keys: null,
+    ...overrides,
+  };
 }
 
 function snap(overrides: Partial<StudentSnapshot> = {}): StudentSnapshot {
@@ -53,6 +67,8 @@ function snap(overrides: Partial<StudentSnapshot> = {}): StudentSnapshot {
     session: { id: 's1', status: 'live', hint_topic: 'pad-x', classroom_name: 'NATA Evening Batch' },
     prompt: prompt(),
     my_response: null,
+    my_skip: null,
+    nudged_at: null,
     score: SCORE,
     ...overrides,
   };
@@ -81,6 +97,103 @@ describe('StudentPad', () => {
     render(pad());
     expect(screen.getByText("You're connected")).toBeTruthy();
     expect(screen.getByText('No score yet')).toBeTruthy();
+  });
+
+  // The first class: the paper said Q.38 and the pad said Question 1.
+  it("names the question as the paper on screen does, with the teacher's question text", () => {
+    mocks.snapshot = snap({ prompt: prompt({ label: '38', question_text: 'Which statement is correct?' }) });
+    const { rerender } = render(pad());
+    expect(screen.getByRole('heading', { name: 'Q.38' })).toBeTruthy();
+    expect(screen.getByText('Which statement is correct?')).toBeTruthy();
+    expect(screen.queryByText('Question 1')).toBeNull();
+
+    // After answering, the card still says which question it is about.
+    mocks.snapshot = snap({ prompt: prompt({ label: '38', state: 'closed' }), my_response: response('C') });
+    rerender(pad());
+    expect(screen.getByText('Q.38')).toBeTruthy();
+    expect(screen.getByText('Answer locked: C')).toBeTruthy();
+    expect(screen.getByText('Answering has closed. Your teacher will share the answer, now or after class.')).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(NO_DASHES);
+  });
+
+  it("shows the teacher's picture of the question and the text of each option", () => {
+    const picture = 'https://db.neramclasses.com/storage/v1/object/public/uploads/pad/s1/q38.jpg';
+    mocks.snapshot = snap({
+      prompt: prompt({ label: '38', image_url: picture, option_texts: ['Both correct', null, 'Both wrong', null] }),
+    });
+    render(pad());
+
+    expect((screen.getByAltText('Picture for Q.38') as HTMLImageElement).src).toBe(picture);
+    expect(screen.getByRole('button', { name: 'Show the picture for Q.38 full screen' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Answer A, Both correct' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Answer B' })).toBeTruthy();
+  });
+
+  it("says why they can't answer, and can still answer afterwards", async () => {
+    mocks.snapshot = snap();
+    mocks.padFetch.mockResolvedValue({ status: 'saved', reason: 'cant_see', note: null });
+    const { rerender } = render(pad());
+
+    fireEvent.click(screen.getByRole('button', { name: "I can't answer" }));
+    const send = screen.getByRole('button', { name: 'Send to my teacher' }) as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: "I can't see the question" }));
+    fireEvent.click(send);
+
+    await waitFor(() =>
+      expect(mocks.padFetch).toHaveBeenCalledWith(host, '/api/pad/skip', {
+        method: 'POST',
+        body: { promptId: 'p1', reason: 'cant_see', note: null },
+      }),
+    );
+
+    mocks.snapshot = snap({ my_skip: { reason: 'cant_see', note: null } });
+    rerender(pad());
+    expect(await screen.findByText("You told your teacher: I can't see the question. You can still answer above.")).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Answer B' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Take it back' }));
+    await waitFor(() =>
+      expect(mocks.padFetch).toHaveBeenLastCalledWith(host, '/api/pad/skip', { method: 'POST', body: { promptId: 'p1', reason: null, note: null } }),
+    );
+    expect(document.body.textContent).not.toMatch(NO_DASHES);
+  });
+
+  it('sends a short note with Something else', async () => {
+    mocks.snapshot = snap();
+    mocks.padFetch.mockResolvedValue({ status: 'saved' });
+    render(pad());
+
+    fireEvent.click(screen.getByRole('button', { name: "I can't answer" }));
+    fireEvent.click(screen.getByRole('button', { name: 'Something else' }));
+    fireEvent.change(screen.getByLabelText('Tell your teacher (optional)'), { target: { value: 'My pen ran out' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send to my teacher' }));
+    await waitFor(() =>
+      expect(mocks.padFetch).toHaveBeenCalledWith(host, '/api/pad/skip', {
+        method: 'POST',
+        body: { promptId: 'p1', reason: 'other', note: 'My pen ran out' },
+      }),
+    );
+  });
+
+  it("shows the teacher's nudge politely and buzzes the phone once per nudge", () => {
+    const vibrate = vi.fn();
+    Object.defineProperty(navigator, 'vibrate', { value: vibrate, configurable: true });
+    try {
+      mocks.snapshot = snap({ prompt: prompt({ label: '38' }), nudged_at: '2026-09-10T10:01:00Z' });
+      const { rerender } = render(pad());
+      expect(screen.getByText("Your teacher is waiting for your answer to Q.38. A guess is fine, or tap I can't answer.")).toBeTruthy();
+      expect(vibrate).toHaveBeenCalledTimes(1);
+
+      rerender(pad());
+      expect(vibrate).toHaveBeenCalledTimes(1);
+
+      mocks.snapshot = snap({ prompt: prompt({ label: '38' }), nudged_at: '2026-09-10T10:02:30Z' });
+      rerender(pad());
+      expect(vibrate).toHaveBeenCalledTimes(2);
+    } finally {
+      delete (navigator as unknown as Record<string, unknown>).vibrate;
+    }
   });
 
   it('locks an answer with one tap and shows Locking while it travels', async () => {

@@ -298,7 +298,7 @@ describe('PaperQuestionList', () => {
     // no Drawing option to pick, and the drawing hides under Unsectioned.
     renderList({ questions: [...APT, drawing(7, null)], needsFilter: 'drawing' });
     expect(screen.getByText('1 of 4 questions')).not.toBeNull();
-    expect(screen.getByText('Unsectioned (Q7 to Q7)')).not.toBeNull();
+    expect(screen.getByText('Unsectioned (Q7)')).not.toBeNull();
   });
 
   /**
@@ -328,7 +328,7 @@ describe('PaperQuestionList', () => {
 
     renderList({ questions: withInactive, needsFilter: 'inactive' });
     expect(screen.getByText('1 of 6 questions')).not.toBeNull();
-    expect(screen.getByText('Mathematics (MCQ) (Q1 to Q1)')).not.toBeNull();
+    expect(screen.getByText('Mathematics (MCQ) (Q1)')).not.toBeNull();
     expect(screen.queryByText('Aptitude (Q4 to Q6)')).toBeNull();
   });
 

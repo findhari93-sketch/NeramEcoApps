@@ -174,3 +174,43 @@ export function compareByNeed(
   if (byStatus !== 0) return byStatus;
   return b.quietDays - a.quietDays;
 }
+
+/** The statuses a reminder is for. Behind and not-started students are not due one. */
+const REMINDER_DUE: readonly RhythmStatus[] = ['needs_nudge', 'needs_call'];
+
+/**
+ * Which door a reminder actually came through, from the receipt's channel
+ * string (sendNudge's `chat+inapp`, `teams+inapp`, `inapp`, `failed`). Chat
+ * wins because it is the one a student can reply to.
+ */
+export function reminderChannelLabel(channel: string | null | undefined): string | null {
+  if (!channel) return null;
+  if (channel.includes('chat')) return 'Teams chat';
+  if (channel.includes('teams')) return 'Teams alert';
+  if (channel.includes('inapp')) return 'Nexus bell only';
+  if (channel === 'failed') return 'not delivered';
+  return null;
+}
+
+function reminderDay(date: string): string {
+  return new Date(`${date}T00:00:00+05:30`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
+}
+
+/**
+ * One line answering "did Nexus remind this student?", because staff were
+ * phoning quiet students without being able to tell. Counts every reminder in
+ * the CURRENT quiet stretch, automatic and teacher-pressed alike; a drawing
+ * starts a new stretch. Null when the student is not due a reminder at all.
+ */
+export function reminderSummary(facts: {
+  status: RhythmStatus;
+  sentThisCycle: number;
+  lastSentOn: string | null;
+  lastChannel: string | null;
+}): string | null {
+  if (facts.sentThisCycle <= 0) return REMINDER_DUE.includes(facts.status) ? 'Not reminded yet' : null;
+  const times = facts.sentThisCycle === 1 ? 'once' : `${facts.sentThisCycle} times`;
+  const when = facts.lastSentOn ? `, last ${reminderDay(facts.lastSentOn)}` : '';
+  const channel = reminderChannelLabel(facts.lastChannel);
+  return `Reminded ${times}${when}${channel ? `, ${channel}` : ''}`;
+}

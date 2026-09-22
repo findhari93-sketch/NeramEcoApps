@@ -1251,7 +1251,13 @@ export default function TakeTestPage() {
               </Button>
 
               {reviewOpen && (
-                <GradedReviewList review={review} getToken={getToken} classroomId={activeClassroom?.id} />
+                <GradedReviewList
+                  review={review}
+                  getToken={getToken}
+                  classroomId={activeClassroom?.id}
+                  allowReport
+                  testId={testId}
+                />
               )}
             </>
           )}

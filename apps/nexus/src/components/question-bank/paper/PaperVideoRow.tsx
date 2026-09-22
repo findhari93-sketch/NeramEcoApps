@@ -2,8 +2,9 @@
 
 import { memo, type Ref } from 'react';
 import { Box, Button, Typography } from '@neram/ui';
-import type { NexusQBQuestion } from '@neram/database';
-import { solutionVideosOf } from '@neram/database';
+import OutlinedFlagIcon from '@mui/icons-material/OutlinedFlag';
+import type { NexusQBQuestion, QBReportGroup } from '@neram/database';
+import { QB_REPORT_TYPE_LABELS, solutionVideosOf } from '@neram/database';
 import MathText from '@/components/common/MathText';
 import SolutionVideoField from '../SolutionVideoField';
 import type { VideoRowState } from '@/hooks/useVideoLinkDrafts';
@@ -22,6 +23,12 @@ export interface PaperVideoRowProps {
   onEnter: () => void;
   onBulkPaste: (text: string) => void;
   inputRef: Ref<HTMLInputElement>;
+  /** Turn down a replacing draft and keep the saved link. */
+  onKeepSaved?: () => void;
+  /** Students' open report on this question's video, if any. */
+  videoReport?: QBReportGroup;
+  /** Tell them it is fixed. Offered only once the reported link has been replaced. */
+  onTellFixed?: (group: QBReportGroup) => void;
 }
 
 /**
@@ -46,6 +53,9 @@ function PaperVideoRow({
   onEnter,
   onBulkPaste,
   inputRef,
+  onKeepSaved,
+  videoReport,
+  onTellFixed,
 }: PaperVideoRowProps) {
   const pending = state === 'draft-new' || state === 'draft-replace' || state === 'draft-clear';
   const problem = state === 'invalid' || state === 'error';
@@ -126,7 +136,64 @@ function PaperVideoRow({
             inputRef={inputRef}
           />
         )}
+        {/* A found or pasted link would replace one saved by hand: one tap
+            keeps the saved one instead of retyping it. */}
+        {state === 'draft-replace' && onKeepSaved && (
+          <Button
+            size="small"
+            onClick={onKeepSaved}
+            aria-label={`Keep the saved link for question ${number}`}
+            sx={{ minHeight: 44, mt: 0.25, textTransform: 'none' }}
+          >
+            Keep the saved link
+          </Button>
+        )}
+        {videoReport && (
+          <VideoReportNotice group={videoReport} onOpen={onActivate} onTellFixed={onTellFixed} />
+        )}
       </Box>
+    </Box>
+  );
+}
+
+/**
+ * Students say this video is wrong. Sits under the field, because this is the
+ * screen where the link is replaced: the teacher sees the report, pastes the
+ * corrected video, saves, and closes the loop from the same row.
+ */
+function VideoReportNotice({
+  group,
+  onOpen,
+  onTellFixed,
+}: {
+  group: QBReportGroup;
+  onOpen: () => void;
+  onTellFixed?: (group: QBReportGroup) => void;
+}) {
+  const top = group.reasons[0]?.reason;
+  const people = `${group.students} student${group.students === 1 ? '' : 's'}`;
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
+      <Button
+        size="small"
+        color="error"
+        onClick={onOpen}
+        startIcon={<OutlinedFlagIcon sx={{ fontSize: 16 }} />}
+        aria-label={`Reported by ${people}. Open the question to read the reports`}
+        sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600, justifyContent: 'flex-start' }}
+      >
+        Reported: {top ? QB_REPORT_TYPE_LABELS[top] : 'a problem'} ({group.students})
+      </Button>
+      {group.changed_since_reported && onTellFixed && (
+        <Button
+          size="small"
+          variant="outlined"
+          onClick={() => onTellFixed(group)}
+          sx={{ minHeight: 44, textTransform: 'none' }}
+        >
+          Tell the {people} it is fixed
+        </Button>
+      )}
     </Box>
   );
 }

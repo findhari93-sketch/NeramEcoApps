@@ -31,13 +31,16 @@ export interface PadFetchOptions {
   signal?: AbortSignal;
 }
 
-export async function padFetch<T>(host: PadHost, path: string, options: PadFetchOptions = {}): Promise<T> {
-  let token: string;
+async function bearer(host: PadHost): Promise<string> {
   try {
-    token = await host.getToken();
+    return await host.getToken();
   } catch (err) {
     throw new PadClientError(401, 'NO_TOKEN', err instanceof Error ? err.message : 'Not signed in');
   }
+}
+
+export async function padFetch<T>(host: PadHost, path: string, options: PadFetchOptions = {}): Promise<T> {
+  const token = await bearer(host);
 
   let response: Response;
   try {
@@ -56,6 +59,28 @@ export async function padFetch<T>(host: PadHost, path: string, options: PadFetch
     throw new PadClientError(0, 'OFFLINE', 'No connection');
   }
 
+  return readAnswer<T>(response);
+}
+
+/**
+ * A file for /api/pad, as multipart form data: the question's picture. Same
+ * token and the same refusals as padFetch; the browser sets the boundary.
+ */
+export async function padUpload<T>(host: PadHost, path: string, file: Blob, filename: string): Promise<T> {
+  const token = await bearer(host);
+  const form = new FormData();
+  form.append('file', file, filename);
+
+  let response: Response;
+  try {
+    response = await fetch(path, { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form, cache: 'no-store' });
+  } catch {
+    throw new PadClientError(0, 'OFFLINE', 'No connection');
+  }
+  return readAnswer<T>(response);
+}
+
+async function readAnswer<T>(response: Response): Promise<T> {
   const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
   if (!response.ok) {
     throw new PadClientError(

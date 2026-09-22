@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Box, Stack, Typography, alpha, useTheme } from '@neram/ui';
 import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded';
-import { displayAnswer, displayKeys } from '@/lib/pad/client/format';
+import { displayAnswer, displayKeys, promptTitle } from '@/lib/pad/client/format';
 import { padFetch } from '@/lib/pad/client/pad-fetch';
 import type { PadHost } from '@/lib/pad/client/pad-host';
 import { nextPollDelay, type RealtimeState } from '@/lib/pad/client/poll-policy';
@@ -139,8 +139,8 @@ export function stageAnnouncement(stage: StageView | null): string {
   if (!stage) return 'The Answer Pad is not running in this meeting.';
   const prompt = stage.prompt;
   if (!prompt) return 'Waiting for the first question.';
-  if (prompt.reveal) return prompt.reveal.ungraded ? `Question ${prompt.sequence} poll results.` : `Question ${prompt.sequence} answer revealed.`;
-  return prompt.state === 'open' ? `Question ${prompt.sequence} is open.` : `Question ${prompt.sequence} closed.`;
+  if (prompt.reveal) return prompt.reveal.ungraded ? `${promptTitle(prompt)} poll results.` : `${promptTitle(prompt)} answer revealed.`;
+  return prompt.state === 'open' ? `${promptTitle(prompt)} is open.` : `${promptTitle(prompt)} closed.`;
 }
 
 const HEADING = { fontSize: 'clamp(1.25rem, 3.5vw, 2rem)', fontWeight: 800, lineHeight: 1.2 } as const;
@@ -184,7 +184,7 @@ function StageBody({ stage }: { stage: StageView }) {
     return (
       <Stack spacing={{ xs: 1.5, sm: 2.5 }}>
         <Typography component="h1" sx={HEADING}>
-          {prompt.state === 'open' ? `Question ${prompt.sequence} is open` : `Question ${prompt.sequence} closed`}
+          {prompt.state === 'open' ? `${promptTitle(prompt)} is open` : `${promptTitle(prompt)} closed`}
         </Typography>
         <Stack direction="row" alignItems="baseline" spacing={1.5} flexWrap="wrap" useFlexGap>
           <Typography sx={BIG}>{`${prompt.answered} of ${prompt.enrolled}`}</Typography>
@@ -208,7 +208,7 @@ function StageBody({ stage }: { stage: StageView }) {
     <Box sx={{ display: 'grid', gap: { xs: 2, sm: 4 }, gridTemplateColumns: { xs: '1fr', sm: 'minmax(0, 1fr) minmax(0, 1.3fr)' }, alignItems: 'start' }}>
       <Stack spacing={{ xs: 1.5, sm: 2 }}>
         <Typography component="h1" sx={HEADING}>
-          {reveal.ungraded ? `Question ${prompt.sequence} poll results` : `Question ${prompt.sequence}`}
+          {reveal.ungraded ? `${promptTitle(prompt)} poll results` : promptTitle(prompt)}
         </Typography>
         {reveal.ungraded ? (
           <Typography sx={BODY}>{`${prompt.answered} of ${prompt.enrolled} answered. Not graded.`}</Typography>

@@ -1,4 +1,5 @@
 import type { SketchbookReaction } from '@neram/database/types';
+import type { ImageQuality } from '@/lib/image-quality';
 
 type GetToken = () => Promise<string | null>;
 
@@ -15,15 +16,19 @@ async function call<T>(getToken: GetToken, url: string, init: RequestInit = {}):
   return body as T;
 }
 
-/** Body for DrawingSubmissionSheet.submitBody when adding to the sketchbook. */
-export function addSketchBody(uploadedUrl: string, caption: string | null, thumbnailUrl: string | null) {
-  return { original_image_url: uploadedUrl, thumbnail_url: thumbnailUrl, caption };
+/**
+ * Body for DrawingSubmissionSheet.submitBody when adding to the sketchbook. The
+ * photo measurement rides along so the sheet's fingerprint is stored: a student
+ * who also sent this sheet to an assignment must not hand the teacher it twice.
+ */
+export function addSketchBody(uploadedUrl: string, caption: string | null, thumbnailUrl: string | null, imageQuality: ImageQuality | null = null) {
+  return { original_image_url: uploadedUrl, thumbnail_url: thumbnailUrl, caption, ...(imageQuality ? { image_quality: imageQuality } : {}) };
 }
 
 /** Body for a sketch practised from an Inspiration drawing. */
 export function practiseBody(itemId: string) {
-  return (uploadedUrl: string, caption: string | null, thumbnailUrl: string | null) => ({
-    ...addSketchBody(uploadedUrl, caption, thumbnailUrl),
+  return (uploadedUrl: string, caption: string | null, thumbnailUrl: string | null, imageQuality: ImageQuality | null = null) => ({
+    ...addSketchBody(uploadedUrl, caption, thumbnailUrl, imageQuality),
     inspiration_item_id: itemId,
   });
 }
@@ -37,11 +42,48 @@ export const setOptOut = (getToken: GetToken, featureOptOut: boolean) =>
 export const setShareOptOut = (getToken: GetToken, optOut: boolean) =>
   call<{ share_drawings_opt_out: boolean }>(getToken, '/api/sketchbook/preferences', { method: 'PATCH', body: JSON.stringify({ share_drawings_opt_out: optOut }) });
 
-export const reactToSketch = (getToken: GetToken, id: string, reaction: SketchbookReaction | null, comment?: string) =>
-  call<{ reaction: SketchbookReaction | null }>(getToken, `/api/sketchbook/entries/${id}/react`, { method: 'POST', body: JSON.stringify({ reaction, comment }) });
+/**
+ * `keepalive` lets a send outlive the page: Flip through answers the teacher at
+ * once and posts in the background, so a tab closed straight after a tap still
+ * delivers. Payloads here are a few bytes, far inside keepalive's 64 KB cap.
+ */
+export interface SendOptions {
+  keepalive?: boolean;
+}
 
-export const flipSketch = (getToken: GetToken, id: string, action: 'seen' | 'skipped') =>
-  call<{ ok: true }>(getToken, `/api/sketchbook/entries/${id}/flip`, { method: 'POST', body: JSON.stringify({ action }) });
+/**
+ * The token a reaction is sent with. It becomes a Teams chat from the teacher, so
+ * the chat-scoped teacher token comes first (the standing rule for anything a
+ * teacher presses Send on). When that one is not to be had, the ordinary session
+ * token still delivers: sendNudge then falls back to the teacher's connected
+ * login, the activity feed and the bell, instead of the reaction failing outright.
+ */
+export const chatTokenGetter = (getTeacherToken: GetToken, getToken: GetToken): GetToken =>
+  async () => (await getTeacherToken().catch(() => null)) ?? getToken();
+
+/**
+ * React, clear (null), or leave `reaction` undefined to send `comment` on its
+ * own, which keeps whatever reaction the sketch already has.
+ */
+export const reactToSketch = (
+  getToken: GetToken,
+  id: string,
+  reaction: SketchbookReaction | null | undefined,
+  comment?: string,
+  options: SendOptions = {},
+) =>
+  call<{ reaction: SketchbookReaction | null }>(getToken, `/api/sketchbook/entries/${id}/react`, {
+    method: 'POST',
+    body: JSON.stringify(reaction === undefined ? { comment } : { reaction, comment }),
+    keepalive: options.keepalive,
+  });
+
+export const flipSketch = (getToken: GetToken, id: string, action: 'seen' | 'skipped', options: SendOptions = {}) =>
+  call<{ ok: true }>(getToken, `/api/sketchbook/entries/${id}/flip`, {
+    method: 'POST',
+    body: JSON.stringify({ action }),
+    keepalive: options.keepalive,
+  });
 
 /**
  * Feature a drawing. The classroom is optional: the server resolves the one

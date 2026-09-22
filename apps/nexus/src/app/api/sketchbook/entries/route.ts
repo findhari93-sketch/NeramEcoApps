@@ -7,6 +7,7 @@ import { getRequestUser } from '@/lib/study-materials';
 import { ApiError, errorResponse } from '@/lib/api-errors';
 import { istDate } from '@/lib/sketchbook-rhythm';
 import { loadStudentRhythm } from '@/lib/sketchbook-payload';
+import { parseQuality } from '@/lib/image-quality';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
 const CAPTION_MAX = 80;
@@ -14,7 +15,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 /**
  * POST /api/sketchbook/entries   (student)
- * body { original_image_url, thumbnail_url?, caption?, inspiration_item_id? }
+ * body { original_image_url, thumbnail_url?, caption?, inspiration_item_id?, image_quality? }
  *
  * The image is already in the drawing-uploads bucket (POST /api/drawing/upload).
  * A sketch is a drawing_submissions row with source_type 'sketchbook' and status
@@ -33,6 +34,9 @@ export async function POST(request: NextRequest) {
     if (!/^https:\/\//.test(originalUrl)) throw new ApiError('Missing original_image_url', 400);
     const thumbnailUrl = typeof body?.thumbnail_url === 'string' && /^https:\/\//.test(body.thumbnail_url) ? body.thumbnail_url : null;
     const caption = typeof body?.caption === 'string' ? body.caption.trim().slice(0, CAPTION_MAX) : '';
+    // The phone's measurement, fingerprint included (lib/image-fingerprint.ts).
+    // Unmeasured is a valid state, so a bad or missing value never blocks the sketch.
+    const imageQuality = parseQuality(body?.image_quality);
 
     let inspirationItemId: string | null = null;
     if (body?.inspiration_item_id !== undefined && body?.inspiration_item_id !== null) {
@@ -62,6 +66,17 @@ export async function POST(request: NextRequest) {
       // Never leave a half-made sketch behind as a 'submitted' orphan in the review queue.
       await supabase.from('drawing_submissions').delete().eq('id', submission.id);
       throw finishError;
+    }
+    if (imageQuality) {
+      // Its own write and never fatal, like the assignment route's storeQuality: an
+      // environment without the column costs an unmeasured photo, never the sketch.
+      // `as any` like the assignment route's storeQuality: image_quality (migration
+      // 20260914110000) is not in the generated Database type yet.
+      const { error: qualityError } = await (supabase as any)
+        .from('drawing_submissions')
+        .update({ image_quality: imageQuality })
+        .eq('id', submission.id);
+      if (qualityError) console.error('[sketchbook] could not store the photo measurement:', qualityError.message);
     }
 
     const today = istDate(submission.submitted_at || new Date());

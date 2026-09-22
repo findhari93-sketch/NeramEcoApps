@@ -3,7 +3,8 @@
  * Pure, so the console's states and the key selector are unit tested.
  */
 
-import type { ParticipationRow, PromptCounts, TeacherPrompt, TeacherSnapshot } from './types';
+import { promptTitle } from './format';
+import type { HistoryEntry, ParticipationRow, PromptCounts, TeacherPrompt, TeacherSnapshot } from './types';
 
 export type ConsoleView =
   | { kind: 'loading' }
@@ -46,12 +47,36 @@ export function consoleAnnouncement(view: ConsoleView): string {
     case 'ready':
       return 'Ready to ask.';
     case 'open':
-      return `Question ${view.prompt.sequence} is open.`;
+      return `${promptTitle(view.prompt)} is open.`;
     case 'closed':
-      return `Question ${view.prompt.sequence} closed.`;
+      return `${promptTitle(view.prompt)} closed.`;
     case 'revealed':
-      return `Question ${view.prompt.sequence} revealed.`;
+      return `${promptTitle(view.prompt)} revealed.`;
   }
+}
+
+/**
+ * A question's chip in Questions so far. A closed question that is not the one
+ * on screen is waiting for its answer ("answer later"), which is what the
+ * teacher chose by asking the next question or by pressing Decide later.
+ */
+export function historyChipLabel(entry: HistoryEntry, waiting: boolean): string {
+  const title = promptTitle(entry);
+  if (entry.state === 'revealed') return entry.ungraded ? `${title} poll` : `${title}  ${entry.correct} of ${entry.answered}`;
+  if (entry.state === 'closed' && waiting) return `${title} answer later`;
+  return `${title} ${entry.state}`;
+}
+
+/** The answer counts for a closed question, from its named rows (the same numbers the snapshot's groups carry). */
+export function groupsFromParticipation(rows: readonly ParticipationRow[]): Array<{ value: string; count: number }> {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    if (row.participation !== 'answered' || row.answer === null) continue;
+    counts.set(row.answer, (counts.get(row.answer) ?? 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
 }
 
 /** What POST /api/pad/sessions/:id/resend answers. */

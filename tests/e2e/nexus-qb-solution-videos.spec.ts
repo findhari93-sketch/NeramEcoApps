@@ -63,8 +63,32 @@ test.describe('QB paper solution videos', () => {
     await expect(page.getByRole('button', { name: 'Videos', pressed: true })).toBeVisible();
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await firstField();
-    await expect(page.getByLabel(/^Videos: \d+ of \d+ done$/)).toBeVisible();
+    // One bar for a one-section paper, one per section otherwise.
+    await expect(page.getByLabel(/: \d+ of \d+ done$/).first()).toBeVisible();
     await page.screenshot({ path: 'test-results/qb-videos-1280.png' });
+  });
+
+  test('a paper with sections counts each one, with the paper total beside them', async () => {
+    const total = page.getByText(/^\d+ of \d+ in all$/);
+    if ((await total.count()) === 0) {
+      await expect(page.getByLabel(/^Videos: \d+ of \d+ done$/)).toBeVisible();
+      return;
+    }
+    await expect(total).toBeVisible();
+    const bars = page.getByLabel(/^(Mathematics|Aptitude|Drawing|Unsectioned).*: \d+ of \d+ done$/);
+    expect(await bars.count()).toBeGreaterThan(1);
+  });
+
+  test('Find on YouTube says plainly when the channel is not connected here', async () => {
+    // Staging holds no YouTube connection, so this is the path it can honestly test.
+    await page.getByRole('button', { name: 'Find on YouTube' }).click();
+    const dialog = page.getByRole('dialog', { name: /Find this paper's videos on YouTube/ });
+    await expect(dialog.getByText(/Q no 22 - (JEE|NATA) \d{4} Solution Video/)).toBeVisible();
+    await dialog.getByRole('button', { name: 'Search the channel' }).click();
+    await expect(dialog.getByRole('alert')).toContainText(/not connected|stopped working|cannot read/i, { timeout: 60_000 });
+    await page.screenshot({ path: 'test-results/qb-youtube-not-connected.png' });
+    await dialog.getByRole('button', { name: 'Close' }).first().click();
+    await expect(dialog).toHaveCount(0);
   });
 
   test('every question gets its own field, and the No video queue narrows to the ones without', async () => {

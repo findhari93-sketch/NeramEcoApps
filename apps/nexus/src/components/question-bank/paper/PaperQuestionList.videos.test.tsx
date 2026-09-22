@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
-import type { NexusQBQuestion, QBQuestionSection } from '@neram/database';
-import PaperQuestionList, { type NeedsFilter, type PaperQuestionMode } from './PaperQuestionList';
+import type { NexusQBQuestion, QBQuestionSection, QBReportGroup } from '@neram/database';
+import PaperQuestionList, {
+  type NeedsFilter,
+  type PaperQuestionMode,
+  type PaperSectionFilter,
+} from './PaperQuestionList';
 import { useVideoLinkDrafts } from '@/hooks/useVideoLinkDrafts';
 import { useState } from 'react';
 
@@ -38,11 +42,19 @@ const QUESTIONS = [
   q(3, 'aptitude'),
 ];
 
-function Harness({ initialMode = 'videos' as PaperQuestionMode, onOpenPaste = vi.fn() }) {
+function Harness({
+  initialMode = 'videos' as PaperQuestionMode,
+  onOpenPaste = vi.fn(),
+  questions = QUESTIONS,
+  reports = undefined as Record<string, QBReportGroup[]> | undefined,
+  onTellVideoFixed = vi.fn(),
+  onOpenYouTube = vi.fn(),
+}) {
   const [mode, setMode] = useState<PaperQuestionMode>(initialMode);
   const [needsFilter, setNeedsFilter] = useState<NeedsFilter>('all');
+  const [sectionFilter, setSectionFilter] = useState<PaperSectionFilter | null>(null);
   const drafts = useVideoLinkDrafts({
-    questions: QUESTIONS,
+    questions,
     paperId: 'paper-1',
     getToken: async () => 't',
     onSaved: vi.fn(),
@@ -50,7 +62,7 @@ function Harness({ initialMode = 'videos' as PaperQuestionMode, onOpenPaste = vi
   });
   return (
     <PaperQuestionList
-      questions={QUESTIONS}
+      questions={questions}
       tagCounts={{}}
       activeQuestionId={null}
       onActivate={vi.fn()}
@@ -59,8 +71,8 @@ function Harness({ initialMode = 'videos' as PaperQuestionMode, onOpenPaste = vi
       onModeChange={setMode}
       needsFilter={needsFilter}
       onNeedsFilterChange={setNeedsFilter}
-      sectionFilter={null}
-      onSectionFilterChange={vi.fn()}
+      sectionFilter={sectionFilter}
+      onSectionFilterChange={setSectionFilter}
       onBulkSetNeedsImage={vi.fn()}
       onDeleteQuestions={vi.fn()}
       onSetActiveQuestions={vi.fn()}
@@ -69,9 +81,29 @@ function Harness({ initialMode = 'videos' as PaperQuestionMode, onOpenPaste = vi
       onSaveAllImages={vi.fn()}
       savingImages={false}
       saveImageProgress={{ done: 0, total: 0 }}
-      videos={{ drafts, onOpenPaste, onSave: vi.fn() }}
+      videos={{ drafts, onOpenPaste, onOpenYouTube, onSave: vi.fn() }}
+      reports={reports}
+      onTellVideoFixed={onTellVideoFixed}
     />
   );
+}
+
+function videoReport(over: Partial<QBReportGroup> = {}): QBReportGroup {
+  return {
+    question_id: 'q1',
+    target: 'video',
+    part_label: null,
+    status: 'open',
+    students: 2,
+    reasons: [{ reason: 'wrong_working', count: 2 }],
+    notes: [],
+    first_reported_at: '2026-09-22T10:00:00Z',
+    last_reported_at: '2026-09-22T11:00:00Z',
+    changed_since_reported: false,
+    resolution_note: null,
+    resolved_at: null,
+    ...over,
+  };
 }
 
 describe('Videos mode', () => {
@@ -82,9 +114,49 @@ describe('Videos mode', () => {
     expect(screen.getByLabelText('Video for question 3')).not.toBeNull();
   });
 
-  it('shows progress across the paper', () => {
+  it('shows one bar for a paper with a single section', () => {
+    render(<Harness questions={[q(1, 'aptitude', watch('xrKukhHIt0A')), q(2, 'aptitude')]} />);
+    expect(screen.getByLabelText('Videos: 1 of 2 done')).not.toBeNull();
+  });
+
+  it('shows each section on its own, with the paper total beside them', () => {
     render(<Harness />);
-    expect(screen.getByLabelText('Videos: 1 of 3 done')).not.toBeNull();
+    expect(screen.getByLabelText('Mathematics (MCQ): 1 of 2 done')).not.toBeNull();
+    expect(screen.getByLabelText('Aptitude: 0 of 1 done')).not.toBeNull();
+    expect(screen.getByText('1 of 3 in all')).not.toBeNull();
+  });
+
+  it('says a finished section is finished, in words and not only colour', () => {
+    render(
+      <Harness
+        questions={[
+          q(1, 'math_mcq'),
+          q(31, 'aptitude', watch('U1X9MmLh-ZQ')),
+          q(32, 'aptitude', watch('T9CB0HymAJo')),
+        ]}
+      />,
+    );
+    expect(screen.getByText('All have a video')).not.toBeNull();
+    // Nothing is missing there, so there is nothing to show.
+    expect(screen.queryByRole('button', { name: /Aptitude questions without a video/ })).toBeNull();
+  });
+
+  it('jumps to the gaps of one section', () => {
+    render(<Harness />);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Show 1 Mathematics (MCQ) question without a video' }),
+    );
+    expect(screen.queryByLabelText('Video for question 1')).toBeNull();
+    expect(screen.getByLabelText('Video for question 2')).not.toBeNull();
+    expect(screen.queryByLabelText('Video for question 3')).toBeNull();
+  });
+
+  it('counts the whole section in its heading, even while the list is filtered', () => {
+    render(<Harness />);
+    fireEvent.click(screen.getByRole('button', { name: 'No video 2' }));
+    // The heading's own range reads Q2 alone now, but its count is the section's.
+    const heading = screen.getByText('Mathematics (MCQ) (Q2)').parentElement!;
+    expect(within(heading).getByText('1/2')).not.toBeNull();
   });
 
   it('counts the questions still without a video, and narrows to them', () => {
@@ -123,6 +195,23 @@ describe('Videos mode', () => {
     expect(within(summary).getByText('Line 6: Q9 is not on this paper')).not.toBeNull();
   });
 
+  it('offers to find the videos on YouTube from the header', () => {
+    const onOpenYouTube = vi.fn();
+    render(<Harness onOpenYouTube={onOpenYouTube} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Find on YouTube' }));
+    expect(onOpenYouTube).toHaveBeenCalled();
+  });
+
+  it('lets a replaced link go back to the saved one, without retyping it', () => {
+    render(<Harness />);
+    fireEvent.change(screen.getByLabelText('Video for question 1'), {
+      target: { value: 'https://youtu.be/J9rHcdRPslM' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Keep the saved link for question 1' }));
+    expect((screen.getByLabelText('Video for question 1') as HTMLInputElement).value).toBe(watch('xrKukhHIt0A'));
+    expect(screen.queryByText('1 unsaved change')).toBeNull();
+  });
+
   it('opens the paste box from the header', () => {
     const onOpenPaste = vi.fn();
     render(<Harness onOpenPaste={onOpenPaste} />);
@@ -133,6 +222,45 @@ describe('Videos mode', () => {
   it('has no tick boxes, since bulk actions do not apply here', () => {
     render(<Harness />);
     expect(screen.queryByRole('checkbox')).toBeNull();
+  });
+});
+
+describe('Student reports', () => {
+  it('queues the questions students reported, and only when there are some', () => {
+    const { unmount } = render(<Harness initialMode="edit" />);
+    expect(screen.queryByRole('button', { name: /^Reported/ })).toBeNull();
+    unmount();
+
+    render(<Harness initialMode="edit" reports={{ q2: [videoReport({ question_id: 'q2' })] }} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Reported 1' }));
+    expect(screen.queryByRole('button', { name: 'Open question 1' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Open question 2' })).not.toBeNull();
+  });
+
+  it('flags a reported question in its row, saying what was reported', () => {
+    render(<Harness initialMode="edit" reports={{ q1: [videoReport()] }} />);
+    const row = (n: number) => screen.getByRole('button', { name: `Open question ${n}` });
+    expect(within(row(1)).queryAllByLabelText('Students reported a problem: Video solution (2)').length).toBeGreaterThan(0);
+    expect(within(row(2)).queryAllByLabelText(/Students reported a problem/)).toHaveLength(0);
+  });
+
+  it('shows a video report on its row in Videos mode, where the link is fixed', () => {
+    render(<Harness reports={{ q1: [videoReport()] }} />);
+    expect(screen.getByText('Reported: Mistake in the working (2)')).not.toBeNull();
+    // Nothing has changed yet, so there is nothing to tell them.
+    expect(screen.queryByRole('button', { name: /Tell the 2 students/ })).toBeNull();
+  });
+
+  it('offers to tell the students once the reported video has been replaced', () => {
+    const onTellVideoFixed = vi.fn();
+    render(
+      <Harness
+        reports={{ q1: [videoReport({ changed_since_reported: true })] }}
+        onTellVideoFixed={onTellVideoFixed}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Tell the 2 students it is fixed' }));
+    expect(onTellVideoFixed).toHaveBeenCalledWith('q1', expect.objectContaining({ target: 'video' }));
   });
 });
 

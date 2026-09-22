@@ -95,3 +95,22 @@ describe('parseQuality', () => {
     expect(parseQuality(null)).toBeNull();
   });
 });
+
+describe('parseQuality keeps the sheet fingerprint', () => {
+  const base = { sharpness: 40, ink: 0.02, brightness: 200, aspect: 0.75, v: 1 };
+
+  it('keeps a well-formed fingerprint', () => {
+    const fp = 'a'.repeat(64);
+    expect(parseQuality({ ...base, fp })?.fp).toBe(fp);
+  });
+
+  it('drops a malformed fingerprint but keeps the measurement', () => {
+    const q = parseQuality({ ...base, fp: 'not-a-fingerprint' });
+    expect(q).not.toBeNull();
+    expect(q?.fp).toBeUndefined();
+  });
+
+  it('accepts a measurement with no fingerprint at all (every older row)', () => {
+    expect(parseQuality(base)?.fp).toBeUndefined();
+  });
+});

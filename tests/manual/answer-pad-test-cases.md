@@ -441,14 +441,30 @@ Run these first. If one fails, stop and report it.
 
 ---
 
-### TC-PAD-029: Notes and the question history
-**Priority:** P2
+### TC-PAD-029: Question numbers and the question history
+**Priority:** P1
 **Type:** Functional
-**Preconditions:** At least two questions revealed.
+**Preconditions:** A session with nothing asked yet.
 **Steps:**
-1. T1 types "Kinematics warm-up" in **Add a note** and selects **Save**.
-2. T1 taps an earlier question in "Questions so far".
-**Expected Result:** The note is saved and appears on that question in history and in the report. History chips read like "Q1 1 of 2" or "Q2 poll". Tapping an earlier revealed question shows its names below the strip.
+1. T1 types 38 in **Question no.**, types a short question in **Question (optional)** (or dictates it with Windows + H), and selects **Ask Q.38**.
+2. T1 closes and reveals it, then looks at the next Ask button.
+3. T1 selects the pencil next to the question title, changes the number to 38a and selects **Save**.
+4. After two questions, T1 taps an earlier question in "Questions so far".
+**Expected Result:** Step 1: every student pad and the meeting screen say "Q.38", and the pads show the question text. Step 2: the button reads **Ask Q.39** with 39 already filled in. Step 3: every screen updates to "Q.38a". History chips read like "Q.38  1 of 2" or "Q.39 poll", and the report names each question the same way. Tapping an earlier revealed question shows its names below the strip.
+**Actual Result:**
+**Status:** Not Run
+
+---
+
+### TC-PAD-032: Decide the answer later
+**Priority:** P1
+**Type:** Functional
+**Preconditions:** A question closed, with answers from at least two students.
+**Steps:**
+1. T1 selects **Decide later, ask the next question**, then asks the next question.
+2. T1 taps the "Q.38 answer later" chip in "Questions so far", picks the answer the class chose most and selects **Reveal answer**.
+3. Leave another question without an answer, end the class, open the class report and select **Set the answer** on it.
+**Expected Result:** Step 1: the next question opens for students while the first keeps its answers. Step 2: the counts show beside each choice, and after the reveal the students' scores include it. Step 3: the report shows the answers counted, the reveal works after the class has ended, and the student table updates. Reopen works only on the newest question.
 **Actual Result:**
 **Status:** Not Run
 
@@ -474,7 +490,7 @@ Run these first. If one fails, stop and report it.
 **Steps:**
 1. T1 selects **End class**, then **End**.
 2. T1 selects **End anyway**.
-**Expected Result:** Step 1 shows "Question N isn't revealed. It will not count towards anyone's score." with **End anyway** and **Cancel**. Step 2 ends the class; that question is not graded anywhere.
+**Expected Result:** Step 1 shows "Q.38 has no answer yet. You can set it later from the class report, and scores update then." (or "2 questions have no answer yet, starting with Q.38...") with **End anyway** and **Cancel**. Step 2 ends the class and says how many questions are waiting. Setting the answer from the report (TC-PAD-032) grades them.
 **Actual Result:**
 **Status:** Not Run
 
@@ -617,7 +633,7 @@ Run these first. If one fails, stop and report it.
 **Type:** Functional
 **Preconditions:** A session.
 **Steps:**
-1. T1 uses **Fewer options** and **More options** to ask with 2, then 6 options.
+1. T1 uses **Fewer answer options** and **More answer options** to ask with 2, then 6 options.
 **Expected Result:** The type button reads "A to B", then "A to F". Students see exactly that many large buttons; the key selector offers the same letters.
 **Actual Result:**
 **Status:** Not Run
@@ -1146,7 +1162,7 @@ About 90% of students join on the Teams phone app. Run TC-PAD-080 first: it reco
 1. On each client, find the Answer Pad in the meeting and open it.
 2. T1 asks a question. Each student notes whether a pop-up appears and whether they can answer inside it.
 3. On Teams desktop, with the pad closed, note whether a red dot appears on the Answer Pad button.
-4. T1 reveals and selects **Share results**. Each student notes what their meeting screen shows.
+4. T1 reveals and selects **More options**, then **Show results on the meeting screen**. Each student notes what their meeting screen shows. No student has a Share button under the side panel.
 5. Note how long the pop-up and the side panel take to show answer buttons on each phone.
 **Expected Result:** A filled table with one row per client: where the button is (top bar, under More, or missing), the pop-up (answered inside it or not), the badge, shared results, and open time. Teams desktop shows everything; phones show the button under More and the pop-up. A client without the panel or the pop-up can still answer through TC-PAD-087. Record surprises as observations with screenshots, not as defects.
 **Actual Result:**
@@ -1278,17 +1294,78 @@ About 90% of students join on the Teams phone app. Run TC-PAD-080 first: it reco
 
 ---
 
+### TC-PAD-091: Pop out and one screen
+**Priority:** P1
+**Type:** Functional
+**Preconditions:** T1 on Teams desktop with one monitor, a question paper open in a PDF viewer.
+**Steps:**
+1. T1 selects the Pop out button next to the class name.
+2. T1 shares with Share, then Window, and picks the PDF viewer, not the screen.
+3. T1 asks, closes and reveals a question from the popped-out window placed beside the PDF.
+4. T1 opens **More options**, then **Using one screen?**
+**Expected Result:** Step 1: the console opens in its own Teams window on the same class, movable and resizable. Step 2 and 3: students see only the PDF, never the pad, and the pads update as usual. Step 4 explains sharing a window. On Teams on the web the Pop out button is not shown.
+**Actual Result:**
+**Status:** Not Run
+
+---
+
+### TC-PAD-092: A snip of the paper on the question
+**Priority:** P1
+**Type:** Functional
+**Preconditions:** T1 on Teams desktop with a question paper open; S1 on a phone.
+**Steps:**
+1. T1 presses Win + Shift + S, snips a question, clicks into the Answer Pad and presses Ctrl + V.
+2. T1 opens **Add option text (optional)**, types text for A and C only, and asks.
+3. S1 taps the picture.
+4. On the next question, T1 asks first, then pastes a picture into **Add a picture** while it is open.
+**Expected Result:** Step 1: a preview appears under "Picture (optional)" within a few seconds. Step 2: S1 sees the picture under the question title, and the answer buttons read "A Both correct", "B", "C Both wrong", "D". Step 3: the picture opens full screen and closes again. Step 4: the picture appears on every pad without the question closing. The class report shows a thumbnail for both questions.
+**Actual Result:**
+**Status:** Not Run
+
+---
+
+### TC-PAD-093: "I can't answer" with a reason
+**Priority:** P1
+**Type:** Functional / Privacy
+**Preconditions:** A question open; S1, S2 and S3 have not answered.
+**Steps:**
+1. S1 taps **I can't answer**, picks **I don't know** and taps **Send to my teacher**.
+2. S2 does the same with **Something else** and the note "My pen ran out".
+3. T1 looks at the console.
+4. S1 taps an answer anyway.
+5. T1 closes the question and taps **Show names**.
+**Expected Result:** Step 1: S1 reads "You told your teacher: I don't know. You can still answer above." and the answer buttons stay. Step 3: the console shows "2 can't answer: 1 don't know, 1 other" and no names. Step 4: S1's answer locks and the count drops to 1. Step 5: S2 is listed under Present but silent with "Said: Something else, My pen ran out". The report shows "1 can't answer: 1 other" under that question.
+**Actual Result:**
+**Status:** Not Run
+
+---
+
+### TC-PAD-094: Nudge the students who have not answered
+**Priority:** P1
+**Type:** Functional
+**Preconditions:** A question open. S1 has the pad open and has not answered; S2 has the pad closed; S3 has answered; T1 has connected their Teams login in Nexus.
+**Steps:**
+1. T1 taps **Nudge the N who haven't answered**.
+2. T1 taps it again straight away.
+3. S1 looks at the pad; S2 looks at Teams chat.
+4. S1 taps **I can't answer** and gives a reason.
+**Expected Result:** Step 1: the console says "Nudged 1 on their pad and 1 by Teams chat." and the button reads "Nudge again in 60s", counting down. Step 2: nothing is sent. Step 3: S1 sees "Your teacher is waiting for your answer to Q.38. A guess is fine, or tap I can't answer." (a phone buzzes once); S2 gets a chat from T1 with the same polite words and an Open the Answer Pad link; S3 gets nothing. Step 4: the banner goes away. If T1's Teams login is not connected, S2 gets a Nexus notification instead and the console says so.
+**Actual Result:**
+**Status:** Not Run
+
+---
+
 ### TC-PAD-090: Share results to the meeting screen
 **Priority:** P1
 **Type:** Functional / Security
 **Preconditions:** A revealed question that at least two students answered. T1 is the organizer, on Teams desktop.
 **Steps:**
-1. T1 selects **Share results** on the console.
+1. T1 selects **More options**, then **Show results on the meeting screen**.
 2. Every student looks at the meeting screen.
 3. T1 asks the next question while still sharing, then closes it.
-4. T1 reveals, then selects **Stop sharing**.
-5. A student who is only an attendee opens the Answer Pad panel.
-**Expected Result:** Step 2: everyone sees "Question N", the answer, the Correct and Incorrect totals, and a bar for each choice with the correct one marked, and no student names anywhere. Step 3: the screen shows only "N of M answered", with no breakdown before the reveal. Step 4: the new breakdown shows, then sharing ends for everyone. Step 5: the attendee has no **Share results** button. A short text question never shows what students typed.
+4. T1 reveals, then selects **Stop** on "The results are on the meeting screen."
+5. A student opens the Answer Pad panel and looks under it.
+**Expected Result:** Step 2: everyone sees the question as the paper names it ("Q.38"), the answer, the Correct and Incorrect totals, and a bar for each choice with the correct one marked, and no student names anywhere. Step 3: the screen shows only "N of M answered", with no breakdown before the reveal. Step 4: the new breakdown shows, then sharing ends for everyone. Step 5: there is no Share button under the panel (Teams' own button is hidden by the 1.3.0 package). A short text question never shows what students typed.
 **Actual Result:**
 **Status:** Not Run
 

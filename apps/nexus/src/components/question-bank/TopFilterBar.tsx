@@ -1,23 +1,9 @@
 'use client';
 
-import {
-  Box,
-  Chip,
-  Badge,
-  Button,
-  IconButton,
-  Typography,
-  ToggleButton,
-  ToggleButtonGroup,
-  useTheme,
-} from '@neram/ui';
+import type { ReactNode } from 'react';
+import { Box, Chip, Badge, useTheme } from '@neram/ui';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import CloseIcon from '@mui/icons-material/Close';
-import AddIcon from '@mui/icons-material/Add';
-import SelectAllIcon from '@mui/icons-material/SelectAll';
-import TranslateIcon from '@mui/icons-material/Translate';
-import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
-import CancelIcon from '@mui/icons-material/Cancel';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import type { QBFilterState, QBExamType } from '@neram/database';
 import { QB_EXAM_TYPE_LABELS } from '@neram/database';
@@ -26,30 +12,13 @@ import { getFilterChips, removeFilterValue, type ActiveChip } from './FilterChip
 // ─── Props ──────────────────────────────────────────────────────────────────
 
 export interface TopFilterBarProps {
-  // Filter state
   filters: QBFilterState;
   onFilterChange: (filters: QBFilterState) => void;
   onOpenDrawer: () => void;
   activeFilterCount: number;
 
-  // Results
-  totalCount: number;
-  filteredCount: number;
-
-  // Selection mode
-  selectionMode: boolean;
-  selectedCount: number;
-  onToggleSelectionMode: () => void;
-  onSelectAll: () => void;
-  onCreateTest: () => void;
-
-  // Context (for year paper view)
-  contextLabel?: string; // e.g., "JEE 2026"
+  /** One paper, or one exam: the quick chips below are the drawer's job there. */
   isYearPaperView?: boolean;
-
-  // Language
-  lang: 'en' | 'hi';
-  onLangChange: (lang: 'en' | 'hi') => void;
 
   /**
    * slug -> label for the subject tag tree, so a collapsed parent selection
@@ -57,8 +26,9 @@ export interface TopFilterBarProps {
    * members of QBCategory, so QB_CATEGORY_LABELS cannot resolve them.
    */
   categoryLabels?: Record<string, string>;
-  /** A request is in flight, so the result count is not worth reporting yet. */
-  loading?: boolean;
+
+  /** Pinned to the end of the chip row, e.g. the Grid / List switch. */
+  trailing?: ReactNode;
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -122,12 +92,28 @@ function isQuickChipActive(filters: QBFilterState, chip: QuickChip): boolean {
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
-/*
-  These were four hardcoded hex values sitting beside a themed app: #7c4dff is
-  not the Nexus purple (#7C3AED), and the orange trio had no relationship to the
-  warning palette at all, so this bar drifted in dark mode and ignored any theme
-  change. They now come from the theme, resolved inside the component.
-*/
+/**
+ * A 36px chip with a 44px hit area.
+ *
+ * The hit area used to be an `::after` inside a row that scrolled sideways, and
+ * `overflow-x: auto` forces `overflow-y` to auto as well: the 44px box stuck
+ * out of a 32px row, the row gained a few pixels of hidden vertical scroll, and
+ * a wheel or a focus scroll slid every chip up under the row's top edge. That
+ * was the clipped "JEE Paper 2 2014" / "Video solutions" row. The row now
+ * wraps and never scrolls, and a 4px row gap per side keeps each hit area
+ * inside it.
+ */
+const CHIP_HIT = {
+  height: 36,
+  position: 'relative',
+  cursor: 'pointer',
+  fontWeight: 600,
+  fontSize: '0.8125rem',
+  borderRadius: '18px',
+  '&::after': { content: '""', position: 'absolute', left: 0, right: 0, top: -4, bottom: -4 },
+  '& .MuiChip-icon': { color: 'inherit' },
+  '&.Mui-focusVisible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+} as const;
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -136,79 +122,44 @@ export default function TopFilterBar({
   onFilterChange,
   onOpenDrawer,
   activeFilterCount,
-  totalCount,
-  filteredCount,
-  selectionMode,
-  selectedCount,
-  onToggleSelectionMode,
-  onSelectAll,
-  onCreateTest,
-  contextLabel,
   isYearPaperView,
-  lang,
-  onLangChange,
   categoryLabels,
-  loading = false,
+  trailing,
 }: TopFilterBarProps) {
   const theme = useTheme();
-  const PURPLE_ACCENT = theme.palette.primary.main;
-  const ORANGE_BG = theme.palette.warning.light;
-  const ORANGE_BORDER = theme.palette.warning.main;
-  const ORANGE_TEXT = theme.palette.warning.dark;
+  const accent = theme.palette.primary.main;
+  const accentDark = theme.palette.primary.dark;
 
   const activeChips: ActiveChip[] = getFilterChips(filters, categoryLabels);
+  const videoOn = filters.solution_filter === 'has_video';
+
+  const on = { bgcolor: accent, color: theme.palette.primary.contrastText, '&:hover': { bgcolor: accentDark } };
+  const off = {
+    borderColor: 'divider',
+    color: 'text.secondary',
+    '&:hover': { borderColor: accent, color: accent },
+  };
 
   function handleDismissChip(key: keyof QBFilterState, value?: string | number) {
     onFilterChange(removeFilterValue(filters, key, value));
   }
 
-  function handleClearAll() {
-    onFilterChange({});
-  }
-
   return (
-    <Box
-      sx={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 10,
-        bgcolor: 'background.paper',
-        borderBottom: '1px solid',
-        borderColor: 'divider',
-        px: { xs: 0.75, sm: 1.5 },
-        py: { xs: 0.75, sm: 1.5 },
-      }}
-    >
-      {/* ── Row 1: Quick filter chips + Filters button + Language toggle ── */}
+    <Box>
+      {/* Quick filters, the Filters drawer, and whatever the page pins after them */}
       <Box
         sx={{
           display: 'flex',
+          flexWrap: 'wrap',
           alignItems: 'center',
-          gap: 0.75,
-          overflowX: 'auto',
-          scrollbarWidth: 'none',
-          '&::-webkit-scrollbar': { display: 'none' },
-          WebkitOverflowScrolling: 'touch',
+          columnGap: 1,
+          rowGap: 1,
+          py: 0.5,
+          overflow: 'visible',
         }}
       >
-        {/* Context label for year paper view */}
-        {contextLabel && (
-          <Chip
-            label={contextLabel}
-            size="small"
-            sx={{
-              flexShrink: 0,
-              height: 30,
-              fontWeight: 600,
-              fontSize: '0.8125rem',
-              bgcolor: PURPLE_ACCENT,
-              color: '#fff',
-              borderRadius: '15px',
-            }}
-          />
-        )}
-
-        {/* Quick-access filter chips */}
+        {/* Quick chips. Below sm they are hidden: each only opens the drawer,
+            and the active-filter row underneath says what is applied. */}
         {!isYearPaperView &&
           QUICK_CHIPS.map((chip) => {
             const active = isQuickChipActive(filters, chip);
@@ -216,28 +167,9 @@ export default function TopFilterBar({
               <Chip
                 key={chip.filterKey}
                 label={getQuickChipLabel(filters, chip)}
-                size="small"
                 variant={active ? 'filled' : 'outlined'}
                 onClick={onOpenDrawer}
-                sx={{
-                  flexShrink: 0,
-                  height: { xs: 26, sm: 30, md: 32 },
-                  fontSize: { xs: '0.675rem', sm: '0.75rem' },
-                  fontWeight: 500,
-                  borderRadius: '13px',
-                  cursor: 'pointer',
-                  ...(active
-                    ? {
-                        bgcolor: PURPLE_ACCENT,
-                        color: '#fff',
-                        '&:hover': { bgcolor: '#651fff' },
-                      }
-                    : {
-                        borderColor: 'grey.300',
-                        color: 'text.secondary',
-                        '&:hover': { borderColor: PURPLE_ACCENT, color: PURPLE_ACCENT },
-                      }),
-                }}
+                sx={{ ...CHIP_HIT, fontWeight: 500, display: { xs: 'none', sm: 'inline-flex' }, ...(active ? on : off) }}
               />
             );
           })}
@@ -245,323 +177,79 @@ export default function TopFilterBar({
         {/* Video solutions: a one-tap lens rather than a drawer setting, and
             shown on a year paper too, where the quick chips above are hidden
             but where students actually practise. */}
-        {(() => {
-          const videoOn = filters.solution_filter === 'has_video';
-          return (
-            <Chip
-              icon={<PlayCircleOutlineIcon aria-hidden sx={{ fontSize: 16 }} />}
-              label="Video solutions"
-              size="small"
-              variant={videoOn ? 'filled' : 'outlined'}
-              onClick={() =>
-                onFilterChange({ ...filters, solution_filter: videoOn ? undefined : 'has_video' })
-              }
-              aria-pressed={videoOn}
-              sx={{
-                flexShrink: 0,
-                height: { xs: 26, sm: 30, md: 32 },
-                fontSize: { xs: '0.675rem', sm: '0.75rem' },
-                fontWeight: 600,
-                borderRadius: '13px',
-                cursor: 'pointer',
-                // A 44px tap area around a chip that stays the row's size.
-                position: 'relative',
-                overflow: 'visible',
-                '&::after': { content: '""', position: 'absolute', left: 0, right: 0, top: '50%', height: 44, transform: 'translateY(-50%)' },
-                '& .MuiChip-icon': { color: 'inherit' },
-                ...(videoOn
-                  ? { bgcolor: PURPLE_ACCENT, color: '#fff', '&:hover': { bgcolor: '#651fff' } }
-                  : {
-                      borderColor: 'grey.300',
-                      color: 'text.secondary',
-                      '&:hover': { borderColor: PURPLE_ACCENT, color: PURPLE_ACCENT },
-                    }),
-              }}
-            />
-          );
-        })()}
+        <Chip
+          icon={<PlayCircleOutlineIcon aria-hidden sx={{ fontSize: 18 }} />}
+          label="Video solutions"
+          variant={videoOn ? 'filled' : 'outlined'}
+          onClick={() => onFilterChange({ ...filters, solution_filter: videoOn ? undefined : 'has_video' })}
+          aria-pressed={videoOn}
+          sx={{ ...CHIP_HIT, ...(videoOn ? on : off) }}
+        />
 
-        {/* Filters button with badge */}
         <Badge
           badgeContent={activeFilterCount}
           color="error"
           invisible={activeFilterCount === 0}
-          sx={{
-            flexShrink: 0,
-            '& .MuiBadge-badge': { fontSize: '0.65rem', height: 16, minWidth: 16 },
-          }}
+          sx={{ '& .MuiBadge-badge': { fontSize: '0.65rem', height: 18, minWidth: 18 } }}
         >
           <Chip
-            icon={<FilterListIcon sx={{ fontSize: 16 }} />}
+            icon={<FilterListIcon aria-hidden sx={{ fontSize: 18 }} />}
             label="Filters"
-            size="small"
             variant="outlined"
             onClick={onOpenDrawer}
             sx={{
-              height: { xs: 26, sm: 30, md: 32 },
-              fontSize: { xs: '0.675rem', sm: '0.75rem' },
-              fontWeight: 600,
-              borderRadius: '13px',
-              borderColor: activeFilterCount > 0 ? PURPLE_ACCENT : 'grey.400',
-              color: activeFilterCount > 0 ? PURPLE_ACCENT : 'text.secondary',
-              cursor: 'pointer',
-              '&:hover': { borderColor: PURPLE_ACCENT, color: PURPLE_ACCENT },
-              '& .MuiChip-icon': { color: 'inherit' },
+              ...CHIP_HIT,
+              ...(activeFilterCount > 0 ? { borderColor: accent, color: accent } : off),
             }}
           />
         </Badge>
 
-        {/* Spacer */}
-        <Box sx={{ flexGrow: 1, minWidth: 8 }} />
-
-        {/* Language toggle */}
-        <ToggleButtonGroup
-          value={lang}
-          exclusive
-          size="small"
-          onChange={(_e, val) => {
-            if (val) onLangChange(val as 'en' | 'hi');
-          }}
-          sx={{
-            flexShrink: 0,
-            height: 30,
-            '& .MuiToggleButton-root': {
-              px: 1,
-              py: 0,
-              fontSize: { xs: '0.7rem', md: '0.8125rem' },
-              fontWeight: 600,
-              textTransform: 'none',
-              borderColor: 'grey.300',
-              '&.Mui-selected': {
-                bgcolor: PURPLE_ACCENT,
-                color: '#fff',
-                borderColor: PURPLE_ACCENT,
-                '&:hover': { bgcolor: '#651fff' },
-              },
-            },
-          }}
-        >
-          <ToggleButton value="en">EN</ToggleButton>
-          <ToggleButton value="hi">HI</ToggleButton>
-        </ToggleButtonGroup>
+        {trailing && (
+          <Box sx={{ ml: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>{trailing}</Box>
+        )}
       </Box>
 
-      {/* ── Row 2 (conditional): Active filter chips ── */}
+      {/* What is applied, each removable in one tap */}
       {activeChips.length > 0 && (
-        <Box
-          sx={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: 0.5,
-            mt: 1,
-          }}
-        >
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, pt: 0.5, pb: 0.5 }}>
           {activeChips.map((chip, idx) => (
             <Chip
               key={`${String(chip.key)}-${chip.value ?? idx}`}
               label={chip.label}
-              size="small"
-              deleteIcon={<CloseIcon sx={{ fontSize: 12 }} />}
+              deleteIcon={<CloseIcon aria-label={`Remove ${chip.label}`} sx={{ fontSize: 16 }} />}
               onDelete={() => handleDismissChip(chip.key, chip.value)}
               sx={{
-                height: 24,
-                fontSize: { xs: '0.7rem', md: '0.8125rem' },
+                height: 32,
+                fontSize: '0.8125rem',
                 fontWeight: 500,
-                borderRadius: '12px',
-                bgcolor: ORANGE_BG,
-                border: `1px solid ${ORANGE_BORDER}`,
-                color: ORANGE_TEXT,
-                '& .MuiChip-deleteIcon': {
-                  color: ORANGE_TEXT,
-                  fontSize: 12,
-                  '&:hover': { color: '#bf360c' },
-                },
+                borderRadius: '16px',
+                bgcolor: 'warning.light',
+                border: '1px solid',
+                borderColor: 'warning.main',
+                color: 'warning.dark',
+                '& .MuiChip-deleteIcon': { color: 'warning.dark', '&:hover': { color: 'error.main' } },
               }}
             />
           ))}
           {activeChips.length > 1 && (
             <Chip
               label="Clear all"
-              size="small"
-              onClick={handleClearAll}
+              onClick={() => onFilterChange({})}
               sx={{
-                height: 24,
-                fontSize: { xs: '0.7rem', md: '0.8125rem' },
+                height: 32,
+                fontSize: '0.8125rem',
                 fontWeight: 500,
-                borderRadius: '12px',
+                borderRadius: '16px',
                 bgcolor: 'transparent',
                 border: '1px solid',
                 borderColor: 'error.light',
                 color: 'error.main',
                 cursor: 'pointer',
-                '&:hover': { bgcolor: 'error.50' },
               }}
             />
           )}
         </Box>
       )}
-
-      {/* ── Row 3: Results count + Selection controls ── */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          mt: { xs: 0.5, sm: 1 },
-          gap: 0.5,
-        }}
-      >
-        {/* Result count */}
-        {/*
-          "Showing 0 of 0 questions" was what this said during every load, which
-          was true and useless: the list had just been emptied before the fetch.
-          The list is no longer blanked, and while a request is in flight this
-          says so rather than reporting a count nobody asked about.
-        */}
-        <Typography
-          variant="body2"
-          color="text.secondary"
-          aria-live="polite"
-          sx={{ fontSize: { xs: '0.75rem', md: '0.8125rem' }, whiteSpace: 'nowrap' }}
-        >
-          {loading ? (
-            'Loading questions…'
-          ) : (
-            <>
-              Showing{' '}
-              <Box component="span" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                {filteredCount}
-              </Box>{' '}
-              of {totalCount} questions
-            </>
-          )}
-        </Typography>
-
-        {/* Selection controls */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-          {!selectionMode ? (
-            <>
-              <IconButton
-                size="small"
-                onClick={onToggleSelectionMode}
-                sx={{
-                  width: 28,
-                  height: { xs: 28, md: 36 },
-                  border: '1px solid',
-                  borderColor: 'grey.300',
-                  color: 'text.secondary',
-                  '&:hover': { borderColor: PURPLE_ACCENT, color: PURPLE_ACCENT },
-                  display: { xs: 'inline-flex', sm: 'none' },
-                }}
-              >
-                <CheckBoxOutlineBlankIcon sx={{ fontSize: 16 }} />
-              </IconButton>
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<CheckBoxOutlineBlankIcon sx={{ fontSize: 16 }} />}
-                onClick={onToggleSelectionMode}
-                sx={{
-                  height: { xs: 28, md: 36 },
-                  fontSize: { xs: '0.7rem', md: '0.8125rem' },
-                  fontWeight: 500,
-                  textTransform: 'none',
-                  borderRadius: '14px',
-                  borderColor: 'grey.300',
-                  color: 'text.secondary',
-                  '&:hover': { borderColor: PURPLE_ACCENT, color: PURPLE_ACCENT },
-                  display: { xs: 'none', sm: 'inline-flex' },
-                }}
-              >
-                Select
-              </Button>
-              <Button
-                size="small"
-                variant="contained"
-                startIcon={<AddIcon sx={{ fontSize: 14, display: { xs: 'none', sm: 'inline-flex' } }} />}
-                onClick={onCreateTest}
-                sx={{
-                  height: { xs: 28, md: 36 },
-                  fontSize: { xs: '0.7rem', md: '0.8125rem' },
-                  fontWeight: 600,
-                  textTransform: 'none',
-                  borderRadius: '14px',
-                  bgcolor: PURPLE_ACCENT,
-                  px: { xs: 1.5, sm: 2 },
-                  minWidth: 'auto',
-                  '&:hover': { bgcolor: '#651fff' },
-                }}
-              >
-                <AddIcon sx={{ fontSize: 14, mr: 0.25, display: { sm: 'none' } }} />
-                Test
-              </Button>
-            </>
-          ) : (
-            <>
-              <Typography
-                variant="body2"
-                sx={{
-                  fontSize: '0.75rem',
-                  fontWeight: 600,
-                  color: PURPLE_ACCENT,
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {selectedCount} selected
-              </Typography>
-              <Button
-                size="small"
-                variant="outlined"
-                startIcon={<SelectAllIcon sx={{ fontSize: 16 }} />}
-                onClick={onSelectAll}
-                sx={{
-                  height: { xs: 28, md: 36 },
-                  fontSize: { xs: '0.7rem', md: '0.8125rem' },
-                  fontWeight: 500,
-                  textTransform: 'none',
-                  borderRadius: '14px',
-                  borderColor: 'grey.300',
-                  color: 'text.secondary',
-                  '&:hover': { borderColor: PURPLE_ACCENT, color: PURPLE_ACCENT },
-                }}
-              >
-                Select All ({filteredCount})
-              </Button>
-              <IconButton
-                size="small"
-                onClick={onToggleSelectionMode}
-                sx={{
-                  width: 28,
-                  height: { xs: 28, md: 36 },
-                  color: 'text.secondary',
-                  '&:hover': { color: 'error.main' },
-                }}
-              >
-                <CancelIcon sx={{ fontSize: 18 }} />
-              </IconButton>
-              <Button
-                size="small"
-                variant="contained"
-                startIcon={<AddIcon sx={{ fontSize: 14 }} />}
-                disabled={selectedCount === 0}
-                onClick={onCreateTest}
-                sx={{
-                  height: { xs: 28, md: 36 },
-                  fontSize: { xs: '0.7rem', md: '0.8125rem' },
-                  fontWeight: 600,
-                  textTransform: 'none',
-                  borderRadius: '14px',
-                  bgcolor: PURPLE_ACCENT,
-                  '&:hover': { bgcolor: '#651fff' },
-                  '&.Mui-disabled': { bgcolor: 'grey.200' },
-                }}
-              >
-                Create Test
-              </Button>
-            </>
-          )}
-        </Box>
-      </Box>
     </Box>
   );
 }

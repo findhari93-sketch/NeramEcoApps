@@ -18,8 +18,16 @@ import CloseIcon from '@mui/icons-material/Close';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import { canActivateQuestion } from '@/lib/qb-activation';
-import type { NexusQBQuestion, NexusQBQuestionSource, QBQuestionSection } from '@neram/database';
+import type {
+  NexusQBQuestion,
+  NexusQBQuestionSource,
+  QBQuestionSection,
+  QBReportGroup,
+  QBReportOutcome,
+} from '@neram/database';
+import { solutionVideosOf } from '@neram/database';
 import QuestionEditForm, { type PaperFallback } from './QuestionEditForm';
+import SolutionReportsPanel from './SolutionReportsPanel';
 import BulkImageQuestionCard from '../BulkImageQuestionCard';
 import type { SlotType, PendingImages } from '@/hooks/useBulkImageFlow';
 import type { ImageState } from '@/lib/bulk-upload-schema';
@@ -65,6 +73,9 @@ export interface PaperQuestionDetailProps {
   /** 'edit' and 'videos' show the full question form (Videos mode opens it to check a question); 'images' shows the paste assembly line. */
   mode?: 'edit' | 'images' | 'videos';
   imagesPane?: ImagesPaneProps;
+  /** Students' open reports on this question. Shown above the form in every mode. */
+  reportGroups?: QBReportGroup[];
+  onResolveReport?: (group: QBReportGroup, outcome: QBReportOutcome, note: string) => Promise<boolean>;
 }
 
 /**
@@ -77,7 +88,7 @@ export interface PaperQuestionDetailProps {
 export default function PaperQuestionDetail({
   question, position, paper, sources, tagIds, choiceGroupSiblings, onUnlinkChoiceGroup,
   getToken, onSaved, onClose, onPrevious, onNext, onChangeSection, onSetActive,
-  mode = 'edit', imagesPane,
+  mode = 'edit', imagesPane, reportGroups, onResolveReport,
 }: PaperQuestionDetailProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -183,6 +194,19 @@ export default function PaperQuestionDetail({
       )}
 
       <Box ref={scrollRef} sx={{ flex: 1, minHeight: 0, overflowY: 'auto', p: { xs: 1.5, md: 2 } }}>
+        {/* First thing in the pane: what students say is wrong here, above the
+            form where it gets fixed. */}
+        {reportGroups && reportGroups.length > 0 && onResolveReport && (
+          <SolutionReportsPanel
+            key={`reports-${question.id}`}
+            groups={reportGroups}
+            videoUrlFor={(part) =>
+              solutionVideosOf(question).find((v) => (v.label ?? null) === (part ?? null))?.url ??
+              (part ? null : question.solution_video_url ?? null)
+            }
+            onResolve={onResolveReport}
+          />
+        )}
         {/*
           key is load-bearing: it remounts the form when the teacher moves to
           another question, so a half-typed edit cannot leak across.

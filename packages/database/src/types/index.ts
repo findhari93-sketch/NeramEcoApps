@@ -8120,25 +8120,144 @@ export interface NexusQBAnswerKeyEntry {
 }
 
 // QB Report Types
+//
+// A student report says WHICH part of a question is wrong (the target) and
+// HOW (the reason). "The answer is wrong" means different fixes for a video,
+// a written solution and an answer key, so the old single list could not tell
+// a teacher what to change.
 
-export type QBReportType = 'wrong_answer' | 'no_correct_option' | 'question_error' | 'missing_solution' | 'unclear_question' | 'other';
+/** The part of a question a student says is wrong. */
+export type QBReportTarget = 'video' | 'explanation' | 'solution_image' | 'answer_key' | 'question';
+
+export const QB_REPORT_TARGETS: QBReportTarget[] = ['video', 'explanation', 'solution_image', 'answer_key', 'question'];
+
+export function isQBReportTarget(value: unknown): value is QBReportTarget {
+  return typeof value === 'string' && (QB_REPORT_TARGETS as string[]).includes(value);
+}
+
+/**
+ * The reason. The first six are the original list; `missing_solution` is kept
+ * for old rows and never offered now (a question without a solution has
+ * nothing to be wrong).
+ */
+export type QBReportType =
+  | 'wrong_answer'
+  | 'no_correct_option'
+  | 'question_error'
+  | 'missing_solution'
+  | 'unclear_question'
+  | 'other'
+  | 'multiple_correct'
+  | 'figure_problem'
+  | 'wrong_working'
+  | 'wrong_final_answer'
+  | 'different_question'
+  | 'not_loading'
+  | 'unclear_solution';
+
 export type QBReportStatus = 'open' | 'in_review' | 'resolved' | 'dismissed';
 
+/** Where the student was when they reported it. */
+export type QBReportSource = 'practice' | 'test_review' | 'drawing';
+
+/** How staff close a report: the solution was wrong and is fixed, or it was right. */
+export type QBReportOutcome = 'fixed' | 'not_a_mistake';
+
+/** Short staff-facing names, for chips and lists. */
 export const QB_REPORT_TYPE_LABELS: Record<QBReportType, string> = {
-  wrong_answer: 'Wrong Answer Key',
-  no_correct_option: 'No Correct Option',
-  question_error: 'Question Has Error',
-  missing_solution: 'Missing Solution',
-  unclear_question: 'Unclear Question',
-  other: 'Other',
+  wrong_answer: 'Answer key is wrong',
+  no_correct_option: 'No option is right',
+  question_error: 'Typo or wrong value',
+  missing_solution: 'No solution given',
+  unclear_question: 'Question is unclear',
+  other: 'Something else',
+  multiple_correct: 'More than one option is right',
+  figure_problem: 'Figure missing or wrong',
+  wrong_working: 'Mistake in the working',
+  wrong_final_answer: 'Wrong final answer',
+  different_question: 'For a different question',
+  not_loading: 'Will not load',
+  unclear_solution: 'Hard to follow',
+};
+
+export const QB_REPORT_TARGET_LABELS: Record<QBReportTarget, string> = {
+  video: 'Video solution',
+  explanation: 'Written solution',
+  solution_image: 'Solution image',
+  answer_key: 'Answer key',
+  question: 'The question',
 };
 
 export const QB_REPORT_STATUS_LABELS: Record<QBReportStatus, string> = {
   open: 'Open',
   in_review: 'In Review',
-  resolved: 'Resolved',
-  dismissed: 'Dismissed',
+  resolved: 'Fixed',
+  dismissed: 'Not a mistake',
 };
+
+export interface QBReportReasonOption {
+  reason: QBReportType;
+  /** What the student taps, in their words. */
+  label: string;
+  hint: string;
+  /** Only for questions with options to choose from. */
+  mcqOnly?: boolean;
+}
+
+const OTHER_REASON: QBReportReasonOption = { reason: 'other', label: 'Something else', hint: 'Tell us below' };
+
+/**
+ * The reasons a student can give, per target. The route validates against
+ * this and the sheet renders it, so the two cannot drift. "Something else"
+ * is always last and is the only one that needs a note.
+ */
+export const QB_REPORT_REASONS_BY_TARGET: Record<QBReportTarget, QBReportReasonOption[]> = {
+  video: [
+    { reason: 'wrong_working', label: 'There is a mistake in the working', hint: 'A step, a formula or a value is wrong' },
+    { reason: 'wrong_final_answer', label: 'It ends on the wrong answer', hint: 'The answer it reaches is not the right one' },
+    { reason: 'different_question', label: 'It solves a different question', hint: 'The video is for another question' },
+    { reason: 'not_loading', label: 'It will not play, or has no sound', hint: 'The video does not start or cannot be heard' },
+    { reason: 'unclear_solution', label: 'It is hard to follow', hint: 'It skips steps or goes too fast' },
+    OTHER_REASON,
+  ],
+  explanation: [
+    { reason: 'wrong_working', label: 'There is a mistake in the working', hint: 'A step, a formula or a value is wrong' },
+    { reason: 'wrong_final_answer', label: 'It ends on the wrong answer', hint: 'The answer it reaches is not the right one' },
+    { reason: 'different_question', label: 'It explains a different question', hint: 'The solution is for another question' },
+    { reason: 'unclear_solution', label: 'It is hard to follow', hint: 'It skips steps or leaves things out' },
+    OTHER_REASON,
+  ],
+  solution_image: [
+    { reason: 'wrong_working', label: 'There is a mistake in it', hint: 'A step, a value or a label is wrong' },
+    { reason: 'wrong_final_answer', label: 'It ends on the wrong answer', hint: 'The answer it reaches is not the right one' },
+    { reason: 'different_question', label: 'It is for a different question', hint: 'The image belongs to another question' },
+    { reason: 'not_loading', label: 'The image will not load', hint: 'It stays blank or broken' },
+    OTHER_REASON,
+  ],
+  answer_key: [
+    { reason: 'wrong_answer', label: 'The marked answer is wrong', hint: 'The right answer is a different one' },
+    { reason: 'no_correct_option', label: 'None of the options is right', hint: 'The correct answer is not among them', mcqOnly: true },
+    { reason: 'multiple_correct', label: 'More than one option is right', hint: 'Two or more options fit the question', mcqOnly: true },
+    OTHER_REASON,
+  ],
+  question: [
+    { reason: 'question_error', label: 'A typo or a wrong value', hint: 'A word, a number or a unit is wrong' },
+    { reason: 'figure_problem', label: 'The figure is missing or wrong', hint: 'The picture does not match the question' },
+    { reason: 'unclear_question', label: 'I cannot tell what is asked', hint: 'The wording does not make sense' },
+    OTHER_REASON,
+  ],
+};
+
+/** Whether a reason may be given for a target. The report route refuses the rest. */
+export function qbReportReasonAllowed(target: QBReportTarget, reason: string): reason is QBReportType {
+  return QB_REPORT_REASONS_BY_TARGET[target].some((o) => o.reason === reason);
+}
+
+/** "Video solution: Mistake in the working", the one line staff read a report as. */
+export function qbReportLabel(target: QBReportTarget | null | undefined, reason: string | null | undefined): string {
+  const why = QB_REPORT_TYPE_LABELS[(reason ?? 'other') as QBReportType] ?? QB_REPORT_TYPE_LABELS.other;
+  return target ? `${QB_REPORT_TARGET_LABELS[target]}: ${why}` : why;
+}
 
 export interface NexusQBQuestionReport {
   id: string;
@@ -8152,6 +8271,74 @@ export interface NexusQBQuestionReport {
   resolved_at: string | null;
   created_at: string;
   updated_at: string;
+  target: QBReportTarget;
+  /** The part of a split drawing ('A', 'B'), or null. */
+  part_label: string | null;
+  /**
+   * What the student was looking at, written by the server at report time:
+   * the video or image link, the answer key, or a hash of the written
+   * solution. Compared with the current value to tell "changed since".
+   */
+  solution_ref: string | null;
+  video_seconds: number | null;
+  source: QBReportSource | null;
+  test_id: string | null;
+  notified_at: string | null;
+}
+
+/** One student's report inside a group, as staff read it. */
+export interface QBReportNote {
+  report_id: string;
+  student_id: string;
+  student_name: string | null;
+  student_avatar_url?: string | null;
+  reason: QBReportType;
+  note: string | null;
+  video_seconds: number | null;
+  created_at: string;
+}
+
+/**
+ * Every report about one part of one question. Ten students reporting the
+ * same video are one problem, fixed once, so staff act on groups.
+ */
+export interface QBReportGroup {
+  question_id: string;
+  target: QBReportTarget;
+  part_label: string | null;
+  status: QBReportStatus;
+  students: number;
+  reasons: { reason: QBReportType; count: number }[];
+  notes: QBReportNote[];
+  first_reported_at: string;
+  last_reported_at: string;
+  /** The solution is not what these students saw: it has been edited since. */
+  changed_since_reported: boolean;
+  resolution_note: string | null;
+  resolved_at: string | null;
+}
+
+/** A group in the question bank's Reports queue, with where it lives. */
+export interface QBReportQueueItem extends QBReportGroup {
+  question_text: string | null;
+  paper_id: string | null;
+  paper_label: string | null;
+  question_number: number | null;
+}
+
+/** What a student sees about reports on one question. */
+export interface QBReportStatusEntry {
+  /** The viewer's own reports that are still open. */
+  mine: { target: QBReportTarget; part_label: string | null; report_type: QBReportType }[];
+  /** Parts that 2 or more students have reported, and that have not changed since. */
+  flagged: { target: QBReportTarget; part_label: string | null }[];
+}
+
+/** A student's own report, with enough context to recognise it later. */
+export interface QBStudentReportItem extends NexusQBQuestionReport {
+  question_text: string | null;
+  paper_label: string | null;
+  question_number: number | null;
 }
 
 export interface NexusQBReportWithContext extends NexusQBQuestionReport {

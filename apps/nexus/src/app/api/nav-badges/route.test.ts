@@ -26,6 +26,8 @@ vi.mock('@neram/database', () => ({
     rpc: async () => ({ data: 0 }),
     from: () => countQuery,
   }),
+  // Questions with an open student report: the Question Bank badge.
+  getOpenQBReportQuestionCount: async () => 2,
 }));
 
 import { GET } from './route';
@@ -49,7 +51,7 @@ describe('GET /api/nav-badges staff poll cost', () => {
     expect(getRequestUser).toHaveBeenCalledTimes(1);
     expect(staffStudentIds).toHaveBeenCalledTimes(1);
     const { badges } = await res.json();
-    expect(badges).toMatchObject({ assignment_drawings: 4, test_drawings: 1, sketchbook_inbox: 3 });
+    expect(badges).toMatchObject({ assignment_drawings: 4, test_drawings: 1, sketchbook_inbox: 3, qb_reports: 2 });
   });
 
   it('zeroes only the roster badges when the roster cannot be loaded', async () => {

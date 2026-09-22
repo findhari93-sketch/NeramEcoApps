@@ -24,6 +24,15 @@ export function answerPopupUrl(origin: string): string {
   return `${origin.replace(/\/+$/, '')}/pad/teams/answer`;
 }
 
+/**
+ * The teacher console in its own Teams window (the Pop out button), for a
+ * teacher on one screen: a window they can move beside the question they are
+ * sharing, which students never see. It opens the running session directly.
+ */
+export function consolePopOutUrl(origin: string, sessionId: string): string {
+  return `${origin.replace(/\/+$/, '')}/pad/teams/console?session=${encodeURIComponent(sessionId)}`;
+}
+
 export function answerPadTab(origin: string): AnswerPadTab {
   const base = origin.replace(/\/+$/, '');
   return {

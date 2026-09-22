@@ -80,4 +80,18 @@ describe('POST /api/sketchbook/entries', () => {
     expect(res.status).toBe(201);
     expect(m.update).toHaveBeenCalledWith(expect.objectContaining({ inspiration_item_id: null }));
   });
+
+  it('keeps the photo measurement and its fingerprint, in a write of its own', async () => {
+    const quality = { sharpness: 40, ink: 0.02, brightness: 200, aspect: 0.75, v: 1, fp: 'f'.repeat(64) };
+    const res = await POST(post({ ...BASE, image_quality: quality }));
+    expect(res.status).toBe(201);
+    expect(m.update).toHaveBeenCalledWith(expect.objectContaining({ status: 'completed' }));
+    expect(m.update).toHaveBeenCalledWith({ image_quality: quality });
+  });
+
+  it('adds the sketch even when the measurement is junk', async () => {
+    const res = await POST(post({ ...BASE, image_quality: { sharpness: 'lots' } }));
+    expect(res.status).toBe(201);
+    expect(m.update).toHaveBeenCalledTimes(1);
+  });
 });

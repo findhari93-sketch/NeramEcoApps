@@ -3,10 +3,12 @@
 import Link from 'next/link';
 import { Box, Typography } from '@neram/ui';
 import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
+import NotificationsOffOutlinedIcon from '@mui/icons-material/NotificationsOffOutlined';
+import NotificationsActiveOutlinedIcon from '@mui/icons-material/NotificationsActiveOutlined';
 import { useStudentStageFacts } from '@/components/students/StudentStageFactsProvider';
 import StudentStageAvatar from '@/components/students/StudentStageAvatar';
 import type { StageKey } from '@/lib/student-stage';
-import type { RhythmStatus, StripDay } from '@/lib/sketchbook-status';
+import { reminderSummary, type RhythmStatus, type StripDay } from '@/lib/sketchbook-status';
 import { sketchbookReviewHref } from '@/lib/review-context';
 import RhythmStrip from './RhythmStrip';
 
@@ -25,8 +27,13 @@ export interface RhythmStudent {
   week: { count: number; goal: number };
   strip: StripDay[];
   run: number;
+  /** Automatic steps in this quiet stretch (what "Needs a call" counts). */
   remindersThisCycle: number;
+  /** Every reminder in this quiet stretch, automatic and teacher-pressed. */
+  remindersSentThisCycle: number;
   lastRemindedOn: string | null;
+  /** sendNudge channel of the newest reminder, e.g. `chat+inapp`. */
+  lastReminderChannel: string | null;
   latestSketch: { id: string; thumbUrl: string | null; submittedAt: string } | null;
 }
 
@@ -48,7 +55,8 @@ function sketchDate(iso: string): string {
 /**
  * One student on Class rhythm, in about 56px: face, name and "1/3" on the first
  * line, the two-week strip and where they stand on the second, and their newest
- * sketch on the right. The row opens their sketchbook; the thumbnail opens that
+ * sketch on the right. Whether Nexus reminded them is a sentence on the second
+ * line from 600px up, and a bell mark beside "1/3" on a phone. The row opens their sketchbook; the thumbnail opens that
  * sketch. Two links side by side, never one inside the other.
  */
 export default function RhythmRow({ student: s }: { student: RhythmStudent }) {
@@ -56,13 +64,19 @@ export default function RhythmRow({ student: s }: { student: RhythmStudent }) {
   const stage = ((factsFor(s.userId)?.stage as StageKey) || 'unset') as StageKey;
   const name = s.name || 'Student';
   const met = s.week.count >= s.week.goal;
+  const reminded = reminderSummary({
+    status: s.status,
+    sentThisCycle: s.remindersSentThisCycle,
+    lastSentOn: s.lastRemindedOn,
+    lastChannel: s.lastReminderChannel,
+  });
 
   return (
     <Box component="li" sx={{ display: 'flex', alignItems: 'center', gap: 1, borderBottom: 1, borderColor: 'divider' }} data-testid="rhythm-row">
       <Box
         component={Link}
         href={`/teacher/sketchbook/${s.userId}`}
-        aria-label={`${name}. ${s.label}. ${s.week.count} of ${s.week.goal} days this week.`}
+        aria-label={`${name}. ${s.label}. ${s.week.count} of ${s.week.goal} days this week.${reminded ? ` ${reminded}.` : ''}`}
         sx={{
           flex: 1,
           minWidth: 0,
@@ -91,6 +105,31 @@ export default function RhythmRow({ student: s }: { student: RhythmStudent }) {
             >
               {name}
             </Typography>
+            {reminded && (
+              // Phones: the reminder story as one mark on the name line, because a
+              // sentence would add a third line to every quiet row. Crossed-out bell =
+              // never reminded, bell and a number = reminded that many times. The full
+              // sentence is the tooltip and part of the row's accessible name.
+              <Box
+                component="span"
+                aria-hidden
+                title={reminded}
+                data-testid="rhythm-row-reminder-mark"
+                sx={{
+                  display: { xs: 'inline-flex', sm: 'none' },
+                  alignItems: 'center',
+                  gap: 0.25,
+                  flexShrink: 0,
+                  alignSelf: 'center',
+                  color: s.remindersSentThisCycle > 0 ? 'text.secondary' : 'warning.dark',
+                }}
+              >
+                {s.remindersSentThisCycle > 0 ? <NotificationsActiveOutlinedIcon sx={{ fontSize: 18 }} /> : <NotificationsOffOutlinedIcon sx={{ fontSize: 18 }} />}
+                {s.remindersSentThisCycle > 0 && (
+                  <Typography component="span" variant="caption" sx={{ fontWeight: 700, lineHeight: 1 }}>{s.remindersSentThisCycle}</Typography>
+                )}
+              </Box>
+            )}
             <Typography
               component="span"
               variant="body2"
@@ -105,6 +144,17 @@ export default function RhythmRow({ student: s }: { student: RhythmStudent }) {
             <Typography component="span" variant="caption" aria-hidden sx={{ fontWeight: 600, color: STATUS_TEXT[s.status], lineHeight: 1.3 }} data-testid="rhythm-row-label">
               {s.label}
             </Typography>
+            {reminded && (
+              <Typography
+                component="span"
+                variant="caption"
+                aria-hidden
+                sx={{ display: { xs: 'none', sm: 'inline' }, color: 'text.secondary', lineHeight: 1.3 }}
+                data-testid="rhythm-row-reminders"
+              >
+                {reminded}
+              </Typography>
+            )}
           </Box>
         </Box>
       </Box>

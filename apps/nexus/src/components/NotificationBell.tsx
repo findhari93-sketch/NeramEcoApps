@@ -34,6 +34,10 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   scholarship_revision_requested: '#ff5722',
   foundation_issue_reported: '#ed6c02',
   result_dispute_raised: '#ed6c02',
+  // Amber for staff: a student found a mistake that other students are still
+  // learning from. Green for the student: what they reported was acted on.
+  qb_solution_reported: '#ed6c02',
+  qb_report_resolved: '#2E7D32',
   foundation_issue_resolved: '#4caf50',
   foundation_issue_awaiting_confirmation: '#2196f3',
   foundation_issue_in_progress: '#2196f3',
@@ -115,6 +119,17 @@ function getNavigationUrl(
     case 'result_dispute_raised': {
       const issueId = notification.metadata?.issue_id as string | undefined;
       return issueId ? `/teacher/issues?issue=${issueId}` : '/teacher/issues';
+    }
+    // A reported mistake: staff land on the question in its paper (Videos mode
+    // for a video), the student on the question they reported. Both hrefs are
+    // written by the routes; the fallbacks are the two report lists.
+    case 'qb_solution_reported': {
+      const href = notification.metadata?.href as string | undefined;
+      return href && href.startsWith('/') ? href : '/teacher/question-bank/reports';
+    }
+    case 'qb_report_resolved': {
+      const href = notification.metadata?.href as string | undefined;
+      return href && href.startsWith('/') ? href : '/student/question-bank/reports';
     }
     // Assignment reminder → open the assignment it was about.
     case 'assignment_nudge': {

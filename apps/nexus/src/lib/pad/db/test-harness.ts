@@ -15,23 +15,22 @@
  */
 import { PGlite } from '@electric-sql/pglite';
 import { randomUUID } from 'crypto';
-import { readdirSync, readFileSync } from 'fs';
+import { readFileSync } from 'fs';
 import path from 'path';
+import { answerPadMigrationFiles } from './migration-files';
 
-const MIGRATIONS_DIR = path.resolve(__dirname, '../../../../../../supabase/migrations');
 const FINGERPRINT_FILE = path.resolve(__dirname, '../../../../../../scripts/answer-pad/schema-fingerprint.sql');
 
 export function schemaFingerprintSql(): string {
   return readFileSync(FINGERPRINT_FILE, 'utf-8');
 }
 
+/** The base migration, then every follow-up in order, as deploys apply them. */
 export function answerPadMigrationSql(): string {
-  // Mutation checks point this at a deliberately broken copy to prove the suite notices.
+  const { base, followUps } = answerPadMigrationFiles();
+  // Mutation checks point this at a deliberately broken copy of the base to prove the suite notices.
   const override = process.env.PAD_MIGRATION_SQL_FILE;
-  if (override) return readFileSync(override, 'utf-8');
-  const file = readdirSync(MIGRATIONS_DIR).find((name) => /_answer_pad\.sql$/.test(name));
-  if (!file) throw new Error(`answer pad migration not found in ${MIGRATIONS_DIR}`);
-  return readFileSync(path.join(MIGRATIONS_DIR, file), 'utf-8');
+  return [override ?? base, ...followUps].map((file) => readFileSync(file, 'utf-8')).join('\n\n');
 }
 
 /**
@@ -327,8 +326,47 @@ export class PadTestDb {
     return this.fn(`select pad_end_session($1::uuid, $2::uuid, $3::boolean) as r`, [actor, sessionId, confirmUnrevealed]);
   }
 
-  ask(actor: string | null, sessionId: string, answerType: string | null = 'mcq', optionCount: number | null = 4): Promise<Json> {
-    return this.fn(`select pad_ask($1::uuid, $2::uuid, $3::text, $4::int) as r`, [actor, sessionId, answerType, optionCount]);
+  ask(
+    actor: string | null,
+    sessionId: string,
+    answerType: string | null = 'mcq',
+    optionCount: number | null = 4,
+    opts: { label?: string | null; text?: string | null; imageUrl?: string | null; optionTexts?: Array<string | null> | null } = {},
+  ): Promise<Json> {
+    return this.fn(`select pad_ask($1::uuid, $2::uuid, $3::text, $4::int, $5::text, $6::text, $7::text, $8::text[]) as r`, [
+      actor,
+      sessionId,
+      answerType,
+      optionCount,
+      opts.label ?? null,
+      opts.text ?? null,
+      opts.imageUrl ?? null,
+      opts.optionTexts ?? null,
+    ]);
+  }
+
+  details(actor: string | null, promptId: string, label: string | null, text: string | null): Promise<Json> {
+    return this.fn(`select pad_set_details($1::uuid, $2::uuid, $3::text, $4::text) as r`, [actor, promptId, label, text]);
+  }
+
+  picture(actor: string | null, promptId: string, imageUrl: string | null): Promise<Json> {
+    return this.fn(`select pad_set_picture($1::uuid, $2::uuid, $3::text) as r`, [actor, promptId, imageUrl]);
+  }
+
+  skip(actor: string | null, promptId: string, reason: string | null, note: string | null = null): Promise<Json> {
+    return this.fn(`select pad_set_skip_reason($1::uuid, $2::uuid, $3::text, $4::text) as r`, [actor, promptId, reason, note]);
+  }
+
+  nudge(actor: string | null, promptId: string, roster: readonly string[]): Promise<Json> {
+    return this.fn(`select pad_nudge($1::uuid, $2::uuid, $3::uuid[]) as r`, [actor, promptId, uuidArray(roster)]);
+  }
+
+  /** Test-only: move a prompt's last nudge into the past, as a minute passing would. */
+  async ageNudges(promptId: string, seconds: number): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx.query(`select set_config('pad.transition', 'nudge', true)`);
+      await tx.query(`update pad_nudges set nudged_at = nudged_at - make_interval(secs => $2) where prompt_id = $1`, [promptId, seconds]);
+    });
   }
 
   close(actor: string | null, promptId: string): Promise<Json> {

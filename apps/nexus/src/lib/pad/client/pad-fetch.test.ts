@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { PadClientError, padFetch } from './pad-fetch';
+import { PadClientError, padFetch, padUpload } from './pad-fetch';
 import type { PadHost } from './pad-host';
 
 const host = (getToken: () => Promise<string>): PadHost => ({
@@ -64,5 +64,27 @@ describe('padFetch', () => {
   it('refuses without calling the server when there is no token', async () => {
     await expect(padFetch(host(async () => Promise.reject(new Error('consent required'))), '/api/pad/join')).rejects.toMatchObject({ status: 401, code: 'NO_TOKEN' });
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('padUpload', () => {
+  it('sends the picture as form data with the host token, leaving the boundary to the browser', async () => {
+    fetchSpy.mockResolvedValue(new Response(JSON.stringify({ url: 'https://x.test/a.jpg' }), { status: 200 }));
+    const file = new File([new Uint8Array(8)], 'question.jpg', { type: 'image/jpeg' });
+    await expect(padUpload(host(async () => 'tok'), '/api/pad/sessions/s1/image', file, 'question.jpg')).resolves.toEqual({ url: 'https://x.test/a.jpg' });
+
+    const [url, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('/api/pad/sessions/s1/image');
+    expect(init.headers).toEqual({ Authorization: 'Bearer tok' });
+    expect((init.body as FormData).get('file')).toBeInstanceOf(File);
+  });
+
+  it('turns a refusal into the same coded error padFetch gives, and no network into OFFLINE', async () => {
+    fetchSpy.mockResolvedValue(new Response(JSON.stringify({ error: 'RATE_LIMITED', code: 'RATE_LIMITED' }), { status: 429 }));
+    const file = new File([new Uint8Array(8)], 'q.jpg', { type: 'image/jpeg' });
+    await expect(padUpload(host(async () => 'tok'), '/api/pad/sessions/s1/image', file, 'q.jpg')).rejects.toMatchObject({ status: 429, code: 'RATE_LIMITED' });
+
+    fetchSpy.mockRejectedValue(new TypeError('Failed to fetch'));
+    await expect(padUpload(host(async () => 'tok'), '/api/pad/sessions/s1/image', file, 'q.jpg')).rejects.toMatchObject({ code: 'OFFLINE' });
   });
 });

@@ -10,7 +10,9 @@
  *     students answer, on their phones: only their answer buttons, and for a
  *     teacher a pointer back to the panel;
  *   - the meeting screen (variant "stage", or any page Teams opens on the
- *     stage), where everyone sees the class results the teacher shared.
+ *     stage), where everyone sees the class results the teacher shared;
+ *   - the teacher console in its own window (variant "console", opened by Pop
+ *     out), for a teacher on one screen who shares only the question's window.
  */
 
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
@@ -32,6 +34,12 @@ type AppState =
   | { kind: 'outside-teams' }
   | { kind: 'problem'; host: PadHost; message: string; canRetry: boolean }
   | { kind: 'ready'; host: PadHost; role: 'staff' | 'student' };
+
+/** The session a popped-out console runs, from ?session= on its address. */
+export function popOutSessionId(search: string): string | null {
+  const id = new URLSearchParams(search).get('session')?.trim().toLowerCase() ?? '';
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id) ? id : null;
+}
 
 export function identifyProblem(err: unknown): { message: string; canRetry: boolean } {
   if (err instanceof PadClientError) {
@@ -56,8 +64,10 @@ function Opening() {
   );
 }
 
-export default function TeamsPadApp({ variant = 'panel' }: { variant?: 'panel' | 'popup' | 'stage' }) {
+export default function TeamsPadApp({ variant = 'panel' }: { variant?: 'panel' | 'popup' | 'stage' | 'console' }) {
   const popup = variant === 'popup';
+  const poppedOut = variant === 'console';
+  const [consoleSession, setConsoleSession] = useState<string | null>(null);
   const [state, setState] = useState<AppState>({ kind: 'connecting' });
   const [theme, setTheme] = useState<PadTheme>('light');
   const [frame, setFrame] = useState<PadFrame | null>(null);
@@ -86,6 +96,7 @@ export default function TeamsPadApp({ variant = 'panel' }: { variant?: 'panel' |
       }
       setTheme(host.theme);
       setFrame(host.frame);
+      if (poppedOut) setConsoleSession(popOutSessionId(window.location.search));
       stopTheme = host.onThemeChange(setTheme);
       await identify(host);
     })();
@@ -94,7 +105,7 @@ export default function TeamsPadApp({ variant = 'panel' }: { variant?: 'panel' |
       active = false;
       stopTheme();
     };
-  }, [identify]);
+  }, [identify, poppedOut]);
 
   return (
     <PadShell theme={theme} dense={popup} wide={onStage}>
@@ -135,10 +146,20 @@ export default function TeamsPadApp({ variant = 'panel' }: { variant?: 'panel' |
           <Suspense fallback={<Opening />}>
             <StageResults host={state.host} />
           </Suspense>
+        ) : poppedOut && state.role === 'student' ? (
+          <Typography>This window is for teachers. Answer from the Answer Pad button in the meeting.</Typography>
         ) : state.role === 'student' ? (
           <StudentMeetingPad host={state.host} compact={popup} />
         ) : popup ? (
           <Typography>This pop-up is for students. Run the class from the Answer Pad button in the meeting.</Typography>
+        ) : poppedOut ? (
+          consoleSession ? (
+            <Suspense fallback={<Opening />}>
+              <TeacherConsole host={state.host} sessionId={consoleSession} />
+            </Suspense>
+          ) : (
+            <Alert severity="info">This window has lost its class. Close it and press Pop out again in the meeting.</Alert>
+          )
         ) : (
           <Suspense fallback={<Opening />}>
             <TeacherConsole host={state.host} />

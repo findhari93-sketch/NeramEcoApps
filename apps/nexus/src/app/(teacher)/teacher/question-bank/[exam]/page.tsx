@@ -57,6 +57,7 @@ import TeacherPaperTable, { TEACHER_PAPER_GRID } from '@/components/question-ban
 import TeacherPaperCard, { TeacherPaperCardSkeleton } from '@/components/question-bank/TeacherPaperCard';
 import WorkStageCards from '@/components/question-bank/WorkStageCards';
 import TeacherQBTools from '@/components/question-bank/TeacherQBTools';
+import ReportedQuestionsBanner from '@/components/question-bank/ReportedQuestionsBanner';
 import {
   WORK_STAGE_LABELS,
   countStages,
@@ -244,6 +245,8 @@ function ExamWorkPage({ exam }: { exam: QBExamType }) {
           </Button>
         </Box>
       </Box>
+
+      <ReportedQuestionsBanner />
 
       {notice && (
         <Alert severity={notice.severity} onClose={() => setNotice(null)} sx={{ mb: 2, borderRadius: 2 }}>

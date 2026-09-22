@@ -19,6 +19,9 @@ import MathText from '@/components/common/MathText';
 import ExplanationPanel from '@/components/tests/ExplanationPanel';
 import SolutionVideoPlayer from '@/components/question-bank/SolutionVideoPlayer';
 import OptionBody, { type TestOption } from '@/components/tests/OptionBody';
+import ReportMistakeLink from '@/components/question-bank/ReportMistakeLink';
+import { SolutionReportScope } from '@/components/question-bank/SolutionReportScope';
+import type { ReportTargetOption } from '@/lib/report-targets';
 import { optionKeyAt, sameChoice } from '@/lib/option-keys';
 
 export interface GradedReviewItem {
@@ -40,9 +43,41 @@ interface GradedReviewListProps {
   review: GradedReviewItem[];
   getToken: () => Promise<string | null>;
   classroomId?: string;
+  /**
+   * A student's own review: offer "Report a mistake" per question. The
+   * teacher's copy of this list (StudentAttemptSheet) leaves it off.
+   */
+  allowReport?: boolean;
+  /** The test this review belongs to, recorded on a report. */
+  testId?: string | null;
 }
 
-export default function GradedReviewList({ review, getToken, classroomId }: GradedReviewListProps) {
+/** What a student can report on one reviewed question, from what the review shows. */
+function reviewTargets(r: GradedReviewItem): ReportTargetOption[] {
+  const out: ReportTargetOption[] = (r.solution_videos ?? []).map((v) => ({
+    target: 'video' as const,
+    partLabel: v.label,
+    label: v.label ? `Video for part ${v.label}` : 'Video solution',
+  }));
+  if (r.explanation?.trim() || r.explanation_detailed?.trim()) {
+    out.push({ target: 'explanation', partLabel: null, label: 'Written solution' });
+  }
+  if (r.is_gradable && r.correct_answer) out.push({ target: 'answer_key', partLabel: null, label: 'Answer key' });
+  out.push({ target: 'question', partLabel: null, label: 'The question itself' });
+  return out;
+}
+
+export default function GradedReviewList(props: GradedReviewListProps) {
+  if (!props.allowReport) return <ReviewCards {...props} />;
+  // One status request for the whole review, however many questions it holds.
+  return (
+    <SolutionReportScope questionIds={props.review.map((r) => r.question_id)}>
+      <ReviewCards {...props} />
+    </SolutionReportScope>
+  );
+}
+
+function ReviewCards({ review, getToken, classroomId, allowReport = false, testId = null }: GradedReviewListProps) {
   const theme = useTheme();
 
   return (
@@ -139,6 +174,22 @@ export default function GradedReviewList({ review, getToken, classroomId }: Grad
             {(r.solution_videos ?? []).map((video) => (
               <ReviewVideo key={video.url} video={video} />
             ))}
+
+            {allowReport && (() => {
+              const targets = reviewTargets(r);
+              return (
+                <ReportMistakeLink
+                  anyPart
+                  questionId={r.question_id}
+                  target={targets[0].target}
+                  partLabel={targets[0].partLabel}
+                  targets={targets}
+                  isMcq={options.length > 0}
+                  source="test_review"
+                  testId={testId}
+                />
+              );
+            })()}
           </Paper>
         );
       })}

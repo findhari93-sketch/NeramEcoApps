@@ -114,7 +114,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         ? fetchAllRows<any>(() =>
             supabase
               .from('nexus_qb_question_reports')
-              .select('id, question_id, report_type, description, status, created_at')
+              .select('id, question_id, report_type, target, description, status, created_at')
               .in('question_id', questionIds)
               .in('status', ['open', 'in_review']),
           ).catch(() => [] as any[])
@@ -194,6 +194,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
           id: r.id,
           question_id: r.question_id,
           report_type: r.report_type,
+          target: r.target ?? null,
           description: r.description,
           created_at: r.created_at,
         })),

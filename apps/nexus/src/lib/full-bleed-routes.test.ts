@@ -10,6 +10,8 @@ describe('isFullBleedRoute', () => {
     '/teacher/drawing-reviews/ae50645f-40d9-4d1b-98d1-bad59719b70b/',
     '/student/assignments/3202eea6-89e7-4faf-b8d1-863c03060cce',
     '/student/assignments/3202eea6-89e7-4faf-b8d1-863c03060cce/',
+    '/student/question-bank/questions',
+    '/student/question-bank/questions/',
   ])('opts %s out of the container', (path) => {
     expect(isFullBleedRoute(path)).toBe(true);
   });
@@ -23,6 +25,10 @@ describe('isFullBleedRoute', () => {
     '/student/assignments',
     '/student/assignments/',
     '/student/assignments/abc/extra',
+    '/student/question-bank',
+    '/student/question-bank/questions/abc',
+    '/student/question-bank/papers/abc',
+    '/teacher/question-bank/questions',
     null,
     undefined,
   ])('keeps %s in the container', (path) => {

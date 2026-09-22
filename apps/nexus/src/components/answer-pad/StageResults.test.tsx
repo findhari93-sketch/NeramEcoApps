@@ -38,7 +38,17 @@ function stage(prompt: StageView['prompt']): StageView {
   };
 }
 
-const OPEN: StageView['prompt'] = { id: 'p1', sequence: 3, state: 'open', version: 1, answer_type: 'mcq', answered: 23, enrolled: 31, reveal: null };
+const OPEN: NonNullable<StageView['prompt']> = {
+  id: 'p1',
+  sequence: 3,
+  label: null,
+  state: 'open',
+  version: 1,
+  answer_type: 'mcq',
+  answered: 23,
+  enrolled: 31,
+  reveal: null,
+};
 const NO_DASHES = /[–—]|--/;
 
 beforeEach(() => {

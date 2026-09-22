@@ -19,6 +19,8 @@ function prompt(overrides: Partial<ReportPrompt> = {}): ReportPrompt {
     id: 'p1',
     sequence: 1,
     label: null,
+    question_text: null,
+    image_url: null,
     answer_type: 'mcq',
     option_count: 4,
     state: 'revealed',
@@ -28,6 +30,11 @@ function prompt(overrides: Partial<ReportPrompt> = {}): ReportPrompt {
     closed_at: '2026-09-10T14:01:00Z',
     revealed_at: '2026-09-10T14:02:00Z',
     counts: { enrolled: 3, answered: 2, silent: 1, absent: 0, correct: 1, incorrect: 1, answered_off_roster: 0 },
+    groups: [
+      { value: 'B', count: 1 },
+      { value: 'A', count: 1 },
+    ],
+    skips: {},
     ...overrides,
   };
 }
@@ -82,7 +89,7 @@ describe('promptOutcome', () => {
     expect(promptOutcome(prompt())).toBe('B');
     expect(promptOutcome(prompt({ correct_keys: ['A', 'C'] }))).toBe('A or C');
     expect(promptOutcome(prompt({ ungraded: true, correct_keys: null }))).toBe('Poll');
-    expect(promptOutcome(prompt({ state: 'closed', correct_keys: null }))).toBe('Not revealed');
+    expect(promptOutcome(prompt({ state: 'closed', correct_keys: null }))).toBe('Answer not set yet');
     expect(promptOutcome(prompt({ state: 'open', correct_keys: null }))).toBe('Still open');
     expect(promptOutcome(prompt({ answer_type: 'yesno', correct_keys: ['no'] }))).toBe('No');
   });

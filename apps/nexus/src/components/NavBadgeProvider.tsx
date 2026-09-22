@@ -31,6 +31,10 @@ const PATH_TO_BADGE_KEY: Record<string, string> = {
   '/teacher/sketchbook': 'sketchbook_inbox',
   '/teacher/photo-review': 'photo_review',
   '/teacher/catch-up': 'catchup',
+  // Questions a student reported a mistake in. On the folder itself, which is
+  // what an icons-only sidebar and the bottom bar show; the Reports queue is
+  // one tap from the page it opens.
+  '/teacher/question-bank': 'qb_reports',
   // The student's own count, not the staff one. Both read `catchup` because the
   // route answers for whoever is asking, and a student never sees a staff path.
   //

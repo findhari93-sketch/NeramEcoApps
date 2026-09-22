@@ -33,6 +33,8 @@ export interface StageView {
   prompt: {
     id: string;
     sequence: number;
+    /** The teacher's reference, so the screen says Q.38 as the paper does. */
+    label: string | null;
     state: PromptState;
     version: number;
     answer_type: AnswerType;
@@ -83,6 +85,7 @@ export function stageView(snapshot: TeacherSnapshot): StageView {
   view.prompt = {
     id: prompt.id,
     sequence: prompt.sequence,
+    label: prompt.label,
     state: prompt.state,
     version: prompt.version,
     answer_type: prompt.answer_type,

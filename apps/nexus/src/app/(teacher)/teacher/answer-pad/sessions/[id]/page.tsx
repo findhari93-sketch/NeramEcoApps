@@ -4,27 +4,51 @@
  * The Answer Pad report for one class: what was asked, how the class did on
  * each question, and each student's participation and score. The CSV comes from
  * the same answer as the tables, so the download and the screen always agree.
+ *
+ * A question whose answer the teacher left for later is settled here, after the
+ * class: the answers the class gave are counted beside each choice, and once it
+ * is revealed every score updates (scores are computed, never stored).
  */
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
-import { Alert, Box, Button, Chip, CircularProgress, Stack, Typography } from '@neram/ui';
+import { Alert, Box, Button, Chip, CircularProgress, ImageViewerDialog, Paper, Stack, Typography } from '@neram/ui';
 import DownloadRounded from '@mui/icons-material/DownloadRounded';
 import RefreshRounded from '@mui/icons-material/RefreshRounded';
+import ScheduleRounded from '@mui/icons-material/ScheduleRounded';
+import AnswerKeyPicker, { AnswerBars } from '@/components/answer-pad/AnswerKeyPicker';
 import StudentAvatar from '@/components/students/StudentAvatar';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { downloadCsv } from '@/lib/csv-export';
-import { answerTypeLabel } from '@/lib/pad/client/format';
+import { answerTypeLabel, promptTitle, skipSummary } from '@/lib/pad/client/format';
 import {
   REPORT_CSV_HEADERS,
   promptOutcome,
   reportCsvRows,
   reportErrorMessage,
   reportFilename,
+  reportSkips,
   reportTotals,
   scorePercent,
+  type ReportPrompt,
   type SessionReport,
 } from '@/lib/pad/client/report';
+
+/** What the teacher reads when setting an answer after class is refused. */
+function settleMessage(code: string | null): string {
+  switch (code) {
+    case 'INVALID_TRANSITION':
+      return 'That question has already been revealed. The report now shows it.';
+    case 'KEY_REQUIRED':
+      return 'Choose the correct answer, or mark it as a poll, before revealing.';
+    case 'INVALID_KEY':
+      return 'That is not a valid answer for this question.';
+    case 'NOT_SESSION_TEACHER':
+      return 'Only the teacher who ran this class can set its answers.';
+    default:
+      return 'The answer could not be saved. Please try again.';
+  }
+}
 
 function formatWhen(iso: string): string {
   return new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' });
@@ -91,6 +115,10 @@ export default function AnswerPadReportPage() {
   const [report, setReport] = useState<SessionReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [settlingId, setSettlingId] = useState<string | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [settleError, setSettleError] = useState<string | null>(null);
+  const [viewing, setViewing] = useState<{ src: string; title: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -116,6 +144,30 @@ export default function AnswerPadReportPage() {
     if (tokenReady) void load();
   }, [tokenReady, load]);
 
+  /** Set a key or reveal, then reload, so the tables show the server's numbers. */
+  const settle = async (label: string, path: string, body?: unknown) => {
+    setBusy(label);
+    setSettleError(null);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(path, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body ?? {}),
+      });
+      if (!res.ok) {
+        const result = await res.json().catch(() => ({}));
+        setSettleError(settleMessage(typeof result.code === 'string' ? result.code : null));
+      }
+    } catch {
+      setSettleError('No connection. Check your network and try again.');
+    } finally {
+      setBusy(null);
+      await load();
+    }
+  };
+
   if (!report) {
     return loading ? (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
@@ -129,6 +181,7 @@ export default function AnswerPadReportPage() {
   const { session, prompts, students } = report;
   const totals = reportTotals(report);
   const live = session.status === 'live';
+  const settling: ReportPrompt | null = prompts.find((prompt) => prompt.id === settlingId && prompt.state === 'closed') ?? null;
 
   return (
     <Stack spacing={3}>
@@ -175,10 +228,10 @@ export default function AnswerPadReportPage() {
       </Box>
 
       {totals.unrevealed > 0 && (
-        <Alert severity="info">
+        <Alert severity="info" icon={<ScheduleRounded />}>
           {totals.unrevealed === 1
-            ? '1 question was never revealed, so it is not graded.'
-            : `${totals.unrevealed} questions were never revealed, so they are not graded.`}
+            ? '1 question has no answer yet, so it is not graded. Set it below and every score updates.'
+            : `${totals.unrevealed} questions have no answer yet, so they are not graded. Set them below and every score updates.`}
         </Alert>
       )}
 
@@ -213,10 +266,66 @@ export default function AnswerPadReportPage() {
               {prompts.map((prompt) => (
                 <tr key={prompt.id}>
                   <th scope="row" className="wrap">
-                    {`Q${prompt.sequence}${prompt.label ? ` ${prompt.label}` : ''}`}
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      {prompt.image_url && (
+                        <Box
+                          component="button"
+                          type="button"
+                          onClick={() => setViewing({ src: prompt.image_url as string, title: promptTitle(prompt) })}
+                          aria-label={`Show the picture for ${promptTitle(prompt)}`}
+                          sx={{
+                            p: 0,
+                            width: 44,
+                            height: 44,
+                            flexShrink: 0,
+                            border: '1px solid',
+                            borderColor: 'divider',
+                            borderRadius: 1,
+                            overflow: 'hidden',
+                            cursor: 'zoom-in',
+                            bgcolor: 'background.paper',
+                            '&:focus-visible': { outline: '3px solid', outlineOffset: 2 },
+                          }}
+                        >
+                          <Box component="img" src={prompt.image_url} alt="" sx={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                        </Box>
+                      )}
+                      <span>{promptTitle(prompt)}</span>
+                    </Stack>
+                    {reportSkips(prompt) && (
+                      <Typography variant="caption" color="text.secondary" component="span" sx={{ display: 'block', fontWeight: 400 }}>
+                        {skipSummary(reportSkips(prompt))}
+                      </Typography>
+                    )}
+                    {prompt.question_text && (
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        component="span"
+                        sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', fontWeight: 400 }}
+                      >
+                        {prompt.question_text}
+                      </Typography>
+                    )}
                   </th>
                   <td>{answerTypeLabel(prompt.answer_type, prompt.option_count)}</td>
-                  <td>{promptOutcome(prompt)}</td>
+                  <td>
+                    {prompt.state === 'closed' ? (
+                      <Button
+                        size="small"
+                        variant={prompt.id === settlingId ? 'contained' : 'outlined'}
+                        startIcon={<ScheduleRounded />}
+                        onClick={() => setSettlingId(prompt.id === settlingId ? null : prompt.id)}
+                        aria-expanded={prompt.id === settlingId}
+                        aria-controls="pad-report-settle"
+                        sx={{ minHeight: 40 }}
+                      >
+                        Set the answer
+                      </Button>
+                    ) : (
+                      promptOutcome(prompt)
+                    )}
+                  </td>
                   <td className="num">{prompt.counts ? `${prompt.counts.answered} of ${prompt.counts.enrolled}` : ''}</td>
                   <td className="num">{prompt.counts && prompt.state === 'revealed' && !prompt.ungraded ? prompt.counts.correct : ''}</td>
                   <td className="num">{prompt.counts?.silent ?? ''}</td>
@@ -226,7 +335,50 @@ export default function AnswerPadReportPage() {
             </tbody>
           </TableFrame>
         )}
+
+        {settling && (
+          <Paper id="pad-report-settle" variant="outlined" sx={{ p: 2, maxWidth: 520 }}>
+            <Stack spacing={2}>
+              <Box>
+                <Typography variant="subtitle1" component="h3" fontWeight={800}>
+                  {`Set the answer for ${promptTitle(settling)}`}
+                </Typography>
+                {settling.question_text && (
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', mt: 0.5 }}>
+                    {settling.question_text}
+                  </Typography>
+                )}
+              </Box>
+              {settling.image_url && (
+                <Box
+                  component="img"
+                  src={settling.image_url}
+                  alt={`Picture for ${promptTitle(settling)}`}
+                  sx={{ width: '100%', maxHeight: 320, objectFit: 'contain', borderRadius: 1, border: '1px solid', borderColor: 'divider' }}
+                />
+              )}
+              {settleError && (
+                <Alert severity="error" onClose={() => setSettleError(null)}>
+                  {settleError}
+                </Alert>
+              )}
+              <AnswerBars prompt={settling} groups={settling.groups ?? []} />
+              <AnswerKeyPicker
+                prompt={settling}
+                groups={settling.groups ?? []}
+                busy={busy}
+                onKeys={(keys) => void settle('key', `/api/pad/prompts/${settling.id}/key`, { keys })}
+                onPoll={() => void settle('key', `/api/pad/prompts/${settling.id}/key`, { ungraded: true })}
+                onReveal={() => void settle('reveal', `/api/pad/prompts/${settling.id}/reveal`)}
+              />
+            </Stack>
+          </Paper>
+        )}
       </Stack>
+
+      {viewing && (
+        <ImageViewerDialog open onClose={() => setViewing(null)} src={viewing.src} alt={`Picture for ${viewing.title}`} name={viewing.title} />
+      )}
 
       <Stack spacing={1.5} component="section" aria-labelledby="pad-report-students">
         <Typography variant="h6" component="h2" fontWeight={800} id="pad-report-students">
@@ -234,7 +386,7 @@ export default function AnswerPadReportPage() {
         </Typography>
         <Typography variant="body2" color="text.secondary">
           The score counts revealed, graded questions a student was there for. Not answering while present counts as skipped.
-          Questions a student was absent for, polls and questions that were never revealed are not graded.
+          Questions a student was absent for, polls and questions still waiting for an answer are not graded.
         </Typography>
         {students.length === 0 ? (
           <Typography color="text.secondary">There is nobody on the class list for this class.</Typography>

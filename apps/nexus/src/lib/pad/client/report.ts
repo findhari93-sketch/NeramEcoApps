@@ -10,12 +10,15 @@
 
 import type { CsvValue } from '@/lib/csv-export';
 import { displayKeys } from './format';
-import type { AnswerType, PromptCounts, PromptState } from './types';
+import type { AnswerType, PromptCounts, PromptState, SkipReason } from './types';
 
 export interface ReportPrompt {
   id: string;
   sequence: number;
   label: string | null;
+  question_text: string | null;
+  /** The picture the teacher pasted, if any. */
+  image_url: string | null;
   answer_type: AnswerType;
   option_count: number | null;
   state: PromptState;
@@ -26,6 +29,17 @@ export interface ReportPrompt {
   revealed_at: string | null;
   /** Null while the question is still open. */
   counts: PromptCounts | null;
+  /** The answers given, counted, once answering has stopped: what the key picker shows. */
+  groups: Array<{ value: string; count: number }> | null;
+  /** How many gave each reason for not answering, once answering stopped. */
+  skips: Partial<Record<SkipReason, number>> | null;
+}
+
+/** The reasons for one question as the console words them: "2 can't answer: 1 don't know, 1 need time". */
+export function reportSkips(prompt: Pick<ReportPrompt, 'skips'>): { total: number; by_reason: Partial<Record<SkipReason, number>> } | null {
+  if (!prompt.skips) return null;
+  const total = Object.values(prompt.skips).reduce((sum, n) => sum + (n ?? 0), 0);
+  return total > 0 ? { total, by_reason: prompt.skips } : null;
 }
 
 export interface ReportStudent {
@@ -66,7 +80,7 @@ export function scorePercent(student: Pick<ReportStudent, 'correct' | 'total_gra
 /** What a question ended as: its key, a poll, or why it has none. */
 export function promptOutcome(prompt: Pick<ReportPrompt, 'state' | 'ungraded' | 'answer_type' | 'correct_keys'>): string {
   if (prompt.state === 'open') return 'Still open';
-  if (prompt.state === 'closed') return 'Not revealed';
+  if (prompt.state === 'closed') return 'Answer not set yet';
   if (prompt.ungraded) return 'Poll';
   return displayKeys(prompt.answer_type, prompt.correct_keys);
 }

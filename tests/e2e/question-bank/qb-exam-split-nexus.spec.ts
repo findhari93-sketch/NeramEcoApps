@@ -362,11 +362,11 @@ test.describe('Student: one page per exam', () => {
     await page.getByRole('button', { name: /search every question/i }).click();
     await page.waitForURL(/\/student\/question-bank\/questions\?.*exam=JEE_PAPER_2/, { timeout: 60_000 });
 
-    // The page's own Back button, named after where it goes. Scoped to <main>:
+    // The page's own Back link, named after where it goes. Scoped to <main>:
     // the sidebar carries a "JEE Paper 2" link of its own.
     const back = page
       .getByRole('main')
-      .getByRole('button', { name: /^(JEE Paper 2|Question Bank)$/ })
+      .getByRole('link', { name: /^Back to (JEE Paper 2|the question bank)$/ })
       .filter({ visible: true })
       .first();
     await expect(back).toBeVisible({ timeout: 60_000 });

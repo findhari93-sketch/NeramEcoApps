@@ -52,6 +52,37 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe('useVideoLinkDrafts, links found on YouTube', () => {
+  it('fills found links in as drafts, reporting new and replaced like a paste', () => {
+    const saved = [q(1), q(2, { solution_video_url: watch('xrKukhHIt0A') }), q(3)];
+    const { result } = setup(saved);
+    act(() => {
+      result.current.fillFound([
+        { questionId: 'q1', number: 1, url: watch('U1X9MmLh-ZQ') },
+        { questionId: 'q2', number: 2, url: watch('T9CB0HymAJo') },
+      ]);
+    });
+    expect(result.current.rowState(saved[0])).toBe('draft-new');
+    expect(result.current.rowState(saved[1])).toBe('draft-replace');
+    expect(result.current.summary).toMatchObject({ added: 1, replaced: 1 });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('can turn down one replacement and keep the saved link', () => {
+    const saved = [q(2, { solution_video_url: watch('xrKukhHIt0A') })];
+    const { result } = setup(saved);
+    act(() => {
+      result.current.fillFound([{ questionId: 'q2', number: 2, url: watch('T9CB0HymAJo') }]);
+    });
+    act(() => {
+      result.current.revert('q2');
+    });
+    expect(result.current.rowState(saved[0])).toBe('saved');
+    expect(result.current.valueFor('q2')).toBe(watch('xrKukhHIt0A'));
+    expect(result.current.unsavedCount).toBe(0);
+  });
+});
+
 describe('useVideoLinkDrafts', () => {
   it('fills the teacher list in as drafts, saving nothing', () => {
     const { result } = setup();

@@ -88,6 +88,10 @@ const TEACHER: Record<string, string> = {
   'apps/nexus/src/lib/drawing-release-server.ts':
     'A teacher releasing their own drawing feedback, with their praise line and sometimes their voice note attached. As personal as a message gets.',
   'apps/nexus/src/app/api/drawing/submissions/[id]/review/route.ts': 'The same feedback, released one at a time.',
+  'apps/nexus/src/lib/qb-report-notify.ts':
+    'A teacher checked the mistake these students reported and says what came of it, often with the reason. They may want to answer.',
+  'apps/nexus/src/app/api/pad/prompts/[id]/nudge/route.ts':
+    'The teacher pressed Nudge in a live class: "we are on Q.38, a guess is fine". The student may answer back with why.',
 };
 
 /** Deliberately no Teams chat, so no identity to get wrong. */
@@ -101,6 +105,8 @@ const NO_CHAT: Record<string, string> = {
     'Enrolled, removed, batch changed. Nobody wrote it to the student: the roster changed.',
   'apps/nexus/src/app/api/classrooms/[id]/enrollments/restore/route.ts': 'The same, in reverse.',
   'apps/nexus/src/lib/exam-recall-notifications.ts': 'Six recall events, feed and bell.',
+  'apps/nexus/src/app/api/question-bank/questions/[id]/report/route.ts':
+    "audience: 'staff', bell only. Tells the paper's uploader a student reported a mistake.",
   // Worth knowing rather than fixing here: a teacher presses this and the
   // student gets no chat from anybody, only the feed and the bell.
   'apps/nexus/src/app/api/timetable/[classId]/class-test/nudge/route.ts': 'Passes no sender at all.',

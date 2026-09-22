@@ -67,7 +67,8 @@ export async function GET(request: NextRequest) {
       // a drawing since then started a new one.
       const { since: cycleStart } = quietClock(start, dates.length ? dates[dates.length - 1] : null, today);
       const log = reminders[m.user_id];
-      const autoSteps = log && log.cycleStart === cycleStart ? log.autoSteps : 0;
+      const current = !!log && log.cycleStart === cycleStart;
+      const autoSteps = current ? log.autoSteps : 0;
       const s = rhythmStatus({
         dates,
         today,
@@ -93,7 +94,9 @@ export async function GET(request: NextRequest) {
         strip: s.strip,
         run: rhythm.run,
         remindersThisCycle: autoSteps,
+        remindersSentThisCycle: current ? log.sentThisCycle : 0,
         lastRemindedOn: log?.lastSentOn ?? null,
+        lastReminderChannel: log?.lastChannel ?? null,
         latestSketch: latest[m.user_id] ?? null,
       };
     });

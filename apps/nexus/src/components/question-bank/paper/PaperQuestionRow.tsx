@@ -9,6 +9,7 @@ import LinkIcon from '@mui/icons-material/Link';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
+import OutlinedFlagIcon from '@mui/icons-material/OutlinedFlag';
 import type { NexusQBQuestion } from '@neram/database';
 import { QB_QUESTION_STATUS_COLORS, QB_QUESTION_STATUS_LABELS, solutionVideosOf } from '@neram/database';
 import { questionImageSlots, solutionGapMessage } from '@/lib/qb-image-needs';
@@ -38,6 +39,14 @@ export interface PaperQuestionRowProps {
   linked?: boolean;
   onToggleSelect: (shiftKey: boolean, ctrlKey: boolean) => void;
   onActivate: () => void;
+  /**
+   * Draw the student-report column. Only on a paper someone has reported, so
+   * every other paper keeps its width; on one that has, every row gets the
+   * cell and the flags line up.
+   */
+  showReportColumn?: boolean;
+  /** "Students reported a problem: Video solution (2)", or null when nobody has. */
+  reportSummary?: string | null;
 }
 
 /**
@@ -60,6 +69,8 @@ export default function PaperQuestionRow({
   linked,
   onToggleSelect,
   onActivate,
+  showReportColumn = false,
+  reportSummary = null,
 }: PaperQuestionRowProps) {
   const qNum = question.display_order ?? position ?? 0;
   const isDrawing = question.question_format === 'DRAWING_PROMPT';
@@ -90,6 +101,7 @@ export default function PaperQuestionRow({
 
   return (
     <Box
+      data-question-id={question.id}
       sx={{
         display: 'flex',
         alignItems: 'center',
@@ -247,6 +259,19 @@ export default function PaperQuestionRow({
         ) : (
           <Box sx={{ flexShrink: 0, width: 18 }} />
         )}
+
+        {/* A student reported a mistake here. First of the glyphs, and red, because
+            it is the one thing on this row other students may be learning wrong. */}
+        {showReportColumn &&
+          (reportSummary ? (
+            <Tooltip title={reportSummary} arrow>
+              <Box sx={{ flexShrink: 0, width: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <OutlinedFlagIcon aria-label={reportSummary} sx={{ fontSize: 15, color: 'error.main' }} />
+              </Box>
+            </Tooltip>
+          ) : (
+            <Box sx={{ flexShrink: 0, width: 18 }} />
+          ))}
 
         {/* Has a solution video: the same marker the teacher Questions list uses.
             Blank otherwise, so the column stays quiet; the "No video" chip is

@@ -23,6 +23,12 @@
  * of it (loading, errors, documents, and drawings with the workspace switched
  * off). The Assignments list stays capped.
  *
+ * The student question practice screen is the fifth: on a laptop it is a
+ * number grid beside a reader, each scrolling on its own inside a viewport-high
+ * shell, which is only possible without the Container's padding underneath it.
+ * On a phone the page puts that padding back itself. One question
+ * (`questions/[id]`) stays capped.
+ *
  * Every other route keeps the Container untouched, which is why this is a route
  * test rather than a layout change.
  *
@@ -31,7 +37,7 @@
  * the chrome heights these routes leave behind.
  */
 const FULL_BLEED =
-  /^\/(teacher|student|parent)\/timetable\/?$|^\/teacher\/question-bank\/papers\/(?!overview\/?$)[^/]+\/?$|^\/teacher\/drawing-reviews\/(?!profile\/?$)[^/]+\/?$|^\/student\/assignments\/[^/]+\/?$/;
+  /^\/(teacher|student|parent)\/timetable\/?$|^\/teacher\/question-bank\/papers\/(?!overview\/?$)[^/]+\/?$|^\/teacher\/drawing-reviews\/(?!profile\/?$)[^/]+\/?$|^\/student\/assignments\/[^/]+\/?$|^\/student\/question-bank\/questions\/?$/;
 
 export function isFullBleedRoute(pathname: string | null | undefined): boolean {
   return !!pathname && FULL_BLEED.test(pathname);

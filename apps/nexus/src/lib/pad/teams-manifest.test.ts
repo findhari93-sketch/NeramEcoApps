@@ -3,7 +3,7 @@ import { existsSync, readFileSync } from 'fs';
 import path from 'path';
 import { describe, expect, it } from 'vitest';
 import { isTeamsPadPath } from './embedded';
-import { answerPadTab, answerPopupUrl } from './teams-tab';
+import { answerPadTab, answerPopupUrl, consolePopOutUrl } from './teams-tab';
 
 /**
  * The Teams app manifest, checked against the code it points at. A broken
@@ -17,10 +17,11 @@ const manifest = JSON.parse(readFileSync(path.join(NEXUS, 'teams-app/manifest.js
 const APP_ID = 'aa039c70-50d2-4c91-bd0e-5675df5e50ff';
 
 describe('Teams app manifest', () => {
-  it('is the existing Neram Assistant app, version 1.2.0, still carrying My Work', () => {
+  it('is the existing Neram Assistant app, version 1.3.0, still carrying My Work', () => {
     expect(manifest.id).toBe('df4f6b2d-ea18-46d1-8934-f508ac248e6c');
-    expect(manifest.version).toBe('1.2.0');
-    expect(Number(manifest.manifestVersion)).toBeGreaterThanOrEqual(1.12);
+    expect(manifest.version).toBe('1.3.0');
+    expect(Number(manifest.manifestVersion)).toBeGreaterThanOrEqual(1.21);
+    expect(manifest.$schema).toContain(`/v${manifest.manifestVersion}/`);
     expect(manifest.staticTabs).toEqual([
       expect.objectContaining({ entityId: 'nexusAssignments', contentUrl: 'https://nexus.neramclasses.com/student/assignments' }),
     ]);
@@ -40,6 +41,13 @@ describe('Teams app manifest', () => {
     expect(isTeamsPadPath(new URL(manifest.configurableTabs[0].configurationUrl).pathname)).toBe(true);
   });
 
+  // A student pressed Teams' own Share button in the first demo and the pad took
+  // over the meeting screen. The flag hides that button for everyone; the teacher
+  // keeps "Show results on the meeting screen" in the console's menu.
+  it("hides Teams' own Share button, which every participant, students included, used to get", () => {
+    expect(manifest.meetingExtensionDefinition).toEqual({ supportsCustomShareToStage: true });
+  });
+
   it('saves the same tab address the side panel serves, from the one definition Graph also pins', () => {
     const config = readFileSync(path.join(NEXUS, 'src/app/(pad)/pad/teams/config/page.tsx'), 'utf-8');
     expect(config).toContain('answerPadTab(window.location.origin)');
@@ -52,6 +60,14 @@ describe('Teams app manifest', () => {
     expect(answerPopupUrl('https://nexus.neramclasses.com')).toBe('https://nexus.neramclasses.com/pad/teams/answer');
     expect(existsSync(path.join(NEXUS, 'src/app/(pad)/pad/teams/answer/page.tsx'))).toBe(true);
     expect(isTeamsPadPath('/pad/teams/answer')).toBe(true);
+  });
+
+  it('pops the console out to a page on the valid domain that signs in with Teams', () => {
+    const url = new URL(consolePopOutUrl('https://nexus.neramclasses.com/', '11111111-1111-4111-8111-111111111111'));
+    expect(url.href).toBe('https://nexus.neramclasses.com/pad/teams/console?session=11111111-1111-4111-8111-111111111111');
+    expect(manifest.validDomains).toContain(url.host);
+    expect(isTeamsPadPath(url.pathname)).toBe(true);
+    expect(existsSync(path.join(NEXUS, 'src/app/(pad)/pad/teams/console/page.tsx'))).toBe(true);
   });
 
   it('keeps every page on a valid domain, and that domain is the one sign-in names', () => {

@@ -134,7 +134,11 @@ export default function NudgeSheet({
                     <Typography noWrap sx={{ fontWeight: 600 }}>{s.name || 'Student'}</Typography>
                     <Typography variant="caption" color="text.secondary">
                       {s.label}
-                      {s.lastRemindedOn ? `, reminded ${s.remindersThisCycle}x` : ''}
+                      {/* Every reminder this quiet stretch, not only the automatic ones: a teacher's
+                          own earlier nudge is exactly what the next teacher needs to see. */}
+                      {s.remindersSentThisCycle > 0
+                        ? `, reminded ${s.remindersSentThisCycle === 1 ? 'once' : `${s.remindersSentThisCycle} times`}`
+                        : ', not reminded yet'}
                     </Typography>
                   </Box>
                 </Box>

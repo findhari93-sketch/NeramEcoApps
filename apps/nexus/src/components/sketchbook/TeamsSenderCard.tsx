@@ -81,7 +81,7 @@ export default function TeamsSenderCard({ classroomId }: { classroomId: string }
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error('Could not disconnect Teams');
-      setNotice({ severity: 'success', text: 'Disconnected. Reminders now reach the Nexus bell only.' });
+      setNotice({ severity: 'success', text: 'Disconnected. Reminders now reach students as a Teams alert and the Nexus bell.' });
       await mutate();
     } catch (e) {
       setNotice({ severity: 'error', text: e instanceof Error ? e.message : 'Could not disconnect Teams' });
@@ -96,10 +96,10 @@ export default function TeamsSenderCard({ classroomId }: { classroomId: string }
   let line: string;
   let action: { label: string; onClick: () => void; primary: boolean } | null;
   if (!s) {
-    line = 'Reminders reach the Nexus bell only. Connect Teams to send them as your Teams chat.';
+    line = 'Reminders reach students as a Teams alert and the Nexus bell. Connect Teams to send them as your own Teams chat, which students can reply to.';
     action = { label: 'Connect Teams', onClick: connect, primary: true };
   } else if (!s.working) {
-    line = `${s.isMe ? 'Your' : `${s.name || 'A teacher'}'s`} Teams connection stopped, so reminders reach the Nexus bell only.`;
+    line = `${s.isMe ? 'Your' : `${s.name || 'A teacher'}'s`} Teams connection stopped, so reminders reach students as a Teams alert and the Nexus bell.`;
     action = { label: s.isMe ? 'Reconnect Teams' : 'Use my Teams', onClick: connect, primary: true };
   } else if (s.isMe) {
     line = 'Reminders go out as your Teams chat.';

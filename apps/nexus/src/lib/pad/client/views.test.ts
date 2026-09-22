@@ -17,7 +17,21 @@ import type { ParticipationRow, StudentPrompt, StudentSnapshot, TeacherPrompt, T
 const SCORE = { correct: 0, wrong: 0, skipped: 0, absent: 0, total_graded: 0 };
 
 function studentPrompt(overrides: Partial<StudentPrompt> = {}): StudentPrompt {
-  return { id: 'p1', sequence: 1, answer_type: 'mcq', option_count: 4, state: 'open', version: 1, ungraded: null, correct_keys: null, ...overrides };
+  return {
+    id: 'p1',
+    sequence: 1,
+    label: null,
+    question_text: null,
+    image_url: null,
+    option_texts: null,
+    answer_type: 'mcq',
+    option_count: 4,
+    state: 'open',
+    version: 1,
+    ungraded: null,
+    correct_keys: null,
+    ...overrides,
+  };
 }
 
 function studentSnap(overrides: Partial<StudentSnapshot> = {}): StudentSnapshot {
@@ -28,6 +42,8 @@ function studentSnap(overrides: Partial<StudentSnapshot> = {}): StudentSnapshot 
     session: { id: 's1', status: 'live', hint_topic: 'pad-x', classroom_name: 'NATA Batch' },
     prompt: studentPrompt(),
     my_response: null,
+    my_skip: null,
+    nudged_at: null,
     score: SCORE,
     ...overrides,
   };
@@ -98,10 +114,14 @@ function teacherPrompt(overrides: Partial<TeacherPrompt> = {}): TeacherPrompt {
     correct_keys: null,
     ungraded: false,
     label: null,
+    question_text: null,
+    image_url: null,
+    option_texts: null,
     opened_at: '2026-09-10T10:00:00Z',
     closed_at: null,
     revealed_at: null,
     answered_count: 3,
+    last_nudged_at: null,
     ...overrides,
   };
 }
@@ -133,6 +153,7 @@ function teacherSnap(overrides: Partial<TeacherSnapshot> = {}): TeacherSnapshot 
     prompt: teacherPrompt(),
     counts: COUNTS,
     groups: [],
+    skips: { total: 0, by_reason: {} },
     history: [],
     ...overrides,
   };

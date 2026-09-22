@@ -1,8 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Snackbar } from '@neram/ui';
-import type { NexusQBQuestion, NexusQBQuestionSource, QBQuestionSection } from '@neram/database';
+import type {
+  NexusQBQuestion,
+  NexusQBQuestionSource,
+  QBQuestionSection,
+  QBReportGroup,
+  QBReportOutcome,
+} from '@neram/database';
 import PaperQuestionList, {
   type PaperQuestionMode,
   type NeedsFilter,
@@ -13,7 +19,11 @@ import PaperQuestionDetail from './PaperQuestionDetail';
 import type { PaperFallback } from './QuestionEditForm';
 import { useBulkImageFlow, type SlotType } from '@/hooks/useBulkImageFlow';
 import { useVideoLinkDrafts } from '@/hooks/useVideoLinkDrafts';
+import { usePaperReports } from '@/hooks/usePaperReports';
+import { useNavBadges } from '@/components/NavBadgeProvider';
 import VideoPasteDialog from '../VideoPasteDialog';
+import YouTubeFindDialog from '../YouTubeFindDialog';
+import type { FindRow } from '@/lib/youtube-solution-titles';
 import type { ImageState } from '@/lib/bulk-upload-schema';
 import { activationMessage } from '@/lib/qb-activation';
 import { partIdOfSolutionSlot } from '@/lib/qb-image-needs';
@@ -88,6 +98,16 @@ export interface PaperWorkspaceProps {
    * instead of waiting on a refetch, and lets a failed write roll itself back.
    */
   onOptimisticPatch: (questionId: string, patch: Partial<NexusQBQuestion>) => void;
+  /**
+   * The token sent when closing a student report. The page passes
+   * getTeacherToken, which carries chat scopes, so the message to the students
+   * comes from this teacher's own Teams chat. Falls back to getToken.
+   */
+  getChatToken?: () => Promise<string | null>;
+  /** Open this question in the pane once it is on the list (a deep link from a report or a bell). */
+  openQuestionId?: string | null;
+  /** Whether this person may connect YouTube in Settings, for the not-connected message. */
+  canConnectYouTube?: boolean;
 }
 
 /** Is the user typing? Then j and k are letters, not navigation. */
@@ -109,9 +129,29 @@ function isTypingTarget(target: EventTarget | null): boolean {
 export default function PaperWorkspace({
   questions, paperId, tagCounts = {}, tagsByQuestion, paper, sources,
   mode, onModeChange, needsFilter, onNeedsFilterChange, sectionFilter, onSectionFilterChange,
-  getToken, onSaved, onChangeSections, onOptimisticPatch,
+  getToken, onSaved, onChangeSections, onOptimisticPatch, getChatToken, openQuestionId,
+  canConnectYouTube = false,
 }: PaperWorkspaceProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
+
+  // A link to one question (?q=). Opened once, when that question has arrived,
+  // and scrolled to so the list shows where it sits.
+  const openedFromLink = useRef<string | null>(null);
+  useEffect(() => {
+    if (!openQuestionId || openedFromLink.current === openQuestionId) return;
+    if (!questions.some((q) => q.id === openQuestionId)) return;
+    openedFromLink.current = openQuestionId;
+    setActiveId(openQuestionId);
+    requestAnimationFrame(() => {
+      document
+        .querySelector(`[data-question-id="${openQuestionId}"]`)
+        ?.scrollIntoView?.({ block: 'center' });
+    });
+  }, [openQuestionId, questions]);
+
+  /** Students' open reports on this paper. */
+  const paperReports = usePaperReports(paperId, getToken);
+  const { refreshBadges } = useNavBadges();
   const [savingImages, setSavingImages] = useState(false);
   const [saveImageProgress, setSaveImageProgress] = useState({ done: 0, total: 0 });
   const [imageToast, setImageToast] = useState<string | null>(null);
@@ -152,13 +192,56 @@ export default function PaperWorkspace({
     onOptimisticPatch,
   });
   const [videoPasteOpen, setVideoPasteOpen] = useState(false);
+  const [youtubeOpen, setYoutubeOpen] = useState(false);
+
+  /** The paper's rows as "Find on YouTube" matches them: numbered as listed, with their section. */
+  const findRows = useMemo<FindRow[]>(() => {
+    const sectionOf = new Map(questions.map((q) => [q.id, q.section ?? null]));
+    return videoDrafts.matchRows.map((r) => ({
+      id: r.id,
+      number: r.number,
+      section: sectionOf.get(r.id) ?? null,
+      savedUrl: r.savedUrl ?? null,
+      splitDrawing: !!r.splitDrawing,
+    }));
+  }, [questions, videoDrafts.matchRows]);
 
   const saveVideos = useCallback(async () => {
     const { saved, failed, message } = await videoDrafts.save();
     if (message) setImageToast(message);
     else if (failed === 0) setImageToast(`${saved} video link${saved === 1 ? '' : 's'} saved`);
     else setImageToast(`Saved ${saved}, ${failed} need a look: the reasons are under each one`);
-  }, [videoDrafts]);
+    // A replaced link turns a reported video into "changed since reported",
+    // which is what offers "Tell the students it is fixed" on its row.
+    if (saved > 0) paperReports.refresh();
+  }, [videoDrafts, paperReports]);
+
+  /**
+   * Close one reported problem and tell its students. True when it closed, so
+   * the panel can keep its buttons and say so when it did not.
+   */
+  const resolveReport = useCallback(
+    async (questionId: string, group: QBReportGroup, outcome: QBReportOutcome, note: string): Promise<boolean> => {
+      const token = (await (getChatToken ?? getToken)()) || (await getToken());
+      if (!token) return false;
+      try {
+        const res = await fetch(`/api/question-bank/questions/${questionId}/reports/resolve`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ target: group.target, part_label: group.part_label, outcome, note }),
+        });
+        if (!res.ok) return false;
+        const people = `${group.students} student${group.students === 1 ? '' : 's'}`;
+        setImageToast(outcome === 'fixed' ? `Marked fixed. ${people} told` : `Sent to ${people}`);
+        paperReports.refresh();
+        refreshBadges();
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [getChatToken, getToken, paperReports, refreshBadges],
+  );
 
   const activeIndex = useMemo(
     () => (activeId ? questions.findIndex((q) => q.id === activeId) : -1),
@@ -489,9 +572,18 @@ export default function PaperWorkspace({
           saveImageProgress={saveImageProgress}
           videos={
             paperId
-              ? { drafts: videoDrafts, onOpenPaste: () => setVideoPasteOpen(true), onSave: saveVideos }
+              ? {
+                  drafts: videoDrafts,
+                  onOpenPaste: () => setVideoPasteOpen(true),
+                  onOpenYouTube: () => setYoutubeOpen(true),
+                  onSave: saveVideos,
+                }
               : undefined
           }
+          reports={paperReports.byQuestion}
+          onTellVideoFixed={(questionId, group) => {
+            void resolveReport(questionId, group, 'fixed', '');
+          }}
         />
       </Box>
       {activeId && (
@@ -511,6 +603,10 @@ export default function PaperWorkspace({
             onNext={() => step(1)}
             onChangeSection={changeOne}
             onSetActive={activeQuestion ? (active) => setActiveQuestions([activeQuestion.id], active) : undefined}
+            reportGroups={activeQuestion ? paperReports.byQuestion[activeQuestion.id] : undefined}
+            onResolveReport={
+              activeQuestion ? (group, outcome, note) => resolveReport(activeQuestion.id, group, outcome, note) : undefined
+            }
             mode={mode}
             imagesPane={
               activeQuestion
@@ -534,6 +630,22 @@ export default function PaperWorkspace({
           rows={videoDrafts.matchRows}
           onApply={(text) => {
             videoDrafts.pasteText(text);
+            onModeChange('videos');
+          }}
+        />
+      )}
+      {paperId && (
+        <YouTubeFindDialog
+          open={youtubeOpen}
+          onClose={() => setYoutubeOpen(false)}
+          paperId={paperId}
+          rows={findRows}
+          examType={paper?.exam_type ?? null}
+          year={paper?.year ?? null}
+          getToken={getToken}
+          canConnect={canConnectYouTube}
+          onFill={(fills) => {
+            videoDrafts.fillFound(fills);
             onModeChange('videos');
           }}
         />

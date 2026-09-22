@@ -13,15 +13,6 @@ const base = (over: Partial<TopFilterBarProps> = {}): TopFilterBarProps => ({
   onFilterChange: vi.fn(),
   onOpenDrawer: vi.fn(),
   activeFilterCount: 0,
-  totalCount: 80,
-  filteredCount: 80,
-  selectionMode: false,
-  selectedCount: 0,
-  onToggleSelectionMode: vi.fn(),
-  onSelectAll: vi.fn(),
-  onCreateTest: vi.fn(),
-  lang: 'en',
-  onLangChange: vi.fn(),
   ...over,
 });
 
@@ -45,8 +36,26 @@ describe('TopFilterBar video filter', () => {
   });
 
   it('is there on a year paper, where the other quick chips are not', () => {
-    render(<TopFilterBar {...base({ isYearPaperView: true, contextLabel: 'JEE 2015' })} />);
+    render(<TopFilterBar {...base({ isYearPaperView: true })} />);
     expect(screen.queryByRole('button', { name: 'Difficulty' })).toBeNull();
     expect(screen.getByRole('button', { name: 'Video solutions' })).not.toBeNull();
+  });
+});
+
+describe('TopFilterBar chip row', () => {
+  it('wraps instead of scrolling, so nothing in it can be clipped', () => {
+    // overflow-x:auto forced overflow-y:auto, and a 44px hit area inside a
+    // shorter row then scrolled every chip up under the row's top edge.
+    render(<TopFilterBar {...base()} />);
+    const row = screen.getByRole('button', { name: 'Video solutions' }).parentElement!;
+    const style = window.getComputedStyle(row);
+    expect(style.overflowX).not.toBe('auto');
+    expect(style.overflowY).not.toBe('auto');
+    expect(style.flexWrap).toBe('wrap');
+  });
+
+  it('renders what the page pins after the chips', () => {
+    render(<TopFilterBar {...base({ trailing: <button type="button">Grid</button> })} />);
+    expect(screen.getByRole('button', { name: 'Grid' })).not.toBeNull();
   });
 });

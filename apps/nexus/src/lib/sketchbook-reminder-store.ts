@@ -10,6 +10,8 @@ export interface ReminderLogRow {
   cycleStart: string;
   step: 1 | 2 | 3 | null;
   sentOn: string;
+  /** sendNudge's channel for this send (`chat+inapp`, `teams+inapp`, `inapp`, `failed`), null until delivered. */
+  channel?: string | null;
 }
 
 function client(): any {
@@ -23,36 +25,58 @@ export async function loadReminderLogs(studentIds: string[]): Promise<Record<str
   if (studentIds.length === 0) return out;
   const { data, error } = await client()
     .from('nexus_sketchbook_reminders')
-    .select('student_id, kind, cycle_start, step, sent_on')
+    .select('student_id, kind, cycle_start, step, sent_on, channel')
     .in('student_id', studentIds)
     .order('created_at', { ascending: true });
   if (error) throw error;
   for (const r of (data || []) as any[]) {
-    (out[r.student_id] ||= []).push({ kind: r.kind, cycleStart: r.cycle_start, step: r.step ?? null, sentOn: r.sent_on });
+    (out[r.student_id] ||= []).push({
+      kind: r.kind, cycleStart: r.cycle_start, step: r.step ?? null, sentOn: r.sent_on, channel: r.channel ?? null,
+    });
   }
   return out;
 }
 
+export interface ReminderCycleFacts {
+  cycleStart: string;
+  /** Automatic steps only: what "Needs a call" counts. */
+  autoSteps: number;
+  /** Every reminder in the cycle, automatic and teacher-pressed: what staff read as "reminded N times". */
+  sentThisCycle: number;
+  lastSentOn: string | null;
+  /** Channel of the newest reminder, so the screen can say whether it reached Teams. */
+  lastChannel: string | null;
+}
+
+/** Fold one student's rows (oldest first) into the facts about their newest cycle. Pure. */
+export function foldReminderCycle(rows: ReminderLogRow[]): ReminderCycleFacts | null {
+  if (!rows.length) return null;
+  const latestCycle = rows.reduce((a, r) => (r.cycleStart > a ? r.cycleStart : a), rows[0].cycleStart);
+  const inCycle = rows.filter((r) => r.cycleStart === latestCycle);
+  // Rows arrive oldest first, so the last one with the newest day is the newest send.
+  let newest: ReminderLogRow | null = null;
+  for (const r of rows) if (!newest || r.sentOn >= newest.sentOn) newest = r;
+  return {
+    cycleStart: latestCycle,
+    autoSteps: inCycle.filter((r) => r.kind === 'auto').length,
+    sentThisCycle: inCycle.length,
+    lastSentOn: newest?.sentOn ?? null,
+    lastChannel: newest?.channel ?? null,
+  };
+}
+
 /**
- * Automatic steps sent in the student's most recent cycle, and the last send day.
- * The rhythm screen uses it for "Needs a call"; a cycle that is no longer current
+ * Reminders in the student's most recent cycle, and the last send. The rhythm
+ * screen uses autoSteps for "Needs a call"; a cycle that is no longer current
  * cannot produce needs_call because that also requires 9 quiet days since the
  * cycle's own start, which a new drawing resets.
  */
-export async function loadRemindersThisCycle(
-  studentIds: string[],
-): Promise<Record<string, { cycleStart: string; autoSteps: number; lastSentOn: string | null }>> {
+export async function loadRemindersThisCycle(studentIds: string[]): Promise<Record<string, ReminderCycleFacts>> {
   const logs = await loadReminderLogs(studentIds);
-  const out: Record<string, { cycleStart: string; autoSteps: number; lastSentOn: string | null }> = {};
+  const out: Record<string, ReminderCycleFacts> = {};
   for (const [id, rows] of Object.entries(logs)) {
-    if (!rows.length) continue;
-    const latestCycle = rows.reduce((a, r) => (r.cycleStart > a ? r.cycleStart : a), rows[0].cycleStart);
-    const inCycle = rows.filter((r) => r.cycleStart === latestCycle);
-    out[id] = {
-      cycleStart: latestCycle,
-      autoSteps: inCycle.filter((r) => r.kind === 'auto').length,
-      lastSentOn: rows.reduce<string | null>((a, r) => (a === null || r.sentOn > a ? r.sentOn : a), null),
-    };
+    const facts = foldReminderCycle(rows);
+    if (facts) out[id] = facts;
   }
   return out;
 }

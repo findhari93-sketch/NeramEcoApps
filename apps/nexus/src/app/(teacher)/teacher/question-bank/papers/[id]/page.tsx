@@ -60,6 +60,7 @@ import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import PaperStudentAccessPanel from '@/components/question-bank/PaperStudentAccessPanel';
 import PaperJSONDialog from '@/components/question-bank/PaperJSONDialog';
 import PaperShell from '@/components/question-bank/paper/PaperShell';
+import { readPaperDeepLink } from '@/lib/qb-paper-link';
 
 /** How long the first load may take before the page says it failed. */
 const PAPER_LOAD_TIMEOUT_MS = 30_000;
@@ -68,7 +69,7 @@ export default function PaperDetailPage() {
   const router = useRouter();
   const params = useParams();
   const paperId = params.id as string;
-  const { getToken } = useNexusAuthContext();
+  const { getToken, getTeacherToken, can } = useNexusAuthContext();
 
   const [paper, setPaper] = useState<NexusQBOriginalPaper | null>(null);
   // Back returns to this paper's own exam page, and the sidebar highlights it.
@@ -121,6 +122,18 @@ export default function PaperDetailPage() {
   const [paperMode, setPaperMode] = useState<PaperQuestionMode>('edit');
   const [needsFilter, setNeedsFilter] = useState<NeedsFilter>('all');
   const [sectionFilter, setSectionFilter] = useState<PaperSectionFilter | null>(null);
+
+  /**
+   * A link straight to one question (?q=, ?mode=), from a student report, the
+   * bell or the Reports queue. Read from window.location once on mount rather
+   * than useSearchParams, which would need a Suspense boundary around the page.
+   */
+  const [linkedQuestionId, setLinkedQuestionId] = useState<string | null>(null);
+  useEffect(() => {
+    const { questionId, mode } = readPaperDeepLink(new URLSearchParams(window.location.search));
+    if (mode) setPaperMode(mode);
+    if (questionId) setLinkedQuestionId(questionId);
+  }, []);
 
   const fetchData = useCallback(async (background = false) => {
     if (!background) {
@@ -807,6 +820,9 @@ export default function PaperDetailPage() {
           onSaved={() => fetchData(true)}
           onChangeSections={handleChangeSections}
           onOptimisticPatch={patchQuestionLocally}
+          getChatToken={getTeacherToken}
+          openQuestionId={linkedQuestionId}
+          canConnectYouTube={can('system.settings')}
         />
         </Box>
       )}

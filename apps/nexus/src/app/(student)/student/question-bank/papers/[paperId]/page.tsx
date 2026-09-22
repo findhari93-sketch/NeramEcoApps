@@ -117,9 +117,11 @@ export default function PaperDetailPage() {
       if (paper.shift) qs.set('shift', paper.shift);
       if (classroomId) qs.set('classroom_id', classroomId);
       if (section) qs.set('section', section);
+      // Back on the practice screen returns here, not to the exam page.
+      qs.set('back', returnTo);
       return `/student/question-bank/questions?${qs.toString()}`;
     },
-    [paper, classroomId],
+    [paper, classroomId, returnTo],
   );
 
   const startMock = () => {

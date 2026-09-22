@@ -86,32 +86,6 @@ export default function QuestionDetailPage() {
     [activeClassroom, questionId, submitting],
   );
 
-  const handleReport = useCallback(
-    async (reportType: string, description: string) => {
-      if (!activeClassroom) return;
-      const token = await getToken();
-      const res = await fetch(
-        `/api/question-bank/questions/${questionId}/report`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            report_type: reportType,
-            description: description || undefined,
-            classroom_id: activeClassroom.id,
-          }),
-        },
-      );
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || 'Failed to submit report');
-      }
-    },
-    [activeClassroom, questionId],
-  );
 
   const handleStudyToggle = useCallback(async () => {
     if (!activeClassroom || !question) return;
@@ -223,7 +197,7 @@ export default function QuestionDetailPage() {
         question={question}
         onSubmit={handleSubmit}
         onStudyToggle={handleStudyToggle}
-        onReport={handleReport}
+        allowReport
         onNext={() => {}}
         onPrev={() => {}}
         hasNext={false}

@@ -4,6 +4,8 @@ import {
   clampDates,
   proratedGoal,
   quietClock,
+  reminderChannelLabel,
+  reminderSummary,
   rhythmStatus,
   trackingStart,
   twoWeekStrip,
@@ -153,5 +155,58 @@ describe('rhythmStatus', () => {
       rhythmStatus(base({ today: '2026-09-19', dates: ['2026-09-18'] })).label,
     ];
     for (const l of labels) expect(l).not.toMatch(/[–—]|--/);
+  });
+});
+
+describe('reminderSummary: was this quiet student reminded?', () => {
+  const facts = (over: Partial<Parameters<typeof reminderSummary>[0]> = {}) => ({
+    status: 'needs_nudge' as const,
+    sentThisCycle: 0,
+    lastSentOn: null,
+    lastChannel: null,
+    ...over,
+  });
+
+  it('says so plainly when a quiet student was never reminded', () => {
+    expect(reminderSummary(facts())).toBe('Not reminded yet');
+    expect(reminderSummary(facts({ status: 'needs_call' }))).toBe('Not reminded yet');
+  });
+
+  it('stays silent for students who are not due a reminder', () => {
+    for (const status of ['on_track', 'behind', 'not_started'] as const) {
+      expect(reminderSummary(facts({ status }))).toBeNull();
+    }
+  });
+
+  it('counts the reminders in this quiet stretch and names the last day and channel', () => {
+    expect(reminderSummary(facts({ sentThisCycle: 1, lastSentOn: '2026-09-20', lastChannel: 'chat+inapp' })))
+      .toMatch(/^Reminded once, last 20 Sept?, Teams chat$/);
+    expect(reminderSummary(facts({ sentThisCycle: 2, lastSentOn: '2026-09-20', lastChannel: 'teams+inapp' })))
+      .toMatch(/^Reminded 2 times, last 20 Sept?, Teams alert$/);
+  });
+
+  it('leaves the channel off when the send never recorded one', () => {
+    expect(reminderSummary(facts({ sentThisCycle: 1, lastSentOn: '2026-09-20', lastChannel: null })))
+      .toMatch(/^Reminded once, last 20 Sept?$/);
+  });
+
+  it('never uses a dash', () => {
+    const lines = [
+      reminderSummary(facts()),
+      reminderSummary(facts({ sentThisCycle: 3, lastSentOn: '2026-09-21', lastChannel: 'failed' })),
+    ];
+    for (const l of lines) expect(l).not.toMatch(/[–—]|--/);
+  });
+});
+
+describe('reminderChannelLabel', () => {
+  it('names the channel that actually landed, chat first', () => {
+    expect(reminderChannelLabel('chat+inapp')).toBe('Teams chat');
+    expect(reminderChannelLabel('chat')).toBe('Teams chat');
+    expect(reminderChannelLabel('teams+inapp')).toBe('Teams alert');
+    expect(reminderChannelLabel('inapp')).toBe('Nexus bell only');
+    expect(reminderChannelLabel('failed')).toBe('not delivered');
+    expect(reminderChannelLabel(null)).toBeNull();
+    expect(reminderChannelLabel('')).toBeNull();
   });
 });

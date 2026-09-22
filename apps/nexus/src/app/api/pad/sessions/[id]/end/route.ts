@@ -9,9 +9,11 @@ import { padDb } from '@/lib/pad/sessions';
  *
  * Body: { confirmUnrevealed?: boolean }
  *
- * With a prompt still open or closed but not revealed, the first call answers
- * 409 UNREVEALED_PROMPT { sequence } so the console can ask "Q7 isn't revealed,
- * end anyway?". Ending again is a no-op success ({ changed: false }).
+ * With questions still open or closed without an answer, the first call answers
+ * 409 UNREVEALED_PROMPT { sequence, label, count } (the first of them, and how
+ * many) so the console can say "Q.38 has no answer yet" before ending. Those
+ * answers can still be set from the class report afterwards. Ending again is a
+ * no-op success ({ changed: false }).
  */
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {

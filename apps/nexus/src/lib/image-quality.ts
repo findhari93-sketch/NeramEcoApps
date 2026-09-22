@@ -30,9 +30,17 @@ export interface ImageQuality {
   brightness: number;
   /** Width over height of the original image. */
   aspect: number;
+  /**
+   * Which sheet this is (image-fingerprint.ts), so a re-upload of a sheet that was
+   * already reviewed does not come back as new work. Absent on older rows.
+   */
+  fp?: string;
   /** Bumped when the measurement changes, so old numbers can be told apart. */
   v: 1;
 }
+
+/** The stored fingerprint shape: 256 bits as 64 lowercase hex characters. */
+const FINGERPRINT_RE = /^[0-9a-f]{64}$/;
 
 /** Long side, in pixels, that every image is scaled to before measuring. */
 export const MEASURE_SIDE = 320;
@@ -146,5 +154,8 @@ export function parseQuality(input: unknown): ImageQuality | null {
   if (!finite(q.ink, 0, 1)) return null;
   if (!finite(q.brightness, 0, 255)) return null;
   if (!finite(q.aspect, 0.01, 100)) return null;
-  return { sharpness: q.sharpness as number, ink: q.ink as number, brightness: q.brightness as number, aspect: q.aspect as number, v: 1 };
+  const out: ImageQuality = { sharpness: q.sharpness as number, ink: q.ink as number, brightness: q.brightness as number, aspect: q.aspect as number, v: 1 };
+  // A malformed fingerprint is dropped, never allowed to sink the measurement.
+  if (typeof q.fp === 'string' && FINGERPRINT_RE.test(q.fp)) out.fp = q.fp;
+  return out;
 }

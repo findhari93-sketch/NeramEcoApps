@@ -11,9 +11,10 @@ import { hintPrompt, padDb } from '@/lib/pad/sessions';
  *
  * Body: { label: string | null }
  *
- * The teacher's own note for a prompt ("Kinematics Q3"), shown in the history
- * strip and the report. Up to 80 characters after spaces are collapsed; null or
- * blank clears it. Teacher screens only.
+ * The teacher's reference for a prompt ("38", shown as Q.38, or "Kinematics
+ * Q3"). Up to 80 characters after spaces are collapsed; null or blank clears it.
+ * Students and the meeting screen show it too, so everyone refreshes. The
+ * console now edits through /details, which carries the question text as well.
  */
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       p_prompt: params.id,
       p_label: parsed.value.label,
     });
-    await hintPrompt(params.id, 'teacher');
+    await hintPrompt(params.id, 'everyone');
     return padJson(transitionBody(result));
   } catch (err) {
     return padErrorResponse(err, 'label');

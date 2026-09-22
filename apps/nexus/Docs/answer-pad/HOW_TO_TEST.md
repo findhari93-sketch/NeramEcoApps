@@ -210,11 +210,29 @@ preview rather than filing a defect.
    - `permission_missing`: the admin consent in step 1 is not in place yet.
 4. Join on each device. The Answer Pad button is there without anyone adding it (TC-PAD-081).
 
-### 3.6 Share results
+### 3.6 Show results on the meeting screen
 
-After revealing a question, select **Share results** on the console. Everyone's meeting screen shows the class
-totals and the answer breakdown, never names (TC-PAD-090). **Stop sharing** on the console, or Teams' own stop
-button, ends it.
+After revealing a question, open **More options** (the three dots next to the class name) and select **Show results
+on the meeting screen**. Everyone's meeting screen shows the class totals and the answer breakdown, never names
+(TC-PAD-090). It replaces the teacher's screen share, which is why it is not a big button. **Stop** on the console,
+or Teams' own stop button, ends it. From package 1.3.0 Teams' own Share button under the side panel is hidden for
+everyone, so students cannot put their pad on the meeting screen.
+
+### 3.7 Picture, reasons and nudge
+
+- **Picture:** Win + Shift + S, snip the question, click into the pad and press Ctrl + V. It goes under "Picture
+  (optional)" before asking, or "Add a picture" while a question is open. Pictures are shrunk in the browser and
+  stored in the `uploads` bucket under `pad/<session id>/` (TC-PAD-092).
+- **I can't answer:** students pick a reason under the answer buttons. The console shows counts by reason while the
+  question is open, and names only after it closes (TC-PAD-093).
+- **Nudge:** one press per minute per question. Pads that are open show a banner; students whose pad is closed get a
+  Teams chat from the teacher's connected Teams login, or a Nexus notification when that is not connected (TC-PAD-094).
+  Try it in a demo class with test accounts: it reaches everyone on the class list who has not answered.
+
+### 3.8 One monitor
+
+Share a Window (the PDF viewer), not the Screen: students then see only that window, never the pad. On Teams desktop
+the Pop out button next to the class name opens the console in its own window to sit beside it (TC-PAD-091).
 
 ---
 

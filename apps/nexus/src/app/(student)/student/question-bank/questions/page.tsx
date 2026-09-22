@@ -1,168 +1,124 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import {
-  Box,
-  Typography,
-  Skeleton,
-  Paper,
-  IconButton,
-  Button,
-  Checkbox,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
-  Snackbar,
-  Alert,
-  useMediaQuery,
-  useTheme,
-  EmptyState,
-} from '@neram/ui';
+import { Alert, Box, EmptyState, Snackbar, useMediaQuery, useTheme } from '@neram/ui';
 import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
-import AddIcon from '@mui/icons-material/Add';
-import CloseIcon from '@mui/icons-material/Close';
-import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import { QB_EXAM_TYPE_LABELS, qbSectionLabel } from '@neram/database';
+import type { QBExamTree, QBExamType, QBFilterState, NexusQBTopic, NexusQBTagNode } from '@neram/database';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthSWR } from '@/lib/nexus-swr';
-import TopFilterBar from '@/components/question-bank/TopFilterBar';
-import QBSearchStatus, { type QBMatchKind } from '@/components/question-bank/QBSearchStatus';
-import InlineQuestionCard from '@/components/question-bank/InlineQuestionCard';
 import FilterDrawer from '@/components/question-bank/FilterDrawer';
 import { countActiveFilters } from '@/components/question-bank/FilterChips';
-import SwipeableQuestionCard from '@/components/question-bank/SwipeableQuestionCard';
-import QuestionDetail from '@/components/question-bank/QuestionDetail';
-import { SHELL_CHROME } from '@/lib/shell-chrome';
 import { expandCategories, categoryLabelMap } from '@/lib/qb-category-tree';
-import type {
-  QBExamTree,
-  QBFilterState,
-  NexusQBQuestionListItem,
-  NexusQBQuestionDetail,
-  NexusQBTopic,
-  NexusQBTagNode,
-} from '@neram/database';
-import { deserializeQBFilters, serializeQBFilters } from '@/lib/qb-filter-url';
-import { MAX_STUDENT_TEST_QUESTIONS } from '@/lib/test-limits';
+import { deserializeQBFilters } from '@/lib/qb-filter-url';
+import { buildPracticeQuery, QID_PARAM } from '@/lib/qb-practice-url';
 import { isQBExamType, qbExamPath, rememberQBExam } from '@/lib/qb-exam-routes';
+import { usePracticeSession, type PracticeContext } from '@/components/question-bank/practice/usePracticeSession';
+import { useTestSelection } from '@/components/question-bank/practice/useTestSelection';
+import { usePracticeKeyboard } from '@/components/question-bank/practice/usePracticeKeyboard';
+import { firstUnanswered } from '@/components/question-bank/practice/practice-logic';
+import { usePracticeView } from '@/components/question-bank/practice/ViewToggle';
+import PracticeWorkspace from '@/components/question-bank/practice/PracticeWorkspace';
+import PracticeHeader from '@/components/question-bank/practice/PracticeHeader';
+import PracticeBrowser from '@/components/question-bank/practice/PracticeBrowser';
+import PracticeReader, { type ReaderAnswerHandle } from '@/components/question-bank/practice/PracticeReader';
+import MobileReaderDialog from '@/components/question-bank/practice/MobileReaderDialog';
+import JumpToQuestion from '@/components/question-bank/practice/JumpToQuestion';
+import SelectionBar from '@/components/question-bank/practice/SelectionBar';
+import ShortcutsDialog from '@/components/question-bank/practice/ShortcutsDialog';
+import CreateTestDialog, { type CreateTestSettings } from '@/components/question-bank/practice/CreateTestDialog';
 
 /** Stable identity, so a render with no counts does not re-trigger consumers. */
 const EMPTY_COUNTS: Record<string, number> = {};
 
-/** Where the detail pane pins, clearing the sticky filter bar beside it. */
-const DETAIL_PANE_TOP = 8;
+/**
+ * Where Back goes when the link says, e.g. a paper's Practice button. Only a
+ * path inside the student app: anything else would make this an open redirect.
+ */
+function safeBackPath(value: string | null): string | null {
+  if (!value || !value.startsWith('/student/') || value.startsWith('//') || value.includes(':')) return null;
+  return value;
+}
 
-const PAGE_SIZE = 20;
-
+/**
+ * The student question bank's practice screen.
+ *
+ * Laptop: a header, then the paper as a grid or a list beside the question
+ * being read, each scrolling on its own. Phone: the list, and a full-screen
+ * reader over it with swipe, Prev / Next and a number grid to jump with.
+ *
+ * The open question lives in the address bar as `?qid=`, so a reload or a
+ * shared link lands on it, and on a phone the Back button closes the reader.
+ */
 export default function QuestionListPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  /**
-   * Two panes, or one.
-   *
-   * At `md` and up a single column of 90px cards was being stretched across
-   * 1116px, so the stem clamped to two lines with most of the row empty. Above
-   * that width the list becomes a column and the question opens beside it. Below
-   * it nothing changes: one column, swipe actions, expansion in place. That is
-   * the majority of these students and the layout already suits them.
-   */
-  const isTwoPane = useMediaQuery(theme.breakpoints.up('md'));
+  // noSsr: RoleGuard renders only a loader on the server, so there is no server
+  // markup to mismatch, and this avoids a phone layout flashing on a laptop.
+  const isTwoPane = useMediaQuery(theme.breakpoints.up('md'), { noSsr: true });
+  const isPhone = useMediaQuery(theme.breakpoints.down('sm'), { noSsr: true });
 
   const { activeClassroom, getToken, loading: authLoading } = useNexusAuthContext();
 
-  // Exam context from URL params
-  const [selectedExam, setSelectedExam] = useState<string | null>(
-    searchParams.get('exam') || null,
-  );
-  const [selectedYear, setSelectedYear] = useState<number | null>(
-    searchParams.get('year') ? Number(searchParams.get('year')) : null,
-  );
-  const [selectedSession, setSelectedSession] = useState<string | null>(
-    searchParams.get('session') || null,
-  );
-  /**
-   * The paper detail screen has always written these two into the practice link.
-   * shift was read by nobody, so a paper split into a forenoon and an afternoon
-   * sitting practised both at once; section is what the new paper breakdown uses
-   * to open one part of a paper.
-   */
-  const [selectedShift] = useState<string | null>(searchParams.get('shift') || null);
-  const [selectedSection] = useState<string | null>(searchParams.get('section') || null);
+  // ─── What is being practised, from the link ───────────────────────────────
+  const exam = searchParams.get('exam') || null;
+  const yearParam = searchParams.get('year');
+  const year = yearParam ? Number(yearParam) : null;
+  const sessionName = searchParams.get('session') || null;
+  const shift = searchParams.get('shift') || null;
+  const section = searchParams.get('section') || null;
+  const paperSource = searchParams.get('paper_source') || null;
+  const backParam = safeBackPath(searchParams.get('back'));
 
-  /**
-   * The three catalogue reads, on the shared SWR cache.
-   *
-   * These were hand-rolled fetch-in-useEffect, each awaiting its own token
-   * first, so nothing they loaded was deduped or cached and coming back to this
-   * page always refetched all of it from cold. The exam tree is the expensive
-   * one: it reads the whole sources table and the whole active-question id list.
-   * A null key holds the request until the classroom resolves, which is the
-   * pattern documented on the QB landing page.
-   */
+  const ctx: PracticeContext = useMemo(
+    () => ({ exam, year, session: sessionName, shift, section, paperSource }),
+    [exam, year, sessionName, shift, section, paperSource],
+  );
+
+  // Read once. A preset and a shared question are both one-time instructions.
+  const initialParams = useRef(new URLSearchParams(searchParams.toString()));
+  const presetId = useRef(initialParams.current.get('preset'));
+  const deepLinkQid = useRef(initialParams.current.get(QID_PARAM));
+
+  // ─── The three catalogue reads, on the shared SWR cache ───────────────────
   const scoped = (path: string, extra?: Record<string, string>) => {
     if (!activeClassroom) return null;
     const qs = new URLSearchParams({ classroom_id: activeClassroom.id, ...(extra || {}) });
     return `${path}?${qs.toString()}`;
   };
-
-  const { data: examTreeRes, isLoading: examTreeLoading } =
-    useAuthSWR<{ data: QBExamTree }>(scoped('/api/question-bank/exam-tree'));
+  const { data: examTreeRes } = useAuthSWR<{ data: QBExamTree }>(scoped('/api/question-bank/exam-tree'));
   const examTree = examTreeRes?.data ?? null;
-
-  const { data: topicsRes } = useAuthSWR<{
-    data: NexusQBTopic[];
-    counts?: Record<string, number>;
-  }>(scoped('/api/question-bank/topics'));
-  const topics = useMemo(() => topicsRes?.data ?? [], [topicsRes]);
-  const topicCounts = useMemo(
-    () => new Map(Object.entries(topicsRes?.counts ?? {})),
-    [topicsRes],
+  const { data: topicsRes } = useAuthSWR<{ data: NexusQBTopic[]; counts?: Record<string, number> }>(
+    scoped('/api/question-bank/topics'),
   );
-
-  const { data: catCountsRes } = useAuthSWR<{
-    data: Record<string, number>;
-    tree?: NexusQBTagNode[];
-  }>(
+  const topics = useMemo(() => topicsRes?.data ?? [], [topicsRes]);
+  const topicCounts = useMemo(() => new Map(Object.entries(topicsRes?.counts ?? {})), [topicsRes]);
+  const { data: catCountsRes } = useAuthSWR<{ data: Record<string, number>; tree?: NexusQBTagNode[] }>(
     scoped('/api/question-bank/category-counts', {
-      ...(selectedExam ? { exam_type: selectedExam } : {}),
-      ...(selectedYear ? { year: String(selectedYear) } : {}),
-      ...(selectedSession ? { session: selectedSession } : {}),
+      ...(exam ? { exam_type: exam } : {}),
+      ...(year ? { year: String(year) } : {}),
+      ...(sessionName ? { session: sessionName } : {}),
     }),
   );
   const categoryCounts = catCountsRes?.data ?? EMPTY_COUNTS;
   const categoryTree = useMemo(() => catCountsRes?.tree ?? [], [catCountsRes]);
+  const categoryLabels = useMemo(() => categoryLabelMap(categoryTree), [categoryTree]);
 
-  // Filters (categories, difficulty, format, status, search, topics)
-  const [filters, setFilters] = useState<QBFilterState>(() =>
-    deserializeQBFilters(searchParams),
-  );
-
-  // Question list state
-  const [questions, setQuestions] = useState<NexusQBQuestionListItem[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  // Students had no visible search box at all: search lived inside the filter
-  // drawer and only ran on Apply. This is the always-on bar; filters.search_text
-  // stays the single source of truth so the drawer and the ?q= URL still work.
+  // ─── Filters and search ───────────────────────────────────────────────────
+  const [filters, setFilters] = useState<QBFilterState>(() => deserializeQBFilters(searchParams));
+  const filtersRef = useRef(filters);
+  filtersRef.current = filters;
   const [searchInput, setSearchInput] = useState(filters.search_text ?? '');
-  const [matchKind, setMatchKind] = useState<QBMatchKind | null>(null);
-  const [didYouMean, setDidYouMean] = useState<string | null>(null);
-  const [matchedTerms, setMatchedTerms] = useState<string[]>([]);
+  const [filterOpen, setFilterOpen] = useState(false);
 
   // Typing -> filters, debounced to match the teacher page's 300ms.
   useEffect(() => {
     const timer = setTimeout(() => {
       setFilters((prev) => {
         const next = searchInput.trim() || undefined;
-        // No-op guard. Without it this effect and the sync-back below feed
-        // each other and the page re-fetches forever.
+        // No-op guard, or this and the sync-back below feed each other forever.
         if (prev.search_text === next) return prev;
         return { ...prev, search_text: next };
       });
@@ -170,172 +126,19 @@ export default function QuestionListPage() {
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  // Filters -> input, for the drawer, a category chip, or the back button.
+  // Filters -> input, for the drawer, a chip, or the reset button.
   useEffect(() => {
-    setSearchInput((prev) =>
-      (prev.trim() || undefined) === filters.search_text ? prev : (filters.search_text ?? ''),
-    );
+    setSearchInput((prev) => ((prev.trim() || undefined) === filters.search_text ? prev : (filters.search_text ?? '')));
   }, [filters.search_text]);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-  const [filterOpen, setFilterOpen] = useState(false);
-
-  // Inline expansion state
-  const [expandedQuestionId, setExpandedQuestionId] = useState<string | null>(null);
-  const [expandedDetail, setExpandedDetail] = useState<NexusQBQuestionDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
-
-  // Selection mode state
-  const [selectionMode, setSelectionMode] = useState(false);
-  const [selectedQuestionIds, setSelectedQuestionIds] = useState<Set<string>>(new Set());
-  /**
-   * Whether this selection came from "select all matching" rather than taps.
-   * Stored on the test as part of source_filters, because it changes what the
-   * paper means: a sweep of the filters is a student exploring, the same size
-   * assembled by hand is a student working through something specific.
-   */
-  const [selectedViaSelectAll, setSelectedViaSelectAll] = useState(false);
-  const [createTestOpen, setCreateTestOpen] = useState(false);
-
-  // Create test dialog state
-  const [testTitle, setTestTitle] = useState('');
-  /** Set once the student edits the name, which stops the suggestion overwriting it. */
-  const [titleTouched, setTitleTouched] = useState(false);
-  const [timerType, setTimerType] = useState<'none' | 'full' | 'per_question'>('none');
-  const [durationMinutes, setDurationMinutes] = useState<number>(60);
-  const [perQuestionSeconds, setPerQuestionSeconds] = useState<number>(120);
-  const [creatingTest, setCreatingTest] = useState(false);
-
-  // Snackbar
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({
-    open: false,
-    message: '',
-    severity: 'success',
-  });
-
-  // Language toggle
-  const [lang, setLang] = useState<'en' | 'hi'>('en');
-
-
-  // Context detection: Year Paper view vs Full Bank view
-  const isYearPaperView = !!(selectedExam || selectedYear || selectedSession);
-
-  // Build context label
-  const contextLabelParts: string[] = [];
-  if (selectedExam) contextLabelParts.push(selectedExam === 'JEE_PAPER_2' ? 'JEE Paper 2' : selectedExam);
-  if (selectedYear) contextLabelParts.push(String(selectedYear));
-  if (selectedSession) contextLabelParts.push(selectedSession);
-  const contextLabel = contextLabelParts.length > 0 ? contextLabelParts.join(' ') : undefined;
-
-  const activeFilterCount = countActiveFilters(filters);
-
-  // ─── Effects ──────────────────────────────────────────────────────────────
-
-  // Load preset if specified
-  useEffect(() => {
-    const presetId = searchParams.get('preset');
-    if (presetId && activeClassroom) {
-      loadPreset(presetId);
-    }
-  }, [searchParams, activeClassroom]);
-
-  // Fetch questions when filters or exam context change
-  useEffect(() => {
-    if (!activeClassroom) {
-      // Every fetch effect on this page returns early without a classroom, and
-      // `loading` starts true, so a student who has none sat on skeletons for
-      // ever. Once auth has settled and there is still no classroom, that is an
-      // answer, not a wait.
-      if (!authLoading) setLoading(false);
-      return;
-    }
-    fetchQuestions(1);
-  }, [activeClassroom, authLoading, filters, selectedExam, selectedYear, selectedSession]);
-
-  // A search scoped to one exam belongs to that exam's page: the sidebar
-  // highlights it, and the QB tab returns to it.
-  useEffect(() => {
-    if (isQBExamType(selectedExam)) rememberQBExam(selectedExam);
-  }, [selectedExam]);
-
-  // Sync filters + exam context to URL
-  useEffect(() => {
-    const params = serializeQBFilters(filters);
-    if (selectedExam) params.set('exam', selectedExam);
-    if (selectedYear) params.set('year', String(selectedYear));
-    if (selectedSession) params.set('session', selectedSession);
-    const qs = params.toString();
-    const current = searchParams.toString();
-    if (qs !== current) {
-      router.replace(`/student/question-bank/questions${qs ? '?' + qs : ''}`, {
-        scroll: false,
-      });
-    }
-  }, [filters, selectedExam, selectedYear, selectedSession]);
-
-  // Total pages for pagination
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
-
-  // Auto-suggest the test title.
-  //
-  // Recomputed from the live selection every time the dialog opens, and left
-  // alone the moment the student types. The old version ran once per mount with
-  // a `!testTitle` guard and no selection in its deps, so a title minted while
-  // nothing was selected stuck: that is where "Practice - 0 questions" on a
-  // 544-question paper came from.
-  useEffect(() => {
-    if (!createTestOpen || titleTouched) return;
-    const parts: string[] = [];
-    if (selectedExam) parts.push(selectedExam === 'JEE_PAPER_2' ? 'JEE Paper 2' : selectedExam);
-    if (selectedYear) parts.push(String(selectedYear));
-    parts.push('Practice');
-    const n = selectedQuestionIds.size;
-    parts.push(`- ${n} question${n === 1 ? '' : 's'}`);
-    setTestTitle(parts.join(' '));
-  }, [createTestOpen, titleTouched, selectedExam, selectedYear, selectedQuestionIds]);
-
-  // ─── Fetch functions ──────────────────────────────────────────────────────
-
-
-
-
-  async function loadPreset(presetId: string) {
-    try {
-      const token = await getToken();
-      const res = await fetch(
-        `/api/question-bank/presets/${presetId}?classroom_id=${activeClassroom!.id}`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      if (res.ok) {
-        const json = await res.json();
-        const preset = json.data || json;
-        if (preset?.filters) {
-          setFilters(preset.filters);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load preset:', err);
-    }
-  }
 
   /**
-   * Write the drawer filters onto an outgoing request.
-   *
-   * Shared by fetchQuestions and selectAllFiltered: if only one of them expanded
-   * parent categories, "Select all" would silently select a different set than
-   * the list on screen.
-   *
-   * Filter state is kept COLLAPSED (a parent slug stands in for all its
-   * children) so the chip row, the URL and saved presets stay compact. The leaf
-   * expansion happens here, at the network boundary. The server repeats it
-   * defensively for hand-typed URLs.
+   * Write the drawer filters onto an outgoing request, parent categories
+   * expanded. Shared by the list and "Select all", so the two cannot select
+   * different sets. State stays COLLAPSED for the chips, the URL and presets.
    */
   const applyFilterParams = useCallback(
-    (params: URLSearchParams, f: QBFilterState = filters) => {
-      if (f.categories?.length) {
-        params.set('categories', expandCategories(f.categories, categoryTree).join(','));
-      }
+    (params: URLSearchParams, f: QBFilterState = filtersRef.current) => {
+      if (f.categories?.length) params.set('categories', expandCategories(f.categories, categoryTree).join(','));
       if (f.difficulty?.length) params.set('difficulty', f.difficulty.join(','));
       if (f.question_format?.length) params.set('question_format', f.question_format.join(','));
       if (f.attempt_status && f.attempt_status !== 'all') params.set('attempt_status', f.attempt_status);
@@ -343,32 +146,288 @@ export default function QuestionListPage() {
       if (f.topic_ids?.length) params.set('topic_ids', f.topic_ids.join(','));
       if (f.confidence_tier?.length) params.set('confidence_tier', f.confidence_tier.join(','));
       if (f.solution_filter === 'has_video') params.set('solution_filter', 'has_video');
-      // Exam context from the URL wins; the drawer only fills these in when the
-      // page is not already scoped to a specific paper.
+      // The link's exam wins; the drawer only fills it in when the page is not scoped.
       if (f.exam_type && !params.has('exam_type')) params.set('exam_type', f.exam_type);
       if (f.exam_years?.length) params.set('years', f.exam_years.join(','));
     },
-    [filters, categoryTree],
+    [categoryTree],
   );
 
-  /** Resolves parent slugs, which QB_CATEGORY_LABELS cannot. */
-  const categoryLabels = useMemo(() => categoryLabelMap(categoryTree), [categoryTree]);
+  // ─── The session ──────────────────────────────────────────────────────────
+  const session = usePracticeSession({
+    classroomId: activeClassroom?.id ?? null,
+    authSettled: !authLoading,
+    getToken,
+    ctx,
+    filters,
+    applyFilterParams,
+    layout: isTwoPane ? 'panes' : 'reader',
+    initialQid: deepLinkQid.current,
+  });
+  const currentIdRef = useRef(session.currentId);
+  currentIdRef.current = session.currentId;
+  // Stable across renders (the session object is not), so memoised rows stay put.
+  const { open: sessionOpen, close: sessionClose, neighbour } = session;
 
+  // Load a saved preset once the classroom is known, then forget it: leaving it
+  // in the link would reapply it over the student's edits on every reload.
+  const presetDone = useRef(false);
+  useEffect(() => {
+    const id = presetId.current;
+    if (!id || !activeClassroom || presetDone.current) return;
+    presetDone.current = true;
+    (async () => {
+      try {
+        const token = await getToken();
+        const res = await fetch(`/api/question-bank/presets/${id}?classroom_id=${activeClassroom.id}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const preset = json.data || json;
+          if (preset?.filters) setFilters(preset.filters);
+        }
+      } catch (err) {
+        console.error('Failed to load preset:', err);
+      }
+    })();
+  }, [activeClassroom, getToken]);
+
+  // A search scoped to one exam belongs to that exam's page: the sidebar
+  // highlights it, and the QB tab returns to it.
+  useEffect(() => {
+    if (isQBExamType(exam)) rememberQBExam(exam);
+  }, [exam]);
+
+  // ─── The address bar ──────────────────────────────────────────────────────
   /**
-   * Live "Apply (N Qs)" count for the drawer.
-   *
-   * Debounced and fetched with page_size=1, so it costs one cheap invocation per
-   * pause in editing rather than one per tap, and only while the drawer is open.
+   * Straight through the History API, patched by Next so useSearchParams
+   * follows, without the server round trip router.replace costs. `null` state
+   * on purpose: passing history.state (which carries Next's __NA marker) makes
+   * Next skip the sync.
    */
+  const writeUrl = useCallback(
+    (mode: 'push' | 'replace', qid: string | null) => {
+      const current = window.location.search.slice(1);
+      const next = buildPracticeQuery(
+        current,
+        { filters: filtersRef.current, exam, year, session: sessionName, qid },
+        presetDone.current ? ['preset'] : [],
+      );
+      if (mode === 'replace' && next === current) return;
+      const url = `${window.location.pathname}${next ? `?${next}` : ''}`;
+      if (mode === 'push') window.history.pushState(null, '', url);
+      else window.history.replaceState(null, '', url);
+    },
+    [exam, year, sessionName],
+  );
+
+  // Every change of filters or question, as a replace. Opening the phone
+  // reader pushes first (below), so this then finds nothing to change.
+  useEffect(() => {
+    writeUrl('replace', session.currentId);
+  }, [filters, session.currentId, writeUrl]);
+
+  /** True while the phone reader has a history entry of its own. */
+  const readerPushed = useRef(false);
+
+  // A shared link on a phone: put the list underneath it in history, so Back
+  // from the question lands on the list and not on whatever came before.
+  useEffect(() => {
+    if (isTwoPane || !deepLinkQid.current || session.currentId !== deepLinkQid.current) return;
+    deepLinkQid.current = null;
+    writeUrl('replace', null);
+    writeUrl('push', session.currentId);
+    readerPushed.current = true;
+  }, [isTwoPane, session.currentId, writeUrl]);
+
+  // Back and Forward.
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
+  useEffect(() => {
+    const onPop = () => {
+      const qid = new URLSearchParams(window.location.search).get(QID_PARAM);
+      if (!qid) {
+        readerPushed.current = false;
+        sessionRef.current.close();
+      } else if (qid !== currentIdRef.current) {
+        sessionRef.current.open(qid);
+      }
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, []);
+
+  // ─── Test selection ───────────────────────────────────────────────────────
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({
+    open: false,
+    message: '',
+    severity: 'success',
+  });
+  const notify = useCallback(
+    (message: string, severity: 'success' | 'error' | 'info' = 'info') => setSnackbar({ open: true, message, severity }),
+    [],
+  );
+
+  const fetchAllIds = useCallback(async () => {
+    const token = await getToken();
+    const params = new URLSearchParams();
+    params.set('classroom_id', activeClassroom!.id);
+    params.set('page', '1');
+    // fields=id runs the same filters and returns only the ids, instead of
+    // about 6.5MB of whole questions over a phone connection.
+    params.set('page_size', '1000');
+    params.set('fields', 'id');
+    if (exam) params.set('exam_type', exam);
+    if (year) params.set('year', String(year));
+    if (sessionName) params.set('session', sessionName);
+    if (shift) params.set('shift', shift);
+    if (section) params.set('section', section);
+    if (paperSource) params.set('paper_source', paperSource);
+    applyFilterParams(params);
+    const res = await fetch(`/api/question-bank/questions?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error('select all failed');
+    const json = await res.json();
+    return ((json.data || json)?.question_ids ?? []) as string[];
+  }, [getToken, activeClassroom, exam, year, sessionName, shift, section, paperSource, applyFilterParams]);
+
+  const visibleIds = useCallback(() => sessionRef.current.questions.map((q) => q.id), []);
+  const selection = useTestSelection({ fetchAllIds, visibleIds, onNotice: notify });
+  const [createTestOpen, setCreateTestOpen] = useState(false);
+
+  // ─── Language, view, labels ───────────────────────────────────────────────
+  const [lang, setLang] = useState<'en' | 'hi'>('en');
+  const showLang = useMemo(() => session.questions.some((q) => !!q.question_text_hi), [session.questions]);
+  const gridAvailable = session.scope === 'paper' && !filters.search_text;
+  const [view, setView] = usePracticeView('grid');
+
+  const examLabel = isQBExamType(exam) ? QB_EXAM_TYPE_LABELS[exam as QBExamType] : exam;
+  const paperLabel = [examLabel, year, sessionName].filter(Boolean).join(' ') || null;
+  const title = (() => {
+    if (session.scope === 'paper') return section ? `${paperLabel}, ${qbSectionLabel(section)}` : paperLabel!;
+    if (session.scope === 'exam') {
+      const base = sessionName ? `${examLabel} ${sessionName}` : `${examLabel}, all years`;
+      return paperSource === 'recalled' ? `${base} (recalled)` : base;
+    }
+    return 'Question bank';
+  })();
+  const backHref = backParam ?? (isQBExamType(exam) ? qbExamPath('student', exam) : '/student/question-bank');
+  const backLabel = backParam?.includes('/papers/')
+    ? 'Back to the paper'
+    : isQBExamType(exam)
+      ? `Back to ${QB_EXAM_TYPE_LABELS[exam]}`
+      : 'Back to the question bank';
+
+  const currentNumber = session.currentId ? session.numbers.get(session.currentId) ?? null : null;
+  const positionLabel =
+    session.currentIndex < 0
+      ? session.scope === 'paper'
+        ? `${session.questions.length} questions`
+        : `${session.total} questions`
+      : session.scope === 'paper'
+        ? `Q${currentNumber} of ${session.questions.length}`
+        : `${session.currentIndex + 1} of ${session.total}`;
+
+  const continueId = firstUnanswered(session.questions);
+  const continueLabel =
+    continueId && session.progress.answered > 0
+      ? `Continue at Q${session.numbers.get(continueId)}`
+      : continueId && session.scope === 'paper'
+        ? 'Start the paper'
+        : null;
+
+  // ─── Moving around ────────────────────────────────────────────────────────
+  /** Open a question from the list, the grid, Continue or a jump. */
+  const openQuestion = useCallback(
+    (id: string) => {
+      if (isTwoPane) {
+        sessionOpen(id);
+        return;
+      }
+      // Phone: the reader gets its own history entry, once.
+      if (!readerPushed.current) {
+        writeUrl('push', id);
+        readerPushed.current = true;
+      }
+      sessionOpen(id);
+    },
+    [isTwoPane, sessionOpen, writeUrl],
+  );
+
+  const step = useCallback(
+    (delta: number) => {
+      const id = neighbour(delta);
+      if (id) sessionOpen(id);
+    },
+    [neighbour, sessionOpen],
+  );
+  const next = useCallback(() => step(1), [step]);
+  const prev = useCallback(() => step(-1), [step]);
+
+  const lastRead = useRef<string | null>(null);
+  if (session.currentId) lastRead.current = session.currentId;
+
+  const closeReader = useCallback(() => {
+    if (readerPushed.current) {
+      // The popstate handler closes the session, so Back and this button agree.
+      window.history.back();
+    } else {
+      sessionClose();
+    }
+  }, [sessionClose]);
+
+  /** After the reader slides away: show the list where the student stopped. */
+  const revealLastRead = useCallback(() => {
+    const id = lastRead.current;
+    if (!id) return;
+    const el = document.querySelector<HTMLElement>(`[data-qid="${id}"]`);
+    if (!el) return;
+    el.scrollIntoView({ block: 'center' });
+    el.focus({ preventScroll: true });
+  }, []);
+
+  const goToNumber = useCallback(
+    (n: number) => {
+      const hit = session.questions.find((q) => session.numbers.get(q.id) === n);
+      if (hit) openQuestion(hit.id);
+    },
+    [session.questions, session.numbers, openQuestion],
+  );
+
+  // ─── Jump grid, shortcuts ─────────────────────────────────────────────────
+  const [jumpAnchor, setJumpAnchor] = useState<HTMLElement | null>(null);
+  const [jumpOpen, setJumpOpen] = useState(false);
+  const openJump = useCallback((anchor: HTMLElement) => {
+    setJumpAnchor(anchor);
+    setJumpOpen(true);
+  }, []);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const answerHandle = useRef<ReaderAnswerHandle | null>(null);
+
+  usePracticeKeyboard(
+    {
+      next,
+      prev,
+      selectOption: (i) => answerHandle.current?.selectOption(i),
+      primary: () => answerHandle.current?.primary(),
+      goTo: goToNumber,
+      help: () => setHelpOpen(true),
+    },
+    isTwoPane,
+  );
+
+  // ─── The filter drawer's live "Apply (N Qs)" count ────────────────────────
   const [draftFilters, setDraftFilters] = useState<QBFilterState | null>(null);
   const [matchCount, setMatchCount] = useState<number | undefined>(undefined);
-
   useEffect(() => {
     if (!filterOpen || !draftFilters || !activeClassroom) {
       setMatchCount(undefined);
       return;
     }
     let cancelled = false;
+    // Debounced, one row per request: one cheap call per pause, not per tap.
     const timer = setTimeout(async () => {
       try {
         const token = await getToken();
@@ -378,930 +437,204 @@ export default function QuestionListPage() {
         params.set('page', '1');
         params.set('page_size', '1');
         params.set('mode', 'practice');
-        if (selectedExam) params.set('exam_type', selectedExam);
-        if (selectedYear) params.set('year', String(selectedYear));
-        if (selectedSession) params.set('session', selectedSession);
+        if (exam) params.set('exam_type', exam);
+        if (year) params.set('year', String(year));
+        if (sessionName) params.set('session', sessionName);
+        if (shift) params.set('shift', shift);
+        if (section) params.set('section', section);
+        if (paperSource) params.set('paper_source', paperSource);
         applyFilterParams(params, draftFilters);
-
         const res = await fetch(`/api/question-bank/questions?${params.toString()}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (!res.ok || cancelled) return;
         const json = await res.json();
-        const payload = json.data || json;
-        if (!cancelled) setMatchCount(payload?.total ?? undefined);
+        if (!cancelled) setMatchCount((json.data || json)?.total ?? undefined);
       } catch {
         if (!cancelled) setMatchCount(undefined);
       }
     }, 400);
-
     return () => {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [
-    filterOpen,
-    draftFilters,
-    activeClassroom,
-    getToken,
-    selectedExam,
-    selectedYear,
-    selectedSession,
-    applyFilterParams,
-  ]);
+  }, [filterOpen, draftFilters, activeClassroom, getToken, exam, year, sessionName, shift, section, paperSource, applyFilterParams]);
 
-  async function fetchQuestions(pageNum: number) {
-    setLoading(true);
-    // The list used to be emptied here, before the request went out. That is why
-    // the bar above it read "Showing 0 of 0 questions" over a skeleton on every
-    // load and every filter tweak: it was reporting the list it had just been
-    // handed, and the list had just been thrown away. Keep the previous page
-    // until the next one lands; the skeleton already says work is happening.
-    setFetchError(null);
-
-    try {
-      const token = await getToken();
-      const params = new URLSearchParams();
-      params.set('classroom_id', activeClassroom!.id);
-      params.set('page', String(pageNum));
-      params.set('page_size', String(PAGE_SIZE));
-      params.set('mode', 'practice');
-
-      // Exam context filters
-      if (selectedExam) params.set('exam_type', selectedExam);
-      if (selectedYear) params.set('year', String(selectedYear));
-      if (selectedSession) params.set('session', selectedSession);
-      if (selectedShift) params.set('shift', selectedShift);
-      if (selectedSection) params.set('section', selectedSection);
-
-      // Filter drawer filters
-      applyFilterParams(params);
-
-      const res = await fetch(`/api/question-bank/questions?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!res.ok) throw new Error('Failed to fetch questions');
-
-
-      const json = await res.json();
-      const payload = json.data || json;
-      const items: NexusQBQuestionListItem[] = payload?.questions || (Array.isArray(payload) ? payload : []);
-      const total: number = payload?.total ?? json.total_count ?? items.length;
-
-      setQuestions(items);
-      setTotalCount(total);
-      setMatchKind(payload?.search?.match_kind ?? null);
-      setDidYouMean(payload?.search?.did_you_mean ?? null);
-      setMatchedTerms(payload?.search?.matched_terms ?? []);
-      setPage(pageNum);
-    } catch (err) {
-      // A failed list request used to be a console line and nothing else, so the
-      // screen sat on an empty list that looked like a legitimate no-results.
-      console.error('Failed to fetch questions:', err);
-      setQuestions([]);
-      setFetchError('Could not load questions. Check your connection and try again.');
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  function goToPage(pageNum: number) {
-    setExpandedQuestionId(null);
-    setExpandedDetail(null);
-    fetchQuestions(pageNum);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
-  // ─── Question handlers ────────────────────────────────────────────────────
-
-  async function handleExpandQuestion(questionId: string) {
-    // In selection mode, toggle selection instead of expanding
-    if (selectionMode) {
-      toggleQuestionSelection(questionId);
-      return;
-    }
-
-    if (expandedQuestionId === questionId) {
-      setExpandedQuestionId(null);
-      setExpandedDetail(null);
-      return;
-    }
-
-    setExpandedQuestionId(questionId);
-    setExpandedDetail(null);
-    setDetailLoading(true);
-
-    try {
-      const token = await getToken();
-      const res = await fetch(
-        `/api/question-bank/questions/${questionId}?classroom_id=${activeClassroom!.id}`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      if (res.ok) {
-        const json = await res.json();
-        setExpandedDetail(json.data || json);
-      }
-    } catch (err) {
-      console.error('Failed to fetch question detail:', err);
-    } finally {
-      setDetailLoading(false);
-    }
-  }
-
-  /** Where the open question sits in the list, or -1. */
-  const detailIndex = expandedQuestionId
-    ? questions.findIndex((q) => q.id === expandedQuestionId)
-    : -1;
-
-  /**
-   * Move the detail pane one question along the list.
-   *
-   * Deliberately does not page: the arrows walk what is on screen, and running
-   * off the end of a page is a pagination decision the student should make
-   * themselves rather than have the arrows make silently.
-   */
-  function stepQuestion(delta: number) {
-    if (detailIndex < 0) return;
-    const next = questions[detailIndex + delta];
-    if (next) void handleExpandQuestion(next.id);
-  }
-
-  async function handleInlineSubmit(answer: string) {
-    if (!expandedQuestionId || !activeClassroom) return;
-    try {
-      const token = await getToken();
-      const res = await fetch(
-        `/api/question-bank/questions/${expandedQuestionId}/attempt`,
-        {
+  // ─── Creating a test ──────────────────────────────────────────────────────
+  const handleCreateTest = useCallback(
+    async (settings: CreateTestSettings) => {
+      if (!activeClassroom || selection.ids.size === 0) return;
+      try {
+        const token = await getToken();
+        const res = await fetch('/api/question-bank/custom-tests', {
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            selected_answer: answer,
-            mode: 'practice',
+            title: settings.title,
+            question_ids: Array.from(selection.ids),
+            timer_type: settings.timerType,
+            duration_minutes: settings.timerType === 'full' ? settings.durationMinutes : undefined,
+            per_question_seconds: settings.timerType === 'per_question' ? settings.perQuestionSeconds : undefined,
             classroom_id: activeClassroom.id,
+            // What this paper was built from, so a teacher can later see how a
+            // student went looking. Categories stay COLLAPSED, as the chips,
+            // the URL and presets store them.
+            source_filters: {
+              exam_type: exam,
+              year,
+              session: sessionName,
+              categories: filters.categories,
+              difficulty: filters.difficulty,
+              question_format: filters.question_format,
+              topic_ids: filters.topic_ids,
+              attempt_status: filters.attempt_status,
+              search_text: filters.search_text,
+              selection: selection.viaSelectAll ? 'select_all' : 'manual',
+              matched_count: session.total,
+            },
           }),
-        },
-      );
-      if (res.ok) {
-        const json = await res.json();
-        setExpandedDetail((prev) => prev ? { ...prev, ...json.data } : prev);
-      }
-    } catch (err) {
-      console.error('Failed to submit answer:', err);
-    }
-  }
-
-  async function handleReport(questionId: string, reportType: string, description: string) {
-    if (!activeClassroom) return;
-    try {
-      const token = await getToken();
-      const res = await fetch(`/api/question-bank/questions/${questionId}/report`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          report_type: reportType,
-          description: description || undefined,
-          classroom_id: activeClassroom.id,
-        }),
-      });
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error || 'Failed to submit report');
-      }
-    } catch (err) {
-      console.error('Failed to submit report:', err);
-      throw err;
-    }
-  }
-
-  async function handleStudyToggle() {
-    if (!expandedQuestionId || !activeClassroom) return;
-    try {
-      const token = await getToken();
-      const res = await fetch(
-        `/api/question-bank/questions/${expandedQuestionId}/study-mark`,
-        {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ classroom_id: activeClassroom.id }),
-        },
-      );
-      if (res.ok) {
-        setExpandedDetail((prev) =>
-          prev ? { ...prev, is_studied: !prev.is_studied } : prev,
-        );
-      }
-    } catch (err) {
-      console.error('Failed to toggle study mark:', err);
-    }
-  }
-
-  async function handleSwipeStudy(questionId: string) {
-    if (!activeClassroom) return;
-    try {
-      const token = await getToken();
-      await fetch(`/api/question-bank/questions/${questionId}/study-mark`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ classroom_id: activeClassroom.id }),
-      });
-      setSnackbar({ open: true, message: 'Marked as studied', severity: 'success' });
-    } catch {
-      setSnackbar({ open: true, message: 'Failed to mark as studied', severity: 'error' });
-    }
-  }
-
-  // ─── Filter handlers ─────────────────────────────────────────────────────
-
-  function handleFilterApply(newFilters: QBFilterState) {
-    setFilters(newFilters);
-  }
-
-  function handleFilterRemove(key: keyof QBFilterState, value?: string | number) {
-    setFilters((prev: QBFilterState) => {
-      const next = { ...prev };
-      if (key === 'exam_relevance' || key === 'attempt_status' || key === 'search_text') {
-        delete next[key];
-      } else {
-        const arr = next[key] as (string | number)[] | undefined;
-        if (arr && value !== undefined) {
-          const filtered = arr.filter((v) => v !== value);
-          if (filtered.length === 0) {
-            delete next[key];
-          } else {
-            (next as Record<string, unknown>)[key as string] = filtered;
-          }
-        } else {
-          delete next[key];
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || 'Failed to create test');
         }
+        notify('Practice test created', 'success');
+        setCreateTestOpen(false);
+        selection.exit();
+        router.push('/student/tests');
+      } catch (err) {
+        notify(err instanceof Error ? err.message : 'Failed to create test', 'error');
+        throw err;
       }
-      return next;
-    });
-  }
+    },
+    [activeClassroom, selection, getToken, exam, year, sessionName, filters, session.total, notify, router],
+  );
 
-  function handleClearFilters() {
-    setFilters({});
-  }
+  const startSelection = useCallback(() => {
+    selection.start();
+    notify('Tap questions to add them to your test', 'info');
+  }, [selection, notify]);
 
-  // ─── Selection mode helpers ───────────────────────────────────────────────
-
-  function toggleQuestionSelection(questionId: string) {
-    const alreadyOn = selectedQuestionIds.has(questionId);
-    // Read the size outside the updater: a setState call inside one is a side
-    // effect React is entitled to run twice.
-    if (!alreadyOn && selectedQuestionIds.size >= MAX_STUDENT_TEST_QUESTIONS) {
-      setSnackbar({
-        open: true,
-        message: `A practice test tops out at ${MAX_STUDENT_TEST_QUESTIONS} questions.`,
-        severity: 'info',
-      });
-      return;
-    }
-    // Any hand-toggle means this is no longer a clean sweep of the filters, so
-    // the paper stops claiming it was. A 50-question paper built by "select all"
-    // is a student exploring; the same size picked one by one is a student
-    // working through something, and the teacher's read of the two differs.
-    setSelectedViaSelectAll(false);
-    setSelectedQuestionIds((prev) => {
-      const next = new Set(prev);
-      if (alreadyOn) next.delete(questionId);
-      else next.add(questionId);
-      return next;
-    });
-  }
-
-  async function selectAllFiltered() {
-    // Fetch ALL question IDs matching current filters (not just current page)
-    try {
-      const token = await getToken();
-      const params = new URLSearchParams();
-      params.set('classroom_id', activeClassroom!.id);
-      params.set('page', '1');
-      // This asked for a thousand whole questions and then read nothing but the
-      // id off each one: roughly 6.5MB of JSON over a phone connection to build
-      // a list of UUIDs. fields=id runs the same filters and returns the ids.
-      params.set('page_size', '1000');
-      params.set('fields', 'id');
-      if (selectedExam) params.set('exam_type', selectedExam);
-      if (selectedYear) params.set('year', String(selectedYear));
-      if (selectedSession) params.set('session', selectedSession);
-      if (selectedShift) params.set('shift', selectedShift);
-      if (selectedSection) params.set('section', selectedSection);
-      applyFilterParams(params);
-
-      const res = await fetch(`/api/question-bank/questions?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const json = await res.json();
-        const payload = json.data || json;
-        const ids: string[] = payload?.question_ids ?? [];
-        // Capped, and said out loud. Selecting every one of 544 matches and then
-        // being refused at Create is worse than being told here how many were
-        // taken. The server enforces the same ceiling either way.
-        const capped = ids.slice(0, MAX_STUDENT_TEST_QUESTIONS);
-        setSelectedViaSelectAll(true);
-        setSelectedQuestionIds(new Set(capped));
-        if (ids.length > capped.length) {
-          setSnackbar({
-            open: true,
-            message: `Selected the first ${capped.length} of ${ids.length} matches. A practice test tops out at ${MAX_STUDENT_TEST_QUESTIONS}.`,
-            severity: 'info',
-          });
-        }
-      }
-    } catch {
-      // Fallback: select only current page. NOT recorded as a clean sweep, since
-      // it is a page rather than the filter set the student asked for.
-      setSelectedViaSelectAll(false);
-      setSelectedQuestionIds(new Set(questions.slice(0, MAX_STUDENT_TEST_QUESTIONS).map((q) => q.id)));
-    }
-  }
-
-  function exitSelectionMode() {
-    setSelectionMode(false);
-    setSelectedQuestionIds(new Set());
-    setSelectedViaSelectAll(false);
-  }
-
-  // ─── Create test handler ─────────────────────────────────────────────────
-
-  async function handleCreateTest() {
-    if (!activeClassroom || selectedQuestionIds.size === 0) return;
-
-    setCreatingTest(true);
-    try {
-      const token = await getToken();
-      const res = await fetch('/api/question-bank/custom-tests', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: testTitle.trim(),
-          question_ids: Array.from(selectedQuestionIds),
-          timer_type: timerType,
-          duration_minutes: timerType === 'full' ? durationMinutes : undefined,
-          per_question_seconds: timerType === 'per_question' ? perQuestionSeconds : undefined,
-          classroom_id: activeClassroom.id,
-          // What this paper was built from. Sent so a teacher can later see how a
-          // student went looking, which is the signal the Student tests tab was
-          // missing entirely: every paper created before this shipped stores
-          // nothing but a title, and the titles collide.
-          //
-          // Categories are sent COLLAPSED (a parent slug standing in for its
-          // children), matching what the chip row, the URL and saved presets
-          // store. The expanded form is a network detail, and expanding it here
-          // would make a teacher read twenty slugs where the student picked one.
-          source_filters: {
-            exam_type: selectedExam,
-            year: selectedYear,
-            session: selectedSession,
-            categories: filters.categories,
-            difficulty: filters.difficulty,
-            question_format: filters.question_format,
-            topic_ids: filters.topic_ids,
-            attempt_status: filters.attempt_status,
-            search_text: filters.search_text,
-            selection: selectedViaSelectAll ? 'select_all' : 'manual',
-            matched_count: totalCount,
-          },
-        }),
-      });
-
-      if (!res.ok) {
-        const errData = await res.json();
-        throw new Error(errData.error || 'Failed to create test');
-      }
-
-      setSnackbar({ open: true, message: 'Custom test created successfully!', severity: 'success' });
-      setCreateTestOpen(false);
-      exitSelectionMode();
-      setTestTitle('');
-      setTitleTouched(false);
-      setTimerType('none');
-      setDurationMinutes(60);
-      setPerQuestionSeconds(120);
-      router.push('/student/tests');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to create test';
-      setSnackbar({ open: true, message, severity: 'error' });
-    } finally {
-      setCreatingTest(false);
-    }
-  }
+  const activeFilterCount = countActiveFilters(filters);
 
   // ─── Render ───────────────────────────────────────────────────────────────
-
-  /**
-   * One left edge for the whole page.
-   *
-   * The back button, the search field and the list each had their own padding
-   * (0.5/2, a flat 2, and 0.5/2), so the three rows started at three different
-   * x positions on a laptop. One value, used by all of them.
-   */
-  const GUTTER = { xs: 1, md: 2 };
-
-  return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        // height:'100%' used to resolve against an auto-height Container, so
-        // flex:1 on the list never got a bounded height and its overflowY never
-        // became a real scroll box. Rather than replace one guess with another,
-        // the page now just flows: the list is as long as it is, and the detail
-        // pane sticks (see DETAIL_PANE_TOP below). Pinning the whole page to the
-        // viewport would need the shell's padding as well as its chrome, and
-        // SHELL_CHROME is documented as the full-bleed number, which this route
-        // is not.
-        minHeight: 0,
-      }}
-    >
-      {/* Back button */}
-      <Box sx={{ px: GUTTER, pt: 0.5 }}>
-        <Button
-          size="small"
-          startIcon={<ArrowBackIcon />}
-          onClick={() =>
-            router.push(
-              isQBExamType(selectedExam)
-                ? qbExamPath('student', selectedExam)
-                : '/student/question-bank',
-            )
-          }
-          sx={{
-            textTransform: 'none',
-            color: 'text.secondary',
-            fontWeight: 500,
-            '&:hover': { bgcolor: 'action.hover' },
-          }}
-        >
-          {contextLabel || 'Question Bank'}
-        </Button>
-      </Box>
-
-      {/* Search: always visible. It used to be hidden inside the filter drawer,
-          so most students never found it. */}
-      <Box sx={{ px: GUTTER, pb: 1 }}>
-        <TextField
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          placeholder="Search questions, formulas, topics..."
-          size="small"
-          fullWidth
-          inputProps={{ 'aria-label': 'Search questions' }}
-          InputProps={{
-            startAdornment: (
-              <SearchOutlinedIcon
-                sx={{ color: 'text.secondary', mr: 1 }}
-                fontSize="small"
-                aria-hidden="true"
-              />
-            ),
-            endAdornment: searchInput ? (
-              <IconButton
-                size="small"
-                aria-label="Clear search"
-                onClick={() => setSearchInput('')}
-                sx={{ minWidth: 44, minHeight: 44 }}
-              >
-                <CloseIcon fontSize="small" />
-              </IconButton>
-            ) : null,
-          }}
-          sx={{
-            // 16px keeps iOS from zooming the viewport on focus, and 48px is
-            // the Material 3 minimum for a primary touch target.
-            '& .MuiInputBase-input': { fontSize: 16 },
-            '& .MuiInputBase-root': { minHeight: 48, borderRadius: 2 },
-          }}
+  if (!authLoading && !activeClassroom) {
+    return (
+      <Box sx={{ px: { xs: 2, sm: 3 }, pt: { xs: 2, md: 3 } }}>
+        <EmptyState
+          icon={<QuizOutlinedIcon sx={{ fontSize: 48, color: 'text.secondary' }} />}
+          title="No classroom yet"
+          description="The Question Bank opens once you are enrolled in a classroom."
         />
       </Box>
+    );
+  }
 
-      <Box sx={{ px: GUTTER }}>
-        <QBSearchStatus
-          query={filters.search_text ?? ''}
-          matchKind={matchKind}
-          didYouMean={didYouMean}
-          total={totalCount}
-          loading={loading}
-          onUseSuggestion={(term) => setSearchInput(term)}
-          onClear={() => setSearchInput('')}
-        />
-      </Box>
+  const readerProps = {
+    questionId: session.currentId,
+    detail: session.detail,
+    detailLoading: session.detailLoading,
+    detailError: session.detailError,
+    positionLabel,
+    hasPrev: !!neighbour(-1),
+    hasNext: !!neighbour(1),
+    onPrev: prev,
+    onNext: next,
+    onJump: openJump,
+    lang,
+    onLangChange: setLang,
+    showLang,
+    showSourceBadges: session.scope !== 'paper',
+    priorAnswer: session.priorAnswer,
+    onSubmit: session.submit,
+    onStudyToggle: (id: string) => {
+      session.toggleStudied(id).catch(() => notify('Could not update the studied mark', 'error'));
+    },
+    onReport: session.report,
+    onRetryLoad: session.retryDetail,
+  };
 
-      {/* Top Filter Bar (sticky) */}
-      <TopFilterBar
-        filters={filters}
-        loading={loading}
-        onFilterChange={(newFilters) => setFilters(newFilters)}
-        onOpenDrawer={() => setFilterOpen(true)}
-        activeFilterCount={activeFilterCount}
-        totalCount={totalCount}
-        filteredCount={questions.length}
-        selectionMode={selectionMode}
-        selectedCount={selectedQuestionIds.size}
-        onToggleSelectionMode={() => {
-          if (selectionMode) {
-            exitSelectionMode();
-          } else {
-            setSelectionMode(true);
-          }
-        }}
-        onSelectAll={selectAllFiltered}
-        onCreateTest={() => setCreateTestOpen(true)}
-        contextLabel={contextLabel}
-        isYearPaperView={isYearPaperView}
-        lang={lang}
-        onLangChange={(v) => setLang(v)}
-        categoryLabels={categoryLabels}
+  const header = (
+    <PracticeHeader
+      variant={isTwoPane ? 'desktop' : 'mobile'}
+      title={title}
+      backHref={backHref}
+      backLabel={backLabel}
+      scope={session.scope}
+      progress={session.progress}
+      shown={session.questions.length}
+      total={session.total}
+      loading={session.loading}
+      continueLabel={continueLabel}
+      onContinue={() => continueId && openQuestion(continueId)}
+      lang={lang}
+      onLangChange={setLang}
+      // On a laptop the reader carries the language switch, beside the text it changes.
+      showLang={showLang && !isTwoPane}
+      selecting={selection.active}
+      onCreateTest={startSelection}
+      onHelp={isTwoPane ? () => setHelpOpen(true) : undefined}
+    />
+  );
+
+  const browser = (
+    <PracticeBrowser
+      variant={isTwoPane ? 'rail' : 'page'}
+      session={session}
+      view={view}
+      onViewChange={setView}
+      gridAvailable={gridAvailable}
+      searchInput={searchInput}
+      onSearchInput={setSearchInput}
+      filters={filters}
+      onFiltersChange={setFilters}
+      onOpenDrawer={() => setFilterOpen(true)}
+      activeFilterCount={activeFilterCount}
+      categoryLabels={categoryLabels}
+      lang={lang}
+      onOpen={openQuestion}
+      selection={selection}
+      activeId={isTwoPane ? session.currentId : null}
+      footer={
+        isTwoPane && selection.active ? (
+          <SelectionBar
+            variant="rail"
+            count={selection.ids.size}
+            onSelectAll={selection.selectAll}
+            onCancel={selection.exit}
+            onCreate={() => setCreateTestOpen(true)}
+          />
+        ) : undefined
+      }
+    />
+  );
+
+  const overlays = (
+    <>
+      <JumpToQuestion
+        variant={isTwoPane ? 'popover' : 'sheet'}
+        anchor={jumpAnchor}
+        open={jumpOpen}
+        onClose={() => setJumpOpen(false)}
+        questions={session.questions}
+        numbers={session.numbers}
+        currentId={session.currentId}
+        onPick={sessionOpen}
       />
-
-      {/*
-        The list, and beside it the question being read.
-
-        On one column this is what it always was. On two, the list scrolls in its
-        own pane and the detail scrolls in another, so paging through questions
-        never loses your place in the list.
-      */}
-      <Box
-        sx={{
-          flex: 1,
-          minHeight: 0,
-          display: isTwoPane ? 'grid' : 'block',
-          gridTemplateColumns: isTwoPane ? 'minmax(340px, 400px) 1fr' : undefined,
-          gap: isTwoPane ? 2 : 0,
-          alignItems: 'start',
-          px: GUTTER,
-          pb: 2,
-        }}
-      >
-      <Box sx={{ minWidth: 0 }}>
-        {fetchError && !loading && (
-          <Alert severity="warning" sx={{ mt: 1, borderRadius: 2 }}>
-            {fetchError}
-          </Alert>
-        )}
-        {loading ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, pt: 1 }}>
-            {[1, 2, 3].map((i) => (
-              <Skeleton key={i} variant="rounded" height={120} sx={{ borderRadius: 2 }} />
-            ))}
-          </Box>
-        ) : !activeClassroom ? (
-          <EmptyState
-            icon={<QuizOutlinedIcon sx={{ fontSize: 48, color: 'text.secondary' }} />}
-            title="No classroom yet"
-            description="The Question Bank opens once you are enrolled in a classroom."
-          />
-        ) : questions.length === 0 ? (
-          <EmptyState
-            icon={<QuizOutlinedIcon sx={{ fontSize: 48, color: 'text.secondary' }} />}
-            title="No questions match your filters"
-            description="Try removing a filter or clearing the search."
-            action={
-              <Button variant="outlined" onClick={handleClearFilters} sx={{ minHeight: 44 }}>
-                Reset Filters
-              </Button>
-            }
-          />
-        ) : (
-          <Box
-            sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 0.75,
-              pt: 1,
-              pb: selectionMode && selectedQuestionIds.size > 0 ? 10 : 0,
-            }}
-          >
-            {questions.map((q, idx) => (
-              <Box key={q.id} sx={{ display: 'flex', alignItems: 'flex-start', gap: 0 }}>
-                {/* Checkbox in selection mode */}
-                {selectionMode && (
-                  <Checkbox
-                    checked={selectedQuestionIds.has(q.id)}
-                    onChange={() => toggleQuestionSelection(q.id)}
-                    sx={{
-                      mt: 1,
-                      mr: -0.5,
-                      minWidth: 42,
-                      minHeight: 42,
-                    }}
-                    inputProps={{ 'aria-label': `Select question ${idx + 1}` }}
-                  />
-                )}
-                <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <SwipeableQuestionCard
-                    onStudied={() => handleSwipeStudy(q.id)}
-                    onBookmark={() => setSnackbar({ open: true, message: 'Bookmarked!', severity: 'success' })}
-                    onLongPress={() => {
-                      if (!selectionMode) {
-                        setSelectionMode(true);
-                        setSelectedQuestionIds(new Set([q.id]));
-                      }
-                    }}
-                    disabled={selectionMode}
-                  >
-                    <InlineQuestionCard
-                      highlight={matchedTerms}
-                      question={q}
-                      questionDetail={
-                        !isTwoPane && expandedQuestionId === q.id ? expandedDetail : null
-                      }
-                      // With a detail pane beside the list the row stays a row:
-                      // expanding in place as well would render the question twice.
-                      expanded={!isTwoPane && expandedQuestionId === q.id}
-                      selected={isTwoPane && expandedQuestionId === q.id}
-                      loading={!isTwoPane && expandedQuestionId === q.id && detailLoading}
-                      questionIndex={idx}
-                      lang={lang}
-                      onToggleExpand={() => handleExpandQuestion(q.id)}
-                      onSubmit={handleInlineSubmit}
-                      onStudyToggle={handleStudyToggle}
-                      onReport={handleReport}
-                      onCategoryClick={(cat) => {
-                        setFilters((prev) => {
-                          const current = prev.categories || [];
-                          if (current.includes(cat)) return prev;
-                          return { ...prev, categories: [...current, cat] };
-                        });
-                      }}
-                    />
-                  </SwipeableQuestionCard>
-                </Box>
-              </Box>
-            ))}
-
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    disabled={page <= 1}
-                    onClick={() => goToPage(page - 1)}
-                    sx={{ minWidth: 40, minHeight: 40 }}
-                  >
-                    ‹
-                  </Button>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1)
-                    .filter(p => p === 1 || p === totalPages || Math.abs(p - page) <= 2)
-                    .map((p, idx, arr) => {
-                      const showEllipsis = idx > 0 && p - arr[idx - 1] > 1;
-                      return (
-                        <Box key={p} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          {showEllipsis && (
-                            <Typography variant="body2" color="text.disabled" sx={{ px: 0.5 }}>
-                              ...
-                            </Typography>
-                          )}
-                          <Button
-                            size="small"
-                            variant={p === page ? 'contained' : 'text'}
-                            onClick={() => goToPage(p)}
-                            sx={{
-                              minWidth: 40,
-                              minHeight: 40,
-                              fontWeight: p === page ? 700 : 400,
-                            }}
-                          >
-                            {p}
-                          </Button>
-                        </Box>
-                      );
-                    })}
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    disabled={page >= totalPages}
-                    onClick={() => goToPage(page + 1)}
-                    sx={{ minWidth: 40, minHeight: 40 }}
-                  >
-                    ›
-                  </Button>
-                </Box>
-              </Box>
-            )}
-          </Box>
-        )}
-      </Box>
-
-      {/* The detail pane. Only ever mounted on two columns. */}
-      {isTwoPane && (
-        <Box
-          sx={{
-            // Sticky rather than a second scroll pane: the question stays in
-            // view while the list scrolls behind it, and nothing has to know the
-            // exact height of the chrome above to get there. The offset clears
-            // the sticky filter bar this sits beside.
-            position: 'sticky',
-            top: DETAIL_PANE_TOP,
-            alignSelf: 'start',
-            maxHeight: `calc(100vh - ${DETAIL_PANE_TOP + SHELL_CHROME.md}px)`,
-            overflowY: 'auto',
-            borderLeft: '1px solid',
-            borderColor: 'divider',
-            pl: 2,
-          }}
-        >
-          {detailLoading ? (
-            <Box sx={{ pt: 1 }}>
-              <Skeleton variant="text" width="40%" height={28} />
-              <Skeleton variant="text" width="90%" />
-              <Skeleton variant="rounded" height={180} sx={{ my: 2, borderRadius: 2 }} />
-              <Skeleton variant="rounded" height={48} sx={{ borderRadius: 2 }} />
-            </Box>
-          ) : expandedDetail ? (
-            <QuestionDetail
-              question={expandedDetail}
-              onSubmit={handleInlineSubmit}
-              onStudyToggle={handleStudyToggle}
-              onReport={(reportType, description) =>
-                handleReport(expandedDetail.id, reportType, description)
-              }
-              onNext={() => stepQuestion(1)}
-              onPrev={() => stepQuestion(-1)}
-              hasNext={detailIndex >= 0 && detailIndex < questions.length - 1}
-              hasPrev={detailIndex > 0}
-              currentIndex={detailIndex}
-              totalCount={questions.length}
-              initialLang={lang}
-            />
-          ) : (
-            <EmptyState
-              icon={<QuizOutlinedIcon sx={{ fontSize: 48, color: 'text.secondary' }} />}
-              title="Pick a question"
-              description="Choose one from the list to read it, answer it and see the solution here."
-            />
-          )}
-        </Box>
-      )}
-      </Box>
-
-      {/* Selection bottom bar (fixed) */}
-      {selectionMode && selectedQuestionIds.size > 0 && (
-        <Paper
-          elevation={8}
-          sx={{
-            position: 'fixed',
-            bottom: { xs: 56, sm: 0 },
-            left: 0,
-            right: 0,
-            p: 2,
-            zIndex: 100,
-            borderTop: '1px solid',
-            borderColor: 'divider',
-            bgcolor: 'background.paper',
-          }}
-        >
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-              maxWidth: 800,
-              mx: 'auto',
-            }}
-          >
-            <Typography variant="body2" sx={{ fontWeight: 600 }}>
-              {selectedQuestionIds.size} selected
-            </Typography>
-            <Box sx={{ flex: 1 }} />
-            <Button
-              variant="contained"
-              onClick={() => setCreateTestOpen(true)}
-              sx={{ textTransform: 'none', minHeight: 44 }}
-            >
-              Create Test
-            </Button>
-          </Box>
-        </Paper>
-      )}
-
-      {/* Create Test Dialog */}
-      <Dialog
+      <ShortcutsDialog open={helpOpen} onClose={() => setHelpOpen(false)} />
+      <CreateTestDialog
         open={createTestOpen}
         onClose={() => setCreateTestOpen(false)}
-        fullScreen={isMobile}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle sx={{ display: 'flex', alignItems: 'center' }}>
-          Create Custom Test
-          <IconButton
-            onClick={() => setCreateTestOpen(false)}
-            sx={{ ml: 'auto' }}
-            aria-label="Close"
-          >
-            <CloseIcon />
-          </IconButton>
-        </DialogTitle>
-        <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5, pt: 1 }}>
-            <TextField
-              label="Test Name"
-              value={testTitle}
-              onChange={(e) => {
-                setTitleTouched(true);
-                setTestTitle(e.target.value);
-              }}
-              fullWidth
-              required
-              inputProps={{ maxLength: 200 }}
-            />
-
-            <Box>
-              <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
-                Timer Type
-              </Typography>
-              <RadioGroup
-                value={timerType}
-                onChange={(e) => setTimerType(e.target.value as 'none' | 'full' | 'per_question')}
-              >
-                <FormControlLabel
-                  value="none"
-                  control={<Radio />}
-                  label="No Timer"
-                />
-                <FormControlLabel
-                  value="full"
-                  control={<Radio />}
-                  label="Full Test Timer"
-                />
-                <FormControlLabel
-                  value="per_question"
-                  control={<Radio />}
-                  label="Per Question Timer"
-                />
-              </RadioGroup>
-            </Box>
-
-            {timerType === 'full' && (
-              <TextField
-                label="Duration (minutes)"
-                type="number"
-                value={durationMinutes}
-                onChange={(e) => setDurationMinutes(Math.max(1, Number(e.target.value)))}
-                inputProps={{ min: 1, max: 600 }}
-                fullWidth
-              />
-            )}
-
-            {timerType === 'per_question' && (
-              <TextField
-                label="Time per question (seconds)"
-                type="number"
-                value={perQuestionSeconds}
-                onChange={(e) => setPerQuestionSeconds(Math.max(10, Number(e.target.value)))}
-                inputProps={{ min: 10, max: 3600 }}
-                fullWidth
-              />
-            )}
-
-            <Typography variant="body2" color="text.secondary">
-              {selectedQuestionIds.size} question{selectedQuestionIds.size !== 1 ? 's' : ''} selected
-              {' '}({selectedQuestionIds.size} marks total)
-            </Typography>
-          </Box>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button
-            onClick={() => setCreateTestOpen(false)}
-            sx={{ textTransform: 'none' }}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="contained"
-            onClick={handleCreateTest}
-            disabled={creatingTest || !testTitle.trim() || selectedQuestionIds.size === 0}
-            sx={{ textTransform: 'none', minWidth: 120 }}
-          >
-            {creatingTest ? 'Creating...' : 'Create Test'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Filter Drawer */}
+        selectedCount={selection.ids.size}
+        paperLabel={paperLabel}
+        fullScreen={isPhone}
+        onCreate={handleCreateTest}
+      />
       <FilterDrawer
         open={filterOpen}
         onClose={() => setFilterOpen(false)}
         filters={filters}
-        onApply={handleFilterApply}
+        onApply={setFilters}
         topics={topics}
         topicCounts={topicCounts}
         categoryCounts={categoryCounts}
@@ -1309,18 +642,17 @@ export default function QuestionListPage() {
         examTree={examTree}
         matchCount={matchCount}
         onDraftChange={setDraftFilters}
-        contextLabel={contextLabel}
+        contextLabel={paperLabel ?? undefined}
       />
-
-      {/* Snackbar for feedback */}
       <Snackbar
         open={snackbar.open}
         autoHideDuration={4000}
-        onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+        onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        sx={{ bottom: { xs: 140, md: 24 } }}
       >
         <Alert
-          onClose={() => setSnackbar((prev) => ({ ...prev, open: false }))}
+          onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
           severity={snackbar.severity}
           variant="filled"
           sx={{ width: '100%' }}
@@ -1328,6 +660,44 @@ export default function QuestionListPage() {
           {snackbar.message}
         </Alert>
       </Snackbar>
+    </>
+  );
+
+  if (isTwoPane) {
+    return (
+      <>
+        <PracticeWorkspace
+          header={header}
+          rail={browser}
+          reader={<PracticeReader variant="pane" {...readerProps} answerHandle={answerHandle} />}
+        />
+        {overlays}
+      </>
+    );
+  }
+
+  return (
+    // Full bleed dropped the layout's padding for the laptop panes; a phone
+    // page puts it back, plus room for the selection bar when it is up.
+    <Box sx={{ px: { xs: 2, sm: 3 }, pt: 2, pb: selection.active ? 12 : 2 }}>
+      {header}
+      {browser}
+      <MobileReaderDialog
+        {...readerProps}
+        open={!!session.currentId && !selection.active}
+        onClose={closeReader}
+        onExited={revealLastRead}
+      />
+      {selection.active && (
+        <SelectionBar
+          variant="fixed"
+          count={selection.ids.size}
+          onSelectAll={selection.selectAll}
+          onCancel={selection.exit}
+          onCreate={() => setCreateTestOpen(true)}
+        />
+      )}
+      {overlays}
     </Box>
   );
 }

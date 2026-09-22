@@ -8,7 +8,7 @@
  */
 
 import { useId, useState, type FormEvent } from 'react';
-import { Box, Button, Stack, TextField } from '@neram/ui';
+import { Box, Button, Stack, TextField, Typography } from '@neram/ui';
 import LockRounded from '@mui/icons-material/LockRounded';
 import { displayAnswer } from '@/lib/pad/client/format';
 import { mcqLetters } from '@/lib/pad/client/teacher-view';
@@ -21,12 +21,17 @@ interface AnswerInputProps {
   error: string | null;
   /** A typed answer to start from, such as one the server refused and the student should fix. */
   initialValue?: string;
+  /** Multiple choice only: the teacher's text for each option, null where left blank. */
+  optionTexts?: Array<string | null> | null;
   onAnswer: (answer: string) => void;
 }
 
-export default function AnswerInput({ answerType, optionCount, disabled, error, initialValue = '', onAnswer }: AnswerInputProps) {
+export default function AnswerInput({ answerType, optionCount, disabled, error, initialValue = '', optionTexts, onAnswer }: AnswerInputProps) {
   if (answerType === 'mcq') {
     const letters = mcqLetters(optionCount);
+    if (optionTexts?.some((text) => text)) {
+      return <ChoiceList values={letters} texts={optionTexts} disabled={disabled} onAnswer={onAnswer} />;
+    }
     return <ChoiceGrid values={letters} answerType={answerType} columns={letters.length <= 4 ? 2 : 3} disabled={disabled} onAnswer={onAnswer} />;
   }
   if (answerType === 'yesno') {
@@ -78,6 +83,59 @@ function ChoiceGrid({
         );
       })}
     </Box>
+  );
+}
+
+/**
+ * Options with the teacher's text: one full-width row each, the letter first,
+ * so a long option wraps instead of squeezing into a grid cell.
+ */
+function ChoiceList({
+  values,
+  texts,
+  disabled,
+  onAnswer,
+}: {
+  values: string[];
+  texts: Array<string | null>;
+  disabled: boolean;
+  onAnswer: (answer: string) => void;
+}) {
+  return (
+    <Stack role="group" aria-label="Choose your answer" spacing={1}>
+      {values.map((value, index) => {
+        const text = texts[index] ?? null;
+        return (
+          <Button
+            key={value}
+            variant="outlined"
+            disabled={disabled}
+            onClick={() => onAnswer(value)}
+            aria-label={text ? `Answer ${value}, ${text}` : `Answer ${value}`}
+            sx={{
+              minHeight: 64,
+              justifyContent: 'flex-start',
+              textAlign: 'left',
+              textTransform: 'none',
+              gap: 1.5,
+              borderWidth: 2,
+              touchAction: 'manipulation',
+              '&:hover': { borderWidth: 2 },
+              '&.Mui-focusVisible': { outline: '3px solid', outlineOffset: 2 },
+            }}
+          >
+            <Typography component="span" sx={{ fontSize: '1.5rem', fontWeight: 800, minWidth: 28, flexShrink: 0 }}>
+              {value}
+            </Typography>
+            {text && (
+              <Typography component="span" sx={{ fontSize: '1rem', fontWeight: 600, lineHeight: 1.4, overflowWrap: 'anywhere' }}>
+                {text}
+              </Typography>
+            )}
+          </Button>
+        );
+      })}
+    </Stack>
   );
 }
 

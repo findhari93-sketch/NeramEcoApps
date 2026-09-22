@@ -2,7 +2,7 @@ import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PadClientError } from '@/lib/pad/client/pad-fetch';
 import type { PadHost } from '@/lib/pad/client/pad-host';
-import TeamsPadApp, { identifyProblem } from './TeamsPadApp';
+import TeamsPadApp, { identifyProblem, popOutSessionId } from './TeamsPadApp';
 
 /**
  * The one address Teams loads for everyone: it must find the host, ask who
@@ -26,7 +26,9 @@ vi.mock('@/lib/pad/client/pad-host', async (importOriginal) => ({
   connectTeamsHost: mocks.connectTeamsHost,
 }));
 
-vi.mock('./TeacherConsole', () => ({ default: () => <div>Teacher console</div> }));
+vi.mock('./TeacherConsole', () => ({
+  default: ({ sessionId }: { sessionId?: string }) => <div>{sessionId ? `Teacher console for ${sessionId}` : 'Teacher console'}</div>,
+}));
 vi.mock('./StageResults', () => ({ default: () => <div>Class results</div> }));
 vi.mock('./StudentMeetingPad', () => ({
   default: ({ compact }: { compact?: boolean }) => <div>{compact ? 'Student pop-up pad' : 'Student pad'}</div>,
@@ -49,6 +51,33 @@ beforeEach(() => {
 });
 
 describe('TeamsPadApp', () => {
+  // Pop out opens /pad/teams/console?session=<id> in its own Teams window.
+  it('runs the popped-out console on the session in its address, for teachers only', async () => {
+    const SESSION = '11111111-1111-4111-8111-111111111111';
+    window.history.replaceState(null, '', `/pad/teams/console?session=${SESSION}`);
+    try {
+      mocks.connectTeamsHost.mockResolvedValue({ ...host, frame: 'content' });
+      mocks.padFetch.mockResolvedValue({ role: 'staff' });
+      const { unmount } = render(<TeamsPadApp variant="console" />);
+      expect(await screen.findByText(`Teacher console for ${SESSION}`)).toBeTruthy();
+      unmount();
+
+      mocks.padFetch.mockResolvedValue({ role: 'student' });
+      render(<TeamsPadApp variant="console" />);
+      expect(await screen.findByText(/This window is for teachers/)).toBeTruthy();
+      expect(screen.queryByText('Student pad')).toBeNull();
+    } finally {
+      window.history.replaceState(null, '', '/');
+    }
+  });
+
+  it('reads only a well formed session id from the pop-out address', () => {
+    expect(popOutSessionId('?session=11111111-1111-4111-8111-111111111111')).toBe('11111111-1111-4111-8111-111111111111');
+    expect(popOutSessionId('?session=11111111-1111-4111-8111-11111111111X')).toBeNull();
+    expect(popOutSessionId('?session=')).toBeNull();
+    expect(popOutSessionId('')).toBeNull();
+  });
+
   it('shows staff the console and students the pad, from the same address', async () => {
     mocks.padFetch.mockResolvedValue({ role: 'staff' });
     const { unmount } = render(<TeamsPadApp />);

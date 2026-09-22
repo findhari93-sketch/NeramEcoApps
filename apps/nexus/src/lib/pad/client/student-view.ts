@@ -4,6 +4,7 @@
  * is a unit test rather than a manual check.
  */
 
+import { promptTitle } from './format';
 import type { StudentPrompt, StudentSnapshot } from './types';
 
 /** The answer the pad is sending, or failed to send, for one prompt. */
@@ -80,13 +81,13 @@ export function studentAnnouncement(view: StudentView): string {
     case 'idle':
       return 'Connected. Waiting for a question.';
     case 'answering':
-      return `Question ${view.prompt.sequence} is open.`;
+      return `${promptTitle(view.prompt)} is open.`;
     case 'locking':
       return view.retrying ? 'Still trying to lock your answer.' : 'Locking your answer.';
     case 'locked':
       return view.closed ? 'Your answer is locked. Answering has closed.' : 'Your answer is locked.';
     case 'missed':
-      return view.revealed ? `Question ${view.prompt.sequence} was revealed.` : `Question ${view.prompt.sequence} has closed.`;
+      return view.revealed ? `${promptTitle(view.prompt)} was revealed.` : `${promptTitle(view.prompt)} has closed.`;
     case 'result':
       if (view.outcome === 'correct') return 'Correct.';
       if (view.outcome === 'incorrect') return 'Not this time.';

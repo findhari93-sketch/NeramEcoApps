@@ -8,6 +8,7 @@
  */
 
 import { MEASURE_SIDE, measureQuality, type ImageQuality } from './image-quality';
+import { drawingFingerprint } from './image-fingerprint';
 
 /** Never wait on a photo for longer than this; unknown is a fine answer. */
 const LOAD_TIMEOUT_MS = 8000;
@@ -54,7 +55,11 @@ export async function measureImageQuality(source: Blob | string): Promise<ImageQ
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) return null;
     ctx.drawImage(drawable.source, 0, 0, w, h);
-    return measureQuality(ctx.getImageData(0, 0, w, h).data, w, h, naturalW / naturalH);
+    const pixels = ctx.getImageData(0, 0, w, h).data;
+    const quality = measureQuality(pixels, w, h, naturalW / naturalH);
+    // Same pixels, so a fingerprint costs one more pass, never another decode.
+    const fp = drawingFingerprint(pixels, w, h);
+    return fp ? { ...quality, fp } : quality;
   } catch {
     return null;
   } finally {

@@ -1,17 +1,14 @@
 // @vitest-environment node
-import { readdirSync, readFileSync } from 'fs';
-import path from 'path';
+import { readFileSync } from 'fs';
 import { describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api-errors';
+import { answerPadMigrationFiles } from './db/migration-files';
 import { PAD_REFUSAL_STATUS, PadRefusal, callPad, padErrorResponse, padRefusalStatus } from './rpc';
 
-const MIGRATIONS = path.resolve(__dirname, '../../../../../supabase/migrations');
-
-/** Every refusal code the Answer Pad migration can hand back. */
+/** Every refusal code the Answer Pad migrations (the base and each follow-up) can hand back. */
 function refusalCodesInMigration(): string[] {
-  const file = readdirSync(MIGRATIONS).find((name) => /_answer_pad\.sql$/.test(name));
-  if (!file) throw new Error('answer pad migration not found');
-  const sql = readFileSync(path.join(MIGRATIONS, file), 'utf-8');
+  const { base, followUps } = answerPadMigrationFiles();
+  const sql = [base, ...followUps].map((file) => readFileSync(file, 'utf-8')).join('\n');
 
   const codes = new Set<string>();
   for (const match of sql.matchAll(/'code',\s*'([A-Z_]+)'/g)) codes.add(match[1]);

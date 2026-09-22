@@ -12,21 +12,16 @@ import {
   AccordionSummary,
   AccordionDetails,
   Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Divider,
   Chip,
   Tabs,
   Tab,
-  TextField,
-  RadioGroup,
-  Radio,
   ToggleButton,
   ToggleButtonGroup,
   useTheme,
   useMediaQuery,
   Fade,
+  Alert,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
@@ -35,10 +30,8 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import CloseIcon from '@mui/icons-material/Close';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
-import FlagOutlined from '@mui/icons-material/FlagOutlined';
 import PaletteOutlinedIcon from '@mui/icons-material/PaletteOutlined';
 import type { NexusQBQuestionDetail } from '@neram/database';
-import { QB_REPORT_TYPE_LABELS } from '@neram/database';
 import DrawingPracticePanel from './DrawingPracticePanel';
 import SourceBadges from './SourceBadges';
 import RepeatBadges from './RepeatBadges';
@@ -48,13 +41,29 @@ import MCQOptions from './MCQOptions';
 import MathText from '@/components/common/MathText';
 import { readDrawingParts } from '@/lib/drawing-parts';
 import SolutionVideoPlayer from './SolutionVideoPlayer';
+import ReportMistakeLink from './ReportMistakeLink';
+import { SolutionReportScope } from './SolutionReportScope';
+import { reportTargetsFor } from '@/lib/report-targets';
+import { useQuestionAnswer, type AnswerSubmitFn, type QuestionAnswerState } from './useQuestionAnswer';
 
 // ---- Types ----
 
 interface QuestionDetailProps {
   question: NexusQBQuestionDetail;
-  onSubmit: (answer: string) => Promise<void>;
+  /** May resolve to the server's verdict, and may reject when the save fails. */
+  onSubmit: AnswerSubmitFn;
   onStudyToggle?: () => void;
+  /**
+   * Offer "Report a mistake" under each solution once it is revealed. Student
+   * screens set it; a teacher previewing a question does not.
+   */
+  allowReport?: boolean;
+  /**
+   * The old report callback. No longer called: the report sheet posts to the
+   * report route itself, with the part and reason the old dialog could not
+   * carry. Kept so a caller that still passes it (a student screen) keeps
+   * offering reports, which is what passing it always meant.
+   */
   onReport?: (reportType: string, description: string) => Promise<void>;
   onNext: () => void;
   onPrev: () => void;
@@ -64,7 +73,20 @@ interface QuestionDetailProps {
   totalCount: number;
   inline?: boolean;
   showSourceBadges?: boolean;
+  /** "Also asked in" badges. Defaults to showSourceBadges. */
+  showRepeatBadges?: boolean;
   initialLang?: 'en' | 'hi';
+  /**
+   * The answer, owned by the caller (the practice reader, whose Submit button
+   * lives outside this component). Omitted, the component keeps its own.
+   */
+  answer?: QuestionAnswerState;
+  /** A language owned by the caller. Hides this component's own EN/HI toggle. */
+  lang?: 'en' | 'hi';
+  /** Hide the prev / "n of m" / next header. */
+  hideNav?: boolean;
+  /** Hide Submit and Next Question, for a caller that renders its own. */
+  hideActions?: boolean;
 }
 
 interface SolutionTab {
@@ -72,11 +94,25 @@ interface SolutionTab {
   key: 'explanation' | 'video' | 'image';
 }
 
-export default function QuestionDetail({
+/**
+ * The report links need one status request for the question, which lives in a
+ * SolutionReportScope. Only screens that offer reporting pay for the scope.
+ */
+export default function QuestionDetail(props: QuestionDetailProps) {
+  const allowReport = props.allowReport ?? !!props.onReport;
+  if (!allowReport) return <QuestionDetailBody {...props} allowReport={false} />;
+  return (
+    <SolutionReportScope questionIds={[props.question.id]}>
+      <QuestionDetailBody {...props} allowReport />
+    </SolutionReportScope>
+  );
+}
+
+function QuestionDetailBody({
   question,
   onSubmit,
   onStudyToggle,
-  onReport,
+  allowReport = false,
   onNext,
   onPrev,
   hasNext,
@@ -85,47 +121,41 @@ export default function QuestionDetail({
   totalCount,
   inline = false,
   showSourceBadges = true,
+  showRepeatBadges,
   initialLang,
+  answer,
+  lang: controlledLang,
+  hideNav = false,
+  hideActions = false,
 }: QuestionDetailProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
-  const [selectedAnswer, setSelectedAnswer] = useState<string | null>(null);
-  const [submitted, setSubmitted] = useState(false);
-  const [isCorrect, setIsCorrect] = useState<boolean | null>(null);
-  const [submitting, setSubmitting] = useState(false);
+  // Always called (hooks cannot be conditional); ignored when the caller owns it.
+  const ownAnswer = useQuestionAnswer({
+    questionId: question.id,
+    correctAnswer: question.correct_answer,
+    onSubmit,
+  });
+  const a = answer ?? ownAnswer;
+  const { selected: selectedAnswer, submitted, isCorrect, submitting, showFeedback } = a;
+
   const [imageZoomed, setImageZoomed] = useState(false);
-  const [showFeedback, setShowFeedback] = useState(false);
   const [solutionTab, setSolutionTab] = useState(0);
   const [solutionImageZoomed, setSolutionImageZoomed] = useState(false);
 
-  // Language toggle — sync with parent's initialLang when it changes
-  const [lang, setLang] = useState<'en' | 'hi'>(initialLang || 'en');
+  // The first solution tab each time an answer lands.
+  useEffect(() => {
+    if (submitted) setSolutionTab(0);
+  }, [submitted]);
+
+  // Language toggle, synced with the parent's initialLang when it changes
+  const [ownLang, setLang] = useState<'en' | 'hi'>(initialLang || 'en');
   useEffect(() => {
     if (initialLang) setLang(initialLang);
   }, [initialLang]);
+  const lang = controlledLang ?? ownLang;
   const hasHindi = !!(question.question_text_hi || question.options?.some(o => o.text_hi) || question.explanation_brief_hi || question.explanation_detailed_hi);
-
-  // Report dialog state
-  const [reportOpen, setReportOpen] = useState(false);
-  const [reportType, setReportType] = useState('');
-  const [reportDescription, setReportDescription] = useState('');
-  const [reportSubmitting, setReportSubmitting] = useState(false);
-
-  const handleReportSubmit = useCallback(async () => {
-    if (!reportType || !onReport || reportSubmitting) return;
-    setReportSubmitting(true);
-    try {
-      await onReport(reportType, reportDescription);
-      setReportOpen(false);
-      setReportType('');
-      setReportDescription('');
-    } catch (err) {
-      console.error('Failed to submit report:', err);
-    } finally {
-      setReportSubmitting(false);
-    }
-  }, [reportType, reportDescription, onReport, reportSubmitting]);
 
   // Build available solution tabs dynamically
   const solutionTabs: SolutionTab[] = [];
@@ -150,40 +180,19 @@ export default function QuestionDetail({
     solutionTabs.push({ label: 'Image', key: 'image' });
   }
 
-  const handleSubmit = useCallback(async () => {
-    if (!selectedAnswer || submitting) return;
-    setSubmitting(true);
-    try {
-      await onSubmit(selectedAnswer);
-      const correct = selectedAnswer === question.correct_answer;
-      setIsCorrect(correct);
-      setSubmitted(true);
-      setShowFeedback(true);
-      // Auto-select first tab
-      setSolutionTab(0);
-      setTimeout(() => setShowFeedback(false), 2000);
-    } finally {
-      setSubmitting(false);
-    }
-  }, [selectedAnswer, submitting, onSubmit, question.correct_answer]);
+  const handleSubmit = a.submit;
 
   const handleNext = useCallback(() => {
-    setSelectedAnswer(null);
-    setSubmitted(false);
-    setIsCorrect(null);
-    setShowFeedback(false);
+    a.reset();
     setSolutionTab(0);
     onNext();
-  }, [onNext]);
+  }, [a, onNext]);
 
   const handlePrev = useCallback(() => {
-    setSelectedAnswer(null);
-    setSubmitted(false);
-    setIsCorrect(null);
-    setShowFeedback(false);
+    a.reset();
     setSolutionTab(0);
     onPrev();
-  }, [onPrev]);
+  }, [a, onPrev]);
 
   // Determine correct option letter for "Incorrect" badge
   const correctOptionLetter = (() => {
@@ -196,11 +205,12 @@ export default function QuestionDetail({
   })();
 
   const activeTabKey = solutionTabs[solutionTab]?.key;
+  const reportTargets = reportTargetsFor(question);
 
   return (
-    <Box sx={{ position: 'relative', pb: inline ? 0 : isMobile ? 10 : 0 }}>
+    <Box sx={{ position: 'relative', pb: inline || hideActions ? 0 : isMobile ? 10 : 0 }}>
       {/* Navigation header (hidden in inline mode) */}
-      {!inline && (
+      {!inline && !hideNav && (
         <Box
           sx={{
             display: 'flex',
@@ -241,14 +251,14 @@ export default function QuestionDetail({
       )}
 
       {/* Repeat badges */}
-      {showSourceBadges && question.repeat_sources.length > 0 && (
+      {(showRepeatBadges ?? showSourceBadges) && question.repeat_sources?.length > 0 && (
         <Box sx={{ mb: 1.5 }}>
           <RepeatBadges sources={question.repeat_sources} />
         </Box>
       )}
 
-      {/* Language toggle — only shown when Hindi text exists */}
-      {hasHindi && (
+      {/* Language toggle, only when Hindi text exists and the caller does not own the language */}
+      {hasHindi && controlledLang === undefined && (
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 1 }}>
           <ToggleButtonGroup
             value={lang}
@@ -337,15 +347,22 @@ export default function QuestionDetail({
             selectedId={selectedAnswer}
             correctId={submitted ? question.correct_answer : undefined}
             submitted={submitted}
-            onSelect={setSelectedAnswer}
+            onSelect={a.select}
             lang={lang}
           />
         </Box>
       )}
 
+      {/* A save that failed says so, next to the answer it did not save. */}
+      {a.error && (
+        <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }} role="alert">
+          {a.error}
+        </Alert>
+      )}
+
       {/* Drawing Prompt: show drawing-specific info + Practice CTA */}
       {question.question_format === 'DRAWING_PROMPT' && (
-        <DrawingPracticePanel question={question} language={lang} />
+        <DrawingPracticePanel question={question} language={lang} allowReport={allowReport} />
       )}
 
       {/* Feedback animation overlay */}
@@ -386,6 +403,18 @@ export default function QuestionDetail({
               color="error"
               variant="filled"
               sx={{ fontWeight: 600, fontSize: '0.875rem' }}
+            />
+          )}
+          {/* The answer key is the one part a student can doubt even with no
+              solution attached. The sheet's Change reaches the question itself. */}
+          {allowReport && question.correct_answer && (
+            <ReportMistakeLink
+              questionId={question.id}
+              target="answer_key"
+              targets={reportTargets}
+              isMcq={question.question_format === 'MCQ'}
+              source="practice"
+              label="Think the answer key is wrong?"
             />
           )}
         </Box>
@@ -508,90 +537,19 @@ export default function QuestionDetail({
             )}
           </Box>
 
-          {/* Report Issue button */}
-          {onReport && (
-            <Box sx={{ mt: 2 }}>
-              <Button
-                size="small"
-                startIcon={<FlagOutlined />}
-                onClick={() => setReportOpen(true)}
-                sx={{ textTransform: 'none', color: 'text.secondary' }}
-              >
-                Report Issue
-              </Button>
-            </Box>
+          {/* A mistake in the part on screen: the video, the written
+              solution or the image. Right under it, where it was noticed. */}
+          {allowReport && activeTabKey && (
+            <ReportMistakeLink
+              key={activeTabKey}
+              questionId={question.id}
+              target={activeTabKey === 'image' ? 'solution_image' : activeTabKey}
+              targets={reportTargets}
+              isMcq={question.question_format === 'MCQ'}
+              source="practice"
+            />
           )}
         </Box>
-      )}
-
-      {/* Report Issue Dialog */}
-      {onReport && (
-        <Dialog
-          open={reportOpen}
-          onClose={() => setReportOpen(false)}
-          fullScreen={isMobile}
-          maxWidth="sm"
-          fullWidth
-        >
-          <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <Typography variant="h6" fontWeight={600}>Report Issue</Typography>
-            <IconButton
-              onClick={() => setReportOpen(false)}
-              aria-label="Close"
-              sx={{ minWidth: 48, minHeight: 48 }}
-            >
-              <CloseIcon />
-            </IconButton>
-          </DialogTitle>
-          <DialogContent>
-            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
-              What type of issue?
-            </Typography>
-            <RadioGroup
-              value={reportType}
-              onChange={(e) => setReportType(e.target.value)}
-            >
-              {Object.entries(QB_REPORT_TYPE_LABELS).map(([value, label]) => (
-                <FormControlLabel
-                  key={value}
-                  value={value}
-                  control={<Radio />}
-                  label={label}
-                  sx={{
-                    mb: 0.5,
-                    '& .MuiFormControlLabel-label': { fontSize: '0.95rem' },
-                  }}
-                />
-              ))}
-            </RadioGroup>
-            <TextField
-              multiline
-              rows={3}
-              fullWidth
-              label="Description (optional)"
-              placeholder="Describe the issue..."
-              value={reportDescription}
-              onChange={(e) => setReportDescription(e.target.value)}
-              sx={{ mt: 2 }}
-            />
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}>
-            <Button
-              onClick={() => setReportOpen(false)}
-              sx={{ textTransform: 'none' }}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="contained"
-              disabled={!reportType || reportSubmitting}
-              onClick={handleReportSubmit}
-              sx={{ textTransform: 'none', minWidth: 120 }}
-            >
-              {reportSubmitting ? 'Submitting...' : 'Submit Report'}
-            </Button>
-          </DialogActions>
-        </Dialog>
       )}
 
       {/* Mark as Studied toggle (available after submit) */}
@@ -684,7 +642,7 @@ export default function QuestionDetail({
       )}
 
       {/* Submit Answer button (before submit) */}
-      {!submitted && (
+      {!submitted && !hideActions && (
         <Box
           sx={{
             position: inline ? 'relative' : isMobile ? 'fixed' : 'relative',
@@ -717,7 +675,7 @@ export default function QuestionDetail({
       )}
 
       {/* After submit: next button */}
-      {submitted && hasNext && (
+      {submitted && hasNext && !hideActions && (
         <Box sx={{ pt: 1 }}>
           <Button
             variant="contained"

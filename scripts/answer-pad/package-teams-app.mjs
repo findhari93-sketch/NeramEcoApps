@@ -14,7 +14,8 @@
  *
  * The manifest is checked before anything is zipped: every page is https on a
  * valid domain, the sign-in resource names a valid domain and the app id, the
- * bot is the sign-in app, and no user-visible text has an en or em dash.
+ * bot is the sign-in app, Teams' own Share button is hidden, and no user-visible
+ * text has an en or em dash.
  */
 
 import { execFileSync } from 'node:child_process';
@@ -78,6 +79,12 @@ function problemsWith(manifest) {
   for (const bot of manifest.bots ?? []) {
     if (bot.botId !== app.id) problems.push('the bot must be the same Entra app as sign-in');
   }
+  // Without it Teams puts its own Share button under the side panel for everyone,
+  // students included, and one press takes over the meeting screen.
+  if (manifest.meetingExtensionDefinition?.supportsCustomShareToStage !== true) {
+    problems.push('meetingExtensionDefinition.supportsCustomShareToStage must be true (it hides Teams\' own Share button)');
+  }
+  if (Number(manifest.manifestVersion) < 1.21) problems.push('manifestVersion must be 1.21 or later for supportsCustomShareToStage');
   if (!/^\d+\.\d+\.\d+$/.test(manifest.version ?? '')) problems.push('version must look like 1.2.3');
   if ((manifest.name?.short ?? '').length > 30) problems.push('name.short is longer than 30 characters');
   if ((manifest.description?.short ?? '').length > 80) problems.push('description.short is longer than 80 characters');

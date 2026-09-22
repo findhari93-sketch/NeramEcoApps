@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { browserHost, cachedTokenGetter, frameFromTeams, readTestHost, stageSharing, themeFromTeams, tokenExpiresAt } from './pad-host';
+import { browserHost, cachedTokenGetter, consolePopOut, frameFromTeams, readTestHost, stageSharing, themeFromTeams, tokenExpiresAt } from './pad-host';
 
 /** A JWT-shaped string, base64url over UTF-8 as Entra issues them (names are not always ASCII). */
 function jwt(claims: Record<string, unknown>): string {
@@ -151,5 +151,54 @@ describe('browserHost', () => {
     await expect(browserHost(async () => 'nexus-token').getToken()).resolves.toBe('nexus-token');
     await expect(browserHost(async () => null).getToken()).rejects.toThrow('Not signed in');
     expect(browserHost(async () => 'x')).toMatchObject({ kind: 'browser', meeting: null, frame: 'content' });
+  });
+});
+
+describe('consolePopOut', () => {
+  const APP_ID = '7b1e4f0a-3c52-4d8e-9a61-2f9c0b7d5e43';
+  type Teams = Parameters<typeof consolePopOut>[0];
+
+  function fakeTeams(supported = true, open: (...args: unknown[]) => Promise<void> = vi.fn(async () => undefined)) {
+    const teams = {
+      stageView: { isSupported: () => supported, open, StageViewOpenMode: { popout: 'popout', modal: 'modal', popoutWithChat: 'popoutWithChat' } },
+    };
+    return { teams: teams as unknown as Teams, open };
+  }
+
+  const desktop = { app: { appId: { toString: () => APP_ID }, host: { clientType: 'desktop' } }, chat: { id: '19:meeting_abc@thread.v2' } };
+
+  it("opens the running session's console in its own Teams window on desktop", async () => {
+    const { teams, open } = fakeTeams();
+    const popOut = consolePopOut(teams, desktop, 'https://nexus.neramclasses.com/');
+    expect(popOut).toBeTypeOf('function');
+    await popOut!('11111111-1111-4111-8111-111111111111');
+    expect(open).toHaveBeenCalledWith({
+      appId: APP_ID,
+      contentUrl: 'https://nexus.neramclasses.com/pad/teams/console?session=11111111-1111-4111-8111-111111111111',
+      websiteUrl: 'https://nexus.neramclasses.com/pad',
+      title: 'Answer Pad',
+      threadId: '19:meeting_abc@thread.v2',
+      openMode: 'popout',
+    });
+  });
+
+  it('waits only briefly, since Teams may answer only when the window closes', async () => {
+    vi.useFakeTimers();
+    try {
+      const { teams } = fakeTeams(true, () => new Promise<void>(() => undefined));
+      const done = vi.fn();
+      const pending = consolePopOut(teams, desktop, 'https://nexus.neramclasses.com')!('s1').then(done);
+      await vi.advanceTimersByTimeAsync(1_500);
+      await pending;
+      expect(done).toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('is absent on Teams web or mobile, without an app id, or where stage views are unsupported', () => {
+    expect(consolePopOut(fakeTeams().teams, { ...desktop, app: { ...desktop.app, host: { clientType: 'web' } } }, 'https://x.test')).toBeUndefined();
+    expect(consolePopOut(fakeTeams().teams, { ...desktop, app: { host: { clientType: 'desktop' } } }, 'https://x.test')).toBeUndefined();
+    expect(consolePopOut(fakeTeams(false).teams, desktop, 'https://x.test')).toBeUndefined();
   });
 });

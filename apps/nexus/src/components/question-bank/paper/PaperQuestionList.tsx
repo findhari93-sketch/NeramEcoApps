@@ -30,13 +30,21 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import CollectionsOutlinedIcon from '@mui/icons-material/CollectionsOutlined';
 import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
 import ContentPasteIcon from '@mui/icons-material/ContentPaste';
+import TravelExploreIcon from '@mui/icons-material/TravelExplore';
 import SaveIcon from '@mui/icons-material/Save';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
-import type { NexusQBQuestion, QBQuestionSection } from '@neram/database';
-import { QB_SECTION_ORDER, qbSectionLabel, QB_SECTIONS, solutionVideosOf } from '@neram/database';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import type { NexusQBQuestion, QBQuestionSection, QBReportGroup } from '@neram/database';
+import {
+  QB_REPORT_TARGET_LABELS,
+  QB_SECTION_ORDER,
+  qbSectionLabel,
+  QB_SECTIONS,
+  solutionVideosOf,
+} from '@neram/database';
 import {
   questionReferencesFigure,
   questionMissingImages,
@@ -45,6 +53,20 @@ import {
 import PaperQuestionRow from './PaperQuestionRow';
 import PaperVideoRow from './PaperVideoRow';
 import type { VideoLinkDrafts, VideoPasteSummary, VideoRowState } from '@/hooks/useVideoLinkDrafts';
+import { sectionVideoProgress, type SectionVideoProgress } from '@/lib/paper-video-progress';
+
+/** Screen-reader-only text. Width '1px', never 1: MUI reads 1 as 100%. */
+const visuallyHidden = {
+  position: 'absolute',
+  width: '1px',
+  height: '1px',
+  p: 0,
+  m: '-1px',
+  overflow: 'hidden',
+  clip: 'rect(0 0 0 0)',
+  whiteSpace: 'nowrap',
+  border: 0,
+} as const;
 
 export type PaperQuestionMode = 'edit' | 'images' | 'videos';
 
@@ -60,6 +82,7 @@ export type PaperQuestionMode = 'edit' | 'images' | 'videos';
  * paper, which are worked through on their own and by a different person.
  * `'missing-video'` is the questions with no saved solution video, in both
  * modes. `'unsaved-video'` is Videos mode's pending rows, for checking a paste.
+ * `'reported'` is the questions a student has an open report on.
  */
 export type NeedsFilter =
   | 'all'
@@ -68,6 +91,7 @@ export type NeedsFilter =
   | 'missing-solution'
   | 'missing-video'
   | 'unsaved-video'
+  | 'reported'
   | 'drawing'
   | 'inactive';
 
@@ -75,6 +99,8 @@ export type NeedsFilter =
 export interface PaperVideosProps {
   drafts: VideoLinkDrafts;
   onOpenPaste: () => void;
+  /** Search the channel for this paper's videos. Absent, the button is not offered. */
+  onOpenYouTube?: () => void;
   onSave: () => void;
 }
 
@@ -87,6 +113,15 @@ function isPendingVideo(state: VideoRowState): boolean {
     state === 'invalid' ||
     state === 'error'
   );
+}
+
+/** "Students reported a problem: Video solution (2)", the row flag's name. */
+function reportSummary(groups: QBReportGroup[] | undefined): string | null {
+  if (!groups || groups.length === 0) return null;
+  const parts = groups.map(
+    (g) => `${QB_REPORT_TARGET_LABELS[g.target]}${g.part_label ? ` part ${g.part_label}` : ''} (${g.students})`,
+  );
+  return `Students reported a problem: ${parts.join(', ')}`;
 }
 
 /** A section the list can be narrowed to, or '__none__' for unsectioned rows. */
@@ -141,6 +176,10 @@ export interface PaperQuestionListProps {
   onSetActiveQuestions: (questionIds: string[], active: boolean) => Promise<void>;
   /** Videos mode. Absent, the mode is not offered. */
   videos?: PaperVideosProps;
+  /** Open student reports by question id: the "Reported" chip and the row flags. */
+  reports?: Record<string, QBReportGroup[]>;
+  /** Close a video report from its row, once the reported link has been replaced. */
+  onTellVideoFixed?: (questionId: string, group: QBReportGroup) => void;
 }
 
 /** Is the user typing? Then Ctrl+A should select their text, not every row. */
@@ -180,6 +219,8 @@ export default function PaperQuestionList({
   onDeleteQuestions,
   onSetActiveQuestions,
   videos,
+  reports,
+  onTellVideoFixed,
 }: PaperQuestionListProps) {
   const theme = useTheme();
   /** Videos mode's props when that mode is on, else null: a truthy check TypeScript can narrow on. */
@@ -380,6 +421,15 @@ export default function PaperQuestionList({
     () => bySection.filter((q) => solutionVideosOf(q).length === 0).length,
     [bySection],
   );
+  const reportedCount = useMemo(
+    () => bySection.filter((q) => (reports?.[q.id]?.length ?? 0) > 0).length,
+    [bySection, reports],
+  );
+  /** Whether the flag column is drawn at all: only on a paper someone has reported. */
+  const paperHasReports = useMemo(
+    () => !!reports && Object.values(reports).some((groups) => groups.length > 0),
+    [reports],
+  );
   const rowState = videos?.drafts.rowState;
   const unsavedVideoCount = useMemo(
     () => (rowState ? bySection.filter((q) => isPendingVideo(rowState(q))).length : 0),
@@ -437,13 +487,15 @@ export default function PaperQuestionList({
             ? (q) => solutionVideosOf(q).length === 0
           : needsFilter === 'unsaved-video'
             ? (q) => (rowState ? isPendingVideo(rowState(q)) : false)
+          : needsFilter === 'reported'
+            ? (q) => (reports?.[q.id]?.length ?? 0) > 0
           : needsFilter === 'drawing'
             ? (q) => q.question_format === 'DRAWING_PROMPT'
             : needsFilter === 'inactive'
               ? (q) => !q.is_active
               : questionReferencesFigure;
     return bySection.filter(predicate);
-  }, [bySection, needsFilter, rowState]);
+  }, [bySection, needsFilter, rowState, reports]);
 
   const sections = useMemo(() => {
     const groups = new Map<string, { order: number; questions: NexusQBQuestion[] }>();
@@ -458,7 +510,9 @@ export default function PaperQuestionList({
       .sort((a, b) => a[1].order - b[1].order)
       .map(([key, group]) => {
         const numbers = group.questions.map((x) => x.display_order).filter((n): n is number => n != null);
-        const range = numbers.length ? ` (Q${Math.min(...numbers)} to Q${Math.max(...numbers)})` : '';
+        const low = Math.min(...numbers);
+        const high = Math.max(...numbers);
+        const range = !numbers.length ? '' : low === high ? ` (Q${low})` : ` (Q${low} to Q${high})`;
         return {
           key,
           title: `${key === '__none__' ? 'Unsectioned' : qbSectionLabel(key)}${range}`,
@@ -466,6 +520,21 @@ export default function PaperQuestionList({
         };
       });
   }, [visibleQuestions]);
+
+  /**
+   * Videos done per section, over the whole paper. Deliberately not
+   * `visibleQuestions`: with "No video" on, the list holds only the gaps and a
+   * section would read 0/21.
+   */
+  const hasVideoNow = videoMode?.drafts.hasVideoNow;
+  const videoProgress = useMemo(
+    () => (hasVideoNow ? sectionVideoProgress(questions, hasVideoNow) : []),
+    [questions, hasVideoNow],
+  );
+  const videoProgressByKey = useMemo(
+    () => new Map(videoProgress.map((row) => [row.key as string, row])),
+    [videoProgress],
+  );
 
   /**
    * Enter in one question's field moves to the next one down, in the order on
@@ -496,9 +565,14 @@ export default function PaperQuestionList({
     value: NeedsFilter;
     label: string;
     count: number;
-    color: 'primary' | 'warning' | 'secondary';
+    color: 'primary' | 'warning' | 'secondary' | 'error';
   }[] = [
     { value: 'all', label: 'All', count: bySection.length, color: 'primary' },
+    // Right after All: a mistake students are still learning from outranks
+    // every backlog below. Absent until a student reports something.
+    ...(reportedCount > 0 || needsFilter === 'reported'
+      ? ([{ value: 'reported' as const, label: 'Reported', count: reportedCount, color: 'error' as const }])
+      : []),
     { value: 'figures', label: 'Figures', count: figureCount, color: 'primary' },
     { value: 'missing-figure', label: 'Figure missing', count: missingCount, color: 'warning' },
     ...(imageStats.solutionTotal > 0 || needsFilter === 'missing-solution'
@@ -711,8 +785,14 @@ export default function PaperQuestionList({
         <VideoModeHeader
           drafts={videoMode.drafts}
           total={questions.length}
+          sections={videoProgress}
+          onShowMissing={(key) => {
+            onSectionFilterChange(key);
+            onNeedsFilterChange('missing-video');
+          }}
           color={theme.palette.success.main}
           onOpenPaste={videoMode.onOpenPaste}
+          onOpenYouTube={videoMode.onOpenYouTube}
           showSkipped={showSkipped}
           onToggleSkipped={() => setShowSkipped((v) => !v)}
         />
@@ -756,6 +836,9 @@ export default function PaperQuestionList({
                 <Typography variant="subtitle2" color="text.secondary" sx={videoMode ? { pl: 1 } : undefined}>
                   {section.title}
                 </Typography>
+                {videoMode && videoProgress.length > 1 && videoProgressByKey.has(section.key) && (
+                  <SectionVideoCount row={videoProgressByKey.get(section.key)!} />
+                )}
               </Box>
 
               {videoMode && section.questions.map((item) => {
@@ -780,6 +863,9 @@ export default function PaperQuestionList({
                       if (el) videoInputs.current.set(item.id, el);
                       else videoInputs.current.delete(item.id);
                     }}
+                    onKeepSaved={() => videoMode.drafts.revert(item.id)}
+                    videoReport={reports?.[item.id]?.find((g) => g.target === 'video' && !g.part_label)}
+                    onTellFixed={onTellVideoFixed ? (group) => onTellVideoFixed(item.id, group) : undefined}
                   />
                 );
               })}
@@ -795,6 +881,8 @@ export default function PaperQuestionList({
                   linked={!!item.choice_group_id}
                   onToggleSelect={(shiftKey) => toggleOne(item, shiftKey)}
                   onActivate={() => onActivate(item.id)}
+                  showReportColumn={paperHasReports}
+                  reportSummary={reportSummary(reports?.[item.id])}
                 />
               ))}
             </Box>
@@ -1054,33 +1142,71 @@ function TrackBar({
 function VideoModeHeader({
   drafts,
   total,
+  sections,
+  onShowMissing,
   color,
   onOpenPaste,
+  onOpenYouTube,
   showSkipped,
   onToggleSkipped,
 }: {
   drafts: VideoLinkDrafts;
   total: number;
+  sections: SectionVideoProgress[];
+  onShowMissing: (key: SectionVideoProgress['key']) => void;
   color: string;
   onOpenPaste: () => void;
+  onOpenYouTube?: () => void;
   showSkipped: boolean;
   onToggleSkipped: () => void;
 }) {
+  // One bar per section once there is more than one: "Aptitude 50/50" is the
+  // number a teacher checks, and a paper total averages it away.
+  const perSection = sections.length > 1;
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 1, px: 0.5 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
-        <Box sx={{ flex: '1 1 200px', minWidth: 0 }}>
-          <TrackBar label="Videos" done={drafts.withVideoCount} total={total} color={color} />
+      <Box sx={{ display: 'flex', alignItems: perSection ? 'flex-start' : 'center', gap: 1.5, flexWrap: 'wrap' }}>
+        <Box sx={{ flex: '1 1 260px', minWidth: 0 }}>
+          {perSection ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+              <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+                <Typography variant="caption" fontWeight={700}>
+                  Videos
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {`${drafts.withVideoCount} of ${total} in all`}
+                </Typography>
+              </Box>
+              {sections.map((row) => (
+                <SectionTrack key={row.key} row={row} color={color} onShowMissing={() => onShowMissing(row.key)} />
+              ))}
+            </Box>
+          ) : (
+            <TrackBar label="Videos" done={drafts.withVideoCount} total={total} color={color} />
+          )}
         </Box>
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<ContentPasteIcon sx={{ fontSize: 18 }} />}
-          onClick={onOpenPaste}
-          sx={{ minHeight: 44, textTransform: 'none', flexShrink: 0 }}
-        >
-          Paste a list
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', flexShrink: 0 }}>
+          {onOpenYouTube && (
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<TravelExploreIcon sx={{ fontSize: 18 }} />}
+              onClick={onOpenYouTube}
+              sx={{ minHeight: 44, textTransform: 'none' }}
+            >
+              Find on YouTube
+            </Button>
+          )}
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<ContentPasteIcon sx={{ fontSize: 18 }} />}
+            onClick={onOpenPaste}
+            sx={{ minHeight: 44, textTransform: 'none' }}
+          >
+            Paste a list
+          </Button>
+        </Box>
       </Box>
       {drafts.summary && (
         <PasteSummaryAlert
@@ -1090,6 +1216,98 @@ function VideoModeHeader({
           onToggleSkipped={onToggleSkipped}
         />
       )}
+    </Box>
+  );
+}
+
+/**
+ * One section's progress. On a phone the name, count and action share a line
+ * and the bar runs full width beneath them; from sm up it is one row.
+ *
+ * A finished section says so in words beside a tick, so the state never rests
+ * on the bar's colour alone. An unfinished one offers to show its gaps.
+ */
+function SectionTrack({
+  row,
+  color,
+  onShowMissing,
+}: {
+  row: SectionVideoProgress;
+  color: string;
+  onShowMissing: () => void;
+}) {
+  const value = row.total > 0 ? (row.done / row.total) * 100 : 0;
+  return (
+    <Box
+      sx={{
+        display: 'grid',
+        alignItems: 'center',
+        columnGap: 1,
+        gridTemplateColumns: { xs: 'minmax(0, 1fr) auto auto', sm: 'minmax(0, 170px) 52px minmax(60px, 1fr) auto' },
+        gridTemplateAreas: { xs: '"label count action" "bar bar bar"', sm: '"label count bar action"' },
+      }}
+    >
+      <Typography variant="caption" color="text.secondary" noWrap sx={{ gridArea: 'label' }}>
+        {row.label}
+      </Typography>
+      <Typography variant="caption" fontWeight={600} sx={{ gridArea: 'count', whiteSpace: 'nowrap' }}>
+        {row.done}/{row.total}
+      </Typography>
+      <LinearProgress
+        variant="determinate"
+        value={value}
+        aria-label={`${row.label}: ${row.done} of ${row.total} done`}
+        sx={{
+          gridArea: 'bar',
+          height: 6,
+          borderRadius: 3,
+          bgcolor: alpha(color, 0.12),
+          '& .MuiLinearProgress-bar': { bgcolor: color, borderRadius: 3 },
+        }}
+      />
+      <Box sx={{ gridArea: 'action', display: 'flex', alignItems: 'center', minHeight: 44, justifyContent: 'flex-end' }}>
+        {row.complete ? (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'success.dark' }}>
+            <CheckCircleIcon aria-hidden sx={{ fontSize: 16 }} />
+            <Typography variant="caption" fontWeight={600} sx={{ whiteSpace: 'nowrap' }}>
+              All have a video
+            </Typography>
+          </Box>
+        ) : (
+          <Button
+            size="small"
+            onClick={onShowMissing}
+            aria-label={`Show ${row.missing} ${row.label} question${row.missing === 1 ? '' : 's'} without a video`}
+            sx={{ minHeight: 44, textTransform: 'none', whiteSpace: 'nowrap' }}
+          >
+            Show {row.missing}
+          </Button>
+        )}
+      </Box>
+    </Box>
+  );
+}
+
+/** A section heading's own count, so it stays in view while scrolling. */
+function SectionVideoCount({ row }: { row: SectionVideoProgress }) {
+  return (
+    <Box
+      sx={{
+        ml: 'auto',
+        pr: 1,
+        display: 'flex',
+        alignItems: 'center',
+        gap: 0.5,
+        color: row.complete ? 'success.dark' : 'text.secondary',
+      }}
+    >
+      {row.complete && <CheckCircleIcon aria-hidden sx={{ fontSize: 14 }} />}
+      <Typography variant="caption" fontWeight={600} component="span">
+        {row.done}/{row.total}
+      </Typography>
+      <Box component="span" sx={visuallyHidden}>
+        {row.complete ? 'every question here has a video' : 'questions here have a video'}
+      </Box>
     </Box>
   );
 }

@@ -5,7 +5,14 @@ import type { RhythmStatus, StripDay } from '@/lib/sketchbook-status';
 
 const swr = vi.fn();
 vi.mock('@/lib/nexus-swr', () => ({ useAuthSWR: (...a: unknown[]) => swr(...a) }));
-vi.mock('@/hooks/useNexusAuth', () => ({ useNexusAuthContext: () => ({ getToken: async () => 't' }) }));
+const auth = { remindersOn: false, isAdmin: false };
+vi.mock('@/hooks/useNexusAuth', () => ({
+  useNexusAuthContext: () => ({
+    getToken: async () => 't',
+    isAdmin: auth.isAdmin,
+    isFeatureEnabled: (id: string) => (id === 'staff.sketchbook-reminders' ? auth.remindersOn : true),
+  }),
+}));
 vi.mock('@/components/students/StudentStageFactsProvider', () => ({
   useStudentStageFacts: () => ({ factsFor: () => null, ready: true }),
 }));
@@ -21,7 +28,7 @@ const STUDENT_A = '11111111-1111-4111-8111-111111111111';
 const student = (id: string, name: string, status: RhythmStatus, label: string, quietDays: number, sketch = false) => ({
   userId: id, name, email: null, avatarUrl: null, msOid: null, enrolledAt: '2026-06-01T00:00:00Z', start: '2026-09-12',
   status, label, quietDays, lastDrawingDate: null, week: { count: status === 'on_track' ? 3 : 1, goal: 3 }, strip,
-  run: 0, remindersThisCycle: 0, lastRemindedOn: null,
+  run: 0, remindersThisCycle: 0, remindersSentThisCycle: 0, lastRemindedOn: null, lastReminderChannel: null,
   latestSketch: sketch ? { id: `sk-${id}`, thumbUrl: 'https://x.test/t.jpg', submittedAt: '2026-09-15T10:00:00Z' } : null,
 });
 
@@ -36,6 +43,8 @@ const payload = {
 };
 
 beforeEach(() => {
+  auth.remindersOn = false;
+  auth.isAdmin = false;
   window.history.replaceState(null, '', '/teacher/sketchbook?view=rhythm');
   swr.mockReturnValue({ data: payload, isLoading: false, mutate: vi.fn() });
 });
@@ -72,6 +81,37 @@ describe('ClassRhythmList', () => {
     const thumb = within(asha).getByRole('link', { name: /latest drawing/ });
     expect(thumb.getAttribute('href')).toBe(`/teacher/drawing-reviews/sk-${STUDENT_A}?from=sketchbook&student=${STUDENT_A}`);
     expect(screen.getByTestId('paused-footnote').textContent).toBe('3 paused students are not shown.');
+  });
+
+  it('says out loud that nobody is being reminded while the switch is off', () => {
+    render(<ClassRhythmList classroomId="c1" />);
+    const notice = screen.getByTestId('auto-reminders-off');
+    expect(notice.textContent).toContain('Automatic reminders are off');
+    expect(notice.textContent).toContain('An admin can switch them on');
+    expect(within(notice).queryByRole('link', { name: 'Turn on' })).toBeNull();
+  });
+
+  it('gives an admin the way to switch reminders on', () => {
+    auth.isAdmin = true;
+    render(<ClassRhythmList classroomId="c1" />);
+    const link = within(screen.getByTestId('auto-reminders-off')).getByRole('link', { name: 'Turn on' });
+    expect(link.getAttribute('href')).toBe('/teacher/admin/features');
+  });
+
+  it('shows no notice once reminders are on', () => {
+    auth.remindersOn = true;
+    render(<ClassRhythmList classroomId="c1" />);
+    expect(screen.queryByTestId('auto-reminders-off')).toBeNull();
+  });
+
+  it('tells the teacher on each quiet row whether Nexus reminded that student', () => {
+    render(<ClassRhythmList classroomId="c1" />);
+    const rows = screen.getAllByTestId('rhythm-row');
+    const charu = rows.find((r) => within(r).queryByText('Charu'))!;
+    const asha = rows.find((r) => within(r).queryByText('Asha'))!;
+    expect(within(charu).getByTestId('rhythm-row-reminders').textContent).toBe('Not reminded yet');
+    // On track is not due a reminder, so the row stays quiet about it.
+    expect(within(asha).queryByTestId('rhythm-row-reminders')).toBeNull();
   });
 
   it('restores the card filter from the URL', () => {
