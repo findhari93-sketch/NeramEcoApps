@@ -71,7 +71,12 @@ const nextConfig = {
     // This flag undoes that from inside Nexus, without touching packages/ui, which
     // matters because editing a shared package makes the deploy path filter rebuild
     // and redeploy all four apps.
-    optimizePackageImports: ['@neram/ui', '@mui/material', '@mui/icons-material'],
+    //
+    // `@neram/auth` for the same reason: its barrel also re-exports ./firebase and
+    // the server-only ./graph, so importing the Microsoft helpers put the Firebase
+    // Auth SDK in the root layout of every page, though Nexus never uses Firebase
+    // (perf audit PERF-0053).
+    optimizePackageImports: ['@neram/ui', '@neram/auth', '@mui/material', '@mui/icons-material'],
   },
   async redirects() {
     return [

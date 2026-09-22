@@ -18,6 +18,7 @@ import { getQuestionOrigin } from '@/lib/test-import-store';
 import { describeError } from '@/lib/api-errors';
 import { canActivateQuestion, statusAfterAnswerSave } from '@/lib/qb-activation';
 import { applyDrawingPartsToWrite } from '@/lib/drawing-parts';
+import { storedSolutionVideo } from '@/lib/solution-video';
 
 /** Only the activation fields this request actually sends, so absent ones do not blank the stored values. */
 function pickActivationFields(body: Record<string, unknown>) {
@@ -99,6 +100,14 @@ export async function PATCH(
     // semantics is correct here: the edit form shows the full tag set.
     const tagIds: string[] | null = Array.isArray(body.tag_ids) ? body.tag_ids : null;
     delete body.tag_ids;
+
+    // One stored shape for a solution link whichever editor sent it: YouTube
+    // canonical, blank as NULL (never '', which the paper's solutions count
+    // reads as solved). An unrecognised link is kept as sent, so no legacy
+    // save starts failing. See lib/solution-video.ts.
+    if ('solution_video_url' in body) {
+      body.solution_video_url = storedSolutionVideo(body.solution_video_url);
+    }
 
     // Parts rebuild question_text, marks and the question-level solution from
     // one place, so no editor can store a text that disagrees with its parts.

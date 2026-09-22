@@ -17,8 +17,8 @@ export default function StudentQuestionBankRedirectPage() {
   const { activeClassroom, loading } = useNexusAuthContext();
   const { qbExams } = useStudentZoneContext();
 
-  // With no classroom the access check never runs, so there is nothing to wait
-  // for: the exam page itself explains "No classroom yet".
+  // With no classroom there is nothing to wait for: the exam page itself
+  // explains "No classroom yet".
   const noClassroom = !loading && !activeClassroom;
   const available = noClassroom ? FIRST_EXAM_ONLY : qbExams;
 

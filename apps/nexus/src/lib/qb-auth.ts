@@ -1,22 +1,30 @@
 /**
  * Shared helper for verifying Question Bank access in API routes.
  *
- * Staff get access from their tier. Students must be enrolled in the classroom
- * AND the classroom must have QB switched on.
+ * Staff get access from their tier. Students must be enrolled in the classroom.
  *
  * That student check is the point of this module, and it was previously NOT
  * performed: the function documented it, imported the two helpers needed for it,
  * then returned `ok: true` for every authenticated caller regardless of
  * enrolment. Any signed-in user could read the whole Question Bank.
+ *
+ * ONE SWITCH
+ *
+ * Whether students see the Question Bank at all is the `student.question-bank`
+ * flag on the Features screen, enforced in the nav and by FeatureGate like every
+ * other student feature. There used to be a second, per-classroom switch
+ * (the QB classroom links table) checked here. It sat beside the title of one exam's
+ * page, Features could not see it, and on 2026-09-21 it was found closed for the
+ * only live classroom: the bank was missing from 42 students' sidebars and their
+ * Tests page was refused, all while Features read On. The Tests routes share
+ * these verifiers, which is how a Question Bank switch took Tests down with it.
+ * Do not bring a second switch back; `qb-single-switch-guard.test.ts` fails if
+ * anything reads that table again.
  */
 
 import { NextResponse } from 'next/server';
 import { getRequestUser } from './study-materials';
-import {
-  getSupabaseAdminClient,
-  getUserRoleInClassroom,
-  isQBEnabledForClassroom,
-} from '@neram/database';
+import { getSupabaseAdminClient, getUserRoleInClassroom } from '@neram/database';
 import { resolveStaffRole } from './staff-capabilities';
 
 export interface QBCaller {
@@ -101,10 +109,9 @@ export async function verifyQBStaff(authHeader: string | null): Promise<QBAccess
  * the global tag registry, a student's own folder tree, a student's own paper.
  *
  * Staff pass exactly as they do in verifyQBAccess. A student passes when they
- * hold at least one active enrolment in a classroom with the Question Bank
- * switched on, which is the real question for these resources. Asking them for
- * a classroom_id they have no way to supply is what produced the developer
- * message a student ended up reading on screen.
+ * hold at least one active enrolment, which is the real question for these
+ * resources. Asking them for a classroom_id they have no way to supply is what
+ * produced the developer message a student ended up reading on screen.
  */
 export async function verifyQBAccessAnyClassroom(
   authHeader: string | null,
@@ -115,34 +122,24 @@ export async function verifyQBAccessAnyClassroom(
 
   if (isStaff) return { ok: true, caller };
 
-  const refused = NextResponse.json(
-    { error: 'The Question Bank is not open for your classroom yet.' },
-    { status: 403 },
-  );
-
   const supabase = getSupabaseAdminClient() as any;
   const { data: enrolments } = await supabase
     .from('nexus_enrollments')
     .select('classroom_id')
     .eq('user_id', caller.id)
     .eq('role', 'student')
-    .eq('is_active', true);
-
-  const classroomIds = [
-    ...new Set(((enrolments || []) as { classroom_id: string }[]).map((e) => e.classroom_id)),
-  ].filter(Boolean);
-  if (classroomIds.length === 0) return { ok: false, response: refused };
-
-  // One query for the whole set rather than isQBEnabledForClassroom per row: a
-  // student on several term cohorts would otherwise cost a round trip each.
-  const { data: links } = await supabase
-    .from('nexus_qb_classroom_links')
-    .select('classroom_id, is_active')
-    .in('classroom_id', classroomIds)
     .eq('is_active', true)
     .limit(1);
 
-  if (!links || links.length === 0) return { ok: false, response: refused };
+  if (!enrolments || enrolments.length === 0) {
+    return {
+      ok: false,
+      response: NextResponse.json(
+        { error: 'You need to be in a classroom to use the Question Bank.' },
+        { status: 403 },
+      ),
+    };
+  }
 
   return { ok: true, caller };
 }
@@ -151,8 +148,7 @@ export async function verifyQBAccessAnyClassroom(
  * Verify that the caller has access to the Question Bank for the given classroom.
  *
  * - Staff (admin/manager/teacher): always allowed, no enrollment check.
- * - Students: must be enrolled in the classroom AND the classroom must have QB
- *   enabled.
+ * - Students: must be enrolled in the classroom.
  * - A student request with no classroomId is a 400: without a classroom there is
  *   nothing to authorise against, and defaulting to "allow" is what caused the
  *   original hole.
@@ -186,32 +182,13 @@ export async function verifyQBAccess(
     };
   }
 
-  // "Are you in this classroom" and "is the bank open for it" are independent
-  // questions, and were asked one after the other on every request. Every QB
-  // screen fires several endpoints at once, so that second serial hop was being
-  // paid several times over per page. The order of the checks below is
-  // unchanged: enrolment still answers before the feature gate, so a student in
-  // no classroom keeps getting 'not enrolled' rather than 'not open yet'.
-  const [role, qbEnabled] = await Promise.all([
-    getUserRoleInClassroom(caller.id, classroomId).catch(() => null),
-    isQBEnabledForClassroom(classroomId).catch(() => false),
-  ]);
+  const role = await getUserRoleInClassroom(caller.id, classroomId).catch(() => null);
 
   if (!role) {
     return {
       ok: false,
       response: NextResponse.json(
         { error: 'You are not enrolled in this classroom.' },
-        { status: 403 },
-      ),
-    };
-  }
-
-  if (!qbEnabled) {
-    return {
-      ok: false,
-      response: NextResponse.json(
-        { error: 'The Question Bank is not open for your classroom yet.' },
         { status: 403 },
       ),
     };

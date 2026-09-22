@@ -10,6 +10,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
+import { errorResponse } from '@/lib/api-errors';
 import {
   getSupabaseAdminClient,
   registerDevice,
@@ -36,6 +37,11 @@ export async function POST(req: NextRequest) {
 
     // Verify Microsoft token and get user
     const msUser = await verifyMsToken(authHeader);
+    // View as Student resolves as the student. Registering here would give the
+    // teacher's computer the student's device slot (PERF-0035).
+    if (msUser.impersonatorUserId) {
+      return NextResponse.json({ device: null });
+    }
     const supabase = getSupabaseAdminClient();
 
     const { data: user } = await (supabase
@@ -74,11 +80,9 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({ device });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Device register error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Internal server error' },
-      { status: error.message?.includes('Authorization') ? 401 : 500 }
-    );
+    // 401 only for a refused session: a Microsoft or database outage answers 503.
+    return errorResponse(error, 'Internal server error');
   }
 }

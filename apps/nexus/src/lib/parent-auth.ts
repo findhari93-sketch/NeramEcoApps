@@ -15,7 +15,7 @@
 
 import { getSupabaseAdminClient, getCurrentBatch } from '@neram/database';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { ApiError } from '@/lib/api-errors';
+import { ApiError, describeError } from '@/lib/api-errors';
 
 export interface ParentUser {
   id: string;
@@ -65,7 +65,7 @@ export async function getParentUser(
   }
 
   const supabase = getSupabaseAdminClient();
-  const { data: cred } = await supabase
+  const { data: cred, error: credError } = await supabase
     .from('nexus_parent_credentials')
     // Single literal: a concatenated select string widens to `string` and
     // collapses PostgREST's compile-time row inference.
@@ -74,6 +74,13 @@ export async function getParentUser(
     )
     .eq('parent_user_id', msUser.parentUserId)
     .maybeSingle();
+
+  // A failed read is not a missing row: without this a database blip told the
+  // parent their access had been revoked (PERF-0014).
+  if (credError) {
+    console.error(`[parent-auth] credential read failed: ${describeError(credError)}`);
+    throw new ApiError('Could not verify the session. Try again.', 503);
+  }
 
   if (!cred || cred.is_active !== true) {
     throw new ApiError('Parent access has been revoked', 401);

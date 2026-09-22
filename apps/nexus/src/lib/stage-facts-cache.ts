@@ -1,6 +1,7 @@
 'use client';
 
-import { mutate } from 'swr';
+import { useCallback } from 'react';
+import { useSWRConfig } from 'swr';
 
 /**
  * The SWR key of the session-wide student lookup (StudentStageFactsProvider).
@@ -19,7 +20,11 @@ export const STAGE_FACTS_KEY = '/api/students/stage-facts';
  * as Hindi would keep a bare corner on every other screen for up to an hour.
  * The one-argument form refetches underneath the data already on screen rather
  * than blanking it first.
+ *
+ * A hook because only useSWRConfig().mutate reaches the app's own cache (see
+ * useRevalidateClass in lib/nexus-swr.ts); the `mutate` exported by 'swr' does not.
  */
-export function refreshStudentStageFacts(): Promise<unknown> {
-  return mutate(STAGE_FACTS_KEY);
+export function useRefreshStudentStageFacts(): () => Promise<unknown> {
+  const { mutate } = useSWRConfig();
+  return useCallback(() => mutate(STAGE_FACTS_KEY), [mutate]);
 }

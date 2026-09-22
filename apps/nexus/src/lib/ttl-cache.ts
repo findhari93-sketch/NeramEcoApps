@@ -47,12 +47,13 @@ export class TtlCache<T> {
     return hit.value;
   }
 
-  set(key: string, value: T): void {
+  /** @param ttlMs this entry's own lifetime, for a value that must expire sooner. */
+  set(key: string, value: T, ttlMs: number = this.ttlMs): void {
     // Re-inserting has to delete first: Map keeps insertion order, and the eviction
     // below relies on that order being "oldest first". Without the delete, an
     // overwritten key would keep its original position and be evicted early.
     this.entries.delete(key);
-    this.entries.set(key, { value, expiresAt: Date.now() + this.ttlMs });
+    this.entries.set(key, { value, expiresAt: Date.now() + ttlMs });
 
     while (this.entries.size > this.maxEntries) {
       const oldest = this.entries.keys().next();

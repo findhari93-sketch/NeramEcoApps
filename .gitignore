@@ -103,3 +103,8 @@ apps/app/Docs/compass_artifact_*.md
 # One-off API response captures from debugging sessions. _tmp/auth.json once
 # published a live Supabase refresh token on this public repo.
 _tmp/
+
+# Performance audit ledger scratch state (the ledger itself IS tracked).
+docs/audits/perf/**/.ledger.lock
+docs/audits/perf/**/.snapshot.json
+docs/audits/perf/**/*.tmp

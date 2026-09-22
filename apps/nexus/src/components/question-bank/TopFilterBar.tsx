@@ -18,6 +18,7 @@ import SelectAllIcon from '@mui/icons-material/SelectAll';
 import TranslateIcon from '@mui/icons-material/Translate';
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
 import CancelIcon from '@mui/icons-material/Cancel';
+import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import type { QBFilterState, QBExamType } from '@neram/database';
 import { QB_EXAM_TYPE_LABELS } from '@neram/database';
 import { getFilterChips, removeFilterValue, type ActiveChip } from './FilterChips';
@@ -240,6 +241,45 @@ export default function TopFilterBar({
               />
             );
           })}
+
+        {/* Video solutions: a one-tap lens rather than a drawer setting, and
+            shown on a year paper too, where the quick chips above are hidden
+            but where students actually practise. */}
+        {(() => {
+          const videoOn = filters.solution_filter === 'has_video';
+          return (
+            <Chip
+              icon={<PlayCircleOutlineIcon aria-hidden sx={{ fontSize: 16 }} />}
+              label="Video solutions"
+              size="small"
+              variant={videoOn ? 'filled' : 'outlined'}
+              onClick={() =>
+                onFilterChange({ ...filters, solution_filter: videoOn ? undefined : 'has_video' })
+              }
+              aria-pressed={videoOn}
+              sx={{
+                flexShrink: 0,
+                height: { xs: 26, sm: 30, md: 32 },
+                fontSize: { xs: '0.675rem', sm: '0.75rem' },
+                fontWeight: 600,
+                borderRadius: '13px',
+                cursor: 'pointer',
+                // A 44px tap area around a chip that stays the row's size.
+                position: 'relative',
+                overflow: 'visible',
+                '&::after': { content: '""', position: 'absolute', left: 0, right: 0, top: '50%', height: 44, transform: 'translateY(-50%)' },
+                '& .MuiChip-icon': { color: 'inherit' },
+                ...(videoOn
+                  ? { bgcolor: PURPLE_ACCENT, color: '#fff', '&:hover': { bgcolor: '#651fff' } }
+                  : {
+                      borderColor: 'grey.300',
+                      color: 'text.secondary',
+                      '&:hover': { borderColor: PURPLE_ACCENT, color: PURPLE_ACCENT },
+                    }),
+              }}
+            />
+          );
+        })()}
 
         {/* Filters button with badge */}
         <Badge

@@ -15,6 +15,7 @@
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import { effectiveAttemptScore } from './exam-score';
 import { gradeQBAnswerStrict } from './question-bank';
+import type { NexusSolutionVideo } from '../../types';
 import {
   compareSittingAttempts,
   loadRunSittings,
@@ -935,6 +936,8 @@ export interface NexusAttemptReviewItem {
   is_gradable: boolean;
   explanation: string | null;
   explanation_detailed: string | null;
+  /** Watchable solutions, behind the same gate as the explanation. */
+  solution_videos: NexusSolutionVideo[];
 }
 
 /** One sitting, fully replayed. */
@@ -1090,6 +1093,7 @@ export async function getStudentTestAttemptReview(
           is_gradable: r.is_gradable,
           explanation: q?.explanation_brief ?? null,
           explanation_detailed: q?.explanation_detailed ?? null,
+          solution_videos: q?.solution_videos ?? [],
         };
       }),
     };

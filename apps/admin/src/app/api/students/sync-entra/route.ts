@@ -1,26 +1,72 @@
-// @ts-nocheck
 export const dynamic = 'force-dynamic';
+// This route pages the whole Entra tenant and then reconciles the unmatched
+// accounts against existing rows. Both halves are bounded below, but the Vercel
+// default duration is far too short for even one tenant page plus its DB work,
+// and this route previously declared no ceiling at all.
+export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient, getDefaultClassroom, reconcileMsIdentity } from '@neram/database';
 import { getAppOnlyToken, addStudentToClassroomTeams, getUserProfile } from '@neram/auth';
+import { mapWithConcurrency, deadline } from '@/lib/concurrency';
+
+/** Per-page abort. Kept well under PAGE_BUDGET_MS so one slow page cannot eat it all. */
+const PAGE_TIMEOUT_MS = 15_000;
+/**
+ * Wall-clock budget for Graph pagination, leaving the rest of maxDuration for
+ * the DB queries and the suggestion pass below. Spending it stops paging and
+ * marks the result truncated, which the dialog shows, instead of letting the
+ * function be killed mid-page and return nothing.
+ */
+const PAGE_BUDGET_MS = 25_000;
+/** Hard ceiling on pages (100 users each), so a looping @odata.nextLink cannot spin forever. */
+const MAX_PAGES = 50;
+
+/** Accounts the reconciler will preview a suggested match for, per request. */
+const SUGGEST_CAP = 100;
+/** Each suggestion is a DB round trip. Sequentially this was the bulk of the wall time. */
+const SUGGEST_CONCURRENCY = 8;
+/** Budget for the suggestion pass, measured on its own. */
+const SUGGEST_BUDGET_MS = 20_000;
+
+/**
+ * Why the STUDENT LIST is incomplete. Deliberately separate from the suggestion
+ * caps below: a capped suggestion pass still returns every student, it just
+ * leaves some without a proposed match. Folding both into one flag would tell
+ * staff that students were missing when they were not.
+ */
+type TruncatedReason = 'page_budget' | 'page_cap';
 
 /**
  * GET /api/students/sync-entra — Pull all student accounts from Azure AD,
  * compare with DB, and return who's missing from Nexus.
+ *
+ * Bounded on both axes. A partial answer that says so beats a 504: staff can
+ * enroll the students it did find and run it again for the rest.
  */
 export async function GET() {
   try {
     const token = await getAppOnlyToken();
     const supabase = getSupabaseAdminClient() as any;
+    const truncatedReasons = new Set<TruncatedReason>();
 
-    // 1. Fetch all users from Azure AD (paginated, with 30s timeout per page)
+    // 1. Fetch users from Azure AD, paginated, under a page cap and a wall-clock budget.
     let allAdUsers: any[] = [];
     let nextLink = 'https://graph.microsoft.com/v1.0/users?$select=id,displayName,userPrincipalName,mail,otherMails,mobilePhone,accountEnabled,assignedLicenses&$top=100';
+    let pagesFetched = 0;
+    const pageClock = deadline(PAGE_BUDGET_MS);
 
     while (nextLink) {
+      if (pagesFetched >= MAX_PAGES) {
+        truncatedReasons.add('page_cap');
+        break;
+      }
+      if (pagesFetched > 0 && pageClock.expired()) {
+        truncatedReasons.add('page_budget');
+        break;
+      }
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30_000);
+      const timeoutId = setTimeout(() => controller.abort(), PAGE_TIMEOUT_MS);
       try {
         const res = await fetch(nextLink, {
           headers: { Authorization: `Bearer ${token}` },
@@ -33,6 +79,7 @@ export async function GET() {
         const data = await res.json();
         allAdUsers = allAdUsers.concat(data.value || []);
         nextLink = data['@odata.nextLink'] || null;
+        pagesFetched++;
       } finally {
         clearTimeout(timeoutId);
       }
@@ -95,8 +142,11 @@ export async function GET() {
 
     const profileUserIds = new Set((profiles || []).map((p: any) => p.user_id));
 
-    // Build the response
-    const oidToUserId = new Map((existingUsers || []).map((u: any) => [u.ms_oid, u.id]));
+    // Build the response. The tuple is annotated because an inferred any[][] makes
+    // Map<unknown, unknown>, and the lookup below then loses its key type.
+    const oidToUserId = new Map<string, string>(
+      (existingUsers || []).map((u: any) => [u.ms_oid, u.id] as [string, string])
+    );
 
     const students = studentAccounts.map((adUser: any) => {
       const dbUserId = oidToUserId.get(adUser.id);
@@ -119,10 +169,21 @@ export async function GET() {
     // existing Google row instead of creating a duplicate @neramclasses.com shell.
     // Bounded so a large unmatched set can't blow up the request.
     const adById = new Map(studentAccounts.map((u: any) => [u.id, u]));
-    const SUGGEST_CAP = 100;
-    let suggested = 0;
-    for (const s of students) {
-      if (s.inDatabase || suggested >= SUGGEST_CAP) continue;
+    const unlinked = students.filter((s: any) => !s.inDatabase);
+    const toSuggest = unlinked.slice(0, SUGGEST_CAP);
+    // Each suggestion is a DB round trip, and run one at a time this loop was
+    // where nearly all of the request's wall time went. Bounded concurrency
+    // keeps the Supabase connection use sane while cutting it by roughly the
+    // concurrency factor. The clock is checked per item, so a slow database
+    // degrades the suggestions rather than the whole response.
+    const suggestClock = deadline(SUGGEST_BUDGET_MS);
+    let suggestionsSkipped = unlinked.length - toSuggest.length;
+
+    await mapWithConcurrency(toSuggest, SUGGEST_CONCURRENCY, async (s: any) => {
+      if (suggestClock.expired()) {
+        suggestionsSkipped++;
+        return;
+      }
       const ad: any = adById.get(s.msOid);
       const phoneHints = ad ? [ad.mobilePhone, ...(ad.businessPhones || [])] : [];
       const emailHints = ad ? (ad.otherMails || []) : [];
@@ -133,7 +194,6 @@ export async function GET() {
         emailHints,
         dryRun: true,
       }).catch(() => null);
-      suggested++;
       if (match && match.user) {
         s.suggestedMatch = {
           id: match.user.id,
@@ -143,7 +203,7 @@ export async function GET() {
           matchedBy: match.action.replace('linked_by_', ''),
         };
       }
-    }
+    });
 
     // Link candidates: every active person who holds NO Microsoft account yet. That
     // is the only pool an Entra account may legitimately attach to, and it is small,
@@ -184,14 +244,26 @@ export async function GET() {
       return (a.name || '').localeCompare(b.name || '');
     });
 
+    const truncated = truncatedReasons.size > 0;
+
     return NextResponse.json({
       success: true,
       students,
       linkCandidates,
+      // The list is partial when Graph pagination stopped early. Surfaced so the
+      // dialog can say so: without it, a truncated run is indistinguishable from
+      // a tenant that genuinely has fewer students, and staff would "finish"
+      // enrolling a batch that was never fully fetched.
+      truncated,
+      truncatedReasons: Array.from(truncatedReasons),
+      // Unlinked accounts we did not compute a suggested match for. The student
+      // is still listed and still enrollable, just without a proposed link.
+      suggestionsSkipped,
       summary: {
         totalInEntra: students.length,
         alreadyInNexus: students.filter((s: any) => !s.needsSetup).length,
         needsSetup: students.filter((s: any) => s.needsSetup).length,
+        pagesFetched,
       },
     });
   } catch (error: any) {

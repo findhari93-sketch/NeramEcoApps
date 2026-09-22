@@ -91,6 +91,17 @@ describe('TtlCache', () => {
     expect(cache.get('a')).toBeUndefined();
   });
 
+  it('lets one entry live for less than the default', () => {
+    const cache = new TtlCache<string>(60_000);
+    cache.set('short', 'value', 1_000);
+    cache.set('default', 'value');
+
+    vi.advanceTimersByTime(1_000);
+
+    expect(cache.get('short')).toBeUndefined();
+    expect(cache.get('default')).toBe('value');
+  });
+
   it('empties on clear', () => {
     const cache = new TtlCache<string>(60_000);
     cache.set('a', '1');

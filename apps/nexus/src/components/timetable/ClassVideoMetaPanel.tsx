@@ -64,7 +64,7 @@ import {
 } from '@/lib/youtube-metadata';
 import type { ClassVideoChapter } from '@neram/database/types';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import { useNexusSWR, revalidateClass } from '@/lib/nexus-swr';
+import { useNexusSWR, useRevalidateClass } from '@/lib/nexus-swr';
 import { RADIUS } from './timetable-theme';
 
 interface RegistryTag extends AllowedTag {
@@ -261,6 +261,7 @@ export default function ClassVideoMetaPanel({ classId, getToken, onNotify, onSav
     classId ? `/api/timetable/${classId}/video-meta` : null,
     getToken,
   );
+  const revalidateClass = useRevalidateClass();
 
   const registry = useMemo(() => data?.registry ?? [], [data]);
 

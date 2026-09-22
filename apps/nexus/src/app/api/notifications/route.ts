@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
+import { httpStatusForError } from '@/lib/api-errors';
 import {
   getSupabaseAdminClient,
   getUserUnreadNotificationCount,
@@ -19,12 +20,17 @@ export async function GET(request: NextRequest) {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
     const supabase = getSupabaseAdminClient() as any;
 
-    const { data: user } = await supabase
+    const { data: user, error: userError } = await supabase
       .from('users')
       .select('id')
       .eq('ms_oid', msUser.oid)
       .single();
 
+    // Only PGRST116 (no row) is "not found". A failed lookup leaves `data` null too,
+    // and answering 404 for it hid timeouts behind a "User not found".
+    if (userError && userError.code !== 'PGRST116') {
+      throw new Error(`users lookup failed: ${userError.code ?? ''} ${userError.message}`);
+    }
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
     }
@@ -49,9 +55,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(data);
   } catch (err: any) {
     console.error('Notifications GET error:', err);
+    // 401 for a missing or rejected token, so the poller can tell "signed out"
+    // from "server trouble"; everything else stays a 500.
     return NextResponse.json(
       { error: 'Failed to fetch notifications' },
-      { status: 500 }
+      { status: httpStatusForError(err) }
     );
   }
 }

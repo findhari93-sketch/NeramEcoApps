@@ -12,7 +12,14 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { QB_LIST_COLUMNS, stripDrawingPartSolutions, stripOptionAnswers } from './question-bank';
+import {
+  QB_LIST_COLUMNS,
+  solutionVideosOf,
+  stripDrawingPartSolutions,
+  stripOptionAnswers,
+  stripStudentListSolutions,
+  studentSolutionFilter,
+} from './question-bank';
 import { sectionProgress } from './qb-papers';
 import { QB_SECTION_ORDER, type NexusQBPaperSectionRow } from '../../types';
 
@@ -112,6 +119,102 @@ describe('stripDrawingPartSolutions', () => {
 
   it('ships drawing_parts in the list columns, where it is stripped', () => {
     expect(QB_LIST_COLUMNS.split(',').map((c) => c.trim())).toContain('drawing_parts');
+  });
+});
+
+describe('solutionVideosOf', () => {
+  it('returns the question video for an ordinary question', () => {
+    expect(solutionVideosOf({ solution_video_url: 'https://youtu.be/xrKukhHIt0A' })).toEqual([
+      { label: null, url: 'https://youtu.be/xrKukhHIt0A' },
+    ]);
+  });
+
+  it('returns nothing for a blank or missing video', () => {
+    expect(solutionVideosOf({ solution_video_url: null })).toEqual([]);
+    expect(solutionVideosOf({ solution_video_url: '   ' })).toEqual([]);
+    expect(solutionVideosOf({})).toEqual([]);
+  });
+
+  it('lists a split drawing per part, not the mirrored question column as well', () => {
+    // The question column is a copy of part A's video (mirroredPartSolution),
+    // so counting both would list the same video twice.
+    const videos = solutionVideosOf({
+      solution_video_url: 'https://v/a',
+      drawing_parts: {
+        mode: 'any_one',
+        items: [
+          { id: 'a', label: 'A', text: 'x', solution_video_url: 'https://v/a' },
+          { id: 'b', label: 'B', text: 'y', solution_video_url: '' },
+          { id: 'c', label: 'C', text: 'z', solution_video_url: 'https://v/c' },
+        ],
+      },
+    });
+    expect(videos).toEqual([
+      { label: 'A', url: 'https://v/a' },
+      { label: 'C', url: 'https://v/c' },
+    ]);
+  });
+
+  it('ignores a parts value that is not a parts object', () => {
+    expect(solutionVideosOf({ solution_video_url: 'https://v/q', drawing_parts: { mode: 'all' } })).toEqual([
+      { label: null, url: 'https://v/q' },
+    ]);
+  });
+});
+
+describe('stripStudentListSolutions', () => {
+  const row = {
+    id: 'q1',
+    question_text: 'Find x',
+    solution_video_url: 'https://youtu.be/xrKukhHIt0A',
+    options: [{ id: 'a', text: '1', is_correct: true }],
+    drawing_parts: null,
+  };
+
+  it('says a video exists without shipping its link', () => {
+    const item = stripStudentListSolutions(row);
+    expect(item.has_solution_video).toBe(true);
+    expect('solution_video_url' in item).toBe(false);
+    expect(JSON.stringify(item)).not.toContain('youtu');
+  });
+
+  it('flags a drawing whose only video is on a part', () => {
+    const item = stripStudentListSolutions({
+      id: 'q2',
+      solution_video_url: null,
+      options: null,
+      drawing_parts: {
+        mode: 'all',
+        items: [
+          { id: 'a', label: 'A', text: 'x', solution_video_url: 'https://v/a' },
+          { id: 'b', label: 'B', text: 'y' },
+        ],
+      },
+    });
+    expect(item.has_solution_video).toBe(true);
+    expect(JSON.stringify(item)).not.toContain('https://');
+  });
+
+  it('still strips the answer key and part solutions', () => {
+    const item = stripStudentListSolutions(row);
+    expect((item.options as Record<string, unknown>[])[0]).not.toHaveProperty('is_correct');
+  });
+
+  it('reports no video honestly', () => {
+    expect(stripStudentListSolutions({ ...row, solution_video_url: null }).has_solution_video).toBe(false);
+  });
+
+  it('lets a student narrow to questions with a video, and to nothing else', () => {
+    expect(studentSolutionFilter('has_video')).toBe('has_video');
+    // "Has an explanation" or "no solution" is a teacher's work queue, not a
+    // practice lens, so a hand-edited student URL cannot reach it.
+    expect(studentSolutionFilter('has_explanation')).toBeUndefined();
+    expect(studentSolutionFilter('no_solution')).toBeUndefined();
+    expect(studentSolutionFilter(undefined)).toBeUndefined();
+  });
+
+  it('selects solution_video_url in the list columns, where it is reduced to a flag', () => {
+    expect(QB_LIST_COLUMNS.split(',').map((c) => c.trim())).toContain('solution_video_url');
   });
 });
 

@@ -9,6 +9,7 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from './types';
+import { deadlineFetch } from './fetch-deadline';
 
 // ============================================
 // ENVIRONMENT VARIABLES
@@ -91,10 +92,9 @@ export function getSupabaseAdminClient(): TypedSupabaseClient {
         autoRefreshToken: false,
       },
       global: {
-        fetch: (url, options = {}) => {
-          // Bypass Next.js fetch cache — ensures fresh data on every query
-          return fetch(url, { ...options, cache: 'no-store' as RequestCache });
-        },
+        // Never cached, and PostgREST/auth calls fail after 20s instead of hanging
+        // until the platform cuts the request. See fetch-deadline.ts.
+        fetch: deadlineFetch,
       },
     });
   }

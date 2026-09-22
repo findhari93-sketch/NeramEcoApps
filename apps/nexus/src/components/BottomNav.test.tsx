@@ -126,6 +126,26 @@ describe('BottomNav More sheet', () => {
     expect(screen.getByText('Assessment')).toBeTruthy();
   });
 
+  it('renders the tabs as real links, so they prefetch and open in a new tab (PERF-0029)', () => {
+    render(<BottomNav items={ITEMS} overflowGroups={GROUPS} />);
+    expect(screen.getByRole('link', { name: 'Classrooms' }).getAttribute('href')).toBe('/teacher/classrooms');
+    expect(screen.getByRole('link', { name: 'Students' }).getAttribute('href')).toBe('/teacher/students');
+    // More opens a sheet; it is not a page.
+    expect(screen.queryByRole('link', { name: 'More' })).toBeNull();
+  });
+
+  it('navigates from a tab tap', () => {
+    render(<BottomNav items={ITEMS} overflowGroups={GROUPS} />);
+    fireEvent.click(screen.getByRole('link', { name: 'Students' }));
+    expect(push).toHaveBeenCalledWith('/teacher/students');
+  });
+
+  it('renders the sheet rows as real links too', () => {
+    render(<BottomNav items={ITEMS} overflowGroups={GROUPS} />);
+    openSheet();
+    expect(screen.getByText('Catch-up').closest('a')?.getAttribute('href')).toBe('/teacher/catch-up');
+  });
+
   it('marks More as the active tab when the open page lives inside the sheet', () => {
     pathname = '/teacher/catch-up';
     render(<BottomNav items={ITEMS} overflowGroups={GROUPS} />);

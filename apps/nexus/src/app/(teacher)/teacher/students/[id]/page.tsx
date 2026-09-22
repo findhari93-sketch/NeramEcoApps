@@ -57,7 +57,7 @@ import FeeSection from '@/components/students/profile/FeeSection';
 import TimelineSection from '@/components/students/profile/TimelineSection';
 import { formatCurrencyINR } from '@/lib/student-profile-fields';
 import { describeClassificationChange } from '@/lib/student-stage';
-import { refreshStudentStageFacts } from '@/lib/stage-facts-cache';
+import { useRefreshStudentStageFacts } from '@/lib/stage-facts-cache';
 import type {
   ProfileTimelineEvent,
   StudentFinancePayload,
@@ -71,6 +71,7 @@ export default function StudentProfilePage() {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
   const { activeClassroom, getToken, can } = useNexusAuthContext();
+  const refreshStudentStageFacts = useRefreshStudentStageFacts();
 
   const studentId = params.id as string;
 

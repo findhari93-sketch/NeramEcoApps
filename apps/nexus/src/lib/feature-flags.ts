@@ -107,6 +107,15 @@ export const FEATURES: FeatureDef[] = [
    * for the students who still have progress in it.
    */
   { id: 'student.foundation', label: 'Foundation (old module)', surface: 'student', group: 'Learn', paths: ['/student/foundation', '/student/modules'], defaultEnabled: false },
+  /**
+   * The ONE switch for the student Question Bank. Which exams it lists follows
+   * from which have a published paper.
+   *
+   * A second, per-classroom switch used to sit in front of this one, set from
+   * the teacher exam page and the classroom page. Retired on 2026-09-21: this
+   * row read On while that switch, left closed, hid the bank from every student
+   * in the live classroom and refused their Tests page too. See lib/qb-auth.ts.
+   */
   { id: 'student.question-bank', label: 'Question Bank', surface: 'student', group: 'Learn', paths: ['/student/question-bank'], defaultEnabled: false },
   { id: 'student.checklist', label: 'Checklist', surface: 'student', group: 'Learn', paths: ['/student/checklist'], defaultEnabled: false },
   { id: 'student.leaderboard', label: 'Leaderboard', surface: 'student', group: 'Learn', paths: ['/student/leaderboard'], defaultEnabled: false },

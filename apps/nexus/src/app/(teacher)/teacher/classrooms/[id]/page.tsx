@@ -130,8 +130,6 @@ export default function ClassroomDetailPage() {
   const [addStudentOpen, setAddStudentOpen] = useState(false);
   const [addTeacherOpen, setAddTeacherOpen] = useState(false);
   const [teacherEnrollments, setTeacherEnrollments] = useState<Enrollment[]>([]);
-  const [qbEnabled, setQbEnabled] = useState<boolean | null>(null);
-  const [qbToggling, setQbToggling] = useState(false);
 
 
   // Student selection & removal state
@@ -217,43 +215,6 @@ export default function ClassroomDetailPage() {
       console.error('Failed to load teacher enrollments:', err);
     }
   }, [id, getToken]);
-
-  const fetchQBStatus = useCallback(async () => {
-    try {
-      const token = await getToken();
-      if (!token) return;
-      const res = await fetch(`/api/question-bank/classroom-link?classroom_id=${id}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        const json = await res.json();
-        setQbEnabled(json.data?.enabled === true);
-      }
-    } catch (err) {
-      console.error('Failed to fetch QB status:', err);
-    }
-  }, [id, getToken]);
-
-  const handleQBToggle = async () => {
-    setQbToggling(true);
-    try {
-      const token = await getToken();
-      if (!token) return;
-      const newEnabled = !qbEnabled;
-      const res = await fetch('/api/question-bank/classroom-link', {
-        method: newEnabled ? 'POST' : 'DELETE',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ classroom_id: id }),
-      });
-      if (res.ok) {
-        setQbEnabled(newEnabled);
-      }
-    } catch (err) {
-      console.error('Failed to toggle QB:', err);
-    } finally {
-      setQbToggling(false);
-    }
-  };
 
   // Teams: Sync members
   const handleTeamsSync = async () => {
@@ -519,8 +480,7 @@ export default function ClassroomDetailPage() {
 
   useEffect(() => {
     fetchClassroom();
-    fetchQBStatus();
-  }, [fetchClassroom, fetchQBStatus]);
+  }, [fetchClassroom]);
 
   useEffect(() => {
     if (tab === 2) fetchTeacherEnrollments();
@@ -759,19 +719,6 @@ export default function ClassroomDetailPage() {
                   size="small"
                   color={classroom.is_active ? 'success' : 'default'}
                 />
-              </Box>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography variant="body2" color="text.secondary">Question Bank</Typography>
-                {qbToggling ? (
-                  <CircularProgress size={20} />
-                ) : (
-                  <Switch
-                    checked={qbEnabled === true}
-                    onChange={handleQBToggle}
-                    disabled={qbEnabled === null || readOnly}
-                    size="small"
-                  />
-                )}
               </Box>
             </Box>
           </Paper>

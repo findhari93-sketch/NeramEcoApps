@@ -67,8 +67,8 @@ Transforms static PDF question papers into a richly tagged, filterable, trackabl
 
 | Role | Can Do |
 |------|--------|
-| **Teacher/Admin** | Create, edit, delete questions. Enable/disable QB per classroom. View all question stats. |
-| **Student** | Practice questions (submit answers), study questions (read solutions), track progress. Save filter presets. Only if enrolled in a QB-enabled classroom. |
+| **Teacher/Admin** | Create, edit, delete questions. Publish papers to students. View all question stats. Admins switch the student Question Bank on or off in Features. |
+| **Student** | Practice questions (submit answers), study questions (read solutions), track progress. Save filter presets. Needs the Question Bank switched on in Features and an active classroom enrolment. |
 
 ### Student Screens
 
@@ -136,51 +136,34 @@ NATA does not release official question papers. The only way to build a question
 
 ---
 
-## 4. Classroom-Scoped Access Control
+## 4. Access Control: one switch
 
 ### How It Works
 
-QB is NOT a global feature — it's gated per classroom. A teacher must explicitly enable QB for their classroom before students in that classroom can see or access it.
+The student Question Bank has ONE switch: `student.question-bank` on `/teacher/admin/features`. When it is on, every enrolled student sees it. Which exams the folder lists follows from publishing: an exam appears once it has a published paper (JEE Paper 2 is always listed).
 
-### Access Flow
-
-```
-Teacher enables QB for Classroom X
-  → nexus_qb_classroom_links row created (classroom_id, is_active=true)
-  → Students enrolled in Classroom X now see "Question Bank" in their sidebar
-  → Students NOT in Classroom X (or in classrooms without QB) don't see it at all
-```
+Until 2026-09-21 there was a second, per-classroom switch (`nexus_qb_classroom_links`), set from the teacher exam page and the classroom detail page. Features could not see it. Left closed for the only live classroom, it hid the bank from 42 students and refused their Tests page (the Tests routes share `verifyQBAccess`) while Features read On. It was retired, and `src/lib/qb-single-switch-guard.test.ts` fails if anything reads it again. The table and its helpers in `packages/database` remain only because editing `packages/` redeploys all four apps.
 
 ### Implementation Layers
 
-**Layer 1: Client-side nav visibility** (`useQBAccess` hook)
-- File: `apps/nexus/src/hooks/useQBAccess.ts`
-- Checks if QB is enabled for the student's active classroom
-- Filters QB nav item from sidebar and bottom nav when not enabled
-- Teachers/admins always see QB (they manage it)
+**Layer 1: Nav visibility** (`StudentZoneProvider`)
+- Hides the Question Bank from sidebar, bottom bar and More when `student.question-bank` is off
+- Lists the exams from `usePublishedQBExams` (`GET /api/question-bank/published-exams`); JEE Paper 2 only while that is loading
 
-**Layer 2: Page-level check** (student QB pages)
-- Each student QB page checks `activeClassroom` before loading
-- Shows "not available" message if QB not enabled
+**Layer 2: Page-level check** (`FeatureGate`)
+- A student opening a QB URL while the flag is off sees the "unavailable" screen
 
-**Layer 3: API-level enforcement** (`verifyQBAccess` helper)
-- File: `apps/nexus/src/lib/qb-auth.ts`
-- Every student-facing QB API route calls `verifyQBAccess()`
-- Verifies: valid MS token → user exists → teacher/admin (bypass) OR student enrolled + QB enabled
-- Returns 403 if student is not enrolled or QB not enabled for their classroom
+**Layer 3: API-level enforcement** (`verifyQBAccess`, `verifyQBAccessAnyClassroom` in `src/lib/qb-auth.ts`)
+- Verifies: valid MS token → user exists → staff (bypass) OR student enrolled
+- Returns 403 if the student is not enrolled in the classroom (or, for the any-classroom check, in any classroom)
 
 ### Key Tables
 
 | Table | Purpose |
 |-------|---------|
-| `nexus_qb_classroom_links` | Maps classroom_id → is_active (QB toggle) |
+| `nexus_settings` (`feature_flags`) | Holds the `student.question-bank` switch |
 | `nexus_enrollments` | Maps user_id → classroom_id + role |
-
-### Teacher Toggle
-
-In the classroom detail page (`/teacher/classrooms/[id]`), the Overview tab has a "Question Bank" switch. Toggling it calls:
-- **Enable**: `POST /api/question-bank/classroom-link` with `{ classroom_id, enabled: true }`
-- **Disable**: `DELETE /api/question-bank/classroom-link` with `{ classroom_id }`
+| `nexus_qb_original_papers.is_student_visible` | Which papers, and so which exams, students see |
 
 ---
 
@@ -215,7 +198,7 @@ apps/nexus/src/app/(teacher)/teacher/
 │   └── page.tsx                          # Question Sharing moderation — separate feature
 └── classrooms/
     └── [id]/
-        └── page.tsx                      # Classroom detail (has QB toggle in Overview tab)
+        └── page.tsx                      # Classroom detail
 ```
 
 ### API Routes
@@ -238,8 +221,8 @@ apps/nexus/src/app/api/
 │   │       └── route.ts                  # GET + PUT (individual preset)
 │   ├── stats/
 │   │   └── route.ts                      # GET (student progress stats)
-│   └── classroom-link/
-│       └── route.ts                      # GET/POST/DELETE (QB toggle per classroom)
+│   └── published-exams/
+│       └── route.ts                      # GET (exams with a published paper)
 └── questions/                            # Question Sharing API — separate feature
     └── route.ts                          # Community Q&A endpoints
 ```
@@ -266,7 +249,7 @@ apps/nexus/src/components/question-bank/
 ### Hooks
 ```
 apps/nexus/src/hooks/
-├── useQBAccess.ts                         # Classroom-scoped QB access check
+├── usePublishedQBExams.ts                 # Exams with a published paper, for the student folder
 └── useNexusAuth.tsx                       # Auth context (activeClassroom, getToken, etc.)
 ```
 
@@ -360,8 +343,8 @@ Student's saved filter presets (name + JSONB filter state).
 ### `nexus_qb_topics`
 Hierarchical topic tree for categorization.
 
-### `nexus_qb_classroom_links`
-QB access control per classroom.
+### `nexus_qb_classroom_links` (retired 2026-09-21, nothing reads it)
+Was QB access control per classroom. See section 4.
 
 | Column | Type | Description |
 |--------|------|-------------|
@@ -424,9 +407,7 @@ QB access control per classroom.
 | GET | `/api/question-bank/presets/[id]` | Student | Get preset detail |
 | PUT | `/api/question-bank/presets/[id]` | Student | Update preset |
 | GET | `/api/question-bank/stats` | Student: enrollment + QB | Get progress stats |
-| GET | `/api/question-bank/classroom-link` | Any authenticated | Check if QB enabled for classroom |
-| POST | `/api/question-bank/classroom-link` | Teacher/Admin | Enable QB for classroom |
-| DELETE | `/api/question-bank/classroom-link` | Teacher/Admin | Disable QB for classroom |
+| GET | `/api/question-bank/published-exams` | Any authenticated | Exams with at least one published paper |
 
 ### Question Sharing API
 
@@ -660,11 +641,10 @@ content_text,question_format,option_a,option_b,option_c,option_d,correct_answer,
 
 | Feature | Status | Notes |
 |---------|--------|-------|
-| `useQBAccess` hook | Done | Client-side nav filtering |
-| Student layout filtering | Done | QB nav hidden when not enabled |
-| `verifyQBAccess` API guard | Done | All student QB APIs protected |
-| Teacher QB toggle (classroom detail) | Done | Switch in Overview tab |
-| `nexus_qb_classroom_links` table | Done | classroom_id → is_active |
+| `usePublishedQBExams` hook | Done | Which exams the student folder lists |
+| Student layout filtering | Done | QB nav hidden when `student.question-bank` is off |
+| `verifyQBAccess` API guard | Done | All student QB APIs require enrolment |
+| Per-classroom QB switch | Retired 2026-09-21 | Features is the only switch; guarded by `qb-single-switch-guard.test.ts` |
 
 ---
 

@@ -1,0 +1,3 @@
+# Audit ledgers are append-mostly JSONL keyed by id; union-merge them and let
+# ledger.mjs keep the newest line per id, so concurrent branches never conflict.
+docs/audits/perf/**/*.jsonl merge=union

@@ -342,6 +342,12 @@ export default function StudentsPage() {
   const [entraLinkCandidates, setEntraLinkCandidates] = useState<any[]>([]);
   const [entraLinkMap, setEntraLinkMap] = useState<Record<string, string>>({});
   const [refreshingEntra, setRefreshingEntra] = useState(false);
+  // The fetch pages Entra under a wall-clock budget. When it stops early the list
+  // below is partial, and that has to be visible: otherwise a truncated run looks
+  // exactly like a tenant with fewer students, and staff would finish enrolling a
+  // batch that was never fully fetched.
+  const [entraTruncated, setEntraTruncated] = useState(false);
+  const [entraSuggestionsSkipped, setEntraSuggestionsSkipped] = useState(0);
 
   // Sync current batch → the single classroom + linked Team + group chat
   const [showBatchSync, setShowBatchSync] = useState(false);
@@ -614,6 +620,8 @@ export default function StudentsPage() {
       setEntraSelected(selected);
       setEntraLinkCandidates(data.linkCandidates || []);
       setEntraLinkMap({});
+      setEntraTruncated(!!data.truncated);
+      setEntraSuggestionsSkipped(data.suggestionsSkipped || 0);
     } catch (err: any) {
       setError(err.message || 'Failed to fetch from Entra');
     } finally {
@@ -1202,6 +1210,40 @@ export default function StudentsPage() {
                 Students from Microsoft Entra. Set the course for each student not yet in Nexus, then click Enroll.
                 They&apos;ll be added to classrooms (Common + course-specific), Teams teams, group chat, and the onboarding pipeline.
               </Typography>
+
+              {entraTruncated && (
+                <Alert
+                  severity="warning"
+                  sx={{ mb: 2 }}
+                  // The recovery path belongs in the banner. Telling staff to "run it
+                  // again" without giving them the button is how a partial list gets
+                  // treated as a finished one.
+                  action={
+                    <Button
+                      color="inherit"
+                      size="small"
+                      onClick={handleFetchEntra}
+                      disabled={entraLoading}
+                      sx={{ textTransform: 'none', fontWeight: 700 }}
+                    >
+                      {entraLoading ? 'Fetching...' : 'Fetch again'}
+                    </Button>
+                  }
+                >
+                  This list is incomplete. The fetch from Entra stopped early, so some
+                  students are not shown. Enroll the ones below, then fetch again to pick
+                  up the rest.
+                </Alert>
+              )}
+
+              {entraSuggestionsSkipped > 0 && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  {entraSuggestionsSkipped} account{entraSuggestionsSkipped === 1 ? '' : 's'} could
+                  not be checked for an existing student to link to. They are still listed and can
+                  still be enrolled, but check the link picker before enrolling so you do not create
+                  a duplicate.
+                </Alert>
+              )}
 
               {entraStudents.length > 0 && (
                 <Box sx={{ mb: 2, display: 'flex', gap: 2, alignItems: 'center' }}>

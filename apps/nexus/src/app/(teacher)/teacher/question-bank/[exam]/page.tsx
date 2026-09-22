@@ -29,7 +29,6 @@ import {
   Button,
   Paper,
   Skeleton,
-  Switch,
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
@@ -92,11 +91,10 @@ function ExamWorkPage({ exam }: { exam: QBExamType }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const theme = useTheme();
-  const { activeClassroom, getToken, tokenReady } = useNexusAuthContext();
+  const { getToken, tokenReady } = useNexusAuthContext();
   const examLabel = QB_EXAM_LABELS[exam];
 
   const [view, setView] = useStoredViewMode<PaperListView>(PAPER_VIEW_STORAGE_KEY, PAPER_VIEWS, 'table');
-  const [toggling, setToggling] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [notice, setNotice] = useState<{ severity: 'success' | 'warning' | 'error'; text: string } | null>(null);
 
@@ -131,16 +129,6 @@ function ExamWorkPage({ exam }: { exam: QBExamType }) {
   const { data: statsRes, isLoading: statsLoading } = useAuthSWR<{ data: QBProgressStats }>(
     tokenReady ? `/api/question-bank/stats?exam_relevance=${examRelevanceFor(exam)}` : null,
   );
-  const {
-    data: linkRes,
-    isLoading: linkLoading,
-    mutate: mutateLink,
-  } = useAuthSWR<{ data: { enabled: boolean } }>(
-    tokenReady && activeClassroom
-      ? `/api/question-bank/classroom-link?classroom_id=${activeClassroom.id}`
-      : null,
-  );
-  const qbEnabled = linkRes?.data?.enabled ?? false;
 
   // All exams come back in one response (27 rows); this page keeps its own.
   const rows = useMemo(
@@ -151,27 +139,6 @@ function ExamWorkPage({ exam }: { exam: QBExamType }) {
   const shown = useMemo(() => queryWorkRows(rows, stage), [rows, stage]);
 
   const openPaper = (row: WorkRow) => router.push(`/teacher/question-bank/papers/${row.paper.id}`);
-
-  async function handleToggle() {
-    if (!activeClassroom) return;
-    setToggling(true);
-    try {
-      const token = await getToken();
-      if (!token) return;
-      const next = !qbEnabled;
-      const res = await fetch('/api/question-bank/classroom-link', {
-        method: next ? 'POST' : 'DELETE',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ classroom_id: activeClassroom.id }),
-      });
-      if (res.ok) await mutateLink({ data: { enabled: next } }, { revalidate: false });
-      else setNotice({ severity: 'error', text: 'Could not change student access. Try again.' });
-    } catch {
-      setNotice({ severity: 'error', text: 'Could not change student access. Try again.' });
-    } finally {
-      setToggling(false);
-    }
-  }
 
   async function handlePublishShown() {
     const ids = shown.map((row) => row.paper.id);
@@ -215,28 +182,6 @@ function ExamWorkPage({ exam }: { exam: QBExamType }) {
   const unfinished = rows.length - counts.done;
   const bulkUploadHref = `/teacher/question-bank/bulk-upload?exam=${exam}`;
 
-  // Rendered twice and shown once: beside the title on a phone, where the
-  // buttons need the full row below; beside the buttons from md up.
-  const accessSwitch = (display: Record<string, string>) => (
-    <Box sx={{ display, alignItems: 'center', flexShrink: 0 }}>
-      {linkLoading ? (
-        <Skeleton variant="rounded" width={120} height={28} sx={{ borderRadius: 7 }} />
-      ) : (
-        <>
-          <Switch
-            checked={qbEnabled}
-            onChange={handleToggle}
-            disabled={toggling || !activeClassroom}
-            inputProps={{ 'aria-label': 'Students in this classroom can open the Question Bank' }}
-          />
-          <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>
-            {qbEnabled ? 'Open to students' : 'Closed to students'}
-          </Typography>
-        </>
-      )}
-    </Box>
-  );
-
   return (
     <Box sx={{ px: { xs: 2, md: 3 }, py: 2 }}>
       {/* Header: which exam, and the two ways to add to it */}
@@ -250,17 +195,10 @@ function ExamWorkPage({ exam }: { exam: QBExamType }) {
           mb: 2,
         }}
       >
-        <Box
-          sx={{
-            flex: '1 1 240px',
-            minWidth: 0,
-            display: 'flex',
-            alignItems: 'flex-start',
-            justifyContent: 'space-between',
-            gap: 1,
-          }}
-        >
-        <Box sx={{ minWidth: 0 }}>
+        {/* No classroom here, and no student-access switch: the bank is one
+            bank for every classroom, and whether students see it is the
+            Question Bank switch on the Features screen (see lib/qb-auth.ts). */}
+        <Box sx={{ flex: '1 1 240px', minWidth: 0 }}>
           <Typography
             variant="overline"
             color="text.secondary"
@@ -271,23 +209,13 @@ function ExamWorkPage({ exam }: { exam: QBExamType }) {
           <Typography variant="h5" component="h1" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
             {examLabel}
           </Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 1, mt: 0.5 }}>
-            <Typography variant="body2" color="text.secondary">
-              {activeClassroom?.name || 'Classroom'}
+          {statsLoading ? (
+            <Skeleton variant="text" width={120} sx={{ mt: 0.5 }} />
+          ) : (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              {totalQuestions.toLocaleString()} questions
             </Typography>
-            <Typography variant="body2" color="text.secondary" aria-hidden>
-              ·
-            </Typography>
-            {statsLoading ? (
-              <Skeleton variant="text" width={120} />
-            ) : (
-              <Typography variant="body2" color="text.secondary">
-                {totalQuestions.toLocaleString()} questions
-              </Typography>
-            )}
-          </Box>
-        </Box>
-        {accessSwitch({ xs: 'flex', md: 'none' })}
+          )}
         </Box>
 
         <Box
@@ -298,7 +226,6 @@ function ExamWorkPage({ exam }: { exam: QBExamType }) {
             width: { xs: '100%', md: 'auto' },
           }}
         >
-          {accessSwitch({ xs: 'none', md: 'flex' })}
           <Button
             variant="outlined"
             startIcon={<AddOutlinedIcon />}

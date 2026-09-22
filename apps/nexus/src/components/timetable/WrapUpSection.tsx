@@ -57,7 +57,7 @@ import { RADIUS } from './timetable-theme';
 import ClassVideoMetaPanel from './ClassVideoMetaPanel';
 import ClassImagesEditor, { type ClassImage } from './ClassImagesEditor';
 import { makeThumbnail } from '@/lib/image-downscale';
-import { useNexusSWR, revalidateClass } from '@/lib/nexus-swr';
+import { useNexusSWR, useRevalidateClass } from '@/lib/nexus-swr';
 
 interface TagOption {
   id: string;
@@ -186,6 +186,7 @@ export default function WrapUpSection({
     `/api/timetable/${classId}/images`,
     getToken,
   );
+  const revalidateClass = useRevalidateClass();
 
   const loading = wrapLoading || imgLoading;
 

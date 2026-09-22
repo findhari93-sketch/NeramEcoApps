@@ -56,6 +56,18 @@ export class TeamsSsoError extends Error {
   }
 }
 
+/**
+ * Microsoft's signing keys could not be fetched. Deliberately not a TeamsSsoError:
+ * nothing is known about the token yet, and a refusal would sign the user out over
+ * a Microsoft outage. Callers answer 503 (PERF-0013).
+ */
+export class TeamsSsoUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TeamsSsoUnavailableError';
+  }
+}
+
 export function teamsSsoConfig(): TeamsSsoConfig | null {
   const clientId = process.env.AZ_CLIENT_ID?.trim().toLowerCase();
   const tenantId = process.env.AZ_TENANT_ID?.trim().toLowerCase();
@@ -130,7 +142,7 @@ export function __resetTeamsSsoKeys(): void {
 
 async function fetchKeySet(tenantId: string): Promise<KeySet> {
   const response = await fetch(`https://login.microsoftonline.com/${encodeURIComponent(tenantId)}/discovery/v2.0/keys`);
-  if (!response.ok) throw new TeamsSsoError(`Signing keys unavailable: ${response.status}`);
+  if (!response.ok) throw new TeamsSsoUnavailableError(`Signing keys unavailable: ${response.status}`);
 
   const body = asRecord(await response.json());
   const entries = body && Array.isArray(body.keys) ? body.keys : [];

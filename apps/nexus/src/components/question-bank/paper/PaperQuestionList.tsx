@@ -28,21 +28,25 @@ import {
 } from '@neram/ui';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import CollectionsOutlinedIcon from '@mui/icons-material/CollectionsOutlined';
+import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
+import ContentPasteIcon from '@mui/icons-material/ContentPaste';
 import SaveIcon from '@mui/icons-material/Save';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import type { NexusQBQuestion, QBQuestionSection } from '@neram/database';
-import { QB_SECTION_ORDER, qbSectionLabel, QB_SECTIONS } from '@neram/database';
+import { QB_SECTION_ORDER, qbSectionLabel, QB_SECTIONS, solutionVideosOf } from '@neram/database';
 import {
   questionReferencesFigure,
   questionMissingImages,
   questionMissingSolutionImage,
 } from '@/lib/qb-image-needs';
 import PaperQuestionRow from './PaperQuestionRow';
+import PaperVideoRow from './PaperVideoRow';
+import type { VideoLinkDrafts, VideoPasteSummary, VideoRowState } from '@/hooks/useVideoLinkDrafts';
 
-export type PaperQuestionMode = 'edit' | 'images';
+export type PaperQuestionMode = 'edit' | 'images' | 'videos';
 
 /**
  * What outstanding work the list is narrowed to.
@@ -54,14 +58,36 @@ export type PaperQuestionMode = 'edit' | 'images';
  * find the handful that got deactivated without scanning the whole paper.
  * `'drawing'` is a lens rather than a backlog: the two or three drawings of a
  * paper, which are worked through on their own and by a different person.
+ * `'missing-video'` is the questions with no saved solution video, in both
+ * modes. `'unsaved-video'` is Videos mode's pending rows, for checking a paste.
  */
 export type NeedsFilter =
   | 'all'
   | 'figures'
   | 'missing-figure'
   | 'missing-solution'
+  | 'missing-video'
+  | 'unsaved-video'
   | 'drawing'
   | 'inactive';
+
+/** Videos mode, owned by PaperWorkspace so drafts outlive a mode switch. */
+export interface PaperVideosProps {
+  drafts: VideoLinkDrafts;
+  onOpenPaste: () => void;
+  onSave: () => void;
+}
+
+/** A row Save would change, or one that needs the teacher's attention. */
+function isPendingVideo(state: VideoRowState): boolean {
+  return (
+    state === 'draft-new' ||
+    state === 'draft-replace' ||
+    state === 'draft-clear' ||
+    state === 'invalid' ||
+    state === 'error'
+  );
+}
 
 /** A section the list can be narrowed to, or '__none__' for unsectioned rows. */
 export type PaperSectionFilter = QBQuestionSection | '__none__';
@@ -113,6 +139,8 @@ export interface PaperQuestionListProps {
   onDeleteQuestions: (questionIds: string[]) => Promise<{ deleted: number; refused: DeleteRefusal[] }>;
   /** Hide or re-show just the ticked questions. Replaces the header's paper-wide Deactivate. */
   onSetActiveQuestions: (questionIds: string[], active: boolean) => Promise<void>;
+  /** Videos mode. Absent, the mode is not offered. */
+  videos?: PaperVideosProps;
 }
 
 /** Is the user typing? Then Ctrl+A should select their text, not every row. */
@@ -151,8 +179,14 @@ export default function PaperQuestionList({
   saveImageProgress,
   onDeleteQuestions,
   onSetActiveQuestions,
+  videos,
 }: PaperQuestionListProps) {
   const theme = useTheme();
+  /** Videos mode's props when that mode is on, else null: a truthy check TypeScript can narrow on. */
+  const videoMode = mode === 'videos' && videos ? videos : null;
+  const [showSkipped, setShowSkipped] = useState(false);
+  /** Each Videos-mode field, so Enter can move to the next question's. */
+  const videoInputs = useRef(new Map<string, HTMLInputElement>());
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkSection, setBulkSection] = useState<QBQuestionSection | ''>('');
   const [applyingSection, setApplyingSection] = useState(false);
@@ -215,6 +249,8 @@ export default function PaperQuestionList({
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target)) return;
+      // Videos mode has no tick boxes, so there is nothing for Select all to tick.
+      if (mode === 'videos') return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'a') {
         e.preventDefault();
         selectAll();
@@ -223,7 +259,7 @@ export default function PaperQuestionList({
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [questions]);
+  }, [questions, mode]);
 
   const applyBulkSection = async () => {
     if (!bulkSection || selected.size === 0) return;
@@ -338,6 +374,17 @@ export default function PaperQuestionList({
     [bySection],
   );
   const inactiveCount = useMemo(() => bySection.filter((q) => !q.is_active).length, [bySection]);
+  // Saved state, not drafts: a row must not leave the "No video" queue while the
+  // teacher is still typing its link. The Videos progress bar counts drafts.
+  const missingVideoCount = useMemo(
+    () => bySection.filter((q) => solutionVideosOf(q).length === 0).length,
+    [bySection],
+  );
+  const rowState = videos?.drafts.rowState;
+  const unsavedVideoCount = useMemo(
+    () => (rowState ? bySection.filter((q) => isPendingVideo(rowState(q))).length : 0),
+    [bySection, rowState],
+  );
 
   /**
    * The drawings of this paper.
@@ -386,13 +433,17 @@ export default function PaperQuestionList({
         ? (q) => questionMissingImages(q)
         : needsFilter === 'missing-solution'
           ? (q) => questionMissingSolutionImage(q)
+          : needsFilter === 'missing-video'
+            ? (q) => solutionVideosOf(q).length === 0
+          : needsFilter === 'unsaved-video'
+            ? (q) => (rowState ? isPendingVideo(rowState(q)) : false)
           : needsFilter === 'drawing'
             ? (q) => q.question_format === 'DRAWING_PROMPT'
             : needsFilter === 'inactive'
               ? (q) => !q.is_active
               : questionReferencesFigure;
     return bySection.filter(predicate);
-  }, [bySection, needsFilter]);
+  }, [bySection, needsFilter, rowState]);
 
   const sections = useMemo(() => {
     const groups = new Map<string, { order: number; questions: NexusQBQuestion[] }>();
@@ -415,6 +466,20 @@ export default function PaperQuestionList({
         };
       });
   }, [visibleQuestions]);
+
+  /**
+   * Enter in one question's field moves to the next one down, in the order on
+   * screen, skipping drawings whose videos are set per part. A run of pastes
+   * is then paste, Enter, paste, Enter, with no mouse.
+   */
+  const focusNextVideoField = (fromId: string) => {
+    const order = sections.flatMap((s) => s.questions).map((q) => q.id).filter((id) => videoInputs.current.has(id));
+    const next = order[order.indexOf(fromId) + 1];
+    const el = next ? videoInputs.current.get(next) : undefined;
+    if (!el) return;
+    el.focus();
+    el.scrollIntoView({ block: 'nearest' });
+  };
 
   const allSelected = selected.size > 0 && selected.size === questions.length;
   const someSelected = selected.size > 0 && !allSelected;
@@ -446,6 +511,17 @@ export default function PaperQuestionList({
           },
         ])
       : []),
+    { value: 'missing-video', label: 'No video', count: missingVideoCount, color: 'secondary' },
+    ...((videoMode && videoMode.drafts.unsavedCount > 0) || needsFilter === 'unsaved-video'
+      ? ([
+          {
+            value: 'unsaved-video' as const,
+            label: 'Unsaved',
+            count: unsavedVideoCount,
+            color: 'primary' as const,
+          },
+        ])
+      : []),
     ...(paperHasDrawings || needsFilter === 'drawing'
       ? ([
           {
@@ -469,17 +545,19 @@ export default function PaperQuestionList({
       */}
       <Paper variant="outlined" sx={{ p: 1, mb: 1, borderRadius: 1.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Checkbox
-            size="small"
-            checked={allSelected}
-            indeterminate={someSelected}
-            onChange={() => (selected.size > 0 ? clearSelection() : selectAll())}
-            inputProps={{ 'aria-label': allSelected ? 'Clear selection' : 'Select every question' }}
-            sx={{ p: 0.75 }}
-          />
+          {!videoMode && (
+            <Checkbox
+              size="small"
+              checked={allSelected}
+              indeterminate={someSelected}
+              onChange={() => (selected.size > 0 ? clearSelection() : selectAll())}
+              inputProps={{ 'aria-label': allSelected ? 'Clear selection' : 'Select every question' }}
+              sx={{ p: 0.75 }}
+            />
+          )}
           <Box aria-live="polite" sx={{ minWidth: 0 }}>
             <Typography variant="caption" color="text.secondary" fontWeight={600} noWrap>
-              {selected.size > 0
+              {selected.size > 0 && !videoMode
                 ? `${selected.size} of ${questions.length} selected`
                 : visibleQuestions.length === questions.length
                   ? `${questions.length} question${questions.length === 1 ? '' : 's'}`
@@ -489,21 +567,36 @@ export default function PaperQuestionList({
 
           <Box sx={{ flex: 1 }} />
 
+          {/* Icons only on a phone: three labelled buttons pushed over the
+              question count at 375px. Each keeps its name for screen readers
+              and a tooltip for everyone else. */}
           <ToggleButtonGroup
             size="small"
             exclusive
             value={mode}
             onChange={(_, next) => next && onModeChange(next)}
-            sx={{ height: 36, flexShrink: 0 }}
+            sx={{ height: { xs: 44, sm: 36 }, flexShrink: 0 }}
           >
-            <ToggleButton value="edit" sx={{ px: 1, textTransform: 'none' }}>
-              <EditOutlinedIcon sx={{ fontSize: 16, mr: 0.5 }} />
-              Edit
-            </ToggleButton>
-            <ToggleButton value="images" sx={{ px: 1, textTransform: 'none' }}>
-              <CollectionsOutlinedIcon sx={{ fontSize: 16, mr: 0.5 }} />
-              Images
-            </ToggleButton>
+            {(
+              [
+                { value: 'edit', label: 'Edit', Icon: EditOutlinedIcon },
+                { value: 'images', label: 'Images', Icon: CollectionsOutlinedIcon },
+                ...(videos ? [{ value: 'videos', label: 'Videos', Icon: VideoLibraryOutlinedIcon }] : []),
+              ] as const
+            ).map(({ value, label, Icon }) => (
+              <ToggleButton
+                key={value}
+                value={value}
+                aria-label={label}
+                title={label}
+                sx={{ px: 1, minWidth: 44, textTransform: 'none' }}
+              >
+                <Icon sx={{ fontSize: { xs: 20, sm: 16 }, mr: { xs: 0, sm: 0.5 } }} />
+                <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                  {label}
+                </Box>
+              </ToggleButton>
+            ))}
           </ToggleButtonGroup>
         </Box>
 
@@ -614,7 +707,26 @@ export default function PaperQuestionList({
         </Box>
       )}
 
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}>
+      {videoMode && (
+        <VideoModeHeader
+          drafts={videoMode.drafts}
+          total={questions.length}
+          color={theme.palette.success.main}
+          onOpenPaste={videoMode.onOpenPaste}
+          showSkipped={showSkipped}
+          onToggleSkipped={() => setShowSkipped((v) => !v)}
+        />
+      )}
+
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          // Room for the fixed Save bar, so it never sits over the last rows.
+          pb: videoMode && videoMode.drafts.unsavedCount > 0 ? 12 : 0,
+        }}
+      >
         {sections.map((section) => {
           const groupIds = section.questions.map((x) => x.id);
           const groupSelected = groupIds.filter((id) => selected.has(id)).length;
@@ -622,29 +734,57 @@ export default function PaperQuestionList({
 
           return (
             <Box key={section.key} sx={{ mb: 1.5 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, position: 'sticky', top: 0, zIndex: 1, bgcolor: 'background.paper', py: 0.5 }}>
-                <Checkbox
-                  size="small"
-                  checked={allGroupSelected}
-                  indeterminate={groupSelected > 0 && !allGroupSelected}
-                  inputProps={{ 'aria-label': `Select every question in ${section.title}` }}
-                  onChange={() =>
-                    setSelected((prev) => {
-                      const next = new Set(prev);
-                      if (allGroupSelected) groupIds.forEach((id) => next.delete(id));
-                      else groupIds.forEach((id) => next.add(id));
-                      baseRef.current = next;
-                      return next;
-                    })
-                  }
-                  sx={{ p: 0.75 }}
-                />
-                <Typography variant="subtitle2" color="text.secondary">
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, position: 'sticky', top: 0, zIndex: 1, bgcolor: 'background.paper', py: 0.5, minHeight: 36 }}>
+                {!videoMode && (
+                  <Checkbox
+                    size="small"
+                    checked={allGroupSelected}
+                    indeterminate={groupSelected > 0 && !allGroupSelected}
+                    inputProps={{ 'aria-label': `Select every question in ${section.title}` }}
+                    onChange={() =>
+                      setSelected((prev) => {
+                        const next = new Set(prev);
+                        if (allGroupSelected) groupIds.forEach((id) => next.delete(id));
+                        else groupIds.forEach((id) => next.add(id));
+                        baseRef.current = next;
+                        return next;
+                      })
+                    }
+                    sx={{ p: 0.75 }}
+                  />
+                )}
+                <Typography variant="subtitle2" color="text.secondary" sx={videoMode ? { pl: 1 } : undefined}>
                   {section.title}
                 </Typography>
               </Box>
 
-              {section.questions.map((item) => (
+              {videoMode && section.questions.map((item) => {
+                const number = item.display_order ?? positions.get(item.id) ?? 0;
+                return (
+                  <PaperVideoRow
+                    key={item.id}
+                    question={item}
+                    number={number}
+                    value={videoMode.drafts.valueFor(item.id)}
+                    state={videoMode.drafts.rowState(item)}
+                    errorText={videoMode.drafts.errorFor(item.id)}
+                    active={item.id === activeQuestionId}
+                    onChange={(value) => videoMode.drafts.setDraft(item.id, value)}
+                    onActivate={() => onActivate(item.id)}
+                    onEnter={() => focusNextVideoField(item.id)}
+                    onBulkPaste={(text) => {
+                      videoMode.drafts.pasteText(text, number);
+                      setShowSkipped(false);
+                    }}
+                    inputRef={(el) => {
+                      if (el) videoInputs.current.set(item.id, el);
+                      else videoInputs.current.delete(item.id);
+                    }}
+                  />
+                );
+              })}
+
+              {!videoMode && section.questions.map((item) => (
                 <PaperQuestionRow
                   key={item.id}
                   question={item}
@@ -662,7 +802,11 @@ export default function PaperQuestionList({
         })}
       </Box>
 
-      {(selected.size > 0 || (mode === 'images' && pendingImageCount > 0)) && (
+      {videoMode && videoMode.drafts.unsavedCount > 0 && (
+        <VideoSaveBar drafts={videoMode.drafts} onSave={videoMode.onSave} />
+      )}
+
+      {!videoMode && (selected.size > 0 || (mode === 'images' && pendingImageCount > 0)) && (
         <Paper
           elevation={8}
           sx={{
@@ -899,5 +1043,166 @@ function TrackBar({
         }}
       />
     </Box>
+  );
+}
+
+/**
+ * Videos mode's header: progress, the paste entry point, and what the last
+ * paste did. The summary stays until Save or dismiss, so a teacher checking 59
+ * rows can come back to it.
+ */
+function VideoModeHeader({
+  drafts,
+  total,
+  color,
+  onOpenPaste,
+  showSkipped,
+  onToggleSkipped,
+}: {
+  drafts: VideoLinkDrafts;
+  total: number;
+  color: string;
+  onOpenPaste: () => void;
+  showSkipped: boolean;
+  onToggleSkipped: () => void;
+}) {
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mb: 1, px: 0.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap' }}>
+        <Box sx={{ flex: '1 1 200px', minWidth: 0 }}>
+          <TrackBar label="Videos" done={drafts.withVideoCount} total={total} color={color} />
+        </Box>
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<ContentPasteIcon sx={{ fontSize: 18 }} />}
+          onClick={onOpenPaste}
+          sx={{ minHeight: 44, textTransform: 'none', flexShrink: 0 }}
+        >
+          Paste a list
+        </Button>
+      </Box>
+      {drafts.summary && (
+        <PasteSummaryAlert
+          summary={drafts.summary}
+          onClose={drafts.dismissSummary}
+          showSkipped={showSkipped}
+          onToggleSkipped={onToggleSkipped}
+        />
+      )}
+    </Box>
+  );
+}
+
+function PasteSummaryAlert({
+  summary,
+  onClose,
+  showSkipped,
+  onToggleSkipped,
+}: {
+  summary: VideoPasteSummary;
+  onClose: () => void;
+  showSkipped: boolean;
+  onToggleSkipped: () => void;
+}) {
+  const filled = summary.added + summary.replaced;
+  const skipped = summary.unmatched.length;
+  const parts: string[] = [];
+  if (filled > 0) {
+    const detail = [
+      summary.added > 0 ? `${summary.added} new` : null,
+      summary.replaced > 0 ? `${summary.replaced} replace a saved link` : null,
+    ]
+      .filter(Boolean)
+      .join(', ');
+    parts.push(`${filled} link${filled === 1 ? '' : 's'} filled in (${detail}).`);
+  } else {
+    parts.push('No links were filled in.');
+  }
+  if (summary.unchanged > 0) parts.push(`${summary.unchanged} already saved.`);
+  if (summary.mode === 'ordered') parts.push('No question numbers were found, so links went in line order.');
+  if (filled > 0) parts.push('Check the highlighted rows, then Save.');
+
+  return (
+    <Alert
+      severity={skipped > 0 || filled === 0 ? 'warning' : 'success'}
+      role="status"
+      onClose={onClose}
+      sx={{ '& .MuiAlert-message': { width: '100%' } }}
+    >
+      <Typography variant="body2">{parts.join(' ')}</Typography>
+      {summary.duplicates.map((d) => (
+        <Typography key={d.number} variant="body2" sx={{ mt: 0.5 }}>
+          Q{d.number} was in the list {d.lines.length} times, so the last link (line{' '}
+          {d.lines[d.lines.length - 1]}) is used.
+        </Typography>
+      ))}
+      {skipped > 0 && (
+        <>
+          <Button
+            size="small"
+            onClick={onToggleSkipped}
+            aria-expanded={showSkipped}
+            sx={{ mt: 0.5, ml: -1, minHeight: 44, textTransform: 'none', color: 'inherit', fontWeight: 700 }}
+          >
+            {showSkipped ? 'Hide' : 'Show'} the {skipped} line{skipped === 1 ? '' : 's'} that were skipped
+          </Button>
+          {showSkipped && (
+            <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+              {summary.unmatched.map((u) => (
+                <li key={`${u.line}-${u.text}`}>
+                  <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
+                    Line {u.line}: {u.reason}
+                  </Typography>
+                </li>
+              ))}
+            </Box>
+          )}
+        </>
+      )}
+    </Alert>
+  );
+}
+
+/** The one place Videos mode saves from, fixed to the bottom like the other bars. */
+function VideoSaveBar({ drafts, onSave }: { drafts: VideoLinkDrafts; onSave: () => void }) {
+  const ready = drafts.unsavedCount - drafts.invalidCount;
+  return (
+    <Paper
+      elevation={8}
+      sx={{
+        position: 'fixed',
+        left: 0,
+        right: 0,
+        bottom: { xs: 56, sm: 0 },
+        zIndex: 30,
+        p: 1.5,
+        pb: 'calc(12px + env(safe-area-inset-bottom))',
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 1,
+      }}
+    >
+      <Typography variant="body2" fontWeight={700} aria-live="polite">
+        {drafts.unsavedCount} unsaved change{drafts.unsavedCount === 1 ? '' : 's'}
+        {drafts.invalidCount > 0
+          ? `, ${drafts.invalidCount} link${drafts.invalidCount === 1 ? '' : 's'} to fix first`
+          : ''}
+      </Typography>
+      <Button onClick={drafts.discard} disabled={drafts.saving} sx={{ minHeight: 44, textTransform: 'none' }}>
+        Discard
+      </Button>
+      <Button
+        variant="contained"
+        onClick={onSave}
+        disabled={drafts.saving || ready === 0}
+        startIcon={drafts.saving ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
+        sx={{ minHeight: 44, textTransform: 'none' }}
+      >
+        {drafts.saving ? 'Saving...' : `Save ${ready}`}
+      </Button>
+    </Paper>
   );
 }

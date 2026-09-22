@@ -28,14 +28,13 @@ const QUESTIONS_URL = '/student/question-bank/questions';
 
 // ─── Fixtures ───────────────────────────────────────────────────────────────
 //
-// The target environment has no coordinate-geometry questions of its own, and a
-// student only reaches the Question Bank when their classroom has it switched
-// on (verifyQBAccess -> isQBEnabledForClassroom). Both are seeded here and
-// removed afterwards, so this spec does not depend on whatever happens to be in
-// the database.
+// The target environment has no coordinate-geometry questions of its own, so
+// they are seeded here and removed afterwards, and this spec does not depend on
+// whatever happens to be in the database. A student reaches the Question Bank
+// through the Features flag and an enrolment alone; there is no per-classroom
+// switch to open any more.
 
 const PROBE = 'E2E_CG_HIERARCHY';
-const E2E_CLASSROOM_NAME = 'E2E Test Classroom';
 
 /** Slug -> how many probe questions to create for it. */
 const SEED: Array<{ slug: string; text: string }> = [
@@ -48,8 +47,6 @@ const SEED: Array<{ slug: string; text: string }> = [
 
 let admin: SupabaseClient | null = null;
 let seededQuestionIds: string[] = [];
-let createdClassroomLink = false;
-let classroomId: string | null = null;
 
 function adminClient(): SupabaseClient | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -61,28 +58,6 @@ function adminClient(): SupabaseClient | null {
 test.beforeAll(async () => {
   admin = adminClient();
   if (!admin) return;
-
-  const { data: classroom } = await admin
-    .from('nexus_classrooms')
-    .select('id')
-    .eq('name', E2E_CLASSROOM_NAME)
-    .maybeSingle();
-  classroomId = (classroom as any)?.id ?? null;
-
-  // Students are blocked unless the classroom has QB enabled.
-  if (classroomId) {
-    const { data: link } = await admin
-      .from('nexus_qb_classroom_links')
-      .select('classroom_id, is_active')
-      .eq('classroom_id', classroomId)
-      .maybeSingle();
-    if (!link) {
-      await admin.from('nexus_qb_classroom_links').insert({ classroom_id: classroomId, is_active: true });
-      createdClassroomLink = true;
-    } else if (!(link as any).is_active) {
-      await admin.from('nexus_qb_classroom_links').update({ is_active: true }).eq('classroom_id', classroomId);
-    }
-  }
 
   // Seed one question per coordinate-geometry child.
   const rows = SEED.map((s) => ({
@@ -125,9 +100,6 @@ test.afterAll(async () => {
   if (seededQuestionIds.length > 0) {
     // Cascades to nexus_qb_question_tags.
     await admin.from('nexus_qb_questions').delete().in('id', seededQuestionIds);
-  }
-  if (createdClassroomLink && classroomId) {
-    await admin.from('nexus_qb_classroom_links').delete().eq('classroom_id', classroomId);
   }
 });
 

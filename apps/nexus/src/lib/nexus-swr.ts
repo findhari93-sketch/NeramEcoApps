@@ -21,8 +21,8 @@
  * refresh.
  */
 
-import { useEffect, useRef } from 'react';
-import useSWR, { mutate as globalMutate, type SWRConfiguration, type SWRResponse } from 'swr';
+import { useCallback, useEffect, useRef } from 'react';
+import useSWR, { useSWRConfig, type SWRConfiguration, type SWRResponse } from 'swr';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 export type GetToken = () => Promise<string | null>;
@@ -122,17 +122,27 @@ export function useRefreshKey(refreshKey: number | undefined, mutate: () => void
 /**
  * Drop every cached read for one class, so the next render refetches.
  *
- * Call this after any write that could change more than the section that made
- * it: saving a prep test moves the prep roster, publishing a listing changes the
- * class row the wrap-up reads. Matching on the class id rather than naming each
- * route means a new section added later is invalidated without anyone
- * remembering to come back here.
+ * Call the returned function after any write that could change more than the
+ * section that made it: saving a prep test moves the prep roster, publishing a
+ * listing changes the class row the wrap-up reads. Matching on the class id rather
+ * than naming each route means a new section added later is invalidated without
+ * anyone remembering to come back here.
+ *
+ * A hook, not a plain function, because the refetch has to reach the cache the app
+ * renders from. app/providers.tsx gives SWR its own cache (the persistent device
+ * cache), and the `mutate` exported by 'swr' is bound to SWR's built-in default
+ * cache instead, so calling that one revalidated nothing and left the old class row
+ * on screen. Only useSWRConfig().mutate is bound to the provider's cache.
  */
-export function revalidateClass(classId: string): Promise<unknown> {
+export function useRevalidateClass(): (classId: string) => Promise<unknown> {
+  const { mutate } = useSWRConfig();
   // One argument on purpose. Passing `undefined` as the second would BLANK every
   // matching entry before refetching, which flips `isLoading` back to true and
   // replaces the section the teacher is looking at with a spinner for the length
   // of a round trip. The single-argument form refetches underneath the data
   // already on screen.
-  return globalMutate((key) => typeof key === 'string' && key.includes(`/api/timetable/${classId}`));
+  return useCallback(
+    (classId: string) => mutate((key) => typeof key === 'string' && key.includes(`/api/timetable/${classId}`)),
+    [mutate],
+  );
 }

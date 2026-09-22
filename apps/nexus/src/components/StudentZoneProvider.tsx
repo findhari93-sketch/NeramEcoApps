@@ -16,14 +16,13 @@ import { createContext, useContext, useState, useEffect, useCallback, useMemo } 
 import { usePathname, useRouter } from 'next/navigation';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { isPathEnabled } from '@/lib/feature-flags';
-import { QB_EXAM_ORDER, isExamPathListed } from '@/lib/qb-exam-routes';
+import { QB_EXAM_ORDER, isExamPathListed, studentSidebarExams } from '@/lib/qb-exam-routes';
 import type { QBExamType } from '@neram/database';
 import {
   ZONES,
   filterNavTree,
   groupNavItems,
   zoneOverflow,
-  QB_PATH,
   STUDY_MATERIALS_PATH,
   SELF_LEARNING_PATH,
   CLASS_RECAP_PATH,
@@ -92,8 +91,8 @@ interface StudentZoneContextValue {
   currentZoneTitle: string;
   /**
    * The exams the Question Bank lists for this student, in sidebar order, or
-   * null while the classroom check is still out. Read by the `/question-bank`
-   * redirect so it does not make the same request a second time.
+   * null while the published-exams check is still out. Read by the
+   * `/question-bank` redirect so it does not make the same request a second time.
    */
   qbExams: readonly QBExamType[] | null;
 }
@@ -117,15 +116,13 @@ export function useStudentZoneContext() {
 
 export default function StudentZoneProvider({
   children,
-  isQBEnabled = true,
   qbExams = QB_EXAM_ORDER,
 }: {
   children: React.ReactNode;
-  isQBEnabled?: boolean;
   /**
    * The exams the Question Bank folder lists (see `studentSidebarExams`), or
-   * null while that is unknown. Unknown filters nothing: the folder is hidden by
-   * the classroom gate until the same check answers anyway.
+   * null while that is unknown. Unknown lists the first exam only, so a later
+   * exam arrives when its answer does instead of showing and then vanishing.
    */
   qbExams?: readonly QBExamType[] | null;
 }) {
@@ -168,16 +165,14 @@ export default function StudentZoneProvider({
   );
 
   // Filter nav by the admin feature flags. Disabled features are stripped from
-  // the sidebar/bottom-nav; empty groups and empty zones disappear. Question
-  // Bank carries an extra per-classroom gate (isQBEnabled) on top of its global
-  // flag, so it shows only when BOTH are on.
+  // the sidebar/bottom-nav; empty groups and empty zones disappear. The Question
+  // Bank answers to its Features flag alone. It used to need a per-classroom
+  // switch as well, which Features could not see, and left closed it hid the
+  // bank from a whole classroom while Features read On (see qb-auth.ts).
   const value = useMemo<StudentZoneContextValue>(() => {
+    const listedExams = qbExams ?? studentSidebarExams([]);
     const isItemEnabled = (path: string) => {
-      // A prefix, not an exact match: the exam links live under QB_PATH, and an
-      // exact match would wave them past the classroom gate.
-      const inQB = path === QB_PATH || path.startsWith(QB_PATH + '/');
-      if (inQB && !isQBEnabled) return false;
-      if (qbExams && !isExamPathListed(path, qbExams)) return false;
+      if (!isExamPathListed(path, listedExams)) return false;
       return isPathEnabled(path, featureFlags);
     };
     const filterGroups = (groups: NavGroup[]) =>
@@ -222,7 +217,7 @@ export default function StudentZoneProvider({
       currentZoneTitle: effective.title,
       qbExams,
     };
-  }, [activeZone, setActiveZone, isQBEnabled, qbExams, featureFlags]);
+  }, [activeZone, setActiveZone, qbExams, featureFlags]);
 
   return <StudentZoneContext.Provider value={value}>{children}</StudentZoneContext.Provider>;
 }

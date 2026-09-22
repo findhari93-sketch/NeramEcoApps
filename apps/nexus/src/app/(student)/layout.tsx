@@ -9,7 +9,7 @@ import TopBar from '@/components/TopBar';
 import BottomNav from '@/components/BottomNav';
 import DesktopSidebar from '@/components/DesktopSidebar';
 import { useSidebarContext } from '@/components/SidebarProvider';
-import { useQBAccess } from '@/hooks/useQBAccess';
+import { usePublishedQBExams } from '@/hooks/usePublishedQBExams';
 import NavBadgeProvider from '@/components/NavBadgeProvider';
 import DeviceRegistrationProvider from '@/components/DeviceRegistrationProvider';
 import WelcomeOrientation from '@/components/WelcomeOrientation';
@@ -91,17 +91,17 @@ function StudentShell({ children }: { children: React.ReactNode }) {
 }
 
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
-  const { isQBEnabled, publishedExams } = useQBAccess();
-  // Null until the classroom check answers, so nothing acts on the placeholder.
+  const publishedExams = usePublishedQBExams();
+  // Null until the published-exams check answers, so nothing acts on a placeholder.
   const qbExams = useMemo(
-    () => (isQBEnabled === null ? null : studentSidebarExams(publishedExams)),
-    [isQBEnabled, publishedExams],
+    () => (publishedExams === null ? null : studentSidebarExams(publishedExams)),
+    [publishedExams],
   );
 
   return (
     <RoleGuard allowedRoles={['student']}>
       <NavBadgeProvider>
-        <StudentZoneProvider isQBEnabled={isQBEnabled ?? false} qbExams={qbExams}>
+        <StudentZoneProvider qbExams={qbExams}>
           <StudentShell>{children}</StudentShell>
         </StudentZoneProvider>
       </NavBadgeProvider>

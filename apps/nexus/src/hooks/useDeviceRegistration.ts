@@ -4,6 +4,27 @@ import { useEffect, useState } from 'react';
 import { getDeviceFingerprint, getDeviceCategory, getDeviceName } from '@/lib/device-fingerprint';
 import { collectDeviceInfo } from '@/lib/device-collector';
 
+/**
+ * This tab's registered device, remembered per account.
+ *
+ * It used to be one bare id, so after a sign-out and a different student's
+ * sign-in in the same tab, the second student's time was logged against the
+ * first student's device (PERF-0035). The value is now `<user id>:<device id>`,
+ * and a value left by another account, or by the old format, reads as nothing.
+ * DeviceSection removes this key when the current device is deregistered.
+ */
+const REGISTERED_DEVICE_KEY = 'neram_device_registered';
+
+function readRegisteredDevice(userId: string): string | null {
+  const value = sessionStorage.getItem(REGISTERED_DEVICE_KEY);
+  const prefix = `${userId}:`;
+  return value?.startsWith(prefix) ? value.slice(prefix.length) || null : null;
+}
+
+function rememberRegisteredDevice(userId: string, deviceId: string): void {
+  sessionStorage.setItem(REGISTERED_DEVICE_KEY, `${userId}:${deviceId}`);
+}
+
 interface DeviceRegistrationResult {
   deviceId: string | null;
   isNewDevice: boolean;
@@ -15,12 +36,14 @@ interface DeviceRegistrationResult {
 /**
  * Automatically registers the current device on login (Nexus/Microsoft auth).
  * Returns the device ID for heartbeat tracking.
- * Only activates for student users.
+ * Only activates for student users, and never while a teacher views as a student:
+ * the caller passes isStudent false then.
  */
 export function useDeviceRegistration(
   getToken: () => Promise<string | null>,
   isStudent: boolean,
-  enabled = true
+  enabled = true,
+  userId: string | null = null
 ): DeviceRegistrationResult {
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [isNewDevice, setIsNewDevice] = useState(false);
@@ -29,12 +52,14 @@ export function useDeviceRegistration(
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isStudent || !enabled) {
+    if (!isStudent || !enabled || !userId) {
       setLoading(false);
       return;
     }
 
-    const registered = sessionStorage.getItem('neram_device_registered');
+    // Captured for register() below: a nested function does not keep the narrowing.
+    const ownerId = userId;
+    const registered = readRegisteredDevice(ownerId);
     if (registered) {
       setDeviceId(registered);
       setLoading(false);
@@ -78,7 +103,7 @@ export function useDeviceRegistration(
           const { device } = await response.json();
           if (device) {
             setDeviceId(device.id);
-            sessionStorage.setItem('neram_device_registered', device.id);
+            rememberRegisteredDevice(ownerId, device.id);
             setIsNewDevice(true);
           }
         } else if (response.status === 409) {
@@ -96,7 +121,7 @@ export function useDeviceRegistration(
     }
 
     register();
-  }, [getToken, isStudent, enabled]);
+  }, [getToken, isStudent, enabled, userId]);
 
   return { deviceId, isNewDevice, limitReached, limitCategory, loading };
 }

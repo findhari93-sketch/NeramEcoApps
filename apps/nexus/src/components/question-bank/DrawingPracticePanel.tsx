@@ -27,8 +27,10 @@ import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import ReplayIcon from '@mui/icons-material/Replay';
 import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import ZoomOutMapIcon from '@mui/icons-material/ZoomOutMap';
+import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import DrawingSubmissionSheet from '@/components/drawings/DrawingSubmissionSheet';
 import DrawingPartsView from './DrawingPartsView';
+import SolutionVideoPlayer from './SolutionVideoPlayer';
 import { readDrawingParts } from '@/lib/drawing-parts';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import type { NexusQBQuestionDetail, QBDrawingState } from '@neram/database';
@@ -74,6 +76,8 @@ export default function DrawingPracticePanel({ question, classroomId, language =
   const [confirmReveal, setConfirmReveal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
+  // Mounted on request, so opening a drawing never loads a YouTube frame.
+  const [videoOpen, setVideoOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -119,6 +123,12 @@ export default function DrawingPracticePanel({ question, classroomId, language =
   const submission = state?.submission ?? null;
   const awaitingReview = submission?.status === 'submitted' || submission?.status === 'under_review';
   const needsRedo = submission?.status === 'redo';
+  // A single-task drawing's own solutions. Parts carry theirs in the view above.
+  const hasImage = !parts && Boolean(question.solution_image_url);
+  const videoUrl = !parts ? question.solution_video_url?.trim() || null : null;
+  const solutionWords =
+    hasImage && videoUrl ? 'solution image and video' : videoUrl ? 'solution video' : 'solution image';
+  const solutionIsPlural = hasImage && Boolean(videoUrl);
 
   return (
     <Box sx={{ mb: 3 }}>
@@ -207,7 +217,7 @@ export default function DrawingPracticePanel({ question, classroomId, language =
               <Typography variant="body2" color="text.secondary">
                 {parts
                   ? 'Draw it first. The solutions open up once you upload your attempt, or you can switch them on below.'
-                  : 'Draw it first. The solution image opens up once you upload your attempt, or you can switch it on below.'}
+                  : `Draw it first. The ${solutionWords} ${solutionIsPlural ? 'open' : 'opens'} up once you upload your attempt, or you can switch ${solutionIsPlural ? 'them' : 'it'} on below.`}
               </Typography>
             </Box>
           ) : (
@@ -277,6 +287,24 @@ export default function DrawingPracticePanel({ question, classroomId, language =
                   />
                 </Box>
               )}
+
+              {videoUrl && (
+                <Box sx={{ mb: 2 }}>
+                  {videoOpen ? (
+                    <SolutionVideoPlayer url={videoUrl} />
+                  ) : (
+                    <Button
+                      variant="outlined"
+                      fullWidth
+                      startIcon={<PlayCircleOutlineIcon />}
+                      onClick={() => setVideoOpen(true)}
+                      sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600, borderRadius: 2 }}
+                    >
+                      Watch the solution video
+                    </Button>
+                  )}
+                </Box>
+              )}
             </>
           )}
 
@@ -312,7 +340,7 @@ export default function DrawingPracticePanel({ question, classroomId, language =
               }
               label={
                 <Typography variant="body2" color="text.secondary">
-                  {parts ? 'Show the solutions' : 'Show the solution image'}
+                  {parts ? 'Show the solutions' : `Show the ${solutionWords}`}
                 </Typography>
               }
             />

@@ -83,11 +83,18 @@ export async function getRequestUser(authHeader: string | null): Promise<Request
   if (cached) return cached;
 
   const supabase = getSupabaseAdminClient();
-  const { data: user } = await supabase
+  const { data: user, error } = await supabase
     .from('users')
     .select('id, user_type, student_program, name, staff_role, can_teach')
     .eq('ms_oid', msUser.oid)
     .single();
+  // Only PGRST116 (no row) means "not found". Any other error is the lookup failing
+  // (a statement timeout, the proxy dropping the connection), and reporting that as
+  // "User not found" answered 401 and told the client its session had ended.
+  if (error && error.code !== 'PGRST116') {
+    console.error(`[getRequestUser] users lookup failed: ${error.code ?? ''} ${error.message}`);
+    throw new Error('Could not load the signed-in user');
+  }
   if (!user) throw new Error('User not found');
 
   requestUserCache.set(msUser.oid, user as RequestUser);

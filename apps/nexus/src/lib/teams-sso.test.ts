@@ -253,6 +253,13 @@ describe('verifyTeamsSsoToken: signing keys', () => {
     expect(fetchSpy).toHaveBeenCalledTimes(2);
   });
 
+  it('reports a failed key fetch as an outage, not as a refused token (PERF-0013)', async () => {
+    // A refusal answers 401, which sends the user to sign in again. Microsoft being
+    // unreachable says nothing about the token, so it must not look like a refusal.
+    fetchSpy.mockResolvedValueOnce({ ok: false, status: 503, json: async () => ({}) });
+    await expect(verifyTeamsSsoToken(signToken(primary, v2Claims()), config)).rejects.not.toBeInstanceOf(TeamsSsoError);
+  });
+
   it('ignores published keys that are not RSA signing keys', async () => {
     publishedKeys = [{ ...primary.jwk, use: 'enc' }, { kty: 'EC', kid: 'key-primary', crv: 'P-256' }, { kty: 'RSA', kid: 'broken', n: '', e: '' }];
     await expect(verifyTeamsSsoToken(signToken(primary, v2Claims()), config)).rejects.toThrow(/signature/);

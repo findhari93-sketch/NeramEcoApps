@@ -3,6 +3,7 @@
 import { forwardRef } from 'react';
 import { Box, Paper, Typography, Collapse, Skeleton, IconButton, Chip, alpha, useTheme } from '@neram/ui';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import type { NexusQBQuestionListItem, NexusQBQuestionDetail } from '@neram/database';
 import SourceBadges from './SourceBadges';
 import DifficultyChip from './DifficultyChip';
@@ -182,6 +183,26 @@ const InlineQuestionCard = forwardRef<HTMLDivElement, InlineQuestionCardProps>(f
                   size="small"
                   variant="outlined"
                   sx={{ height: 18, fontSize: '0.6rem', fontWeight: 600, '& .MuiChip-label': { px: 0.5 } }}
+                />
+              )}
+              {/* The list ships a flag, never the link: the video itself opens
+                  only after the student answers. */}
+              {question.has_solution_video && (
+                <Chip
+                  icon={<PlayCircleOutlineIcon aria-hidden />}
+                  label="Video"
+                  size="small"
+                  variant="outlined"
+                  color="primary"
+                  title="Has a video solution, unlocks after you answer"
+                  aria-label="Has a video solution, unlocks after you answer"
+                  sx={{
+                    height: 18,
+                    fontSize: '0.6rem',
+                    fontWeight: 600,
+                    '& .MuiChip-label': { px: 0.5 },
+                    '& .MuiChip-icon': { fontSize: 12, ml: 0.5, mr: -0.25 },
+                  }}
                 />
               )}
               <Box sx={{ flexGrow: 1 }} />

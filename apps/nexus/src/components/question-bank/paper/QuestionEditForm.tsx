@@ -50,6 +50,7 @@ import ImageUploadZone from '../ImageUploadZone';
 import DrawingQuestionPanel from '../DrawingQuestionPanel';
 import TagCategoryDialog from '../TagCategoryDialog';
 import DeleteQuestionDialog from '../DeleteQuestionDialog';
+import SolutionVideoField from '../SolutionVideoField';
 import DrawingPartsEditor, {
   SplitIntoPartsPrompt,
   formToParts,
@@ -1029,15 +1030,16 @@ export default function QuestionEditForm({
               getToken={getToken}
               subfolder="solutions"
             />
-            <TextField
-              label="Solution Video URL"
-              value={form.solution_video_url}
-              onChange={(e) => updateField('solution_video_url', e.target.value)}
-              size="small"
-              fullWidth
-              sx={{ mt: 1.5 }}
-              placeholder="YouTube or SharePoint link"
-            />
+            {/* The same checked field as the paper's Videos mode: it says
+                whether the link will play, and opens it to check it. */}
+            <Box sx={{ mt: 1.5 }}>
+              <SolutionVideoField
+                label="Solution video"
+                showLabel
+                value={form.solution_video_url}
+                onChange={(value) => updateField('solution_video_url', value)}
+              />
+            </Box>
           </AccordionDetails>
         </Accordion>
         )}

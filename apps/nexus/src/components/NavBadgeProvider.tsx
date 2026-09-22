@@ -42,13 +42,29 @@ const PATH_TO_BADGE_KEY: Record<string, string> = {
 };
 
 const POLL_INTERVAL = 60_000; // 60 seconds
+/**
+ * A badge request that has not answered in this long is abandoned. Behind Cloudflare
+ * a stalled request otherwise hangs until the 100s cut-off (a 524), longer than the
+ * poll interval, and holds the in-flight guard below for all of it.
+ */
+const REQUEST_TIMEOUT = 15_000;
 
 export default function NavBadgeProvider({ children }: { children: React.ReactNode }) {
-  const { getToken, user } = useNexusAuthContext();
+  // Silent: this polls on a timer, and the redirecting getToken would send the
+  // page to Microsoft sign-in under the user when the session expires (PERF-0054).
+  const { getTokenSilently: getToken, user } = useNexusAuthContext();
   const [counts, setCounts] = useState<BadgeCounts>({});
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** Requests still waiting for an answer. Timed polls skip while any is. */
+  const inFlightRef = useRef(0);
+  /** Numbers each request, so an older answer landing late cannot overwrite a newer one. */
+  const latestRequestRef = useRef(0);
 
   const fetchBadges = useCallback(async () => {
+    const requestId = ++latestRequestRef.current;
+    inFlightRef.current += 1;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
     try {
       const token = await getToken();
       if (!token) return;
@@ -62,11 +78,12 @@ export default function NavBadgeProvider({ children }: { children: React.ReactNo
       const res = await fetch('/api/nav-badges', {
         cache: 'no-store',
         headers: { Authorization: `Bearer ${token}` },
+        signal: controller.signal,
       });
 
       if (res.ok) {
         const data = await res.json();
-        setCounts(data.badges || {});
+        if (requestId === latestRequestRef.current) setCounts(data.badges || {});
         return;
       }
       // Not fatal, the next poll retries. But log it: a non-OK response leaves
@@ -77,8 +94,21 @@ export default function NavBadgeProvider({ children }: { children: React.ReactNo
       // Badges are non-critical, so this must not throw. It must not be silent
       // either: the counts on screen are now of unknown age.
       console.warn('nav-badges: could not refresh counts', err);
+    } finally {
+      clearTimeout(timer);
+      inFlightRef.current -= 1;
     }
   }, [getToken]);
+
+  /**
+   * The timed and on-return polls. They skip while a request is still out, so a slow
+   * server gets one request at a time from each tab instead of a growing pile.
+   * refreshBadges() (after a teacher acts) is never skipped: it calls fetchBadges.
+   */
+  const pollBadges = useCallback(() => {
+    if (inFlightRef.current > 0) return;
+    void fetchBadges();
+  }, [fetchBadges]);
 
   // Fetch on mount and poll, but only while somebody is actually looking.
   //
@@ -92,7 +122,7 @@ export default function NavBadgeProvider({ children }: { children: React.ReactNo
 
     const start = () => {
       if (intervalRef.current) return;
-      intervalRef.current = setInterval(fetchBadges, POLL_INTERVAL);
+      intervalRef.current = setInterval(pollBadges, POLL_INTERVAL);
     };
 
     const stop = () => {
@@ -109,12 +139,12 @@ export default function NavBadgeProvider({ children }: { children: React.ReactNo
       // Refetch immediately on return: the counts may have moved while away, and
       // waiting out the rest of the interval would show a stale badge at the exact
       // moment someone is looking at it.
-      fetchBadges();
+      pollBadges();
       start();
     };
 
     if (document.visibilityState !== 'hidden') {
-      fetchBadges();
+      pollBadges();
       start();
     }
 
@@ -124,7 +154,7 @@ export default function NavBadgeProvider({ children }: { children: React.ReactNo
       stop();
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [user, fetchBadges]);
+  }, [user, pollBadges]);
 
   const getBadgeCount = useCallback(
     (path: string): number => {

@@ -22,6 +22,7 @@ const composed = [
     correct_answer: 'a',
     explanation_brief: 'Aibak began it in 1199.',
     explanation_detailed: null,
+    solution_videos: [{ label: null, url: 'https://www.youtube.com/watch?v=U1X9MmLh-ZQ' }],
     sort_order: 0,
   },
   {
@@ -160,6 +161,18 @@ describe('getStudentTestAttemptReview', () => {
     expect(attempts[1].review[0]).toMatchObject({ selected: 'a', is_correct: true });
   });
 
+  it('carries the solution video beside the explanation, and none where there is none', async () => {
+    const { attempts } = await getStudentTestAttemptReview(
+      { testId: 't-1', studentId: 'stu-1' },
+      stubClient(seed()),
+    );
+
+    expect(attempts[0].review[0].solution_videos).toEqual([
+      { label: null, url: 'https://www.youtube.com/watch?v=U1X9MmLh-ZQ' },
+    ]);
+    expect(attempts[0].review[1].solution_videos).toEqual([]);
+  });
+
   /**
    * The original fired one draw lookup per attempt inside a Promise.all, so a
    * student with seven retakes cost seven round trips to open one drawer.
@@ -242,6 +255,9 @@ describe('the study file report shape survives the move', () => {
           is_gradable: true,
           explanation: 'Aibak began it in 1199.',
           explanation_detailed: null,
+          // Added on purpose: the chapter drawer renders GradedReviewList, which
+          // now offers the video under the explanation.
+          solution_videos: [{ label: null, url: 'https://www.youtube.com/watch?v=U1X9MmLh-ZQ' }],
         },
         {
           question_id: 'q2',
@@ -256,6 +272,7 @@ describe('the study file report shape survives the move', () => {
           is_gradable: true,
           explanation: null,
           explanation_detailed: 'Iltutmish added three storeys.',
+          solution_videos: [],
         },
       ],
     });

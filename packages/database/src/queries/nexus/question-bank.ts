@@ -39,6 +39,7 @@ import type {
   NexusQBOriginalPaper,
   NexusQBPaperContributor,
   NexusQBQuestionListItem,
+  NexusSolutionVideo,
   NexusQBQuestionDetail,
   NexusQBQuestionInsert,
   NexusQBQuestionUpdate,
@@ -411,7 +412,10 @@ export const QB_LIST_COLUMNS =
   'id, question_text, question_text_hi, question_image_url, question_format, ' +
   'options, categories, difficulty, topic_id, display_order, created_at, ' +
   'section, section_order, marks_correct, marks_negative, confidence_tier, ' +
-  'origin, repeat_group_id, needs_image, choice_group_id, choice_group_pick, drawing_parts';
+  'origin, repeat_group_id, needs_image, choice_group_id, choice_group_pick, drawing_parts, ' +
+  // Selected only to be reduced to has_solution_video by stripStudentListSolutions;
+  // the link itself never leaves the server on this path.
+  'solution_video_url';
 
 /**
  * Drop the correct answer out of an option list.
@@ -446,6 +450,76 @@ export function stripDrawingPartSolutions(value: unknown): QBDrawingParts | null
   };
 }
 
+function isPartsObject(value: unknown): value is QBDrawingParts {
+  if (!value || typeof value !== 'object') return false;
+  const v = value as Partial<QBDrawingParts>;
+  return (v.mode === 'all' || v.mode === 'any_one') && Array.isArray(v.items);
+}
+
+function cleanUrl(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+}
+
+/**
+ * Every solution video a question has, in the order a student should see them.
+ *
+ * The one definition of "has a video" for every screen: the teacher's paper
+ * marker and "No video" queue, the student card chip and filter, and the test
+ * review all read this, so no two of them can disagree.
+ *
+ * A split drawing answers per part. Its question-level column is only a mirror
+ * of the first part that has a video (mirroredPartSolution), so reading both
+ * would list part A twice and would call a question with an empty part B
+ * finished.
+ */
+export function solutionVideosOf(question: {
+  solution_video_url?: string | null;
+  drawing_parts?: unknown;
+}): NexusSolutionVideo[] {
+  if (isPartsObject(question.drawing_parts)) {
+    return question.drawing_parts.items.flatMap((part) => {
+      const url = cleanUrl(part?.solution_video_url);
+      return url ? [{ label: part.label ?? null, url }] : [];
+    });
+  }
+  const url = cleanUrl(question.solution_video_url);
+  return url ? [{ label: null, url }] : [];
+}
+
+/**
+ * A question row as the student browse list may ship it.
+ *
+ * The list says whether a video exists (the card chip needs that before the
+ * student answers) but never ships the link itself, for the same reason the
+ * answer key and the part solutions are stripped: a solution readable from the
+ * network tab of the practice list is a solution read before answering.
+ */
+export function stripStudentListSolutions<
+  T extends { solution_video_url?: string | null; drawing_parts?: unknown; options?: unknown },
+>(row: T): Omit<T, 'solution_video_url'> & { has_solution_video: boolean } {
+  const { solution_video_url: _url, ...rest } = row;
+  return {
+    ...rest,
+    options: stripOptionAnswers(row.options),
+    drawing_parts: stripDrawingPartSolutions(row.drawing_parts),
+    has_solution_video: solutionVideosOf(row).length > 0,
+  } as Omit<T, 'solution_video_url'> & { has_solution_video: boolean };
+}
+
+/**
+ * The one solution filter a student may use: "has a video".
+ *
+ * The teacher values ("has an explanation", "no solution") are work queues, not
+ * practice lenses, so they are dropped here rather than trusted from the URL.
+ */
+export function studentSolutionFilter(
+  value: QBFilterState['solution_filter'],
+): 'has_video' | undefined {
+  return value === 'has_video' ? 'has_video' : undefined;
+}
+
 export function stripOptionAnswers<T>(options: T): T {
   if (!Array.isArray(options)) return options;
   return options.map((opt: any) =>
@@ -471,33 +545,66 @@ export function stripOptionAnswers<T>(options: T): T {
  * was asked for and matched nothing. Callers must tell those apart.
  */
 async function resolvePaperSourceIds(
-  filters: Pick<QBFilterState, 'exam_type' | 'source_year' | 'source_session' | 'source_shift'>,
+  filters: PaperSourceFilters,
   supabase: TypedSupabaseClient,
 ): Promise<string[] | null> {
   if (!filters.exam_type) return null;
 
-  let sourceQuery = supabase
-    .from('nexus_qb_question_sources')
-    .select('question_id')
-    .eq('exam_type', filters.exam_type);
-
-  if (filters.source_year) {
-    sourceQuery = sourceQuery.eq('year', filters.source_year);
-  }
-  if (filters.source_session) {
-    const parsed = parseSessionKey(filters.source_session);
-    sourceQuery = sourceQuery.eq('session', parsed.session);
-    if (parsed.shift) {
-      sourceQuery = sourceQuery.eq('shift', parsed.shift);
-    }
-  }
-  if (filters.source_shift) {
-    sourceQuery = sourceQuery.eq('shift', filters.source_shift);
-  }
+  const sourceQuery = applyPaperSourceFilters(
+    supabase.from('nexus_qb_question_sources').select('question_id'),
+    filters,
+  );
 
   const { data, error } = await sourceQuery;
   if (error) throw error;
   return [...new Set((data || []).map((s: any) => s.question_id))];
+}
+
+type PaperSourceFilters = Pick<
+  QBFilterState,
+  'exam_type' | 'source_year' | 'source_session' | 'source_shift'
+>;
+
+/**
+ * The sources table, joined into a question list only to filter it.
+ *
+ * A browse query used to resolve the paper filter to question ids first and
+ * send them back as `.in('id', ids)`. For an exam on its own that is every
+ * question the exam's papers hold (2,115 for JEE Paper 2), which put the list
+ * far past what one URL can carry and failed as "TypeError: fetch failed"
+ * (see IN_LIST_CHUNK in utils/paged-rows.ts). An `!inner` embed filters in the
+ * database instead. It is empty, so it adds nothing to the rows, and it
+ * returns each question once however many sittings it appeared in.
+ */
+const PAPER_SOURCE_EMBED = 'paper_src:nexus_qb_question_sources!inner()';
+
+/** The select list, plus the sources join when a paper filter is set. */
+function withPaperSourceJoin(columns: string, filters: PaperSourceFilters): string {
+  return filters.exam_type ? `${columns}, ${PAPER_SOURCE_EMBED}` : columns;
+}
+
+/**
+ * Exam, year, session and shift, applied either to a query on the sources
+ * table itself (`prefix` '') or through PAPER_SOURCE_EMBED ('paper_src.').
+ * One place, so the ranked search and the browse list cannot disagree about
+ * what "JEE 2024 January" means.
+ */
+function applyPaperSourceFilters<Q>(query: Q, filters: PaperSourceFilters, prefix = ''): Q {
+  let q = (query as any).eq(`${prefix}exam_type`, filters.exam_type);
+  if (filters.source_year) {
+    q = q.eq(`${prefix}year`, filters.source_year);
+  }
+  if (filters.source_session) {
+    const parsed = parseSessionKey(filters.source_session);
+    q = q.eq(`${prefix}session`, parsed.session);
+    if (parsed.shift) {
+      q = q.eq(`${prefix}shift`, parsed.shift);
+    }
+  }
+  if (filters.source_shift) {
+    q = q.eq(`${prefix}shift`, filters.source_shift);
+  }
+  return q as Q;
 }
 
 /**
@@ -514,11 +621,14 @@ export async function getQBQuestions(
 ): Promise<{ questions: NexusQBQuestionListItem[]; total: number; search?: QBSearchMeta }> {
   const supabase = client || getSupabaseAdminClient();
   const offset = (page - 1) * pageSize;
+  // Narrowed before anything reads it, so the ranked search path below is held
+  // to the same rule as the browse query.
+  filters = { ...filters, solution_filter: studentSolutionFilter(filters.solution_filter) };
 
   // --- Build the base query ---
   let query = supabase
     .from('nexus_qb_questions')
-    .select(QB_LIST_COLUMNS, { count: 'exact' })
+    .select(withPaperSourceJoin(QB_LIST_COLUMNS, filters), { count: 'exact' })
     .eq('is_active', true)
     .eq('status' as any, 'active');
 
@@ -545,6 +655,11 @@ export async function getQBQuestions(
   if (filters.section && filters.section.length > 0) {
     query = query.in('section' as any, filters.section);
   }
+  // A split drawing counts too: its question column mirrors the first part
+  // that has a video. Blank strings are not videos.
+  if (filters.solution_filter === 'has_video') {
+    query = query.not('solution_video_url', 'is', null).neq('solution_video_url' as any, '');
+  }
   // NOTE: search_text is deliberately NOT applied here. It is handled by the
   // nexus_qb_search RPC below, under the 'student' role so that explanation
   // text is neither matchable nor returnable. See queries/nexus/qb-search.ts.
@@ -558,13 +673,17 @@ export async function getQBQuestions(
     query = query.in('origin' as any, filters.origin);
   }
 
-  // Source-based filters from sidebar (exam_type + source_year + source_session)
-  const sourceFilteredIds = await resolvePaperSourceIds(filters, supabase);
-  if (sourceFilteredIds !== null) {
-    if (sourceFilteredIds.length === 0) {
-      return { questions: [], total: 0 };
-    }
-    query = query.in('id', sourceFilteredIds);
+  // Source-based filters from sidebar (exam_type + source_year + source_session).
+  // Browse filters through the sources join; only the ranked search needs the
+  // ids, and it sends them in a POST body. See PAPER_SOURCE_EMBED.
+  if (filters.exam_type) {
+    query = applyPaperSourceFilters(query, filters, 'paper_src.');
+  }
+  const sourceFilteredIds = filters.search_text
+    ? await resolvePaperSourceIds(filters, supabase)
+    : null;
+  if (sourceFilteredIds !== null && sourceFilteredIds.length === 0) {
+    return { questions: [], total: 0 };
   }
 
   // For exam_years filter (legacy/preset-based), get question IDs from sources
@@ -796,9 +915,7 @@ export async function getQBQuestions(
 
   // --- Assemble list items ---
   const result: NexusQBQuestionListItem[] = questions.map(q => ({
-    ...q,
-    options: stripOptionAnswers(q.options),
-    drawing_parts: stripDrawingPartSolutions(q.drawing_parts),
+    ...(stripStudentListSolutions(q) as unknown as NexusQBQuestion & { has_solution_video: boolean }),
     sources: sourcesMap.get(q.id) || [],
     topic: q.topic_id ? topicMap.get(q.topic_id) || null : null,
     attempt_summary: attemptMap.get(q.id) || null,
@@ -1233,22 +1350,26 @@ export async function getStudentQBStats(
     questionDifficultyMap.set(q.id, q.difficulty);
   }
 
-  const allQuestionIds = questionsData.map(q => q.id);
-
-  // Fetch all attempts for this student on the filtered questions
-  let attemptsQuery = supabase
-    .from('nexus_qb_student_attempts')
-    .select('question_id, is_correct, created_at')
-    .eq('student_id', studentId);
-  if (allQuestionIds.length > 0) {
-    attemptsQuery = attemptsQuery.in('question_id', allQuestionIds);
-  }
-  const { data: attemptsRaw, error: attemptsError } = await attemptsQuery;
-  if (attemptsError) throw attemptsError;
+  // This student's attempts, kept to the questions above in memory. Filtering
+  // by those ids in the query put every one of them in the URL: 853 JEE ids,
+  // which failed as "TypeError: fetch failed" (see IN_LIST_CHUNK). A student's
+  // own attempts are a short read, and paging it also stops the old silent cut
+  // at 1,000 rows.
+  const attemptsRaw = await fetchAllRowsPaged<{
+    question_id: string;
+    is_correct: boolean;
+    created_at: string;
+  }>(() =>
+    (supabase as any)
+      .from('nexus_qb_student_attempts')
+      .select('question_id, is_correct, created_at')
+      .eq('student_id', studentId),
+  );
 
   // Group by question, find latest attempt per question
   const attemptsByQ = new Map<string, { is_correct: boolean; created_at: string }[]>();
-  for (const a of (attemptsRaw || []) as any[]) {
+  for (const a of attemptsRaw) {
+    if (!questionCategoryMap.has(a.question_id)) continue;
     if (!attemptsByQ.has(a.question_id)) {
       attemptsByQ.set(a.question_id, []);
     }
@@ -2123,7 +2244,7 @@ export async function getTeacherQBQuestions(
 
   let query = supabase
     .from('nexus_qb_questions')
-    .select('*', { count: 'exact' });
+    .select(withPaperSourceJoin('*', filters), { count: 'exact' });
 
   // Teacher can see all statuses, or filter by specific ones
   if (filters.status && filters.status.length > 0) {
@@ -2159,13 +2280,16 @@ export async function getTeacherQBQuestions(
 
   // Which paper the question came from. The API has always parsed these; until
   // now this function ignored them, so "show me JEE 2014" quietly returned the
-  // entire bank.
-  const sourceFilteredIds = await resolvePaperSourceIds(filters, supabase);
-  if (sourceFilteredIds !== null) {
-    if (sourceFilteredIds.length === 0) {
-      return { questions: [], total: 0 };
-    }
-    query = query.in('id', sourceFilteredIds);
+  // entire bank. Browse filters through the sources join; only the ranked
+  // search needs the ids (see PAPER_SOURCE_EMBED).
+  if (filters.exam_type) {
+    query = applyPaperSourceFilters(query, filters, 'paper_src.');
+  }
+  const sourceFilteredIds = filters.search_text
+    ? await resolvePaperSourceIds(filters, supabase)
+    : null;
+  if (sourceFilteredIds !== null && sourceFilteredIds.length === 0) {
+    return { questions: [], total: 0 };
   }
 
   // Solution filter
@@ -2246,7 +2370,9 @@ export async function getTeacherQBQuestions(
     const { data: questionsRaw, error: questionsError, count: browseCount } = await query;
     if (questionsError) throw questionsError;
 
-    questions = (questionsRaw || []) as NexusQBQuestion[];
+    // The select list is built at runtime (the sources join is added only for a
+    // paper filter), so postgrest-js cannot infer the row shape from it.
+    questions = (questionsRaw || []) as unknown as NexusQBQuestion[];
     count = browseCount;
   }
 
@@ -2329,6 +2455,7 @@ export async function getTeacherQBQuestions(
 
   const result: NexusQBQuestionListItem[] = questions.map((q) => ({
     ...q,
+    has_solution_video: solutionVideosOf(q).length > 0,
     sources: sourcesMap.get(q.id) || [],
     topic: q.topic_id ? topicMap.get(q.topic_id) || null : null,
     attempt_summary: null,

@@ -74,7 +74,6 @@ test.describe('Question Bank paper: Quick 15 and desktop layout', () => {
     wasVisible: boolean;
     attachedTestId: string | null;
     staffToken: string | null;
-    linkedClassroomId: string | null;
     /** A second published paper, purely so the flatten test has two rows to
      * compare. Not used by the pre-existing Quick 15 / action-card tests. */
     secondPaperId: string | null;
@@ -84,7 +83,6 @@ test.describe('Question Bank paper: Quick 15 and desktop layout', () => {
     wasVisible: false,
     attachedTestId: null,
     staffToken: null,
-    linkedClassroomId: null,
     secondPaperId: null,
     secondWasVisible: false,
   };
@@ -98,22 +96,8 @@ test.describe('Question Bank paper: Quick 15 and desktop layout', () => {
       fixture.staffToken = auth.testToken;
       const headers = { Authorization: `Bearer ${auth.testToken}` };
 
-      const studentAuth = await getTestAuthToken(api, 'student');
-      const classroomId = studentAuth?.classrooms?.[0]?.id;
-      if (classroomId) {
-        const link = await api
-          .get(`${NEXUS}/api/question-bank/classroom-link?classroom_id=${classroomId}`, { headers })
-          .then((r) => r.json())
-          .catch(() => ({ data: { enabled: true } }));
-        if (!link?.data?.enabled) {
-          const on = await api.post(`${NEXUS}/api/question-bank/classroom-link`, {
-            headers,
-            data: { classroom_id: classroomId },
-          });
-          if (on.ok()) fixture.linkedClassroomId = classroomId;
-        }
-      }
-
+      // No per-classroom Question Bank switch to open any more: the Features
+      // flag is the only one, and E2E test mode resolves every flag on.
       const papers = await api
         .get(`${NEXUS}/api/question-bank/papers`, { headers })
         .then((r) => r.json())
@@ -198,12 +182,6 @@ test.describe('Question Bank paper: Quick 15 and desktop layout', () => {
         await api.patch(`${NEXUS}/api/question-bank/papers/${fixture.secondPaperId}/access`, {
           headers,
           data: { is_student_visible: false },
-        });
-      }
-      if (fixture.linkedClassroomId) {
-        await api.delete(`${NEXUS}/api/question-bank/classroom-link`, {
-          headers,
-          data: { classroom_id: fixture.linkedClassroomId },
         });
       }
     } finally {

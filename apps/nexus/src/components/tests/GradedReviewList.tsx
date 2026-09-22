@@ -11,9 +11,13 @@
  * same way the has_test chip and the completion banner once did.
  */
 
-import { Box, Typography, Paper, Chip, alpha, useTheme } from '@neram/ui';
+import { useState } from 'react';
+import { Box, Button, Typography, Paper, Chip, alpha, useTheme } from '@neram/ui';
+import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
+import type { NexusSolutionVideo } from '@neram/database';
 import MathText from '@/components/common/MathText';
 import ExplanationPanel from '@/components/tests/ExplanationPanel';
+import SolutionVideoPlayer from '@/components/question-bank/SolutionVideoPlayer';
 import OptionBody, { type TestOption } from '@/components/tests/OptionBody';
 import { optionKeyAt, sameChoice } from '@/lib/option-keys';
 
@@ -28,6 +32,8 @@ export interface GradedReviewItem {
   explanation: string | null;
   /** Only present once someone has asked the AI for the worked version. */
   explanation_detailed?: string | null;
+  /** The question's solution videos, one per part for a split drawing. Absent on older payloads. */
+  solution_videos?: NexusSolutionVideo[];
 }
 
 interface GradedReviewListProps {
@@ -129,9 +135,43 @@ export default function GradedReviewList({ review, getToken, classroomId }: Grad
               classroomId={classroomId}
               getToken={getToken}
             />
+
+            {(r.solution_videos ?? []).map((video) => (
+              <ReviewVideo key={video.url} video={video} />
+            ))}
           </Paper>
         );
       })}
     </Box>
+  );
+}
+
+/**
+ * One solution video in the review. A button until pressed, so a long review
+ * never loads a player per question.
+ */
+function ReviewVideo({ video }: { video: NexusSolutionVideo }) {
+  const [open, setOpen] = useState(false);
+  const label = video.label ? `Watch the video for part ${video.label}` : 'Watch the video solution';
+  if (open) {
+    return (
+      <Box sx={{ mt: 1.25 }}>
+        <SolutionVideoPlayer
+          url={video.url}
+          title={video.label ? `Solution video for part ${video.label}` : 'Solution video'}
+        />
+      </Box>
+    );
+  }
+  return (
+    <Button
+      variant="outlined"
+      size="small"
+      startIcon={<PlayCircleOutlineIcon />}
+      onClick={() => setOpen(true)}
+      sx={{ mt: 1.25, minHeight: 44, textTransform: 'none', fontWeight: 600 }}
+    >
+      {label}
+    </Button>
   );
 }

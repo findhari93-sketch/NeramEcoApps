@@ -45,7 +45,10 @@ const VALUE_PROPS = [
 ];
 
 export default function NoClassroomWelcome() {
-  const { user, signOut } = useNexusAuthContext();
+  const { user, nexusRole, signOut } = useNexusAuthContext();
+  // Staff need a classroom too (PERF-0038), but an admin adds them as a
+  // teacher, so they get their own wording instead of the student welcome.
+  const isStaff = nexusRole === 'teacher' || nexusRole === 'admin';
   const [adminEmails, setAdminEmails] = useState<string[]>(DEFAULT_ADMIN_TEAMS_EMAILS);
 
   // Fetch the admin Teams contacts so the "Talk to Admin" button opens the
@@ -71,10 +74,13 @@ export default function NoClassroomWelcome() {
   }, []);
 
   const teamsDeepLink = useCallback(() => {
-    const message = `Hi, I've signed in to Nexus but I'm not in a classroom yet. Could you please add me to the right classroom?\n\nName: ${user?.name || 'N/A'}\nEmail: ${user?.email || 'N/A'}`;
+    const ask = isStaff
+      ? "Hi, I've signed in to Nexus as staff but I'm not in a classroom yet. Could you please add me to my classroom as a teacher?"
+      : "Hi, I've signed in to Nexus but I'm not in a classroom yet. Could you please add me to the right classroom?";
+    const message = `${ask}\n\nName: ${user?.name || 'N/A'}\nEmail: ${user?.email || 'N/A'}`;
     const emails = adminEmails.join(',');
     return `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(emails)}&message=${encodeURIComponent(message)}`;
-  }, [user, adminEmails]);
+  }, [user, adminEmails, isStaff]);
 
   const primaryColor = '#7C3AED'; // Nexus purple
 
@@ -100,7 +106,7 @@ export default function NoClassroomWelcome() {
           size="small"
           startIcon={<LogoutOutlinedIcon />}
           onClick={signOut}
-          sx={{ color: 'text.secondary' }}
+          sx={{ color: 'text.secondary', minHeight: 44 }}
         >
           Sign Out
         </Button>
@@ -146,6 +152,7 @@ export default function NoClassroomWelcome() {
 
           <Typography
             variant="h4"
+            component="h1"
             sx={{
               fontWeight: 800,
               mb: 1.5,
@@ -155,7 +162,7 @@ export default function NoClassroomWelcome() {
               WebkitTextFillColor: 'transparent',
             }}
           >
-            Welcome to Neram Classes
+            {isStaff ? 'You’re not in a classroom yet' : 'Welcome to Neram Classes'}
           </Typography>
 
           <Typography
@@ -168,9 +175,18 @@ export default function NoClassroomWelcome() {
               fontSize: { xs: '0.95rem', sm: '1.05rem' },
             }}
           >
-            India&#39;s most trusted online NATA coaching.
-            You&#39;ve made an excellent choice joining us!
-            Get access to expert-led classes, structured lessons, and comprehensive practice.
+            {isStaff ? (
+              <>
+                Nexus opens once you&#39;re added to a classroom as a teacher.
+                An admin does this in Nexus: Classrooms, then your classroom, then the Teachers tab and Add Teacher.
+              </>
+            ) : (
+              <>
+                India&#39;s most trusted online NATA coaching.
+                You&#39;ve made an excellent choice joining us!
+                Get access to expert-led classes, structured lessons, and comprehensive practice.
+              </>
+            )}
           </Typography>
 
           {user && (
@@ -187,8 +203,8 @@ export default function NoClassroomWelcome() {
           )}
         </Box>
 
-        {/* Value Props */}
-        <Box
+        {/* Value Props (students only: staff are not being sold the course) */}
+        {!isStaff && <Box
           sx={{
             display: 'grid',
             gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
@@ -219,7 +235,7 @@ export default function NoClassroomWelcome() {
               </CardContent>
             </Card>
           ))}
-        </Box>
+        </Box>}
 
         {/* Contact section — a teacher adds you to your classroom, then you're in */}
         <Box sx={{ width: '100%' }}>
@@ -233,15 +249,24 @@ export default function NoClassroomWelcome() {
           >
             <CardContent sx={{ p: { xs: 3, sm: 4 }, textAlign: 'center' }}>
               <Typography variant="h6" sx={{ fontWeight: 700, mb: 0.75 }}>
-                You&#39;re almost in
+                {isStaff ? 'Ask to be added' : 'You’re almost in'}
               </Typography>
               <Typography
                 variant="body2"
                 color="text.secondary"
                 sx={{ mb: 3, lineHeight: 1.6 }}
               >
-                Your teacher adds you to your classroom, then you get full access.
-                If you haven&#39;t been added yet, reach out on Teams and we&#39;ll set you up.
+                {isStaff ? (
+                  <>
+                    Message the admin on Teams and say which classroom you teach.
+                    Once they add you, reload this page.
+                  </>
+                ) : (
+                  <>
+                    Your teacher adds you to your classroom, then you get full access.
+                    If you haven&#39;t been added yet, reach out on Teams and we&#39;ll set you up.
+                  </>
+                )}
               </Typography>
 
               <Stack spacing={1.5}>
@@ -275,13 +300,15 @@ export default function NoClassroomWelcome() {
         </Box>
 
         {/* Footer note */}
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          sx={{ mt: 4, textAlign: 'center', opacity: 0.7 }}
-        >
-          Neram Classes, India&#39;s #1 Online NATA Coaching
-        </Typography>
+        {!isStaff && (
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ mt: 4, textAlign: 'center', opacity: 0.7 }}
+          >
+            Neram Classes, India&#39;s #1 Online NATA Coaching
+          </Typography>
+        )}
       </Box>
     </Box>
   );

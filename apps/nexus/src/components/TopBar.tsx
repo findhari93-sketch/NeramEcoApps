@@ -36,6 +36,7 @@ import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import MenuIcon from '@mui/icons-material/Menu';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { useNavigate } from './NavigationProgress';
 import { useSidebarContext } from '@/components/SidebarProvider';
 import { usePanelContext } from '@/components/PanelProvider';
 import { useStudentZoneContext } from '@/components/StudentZoneProvider';
@@ -57,6 +58,8 @@ const ROLE_COLORS: Record<string, string> = {
  */
 export default function TopBar() {
   const router = useRouter();
+  // In the shared transition, so the top progress bar shows while the page loads (PERF-0029).
+  const navigate = useNavigate();
   const theme = useTheme();
   const {
     user,
@@ -173,7 +176,7 @@ export default function TopBar() {
         <Box
           component="button"
           type="button"
-          onClick={() => router.push(getRoleDashboard(nexusRole))}
+          onClick={() => navigate(getRoleDashboard(nexusRole))}
           aria-label="Go to dashboard"
           sx={{
             display: { xs: 'flex', md: 'none' },
@@ -748,7 +751,7 @@ export default function TopBar() {
               <MenuItem
                 onClick={() => {
                   setProfileAnchor(null);
-                  router.push(`/${nexusRole}/profile`);
+                  navigate(`/${nexusRole}/profile`);
                 }}
                 sx={{
                   py: 1,
@@ -775,7 +778,7 @@ export default function TopBar() {
               <MenuItem
                 onClick={() => {
                   setProfileAnchor(null);
-                  router.push(`/${nexusRole}/guide`);
+                  navigate(`/${nexusRole}/guide`);
                 }}
                 sx={{
                   py: 1,

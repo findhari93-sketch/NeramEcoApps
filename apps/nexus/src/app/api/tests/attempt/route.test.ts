@@ -118,6 +118,42 @@ describe('POST submit on a closed attempt', () => {
   });
 });
 
+describe('POST submit review', () => {
+  it('returns the solution video beside the explanation, per question', async () => {
+    mocks.submitAttempt.mockResolvedValue({
+      attempt_id: 'attempt-1',
+      attempt_number: 1,
+      test_id: 'test-1',
+      score: 4,
+      total_marks: 8,
+      percentage: 50,
+      draw: null,
+      review: [
+        { question_id: 'q1', correct_answer: 'a', selected: 'a', is_correct: true, is_gradable: true },
+        { question_id: 'q2', correct_answer: 'b', selected: 'a', is_correct: false, is_gradable: true },
+      ],
+    });
+    mocks.getComposedTestQuestions.mockResolvedValue([
+      {
+        question_id: 'q1',
+        question_text: 'Find x',
+        options: [],
+        explanation_brief: 'Because.',
+        solution_videos: [{ label: null, url: 'https://www.youtube.com/watch?v=U1X9MmLh-ZQ' }],
+      },
+      { question_id: 'q2', question_text: 'Find y', options: [], explanation_brief: null },
+    ]);
+
+    const body = await (await POST(submit())).json();
+
+    expect(body.result.review[0].solution_videos).toEqual([
+      { label: null, url: 'https://www.youtube.com/watch?v=U1X9MmLh-ZQ' },
+    ]);
+    // A question with no video says so with an empty list, not a missing key.
+    expect(body.result.review[1].solution_videos).toEqual([]);
+  });
+});
+
 describe('GET attempts_left_after_this', () => {
   const open = (placementId: string | null) =>
     new NextRequest(

@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback, createContext, useContext } from 'react';
-import { useMicrosoftAuth, getAccessToken, getAccessTokenSilent, loginScopes } from '@neram/auth';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, createContext, useContext } from 'react';
+import { useMicrosoftAuth, getAccessToken, getAccessTokenSilent, signInSilent, loginScopes } from '@neram/auth';
 import {
   resolveFlags,
   allFeaturesEnabled,
@@ -148,6 +148,13 @@ interface NexusAuthState {
   tokenReady: boolean;
   error: string | null;
   /**
+   * True when the last /api/auth/me load failed for a reason that says nothing about
+   * the session: a server fault (5xx), a network failure, or no answer within
+   * ME_TIMEOUT_MS. RoleGuard then offers a retry instead of sending a signed-in
+   * person to sign in. A real rejection (401, 404) leaves it false.
+   */
+  authUnavailable: boolean;
+  /**
    * Set when the signed-in user has been graduated to alumni and is locked out
    * of Nexus (the /api/auth/me gate returns 403 with error: 'alumni'). The UI
    * renders a friendly "you've graduated" screen instead of the app.
@@ -168,7 +175,24 @@ interface NexusAuthState {
    * the admin-only panel and system settings stay hidden from them.
    */
   isAdmin: boolean;
+  /**
+   * The token for anything the user just asked for. If the Microsoft session has
+   * expired this navigates the whole page to Microsoft sign-in, so it is for
+   * foreground work only.
+   */
   getToken: () => Promise<string | null>;
+  /**
+   * The same token for background work (pollers, the heartbeat), and it never
+   * navigates. When the Microsoft session needs the user to act it returns null
+   * and sets `sessionExpired`; any other failure is a plain null so the next tick
+   * retries. A timer calling getToken used to send the page to Microsoft under
+   * someone mid-sentence (PERF-0054).
+   */
+  getTokenSilently: () => Promise<string | null>;
+  /** A background call found the Microsoft session expired. SessionExpiredPrompt shows it. */
+  sessionExpired: boolean;
+  /** Sign in again after `sessionExpired`: the user's choice, so it may redirect. */
+  renewSession: () => Promise<void>;
   /** Get token with extended teacher scopes (meetings, channels, calendar) */
   getTeacherToken: () => Promise<string | null>;
   /**
@@ -241,6 +265,14 @@ export interface ParentChildRef {
 }
 
 const ACTIVE_CLASSROOM_KEY = 'nexus_active_classroom_id';
+
+/**
+ * How long /api/auth/me may take before the app gives up on it. Every page waits on
+ * this request when there is no cached shell, and without a limit the spinner lasted
+ * as long as the origin held the request open (Cloudflare cuts at 100s). Matches the
+ * badge and bell pollers' 15s.
+ */
+export const ME_TIMEOUT_MS = 15_000;
 const IMPERSONATION_KEY = 'nexus_impersonation';
 
 function readStoredImpersonation(): StoredImpersonation | null {
@@ -293,6 +325,9 @@ function readBootPayload(): Record<string, any> | null {
   return readCachedAuth()?.payload ?? null;
 }
 
+// useLayoutEffect warns during server rendering; the server never runs effects anyway.
+const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
+
 export function useNexusAuth(): NexusAuthState {
   const {
     user: msUser,
@@ -302,11 +337,28 @@ export function useNexusAuth(): NexusAuthState {
   } = useMicrosoftAuth();
 
   /**
-   * Last session's /api/auth/me answer, read once, synchronously, before the first
-   * paint. Every piece of state below opens from it when it is present, which is what
-   * lets the app draw its real shell instead of a spinner while the network catches up.
+   * Last session's /api/auth/me answer, applied once, just after hydration and before
+   * the first paint (see the layout effect below). It is what lets the app draw its
+   * real shell instead of a spinner while the network catches up.
+   *
+   * It is NOT read during the first render. The server has no device storage, so it
+   * renders the signed-out, loading shell; a first client render drawn from the cache
+   * instead produced a different tree on every hard load for anyone with a warm cache:
+   * React #418, then #423, the whole root discarded and rendered again on the client.
+   * So every piece of state below starts exactly as the server renders it.
+   *
+   * `bootedRef` carries the same payload for effects. It is set before any passive
+   * effect runs, which a state value is not.
    */
-  const [booted] = useState<Record<string, any> | null>(() => readBootPayload());
+  const [booted, setBooted] = useState<Record<string, any> | null>(null);
+  const bootedRef = useRef<Record<string, any> | null>(null);
+
+  /**
+   * Numbers each /api/auth/me load. Only the newest may write state, so an answer
+   * for an identity the app has already left (a slow refresh from before View as
+   * Student started) cannot land last and put that identity back (PERF-0055).
+   */
+  const loadSeqRef = useRef(0);
 
   /**
    * The Answer Pad's Teams pages (/pad/teams, /pad/stage) sign in with the Teams
@@ -316,44 +368,57 @@ export function useNexusAuth(): NexusAuthState {
    */
   const [teamsPad] = useState(() => typeof window !== 'undefined' && isTeamsPadPath(window.location.pathname));
 
-  const [user, setUser] = useState<NexusUser | null>(booted?.user ?? null);
-  const [nexusRole, setNexusRole] = useState<NexusRole | null>(booted?.nexusRole ?? null);
-  const [classrooms, setClassrooms] = useState<NexusClassroom[]>(booted?.classrooms ?? []);
-  const [activeClassroom, setActiveClassroomState] = useState<NexusClassroom | null>(() =>
-    booted ? pickActiveClassroom(booted.classrooms || []) : null
-  );
-  // Only ever starts true when there is nothing cached to show. With a cached payload
-  // the app is already displaying the right thing, so the revalidation behind it is
-  // not a "loading" state and must not raise the RoleGuard spinner.
-  const [dbLoading, setDbLoading] = useState(!booted);
+  const [user, setUser] = useState<NexusUser | null>(null);
+  const [nexusRole, setNexusRole] = useState<NexusRole | null>(null);
+  const [classrooms, setClassrooms] = useState<NexusClassroom[]>([]);
+  const [activeClassroom, setActiveClassroomState] = useState<NexusClassroom | null>(null);
+  // Cleared by the boot payload when there is one. With a cached payload the app is
+  // already displaying the right thing, so the revalidation behind it is not a
+  // "loading" state and must not raise the RoleGuard spinner.
+  const [dbLoading, setDbLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [authUnavailable, setAuthUnavailable] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
   const [accessEnded, setAccessEnded] = useState<{ reason: string; message: string } | null>(null);
   // Default to registry defaults (student features off, staff on) until /me loads.
-  const [featureFlags, setFeatureFlags] = useState<FlagMap>(
-    () => booted?.featureFlags ?? resolveFlags({})
-  );
-  const [timetableWindow, setTimetableWindow] = useState<TimetableWindow>(() =>
-    booted ? parseWindow(booted.timetableWindow) : cloneDefaultWindow()
-  );
-  const [staffRole, setStaffRole] = useState<StaffRole | null>(booted?.staffRole ?? null);
-  const [canTeach, setCanTeach] = useState<boolean>(booted ? booted.canTeach !== false : true);
+  const [featureFlags, setFeatureFlags] = useState<FlagMap>(() => resolveFlags({}));
+  const [timetableWindow, setTimetableWindow] = useState<TimetableWindow>(() => cloneDefaultWindow());
+  const [staffRole, setStaffRole] = useState<StaffRole | null>(null);
+  const [canTeach, setCanTeach] = useState<boolean>(true);
   // Starts as the all-false map, so the UI hides staff actions until /me answers
   // rather than flashing them and then removing them. Recomputed from the tier rather
   // than read from the payload, exactly as the live path does, so a hand-edited cache
   // entry cannot grant a capability.
-  const [capabilities, setCapabilities] = useState<CapabilityMap>(() =>
-    booted ? capabilityMap(booted.staffRole ?? null, booted.canTeach !== false) : capabilityMap(null)
-  );
+  const [capabilities, setCapabilities] = useState<CapabilityMap>(() => capabilityMap(null));
   // Default never blocks: a gate that defaults to "blocked" would flash the
   // blocker on every page load for every compliant student.
-  const [photoGate, setPhotoGate] = useState<PhotoGateState>(
-    booted?.photoGate ?? DEFAULT_PHOTO_GATE
-  );
+  const [photoGate, setPhotoGate] = useState<PhotoGateState>(DEFAULT_PHOTO_GATE);
   // Parent portal: which children this login covers. Empty for every other role.
-  const [children, setChildren] = useState<ParentChildRef[]>(booted?.children ?? []);
-  const [activeChildId, setActiveChildId] = useState<string | null>(
-    booted ? booted.activeChildId ?? booted.children?.[0]?.id ?? null : null
-  );
+  const [children, setChildren] = useState<ParentChildRef[]>([]);
+  const [activeChildId, setActiveChildId] = useState<string | null>(null);
+
+  // Apply the cached answer once, after hydration and before the browser paints, so
+  // the shell still appears on the first painted frame. Runs before every passive
+  // effect below, which is why the MSAL effect reads `bootedRef` and not `booted`.
+  useIsomorphicLayoutEffect(() => {
+    const payload = readBootPayload();
+    if (!payload) return;
+    bootedRef.current = payload;
+    setBooted(payload);
+    setUser(payload.user ?? null);
+    setNexusRole(payload.nexusRole ?? null);
+    setClassrooms(payload.classrooms ?? []);
+    setActiveClassroomState(pickActiveClassroom(payload.classrooms || []));
+    setDbLoading(false);
+    setFeatureFlags(payload.featureFlags ?? resolveFlags({}));
+    setTimetableWindow(parseWindow(payload.timetableWindow));
+    setStaffRole(payload.staffRole ?? null);
+    setCanTeach(payload.canTeach !== false);
+    setCapabilities(capabilityMap(payload.staffRole ?? null, payload.canTeach !== false));
+    setPhotoGate(payload.photoGate ?? DEFAULT_PHOTO_GATE);
+    setChildren(payload.children ?? []);
+    setActiveChildId(payload.activeChildId ?? payload.children?.[0]?.id ?? null);
+  }, []);
 
   // "View as Student" (impersonation) state, persisted in sessionStorage so it
   // survives reloads within the tab but auto-clears when the tab closes.
@@ -389,6 +454,30 @@ export function useNexusAuth(): NexusAuthState {
     setImpersonationState(null);
   }, []);
 
+  /**
+   * Another identity is about to load: View as Student starts or ends, or a parent
+   * signs in. Treated as a fresh boot, so `loading` covers the /api/auth/me reload.
+   *
+   * The cached shell used to keep `loading` false for the whole session, so for the
+   * length of that reload the context still described the old identity while
+   * getToken already served the new one. Guards judged a student page by the
+   * teacher's role and bounced, and Exit's return page was judged as the student
+   * (PERF-0055). Bumping the load sequence also retires any load in flight for the
+   * identity being left.
+   */
+  const beginIdentitySwitch = useCallback(() => {
+    loadSeqRef.current += 1;
+    bootedRef.current = null;
+    setBooted(null);
+    setDbLoading(true);
+  }, []);
+
+  /** Leave View as Student and load the real account behind a spinner. */
+  const endImpersonation = useCallback(() => {
+    beginIdentitySwitch();
+    clearImpersonation();
+  }, [beginIdentitySwitch, clearImpersonation]);
+
   const getToken = useCallback(async () => {
     // While impersonating, hand out the impersonation token so the entire app
     // (reads and writes) acts as the student.
@@ -412,8 +501,41 @@ export function useNexusAuth(): NexusAuthState {
       if (injected) return injected;
     }
 
-    return getAccessToken(loginScopes.nexus);
+    const token = await getAccessToken(loginScopes.nexus);
+    if (token) setSessionExpired(false);
+    return token;
   }, [impersonationToken, parentToken]);
+
+  const getTokenSilently = useCallback(async () => {
+    // The same order as getToken: these sessions carry their own token and never
+    // need MSAL.
+    if (impersonationToken) return impersonationToken;
+    if (parentToken) return parentToken;
+    if (typeof window !== 'undefined') {
+      const injected = localStorage.getItem('nexus_test_token');
+      if (injected) return injected;
+    }
+
+    try {
+      // signInSilent answers null only when Microsoft needs the user (an expired
+      // refresh token, or a blocked silent iframe) and throws on anything else.
+      const result = await signInSilent(loginScopes.nexus);
+      if (result) {
+        setSessionExpired(false);
+        return result.accessToken;
+      }
+      setSessionExpired(true);
+      return null;
+    } catch {
+      // A network blip says nothing about the session; the next tick retries.
+      return null;
+    }
+  }, [impersonationToken, parentToken]);
+
+  const renewSession = useCallback(async () => {
+    const token = await getAccessToken(loginScopes.nexus);
+    if (token) setSessionExpired(false);
+  }, []);
 
   const getTeacherToken = useCallback(async () => {
     return getAccessToken(loginScopes.nexusTeacher);
@@ -494,12 +616,22 @@ export function useNexusAuth(): NexusAuthState {
    * exactly the same load without duplicating the impersonation and error
    * handling. `isCancelled` lets the effect abandon an in-flight load on
    * unmount; the manual refresh path passes a predicate that never cancels.
+   * Either way a load stops writing once a newer one has started.
    */
   const loadNexusUser = useCallback(
     async (isCancelled: () => boolean) => {
+      const seq = ++loadSeqRef.current;
+      const stale = () => isCancelled() || seq !== loadSeqRef.current;
       setDbLoading(true);
       setError(null);
       setAccessEnded(null);
+      setAuthUnavailable(false);
+
+      // Until a response says otherwise, a failure here means Nexus could not be
+      // reached (network, timeout, server fault), not that the session is gone.
+      let rejected = false;
+      const controller = new AbortController();
+      let deadline: ReturnType<typeof setTimeout> | undefined;
 
       try {
         // While impersonating, /api/auth/me is called with the impersonation
@@ -509,20 +641,36 @@ export function useNexusAuth(): NexusAuthState {
         // token it can never mint, and the whole context would stay empty.
         const token =
           impersonationToken || parentToken || (await getAccessToken(loginScopes.default));
-        if (!token || isCancelled()) return;
+        if (!token || stale()) return;
 
+        deadline = setTimeout(() => controller.abort(), ME_TIMEOUT_MS);
         const response = await fetch('/api/auth/me', {
           headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
         });
 
         if (!response.ok) {
           // An expired/invalid impersonation token: drop it and let this effect
-          // re-run with the real teacher/admin token (graceful auto-exit).
-          if (impersonationToken && !isCancelled()) {
-            clearImpersonation();
+          // re-run with the real teacher/admin token (graceful auto-exit). Only on
+          // a refusal: a 5xx says nothing about the token, and exiting on one threw
+          // the teacher out of the student view over a server blip (PERF-0014).
+          if (impersonationToken && response.status < 500 && !stale()) {
+            endImpersonation();
             return;
           }
           const data = await response.json().catch(() => ({}));
+          // A parent session the server refuses (signed out on another device,
+          // password reset, access revoked) is dead: drop it, as the impersonation
+          // branch above does. Kept, it looped RoleGuard's redirect to /parent/login
+          // against the login page's redirect of any "active" session back to the
+          // dashboard. A 500 says nothing about the session, so that keeps it.
+          if (parentToken && [401, 403, 404].includes(response.status)) {
+            if (!stale()) {
+              clearParentSession();
+              setParentSession(null);
+            }
+            return;
+          }
           // Full-screen lockout: the /api/auth/me gate returns 403 with
           // error: 'alumni' when the student has graduated. It surfaces a
           // dedicated state so the UI shows a friendly "you've graduated"
@@ -532,7 +680,7 @@ export function useNexusAuth(): NexusAuthState {
           // missing an approved photo also get a 200, with photoGate.required
           // set, and see PhotoRequiredGate.)
           if (response.status === 403 && data?.error === 'alumni') {
-            if (!isCancelled()) {
+            if (!stale()) {
               // Drop the cached shell and everything read under it. Without this a
               // graduated student would keep booting into their old classrooms for a
               // frame before the gate caught up, on every open, for a day.
@@ -558,11 +706,14 @@ export function useNexusAuth(): NexusAuthState {
             }
             return;
           }
+          // A 4xx means the server looked at the session and refused it; a 5xx says
+          // nothing about the session at all.
+          rejected = response.status < 500;
           throw new Error(data.error || `Auth failed: ${response.status}`);
         }
 
         const data = await response.json();
-        if (isCancelled()) return;
+        if (stale()) return;
 
         setUser(data.user);
         setNexusRole(data.nexusRole);
@@ -609,17 +760,25 @@ export function useNexusAuth(): NexusAuthState {
           writeCachedAuth(nextOid, data);
         }
       } catch (err) {
-        if (!isCancelled()) {
-          setError(err instanceof Error ? err.message : 'Failed to load user data');
+        if (!stale()) {
+          setError(
+            controller.signal.aborted
+              ? 'Nexus took too long to answer'
+              : err instanceof Error
+                ? err.message
+                : 'Failed to load user data',
+          );
+          setAuthUnavailable(!rejected);
           console.error('Nexus auth error:', err);
         }
       } finally {
-        if (!isCancelled()) {
+        clearTimeout(deadline);
+        if (!stale()) {
           setDbLoading(false);
         }
       }
     },
-    [impersonationToken, parentToken, clearImpersonation]
+    [impersonationToken, parentToken, endImpersonation]
   );
 
   // Fetch DB user after MS auth succeeds. Also runs while impersonating (even
@@ -637,7 +796,7 @@ export function useNexusAuth(): NexusAuthState {
     // here is what the cache exists to prevent, and "MSAL has not answered yet" is not
     // evidence that anyone is signed out. The branch below still fires the moment MSAL
     // settles on "no account", so a genuinely expired session is caught a beat later.
-    if (!impersonationToken && !parentToken && msLoading && booted) {
+    if (!impersonationToken && !parentToken && msLoading && bootedRef.current) {
       return;
     }
 
@@ -663,6 +822,8 @@ export function useNexusAuth(): NexusAuthState {
       setPhotoGate(DEFAULT_PHOTO_GATE);
       setChildren([]);
       setActiveChildId(null);
+      // No account at all is "signed out", never "could not reach Nexus".
+      setAuthUnavailable(false);
       // Only clear dbLoading if MS auth is definitively done (not loading)
       // so we don't briefly show loading=false with user=null
       if (!msLoading) setDbLoading(false);
@@ -672,10 +833,12 @@ export function useNexusAuth(): NexusAuthState {
     let cancelled = false;
     loadNexusUser(() => cancelled);
     return () => { cancelled = true; };
-    // `booted` is frozen for the life of the hook, so it adds no re-runs. `user` is
-    // deliberately NOT a dependency: this effect sets it, and depending on it would
-    // make every successful load schedule the next one.
-  }, [teamsPad, msUser, msLoading, impersonationToken, parentToken, testMode, loadNexusUser, booted]);
+    // The boot payload is read through `bootedRef`, which is set once before this effect
+    // first runs, so it is not a dependency: depending on the `booted` state would re-run
+    // this effect when it lands and, with MSAL already settled, load /api/auth/me twice.
+    // `user` is deliberately NOT a dependency either: this effect sets it, and depending
+    // on it would make every successful load schedule the next one.
+  }, [teamsPad, msUser, msLoading, impersonationToken, parentToken, testMode, loadNexusUser]);
 
   /**
    * Manual re-fetch. The photo blocker calls this after a successful upload so
@@ -691,12 +854,12 @@ export function useNexusAuth(): NexusAuthState {
     if (!impersonationToken || !impersonationState) return;
     const ms = Date.parse(impersonationState.expiresAt) - Date.now();
     if (ms <= 0) {
-      clearImpersonation();
+      endImpersonation();
       return;
     }
-    const t = setTimeout(() => clearImpersonation(), ms);
+    const t = setTimeout(() => endImpersonation(), ms);
     return () => clearTimeout(t);
-  }, [impersonationToken, impersonationState, clearImpersonation]);
+  }, [impersonationToken, impersonationState, endImpersonation]);
 
   // Drop an expired parent session so the UI falls back to the login screen
   // rather than sitting on a dead token and 401-ing every request.
@@ -756,9 +919,10 @@ export function useNexusAuth(): NexusAuthState {
       }
       // Setting state re-runs the /api/auth/me effect with the impersonation
       // token, swapping the whole context to the student.
+      beginIdentitySwitch();
       setImpersonationState(stored);
     },
-    []
+    [beginIdentitySwitch]
   );
 
   const exitImpersonation = useCallback(async () => {
@@ -784,8 +948,8 @@ export function useNexusAuth(): NexusAuthState {
     } catch {
       /* ignore */
     }
-    clearImpersonation();
-  }, [clearImpersonation]);
+    endImpersonation();
+  }, [endImpersonation]);
 
   const setActiveClassroom = useCallback((classroom: NexusClassroom) => {
     setActiveClassroomState(classroom);
@@ -867,10 +1031,11 @@ export function useNexusAuth(): NexusAuthState {
         mustChangePassword: !!data.mustChangePassword,
       };
       writeParentSession(stored);
+      beginIdentitySwitch();
       setParentSession(stored);
       return stored;
     },
-    []
+    [beginIdentitySwitch]
   );
 
   return {
@@ -907,11 +1072,15 @@ export function useNexusAuth(): NexusAuthState {
     // The MSAL half of `loading`, without the /api/auth/me half. See the interface.
     tokenReady: !!impersonationToken || !!parentToken || testMode || !msLoading,
     error,
+    authUnavailable,
     accessEnded,
     isTeacher: nexusRole === 'teacher' || nexusRole === 'admin',
     isStudent: nexusRole === 'student',
     isAdmin: nexusRole === 'admin',
     getToken,
+    getTokenSilently,
+    sessionExpired,
+    renewSession,
     getTeacherToken,
     getFileSearchToken,
     impersonation: {

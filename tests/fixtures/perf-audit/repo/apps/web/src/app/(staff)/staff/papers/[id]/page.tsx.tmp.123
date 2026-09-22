@@ -1,0 +1,2 @@
+// An editor temp file. Not a route file, so never an entry.
+export default function Stale() { return null; }

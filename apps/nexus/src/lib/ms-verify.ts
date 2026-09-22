@@ -26,8 +26,22 @@ import {
   verifyImpersonationToken,
 } from '@/lib/impersonation-token';
 import { isParentToken, verifyParentToken } from '@/lib/parent-token';
-import { isTeamsSsoToken, verifyTeamsSsoToken } from '@/lib/teams-sso';
+import { isTeamsSsoToken, verifyTeamsSsoToken, TeamsSsoError } from '@/lib/teams-sso';
 import { TtlCache } from '@/lib/ttl-cache';
+import { ApiError, describeError } from '@/lib/api-errors';
+
+/**
+ * Microsoft or the database could not answer, so nothing is known about the token.
+ *
+ * These are 503s, never the 401 messages below. A 401 is what makes useAuthFetch
+ * start a sign-in redirect and what drops a teacher out of View as Student, so an
+ * outage classed as one signed people out mid-edit (PERF-0013, PERF-0014).
+ */
+const MICROSOFT_UNAVAILABLE = 'Microsoft sign-in check is unavailable. Try again.';
+const SESSION_CHECK_UNAVAILABLE = 'Could not verify the session. Try again.';
+
+/** PostgREST's "no rows" from `.single()`: a real answer, unlike a failed read. */
+const NO_ROWS = 'PGRST116';
 
 /**
  * Resolved identities for Microsoft access tokens we have already checked with Graph.
@@ -36,17 +50,38 @@ import { TtlCache } from '@/lib/ttl-cache';
  * just to learn who the caller was, on the large majority of routes, before the route
  * began its own work. From India that is a serial 150-400ms added to everything.
  *
- * A minute is a deliberate ceiling on staleness: a token revoked at Entra keeps working
- * for at most that long. The alternative, re-asking Graph every time, is what made the
- * app feel slow, and the fact being cached (which Microsoft account this token belongs
- * to) cannot change during that token's life anyway, so the window costs nothing in
- * practice.
+ * Five minutes is a deliberate ceiling on staleness: a token revoked at Entra keeps
+ * working for at most that long, and never past the token's own `exp`. It was one
+ * minute, which the bell and badge pollers (both every 60s) outran on almost every
+ * poll, so each one paid a Graph round trip, the call that stalled into 524s (perf
+ * audit PERF-0009, 2026-09-21; the user accepted the longer window). The fact being
+ * cached, which Microsoft account this token belongs to, cannot change during that
+ * token's life anyway. Tokens whose expiry cannot be read keep the old minute.
  *
  * Keyed on a hash of the token, never the token itself, so an inspected heap or a
  * logged cache key cannot be replayed as a credential.
  */
-const IDENTITY_TTL_MS = 60_000;
+const IDENTITY_TTL_MS = 5 * 60_000;
+const OPAQUE_TOKEN_TTL_MS = 60_000;
 const graphIdentityCache = new TtlCache<MsUserInfo>(IDENTITY_TTL_MS);
+
+/**
+ * The token's own expiry in epoch ms, read from its JWT payload, or null when it is not
+ * a readable JWT. Only ever used to shorten the cache window; the identity itself comes
+ * from Graph, never from this unverified payload.
+ */
+function tokenExpiresAtMs(token: string): number | null {
+  const payload = token.split('.')[1];
+  if (!payload) return null;
+  try {
+    const exp = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'))?.exp;
+    return typeof exp === 'number' ? exp * 1000 : null;
+  } catch {
+    return null;
+  }
+}
+/** How long the Graph /me check may take before the request fails instead of hanging. */
+const GRAPH_TIMEOUT_MS = 8_000;
 
 function tokenKey(token: string): string {
   return createHash('sha256').update(token).digest('hex');
@@ -140,7 +175,7 @@ export async function verifyMsToken(
     }
 
     const supabase = getSupabaseAdminClient();
-    const { data: cred } = await supabase
+    const { data: cred, error: credError } = await supabase
       .from('nexus_parent_credentials')
       // One literal string: PostgREST's types parse the select at compile time,
       // and a concatenated string widens to `string` and loses all inference.
@@ -149,6 +184,13 @@ export async function verifyMsToken(
       )
       .eq('parent_user_id', payload.parentUserId)
       .maybeSingle();
+
+    // A failed read is not a missing row. Read as one, a database blip told the
+    // parent their access had been revoked.
+    if (credError) {
+      console.error(`[ms-verify] parent credential read failed: ${describeError(credError)}`);
+      throw new ApiError(SESSION_CHECK_UNAVAILABLE, 503);
+    }
 
     // Re-reading the credential row on every request is what makes "Revoke"
     // instant. Without it a revoked parent would keep full access until their
@@ -193,11 +235,19 @@ export async function verifyMsToken(
     }
 
     const supabase = getSupabaseAdminClient();
-    const { data: student } = await supabase
+    const { data: student, error: studentError } = await supabase
       .from('users')
       .select('id, name, email, linked_classroom_email, ms_oid')
       .eq('id', payload.targetUserId)
       .single();
+
+    // `.single()` reports a missing student as PGRST116, which is a real answer
+    // and falls through to the refusal below. Anything else is a failed read, and
+    // refusing on it ended the teacher's View as Student over a database blip.
+    if (studentError && studentError.code !== NO_ROWS) {
+      console.error(`[ms-verify] impersonation target read failed: ${describeError(studentError)}`);
+      throw new ApiError(SESSION_CHECK_UNAVAILABLE, 503);
+    }
 
     // Defend against stale tokens: the student must still exist and their
     // ms_oid must still match what the token was minted for.
@@ -253,8 +303,14 @@ export async function verifyMsToken(
       };
     } catch (err) {
       // Logged, not returned, for the same reason as the Graph failure below.
-      console.error(`[ms-verify] Teams SSO token rejected: ${err instanceof Error ? err.message : String(err)}`);
-      throw new Error('Invalid Microsoft token: 401');
+      if (err instanceof TeamsSsoError) {
+        console.error(`[ms-verify] Teams SSO token rejected: ${err.message}`);
+        throw new Error('Invalid Microsoft token: 401');
+      }
+      // Anything else (the signing keys could not be fetched, the network failed)
+      // says nothing about the token.
+      console.error(`[ms-verify] Teams SSO check unavailable: ${describeError(err)}`);
+      throw new ApiError(MICROSOFT_UNAVAILABLE, 503);
     }
   }
 
@@ -267,9 +323,29 @@ export async function verifyMsToken(
   const cached = graphIdentityCache.get(cacheKey);
   if (cached) return cached;
 
-  const response = await fetch('https://graph.microsoft.com/v1.0/me', {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  // A deadline, because nearly every route verifies through this call before doing
+  // anything else. Without one, a Graph call that stalls holds the whole request open
+  // for as long as the platform allows; behind Cloudflare that surfaced as 524s on the
+  // bell and badge pollers. A healthy call takes well under a second from sin1.
+  // A timer rather than AbortSignal.timeout, so tests can drive it with fake timers.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), GRAPH_TIMEOUT_MS);
+  let response: Response;
+  try {
+    response = await fetch('https://graph.microsoft.com/v1.0/me', {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    });
+  } catch (err) {
+    if (controller.signal.aborted) {
+      console.error(`[ms-verify] Graph token check timed out after ${GRAPH_TIMEOUT_MS}ms`);
+      throw new ApiError('Microsoft identity check timed out', 503);
+    }
+    console.error(`[ms-verify] Graph token check could not connect: ${describeError(err)}`);
+    throw new ApiError(MICROSOFT_UNAVAILABLE, 503);
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!response.ok) {
     const errorText = await response.text().catch(() => 'Unknown error');
@@ -281,6 +357,10 @@ export async function verifyMsToken(
     // route's JSON response and from there rendered as literal text inside a
     // student's video player.
     console.error(`[ms-verify] Graph token check failed: ${response.status} ${errorText}`);
+    // Throttling and server faults are Graph's trouble, not the token's.
+    if (response.status === 429 || response.status >= 500) {
+      throw new ApiError(MICROSOFT_UNAVAILABLE, 503);
+    }
     throw new Error(`Invalid Microsoft token: ${response.status}`);
   }
 
@@ -293,7 +373,9 @@ export async function verifyMsToken(
     displayName: profile.displayName || '',
   };
 
-  graphIdentityCache.set(cacheKey, identity);
+  const expiresAt = tokenExpiresAtMs(token);
+  const ttl = expiresAt === null ? OPAQUE_TOKEN_TTL_MS : Math.min(IDENTITY_TTL_MS, expiresAt - Date.now());
+  if (ttl > 0) graphIdentityCache.set(cacheKey, identity, ttl);
   return identity;
 }
 

@@ -5,6 +5,8 @@ import { SWRConfig, type Cache } from 'swr';
 import { NexusAuthProvider } from '@/hooks/useNexusAuth';
 import SidebarProvider from '@/components/SidebarProvider';
 import ImpersonationBanner from '@/components/ImpersonationBanner';
+import SessionExpiredPrompt from '@/components/SessionExpiredPrompt';
+import { NavigationProgressProvider } from '@/components/NavigationProgress';
 import AccessGate from '@/components/AccessGate';
 import { createPersistentCache } from '@/lib/swr-cache';
 import { readCachedAuth } from '@/lib/auth-cache';
@@ -63,10 +65,13 @@ export default function Providers({ children }: { children: React.ReactNode }) {
       }}
     >
       <NexusAuthProvider>
-        <SidebarProvider>
-          <ImpersonationBanner />
-          <AccessGate>{children}</AccessGate>
-        </SidebarProvider>
+        <NavigationProgressProvider>
+          <SidebarProvider>
+            <ImpersonationBanner />
+            <AccessGate>{children}</AccessGate>
+            <SessionExpiredPrompt />
+          </SidebarProvider>
+        </NavigationProgressProvider>
       </NexusAuthProvider>
     </SWRConfig>
   );

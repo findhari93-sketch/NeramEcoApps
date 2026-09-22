@@ -524,6 +524,8 @@ export async function POST(request: NextRequest) {
               // The take page uses this to decide between showing it and
               // offering the "explain in more detail" button.
               explanation_detailed: q?.explanation_detailed ?? null,
+              // The worked video, on the same terms as the explanation above.
+              solution_videos: q?.solution_videos ?? [],
             };
           }),
         },

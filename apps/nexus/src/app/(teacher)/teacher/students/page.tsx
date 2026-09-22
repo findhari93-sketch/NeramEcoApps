@@ -104,7 +104,7 @@ import {
   parseLanguageParam,
   type LanguageKey,
 } from '@/lib/student-language';
-import { refreshStudentStageFacts } from '@/lib/stage-facts-cache';
+import { useRefreshStudentStageFacts } from '@/lib/stage-facts-cache';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { usePresence } from '@/hooks/usePresence';
 import { rankPeople, suggestPeople } from '@/lib/people-search';
@@ -181,6 +181,7 @@ export default function TeacherStudents() {
   const pathname = usePathname();
   const { activeClassroom, getToken, getTeacherToken, can, isTeacher, impersonation, startImpersonation } =
     useNexusAuthContext();
+  const refreshStudentStageFacts = useRefreshStudentStageFacts();
 
   // can() is fail-closed: an unknown capability, or a payload from before this
   // rollout, returns false. So a stale /api/auth/me hides the controls rather
@@ -847,7 +848,7 @@ export default function TeacherStudents() {
         setSaving(false);
       }
     },
-    [activeClassroom, getToken, selectedIds, exitSelectMode, fetchStudents, closeDrawer, students],
+    [activeClassroom, getToken, selectedIds, exitSelectMode, fetchStudents, closeDrawer, students, refreshStudentStageFacts],
   );
 
   /** Who the classify drawer is about: one row's student from its menu, or the selection. */

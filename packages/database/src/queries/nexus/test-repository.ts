@@ -5,7 +5,12 @@ import { countRowsByKey } from '../../utils/paged-rows';
 import { resolveExamTimer } from './exam-timer';
 import { storeContentSummary, type NexusTestSourceFilters } from './test-provenance';
 import { recordCatchupTestAttempt } from './catchup-journey';
-import { gradeQBAnswerStrict, normaliseQuestionFormat, stripDrawingPartSolutions } from './question-bank';
+import {
+  gradeQBAnswerStrict,
+  normaliseQuestionFormat,
+  solutionVideosOf,
+  stripDrawingPartSolutions,
+} from './question-bank';
 import { sectionOrderFor } from './paper-marking';
 import { getLiveAccessRequest } from './test-access';
 import {
@@ -908,7 +913,7 @@ export async function getComposedTestQuestions(
       // They were missing from this select while the review UI rendered them,
       // so every attempt in the product showed a blank explanation.
       .select(
-        'id, question_text, question_image_url, question_format, options, correct_answer, answer_tolerance, explanation_brief, explanation_detailed, drawing_parts',
+        'id, question_text, question_image_url, question_format, options, correct_answer, answer_tolerance, explanation_brief, explanation_detailed, drawing_parts, solution_video_url',
       )
       .in('id', qbIds);
     for (const q of data || []) qbMap.set(q.id, q);
@@ -957,6 +962,10 @@ export async function getComposedTestQuestions(
       // one vocabulary whichever table the question came from.
       out.explanation_brief = src?.explanation_brief ?? src?.explanation ?? null;
       out.explanation_detailed = src?.explanation_detailed ?? null;
+      // The review's video, with the explanation and never before submit. Read
+      // from the raw row, since drawing_parts above has already lost its part
+      // videos. Legacy verified questions have no video column and give [].
+      out.solution_videos = src ? solutionVideosOf(src) : [];
     }
     return out;
   });

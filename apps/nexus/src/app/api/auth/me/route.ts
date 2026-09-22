@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
+import { describeError, errorResponse } from '@/lib/api-errors';
 import { getSupabaseAdminClient, reconcileMsIdentity, getNexusSetting, getCurrentBatch } from '@neram/database';
 import { getUserProfile } from '@neram/auth';
 import { FEATURE_FLAGS_KEY, resolveFlags, type FlagMap } from '@/lib/feature-flags';
@@ -57,11 +58,18 @@ export async function GET(request: NextRequest) {
     // Kept as one string literal on purpose: supabase-js infers the row type by
     // parsing this at the type level, and a concatenated string widens to
     // `string`, which collapses the result to GenericStringError.
-    let { data: user } = await supabase
+    let { data: user, error: userError } = await supabase
       .from('users')
       .select('id, name, email, phone, avatar_url, user_type, is_alumni, nexus_first_login_at, nexus_last_login_at, nexus_entered_at, linked_classroom_email, linked_classroom_at, photo_status, photo_rejection_reason, photo_ms_sync_status, staff_role, can_teach')
       .eq('ms_oid', msUser.oid)
       .maybeSingle();
+
+    // A failed read is not "no such user". Read as one, a timeout sent an existing
+    // account down the first-login reconciler below.
+    if (userError) {
+      console.error('[auth/me] users read failed:', describeError(userError));
+      throw new Error('Could not load your account');
+    }
 
     // A parent token whose users row has vanished must stop here. Falling
     // through to reconcileMsIdentity would try to match a synthetic
@@ -263,6 +271,13 @@ export async function GET(request: NextRequest) {
       user = { ...user, linked_classroom_email: updates.linked_classroom_email };
     }
 
+    // A failed read must not become "no classrooms": the client would show an
+    // enrolled student the not-in-a-classroom screen and cache that answer as the
+    // device's next boot shell.
+    if (enrollmentsResult.error) {
+      console.error('[auth/me] enrolments read failed:', describeError(enrollmentsResult.error));
+      throw new Error('Could not load your classrooms');
+    }
     const enrollments = enrollmentsResult.data;
 
     // Only surface enrollments whose classroom is still live. A classroom drops
@@ -390,6 +405,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       user: {
         id: user.id,
+        // The account this answer belongs to. useNexusAuth keys the device caches on
+        // it; without it every account on a device shared one bucket.
+        ms_oid: msUser.oid,
         name: user.name,
         email: msUser.email || user.email,
         phone: user.phone,
@@ -413,8 +431,10 @@ export async function GET(request: NextRequest) {
       photoGate,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Authentication failed';
-    console.error('Auth error:', message);
-    return NextResponse.json({ error: message }, { status: 401 });
+    // 401 only for a real authentication failure. Everything else (a Graph
+    // timeout, a database deadline) is a 500, so the client can offer a retry
+    // instead of treating the person as signed out.
+    console.error('Auth error:', describeError(err));
+    return errorResponse(err, 'Authentication failed');
   }
 }

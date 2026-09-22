@@ -38,6 +38,7 @@
  */
 
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
+import { IN_LIST_CHUNK } from '../../utils/paged-rows';
 import type {
   NexusQBOriginalPaper,
   NexusQBPaperCard,
@@ -91,8 +92,12 @@ const TEST_ATTEMPTS = 'nexus_test_attempts';
 const PLACEMENTS = 'nexus_test_placements';
 const ENROLLMENTS = 'nexus_enrollments';
 
-/** Supabase caps a single .in() list; stay well under it. */
-const IN_CHUNK = 400;
+/**
+ * Ids per .in() request. This was 400, which is past the real limit: every
+ * published-paper read failed as "fetch failed" once the papers held more
+ * than about 300 questions. See IN_LIST_CHUNK.
+ */
+const IN_CHUNK = IN_LIST_CHUNK;
 /** PostgREST's default page. Anything unbounded has to walk. */
 const PAGE = 1000;
 /** How many recent answers the paper detail activity strip shows. */

@@ -21,11 +21,11 @@ import { APP_URLS, getTestAuthToken } from '../utils/credentials';
  * WHAT IS ASSERTED UNCONDITIONALLY, and why it is split this way.
  *
  * The regression is the SHAPE of the refusal, not the 200. Whether the test
- * student's classroom has the Question Bank switched on is an environment fact
- * this suite does not control: staging currently has no rows in
- * nexus_qb_classroom_links at all, while production has it active. So every
- * test below asserts "never the classroom_id message" for real, on every run,
- * and only asserts a 200 body when the bank is actually open, skipping with a
+ * student is enrolled in a classroom is an environment fact this suite does not
+ * control (the per-classroom Question Bank switch that used to be a second such
+ * fact was retired on 2026-09-21; enrolment is now the only one). So every test
+ * below asserts "never the classroom_id message" for real, on every run, and
+ * only asserts a 200 body when the student can actually get in, skipping with a
  * stated reason otherwise. A spec that skipped wholesale would be a spec that
  * can never fail, which this repo has been bitten by before.
  *

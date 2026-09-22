@@ -234,13 +234,11 @@ test.describe('Paper faces: student (mobile)', () => {
     wasVisible: boolean;
     attachedTestId: string | null;
     staffToken: string | null;
-    linkedClassroomId: string | null;
   } = {
     paperId: null,
     wasVisible: false,
     attachedTestId: null,
     staffToken: null,
-    linkedClassroomId: null,
   };
 
   test.beforeAll(async ({ playwright }) => {
@@ -256,30 +254,8 @@ test.describe('Paper faces: student (mobile)', () => {
       fixture.staffToken = auth.testToken;
       const headers = { Authorization: `Bearer ${auth.testToken}` };
 
-      /**
-       * The Question Bank has to be switched on for the student's classroom, or
-       * verifyQBAccess 403s and the grid is empty however many papers are
-       * published. Staging ships with it OFF, which is a deliberate state, so it
-       * is switched back in afterAll.
-       */
-      const studentAuth = await getTestAuthToken(api, 'student');
-      const classroomId = studentAuth?.classrooms?.[0]?.id;
-      if (classroomId) {
-        const link = await api
-          .get(`${NEXUS}/api/question-bank/classroom-link?classroom_id=${classroomId}`, { headers })
-          .then((r) => r.json())
-          // Assume ON when the state cannot be read, so a failure here never
-          // leaves the run switching something off that it did not switch on.
-          .catch(() => ({ data: { enabled: true } }));
-        if (!link?.data?.enabled) {
-          const on = await api.post(`${NEXUS}/api/question-bank/classroom-link`, {
-            headers,
-            data: { classroom_id: classroomId },
-          });
-          if (on.ok()) fixture.linkedClassroomId = classroomId;
-        }
-      }
-
+      // No per-classroom Question Bank switch to open any more: the Features
+      // flag is the only one, and E2E test mode resolves every flag on.
       const papers = await api
         .get(`${NEXUS}/api/question-bank/papers`, { headers })
         .then((r) => r.json())
@@ -346,7 +322,7 @@ test.describe('Paper faces: student (mobile)', () => {
 
   test.afterAll(async ({ playwright }) => {
     // Same reason as beforeAll, and it matters more here: a teardown that times
-    // out leaves the Question Bank switched on for a classroom that had it off.
+    // out leaves a paper published that was not.
     test.setTimeout(COLD_COMPILE_BUDGET);
     if (!fixture.staffToken) return;
     const api = await playwright.request.newContext();
@@ -359,16 +335,6 @@ test.describe('Paper faces: student (mobile)', () => {
         await api.patch(`${NEXUS}/api/question-bank/papers/${fixture.paperId}/access`, {
           headers,
           data: { is_student_visible: false },
-        });
-      }
-      // Only when this run turned it on. An environment that already had the
-      // Question Bank open for its students must keep it open.
-      if (fixture.linkedClassroomId) {
-        // classroom_id travels in the BODY here, not the query string, unlike
-        // the GET on the same route.
-        await api.delete(`${NEXUS}/api/question-bank/classroom-link`, {
-          headers,
-          data: { classroom_id: fixture.linkedClassroomId },
         });
       }
     } finally {

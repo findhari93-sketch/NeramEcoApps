@@ -4,6 +4,7 @@ import { getRequestUser } from '@/lib/study-materials';
 import { staffStudentIds } from '@/lib/sketchbook-access';
 import { countOwedDrawings } from '@/lib/owed-drawings';
 import { getSupabaseAdminClient } from '@neram/database';
+import { httpStatusForError } from '@/lib/api-errors';
 
 /** How recently a reason has to have arrived to still count as news. */
 const CATCHUP_BADGE_WINDOW_MS = 48 * 60 * 60 * 1000;
@@ -49,12 +50,14 @@ export async function GET(request: NextRequest) {
     try {
       user = await getRequestUser(request.headers.get('Authorization'));
     } catch (err) {
-      // It throws where this route answered with a status. Keep both apart: a caller with
-      // no users row is a 404, a bad token is a 401, and the poller tells them apart.
+      // It throws where this route answered with a status. Keep them apart: a caller
+      // with no users row is a 404, a bad token is a 401, and anything else (Graph
+      // timing out, the users lookup failing) is the server's trouble, a 500, never a
+      // 401 that reads to the client as a session that has ended.
       const message = err instanceof Error ? err.message : 'Unauthorized';
       return NextResponse.json(
         { error: message },
-        { status: message === 'User not found' ? 404 : 401 },
+        { status: message === 'User not found' ? 404 : httpStatusForError(err) },
       );
     }
 
@@ -67,6 +70,15 @@ export async function GET(request: NextRequest) {
       // This route is polled every 60 seconds by every signed-in staff member for as
       // long as Nexus is open, so its cost is paid forever, not once.
       const since = new Date(Date.now() - CATCHUP_BADGE_WINDOW_MS).toISOString();
+
+      // The staff roster feeds two badges. Computed once per poll, from the caller
+      // already resolved above: it used to be re-resolved and recomputed in each
+      // branch, an enrolment query per classroom twice over, every 60s per staff
+      // member. Each branch still catches on its own, so a roster failure zeroes
+      // only those two badges. The no-op catch keeps a rejection from being
+      // reported as unhandled before the branches await it.
+      const roster = staffStudentIds(user, null);
+      roster.catch(() => {});
 
       const [issues, owed, photoCount, freshReasons, sketchInbox] = await Promise.all([
         // Tickets in play, plus tickets carrying a reply nobody on the team has
@@ -85,9 +97,7 @@ export async function GET(request: NextRequest) {
         // never counts; see lib/owed-drawings.
         (async () => {
           try {
-            const caller = await getRequestUser(request.headers.get('Authorization'));
-            const students = await staffStudentIds(caller, null);
-            return await countOwedDrawings(supabase, students);
+            return await countOwedDrawings(supabase, await roster);
           } catch {
             return { assignment: 0, test: 0 };
           }
@@ -136,9 +146,7 @@ export async function GET(request: NextRequest) {
         // is: a number the person cannot drive to zero is not a badge.
         (async () => {
           try {
-            const caller = await getRequestUser(request.headers.get('Authorization'));
-            const students = await staffStudentIds(caller, null);
-            const { rows, remaining } = await listUnflipped(caller.id, students, 50);
+            const { rows, remaining } = await listUnflipped(user.id, await roster, 50);
             return rows.length + remaining;
           } catch {
             return 0;
@@ -198,7 +206,9 @@ export async function GET(request: NextRequest) {
     // body was the browser's own cache, which honours private perfectly well.
     return NextResponse.json({ badges }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
+    // Past authentication, so a failure here is a badge query failing: a 500.
     const message = err instanceof Error ? err.message : 'Failed to load badges';
-    return NextResponse.json({ error: message }, { status: 401 });
+    console.error('[nav-badges] failed:', message);
+    return NextResponse.json({ error: message }, { status: httpStatusForError(err) });
   }
 }

@@ -301,18 +301,17 @@ test.describe('Teacher: phone', () => {
 });
 
 test.describe('Student: one page per exam', () => {
-  /** What the student's classroom lets them see, from the same route the sidebar reads. */
+  /** Which exams have a published paper, from the same route the sidebar reads. */
   async function studentQB(playwright: { request: { newContext: () => Promise<any> } }) {
     const api = await playwright.request.newContext();
     try {
       const auth = await getTestAuthToken(api, 'student');
-      const classroomId = auth?.classrooms?.[0]?.id;
-      if (!auth || !classroomId) return null;
-      const res = await api.get(`${NEXUS}/api/question-bank/classroom-link?classroom_id=${classroomId}`, {
+      if (!auth) return null;
+      const res = await api.get(`${NEXUS}/api/question-bank/published-exams`, {
         headers: { Authorization: `Bearer ${auth.testToken}` },
       });
       if (!res.ok()) return null;
-      const data = (await res.json()).data as { enabled: boolean; published_exams: string[] };
+      const data = (await res.json()).data as { published_exams: string[] };
       return data;
     } finally {
       await api.dispose();
@@ -333,8 +332,7 @@ test.describe('Student: one page per exam', () => {
 
   test('the sidebar lists only exams with a published paper', async ({ browser, playwright }) => {
     const access = await studentQB(playwright);
-    test.skip(!access, 'Student test-login or classroom unavailable');
-    test.skip(!access!.enabled, 'Question Bank is switched off for the test student\'s classroom');
+    test.skip(!access, 'Student test-login unavailable');
 
     const { context, page, ok } = await signedInPage(browser, 'student');
     test.skip(!ok, 'Nexus test-login unavailable');

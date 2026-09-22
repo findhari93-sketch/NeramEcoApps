@@ -32,6 +32,9 @@ function hideTab() {
 
 describe('persistent SWR cache', () => {
   beforeEach(() => {
+    // Retire the caches earlier tests made. Each one is still listening for the tab
+    // to hide and would write its own bucket back mid-test; a page has only one.
+    clearPersistentCache();
     localStorage.clear();
     Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
   });
@@ -90,13 +93,39 @@ describe('persistent SWR cache', () => {
     expect(parent.size).toBe(0);
   });
 
-  it('gives an unidentified visitor their own bucket', () => {
+  it('keeps an unidentified visitor in memory only, never on the device', () => {
+    // A shared 'anon' bucket was read and written by every account whose owner id
+    // was unknown, which in production was every account (PERF-0025).
+    localStorage.setItem(keyFor('anon'), JSON.stringify({ savedAt: Date.now(), entries: [['/api/x', { data: 1 }]] }));
     const anon = createPersistentCache(null);
+    expect(anon.size).toBe(0);
+
     anon.set('/api/nav-badges', ok({ count: 1 }));
     hideTab();
 
-    expect(createPersistentCache('oid-1').size).toBe(0);
-    expect(createPersistentCache(null).size).toBe(1);
+    expect(anon.get('/api/nav-badges')).toBeTruthy();
+    expect(storedKeys().filter((k) => k.startsWith(PREFIX) && k !== keyFor('anon'))).toEqual([]);
+    expect(localStorage.getItem(keyFor('anon'))).not.toContain('nav-badges');
+  });
+
+  it('leaves nothing on the device after a clear, even when the page then hides or unloads', () => {
+    // Sign-out clears the cache and then navigates to Microsoft's logout page. The
+    // live Map used to write everything straight back on that navigation.
+    const cache = createPersistentCache('oid-1');
+    cache.set('/api/student/catchup-journey', ok({ items: [1, 2, 3] }));
+    hideTab();
+    expect(storedKeys().some((k) => k.startsWith(PREFIX))).toBe(true);
+
+    clearPersistentCache();
+    window.dispatchEvent(new Event('beforeunload'));
+    hideTab();
+    cache.set('/api/later', ok({ late: true }));
+    hideTab();
+
+    expect(storedKeys().filter((k) => k.startsWith(PREFIX))).toEqual([]);
+    // Still a working Map for the rest of the page, holding only what came after.
+    expect(cache.has('/api/student/catchup-journey')).toBe(false);
+    expect(cache.has('/api/later')).toBe(true);
   });
 
   it('drops everything for every account on clear', () => {

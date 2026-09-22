@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import {
   Badge,
   BottomNavigation,
@@ -20,6 +20,7 @@ import {
 } from '@neram/ui';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
 import { useNavBadges } from './NavBadgeProvider';
+import { NavLink } from './NavigationProgress';
 
 interface NavItem {
   label: string;
@@ -54,7 +55,6 @@ interface BottomNavProps {
  */
 export default function BottomNav({ items, overflowItems, overflowGroups }: BottomNavProps) {
   const pathname = usePathname();
-  const router = useRouter();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -115,11 +115,8 @@ export default function BottomNav({ items, overflowItems, overflowGroups }: Bott
         <BottomNavigation
           value={activeValue}
           onChange={(_, newValue) => {
-            if (hasOverflow && newValue === moreIndex) {
-              setDrawerOpen(true);
-            } else {
-              router.push(items[newValue].path);
-            }
+            // The tabs are links and navigate themselves; only More is an action.
+            if (hasOverflow && newValue === moreIndex) setDrawerOpen(true);
           }}
           showLabels
           sx={{
@@ -160,8 +157,12 @@ export default function BottomNav({ items, overflowItems, overflowGroups }: Bott
           {items.map((item, index) => {
             const badgeCount = getBadgeCount(item.path);
             return (
+              // A real link (PERF-0029): prefetched, and read as a link to a page.
               <BottomNavigationAction
                 key={item.path}
+                component={NavLink}
+                href={item.path}
+                aria-current={activeIndex === index ? 'page' : undefined}
                 label={item.label}
                 icon={
                   <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -302,10 +303,10 @@ export default function BottomNav({ items, overflowItems, overflowGroups }: Bott
                     return (
                       <ListItemButton
                         key={item.path}
-                        onClick={() => {
-                          setDrawerOpen(false);
-                          router.push(item.path);
-                        }}
+                        component={NavLink}
+                        href={item.path}
+                        aria-current={isActive ? 'page' : undefined}
+                        onClick={() => setDrawerOpen(false)}
                         sx={{
                           borderRadius: 2,
                           mb: 0.25,

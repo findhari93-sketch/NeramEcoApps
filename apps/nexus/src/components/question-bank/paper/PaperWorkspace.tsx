@@ -12,6 +12,8 @@ import PaperQuestionList, {
 import PaperQuestionDetail from './PaperQuestionDetail';
 import type { PaperFallback } from './QuestionEditForm';
 import { useBulkImageFlow, type SlotType } from '@/hooks/useBulkImageFlow';
+import { useVideoLinkDrafts } from '@/hooks/useVideoLinkDrafts';
+import VideoPasteDialog from '../VideoPasteDialog';
 import type { ImageState } from '@/lib/bulk-upload-schema';
 import { activationMessage } from '@/lib/qb-activation';
 import { partIdOfSolutionSlot } from '@/lib/qb-image-needs';
@@ -52,6 +54,8 @@ export function imagesPatchBody(
 export interface PaperWorkspaceProps {
   /** Already in paper order. Position is counted from this order, not display_order. */
   questions: NexusQBQuestion[];
+  /** Offers Videos mode, which saves through this paper's video-links route. */
+  paperId?: string;
   tagCounts?: Record<string, number>;
   /** Tag ids per question id, the same batch tagCounts is derived from. */
   tagsByQuestion?: Record<string, string[]>;
@@ -103,7 +107,7 @@ function isTypingTarget(target: EventTarget | null): boolean {
  * answer key and then editing the same question meant finding it twice.
  */
 export default function PaperWorkspace({
-  questions, tagCounts = {}, tagsByQuestion, paper, sources,
+  questions, paperId, tagCounts = {}, tagsByQuestion, paper, sources,
   mode, onModeChange, needsFilter, onNeedsFilterChange, sectionFilter, onSectionFilterChange,
   getToken, onSaved, onChangeSections, onOptimisticPatch,
 }: PaperWorkspaceProps) {
@@ -134,6 +138,27 @@ export default function PaperWorkspace({
     // that question so the teacher can see what they are pasting into.
     onCrossQuestion: setActiveId,
   });
+
+  /**
+   * Videos mode's unsaved links. Hoisted here for the same reason as the images
+   * line above: opening a question in the pane to check it must not throw away
+   * a 59-link paste.
+   */
+  const videoDrafts = useVideoLinkDrafts({
+    questions,
+    paperId: paperId ?? '',
+    getToken,
+    onSaved,
+    onOptimisticPatch,
+  });
+  const [videoPasteOpen, setVideoPasteOpen] = useState(false);
+
+  const saveVideos = useCallback(async () => {
+    const { saved, failed, message } = await videoDrafts.save();
+    if (message) setImageToast(message);
+    else if (failed === 0) setImageToast(`${saved} video link${saved === 1 ? '' : 's'} saved`);
+    else setImageToast(`Saved ${saved}, ${failed} need a look: the reasons are under each one`);
+  }, [videoDrafts]);
 
   const activeIndex = useMemo(
     () => (activeId ? questions.findIndex((q) => q.id === activeId) : -1),
@@ -462,6 +487,11 @@ export default function PaperWorkspace({
           onSaveAllImages={handleSaveAllImages}
           savingImages={savingImages}
           saveImageProgress={saveImageProgress}
+          videos={
+            paperId
+              ? { drafts: videoDrafts, onOpenPaste: () => setVideoPasteOpen(true), onSave: saveVideos }
+              : undefined
+          }
         />
       </Box>
       {activeId && (
@@ -496,6 +526,17 @@ export default function PaperWorkspace({
             }
           />
         </Box>
+      )}
+      {paperId && (
+        <VideoPasteDialog
+          open={videoPasteOpen}
+          onClose={() => setVideoPasteOpen(false)}
+          rows={videoDrafts.matchRows}
+          onApply={(text) => {
+            videoDrafts.pasteText(text);
+            onModeChange('videos');
+          }}
+        />
       )}
       {imageToast && (
         <Snackbar

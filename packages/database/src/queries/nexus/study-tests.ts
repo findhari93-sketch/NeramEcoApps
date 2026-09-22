@@ -7,6 +7,7 @@ import type {
   NexusStudyTestQuestionInput,
   NexusStudyTestForStudent,
   NexusStudyTestAttemptResult,
+  NexusSolutionVideo,
 } from '../../types';
 
 const TESTS = 'nexus_study_tests';
@@ -630,6 +631,8 @@ export interface StudyFileAttemptReviewItem {
   is_gradable: boolean;
   explanation: string | null;
   explanation_detailed: string | null;
+  /** Passed straight through from getStudentTestAttemptReview. */
+  solution_videos: NexusSolutionVideo[];
 }
 
 /** One sitting of the chapter test, fully replayed. */

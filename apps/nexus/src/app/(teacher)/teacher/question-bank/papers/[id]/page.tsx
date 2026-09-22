@@ -52,8 +52,7 @@ import PaperWorkspace, {
   type NeedsFilter,
   type PaperSectionFilter,
 } from '@/components/question-bank/paper/PaperWorkspace';
-import BulkVideoLinksDialog from '@/components/question-bank/BulkVideoLinksDialog';
-import ContentPasteIcon from '@mui/icons-material/ContentPaste';
+import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
 import GroupsOutlinedIcon from '@mui/icons-material/GroupsOutlined';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
@@ -61,6 +60,9 @@ import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import PaperStudentAccessPanel from '@/components/question-bank/PaperStudentAccessPanel';
 import PaperJSONDialog from '@/components/question-bank/PaperJSONDialog';
 import PaperShell from '@/components/question-bank/paper/PaperShell';
+
+/** How long the first load may take before the page says it failed. */
+const PAPER_LOAD_TIMEOUT_MS = 30_000;
 
 export default function PaperDetailPage() {
   const router = useRouter();
@@ -80,6 +82,13 @@ export default function PaperDetailPage() {
   /** Tag ids per question id, fetched in the same round trip as the paper. */
   const [tagsByQuestion, setTagsByQuestion] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
+  /**
+   * Why the first load has no paper to show. A 404 is a paper that is not there;
+   * anything else (a 5xx, Cloudflare's 524, a dropped connection, the timeout
+   * below) is a paper we could not fetch, and saying "not found" about it sends
+   * the teacher looking for a deleted paper instead of pressing Try again.
+   */
+  const [loadError, setLoadError] = useState<'not_found' | 'failed' | null>(null);
   const [tab, setTab] = useState(0);
   const [saving, setSaving] = useState(false);
   const [activating, setActivating] = useState(false);
@@ -87,7 +96,6 @@ export default function PaperDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [hindiMergeOpen, setHindiMergeOpen] = useState(false);
-  const [videoLinksOpen, setVideoLinksOpen] = useState(false);
   const [jsonUploadOpen, setJsonUploadOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [message, setMessage] = useState('');
@@ -115,13 +123,23 @@ export default function PaperDetailPage() {
   const [sectionFilter, setSectionFilter] = useState<PaperSectionFilter | null>(null);
 
   const fetchData = useCallback(async (background = false) => {
-    if (!background) setLoading(true);
+    if (!background) {
+      setLoading(true);
+      setLoadError(null);
+    }
     try {
       const token = await getToken();
-      if (!token) return;
+      if (!token) {
+        if (!background) setLoadError('failed');
+        return;
+      }
 
       const res = await fetch(`/api/question-bank/papers/${paperId}`, {
         headers: { Authorization: `Bearer ${token}` },
+        // A request the origin holds open would otherwise keep the skeleton up
+        // until Cloudflare gives up at 100s (a 524). A healthy load takes a few
+        // seconds, so 30s is a failure worth saying out loud.
+        signal: AbortSignal.timeout(PAPER_LOAD_TIMEOUT_MS),
       });
       if (res.ok) {
         const json = await res.json();
@@ -129,9 +147,12 @@ export default function PaperDetailPage() {
         setQuestions(json.data.questions);
         setSources(json.data.sources || {});
         setTagsByQuestion(json.data.tagsByQuestion || {});
+      } else if (!background) {
+        setLoadError(res.status === 404 ? 'not_found' : 'failed');
       }
     } catch (err) {
       console.error('Failed to fetch paper:', err);
+      if (!background) setLoadError('failed');
     } finally {
       if (!background) setLoading(false);
     }
@@ -399,7 +420,7 @@ export default function PaperDetailPage() {
 
   if (loading) {
     return (
-      <Box sx={{ px: { xs: 2, md: 3 }, py: 2 }}>
+      <Box sx={{ px: { xs: 2, md: 3 }, py: 2 }} aria-busy="true" aria-label="Loading paper">
         <Skeleton variant="rectangular" height={48} sx={{ borderRadius: 1, mb: 2 }} />
         <Skeleton variant="rectangular" height={200} sx={{ borderRadius: 1 }} />
       </Box>
@@ -407,9 +428,30 @@ export default function PaperDetailPage() {
   }
 
   if (!paper) {
+    const notFound = loadError === 'not_found';
     return (
-      <Box sx={{ px: { xs: 2, md: 3 }, py: 2 }}>
-        <Alert severity="error">Paper not found</Alert>
+      <Box sx={{ px: { xs: 2, md: 3 }, py: 2, maxWidth: 600 }}>
+        <Alert
+          severity={notFound ? 'warning' : 'error'}
+          action={
+            notFound ? undefined : (
+              <Button color="inherit" onClick={() => fetchData()} sx={{ minHeight: 44 }}>
+                Try again
+              </Button>
+            )
+          }
+        >
+          {notFound
+            ? 'This paper could not be found. It may have been deleted.'
+            : 'This paper could not be loaded. The connection dropped or the server took too long.'}
+        </Alert>
+        <Button
+          href="/teacher/question-bank"
+          startIcon={<ArrowBackIcon />}
+          sx={{ mt: 2, minHeight: 44 }}
+        >
+          Back to question bank
+        </Button>
       </Box>
     );
   }
@@ -684,9 +726,23 @@ export default function PaperDetailPage() {
             <ListItemIcon><UploadFileIcon fontSize="small" /></ListItemIcon>
             <ListItemText>{saving ? 'Saving answers...' : 'Upload Answer Key'}</ListItemText>
           </MenuItem>
-          <MenuItem onClick={() => { setActionsMenuAnchor(null); setVideoLinksOpen(true); }} sx={{ minHeight: 44 }}>
-            <ListItemIcon><ContentPasteIcon fontSize="small" sx={{ color: '#7c3aed' }} /></ListItemIcon>
-            <ListItemText>Paste Video Links</ListItemText>
+          {/* Opens the paper's Videos mode rather than a dialog: every question
+              with its own link field, and a paste that reads the question
+              numbers in the teacher's own list. */}
+          <MenuItem
+            onClick={() => {
+              setActionsMenuAnchor(null);
+              setTab(0);
+              setPaperMode('videos');
+            }}
+            sx={{ minHeight: 44 }}
+          >
+            <ListItemIcon><VideoLibraryOutlinedIcon fontSize="small" color="primary" /></ListItemIcon>
+            <ListItemText
+              primary="Solution videos"
+              secondary="See and paste every question's video link"
+              secondaryTypographyProps={{ variant: 'caption' }}
+            />
           </MenuItem>
           <MenuItem onClick={() => { setActionsMenuAnchor(null); setHindiMergeOpen(true); }} sx={{ minHeight: 44 }}>
             <ListItemIcon><TranslateIcon fontSize="small" sx={{ color: '#e65100' }} /></ListItemIcon>
@@ -736,6 +792,7 @@ export default function PaperDetailPage() {
         <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', pt: 1 }}>
         <PaperWorkspace
           questions={questions}
+          paperId={paperId}
           tagCounts={tagCounts}
           tagsByQuestion={tagsByQuestion}
           paper={paper ?? undefined}
@@ -850,19 +907,6 @@ export default function PaperDetailPage() {
         getToken={getToken}
         onSuccess={() => {
           setMessage('Hindi text merged successfully');
-          fetchData(true);
-        }}
-      />
-
-      {/* Bulk video links dialog */}
-      <BulkVideoLinksDialog
-        open={videoLinksOpen}
-        onClose={() => setVideoLinksOpen(false)}
-        questions={questions}
-        paperId={paperId}
-        getToken={getToken}
-        onSuccess={(msg) => {
-          setMessage(msg);
           fetchData(true);
         }}
       />

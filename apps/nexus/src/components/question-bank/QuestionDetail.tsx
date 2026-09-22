@@ -1,8 +1,6 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import NeramVideoPlayer from '@/components/video/NeramVideoPlayer';
-import { OPEN_GATE } from '@/lib/video-gate';
 import {
   Box,
   Typography,
@@ -36,6 +34,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import CloseIcon from '@mui/icons-material/Close';
+import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import FlagOutlined from '@mui/icons-material/FlagOutlined';
 import PaletteOutlinedIcon from '@mui/icons-material/PaletteOutlined';
 import type { NexusQBQuestionDetail } from '@neram/database';
@@ -48,39 +47,7 @@ import CategoryChips from './CategoryChips';
 import MCQOptions from './MCQOptions';
 import MathText from '@/components/common/MathText';
 import { readDrawingParts } from '@/lib/drawing-parts';
-
-// ---- Video embed helpers (copied from SolutionSection.tsx) ----
-
-function extractYouTubeId(url: string): string | null {
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
-    /youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})/,
-  ];
-  for (const pattern of patterns) {
-    const match = url.match(pattern);
-    if (match) return match[1];
-  }
-  return null;
-}
-
-function isSharePointUrl(url: string): boolean {
-  return /\.sharepoint\.com\//i.test(url) || /onedrive\.live\.com\//i.test(url);
-}
-
-function getSharePointDownloadUrl(url: string): string {
-  // Convert SharePoint sharing links to direct download URLs for HTML5 video playback
-  try {
-    const parsed = new URL(url);
-    // Already a download link
-    if (parsed.searchParams.has('download')) return url;
-    // SharePoint sharing link format: /:v:/s/SiteName/...
-    // Add download=1 to get direct file access
-    parsed.searchParams.set('download', '1');
-    return parsed.toString();
-  } catch {
-    return url;
-  }
-}
+import SolutionVideoPlayer from './SolutionVideoPlayer';
 
 // ---- Types ----
 
@@ -227,11 +194,6 @@ export default function QuestionDetail({
     if (idx >= 0) return String.fromCharCode(65 + idx); // A, B, C, D
     return question.correct_answer;
   })();
-
-  // Video embed helpers
-  const videoId = question.solution_video_url
-    ? extractYouTubeId(question.solution_video_url)
-    : null;
 
   const activeTabKey = solutionTabs[solutionTab]?.key;
 
@@ -420,7 +382,7 @@ export default function QuestionDetail({
           ) : (
             <Chip
               icon={<CancelIcon />}
-              label={`Incorrect — Answer: ${correctOptionLetter}`}
+              label={`Incorrect. Answer: ${correctOptionLetter}`}
               color="error"
               variant="filled"
               sx={{ fontWeight: 600, fontSize: '0.875rem' }}
@@ -501,75 +463,7 @@ export default function QuestionDetail({
 
             {/* Video tab */}
             {activeTabKey === 'video' && question.solution_video_url && (
-              <Box>
-                {videoId ? (
-                  <Box
-                    sx={{
-                      position: 'relative',
-                      width: '100%',
-                      paddingTop: '56.25%',
-                      borderRadius: 2,
-                      overflow: 'hidden',
-                      bgcolor: '#000',
-                    }}
-                  >
-                    <Box sx={{ position: 'absolute', inset: 0 }}>
-                      {/* Nothing to gate on a solution the student has already
-                          reached, but the chrome is worth having: speed,
-                          keyboard and captions behave as they do everywhere
-                          else, rather than being YouTube's on this one screen. */}
-                      <NeramVideoPlayer
-                        source={{ kind: 'youtube', youtubeId: videoId }}
-                        gate={OPEN_GATE}
-                        title="Solution video"
-                        allowFullscreen
-                      />
-                    </Box>
-                  </Box>
-                ) : isSharePointUrl(question.solution_video_url) ? (
-                  <Box
-                    sx={{
-                      position: 'relative',
-                      width: '100%',
-                      borderRadius: 2,
-                      overflow: 'hidden',
-                      bgcolor: '#000',
-                    }}
-                  >
-                    <Box sx={{ position: 'relative', width: '100%', aspectRatio: '16 / 9', maxHeight: 480 }}>
-                      <NeramVideoPlayer
-                        // A fixed link, not a grant: nothing to renew, so a
-                        // failure reloads the same URL in place.
-                        source={{ kind: 'html5', src: getSharePointDownloadUrl(question.solution_video_url), renew: null }}
-                        gate={OPEN_GATE}
-                        title="Solution video"
-                        allowFullscreen
-                        allowPictureInPicture
-                      />
-                    </Box>
-                  </Box>
-                ) : (
-                  <Box
-                    sx={{
-                      position: 'relative',
-                      width: '100%',
-                      borderRadius: 2,
-                      overflow: 'hidden',
-                      bgcolor: '#000',
-                    }}
-                  >
-                    <Box sx={{ position: 'relative', width: '100%', aspectRatio: '16 / 9', maxHeight: 480 }}>
-                      <NeramVideoPlayer
-                        source={{ kind: 'html5', src: question.solution_video_url, renew: null }}
-                        gate={OPEN_GATE}
-                        title="Solution video"
-                        allowFullscreen
-                        allowPictureInPicture
-                      />
-                    </Box>
-                  </Box>
-                )}
-              </Box>
+              <SolutionVideoPlayer url={question.solution_video_url} />
             )}
 
             {/* Image tab */}
@@ -780,6 +674,14 @@ export default function QuestionDetail({
         <DifficultyChip difficulty={question.difficulty} />
         <CategoryChips categories={question.categories || []} />
       </Box>
+
+      {/* The video is promised before the answer, and only opens after it. */}
+      {!submitted && question.question_format !== 'DRAWING_PROMPT' && question.solution_video_url?.trim() && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1, color: 'text.secondary' }}>
+          <PlayCircleOutlineIcon aria-hidden sx={{ fontSize: 20, color: 'primary.main' }} />
+          <Typography variant="body2">A video solution unlocks when you submit</Typography>
+        </Box>
+      )}
 
       {/* Submit Answer button (before submit) */}
       {!submitted && (

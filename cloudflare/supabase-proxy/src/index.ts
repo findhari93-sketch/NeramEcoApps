@@ -22,6 +22,10 @@ const ALLOWED_ORIGINS = [
   "http://localhost:3013",
 ];
 
+/** Tables, RPCs and auth get an upstream deadline; storage and anything else do not. */
+const HAS_DEADLINE = /^\/(rest|auth)\/v1\//;
+const UPSTREAM_DEADLINE_MS = 25_000;
+
 function isAllowedOrigin(origin: string): boolean {
   return (
     ALLOWED_ORIGINS.includes(origin) || origin.endsWith(".vercel.app")
@@ -89,7 +93,29 @@ export default {
       // Override the host header to the Supabase host
       proxyRequest.headers.set("Host", env.SUPABASE_HOST);
 
-      const response = await fetch(proxyRequest);
+      // A deadline for tables, RPCs and auth, so a stalled supabase.co answer fails
+      // instead of holding the caller open until the platform cuts it (Nexus saw 524s).
+      // 25s sits just past the apps' own 20s client deadline, so their clearer error
+      // normally wins. Storage keeps none: a large upload legitimately takes longer.
+      const deadline = HAS_DEADLINE.test(url.pathname) ? new AbortController() : null;
+      const timer = deadline ? setTimeout(() => deadline.abort(), UPSTREAM_DEADLINE_MS) : null;
+      let response: Response;
+      try {
+        response = await fetch(proxyRequest, deadline ? { signal: deadline.signal } : undefined);
+      } catch (err: unknown) {
+        if (deadline?.signal.aborted) {
+          return new Response(
+            JSON.stringify({ error: "Upstream timeout", message: `No answer from Supabase within ${UPSTREAM_DEADLINE_MS}ms` }),
+            {
+              status: 504,
+              headers: { "Content-Type": "application/json", ...(allowed ? corsHeaders(origin) : {}) },
+            },
+          );
+        }
+        throw err;
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
 
       // Build response with CORS headers
       const responseHeaders = new Headers(response.headers);

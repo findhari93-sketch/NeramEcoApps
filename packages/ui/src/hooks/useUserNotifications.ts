@@ -72,10 +72,19 @@ function emit(poller: Poller, count: number) {
   poller.listeners.forEach((listener) => listener(count));
 }
 
+/**
+ * A count request that has not answered in this long is abandoned. The in-flight
+ * guard below would otherwise stay held for as long as a stalled connection stays
+ * open (Nexus saw Cloudflare 524s at 100s), and the bell would stop updating.
+ */
+const REQUEST_TIMEOUT_MS = 15_000;
+
 async function pollOnce(key: string) {
   const poller = pollers.get(key);
   if (!poller || poller.inFlight) return;
   poller.inFlight = true;
+  const controller = new AbortController();
+  const deadline = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     const token = await poller.getToken();
     if (!token) return;
@@ -84,6 +93,7 @@ async function pollOnce(key: string) {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
+      signal: controller.signal,
     });
     if (!res.ok) return;
     const data = await res.json();
@@ -92,6 +102,7 @@ async function pollOnce(key: string) {
     // Silent: the badge is non-critical, and a noisy poll failure would bill a
     // log line every interval for as long as the outage lasts.
   } finally {
+    clearTimeout(deadline);
     poller.inFlight = false;
   }
 }

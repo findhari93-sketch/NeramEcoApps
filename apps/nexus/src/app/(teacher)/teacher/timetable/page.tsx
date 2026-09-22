@@ -29,7 +29,6 @@ import LinkPrepTestDialog from '@/components/timetable/LinkPrepTestDialog';
 import AssignmentSetupDialog from '@/components/assignments/AssignmentSetupDialog';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import { useAuthSWR } from '@/lib/nexus-swr';
-import { mutate } from 'swr';
 import type { RsvpDashboardRangeResponse, RsvpSummary } from '@/app/api/timetable/rsvp-dashboard/route';
 import type { StandingResponse } from '@/app/api/attendance/standing/route';
 import { buildForecast } from '@/lib/class-forecast';
@@ -260,7 +259,10 @@ export default function TeacherTimetable() {
     ? `/api/timetable/rsvp-dashboard?classroom_id=${activeClassroom.id}` +
       `&start=${fetchRange.start}&end=${fetchRange.end}`
     : null;
-  const { data: availability, isLoading: availabilityLoading } =
+  // The hook's own bound mutate, not the one exported by 'swr': that one is tied to
+  // SWR's default cache, while this app renders from the provider's cache, so it
+  // refetched nothing (see useRevalidateClass in lib/nexus-swr.ts).
+  const { data: availability, isLoading: availabilityLoading, mutate: refreshAvailability } =
     useAuthSWR<RsvpDashboardRangeResponse>(availabilityKey, {
       revalidateOnFocus: false,
       dedupingInterval: 60_000,
@@ -354,7 +356,7 @@ export default function TeacherTimetable() {
     // answer for up to its 60s dedupe window, so "Who is coming" could still
     // list a class the teacher had just cancelled, and the month view's away
     // pill could still count a date that no longer has one.
-    if (force && availabilityKey) void mutate(availabilityKey);
+    if (force && availabilityKey) void refreshAvailability();
 
     const have = loadedRange.current;
     const covered =
@@ -391,7 +393,7 @@ export default function TeacherTimetable() {
     } finally {
       setLoading(false);
     }
-  }, [activeClassroom, fetchRange.start, fetchRange.end, getToken, availabilityKey]);
+  }, [activeClassroom, fetchRange.start, fetchRange.end, getToken, availabilityKey, refreshAvailability]);
 
   const loadedHolidayRange = useRef<{ classroomId: string; start: string; end: string } | null>(null);
 

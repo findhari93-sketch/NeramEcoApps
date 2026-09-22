@@ -7381,6 +7381,14 @@ export interface NexusComposedQuestionWithAnswer extends NexusComposedQuestion {
   answer_tolerance?: number | null;
   explanation_brief?: string | null;
   explanation_detailed?: string | null;
+  /** The question's solution videos (one per part for a split drawing), from solutionVideosOf. */
+  solution_videos?: NexusSolutionVideo[];
+}
+
+/** One watchable solution: the question's own (label null) or a part's ("A"). */
+export interface NexusSolutionVideo {
+  label: string | null;
+  url: string;
 }
 
 export interface NexusTestGradeReviewItem {
@@ -7621,6 +7629,12 @@ export interface NexusQBQuestionListItem extends NexusQBQuestion {
   sources: NexusQBQuestionSource[];
   topic: NexusQBTopic | null;
   attempt_summary: QBAttemptSummary | null;
+  /**
+   * Has a solution video (its own, or on any part of a split drawing), from
+   * solutionVideosOf. Student payloads carry this flag and never the link:
+   * solution_video_url is absent on them despite the inherited type.
+   */
+  has_solution_video?: boolean;
   /** Managed registry tags (teacher lists only; absent in student payloads). */
   tags?: NexusQBQuestionTagChip[];
   /**

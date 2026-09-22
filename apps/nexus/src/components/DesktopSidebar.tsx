@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useCallback, useState, useEffect, useMemo } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import {
   Badge,
   Box,
@@ -28,6 +28,7 @@ import { useSidebarContext, SIDEBAR_EXPANDED, SIDEBAR_ICONS } from './SidebarPro
 import { COURSE_PLANS_PATH, COURSE_PLAN_SUBNAV } from '@/lib/nav-config';
 import { examFromPathname, useRememberedQBExam } from '@/lib/qb-exam-routes';
 import { useNavBadges } from './NavBadgeProvider';
+import { NavLink } from './NavigationProgress';
 
 // Re-export for backward compat (layouts import this)
 export const SIDEBAR_WIDTH = SIDEBAR_EXPANDED;
@@ -58,7 +59,6 @@ const TRANSITION = 'all 250ms cubic-bezier(0.2, 0, 0, 1)';
 
 export default function DesktopSidebar({ items, groups, homePath }: DesktopSidebarProps) {
   const pathname = usePathname();
-  const router = useRouter();
   const theme = useTheme();
   const { user, nexusRole, impersonation } = useNexusAuthContext();
   const { sidebarState, cycle, toggle, expand } = useSidebarContext();
@@ -149,9 +149,13 @@ export default function DesktopSidebar({ items, groups, homePath }: DesktopSideb
     const active = isActive(item.path);
     const badgeCount = getBadgeCount(item.path);
     const button = (
+      // A real link (PERF-0029): Next prefetches it, it opens in a new tab, and a
+      // screen reader hears a link to a page rather than an unlabelled action.
       <ListItemButton
         key={item.path}
-        onClick={() => router.push(item.path)}
+        component={NavLink}
+        href={item.path}
+        aria-current={active ? 'page' : undefined}
         sx={{
           borderRadius: 2.5,
           mb: 0.5,
@@ -164,6 +168,7 @@ export default function DesktopSidebar({ items, groups, homePath }: DesktopSideb
           '&:hover': {
             bgcolor: active ? alpha('#fff', 0.22) : alpha('#fff', 0.08),
           },
+          '&.Mui-focusVisible': { outline: `2px solid ${alpha('#fff', 0.8)}`, outlineOffset: -2 },
           transition: TRANSITION,
         }}
       >
@@ -242,7 +247,9 @@ export default function DesktopSidebar({ items, groups, homePath }: DesktopSideb
     return (
       <Box key={COURSE_PLANS_PATH}>
         <ListItemButton
-          onClick={() => router.push(COURSE_PLANS_PATH)}
+          component={NavLink}
+          href={COURSE_PLANS_PATH}
+          aria-current={pathname === COURSE_PLANS_PATH ? 'page' : undefined}
           sx={{
             borderRadius: 2.5,
             mb: 0.5,
@@ -266,6 +273,8 @@ export default function DesktopSidebar({ items, groups, homePath }: DesktopSideb
           />
           <ExpandMoreIcon
             onClick={(e) => {
+              // Inside the row's link: open or close the list without following it.
+              e.preventDefault();
               e.stopPropagation();
               setCoursePlansOpen((o) => !o);
             }}
@@ -284,7 +293,9 @@ export default function DesktopSidebar({ items, groups, homePath }: DesktopSideb
               return (
                 <ListItemButton
                   key={s.key}
-                  onClick={() => router.push(s.planScreen ? resolvePlanPath(s.suffix) : COURSE_PLANS_PATH)}
+                  component={NavLink}
+                  href={s.planScreen ? resolvePlanPath(s.suffix) : COURSE_PLANS_PATH}
+                  aria-current={active ? 'page' : undefined}
                   sx={{
                     borderRadius: 2,
                     mb: 0.25,
@@ -393,7 +404,8 @@ export default function DesktopSidebar({ items, groups, homePath }: DesktopSideb
               return (
                 <ListItemButton
                   key={child.path}
-                  onClick={() => router.push(child.path)}
+                  component={NavLink}
+                  href={child.path}
                   aria-current={active ? 'page' : undefined}
                   sx={{
                     borderRadius: 2,
@@ -566,7 +578,9 @@ export default function DesktopSidebar({ items, groups, homePath }: DesktopSideb
             {homePath && (
               <Tooltip title="Home" placement={isIcons ? 'right' : 'bottom'} arrow>
                 <IconButton
-                  onClick={() => router.push(homePath)}
+                  component={NavLink}
+                  href={homePath}
+                  aria-label="Home"
                   size="small"
                   sx={{
                     color: isActive(homePath) ? '#fff' : alpha('#fff', 0.7),

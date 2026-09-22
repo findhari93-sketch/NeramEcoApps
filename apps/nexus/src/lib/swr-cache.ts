@@ -192,30 +192,52 @@ function serialise(map: Map<string, unknown>): string | null {
 }
 
 /**
+ * Every persistent cache made on this page. A wipe has to reach the live Maps as well
+ * as the stored copies: a Map left holding data writes it all straight back the next
+ * time the tab hides or the page unloads, which is exactly what sign-out does next.
+ */
+const liveCaches = new Set<() => void>();
+
+/**
  * Build the Map SWR should use, pre-filled from the last visit.
  *
  * @param namespace who this cache belongs to. Entries are stored per account, so two
  *   people sharing a device (a parent and their child, two teachers on a staffroom
  *   laptop) can never read each other's. Callers pass the account id they already know
- *   synchronously; `null` means "nobody identified yet", which gets its own bucket and
- *   is discarded rather than promoted once someone signs in.
+ *   synchronously. `null` means "nobody identified yet": that cache lives in memory
+ *   only and is never read from or written to the device, because a bucket without an
+ *   owner would be shared by everyone who ever signs in on it.
  */
 export function createPersistentCache(namespace: string | null): Map<string, unknown> {
-  const bucket = namespace || 'anon';
+  if (typeof window === 'undefined') return new Map();
   // Before hydrating, not after: the whole point is that an older build's entries
   // are gone by the time anything can read one back.
-  if (typeof window !== 'undefined') evictOtherBuilds();
+  evictOtherBuilds();
+  if (!namespace) return new Map();
+
+  const bucket = namespace;
   const map = new Map<string, unknown>(hydrate(bucket) as [string, unknown][]);
 
-  if (typeof window === 'undefined') return map;
-
   let timer: ReturnType<typeof setTimeout> | null = null;
+  // Set by clearPersistentCache. From then on this Map is memory only for the rest
+  // of the page's life: the account it was built for has signed out or been replaced.
+  let disposed = false;
+
+  liveCaches.add(() => {
+    disposed = true;
+    if (timer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    Map.prototype.clear.call(map);
+  });
 
   const flush = () => {
     if (timer) {
       clearTimeout(timer);
       timer = null;
     }
+    if (disposed) return;
     try {
       const payload = serialise(map);
       if (payload === null) {
@@ -230,6 +252,7 @@ export function createPersistentCache(namespace: string | null): Map<string, unk
   };
 
   const schedule = () => {
+    if (disposed) return;
     if (timer) clearTimeout(timer);
     timer = setTimeout(flush, WRITE_DEBOUNCE_MS);
   };
@@ -271,6 +294,11 @@ export function createPersistentCache(namespace: string | null): Map<string, unk
  */
 export function clearPersistentCache(): void {
   if (typeof window === 'undefined') return;
+
+  // The live Maps first. Removing only the stored copies left every response in
+  // memory, and the next hide or unload wrote it all back.
+  liveCaches.forEach((dispose) => dispose());
+  liveCaches.clear();
 
   try {
     const doomed: string[] = [];

@@ -10,6 +10,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
+import { errorResponse } from '@/lib/api-errors';
 import { getSupabaseAdminClient, recordDeviceHeartbeat } from '@neram/database';
 
 export async function POST(req: NextRequest) {
@@ -23,6 +24,11 @@ export async function POST(req: NextRequest) {
     }
 
     const msUser = await verifyMsToken(authHeader);
+    // View as Student resolves as the student. The teacher's minutes are not the
+    // student's, so nothing is written, as /api/auth/me does (PERF-0035).
+    if (msUser.impersonatorUserId) {
+      return NextResponse.json({ ok: true });
+    }
     const supabase = getSupabaseAdminClient();
 
     const { data: user } = await (supabase
@@ -46,11 +52,9 @@ export async function POST(req: NextRequest) {
     );
 
     return NextResponse.json({ ok: true });
-  } catch (error: any) {
+  } catch (error) {
     console.error('Heartbeat error:', error);
-    return NextResponse.json(
-      { error: error.message || 'Internal server error' },
-      { status: (error.message?.includes('Authorization') || error.message?.includes('Invalid Microsoft token') || error.message?.includes('token')) ? 401 : 500 }
-    );
+    // 401 only for a refused session: a Microsoft or database outage answers 503.
+    return errorResponse(error, 'Internal server error');
   }
 }

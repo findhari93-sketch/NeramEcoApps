@@ -14,7 +14,8 @@
  */
 
 import { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
+import { useNavigate } from './NavigationProgress';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { isPathEnabled } from '@/lib/feature-flags';
 import {
@@ -107,7 +108,8 @@ export function usePanelContext() {
 export default function PanelProvider({ children }: { children: React.ReactNode }) {
   const { nexusRole, featureFlags, can } = useNexusAuthContext();
   const pathname = usePathname();
-  const router = useRouter();
+  // In the shared transition, so the top progress bar shows while the page loads (PERF-0029).
+  const navigate = useNavigate();
   const [activePanel, setActivePanelState] = useState<PanelId>('teaching');
   const [hydrated, setHydrated] = useState(false);
 
@@ -163,8 +165,8 @@ export default function PanelProvider({ children }: { children: React.ReactNode 
 
     setActivePanelState(panelId);
     localStorage.setItem(STORAGE_KEY, panelId);
-    router.push(panel.defaultPath);
-  }, [nexusRole, router]);
+    navigate(panel.defaultPath);
+  }, [nexusRole, navigate]);
 
   const currentPanel = PANELS.find((p) => p.id === activePanel) || PANELS[0];
 

@@ -62,8 +62,8 @@ export interface PaperQuestionDetailProps {
   onChangeSection: (questionId: string, section: QBQuestionSection) => Promise<void>;
   /** Show or hide the open question, through the same path as the list's selection bar. */
   onSetActive?: (active: boolean) => Promise<void>;
-  /** 'edit' shows the full question form; 'images' shows the paste assembly line. */
-  mode?: 'edit' | 'images';
+  /** 'edit' and 'videos' show the full question form (Videos mode opens it to check a question); 'images' shows the paste assembly line. */
+  mode?: 'edit' | 'images' | 'videos';
   imagesPane?: ImagesPaneProps;
 }
 

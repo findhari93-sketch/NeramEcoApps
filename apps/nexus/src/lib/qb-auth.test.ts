@@ -9,6 +9,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  * student may read anything" and returned the developer sentence
  * "classroom_id is required" to a student's screen. verifyQBAccessAnyClassroom
  * is the question those routes actually meant to ask.
+ *
+ * Neither reads the retired per-classroom Question Bank switch. It sat on one
+ * exam's page, the Features screen could not see it, and left closed it hid the
+ * bank and refused the Tests page for a whole classroom while Features said On.
+ * The cases below keep a closed switch in the data on purpose: enrolment is the
+ * whole rule now.
  */
 
 const state = {
@@ -16,8 +22,10 @@ const state = {
   user: null as any,
   /** nexus_enrollments rows for that user. */
   enrolments: [] as Array<{ classroom_id: string }>,
-  /** nexus_qb_classroom_links rows that come back active. */
+  /** Rows of the retired nexus_qb_classroom_links table. Nothing may read them. */
   qbLinks: [] as Array<{ classroom_id: string; is_active: boolean }>,
+  /** What getUserRoleInClassroom answers for the named classroom. */
+  role: 'student' as string | null,
   tokenValid: true,
 };
 
@@ -30,8 +38,7 @@ vi.mock('./ms-verify', () => ({
 
 vi.mock('@neram/database', () => ({
   getSupabaseAdminClient: () => makeClient(),
-  getUserRoleInClassroom: vi.fn(async () => 'student'),
-  isQBEnabledForClassroom: vi.fn(async () => true),
+  getUserRoleInClassroom: vi.fn(async () => state.role),
 }));
 
 /**
@@ -76,6 +83,7 @@ beforeEach(() => {
   state.user = STUDENT;
   state.enrolments = [];
   state.qbLinks = [];
+  state.role = 'student';
   state.tokenValid = true;
   // resolveQBCaller resolves the caller through getRequestUser, which holds the users
   // row for 30s keyed on ms_oid. Every case here reuses the same oid while swapping the
@@ -92,9 +100,15 @@ describe('verifyQBAccessAnyClassroom', () => {
     if (result.ok) expect(result.caller.id).toBe('u-teacher');
   });
 
-  it('lets a student through on any one QB-enabled enrolment', async () => {
+  it('lets a student through on one active enrolment, with no classroom switch anywhere', async () => {
     state.enrolments = [{ classroom_id: 'c-1' }];
-    state.qbLinks = [{ classroom_id: 'c-1', is_active: true }];
+    const result = await verifyQBAccessAnyClassroom('Bearer t');
+    expect(result.ok).toBe(true);
+  });
+
+  it('ignores a classroom Question Bank switch left closed', async () => {
+    state.enrolments = [{ classroom_id: 'c-1' }];
+    state.qbLinks = [{ classroom_id: 'c-1', is_active: false }];
     const result = await verifyQBAccessAnyClassroom('Bearer t');
     expect(result.ok).toBe(true);
   });
@@ -110,14 +124,6 @@ describe('verifyQBAccessAnyClassroom', () => {
       expect(body.error).not.toContain('classroom_id');
       expect(body.error).toContain('Question Bank');
     }
-  });
-
-  it('refuses a student whose classrooms all have the bank switched off', async () => {
-    state.enrolments = [{ classroom_id: 'c-1' }];
-    state.qbLinks = [{ classroom_id: 'c-1', is_active: false }];
-    const result = await verifyQBAccessAnyClassroom('Bearer t');
-    expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.response.status).toBe(403);
   });
 
   it('401s without a header and on a bad token', async () => {
@@ -150,7 +156,33 @@ describe('verifyQBAccess', () => {
     }
   });
 
-  it('passes a student who named an enrolled, QB-enabled classroom', async () => {
+  it('passes a student enrolled in the classroom they named', async () => {
+    const result = await verifyQBAccess('Bearer t', 'c-1');
+    expect(result.ok).toBe(true);
+  });
+
+  // The prod state on 2026-09-21: JEE B.Arch Session 1 had its switch closed,
+  // so the Tests page refused all 42 students while Features read On.
+  it('passes an enrolled student whose classroom switch was left closed', async () => {
+    state.qbLinks = [{ classroom_id: 'c-1', is_active: false }];
+    const result = await verifyQBAccess('Bearer t', 'c-1');
+    expect(result.ok).toBe(true);
+  });
+
+  it('refuses a student who is not in the classroom they named', async () => {
+    state.role = null;
+    const result = await verifyQBAccess('Bearer t', 'c-1');
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.response.status).toBe(403);
+      const body = await result.response.json();
+      expect(body.error).toBe('You are not enrolled in this classroom.');
+    }
+  });
+
+  it('lets staff through without asking about enrolment', async () => {
+    state.user = TEACHER;
+    state.role = null;
     const result = await verifyQBAccess('Bearer t', 'c-1');
     expect(result.ok).toBe(true);
   });

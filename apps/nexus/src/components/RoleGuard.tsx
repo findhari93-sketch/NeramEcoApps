@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect } from 'react';
+import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Box, CircularProgress, Typography } from '@neram/ui';
+import { Box, Button, CircularProgress, Stack, Typography } from '@neram/ui';
+import CloudOffOutlinedIcon from '@mui/icons-material/CloudOffOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import NoClassroomWelcome from '@/components/NoClassroomWelcome';
 import ParentNoChildLinked from '@/components/ParentNoChildLinked';
@@ -37,10 +39,16 @@ export default function RoleGuard({
 }: RoleGuardProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, nexusRole, classrooms, loading } = useNexusAuthContext();
+  const { user, nexusRole, classrooms, loading, authUnavailable, refreshAuth, parentSession } =
+    useNexusAuthContext();
 
   useEffect(() => {
     if (loading) return;
+
+    // Nexus could not be reached. That says nothing about the session, so this is
+    // not the moment to send a signed-in person to sign in: the screen below offers
+    // a retry instead.
+    if (!user && authUnavailable) return;
 
     if (!user) {
       // Carry the destination through sign-in. Without this, a student tapping
@@ -66,6 +74,7 @@ export default function RoleGuard({
     }
   }, [
     user,
+    authUnavailable,
     nexusRole,
     loading,
     allowedRoles,
@@ -96,6 +105,18 @@ export default function RoleGuard({
     );
   }
 
+  if (!user && authUnavailable) {
+    const query = typeof window !== 'undefined' ? window.location.search : '';
+    return (
+      <CouldNotReachNexus
+        onRetry={() => void refreshAuth()}
+        // A parent's sign-in page sends any live parent session straight back here,
+        // so offering it to a parent would only bounce.
+        signInHref={parentSession?.active ? null : loginUrlWithReturn(loginPath, `${pathname}${query}`)}
+      />
+    );
+  }
+
   if (!user || !nexusRole || !allowedRoles.includes(nexusRole)) {
     return null;
   }
@@ -113,4 +134,50 @@ export default function RoleGuard({
   }
 
   return <>{children}</>;
+}
+
+/**
+ * Full-screen stand-in for the app when /api/auth/me could not be reached: laid out
+ * like the loading spinner it replaces, announced as an alert, with the retry
+ * focused so a keyboard user lands on it. Pressing it re-runs the sign-in check,
+ * which puts the spinner back until the answer arrives.
+ */
+function CouldNotReachNexus({ onRetry, signInHref }: { onRetry: () => void; signInHref: string | null }) {
+  return (
+    <Box
+      role="alert"
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+        gap: 2,
+        px: 3,
+        textAlign: 'center',
+      }}
+    >
+      <CloudOffOutlinedIcon aria-hidden sx={{ fontSize: 48, color: 'text.secondary' }} />
+      <Typography variant="h6" component="h1">
+        Could not reach Nexus
+      </Typography>
+      <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 360 }}>
+        Check your internet connection and try again. If it keeps happening, sign in again.
+      </Typography>
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        spacing={1}
+        sx={{ width: { xs: '100%', sm: 'auto' }, maxWidth: 360, mt: 1 }}
+      >
+        <Button variant="contained" onClick={onRetry} autoFocus sx={{ minHeight: 48, px: 3 }}>
+          Try again
+        </Button>
+        {signInHref && (
+          <Button component={Link} href={signInHref} variant="text" sx={{ minHeight: 48, px: 3 }}>
+            Sign in again
+          </Button>
+        )}
+      </Stack>
+    </Box>
+  );
 }

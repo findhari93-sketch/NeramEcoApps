@@ -47,9 +47,8 @@ import type {
   NexusQBQuestionDetail,
   NexusQBTopic,
   NexusQBTagNode,
-  QBDifficulty,
-  QBQuestionFormat,
 } from '@neram/database';
+import { deserializeQBFilters, serializeQBFilters } from '@/lib/qb-filter-url';
 import { MAX_STUDENT_TEST_QUESTIONS } from '@/lib/test-limits';
 import { isQBExamType, qbExamPath, rememberQBExam } from '@/lib/qb-exam-routes';
 
@@ -60,34 +59,6 @@ const EMPTY_COUNTS: Record<string, number> = {};
 const DETAIL_PANE_TOP = 8;
 
 const PAGE_SIZE = 20;
-
-function serializeFilters(filters: QBFilterState): URLSearchParams {
-  const params = new URLSearchParams();
-  if (filters.categories?.length) params.set('cat', filters.categories.join(','));
-  if (filters.difficulty?.length) params.set('diff', filters.difficulty.join(','));
-  if (filters.question_format?.length) params.set('fmt', filters.question_format.join(','));
-  if (filters.attempt_status && filters.attempt_status !== 'all') params.set('status', filters.attempt_status);
-  if (filters.search_text) params.set('q', filters.search_text);
-  if (filters.topic_ids?.length) params.set('topics', filters.topic_ids.join(','));
-  return params;
-}
-
-function deserializeFilters(params: URLSearchParams): QBFilterState {
-  const filters: QBFilterState = {};
-  const cat = params.get('cat');
-  if (cat) filters.categories = cat.split(',');
-  const diff = params.get('diff');
-  if (diff) filters.difficulty = diff.split(',') as QBDifficulty[];
-  const fmt = params.get('fmt');
-  if (fmt) filters.question_format = fmt.split(',') as QBQuestionFormat[];
-  const status = params.get('status');
-  if (status) filters.attempt_status = status as QBFilterState['attempt_status'];
-  const q = params.get('q');
-  if (q) filters.search_text = q;
-  const topics = params.get('topics');
-  if (topics) filters.topic_ids = topics.split(',');
-  return filters;
-}
 
 export default function QuestionListPage() {
   const router = useRouter();
@@ -171,7 +142,7 @@ export default function QuestionListPage() {
 
   // Filters (categories, difficulty, format, status, search, topics)
   const [filters, setFilters] = useState<QBFilterState>(() =>
-    deserializeFilters(searchParams),
+    deserializeQBFilters(searchParams),
   );
 
   // Question list state
@@ -290,7 +261,7 @@ export default function QuestionListPage() {
 
   // Sync filters + exam context to URL
   useEffect(() => {
-    const params = serializeFilters(filters);
+    const params = serializeQBFilters(filters);
     if (selectedExam) params.set('exam', selectedExam);
     if (selectedYear) params.set('year', String(selectedYear));
     if (selectedSession) params.set('session', selectedSession);
@@ -371,6 +342,7 @@ export default function QuestionListPage() {
       if (f.search_text) params.set('search_text', f.search_text);
       if (f.topic_ids?.length) params.set('topic_ids', f.topic_ids.join(','));
       if (f.confidence_tier?.length) params.set('confidence_tier', f.confidence_tier.join(','));
+      if (f.solution_filter === 'has_video') params.set('solution_filter', 'has_video');
       // Exam context from the URL wins; the drawer only fills these in when the
       // page is not already scoped to a specific paper.
       if (f.exam_type && !params.has('exam_type')) params.set('exam_type', f.exam_type);

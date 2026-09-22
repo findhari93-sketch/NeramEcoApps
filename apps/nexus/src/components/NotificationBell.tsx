@@ -296,7 +296,7 @@ function timeAgo(dateStr: string): string {
 
 export default function NotificationBell() {
   const router = useRouter();
-  const { getToken, nexusRole } = useNexusAuthContext();
+  const { getTokenSilently, nexusRole } = useNexusAuthContext();
   const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
 
   const {
@@ -308,7 +308,9 @@ export default function NotificationBell() {
     markAllAsRead,
   } = useUserNotifications({
     apiBaseUrl: '',
-    getIdToken: getToken,
+    // Silent: the unread count polls every 60s, and the redirecting getToken would
+    // send the page to Microsoft sign-in from that timer (PERF-0054).
+    getIdToken: getTokenSilently,
   });
 
   const handleOpen = (event: React.MouseEvent<HTMLButtonElement>) => {

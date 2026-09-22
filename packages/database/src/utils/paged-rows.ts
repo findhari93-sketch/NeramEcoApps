@@ -39,6 +39,18 @@ const PAGE_SIZE = 500;
  */
 const MAX_PAGES = 200;
 
+/**
+ * The most ids one `.in()` filter may carry.
+ *
+ * PostgREST puts `.in()` values in the URL and echoes the query string back in
+ * a response header, so a long list fails before any row is read. Measured
+ * 2026-09-21, through the proxy and directly alike: 300 uuids passed, 400 (a
+ * 15.7 KB URL) overflowed Node's 16 KB response-header limit, and supabase-js
+ * reported the bare string "TypeError: fetch failed". Past about 1,000 the
+ * request line itself is refused. Chunk any list that can grow to this size.
+ */
+export const IN_LIST_CHUNK = 200;
+
 /** The shape both callers below need: something rangeable that resolves to rows. */
 interface Rangeable<T> {
   range(from: number, to: number): PromiseLike<{ data: T[] | null; error: unknown }>;
@@ -125,9 +137,8 @@ export async function countRowsForIds(
   const unique = [...new Set(ids)].filter(Boolean);
   if (unique.length === 0) return counts;
 
-  const ID_CHUNK = 200;
-  for (let i = 0; i < unique.length; i += ID_CHUNK) {
-    const chunk = unique.slice(i, i + ID_CHUNK);
+  for (let i = 0; i < unique.length; i += IN_LIST_CHUNK) {
+    const chunk = unique.slice(i, i + IN_LIST_CHUNK);
     const chunkCounts = await countRowsByKey(() => {
       const base = (client as any).from(table).select(keyColumn).in(keyColumn, chunk);
       return refine ? refine(base) : base;

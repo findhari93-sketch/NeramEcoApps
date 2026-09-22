@@ -8,8 +8,9 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import LinkIcon from '@mui/icons-material/Link';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined';
+import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
 import type { NexusQBQuestion } from '@neram/database';
-import { QB_QUESTION_STATUS_COLORS, QB_QUESTION_STATUS_LABELS } from '@neram/database';
+import { QB_QUESTION_STATUS_COLORS, QB_QUESTION_STATUS_LABELS, solutionVideosOf } from '@neram/database';
 import { questionImageSlots, solutionGapMessage } from '@/lib/qb-image-needs';
 import MathText from '@/components/common/MathText';
 import AltRouteIcon from '@mui/icons-material/AltRoute';
@@ -76,6 +77,7 @@ export default function PaperQuestionRow({
   // The glyph and its sentence come from one place, so the row cannot tell a
   // teacher that "maths questions need one" about a drawing.
   const solutionGap = solutionGapMessage(question);
+  const hasVideo = solutionVideosOf(question).length > 0;
 
   const handleRowClick = (e: React.MouseEvent) => {
     if (e.shiftKey || e.ctrlKey || e.metaKey) {
@@ -239,6 +241,22 @@ export default function PaperQuestionRow({
               <LightbulbOutlinedIcon
                 aria-label="Solution image missing"
                 sx={{ fontSize: 15, color: 'warning.main' }}
+              />
+            </Box>
+          </Tooltip>
+        ) : (
+          <Box sx={{ flexShrink: 0, width: 18 }} />
+        )}
+
+        {/* Has a solution video: the same marker the teacher Questions list uses.
+            Blank otherwise, so the column stays quiet; the "No video" chip is
+            the queue of the ones still to do. */}
+        {hasVideo ? (
+          <Tooltip title="Has a solution video" arrow>
+            <Box sx={{ flexShrink: 0, width: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <VideoLibraryOutlinedIcon
+                aria-label="Has a solution video"
+                sx={{ fontSize: 14, color: 'success.main' }}
               />
             </Box>
           </Tooltip>
