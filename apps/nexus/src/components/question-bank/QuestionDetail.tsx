@@ -11,7 +11,6 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
-  Dialog,
   Divider,
   Chip,
   Tabs,
@@ -28,7 +27,6 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
-import CloseIcon from '@mui/icons-material/Close';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import PaletteOutlinedIcon from '@mui/icons-material/PaletteOutlined';
 import type { NexusQBQuestionDetail } from '@neram/database';
@@ -38,6 +36,7 @@ import RepeatBadges from './RepeatBadges';
 import DifficultyChip from './DifficultyChip';
 import CategoryChips from './CategoryChips';
 import MCQOptions from './MCQOptions';
+import FigureViewer from './FigureViewer';
 import MathText from '@/components/common/MathText';
 import { readDrawingParts } from '@/lib/drawing-parts';
 import SolutionVideoPlayer from './SolutionVideoPlayer';
@@ -83,6 +82,11 @@ interface QuestionDetailProps {
   answer?: QuestionAnswerState;
   /** A language owned by the caller. Hides this component's own EN/HI toggle. */
   lang?: 'en' | 'hi';
+  /**
+   * Which option of an either-or drawing the student picked. The question is
+   * the whole row; this narrows what is shown to the half they chose.
+   */
+  partKey?: string | null;
   /** Hide the prev / "n of m" / next header. */
   hideNav?: boolean;
   /** Hide Submit and Next Question, for a caller that renders its own. */
@@ -125,6 +129,7 @@ function QuestionDetailBody({
   initialLang,
   answer,
   lang: controlledLang,
+  partKey = null,
   hideNav = false,
   hideActions = false,
 }: QuestionDetailProps) {
@@ -290,38 +295,32 @@ function QuestionDetailBody({
             alt="Question figure"
             onClick={() => setImageZoomed(true)}
             sx={{
+              display: 'block',
+              width: 'auto',
+              height: 'auto',
               maxWidth: '100%',
-              maxHeight: 300,
+              // Capped so the answers stay on the same screen as the question.
+              // The founder's report was that scrolling down to the options
+              // pushed the problem figure off the top; on a 740px phone this
+              // leaves room for a two by two grid of answer figures below.
+              maxHeight: { xs: '30vh', md: '24vh' },
               borderRadius: 1.5,
               mb: 2,
               cursor: 'zoom-in',
               border: '1px solid',
               borderColor: 'divider',
               objectFit: 'contain',
+              // The bank's figures are line art on a transparent background,
+              // so without this they vanish on a dark card.
+              bgcolor: 'common.white',
             }}
           />
-          <Dialog
+          <FigureViewer
             open={imageZoomed}
             onClose={() => setImageZoomed(false)}
-            maxWidth="lg"
-            fullWidth
-          >
-            <Box sx={{ position: 'relative' }}>
-              <IconButton
-                onClick={() => setImageZoomed(false)}
-                sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}
-                aria-label="Close zoomed image"
-              >
-                <CloseIcon />
-              </IconButton>
-              <Box
-                component="img"
-                src={question.question_image_url}
-                alt="Question figure (zoomed)"
-                sx={{ width: '100%', display: 'block' }}
-              />
-            </Box>
-          </Dialog>
+            src={question.question_image_url}
+            label="Question figure"
+          />
         </>
       )}
 
@@ -362,7 +361,7 @@ function QuestionDetailBody({
 
       {/* Drawing Prompt: show drawing-specific info + Practice CTA */}
       {question.question_format === 'DRAWING_PROMPT' && (
-        <DrawingPracticePanel question={question} language={lang} allowReport={allowReport} />
+        <DrawingPracticePanel question={question} language={lang} allowReport={allowReport} partKey={partKey} />
       )}
 
       {/* Feedback animation overlay */}
@@ -503,36 +502,29 @@ function QuestionDetailBody({
                   src={question.solution_image_url}
                   alt="Solution diagram"
                   onClick={() => setSolutionImageZoomed(true)}
+                  loading="lazy"
                   sx={{
+                    display: 'block',
+                    width: 'auto',
+                    height: 'auto',
                     maxWidth: '100%',
+                    // Had no cap at all, so a tall worked solution pushed the
+                    // report link and everything under it off the screen.
+                    maxHeight: { xs: '46vh', md: 420 },
                     borderRadius: 1,
                     cursor: 'zoom-in',
                     border: '1px solid',
                     borderColor: 'divider',
+                    objectFit: 'contain',
+                    bgcolor: 'common.white',
                   }}
                 />
-                <Dialog
+                <FigureViewer
                   open={solutionImageZoomed}
                   onClose={() => setSolutionImageZoomed(false)}
-                  maxWidth="lg"
-                  fullWidth
-                >
-                  <Box sx={{ position: 'relative' }}>
-                    <IconButton
-                      onClick={() => setSolutionImageZoomed(false)}
-                      sx={{ position: 'absolute', top: 8, right: 8, zIndex: 1 }}
-                      aria-label="Close zoomed image"
-                    >
-                      <CloseIcon />
-                    </IconButton>
-                    <Box
-                      component="img"
-                      src={question.solution_image_url}
-                      alt="Solution diagram (zoomed)"
-                      sx={{ width: '100%', display: 'block' }}
-                    />
-                  </Box>
-                </Dialog>
+                  src={question.solution_image_url}
+                  label="Solution diagram"
+                />
               </>
             )}
           </Box>

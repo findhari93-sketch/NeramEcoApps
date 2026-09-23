@@ -29,7 +29,12 @@ export interface PaperQuestion {
   question_text: string;
   question_image_url: string | null;
   format: 'MCQ' | 'NUMERICAL' | 'SUBJECTIVE';
-  options: { key: string; text: string }[];
+  /**
+   * image_url is what makes a figure question answerable. The type used to
+   * stop at {key, text}, so a "which figure completes the sequence" question
+   * reached a drawing assignment as four rows of bare labels.
+   */
+  options: { key: string; text: string; image_url?: string }[];
   marks: number;
   correct_answer?: string | null;
   explanation?: string | null;
@@ -242,7 +247,22 @@ export default function AssignmentQuestions({
                   component="img"
                   src={q.question_image_url}
                   alt=""
-                  sx={{ width: '100%', borderRadius: 2, mb: 1.5, border: '1px solid', borderColor: 'divider' }}
+                  loading="lazy"
+                  sx={{
+                    display: 'block',
+                    // Never stretched: the bank's figures are 86 to 587px
+                    // across, and width 100% blew them up on every screen.
+                    width: 'auto',
+                    height: 'auto',
+                    maxWidth: '100%',
+                    maxHeight: { xs: '34vh', md: 340 },
+                    objectFit: 'contain',
+                    borderRadius: 2,
+                    mb: 1.5,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    bgcolor: 'common.white',
+                  }}
                 />
               )}
 

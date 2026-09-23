@@ -295,7 +295,20 @@ export default function ClassPrepTestPage() {
           <img
             src={current.question_image_url}
             alt=""
-            style={{ maxWidth: '100%', borderRadius: 8, marginBottom: 16 }}
+            loading="lazy"
+            style={{
+              display: 'block',
+              maxWidth: '100%',
+              // Capped so the answers stay on the same screen as the question.
+              maxHeight: '34vh',
+              width: 'auto',
+              height: 'auto',
+              objectFit: 'contain',
+              borderRadius: 8,
+              marginBottom: 16,
+              // Line art on a transparent background, invisible in dark mode.
+              backgroundColor: '#fff',
+            }}
           />
         )}
 

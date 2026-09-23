@@ -7,6 +7,7 @@ import {
 import StarOutlinedIcon from '@mui/icons-material/StarOutlined';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import CommentSection from '@/components/drawings/CommentSection';
+import PractisedFrom from '@/components/drawings/PractisedFrom';
 import PageHeader from '@/components/PageHeader';
 import { drawingSourceLabel } from '@/lib/drawing-source';
 import { REACTION_LABEL } from '@/lib/sketchbook-messages';
@@ -53,6 +54,11 @@ export default function SketchPageView({ sketch, mode, backHref, getToken, onDel
             sx={{ height: 36, maxWidth: '100%' }}
           />
         )}
+        <PractisedFrom
+          origin={sketch.practisedFrom}
+          helpUsed={sketch.helpUsed}
+          fromQuestionBank={sketch.source_type === 'question_bank'}
+        />
         {sketch.featured.map((f) => (
           <Chip key={f.classroom_id} icon={<StarOutlinedIcon />} color="warning" label={`Featured in ${f.classroom_name}`} sx={{ height: 36 }} />
         ))}

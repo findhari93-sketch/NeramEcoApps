@@ -162,10 +162,14 @@ export interface PaperJSONQuestion {
 export interface PaperJSONDrawingPart {
   /** 'A', 'B'... Informational: parts are relabelled by position on import. */
   label?: string;
+  /** Carried so a re-import does not re-file student drawings. Minted when absent. */
+  key?: string | null;
   text: string;
   text_hi?: string | null;
   /** Only meaningful when mode is 'all'. */
   marks?: number | null;
+  /** The figure for this option alone. A URL, or a data URI to be stored on import. */
+  image?: string | null;
   solution_image?: string | null;
   solution_video_url?: string | null;
 }
@@ -256,8 +260,10 @@ function partsOut(parts: QBDrawingParts): PaperJSONDrawingParts {
           label: p.label,
           text: p.text,
           ...compact({
+            key: p.key,
             text_hi: p.text_hi,
             marks: p.marks,
+            image: p.image_url,
             solution_image: p.solution_image_url,
             solution_video_url: p.solution_video_url,
           }),
@@ -666,9 +672,11 @@ function readParts(
   const r = raw as Record<string, unknown>;
   const items = Array.isArray(r.items)
     ? (r.items as Record<string, unknown>[]).map((item) => ({
+        key: item?.key,
         text: item?.text,
         text_hi: item?.text_hi,
         marks: item?.marks,
+        image_url: item?.image ?? item?.image_url,
         solution_image_url: item?.solution_image ?? item?.solution_image_url,
         solution_video_url: item?.solution_video_url,
       }))

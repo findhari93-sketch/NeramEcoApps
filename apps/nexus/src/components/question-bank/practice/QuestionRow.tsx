@@ -30,6 +30,8 @@ export const SR_ONLY = {
 interface QuestionRowProps {
   question: NexusQBQuestionListItem;
   number: number;
+  /** 'A' or 'B' for an option of an either-or drawing, so the badge reads 81A. */
+  suffix?: string;
   current: boolean;
   lang: 'en' | 'hi';
   /** "Sets & Relations": the one topic worth printing. */
@@ -59,6 +61,7 @@ interface QuestionRowProps {
 function QuestionRow({
   question,
   number,
+  suffix,
   current,
   lang,
   topic,
@@ -153,6 +156,7 @@ function QuestionRow({
         }}
       >
         {number}
+        {suffix}
         {status !== 'unanswered' && (
           <Box component="span" sx={{ position: 'absolute', right: 1, bottom: 0, display: 'flex', lineHeight: 0 }}>
             {status === 'right' ? <CheckIcon sx={{ fontSize: 11 }} /> : <CloseIcon sx={{ fontSize: 11 }} />}
@@ -162,7 +166,7 @@ function QuestionRow({
 
       <Box component="span" sx={{ flex: 1, minWidth: 0, display: 'block' }}>
         <Box component="span" sx={SR_ONLY}>
-          {`Question ${number}, ${STATUS_SPEECH[status]}${selecting && selected ? ', selected for the test' : ''}. `}
+          {`Question ${number}${suffix ?? ''}, ${STATUS_SPEECH[status]}${selecting && selected ? ', selected for the test' : ''}. `}
         </Box>
         {/* Two lines of the stem */}
         <Box

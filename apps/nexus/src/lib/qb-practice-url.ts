@@ -15,18 +15,32 @@
 
 import type { QBFilterState } from '@neram/database';
 import { serializeQBFilters } from './qb-filter-url';
+import { atomIdOf, splitAtomId } from './practice-atoms';
 
 /** The open question. Not `q`, which already carries the search text. */
 export const QID_PARAM = 'qid';
 
+/**
+ * Which option of an either-or drawing is open.
+ *
+ * A separate key rather than part of `qid`, so a shared link stays readable
+ * and nothing has to be escaped: the two are joined into one id inside the
+ * practice session (lib/practice-atoms.ts).
+ */
+export const PART_PARAM = 'part';
+
 /** Keys rebuilt from page state on every write. Everything else passes through. */
-const OWNED = new Set(['exam', 'year', 'session', 'cat', 'diff', 'fmt', 'status', 'q', 'topics', 'video', QID_PARAM]);
+const OWNED = new Set([
+  'exam', 'year', 'session', 'cat', 'diff', 'fmt', 'status', 'q', 'topics', 'video',
+  QID_PARAM, PART_PARAM,
+]);
 
 export interface PracticeUrlState {
   filters: QBFilterState;
   exam: string | null;
   year: number | null;
   session: string | null;
+  /** The open question, as an atom id: "<question>" or "<question>~<option>". */
   qid: string | null;
 }
 
@@ -54,7 +68,18 @@ export function buildPracticeQuery(
   });
 
   serializeQBFilters(state.filters).forEach((value, key) => out.set(key, value));
-  if (state.qid) out.set(QID_PARAM, state.qid);
+  if (state.qid) {
+    const { questionId, partKey } = splitAtomId(state.qid);
+    if (questionId) out.set(QID_PARAM, questionId);
+    if (partKey) out.set(PART_PARAM, partKey);
+  }
 
   return out.toString();
+}
+
+/** The atom id a link points at, from its `qid` and `part`. */
+export function readPracticeQid(params: URLSearchParams): string | null {
+  const qid = params.get(QID_PARAM);
+  if (!qid) return null;
+  return atomIdOf(qid, params.get(PART_PARAM));
 }

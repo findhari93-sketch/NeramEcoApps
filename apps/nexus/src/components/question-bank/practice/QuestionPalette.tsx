@@ -11,6 +11,11 @@ import { STATUS_SPEECH, statusOf, type QuestionStatus } from './practice-logic';
 interface QuestionPaletteProps {
   questions: NexusQBQuestionListItem[];
   numbers: Map<string, number>;
+  /**
+   * The letter after the number for an option of an either-or drawing, so the
+   * two halves of Q81 read "81A" and "81B". Absent for every other question.
+   */
+  suffixes?: Map<string, string>;
   currentId: string | null;
   onOpen: (id: string) => void;
   /** Selecting for a test: a tap toggles the question instead of opening it. */
@@ -37,6 +42,7 @@ interface QuestionPaletteProps {
 function QuestionPalette({
   questions,
   numbers,
+  suffixes,
   currentId,
   onOpen,
   selecting = false,
@@ -127,7 +133,7 @@ function QuestionPalette({
               <PaletteCell
                 key={q.id}
                 id={q.id}
-                number={numbers.get(q.id) ?? 0}
+                label={`${numbers.get(q.id) ?? 0}${suffixes?.get(q.id) ?? ''}`}
                 status={statusOf(q.attempt_summary)}
                 current={q.id === currentId}
                 tabStop={q.id === tabStopId}
@@ -152,7 +158,7 @@ export default memo(QuestionPalette);
 
 interface PaletteCellProps {
   id: string;
-  number: number;
+  label: string;
   status: QuestionStatus;
   current: boolean;
   tabStop: boolean;
@@ -164,7 +170,7 @@ interface PaletteCellProps {
 
 const PaletteCell = memo(function PaletteCell({
   id,
-  number,
+  label,
   status,
   current,
   tabStop,
@@ -182,8 +188,8 @@ const PaletteCell = memo(function PaletteCell({
         : { bg: theme.palette.background.paper, fg: theme.palette.text.primary, border: theme.palette.divider };
 
   const name = selecting
-    ? `Question ${number}${selected ? ', selected for the test' : ''}`
-    : `Question ${number}, ${STATUS_SPEECH[status]}`;
+    ? `Question ${label}${selected ? ', selected for the test' : ''}`
+    : `Question ${label}, ${STATUS_SPEECH[status]}`;
 
   return (
     <Box
@@ -224,7 +230,7 @@ const PaletteCell = memo(function PaletteCell({
         '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
       }}
     >
-      {number}
+      {label}
       {!selecting && status !== 'unanswered' && (
         <Box
           component="span"

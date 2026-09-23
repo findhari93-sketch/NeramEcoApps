@@ -30,6 +30,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import type { QBDrawingParts, QBDrawingPartsMode } from '@neram/database';
 import MathField from '@/components/common/MathField';
 import DrawingSolutionFields, { SolutionStatus } from '../DrawingSolutionFields';
+import ImageUploadZone from '../ImageUploadZone';
 import { PartBadge, PartsOrDivider } from '../DrawingPartsView';
 import type { ImageState } from '@/lib/bulk-upload-schema';
 import {
@@ -60,9 +61,17 @@ import {
 export interface DrawingPartForm {
   /** React key only. Survives reordering and removal; the stored id is positional. */
   key: string;
+  /**
+   * The stored key, the one a student's drawing is filed against. Carried
+   * through the form untouched so editing the wording never re-points work
+   * that has already been handed in.
+   */
+  storedKey?: string;
   text: string;
   text_hi: string;
   marks: string;
+  /** The figure for this option alone. 81A needs none; 81B needs the graphic. */
+  image?: ImageState;
   solution_image?: ImageState;
   solution_video_url: string;
 }
@@ -92,9 +101,11 @@ export function partsToForm(parts: QBDrawingParts | null | undefined): DrawingPa
     stem_hi: parts.stem_hi ?? '',
     items: parts.items.map((p) => ({
       key: newPartKey(),
+      storedKey: p.key ?? undefined,
       text: p.text,
       text_hi: p.text_hi ?? '',
       marks: p.marks != null ? String(p.marks) : '',
+      image: p.image_url ? { url: p.image_url, uploaded: true } : undefined,
       solution_image: p.solution_image_url ? { url: p.solution_image_url, uploaded: true } : undefined,
       solution_video_url: p.solution_video_url ?? '',
     })),
@@ -110,9 +121,11 @@ export function formToParts(form: DrawingPartsForm): QBDrawingParts {
     items: form.items.map((item, i) => ({
       id: partIdAt(i),
       label: partLabelAt(i),
+      key: item.storedKey ?? null,
       text: item.text,
       text_hi: item.text_hi.trim() || null,
       marks: form.mode === 'all' && item.marks ? Number(item.marks) : null,
+      image_url: item.image?.uploaded ? item.image.url : null,
       solution_image_url: item.solution_image?.uploaded ? item.solution_image.url : null,
       solution_video_url: item.solution_video_url.trim() || null,
     })),
@@ -313,6 +326,9 @@ export default function DrawingPartsEditor({
    * make the field disappear under the cursor.
    */
   const [showStem] = useState(() => Boolean(value.stem.trim() || value.stem_hi.trim()));
+  // Most options have no figure, so the dropzone stays behind a button until
+  // this teacher asks for one on this option.
+  const [showFigureFor, setShowFigureFor] = useState<string | null>(null);
   const anyOne = value.mode === 'any_one';
   const total = partsFormTotalMarks(value);
   const noun = anyOne ? 'Option' : 'Part';
@@ -501,6 +517,35 @@ export default function DrawingPartsEditor({
                     size="small"
                     sx={{ mb: 1 }}
                   />
+                )}
+
+                {/* One figure used to be attached to the whole question and
+                    printed above both options, so a student choosing 81A was
+                    shown the graphic that belongs to 81B. Each option carries
+                    its own now, and most carry none. */}
+                {item.image || showFigureFor === item.key ? (
+                  <Box sx={{ mt: 1 }}>
+                    <Typography variant="caption" fontWeight={600} sx={{ mb: 0.5, display: 'block' }}>
+                      Figure for {label}
+                    </Typography>
+                    <ImageUploadZone
+                      image={item.image}
+                      onChange={(img) => patchItem(i, { image: img })}
+                      getToken={getToken}
+                      subfolder="questions"
+                      height={140}
+                      label={`Drop the figure for ${label}, paste, or click to upload`}
+                    />
+                  </Box>
+                ) : (
+                  <Button
+                    size="small"
+                    startIcon={<AddIcon />}
+                    onClick={() => setShowFigureFor(item.key)}
+                    sx={{ textTransform: 'none', minHeight: 44, mt: 0.5 }}
+                  >
+                    Add a figure for {label}
+                  </Button>
                 )}
 
                 <Accordion disableGutters variant="outlined" sx={{ mt: 1 }}>

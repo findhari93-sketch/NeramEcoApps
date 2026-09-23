@@ -1,8 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Box, ImageViewerDialog } from '@neram/ui';
+import { Box } from '@neram/ui';
 import MathText from '@/components/common/MathText';
+import FigureViewer from '@/components/question-bank/FigureViewer';
+import { textSaysNothingBeyondFigure } from '@/lib/qb-image-needs';
 
 export interface TestOption {
   id?: string;
@@ -17,6 +19,12 @@ interface OptionBodyProps {
   letter: string;
   /** The review list, where a figure is a reminder rather than the thing being judged. */
   compact?: boolean;
+  /**
+   * The option sits in a grid of figures rather than in a full width row, so
+   * the picture is centred at its own size instead of stretched to the card,
+   * and a label that only reads "Figure (1)" is dropped.
+   */
+  grid?: boolean;
 }
 
 /**
@@ -31,12 +39,13 @@ interface OptionBodyProps {
  *
  * Shared by the player and the review so the two cannot drift apart again.
  */
-export default function OptionBody({ option, letter, compact }: OptionBodyProps) {
+export default function OptionBody({ option, letter, compact, grid }: OptionBodyProps) {
   const hasText = Boolean(option.text && option.text.trim());
+  const showText = hasText && !(grid && Boolean(option.image_url) && textSaysNothingBeyondFigure(option.text));
   const [zoomed, setZoomed] = useState(false);
   return (
     <>
-      {hasText && (
+      {showText && (
         <MathText
           text={option.text}
           variant="body2"
@@ -57,13 +66,18 @@ export default function OptionBody({ option, letter, compact }: OptionBodyProps)
           }}
           sx={{
             display: 'block',
-            mt: hasText ? 0.75 : 0,
-            width: compact ? 'auto' : '100%',
+            mt: showText ? 0.75 : 0,
+            // Never stretched past its own pixels. The source scans are 79 to
+            // 280px across, and blowing one up to fill a 375px screen is the
+            // "pixelated" look the founder reported. In a grid the cards are
+            // already about the size of the picture, and the viewer is there
+            // for a closer look.
+            width: compact || grid ? 'auto' : '100%',
+            mx: grid ? 'auto' : 0,
             maxWidth: '100%',
-            // Big enough to compare two isometric views at 375px without pinching.
-            maxHeight: compact ? 96 : 180,
+            maxHeight: compact ? 96 : grid ? 200 : 180,
             objectFit: 'contain',
-            objectPosition: 'left',
+            objectPosition: grid ? 'center' : 'left',
             borderRadius: 1,
             // Bank figures are line art on transparent, invisible on a dark card.
             bgcolor: 'common.white',
@@ -72,11 +86,12 @@ export default function OptionBody({ option, letter, compact }: OptionBodyProps)
         />
       )}
       {option.image_url && (
-        <ImageViewerDialog
+        <FigureViewer
           open={zoomed}
           onClose={() => setZoomed(false)}
           src={option.image_url}
-          alt={`Option ${letter}`}
+          label={`Option ${letter}`}
+          caption={hasText && !textSaysNothingBeyondFigure(option.text) ? option.text : null}
         />
       )}
     </>

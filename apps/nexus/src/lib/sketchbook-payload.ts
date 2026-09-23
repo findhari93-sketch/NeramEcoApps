@@ -1,8 +1,8 @@
 import { getSupabaseAdminClient } from '@neram/database';
 import {
   countSketches, firstAndLatestSketch, firstSeenBy, getDrawingSharingOptOut, getFeatureOptOut, getSketchbookGoalHistory,
-  listLiveFeatures, listSketchbookMonth,
-  type SketchbookFeatureFact, type SketchbookSketchRow, type SketchbookViewer,
+  getQBHelpUsed, getQBPracticeOrigins, listLiveFeatures, listSketchbookMonth,
+  type QBPracticeOrigin, type SketchbookFeatureFact, type SketchbookSketchRow, type SketchbookViewer,
 } from '@neram/database/queries/nexus';
 import { computeRhythm, daysBetween, istDate, type Rhythm } from '@/lib/sketchbook-rhythm';
 import { clampDates, proratedGoal, trackingStart } from '@/lib/sketchbook-status';
@@ -20,6 +20,16 @@ export interface SketchbookEntry extends SketchbookSketchRow {
   featured: SketchbookFeatureFact[];
   kind: ReviewKind;
   review: ReviewSummary;
+  /** The bank question this was practised from, when it came from the Question Bank. */
+  practisedFrom: QBPracticeOrigin | null;
+  /**
+   * What the student had open while they drew it: 'solution', 'peers', or both.
+   *
+   * Never hidden from the student and never editable by them, because the point
+   * of recording it is that the teacher can always tell, and a record only the
+   * teacher can see would be a record the student cannot argue with.
+   */
+  helpUsed: string[];
 }
 
 export interface SketchbookPayload {
@@ -75,11 +85,20 @@ export function entryFor(
   heldIds: ReadonlySet<string>,
   seenBy: SketchbookEntry['seenBy'],
   featured: SketchbookFeatureFact[],
+  practice: { origin?: QBPracticeOrigin | null; helpUsed?: string[] } = {},
 ): SketchbookEntry {
   const released = viewer === 'staff' || isReleasedForStudent(row, heldIds);
   const visible = released ? row : { ...row, tutor_rating: null, tutor_marks: null, reaction: null, reviewed_at: null };
   const safe = viewer === 'student' ? { ...visible, is_gallery_visible: false } : visible;
-  return { ...safe, seenBy, featured, kind: reviewKindOf(row), review: summarizeReview(row, released) };
+  return {
+    ...safe,
+    seenBy,
+    featured,
+    kind: reviewKindOf(row),
+    review: summarizeReview(row, released),
+    practisedFrom: practice.origin ?? null,
+    helpUsed: practice.helpUsed ?? [],
+  };
 }
 
 /**
@@ -124,15 +143,31 @@ export async function buildSketchbookPayload(
     firstAndLatestSketch(studentId),
   ]);
   const ids = rows.map((r) => r.id);
-  const [seen, features, evaluations] = await Promise.all([
+  // Any drawing with a practice question behind it, not only one uploaded
+  // through the bank: a teacher can file an older sketch under the question it
+  // answers, and that sketch keeps being a sketch.
+  const qbRows = rows.filter((r) => !!r.question_id);
+  const [seen, features, evaluations, origins, help] = await Promise.all([
     firstSeenBy(ids),
     listLiveFeatures(ids),
     // Only a student's own view needs to know which reviews are still held.
     opts.viewer === 'student' ? loadManualEvaluations(getSupabaseAdminClient(), ids) : Promise.resolve([]),
+    // Best effort, both of them. A missing caption is a caption; a sketchbook
+    // that will not open because a label lookup failed is a month of a
+    // student's work they cannot reach.
+    getQBPracticeOrigins(qbRows.map((r) => r.question_id || '')).catch(
+      () => ({}) as Record<string, QBPracticeOrigin>,
+    ),
+    getQBHelpUsed(qbRows.map((r) => r.id)).catch(() => ({}) as Record<string, string[]>),
   ]);
   const heldIds = heldIdsFrom(evaluations);
 
-  base.sketches = rows.map((r) => entryFor(r, opts.viewer, heldIds, seen[r.id] ?? null, features[r.id] ?? []));
+  base.sketches = rows.map((r) =>
+    entryFor(r, opts.viewer, heldIds, seen[r.id] ?? null, features[r.id] ?? [], {
+      origin: (r.question_id && origins[r.question_id]) || null,
+      helpUsed: help[r.id] ?? [],
+    }),
+  );
   // Same rule as thenAndNow() in the engine (8+ drawings, 30+ days apart), but
   // from the two edge rows instead of the whole list, which we never load here.
   if (edges && total >= 8 && daysBetween(istDate(edges.first.submitted_at), istDate(edges.latest.submitted_at)) >= 30) {

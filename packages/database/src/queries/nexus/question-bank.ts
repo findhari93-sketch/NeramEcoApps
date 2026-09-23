@@ -440,10 +440,17 @@ export function stripDrawingPartSolutions(value: unknown): QBDrawingParts | null
     stem_hi: v.stem_hi ?? null,
     items: v.items.map((p) => ({
       id: p.id,
+      // The part's identity and its own figure are not solutions and must
+      // survive this: the figure IS the question for an option like "rotate
+      // the graphic below", and the key is what a student's drawing is filed
+      // against. Rebuilt field by field on purpose, so a new solution field
+      // can never leak by being forgotten here.
+      key: p.key ?? null,
       label: p.label,
       text: p.text,
       text_hi: p.text_hi ?? null,
       marks: p.marks ?? null,
+      image_url: p.image_url ?? null,
     })),
   };
 }
@@ -3187,9 +3194,15 @@ export async function refreshTopicSessionCounts(
 /**
  * Get the linked drawing_questions.id for a QB DRAWING_PROMPT question.
  * Used by the "Practice" button in QB to navigate to the drawing module.
+ *
+ * `partId` picks one option of an "attempt any one of N" drawing, which has a
+ * mirror row per option so each gets its own thread and its own redo cycle.
+ * The default, the empty string, is the whole question, which is what every
+ * caller but practice wants and what every row held before 2026-10.
  */
 export async function getLinkedDrawingQuestionId(
   qbQuestionId: string,
+  partId: string = '',
   client?: TypedSupabaseClient
 ): Promise<string | null> {
   const supabase = client || getSupabaseAdminClient();
@@ -3198,6 +3211,7 @@ export async function getLinkedDrawingQuestionId(
     .from('drawing_questions')
     .select('id')
     .eq('qb_question_id', qbQuestionId)
+    .eq('qb_part_id', partId)
     .eq('is_active', true)
     .single();
 
@@ -3208,13 +3222,35 @@ export async function getLinkedDrawingQuestionId(
   return data?.id || null;
 }
 
+/** The one option of an "any one of N" drawing that `partId` names. */
+function findQBDrawingPart(
+  drawingParts: unknown,
+  partId: string,
+): { label?: string; text?: string } | null {
+  if (!partId) return null;
+  const items = (drawingParts as { items?: unknown } | null)?.items;
+  if (!Array.isArray(items)) return null;
+  return (
+    (items as Array<{ id?: string; key?: string; label?: string; text?: string }>).find(
+      (p) => p?.key === partId || p?.id === partId,
+    ) ?? null
+  );
+}
+
 /**
  * Create a drawing_questions row from an activated QB DRAWING_PROMPT question.
  * Maps QB fields to drawing_questions fields and sets the qb_question_id link.
  * Returns the new drawing_questions.id.
+ *
+ * `partId` mints the mirror for one option of an "attempt any one of N"
+ * drawing. It carries that option's own words, because the question's composed
+ * text is both options joined by OR, and a teacher marking 81B should not be
+ * reading 81A's brief above the sheet. The default, the empty string, is the
+ * whole question.
  */
 export async function createDrawingQuestionFromQB(
   qbQuestionId: string,
+  partId: string = '',
   client?: TypedSupabaseClient
 ): Promise<string | null> {
   const supabase = client || getSupabaseAdminClient();
@@ -3229,12 +3265,16 @@ export async function createDrawingQuestionFromQB(
 
   if (qbError || !qbQ) return null;
 
+  const part = findQBDrawingPart(qbQ.drawing_parts, partId);
+  if (partId && !part) return null;
+
   // Check if already linked
   const { data: existing } = await (supabase as any)
     .from('drawing_questions')
     .select('id')
     .eq('qb_question_id', qbQuestionId)
-    .single();
+    .eq('qb_part_id', partId)
+    .maybeSingle();
 
   if (existing) return existing.id;
 
@@ -3270,7 +3310,7 @@ export async function createDrawingQuestionFromQB(
       year,
       category,
       sub_type: category, // default sub_type to category
-      question_text: qbQ.question_text,
+      question_text: part?.text || qbQ.question_text,
       objects,
       color_constraint: qbQ.colour_constraint || null,
       design_principle: qbQ.design_principle_tested || null,
@@ -3280,6 +3320,7 @@ export async function createDrawingQuestionFromQB(
       solution_images: null,
       is_active: true,
       qb_question_id: qbQuestionId,
+      qb_part_id: partId,
       question_number: questionNumber,
     })
     .select('id')

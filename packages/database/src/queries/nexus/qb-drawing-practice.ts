@@ -23,25 +23,36 @@
  * also mints them, but only for questions that are already is_active, which is
  * how 27 real drawing prompts ended up with no mirror and a permanently
  * disabled Practice button.
+ *
+ * ONE MIRROR PER OPTION
+ *
+ * A JEE drawing question is printed as a choice: Q81 is "draw a frame of cubes
+ * and cones" OR "rotate the graphic below", two unrelated tasks that share a
+ * number only because the exam lets you pick one. In practice a student wants
+ * to draw both. They cannot share a mirror: a thread refuses a second upload
+ * until a teacher asks for a redo, so uploading 81A would lock 81B behind
+ * "wait for your teacher". Each option therefore gets its own mirror, keyed by
+ * `partId`, and with it its own thread, attempt numbering and redo cycle. The
+ * empty string is the whole question, which is every question but two.
  */
 
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import { createDrawingQuestionFromQB, getLinkedDrawingQuestionId } from './question-bank';
 import { createDrawingSubmissionWithThread } from './drawings';
 
-/**
- * Prefix stamped on a student's note when they saw the solution before drawing.
- *
- * It lives in the note because there is nowhere else a teacher already looks.
- * Exported so the review UI can strip it for display and render a chip instead
- * of showing the raw marker.
- */
-export const SOLUTION_FIRST_PREFIX = '[Solution viewed first]';
+/** What a student had in front of them while they drew. */
+export type QBDrawingHelp = 'solution' | 'peers';
+
+/** Which option of an "attempt any one of N" drawing is being practised. */
+export interface QBDrawingScope {
+  /** A part key from drawing_parts. The empty string, the default, is the whole question. */
+  partId?: string;
+}
 
 export interface QBDrawingState {
-  /** The practice-module mirror, if one exists yet. */
+  /** The practice-module mirror for this option, if one exists yet. */
   drawing_question_id: string | null;
-  /** The student's latest submission on this question, if any. */
+  /** The student's latest submission on this option, if any. */
   submission: {
     id: string;
     status: string | null;
@@ -56,6 +67,8 @@ export interface QBDrawingState {
   } | null;
   /** When the student unlocked the solution without attempting first. */
   revealed_at: string | null;
+  /** When the student opened other students' work without attempting first. */
+  peers_revealed_at: string | null;
   /**
    * Whether the solution and focus points may be shown.
    *
@@ -64,17 +77,21 @@ export interface QBDrawingState {
    * disagrees with itself, and the half that leaks is the one that ships.
    */
   unlocked: boolean;
+  /** Whether other students' attempts at this question may be shown. Same rule. */
+  peers_unlocked: boolean;
 }
 
 /** What a student is allowed to see, and what they have already done. */
 export async function getStudentQBDrawingState(
   qbQuestionId: string,
   studentId: string,
+  scope: QBDrawingScope = {},
   client?: TypedSupabaseClient,
 ): Promise<QBDrawingState> {
   const supabase: any = client || getSupabaseAdminClient();
+  const partId = scope.partId || '';
 
-  const mirrorId = await getLinkedDrawingQuestionId(qbQuestionId, client);
+  const mirrorId = await getLinkedDrawingQuestionId(qbQuestionId, partId, client);
 
   let submission: QBDrawingState['submission'] = null;
   if (mirrorId) {
@@ -90,36 +107,56 @@ export async function getStudentQBDrawingState(
     submission = (data || [])[0] ?? null;
   }
 
-  const { data: reveal } = await supabase
+  // Both kinds in one read. Two round trips for two booleans is two round
+  // trips too many on a route a student hits on every question they open.
+  const { data: reveals } = await supabase
     .from('nexus_qb_drawing_reveals')
-    .select('revealed_at')
+    .select('kind, revealed_at')
     .eq('student_id', studentId)
     .eq('question_id', qbQuestionId)
-    .maybeSingle();
+    .eq('part_id', partId);
 
-  const revealedAt = reveal?.revealed_at ?? null;
+  const rows: Array<{ kind?: string | null; revealed_at?: string | null }> = reveals || [];
+  const at = (kind: QBDrawingHelp) =>
+    rows.find((r) => (r.kind || 'solution') === kind)?.revealed_at ?? null;
+
+  const revealedAt = at('solution');
+  const peersRevealedAt = at('peers');
 
   return {
     drawing_question_id: mirrorId,
     submission,
     revealed_at: revealedAt,
+    peers_revealed_at: peersRevealedAt,
     unlocked: submission !== null || revealedAt !== null,
+    peers_unlocked: submission !== null || peersRevealedAt !== null,
   };
 }
 
-/** Record that a student chose to see the answer before drawing it. */
+/**
+ * Record that a student chose to see help before drawing it themselves.
+ *
+ * Two kinds of help, one table. 'solution' is the teacher's model answer;
+ * 'peers' is what classmates drew for the same question. Neither is refused,
+ * because learning from a worked example and learning from a classmate are
+ * both real ways to learn drawing. Both are recorded, because the teacher
+ * marking the sheet has to be able to tell which of the three it was.
+ */
 export async function revealQBDrawingSolution(
   qbQuestionId: string,
   studentId: string,
+  scope: QBDrawingScope & { kind?: QBDrawingHelp } = {},
   client?: TypedSupabaseClient,
 ): Promise<{ revealed_at: string }> {
   const supabase: any = client || getSupabaseAdminClient();
+  const partId = scope.partId || '';
+  const kind: QBDrawingHelp = scope.kind || 'solution';
 
   const { data, error } = await supabase
     .from('nexus_qb_drawing_reveals')
     .upsert(
-      { student_id: studentId, question_id: qbQuestionId },
-      { onConflict: 'student_id,question_id', ignoreDuplicates: true },
+      { student_id: studentId, question_id: qbQuestionId, part_id: partId, kind },
+      { onConflict: 'student_id,question_id,part_id,kind', ignoreDuplicates: true },
     )
     .select('revealed_at');
   if (error) throw error;
@@ -133,6 +170,8 @@ export async function revealQBDrawingSolution(
     .select('revealed_at')
     .eq('student_id', studentId)
     .eq('question_id', qbQuestionId)
+    .eq('part_id', partId)
+    .eq('kind', kind)
     .maybeSingle();
 
   return { revealed_at: existing?.revealed_at ?? new Date().toISOString() };
@@ -149,12 +188,15 @@ export async function submitQBDrawingAttempt(
   input: {
     qbQuestionId: string;
     studentId: string;
+    /** Which option of an "any one of N" drawing. '' is the whole question. */
+    partId?: string;
     originalImageUrl: string;
     selfNote?: string | null;
   },
   client?: TypedSupabaseClient,
-): Promise<{ submissionId: string; attemptNumber: number; isRedo: boolean }> {
+): Promise<{ submissionId: string; attemptNumber: number; isRedo: boolean; helpUsed: QBDrawingHelp[] }> {
   const supabase: any = client || getSupabaseAdminClient();
+  const partId = input.partId || '';
 
   const { data: question, error } = await supabase
     .from('nexus_qb_questions')
@@ -166,9 +208,9 @@ export async function submitQBDrawingAttempt(
     throw new Error('This question is not a drawing.');
   }
 
-  let mirrorId = await getLinkedDrawingQuestionId(input.qbQuestionId, client);
+  let mirrorId = await getLinkedDrawingQuestionId(input.qbQuestionId, partId, client);
   if (!mirrorId) {
-    mirrorId = await createDrawingQuestionFromQB(input.qbQuestionId, client);
+    mirrorId = await createDrawingQuestionFromQB(input.qbQuestionId, partId, client);
   }
   if (!mirrorId) {
     throw new Error(
@@ -176,17 +218,29 @@ export async function submitQBDrawingAttempt(
     );
   }
 
-  // A note left by a student who read the answer first carries the marker, so
-  // the teacher marking it knows what they are looking at.
-  const { data: reveal } = await supabase
+  /**
+   * What the student had open when they drew this.
+   *
+   * Read now and written onto the row, rather than joined at read time. A
+   * student who opens the solution AFTER submitting has not copied anything,
+   * and deriving this later would say they had. It used to be pushed into the
+   * student's own self_note as a "[Solution viewed first]" prefix, which put
+   * system text inside a private reflection and could be typed by hand.
+   */
+  const { data: reveals } = await supabase
     .from('nexus_qb_drawing_reveals')
-    .select('id')
+    .select('kind')
     .eq('student_id', input.studentId)
     .eq('question_id', input.qbQuestionId)
-    .maybeSingle();
+    .eq('part_id', partId);
 
-  const note = (input.selfNote || '').trim();
-  const selfNote = reveal ? `${SOLUTION_FIRST_PREFIX} ${note}`.trim() : note || null;
+  const helpUsed = Array.from(
+    new Set<QBDrawingHelp>(
+      ((reveals || []) as Array<{ kind?: string | null }>).map(
+        (r) => (r.kind || 'solution') as QBDrawingHelp,
+      ),
+    ),
+  ).sort();
 
   const { submission, attemptNumber, isRedo } = await createDrawingSubmissionWithThread(
     {
@@ -195,10 +249,22 @@ export async function submitQBDrawingAttempt(
       assignment_id: null,
       source_type: 'question_bank',
       original_image_url: input.originalImageUrl,
-      self_note: selfNote,
+      self_note: (input.selfNote || '').trim() || null,
     },
     client,
   );
 
-  return { submissionId: submission.id, attemptNumber, isRedo };
+  // Written after the insert so the shared thread helper keeps its signature
+  // and nothing else that calls it has to learn a bank-only column.
+  const { error: stampError } = await supabase
+    .from('drawing_submissions')
+    .update({ qb_help_used: helpUsed })
+    .eq('id', submission.id);
+  if (stampError) {
+    // The drawing is safe in the queue; only the provenance chip is missing.
+    // Losing that is much better than losing the sheet.
+    console.error('[QB drawing attempt] could not stamp help used:', stampError.message);
+  }
+
+  return { submissionId: submission.id, attemptNumber, isRedo, helpUsed };
 }

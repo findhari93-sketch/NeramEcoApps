@@ -56,6 +56,57 @@ function cleanMarks(value: unknown): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/**
+ * Give every part a key that will survive being reordered.
+ *
+ * Called only from the write path. An existing key is never replaced and a
+ * retired one is never handed out again, so a drawing stored against part B
+ * still means part B after part A is deleted and B becomes the new A.
+ *
+ * The first key a part gets is its position, so a freshly split question reads
+ * as a/b and the key is something a human can follow. Deterministic on purpose:
+ * a random one would differ on every parse, and re-importing the same paper
+ * file would then re-file every drawing already handed in against it.
+ */
+export function withPartKeys(parts: QBDrawingParts): QBDrawingParts {
+  const taken = new Set(parts.items.map((p) => p.key).filter(Boolean) as string[]);
+  return {
+    ...parts,
+    items: parts.items.map((item) => {
+      if (item.key) return item;
+      let key = item.id;
+      let n = 1;
+      while (taken.has(key)) {
+        n += 1;
+        key = `${item.id}${n}`;
+      }
+      taken.add(key);
+      return { ...item, key };
+    }),
+  };
+}
+
+/**
+ * The part a student is working on, found by key first and position second.
+ *
+ * A stored attempt carries the key. A link carries the readable position
+ * ("?part=b"), which can point somewhere else after a re-split, so the key
+ * always wins when both are offered.
+ */
+export function findPart(
+  parts: QBDrawingParts | null,
+  keyOrId: string | null | undefined,
+): QBDrawingPart | null {
+  if (!parts || !keyOrId) return null;
+  const wanted = keyOrId.trim().toLowerCase();
+  if (!wanted) return null;
+  return (
+    parts.items.find((p) => (p.key || '').toLowerCase() === wanted) ||
+    parts.items.find((p) => p.id.toLowerCase() === wanted) ||
+    null
+  );
+}
+
 export type NormalizeResult =
   | { ok: true; parts: QBDrawingParts }
   | { ok: false; error: string };
@@ -64,9 +115,10 @@ export type NormalizeResult =
  * Validate parts from anywhere (a request body, a JSON file, a stored row) and
  * put them in canonical shape.
  *
- * Ids and labels are reassigned by position. Nothing references a part id yet
- * (a student still uploads one photo per question), so removing part A simply
- * makes the old B the new A, which is what the teacher sees on screen.
+ * Ids and labels are reassigned by position, so removing part A makes the old
+ * B the new A, which is what the teacher sees on screen. `key` is the opposite:
+ * it is carried through untouched, because a student's drawing is stored
+ * against it and must not follow a renumbering.
  * Marks only mean something when every part is answered, so 'any_one' drops
  * them rather than storing numbers nothing reads.
  */
@@ -102,10 +154,16 @@ export function normalizeDrawingParts(input: unknown): NormalizeResult {
     }
     items.push({
       id: partIdAt(i),
+      // Preserved, never minted here: readDrawingParts runs this on every
+      // render, and a key that changed on read would point a student's
+      // drawing at a different part each time the page drew itself.
+      // applyDrawingPartsToWrite mints the missing ones.
+      key: cleanText(r.key),
       label: partLabelAt(i),
       text,
       text_hi: cleanText(r.text_hi),
       marks: mode === 'all' ? cleanMarks(r.marks) : null,
+      image_url: cleanText(r.image_url),
       solution_image_url: cleanText(r.solution_image_url),
       solution_video_url: cleanText(r.solution_video_url),
     });
@@ -223,7 +281,7 @@ export function applyDrawingPartsToWrite(
   if (!result.ok) return result;
   const parts = result.parts;
 
-  body.drawing_parts = parts;
+  body.drawing_parts = withPartKeys(parts);
   body.question_text = composeDrawingPartsText(parts, 'en');
   const hindi = composeDrawingPartsText(parts, 'hi');
   if (hindi) body.question_text_hi = hindi;
@@ -290,10 +348,14 @@ export function stripPartSolutions(value: unknown): QBDrawingParts | null {
     stem_hi: parts.stem_hi ?? null,
     items: parts.items.map((p) => ({
       id: p.id,
+      // Not solutions: the figure is the question for an option like "rotate
+      // the graphic below", and the key is what a drawing is filed against.
+      key: p.key ?? null,
       label: p.label,
       text: p.text,
       text_hi: p.text_hi ?? null,
       marks: p.marks ?? null,
+      image_url: p.image_url ?? null,
     })),
   };
 }

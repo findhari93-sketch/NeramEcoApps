@@ -6,6 +6,7 @@ import AutoStoriesOutlinedIcon from '@mui/icons-material/AutoStoriesOutlined';
 import StarOutlinedIcon from '@mui/icons-material/StarOutlined';
 import ReviewStateBadge, { tileBadgeSx } from '@/components/drawings/ReviewStateBadge';
 import { drawingSourceLabel, reviewStateWords } from '@/lib/drawing-source';
+import { helpUsedWords } from '@/lib/qb-help-used';
 import type { SketchbookPayload } from '@/lib/sketchbook-payload';
 
 export type GridSketch = SketchbookPayload['sketches'][number];
@@ -27,6 +28,8 @@ const SKELETON_COUNT = 9;
 function tileLabel(s: GridSketch, viewer: 'own' | 'teacher'): string {
   const date = new Date(s.submitted_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
   const parts = [`${drawingSourceLabel(s.source_type)} from ${date}`];
+  if (s.practisedFrom) parts.push(`practised from ${s.practisedFrom.label}`);
+  if (s.source_type === 'question_bank') parts.push(helpUsedWords(s.helpUsed).toLowerCase());
   if (s.assignment?.title) parts.push(s.assignment.title);
   const words = reviewStateWords(s.review, { maxMarks: s.assignment?.max_marks ?? null, viewer });
   if (words) parts.push(words);
@@ -87,7 +90,10 @@ export default function SketchGrid({
             <ReviewStateBadge review={s.review} maxMarks={s.assignment?.max_marks ?? null} />
             {s.source_type !== 'sketchbook' && (
               <Box aria-hidden sx={{ ...tileBadgeSx, left: 6, bottom: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
-                {drawingSourceLabel(s.source_type)}
+                {/* The paper and number beat the word "Question bank": a month
+                    of squares is unreadable when a third of them say the same
+                    thing. */}
+                {s.practisedFrom?.label ?? drawingSourceLabel(s.source_type)}
               </Box>
             )}
           </Box>

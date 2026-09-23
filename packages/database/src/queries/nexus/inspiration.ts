@@ -504,3 +504,39 @@ export async function listInspirationAttempts(
   return { students: Number(body.students) || 0, shown: Number(body.shown) || 0, rows: body.rows ?? [] };
 }
 
+
+/**
+ * "See how others drew this": other students' attempts at one bank drawing.
+ *
+ * Reached from a question, not from the library, so it takes the question and
+ * the option rather than an item id. Everything about who may see whose work is
+ * decided inside nexus_qb_peer_attempts, which reads nexus_inspiration_base:
+ * the author's opt-out, the curation state and the four star bar are enforced
+ * once, in SQL, for this and for the library alike.
+ *
+ * `scope` is 'visible' for a student and 'all' only for staff. Passing 'all' to
+ * a student would hand them work its author asked to keep private.
+ */
+export async function listQBPeerAttempts(
+  qbQuestionId: string,
+  partId: string,
+  viewerId: string,
+  opts: { scope?: InspirationScope; limit?: number } = {},
+  client?: TypedSupabaseClient,
+): Promise<InspirationSearchResult> {
+  const { data, error } = await db(client).rpc('nexus_qb_peer_attempts', {
+    p_qb_question_id: qbQuestionId,
+    p_part_id: partId || '',
+    p_viewer_id: viewerId,
+    p_scope: opts.scope ?? 'visible',
+    p_limit: Math.min(Math.max(opts.limit ?? 24, 1), MAX_PAGE),
+  });
+  if (error) throw error;
+  const rows = (data || []) as InspirationRow[];
+  return {
+    rows,
+    // The RPC repeats the windowed total on every row, so an empty page is zero.
+    total: rows.length ? Number(rows[0].total_count) : 0,
+    matchKind: rows.length ? rows[0].match_kind : null,
+  };
+}

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyQBAccess } from '@/lib/qb-auth';
+import { verifyQBAccessAnyClassroom } from '@/lib/qb-auth';
 import { getStudentQBDrawingState } from '@neram/database';
 
 import { describeError } from '@/lib/api-errors';
@@ -12,6 +12,16 @@ import { describeError } from '@/lib/api-errors';
  * panel does not rebuild it from the pieces: a rule written twice is a rule
  * that eventually disagrees with itself, and the copy that leaks is the one
  * that shows a student the answer they were meant to earn.
+ *
+ * Not classroom scoped, so verifyQBAccessAnyClassroom rather than
+ * verifyQBAccess. What comes back is one student's own progress on one bank
+ * question, and drawing_submissions has no classroom_id column to scope it by.
+ * Asking the panel for a classroom it had no way to supply is what put
+ * "classroom_id is required" on screen for every student (NXS-0114 again).
+ *
+ * `?part=` names one option of an "attempt any one of N" drawing. Each option
+ * has its own mirror, its own thread and its own reveal, because in practice
+ * they are two unrelated questions. Omitted means the whole question.
  */
 export async function GET(
   request: NextRequest,
@@ -19,12 +29,13 @@ export async function GET(
 ) {
   try {
     const { id: questionId } = await params;
-    const classroomId = request.nextUrl.searchParams.get('classroom_id');
 
-    const access = await verifyQBAccess(request.headers.get('Authorization'), classroomId);
+    const access = await verifyQBAccessAnyClassroom(request.headers.get('Authorization'));
     if (!access.ok) return access.response;
 
-    const state = await getStudentQBDrawingState(questionId, access.caller.id);
+    const partId = request.nextUrl.searchParams.get('part') || '';
+
+    const state = await getStudentQBDrawingState(questionId, access.caller.id, { partId });
     return NextResponse.json({ data: state }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';

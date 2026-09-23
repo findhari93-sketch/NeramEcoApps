@@ -97,6 +97,33 @@ async function resolveInlineImages(
         q.question_number,
       );
     }
+    // A split drawing keeps its figures and its solutions inside the parts
+    // blob, and nothing here used to look in there, so an AI-generated paper
+    // stored whole base64 images in the database row.
+    const parts = next.drawing_parts;
+    if (parts?.items?.some((i) => isDataUri(i.image_url) || isDataUri(i.solution_image_url))) {
+      const items = [];
+      for (const item of parts.items) {
+        const nextItem = { ...item };
+        if (isDataUri(nextItem.image_url)) {
+          nextItem.image_url = await resolve(
+            nextItem.image_url as string,
+            'questions',
+            q.question_number,
+          );
+        }
+        if (isDataUri(nextItem.solution_image_url)) {
+          nextItem.solution_image_url = await resolve(
+            nextItem.solution_image_url as string,
+            'drawing-solutions',
+            q.question_number,
+          );
+        }
+        items.push(nextItem);
+      }
+      next.drawing_parts = { ...parts, items };
+    }
+
     if (next.options?.some((o) => isDataUri(o.image_url))) {
       next.options = await Promise.all(
         next.options.map(async (o) =>

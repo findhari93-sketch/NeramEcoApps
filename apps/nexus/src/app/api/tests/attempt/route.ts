@@ -518,6 +518,10 @@ export async function POST(request: NextRequest) {
             return {
               ...r,
               question_text: q?.question_text ?? null,
+              // Without this, "see what you got wrong" on a figure question
+              // showed the four answer figures and no problem figure, so the
+              // review could not be read at all.
+              question_image_url: q?.question_image_url ?? null,
               options: q?.options ?? null,
               explanation: q?.explanation_brief ?? null,
               // Present only once someone has asked for the deeper version.

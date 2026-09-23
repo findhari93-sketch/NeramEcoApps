@@ -13,6 +13,7 @@ interface JumpToQuestionProps {
   onClose: () => void;
   questions: NexusQBQuestionListItem[];
   numbers: Map<string, number>;
+  suffixes?: Map<string, string>;
   currentId: string | null;
   onPick: (id: string) => void;
 }
@@ -30,6 +31,7 @@ export default function JumpToQuestion({
   onClose,
   questions,
   numbers,
+  suffixes,
   currentId,
   onPick,
 }: JumpToQuestionProps) {
@@ -39,7 +41,7 @@ export default function JumpToQuestion({
   };
 
   const body = (
-    <QuestionPalette questions={questions} numbers={numbers} currentId={currentId} onOpen={pick} autoReveal legend />
+    <QuestionPalette questions={questions} numbers={numbers} suffixes={suffixes} currentId={currentId} onOpen={pick} autoReveal legend />
   );
 
   if (variant === 'popover') {

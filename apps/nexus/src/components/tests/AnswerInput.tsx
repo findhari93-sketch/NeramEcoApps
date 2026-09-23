@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, TextField, Typography, alpha, useTheme, ImageUploadField } from '@neram/ui';
-import MathText from '@/components/common/MathText';
+import OptionBody from './OptionBody';
 
 export interface AnswerInputQuestion {
   question_id: string;
@@ -27,6 +27,14 @@ interface AnswerInputProps {
 interface OptionShape {
   key: string;
   text: string;
+  /**
+   * The picture that IS the answer on a figure question.
+   *
+   * It used to be thrown away here, so a "which figure completes the sequence"
+   * question reached class-prep tests and drawing assignments as four rows
+   * reading "Figure (1)" to "Figure (4)" with nothing to look at.
+   */
+  image_url?: string;
 }
 
 /**
@@ -156,8 +164,24 @@ export default function AnswerInput({
     );
   }
 
+  // Pictures side by side, the way the paper prints them, so the question and
+  // its answers stay on one screen.
+  const figureAnswers = options.filter((o) => Boolean(o.image_url)).length >= 2;
+
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+    <Box sx={{ containerType: 'inline-size' }}>
+    <Box
+      sx={
+        figureAnswers
+          ? {
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              gap: 1,
+              '@container (min-width: 640px)': { gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' },
+            }
+          : { display: 'flex', flexDirection: 'column', gap: 1 }
+      }
+    >
       {options.map((opt) => {
         const isSelected = value === opt.key;
         return (
@@ -175,8 +199,10 @@ export default function AnswerInput({
             }}
             sx={{
               display: 'flex',
+              // A figure takes the whole cell, so the letter goes above it.
+              flexDirection: figureAnswers && opt.image_url ? 'column' : 'row',
               alignItems: 'flex-start',
-              gap: 1.5,
+              gap: figureAnswers && opt.image_url ? 0.75 : 1.5,
               // 56px, comfortably past the 48px floor: this is the primary tap
               // target on the screen and it is tapped under time pressure.
               minHeight: 56,
@@ -205,12 +231,26 @@ export default function AnswerInput({
             >
               {opt.key.toUpperCase()}
             </Box>
-            <Box sx={{ flex: 1, minWidth: 0, pt: 0.25, fontSize: '0.9375rem', lineHeight: 1.5 }}>
-              <MathText text={opt.text} />
+            <Box
+              sx={{
+                flex: figureAnswers && opt.image_url ? 'none' : 1,
+                width: figureAnswers && opt.image_url ? '100%' : undefined,
+                minWidth: 0,
+                pt: 0.25,
+                fontSize: '0.9375rem',
+                lineHeight: 1.5,
+              }}
+            >
+              <OptionBody
+                option={{ text: opt.text, image_url: opt.image_url }}
+                letter={opt.key.toUpperCase()}
+                grid={figureAnswers}
+              />
             </Box>
           </Box>
         );
       })}
+    </Box>
     </Box>
   );
 }
@@ -231,11 +271,14 @@ function normaliseOptions(raw: unknown): OptionShape[] {
           const rec = o as Record<string, unknown>;
           const key = String(rec.key ?? rec.option ?? rec.id ?? String.fromCharCode(97 + i));
           const text = String(rec.text ?? rec.label ?? rec.value ?? '');
-          return { key, text };
+          const image = typeof rec.image_url === 'string' ? rec.image_url : undefined;
+          return image ? { key, text, image_url: image } : { key, text };
         }
         return null;
       })
-      .filter((o): o is OptionShape => !!o && o.text.length > 0);
+      // An option with a picture and no words is a whole answer. Dropping it
+      // for having no text would quietly delete one of the four choices.
+      .filter((o): o is OptionShape => !!o && (o.text.length > 0 || Boolean(o.image_url)));
   }
 
   if (typeof raw === 'object') {

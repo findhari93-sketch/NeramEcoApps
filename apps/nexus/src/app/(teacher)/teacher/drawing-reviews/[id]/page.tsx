@@ -35,6 +35,8 @@ import ReviewActionBar from '@/components/drawings/review/ReviewActionBar';
 import ReviewDialogs from '@/components/drawings/review/ReviewDialogs';
 import InspirationSwitch from '@/components/drawings/review/InspirationSwitch';
 import TeacherSketchActions from '@/components/sketchbook/TeacherSketchActions';
+import PractisedFrom from '@/components/drawings/PractisedFrom';
+import type { QBPracticeOrigin } from '@neram/database/queries/nexus';
 import { flipSketch } from '@/components/sketchbook/sketchbook-api';
 import { canRedo, opensForGrading, reviewKindOf, wasReviewedBefore } from '@/lib/drawing-source';
 import {
@@ -108,6 +110,8 @@ export default function DrawingReviewDetailPage() {
   // it is featured, and a test drawing's marks ceiling (GET /api/drawing/submissions/[id]).
   const [inspiration, setInspiration] = useState<{ original: SubmissionInspirationState | null; reference: SubmissionInspirationState | null } | null>(null);
   const [practisedFrom, setPractisedFrom] = useState<{ item_id: string; title: string; image_url: string } | null>(null);
+  const [practisedFromQb, setPractisedFromQb] = useState<QBPracticeOrigin | null>(null);
+  const [qbHelpUsed, setQbHelpUsed] = useState<string[] | null>(null);
   const [featured, setFeatured] = useState<SketchbookFeatureFact[]>([]);
   const [examMaxMarks, setExamMaxMarks] = useState<number | null>(null);
   const [tagLabels, setTagLabels] = useState<string[]>([]);
@@ -194,6 +198,8 @@ export default function DrawingReviewDetailPage() {
       setStudentTeamsEmail(data.student_teams_email ?? null);
       setInspiration(data.inspiration ?? null);
       setPractisedFrom(data.practised_from ?? null);
+      setPractisedFromQb(data.practised_from_qb ?? null);
+      setQbHelpUsed(data.qb_help_used ?? null);
       setFeatured(Array.isArray(data.featured) ? data.featured : []);
       setExamMaxMarks(typeof data.exam_max_marks === 'number' ? data.exam_max_marks : null);
     } catch {
@@ -202,6 +208,7 @@ export default function DrawingReviewDetailPage() {
       setVoice(null);
       setVoiceByAttempt({});
       setInspiration(null); setPractisedFrom(null); setFeatured([]); setExamMaxMarks(null);
+      setPractisedFromQb(null); setQbHelpUsed(null);
     } finally {
       setLoading(false);
     }
@@ -800,6 +807,26 @@ export default function DrawingReviewDetailPage() {
     </Box>
   ) : null;
 
+  /**
+   * A question bank practice drawing: which question, and what the student had
+   * open while drawing it.
+   *
+   * The founder's requirement in one strip. A teacher marking a sheet has to be
+   * able to tell whether it was drawn blind, after looking at the solution, or
+   * after looking at what classmates did, because the same drawing means three
+   * different things in those three cases.
+   */
+  const qbStrip = practisedFromQb || qbHelpUsed ? (
+    <Box
+      sx={{
+        px: 1.5, py: 1, minHeight: 56, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap',
+        borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.paper', flexShrink: 0,
+      }}
+    >
+      <PractisedFrom origin={practisedFromQb} helpUsed={qbHelpUsed} fromQuestionBank size="small" />
+    </Box>
+  ) : null;
+
   // Previous attempts of this redo, shown while grading the latest one. Each
   // round links to its own review screen so a teacher can grade an earlier
   // attempt that was never closed out, not just preview it.
@@ -950,9 +977,10 @@ export default function DrawingReviewDetailPage() {
         }
         contextBar={assignmentContextBar}
         referenceStrip={
-          practisedStrip || partsStrip || referenceStrip ? (
+          practisedStrip || qbStrip || partsStrip || referenceStrip ? (
             <>
               {practisedStrip}
+              {qbStrip}
               {partsStrip}
               {referenceStrip}
             </>

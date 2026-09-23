@@ -16,6 +16,7 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import CategoryBadge from '@/components/drawings/CategoryBadge';
 import DifficultyChip from '@/components/drawings/DifficultyChip';
 import { readDrawingParts } from '@/lib/drawing-parts';
+import LinkPastDrawingsDialog from '@/components/question-bank/LinkPastDrawingsDialog';
 
 interface DrawingQBQuestion {
   id: string;
@@ -120,6 +121,9 @@ export default function DrawingManagementPage() {
   });
   const [solutionUrl, setSolutionUrl] = useState('');
   const [saving, setSaving] = useState(false);
+
+  // Filing drawings students already made under the question they answer.
+  const [linkFor, setLinkFor] = useState<DrawingQBQuestion | null>(null);
 
   const fetchQuestions = useCallback(async () => {
     setLoading(true);
@@ -262,6 +266,17 @@ export default function DrawingManagementPage() {
               )}
             </Box>
 
+            {/* Older work students already made for this question. */}
+            <Button
+              size="small"
+              variant="text"
+              startIcon={<LinkIcon />}
+              onClick={() => setLinkFor(q)}
+              sx={{ textTransform: 'none', minHeight: 44, flexShrink: 0, alignSelf: 'center' }}
+            >
+              Link drawings
+            </Button>
+
             {/* Solution status + action */}
             <SolutionStatusCell
               question={q}
@@ -274,6 +289,22 @@ export default function DrawingManagementPage() {
           </Paper>
         ))
       )}
+
+      <LinkPastDrawingsDialog
+        open={!!linkFor}
+        onClose={() => setLinkFor(null)}
+        questionId={linkFor?.id ?? ''}
+        drawingParts={linkFor?.drawing_parts}
+        questionLabel={
+          linkFor
+            ? [linkFor.year ? String(linkFor.year) : null, linkFor.question_number ? `Q${linkFor.question_number}` : null]
+                .filter(Boolean)
+                .join(' ') || linkFor.question_text.slice(0, 60)
+            : undefined
+        }
+        getToken={getToken}
+        onLinked={fetchQuestions}
+      />
 
       {/* Solution URL dialog */}
       <Dialog open={solutionDialog.open} onClose={() => setSolutionDialog({ open: false, questionId: '', currentUrl: '' })} maxWidth="sm" fullWidth>

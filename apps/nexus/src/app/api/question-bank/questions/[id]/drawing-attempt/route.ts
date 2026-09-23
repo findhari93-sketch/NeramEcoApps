@@ -1,8 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyQBAccess } from '@/lib/qb-auth';
-import { submitQBDrawingAttempt, getStudentQBDrawingState } from '@neram/database';
+import { verifyQBAccessAnyClassroom } from '@/lib/qb-auth';
+import { submitQBDrawingAttempt, getStudentQBDrawingState, getSupabaseAdminClient } from '@neram/database';
 
 import { describeError } from '@/lib/api-errors';
+import { parseQuality } from '@/lib/image-quality';
+
+/**
+ * The phone's own measurement of the photo, and the 400px copy the sketchbook
+ * grid loads instead of the full sheet. Written after the insert rather than
+ * through submitQBDrawingAttempt so the shared query keeps its signature and
+ * only Nexus rebuilds.
+ *
+ * Best effort on purpose, the same rule as the drawing module's storeQuality:
+ * an unmeasured photo is a valid state, a lost drawing is not.
+ */
+async function storeExtras(
+  submissionId: string,
+  raw: { thumbnailUrl: string | null; imageQuality: unknown },
+) {
+  const patch: Record<string, unknown> = {};
+  const quality = parseQuality(raw.imageQuality);
+  if (quality) patch.image_quality = quality;
+  if (raw.thumbnailUrl) patch.thumbnail_url = raw.thumbnailUrl;
+  if (Object.keys(patch).length === 0) return;
+  try {
+    const supabase = getSupabaseAdminClient() as any;
+    await supabase.from('drawing_submissions').update(patch).eq('id', submissionId);
+  } catch (err) {
+    console.error('[QB drawing attempt] could not store extras:', describeError(err));
+  }
+}
 
 /**
  * A student's drawing for a bank question.
@@ -13,6 +40,10 @@ import { describeError } from '@/lib/api-errors';
  * it: is_correct is NOT NULL, so a row written now would have to claim a sheet
  * nobody has looked at is either right or wrong, and that claim feeds the
  * student's accuracy percentage.
+ *
+ * Not classroom scoped: the row lands in drawing_submissions, which has no
+ * classroom_id column, so there is nothing for a classroom to authorise. See
+ * the note in drawing-state/route.ts.
  */
 export async function POST(
   request: NextRequest,
@@ -21,13 +52,15 @@ export async function POST(
   try {
     const { id: questionId } = await params;
     const body = await request.json();
-    const { original_image_url, self_note, classroom_id } = body as {
+    const { original_image_url, self_note, thumbnail_url, image_quality, part } = body as {
       original_image_url?: string;
       self_note?: string | null;
-      classroom_id?: string | null;
+      thumbnail_url?: string | null;
+      image_quality?: unknown;
+      part?: string | null;
     };
 
-    const access = await verifyQBAccess(request.headers.get('Authorization'), classroom_id || null);
+    const access = await verifyQBAccessAnyClassroom(request.headers.get('Authorization'));
     if (!access.ok) return access.response;
     const caller = access.caller;
 
@@ -35,14 +68,22 @@ export async function POST(
       return NextResponse.json({ error: 'original_image_url is required' }, { status: 400 });
     }
 
+    const partId = part || '';
+
     const result = await submitQBDrawingAttempt({
       qbQuestionId: questionId,
       studentId: caller.id,
+      partId,
       originalImageUrl: original_image_url,
       selfNote: self_note ?? null,
     });
 
-    const state = await getStudentQBDrawingState(questionId, caller.id);
+    await storeExtras(result.submissionId, {
+      thumbnailUrl: thumbnail_url ?? null,
+      imageQuality: image_quality,
+    });
+
+    const state = await getStudentQBDrawingState(questionId, caller.id, { partId });
 
     return NextResponse.json({ data: { ...result, state } }, { status: 200 });
   } catch (err) {

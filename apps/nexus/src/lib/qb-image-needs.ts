@@ -99,12 +99,27 @@ function optionsOf(question: NexusQBQuestion): NexusQBQuestionOption[] {
   return (question.options as NexusQBQuestionOption[] | null) ?? [];
 }
 
+/**
+ * Does this option's text say anything the picture does not already say?
+ *
+ * "Figure (1)" printed beside the figure it names is noise, and in a
+ * four-across grid it is noise that costs two lines of every card. 2,214 of
+ * the bank's 2,306 picture options are like this; the other 92 carry real
+ * words, and none of them runs past 43 characters.
+ *
+ * Kept as one predicate because the practice reader and the test player both
+ * ask it, of two different option types.
+ */
+export function textSaysNothingBeyondFigure(text: string | null | undefined): boolean {
+  const trimmed = (text || '').trim();
+  if (!trimmed) return true;
+  if (OPTION_PLACEHOLDER.test(trimmed)) return true;
+  return FIGURE_NOUN.test(trimmed);
+}
+
 /** Is this option's answer the picture rather than the words? */
-function optionMentionsFigure(option: NexusQBQuestionOption): boolean {
-  const text = (option.text || '').trim();
-  if (!text) return true;
-  if (OPTION_PLACEHOLDER.test(text)) return true;
-  return FIGURE_NOUN.test(text);
+export function optionMentionsFigure(option: NexusQBQuestionOption): boolean {
+  return textSaysNothingBeyondFigure(option.text);
 }
 
 /**
@@ -205,6 +220,13 @@ export function questionImageSlots(
   const ruledOut = question.needs_image === false;
   const ruledIn = question.needs_image === true;
 
+  // A drawing split into options carries a figure per option, edited in the
+  // parts editor. One image at question level is what put 81B's graphic above
+  // 81A, a question the student did not choose, so this slot stops asking for
+  // one. It still shows what is already there, which is how the old shared
+  // image gets found and moved onto the option it belongs to.
+  const splitDrawing = Boolean(drawingPartsOf(question));
+
   const slots: ImageSlot[] = [
     {
       slot: 'question',
@@ -212,6 +234,7 @@ export function questionImageSlots(
       // The stem's own figure. Judged on the stem's own words, so a question
       // whose *options* are pictures does not also demand one of its own.
       expected:
+        !splitDrawing &&
         !ruledOut &&
         (ruledIn ||
           question.question_format === 'IMAGE_BASED' ||

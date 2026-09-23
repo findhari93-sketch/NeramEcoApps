@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   applyDrawingPartsToWrite,
+  findPart,
+  withPartKeys,
   applyPartSolutionImages,
   mirroredPartSolution,
   composeDrawingPartsText,
@@ -329,5 +331,153 @@ describe('applyPartSolutionImages', () => {
   it('refuses a question that is not split into parts', () => {
     const result = applyPartSolutionImages(null, { a: 'https://x/a.png' });
     expect(result).toEqual({ ok: false, error: 'This question is not split into parts.' });
+  });
+});
+
+/**
+ * A part's own figure, and an identity that survives a re-split.
+ *
+ * 2014 Q81 is "draw a frame of cubes and cones" OR "rotate the graphic below".
+ * One image was stored for the pair and printed above both, so whichever part
+ * the student picked, they were shown a figure belonging to the other one.
+ *
+ * `id` is the position, so deleting part A renames B to A. That was safe while
+ * nothing pointed at a part; a student's drawing does, so it is stored against
+ * `key`, which is minted once on write and never reassigned.
+ */
+describe('per-part figures and stable keys', () => {
+  const partsWith = (over: Record<string, unknown>[]) => ({
+    mode: 'any_one' as const,
+    items: [
+      { text: 'Draw a rectangular frame of cubes, cones and cylinders.', ...over[0] },
+      { text: 'Rotate the graphic 90 degrees about point A.', ...over[1] },
+    ],
+  });
+
+  it('keeps a figure on the part it belongs to', () => {
+    const result = normalizeDrawingParts(
+      partsWith([{}, { image_url: 'https://x/rotate.png' }]),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.parts.items[0].image_url).toBeNull();
+    expect(result.parts.items[1].image_url).toBe('https://x/rotate.png');
+  });
+
+  it('never mints a key while reading', () => {
+    // readDrawingParts runs on every render. A key minted here would point a
+    // student's drawing somewhere new each time the page drew itself.
+    const parts = readDrawingParts(partsWith([{}, {}]));
+    expect(parts?.items.every((i) => !i.key)).toBe(true);
+  });
+
+  it('mints a key for every part on write', () => {
+    const body: Record<string, unknown> = {
+      question_format: 'DRAWING_PROMPT',
+      drawing_parts: partsWith([{}, {}]),
+    };
+    expect(applyDrawingPartsToWrite(body)).toEqual({ ok: true });
+    const written = body.drawing_parts as { items: { key?: string | null }[] };
+    expect(written.items[0].key).toBeTruthy();
+    expect(written.items[1].key).toBeTruthy();
+    expect(written.items[0].key).not.toBe(written.items[1].key);
+  });
+
+  it('leaves a key that already exists alone', () => {
+    const kept = withPartKeys({
+      mode: 'any_one',
+      items: [
+        { id: 'a', label: 'A', key: 'p-old-a', text: 'one' },
+        { id: 'b', label: 'B', text: 'two' },
+      ],
+    });
+    expect(kept.items[0].key).toBe('p-old-a');
+    expect(kept.items[1].key).toBeTruthy();
+    expect(kept.items[1].key).not.toBe('p-old-a');
+  });
+
+  it('a deleted part renumbers the rest but does not move their keys', () => {
+    const before = withPartKeys({
+      mode: 'any_one',
+      items: [
+        { id: 'a', label: 'A', text: 'one' },
+        { id: 'b', label: 'B', text: 'two' },
+      ],
+    });
+    const keyOfB = before.items[1].key;
+
+    // Part A is removed. The old B is now in position A.
+    const after = normalizeDrawingParts({
+      mode: 'any_one',
+      items: [before.items[1], { text: 'three' }],
+    });
+    expect(after.ok).toBe(true);
+    if (!after.ok) return;
+    expect(after.parts.items[0].id).toBe('a');
+    expect(after.parts.items[0].key).toBe(keyOfB);
+  });
+
+  it('gives the same keys every time, so a re-import does not re-file work', () => {
+    const write = () => {
+      const body: Record<string, unknown> = {
+        question_format: 'DRAWING_PROMPT',
+        drawing_parts: partsWith([{}, {}]),
+      };
+      applyDrawingPartsToWrite(body);
+      return (body.drawing_parts as { items: { key?: string | null }[] }).items.map((i) => i.key);
+    };
+    // A random key would differ on every parse, and importing the same paper
+    // file twice would then point every drawing handed in at a new part.
+    expect(write()).toEqual(write());
+    expect(write()).toEqual(['a', 'b']);
+  });
+
+  it('never hands a retired key to a new part', () => {
+    const grown = withPartKeys({
+      mode: 'any_one',
+      items: [
+        // The old B, now sitting in position A after A was deleted.
+        { id: 'a', label: 'A', key: 'b', text: 'was B' },
+        { id: 'b', label: 'B', text: 'brand new' },
+      ],
+    });
+    expect(grown.items[0].key).toBe('b');
+    expect(grown.items[1].key).not.toBe('b');
+  });
+
+  it('keeps a part figure and key when the solutions are stripped for a test', () => {
+    const stripped = stripPartSolutions({
+      mode: 'any_one',
+      items: [
+        { id: 'a', label: 'A', key: 'a', text: 'Draw a frame of cubes.' },
+        {
+          id: 'b',
+          label: 'B',
+          key: 'b',
+          text: 'Rotate the graphic below.',
+          image_url: 'https://x/rotate.png',
+          solution_image_url: 'https://x/answer.png',
+        },
+      ],
+    });
+    // The figure is the question here, not the answer. Dropping it with the
+    // solutions would leave "rotate the graphic below" with no graphic.
+    expect(stripped?.items[1].image_url).toBe('https://x/rotate.png');
+    expect(stripped?.items[1].key).toBe('b');
+    expect(stripped?.items[1].solution_image_url ?? null).toBeNull();
+  });
+
+  it('finds a part by its key before its position', () => {
+    const parts = withPartKeys({
+      mode: 'any_one',
+      items: [
+        { id: 'a', label: 'A', key: 'p-one', text: 'one' },
+        { id: 'b', label: 'B', key: 'p-two', text: 'two' },
+      ],
+    });
+    expect(findPart(parts, 'p-two')?.text).toBe('two');
+    expect(findPart(parts, 'b')?.text).toBe('two');
+    expect(findPart(parts, 'z')).toBeNull();
+    expect(findPart(null, 'a')).toBeNull();
   });
 });

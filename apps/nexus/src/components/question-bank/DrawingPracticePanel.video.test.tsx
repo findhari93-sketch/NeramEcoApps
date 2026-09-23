@@ -13,7 +13,10 @@ import type { NexusQBQuestionDetail } from '@neram/database';
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));
 // One stable getToken, as the real context memoises it. A fresh function per
 // render re-keys the panel's load effect and it fetches for ever.
-const auth = vi.hoisted(() => ({ getToken: async () => 't' }));
+// featureFlags as the real context supplies it: a FlagMap, always present.
+// The peer drawings button reads it, and `student.inspiration` is off by
+// default, so these tests see the panel without it.
+const auth = vi.hoisted(() => ({ getToken: async () => 't', featureFlags: {} }));
 vi.mock('@/hooks/useNexusAuth', () => ({ useNexusAuthContext: () => auth }));
 vi.mock('@/components/drawings/DrawingSubmissionSheet', () => ({ default: () => null }));
 vi.mock('@/components/video/NeramVideoPlayer', () => ({

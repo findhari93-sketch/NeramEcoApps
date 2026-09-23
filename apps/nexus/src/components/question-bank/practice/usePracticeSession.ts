@@ -15,6 +15,7 @@ import {
   type PaperContext,
   type PracticeScope,
 } from '@/lib/qb-paper-number';
+import { baseIdOf, expandAtoms, splitAtomId, type PracticeAtom } from '@/lib/practice-atoms';
 import type { PriorAnswer } from '../useQuestionAnswer';
 import { patchAttemptSummary, progressOf, reconcileCurrent, stepFrom } from './practice-logic';
 
@@ -47,9 +48,21 @@ export interface UsePracticeSessionOptions {
 
 export interface PracticeSession {
   scope: PracticeScope;
-  questions: NexusQBQuestionListItem[];
+  /**
+   * What there is to practise, which is one per question except for a drawing
+   * printed as "attempt any one of two". Those become one entry per option:
+   * two unrelated tasks that share a number in the paper are two questions in
+   * practice. See lib/practice-atoms.ts.
+   */
+  questions: PracticeAtom[];
   /** The label for each question: its paper number, or its place in the list. */
   numbers: Map<string, number>;
+  /**
+   * The letter after that number, for an option of an either-or drawing, so
+   * the two halves of Q81 read "81A" and "81B" rather than both reading "81".
+   * Empty for every other question.
+   */
+  suffixes: Map<string, string>;
   total: number;
   loading: boolean;
   loadingMore: boolean;
@@ -62,6 +75,8 @@ export interface PracticeSession {
 
   currentId: string | null;
   currentIndex: number;
+  /** Which option of an either-or drawing is open, if any. */
+  currentPartKey: string | null;
   detail: NexusQBQuestionDetail | null;
   detailLoading: boolean;
   detailError: string | null;
@@ -122,7 +137,7 @@ export function usePracticeSession({
 }: UsePracticeSessionOptions): PracticeSession {
   const scope = practiceScopeOf(ctx);
 
-  const [questions, setQuestions] = useState<NexusQBQuestionListItem[]>([]);
+  const [questions, setQuestions] = useState<PracticeAtom[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -175,6 +190,13 @@ export function usePracticeSession({
 
   const filtersKey = JSON.stringify(filters);
 
+  /**
+   * The question row behind an atom. Identity for the API, the detail cache
+   * and the answered state, all of which belong to the question rather than
+   * to which option of it a student picked.
+   */
+  const baseOf = (id: string) => baseIdOf(id) ?? id;
+
   // ─── The list ──────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!classroomId) {
@@ -220,7 +242,7 @@ export function usePracticeSession({
 
         if (seq !== listSeq.current) return;
         const ordered = scope === 'paper' && !filters.search_text ? sortForPaper(items, ctx) : items;
-        setQuestions(ordered);
+        setQuestions(expandAtoms(ordered));
         setTotal(count);
         setPage(1);
         setSearch({
@@ -261,7 +283,7 @@ export function usePracticeSession({
         if (seq !== listSeq.current) return;
         setQuestions((prev) => {
           const seen = new Set(prev.map((q) => q.id));
-          return prev.concat((next.questions ?? []).filter((q) => !seen.has(q.id)));
+          return prev.concat(expandAtoms(next.questions ?? []).filter((q) => !seen.has(q.id)));
         });
         setPage((p) => p + 1);
       } catch (err) {
@@ -288,8 +310,14 @@ export function usePracticeSession({
   }, [questions, loading, layout]);
 
   // ─── The open question's detail ────────────────────────────────────────────
+  /**
+   * The detail belongs to the question row, so both options of an either-or
+   * drawing share one request and one cache entry. Everything else here is
+   * keyed on the atom; this is the boundary where the question id is needed.
+   */
   const fetchDetail = useCallback(
-    (id: string): Promise<NexusQBQuestionDetail | null> => {
+    (atomId: string): Promise<NexusQBQuestionDetail | null> => {
+      const id = baseIdOf(atomId) ?? atomId;
       const cached = details.current.get(id);
       if (cached) return Promise.resolve(cached);
       const running = inflight.current.get(id);
@@ -317,7 +345,9 @@ export function usePracticeSession({
 
   const prefetch = useCallback(
     (id: string | null) => {
-      if (!id || details.current.has(id) || inflight.current.has(id)) return;
+      if (!id) return;
+      const base = baseOf(id);
+      if (details.current.has(base) || inflight.current.has(base)) return;
       fetchDetail(id)
         .then((d) => {
           // Warm the figure too, so the next question paints complete.
@@ -336,7 +366,7 @@ export function usePracticeSession({
       return;
     }
     openedAt.current = Date.now();
-    const cached = details.current.get(currentId);
+    const cached = details.current.get(baseOf(currentId));
     if (cached) {
       setDetail(cached);
       setDetailLoading(false);
@@ -373,17 +403,18 @@ export function usePracticeSession({
 
   // ─── Acting on a question ──────────────────────────────────────────────────
   const updateDetail = useCallback((id: string, patch: (d: NexusQBQuestionDetail) => NexusQBQuestionDetail) => {
-    const cached = details.current.get(id);
+    const base = baseIdOf(id) ?? id;
+    const cached = details.current.get(base);
     if (!cached) return;
     const next = patch(cached);
-    details.current.set(id, next);
-    if (currentIdRef.current === id) setDetail(next);
+    details.current.set(base, next);
+    if ((baseIdOf(currentIdRef.current) ?? currentIdRef.current) === base) setDetail(next);
   }, []);
 
   const submit = useCallback(
     async (id: string, answer: string) => {
       const token = await getTokenRef.current();
-      const res = await fetch(`/api/question-bank/questions/${id}/attempt`, {
+      const res = await fetch(`/api/question-bank/questions/${baseOf(id)}/attempt`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -400,8 +431,11 @@ export function usePracticeSession({
       const at = data.attempt?.created_at ?? new Date().toISOString();
 
       answers.current.set(id, { selected: answer, isCorrect });
+      const base = baseOf(id);
       setQuestions((prev) =>
-        prev.map((q) => (q.id === id ? { ...q, attempt_summary: patchAttemptSummary(q.attempt_summary, isCorrect, at) } : q)),
+        prev.map((q) =>
+          q.base_id === base ? { ...q, attempt_summary: patchAttemptSummary(q.attempt_summary, isCorrect, at) } : q,
+        ),
       );
       updateDetail(id, (d) => ({
         ...d,
@@ -416,7 +450,7 @@ export function usePracticeSession({
   const toggleStudied = useCallback(
     async (id: string) => {
       const token = await getTokenRef.current();
-      const res = await fetch(`/api/question-bank/questions/${id}/study-mark`, {
+      const res = await fetch(`/api/question-bank/questions/${baseOf(id)}/study-mark`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ classroom_id: classroomId }),
@@ -430,7 +464,7 @@ export function usePracticeSession({
   const report = useCallback(
     async (id: string, reportType: string, description: string) => {
       const token = await getTokenRef.current();
-      const res = await fetch(`/api/question-bank/questions/${id}/report`, {
+      const res = await fetch(`/api/question-bank/questions/${baseOf(id)}/report`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ report_type: reportType, description: description || undefined, classroom_id: classroomId }),
@@ -443,7 +477,31 @@ export function usePracticeSession({
     [classroomId],
   );
 
-  const numbers = useMemo(() => displayNumbers(questions, ctx), [questions, ctx]);
+  // Numbered by the QUESTION, so both options of Q81 are 81 and the letter
+  // after it says which one. Numbering the atoms would have made them 81 and
+  // 82, renaming every question after them.
+  const numbers = useMemo(() => {
+    const byQuestion = displayNumbers(
+      questions
+        .filter((q, i) => questions.findIndex((o) => o.base_id === q.base_id) === i)
+        // Keyed on the question row, so an option's atom id never reaches the
+        // numberer and the two halves of Q81 cannot become 81 and 82.
+        .map((q) => ({ ...q, id: q.base_id })),
+      ctx,
+    );
+    const out = new Map<string, number>();
+    for (const q of questions) {
+      const n = byQuestion.get(q.base_id);
+      if (n != null) out.set(q.id, n);
+    }
+    return out;
+  }, [questions, ctx]);
+
+  const suffixes = useMemo(() => {
+    const out = new Map<string, string>();
+    for (const q of questions) if (q.part_label) out.set(q.id, q.part_label);
+    return out;
+  }, [questions]);
   const progress = useMemo(() => progressOf(questions), [questions]);
   const currentIndex = currentId ? questions.findIndex((q) => q.id === currentId) : -1;
   const reload = useCallback(() => setReloadTick((t) => t + 1), []);
@@ -451,8 +509,8 @@ export function usePracticeSession({
   // A question already fetched shows in the same render that opens it. Waiting
   // for the effect above to copy it into state painted a skeleton for a frame
   // on every Next, which is exactly the flicker the prefetch exists to remove.
-  const cachedCurrent = currentId ? details.current.get(currentId) ?? null : null;
-  const detailOut = detail && detail.id === currentId ? detail : cachedCurrent;
+  const cachedCurrent = currentId ? details.current.get(baseOf(currentId)) ?? null : null;
+  const detailOut = detail && currentId && detail.id === baseOf(currentId) ? detail : cachedCurrent;
   const retryDetail = useCallback(() => {
     const id = currentIdRef.current;
     if (!id) return;
@@ -470,10 +528,14 @@ export function usePracticeSession({
       });
   }, [fetchDetail]);
 
+  const currentPartKey = currentId ? splitAtomId(currentId).partKey : null;
+
   return {
     scope,
     questions,
     numbers,
+    suffixes,
+    currentPartKey,
     total,
     loading,
     loadingMore,

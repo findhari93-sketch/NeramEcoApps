@@ -6859,16 +6859,33 @@ export interface NexusQBQuestion {
 /** 'all': every part is answered (1(a) and 1(b)). 'any_one': the student picks one. */
 export type QBDrawingPartsMode = 'all' | 'any_one';
 
-/** One part of a drawing question, with its own solution. */
+/** One part of a drawing question, with its own figure and its own solution. */
 export interface QBDrawingPart {
-  /** Stable key, 'a' to 'd'. */
+  /** Position, 'a' to 'd'. Reassigned when parts are added or removed. */
   id: string;
+  /**
+   * Identity that survives reordering, minted on write and never reused.
+   *
+   * `id` is the position, so deleting part A turns the old B into the new A.
+   * That was harmless while nothing pointed at a part. A student's drawing
+   * does, so anything stored against a part stores this instead.
+   */
+  key?: string | null;
   /** What students see after the question number, 'A' to 'D', so "81A". */
   label: string;
   text: string;
   text_hi?: string | null;
   /** Read in 'all' mode only. In 'any_one' every option is worth the question. */
   marks?: number | null;
+  /**
+   * The figure for THIS part.
+   *
+   * 2014 Q81 is "draw a frame of cubes and cones" OR "rotate the graphic
+   * below". Only the second has a graphic, but the question carried one image
+   * for the pair and printed it above both, so part A was shown a figure that
+   * belongs to a question the student did not choose.
+   */
+  image_url?: string | null;
   solution_image_url?: string | null;
   solution_video_url?: string | null;
 }

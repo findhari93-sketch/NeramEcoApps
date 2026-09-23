@@ -7,7 +7,6 @@ import {
   Typography,
   Button,
   Chip,
-  ImageViewerDialog,
   alpha,
 } from '@neram/ui';
 import AltRouteIcon from '@mui/icons-material/AltRoute';
@@ -16,6 +15,7 @@ import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import type { QBDrawingPart, QBDrawingParts } from '@neram/database';
 import MathText from '@/components/common/MathText';
 import { drawingPartsSummary, partNumberLabel } from '@/lib/drawing-parts';
+import FigureViewer from './FigureViewer';
 
 /**
  * A drawing question split into parts, as anyone reading it sees it: the
@@ -53,6 +53,15 @@ interface Props {
   questionNumber?: number | null;
   language?: 'en' | 'hi';
   showSolutions?: boolean;
+  /**
+   * How many options the paper printed, when only one of them is on screen.
+   *
+   * In practice an "attempt any one of two" drawing is listed and opened as
+   * two separate questions, so the banner telling a student to choose would be
+   * telling them to choose from a list of one. They still get told the exam
+   * only asked for one of them.
+   */
+  soloOf?: number | null;
 }
 
 /** The OR between two options. Shared with the teacher's parts editor. */
@@ -101,9 +110,79 @@ export function PartBadge({ children }: { children: string }) {
   );
 }
 
+/**
+ * The figure for one part.
+ *
+ * It used to be one image on the question, printed above both parts. On 2014
+ * Q81 that meant the student who chose "draw a frame of cubes and cones" was
+ * shown the graphic belonging to "rotate the graphic below", which is a
+ * different question they did not pick.
+ */
+function PartFigure({ part }: { part: QBDrawingPart }) {
+  const [viewerOpen, setViewerOpen] = useState(false);
+  if (!part.image_url) return null;
+  return (
+    <Box sx={{ mt: 1.5 }}>
+      <Box
+        component="button"
+        type="button"
+        onClick={() => setViewerOpen(true)}
+        aria-label={`Look closer at the figure for ${part.label}`}
+        sx={{
+          display: 'block',
+          p: 0,
+          border: 0,
+          bgcolor: 'transparent',
+          cursor: 'zoom-in',
+          borderRadius: 1,
+          '&:focus-visible': { outline: '3px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+        }}
+      >
+        <Box
+          component="img"
+          src={part.image_url}
+          alt={`Figure for ${part.label}`}
+          loading="lazy"
+          sx={{
+            display: 'block',
+            width: 'auto',
+            height: 'auto',
+            maxWidth: '100%',
+            maxHeight: { xs: '30vh', md: 280 },
+            objectFit: 'contain',
+            borderRadius: 1,
+            border: '1px solid',
+            borderColor: 'divider',
+            bgcolor: 'common.white',
+          }}
+        />
+      </Box>
+      <FigureViewer
+        open={viewerOpen}
+        onClose={() => setViewerOpen(false)}
+        src={part.image_url}
+        label={`Figure for ${part.label}`}
+      />
+    </Box>
+  );
+}
+
 function PartSolution({ part }: { part: QBDrawingPart }) {
   const [viewerOpen, setViewerOpen] = useState(false);
-  if (!part.solution_image_url && !part.solution_video_url) return null;
+  // Say so rather than showing nothing. Each option carries its own solution,
+  // and the question-level image is only ever a copy of the first option's, so
+  // a student who unlocks an option nobody has drawn yet would otherwise watch
+  // the switch turn on and the page stay exactly the same.
+  if (!part.solution_image_url && !part.solution_video_url) {
+    return (
+      <Typography
+        variant="caption"
+        sx={{ display: 'block', mt: 1.5, color: 'text.secondary', fontStyle: 'italic' }}
+      >
+        No solution for {part.label} yet. Your teacher is still adding it.
+      </Typography>
+    );
+  }
   return (
     <Box sx={{ mt: 1.5 }}>
       <Typography
@@ -137,20 +216,25 @@ function PartSolution({ part }: { part: QBDrawingPart }) {
               loading="lazy"
               sx={{
                 display: 'block',
-                width: '100%',
+                // Never blown up to fill the card: a small scan stretched is
+                // the pixelated look, and the viewer is one tap away.
+                width: 'auto',
+                height: 'auto',
+                maxWidth: '100%',
                 maxHeight: 300,
                 objectFit: 'contain',
                 borderRadius: 1,
                 border: '1px solid',
                 borderColor: 'divider',
+                bgcolor: 'common.white',
               }}
             />
           </Box>
-          <ImageViewerDialog
+          <FigureViewer
             open={viewerOpen}
             onClose={() => setViewerOpen(false)}
             src={part.solution_image_url}
-            alt={`Solution for ${part.label}, full size`}
+            label={`Solution for ${part.label}`}
           />
         </>
       )}
@@ -175,8 +259,10 @@ export default function DrawingPartsView({
   questionNumber,
   language = 'en',
   showSolutions = false,
+  soloOf = null,
 }: Props) {
   const anyOne = parts.mode === 'any_one';
+  const solo = Boolean(soloOf && soloOf > 1 && parts.items.length === 1);
   const stem = language === 'hi' && parts.stem_hi ? parts.stem_hi : parts.stem;
   const noun = anyOne ? 'Option' : 'Part';
 
@@ -203,12 +289,14 @@ export default function DrawingPartsView({
         )}
         <Box sx={{ minWidth: 0 }}>
           <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.primary' }}>
-            {drawingPartsSummary(parts)}
+            {solo ? `One of ${soloOf} options in the exam` : drawingPartsSummary(parts)}
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary' }}>
-            {anyOne
-              ? 'Choose the option you want to draw. You do not draw the others.'
-              : 'Draw every part below.'}
+            {solo
+              ? 'In the exam you answer either one. Here you can practise both, separately.'
+              : anyOne
+                ? 'Choose the option you want to draw. You do not draw the others.'
+                : 'Draw every part below.'}
           </Typography>
         </Box>
       </Stack>
@@ -247,6 +335,7 @@ export default function DrawingPartsView({
                     variant="body1"
                     sx={{ lineHeight: 1.7 }}
                   />
+                  {part.image_url && <PartFigure part={part} />}
                   {!anyOne && part.marks ? (
                     <Chip
                       size="small"

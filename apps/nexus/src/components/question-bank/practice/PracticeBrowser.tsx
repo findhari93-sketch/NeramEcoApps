@@ -148,6 +148,7 @@ export default function PracticeBrowser({
       <QuestionPalette
         questions={session.questions}
         numbers={session.numbers}
+        suffixes={session.suffixes}
         currentId={activeId}
         onOpen={open}
         selecting={selection.active}
@@ -173,6 +174,7 @@ export default function PracticeBrowser({
             key={q.id}
             question={q}
             number={session.numbers.get(q.id) ?? 0}
+            suffix={session.suffixes.get(q.id)}
             current={q.id === activeId}
             lang={lang}
             topic={topicCaption(q.categories, categoryLabels)}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPracticeQuery, type PracticeUrlState } from './qb-practice-url';
+import { buildPracticeQuery, readPracticeQid, type PracticeUrlState } from './qb-practice-url';
 
 const state = (over: Partial<PracticeUrlState> = {}): PracticeUrlState => ({
   filters: {},
@@ -50,5 +50,45 @@ describe('buildPracticeQuery', () => {
   it('gives the same string for the same state, so a sync effect settles', () => {
     const once = buildPracticeQuery('exam=JEE_PAPER_2&year=2014&shift=AN', state({ qid: 'x', filters: { difficulty: ['EASY'] } }));
     expect(buildPracticeQuery(once, state({ qid: 'x', filters: { difficulty: ['EASY'] } }))).toBe(once);
+  });
+});
+
+/**
+ * An either-or drawing is practised one option at a time, so a link has to say
+ * which one. Kept as its own key rather than folded into `qid`, because the
+ * separator inside an atom id would have to be escaped in a URL and a shared
+ * link should stay readable.
+ */
+describe('the open option in a link', () => {
+  const state = (qid: string | null) => ({
+    filters: {} as never,
+    exam: 'JEE_PAPER_2',
+    year: 2014,
+    session: null,
+    qid,
+  });
+
+  it('writes the question alone when there is no option', () => {
+    const out = new URLSearchParams(buildPracticeQuery('', state('q-81')));
+    expect(out.get('qid')).toBe('q-81');
+    expect(out.get('part')).toBeNull();
+  });
+
+  it('writes the option beside the question', () => {
+    const out = new URLSearchParams(buildPracticeQuery('', state('q-81~b')));
+    expect(out.get('qid')).toBe('q-81');
+    expect(out.get('part')).toBe('b');
+  });
+
+  it('reads them back as one id', () => {
+    expect(readPracticeQid(new URLSearchParams('qid=q-81&part=b'))).toBe('q-81~b');
+    expect(readPracticeQid(new URLSearchParams('qid=q-81'))).toBe('q-81');
+    expect(readPracticeQid(new URLSearchParams('part=b'))).toBeNull();
+  });
+
+  it('drops a stale option when the next question has none', () => {
+    const out = new URLSearchParams(buildPracticeQuery('qid=q-81&part=b', state('q-82')));
+    expect(out.get('qid')).toBe('q-82');
+    expect(out.get('part')).toBeNull();
   });
 });

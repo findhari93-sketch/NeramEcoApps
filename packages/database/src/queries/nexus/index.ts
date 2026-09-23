@@ -14,6 +14,7 @@ export * from './question-bank';
 export * from './qb-search';
 export * from './qb-question-delete';
 export * from './qb-drawing-practice';
+export * from './qb-practice-origin';
 export * from './qb-tags';
 export * from './qb-category-proposals';
 export * from './qb-papers';

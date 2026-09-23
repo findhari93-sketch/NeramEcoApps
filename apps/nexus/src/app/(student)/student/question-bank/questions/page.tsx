@@ -12,7 +12,7 @@ import FilterDrawer from '@/components/question-bank/FilterDrawer';
 import { countActiveFilters } from '@/components/question-bank/FilterChips';
 import { expandCategories, categoryLabelMap } from '@/lib/qb-category-tree';
 import { deserializeQBFilters } from '@/lib/qb-filter-url';
-import { buildPracticeQuery, QID_PARAM } from '@/lib/qb-practice-url';
+import { buildPracticeQuery, readPracticeQid } from '@/lib/qb-practice-url';
 import { isQBExamType, qbExamPath, rememberQBExam } from '@/lib/qb-exam-routes';
 import { usePracticeSession, type PracticeContext } from '@/components/question-bank/practice/usePracticeSession';
 import { useTestSelection } from '@/components/question-bank/practice/useTestSelection';
@@ -80,7 +80,7 @@ export default function QuestionListPage() {
   // Read once. A preset and a shared question are both one-time instructions.
   const initialParams = useRef(new URLSearchParams(searchParams.toString()));
   const presetId = useRef(initialParams.current.get('preset'));
-  const deepLinkQid = useRef(initialParams.current.get(QID_PARAM));
+  const deepLinkQid = useRef(readPracticeQid(initialParams.current));
 
   // ─── The three catalogue reads, on the shared SWR cache ───────────────────
   const scoped = (path: string, extra?: Record<string, string>) => {
@@ -246,7 +246,7 @@ export default function QuestionListPage() {
   sessionRef.current = session;
   useEffect(() => {
     const onPop = () => {
-      const qid = new URLSearchParams(window.location.search).get(QID_PARAM);
+      const qid = readPracticeQid(new URLSearchParams(window.location.search));
       if (!qid) {
         readerPushed.current = false;
         sessionRef.current.close();
@@ -320,7 +320,12 @@ export default function QuestionListPage() {
       ? `Back to ${QB_EXAM_TYPE_LABELS[exam]}`
       : 'Back to the question bank';
 
-  const currentNumber = session.currentId ? session.numbers.get(session.currentId) ?? null : null;
+  // "81A" for an option of an either-or drawing, "18" for everything else.
+  const numberLabel = (id: string | null) =>
+    id && session.numbers.has(id)
+      ? `${session.numbers.get(id)}${session.suffixes.get(id) ?? ''}`
+      : null;
+  const currentNumber = numberLabel(session.currentId);
   const positionLabel =
     session.currentIndex < 0
       ? session.scope === 'paper'
@@ -333,7 +338,7 @@ export default function QuestionListPage() {
   const continueId = firstUnanswered(session.questions);
   const continueLabel =
     continueId && session.progress.answered > 0
-      ? `Continue at Q${session.numbers.get(continueId)}`
+      ? `Continue at Q${numberLabel(continueId)}`
       : continueId && session.scope === 'paper'
         ? 'Start the paper'
         : null;
@@ -531,6 +536,7 @@ export default function QuestionListPage() {
   }
 
   const readerProps = {
+    partKey: session.currentPartKey,
     questionId: session.currentId,
     detail: session.detail,
     detailLoading: session.detailLoading,
@@ -618,6 +624,7 @@ export default function QuestionListPage() {
         onClose={() => setJumpOpen(false)}
         questions={session.questions}
         numbers={session.numbers}
+        suffixes={session.suffixes}
         currentId={session.currentId}
         onPick={sessionOpen}
       />

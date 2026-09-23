@@ -32,8 +32,9 @@ import DrawingSubmissionSheet from '@/components/drawings/DrawingSubmissionSheet
 import DrawingPartsView from './DrawingPartsView';
 import SolutionVideoPlayer from './SolutionVideoPlayer';
 import ReportMistakeLink from './ReportMistakeLink';
+import PeerAttempts from './PeerAttempts';
 import { reportTargetsFor } from '@/lib/report-targets';
-import { readDrawingParts } from '@/lib/drawing-parts';
+import { findPart, readDrawingParts } from '@/lib/drawing-parts';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import type { NexusQBQuestionDetail, QBDrawingState } from '@neram/database';
 
@@ -58,11 +59,39 @@ import type { NexusQBQuestionDetail, QBDrawingState } from '@neram/database';
 
 interface Props {
   question: NexusQBQuestionDetail;
-  classroomId?: string | null;
   /** The reader's language, for a question split into parts. */
   language?: 'en' | 'hi';
   /** Offer "Report a mistake" under the solutions once they are open. Student screens only. */
   allowReport?: boolean;
+  /**
+   * Which option of an "attempt any one of two" drawing to show.
+   *
+   * In practice the two options are listed and opened separately, because they
+   * are two unrelated tasks that happen to share a number in the paper. Null
+   * shows the question whole, which is what a test and the teacher's preview
+   * still want.
+   */
+  partKey?: string | null;
+}
+
+/**
+ * What to put in front of the student when a call fails.
+ *
+ * A 4xx in these routes is a sentence written for a person ("You need to be in
+ * a classroom to use the Question Bank"), so it is worth showing. A 5xx is an
+ * accident and its text is written for us, so the student gets the plain
+ * fallback and the detail goes to the console. This panel once printed
+ * "classroom_id is required" to every student who opened a drawing, which is
+ * what this rule exists to stop happening again.
+ */
+async function readError(res: Response, fallback: string): Promise<string> {
+  const json = await res.json().catch(() => ({} as { error?: string }));
+  const serverText = typeof json.error === 'string' ? json.error : null;
+  if (res.status >= 500 || !serverText) {
+    console.error('[QB drawing panel]', res.status, serverText ?? '(no message)');
+    return fallback;
+  }
+  return serverText;
 }
 
 /**
@@ -70,14 +99,14 @@ interface Props {
  * here, each with its own solution behind the same gate, in place of the one
  * solution image. The caller skips its plain question text for such a question.
  */
-export default function DrawingPracticePanel({ question, classroomId, language = 'en', allowReport = false }: Props) {
+export default function DrawingPracticePanel({ question, language = 'en', allowReport = false, partKey = null }: Props) {
   const router = useRouter();
-  const { getToken } = useNexusAuthContext();
+  const { getToken, featureFlags } = useNexusAuthContext();
 
   const [state, setState] = useState<QBDrawingState | null>(null);
   const [loading, setLoading] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [confirmReveal, setConfirmReveal] = useState(false);
+  const [confirmReveal, setConfirmReveal] = useState<'solution' | 'peers' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
   // Mounted on request, so opening a drawing never loads a YouTube frame.
@@ -86,43 +115,53 @@ export default function DrawingPracticePanel({ question, classroomId, language =
   const load = useCallback(async () => {
     try {
       const token = await getToken();
-      const res = await fetch(`/api/question-bank/questions/${question.id}/drawing-state`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
+      const res = await fetch(
+        `/api/question-bank/questions/${question.id}/drawing-state?part=${encodeURIComponent(partKey ?? '')}`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+      );
+      if (!res.ok) throw new Error(await readError(res, 'Could not load your progress'));
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || 'Could not load your progress');
       setState(json.data as QBDrawingState);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load your progress');
     } finally {
       setLoading(false);
     }
-  }, [question.id, getToken]);
+  }, [question.id, partKey, getToken]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const reveal = useCallback(async () => {
-    setConfirmReveal(false);
-    try {
-      const token = await getToken();
-      const res = await fetch(`/api/question-bank/questions/${question.id}/drawing-reveal`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ classroom_id: classroomId ?? null }),
-      });
-      if (!res.ok) throw new Error((await res.json()).error || 'That did not work');
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'That did not work');
-    }
-  }, [question.id, classroomId, getToken, load]);
+  /** Open the teacher's answer, or the classmates' attempts. Both are recorded. */
+  const reveal = useCallback(
+    async (kind: 'solution' | 'peers') => {
+      setConfirmReveal(null);
+      try {
+        const token = await getToken();
+        const res = await fetch(`/api/question-bank/questions/${question.id}/drawing-reveal`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ part: partKey ?? '', kind }),
+        });
+        if (!res.ok) throw new Error(await readError(res, 'That did not work'));
+        await load();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'That did not work');
+      }
+    },
+    [question.id, partKey, getToken, load],
+  );
 
-  const parts = readDrawingParts(question.drawing_parts);
+  const allParts = readDrawingParts(question.drawing_parts);
+  // One option, when the student opened one. A question that is not split, or
+  // one whose parts are all compulsory, is shown whole.
+  const chosen = partKey ? findPart(allParts, partKey) : null;
+  const parts =
+    allParts && chosen ? { ...allParts, items: [chosen] } : allParts;
   const unlocked = state?.unlocked === true;
   const submission = state?.submission ?? null;
   const awaitingReview = submission?.status === 'submitted' || submission?.status === 'under_review';
@@ -133,6 +172,34 @@ export default function DrawingPracticePanel({ question, classroomId, language =
   const solutionWords =
     hasImage && videoUrl ? 'solution image and video' : videoUrl ? 'solution video' : 'solution image';
   const solutionIsPlural = hasImage && Boolean(videoUrl);
+  /**
+   * Is there a solution at all, anywhere on this question?
+   *
+   * Nearly every drawing question in the bank has none. The gate used to be
+   * drawn regardless, so a student was invited to "show the solution image" on
+   * a question that has no image, and flipping it revealed nothing while
+   * writing a reveal row that marks their next attempt for the teacher as
+   * having been drawn with the answer in front of them. With nothing to open,
+   * there is nothing to gate.
+   */
+  const hasAnySolution = parts
+    ? parts.items.some((p) => Boolean(p.solution_image_url) || Boolean(p.solution_video_url))
+    : hasImage || Boolean(videoUrl);
+  /** The solution to draw alongside, once earned. The option's own, when split. */
+  const referenceImageUrl = chosen
+    ? chosen.solution_image_url ?? null
+    : question.solution_image_url ?? null;
+  /**
+   * Is the peer drawing library switched on?
+   *
+   * The same switch that decides whether the Inspiration tab exists, because
+   * this shows the same students' work through a different door. Checked as
+   * `=== true` rather than `!== false` so the button appears once the flags
+   * have loaded instead of appearing and then vanishing. The route checks it
+   * again, which is where it actually matters.
+   */
+  const peersAvailable =
+    featureFlags['student.inspiration'] === true || featureFlags['staff.inspiration'] === true;
   const reportTargets = reportTargetsFor(question);
   // Parts' solutions live in the parts view above; one link asks which part.
   const partSolutionTargets = parts ? reportTargets.filter((t) => t.target !== 'question') : [];
@@ -146,6 +213,7 @@ export default function DrawingPracticePanel({ question, classroomId, language =
             questionNumber={question.display_order}
             language={language}
             showSolutions={unlocked}
+            soloOf={chosen ? allParts?.items.length ?? null : null}
           />
         </Box>
       )}
@@ -209,7 +277,7 @@ export default function DrawingPracticePanel({ question, classroomId, language =
           )}
 
           {/* The gate */}
-          {!unlocked ? (
+          {hasAnySolution && (!unlocked ? (
             <Box
               sx={{
                 p: 2,
@@ -344,7 +412,7 @@ export default function DrawingPracticePanel({ question, classroomId, language =
                 />
               )}
             </>
-          )}
+          ))}
 
           {/* Actions */}
           <Stack spacing={1}>
@@ -365,6 +433,7 @@ export default function DrawingPracticePanel({ question, classroomId, language =
               un-reveal, so a flip back to off would lie about what the teacher
               can still see on their side.
             */}
+            {hasAnySolution && (
             <FormControlLabel
               sx={{ alignSelf: 'center', ml: 0 }}
               control={
@@ -372,7 +441,7 @@ export default function DrawingPracticePanel({ question, classroomId, language =
                   checked={unlocked}
                   disabled={unlocked}
                   onChange={(e) => {
-                    if (e.target.checked) setConfirmReveal(true);
+                    if (e.target.checked) setConfirmReveal('solution');
                   }}
                 />
               }
@@ -382,6 +451,17 @@ export default function DrawingPracticePanel({ question, classroomId, language =
                 </Typography>
               }
             />
+            )}
+
+            {peersAvailable && (
+              <PeerAttempts
+                questionId={question.id}
+                partKey={partKey}
+                unlocked={state?.peers_unlocked === true}
+                onReveal={() => void reveal('peers')}
+                getToken={getToken}
+              />
+            )}
 
             {state?.drawing_question_id && (
               <MuiLink
@@ -400,19 +480,33 @@ export default function DrawingPracticePanel({ question, classroomId, language =
         </>
       )}
 
-      <Dialog open={confirmReveal} onClose={() => setConfirmReveal(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Show the solution now?</DialogTitle>
+      <Dialog
+        open={confirmReveal !== null}
+        onClose={() => setConfirmReveal(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle>
+          {confirmReveal === 'peers'
+            ? 'Look at other students first?'
+            : 'Show the solution now?'}
+        </DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary">
-            Your teacher will see that you opened the answer before drawing. You can still upload an
-            attempt afterwards, and copying a good drawing is a fair way to learn technique.
+            {confirmReveal === 'peers'
+              ? 'Your teacher will see that you looked at what other students drew before making your own. Looking for ideas is a fair way to start. In the exam you will get a question you have never seen, so it is worth trying one on your own first.'
+              : 'Your teacher will see that you opened the answer before drawing. You can still upload an attempt afterwards, and copying a good drawing is a fair way to learn technique.'}
           </Typography>
         </DialogContent>
         <DialogActions sx={{ p: 2, gap: 1 }}>
-          <Button onClick={() => setConfirmReveal(false)} sx={{ minHeight: 44 }}>
+          <Button onClick={() => setConfirmReveal(null)} sx={{ minHeight: 44 }}>
             Not yet
           </Button>
-          <Button variant="contained" onClick={reveal} sx={{ minHeight: 44 }}>
+          <Button
+            variant="contained"
+            onClick={() => reveal(confirmReveal ?? 'solution')}
+            sx={{ minHeight: 44 }}
+          >
             Show me
           </Button>
         </DialogActions>
@@ -431,12 +525,26 @@ export default function DrawingPracticePanel({ question, classroomId, language =
         // Upload button has no gate of its own), and passing the image
         // unconditionally would show the solution through the submission
         // sheet to a student who has not earned it yet.
-        referenceImageUrl={unlocked ? question.solution_image_url ?? undefined : undefined}
+        // For a question split into options this is the chosen option's own
+        // solution. The question-level column is only ever a copy of the first
+        // option's, so passing it would hand 81A's answer to a student drawing
+        // 81B.
+        referenceImageUrl={unlocked ? referenceImageUrl ?? undefined : undefined}
         submitUrl={`/api/question-bank/questions/${question.id}/drawing-attempt`}
-        submitBody={(uploadedUrl, selfNote) => ({
+        // A bank drawing shows up in the student's sketchbook like any other,
+        // so it needs the same 400px copy the grid loads, and the same quality
+        // measurement the teacher's triage reads. Both used to be dropped here
+        // because this callback took two arguments while the sheet passes four.
+        withThumbnail
+        submitBody={(uploadedUrl, selfNote, thumbnailUrl, imageQuality) => ({
           original_image_url: uploadedUrl,
           self_note: selfNote,
-          classroom_id: classroomId ?? null,
+          thumbnail_url: thumbnailUrl,
+          image_quality: imageQuality,
+          // Which option of an "any one of two" this sheet answers. Without it
+          // 81A and 81B would land on one thread and the second upload would
+          // be refused with "wait for your teacher".
+          part: partKey ?? '',
         })}
         onSubmitted={() => {
           setSheetOpen(false);

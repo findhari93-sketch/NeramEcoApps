@@ -25,6 +25,12 @@ interface PracticeReaderProps {
   /** `pane` beside the rail on a laptop, `screen` for the phone's full-screen reader. */
   variant: 'pane' | 'screen';
   questionId: string | null;
+  /**
+   * Which option of an either-or drawing is open. The detail is the whole
+   * question, because that is what the API returns; this says which half of
+   * it the student picked to practise.
+   */
+  partKey?: string | null;
   detail: NexusQBQuestionDetail | null;
   detailLoading: boolean;
   detailError: string | null;
@@ -232,6 +238,7 @@ function ReaderQuestion(props: PracticeReaderProps & { detail: NexusQBQuestionDe
         totalCount={0}
         answer={answer}
         lang={lang}
+        partKey={props.partKey}
         hideNav
         hideActions
         showSourceBadges={showSourceBadges}

@@ -8,7 +8,9 @@ import {
   getExamDrawingMaxMarks,
   getInspirationItem,
   getInspirationItemsForSubmission,
+  getQBPracticeOrigins,
   listLiveFeatures,
+  type QBPracticeOrigin,
 } from '@neram/database/queries/nexus';
 import { getSupabaseAdminClient } from '@neram/database';
 import {
@@ -97,7 +99,7 @@ export async function GET(
     const row = submission as any;
     const kind = reviewKindOf(row);
     const itemId = (row.inspiration_item_id as string | null) ?? null;
-    const [inspiration, practisedFrom, featured, examMaxMarks] = await Promise.all([
+    const [inspiration, practisedFrom, featured, examMaxMarks, qbOrigins] = await Promise.all([
       isStaffViewer && kind !== 'test' ? getInspirationItemsForSubmission(id).catch(() => null) : Promise.resolve(null),
       itemId && viewer
         ? getInspirationItem(itemId, viewer.id, isStaffViewer ? 'all' : 'visible').then((r) => r.item).catch(() => null)
@@ -106,6 +108,13 @@ export async function GET(
       isStaffViewer && kind === 'test' && row.exam_attempt_id && row.exam_qb_question_id
         ? getExamDrawingMaxMarks(row.exam_attempt_id, row.exam_qb_question_id).catch(() => null)
         : Promise.resolve(null),
+      // Which bank question this was practised from, and therefore whether the
+      // "Drawn with the solution open" chip has anything to point at. Best
+      // effort: a review screen that will not load because a caption lookup
+      // failed is worse than a review screen with no caption.
+      row.source_type === 'question_bank' && row.question_id
+        ? getQBPracticeOrigins([row.question_id]).catch(() => ({}) as Record<string, QBPracticeOrigin>)
+        : Promise.resolve({} as Record<string, QBPracticeOrigin>),
     ]);
 
     return NextResponse.json({
@@ -125,6 +134,11 @@ export async function GET(
         : null,
       featured,
       exam_max_marks: examMaxMarks,
+      // The bank question behind a practice drawing, and what the student had
+      // open while they drew it. Both go to the student as well as the teacher:
+      // a record only one side can see is a record the other cannot argue with.
+      practised_from_qb: (row.question_id && qbOrigins[row.question_id as string]) || null,
+      qb_help_used: (row.qb_help_used as string[] | null) ?? null,
     });
   } catch (err) {
     console.error('Submission GET error:', describeError(err));

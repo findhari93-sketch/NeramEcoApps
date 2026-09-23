@@ -37,11 +37,26 @@ async function loadFlags(authHeader: string | null): Promise<FlagMap> {
   return resolveFlags((data?.value as FlagMap) || {});
 }
 
+/**
+ * Is the peer drawing library switched on for this caller?
+ *
+ * Exported for the doors into Inspiration that are not Inspiration routes:
+ * "See how others drew this" sits inside a Question Bank drawing and
+ * authorises through the Question Bank's own verifier, but it shows the same
+ * students' work and must die by the same switch.
+ */
+export async function inspirationEnabledFor(
+  authHeader: string | null,
+  staff: boolean,
+): Promise<boolean> {
+  const flags = await loadFlags(authHeader);
+  return isFeatureEnabled(staff ? 'staff.inspiration' : 'student.inspiration', flags);
+}
+
 export async function resolveInspirationCaller(authHeader: string | null): Promise<InspirationCaller> {
   const user = await getRequestUser(authHeader);
   const staff = isStaff(user);
-  const flags = await loadFlags(authHeader);
-  if (!isFeatureEnabled(staff ? 'staff.inspiration' : 'student.inspiration', flags)) {
+  if (!(await inspirationEnabledFor(authHeader, staff))) {
     throw new ApiError('Inspiration is not available yet.', 404);
   }
   return { user, staff };

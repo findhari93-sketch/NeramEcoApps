@@ -1594,8 +1594,31 @@ export default function TakeTestPage() {
     />
   ) : null;
 
+  /**
+   * A question whose answers are pictures. Stacking those one per row put the
+   * problem figure off the top of the screen by the time the student reached
+   * the options, so they could never compare the two. On paper all of them sit
+   * on one page, and this puts them back on one screen: two across on a phone,
+   * four once the column is wide enough, which is how the paper prints them.
+   */
+  const figureAnswers = currentQuestion
+    ? (currentQuestion.question.options || []).filter((o) => Boolean(o.image_url)).length >= 2
+    : false;
+
   const optionCards = currentQuestion ? (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 0.75, md: 1 } }}>
+    <Box sx={{ containerType: 'inline-size' }}>
+    <Box
+      sx={
+        figureAnswers
+          ? {
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+              gap: { xs: 0.75, md: 1 },
+              '@container (min-width: 640px)': { gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' },
+            }
+          : { display: 'flex', flexDirection: 'column', gap: { xs: 0.75, md: 1 } }
+      }
+    >
       {(currentQuestion.question.options || []).map((option, optIdx) => {
         const optionKey = optionKeyAt(option, optIdx);
         const displayLetter = option.label || String.fromCharCode(65 + optIdx);
@@ -1665,11 +1688,12 @@ export default function TakeTestPage() {
 
             {/* Option text and figure */}
             <Box sx={{ flex: isFigure ? 'none' : 1, minWidth: 0 }}>
-              <OptionBody option={option} letter={displayLetter} />
+              <OptionBody option={option} letter={displayLetter} grid={figureAnswers} />
             </Box>
           </Paper>
         );
       })}
+    </Box>
     </Box>
   ) : null;
 

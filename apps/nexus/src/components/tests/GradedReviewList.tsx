@@ -27,6 +27,12 @@ import { optionKeyAt, sameChoice } from '@/lib/option-keys';
 export interface GradedReviewItem {
   question_id: string;
   question_text: string | null;
+  /**
+   * The problem figure. The review never received it, so looking back at a
+   * "which figure completes the sequence" question showed the four answer
+   * figures with nothing to compare them against.
+   */
+  question_image_url?: string | null;
   options: TestOption[] | null;
   correct_answer: string | null;
   selected: string | null;
@@ -108,6 +114,28 @@ function ReviewCards({ review, getToken, classroomId, allowReport = false, testI
                 sx={{ height: 22, fontSize: '0.68rem', flexShrink: 0 }}
               />
             </Box>
+
+            {r.question_image_url && (
+              <Box
+                component="img"
+                src={r.question_image_url}
+                alt="Question figure"
+                loading="lazy"
+                sx={{
+                  display: 'block',
+                  width: 'auto',
+                  height: 'auto',
+                  maxWidth: '100%',
+                  maxHeight: 180,
+                  objectFit: 'contain',
+                  borderRadius: 1,
+                  mb: 1,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  bgcolor: 'common.white',
+                }}
+              />
+            )}
 
             {options.length > 0 ? (
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, mb: 1 }}>
