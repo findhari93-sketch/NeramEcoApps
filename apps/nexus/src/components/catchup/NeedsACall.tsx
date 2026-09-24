@@ -27,15 +27,20 @@
  * numbers about anybody behind.
  */
 import { useState } from 'react';
-import { Box, Button, Stack, Typography, alpha, useTheme } from '@neram/ui';
+import { Box, Button, Stack, Typography, alpha, useMediaQuery, useTheme } from '@neram/ui';
 import PhoneInTalkOutlinedIcon from '@mui/icons-material/PhoneInTalkOutlined';
 import StudentAvatar from '@/components/students/StudentAvatar';
 import { RADIUS } from '@/components/timetable/timetable-theme';
 import { timeAgo } from './shared';
 import type { Row } from './types';
 
-/** Enough to make a round of calls from. More is a report, not a to-do list. */
+/**
+ * Enough to make a round of calls from. More is a report, not a to-do list.
+ * Three on a phone: ten 64px rows pushed every group below it off the first
+ * two screens, and the rest are one tap away.
+ */
 const FIRST_PAGE = 10;
+const FIRST_PAGE_PHONE = 3;
 
 export interface NeedsACallProps {
   rows: Row[];
@@ -46,10 +51,12 @@ export interface NeedsACallProps {
 export default function NeedsACall({ rows, onSelect }: NeedsACallProps) {
   const theme = useTheme();
   const [expanded, setExpanded] = useState(false);
+  const phone = useMediaQuery(theme.breakpoints.down('sm'));
+  const firstPage = phone ? FIRST_PAGE_PHONE : FIRST_PAGE;
 
   if (rows.length === 0) return null;
 
-  const shown = expanded ? rows : rows.slice(0, FIRST_PAGE);
+  const shown = expanded ? rows : rows.slice(0, firstPage);
   const tint = theme.palette.error.main;
 
   return (
@@ -151,7 +158,7 @@ export default function NeedsACall({ rows, onSelect }: NeedsACallProps) {
         ))}
       </Stack>
 
-      {rows.length > FIRST_PAGE && (
+      {rows.length > firstPage && (
         <Button
           size="small"
           onClick={() => setExpanded((v) => !v)}

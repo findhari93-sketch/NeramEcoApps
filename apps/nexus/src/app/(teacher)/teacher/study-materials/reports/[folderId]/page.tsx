@@ -82,6 +82,29 @@ const SORTS: ExtraSort<StudentRow, SortKey>[] = [
   { key: 'average', label: 'Highest average', compare: (a, b) => (b.average_score_pct ?? -1) - (a.average_score_pct ?? -1) },
 ];
 
+/**
+ * The pinned name column on a phone. 128, not 168: with Done pinned too, 168
+ * left room for two chapters at 375px. The name wraps to two lines instead.
+ */
+const NAME_COL_PHONE = 128;
+
+/** The Done column, held at the right edge while the chapters scroll under it. */
+const DONE_COL_SX = {
+  position: 'sticky',
+  right: 0,
+  zIndex: 1,
+  bgcolor: 'background.paper',
+  minWidth: 48,
+  pl: 1,
+  pr: 1,
+  textAlign: 'right',
+  alignSelf: 'stretch',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'flex-end',
+  boxShadow: (t: { palette: { divider: string } }) => `inset 1px 0 0 ${t.palette.divider}`,
+} as const;
+
 export default function FoundationReportPage() {
   const params = useParams();
   const search = useSearchParams();
@@ -168,7 +191,9 @@ export default function FoundationReportPage() {
   }
 
   return (
-    <Box sx={{ px: { xs: 1.5, sm: 2 }, py: 2, maxWidth: 1400, mx: 'auto' }}>
+    // The teacher layout already pads the page; a second padding here cost a
+    // phone most of a chapter column.
+    <Box sx={{ maxWidth: 1400, mx: 'auto' }}>
       <PageHeader
         title={data.folder.name}
         subtitle="Who has finished which chapter, and what they scored"
@@ -187,7 +212,21 @@ export default function FoundationReportPage() {
         }
       />
 
-      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+      {/* One line on a phone instead of five chips over three rows. */}
+      <Typography variant="body2" color="text.secondary" sx={{ display: { xs: 'block', sm: 'none' }, mb: 1.5, lineHeight: 1.5 }}>
+        {data.stats.students} students · {data.stats.chapters} chapters
+        {data.stats.completion_pct != null && (
+          <>
+            {' · '}
+            <Box component="span" sx={{ fontWeight: 700, color: 'primary.main' }}>{data.stats.completion_pct}%</Box> complete
+          </>
+        )}
+        {' · '}
+        <Box component="span" sx={{ fontWeight: 700, color: 'success.dark' }}>{data.stats.fully_done}</Box> finished everything
+        {' · '}
+        <Box component="span" sx={{ fontWeight: 700, color: 'warning.dark' }}>{data.stats.not_started}</Box> not started
+      </Typography>
+      <Box sx={{ display: { xs: 'none', sm: 'flex' }, gap: 1, flexWrap: 'wrap', mb: 2 }}>
         <Chip label={`${data.stats.students} students`} />
         <Chip label={`${data.stats.chapters} chapters`} />
         {data.stats.completion_pct != null && (
@@ -209,7 +248,7 @@ export default function FoundationReportPage() {
       ) : (
         // The matrix scrolls horizontally inside its own container, with the
         // student name pinned. The page itself must never scroll sideways.
-        <Paper sx={{ overflowX: 'auto' }}>
+        <Paper sx={{ overflowX: 'auto', overscrollBehaviorX: 'contain', mx: { xs: -2, sm: 0 }, borderRadius: { xs: 0, sm: 1 } }}>
           <Box sx={{ minWidth: 320 + data.chapters.length * 42 }}>
             <Box
               sx={{
@@ -228,7 +267,7 @@ export default function FoundationReportPage() {
             >
               {/* Must track the body cell's width below, or the chapter columns
                   drift out of line with their headings. */}
-              <Box sx={{ width: isMobile ? 168 : 258, flexShrink: 0, position: 'sticky', left: 0, bgcolor: 'background.paper' }}>
+              <Box sx={{ width: isMobile ? NAME_COL_PHONE : 258, flexShrink: 0, position: 'sticky', left: 0, bgcolor: 'background.paper' }}>
                 <Typography variant="caption" sx={{ fontWeight: 700 }}>
                   Student
                 </Typography>
@@ -241,7 +280,9 @@ export default function FoundationReportPage() {
                 </Box>
               ))}
               <Box sx={{ flex: 1 }} />
-              <Typography variant="caption" color="text.secondary" sx={{ pr: 1 }}>
+              {/* Pinned right, like the register's rate: with twenty chapters it
+                  was the one number that scrolled out of sight. */}
+              <Typography variant="caption" color="text.secondary" sx={{ ...DONE_COL_SX, fontWeight: 700 }}>
                 Done
               </Typography>
             </Box>
@@ -271,9 +312,23 @@ export default function FoundationReportPage() {
                 {/* Widened by the face plus its ring: 130 -> 168, 220 -> 258. A
                     column sized for a bare name clips the ring, which is drawn
                     outside the avatar's own box. */}
-                <Box sx={{ width: isMobile ? 168 : 258, flexShrink: 0, minWidth: 0, position: 'sticky', left: 0, bgcolor: 'inherit', display: 'flex', alignItems: 'center', gap: 1 }}>
+                {/* Opaque, not `inherit`: the row has no background of its own, so
+                    the chapter cells scrolled visibly through the pinned names. */}
+                <Box sx={{ width: isMobile ? NAME_COL_PHONE : 258, flexShrink: 0, minWidth: 0, position: 'sticky', left: 0, zIndex: 1, bgcolor: 'background.paper', display: 'flex', alignItems: 'center', gap: 1, alignSelf: 'stretch' }}>
                   <StudentAvatar userId={s.student_id} name={s.name} size={28} />
-                  <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontWeight: 600,
+                      minWidth: 0,
+                      lineHeight: 1.3,
+                      display: '-webkit-box',
+                      WebkitLineClamp: isMobile ? 2 : 1,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                      overflowWrap: 'anywhere',
+                    }}
+                  >
                     {s.name || s.email}
                   </Typography>
                 </Box>
@@ -285,7 +340,7 @@ export default function FoundationReportPage() {
                   />
                 ))}
                 <Box sx={{ flex: 1 }} />
-                <Typography variant="body2" sx={{ fontWeight: 700, pr: 1 }}>
+                <Typography variant="body2" sx={{ ...DONE_COL_SX, fontWeight: 700 }}>
                   {s.completed_count}/{data.chapters.length}
                 </Typography>
               </Box>
@@ -305,7 +360,7 @@ export default function FoundationReportPage() {
             {openStudent?.completed_count}/{data.chapters.length} chapters completed
             {openStudent?.average_score_pct != null && ` · average ${openStudent.average_score_pct}%`}
           </Typography>
-          <IconButton onClick={() => setOpenStudent(null)} aria-label="Close" sx={{ position: 'absolute', top: 8, right: 8 }}>
+          <IconButton onClick={() => setOpenStudent(null)} aria-label="Close" sx={{ position: 'absolute', top: 6, right: 6, width: 44, height: 44 }}>
             <CloseIcon />
           </IconButton>
         </DialogTitle>

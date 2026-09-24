@@ -27,6 +27,21 @@ describe('Teams app manifest', () => {
     ]);
   });
 
+  // The admin center refused the 1.3.0 upload with one line: 'Property
+  // "packageName" has not been defined and the schema does not allow additional
+  // properties.' v1.16 defined packageName and v1.21 does not, so moving the
+  // manifest up a version turned a valid key into a rejected package. The schema
+  // is kept beside the manifest and read here, so the next such key is named
+  // before anyone waits on an upload.
+  it('declares no property the schema for its own manifestVersion refuses', () => {
+    const schemaFile = path.join(NEXUS, `teams-app/MicrosoftTeams.schema.${manifest.manifestVersion}.json`);
+    expect(existsSync(schemaFile)).toBe(true);
+    const schema = JSON.parse(readFileSync(schemaFile, 'utf-8'));
+    expect(schema.additionalProperties).toBe(false);
+    const defined = new Set(Object.keys(schema.properties));
+    expect(Object.keys(manifest).filter((key) => !defined.has(key))).toEqual([]);
+  });
+
   it('adds the Answer Pad to meetings through a configuration page that exists and may be framed by Teams', () => {
     expect(manifest.configurableTabs).toEqual([
       {

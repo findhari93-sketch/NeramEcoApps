@@ -12,16 +12,17 @@
  *       The bot and its permissions are left out unless --bot is given: a bot id
  *       belongs to one Teams app in a tenant, and the real app already uses it.
  *
- * The manifest is checked before anything is zipped: every page is https on a
- * valid domain, the sign-in resource names a valid domain and the app id, the
- * bot is the sign-in app, Teams' own Share button is hidden, and no user-visible
- * text has an en or em dash.
+ * The manifest is checked before anything is zipped: it carries no property the
+ * Teams schema for its manifestVersion refuses, every page is https on a valid
+ * domain, the sign-in resource names a valid domain and the app id, the bot is
+ * the sign-in app, Teams' own Share button is hidden, and no user-visible text
+ * has an en or em dash.
  */
 
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
@@ -40,7 +41,6 @@ function devManifest(prod, host, withBot) {
   const manifest = structuredClone(prod);
 
   manifest.id = DEV_APP_ID;
-  manifest.packageName = `${prod.packageName}.dev`;
   manifest.name = { short: 'Neram Pad Dev', full: 'Neram Answer Pad (development)' };
   // My Work stays in the real app; the dev copy is only the Answer Pad.
   delete manifest.staticTabs;
@@ -57,8 +57,62 @@ function devManifest(prod, host, withBot) {
   return manifest;
 }
 
+/**
+ * Every object in the Teams manifest schema refuses properties it does not
+ * define, and the admin center rejects the whole package over one of them with a
+ * single line: 'Schema validation failed at 'packageName': Property
+ * "packageName" has not been defined and the schema does not allow additional
+ * properties.' That is what v1.21 said about `packageName`, which v1.16 allowed.
+ * The schema for the version the manifest declares is kept beside it, so the
+ * same answer comes from here, before a zip exists, with no network.
+ */
+function schemaProblems(manifest) {
+  const file = join(APP_DIR, `MicrosoftTeams.schema.${manifest.manifestVersion}.json`);
+  if (!existsSync(file)) {
+    return [`no schema kept for manifestVersion ${manifest.manifestVersion}: save ${manifest.$schema} as teams-app/${basename(file)}`];
+  }
+  const schema = JSON.parse(readFileSync(file, 'utf8'));
+
+  const deref = (node) => {
+    let at = node;
+    while (at && typeof at.$ref === 'string') {
+      at = at.$ref.replace(/^#\//, '').split('/').reduce((into, key) => into?.[key], schema);
+    }
+    return at;
+  };
+  // A property any branch of a choice defines counts as defined, so nothing is
+  // blamed for a key that belongs to the branch it does not happen to match.
+  const shapeOf = (node) => {
+    const at = deref(node);
+    if (!at) return null;
+    const properties = new Map(Object.entries(at.properties ?? {}));
+    let closed = at.additionalProperties === false;
+    for (const branch of [...(at.allOf ?? []), ...(at.anyOf ?? []), ...(at.oneOf ?? [])]) {
+      const sub = shapeOf(branch);
+      if (!sub) continue;
+      for (const [key, value] of sub.properties) if (!properties.has(key)) properties.set(key, value);
+      closed = closed || sub.closed;
+    }
+    return { properties, closed, items: at.items };
+  };
+
+  const walk = (node, value, path) => {
+    if (value === null || typeof value !== 'object') return [];
+    const shape = shapeOf(node);
+    if (!shape) return [];
+    if (Array.isArray(value)) return value.flatMap((entry, index) => walk(shape.items, entry, `${path.replace(/\.$/, '')}[${index}].`));
+    return Object.keys(value).flatMap((key) => {
+      const property = shape.properties.get(key);
+      if (!property) return shape.closed ? [`${path}${key} is not defined in the Teams manifest ${manifest.manifestVersion} schema`] : [];
+      return walk(property, value[key], `${path}${key}.`);
+    });
+  };
+
+  return walk(schema, manifest, '');
+}
+
 function problemsWith(manifest) {
-  const problems = [];
+  const problems = schemaProblems(manifest);
   const domains = new Set(manifest.validDomains ?? []);
 
   const pages = [

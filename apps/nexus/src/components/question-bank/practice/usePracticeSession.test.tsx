@@ -22,7 +22,25 @@ function listItem(id: string, n: number): NexusQBQuestionListItem {
   } as unknown as NexusQBQuestionListItem;
 }
 
+/** A drawing printed as "attempt any one of two": one row, two things to practise. */
+function splitItem(id: string, n: number): NexusQBQuestionListItem {
+  return {
+    ...listItem(id, n),
+    question_format: 'DRAWING_PROMPT',
+    drawing_parts: {
+      mode: 'any_one',
+      items: [
+        { id: 'a', key: 'a', label: 'A', text: `Question ${n}, option A` },
+        { id: 'b', key: 'b', label: 'B', text: `Question ${n}, option B` },
+      ],
+    },
+  } as unknown as NexusQBQuestionListItem;
+}
+
 const LIST = [listItem('a', 1), listItem('b', 2), listItem('c', 3)];
+
+/** No year, so the list pages instead of arriving whole. */
+const EXAM_CTX: PracticeContext = { ...CTX, year: null };
 
 function json(body: unknown, ok = true) {
   return Promise.resolve({ ok, status: ok ? 200 : 500, json: () => Promise.resolve(body) } as Response);
@@ -167,5 +185,34 @@ describe('usePracticeSession', () => {
     const { result } = setup();
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.error).not.toBeNull();
+  });
+  it('counts what is on screen, not the rows behind it', async () => {
+    // Two either-or drawings are four things to practise. The header read
+    // "Showing 4 of 2 questions" while the server's row count stood in for a
+    // total the rest of the screen measures in practice items.
+    fetchMock.mockImplementation((url: string) =>
+      url.startsWith('/api/question-bank/questions?')
+        ? json({ data: { questions: [splitItem('a', 1), splitItem('b', 2)], total: 2 } })
+        : json({ data: { id: 'a', question_text: 'Q a', attempts: [], options: [] } }),
+    );
+    const { result } = setup({ ctx: EXAM_CTX, layout: 'reader' });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.questions.map((q) => q.id)).toEqual(['a~a', 'a~b', 'b~a', 'b~b']);
+    expect(result.current.total).toBe(4);
+  });
+
+  it('pages by question row, so a split drawing does not end the list early', async () => {
+    // One row of the two splits: three things to practise out of three rows.
+    // Comparing the four-item list with the three-row total said there was
+    // nothing more to load, and the third question was unreachable.
+    fetchMock.mockImplementation((url: string) =>
+      url.startsWith('/api/question-bank/questions?')
+        ? json({ data: { questions: [splitItem('a', 1), listItem('b', 2)], total: 3 } })
+        : json({ data: { id: 'a', question_text: 'Q a', attempts: [], options: [] } }),
+    );
+    const { result } = setup({ ctx: EXAM_CTX, layout: 'reader' });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.questions).toHaveLength(3);
+    expect(result.current.hasMore).toBe(true);
   });
 });

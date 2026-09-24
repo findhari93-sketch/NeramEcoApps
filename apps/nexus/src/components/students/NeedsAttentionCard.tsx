@@ -90,29 +90,33 @@ export default function NeedsAttentionCard({ canEdit, onAction, ...input }: Need
             return (
               <Box key={row.key}>
                 {index > 0 && <Divider sx={{ mb: 1 }} />}
+                {/* Message and action on one line, wrapping only when there is
+                    no room. On a phone each item used to be a paragraph with a
+                    full 48px filled orange button under it, so three items were
+                    a screen of orange before the first student. */}
                 <Box
                   sx={{
                     display: 'flex',
-                    // Message above the buttons at 375px, side by side from sm.
-                    flexDirection: { xs: 'column', sm: 'row' },
-                    alignItems: { xs: 'stretch', sm: 'center' },
-                    gap: 1,
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    columnGap: 1,
+                    rowGap: 0.5,
                   }}
                 >
-                  <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography variant="body2" sx={{ flex: '1 1 180px', minWidth: 0, lineHeight: 1.45 }}>
                     {row.message}
                     {hidden && ' Ask a manager or a teacher with edit access to fix this.'}
                   </Typography>
                   {actions.length > 0 && (
-                    <Box sx={{ display: 'flex', gap: 0.75, flexShrink: 0, flexWrap: 'wrap' }}>
+                    <Box sx={{ display: 'flex', gap: 0.75, flexShrink: 0, flexWrap: 'wrap', ml: 'auto' }}>
                       {actions.map((action) => (
                         <Button
                           key={action.key}
                           size="small"
-                          variant={action.primary ? 'contained' : 'outlined'}
+                          variant={action.primary && !isPhone ? 'contained' : 'outlined'}
                           color="warning"
                           onClick={() => onAction(action.key)}
-                          sx={{ minHeight: 48, fontWeight: 700, whiteSpace: 'nowrap' }}
+                          sx={{ minHeight: 44, fontWeight: 700, whiteSpace: 'nowrap', textTransform: 'none' }}
                         >
                           {action.label}
                         </Button>

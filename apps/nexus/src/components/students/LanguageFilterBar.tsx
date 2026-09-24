@@ -93,9 +93,18 @@ export default function LanguageFilterBar({
         overflowX: 'auto',
         pb: 0.5,
         // The row may scroll itself; it must never push the document sideways.
-        maxWidth: '100%',
+        maxWidth: { sm: '100%' },
+        overscrollBehaviorX: 'contain',
         '&::-webkit-scrollbar': { display: 'none' },
         scrollbarWidth: 'none',
+        // Edge to edge on a phone, fading at the right so the hidden languages
+        // announce themselves (see StudentSegmentBar).
+        '@media (max-width: 599.95px)': {
+          mx: -2,
+          px: 2,
+          maskImage: 'linear-gradient(to right, #000 calc(100% - 28px), transparent)',
+          WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 28px), transparent)',
+        },
       }}
     >
       <Typography

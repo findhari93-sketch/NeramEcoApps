@@ -18,29 +18,40 @@ const state = vi.hoisted(() => ({
   chat: (_recipient: string, _token?: string): any => ({ ok: true, status: 201 }),
   activityCalls: [] as Array<{ id: string; catalogAppId: string }>,
   activity: (): any => ({ ok: true, status: 204 }),
-  chatTokens: [] as string[],
-  chatHtml: [] as string[],
-  sender: (_id: string): any => 'sender-token',
-  touched: [] as string[],
+  assistantOn: true,
+  assistantCalls: [] as Array<{ user: { id: string; ms_oid: string | null }; message: any }>,
+  assistant: (_id: string): any => ({ ok: true, status: 201 }),
+  /** Staff rows the "From" lookup can find, by id or by ms_oid. */
+  staff: [] as any[],
+  lookups: [] as Array<[string, string]>,
 }));
 
-vi.mock('./teams-sender', () => ({
-  getSenderAccessToken: vi.fn(async (id: string) => {
-    const r = state.sender(id);
-    if (r instanceof Error) throw r;
-    return r;
-  }),
-  touchSender: vi.fn(async (id: string) => {
-    state.touched.push(id);
+vi.mock('./teams-assistant', () => ({
+  assistantEnabled: vi.fn(async () => state.assistantOn),
+  sendAssistantMessage: vi.fn(async (user: { id: string; ms_oid: string | null }, message: any) => {
+    state.assistantCalls.push({ user, message });
+    return state.assistant(user.id);
   }),
 }));
 
 vi.mock('@neram/database', () => ({
   getSupabaseAdminClient: () => ({
     from: (table: string) => {
+      let eqCol = '';
+      let eqVal = '';
       const chain: any = {
         select: () => chain,
         in: () => chain,
+        eq: (col: string, val: string) => {
+          eqCol = col;
+          eqVal = val;
+          state.lookups.push([col, val]);
+          return chain;
+        },
+        maybeSingle: async () => ({
+          data: state.staff.find((u) => (eqCol === 'id' ? u.id === eqVal : u.ms_oid === eqVal)) ?? null,
+          error: null,
+        }),
         insert: async (row: any) => {
           state.inserted.push(row);
           return { error: null };
@@ -70,8 +81,6 @@ vi.mock('@neram/auth', () => ({
 vi.mock('./teams-messaging', () => ({
   sendTeamsChatMessage: vi.fn(async (token: string, recipient: string, html: string) => {
     state.chatCalls.push(recipient);
-    state.chatTokens.push(token);
-    state.chatHtml.push(html);
     return state.chat(recipient, token);
   }),
 }));
@@ -101,10 +110,11 @@ beforeEach(() => {
   state.activityCalls = [];
   state.chat = () => ({ ok: true, status: 201 });
   state.activity = () => ({ ok: true, status: 204 });
-  state.chatTokens = [];
-  state.chatHtml = [];
-  state.sender = () => 'sender-token';
-  state.touched = [];
+  state.assistantOn = true;
+  state.assistantCalls = [];
+  state.assistant = () => ({ ok: true, status: 201 });
+  state.staff = [{ id: 'teacher-1', ms_oid: 'oid-hari', name: 'Hari Babu', email: 'hari@neramclasses.com' }];
+  state.lookups = [];
   process.env.TEAMS_APP_CATALOG_ID = '27d1b57f-fc6d-4a5d-b5b1-ad4b5a9814f9';
 });
 
@@ -122,60 +132,120 @@ describe('sendNudge: one door, chat first (2026-09-13)', () => {
     expect(state.inserted.find((r) => r.event_type === 'test_reopened').message).toBe('Hi Ash');
   });
 
-  it('does not also ping the activity feed when the teacher chat landed', async () => {
+  it('never sends from a teacher\'s own Teams: a pressed Send goes out as Neram Assistant', async () => {
     state.users = [student('asha', 'Asha')];
     const { results } = await sendNudge({
       ...BASE, studentIds: ['asha'], respectDormancy: false, chat: { delegatedToken: 't', html: '<p>Hi</p>' },
     });
+    expect(state.chatCalls).toHaveLength(0);
+    expect(state.assistantCalls).toHaveLength(1);
+    expect(results[0]).toMatchObject({ chat: true, chatSender: 'assistant', channel: 'assistant+inapp' });
+    // The Assistant chat already raised a Teams alert; a second one is noise.
     expect(state.activityCalls).toHaveLength(0);
-    expect(results[0].channel).toBe('chat+inapp');
   });
 
-  it('sends an automatic message as the connected teacher, through the same chat path, and skips the feed', async () => {
+  it('names the teacher on the card and adds a Message button, from the `teacher` a screen passes', async () => {
     state.users = [student('asha', 'Asha Bavi')];
-    const { results, counts } = await sendNudge({
+    await sendNudge({
+      ...BASE,
+      subject: 'Hari commented on your sketch',
+      plain: 'Practice simple human figures',
+      studentIds: ['asha'],
+      respectDormancy: false,
+      teacher: { authHeader: null, userId: 'teacher-1' },
+    });
+    const card = state.assistantCalls[0].message.card;
+    expect(card.from).toEqual({ name: 'Hari Babu', email: 'hari@neramclasses.com' });
+    expect(card.title).toBe('Hari commented on your sketch');
+    expect(state.chatCalls).toHaveLength(0);
+  });
+
+  it('finds the teacher from the oid in a pressed-Send token when no id is passed', async () => {
+    state.users = [student('asha', 'Asha')];
+    const payload = Buffer.from(JSON.stringify({ oid: 'oid-hari' })).toString('base64url');
+    await sendNudge({
+      ...BASE, studentIds: ['asha'], respectDormancy: false, chat: { delegatedToken: `h.${payload}.s`, html: '<p>Hi</p>' },
+    });
+    expect(state.lookups).toContainEqual(['ms_oid', 'oid-hari']);
+    expect(state.assistantCalls[0].message.card.from?.name).toBe('Hari Babu');
+  });
+
+  it('keeps a caller\'s own card (the drawing with its image) as the Assistant\'s card', async () => {
+    state.users = [student('asha', 'Asha')];
+    const content = JSON.stringify({ type: 'AdaptiveCard', body: [{ type: 'Image', url: 'https://x.test/d.png' }], actions: [] });
+    await sendNudge({
+      ...BASE,
+      studentIds: ['asha'],
+      respectDormancy: false,
+      sendAs: { senderUserId: 'teacher-1' },
+      chat: {
+        delegatedToken: 't',
+        html: '<attachment id="c"></attachment>',
+        attachments: [{ id: 'c', contentType: 'application/vnd.microsoft.card.adaptive', content }],
+        fallbackHtml: '<p>x</p><p><a href="https://x.test/review?a=1&amp;b=2">See feedback</a></p>',
+      },
+    });
+    const card = state.assistantCalls[0].message.card;
+    expect(card.content.body[0]).toMatchObject({ type: 'Image', url: 'https://x.test/d.png' });
+    expect(card.url).toBe('https://x.test/review?a=1&b=2');
+    expect(card.buttonLabel).toBe('See feedback');
+  });
+
+  it('turns the first link in `html` into the card button', async () => {
+    state.users = [student('asha', 'Asha')];
+    await sendNudge({
+      ...BASE, studentIds: ['asha'], respectDormancy: false,
+      html: '<p>Hi</p><p><a href="https://x.test/add">Add a sketch</a></p>',
+      teacher: { authHeader: null, userId: 'teacher-1' },
+    });
+    expect(state.assistantCalls[0].message.card).toMatchObject({ url: 'https://x.test/add', buttonLabel: 'Add a sketch' });
+  });
+
+  it('sends a system message with no name on it', async () => {
+    state.users = [student('asha', 'Asha Bavi')];
+    await sendNudge({
       ...BASE,
       subject: 'Time for a sketch, {firstName}',
       plain: 'Ten minutes is enough.',
       studentIds: ['asha'],
-      sendAs: { senderUserId: 'teacher-1', link: { url: 'https://x.test/add', label: 'Add a sketch' } },
+      assistant: { link: { url: 'https://x.test/add', label: 'Add a sketch' } },
     });
-    expect(state.chatTokens).toEqual(['sender-token']);
-    expect(state.chatHtml[0]).toContain('Time for a sketch, Asha');
-    expect(state.chatHtml[0]).toContain('href="https://x.test/add"');
-    expect(state.activityCalls).toHaveLength(0);
-    expect(results[0].channel).toBe('chat+inapp');
-    expect(counts.chat).toBe(1);
-    expect(state.touched).toEqual(['teacher-1']);
+    const card = state.assistantCalls[0].message.card;
+    expect(card.title).toBe('Time for a sketch, Asha');
+    expect(card.from).toBeNull();
+    expect(state.lookups).toHaveLength(0);
   });
 
-  it('falls back to the activity feed, and says why, when the teacher connection is not working', async () => {
-    state.sender = () => new Error('The Teams connection stopped working and needs reconnecting');
+  it('with the Assistant switched off, falls to the feed and the bell, never a teacher chat', async () => {
+    state.assistantOn = false;
     state.users = [student('asha', 'Asha'), student('bala', 'Bala')];
-    const { results } = await sendNudge({ ...BASE, studentIds: ['asha', 'bala'], sendAs: { senderUserId: 'teacher-1' } });
+    const { results } = await sendNudge({
+      ...BASE, studentIds: ['asha', 'bala'], sendAs: { senderUserId: 'teacher-1' }, chat: { delegatedToken: 't', html: '<p>Hi</p>' },
+    });
     expect(state.chatCalls).toHaveLength(0);
+    expect(state.assistantCalls).toHaveLength(0);
     expect(state.activityCalls).toHaveLength(2);
     expect(results[0].channel).toBe('teams+inapp');
-    expect(results[0].reasons?.chat).toContain('needs reconnecting');
+    expect(results[0].reasons?.chat).toBe('Neram Assistant is switched off');
   });
 
-  it('prefers the teacher who pressed Send over the connected sender', async () => {
+  it('when the Assistant cannot reach a student, says why and sends the feed alert instead', async () => {
+    state.assistant = () => ({ ok: false, status: 0, reason: 'Could not install Neram Assistant (403)' });
     state.users = [student('asha', 'Asha')];
-    await sendNudge({
-      ...BASE, studentIds: ['asha'], chat: { delegatedToken: 'pressed-send', html: '<p>Hi</p>' }, sendAs: { senderUserId: 'teacher-1' },
-    });
-    expect(state.chatTokens).toEqual(['pressed-send']);
+    const { results } = await sendNudge({ ...BASE, studentIds: ['asha'], teacher: { authHeader: null, userId: 'teacher-1' } });
+    expect(state.chatCalls).toHaveLength(0);
+    expect(results[0].channel).toBe('teams+inapp');
+    expect(results[0].reasons?.chat).toContain('Could not install');
   });
 
-  it('rescues a pressed Send whose browser token cannot chat, using that teacher\'s connected login', async () => {
-    state.users = [student('asha', 'Asha'), student('bala', 'Bala')];
-    state.chat = (_r: string, token?: string) =>
-      token === 'no-chat-scope' ? { ok: false, status: 403, reason: 'Could not start the chat (403 Forbidden)' } : { ok: true, status: 201 };
+  it('bellOnly sends no chat from anybody', async () => {
+    state.users = [student('asha', 'Asha')];
     const { results } = await sendNudge({
-      ...BASE, studentIds: ['asha', 'bala'], chat: { delegatedToken: 'no-chat-scope', html: '<p>Hi</p>' }, sendAs: { senderUserId: 'teacher-1' },
+      ...BASE, studentIds: ['asha'], bellOnly: true, teacher: { authHeader: null, userId: 'teacher-1' },
     });
-    expect(state.chatTokens.filter((t) => t === 'sender-token')).toHaveLength(2);
-    expect(results.every((r) => r.channel === 'chat+inapp')).toBe(true);
+    expect(state.assistantCalls).toHaveLength(0);
+    expect(state.activityCalls).toHaveLength(0);
+    expect(results[0].channel).toBe('inapp');
   });
 
   it('staff messages skip the dormant filter', async () => {
@@ -208,38 +278,6 @@ describe('sendNudge', () => {
     // Kept for the callers that already read it.
     expect(counts.failed).toBe(1);
     expect(results.find((r) => r.studentId === 'dhriti')).toMatchObject({ channel: 'dormant', name: 'Dhriti' });
-  });
-
-  it('stops opening chats after the first permission refusal and says why for everyone', async () => {
-    state.users = Array.from({ length: 8 }, (_, i) => student(`s${i}`, `Student ${i}`));
-    state.chat = () => ({ ok: false, status: 403, reason: 'Could not start the chat (403 Forbidden)' });
-
-    const { results, counts } = await sendNudge({
-      ...BASE,
-      studentIds: state.users.map((u) => u.id),
-      respectDormancy: false,
-      chat: { delegatedToken: 'teacher-token', html: '<p>Hi</p>' },
-    });
-
-    expect(counts.chat).toBe(0);
-    // Only the first batch of five was tried; the rest were not sent 403 by 403.
-    expect(state.chatCalls.length).toBe(5);
-    for (const r of results) {
-      expect(r.reasons?.chat).toBe('Could not start the chat (403 Forbidden)');
-    }
-  });
-
-  it('addresses the chat by Microsoft object id before any email address', async () => {
-    state.users = [student('kaveya', 'Kaveya', { email: 'Kaveya@neram.co.in' })];
-
-    await sendNudge({
-      ...BASE,
-      studentIds: ['kaveya'],
-      respectDormancy: false,
-      chat: { delegatedToken: 'teacher-token', html: '<p>Hi</p>' },
-    });
-
-    expect(state.chatCalls).toEqual(['oid-kaveya']);
   });
 
   it('trims the Teams app id, which arrives from Vercel with a trailing newline', async () => {

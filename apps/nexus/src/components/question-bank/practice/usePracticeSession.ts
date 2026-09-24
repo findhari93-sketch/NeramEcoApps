@@ -63,6 +63,12 @@ export interface PracticeSession {
    * Empty for every other question.
    */
   suffixes: Map<string, string>;
+  /**
+   * How many there are to practise in all, counted the same way `questions`
+   * is. The server counts question rows, and an either-or drawing is one row
+   * but two things to practise, so the extra options found among the rows
+   * already loaded are added on. It is exact once the list is fully loaded.
+   */
   total: number;
   loading: boolean;
   loadingMore: boolean;
@@ -138,7 +144,7 @@ export function usePracticeSession({
   const scope = practiceScopeOf(ctx);
 
   const [questions, setQuestions] = useState<PracticeAtom[]>([]);
-  const [total, setTotal] = useState(0);
+  const [rowTotal, setRowTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -243,7 +249,7 @@ export function usePracticeSession({
         if (seq !== listSeq.current) return;
         const ordered = scope === 'paper' && !filters.search_text ? sortForPaper(items, ctx) : items;
         setQuestions(expandAtoms(ordered));
-        setTotal(count);
+        setRowTotal(count);
         setPage(1);
         setSearch({
           matchKind: first.search?.match_kind ?? null,
@@ -254,7 +260,7 @@ export function usePracticeSession({
         if (controller.signal.aborted || seq !== listSeq.current) return;
         console.error('Failed to fetch questions:', err);
         setQuestions([]);
-        setTotal(0);
+        setRowTotal(0);
         setError('Could not load questions. Check your connection and try again.');
       } finally {
         if (seq === listSeq.current) setLoading(false);
@@ -266,7 +272,15 @@ export function usePracticeSession({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classroomId, authSettled, scope, baseParams, filtersKey, reloadTick]);
 
-  const hasMore = scope !== 'paper' ? questions.length < total : false;
+  /**
+   * Question rows on screen, which is fewer than `questions` wherever an
+   * either-or drawing was split into its options. Paging is the server's
+   * business and the server counts rows: comparing the longer list with the
+   * row total said a page was complete while questions were still unfetched.
+   */
+  const rowsLoaded = useMemo(() => new Set(questions.map((q) => q.base_id)).size, [questions]);
+  const total = rowTotal + (questions.length - rowsLoaded);
+  const hasMore = scope !== 'paper' ? rowsLoaded < rowTotal : false;
 
   const loadMore = useCallback(() => {
     if (!classroomId || loadingMore || !hasMore) return;

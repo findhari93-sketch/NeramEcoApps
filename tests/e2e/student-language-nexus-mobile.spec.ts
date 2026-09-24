@@ -191,7 +191,7 @@ test.describe('Student language on a phone', () => {
     await openStudents(page);
 
     await page.getByRole('tablist', { name: /filter students/i }).getByRole('tab', { name: /^All active/ }).click();
-    await page.getByRole('button', { name: /^Select$/ }).click();
+    await page.getByRole('button', { name: /^Select( students)?$/ }).click();
 
     const row = page.getByRole('option').filter({ hasText: student!.email! }).first();
     await expect(row).toBeVisible({ timeout: 30_000 });

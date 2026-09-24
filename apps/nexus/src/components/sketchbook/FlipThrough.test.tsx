@@ -22,7 +22,7 @@ vi.mock('@/components/students/StudentStageFactsProvider', () => ({ useStudentSt
 // mock would collide with `getByText('Asha Rao')` (two elements with that exact text).
 vi.mock('@/components/students/StudentStageAvatar', () => ({ default: ({ name }: { name?: string | null }) => <div aria-label={name ? `Avatar for ${name}` : 'Avatar'} /> }));
 
-import FlipThrough, { ADVANCE_AFTER_MS, UNDO_WINDOW_MS } from './FlipThrough';
+import FlipThrough, { ADVANCE_AFTER_MS, SWIPE_MIN_PX, UNDO_WINDOW_MS } from './FlipThrough';
 
 const row = (id: string, name = 'Asha Rao') => ({
   id, student_id: 's1', original_image_url: `https://x/${id}.jpg`, thumbnail_url: null, self_note: 'a chair',
@@ -61,6 +61,34 @@ describe('FlipThrough', () => {
     expect(screen.getByText('2 of 2')).toBeTruthy();
     await waitFor(() => expect(skips()).toHaveLength(1));
     expect(skips()[0]).toEqual([expect.any(Function), 'a', 'skipped', { keepalive: true }]);
+  });
+
+  it('swiping left on the sketch flips to the next one, right goes back', () => {
+    swr.mockReturnValue(inbox('a', 'b'));
+    render(<FlipThrough classroomId="c1" />);
+    const sketch = screen.getByTestId('flip-sketch');
+    const swipe = (fromX: number, toX: number, dy = 0) => {
+      fireEvent.touchStart(sketch, { touches: [{ clientX: fromX, clientY: 300 }] });
+      fireEvent.touchMove(sketch, { touches: [{ clientX: toX, clientY: 300 + dy }] });
+      fireEvent.touchEnd(sketch, { changedTouches: [{ clientX: toX, clientY: 300 + dy }] });
+    };
+    swipe(300, 300 - SWIPE_MIN_PX - 10);
+    expect(screen.getByText('2 of 2')).toBeTruthy();
+    swipe(100, 100 + SWIPE_MIN_PX + 10);
+    expect(screen.getByText('1 of 2')).toBeTruthy();
+    // Short or mostly vertical moves are page scrolls, not flips.
+    swipe(300, 280);
+    swipe(300, 200, 200);
+    expect(screen.getByText('1 of 2')).toBeTruthy();
+  });
+
+  it('the dock labels every tool and Previous is off on the first card', () => {
+    swr.mockReturnValue(inbox('a', 'b'));
+    render(<FlipThrough classroomId="c1" />);
+    for (const name of ['Previous', 'Comment', 'Feature', 'Next']) expect(screen.getByRole('button', { name })).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Previous' }) as HTMLButtonElement).disabled).toBe(true);
+    // No "Sent" line or chip in the dock: the card moves on and the Undo bar says it.
+    expect(screen.queryByText(/^Sent /)).toBeNull();
   });
 
   it('says when everything has been flipped', () => {

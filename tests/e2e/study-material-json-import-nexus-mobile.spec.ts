@@ -72,7 +72,7 @@ async function signIn(page: Page): Promise<boolean> {
  * hunted for rather than assumed to be on the first card.
  */
 async function openAddTestDialog(page: Page): Promise<boolean> {
-  const menus = page.getByRole('button', { name: 'File actions' });
+  const menus = page.getByRole('button', { name: /^File actions/ });
   const count = Math.min(await menus.count(), 8);
   for (let i = 0; i < count; i += 1) {
     await menus.nth(i).click();

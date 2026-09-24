@@ -43,6 +43,7 @@ import {
   QB_SECTION_ORDER,
   qbSectionLabel,
   QB_SECTIONS,
+  needsAnswerKey,
   solutionVideosOf,
 } from '@neram/database';
 import {
@@ -50,6 +51,7 @@ import {
   questionMissingImages,
   questionMissingSolutionImage,
 } from '@/lib/qb-image-needs';
+import { questionMissingAnswerKey } from '@/lib/qb-activation';
 import PaperQuestionRow from './PaperQuestionRow';
 import PaperVideoRow from './PaperVideoRow';
 import type { VideoLinkDrafts, VideoPasteSummary, VideoRowState } from '@/hooks/useVideoLinkDrafts';
@@ -83,9 +85,12 @@ export type PaperQuestionMode = 'edit' | 'images' | 'videos';
  * `'missing-video'` is the questions with no saved solution video, in both
  * modes. `'unsaved-video'` is Videos mode's pending rows, for checking a paste.
  * `'reported'` is the questions a student has an open report on.
+ * `'missing-answer'` is the MCQ and numerical questions with no answer key,
+ * the first stage of a paper: nothing goes live until it is empty.
  */
 export type NeedsFilter =
   | 'all'
+  | 'missing-answer'
   | 'figures'
   | 'missing-figure'
   | 'missing-solution'
@@ -415,6 +420,12 @@ export default function PaperQuestionList({
     [bySection],
   );
   const inactiveCount = useMemo(() => bySection.filter((q) => !q.is_active).length, [bySection]);
+  const missingAnswerCount = useMemo(() => bySection.filter(questionMissingAnswerKey).length, [bySection]);
+  /** Offered on any paper with something to key, so a finished paper reads "No answer key 0". */
+  const paperNeedsKeys = useMemo(
+    () => questions.some((q) => needsAnswerKey(q.question_format)),
+    [questions],
+  );
   // Saved state, not drafts: a row must not leave the "No video" queue while the
   // teacher is still typing its link. The Videos progress bar counts drafts.
   const missingVideoCount = useMemo(
@@ -479,7 +490,9 @@ export default function PaperQuestionList({
   const visibleQuestions = useMemo(() => {
     if (needsFilter === 'all') return bySection;
     const predicate: (q: NexusQBQuestion) => boolean =
-      needsFilter === 'missing-figure'
+      needsFilter === 'missing-answer'
+        ? questionMissingAnswerKey
+        : needsFilter === 'missing-figure'
         ? (q) => questionMissingImages(q)
         : needsFilter === 'missing-solution'
           ? (q) => questionMissingSolutionImage(q)
@@ -572,6 +585,16 @@ export default function PaperQuestionList({
     // every backlog below. Absent until a student reports something.
     ...(reportedCount > 0 || needsFilter === 'reported'
       ? ([{ value: 'reported' as const, label: 'Reported', count: reportedCount, color: 'error' as const }])
+      : []),
+    ...(paperNeedsKeys || needsFilter === 'missing-answer'
+      ? ([
+          {
+            value: 'missing-answer' as const,
+            label: 'No answer key',
+            count: missingAnswerCount,
+            color: 'warning' as const,
+          },
+        ])
       : []),
     { value: 'figures', label: 'Figures', count: figureCount, color: 'primary' },
     { value: 'missing-figure', label: 'Figure missing', count: missingCount, color: 'warning' },

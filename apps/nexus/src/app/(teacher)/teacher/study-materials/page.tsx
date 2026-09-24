@@ -31,6 +31,7 @@ import {
   ToggleButtonGroup,
   EmptyState,
   alpha,
+  useMediaQuery,
   useTheme,
 } from '@neram/ui';
 import FolderOutlinedIcon from '@mui/icons-material/FolderOutlined';
@@ -84,8 +85,18 @@ type FolderDTO = NexusStudyFolderDTO;
 // Staff responses add allow_download (null = inherit folder) on files.
 type FileDTO = NexusStudyFileDTO & { allow_download?: boolean | null };
 
+/** Clamp a title to two lines instead of one: names here are long and alike. */
+const TWO_LINES = {
+  display: '-webkit-box',
+  WebkitLineClamp: 2,
+  WebkitBoxOrient: 'vertical',
+  overflow: 'hidden',
+  overflowWrap: 'anywhere',
+} as const;
+
 function TeacherStudyMaterials() {
   const theme = useTheme();
+  const isPhone = useMediaQuery(theme.breakpoints.down('sm'));
   const router = useRouter();
   const searchParams = useSearchParams();
   const folderId = searchParams.get('folder');
@@ -579,6 +590,10 @@ function TeacherStudyMaterials() {
         '&:active': { cursor: 'grabbing' },
         '&:hover': { color: 'text.secondary' },
         ...sx,
+        // HTML drag and drop does not start from a finger, so on a touch
+        // screen the handle was a dead control taking a corner of every card.
+        // Touch reorders and moves through the item menu instead.
+        '@media (hover: none), (pointer: coarse)': { display: 'none' },
       }}
     >
       <DragIndicatorIcon fontSize="small" />
@@ -599,16 +614,16 @@ function TeacherStudyMaterials() {
               ? 'Download'
               : 'View only'
         }
-        sx={{ height: 20, fontSize: '0.6rem', '& .MuiChip-icon': { fontSize: '0.78rem' } }}
+        sx={{ height: 22, fontSize: '0.6875rem', '& .MuiChip-icon': { fontSize: '0.85rem' } }}
       />
       <Chip
         size="small"
         icon={file.has_test ? <QuizOutlinedIcon /> : <ErrorOutlineIcon />}
         label={file.has_test ? 'Test' : 'No test'}
         sx={{
-          height: 20,
-          fontSize: '0.6rem',
-          '& .MuiChip-icon': { fontSize: '0.78rem' },
+          height: 22,
+          fontSize: '0.6875rem',
+          '& .MuiChip-icon': { fontSize: '0.85rem' },
           bgcolor: file.has_test ? alpha(theme.palette.success.main, 0.14) : alpha(theme.palette.warning.main, 0.18),
           color: file.has_test ? 'success.main' : 'warning.dark',
         }}
@@ -621,9 +636,9 @@ function TeacherStudyMaterials() {
           icon={<LinkOutlinedIcon />}
           label={`Linked: ${file.qb_paper.short_title}`}
           sx={{
-            height: 20,
-            fontSize: '0.6rem',
-            '& .MuiChip-icon': { fontSize: '0.78rem' },
+            height: 22,
+            fontSize: '0.6875rem',
+            '& .MuiChip-icon': { fontSize: '0.85rem' },
             bgcolor: alpha(theme.palette.primary.main, 0.1),
             color: 'primary.main',
           }}
@@ -641,9 +656,9 @@ function TeacherStudyMaterials() {
           icon={<SmartDisplayOutlinedIcon />}
           label={l.gates ? l.label : `${l.label} (open)`}
           sx={{
-            height: 20,
-            fontSize: '0.6rem',
-            '& .MuiChip-icon': { fontSize: '0.78rem' },
+            height: 22,
+            fontSize: '0.6875rem',
+            '& .MuiChip-icon': { fontSize: '0.85rem' },
             bgcolor: alpha(theme.palette.info.main, 0.14),
             color: 'info.main',
           }}
@@ -658,9 +673,9 @@ function TeacherStudyMaterials() {
           icon={<ErrorOutlineIcon />}
           label="Slides need a fix"
           sx={{
-            height: 20,
-            fontSize: '0.6rem',
-            '& .MuiChip-icon': { fontSize: '0.78rem' },
+            height: 22,
+            fontSize: '0.6875rem',
+            '& .MuiChip-icon': { fontSize: '0.85rem' },
             bgcolor: alpha(theme.palette.warning.main, 0.18),
             color: 'warning.dark',
           }}
@@ -671,9 +686,9 @@ function TeacherStudyMaterials() {
           icon={<SlideshowOutlinedIcon />}
           label="Slides"
           sx={{
-            height: 20,
-            fontSize: '0.6rem',
-            '& .MuiChip-icon': { fontSize: '0.78rem' },
+            height: 22,
+            fontSize: '0.6875rem',
+            '& .MuiChip-icon': { fontSize: '0.85rem' },
             bgcolor: alpha(theme.palette.primary.main, 0.1),
             color: 'primary.main',
           }}
@@ -685,9 +700,9 @@ function TeacherStudyMaterials() {
           icon={<ErrorOutlineIcon />}
           label="Old link"
           sx={{
-            height: 20,
-            fontSize: '0.6rem',
-            '& .MuiChip-icon': { fontSize: '0.78rem' },
+            height: 22,
+            fontSize: '0.6875rem',
+            '& .MuiChip-icon': { fontSize: '0.85rem' },
             bgcolor: alpha(theme.palette.warning.main, 0.18),
             color: 'warning.dark',
           }}
@@ -700,13 +715,13 @@ function TeacherStudyMaterials() {
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.25, flexWrap: 'wrap' }}>
       <Typography variant="caption" sx={{ color: 'text.secondary' }}>{f.item_count} items</Typography>
       {(f.target_exams?.length || f.target_programs?.length) ? (
-        <Chip size="small" label={[...(f.target_exams || []), ...(f.target_programs || [])].join(', ')} sx={{ height: 18, fontSize: '0.58rem' }} />
+        <Chip size="small" label={[...(f.target_exams || []), ...(f.target_programs || [])].join(', ')} sx={{ height: 22, fontSize: '0.6875rem', maxWidth: '100%' }} />
       ) : null}
       <Chip
         size="small"
         icon={f.allow_download ? <DownloadOutlinedIcon /> : <LockOutlinedIcon />}
         label={f.allow_download ? 'Downloadable' : 'View only'}
-        sx={{ height: 18, fontSize: '0.58rem', '& .MuiChip-icon': { fontSize: '0.7rem' } }}
+        sx={{ height: 22, fontSize: '0.6875rem', '& .MuiChip-icon': { fontSize: '0.85rem' } }}
       />
     </Box>
   );
@@ -734,17 +749,19 @@ function TeacherStudyMaterials() {
           onDragEnd={onDragEnd}
           sx={{ position: 'relative', border: `1px solid ${theme.palette.divider}`, borderRadius: 2.5, transition: 'transform 150ms ease, box-shadow 150ms ease', '&:hover': dropHint ? undefined : { transform: 'translateY(-2px)', boxShadow: `0 6px 20px ${alpha('#000', 0.08)}` }, ...dropSx('folder', f.id) }}
         >
-          <CardActionArea onClick={() => goToFolder(f.id)} sx={{ p: 1.5, pt: 3.75, minHeight: 130, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+          <CardActionArea onClick={() => goToFolder(f.id)} sx={{ p: 1.5, pt: 3.75, '@media (hover: none), (pointer: coarse)': { pt: 1.5 }, minHeight: 130, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'space-between' }}>
             <Box sx={{ width: 48, height: 48, borderRadius: 2, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: alpha(theme.palette.primary.main, 0.1), mb: 1 }}>
               <FolderOutlinedIcon sx={{ fontSize: 28, color: 'primary.main' }} />
             </Box>
             <Box sx={{ width: '100%' }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 700, lineHeight: 1.25 }} noWrap>{f.name}</Typography>
+              {/* Two lines before it clips: "Previous Question ..." hid the
+                  word that tells two folders apart. */}
+              <Typography variant="subtitle2" sx={{ fontWeight: 700, lineHeight: 1.25, ...TWO_LINES }}>{f.name}</Typography>
               {folderMeta(f)}
             </Box>
           </CardActionArea>
           {renderDragHandle('folder', f.id, handleOverlaySx)}
-          <IconButton size="small" onClick={(e) => setFolderMenu({ el: e.currentTarget, folder: f })} sx={{ position: 'absolute', top: 4, right: 4 }}>
+          <IconButton aria-label={`Folder actions: ${f.name}`} onClick={(e) => setFolderMenu({ el: e.currentTarget, folder: f })} sx={{ position: 'absolute', top: 2, right: 2, width: 44, height: 44 }}>
             <MoreVertIcon fontSize="small" />
           </IconButton>
         </Card>
@@ -762,12 +779,12 @@ function TeacherStudyMaterials() {
           <CardActionArea onClick={() => openFile(file)} sx={{ p: 1.5, minHeight: 150, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'flex-start' }}>
             <FileThumb kind={file.kind} src={thumbUrl(file.id)} />
             <Box sx={{ width: '100%' }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 600, lineHeight: 1.25 }} noWrap>{file.title}</Typography>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, lineHeight: 1.25, ...TWO_LINES }}>{file.title}</Typography>
               {fileChip(file)}
             </Box>
           </CardActionArea>
           {renderDragHandle('file', file.id, handleOverlaySx)}
-          <IconButton size="small" aria-label="File actions" onClick={(e) => { e.stopPropagation(); setFileMenu({ el: e.currentTarget, file }); }} sx={{ position: 'absolute', top: 4, right: 4, bgcolor: alpha(theme.palette.background.paper, 0.85), '&:hover': { bgcolor: theme.palette.background.paper } }}>
+          <IconButton aria-label={`File actions: ${file.title}`} onClick={(e) => { e.stopPropagation(); setFileMenu({ el: e.currentTarget, file }); }} sx={{ position: 'absolute', top: 2, right: 2, width: 44, height: 44, bgcolor: alpha(theme.palette.background.paper, 0.85), '&:hover': { bgcolor: theme.palette.background.paper } }}>
             <MoreVertIcon fontSize="small" />
           </IconButton>
         </Card>
@@ -781,9 +798,12 @@ function TeacherStudyMaterials() {
     alignItems: 'center',
     gap: 1.25,
     p: 1,
+    minHeight: 64,
+    bgcolor: 'background.paper',
     border: `1px solid ${theme.palette.divider}`,
     borderRadius: 2,
     cursor: 'pointer',
+    '&:focus-visible': { outline: `2px solid ${theme.palette.primary.main}`, outlineOffset: 2 },
     transition: 'background-color 150ms ease',
     '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.04) },
   } as const;
@@ -807,10 +827,10 @@ function TeacherStudyMaterials() {
             <FolderOutlinedIcon sx={{ color: 'primary.main' }} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700 }} noWrap>{f.name}</Typography>
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, ...TWO_LINES }}>{f.name}</Typography>
             {folderMeta(f)}
           </Box>
-          <IconButton size="small" onClick={(e) => { e.stopPropagation(); setFolderMenu({ el: e.currentTarget, folder: f }); }} aria-label="Folder actions" sx={{ flexShrink: 0 }}>
+          <IconButton onClick={(e) => { e.stopPropagation(); setFolderMenu({ el: e.currentTarget, folder: f }); }} aria-label={`Folder actions: ${f.name}`} sx={{ flexShrink: 0, width: 44, height: 44 }}>
             <MoreVertIcon fontSize="small" />
           </IconButton>
         </Box>
@@ -833,10 +853,10 @@ function TeacherStudyMaterials() {
             <FileThumb kind={file.kind} src={thumbUrl(file.id)} sx={{ height: 44, mb: 0, borderRadius: 1.5 }} iconSize={22} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 600 }} noWrap>{file.title}</Typography>
+            <Typography variant="subtitle2" sx={{ fontWeight: 600, ...TWO_LINES }}>{file.title}</Typography>
             {fileChip(file)}
           </Box>
-          <IconButton size="small" onClick={(e) => { e.stopPropagation(); setFileMenu({ el: e.currentTarget, file }); }} aria-label="File actions" sx={{ flexShrink: 0 }}>
+          <IconButton onClick={(e) => { e.stopPropagation(); setFileMenu({ el: e.currentTarget, file }); }} aria-label={`File actions: ${file.title}`} sx={{ flexShrink: 0, width: 44, height: 44 }}>
             <MoreVertIcon fontSize="small" />
           </IconButton>
         </Box>
@@ -846,10 +866,16 @@ function TeacherStudyMaterials() {
 
   return (
     <Box>
-      {/* Header + actions */}
-      <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, mb: 0.5 }}>
-        <FolderOutlinedIcon sx={{ color: 'primary.main' }} />
-        <Typography variant="h5" sx={{ fontWeight: 800, flex: 1 }}>
+      {/* Header + actions.
+          2026-09-24, for a phone: the title and the layout switch share a line,
+          and the actions sit below in equal columns. They used to wrap round
+          the title into ragged rows, so "Study Materials" broke over two lines
+          and, inside a folder, four buttons took three rows. Upload is gone at
+          the top level rather than disabled: nothing can be uploaded there,
+          and this theme's disabled primary still looked pressable. */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+        <FolderOutlinedIcon sx={{ color: 'primary.main', display: { xs: 'none', sm: 'block' } }} />
+        <Typography variant="h5" component="h1" sx={{ fontWeight: 800, flex: 1, minWidth: 0, fontSize: { xs: '1.35rem', sm: '1.5rem' } }} noWrap>
           Study Materials
         </Typography>
         <ToggleButtonGroup
@@ -858,17 +884,47 @@ function TeacherStudyMaterials() {
           size="small"
           onChange={(_, v) => changeView(v)}
           aria-label="View layout"
-          sx={{ '& .MuiToggleButton-root': { px: 1 } }}
+          sx={{ flexShrink: 0, bgcolor: 'background.paper', '& .MuiToggleButton-root': { px: 1, minWidth: 44, minHeight: 44 } }}
         >
           <ToggleButton value="grid" aria-label="Grid view"><GridViewOutlinedIcon fontSize="small" /></ToggleButton>
           <ToggleButton value="list" aria-label="List view"><ViewListOutlinedIcon fontSize="small" /></ToggleButton>
         </ToggleButtonGroup>
+      </Box>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', sm: 'repeat(4, auto)' },
+          justifyContent: { sm: 'start' },
+          gap: 1,
+          mb: 1.5,
+          '& .MuiButton-root': { minHeight: 44, textTransform: 'none', fontWeight: 600, whiteSpace: 'nowrap', minWidth: 0 },
+        }}
+      >
+        {!atRoot && (
+          <Button
+            variant="contained"
+            startIcon={<UploadFileOutlinedIcon />}
+            onClick={() => setUploadOpen(true)}
+            disabled={busy}
+            sx={{ fontWeight: 700 }}
+          >
+            Upload
+          </Button>
+        )}
+        <Button
+          variant="outlined"
+          startIcon={<CreateNewFolderOutlinedIcon />}
+          onClick={openCreate}
+          disabled={busy}
+          sx={atRoot ? { gridColumn: { xs: '1 / -1', sm: 'auto' } } : undefined}
+        >
+          New folder
+        </Button>
         {/* Cohort progress for this folder. Only inside a folder: at the root
             there is no set of chapters to report on. */}
         {!atRoot && (
           <Button
             variant="outlined"
-            size="small"
             startIcon={<GroupsOutlinedIcon />}
             onClick={() => router.push(`/teacher/study-materials/reports/${folderId}`)}
             disabled={busy}
@@ -882,7 +938,6 @@ function TeacherStudyMaterials() {
         {!atRoot && files.some((f) => f.file_type === 'application/pdf' && !f.has_test && !f.qb_paper) && (
           <Button
             variant="outlined"
-            size="small"
             color="primary"
             startIcon={<AutoAwesomeOutlinedIcon />}
             onClick={() => setFolderGenOpen(true)}
@@ -891,31 +946,25 @@ function TeacherStudyMaterials() {
             Generate tests
           </Button>
         )}
-        <Button
-          variant="outlined"
-          size="small"
-          startIcon={<CreateNewFolderOutlinedIcon />}
-          onClick={openCreate}
-          disabled={busy}
-        >
-          New Folder
-        </Button>
-        <Button
-          variant="contained"
-          size="small"
-          startIcon={<UploadFileOutlinedIcon />}
-          onClick={() => setUploadOpen(true)}
-          disabled={busy || atRoot}
-        >
-          Upload
-        </Button>
       </Box>
-      <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
-        Organise resources into folders for students. {atRoot ? 'Open a folder to upload files.' : 'Tap a file to preview it.'} Drag the handle to reorder, or drop an item onto a folder to move it. On a phone, use the menu (Move to folder, Move up or down).
+      {/* The drag instructions only mean something with a mouse. */}
+      <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1.5, display: { xs: 'none', md: 'block' } }}>
+        Organise resources into folders for students. {atRoot ? 'Open a folder to upload files.' : 'Tap a file to preview it.'} Drag the handle to reorder, or drop an item onto a folder to move it.
+      </Typography>
+      <Typography variant="caption" sx={{ color: 'text.secondary', mb: 1, display: { xs: 'block', md: 'none' } }}>
+        {atRoot ? 'Open a folder to upload files. ' : ''}Use the ⋮ menu to move or reorder.
       </Typography>
 
       {/* Breadcrumb (also a drop target: drag an item onto a crumb to move it there) */}
-      <Breadcrumbs separator="›" sx={{ mb: 2 }}>
+      <Breadcrumbs
+        separator="›"
+        // Two on a phone: Home, the collapse button, then where you are. Three
+        // ran the last crumb to 393px, past the edge of a 375px screen.
+        maxItems={isPhone ? 2 : 8}
+        itemsBeforeCollapse={1}
+        itemsAfterCollapse={isPhone ? 1 : 2}
+        sx={{ mb: 1.5, '& .MuiBreadcrumbs-li > button': { minHeight: 44 }, '& li > .MuiButtonBase-root': { minWidth: 44, minHeight: 44, mx: 0 }, '& .MuiBreadcrumbs-ol': { flexWrap: 'nowrap' }, '& .MuiBreadcrumbs-li': { minWidth: 0 } }}
+      >
         <Link
           component="button"
           underline="hover"
@@ -940,7 +989,7 @@ function TeacherStudyMaterials() {
               onDragOver={(e) => onCrumbDragOver(e, crumb.id)}
               onDrop={(e) => onCrumbDrop(e, crumb.id)}
               onDragEnd={onDragEnd}
-              sx={{ fontWeight: isLast ? 700 : 400, borderRadius: 1, px: 0.5, bgcolor: dropCrumb === crumb.id ? alpha(theme.palette.primary.main, 0.14) : 'transparent' }}
+              sx={{ fontWeight: isLast ? 700 : 400, borderRadius: 1, px: 0.5, maxWidth: { xs: 180, sm: 320 }, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', bgcolor: dropCrumb === crumb.id ? alpha(theme.palette.primary.main, 0.14) : 'transparent' }}
             >
               {crumb.name}
             </Link>
@@ -1164,8 +1213,8 @@ function TeacherStudyMaterials() {
           </Stack>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setFolderDialog(null)}>Cancel</Button>
-          <Button variant="contained" onClick={saveFolder} disabled={busy || !fName.trim()}>Save</Button>
+          <Button onClick={() => setFolderDialog(null)} sx={{ minHeight: 44 }}>Cancel</Button>
+          <Button variant="contained" onClick={saveFolder} disabled={busy || !fName.trim()} sx={{ minHeight: 44 }}>Save</Button>
         </DialogActions>
       </Dialog>
 
@@ -1176,8 +1225,8 @@ function TeacherStudyMaterials() {
           <TextField value={renameValue} onChange={(e) => setRenameValue(e.target.value)} fullWidth autoFocus size="small" sx={{ mt: 0.5 }} />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setRenameFile(null)}>Cancel</Button>
-          <Button variant="contained" onClick={saveRename} disabled={busy || !renameValue.trim()}>Save</Button>
+          <Button onClick={() => setRenameFile(null)} sx={{ minHeight: 44 }}>Cancel</Button>
+          <Button variant="contained" onClick={saveRename} disabled={busy || !renameValue.trim()} sx={{ minHeight: 44 }}>Save</Button>
         </DialogActions>
       </Dialog>
 
@@ -1261,7 +1310,7 @@ function TeacherStudyMaterials() {
         onError={(msg) => setSnack({ msg, sev: 'error' })}
       />
 
-      <Snackbar open={!!snack} autoHideDuration={3000} onClose={() => setSnack(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+      <Snackbar open={!!snack} autoHideDuration={3000} onClose={() => setSnack(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }} sx={{ bottom: { xs: 80, md: 24 } }}>
         {snack ? <Alert severity={snack.sev} onClose={() => setSnack(null)} variant="filled">{snack.msg}</Alert> : undefined}
       </Snackbar>
     </Box>

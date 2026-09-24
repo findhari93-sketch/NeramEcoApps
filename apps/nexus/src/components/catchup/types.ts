@@ -181,6 +181,12 @@ export type ItemAction = 'excuse' | 'restore' | 'reset_test';
 /** What every tab needs from the page shell to do its job. */
 export interface TabProps {
   data: Payload;
+  /**
+   * The Needs action group filter, when the page owns it (its header tiles set
+   * it). Null means every group. Absent, the tab keeps its own.
+   */
+  bucket?: CatchupBucket | null;
+  onBucket?: (next: CatchupBucket | null) => void;
   busy: string | null;
   onAct: (itemId: string, action: ItemAction) => void;
   onNudge: (studentId: string, journeyId: string | null) => void;

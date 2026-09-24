@@ -3,32 +3,31 @@ import { join, relative, sep } from 'node:path';
 import { describe, it, expect } from 'vitest';
 
 /**
- * WHO a student's message comes from (founder rule, 2026-09-20).
+ * WHO a student's message comes from.
  *
- * Publishing the 18 Aug exam sent every student a Teams chat from the founder's
- * own account, landing in their personal thread with that student between a real
- * "good evening sir" and a thumbs-up. The application-form request did the same.
- * Neither was a conversation.
+ * Founder, 2026-09-24: EVERY Teams chat to a student comes from Neram Assistant.
+ * Nothing is ever sent from a teacher's own Teams. With 200 students, each
+ * reaction, marked drawing and reminder opened another thread in the teacher's
+ * personal chat list ("Hari commented on your sketch", 19 of them in three days)
+ * and buried the conversations that matter.
  *
- * The line is NOT who pressed the button. A teacher presses Publish, and a member
- * of staff presses Send on the application-form request, and both of those are
- * the school speaking. The line is whether a PERSON is talking to the student:
+ * (The 2026-09-20 rule sent system messages as the Assistant but kept teacher
+ * actions in the teacher's own chat so students could reply. That is replaced:
+ * a teacher action now goes out as the Assistant with "From Hari" on the card
+ * and a "Message Hari" button, so a student who wants to answer starts that chat
+ * themselves, and only then.)
  *
- *   ASSISTANT  The system decided it. Results are out, your details are needed, a
- *              cron fired, the class was cancelled. Sent as Neram Assistant,
- *              which cannot read a reply and says so when somebody sends one.
- *   TEACHER    A person is talking, or has just done something for this one
- *              student. "Why have you not done your catch-up", a marked piece of
- *              work, a window opened by hand. The student can reply to somebody.
- *   NO_CHAT    Reaches no Teams chat at all by design: staff digests, parent
- *              escalations, and roster changes nobody wrote. These were never
- *              part of the complaint, because they never arrived in a personal
- *              chat in the first place.
+ * Three kinds of call site, held here as data:
  *
- * This test holds that classification as data. It fails when a call site sends a
- * system message as a person or the reverse, which is the mistake that is
- * invisible in review: both spellings compile, both deliver, and the difference
- * only shows up in somebody's private chat weeks later.
+ *   ASSISTANT     The system decided it. Sent as Neram Assistant with no name on it.
+ *   FROM_TEACHER  A person did something for this student. Sent as Neram
+ *                 Assistant with that teacher's name and Message button, which is
+ *                 what passing `teacher`, `chat`, `sendAs` or `from` now means.
+ *   NO_CHAT       Reaches no Teams chat at all by design.
+ *
+ * And one rule under all three, checked at the door itself: nudge-delivery.ts
+ * never posts a chat with a person's token, and no file but teams-messaging.ts
+ * touches sendTeamsChatMessage.
  *
  * Adding a sendNudge call? Put it in one of the three lists, with the reason.
  */
@@ -58,13 +57,10 @@ const ASSISTANT: Record<string, string> = {
 };
 
 /**
- * A person is talking, and the student can answer them.
- *
- * Several of these are a teacher acting for ONE student: a make-up window, an
- * extra attempt, an eligibility override, a marked assignment. Those read as "I
- * have done this for you" and deserve a name on them.
+ * A person did something for this student, so the Assistant's card carries
+ * their name and a Message button. Still Neram Assistant, never their own Teams.
  */
-const TEACHER: Record<string, string> = {
+const FROM_TEACHER: Record<string, string> = {
   'apps/nexus/src/app/api/assignments/nudge/route.ts': 'A teacher chasing named students.',
   'apps/nexus/src/app/api/assignments/[id]/route.ts': 'A teacher marked their work.',
   'apps/nexus/src/app/api/catchup/nudge/route.ts': 'A teacher asking why.',
@@ -160,7 +156,7 @@ function callSites(): CallSite[] {
 
 describe('who a student message comes from', () => {
   const sites = callSites();
-  const listed = (p: string) => ASSISTANT[p] || TEACHER[p] || NO_CHAT[p];
+  const listed = (p: string) => ASSISTANT[p] || FROM_TEACHER[p] || NO_CHAT[p];
 
   it('finds the call sites at all, so a rename cannot make this test vacuous', () => {
     expect(sites.length).toBeGreaterThan(20);
@@ -178,12 +174,8 @@ describe('who a student message comes from', () => {
     expect(sites.filter((s) => ASSISTANT[s.path] && !s.assistant).map((s) => s.path)).toEqual([]);
   });
 
-  it('never sends a teacher message as the Assistant', () => {
-    expect(sites.filter((s) => TEACHER[s.path] && s.assistant).map((s) => s.path)).toEqual([]);
-  });
-
-  it('leaves the listed teacher messages with a person on them', () => {
-    expect(sites.filter((s) => TEACHER[s.path] && !s.person).map((s) => s.path)).toEqual([]);
+  it('names the teacher on every message a teacher did for a student', () => {
+    expect(sites.filter((s) => FROM_TEACHER[s.path] && !s.person).map((s) => s.path)).toEqual([]);
   });
 
   it('keeps the no-chat call sites free of any sender', () => {
@@ -192,8 +184,22 @@ describe('who a student message comes from', () => {
 
   it('lists no file that has stopped calling sendNudge', () => {
     const live = new Set(sites.map((s) => s.path));
-    const all = [...Object.keys(ASSISTANT), ...Object.keys(TEACHER), ...Object.keys(NO_CHAT)];
+    const all = [...Object.keys(ASSISTANT), ...Object.keys(FROM_TEACHER), ...Object.keys(NO_CHAT)];
     expect(all.filter((p) => !live.has(p))).toEqual([]);
+  });
+
+  it('never posts a chat as a person at the door', () => {
+    const door = stripComments(readFileSync(join(REPO_ROOT, DOOR), 'utf8'));
+    expect(door).not.toMatch(/\bsendTeamsChatMessage\b/);
+    expect(door).not.toMatch(/\bgetSenderAccessToken\b/);
+  });
+
+  it('keeps sendTeamsChatMessage inside teams-messaging.ts, called by nobody', () => {
+    const users = walk(NEXUS_SRC)
+      .map((f) => relative(REPO_ROOT, f).split(sep).join('/'))
+      .filter((p) => p !== 'apps/nexus/src/lib/teams-messaging.ts')
+      .filter((p) => /\bsendTeamsChatMessage\b/.test(stripComments(readFileSync(join(REPO_ROOT, p), 'utf8'))));
+    expect(users).toEqual([]);
   });
 
   // The crons reach the Assistant through senderLookup rather than by naming it,

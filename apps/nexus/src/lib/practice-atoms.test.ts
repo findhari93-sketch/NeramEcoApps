@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { NexusQBQuestionListItem } from '@neram/database';
-import { atomIdOf, baseIdOf, expandAtoms, splitAtomId } from './practice-atoms';
+import { atomIdOf, baseIdOf, baseIdsOf, expandAtoms, splitAtomId } from './practice-atoms';
 
 /**
  * "Attempt any one of two" becomes two things to practise.
@@ -142,5 +142,11 @@ describe('expanding a paper into things to practise', () => {
       question({ id: 'q-82' }),
     ]);
     expect(atoms.map((a) => a.base_id)).toEqual(['q-80', 'q-81', 'q-81', 'q-82']);
+  });
+  it('hands the API question rows, once each, whichever options were picked', () => {
+    // A test is built of questions. Both options of Q81 are the same row, and
+    // the atom id a student's tap carries is not a uuid, so sending it as-is
+    // wrote a test with no questions in it.
+    expect(baseIdsOf(['q-80', 'q-81~a', 'q-81~b', 'q-82'])).toEqual(['q-80', 'q-81', 'q-82']);
   });
 });

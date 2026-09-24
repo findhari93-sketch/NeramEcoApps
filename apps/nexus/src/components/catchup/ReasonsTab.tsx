@@ -15,8 +15,9 @@
  * has not started" is one row rather than two screens.
  */
 import { useMemo, useState } from 'react';
-import { Alert, Box, Button, Chip, Stack, Typography, alpha, useTheme } from '@neram/ui';
+import { Alert, Box, Button, Chip, IconButton, Stack, Typography, alpha, useTheme } from '@neram/ui';
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
+import NotificationsActiveOutlinedIcon from '@mui/icons-material/NotificationsActiveOutlined';
 import FamilyRestroomOutlinedIcon from '@mui/icons-material/FamilyRestroomOutlined';
 import { RSVP_REASONS, reasonShortLabel } from '@/lib/rsvp-reasons';
 import { RADIUS } from '@/components/timetable/timetable-theme';
@@ -43,9 +44,16 @@ function SourceTag({ source }: { source: string | null }) {
   );
 }
 
+/**
+ * How many reasons render before "Show more". Fifty cards at about 200px each
+ * made this tab 10,700px on a phone; the newest are the ones a teacher answers.
+ */
+const PAGE = 15;
+
 export default function ReasonsTab({ data, busy, onNudge }: TabProps) {
   const theme = useTheme();
   const [filter, setFilter] = useState<string | null>(null);
+  const [limit, setLimit] = useState(PAGE);
 
   const rows = useMemo(
     () => (filter ? data.reasons.filter((r) => r.reason_code === filter) : data.reasons),
@@ -66,17 +74,33 @@ export default function ReasonsTab({ data, busy, onNudge }: TabProps) {
 
   return (
     <Box>
-      <Stack
-        direction="row"
-        spacing={0.75}
-        sx={{ mb: 2, flexWrap: 'wrap', gap: 0.75, rowGap: 0.75 }}
-      >
+      <Box role="group" aria-label="Filter reasons by kind" sx={{
+          display: 'flex',
+          gap: 1,
+          mb: 2,
+          overflowX: 'auto',
+          pb: 0.5,
+          overscrollBehaviorX: 'contain',
+          '&::-webkit-scrollbar': { display: 'none' },
+          scrollbarWidth: 'none',
+          '& .MuiChip-root': { height: 44, borderRadius: 22, px: 0.5, flexShrink: 0, fontWeight: 700 },
+          // Scrolls sideways on a phone instead of wrapping to three lines, and
+          // fades at the edge so the hidden pills still announce themselves.
+          [theme.breakpoints.down('sm')]: {
+            mx: -2,
+            px: 2,
+            maskImage: 'linear-gradient(to right, #000 calc(100% - 32px), transparent)',
+            WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 32px), transparent)',
+          },
+        }}>
         <Chip
           label={`All ${data.reasons.length}`}
-          onClick={() => setFilter(null)}
+          onClick={() => {
+            setFilter(null);
+            setLimit(PAGE);
+          }}
           color={filter === null ? 'primary' : 'default'}
           variant={filter === null ? 'filled' : 'outlined'}
-          sx={{ fontWeight: 700, height: 34 }}
         />
         {RSVP_REASONS.map((r) => {
           const n = data.reasonTally?.[r.code] ?? 0;
@@ -86,14 +110,16 @@ export default function ReasonsTab({ data, busy, onNudge }: TabProps) {
             <Chip
               key={r.code}
               label={`${r.shortLabel} ${n}`}
-              onClick={() => setFilter(on ? null : r.code)}
+              onClick={() => {
+                setFilter(on ? null : r.code);
+                setLimit(PAGE);
+              }}
               color={on ? 'primary' : 'default'}
               variant={on ? 'filled' : 'outlined'}
-              sx={{ fontWeight: 700, height: 34 }}
             />
           );
         })}
-      </Stack>
+      </Box>
 
       {rows.length === 0 ? (
         <Alert severity="info" sx={{ borderRadius: 2 }}>
@@ -101,7 +127,7 @@ export default function ReasonsTab({ data, busy, onNudge }: TabProps) {
         </Alert>
       ) : (
         <Stack spacing={1}>
-          {rows.map((row: FeedRow) => (
+          {rows.slice(0, limit).map((row: FeedRow) => (
             <Box
               key={row.id}
               sx={{
@@ -120,22 +146,52 @@ export default function ReasonsTab({ data, busy, onNudge }: TabProps) {
                   secondary={
                     <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                       {row.class.title || 'Class'} · {shortDate(row.class.scheduled_date)}
+                      {/* On a phone the time moves in here, so the header row
+                          keeps its width for the name. */}
+                      <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+                        {' '}· {timeAgo(row.reason_submitted_at)}
+                      </Box>
                     </Typography>
                   }
                 />
                 <Typography
                   variant="caption"
-                  color="text.disabled"
-                  sx={{ whiteSpace: 'nowrap', pt: 0.25 }}
+                  color="text.secondary"
+                  sx={{ whiteSpace: 'nowrap', pt: 0.25, display: { xs: 'none', sm: 'block' } }}
                 >
                   {timeAgo(row.reason_submitted_at)}
                 </Typography>
+                {/* On a phone the actions ride in the header as icons. A row of
+                    two buttons under every reason was the other half of each
+                    card's height. */}
+                <Stack direction="row" sx={{ display: { xs: 'flex', sm: 'none' }, flexShrink: 0, mt: -0.75 }}>
+                  {row.student.phone && (
+                    <IconButton
+                      href={`tel:${row.student.phone}`}
+                      aria-label={`Call ${row.student.name || 'student'}`}
+                      sx={{ width: 44, height: 44 }}
+                    >
+                      <PhoneOutlinedIcon fontSize="small" />
+                    </IconButton>
+                  )}
+                  {!row.caught_up_at && !row.excused && (
+                    <IconButton
+                      color="primary"
+                      disabled={busy === row.student.id}
+                      onClick={() => onNudge(row.student.id, journeyFor(row.student.id))}
+                      aria-label={`Nudge ${row.student.name || 'student'}`}
+                      sx={{ width: 44, height: 44 }}
+                    >
+                      <NotificationsActiveOutlinedIcon fontSize="small" />
+                    </IconButton>
+                  )}
+                </Stack>
               </Stack>
 
               {/* The reason itself. The category is a tag; the quote is what they
                   actually typed, and it is the only thing on this screen that is
                   in the student's own voice. */}
-              <Box sx={{ mt: 1.25, pl: { xs: 0, sm: 6.5 } }}>
+              <Box sx={{ mt: 1, pl: { xs: 0, sm: 6.5 } }}>
                 <Stack direction="row" spacing={0.75} sx={{ flexWrap: 'wrap', gap: 0.75, mb: row.reason_note ? 0.75 : 0 }}>
                   <Chip
                     size="small"
@@ -169,7 +225,7 @@ export default function ReasonsTab({ data, busy, onNudge }: TabProps) {
               <Stack
                 direction="row"
                 spacing={0.75}
-                sx={{ mt: 1.25, pl: { xs: 0, sm: 6.5 }, flexWrap: 'wrap', gap: 0.75 }}
+                sx={{ mt: 1.25, pl: { xs: 0, sm: 6.5 }, flexWrap: 'wrap', gap: 0.75, display: { xs: 'none', sm: 'flex' } }}
               >
                 {row.student.phone && (
                   <Button
@@ -177,7 +233,7 @@ export default function ReasonsTab({ data, busy, onNudge }: TabProps) {
                     variant="outlined"
                     href={`tel:${row.student.phone}`}
                     startIcon={<PhoneOutlinedIcon />}
-                    sx={{ minHeight: 40, textTransform: 'none' }}
+                    sx={{ minHeight: 44, textTransform: 'none' }}
                   >
                     Call
                   </Button>
@@ -188,7 +244,7 @@ export default function ReasonsTab({ data, busy, onNudge }: TabProps) {
                     variant="contained"
                     disabled={busy === row.student.id}
                     onClick={() => onNudge(row.student.id, journeyFor(row.student.id))}
-                    sx={{ minHeight: 40, textTransform: 'none' }}
+                    sx={{ minHeight: 44, textTransform: 'none' }}
                   >
                     Nudge
                   </Button>
@@ -196,6 +252,15 @@ export default function ReasonsTab({ data, busy, onNudge }: TabProps) {
               </Stack>
             </Box>
           ))}
+          {rows.length > limit && (
+            <Button
+              variant="outlined"
+              onClick={() => setLimit((n) => n + PAGE * 2)}
+              sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700 }}
+            >
+              Show more ({rows.length - limit} left)
+            </Button>
+          )}
         </Stack>
       )}
     </Box>

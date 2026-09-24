@@ -22,8 +22,16 @@ node scripts/answer-pad/package-teams-app.mjs
 # writes apps/nexus/teams-app/dist/neram-assistant-1.1.0.zip
 ```
 
-The script checks the manifest first (every page on a valid domain, sign-in resource
-matching, no en or em dashes in names) and refuses to build a broken package.
+The script checks the manifest first (no property the Teams schema refuses, every page
+on a valid domain, sign-in resource matching, no en or em dashes in names) and refuses
+to build a broken package.
+
+The schema check reads `MicrosoftTeams.schema.<manifestVersion>.json` in this folder, a
+saved copy of the schema the `$schema` URL points at. It exists because the admin center
+rejects a whole package over one unexpected property and says only which one: 1.16
+defined `packageName`, 1.21 does not, and moving up a version turned a valid key into a
+refused upload. **When you raise `manifestVersion`, save the new schema here under its
+version, or the build stops and tells you to.**
 
 For local testing through a tunnel, build a separate dev app that points at the tunnel:
 
@@ -70,20 +78,19 @@ Teams admin center needs a higher version, for example `--version 1.1.1`.
 Until `TEAMS_APP_CATALOG_ID` is set, reminders fall back to the Nexus bell only.
 There is no email channel.
 
-## Since 2026-09-14: the activity feed is the fallback, not the first choice
+## Since 2026-09-24: every student chat comes from Neram Assistant
 
 Every student message goes through `sendNudge` (`src/lib/nudge-delivery.ts`) and
-tries a Teams **chat** first: the teacher's own chat when they press Send, or, for
-automatic reminders, the chat of the teacher who connected their Teams once
-(`src/lib/teams-sender.ts`, "Connect Teams" on Sketchbooks, Class rhythm). The
-activity feed below is used only when no chat landed.
+tries a Teams **chat from Neram Assistant** first (`src/lib/teams-assistant.ts`).
+Nothing is sent from a teacher's own Teams any more: when a teacher did something
+for the student, the Assistant's card says "From Hari" and carries a
+"Message Hari" button, so a student who wants to reply starts that chat
+themselves. The activity feed below is used only when no chat landed.
 
-Automatic chats need one Azure change on app registration
-`aa039c70-50d2-4c91-bd0e-5675df5e50ff`: Authentication, Add a platform, **Web**,
-redirect URIs `https://nexus.neramclasses.com/api/teams/sender/callback` and
-`https://staging-nexus.neramclasses.com/api/teams/sender/callback` (plus
-`http://localhost:3012/api/teams/sender/callback` for local work). Keep the
-existing SPA platform as it is.
+This needs the manifest with `"personal"` in `bots[0].scopes` approved in Teams
+admin, and `staff.assistant-sender` switched on in Features. "Connect Teams" and
+its `/api/teams/sender/callback` redirect URI are retired; no Azure redirect URI
+is needed.
 
 ## Answer Pad: one-time setup
 

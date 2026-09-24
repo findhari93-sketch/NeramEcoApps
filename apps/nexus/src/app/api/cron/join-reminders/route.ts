@@ -6,7 +6,6 @@ import { joinReminderDue, joinReminderMessage } from '@/lib/not-started';
 import { hasMicrosoftAccount } from '@/lib/microsoft-account';
 import { sendNudge } from '@/lib/nudge-delivery';
 import { shareBaseUrl } from '@/lib/class-share-links';
-import { classroomSenders } from '@/lib/teams-sender';
 
 export const maxDuration = 60;
 
@@ -122,9 +121,8 @@ export async function GET(request: NextRequest) {
       if (won?.length) claimed.push(c);
     }
 
-    // One sendNudge per classroom and step, sent as Neram Assistant. The
-    // classroom's connected teacher is the fallback while the Assistant is off.
-    const senders = await classroomSenders([...new Set(claimed.map((c) => c.classroomId))]);
+    // One sendNudge per classroom and step, sent as Neram Assistant. Never from a
+    // teacher's own Teams (founder, 2026-09-24).
     const groups = new Map<string, Candidate[]>();
     for (const c of claimed) {
       const key = `${c.classroomId}|${c.step}`;
@@ -137,7 +135,6 @@ export async function GET(request: NextRequest) {
     for (const group of groups.values()) {
       const first = group[0];
       const msg = joinReminderMessage(first.step);
-      const sender = senders[first.classroomId];
       const { results } = await sendNudge({
         studentIds: group.map((g) => g.studentId),
         subject: msg.subject,
@@ -146,7 +143,7 @@ export async function GET(request: NextRequest) {
         eventType: 'classroom_enrolled',
         metadata: { source: 'join_reminder', step: first.step, classroom_id: first.classroomId },
         reachNotStarted: true,
-        assistant: { link: { url, label: msg.buttonLabel }, fallbackSenderUserId: sender?.userId ?? null },
+        assistant: { link: { url, label: msg.buttonLabel } },
         source: { kind: 'join_reminder', refId: first.classroomId },
       });
       reached += results.filter((r) => r.ok).length;

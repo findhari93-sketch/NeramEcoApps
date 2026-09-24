@@ -13,6 +13,7 @@ import { countActiveFilters } from '@/components/question-bank/FilterChips';
 import { expandCategories, categoryLabelMap } from '@/lib/qb-category-tree';
 import { deserializeQBFilters } from '@/lib/qb-filter-url';
 import { buildPracticeQuery, readPracticeQid } from '@/lib/qb-practice-url';
+import { baseIdsOf } from '@/lib/practice-atoms';
 import { isQBExamType, qbExamPath, rememberQBExam } from '@/lib/qb-exam-routes';
 import { usePracticeSession, type PracticeContext } from '@/components/question-bank/practice/usePracticeSession';
 import { useTestSelection } from '@/components/question-bank/practice/useTestSelection';
@@ -476,7 +477,10 @@ export default function QuestionListPage() {
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             title: settings.title,
-            question_ids: Array.from(selection.ids),
+            // The question rows behind what was picked: a test is built of
+            // questions, and picking either option of an either-or drawing
+            // picks the one question it belongs to.
+            question_ids: baseIdsOf(selection.ids),
             timer_type: settings.timerType,
             duration_minutes: settings.timerType === 'full' ? settings.durationMinutes : undefined,
             per_question_seconds: settings.timerType === 'per_question' ? settings.perQuestionSeconds : undefined,

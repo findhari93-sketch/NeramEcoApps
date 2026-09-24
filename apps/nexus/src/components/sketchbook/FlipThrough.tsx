@@ -1,9 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
 import { Box, Button, Chip, Paper, Skeleton, Typography, EmptyState } from '@neram/ui';
 import DoneAllOutlinedIcon from '@mui/icons-material/DoneAllOutlined';
+import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded';
+import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
+import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import type { SketchbookFeatureFact, SketchbookInboxRow } from '@neram/database/queries/nexus';
 import type { SketchbookReaction } from '@neram/database/types';
 import { useAuthSWR } from '@/lib/nexus-swr';
@@ -18,7 +20,7 @@ import { createHeldSends } from '@/lib/held-sends';
 import { BOTTOM_NAV_HEIGHT } from '@/lib/shell-chrome';
 import { firstName, REACTION_LABEL } from '@/lib/sketchbook-messages';
 import { chatTokenGetter, flipSketch, reactToSketch } from './sketchbook-api';
-import TeacherSketchActions from './TeacherSketchActions';
+import TeacherSketchActions, { DockTool } from './TeacherSketchActions';
 
 const SEEN_AFTER_MS = 1500;
 /** How long a reaction waits before it is sent, so Undo can take it back. A Teams chat cannot be unsent. */
@@ -28,6 +30,8 @@ export const ADVANCE_AFTER_MS = 250;
 /** Images fetched ahead of the card on screen, so the next one is already there. */
 const PRELOAD_AHEAD = 2;
 const KEY_REACTIONS: Record<string, SketchbookReaction> = { '1': 'heart', '2': 'fire', '3': 'wow' };
+/** How far a finger must travel sideways on the sketch to flip it. */
+export const SWIPE_MIN_PX = 56;
 
 type Row = SketchbookInboxRow & { featured: SketchbookFeatureFact[] };
 interface Inbox { sketches: Row[]; remaining: number }
@@ -90,6 +94,8 @@ export default function FlipThrough({ classroomId }: { classroomId: string }) {
   // Copies of a sheet already answered in this sitting (the inbox's twin_ids).
   const [dropped, setDropped] = useState<ReadonlySet<string>>(() => new Set());
   const touched = useRef(false);
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
+  const [drag, setDrag] = useState(0);
   const seenTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -267,20 +273,27 @@ export default function FlipThrough({ classroomId }: { classroomId: string }) {
     return <Skeleton variant="rounded" aria-busy="true" aria-label="Loading sketches" sx={{ height: 'min(70vh, 560px)', borderRadius: 2 }} />;
   }
 
-  const statusBar = status && (
+  // Undo is only worth anything if it is on screen in the second after the tap,
+  // so below 900px the bar floats where the thumb already is. On the card it
+  // rides on top of the sticky dock (over the bottom edge of the sketch), so it
+  // can never cover Previous or Next; it used to be fixed above the bottom nav,
+  // which is exactly where the dock sticks. With no card left it floats above
+  // the nav, where the dock would have been.
+  const statusBar = (anchor: 'dock' | 'screen') => status && (
     <Box
       data-testid="flip-status"
       role="status"
       sx={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1,
-        minHeight: 44, px: 1.5, py: 0.5, mb: 1, borderRadius: 2,
-        // Below 900px the card's own buttons sit under the fold and the bottom nav,
-        // so the bar floats just above the nav where the thumb already is: Undo is
-        // only worth anything if it is on screen in the second after the tap.
-        position: { xs: 'fixed', md: 'static' },
-        left: { xs: 16, md: 'auto' },
-        right: { xs: 16, md: 'auto' },
-        bottom: { xs: `calc(${BOTTOM_NAV_HEIGHT + 12}px + env(safe-area-inset-bottom, 0px))`, md: 'auto' },
+        minHeight: 44, px: 1.5, py: 0.5, borderRadius: 2,
+        mb: 1,
+        position: { xs: anchor === 'dock' ? 'absolute' : 'fixed', md: 'static' },
+        left: { xs: anchor === 'dock' ? 12 : 16, md: 'auto' },
+        right: { xs: anchor === 'dock' ? 12 : 16, md: 'auto' },
+        bottom: {
+          xs: anchor === 'dock' ? '100%' : `calc(${BOTTOM_NAV_HEIGHT + 12}px + env(safe-area-inset-bottom, 0px))`,
+          md: 'auto',
+        },
         zIndex: { xs: 1400, md: 'auto' },
         boxShadow: { xs: 6, md: 0 },
         // Dark text on an opaque light surface in both states: 4.5:1 without a tinted fill.
@@ -306,7 +319,7 @@ export default function FlipThrough({ classroomId }: { classroomId: string }) {
   if (!current) {
     return (
       <Box>
-        {statusBar}
+        {statusBar('screen')}
         <EmptyState icon={<DoneAllOutlinedIcon />} title="You have flipped through everything."
           description="New sketches appear here as students add them." action={<Button onClick={checkAgain} sx={{ minHeight: 48 }}>Check again</Button>} />
       </Box>
@@ -318,8 +331,35 @@ export default function FlipThrough({ classroomId }: { classroomId: string }) {
   const state = local[current.id] || {};
   const total = rows.length + (liveDeck?.remaining || 0);
 
+  // Swipe on the sketch flips it, like any photo viewer: left for Next, right
+  // for Previous. The buttons stay the contract; this only saves a reach.
+  // Mostly-vertical moves are left alone so the page still scrolls.
+  const onTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    swipeStart.current = t ? { x: t.clientX, y: t.clientY } : null;
+  };
+  const onTouchMove = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    if (!swipeStart.current || !t) return;
+    const dx = t.clientX - swipeStart.current.x;
+    const dy = t.clientY - swipeStart.current.y;
+    setDrag(Math.abs(dx) > Math.abs(dy) ? dx : 0);
+  };
+  const onTouchEnd = (e: React.TouchEvent) => {
+    const start = swipeStart.current;
+    const t = e.changedTouches[0];
+    swipeStart.current = null;
+    setDrag(0);
+    if (!start || !t) return;
+    const dx = t.clientX - start.x;
+    const dy = t.clientY - start.y;
+    if (Math.abs(dx) < SWIPE_MIN_PX || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    if (dx < 0) next();
+    else if (index > 0) previous();
+  };
+
   return (
-    <Paper elevation={0} sx={{ borderRadius: 2, border: 1, borderColor: 'divider', overflow: 'hidden', display: 'flex', flexDirection: 'column', minHeight: 'min(70vh, 640px)' }}>
+    <Paper elevation={0} sx={{ borderRadius: 2, border: 1, borderColor: 'divider', overflow: 'clip', display: 'flex', flexDirection: 'column', minHeight: 'min(70vh, 640px)' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, p: 1.5 }}>
         <StudentStageAvatar stage={stage} dormant={!!fact?.dormant} userId={current.student.id} name={current.student.name} msOid={current.student.ms_oid} fallbackSrc={current.student.avatar_url} size={40} />
         <Box sx={{ minWidth: 0, flex: 1, display: 'flex', alignItems: 'center' }}>
@@ -332,17 +372,46 @@ export default function FlipThrough({ classroomId }: { classroomId: string }) {
         <Typography variant="caption" color="text.secondary" aria-live="polite">{index + 1} of {total}</Typography>
       </Box>
 
-      <Box sx={{ flex: 1, bgcolor: 'action.hover', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 280 }}>
+      <Box
+        data-testid="flip-sketch"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={() => { swipeStart.current = null; setDrag(0); }}
+        sx={{
+          flex: 1, bgcolor: 'action.hover', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          minHeight: 280, overflow: 'hidden',
+          // Vertical scroll and pinch stay the browser's; sideways is the flip.
+          touchAction: 'pan-y pinch-zoom',
+        }}
+      >
         <Box component="img" src={current.original_image_url} alt={current.self_note || `Sketch by ${current.student.name || 'student'}`}
           decoding="async"
-          sx={{ maxWidth: '100%', maxHeight: 'min(56vh, 520px)', objectFit: 'contain', display: 'block' }} />
+          draggable={false}
+          sx={{
+            maxWidth: '100%', objectFit: 'contain', display: 'block', userSelect: 'none',
+            // On a phone the sketch takes what the card header, the dock and the
+            // app chrome leave, so the whole card fits once the page is scrolled to it.
+            maxHeight: { xs: 'max(280px, calc(100dvh - 320px))', md: 'min(56vh, 520px)' },
+            // Follows the finger at half speed so a swipe feels held, not thrown.
+            transform: drag ? `translateX(${drag / 2}px)` : 'none',
+            transition: drag ? 'none' : 'transform 180ms ease-out',
+            '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+          }} />
       </Box>
 
       {current.self_note && <Typography variant="body2" sx={{ px: 1.5, pt: 1.5 }}>{current.self_note}</Typography>}
 
-      {/* Sticks above the bottom nav below 900px, as ReviewActionBar does; at bottom 0
-          the Previous / Open review / Next row sat underneath the nav on a phone. */}
-      <Box sx={{ p: 1.5, pb: 'calc(12px + env(safe-area-inset-bottom))', position: 'sticky', bottom: { xs: BOTTOM_NAV_HEIGHT, md: 0 }, bgcolor: 'background.paper' }}>
+      {/* The dock: reactions, then one row of labelled tools. It sticks above the
+          bottom nav below 900px, as ReviewActionBar does. It replaced three
+          stacked rows (reactions, Comment/Feature, Previous/Open review/Next)
+          that took two fifths of a phone screen and squeezed the sketch. */}
+      <Box sx={{
+        position: 'sticky', bottom: { xs: BOTTOM_NAV_HEIGHT, md: 0 }, zIndex: 2,
+        px: 1.5, pt: 1.25, pb: 'calc(10px + env(safe-area-inset-bottom))',
+        bgcolor: 'background.paper', borderTop: 1, borderColor: 'divider',
+      }}>
+        {statusBar('dock')}
         <TeacherSketchActions
           key={current.id}
           compact
@@ -353,13 +422,16 @@ export default function FlipThrough({ classroomId }: { classroomId: string }) {
           onChanged={(c) => setLocal((m) => ({ ...m, [current.id]: { ...m[current.id], ...c } }))}
           onReact={(r, comment) => react(current, r, comment)}
           onComment={(comment) => hold(current, { comment })}
+          dock={{
+            before: <DockTool icon={<ChevronLeftRoundedIcon />} label="Previous" disabled={index === 0} onClick={previous} />,
+            after: (
+              <>
+                <DockTool icon={<RateReviewOutlinedIcon />} label="Review" ariaLabel="Open review" href={flipReviewHref(current.id, classroomId)} />
+                <DockTool icon={<ChevronRightRoundedIcon />} label="Next" emphasis onClick={next} />
+              </>
+            ),
+          }}
         />
-        {statusBar}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-          <Button variant="text" disabled={index === 0} onClick={previous} sx={{ minHeight: 48, px: 1, whiteSpace: 'nowrap' }}>Previous</Button>
-          <Button component={Link} href={flipReviewHref(current.id, classroomId)} variant="outlined" sx={{ minHeight: 48, px: 1.5, whiteSpace: 'nowrap' }}>Open review</Button>
-          <Button variant="contained" onClick={next} sx={{ minHeight: 48, minWidth: 88, whiteSpace: 'nowrap' }}>Next</Button>
-        </Box>
       </Box>
     </Paper>
   );

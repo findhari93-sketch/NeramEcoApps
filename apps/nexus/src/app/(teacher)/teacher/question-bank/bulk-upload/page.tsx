@@ -46,23 +46,12 @@ import PasteTextTab from '@/components/question-bank/bulk-upload/PasteTextTab';
 import UploadPDFTab from '@/components/question-bank/bulk-upload/UploadPDFTab';
 import UploadJSONTab from '@/components/question-bank/bulk-upload/UploadJSONTab';
 import ReviewPanel from '@/components/question-bank/bulk-upload/ReviewPanel';
+import { JEE_SESSIONS, NATA_SESSIONS } from '@/lib/qb-paper-identity';
 
 const steps = ['Paper Info', 'Upload Data', 'Review & Import', 'Done'];
 const currentYear = new Date().getFullYear();
 const YEARS = Array.from({ length: currentYear - 2005 + 1 }, (_, i) => currentYear - i);
 
-// JEE Paper 2 has 2 sessions per year
-const JEE_SESSIONS = [
-  { value: 'Session 1', label: 'Session 1', hint: 'January' },
-  { value: 'Session 2', label: 'Session 2', hint: 'April' },
-];
-
-// NATA has up to 3 tests per year
-const NATA_SESSIONS = [
-  { value: 'Test 1', label: 'Test 1', hint: 'April' },
-  { value: 'Test 2', label: 'Test 2', hint: 'July' },
-  { value: 'Test 3', label: 'Test 3', hint: 'October' },
-];
 
 const TAB_ICONS: Record<UploadMethod, React.ReactElement> = {
   paste: <ContentPasteIcon sx={{ fontSize: '1rem' }} />,

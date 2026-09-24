@@ -1,4 +1,16 @@
 /**
+ * RETIRED 2026-09-24: nothing sends from a teacher's own Teams any more.
+ *
+ * The founder asked for every student chat to come from Neram Assistant
+ * (lib/teams-assistant.ts), because 200 students meant 200 automated threads in
+ * the teacher's personal chat list. "Connect Teams", its routes and the daily
+ * renewal are gone, and sendNudge no longer calls getSenderAccessToken. What is
+ * still used: senderLookup() (a no-op fragment the crons spread),
+ * senderAppConfig() and classroomSenders() for the delivery-health page. The
+ * OAuth helpers below stay only until the nexus_teams_senders table is dropped.
+ *
+ * The original design, for the record:
+ *
  * Automatic Teams chats, sent as a teacher who connected their Teams once.
  *
  * Founder decision, 2026-09-14: automatic reminders reach the student exactly the
@@ -280,37 +292,18 @@ export async function renewSenders(deps: SenderDeps = {}): Promise<{ renewed: nu
   return out;
 }
 
-/** What a cron spreads into sendNudge to say who this classroom's reminders come from. */
-export type AutomaticSender = { assistant: { fallbackSenderUserId: string | null } };
+/** What a cron spreads into sendNudge: Neram Assistant, with nobody's name on it. */
+export type AutomaticSender = { assistant: Record<string, never> };
 
 /**
- * For a cron that reminds students one at a time: who a classroom's automatic
- * messages come from, looked up once per classroom per run. Spread it into
- * sendNudge.
- *
- * NOBODY WROTE THESE, so they come from Neram Assistant (founder, 2026-09-20).
- * A sweep that fires every weekday morning is not a teacher talking, and sending
- * it from one turns a real conversation into a notification log. The connected
- * teacher is kept as the named fallback so that switching the Assistant on is a
- * decision rather than an outage: while staff.assistant-sender is off, every one
- * of these behaves exactly as it did before.
- *
- * A null fallback used to mean no chat at all. With the Assistant on it no longer
- * does: a classroom whose teacher never connected Teams can now be reached.
+ * For a cron that reminds students one at a time: spread the result into
+ * sendNudge. NOBODY WROTE THESE, so they come from Neram Assistant with no
+ * teacher's name on them, and never from a teacher's own Teams (founder,
+ * 2026-09-20, and 2026-09-24 when the teacher fallback was removed too). Kept as
+ * a lookup so the crons that call it need no change; it no longer reads anything.
  */
-export function senderLookup(supabase: any = getSupabaseAdminClient()) {
-  const memo = new Map<string, Promise<AutomaticSender>>();
-  return (classroomId: string | null | undefined): Promise<AutomaticSender> => {
-    if (!classroomId) return Promise.resolve({ assistant: { fallbackSenderUserId: null } });
-    let hit = memo.get(classroomId);
-    if (!hit) {
-      hit = classroomSenders([classroomId], supabase)
-        .then((m) => ({ assistant: { fallbackSenderUserId: m[classroomId]?.userId ?? null } }))
-        .catch(() => ({ assistant: { fallbackSenderUserId: null } }) as AutomaticSender);
-      memo.set(classroomId, hit);
-    }
-    return hit;
-  };
+export function senderLookup(_supabase?: unknown) {
+  return (_classroomId: string | null | undefined): Promise<AutomaticSender> => Promise.resolve({ assistant: {} });
 }
 
 /**

@@ -44,6 +44,7 @@ import UploadFileIcon from '@mui/icons-material/UploadFile';
 import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import PublishIcon from '@mui/icons-material/Publish';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import { BOTTOM_NAV_HEIGHT } from '@/lib/shell-chrome';
 import TuneIcon from '@mui/icons-material/Tune';
 import { ToggleButtonGroup, ToggleButton } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
@@ -52,6 +53,22 @@ import RecapCheckpointsEditor, {
   toEditableSections,
   type EditableSection,
 } from '@/components/class-recap/RecapCheckpointsEditor';
+
+/**
+ * The three tools (Generate, Upload .vtt, Settings). A third of the row each on
+ * a phone, icon over label so the words fit; an ordinary button above that.
+ */
+const TOOL_SX = {
+  minHeight: { xs: 56, sm: 44 },
+  textTransform: 'none',
+  flexDirection: { xs: 'column', sm: 'row' },
+  gap: { xs: 0.25, sm: 0 },
+  px: { xs: 0.5, sm: 2 },
+  fontSize: { xs: '0.8125rem', sm: '0.875rem' },
+  lineHeight: 1.2,
+  whiteSpace: 'nowrap',
+  '& .MuiButton-startIcon': { m: { xs: 0, sm: '0 8px 0 -4px' } },
+} as const;
 
 export default function TeacherClassRecapEditor() {
   const params = useParams();
@@ -357,7 +374,8 @@ export default function TeacherClassRecapEditor() {
   const published = recap.status === 'published';
 
   return (
-    <Box sx={{ maxWidth: 820, mx: 'auto', pb: 6 }}>
+    // Room at the foot for the pinned Save and Publish bar on a phone.
+    <Box sx={{ maxWidth: 820, mx: 'auto', pb: { xs: 11, sm: 6 } }}>
       {/* Pushed, not router.back(). This editor is opened from the review queue,
           from a class row, and straight from a link in a notification, and
           back() sent a teacher who arrived by the last of those nowhere useful.
@@ -365,12 +383,12 @@ export default function TeacherClassRecapEditor() {
       <Button
         startIcon={<ArrowBackIcon />}
         onClick={() => router.push('/teacher/catch-up?tab=classes')}
-        sx={{ mb: 1, color: 'text.secondary', minHeight: 44 }}
+        sx={{ mb: 1, ml: -1, color: 'text.secondary', minHeight: 44, textTransform: 'none', fontWeight: 600 }}
       >
         Back to Catch-up
       </Button>
 
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', mb: 0.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', mb: { xs: 2, sm: 0.5 } }}>
         <Typography variant="h5" sx={{ fontSize: { xs: '1.2rem', sm: '1.5rem' }, letterSpacing: '-0.3px' }}>
           {recap.title}
         </Typography>
@@ -384,7 +402,7 @@ export default function TeacherClassRecapEditor() {
           }}
         />
       </Box>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2, display: { xs: 'none', sm: 'block' } }}>
         Generate checkpoint quizzes from the class transcript, review them, then publish. Anyone who
         missed this class watches it here, not only students who joined late.
       </Typography>
@@ -400,11 +418,12 @@ export default function TeacherClassRecapEditor() {
           size="small"
           disabled={!!busy}
           onChange={(_, v) => v && setVideoSource(v)}
+          sx={{ width: { xs: '100%', sm: 'auto' }, '& .MuiToggleButton-root': { flex: { xs: 1, sm: 'none' } } }}
         >
-          <ToggleButton value="sharepoint" sx={{ textTransform: 'none', minHeight: 40, px: 2 }}>
+          <ToggleButton value="sharepoint" sx={{ textTransform: 'none', minHeight: 44, px: 2 }}>
             Teams recording
           </ToggleButton>
-          <ToggleButton value="youtube" sx={{ textTransform: 'none', minHeight: 40, px: 2 }}>
+          <ToggleButton value="youtube" sx={{ textTransform: 'none', minHeight: 44, px: 2 }}>
             YouTube backup
           </ToggleButton>
         </ToggleButtonGroup>
@@ -433,18 +452,37 @@ export default function TeacherClassRecapEditor() {
         editable.
       </Typography>
 
-      {/* Actions */}
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} sx={{ mb: 2.5 }}>
+      {/* Actions.
+          On a phone these used to stack into six full-width buttons, about
+          310px, and Save and Publish sat above a checkpoint list that can run
+          for several screens, so saving an edit meant scrolling back up for it.
+          Now the three tools share one row, and Save and Publish are pinned
+          above the bottom nav, always a thumb away. From sm up it is the one
+          row it always was. */}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: 'repeat(3, minmax(0, 1fr))', sm: 'auto auto auto 1fr auto auto' },
+          gap: 1,
+          mb: 2.5,
+          '& .MuiButton-root': { minWidth: 0 },
+        }}
+      >
         <Button
           variant="outlined"
           startIcon={<AutoAwesomeIcon />}
           disabled={!!busy}
           onClick={() => generate()}
-          sx={{ minHeight: 44, textTransform: 'none' }}
+          sx={TOOL_SX}
         >
-          {busy === 'generate' ? 'Generating...' : 'Generate only'}
+          {busy === 'generate' ? 'Generating...' : (
+            <>
+              <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>Generate</Box>
+              <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Generate only</Box>
+            </>
+          )}
         </Button>
-        <Button variant="outlined" startIcon={<UploadFileIcon />} disabled={!!busy} onClick={() => fileRef.current?.click()} sx={{ minHeight: 44, textTransform: 'none' }}>
+        <Button variant="outlined" startIcon={<UploadFileIcon />} disabled={!!busy} onClick={() => fileRef.current?.click()} sx={TOOL_SX}>
           Upload .vtt
         </Button>
         {/* Sits next to Generate on purpose: these numbers decide what Generate
@@ -454,25 +492,49 @@ export default function TeacherClassRecapEditor() {
           startIcon={<TuneIcon />}
           disabled={!!busy || !settings}
           onClick={() => setSettingsOpen(true)}
-          sx={{ minHeight: 44, textTransform: 'none' }}
+          sx={TOOL_SX}
         >
-          Checkpoint settings
+          <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>Settings</Box>
+          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Checkpoint settings</Box>
         </Button>
         <input ref={fileRef} type="file" accept=".vtt,text/vtt" hidden onChange={onUpload} />
-        <Box sx={{ flex: 1 }} />
-        <Button variant="outlined" startIcon={<SaveOutlinedIcon />} disabled={!!busy || sections.length === 0} onClick={() => save()} sx={{ minHeight: 44, textTransform: 'none' }}>
-          Save
-        </Button>
-        {published ? (
-          <Button variant="text" disabled={!!busy} onClick={() => setStatus('unpublish')} sx={{ minHeight: 44, textTransform: 'none' }}>
-            Unpublish
+        <Box sx={{ display: { xs: 'none', sm: 'block' } }} />
+
+        <Box
+          sx={{
+            display: 'contents',
+            [`@media (max-width: 599.95px)`]: {
+              display: 'flex',
+              gap: 1.5,
+              position: 'fixed',
+              left: 0,
+              right: 0,
+              bottom: BOTTOM_NAV_HEIGHT,
+              zIndex: 1100,
+              px: 2,
+              py: 1.25,
+              bgcolor: 'background.paper',
+              borderTop: '1px solid',
+              borderColor: 'divider',
+              boxShadow: '0 -4px 16px rgba(0,0,0,0.08)',
+              '& .MuiButton-root': { flex: 1, minHeight: 48 },
+            },
+          }}
+        >
+          <Button variant="outlined" startIcon={<SaveOutlinedIcon />} disabled={!!busy || sections.length === 0} onClick={() => save()} sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}>
+            Save
           </Button>
-        ) : (
-          <Button variant="contained" color="success" startIcon={<PublishIcon />} disabled={!!busy || sections.length === 0} onClick={() => setStatus('publish')} sx={{ minHeight: 44, textTransform: 'none' }}>
-            Publish
-          </Button>
-        )}
-      </Stack>
+          {published ? (
+            <Button variant="text" disabled={!!busy} onClick={() => setStatus('unpublish')} sx={{ minHeight: 44, textTransform: 'none' }}>
+              Unpublish
+            </Button>
+          ) : (
+            <Button variant="contained" color="success" startIcon={<PublishIcon />} disabled={!!busy || sections.length === 0} onClick={() => setStatus('publish')} sx={{ minHeight: 44, textTransform: 'none', fontWeight: 700 }}>
+              Publish
+            </Button>
+          )}
+        </Box>
+      </Box>
 
       {/* The class test. Separate from the checkpoints above because it answers
           a different question: the checkpoints prove someone watched, this
@@ -545,7 +607,14 @@ export default function TeacherClassRecapEditor() {
         />
       )}
 
-      <Snackbar open={!!snack} autoHideDuration={4000} onClose={() => setSnack(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+      <Snackbar
+        open={!!snack}
+        autoHideDuration={4000}
+        onClose={() => setSnack(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        // Above the bottom nav and the pinned Save bar on a phone.
+        sx={{ bottom: { xs: BOTTOM_NAV_HEIGHT + 84, md: 24 } }}
+      >
         <Alert severity={snack?.sev || 'info'} onClose={() => setSnack(null)}>
           {snack?.msg}
         </Alert>

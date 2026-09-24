@@ -7,8 +7,18 @@ export interface ActivationCandidate {
 }
 
 /** An empty string is not a key: prod holds 410 draft rows whose answer is ''. */
-function hasAnswerKey(answer: string | null | undefined): boolean {
+export function hasAnswerKey(answer: string | null | undefined): boolean {
   return typeof answer === 'string' && answer.trim() !== '';
+}
+
+/**
+ * A question still owed its answer key: an MCQ or numerical one with no key.
+ * The paper's "No answer key" queue. Read from the answer, never from
+ * `status`, for the reason canActivateQuestion gives below; a drawing or an
+ * image answer is never in it.
+ */
+export function questionMissingAnswerKey(question: ActivationCandidate): boolean {
+  return needsAnswerKey(question.question_format) && !hasAnswerKey(question.correct_answer);
 }
 
 /**

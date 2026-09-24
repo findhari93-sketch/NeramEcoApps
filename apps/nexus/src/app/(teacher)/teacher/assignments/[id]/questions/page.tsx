@@ -43,6 +43,8 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import BoltOutlinedIcon from '@mui/icons-material/BoltOutlined';
 import { useAuthFetch } from '@/components/curriculum/shared';
+import { useSidebarContext } from '@/components/SidebarProvider';
+import { BOTTOM_NAV_HEIGHT } from '@/lib/shell-chrome';
 import QuestionComposer, {
   type ComposerQuestion,
   fromApiQuestions,
@@ -55,6 +57,7 @@ function AssignmentQuestionsEditor() {
   const search = useSearchParams();
   const authFetch = useAuthFetch();
   const theme = useTheme();
+  const { sidebarWidth } = useSidebarContext();
 
   // Came straight from creating the assignment, so it is still a draft and the
   // teacher has not seen it published yet. Only changes the wording.
@@ -185,7 +188,7 @@ function AssignmentQuestionsEditor() {
   }
 
   return (
-    <Box sx={{ pb: 12 }}>
+    <Box sx={{ pb: { xs: 10, md: 12 } }}>
       {/* Sticky header: where you are, and what the paper adds up to, always. */}
       <Box
         sx={{
@@ -331,21 +334,23 @@ function AssignmentQuestionsEditor() {
         )}
       </Box>
 
-      {/* Sticky action bar: the save is always one thumb away, never scrolled past. */}
+      {/* Sticky action bar: the save is always one thumb away, never scrolled past.
+          Below md it stacks on the bottom nav rather than under it: at bottom 0
+          with zIndex 20 the nav (appBar, 1100) covered Save entirely on a phone. */}
       {!lockedReason && (
         <Box
           sx={{
             position: 'fixed',
-            left: 0,
+            left: { xs: 0, md: `${sidebarWidth}px` },
             right: 0,
-            bottom: 0,
-            zIndex: 20,
+            bottom: { xs: BOTTOM_NAV_HEIGHT, md: 0 },
+            zIndex: (t) => t.zIndex.appBar,
             bgcolor: 'background.paper',
             borderTop: '1px solid',
             borderColor: 'divider',
             px: { xs: 1.5, sm: 2 },
             py: 1.25,
-            pb: 'calc(10px + env(safe-area-inset-bottom))',
+            pb: { xs: 1.25, md: 'calc(10px + env(safe-area-inset-bottom))' },
           }}
         >
           <Stack direction="row" spacing={1.5} sx={{ maxWidth: 780, mx: 'auto' }}>
@@ -369,7 +374,7 @@ function AssignmentQuestionsEditor() {
         autoHideDuration={5000}
         onClose={() => setSnack(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-        sx={{ bottom: { xs: 88, sm: 88 } }}
+        sx={{ bottom: { xs: BOTTOM_NAV_HEIGHT + 88, md: 88 } }}
       >
         <Alert severity={snack?.sev ?? 'success'} onClose={() => setSnack(null)} sx={{ width: '100%' }}>
           {snack?.msg}

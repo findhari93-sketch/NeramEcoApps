@@ -14,6 +14,8 @@ import {
   Tooltip,
   ToggleButton,
   ToggleButtonGroup,
+  Menu,
+  MenuItem,
   useTheme,
   useMediaQuery,
   alpha,
@@ -321,6 +323,9 @@ export default function TeacherStudents() {
     setSelectedIds(new Set());
     patchQuery({ dv: next === 'all' ? null : next });
   }, []);
+
+  // The phone's single layout button opens this menu.
+  const [layoutAnchor, setLayoutAnchor] = useState<HTMLElement | null>(null);
 
   const handleViewModeChange = useCallback((_e: React.MouseEvent<HTMLElement>, next: ViewMode | null) => {
     if (!next) return; // ignore de-select (a mode is always active)
@@ -1116,11 +1121,14 @@ export default function TeacherStudents() {
 
   return (
     <Box sx={{ pb: selectMode ? 12 : fabVisible ? { xs: 9, sm: 0 } : 0 }}>
-      {/* Header: what the numbers count, and the page's two actions */}
+      {/* Header: what the numbers count, and the page's two actions.
+          On a phone the count line takes the full width and Select moves down
+          to the toolbar as an icon: squeezed beside the info and Select
+          buttons, "37 tracked, 2 not started, ..." wrapped to four lines. */}
       <Box sx={{ display: 'flex', alignItems: 'center', columnGap: 1, flexWrap: 'wrap', mb: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0, flex: '1 1 200px' }}>
-          <PeopleOutlinedIcon aria-hidden sx={{ fontSize: 20, color: 'primary.main', mr: 0.75, flexShrink: 0 }} />
-          <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.secondary' }}>
+          <PeopleOutlinedIcon aria-hidden sx={{ fontSize: 20, color: 'primary.main', mr: 0.75, flexShrink: 0, display: { xs: 'none', sm: 'block' } }} />
+          <Typography variant="body2" sx={{ fontWeight: 700, color: 'text.secondary', fontSize: { xs: '0.8125rem', sm: '0.875rem' } }}>
             {loading && !students.length ? 'Loading students' : headerCaption}
           </Typography>
           {/*
@@ -1137,7 +1145,7 @@ export default function TeacherStudents() {
             }}
           />
         </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, ml: 'auto' }}>
+        <Box sx={{ display: { xs: selectMode ? 'flex' : 'none', sm: 'flex' }, alignItems: 'center', gap: 1, ml: 'auto' }}>
           {canSetStage && !selectMode && (
             <Button
               startIcon={<ChecklistOutlinedIcon />}
@@ -1165,10 +1173,12 @@ export default function TeacherStudents() {
         </Box>
       </Box>
 
-      {/* Sticky: search, categories, then how the list is narrowed and ordered */}
+      {/* Sticky from sm up: search, categories, then how the list is narrowed
+          and ordered. Not on a phone, where the whole block is about 230px
+          and pinned it covered a third of the screen while scrolling the list. */}
       <Box
         sx={{
-          position: 'sticky',
+          position: { xs: 'static', sm: 'sticky' },
           top: 0,
           zIndex: 5,
           pt: 0.5,
@@ -1216,7 +1226,7 @@ export default function TeacherStudents() {
           </Box>
         )}
 
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: { xs: 'nowrap', sm: 'wrap' } }}>
           <StudentFilterSheet
             filters={filters}
             examBatchFilter={examBatchFilter}
@@ -1230,6 +1240,61 @@ export default function TeacherStudents() {
           />
           <StudentSortMenu value={sort} onChange={handleSortChange} />
 
+          {/* On a phone: the layout switch is one button with a menu, and Select
+              sits beside it as an icon. Three 44px toggles plus Select did not
+              fit the row. */}
+          <Box sx={{ display: { xs: 'flex', sm: 'none' }, gap: 0.5, ml: 'auto', flexShrink: 0 }}>
+            <IconButton
+              aria-label="Change the list layout"
+              aria-haspopup="menu"
+              onClick={(e) => setLayoutAnchor(e.currentTarget)}
+              sx={{ width: 48, height: 48, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'background.paper' }}
+            >
+              {viewMode === 'cards' ? (
+                <GridViewOutlinedIcon fontSize="small" />
+              ) : viewMode === 'detailed' ? (
+                <ViewAgendaOutlinedIcon fontSize="small" />
+              ) : (
+                <DensitySmallOutlinedIcon fontSize="small" />
+              )}
+            </IconButton>
+            {canSetStage && !selectMode && (
+              <IconButton
+                aria-label="Select students"
+                onClick={() => setSelectMode(true)}
+                sx={{ width: 48, height: 48, color: 'primary.main', border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'background.paper' }}
+              >
+                <ChecklistOutlinedIcon fontSize="small" />
+              </IconButton>
+            )}
+          </Box>
+          <Menu
+            anchorEl={layoutAnchor}
+            open={!!layoutAnchor}
+            onClose={() => setLayoutAnchor(null)}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+          >
+            {([
+              ['compact', 'Compact list', DensitySmallOutlinedIcon],
+              ['cards', 'Card grid', GridViewOutlinedIcon],
+              ['detailed', 'Detailed rows', ViewAgendaOutlinedIcon],
+            ] as const).map(([mode, label, ModeIcon]) => (
+              <MenuItem
+                key={mode}
+                selected={viewMode === mode}
+                onClick={(e) => {
+                  setLayoutAnchor(null);
+                  handleViewModeChange(e as unknown as React.MouseEvent<HTMLElement>, mode);
+                }}
+                sx={{ minHeight: 48, gap: 1.5 }}
+              >
+                <ModeIcon fontSize="small" />
+                {label}
+              </MenuItem>
+            ))}
+          </Menu>
+
           {/* Density switch: dense scan list / avatar cards / roomy rows */}
           <ToggleButtonGroup
             value={viewMode}
@@ -1238,6 +1303,7 @@ export default function TeacherStudents() {
             size="small"
             aria-label="Student list layout"
             sx={{
+              display: { xs: 'none', sm: 'inline-flex' },
               ml: 'auto',
               bgcolor: 'background.paper',
               borderRadius: 2,

@@ -143,7 +143,7 @@ test.describe('Nexus — Teacher Study Materials', () => {
     await expect(page.getByLabel('Drag to reorder or move').first()).toBeVisible({ timeout: 20_000 });
 
     // Open the first file's ... menu and confirm the new organise actions exist.
-    await page.getByRole('button', { name: 'File actions' }).first().click();
+    await page.getByRole('button', { name: /^File actions/ }).first().click();
     const menu = page.getByRole('menu');
     await expect(menu.getByRole('menuitem', { name: 'Move to folder...' })).toBeVisible();
     await expect(menu.getByRole('menuitem', { name: 'Move up' })).toBeVisible();
@@ -169,7 +169,7 @@ test.describe('Nexus — Teacher Study Materials', () => {
     await page.waitForLoadState('networkidle').catch(() => undefined);
     await page.getByRole('button', { name: 'List view' }).click();
 
-    await page.getByRole('button', { name: 'File actions' }).first().click();
+    await page.getByRole('button', { name: /^File actions/ }).first().click();
     await page.getByRole('menuitem', { name: 'Move to folder...' }).click();
 
     // The picker dialog opens and lists folders; the file's own folder is flagged "Current".

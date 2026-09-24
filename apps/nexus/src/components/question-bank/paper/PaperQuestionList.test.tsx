@@ -242,6 +242,31 @@ describe('PaperQuestionList', () => {
     expect(screen.getByText('3 of 6 questions')).not.toBeNull();
   });
 
+  it('narrows to the questions with no answer key, leaving drawings out', () => {
+    const questions = [
+      q(1, 'math_mcq'),
+      { ...q(2, 'math_mcq'), correct_answer: null } as NexusQBQuestion,
+      { ...q(4, 'aptitude'), correct_answer: '' } as NexusQBQuestion,
+      q(5, 'aptitude'),
+      drawing(7),
+    ];
+    const onNeedsFilterChange = vi.fn();
+    const { rerender } = render(<PaperQuestionList {...baseProps({ questions, onNeedsFilterChange })} />);
+    fireEvent.click(screen.getByRole('button', { name: 'No answer key 2' }));
+    expect(onNeedsFilterChange).toHaveBeenCalledWith('missing-answer');
+
+    rerender(<PaperQuestionList {...baseProps({ questions, needsFilter: 'missing-answer' })} />);
+    expect(screen.getByRole('button', { name: 'Open question 2' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Open question 4' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Open question 1' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Open question 7' })).toBeNull();
+  });
+
+  it('hides the answer key filter on a paper with nothing to key', () => {
+    render(<PaperQuestionList {...baseProps({ questions: [drawing(1), drawing(2)] })} />);
+    expect(screen.queryByRole('button', { name: /^No answer key/ })).toBeNull();
+  });
+
   it('counts the solution queue within the section in view, not the whole paper', () => {
     renderList({ sectionFilter: 'aptitude' });
     expect(screen.getByRole('button', { name: 'Solution missing 0' })).not.toBeNull();

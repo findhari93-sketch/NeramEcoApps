@@ -153,7 +153,19 @@ function StudentRowBase({
           <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }} noWrap>
             {name}
           </Typography>
-          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+          {/* Two lines, not one: at 375px a single line cut "1 before joined"
+              to "1 before join...", which is the half a teacher needs. */}
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              lineHeight: 1.35,
+            }}
+          >
             {owedLine(row)}
           </Typography>
         </Box>
@@ -240,7 +252,7 @@ function StudentRowBase({
                 </Typography>
                 <Typography
                   variant="caption"
-                  color={item.overdue ? 'error.main' : 'text.disabled'}
+                  color={item.overdue ? 'error.main' : 'text.secondary'}
                   sx={{ display: 'block' }}
                 >
                   {itemLine(item)}

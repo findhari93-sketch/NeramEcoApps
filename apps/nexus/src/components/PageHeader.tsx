@@ -53,7 +53,10 @@ export default function PageHeader({
                 underline="hover"
                 color="text.secondary"
                 variant="caption"
-                sx={{ fontWeight: 500 }}
+                // The text stays small but the tap area is 44px tall: padding
+                // taken back by an equal negative margin, so the header does not
+                // move. A 14px-tall link was the smallest target on the page.
+                sx={{ fontWeight: 500, display: 'inline-flex', alignItems: 'center', minHeight: 44, my: '-15px' }}
               >
                 {crumb.label}
               </MuiLink>

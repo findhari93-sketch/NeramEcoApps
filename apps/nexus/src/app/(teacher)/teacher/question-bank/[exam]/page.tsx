@@ -53,6 +53,7 @@ import {
   examRelevanceFor,
   rememberQBExam,
 } from '@/lib/qb-exam-routes';
+import { paperHref } from '@/lib/qb-paper-link';
 import TeacherPaperTable, { TEACHER_PAPER_GRID } from '@/components/question-bank/TeacherPaperTable';
 import TeacherPaperCard, { TeacherPaperCardSkeleton } from '@/components/question-bank/TeacherPaperCard';
 import WorkStageCards from '@/components/question-bank/WorkStageCards';
@@ -139,7 +140,8 @@ function ExamWorkPage({ exam }: { exam: QBExamType }) {
   const counts = useMemo(() => countStages(rows), [rows]);
   const shown = useMemo(() => queryWorkRows(rows, stage), [rows, stage]);
 
-  const openPaper = (row: WorkRow) => router.push(`/teacher/question-bank/papers/${row.paper.id}`);
+  // Carries the card in view, so the paper's Back lands on the same list.
+  const openPaper = (row: WorkRow) => router.push(paperHref(row.paper.id, stage));
 
   async function handlePublishShown() {
     const ids = shown.map((row) => row.paper.id);

@@ -175,10 +175,12 @@ function ChapterWorkspace() {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
       {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1.25, borderBottom: `1px solid ${theme.palette.divider}`, flexShrink: 0 }}>
+      {/* No side padding of its own on a phone: the layout already gives 16px. */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: { xs: 0, sm: 2 }, py: { xs: 0.5, sm: 1.25 }, borderBottom: `1px solid ${theme.palette.divider}`, flexShrink: 0 }}>
         <IconButton
           onClick={() => router.push(file ? `/teacher/study-materials?folder=${file.folder_id}` : '/teacher/study-materials')}
-          aria-label="Back"
+          aria-label="Back to the folder"
+          sx={{ width: 44, height: 44, ml: { xs: -1, sm: 0 } }}
         >
           <ArrowBackIcon />
         </IconButton>
@@ -190,9 +192,24 @@ function ChapterWorkspace() {
           </Typography>
         )}
         {file?.downloadable && (
-          <Button size="small" startIcon={<DownloadOutlinedIcon />} onClick={() => window.open(contentUrl(true), '_blank')}>
-            Download
-          </Button>
+          <>
+            {/* An icon on a phone, so the chapter title keeps the width. */}
+            <IconButton
+              aria-label="Download"
+              onClick={() => window.open(contentUrl(true), '_blank')}
+              sx={{ display: { xs: 'inline-flex', sm: 'none' }, width: 44, height: 44 }}
+            >
+              <DownloadOutlinedIcon />
+            </IconButton>
+            <Button
+              size="small"
+              startIcon={<DownloadOutlinedIcon />}
+              onClick={() => window.open(contentUrl(true), '_blank')}
+              sx={{ display: { xs: 'none', sm: 'inline-flex' }, minHeight: 44 }}
+            >
+              Download
+            </Button>
+          </>
         )}
       </Box>
 
@@ -206,11 +223,13 @@ function ChapterWorkspace() {
         fullWidth
         size="small"
         sx={{
-          p: 1,
+          p: { xs: '8px 0', sm: 1 },
           flexShrink: 0,
           borderBottom: `1px solid ${theme.palette.divider}`,
           '& .MuiToggleButton-root': isMobile
-            ? { minHeight: 52, textTransform: 'none', flexDirection: 'column', gap: 0.25, fontSize: 10, px: 0.5 }
+            // 12px, not 10: five labels still fit a 375px row at this size,
+            // and 10px was below what a phone reads comfortably.
+            ? { minHeight: 56, textTransform: 'none', flexDirection: 'column', gap: 0.25, fontSize: '0.75rem', fontWeight: 600, px: 0.25, minWidth: 0 }
             : { minHeight: 44, textTransform: 'none', gap: 0.75 },
         }}
       >
@@ -321,7 +340,7 @@ function ChapterWorkspace() {
         onClose={() => setGrantTarget(null)}
       />
 
-      <Snackbar open={!!snack} autoHideDuration={3000} onClose={() => setSnack(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+      <Snackbar open={!!snack} autoHideDuration={3000} onClose={() => setSnack(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }} sx={{ bottom: { xs: 80, md: 24 } }}>
         {snack ? <Alert severity={snack.sev} onClose={() => setSnack(null)} variant="filled">{snack.msg}</Alert> : undefined}
       </Snackbar>
     </Box>

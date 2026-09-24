@@ -161,10 +161,14 @@ export default function YouTubeFindDialog({
             </Box>
             {severalPapers && (
               <Typography variant="body2" sx={{ mb: 1 }}>
-                {year} has several papers, so a title must also name the session, for example &quot;{exam} {year} Session 1
-                Forenoon&quot;.
+                {year} has several papers, so a title must also name the session and shift, for example &quot;{exam} {year}
+                Session 1 FN&quot; or &quot;Session 2 Afternoon&quot;.
               </Typography>
             )}
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              Numbers can run across the whole paper or start again at 1 in each section (&quot;Q no 12 - Aptitude
+              Solution&quot; is then the 12th aptitude question). The section word tells them apart.
+            </Typography>
             <Typography variant="body2" color="text.secondary">
               Nothing is saved until you check the rows and press Save.
             </Typography>

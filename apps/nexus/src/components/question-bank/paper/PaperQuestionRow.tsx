@@ -11,7 +11,12 @@ import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined
 import VideoLibraryOutlinedIcon from '@mui/icons-material/VideoLibraryOutlined';
 import OutlinedFlagIcon from '@mui/icons-material/OutlinedFlag';
 import type { NexusQBQuestion } from '@neram/database';
-import { QB_QUESTION_STATUS_COLORS, QB_QUESTION_STATUS_LABELS, solutionVideosOf } from '@neram/database';
+import {
+  QB_QUESTION_STATUS_COLORS,
+  QB_QUESTION_STATUS_LABELS,
+  needsAnswerKey,
+  solutionVideosOf,
+} from '@neram/database';
 import { questionImageSlots, solutionGapMessage } from '@/lib/qb-image-needs';
 import MathText from '@/components/common/MathText';
 import AltRouteIcon from '@mui/icons-material/AltRoute';
@@ -88,7 +93,14 @@ export default function PaperQuestionRow({
   // The glyph and its sentence come from one place, so the row cannot tell a
   // teacher that "maths questions need one" about a drawing.
   const solutionGap = solutionGapMessage(question);
-  const hasVideo = solutionVideosOf(question).length > 0;
+  const videos = solutionVideosOf(question);
+  const firstVideo = videos[0] ?? null;
+  const videoLinkLabel =
+    videos.length > 1
+      ? `Open the part ${firstVideo?.label ?? 'A'} solution video in a new tab (${videos.length} videos: open the question for the rest)`
+      : 'Open the solution video in a new tab';
+  // Formats with nothing to key (image answers) must not read as a gap.
+  const keyNeeded = needsAnswerKey(question.question_format);
 
   const handleRowClick = (e: React.MouseEvent) => {
     if (e.shiftKey || e.ctrlKey || e.metaKey) {
@@ -211,10 +223,16 @@ export default function PaperQuestionRow({
             <Tooltip title="Self-assessed" arrow>
               <BrushOutlinedIcon aria-label="Self-assessed" sx={{ fontSize: 14, color: 'text.disabled' }} />
             </Tooltip>
-          ) : answer ? (
+          ) : answer?.trim() ? (
             <Typography variant="caption" fontWeight={700}>
               {answer.toUpperCase()}
             </Typography>
+          ) : !keyNeeded ? (
+            <Tooltip title="No answer key needed" arrow>
+              <Typography variant="caption" color="text.disabled" aria-label="No answer key needed">
+                &middot;
+              </Typography>
+            </Tooltip>
           ) : (
             <Tooltip title="No answer key yet" arrow>
               <Typography variant="caption" color="warning.main" aria-label="No answer key yet">
@@ -276,13 +294,37 @@ export default function PaperQuestionRow({
         {/* Has a solution video: the same marker the teacher Questions list uses.
             Blank otherwise, so the column stays quiet; the "No video" chip is
             the queue of the ones still to do. */}
-        {hasVideo ? (
-          <Tooltip title="Has a solution video" arrow>
-            <Box sx={{ flexShrink: 0, width: 18, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <VideoLibraryOutlinedIcon
-                aria-label="Has a solution video"
-                sx={{ fontSize: 14, color: 'success.main' }}
-              />
+        {firstVideo ? (
+          <Tooltip title={videoLinkLabel} arrow>
+            {/* A link, so a teacher checking a paste can watch the video in a
+                new tab without leaving the paper. Clicks and keys stop here:
+                the row around it opens the question on both. The ::after
+                widens the tap area to 38px without widening the column. */}
+            <Box
+              component="a"
+              href={firstVideo.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={videoLinkLabel}
+              onClick={(e: React.MouseEvent) => e.stopPropagation()}
+              onKeyDown={(e: React.KeyboardEvent) => e.stopPropagation()}
+              sx={{
+                position: 'relative',
+                flexShrink: 0,
+                width: 18,
+                height: 18,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                borderRadius: 0.5,
+                color: 'success.main',
+                cursor: 'pointer',
+                '&::after': { content: '""', position: 'absolute', inset: -10 },
+                '&:hover': { color: 'success.dark', bgcolor: 'action.hover' },
+                '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+              }}
+            >
+              <VideoLibraryOutlinedIcon aria-hidden sx={{ fontSize: 14 }} />
             </Box>
           </Tooltip>
         ) : (

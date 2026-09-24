@@ -38,6 +38,34 @@ describe('PaperQuestionRow', () => {
     expect(screen.getByLabelText('3 tags')).not.toBeNull();
   });
 
+  it('opens the solution video in a new tab without opening the question', () => {
+    const onActivate = vi.fn();
+    render(
+      <PaperQuestionRow question={q({ solution_video_url: 'https://www.youtube.com/watch?v=abcdefghijk' })}
+        selected={false} active={false} tagCount={1} onToggleSelect={() => {}} onActivate={onActivate} />,
+    );
+    const link = screen.getByRole('link', { name: 'Open the solution video in a new tab' });
+    expect(link.getAttribute('href')).toBe('https://www.youtube.com/watch?v=abcdefghijk');
+    expect(link.getAttribute('target')).toBe('_blank');
+    fireEvent.click(link);
+    fireEvent.keyDown(link, { key: 'Enter' });
+    expect(onActivate).not.toHaveBeenCalled();
+  });
+
+  it('flags a missing key only on a format that needs one', () => {
+    const { rerender } = render(
+      <PaperQuestionRow question={q({ correct_answer: '  ' })} selected={false} active={false} tagCount={1}
+        onToggleSelect={() => {}} onActivate={() => {}} />,
+    );
+    expect(screen.getByLabelText('No answer key yet')).not.toBeNull();
+    rerender(
+      <PaperQuestionRow question={q({ correct_answer: null, question_format: 'IMAGE_BASED' })} selected={false}
+        active={false} tagCount={1} onToggleSelect={() => {}} onActivate={() => {}} />,
+    );
+    expect(screen.queryByLabelText('No answer key yet')).toBeNull();
+    expect(screen.getByLabelText('No answer key needed')).not.toBeNull();
+  });
+
   it('marks an untagged question so the gap is visible', () => {
     render(
       <PaperQuestionRow question={q()} selected={false} active={false} tagCount={0}

@@ -72,11 +72,23 @@ const ACCESSORS: ListAccessors<Row> = {
 // The server's order is the worklist order; search still ranks by name match.
 const SORTS = [suggestedOrder<Row>()];
 
-export default function NeedsActionTab({ data, busy, onAct, onNudge, onNudgeMany }: TabProps) {
+export default function NeedsActionTab({
+  data,
+  busy,
+  onAct,
+  onNudge,
+  onNudgeMany,
+  bucket: controlledBucket,
+  onBucket,
+}: TabProps) {
   const theme = useTheme();
   const canShowMatrix = useMediaQuery(theme.breakpoints.up('md'));
 
-  const [bucketFilter, setBucketFilter] = useState<CatchupBucket | null>(null);
+  // Controlled by the page when it passes a filter (its header tiles set it),
+  // otherwise this tab's own.
+  const [ownBucket, setOwnBucket] = useState<CatchupBucket | null>(null);
+  const bucketFilter = controlledBucket !== undefined ? controlledBucket : ownBucket;
+  const setBucketFilter = onBucket ?? setOwnBucket;
   const [expanded, setExpanded] = useState<string | null>(null);
   const [view, setView] = useState<'cards' | 'matrix'>('cards');
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
@@ -238,16 +250,18 @@ export default function NeedsActionTab({ data, busy, onAct, onNudge, onNudgeMany
         onBucket={setBucketFilter}
         tally={data.totals.byBucket}
         total={chaseStudents.length}
+        // Beside the search rather than on a row of its own: on a phone the
+        // Stage button alone cost a 60px line above the first student.
+        trailing={
+          <StageFilter
+            value={listView.stages}
+            counts={listView.stageCounts}
+            onToggle={listView.toggleStage}
+            onClear={listView.clearStages}
+            disabled={!listView.stageReady}
+          />
+        }
       />
-      <Box sx={{ mb: 1.5 }}>
-        <StageFilter
-          value={listView.stages}
-          counts={listView.stageCounts}
-          onToggle={listView.toggleStage}
-          onClear={listView.clearStages}
-          disabled={!listView.stageReady}
-        />
-      </Box>
 
       {/*
         Above the filter results rather than inside them, because it is a

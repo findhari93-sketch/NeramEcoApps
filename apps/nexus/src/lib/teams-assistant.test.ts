@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   assistantConfig,
   buildAssistantCard,
+  teamsChatDeepLink,
   personalConversationFrom,
   resolveAssistantConversation,
   sendAssistantMessage,
@@ -242,5 +243,40 @@ describe('buildAssistantCard', () => {
   it('wraps long text rather than letting Teams clip it', () => {
     const card = buildAssistantCard({ title: 'T', body: 'B', buttonLabel: 'Go', url: 'https://n/x' }) as any;
     expect(card.content.body.every((b: any) => b.wrap === true)).toBe(true);
+  });
+
+  it('names the teacher and adds a Message button that opens a Teams chat with them', () => {
+    const card = buildAssistantCard({
+      title: 'Hari commented on your sketch',
+      body: 'Practice simple human figures',
+      buttonLabel: 'Open sketch',
+      url: 'https://n/s',
+      from: { name: 'Hari Babu', email: 'hari@neramclasses.com' },
+    }) as any;
+    expect(card.content.body[0].text).toBe('From Hari Babu');
+    expect(card.content.actions).toEqual([
+      { type: 'Action.OpenUrl', title: 'Open sketch', url: 'https://n/s' },
+      { type: 'Action.OpenUrl', title: 'Message Hari', url: teamsChatDeepLink('hari@neramclasses.com') },
+    ]);
+    expect(teamsChatDeepLink('a+b@x.com')).toBe('https://teams.microsoft.com/l/chat/0/0?users=a%2Bb%40x.com');
+  });
+
+  it('gives a teacher note with no page link just the Message button, and none without an address', () => {
+    const withMail = buildAssistantCard({ title: 'T', body: 'B', from: { name: 'Hari', email: 'h@x.com' } }) as any;
+    expect(withMail.content.actions.map((a: any) => a.title)).toEqual(['Message Hari']);
+    const noMail = buildAssistantCard({ title: 'T', body: 'B', from: { name: 'Hari', email: null } }) as any;
+    expect(noMail.content.actions).toBeUndefined();
+    expect(noMail.content.body[0].text).toBe('From Hari');
+  });
+
+  it('keeps a caller card (image and all) and still adds the From line and the Message button', () => {
+    const card = buildAssistantCard({
+      title: 'ignored',
+      body: 'ignored',
+      from: { name: 'Hari', email: 'h@x.com' },
+      content: { body: [{ type: 'Image', url: 'https://n/d.png' }], actions: [{ type: 'Action.OpenUrl', title: 'See feedback', url: 'https://n/f' }] },
+    }) as any;
+    expect(card.content.body.map((b: any) => b.type)).toEqual(['TextBlock', 'Image']);
+    expect(card.content.actions.map((a: any) => a.title)).toEqual(['See feedback', 'Message Hari']);
   });
 });

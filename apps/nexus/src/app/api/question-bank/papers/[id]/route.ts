@@ -10,6 +10,7 @@ import {
 } from '@neram/database';
 import type { NexusQBOriginalPaper, NexusQBQuestionSource } from '@neram/database';
 import { buildPaperBlueprint } from '@/lib/paper-blueprint';
+import { bodyEditsIdentity, parsePaperIdentityEdit, renameErrorStatus } from '@/lib/qb-paper-identity';
 
 
 import { describeError } from '@/lib/api-errors';
@@ -122,6 +123,40 @@ export async function PATCH(
     const supabase = getSupabaseAdminClient();
 
     const body = await request.json();
+
+    // Year, session and shift: a correction after upload. They key the paper's
+    // question source rows too, so they go through one function that moves
+    // both together, never through the plain update below.
+    if (body && typeof body === 'object' && bodyEditsIdentity(body)) {
+      const { data: current, error: readError } = await supabase
+        .from('nexus_qb_original_papers')
+        .select('year, session, shift')
+        .eq('id', params.id)
+        .maybeSingle();
+      if (readError) throw readError;
+      if (!current) return NextResponse.json({ error: 'Paper not found' }, { status: 404 });
+
+      const parsed = parsePaperIdentityEdit(body, current as { year: number; session: string | null; shift: string | null });
+      if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+
+      const { data: renamed, error: renameError } = await (supabase as any).rpc('nexus_qb_rename_paper', {
+        p_paper_id: params.id,
+        p_year: parsed.value.year,
+        p_session: parsed.value.session,
+        p_shift: parsed.value.shift,
+      });
+      if (renameError) {
+        const status = renameErrorStatus(renameError.code);
+        if (status === 500) throw renameError;
+        const error =
+          renameError.code === '23505'
+            ? 'Another paper is already saved as this year, session and shift. Open that paper instead, or pick a different one.'
+            : renameError.message;
+        return NextResponse.json({ error }, { status });
+      }
+      return NextResponse.json({ data: Array.isArray(renamed) ? renamed[0] ?? null : renamed }, { status: 200 });
+    }
+
     const allowedFields = ['pdf_url', 'total_marks', 'duration_minutes'];
     const updates: Record<string, any> = {};
     for (const key of allowedFields) {

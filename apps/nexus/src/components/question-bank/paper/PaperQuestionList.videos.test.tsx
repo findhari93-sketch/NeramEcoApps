@@ -268,8 +268,10 @@ describe('Edit mode', () => {
   it('marks a question that has a solution video, and leaves the others quiet', () => {
     render(<Harness initialMode="edit" />);
     const row = (n: number) => screen.getByRole('button', { name: `Open question ${n}` });
-    expect(within(row(1)).queryAllByLabelText('Has a solution video').length).toBeGreaterThan(0);
-    expect(within(row(2)).queryAllByLabelText('Has a solution video')).toHaveLength(0);
-    expect(within(row(3)).queryAllByLabelText('Has a solution video')).toHaveLength(0);
+    const link = within(row(1)).getByRole('link', { name: 'Open the solution video in a new tab' });
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toContain('noopener');
+    expect(within(row(2)).queryAllByRole('link')).toHaveLength(0);
+    expect(within(row(3)).queryAllByRole('link')).toHaveLength(0);
   });
 });

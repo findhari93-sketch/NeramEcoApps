@@ -69,9 +69,19 @@ export default function StudentSegmentBar({
         overflowX: 'auto',
         pb: 0.5,
         // The bar may scroll itself; it must never push the document sideways.
-        maxWidth: '100%',
+        maxWidth: { sm: '100%' },
+        overscrollBehaviorX: 'contain',
         '&::-webkit-scrollbar': { display: 'none' },
         scrollbarWidth: 'none',
+          // A phone scrolls this row sideways. It runs to the screen edge and the
+          // last pill fades out, which is what says "more this way" once the
+          // scrollbar is hidden; a hard clip read as the end of the list.
+          [theme.breakpoints.down('sm')]: {
+            mx: -2,
+            px: 2,
+            maskImage: 'linear-gradient(to right, #000 calc(100% - 28px), transparent)',
+            WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 28px), transparent)',
+          },
       }}
     >
       {SEGMENT_ORDER.map((segment) => {

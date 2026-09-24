@@ -46,6 +46,25 @@ describe('TeacherSketchActions', () => {
     await waitFor(() => expect(onChanged).toHaveBeenCalledWith({ featured: [] }));
   });
 
+  it('in the dock, a featured sketch shows on the Feature tool and tapping it un-features', async () => {
+    const onChanged = vi.fn();
+    render(
+      <TeacherSketchActions
+        sketchId="a"
+        reaction={null}
+        featured={[{ classroom_id: 'c1', classroom_name: 'Class 1', featured_at: '2026-09-01T00:00:00.000Z' }]}
+        onChanged={onChanged}
+        compact
+        onReact={vi.fn()}
+        dock={{ after: <button type="button">Next</button> }}
+      />,
+    );
+    expect(screen.queryByText('Featured in Class 1')).toBeFalsy();
+    fireEvent.click(screen.getByRole('button', { name: 'Featured in Class 1, tap to un-feature' }));
+    await waitFor(() => expect(onChanged).toHaveBeenCalledWith({ featured: [] }));
+    expect(screen.getByRole('button', { name: 'Next' })).toBeTruthy();
+  });
+
   it('shows Feature and no chip when not featured', () => {
     render(<TeacherSketchActions sketchId="a" reaction={null} featured={[]} studentName="Anuvika Stalin Prem" onChanged={vi.fn()} />);
     expect(screen.getByRole('button', { name: 'Feature' })).toBeTruthy();

@@ -57,6 +57,26 @@ export function baseIdOf(atomId: string | null | undefined): string | null {
 }
 
 /**
+ * The question rows behind a set of atom ids, in order and once each.
+ *
+ * The boundary every list of ids crosses on its way to the API, which knows
+ * only questions: a test is built of question rows, and both options of Q81
+ * are one row. An atom id sent as-is is not a uuid, and the insert behind
+ * "Create test" dropped the lot without a word.
+ */
+export function baseIdsOf(atomIds: Iterable<string>): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const atomId of atomIds) {
+    const base = baseIdOf(atomId) ?? atomId;
+    if (seen.has(base)) continue;
+    seen.add(base);
+    out.push(base);
+  }
+  return out;
+}
+
+/**
  * Turn a list of questions into a list of things to practise.
  *
  * Only 'any_one' splits. In 'all' mode both parts are one task with one

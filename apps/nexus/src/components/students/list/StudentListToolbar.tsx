@@ -21,6 +21,7 @@ export default function StudentListToolbar<T, S extends string, F extends string
   statusSlot,
   actionsSlot,
   sticky = false,
+  dense = false,
 }: {
   view: StudentListView<T, S, F>;
   searchLabel?: string;
@@ -28,6 +29,12 @@ export default function StudentListToolbar<T, S extends string, F extends string
   actionsSlot?: ReactNode;
   /** Keep search and filters in reach while a long list scrolls. */
   sticky?: boolean;
+  /**
+   * Search shares the phone row with Sort and Stage instead of taking a row of
+   * its own. For screens where the list below needs every pixel of height (the
+   * attendance register fills the rest of the screen).
+   */
+  dense?: boolean;
 }) {
   return (
     <Box
@@ -42,9 +49,9 @@ export default function StudentListToolbar<T, S extends string, F extends string
           value={view.query}
           onChange={view.setQuery}
           label={searchLabel}
-          placeholder="Search by name"
+          placeholder={dense ? 'Search' : 'Search by name'}
           resultCount={view.shown.length}
-          sx={{ flex: { xs: '1 1 100%', sm: '1 1 240px' }, minWidth: 0 }}
+          sx={{ flex: { xs: dense ? '1 1 130px' : '1 1 100%', sm: '1 1 240px' }, minWidth: 0 }}
         />
         <ListSortMenu value={view.sort} options={view.sortOptions} onChange={view.setSort} />
         <StageFilter

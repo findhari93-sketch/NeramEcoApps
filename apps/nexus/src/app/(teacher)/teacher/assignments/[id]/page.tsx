@@ -16,18 +16,20 @@ import {
   Skeleton,
   Snackbar,
   Alert,
-  ToggleButtonGroup,
-  ToggleButton,
   IconButton,
   Tooltip,
-  Breadcrumbs,
-  Link as MuiLink,
+  Menu,
+  MenuItem,
+  ListItemIcon,
+  ListItemText,
   alpha,
 } from '@neram/ui';
 import StudentAvatar from '@/components/students/StudentAvatar';
 import NextLink from 'next/link';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import NavigateNextIcon from '@mui/icons-material/NavigateNext';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import PublishOutlinedIcon from '@mui/icons-material/PublishOutlined';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import SendIcon from '@mui/icons-material/Send';
@@ -60,6 +62,7 @@ import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
 import ShareAssignmentDialog from '@/components/assignments/ShareAssignmentDialog';
 import AssignmentSetupDialog from '@/components/assignments/AssignmentSetupDialog';
 import QuestionsSummaryCard from '@/components/assignments/QuestionsSummaryCard';
+import FilterTiles from '@/components/assignments/FilterTiles';
 import ClassPickerField, {
   formatClassDay,
   type ClassOption,
@@ -172,6 +175,7 @@ export default function AssignmentReviewPage() {
   const [editOpen, setEditOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [closeOpen, setCloseOpen] = useState(false);
+  const [moreAnchor, setMoreAnchor] = useState<HTMLElement | null>(null);
   // Changing the class from here is what removes the round trip through the
   // timetable for work that is already published.
   const [classOpen, setClassOpen] = useState(false);
@@ -440,130 +444,166 @@ export default function AssignmentReviewPage() {
   }
 
   return (
-    <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 720, mx: 'auto' }}>
+    <Box sx={{ maxWidth: 720, mx: 'auto' }}>
+      {/* One way back, named for where it goes. The breadcrumb above the title
+          used to repeat this same link a line lower. */}
       <Button
+        component={NextLink}
+        href="/teacher/assignments"
         startIcon={<ArrowBackIcon />}
-        onClick={() => router.push('/teacher/assignments')}
-        sx={{ mb: 1, minHeight: 44, color: 'text.secondary', fontWeight: 600 }}
+        sx={{ mb: 0.5, ml: -1, minHeight: 44, color: 'text.secondary', fontWeight: 600, textTransform: 'none' }}
       >
-        Back
+        Assignments
       </Button>
 
       {!assignment ? (
-        <Stack spacing={1.5}>
-          <Skeleton variant="rounded" height={70} sx={{ borderRadius: 3 }} />
+        <Stack spacing={1.5} aria-busy="true" aria-label="Loading assignment">
+          <Skeleton variant="text" width="70%" height={36} />
+          <Skeleton variant="rounded" height={48} sx={{ borderRadius: 2 }} />
+          <Skeleton variant="rounded" height={64} sx={{ borderRadius: 2 }} />
           <Skeleton variant="rounded" height={300} sx={{ borderRadius: 3 }} />
         </Stack>
       ) : (
         <>
-          <Breadcrumbs
-            separator={<NavigateNextIcon sx={{ fontSize: '0.9rem' }} />}
-            sx={{ mb: 0.75 }}
+          <Typography
+            variant="h5"
+            component="h1"
+            sx={{ fontSize: { xs: '1.25rem', sm: '1.4rem' }, fontWeight: 800, lineHeight: 1.3, overflowWrap: 'anywhere' }}
           >
-            <MuiLink
-              component={NextLink}
-              href="/teacher/assignments"
-              underline="hover"
-              color="text.secondary"
-              variant="caption"
-              sx={{ fontWeight: 500 }}
-            >
-              Assignments
-            </MuiLink>
-            <Typography
-              variant="caption"
-              color="text.primary"
-              sx={{
-                fontWeight: 600,
-                maxWidth: { xs: 200, sm: 360 },
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {assignment.title}
-            </Typography>
-          </Breadcrumbs>
-          <Typography variant="h5" sx={{ fontSize: { xs: '1.25rem', sm: '1.4rem' } }}>
             {assignment.title}
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            {new Date(assignment.class_date + 'T00:00:00').toLocaleDateString('en-IN', {
-              weekday: 'short',
-              day: 'numeric',
-              month: 'short',
-            })}{' '}
-            · {assignment.evaluation_type === 'stars' ? '1-5 stars' : `out of ${assignment.max_marks}`}
-            {assignment.due_at
-              ? ` · due ${new Date(assignment.due_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`
-              : ''}
-          </Typography>
+          <Stack direction="row" alignItems="center" spacing={1} sx={{ mt: 0.5, mb: 1.25, minWidth: 0 }}>
+            <Chip
+              label={assignment.status}
+              size="small"
+              sx={{ height: 22, flexShrink: 0, fontWeight: 700, textTransform: 'capitalize' }}
+              color={assignment.status === 'published' ? 'success' : assignment.status === 'draft' ? 'default' : 'warning'}
+            />
+            <Typography variant="body2" color="text.secondary" sx={{ minWidth: 0 }}>
+              {new Date(assignment.class_date + 'T00:00:00').toLocaleDateString('en-IN', {
+                weekday: 'short',
+                day: 'numeric',
+                month: 'short',
+              })}{' '}
+              · {assignment.evaluation_type === 'stars' ? '1-5 stars' : `out of ${assignment.max_marks}`}
+              {assignment.due_at
+                ? ` · due ${new Date(assignment.due_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`
+                : ''}
+            </Typography>
+          </Stack>
 
           {/* The timetable class this work belongs to, changed in place.
               Reaching this used to mean leaving for the timetable, finding the
               class and scanning an unsearchable list of assignments. */}
-          <Stack
-            direction="row"
-            spacing={1}
-            alignItems="center"
-            sx={{ mb: 2, flexWrap: 'wrap' }}
-            useFlexGap
-          >
-            <EventOutlinedIcon sx={{ fontSize: 18, color: 'text.disabled' }} />
-            <Typography variant="body2" color={assignment.scheduled_class ? 'text.primary' : 'text.secondary'}>
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1.5, minWidth: 0 }}>
+            <EventOutlinedIcon aria-hidden sx={{ fontSize: 18, color: 'text.secondary', flexShrink: 0 }} />
+            <Typography
+              variant="body2"
+              color={assignment.scheduled_class ? 'text.primary' : 'text.secondary'}
+              sx={{ flex: 1, minWidth: 0 }}
+            >
               {assignment.scheduled_class
                 ? `${assignment.scheduled_class.title || 'Untitled class'}, ${formatClassDay(
                     assignment.scheduled_class.scheduled_date,
                   )}`
                 : 'Not linked to a class'}
+              {assignment.timing === 'prework' && assignment.scheduled_class && (
+                <Chip label="Before class" size="small" sx={{ ml: 0.75, height: 20, fontWeight: 700 }} />
+              )}
             </Typography>
-            {assignment.timing === 'prework' && assignment.scheduled_class && (
-              <Chip label="Before class" size="small" sx={{ height: 22, fontWeight: 700 }} />
-            )}
             <Button
               size="small"
               variant="text"
               onClick={openClassDialog}
-              sx={{ minHeight: 40, textTransform: 'none' }}
+              sx={{ flexShrink: 0, minHeight: 44, textTransform: 'none', fontWeight: 600 }}
             >
               {assignment.scheduled_class ? 'Change' : 'Link a class'}
             </Button>
           </Stack>
 
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
-            <Chip
-              label={assignment.status}
-              size="small"
-              sx={{ height: 22, fontWeight: 700, textTransform: 'capitalize' }}
-              color={assignment.status === 'published' ? 'success' : assignment.status === 'draft' ? 'default' : 'warning'}
-            />
+          {/* One primary action for the state it is in, Edit beside it, and the
+              rarer or destructive ones (Close, Delete) behind the menu. Five
+              buttons used to wrap into two ragged rows on a phone. */}
+          <Stack direction="row" spacing={1} sx={{ mb: 2 }}>
             {assignment.status === 'draft' && (
-              <Button size="small" variant="contained" disabled={busy} onClick={() => setStatus('publish')} sx={{ minHeight: 40, textTransform: 'none' }}>
-                Publish to students
+              <Button
+                variant="contained"
+                disabled={busy}
+                onClick={() => setStatus('publish')}
+                startIcon={<PublishOutlinedIcon />}
+                sx={{ flex: { xs: 1, sm: 'none' }, minHeight: 48, textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap' }}
+              >
+                Publish
               </Button>
             )}
             {assignment.status === 'published' && (
-              <Button size="small" variant="outlined" disabled={busy} onClick={() => setCloseOpen(true)} sx={{ minHeight: 40, textTransform: 'none' }}>
-                Close
-              </Button>
-            )}
-            {assignment.status === 'closed' && (
-              <Button size="small" variant="contained" disabled={busy} onClick={() => setStatus('reopen')} sx={{ minHeight: 40, textTransform: 'none' }}>
-                Reopen
-              </Button>
-            )}
-            {assignment.status === 'published' && (
-              <Button size="small" variant="outlined" startIcon={<IosShareIcon sx={{ fontSize: 16 }} />} onClick={() => setShareOpen(true)} sx={{ minHeight: 40, textTransform: 'none' }}>
+              <Button
+                variant="contained"
+                startIcon={<IosShareIcon />}
+                onClick={() => setShareOpen(true)}
+                sx={{ flex: { xs: 1, sm: 'none' }, minHeight: 48, textTransform: 'none', fontWeight: 700 }}
+              >
                 Share
               </Button>
             )}
-            <Button size="small" variant="outlined" startIcon={<EditOutlinedIcon sx={{ fontSize: 16 }} />} onClick={() => setEditOpen(true)} sx={{ minHeight: 40, textTransform: 'none' }}>
+            {assignment.status === 'closed' && (
+              <Button
+                variant="contained"
+                disabled={busy}
+                onClick={() => setStatus('reopen')}
+                sx={{ flex: { xs: 1, sm: 'none' }, minHeight: 48, textTransform: 'none', fontWeight: 700 }}
+              >
+                Reopen
+              </Button>
+            )}
+            <Button
+              variant="outlined"
+              startIcon={<EditOutlinedIcon />}
+              onClick={() => setEditOpen(true)}
+              sx={{ flex: { xs: 1, sm: 'none' }, minHeight: 48, textTransform: 'none', fontWeight: 600 }}
+            >
               Edit
             </Button>
-            <Button size="small" variant="text" color="error" startIcon={<DeleteOutlineIcon sx={{ fontSize: 16 }} />} onClick={() => setDeleteOpen(true)} sx={{ minHeight: 40, textTransform: 'none' }}>
-              Delete
-            </Button>
+            <IconButton
+              aria-label="More actions"
+              aria-haspopup="menu"
+              onClick={(e) => setMoreAnchor(e.currentTarget)}
+              sx={{ flexShrink: 0, width: 48, height: 48, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}
+            >
+              <MoreVertIcon />
+            </IconButton>
           </Stack>
+          <Menu
+            anchorEl={moreAnchor}
+            open={!!moreAnchor}
+            onClose={() => setMoreAnchor(null)}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+            PaperProps={{ sx: { minWidth: 220, borderRadius: 2 } }}
+          >
+            {assignment.status === 'published' && (
+              <MenuItem
+                sx={{ minHeight: 48 }}
+                onClick={() => {
+                  setMoreAnchor(null);
+                  setCloseOpen(true);
+                }}
+              >
+                <ListItemIcon><LockOutlinedIcon fontSize="small" /></ListItemIcon>
+                <ListItemText primary="Close assignment" secondary="Hide it from students" />
+              </MenuItem>
+            )}
+            <MenuItem
+              sx={{ minHeight: 48, color: 'error.main' }}
+              onClick={() => {
+                setMoreAnchor(null);
+                setDeleteOpen(true);
+              }}
+            >
+              <ListItemIcon><DeleteOutlineIcon fontSize="small" sx={{ color: 'error.main' }} /></ListItemIcon>
+              <ListItemText>Delete</ListItemText>
+            </MenuItem>
+          </Menu>
 
           {assignment.status === 'closed' && (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: -1, mb: 2 }}>
@@ -668,7 +708,7 @@ export default function AssignmentReviewPage() {
                       startIcon={<LinkIcon />}
                       endIcon={<OpenInNewIcon sx={{ fontSize: 15 }} />}
                       onClick={() => window.open(l.url, '_blank', 'noopener')}
-                      sx={{ justifyContent: 'flex-start', minHeight: 40, textTransform: 'none' }}
+                      sx={{ justifyContent: 'flex-start', minHeight: 44, textTransform: 'none' }}
                     >
                       <Box sx={{ flex: 1, textAlign: 'left', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.label}</Box>
                     </Button>
@@ -689,20 +729,19 @@ export default function AssignmentReviewPage() {
 
               <AssignmentBriefPicker assignmentId={id} getToken={getTeacherToken} />
 
-              <ToggleButtonGroup
+              {/* Count over label, so "Not submitted (12)" never wraps mid-tab at 375px. */}
+              <FilterTiles<DBucket>
+                ariaLabel="Show students by submission"
                 value={dTab}
-                exclusive
-                onChange={(_, v) => v && setDTab(v)}
-                fullWidth
-                size="small"
+                onChange={setDTab}
+                tiles={(['submitted', 'reviewed', 'missing'] as DBucket[]).map((b) => ({
+                  value: b,
+                  label: D_BUCKET_LABEL[b],
+                  count: counts[b] ?? 0,
+                  attention: b === 'submitted' && (counts[b] ?? 0) > 0,
+                }))}
                 sx={{ mb: 2 }}
-              >
-                {(['submitted', 'reviewed', 'missing'] as DBucket[]).map((b) => (
-                  <ToggleButton key={b} value={b} sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}>
-                    {D_BUCKET_LABEL[b]} ({counts[b] ?? 0})
-                  </ToggleButton>
-                ))}
-              </ToggleButtonGroup>
+              />
 
               {dTab === 'submitted' && (counts.submitted ?? 0) > 0 && (
                 <TriageBandCards
@@ -742,7 +781,7 @@ export default function AssignmentReviewPage() {
                   {dTab === 'submitted' && bandFilter ? `, ${BAND_LABEL[bandFilter].toLowerCase()}` : ''}
                 </Typography>
                 {dTab === 'missing' && dBucketRows.length > 0 && (
-                  <Button size="small" startIcon={<SendIcon sx={{ fontSize: 16 }} />} onClick={() => { setNudgeRecipient(null); setNudgeOpen(true); }} sx={{ minHeight: 40 }}>
+                  <Button size="small" startIcon={<SendIcon sx={{ fontSize: 16 }} />} onClick={() => { setNudgeRecipient(null); setNudgeOpen(true); }} sx={{ minHeight: 44, textTransform: 'none' }}>
                     Message all
                   </Button>
                 )}
@@ -795,8 +834,15 @@ export default function AssignmentReviewPage() {
                       <Box
                         key={row.student.id}
                         role={clickable ? 'button' : undefined}
+                        tabIndex={clickable ? 0 : undefined}
                         data-band={triaged?.band}
                         onClick={clickable ? () => router.push(`/teacher/drawing-reviews/${row.drawing!.id}?assignment=${id}${lane}`) : undefined}
+                        onKeyDown={clickable ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            router.push(`/teacher/drawing-reviews/${row.drawing!.id}?assignment=${id}${lane}`);
+                          }
+                        } : undefined}
                         sx={{
                           display: 'flex',
                           alignItems: 'center',
@@ -807,7 +853,9 @@ export default function AssignmentReviewPage() {
                           border: '1px solid',
                           borderColor: 'divider',
                           cursor: clickable ? 'pointer' : 'default',
+                          bgcolor: 'background.paper',
                           '&:hover': clickable ? { borderColor: 'primary.light', bgcolor: 'action.hover' } : {},
+                          '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
                         }}
                       >
                         <StudentAvatar
@@ -917,26 +965,24 @@ export default function AssignmentReviewPage() {
             </>
           ) : (
             <>
-              <ToggleButtonGroup
+              {/* Results is only offered when there is a paper to have results for;
+                  like the others, its tile counts students (the ones who answered). */}
+              <FilterTiles<RosterTab>
+                ariaLabel="Show students by submission"
                 value={tab}
-                exclusive
-                onChange={(_, v) => v && setTab(v)}
-                fullWidth
-                size="small"
+                onChange={setTab}
+                tiles={[
+                  ...(['submitted', 'late', 'missing'] as Bucket[]).map((b) => ({
+                    value: b as RosterTab,
+                    label: BUCKET_LABEL[b],
+                    count: counts[b] ?? 0,
+                  })),
+                  ...(hasPaper
+                    ? [{ value: 'results' as RosterTab, label: 'Results', count: rows.filter((r) => (r as any).answers).length }]
+                    : []),
+                ]}
                 sx={{ mb: 2 }}
-              >
-                {(['submitted', 'late', 'missing'] as Bucket[]).map((b) => (
-                  <ToggleButton key={b} value={b} sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}>
-                    {BUCKET_LABEL[b]} ({counts[b] ?? 0})
-                  </ToggleButton>
-                ))}
-                {/* Only offered when there is a paper to have results for. */}
-                {hasPaper && (
-                  <ToggleButton value="results" sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}>
-                    Results
-                  </ToggleButton>
-                )}
-              </ToggleButtonGroup>
+              />
 
               {tab === 'results' ? (
                 <AssignmentResultsGrid
@@ -952,13 +998,13 @@ export default function AssignmentReviewPage() {
                 </Typography>
                 {bucketRows.length > 0 && (
                   <Tooltip title="Copy names">
-                    <Button size="small" startIcon={<ContentCopyIcon sx={{ fontSize: 16 }} />} onClick={copyNames} sx={{ minHeight: 40 }}>
+                    <Button size="small" startIcon={<ContentCopyIcon sx={{ fontSize: 16 }} />} onClick={copyNames} sx={{ minHeight: 44, textTransform: 'none' }}>
                       Copy names
                     </Button>
                   </Tooltip>
                 )}
                 {tab === 'missing' && bucketRows.length > 0 && (
-                  <Button size="small" startIcon={<SendIcon sx={{ fontSize: 16 }} />} onClick={() => { setNudgeRecipient(null); setNudgeOpen(true); }} sx={{ minHeight: 40 }}>
+                  <Button size="small" startIcon={<SendIcon sx={{ fontSize: 16 }} />} onClick={() => { setNudgeRecipient(null); setNudgeOpen(true); }} sx={{ minHeight: 44, textTransform: 'none' }}>
                     Message all
                   </Button>
                 )}
@@ -999,7 +1045,14 @@ export default function AssignmentReviewPage() {
                       <Box
                         key={row.student.id}
                         role={clickable ? 'button' : undefined}
+                        tabIndex={clickable ? 0 : undefined}
                         onClick={clickable ? () => openReview(row) : undefined}
+                        onKeyDown={clickable ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            openReview(row);
+                          }
+                        } : undefined}
                         sx={{
                           display: 'flex',
                           alignItems: 'center',
@@ -1010,7 +1063,9 @@ export default function AssignmentReviewPage() {
                           border: '1px solid',
                           borderColor: 'divider',
                           cursor: clickable ? 'pointer' : 'default',
+                          bgcolor: 'background.paper',
                           '&:hover': clickable ? { borderColor: 'primary.light', bgcolor: 'action.hover' } : {},
+                          '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
                         }}
                       >
                         <StudentAvatar
@@ -1199,8 +1254,8 @@ export default function AssignmentReviewPage() {
           </Typography>
         </DialogContent>
         <DialogActions sx={{ p: 2, gap: 1 }}>
-          <Button onClick={() => setCloseOpen(false)} sx={{ textTransform: 'none' }}>Cancel</Button>
-          <Button variant="contained" color="warning" disabled={busy} onClick={() => setStatus('close')} sx={{ textTransform: 'none' }}>
+          <Button onClick={() => setCloseOpen(false)} sx={{ minHeight: 44, textTransform: 'none' }}>Cancel</Button>
+          <Button variant="contained" color="warning" disabled={busy} onClick={() => setStatus('close')} sx={{ minHeight: 44, textTransform: 'none' }}>
             {busy ? 'Closing...' : 'Close assignment'}
           </Button>
         </DialogActions>
@@ -1214,8 +1269,8 @@ export default function AssignmentReviewPage() {
           </Typography>
         </DialogContent>
         <DialogActions sx={{ p: 2, gap: 1 }}>
-          <Button onClick={() => setDeleteOpen(false)} sx={{ textTransform: 'none' }}>Cancel</Button>
-          <Button variant="contained" color="error" disabled={busy} onClick={doDelete} sx={{ textTransform: 'none' }}>
+          <Button onClick={() => setDeleteOpen(false)} sx={{ minHeight: 44, textTransform: 'none' }}>Cancel</Button>
+          <Button variant="contained" color="error" disabled={busy} onClick={doDelete} sx={{ minHeight: 44, textTransform: 'none' }}>
             {busy ? 'Deleting...' : 'Delete'}
           </Button>
         </DialogActions>
@@ -1226,6 +1281,7 @@ export default function AssignmentReviewPage() {
         autoHideDuration={3500}
         onClose={() => setSnack(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        sx={{ bottom: { xs: 80, md: 24 } }}
       >
         <Alert severity={snack?.sev || 'success'} onClose={() => setSnack(null)}>
           {snack?.msg}

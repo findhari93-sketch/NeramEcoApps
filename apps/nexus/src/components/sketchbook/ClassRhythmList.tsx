@@ -13,8 +13,8 @@ import { RHYTHM_STATUS_LABEL, RHYTHM_STATUS_ORDER, compareByNeed, type RhythmSta
 import RhythmRow, { type RhythmStudent } from './RhythmRow';
 import WeeklyGoalSheet from './WeeklyGoalSheet';
 import NudgeSheet from './NudgeSheet';
-import TeamsSenderCard from './TeamsSenderCard';
-import AutoRemindersNotice from './AutoRemindersNotice';
+import ReminderSetup from './ReminderSetup';
+import { BOTTOM_NAV_HEIGHT } from '@/lib/shell-chrome';
 
 interface RhythmPayload {
   goal: number;
@@ -122,7 +122,7 @@ export default function ClassRhythmList({ classroomId }: { classroomId: string }
       <Box aria-busy="true" aria-label="Loading class rhythm">
         <Skeleton variant="rounded" height={40} sx={{ borderRadius: 2, mb: 1.5 }} />
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 1, mb: 1.5 }}>
-          {[0, 1, 2].map((i) => <Skeleton key={i} variant="rounded" height={72} sx={{ borderRadius: 2 }} />)}
+          {[0, 1, 2].map((i) => <Skeleton key={i} variant="rounded" sx={{ borderRadius: 2, height: { xs: 44, sm: 72 } }} />)}
         </Box>
         <Skeleton variant="rounded" height={48} sx={{ borderRadius: 2, mb: 1.5 }} />
         {[0, 1, 2, 3, 4].map((i) => <Skeleton key={i} variant="rounded" height={56} sx={{ borderRadius: 1, mb: 0.5 }} />)}
@@ -148,8 +148,7 @@ export default function ClassRhythmList({ classroomId }: { classroomId: string }
         </Button>
       </Box>
 
-      <AutoRemindersNotice />
-      <TeamsSenderCard classroomId={classroomId} />
+      <ReminderSetup classroomId={classroomId} />
 
       {noStudents ? (
         <>
@@ -165,32 +164,10 @@ export default function ClassRhythmList({ classroomId }: { classroomId: string }
                 tiles={tiles}
                 active={view.status}
                 onChange={view.setStatus}
-                phoneLayout="grid"
+                phoneLayout="pills"
               />
             }
           />
-
-          {NUDGE_STATUSES.includes(view.status as RhythmStatus) && view.shown.length > 0 && (
-            <Box
-              sx={{
-                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap',
-                p: 1, pl: 1.5, mb: 1, borderRadius: 2, bgcolor: 'action.hover',
-              }}
-            >
-              <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                {view.shown.length} quiet {view.shown.length === 1 ? 'student' : 'students'} shown
-              </Typography>
-              <Button
-                variant="contained"
-                startIcon={<SendOutlinedIcon />}
-                onClick={() => setNudgeOpen(true)}
-                sx={{ minHeight: 44 }}
-                data-testid="nudge-shown"
-              >
-                Nudge all shown
-              </Button>
-            </Box>
-          )}
 
           {view.shown.length === 0 ? (
             <EmptyState
@@ -201,6 +178,34 @@ export default function ClassRhythmList({ classroomId }: { classroomId: string }
           ) : (
             <Box component="ul" aria-label="Students" sx={{ listStyle: 'none', m: 0, p: 0 }}>
               {view.shown.map((s) => <RhythmRow key={s.userId} student={s} />)}
+            </Box>
+          )}
+
+          {/* After the list and sticky, so the one action on a quiet group stays in
+              thumb reach above the bottom nav however far the teacher scrolls. */}
+          {NUDGE_STATUSES.includes(view.status as RhythmStatus) && view.shown.length > 0 && (
+            <Box
+              sx={{
+                position: 'sticky',
+                bottom: { xs: `calc(${BOTTOM_NAV_HEIGHT}px + env(safe-area-inset-bottom, 0px) + 8px)`, md: 16 },
+                zIndex: 2,
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1,
+                p: 1, pl: 1.5, mt: 1.5, borderRadius: 2,
+                border: 1, borderColor: 'divider', bgcolor: 'background.paper', boxShadow: 3,
+              }}
+            >
+              <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 0 }}>
+                {view.shown.length} quiet {view.shown.length === 1 ? 'student' : 'students'}
+              </Typography>
+              <Button
+                variant="contained"
+                startIcon={<SendOutlinedIcon />}
+                onClick={() => setNudgeOpen(true)}
+                sx={{ minHeight: 48, flexShrink: 0 }}
+                data-testid="nudge-shown"
+              >
+                Nudge all {view.shown.length}
+              </Button>
             </Box>
           )}
           <PausedFootnote count={view.pausedHidden + data.pausedCount} />

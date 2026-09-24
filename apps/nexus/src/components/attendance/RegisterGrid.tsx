@@ -9,8 +9,21 @@
  * allowed to scroll sideways, and it does so inside its own container with the
  * name column pinned, so the page itself never does.
  */
+import { useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Box, Typography, alpha, useTheme, type Theme } from '@neram/ui';
+import {
+  Box,
+  Button,
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  Typography,
+  alpha,
+  useTheme,
+  type Theme,
+} from '@neram/ui';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import StudentStageAvatar from '@/components/students/StudentStageAvatar';
 import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
 import { useStudentListView } from '@/components/students/list/useStudentListView';
@@ -20,6 +33,7 @@ import { RADIUS } from '@/components/timetable/timetable-theme';
 import { GROUP_LABEL, GROUP_LETTER, GROUP_ORDER, type RegisterGroup } from '@/lib/attendance-register';
 import type { RegisterCell, RegisterResponse, RegisterStudent } from '@/app/api/attendance/register/route';
 import { formatClassDate } from './attendance-format';
+import { BOTTOM_NAV_HEIGHT } from '@/lib/shell-chrome';
 
 const ACCESSORS: ListAccessors<RegisterStudent> = {
   id: (s) => s.id,
@@ -29,6 +43,15 @@ const ACCESSORS: ListAccessors<RegisterStudent> = {
 
 /**
  * The two pinned columns, and the class cells that scroll between them.
+ *
+ * 2026-09-24: these widths used to be suggestions. A table cell grows to its
+ * content's min-content width, and a `noWrap` name's min-content is the whole
+ * name, so the longest name in the class set the column: "Sowmiya Lakshmi
+ * Narayanan" made it 263px at 375, and a phone showed ONE class. The name now
+ * sits in a box of fixed width (NAME_INNER) that clips, so the column is what it
+ * says, and on a phone the name splits over two lines (first name, then the
+ * rest) so the clip rarely bites. At 375px with the grid full-bleed that is
+ * 128 + 52 pinned, leaving 195px, about four and a half class columns.
  *
  * `NAME_COL` varies at `xs` alone, and that distinction is the whole reason it
  * used to be a plain px: from `md` up this app reserves a 248px sidebar, so the
@@ -40,10 +63,62 @@ const ACCESSORS: ListAccessors<RegisterStudent> = {
  * four class columns at 375px. 132 fits the 38px avatar (30, plus the 8px its
  * ring is drawn in), the 8px gap, and about eleven characters of name.
  */
-const NAME_COL = { xs: 132, sm: 168 };
-const CELL_W = 48;
+const NAME_COL = { xs: 128, sm: 168 };
+/**
+ * NAME_COL less the cell's own padding (6px a side on a phone, 8px above).
+ * From md up there is room to spare, so the name may grow to NAME_INNER_MAX
+ * rather than clip at a phone-sized width beside a half-empty table.
+ */
+const NAME_INNER = { xs: 116, sm: 152, md: 'auto' };
+const NAME_INNER_MAX = { md: 220 };
+const CELL_W = { xs: 44, sm: 48 };
 /** Fixed, so the pinned right edge lands in the same place on every row. */
-const RATE_COL = 56;
+const RATE_COL = { xs: 52, sm: 56 };
+
+/** "Ridhusha" and "Prawin Rajan": a phone shows the first name, then the rest. */
+function splitName(name: string): { first: string; rest: string } {
+  const trimmed = name.trim();
+  const at = trimmed.indexOf(' ');
+  return at === -1 ? { first: trimmed, rest: '' } : { first: trimmed.slice(0, at), rest: trimmed.slice(at + 1) };
+}
+
+/**
+ * The height that makes the grid end just above the bottom nav (or the page's
+ * foot on a laptop), measured from where the grid actually starts.
+ *
+ * The grid is its own scrollport (the pinned dates need one), and it used to be
+ * a fixed 62% of the screen inside a page that ALSO scrolled. On a phone that is
+ * two scrollers stacked, and a thumb landing on the grid moved the grid while
+ * one landing a centimetre higher moved the page, so the register felt stuck.
+ * Filling exactly the rest of the screen leaves the page nothing to scroll, so
+ * every vertical swipe moves the students and every sideways one moves the
+ * dates. The floor keeps it usable on a very short landscape screen, where the
+ * page scrolls a little instead.
+ */
+const MIN_GRID_HEIGHT = 320;
+
+function useFillHeight(active: boolean) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState<number | null>(null);
+
+  useLayoutEffect(() => {
+    if (!active) return;
+    const fit = () => {
+      const el = ref.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      // Below md the layout pads main by 80px for the fixed bottom nav; above
+      // it, by 24px. Leave the same, and room for the footnote line.
+      const foot = window.matchMedia('(min-width: 900px)').matches ? 24 + 56 : BOTTOM_NAV_HEIGHT + 16 + 8;
+      setHeight(Math.max(MIN_GRID_HEIGHT, Math.floor(window.innerHeight - top - foot)));
+    };
+    fit();
+    window.addEventListener('resize', fit);
+    return () => window.removeEventListener('resize', fit);
+  }, [active]);
+
+  return { ref, height };
+}
 
 /**
  * Seams for the pinned columns and the pinned header, as inset shadows.
@@ -161,6 +236,7 @@ export default function RegisterGrid({
   classHref: (classId: string) => string;
 }) {
   const theme = useTheme();
+  const [keyOpen, setKeyOpen] = useState(false);
 
   const view = useStudentListView<RegisterStudent, 'suggested'>({
     rows: data.students,
@@ -177,9 +253,12 @@ export default function RegisterGrid({
     storageKey: 'nexus:attendance-register:sort',
   });
 
+  const hasRows = view.shown.length > 0;
+  const fill = useFillHeight(hasRows);
+
   return (
     <Box>
-      <StudentListToolbar view={view} searchLabel="Find a student" />
+      <StudentListToolbar view={view} searchLabel="Find a student" dense />
 
       {view.shown.length === 0 ? (
         <Box
@@ -196,6 +275,8 @@ export default function RegisterGrid({
         </Box>
       ) : (
         <Box
+          ref={fill.ref}
+          style={fill.height ? { maxHeight: fill.height } : undefined}
           sx={{
             /**
              * Bounded on purpose. Left free to grow, this container puts its one
@@ -212,6 +293,9 @@ export default function RegisterGrid({
              * impersonation banner is showing, so any subtracted constant is
              * wrong somewhere. No minHeight, so a classroom of four students
              * still gets a short box that never scrolls at all.
+             *
+             * These percentages are now only the first paint: useFillHeight
+             * replaces them with the exact room left once the grid is laid out.
              */
             maxHeight: { xs: '62vh', md: '70vh' },
             '@supports (height: 1dvh)': {
@@ -226,6 +310,14 @@ export default function RegisterGrid({
             border: `1px solid ${theme.palette.divider}`,
             borderRadius: RADIUS.card,
             bgcolor: 'background.paper',
+            // Edge to edge on a phone: the page's 16px gutters are most of
+            // another class column.
+            [theme.breakpoints.down('sm')]: {
+              mx: -2,
+              borderRadius: 0,
+              borderLeft: 'none',
+              borderRight: 'none',
+            },
           }}
         >
           <Box sx={{ display: 'table', borderCollapse: 'collapse', minWidth: '100%' }} role="table">
@@ -246,13 +338,25 @@ export default function RegisterGrid({
                   bgcolor: 'background.paper',
                   boxShadow: seam(theme, 'right', 'bottom'),
                   p: 1,
+                  px: { xs: 0.75, sm: 1 },
                   width: NAME_COL,
                   minWidth: NAME_COL,
                 }}
               >
-                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
-                  Student
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.5 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700 }}>
+                    Student
+                  </Typography>
+                  {/* The key, on a phone, where the question comes up. The
+                      legend under the grid would sit below the fold there. */}
+                  <IconButton
+                    aria-label="What the letters mean"
+                    onClick={() => setKeyOpen(true)}
+                    sx={{ display: { xs: 'inline-flex', sm: 'none' }, width: 40, height: 40, mr: -0.5, color: 'text.secondary' }}
+                  >
+                    <HelpOutlineIcon sx={{ fontSize: 20 }} />
+                  </IconButton>
+                </Box>
               </Box>
               {data.classes.map((cls) => {
                 const full = formatClassDate(cls.scheduled_date);
@@ -269,7 +373,10 @@ export default function RegisterGrid({
                       // Opaque, or the rows scroll visibly through the dates.
                       bgcolor: 'background.paper',
                       boxShadow: seam(theme, 'bottom'),
-                      p: 0.5,
+                      // No side padding on a phone: "18 Sep" plus 8px of it made
+                      // every column 50px, which cost most of a fifth class.
+                      py: 0.5,
+                      px: { xs: 0, sm: 0.5 },
                       width: CELL_W,
                       minWidth: CELL_W,
                       textAlign: 'center',
@@ -324,6 +431,7 @@ export default function RegisterGrid({
                   bgcolor: 'background.paper',
                   boxShadow: seam(theme, 'left', 'bottom'),
                   p: 1,
+                  px: { xs: 0.75, sm: 1 },
                   textAlign: 'right',
                   width: RATE_COL,
                   minWidth: RATE_COL,
@@ -347,12 +455,25 @@ export default function RegisterGrid({
                     bgcolor: 'background.paper',
                     borderTop: `1px solid ${theme.palette.divider}`,
                     boxShadow: seam(theme, 'right'),
-                    p: 1,
+                    py: 1,
+                    px: { xs: 0.75, sm: 1 },
                     width: NAME_COL,
                     minWidth: NAME_COL,
+                    maxWidth: { ...NAME_COL, md: 'none' },
                   }}
                 >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
+                  {/* Fixed width and clipped: this box, not the name, sets the column. */}
+                  <Box
+                    title={student.name}
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: { xs: 0.75, sm: 1 },
+                      width: NAME_INNER,
+                      maxWidth: NAME_INNER_MAX,
+                      overflow: 'hidden',
+                    }}
+                  >
                     {/*
                       `userId` is what draws the language mark: without it the
                       lookup returns null, the language resolves to English and
@@ -372,9 +493,30 @@ export default function RegisterGrid({
                       size={30}
                       tapToView={false}
                     />
-                    <Typography variant="body2" noWrap sx={{ fontWeight: 600 }}>
-                      {student.name}
-                    </Typography>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography
+                        variant="body2"
+                        noWrap
+                        sx={{ fontWeight: 600, fontSize: { xs: '0.8125rem', sm: '0.875rem' }, lineHeight: 1.25 }}
+                      >
+                        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                          {student.name}
+                        </Box>
+                        <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+                          {splitName(student.name).first}
+                        </Box>
+                      </Typography>
+                      {splitName(student.name).rest && (
+                        <Typography
+                          variant="caption"
+                          noWrap
+                          color="text.secondary"
+                          sx={{ display: { xs: 'block', sm: 'none' }, lineHeight: 1.25 }}
+                        >
+                          {splitName(student.name).rest}
+                        </Typography>
+                      )}
+                    </Box>
                   </Box>
                 </Box>
 
@@ -434,6 +576,7 @@ export default function RegisterGrid({
                     borderTop: `1px solid ${theme.palette.divider}`,
                     boxShadow: seam(theme, 'left'),
                     p: 1,
+                    px: { xs: 0.75, sm: 1 },
                     textAlign: 'right',
                     width: RATE_COL,
                     minWidth: RATE_COL,
@@ -450,39 +593,74 @@ export default function RegisterGrid({
         </Box>
       )}
 
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mt: 1 }}>
-        {GROUP_ORDER.map((g) => (
-          <Typography
-            key={g}
-            variant="caption"
-            color="text.secondary"
-            sx={{ display: 'inline-flex', alignItems: 'center' }}
-          >
-            {/* Same ink, same tint as the cells above, so the legend is read
-                as one system with the grid rather than a second, drifting copy. */}
-            <Box
-              component="span"
-              sx={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                minWidth: 20,
-                height: 20,
-                borderRadius: 1,
-                fontWeight: 800,
-                color: LETTER_COLOR[g],
-                bgcolor: toneBg(theme, g),
-                mr: 0.75,
-              }}
-            >
-              {GROUP_LETTER[g]}
-            </Box>
-            {GROUP_LABEL[g]}
-          </Typography>
-        ))}
+      <Box sx={{ display: { xs: 'none', sm: 'flex' }, flexWrap: 'wrap', gap: 1.5, mt: 1 }}>
+        <RegisterLegend theme={theme} />
       </Box>
+
+      <Dialog
+        open={keyOpen}
+        onClose={() => setKeyOpen(false)}
+        fullWidth
+        maxWidth="xs"
+        PaperProps={{ sx: { borderRadius: 3, mx: 2, width: 'calc(100% - 32px)' } }}
+      >
+        <DialogTitle sx={{ fontWeight: 800, pb: 1 }}>What the letters mean</DialogTitle>
+        <DialogContent>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+            <RegisterLegend theme={theme} />
+            <Typography variant="caption" color="text.secondary">
+              ? means Teams attendance has not been read for that class yet. Tap any letter for the details.
+            </Typography>
+          </Box>
+          <Button
+            fullWidth
+            variant="contained"
+            onClick={() => setKeyOpen(false)}
+            sx={{ mt: 2, minHeight: 48, textTransform: 'none', fontWeight: 700 }}
+          >
+            Got it
+          </Button>
+        </DialogContent>
+      </Dialog>
 
       <PausedFootnote count={data.paused_hidden} />
     </Box>
+  );
+}
+
+/** One swatch per group, shared by the legend under the grid and the phone's key. */
+function RegisterLegend({ theme }: { theme: Theme }) {
+  return (
+    <>
+      {GROUP_ORDER.map((g) => (
+        <Typography
+          key={g}
+          variant="caption"
+          color="text.secondary"
+          sx={{ display: 'inline-flex', alignItems: 'center' }}
+        >
+          {/* Same ink, same tint as the cells above, so the legend is read
+              as one system with the grid rather than a second, drifting copy. */}
+          <Box
+            component="span"
+            sx={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minWidth: 20,
+              height: 20,
+              borderRadius: 1,
+              fontWeight: 800,
+              color: LETTER_COLOR[g],
+              bgcolor: toneBg(theme, g),
+              mr: 0.75,
+            }}
+          >
+            {GROUP_LETTER[g]}
+          </Box>
+          {GROUP_LABEL[g]}
+        </Typography>
+      ))}
+    </>
   );
 }

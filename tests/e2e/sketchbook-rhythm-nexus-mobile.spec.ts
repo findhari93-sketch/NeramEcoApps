@@ -8,7 +8,7 @@ import { assertNoHorizontalOverflow } from '../utils/mobile-helpers';
  *
  * API: the rhythm never claims "8 weeks", every row carries a 14-day strip and a
  * status, any drawing counts, dormant students only ever appear as a count; the
- * nudge, cron, Connect Teams and health routes refuse whoever should be refused.
+ * nudge, cron and health routes refuse whoever should be refused.
  * UI at 375px: the status cards are the filters and live in the URL, rows stay
  * compact, nothing scrolls sideways.
  */
@@ -132,40 +132,15 @@ test.describe('Guards on the new routes', () => {
     for (const s of body.wouldSend) expect([1, 2, 3]).toContain(s.step);
   });
 
-  test('Connect Teams: a teacher gets a Microsoft sign-in link, a student is refused, a bad return is turned away', async ({ request }) => {
+  test('Connect Teams is gone: reminders come from Neram Assistant, so no route hands out a sign-in link', async ({ request }) => {
     const teacher = await login(request, TEACHER_ACCOUNT.email, 'teacher');
-    const student = await login(request, STUDENT_ACCOUNT.email, 'student');
-    test.skip(!teacher || !student, 'test-login not available');
-    const classroomId = await teacherClassroom(request, teacher!);
-    test.skip(!classroomId, 'The E2E teacher has no classroom');
-
-    const refused = await request.post(`${NEXUS}/api/teams/sender/start`, {
-      headers: { Authorization: `Bearer ${student}` },
-      data: { classroom_id: classroomId },
-      failOnStatusCode: false,
-    });
-    expect([401, 403]).toContain(refused.status());
-
-    const status = await request.get(`${NEXUS}/api/teams/sender?classroom=${classroomId}`, { headers: { Authorization: `Bearer ${teacher}` } });
-    expect(status.status()).toBe(200);
-    const body = await status.json();
-    test.skip(!body.available, 'Teams sending is not configured on this server');
-
+    test.skip(!teacher, 'test-login not available');
     const start = await request.post(`${NEXUS}/api/teams/sender/start`, {
       headers: { Authorization: `Bearer ${teacher}` },
-      data: { classroom_id: classroomId, return_to: '/teacher/sketchbook?view=rhythm' },
+      data: { classroom_id: 'x' },
+      failOnStatusCode: false,
     });
-    expect(start.status()).toBe(200);
-    const { url } = await start.json();
-    const authorize = new URL(url);
-    expect(authorize.host).toBe('login.microsoftonline.com');
-    expect(authorize.searchParams.get('scope')).toContain('ChatMessage.Send');
-    expect(authorize.searchParams.get('redirect_uri')).toContain('/api/teams/sender/callback');
-
-    // A return from Microsoft with no matching sign-in cookie must not connect anything.
-    const forged = await request.get(`${NEXUS}/api/teams/sender/callback?code=x&state=forged`, { maxRedirects: 0, failOnStatusCode: false });
-    expect(forged.status()).toBe(302);
-    expect(forged.headers()['location']).toContain('teams=error');
+    expect(start.status()).toBe(404);
   });
 
   test('delivery health is admin only', async ({ request }) => {

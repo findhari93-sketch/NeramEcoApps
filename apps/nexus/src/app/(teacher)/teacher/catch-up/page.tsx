@@ -22,11 +22,23 @@
  */
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Alert, Box, Button, Skeleton, Snackbar, Tab, Tabs, Typography } from '@neram/ui';
+import {
+  Alert,
+  Box,
+  Button,
+  Skeleton,
+  Snackbar,
+  Tab,
+  Tabs,
+  Typography,
+  useMediaQuery,
+  useTheme,
+} from '@neram/ui';
+import FilterTiles from '@/components/assignments/FilterTiles';
+import type { CatchupBucket } from '@/lib/catchup-buckets';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import { useAuthSWR } from '@/lib/nexus-swr';
-import { StatTile } from '@/components/catchup/shared';
 import {
   EMPTY_PAYLOAD,
   withPayloadDefaults,
@@ -49,6 +61,33 @@ import type { ItemAction, Row, TabProps } from '@/components/catchup/types';
 type TabKey = 'students' | 'reasons' | 'caught-up' | 'classes';
 
 const TAB_KEYS: TabKey[] = ['students', 'reasons', 'caught-up', 'classes'];
+
+/** The header tiles: three buckets that open Needs action filtered, and all clear. */
+type TileKey = 'run_over' | 'not_started' | 'waiting_on_us' | 'all_clear' | 'none';
+
+/**
+ * A tab label that fits a quarter of a phone.
+ *
+ * Four tabs with their long names ("Classes and recaps (2)") ran to about 490px,
+ * so on a 375px phone the strip scrolled and cut two of them in half ("ction",
+ * "Stan"). Below sm each tab takes an equal quarter with a short word over its
+ * count; from sm up the full label comes back on one line.
+ */
+function TabLabel({ long, short, count }: { long: string; short: string; count?: number }) {
+  return (
+    <Box component="span" sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: 'center', gap: { sm: 0.5 }, lineHeight: 1.2 }}>
+      <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>{long}</Box>
+      <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>{short}</Box>
+      {count != null && count > 0 && (
+        <Box component="span" sx={{ fontSize: { xs: '0.75rem', sm: 'inherit' }, fontWeight: { xs: 600, sm: 700 }, opacity: 0.85 }}>
+          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>(</Box>
+          {count}
+          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>)</Box>
+        </Box>
+      )}
+    </Box>
+  );
+}
 
 function TeacherCatchUpWorkspace() {
   const searchParams = useSearchParams();
@@ -82,6 +121,16 @@ function TeacherCatchUpWorkspace() {
   const [tab, setTabState] = useState<TabKey>(
     initialTab && TAB_KEYS.includes(initialTab) ? initialTab : 'students',
   );
+
+  const theme = useTheme();
+  const phone = useMediaQuery(theme.breakpoints.down('sm'));
+
+  /**
+   * The Needs action bucket filter, lifted here so the header tiles can set it.
+   * They used to be read-only numbers above a row of filter chips carrying the
+   * same numbers; on a phone the two together filled the first screen.
+   */
+  const [bucket, setBucket] = useState<CatchupBucket | null>(null);
 
   const setTab = useCallback((next: TabKey) => {
     setTabState(next);
@@ -331,9 +380,9 @@ function TeacherCatchUpWorkspace() {
   const tabProps: TabProps | null = useMemo(
     () =>
       data
-        ? { data, busy, onAct, onNudge, onNudgeMany, onCelebrate, onMarkCelebrated, onReload }
+        ? { data, busy, onAct, onNudge, onNudgeMany, onCelebrate, onMarkCelebrated, onReload, bucket, onBucket: setBucket }
         : null,
-    [data, busy, onAct, onNudge, onNudgeMany, onCelebrate, onMarkCelebrated, onReload],
+    [data, busy, onAct, onNudge, onNudgeMany, onCelebrate, onMarkCelebrated, onReload, bucket],
   );
 
   if (data === null || tabProps === null) {
@@ -359,86 +408,89 @@ function TeacherCatchUpWorkspace() {
       >
         Catch-up
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>
+      {/* The explanation is for a first visit on a laptop. On a phone it was
+          four lines standing between the teacher and the list. */}
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2, display: { xs: 'none', sm: 'block' } }}>
         Everyone who missed a class, why they missed it, and what they still have to do. Anyone who
         was away belongs here, not only students who joined late.
       </Typography>
 
       {/*
-        All five tiles count STUDENTS, except the last. They used to mix units:
-        one counted people and three counted absence rows, so "8 need attention"
-        sat beside "91 unexplained" and read as though they were the same kind of
-        thing. The row counts moved to the line underneath, where a per-absence
-        number is not being silently compared with a per-student one.
+        All four tiles count STUDENTS. They used to mix units: one counted people
+        and three counted absence rows, so "8 need attention" sat beside "91
+        unexplained" and read as though they were the same kind of thing. The
+        row counts live in the line underneath.
 
         Every number here comes from totals.byBucket, which is a tally of the
         rows the tab renders. The tile and the group beneath it cannot disagree.
 
-        "all clear" is the one tile that is good news, and it exists because the
-        route used to drop those students before this page saw them. It is
-        deliberately first: the screen opens on what is working rather than on a
-        wall of red.
+        2026-09-24: the tiles are now the way in, not a second copy of the
+        filter chips. Run over, Not started and Waiting on us open Needs action
+        on that group; All clear opens Standing. One row at every width, which
+        on a phone replaced three rows of tiles (about 240px) with one of 60.
+        "Classes cleared this month" was the fifth tile and is not a group of
+        students, so it moved into the line below.
       */}
-      <Box
-        sx={{
-          display: 'grid',
-          gap: 1,
-          gridTemplateColumns: {
-            xs: 'repeat(2, 1fr)',
-            sm: 'repeat(3, 1fr)',
-            md: 'repeat(5, 1fr)',
-          },
-          mb: 1,
+      <FilterTiles<TileKey>
+        ariaLabel="Jump to a group of students"
+        value={tab === 'students' && bucket ? (bucket as TileKey) : tab === 'caught-up' ? 'all_clear' : 'none'}
+        onChange={(v) => {
+          if (v === 'all_clear') {
+            setBucket(null);
+            setTab('caught-up');
+          } else if (v !== 'none') {
+            setBucket(tab === 'students' && bucket === v ? null : v);
+            setTab('students');
+          }
         }}
-      >
-        <StatTile n={data.totals.byBucket.all_clear} label="all clear" tone="good" />
-        <StatTile n={data.totals.byBucket.run_over} label="run over" tone="bad" />
-        <StatTile n={data.totals.byBucket.not_started} label="not started" tone="warn" />
-        <StatTile n={data.totals.byBucket.waiting_on_us} label="waiting on us" />
-        <StatTile n={data.totals.clearedThisMonth} label="classes cleared this month" tone="good" />
-      </Box>
+        tiles={[
+          { value: 'run_over', label: 'Run over', count: data.totals.byBucket.run_over, color: data.totals.byBucket.run_over ? theme.palette.error.main : undefined, attention: data.totals.byBucket.run_over > 0 },
+          { value: 'not_started', label: 'Not started', count: data.totals.byBucket.not_started, color: data.totals.byBucket.not_started ? theme.palette.warning.dark : undefined },
+          { value: 'waiting_on_us', label: 'Waiting on us', count: data.totals.byBucket.waiting_on_us },
+          { value: 'all_clear', label: 'All clear', count: data.totals.byBucket.all_clear, color: theme.palette.success.dark },
+        ]}
+        sx={{ mb: 1 }}
+      />
 
-      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
-        {data.totals.outstanding} classes outstanding across {data.totals.studentsCatchingUp}{' '}
-        students · {data.totals.unexplained} absences with no reason given
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5, lineHeight: 1.5 }}>
+        <Box component="span" sx={{ fontWeight: 700, color: 'text.primary' }}>{data.totals.outstanding}</Box> classes
+        outstanding across {data.totals.studentsCatchingUp} students ·{' '}
+        <Box component="span" sx={{ fontWeight: 700, color: 'success.dark' }}>{data.totals.clearedThisMonth}</Box> cleared
+        this month · {data.totals.unexplained} absences with no reason
         {data.totals.hiddenDormant > 0 ? ` · ${data.totals.hiddenDormant} dormant hidden` : ''}
       </Typography>
 
       <Tabs
         value={tab}
         onChange={(_e, v) => setTab(v)}
-        variant="scrollable"
-        scrollButtons="auto"
-        allowScrollButtonsMobile
-        sx={{ borderBottom: '1px solid', borderColor: 'divider', mb: 2, minHeight: 46 }}
+        variant={phone ? 'fullWidth' : 'scrollable'}
+        scrollButtons={phone ? false : 'auto'}
+        aria-label="Catch-up views"
+        sx={{
+          borderBottom: '1px solid',
+          borderColor: 'divider',
+          mb: 2,
+          minHeight: 48,
+          '& .MuiTab-root': {
+            textTransform: 'none',
+            fontWeight: 700,
+            minHeight: { xs: 56, sm: 48 },
+            minWidth: 0,
+            px: { xs: 0.5, sm: 2 },
+            fontSize: { xs: '0.8125rem', sm: '0.875rem' },
+          },
+        }}
       >
-        <Tab value="students" label="Needs action" sx={{ textTransform: 'none', fontWeight: 700, minHeight: 46 }} />
-        <Tab
-          value="reasons"
-          label={data.reasons.length > 0 ? `Reasons (${data.reasons.length})` : 'Reasons'}
-          sx={{ textTransform: 'none', fontWeight: 700, minHeight: 46 }}
-        />
+        <Tab value="students" label={<TabLabel long="Needs action" short="Action" count={data.students.filter((s) => s.bucket !== 'all_clear').length} />} />
+        <Tab value="reasons" label={<TabLabel long="Reasons" short="Reasons" count={data.reasons.length} />} />
         {/*
           The count is students who are completely clear, not finished items.
           It used to be `data.completed.length`, and "Caught up (7)" was read as
           seven finished students when it meant seven cleared classes in sixty
-          days: one student who cleared two of her five showed up twice and
-          looked done. Counting people under a heading about people is the fix.
+          days. Counting people under a heading about people is the fix.
         */}
-        <Tab
-          value="caught-up"
-          label={
-            data.totals.byBucket.all_clear > 0
-              ? `Standing (${data.totals.byBucket.all_clear})`
-              : 'Standing'
-          }
-          sx={{ textTransform: 'none', fontWeight: 700, minHeight: 46 }}
-        />
-        <Tab
-          value="classes"
-          label={needsRecap > 0 ? `Classes and recaps (${needsRecap})` : 'Classes and recaps'}
-          sx={{ textTransform: 'none', fontWeight: 700, minHeight: 46 }}
-        />
+        <Tab value="caught-up" label={<TabLabel long="Standing" short="Standing" count={data.totals.byBucket.all_clear} />} />
+        <Tab value="classes" label={<TabLabel long="Classes and recaps" short="Recaps" count={needsRecap} />} />
       </Tabs>
 
       {tab === 'students' && <NeedsActionTab {...tabProps} />}
@@ -470,6 +522,8 @@ function TeacherCatchUpWorkspace() {
         autoHideDuration={snack?.undoMark?.length ? 8000 : 4000}
         onClose={() => setSnack(null)}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        // Clear of the bottom nav on a phone.
+        sx={{ bottom: { xs: 80, md: 24 } }}
       >
         <Alert
           severity={snack?.sev}

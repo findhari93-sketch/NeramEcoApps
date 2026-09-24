@@ -94,6 +94,8 @@ describe('ClassRhythmList', () => {
   it('gives an admin the way to switch reminders on', () => {
     auth.isAdmin = true;
     render(<ClassRhythmList classroomId="c1" />);
+    // jsdom has no matchMedia, so this is the phone layout: open the fold first.
+    fireEvent.click(screen.getByTestId('reminder-setup-toggle'));
     const link = within(screen.getByTestId('auto-reminders-off')).getByRole('link', { name: 'Turn on' });
     expect(link.getAttribute('href')).toBe('/teacher/admin/features');
   });
@@ -112,6 +114,34 @@ describe('ClassRhythmList', () => {
     expect(within(charu).getByTestId('rhythm-row-reminders').textContent).toBe('Not reminded yet');
     // On track is not due a reminder, so the row stays quiet about it.
     expect(within(asha).queryByTestId('rhythm-row-reminders')).toBeNull();
+  });
+
+  it('a quiet group gets one Nudge button that counts who it reaches', () => {
+    render(<ClassRhythmList classroomId="c1" />);
+    expect(screen.queryByTestId('nudge-shown')).toBeNull();
+    fireEvent.click(screen.getByTestId('stat-tile-needs_nudge'));
+    expect(screen.getByTestId('nudge-shown').textContent).toBe('Nudge all 2');
+    // After the rows, so it can stick above the bottom nav.
+    const list = screen.getByRole('list', { name: 'Students' });
+    expect(list.compareDocumentPosition(screen.getByTestId('nudge-shown')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('on a phone, folds the reminder cards behind one line that still says reminders are off', () => {
+    render(<ClassRhythmList classroomId="c1" />);
+    const toggle = screen.getByTestId('reminder-setup-toggle');
+    expect(toggle.textContent).toContain('Automatic reminders are off');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('auto-reminders-off')).toBeTruthy();
+  });
+
+  it('says reminders come from Neram Assistant once the switch is on, with nothing to set up', () => {
+    auth.remindersOn = true;
+    render(<ClassRhythmList classroomId="c1" />);
+    expect(screen.getByTestId('reminder-setup-on').textContent).toContain('Neram Assistant');
+    expect(screen.queryByTestId('reminder-setup-toggle')).toBeNull();
+    expect(screen.queryByRole('button', { name: /connect teams/i })).toBeNull();
   });
 
   it('restores the card filter from the URL', () => {

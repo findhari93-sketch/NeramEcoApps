@@ -103,12 +103,9 @@ export async function notifyStudents(input: NotifyStudentsInput): Promise<Notify
       metadata: { classroom_id: input.classroomId, ...(input.metadata || {}) },
       // A class notice is an announcement, not a conversation: the class was
       // created, moved, cancelled, its recording is up, the week is published.
-      // Nobody wrote it to any one student, so it goes out as Neram Assistant,
-      // with the teacher who made the change as the fallback while the Assistant
-      // is switched off (founder, 2026-09-20).
-      ...(input.teams === false
-        ? { bellOnly: true }
-        : { assistant: { fallbackSenderUserId: input.teacher?.userId ?? null } }),
+      // Nobody wrote it to any one student, so it goes out as Neram Assistant
+      // with no teacher's name on it (founders, 2026-09-20 and 2026-09-24).
+      ...(input.teams === false ? { bellOnly: true } : { assistant: {} }),
       source: { kind: input.eventType, refId: input.classroomId },
     });
     return { recipients: ids.length, teamsDelivered: counts.chat + counts.teams, inAppDelivered, topBarDelivered: counts.inapp };

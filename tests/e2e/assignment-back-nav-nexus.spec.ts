@@ -1,12 +1,14 @@
 /**
- * Assignment detail — Back navigation + breadcrumb (regression guard).
+ * Assignment detail, Back navigation (regression guard).
  *
  * The teacher assignment detail "Back" button must ALWAYS return to the
  * Assignments list (/teacher/assignments), never to whatever the browser
  * history happens to point at. Previously it used router.back(), so after a
  * teacher opened a drawing submission (which navigates back with router.push,
  * stacking history) the detail's Back landed on the submission page instead of
- * the list. It now does an explicit router.push('/teacher/assignments').
+ * the list. It is now a link with an explicit href to /teacher/assignments,
+ * labelled "Assignments" so it says where it goes. The breadcrumb that used to
+ * repeat the same link one line lower was removed in the 2026-09-24 mobile pass.
  *
  * To prove the fix we seed history with a NON-list page (the teacher's
  * Sketchbooks hub) before opening the detail: a history-based Back would
@@ -102,7 +104,7 @@ test.describe('Nexus — Assignment detail Back navigation', () => {
     // This fixture assignment's own detail page is slow to answer on staging
     // (observed ~20s for its data fetch alone, precompiled or not), so the
     // 15s Playwright default is too tight here even with the compile paid for.
-    const backBtn = page.getByRole('button', { name: /^back$/i });
+    const backBtn = page.getByRole('main').getByRole('link', { name: /^assignments$/i });
     await expect(backBtn).toBeVisible({ timeout: 45000 });
     await backBtn.click();
 
@@ -112,7 +114,7 @@ test.describe('Nexus — Assignment detail Back navigation', () => {
     expect(page.url()).not.toContain(assignmentId);
   });
 
-  test('detail page shows an Assignments breadcrumb that links to the list', async ({ page }) => {
+  test('detail page has exactly one Back link, and it points at the list', async ({ page }) => {
     test.skip(!token || !assignmentId, 'No assignment available to open');
 
     const ok = await injectAuthForPage(page, 'teacher');
@@ -120,17 +122,11 @@ test.describe('Nexus — Assignment detail Back navigation', () => {
 
     await page.goto(`${NEXUS}/teacher/assignments/${assignmentId}`, { waitUntil: 'domcontentloaded' });
 
-    // The breadcrumb renders once the assignment loads. Scope to the breadcrumb
-    // nav so we do not match the sidebar's "Assignments" nav link.
-    const crumb = page
-      .getByRole('navigation', { name: /breadcrumb/i })
-      .getByRole('link', { name: /^assignments$/i });
-    await expect(crumb).toBeVisible({ timeout: 15000 });
-    await expect(crumb).toHaveAttribute('href', '/teacher/assignments');
-
-    // Clicking the crumb also returns to the list.
-    await crumb.click();
-    await page.waitForURL('**/teacher/assignments', { timeout: 15000 });
-    expect(page.url()).not.toContain(assignmentId);
+    // Scoped to main so the sidebar's own "Assignments" nav link does not count.
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 45000 });
+    const back = page.getByRole('main').getByRole('link', { name: /^assignments$/i });
+    await expect(back).toHaveCount(1);
+    await expect(back).toHaveAttribute('href', '/teacher/assignments');
+    await expect(page.getByRole('navigation', { name: /breadcrumb/i })).toHaveCount(0);
   });
 });

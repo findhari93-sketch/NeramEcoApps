@@ -308,7 +308,11 @@ export async function POST(request: NextRequest) {
         negative_marks: body.negative_marks || 0,
       }));
 
-      await supabase.from('nexus_test_questions').insert(testQuestions);
+      // Checked, because it silently wrote nothing: an id the questions table
+      // does not have made the whole insert fail and the student was still
+      // told "Practice test created", over a paper with no questions in it.
+      const { error: questionsError } = await supabase.from('nexus_test_questions').insert(testQuestions);
+      if (questionsError) throw questionsError;
     }
 
     return NextResponse.json({ test }, { status: 201 });

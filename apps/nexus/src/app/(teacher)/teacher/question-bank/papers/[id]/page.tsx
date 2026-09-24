@@ -59,8 +59,11 @@ import DownloadOutlinedIcon from '@mui/icons-material/DownloadOutlined';
 import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import PaperStudentAccessPanel from '@/components/question-bank/PaperStudentAccessPanel';
 import PaperJSONDialog from '@/components/question-bank/PaperJSONDialog';
+import EditPaperDetailsDialog from '@/components/question-bank/paper/EditPaperDetailsDialog';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import PaperShell from '@/components/question-bank/paper/PaperShell';
-import { readPaperDeepLink } from '@/lib/qb-paper-link';
+import { paperBackHref, readPaperDeepLink } from '@/lib/qb-paper-link';
+import { isWorkStage, type WorkStage } from '@/components/question-bank/papers/paperWorkStage';
 
 /** How long the first load may take before the page says it failed. */
 const PAPER_LOAD_TIMEOUT_MS = 30_000;
@@ -98,6 +101,7 @@ export default function PaperDetailPage() {
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [hindiMergeOpen, setHindiMergeOpen] = useState(false);
   const [jsonUploadOpen, setJsonUploadOpen] = useState(false);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [message, setMessage] = useState('');
   const [answerKeyOpen, setAnswerKeyOpen] = useState(false);
@@ -129,8 +133,11 @@ export default function PaperDetailPage() {
    * than useSearchParams, which would need a Suspense boundary around the page.
    */
   const [linkedQuestionId, setLinkedQuestionId] = useState<string | null>(null);
+  /** The exam page card this paper was opened from (?stage=), for Back. */
+  const [returnStage, setReturnStage] = useState<WorkStage | null>(null);
   useEffect(() => {
-    const { questionId, mode } = readPaperDeepLink(new URLSearchParams(window.location.search));
+    const { questionId, mode, stage } = readPaperDeepLink(new URLSearchParams(window.location.search));
+    if (isWorkStage(stage)) setReturnStage(stage);
     if (mode) setPaperMode(mode);
     if (questionId) setLinkedQuestionId(questionId);
   }, []);
@@ -522,8 +529,9 @@ export default function PaperDetailPage() {
           // is a separate destination a teacher rarely visits directly, and
           // landing there after opening a paper from the exam page put you on a
           // page you never navigated to in this session.
+          // On the card it was opened from ("Done"), not the page's default list.
           onClick={() =>
-            router.push(paperExam ? qbExamPath('teacher', paperExam) : '/teacher/question-bank')
+            router.push(paperExam ? paperBackHref(qbExamPath('teacher', paperExam), returnStage) : '/teacher/question-bank')
           }
           sx={{ minWidth: 44, minHeight: 44 }}
         >
@@ -664,6 +672,20 @@ export default function PaperDetailPage() {
           open={!!actionsMenuAnchor}
           onClose={() => setActionsMenuAnchor(null)}
         >
+          {/* The paper's own name first: a session or shift picked wrongly
+              at upload is fixed here, without uploading it again. */}
+          <MenuItem
+            onClick={() => { setActionsMenuAnchor(null); setDetailsOpen(true); }}
+            sx={{ minHeight: 44 }}
+          >
+            <ListItemIcon><EditOutlinedIcon fontSize="small" color="primary" /></ListItemIcon>
+            <ListItemText
+              primary="Edit paper details"
+              secondary="Year, session and shift (FN or AN)"
+              secondaryTypographyProps={{ variant: 'caption' }}
+            />
+          </MenuItem>
+          <Divider />
           {/* The round trip, first because it is the superset of the three
               narrow uploads below: answer key, video links and Hindi are each
               one column of the same document. */}
@@ -928,6 +950,18 @@ export default function PaperDetailPage() {
       />
 
       {/* The round trip's other half */}
+      <EditPaperDetailsDialog
+        open={detailsOpen}
+        paper={paper}
+        onClose={() => setDetailsOpen(false)}
+        getToken={getToken}
+        onSaved={(saved) => {
+          setPaper((prev) => (prev ? { ...prev, year: saved.year, session: saved.session, shift: saved.shift } as typeof prev : prev));
+          fetchData(true);
+          setMessage('Paper details saved. Its questions moved with it.');
+        }}
+      />
+
       <PaperJSONDialog
         open={jsonUploadOpen}
         onClose={() => setJsonUploadOpen(false)}

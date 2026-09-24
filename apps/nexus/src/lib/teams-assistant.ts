@@ -236,31 +236,81 @@ export async function resolveAssistantConversation(
 
 // -- Sending -----------------------------------------------------------------
 
+/**
+ * The teacher a message is from, when a person did something for this student
+ * (reacted to a sketch, marked their work, typed a message).
+ *
+ * Founder, 2026-09-24: nothing is ever sent from a teacher's own Teams any more.
+ * Two hundred students meant two hundred automated threads burying the real
+ * conversations in the teacher's chat list. So the Assistant carries it, names
+ * the teacher, and offers a "Message Hari" button. A personal chat only exists
+ * when the student actually wants to talk.
+ */
+export interface AssistantFrom {
+  name: string;
+  /** The teacher's Microsoft sign-in address, for the chat deep link. No button without it. */
+  email: string | null;
+}
+
 export interface AssistantCard {
   title: string;
   body: string;
-  buttonLabel: string;
-  url: string;
+  /** The page button. Optional: a teacher's note may carry only "Message Hari". */
+  buttonLabel?: string;
+  url?: string;
+  from?: AssistantFrom | null;
+  /**
+   * A card the caller already built (the drawing review card, with the student's
+   * own drawing on it). Used as the base instead of title and body; the "From"
+   * line and the "Message" button are still added.
+   */
+  content?: Record<string, unknown> | null;
+}
+
+/** "Asha" from "Asha Bavi". */
+function firstWord(name: string): string {
+  return String(name || '').trim().split(/\s+/)[0] || name;
+}
+
+/** Opens a new or existing Teams 1:1 chat with this person. Microsoft's documented deep link. */
+export function teamsChatDeepLink(email: string): string {
+  return `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(email)}`;
 }
 
 /**
- * An Adaptive Card with one button. Pure.
+ * An Adaptive Card. Pure.
  *
- * Plain text only in the two TextBlocks: Teams renders card text as a reduced
+ * Plain text only in the TextBlocks: Teams renders card text as a reduced
  * markdown, so an unescaped asterisk in a paper's title turns into italics.
  */
 export function buildAssistantCard(c: AssistantCard): Record<string, unknown> {
+  const base = (c.content as any) || null;
+  const fromLine = c.from?.name
+    ? [{ type: 'TextBlock', text: `From ${c.from.name}`, size: 'Small', isSubtle: true, wrap: true, spacing: 'None' }]
+    : [];
+  const body = base?.body
+    ? [...fromLine, ...(base.body as unknown[])]
+    : [
+        ...fromLine,
+        { type: 'TextBlock', text: c.title, weight: 'Bolder', size: 'Medium', wrap: true },
+        { type: 'TextBlock', text: c.body, wrap: true, spacing: 'Small' },
+      ];
+  const actions: unknown[] = base?.actions
+    ? [...(base.actions as unknown[])]
+    : c.buttonLabel && c.url
+      ? [{ type: 'Action.OpenUrl', title: c.buttonLabel, url: c.url }]
+      : [];
+  if (c.from?.email) {
+    actions.push({ type: 'Action.OpenUrl', title: `Message ${firstWord(c.from.name)}`, url: teamsChatDeepLink(c.from.email) });
+  }
   return {
     contentType: 'application/vnd.microsoft.card.adaptive',
     content: {
       type: 'AdaptiveCard',
       $schema: 'http://adaptivecards.io/schemas/adaptive-card.json',
       version: '1.4',
-      body: [
-        { type: 'TextBlock', text: c.title, weight: 'Bolder', size: 'Medium', wrap: true },
-        { type: 'TextBlock', text: c.body, wrap: true, spacing: 'Small' },
-      ],
-      actions: [{ type: 'Action.OpenUrl', title: c.buttonLabel, url: c.url }],
+      body,
+      ...(actions.length ? { actions } : {}),
     },
   };
 }
@@ -363,7 +413,7 @@ export function personalConversationFrom(activity: Record<string, unknown>): {
  * cannot read replies and names the two things that do work.
  */
 export const ASSISTANT_REPLY =
-  'I am Neram Assistant, and I cannot read replies. To ask about a result, open it in Nexus and use "Something looks wrong". For anything else, message your teacher directly.';
+  'I am Neram Assistant, and I cannot read replies. To answer a teacher, press the "Message" button on their note. To ask about a result, open it in Nexus and use "Something looks wrong".';
 
 /**
  * Remember the conversation Teams just told us about.

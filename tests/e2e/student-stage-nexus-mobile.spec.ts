@@ -1,5 +1,20 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import { APP_URLS, getTestAuthToken, injectAuthForPage } from '../utils/credentials';
+
+
+/**
+ * Pick a list layout on any width. Below sm the three toggles are one
+ * "Change the list layout" menu (2026-09-24), whose items carry the same names.
+ */
+async function chooseLayout(page: Page, label: 'Compact list' | 'Card grid' | 'Detailed rows') {
+  const toggle = page.getByRole('button', { name: label });
+  if (await toggle.isVisible().catch(() => false)) {
+    await toggle.click();
+    return;
+  }
+  await page.getByRole('button', { name: 'Change the list layout' }).click();
+  await page.getByRole('menuitem', { name: label }).click();
+}
 
 /**
  * The students screen at 375px, the iPhone SE width the mobile mandate targets.
@@ -55,8 +70,8 @@ test.describe('Students screen on a phone', () => {
   });
 
   test('no horizontal overflow in any of the three densities', async ({ page }) => {
-    for (const label of ['Compact list', 'Card grid', 'Detailed rows']) {
-      await page.getByRole('button', { name: label }).click();
+    for (const label of ['Compact list', 'Card grid', 'Detailed rows'] as const) {
+      await chooseLayout(page, label);
       await page.waitForTimeout(250);
 
       const overflow = await page.evaluate(
@@ -95,7 +110,7 @@ test.describe('Students screen on a phone', () => {
   });
 
   test('the classify drawer is reachable and its Apply button is not clipped', async ({ page }) => {
-    const select = page.getByRole('button', { name: /^Select$/ });
+    const select = page.getByRole('button', { name: /^Select( students)?$/ });
     if ((await select.count()) === 0) {
       test.skip(true, 'Signed-in account cannot classify (needs manager or admin)');
     }
@@ -188,7 +203,7 @@ test.describe('Students screen on a phone', () => {
   });
 
   test('a compact row keeps the student name visible alongside the chips', async ({ page }) => {
-    await page.getByRole('button', { name: 'Compact list' }).click();
+    await chooseLayout(page, 'Compact list');
     await page.waitForTimeout(400);
 
     const first = studentRows(page).first();

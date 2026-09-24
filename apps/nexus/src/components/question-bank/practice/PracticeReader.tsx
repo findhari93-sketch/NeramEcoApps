@@ -7,8 +7,9 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown';
 import ReplayIcon from '@mui/icons-material/Replay';
-import type { NexusQBQuestionDetail } from '@neram/database';
 import EmptyStateIcon from '@mui/icons-material/QuizOutlined';
+import type { NexusQBQuestionDetail } from '@neram/database';
+import { baseIdOf } from '@/lib/practice-atoms';
 import QuestionDetail from '../QuestionDetail';
 import { useQuestionAnswer, type PriorAnswer } from '../useQuestionAnswer';
 import LangToggle from './LangToggle';
@@ -90,6 +91,11 @@ export default function PracticeReader(props: PracticeReaderProps) {
   } = props;
 
   const screen = variant === 'screen';
+  // The API answers with the question row, so its id never carries a part.
+  // `questionId` may name one option of an either-or drawing ("<id>~a"), and
+  // comparing the two as they came left a split question on its skeleton for
+  // ever. Compare the question behind each.
+  const baseId = baseIdOf(questionId);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0, bgcolor: 'background.paper' }}>
@@ -172,7 +178,7 @@ export default function PracticeReader(props: PracticeReaderProps) {
             {detailError}
           </Alert>
         </ReaderShell>
-      ) : detailLoading || !detail || detail.id !== questionId ? (
+      ) : detailLoading || !detail || detail.id !== baseId ? (
         <ReaderShell {...props} footer={<ActionBar {...props} state="loading" />}>
           <Skeleton variant="text" width="30%" height={28} />
           <Skeleton variant="text" width="95%" />

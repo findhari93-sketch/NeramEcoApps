@@ -168,5 +168,129 @@ describe('matchPaperVideos', () => {
       const item = matchPaperVideos([v], rows, paper, { paperCountThatYear: 3 }).items[0];
       expect(item.status).toBe('skipped-no-session');
     });
+
+    it('drops the other shift of the same session', () => {
+      const v = found('Q no 2 - JEE 2019 Solution Video Session 1 AN - Math Solution');
+      expect(matchPaperVideos([v], rows, paper, { paperCountThatYear: 3 }).items).toHaveLength(0);
+    });
+  });
+
+  /**
+   * JEE 2019 Session 1 as prod stores it: Math MCQ Q1 to Q20, Math numerical
+   * Q21 to Q25, Aptitude Q26 to Q75, Drawing Q76 to Q83. The channel titles
+   * these per section, "Q no 12 - ... - Aptitude Solution".
+   */
+  describe('a session paper titled per section', () => {
+    const paper = { exam_type: 'JEE_PAPER_2', year: 2019, session: 'Session 1', shift: 'forenoon' };
+    const sectionOfNumber = (n: number) =>
+      n <= 20 ? 'math_mcq' : n <= 25 ? 'math_numerical' : n <= 75 ? 'aptitude' : 'drawing';
+    const rows = Array.from({ length: 83 }, (_, i) => row(i + 1, { section: sectionOfNumber(i + 1) as FindRow['section'] }));
+    const title = (n: number, section: string, sitting = 'Session 1 - FN') =>
+      found(`Q no ${n} -  JEE 2019 Solution Video ${sitting} - ${section} Solution`);
+
+    it('puts Aptitude question 12 on paper Q37, not on the math Q12', () => {
+      const result = matchPaperVideos([title(12, 'Aptitude'), title(2, 'Math')], rows, paper, { paperCountThatYear: 4 });
+      expect(result.fills.map((f) => [f.questionId, f.number])).toEqual([
+        ['q2', 2],
+        ['q37', 37],
+      ]);
+    });
+
+    it('counts a whole run of aptitude titles inside the section, including the numbers that would also fit the paper', () => {
+      const videos = Array.from({ length: 50 }, (_, i) => title(i + 1, 'Aptitude'));
+      const result = matchPaperVideos(videos, rows, paper, { paperCountThatYear: 4 });
+      expect(result.fills).toHaveLength(50);
+      expect(result.fills[0]).toMatchObject({ questionId: 'q26', number: 26 });
+      // "Q no 30 - Aptitude" is the 30th aptitude question, Q55. Never paper Q30.
+      expect(result.fills.find((f) => f.questionId === 'q55')).toBeTruthy();
+      expect(result.counts.skipped).toBe(0);
+    });
+
+    it('reads the title without a dash between session and shift', () => {
+      const v = found('Q no 2 -  JEE 2019 Solution Video Session 1 FN - Math Solution');
+      expect(matchPaperVideos([v], rows, paper, { paperCountThatYear: 4 }).fills).toEqual([
+        expect.objectContaining({ questionId: 'q2' }),
+      ]);
+    });
+
+    it('still reads a paper whose titles count across the whole paper', () => {
+      const videos = [title(26, 'Aptitude'), title(60, 'Aptitude'), title(75, 'Aptitude')];
+      const result = matchPaperVideos(videos, rows, paper, { paperCountThatYear: 4 });
+      expect(result.fills.map((f) => f.questionId)).toEqual(['q26', 'q60', 'q75']);
+    });
+
+    it('leaves a title for a person when the aptitude titles could be counted either way', () => {
+      const result = matchPaperVideos([title(30, 'Aptitude')], rows, paper, { paperCountThatYear: 4 });
+      expect(result.fills).toHaveLength(0);
+      expect(result.items[0]).toMatchObject({ status: 'skipped-numbering' });
+      expect(result.items[0].reason).toContain('Q55');
+    });
+
+    it('keeps the newest of two uploads for one section question, reported under the paper number', () => {
+      const older = title(12, 'Aptitude');
+      older.publishedAt = '2026-01-01T00:00:00Z';
+      const newer = title(12, 'Aptitude');
+      newer.publishedAt = '2026-02-01T00:00:00Z';
+      const result = matchPaperVideos([older, newer], rows, paper, { paperCountThatYear: 4 });
+      expect(result.fills).toEqual([{ questionId: 'q37', number: 37, url: `https://www.youtube.com/watch?v=${newer.videoId}` }]);
+      expect(result.items.find((i) => i.video === older)).toMatchObject({ status: 'skipped-older', number: 37 });
+    });
+
+    it('counts drawing titles inside the drawing section', () => {
+      const result = matchPaperVideos([title(1, 'Drawing'), title(2, 'Drawing')], rows, paper, { paperCountThatYear: 4 });
+      expect(result.fills.map((f) => f.questionId)).toEqual(['q76', 'q77']);
+    });
+  });
+
+  describe('a paper whose numbers repeat', () => {
+    // 2019 Session 2 (AN) on prod restarts the count in each section.
+    const rows = [
+      row(1, { id: 'm1', section: 'math_mcq' }),
+      row(2, { id: 'm2', section: 'math_mcq' }),
+      row(1, { id: 'a1', section: 'aptitude' }),
+      row(2, { id: 'a2', section: 'aptitude' }),
+      row(2, { id: 'a2-copy', section: 'aptitude' }),
+    ];
+    const paper = { exam_type: 'JEE_PAPER_2', year: 2019, session: 'Session 2', shift: 'afternoon' };
+
+    it('uses the section word to pick between the sections', () => {
+      const v = found('Q no 1 - JEE 2019 Session 2 AN Solution Video - Aptitude Solution');
+      expect(matchPaperVideos([v], rows, paper, { paperCountThatYear: 4 }).fills).toEqual([
+        expect.objectContaining({ questionId: 'a1' }),
+      ]);
+    });
+
+    it('asks for the section when the title has none', () => {
+      const v = found('Q no 1 - JEE 2019 Session 2 AN Solution Video');
+      const item = matchPaperVideos([v], rows, paper, { paperCountThatYear: 4 }).items[0];
+      expect(item.status).toBe('skipped-numbering');
+      expect(item.reason).toContain('must say Math, Aptitude or Drawing');
+    });
+
+    it('never guesses between two copies of one question', () => {
+      const v = found('Q no 2 - JEE 2019 Session 2 AN Solution Video - Aptitude Solution');
+      const item = matchPaperVideos([v], rows, paper, { paperCountThatYear: 4 }).items[0];
+      expect(item.status).toBe('skipped-numbering');
+      expect(item.reason).toBe('Q2 appears 2 times on this paper: fix the question numbers first');
+    });
+  });
+});
+
+describe('parseSolutionTitle, the wordings seen on session papers', () => {
+  it.each([
+    ['Q no 12 -  JEE 2019 Solution Video Session 1 - FN - Aptitude Solution', { number: 12, session: 1, shift: 'forenoon', section: 'aptitude' }],
+    ['Q no 2 -  JEE 2019 Solution Video Session 1 FN - Math Solution', { number: 2, session: 1, shift: 'forenoon', section: 'math' }],
+    ['Q no 5 - JEE 2019 Solution Video Session 2 - AN - Drawing Solution', { session: 2, shift: 'afternoon', section: 'drawing' }],
+    ['Q no 5 - JEE Mains 2020 Session-1 (an) Aptitude Solution', { year: 2020, session: 1, shift: 'afternoon' }],
+    ['Q no 5 - JEE Main 2021 Session 01 fn Math Solution', { year: 2021, session: 1, shift: 'forenoon' }],
+    ['Q no 5 - JEE (Main) Paper 2 2022 Session II Shift 2 Math Solution', { year: 2022, session: 2, shift: 'afternoon' }],
+    ['Q no 5 - JEE 2020 Session 1 Shift 1 Math Solution', { session: 1, shift: 'forenoon' }],
+    ['Q no 5 - JEE 2020 Session 1 F.N. Math Solution', { shift: 'forenoon' }],
+  ])('%s', (title, expected) => {
+    expect(parseSolutionTitle(title)).toMatchObject(expected);
+  });
+
+  it('does not read the English word "an" as the afternoon shift', () => {
+    expect(parseSolutionTitle('Q no 5 - JEE 2020 an easy Math Solution')?.shift).toBeNull();
   });
 });

@@ -416,17 +416,30 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
         </Typography>
       </Box>
 
-      <Stack
-        direction="row"
-        spacing={0.75}
-        sx={{ mb: 2, flexWrap: 'wrap', gap: 0.75, alignItems: 'center' }}
-      >
+      <Box role="group" aria-label="Filter classes" sx={{
+          display: 'flex',
+          gap: 1,
+          mb: 1,
+          overflowX: 'auto',
+          pb: 0.5,
+          overscrollBehaviorX: 'contain',
+          '&::-webkit-scrollbar': { display: 'none' },
+          scrollbarWidth: 'none',
+          '& .MuiChip-root': { height: 44, borderRadius: 22, px: 0.5, flexShrink: 0, fontWeight: 700 },
+          // Scrolls sideways on a phone instead of wrapping to three lines, and
+          // fades at the edge so the hidden pills still announce themselves.
+          [theme.breakpoints.down('sm')]: {
+            mx: -2,
+            px: 2,
+            maskImage: 'linear-gradient(to right, #000 calc(100% - 32px), transparent)',
+            WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 32px), transparent)',
+          },
+        }}>
         <Chip
           label={`All ${data.classStats.length}`}
           onClick={() => setFilter('all')}
           color={filter === 'all' ? 'primary' : 'default'}
           variant={filter === 'all' ? 'filled' : 'outlined'}
-          sx={{ fontWeight: 700, height: 34 }}
         />
         {blockingCount > 0 && (
           <Chip
@@ -434,7 +447,6 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
             onClick={() => setFilter(filter === 'blocking' ? 'all' : 'blocking')}
             color={filter === 'blocking' ? 'error' : 'default'}
             variant={filter === 'blocking' ? 'filled' : 'outlined'}
-            sx={{ fontWeight: 700, height: 34 }}
           />
         )}
         {outstandingCount > 0 && (
@@ -443,10 +455,22 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
             onClick={() => setFilter(filter === 'not_caught_up' ? 'all' : 'not_caught_up')}
             color={filter === 'not_caught_up' ? 'warning' : 'default'}
             variant={filter === 'not_caught_up' ? 'filled' : 'outlined'}
-            sx={{ fontWeight: 700, height: 34 }}
           />
         )}
-        <Box sx={{ flex: 1 }} />
+      </Box>
+
+      {/* Two equal buttons on a phone, where the long labels used to wrap
+          under the pills at two different widths. */}
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr 1fr', sm: 'auto auto' },
+          justifyContent: { sm: 'end' },
+          gap: 1,
+          mb: 2,
+          '& .MuiButton-root': { whiteSpace: 'nowrap', minWidth: 0 },
+        }}
+      >
         {/* An escape hatch, not a chore.
             Outlined rather than contained on purpose. The sweep now runs every
             fifteen minutes from 20:45 IST and picks a class up in whichever pass
@@ -463,7 +487,14 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
           disabled={!!prep && !prep.finished}
           sx={{ minHeight: 44, textTransform: 'none' }}
         >
-          {prep && !prep.finished ? 'Preparing...' : 'Prepare missing classes'}
+          {prep && !prep.finished ? (
+            'Preparing...'
+          ) : (
+            <>
+              <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>Prepare missing</Box>
+              <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Prepare missing classes</Box>
+            </>
+          )}
         </Button>
         <Button
           size="small"
@@ -473,9 +504,10 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
           disabled={!data.classroomId}
           sx={{ minHeight: 44, textTransform: 'none' }}
         >
-          Recap from a link
+          <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>From a link</Box>
+          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Recap from a link</Box>
         </Button>
-      </Stack>
+      </Box>
 
       {prep && (
         <Box
@@ -579,29 +611,51 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
                       : 'background.paper',
                 }}
               >
-                <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ flexWrap: 'wrap' }}>
-                  <Box sx={{ flex: 1, minWidth: 160 }}>
+                <Stack
+                  direction={{ xs: 'column', sm: 'row' }}
+                  spacing={{ xs: 0.75, sm: 1 }}
+                  alignItems={{ xs: 'stretch', sm: 'flex-start' }}
+                >
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Typography
                       variant="caption"
-                      color="text.disabled"
+                      color="text.secondary"
                       sx={{ fontVariantNumeric: 'tabular-nums' }}
                     >
                       {shortDate(c.scheduled_date)}
                     </Typography>
-                    <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }} noWrap>
+                    {/* Two lines before it clips: "E2E-CPv2 1783064..." told a
+                        teacher nothing about which class this was. */}
+                    <Typography
+                      sx={{
+                        fontWeight: 700,
+                        fontSize: '0.9rem',
+                        lineHeight: 1.35,
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden',
+                        overflowWrap: 'anywhere',
+                      }}
+                    >
                       {c.title || 'Class'}
                     </Typography>
-                    <Typography variant="caption" color="text.secondary">
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                       {c.present} present · {c.missed} missed · {c.caughtUp} caught up
                     </Typography>
                     {notCaughtUp(c) > 0 && (
-                      <Typography variant="caption" sx={{ color: 'warning.dark', fontWeight: 700 }}>
+                      <Typography variant="caption" sx={{ display: 'block', color: 'warning.dark', fontWeight: 700 }}>
                         {notCaughtUp(c)} {notCaughtUp(c) === 1 ? 'student has' : 'students have'} not
                         caught up
                       </Typography>
                     )}
                   </Box>
-                  <Stack spacing={0.75} alignItems="flex-end">
+                  <Stack
+                    direction={{ xs: 'row', sm: 'column' }}
+                    spacing={0.75}
+                    alignItems={{ xs: 'center', sm: 'flex-end' }}
+                    sx={{ flexWrap: 'wrap', rowGap: 0.75 }}
+                  >
                     <Chip
                       size="small"
                       color={tone}
@@ -643,11 +697,18 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
 
                 {/* The fact the old Class Recaps page could never show: this
                     missing recap is not admin, it is N people who cannot start. */}
-                <Stack
-                  direction="row"
-                  spacing={1}
-                  alignItems="center"
-                  sx={{ mt: 1.25, flexWrap: 'wrap', gap: 1 }}
+                {/* On a phone the actions are one fixed row, Attendance and the
+                    recap button sharing the width and the menu at the end. They
+                    used to wrap, which stranded the menu on a line of its own. */}
+                <Box
+                  sx={{
+                    mt: 1.25,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 1,
+                    flexWrap: { xs: 'nowrap', sm: 'wrap' },
+                    '& > .MuiButton-root': { flex: { xs: '1 1 0', sm: '0 0 auto' }, minWidth: 0, whiteSpace: 'nowrap' },
+                  }}
                 >
                   {/* Red only when we could fix it today. A class with no
                       recording at all is a content gap that counts against
@@ -658,6 +719,7 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
                     <Typography
                       variant="caption"
                       sx={{
+                        display: { xs: 'none', sm: 'block' },
                         color: c.recap_state === 'no_recording' ? 'text.secondary' : 'error.main',
                         fontWeight: 700,
                       }}
@@ -667,7 +729,7 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
                         : `${c.blocked} students are waiting on this`}
                     </Typography>
                   )}
-                  <Box sx={{ flex: 1 }} />
+                  <Box sx={{ flex: 1, display: { xs: 'none', sm: 'block' } }} />
                   {/* The route into the roster behind these numbers. A teacher
                       reading "9 missed" wants the nine names and a way to
                       message them, and until now that meant going back to the
@@ -677,12 +739,16 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
                     variant="outlined"
                     startIcon={<GroupsOutlinedIcon />}
                     onClick={() => setOpenClassId(c.id)}
-                    sx={{ minHeight: 40, textTransform: 'none' }}
+                    sx={{ minHeight: 44, textTransform: 'none' }}
                   >
                     {notCaughtUp(c) > 0 ? `Follow up ${notCaughtUp(c)}` : 'Attendance'}
                   </Button>
                   {c.recap_state === 'no_recording' ? (
-                    <Typography variant="caption" color="text.disabled">
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      sx={{ flex: { xs: '1 1 0', sm: '0 0 auto' }, textAlign: 'center', minWidth: 0 }}
+                    >
                       Nothing to watch yet
                     </Typography>
                   ) : (
@@ -691,7 +757,7 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
                       variant={c.recap_state === 'published' ? 'outlined' : 'contained'}
                       disabled={busyClass === c.id}
                       onClick={() => openRecap(c)}
-                      sx={{ minHeight: 40, textTransform: 'none' }}
+                      sx={{ minHeight: 44, textTransform: 'none' }}
                     >
                       {c.recap_state === 'published'
                         ? 'Edit recap'
@@ -704,11 +770,25 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
                     size="small"
                     aria-label={`More actions for ${c.title || 'this class'}`}
                     onClick={(e) => setMenuFor({ el: e.currentTarget, cls: c })}
-                    sx={{ minWidth: 44, minHeight: 44 }}
+                    sx={{ minWidth: 44, minHeight: 44, flexShrink: 0 }}
                   >
                     <MoreVertIcon fontSize="small" />
                   </IconButton>
-                </Stack>
+                </Box>
+                {/* The waiting line, under the actions on a phone. */}
+                {c.blocked > 0 && (
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      display: { xs: 'block', sm: 'none' },
+                      mt: 0.75,
+                      color: c.recap_state === 'no_recording' ? 'text.secondary' : 'error.main',
+                      fontWeight: 700,
+                    }}
+                  >
+                    {c.blocked === 1 ? '1 student is waiting on this' : `${c.blocked} students are waiting on this`}
+                  </Typography>
+                )}
               </Box>
             );
           })}
