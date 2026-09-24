@@ -1,6 +1,6 @@
 'use client';
 
-import { useLayoutEffect, useMemo, useRef } from 'react';
+import { Fragment, useLayoutEffect, useMemo, useRef } from 'react';
 import { Box, Skeleton, Typography, alpha, useTheme } from '@neram/ui';
 import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import VideocamIcon from '@mui/icons-material/Videocam';
@@ -34,6 +34,9 @@ import {
 } from '../timetable-theme';
 import { useNow } from '@/hooks/useNow';
 import CalendarEmptyState from './CalendarEmptyState';
+import CatchupBadge from '../CatchupBadge';
+import { catchupSentence } from '../catchup-badge';
+import type { CalendarClass } from '@/lib/catchup-calendar';
 
 const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -59,6 +62,11 @@ interface GridViewProps {
    * otherwise open at 8 AM, hours above where classes actually happen.
    */
   scrollToTime?: string;
+  /**
+   * Staff only: catch-up status for past classes, already filtered to the ones
+   * worth a badge. Absent on the student timetable, which renders as before.
+   */
+  catchupByClassId?: Map<string, CalendarClass>;
 }
 
 /**
@@ -84,6 +92,7 @@ export default function GridView({
   onSlotClick,
   rsvpData,
   scrollToTime,
+  catchupByClassId,
 }: GridViewProps) {
   const theme = useTheme();
 
@@ -414,10 +423,11 @@ export default function GridView({
                 const countdown = today && !isCancelled ? formatCountdown(start, now) : null;
                 const isFeature = isLive || (!!countdown && today);
                 const rsvp = rsvpData?.[cls.id];
+                const catchup = role === 'teacher' ? catchupByClassId?.get(cls.id) : undefined;
 
                 return (
+                  <Fragment key={cls.id}>
                   <Box
-                    key={cls.id}
                     ref={cls.id === firstClassId ? firstBlockRef : undefined}
                     data-testid="grid-class-block"
                     role="button"
@@ -427,7 +437,7 @@ export default function GridView({
                     // sees. The whole sentence goes here instead.
                     aria-label={`${cls.title}, ${formatTime(cls.start_time)} to ${formatTime(cls.end_time)}${
                       role === 'teacher' && rsvp ? `, ${announce(rsvp)}` : ''
-                    }`}
+                    }${catchup ? `, ${catchupSentence(catchup)}` : ''}`}
                     onClick={() => onClassClick?.(cls)}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
@@ -444,6 +454,10 @@ export default function GridView({
                       zIndex: 2,
                       px: 1.125,
                       py: 0.875,
+                      // Room at the foot for the catch-up badge, which is laid
+                      // over the block as a sibling (a link inside a
+                      // role="button" would be a nested control).
+                      ...(catchup && { pb: '34px' }),
                       borderRadius: RADIUS.control,
                       overflow: 'hidden',
                       cursor: onClassClick ? 'pointer' : 'default',
@@ -559,6 +573,20 @@ export default function GridView({
                       )}
                     </Box>
                   </Box>
+                  {catchup && (
+                    <CatchupBadge
+                      c={catchup}
+                      size="block"
+                      sx={{
+                        position: 'absolute',
+                        top: `calc(${pct(top + height)} - 29px)`,
+                        left: 13,
+                        maxWidth: 'calc(100% - 23px)',
+                        zIndex: 3,
+                      }}
+                    />
+                  )}
+                  </Fragment>
                 );
               })}
             </Box>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { displayTitle, presentRow } from './inspiration-present';
+import { displayTitle, presentClassFeatured, presentRow } from './inspiration-present';
 import { makeRow } from './inspiration-test-rows';
 
 describe('displayTitle', () => {
@@ -38,14 +38,15 @@ describe('presentRow', () => {
     // One badge slot: at 375px a tile is about 164px wide and two pills wrap.
     // Featured outranks alumni because a teacher chose it, and nothing is lost,
     // the credit line underneath still says Alumni.
+    // A featured drawing names its author in full: being singled out is the point.
     expect(presentRow(makeRow({ is_featured: true }), { staff: false })).toMatchObject({
       badge: 'featured',
       featured: true,
-      credit: 'Harshitaa T. · 2026 batch',
+      credit: 'Harshitaa Thiyagu · 2026 batch',
     });
     expect(presentRow(makeRow({ is_featured: true, author_is_alumni: true }), { staff: false })).toMatchObject({
       badge: 'featured',
-      credit: 'Harshitaa T. · Alumni 2026',
+      credit: 'Harshitaa Thiyagu · Alumni 2026',
     });
     // A reference is a different kind of thing, so it keeps its own badge.
     expect(presentRow(makeRow({ is_featured: true, source_kind: 'submission_reference' }), { staff: false }).badge).toBe('reference');
@@ -76,5 +77,41 @@ describe('presentRow', () => {
   it('tells a teacher why a drawing is not on the shelf', () => {
     const card = presentRow(makeRow({ is_visible: false, auto_eligible: false, score_pct: 0.6 }), { staff: true });
     expect(card.staff).toMatchObject({ visible: false, curation: 'auto', hiddenReason: 'Below 4 stars or 80%' });
+  });
+});
+
+describe('featured authors', () => {
+  it('carries a face and a full name for a featured drawing, and the user id only to staff', () => {
+    const student = presentRow(makeRow({ is_featured: true }), { staff: false });
+    expect(student.author).toEqual({ id: null, name: 'Harshitaa Thiyagu', avatarUrl: null });
+    expect(JSON.stringify(student)).not.toContain('33333333-3333-4333-8333-333333333333');
+    const staff = presentRow(makeRow({ is_featured: true }), { staff: true });
+    expect(staff.author?.id).toBe('33333333-3333-4333-8333-333333333333');
+  });
+
+  it('has no author block for ordinary or opted-out drawings', () => {
+    expect(presentRow(makeRow(), { staff: false }).author).toBeUndefined();
+    const optedOut = presentRow(
+      makeRow({ is_featured: true, author_opted_out: true, author_id: null, author_name: null, author_first_name: null, author_last_name: null }),
+      { staff: false },
+    );
+    expect(optedOut.author).toBeUndefined();
+    expect(optedOut.credit).toBe('Neram student');
+  });
+
+  it('puts the classroom, the date and the photo on a class wall card', () => {
+    const card = presentClassFeatured(
+      {
+        row: makeRow({ is_featured: true }),
+        classroom_id: 'c1',
+        classroom_name: 'JEE B.Arch Session 1',
+        featured_at: '2026-09-23T10:00:00Z',
+        author_avatar_url: 'https://example.com/a.jpg',
+      },
+      { staff: false },
+    );
+    expect(card.featuredIn).toEqual({ classroomId: 'c1', classroomName: 'JEE B.Arch Session 1', featuredAt: '2026-09-23T10:00:00Z' });
+    expect(card.author).toEqual({ id: null, name: 'Harshitaa Thiyagu', avatarUrl: 'https://example.com/a.jpg' });
+    expect(card.credit).toBe('Harshitaa Thiyagu · 2026 batch');
   });
 });

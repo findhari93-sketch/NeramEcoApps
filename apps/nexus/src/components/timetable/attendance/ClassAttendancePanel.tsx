@@ -23,6 +23,7 @@ import MissedTab from './MissedTab';
 import NudgeDialog, { type NudgeOutcome } from './NudgeDialog';
 import { buildMissedList } from './attendance-copy';
 import type {
+  AttendanceFilter,
   AttendanceRecord,
   AttendanceSummary,
   AttendanceTabKey,
@@ -31,6 +32,7 @@ import type {
   SyncState,
 } from './types';
 import type { RosterCandidate } from '@/lib/teams-attendance-csv';
+import { insightsKey, useClassInsights } from './useClassInsights';
 
 // Lazy: a teacher who opens this to see who to chase never pays for the ranked
 // list's code or the register's, and the register is the rarest of the three.
@@ -64,6 +66,12 @@ export interface ClassAttendancePanelProps {
   teamsMeetingId: string | null;
   getToken: () => Promise<string | null>;
   initialTab?: AttendanceTabKey;
+  /**
+   * Open on one group: the drawer's "How this class went" card sends a teacher
+   * here from a tapped corner ("Said nothing, not yet") or from "6 have not
+   * handed it in", and the list should already be narrowed to those students.
+   */
+  initialFilter?: AttendanceFilter | null;
   /** Fired after every write, so the caller's cached summary stays honest. */
   onChanged?: () => void;
   /** Walk the schedule without closing: the caller supplies the order. */
@@ -90,6 +98,31 @@ export interface ClassAttendancePanelProps {
  * The body, not a dialog. The timetable wraps it in one and the catch-up page
  * wraps it in a drawer, so the same panel serves both without either owning it.
  */
+/**
+ * A message written for who is ticked. Asking the silent ones why is a
+ * different message from reminding the ones who already explained, and sending
+ * the explained ones "you have not told us why" is exactly the kind of wrong
+ * that makes a student stop reading these. Mixed or other selections get the
+ * server's neutral default.
+ */
+export function nudgePreset(
+  states: Array<string | undefined>,
+  title: string,
+  dateLabel: string,
+): string {
+  if (states.length === 0) return '';
+  const when = dateLabel ? `${title} on ${dateLabel}` : title;
+  if (states.every((s) => s === 'needs_call')) {
+    return `You missed ${when} and have not told us why. Please reply with the reason, and start the catch-up in Nexus so you do not fall behind.`;
+  }
+  if (states.every((s) => s === 'catching_up')) {
+    return `Thanks for telling us why you missed ${when}. The catch-up is still open: watch the recording in Nexus and finish the short check.`;
+  }
+  return '';
+}
+
+export { insightsKey };
+
 export default function ClassAttendancePanel({
   classId,
   classTitle,
@@ -97,6 +130,7 @@ export default function ClassAttendancePanel({
   teamsMeetingId,
   getToken,
   initialTab,
+  initialFilter,
   onChanged,
   onPrev,
   onNext,
@@ -104,8 +138,15 @@ export default function ClassAttendancePanel({
 }: ClassAttendancePanelProps) {
   const [tab, setTab] = useState<AttendanceTabKey>(initialTab ?? 'missed');
 
-  const [insights, setInsights] = useState<Insights | null>(null);
-  const [insightsLoading, setInsightsLoading] = useState(true);
+  // Shared with the drawer's "How this class went" card through one SWR key,
+  // so opening this from the card shows the list at once instead of a second
+  // round trip for the same payload.
+  const {
+    data: insightsData,
+    isLoading: insightsLoading,
+    mutate: mutateInsights,
+  } = useClassInsights(classId, classroomId, getToken);
+  const insights: Insights | null = insightsData ?? null;
 
   const [records, setRecords] = useState<AttendanceRecord[]>([]);
   const [recordsLoading, setRecordsLoading] = useState(false);
@@ -133,23 +174,10 @@ export default function ClassAttendancePanel({
     setMessage(text);
   }, []);
 
+  /** Re-read after a write. The hook's own mutate, bound to the app's cache. */
   const fetchInsights = useCallback(async () => {
-    setInsightsLoading(true);
-    try {
-      const token = await getToken();
-      if (!token) return;
-      const res = await fetch(
-        `/api/timetable/class-insights?class_id=${classId}&classroom_id=${classroomId}`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      if (res.ok) setInsights(await res.json());
-      else setInsights(null);
-    } catch {
-      setInsights(null);
-    } finally {
-      setInsightsLoading(false);
-    }
-  }, [classId, classroomId, getToken]);
+    await mutateInsights();
+  }, [mutateInsights]);
 
   const fetchRecords = useCallback(async () => {
     setRecordsLoading(true);
@@ -193,12 +221,10 @@ export default function ClassAttendancePanel({
     setMessage(null);
     setUnmatched(0);
     setSelected(new Set());
-    setInsights(null);
     setRecords([]);
     setSummary(EMPTY_SUMMARY);
     recordsStale.current = true;
-    fetchInsights();
-  }, [classId, classroomId, fetchInsights]);
+  }, [classId, classroomId]);
 
   useEffect(() => {
     if (tab === 'register' && recordsStale.current && !recordsLoading) fetchRecords();
@@ -429,10 +455,13 @@ export default function ClassAttendancePanel({
     onMarkAllPresent: handleMarkAllPresent,
     onOpenImport: () => setImportOpen(true),
     onNotify: notify,
+    initialFilter: initialFilter ?? null,
   };
 
   const syncFailed = !!sync?.status && sync.status !== 'ok';
-  const missedCount = insights ? insights.summary.notCaughtUp : 0;
+  // Everyone who missed it, finished or not, so the tab and the "All" chip
+  // under it give the same number. notCaughtUp for an older payload.
+  const missedCount = insights ? insights.followup?.missed ?? insights.summary.notCaughtUp : 0;
   const dateLabel = insights?.class.scheduled_date
     ? new Date(`${insights.class.scheduled_date}T00:00:00`).toLocaleDateString('en-IN', {
         weekday: 'short',
@@ -440,6 +469,12 @@ export default function ClassAttendancePanel({
         month: 'short',
       })
     : '';
+
+  const presetMessage = nudgePreset(
+    selectedStudents.map((s) => s.followup),
+    insights?.class.title ?? classTitle,
+    dateLabel,
+  );
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
@@ -597,6 +632,7 @@ export default function ClassAttendancePanel({
         sending={nudging}
         outcome={nudgeOutcome}
         onSend={handleNudge}
+        presetMessage={presetMessage}
       />
 
       <TeamsCsvImportDialog

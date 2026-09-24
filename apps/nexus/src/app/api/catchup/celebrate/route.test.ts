@@ -2,10 +2,11 @@
  * The celebrate route remembers who it congratulated.
  *
  * Staging has no absences to make anyone all clear, so the round trip cannot be
- * exercised end to end there. These pin the three things that stop a teacher
- * naming the same students again: a post writes a 'teams' row per named
- * student, a mark writes 'marked' rows without touching Teams, and an undo can
- * only ever delete 'marked' rows.
+ * exercised end to end there. These pin what stops a teacher naming the same
+ * students again, and the 2026-10 change: a personal note goes 1:1 through
+ * sendNudge (Neram Assistant, "From <teacher>") and writes a 'note' row per
+ * student; the class-group post is gone; a mark writes 'marked' rows without
+ * sending anything; an undo can only ever delete 'marked' rows.
  */
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -74,14 +75,10 @@ vi.mock('@/lib/catchup-cohort', () => ({
     },
   ],
 }));
-const postChannel = vi.fn(async () => ({ id: 'msg-1' }));
-vi.mock('@/lib/teams-class-announcements', () => ({
-  buildMentions: (people: any[]) => ({ html: people.map((p) => p.displayName).join(', '), mentions: [] }),
-  escapeMessageHtml: (s: string) => s,
-  isPostError: (r: any) => 'error' in r,
-  postChannelMessageDetailed: (...a: any[]) => postChannel(...(a as [])),
-  postChatMessageDetailed: async () => ({ error: 'no chat' }),
-  resolveMeetingChannelId: async () => 'channel-1',
+const sendNudge = vi.fn(async (_input: any) => ({ results: [], counts: { chat: 1 } }));
+vi.mock('@/lib/nudge-delivery', () => ({
+  sendNudge: (input: any) => sendNudge(input),
+  plainToHtmlWithLink: (t: string) => `<p>${t}</p>`,
 }));
 
 import { POST } from './route';
@@ -100,40 +97,55 @@ const inserts = () =>
 beforeEach(() => {
   calls.length = 0;
   insertError = null;
-  postChannel.mockClear();
+  sendNudge.mockClear();
 });
 
 describe('POST /api/catchup/celebrate', () => {
-  it('records a teams row for each named student, with the standing snapshot and message id', async () => {
-    const res = await POST(req({ classroomId: 'room-1', studentIds: ['poheem'], postToTeams: 'channel' }));
+  it('sends a personal note through Neram Assistant and records a note row per student', async () => {
+    const res = await POST(req({ classroomId: 'room-1', mode: 'note', studentIds: ['poheem'] }));
     const body = await res.json();
 
     expect(res.status).toBe(200);
     expect(body.named).toEqual(['Poheem']);
     expect(body.recorded).toBe(true);
-    expect(inserts()).toHaveLength(1);
+    expect(sendNudge).toHaveBeenCalledTimes(1);
+    const input = sendNudge.mock.calls[0][0];
+    expect(input.studentIds).toEqual(['poheem']);
+    expect(input.eventType).toBe('catchup_note');
+    // Names the teacher on the card; never a group post.
+    expect(input.teacher).toMatchObject({ userId: 'teacher-1' });
+    expect(input.group).toBeUndefined();
     expect(inserts()[0].args[0]).toEqual([
       {
         classroom_id: 'room-1',
         student_id: 'poheem',
         celebrated_by: 'teacher-1',
-        source: 'teams',
+        source: 'note',
         cleared_total: 1,
         last_cleared_at: '2026-09-09T10:00:00+05:30',
-        teams_channel_message_id: 'msg-1',
-        teams_group_chat_message_id: null,
       },
     ]);
   });
 
-  it('still reports the post as sent when the record fails, so nobody presses again', async () => {
+  it("uses the teacher's own words when given", async () => {
+    await POST(req({ classroomId: 'room-1', mode: 'note', studentIds: ['poheem'], message: 'Proud of you.' }));
+    expect(sendNudge.mock.calls[0][0].plain).toBe('Proud of you.');
+  });
+
+  it('still reports the note as sent when the record fails, so nobody presses again', async () => {
     insertError = { message: 'relation does not exist' };
-    const res = await POST(req({ classroomId: 'room-1', studentIds: ['poheem'], postToTeams: 'channel' }));
+    const res = await POST(req({ classroomId: 'room-1', mode: 'note', studentIds: ['poheem'] }));
     const body = await res.json();
 
     expect(res.status).toBe(200);
     expect(body.ok).toBe(true);
     expect(body.recorded).toBe(false);
+  });
+
+  it('refuses the retired class-group post', async () => {
+    const res = await POST(req({ classroomId: 'room-1', mode: 'post', postToTeams: 'channel' }));
+    expect(res.status).toBe(410);
+    expect(sendNudge).not.toHaveBeenCalled();
   });
 
   it('marks without posting, and only students who are clear right now', async () => {
@@ -143,7 +155,7 @@ describe('POST /api/catchup/celebrate', () => {
     const body = await res.json();
 
     expect(res.status).toBe(200);
-    expect(postChannel).not.toHaveBeenCalled();
+    expect(sendNudge).not.toHaveBeenCalled();
     expect(body.named).toEqual(['Humaira']);
     expect(body.celebrationIds).toEqual(['cel-1']);
     const rows = inserts()[0].args[0];

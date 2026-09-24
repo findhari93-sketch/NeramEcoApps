@@ -11,13 +11,17 @@
  *
  * So the row IS the card. Collapsed it answers "who and how bad"; expanded it
  * answers "stuck on what", in the same place, without moving.
+ *
+ * 2026-10: the second line is the diagnosis ("Stopped on "Pritzker Prize" at
+ * 40% watched, last active 5 days ago") rather than a count, and tapping the
+ * row opens the student sheet (StudentSheet) with every class, its reason and
+ * how far they got. The inline expand was a list inside a list.
  */
 import { memo } from 'react';
 import {
   Box,
   Button,
   Checkbox,
-  Collapse,
   IconButton,
   Stack,
   Typography,
@@ -25,13 +29,14 @@ import {
   useTheme,
 } from '@neram/ui';
 import StudentAvatar from '@/components/students/StudentAvatar';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import NotificationsActiveOutlinedIcon from '@mui/icons-material/NotificationsActiveOutlined';
 import { describeReason } from '@/lib/rsvp-reasons';
+import { DIAGNOSIS_META } from '@/lib/catchup-diagnosis';
 import { RADIUS } from '@/components/timetable/timetable-theme';
-import { Gates, owedLine, shortDate } from './shared';
-import type { Item, ItemAction, Row } from './types';
+import { owedLine, shortDate } from './shared';
+import type { Item, Row } from './types';
 
 /** Below this the row swaps its labelled buttons for icons. Matches the theme's sm. */
 const COMPACT_ACTIONS_SX = { display: { xs: 'inline-flex', sm: 'none' } } as const;
@@ -44,7 +49,13 @@ const FULL_ACTIONS_SX = { display: { xs: 'none', sm: 'inline-flex' } } as const;
  */
 export function itemLine(item: Item): string {
   const bits = [shortDate(item.class.scheduled_date)];
-  if (item.reason_code) {
+  // The resolved reason first: it also knows what they said on the RSVP or an
+  // away window, which the absence row alone never did.
+  const r = item.reason;
+  if (r) {
+    const said = describeReason(r.code, r.note);
+    bits.push(r.note ? `"${said}"` : said);
+  } else if (item.reason_code) {
     const said = describeReason(item.reason_code, item.reason_note);
     bits.push(item.reason_note ? `"${said}"` : said);
   }
@@ -64,35 +75,50 @@ export function itemLine(item: Item): string {
   return bits.join(' · ');
 }
 
+/** The diagnosis chip colours, from the theme. */
+export function useDiagnosisColor() {
+  const theme = useTheme();
+  return (tone: 'error' | 'warning' | 'info' | 'success' | 'neutral'): string =>
+    tone === 'error'
+      ? theme.palette.error.main
+      : tone === 'warning'
+        ? theme.palette.warning.dark
+        : tone === 'info'
+          ? theme.palette.info.dark
+          : tone === 'success'
+            ? theme.palette.success.dark
+            : theme.palette.text.secondary;
+}
+
 export interface StudentRowProps {
   row: Row;
-  expanded: boolean;
-  onToggle: () => void;
+  /** Opens the student sheet. */
+  onOpen: () => void;
   /** Null when not selecting. Non-null swaps the actions for a checkbox. */
   selected: boolean | null;
   onSelect: (next: boolean) => void;
   /** False in the groups where a nudge would be dishonest, so it is not offered. */
   nudgeable: boolean;
   busy: string | null;
-  onAct: (itemId: string, action: ItemAction) => void;
   onNudge: (studentId: string, journeyId: string | null) => void;
 }
 
 function StudentRowBase({
   row,
-  expanded,
-  onToggle,
+  onOpen,
   selected,
   onSelect,
   nudgeable,
   busy,
-  onAct,
   onNudge,
 }: StudentRowProps) {
   const theme = useTheme();
   const selecting = selected !== null;
   const name = row.student.name || row.student.email || 'Student';
-  const urgent = row.bucket === 'run_over';
+  const diagnosis = row.diagnosis;
+  const meta = diagnosis ? DIAGNOSIS_META[diagnosis.state] : null;
+  const urgent = diagnosis ? diagnosis.state === 'stuck' || diagnosis.state === 'stopped' : row.bucket === 'run_over';
+  const line = diagnosis?.sentence || owedLine(row);
 
   return (
     <Box
@@ -107,13 +133,13 @@ function StudentRowBase({
       <Box
         role="button"
         tabIndex={0}
-        aria-expanded={expanded}
-        aria-label={`${name}, ${owedLine(row)}`}
-        onClick={onToggle}
+        aria-haspopup="dialog"
+        aria-label={`${name}${meta ? `, ${meta.label}` : ''}, ${line}`}
+        onClick={onOpen}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            onToggle();
+            onOpen();
           }
         }}
         sx={{
@@ -150,6 +176,9 @@ function StudentRowBase({
         />
 
         <Box sx={{ flex: 1, minWidth: 0 }}>
+          {/* No diagnosis chip here: every row sits under a heading that
+              already names it, and at 375px the chip cost the name half its
+              characters. The label keeps it for screen readers. */}
           <Typography sx={{ fontWeight: 700, fontSize: '0.9rem' }} noWrap>
             {name}
           </Typography>
@@ -166,7 +195,7 @@ function StudentRowBase({
               lineHeight: 1.35,
             }}
           >
-            {owedLine(row)}
+            {line}
           </Typography>
         </Box>
 
@@ -189,7 +218,7 @@ function StudentRowBase({
                   variant="outlined"
                   href={`tel:${row.student.phone}`}
                   startIcon={<PhoneOutlinedIcon />}
-                  sx={{ ...FULL_ACTIONS_SX, minHeight: 40, textTransform: 'none' }}
+                  sx={{ ...FULL_ACTIONS_SX, minHeight: 44, textTransform: 'none' }}
                 >
                   Call
                 </Button>
@@ -211,7 +240,7 @@ function StudentRowBase({
                   variant="contained"
                   disabled={busy === row.student.id}
                   onClick={() => onNudge(row.student.id, row.journey_id)}
-                  sx={{ ...FULL_ACTIONS_SX, minHeight: 40, textTransform: 'none' }}
+                  sx={{ ...FULL_ACTIONS_SX, minHeight: 44, textTransform: 'none' }}
                 >
                   Nudge
                 </Button>
@@ -220,57 +249,8 @@ function StudentRowBase({
           </Stack>
         )}
 
-        <ExpandMoreIcon
-          sx={{
-            flexShrink: 0,
-            color: 'text.disabled',
-            transform: expanded ? 'rotate(180deg)' : 'none',
-            transition: 'transform 200ms ease',
-            '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
-          }}
-        />
+        <ChevronRightIcon sx={{ flexShrink: 0, color: 'text.disabled' }} />
       </Box>
-
-      <Collapse in={expanded} unmountOnExit>
-        <Stack spacing={0} sx={{ px: 1.5, pb: 1.5 }}>
-          {row.items.map((item) => (
-            <Box
-              key={item.id}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1,
-                py: 1,
-                borderTop: '1px solid',
-                borderColor: 'divider',
-                flexWrap: 'wrap',
-              }}
-            >
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="body2" sx={{ fontWeight: 600 }} noWrap>
-                  {item.class.title || 'Class'}
-                </Typography>
-                <Typography
-                  variant="caption"
-                  color={item.overdue ? 'error.main' : 'text.secondary'}
-                  sx={{ display: 'block' }}
-                >
-                  {itemLine(item)}
-                </Typography>
-              </Box>
-              <Gates item={item} />
-              <Button
-                size="small"
-                disabled={busy === item.id}
-                onClick={() => onAct(item.id, item.excused ? 'restore' : 'excuse')}
-                sx={{ textTransform: 'none', minHeight: 44, minWidth: 76 }}
-              >
-                {item.excused ? 'Restore' : 'Excuse'}
-              </Button>
-            </Box>
-          ))}
-        </Stack>
-      </Collapse>
     </Box>
   );
 }

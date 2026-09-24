@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
@@ -70,6 +70,35 @@ function Kpi({ label, value, tone = 'default' }: { label: string; value: string 
       </Typography>
     </Box>
   );
+}
+
+/** Came, but not for all of it: late, left early, dropped out, or barely there. */
+function isPartly(s: StudentInsight): boolean {
+  return !!(s.joinedLate || s.leftEarly || s.droppedMidClass || s.barelyAttended);
+}
+
+/** Owes the class's homework: at least one assignment neither on time nor late. */
+export function homeworkMissing(s: StudentInsight): boolean {
+  return !!s.work && s.work.total > 0 && s.work.handedIn < s.work.total;
+}
+
+type AttendedFilter = 'all' | 'not_handed_in' | 'partly';
+
+function WorkChip({ student }: { student: StudentInsight }) {
+  const w = student.work;
+  if (!w || w.total === 0) return null;
+  if (w.handedIn === w.total) {
+    return (
+      <Chip
+        size="small"
+        color="success"
+        variant="outlined"
+        label={w.late ? 'Homework in, late' : 'Homework in'}
+      />
+    );
+  }
+  if (w.redo) return <Chip size="small" color="warning" variant="outlined" label="Homework sent back" />;
+  return <Chip size="small" color="error" variant="outlined" label="Homework not in" />;
 }
 
 function AttendedRow({
@@ -171,6 +200,7 @@ function AttendedRow({
           {student.rsvp === 'not_attending' && (
             <Chip size="small" color="info" variant="outlined" label="Came anyway" />
           )}
+          <WorkChip student={student} />
         </Box>
       </Box>
     </Box>
@@ -182,10 +212,27 @@ export default function AttendedTab({
   insightsLoading,
   selected,
   onSelect,
+  initialFilter,
 }: AttendanceTabProps) {
-  const ranked = useMemo(
+  const start: AttendedFilter =
+    initialFilter === 'not_handed_in' ? 'not_handed_in' : initialFilter === 'partly' ? 'partly' : 'all';
+  const [filter, setFilter] = useState<AttendedFilter>(start);
+  useEffect(() => setFilter(start), [start]);
+
+  const everyone = useMemo(
     () => rankByTimeInRoom((insights?.students ?? []).filter((s) => s.attended)),
     [insights],
+  );
+  const missingCount = everyone.filter(homeworkMissing).length;
+  const partlyCount = everyone.filter(isPartly).length;
+  const ranked = useMemo(
+    () =>
+      filter === 'not_handed_in'
+        ? everyone.filter(homeworkMissing)
+        : filter === 'partly'
+          ? everyone.filter(isPartly)
+          : everyone,
+    [everyone, filter],
   );
   // The order IS the analysis here, so the shared list keeps it by default and
   // adds search, the stage filter and the other sorts on top.
@@ -229,7 +276,7 @@ export default function AttendedTab({
         />
       </Box>
 
-      {ranked.length === 0 ? (
+      {everyone.length === 0 ? (
         <Alert severity="warning" sx={{ borderRadius: 2 }}>
           Nobody is recorded as having attended. If that is wrong, open Register and either sync
           from Teams or mark the class by hand.
@@ -249,6 +296,42 @@ export default function AttendedTab({
             </Typography>
           )}
           <StudentListToolbar view={view} />
+          {/* Who came is not the end of it: the class set homework, and a
+              student who sat through the class and handed nothing in needs the
+              same nudge as one catching up. Shown only when there is something
+              to filter to. */}
+          {(missingCount > 0 || partlyCount > 0) && (
+            <Box role="group" aria-label="Show only" sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
+              <Chip
+                label={`All ${everyone.length}`}
+                onClick={() => setFilter('all')}
+                color={filter === 'all' ? 'primary' : 'default'}
+                variant={filter === 'all' ? 'filled' : 'outlined'}
+                aria-pressed={filter === 'all'}
+                sx={{ minHeight: 44, fontWeight: 600 }}
+              />
+              {missingCount > 0 && (
+                <Chip
+                  label={`Homework not in ${missingCount}`}
+                  onClick={() => setFilter(filter === 'not_handed_in' ? 'all' : 'not_handed_in')}
+                  color={filter === 'not_handed_in' ? 'error' : 'default'}
+                  variant={filter === 'not_handed_in' ? 'filled' : 'outlined'}
+                  aria-pressed={filter === 'not_handed_in'}
+                  sx={{ minHeight: 44, fontWeight: 600 }}
+                />
+              )}
+              {partlyCount > 0 && (
+                <Chip
+                  label={`Partly there ${partlyCount}`}
+                  onClick={() => setFilter(filter === 'partly' ? 'all' : 'partly')}
+                  color={filter === 'partly' ? 'warning' : 'default'}
+                  variant={filter === 'partly' ? 'filled' : 'outlined'}
+                  aria-pressed={filter === 'partly'}
+                  sx={{ minHeight: 44, fontWeight: 600 }}
+                />
+              )}
+            </Box>
+          )}
           <Box sx={{ display: 'flex', flexDirection: 'column' }}>
             {view.shown.map((student) => (
               <AttendedRow

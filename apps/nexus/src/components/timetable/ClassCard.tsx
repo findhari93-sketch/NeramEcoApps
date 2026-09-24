@@ -12,6 +12,8 @@ import { formatTimeCompact } from './time-utils';
 import type { ClassImageRef } from '@/lib/class-cover';
 import { resourceCount } from '@/lib/class-resources';
 import type { RsvpSummary } from '@/app/api/timetable/rsvp-dashboard/route';
+import type { CalendarClass } from '@/lib/catchup-calendar';
+import CatchupBadge from './CatchupBadge';
 
 export { formatTimeCompact };
 
@@ -113,6 +115,12 @@ interface ClassCardProps {
   averageRating?: number | null;
   myAttended?: boolean | null;
   onClick?: (cls: ClassCardData) => void;
+  /**
+   * Staff only: how catch-up stands on past classes, from /api/catchup/calendar,
+   * already filtered to the ones worth a badge (see indexCatchup). Absent on the
+   * student timetable, where the card renders exactly as before.
+   */
+  catchupByClassId?: Map<string, CalendarClass>;
   // Legacy action props (kept for backward compat, but no longer rendered on card)
   onEdit?: (cls: ClassCardData) => void;
   onDelete?: (classId: string) => void;
@@ -138,6 +146,7 @@ export default function ClassCard({
   averageRating,
   myAttended,
   onClick,
+  catchupByClassId,
 }: ClassCardProps) {
   const isUpcoming = cls.status === 'scheduled' || cls.status === 'live';
   const isCompleted = cls.status === 'completed';
@@ -146,6 +155,7 @@ export default function ClassCard({
   const hasRecording = !!cls.recording_url;
   const hasMeeting = !!cls.teams_meeting_id;
   const materialCount = resourceCount(cls);
+  const catchup = role === 'teacher' ? catchupByClassId?.get(cls.id) : undefined;
 
   // Build metadata parts: teacher + topic
   const metaParts: string[] = [];
@@ -277,7 +287,7 @@ export default function ClassCard({
 
       {/* Layer 3: Role-specific micro-indicators */}
       {(role === 'teacher' || role === 'student') && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.125 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, mt: 0.125 }}>
           {/* Teacher: RSVP count */}
           {role === 'teacher' && isUpcoming && rsvpSummary && (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
@@ -287,6 +297,10 @@ export default function ClassCard({
               </Typography>
             </Box>
           )}
+
+          {/* Teacher: how catch-up stands on a past class. A link of its own
+              to the Catch-up calendar; it stops the click reaching the card. */}
+          {catchup && <CatchupBadge c={catchup} size="row" />}
 
           {/* Teacher: Average rating for completed */}
           {role === 'teacher' && isCompleted && averageRating != null && averageRating > 0 && (

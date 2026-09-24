@@ -17,7 +17,8 @@
 
 export type CelebrationState = 'new' | 'congratulated' | 'cleared_again';
 
-export type CelebrationSource = 'teams' | 'marked';
+/** 'teams' is history (the retired group post); 'auto' the system; 'note' a teacher's note. */
+export type CelebrationSource = 'teams' | 'marked' | 'auto' | 'note';
 
 export interface CelebrationRow {
   id: string;

@@ -7,6 +7,9 @@ import {
 } from '@neram/database';
 import { computeCatchupPace, describeCatchupPace } from '@/lib/catchup-pace';
 import { listRewatchableRecaps } from '@/lib/rewatchable-recaps';
+import { loadReasonContext, resolveFromContext } from '@/lib/absence-reason-load';
+import { describeReasonSourceForStudent } from '@/lib/absence-reason';
+import { congratulateClears } from '@/lib/catchup-congrats';
 
 /**
  * GET /api/student/catchup-journey
@@ -95,6 +98,15 @@ export async function GET(request: NextRequest) {
     }
     if (!backlog) return NextResponse.json(emptyPayload(rewatchable, truncated));
 
+    // getCatchupBacklog stamps caught_up_at for anything finished without the
+    // button (a passed test, a completed recap). Congratulate those now, while
+    // it is fresh. Claim-based, so a reload sends nothing twice.
+    await congratulateClears(supabase, {
+      studentId: user.id,
+      classroomId,
+      origin: request.nextUrl.origin,
+    });
+
     const { journey, missed, totals, missedTotals } = backlog;
 
     // Pace belongs to the journey, and only a late joiner has one. It is a
@@ -114,7 +126,33 @@ export async function GET(request: NextRequest) {
     // Classes nobody can do anything about are listed separately rather than
     // padding either list with rows that have no action on them.
     const blocked = backlog.items.filter((i) => i.status === 'blocked');
-    const paced = backlog.backlog.filter((i) => i.status !== 'blocked');
+
+    // The reason on each card is whatever they told us anywhere: declining the
+    // RSVP, an away window, or this screen. The backlog row only carries the
+    // last of those, so a student who declined in advance was told to "tell us
+    // why" on every card.
+    const reasonCtx = await loadReasonContext(
+      supabase,
+      backlog.items.map((i: any) => ({
+        student_id: user.id,
+        scheduled_class_id: i.scheduled_class_id,
+        scheduled_date: i.class?.scheduled_date ?? null,
+        reason_code: i.reason_code,
+      })),
+    );
+    const withReason = <T extends { scheduled_class_id: string; reason_code?: string | null; class?: any; kind?: string }>(
+      i: T,
+    ) => {
+      if (i.kind === 'late_joiner') return i;
+      const r = resolveFromContext(reasonCtx, {
+        student_id: user.id,
+        scheduled_class_id: i.scheduled_class_id,
+        scheduled_date: i.class?.scheduled_date ?? null,
+        reason_code: i.reason_code,
+      });
+      return r ? { ...i, reason_code: r.code, reason_said: describeReasonSourceForStudent(r) } : i;
+    };
+    const paced = backlog.backlog.filter((i) => i.status !== 'blocked').map(withReason);
 
     return NextResponse.json({
       journey: journey
@@ -133,7 +171,7 @@ export async function GET(request: NextRequest) {
       // Missed classes first in the payload as well as on the screen, because a
       // class the course has already built on matters more than one taught
       // before the student existed here.
-      missed: missed.filter((i) => i.status !== 'blocked'),
+      missed: missed.filter((i) => i.status !== 'blocked').map(withReason),
       // No due_on override any more. It used to stamp a quota deadline over
       // every backlog item, so a late joiner's card carried a date they had
       // never agreed to and which competed with the real clock. The only

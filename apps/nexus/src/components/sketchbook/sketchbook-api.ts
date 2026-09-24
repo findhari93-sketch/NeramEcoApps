@@ -96,6 +96,8 @@ export const featureSketch = (getToken: GetToken, id: string, classroomId?: stri
     feature: { classroom_id: string; featured_at: string };
     teams: { channel: boolean; chat: boolean; errors: string[] };
     shelved: boolean;
+    /** A teacher had hidden this drawing from Inspiration, and featuring left that alone. */
+    hiddenByTeacher?: boolean;
   }>(
     getToken,
     `/api/sketchbook/entries/${id}/feature`,

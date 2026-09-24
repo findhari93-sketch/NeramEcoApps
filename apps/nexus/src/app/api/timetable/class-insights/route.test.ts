@@ -140,3 +140,50 @@ describe('GET /api/timetable/class-insights, the real-end regression', () => {
     expect(body.summary.leftEarlyCount).toBe(0);
   });
 });
+
+describe('GET /api/timetable/class-insights, one reason and one follow-up state', () => {
+  beforeEach(() => {
+    // A sixth student, on declared exam leave over the class date, with no
+    // absence reason and no RSVP: the case the panel printed as "No reason
+    // given" under a "Told us why" heading.
+    state.members.push({
+      user_id: 'away-1',
+      enrolled_at: '2026-06-01T00:00:00Z',
+      current_standard: null,
+      participation_status: 'active',
+      enrolled: true,
+      user: { name: 'Sanjay Kumar', avatar_url: null, phone: null },
+    });
+    state.awayWindows = [
+      {
+        id: 'w1',
+        student_id: 'away-1',
+        starts_on: '2026-09-10',
+        ends_on: '2026-09-20',
+        reason_code: 'clash',
+        reason_note: null,
+        source: 'student',
+        cancelled_at: null,
+        created_at: '2026-09-05T10:00:00Z',
+      },
+    ];
+  });
+
+  it('says why an away student missed it, and files them as told us why', async () => {
+    const body = await (await call()).json();
+    const away = body.students.find((s: { id: string }) => s.id === 'away-1');
+    expect(away.reason_resolved).toMatchObject({ code: 'clash', source: 'away' });
+    expect(away.reason_resolved.line).toMatch(/^Exam clash · Away /);
+    expect(away.followup).toBe('catching_up');
+  });
+
+  it('gives every student exactly one follow-up state', async () => {
+    const body = await (await call()).json();
+    const t = body.followup.tally as Record<string, number>;
+    const sum = Object.values(t).reduce((n, v) => n + v, 0);
+    expect(sum).toBe(body.students.length);
+    expect(t.attended + t.partly).toBe(5);
+    expect(body.followup.missed).toBe(1);
+  });
+});
+

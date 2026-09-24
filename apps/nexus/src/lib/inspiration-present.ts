@@ -1,6 +1,11 @@
-import type { InspirationCuration, InspirationRow, InspirationSourceKind } from '@neram/database/queries/nexus';
+import type {
+  ClassFeaturedRow,
+  InspirationCuration,
+  InspirationRow,
+  InspirationSourceKind,
+} from '@neram/database/queries/nexus';
 import { examYearOf } from '@/lib/student-stage';
-import { formatInspirationCredit } from '@/lib/inspiration-credit';
+import { formatInspirationCredit, fullName } from '@/lib/inspiration-credit';
 import { HIDDEN_REASON_LABEL, hiddenReason } from '@/lib/inspiration-rules';
 import { INSPIRATION_FAMILIES, typeLabel } from '@/lib/inspiration-types';
 
@@ -39,7 +44,18 @@ export interface InspirationCard {
   saved: boolean;
   saveCount: number;
   createdAt: string;
+  /**
+   * Who drew it, for the face beside a featured drawing. Present only on a
+   * featured student original whose author is named; never for an opt-out.
+   * `id` is staff only (it feeds the info ring), like InspirationCardStaff.authorId.
+   */
+  author?: { id: string | null; name: string; avatarUrl: string | null };
   staff?: InspirationCardStaff;
+}
+
+/** A card on the "Featured from your class" row: the card, plus where and when it was praised. */
+export interface ClassFeaturedCard extends InspirationCard {
+  featuredIn: { classroomId: string; classroomName: string; featuredAt: string };
 }
 
 export function displayTitle(row: Pick<InspirationRow, 'title_override' | 'type_slugs' | 'category'>): string {
@@ -80,6 +96,7 @@ export function presentRow(row: InspirationRow, opts: { staff: boolean }): Inspi
       isAlumni: row.author_is_alumni,
       examYear: examYearOf(row.author_academic_year),
       optedOut: row.author_opted_out,
+      featured: row.is_featured,
     }),
     badge,
     typeSlugs: row.type_slugs ?? [],
@@ -91,6 +108,15 @@ export function presentRow(row: InspirationRow, opts: { staff: boolean }): Inspi
     saveCount: Number(row.save_count ?? 0),
     createdAt: row.source_created_at,
   };
+
+  const namedAuthor = isOriginal && row.is_featured && !row.author_opted_out && row.author_id;
+  if (namedAuthor) {
+    card.author = {
+      id: opts.staff ? row.author_id : null,
+      name: fullName(row.author_first_name, row.author_last_name, row.author_name) ?? 'Neram student',
+      avatarUrl: null,
+    };
+  }
 
   if (opts.staff) {
     const reason = hiddenReason({
@@ -110,4 +136,22 @@ export function presentRow(row: InspirationRow, opts: { staff: boolean }): Inspi
     };
   }
   return card;
+}
+
+/**
+ * One entry on the class wall. The row is presented exactly as the grid would,
+ * so the badge, the credit and the staff block cannot drift from it; the wall
+ * adds only the classroom, the date and the photo the grid does not carry.
+ */
+export function presentClassFeatured(entry: ClassFeaturedRow, opts: { staff: boolean }): ClassFeaturedCard {
+  const card = presentRow(entry.row, opts);
+  if (card.author) card.author = { ...card.author, avatarUrl: entry.author_avatar_url };
+  return {
+    ...card,
+    featuredIn: {
+      classroomId: entry.classroom_id,
+      classroomName: entry.classroom_name,
+      featuredAt: entry.featured_at,
+    },
+  };
 }

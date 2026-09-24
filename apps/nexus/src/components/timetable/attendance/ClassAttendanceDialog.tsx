@@ -2,7 +2,7 @@
 
 import { Box, Dialog, DialogActions, Button, DialogTitle, Typography, useMediaQuery, useTheme } from '@neram/ui';
 import ClassAttendancePanel from './ClassAttendancePanel';
-import type { AttendanceTabKey } from './types';
+import type { AttendanceFilter, AttendanceTabKey } from './types';
 
 interface ClassAttendanceDialogProps {
   open: boolean;
@@ -13,6 +13,8 @@ interface ClassAttendanceDialogProps {
   teamsMeetingId: string | null;
   getToken: () => Promise<string | null>;
   initialTab?: AttendanceTabKey;
+  /** Open already narrowed to one group, from the drawer's outcome card. */
+  initialFilter?: AttendanceFilter | null;
   onChanged?: () => void;
 }
 
@@ -38,6 +40,7 @@ export default function ClassAttendanceDialog({
   teamsMeetingId,
   getToken,
   initialTab,
+  initialFilter,
   onChanged,
 }: ClassAttendanceDialogProps) {
   const theme = useTheme();
@@ -75,6 +78,7 @@ export default function ClassAttendanceDialog({
             teamsMeetingId={teamsMeetingId}
             getToken={getToken}
             initialTab={initialTab}
+            initialFilter={initialFilter}
             onChanged={onChanged}
           />
         )}

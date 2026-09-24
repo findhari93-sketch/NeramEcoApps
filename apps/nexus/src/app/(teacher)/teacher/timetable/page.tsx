@@ -36,7 +36,7 @@ import { istRange } from '@/components/attendance/attendance-format';
 import ClassCreateDialog from '@/components/timetable/ClassCreateDialog';
 import BackfillFromTeamsDialog from '@/components/timetable/BackfillFromTeamsDialog';
 import ClassAttendanceDialog from '@/components/timetable/attendance/ClassAttendanceDialog';
-import type { AttendanceTabKey } from '@/components/timetable/attendance/types';
+import type { AttendanceFilter, AttendanceTabKey } from '@/components/timetable/attendance/types';
 import { ClassPanel } from '@/components/timetable/class-panel';
 import RescheduleDialog, { type ReschedulePayload } from '@/components/timetable/RescheduleDialog';
 import HolidayManager from '@/components/timetable/HolidayManager';
@@ -54,6 +54,14 @@ import {
 } from '@/components/timetable/date-utils';
 import { type PlanShape } from '@/lib/plan-shape';
 import { classStartIso, formatIstTime } from '@/lib/prework';
+import type { CalendarClass } from '@/lib/catchup-calendar';
+import { indexCatchup, splitCatchupRange } from '@/components/timetable/catchup-badge';
+
+/** What /api/catchup/calendar returns. Only the fields the badges read. */
+interface CatchupCalendarResponse {
+  classroomId: string;
+  classes: CalendarClass[];
+}
 
 interface ClassroomOption {
   id: string;
@@ -61,23 +69,6 @@ interface ClassroomOption {
   type: string;
   ms_team_id?: string | null;
   academic_year?: string | null;
-}
-
-/**
- * What /api/timetable/attendance-report returns as `summary`.
- *
- * The follow-up counts ride along with the register counts because they come
- * from the same request: the detail panel can then say "3 missed, 2 explained,
- * 1 caught up" without a second round trip per class, and the per-class fan-out
- * here is already the most expensive thing on the page.
- */
-interface AttendanceSummary {
-  present: number;
-  absent: number;
-  total: number;
-  missed: number;
-  explained: number;
-  caughtUp: number;
 }
 
 /** "Mon, 20 Jul". Built in IST so a late-evening class does not shift a day. */
@@ -146,6 +137,7 @@ export default function TeacherTimetable() {
   const [attendanceClass, setAttendanceClass] = useState<ClassCardData | null>(null);
   /** Which tab the attendance dialog opens on. Insights was its own dialog. */
   const [attendanceTab, setAttendanceTab] = useState<AttendanceTabKey>('missed');
+  const [attendanceFilter, setAttendanceFilter] = useState<AttendanceFilter | null>(null);
   const [backfillOpen, setBackfillOpen] = useState(false);
   /**
    * ONE selection, shared by every view.
@@ -186,8 +178,6 @@ export default function TeacherTimetable() {
   const markedDates = useMemo(() => new Set(classes.map((c) => c.scheduled_date)), [classes]);
   const holidayDates = useMemo(() => new Set(Object.keys(holidays)), [holidays]);
 
-  // Real Teams/manual attendance, for past classes only (cheap DB-only read, no Graph call).
-  const [attendanceData, setAttendanceData] = useState<Record<string, AttendanceSummary>>({});
   // Rating data
   const [averageRatings, setAverageRatings] = useState<Record<string, number>>({});
 
@@ -330,6 +320,46 @@ export default function TeacherTimetable() {
     [standing, activeClassroom],
   );
 
+  /**
+   * How catch-up stands on the past classes on screen, for the badges.
+   *
+   * Every view draws the badge (Month, Week, Day and the Plan list). Keyed on the
+   * VISIBLE range (the month grid, or the Monday week) rather than fetchRange,
+   * because the endpoint caps a request at 45 days and the planning horizon
+   * can run past that. A month grid is at most 42 days, so this is one request;
+   * the second key only fills if a wider view ever appears. A teacher without
+   * attendance access gets a 403 and simply sees no badges, hence no retry.
+   */
+  const catchupRange =
+    view === 'month' && range.month
+      ? { from: range.start, to: range.end }
+      : view === 'week' || view === 'day' || view === 'agenda'
+        ? { from: week.start, to: week.end }
+        : null;
+  const catchupParts = catchupRange ? splitCatchupRange(catchupRange.from, catchupRange.to) : [];
+  const catchupKeyFor = (i: number): string | null =>
+    activeClassroom && catchupParts[i]
+      ? `/api/catchup/calendar?classroomId=${activeClassroom.id}` +
+        `&from=${catchupParts[i].from}&to=${catchupParts[i].to}`
+      : null;
+  const catchupSWROptions = {
+    revalidateOnFocus: false,
+    dedupingInterval: 60_000,
+    shouldRetryOnError: false,
+  };
+  const { data: catchupA } = useAuthSWR<CatchupCalendarResponse>(catchupKeyFor(0), catchupSWROptions);
+  const { data: catchupB } = useAuthSWR<CatchupCalendarResponse>(catchupKeyFor(1), catchupSWROptions);
+  const catchupByClassId = useMemo(() => {
+    // SWR keeps serving the previous key's payload while a new one loads, so a
+    // classroom switch would briefly badge the new room with the old one's
+    // numbers. The echoed id is the guard, as with `standing` above.
+    const id = activeClassroom?.id;
+    const rows = [catchupA, catchupB].flatMap((r) =>
+      r && r.classroomId === id ? r.classes : [],
+    );
+    return indexCatchup(rows);
+  }, [catchupA, catchupB, activeClassroom?.id]);
+
   const forecastByDate = useMemo(() => {
     const map = buildForecast({
       days: availability?.days ?? [],
@@ -438,7 +468,14 @@ export default function TeacherTimetable() {
     }
   }, [activeClassroom, fetchRange.start, fetchRange.end, getToken]);
 
-  const fetchRatingsAndAttendance = async (fetchedClasses: ClassCardData[], token: string) => {
+  /**
+   * Ratings, per class. The attendance-report half of this fan-out is gone: its
+   * only reader was the drawer's old Attended figure, which Month view never
+   * filled (so a class opened from the month read "Attended 0"). The drawer's
+   * "How this class went" card now reads class-insights on demand, for the one
+   * class that is open, which is one request instead of one per past class.
+   */
+  const fetchRatings = async (fetchedClasses: ClassCardData[], token: string) => {
     if (!activeClassroom || fetchedClasses.length === 0) return;
 
     // Use the fetched classes directly to get classroom_id (state may not be updated yet)
@@ -448,60 +485,23 @@ export default function TeacherTimetable() {
     };
 
     const classIds = fetchedClasses.map((c) => c.id);
-
-    // No RSVP request here any more. The expected headcount for the whole month
-    // arrives in one call above, and this fan-out is now only the two things
-    // that genuinely have no range endpoint.
-    const ratingPromises = classIds.map((id) => {
-      const cid = getClassroomId(id);
-      return fetch(`/api/timetable/reviews?class_id=${id}&classroom_id=${cid}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((r) => r.ok ? r.json() : null)
-        .catch(() => null);
-    });
-
-    // Real attendance is only meaningful once a class has ended, and the fetch
-    // itself is a plain DB read (no Graph call), so it's cheap to include here.
-    const ensureSec = (t: string) => (t && t.length === 5 ? `${t}:00` : t);
-    const pastClassIds = classIds.filter((id) => {
-      const c = fetchedClasses.find((fc) => fc.id === id);
-      if (!c || c.status === 'cancelled') return false;
-      const endMs = new Date(`${c.scheduled_date}T${ensureSec(c.end_time)}+05:30`).getTime();
-      return !Number.isNaN(endMs) && Date.now() > endMs;
-    });
-
-    const attendancePromises = pastClassIds.map((id) => {
-      const cid = getClassroomId(id);
-      return fetch(`/api/timetable/attendance-report?class_id=${id}&classroom_id=${cid}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-        .then((r) => r.ok ? r.json() : null)
-        .catch(() => null);
-    });
-
-    const [ratingResults, attendanceResults] = await Promise.all([
-      Promise.all(ratingPromises),
-      Promise.all(attendancePromises),
-    ]);
+    const ratingResults = await Promise.all(
+      classIds.map((id) =>
+        fetch(`/api/timetable/reviews?class_id=${id}&classroom_id=${getClassroomId(id)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null),
+      ),
+    );
 
     const ratingMap: Record<string, number> = {};
-    const attendanceMap: Record<string, AttendanceSummary> = {};
-
     classIds.forEach((id, i) => {
       if (ratingResults[i]?.summary?.average) {
         ratingMap[id] = ratingResults[i].summary.average;
       }
     });
-
-    pastClassIds.forEach((id, i) => {
-      if (attendanceResults[i]?.summary) {
-        attendanceMap[id] = attendanceResults[i].summary;
-      }
-    });
-
     setAverageRatings(ratingMap);
-    setAttendanceData(attendanceMap);
   };
 
   // Navigation only: the range guards inside decide whether a request is
@@ -567,33 +567,13 @@ export default function TeacherTimetable() {
     (async () => {
       const token = await getToken();
       if (!token || cancelled) return;
-      fetchRatingsAndAttendance(visibleClasses, token);
+      fetchRatings(visibleClasses, token);
     })();
     return () => {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, visibleClassKey, getToken]);
-
-  /** Re-pull one class's attendance summary, so the detail panel reflects a sync/manual-mark made in the Attendance sheet without re-fetching the whole week. */
-  const refreshAttendanceSummary = async (classId: string, classroomId: string) => {
-    try {
-      const token = await getToken();
-      if (!token) return;
-      const res = await fetch(
-        `/api/timetable/attendance-report?class_id=${classId}&classroom_id=${classroomId}`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
-      if (res.ok) {
-        const data = await res.json();
-        if (data.summary) {
-          setAttendanceData((prev) => ({ ...prev, [classId]: data.summary }));
-        }
-      }
-    } catch {
-      // panel just keeps showing the stale/"not synced" summary
-    }
-  };
 
   // How many drafts are waiting in this week, so the Publish button can say so.
   const fetchDraftCount = useCallback(async () => {
@@ -1509,15 +1489,18 @@ export default function TeacherTimetable() {
     // ready, so one key refreshes the roster, the assignments and the test.
     refreshKey: assignmentRefreshKey,
     rsvpSummary: selectedClass ? rsvpData[selectedClass.id] : null,
-    attendanceSummary: selectedClass ? attendanceData[selectedClass.id] : null,
     averageRating: selectedClass ? averageRatings[selectedClass.id] : null,
     assignmentsEditable: true,
     onEdit: handleEdit,
     onDelete: handleDelete,
     onDeletePermanent: handleDeletePermanent,
     onNotTaught: handleNotTaught,
-    onOpenAttendance: (cls: ClassCardData) => {
-      setAttendanceTab('missed');
+    onOpenAttendance: (
+      cls: ClassCardData,
+      opts?: { tab?: AttendanceTabKey; filter?: AttendanceFilter | null },
+    ) => {
+      setAttendanceTab(opts?.tab ?? 'missed');
+      setAttendanceFilter(opts?.filter ?? null);
       setAttendanceClass(cls);
     },
     onSyncRecording: handleSyncRecording,
@@ -1575,6 +1558,7 @@ export default function TeacherTimetable() {
             forecastByDate={forecastByDate}
             todayISO={formatDateISO(new Date())}
             onOpenDayAvailability={(iso) => setAvailabilityScope({ kind: 'day', date: iso })}
+            catchupByClassId={catchupByClassId}
           />
         ) : view === 'week' ? (
           <GridView
@@ -1588,6 +1572,7 @@ export default function TeacherTimetable() {
             onClassClick={handleClassClick}
             rsvpData={rsvpData}
             scrollToTime={configuredWindow.start}
+            catchupByClassId={catchupByClassId}
           />
         ) : view === 'day' ? (
           <DayView
@@ -1604,6 +1589,7 @@ export default function TeacherTimetable() {
             onClassClick={handleClassClick}
             rsvpData={rsvpData}
             scrollToTime={configuredWindow.start}
+            catchupByClassId={catchupByClassId}
           />
         ) : (
           <Box
@@ -1634,6 +1620,7 @@ export default function TeacherTimetable() {
               onAssignmentClick={openAssignmentMenu}
               onAddClass={(date) => openCreateDialog(date)}
               availability={rsvpData}
+              catchupByClassId={catchupByClassId}
             />
             {/* The rail only exists at lg+. Below that the sheet is the panel,
                 and rendering both would double every self-fetching section
@@ -1786,11 +1773,9 @@ export default function TeacherTimetable() {
           teamsMeetingId={attendanceClass.teams_meeting_id}
           getToken={getToken}
           initialTab={attendanceTab}
-          // After every write, not just on close: the panel behind this dialog
-          // shows the same numbers and must not sit there contradicting it.
-          onChanged={() =>
-            refreshAttendanceSummary(attendanceClass.id, getClassroomIdForClass(attendanceClass.id))
-          }
+          initialFilter={attendanceFilter}
+          // No onChanged: the drawer's "How this class went" card reads the same
+          // SWR key as this dialog, so every write here reaches it on its own.
         />
       )}
 

@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { APP_URLS, injectAuthForPage } from '../utils/credentials';
 import { assertNoHorizontalOverflow, assertTouchTargetSize } from '../utils/mobile-helpers';
+import { openTeacherCatchup, skipWelcome } from '../utils/catchup-helpers';
 
 /**
  * The catch-up automation at a real phone size.
@@ -41,24 +42,37 @@ async function settle(page: any, marker: RegExp) {
 test.describe('Catch-up automation (mobile)', () => {
   test.setTimeout(COLD_COMPILE_BUDGET);
 
-  test('375px: the Classes tab offers the backlog run and fits the phone', async ({ browser }) => {
+  test('375px: the Calendar view offers the backlog run and fits the phone', async ({ browser }) => {
     const context = await browser.newContext({ viewport: PHONE });
     const page = await context.newPage();
 
     const injected = await injectAuthForPage(page, 'teacher');
     test.skip(!injected, 'Nexus test-login unavailable');
+    await skipWelcome(page);
 
-    await page.goto(`${NEXUS}/teacher/catch-up?tab=classes`, { waitUntil: 'domcontentloaded' });
-    const ready = await settle(page, /prepare missing classes|nothing outstanding|recap/i);
-    test.skip(!ready, 'Catch-up workspace did not render in this environment');
+    // The old ?tab=classes link, on purpose: it is what the recap editor and
+    // older notifications carry, and it must land on the Calendar.
+    await openTeacherCatchup(page, 'tab=classes');
+    await expect(page.getByRole('tab', { name: 'Calendar' })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('button', { name: 'Previous month' })).toBeVisible();
 
-    // The house rule. This tab carries a chip row, a progress panel and a class
-    // list, all of which want to be wider than a phone.
+    // The house rule. The month bar carries a title, two arrows, the view toggle
+    // and a menu, all on one row at 375px.
     await assertNoHorizontalOverflow(page);
 
-    const prepare = page.getByRole('button', { name: /prepare missing classes/i });
+    // The backlog run moved off the page into the "More recap actions" menu.
+    const more = page.getByRole('button', { name: 'More recap actions' });
+    await expect(more).toBeVisible();
+    await assertTouchTargetSize(page, '[aria-label="More recap actions"]', 44);
+    await more.click();
+    const prepare = page.getByRole('menuitem', { name: /Prepare missing classes/ });
     await expect(prepare, 'the backlog run must be offered here').toHaveCount(1);
-    await assertTouchTargetSize(page, 'button:has-text("Prepare missing classes")', 40);
+    await expect(page.getByRole('menuitem', { name: /Recap from a link/ })).toHaveCount(1);
+    const box = await prepare.boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    // Closed without pressing: a real run spends Gemini quota.
+    await page.keyboard.press('Escape');
+    await expect(prepare).toHaveCount(0);
 
     await context.close();
   });
@@ -69,15 +83,22 @@ test.describe('Catch-up automation (mobile)', () => {
 
     const injected = await injectAuthForPage(page, 'teacher');
     test.skip(!injected, 'Nexus test-login unavailable');
+    await skipWelcome(page);
 
-    // Reached through the workspace rather than a guessed recap id, so this
-    // tests the route a teacher actually takes.
-    await page.goto(`${NEXUS}/teacher/catch-up?tab=classes`, { waitUntil: 'domcontentloaded' });
-    const ready = await settle(page, /prepare missing classes|nothing outstanding/i);
-    test.skip(!ready, 'Catch-up workspace did not render in this environment');
-
-    const open = page.getByRole('button', { name: /edit recap|continue draft/i }).first();
-    test.skip((await open.count()) === 0, 'No class in this environment has a recap to open');
+    // Reached through the List mode of the Calendar rather than a guessed recap
+    // id, so this tests the route a teacher actually takes. Walks back up to six
+    // months to find a class with a recap to open.
+    let open = null as any;
+    const now = new Date();
+    for (let back = 0; back < 6 && !open; back++) {
+      const d = new Date(now.getFullYear(), now.getMonth() - back, 1);
+      const month = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      await openTeacherCatchup(page, `view=calendar&month=${month}&display=list`);
+      await expect(page.getByRole('group', { name: 'Filter classes' })).toBeVisible({ timeout: 60_000 });
+      const btn = page.getByRole('button', { name: /edit recap|continue draft/i }).first();
+      if (await btn.count()) open = btn;
+    }
+    test.skip(!open, 'No class in the last six months has a recap to open in this environment');
 
     await open.click();
     const editor = await settle(page, /generate and publish/i);

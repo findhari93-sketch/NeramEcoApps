@@ -59,6 +59,7 @@ import WatchAgainList from '@/components/class-recap/WatchAgainList';
 import { isPathEnabled } from '@/lib/feature-flags';
 import { CLASS_RECAP_PATH } from '@/lib/nav-config';
 import type { RewatchableRecap } from '@/lib/rewatchable-recaps';
+import { reasonShortLabel } from '@/lib/rsvp-reasons';
 
 interface BacklogItem {
   id: string;
@@ -76,6 +77,8 @@ interface BacklogItem {
   order: number | null;
   recommended: boolean;
   reason_code: string | null;
+  /** Where they told us ("You told us before class"). Absent when they said it here. */
+  reason_said?: string;
   watched: boolean;
   assignments_outstanding: number;
   assignments_total: number;
@@ -124,12 +127,6 @@ const STEP_COPY: Record<
   done: { label: 'Done', cta: 'Review', icon: CheckCircleIcon },
 };
 
-const REASON_LABEL: Record<string, string> = {
-  unwell: 'Unwell',
-  family: 'Family reasons',
-  clash: 'Clashed with something',
-  other: 'Other',
-};
 
 function formatDay(ymd: string): string {
   const d = new Date(`${ymd}T00:00:00+05:30`);
@@ -437,7 +434,7 @@ function StudentCatchUpWorkspace() {
                 {item.status === 'done'
                   ? 'All three steps cleared.'
                   : item.reason_code
-                    ? `You told us: ${(REASON_LABEL[item.reason_code] || item.reason_code).toLowerCase()}.`
+                    ? `${item.reason_said || 'You told us'}: ${reasonShortLabel(item.reason_code).toLowerCase()}.`
                     : 'Tell us why, then watch it and finish the work.'}
               </Typography>
             )}

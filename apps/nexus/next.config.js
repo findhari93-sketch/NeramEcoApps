@@ -91,7 +91,7 @@ const nextConfig = {
         // function runs. `source` matches the exact path only, so the recap
         // EDITOR at /teacher/class-recaps/[recapId] is untouched.
         source: '/teacher/class-recaps',
-        destination: '/teacher/catch-up?tab=classes',
+        destination: '/teacher/catch-up?view=calendar',
         permanent: true,
       },
       {

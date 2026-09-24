@@ -24,6 +24,7 @@ import {
 } from '@/lib/inspiration-query';
 import type { InspirationCard } from '@/lib/inspiration-present';
 import AddExemplarSheet from './AddExemplarSheet';
+import FeaturedClassRow from './FeaturedClassRow';
 import InspirationFilterChips from './InspirationFilterChips';
 import InspirationMasonry from './InspirationMasonry';
 import InspirationSearchBar from './InspirationSearchBar';
@@ -315,6 +316,9 @@ export default function InspirationBrowser({ mode, savedOnly = false, chrome = '
             />
           </>
         )}
+
+        {/* The class wall sits on the unfiltered home only: a search is a question, and it answers that. */}
+        {ready && !savedOnly && !filtered && <FeaturedClassRow base={base} staff={mode === 'staff'} />}
 
         <Typography
           component="p"

@@ -23,6 +23,12 @@
  * list can be read out in class or posted to Teams exactly as it stands, which
  * is the test it has to pass.
  *
+ * 2026-10: students are congratulated automatically, one to one, by Neram
+ * Assistant as they clear each class and again when nothing is left (see
+ * lib/catchup-congrats.ts). The class-group Teams post is gone. What remains
+ * here is the teacher's own voice: a personal note, sent 1:1 as the Assistant
+ * "From <teacher>", and Mark as congratulated for one that happened in person.
+ *
  * It is split in two by one question: has this student already been
  * congratulated? The share used to name everyone who was clear on every press,
  * and a teacher who had named two students twice had no way to name only the
@@ -34,6 +40,8 @@ import { Alert, Box, Button, Checkbox, Chip, Stack, Typography, alpha, useTheme 
 import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
+import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
+import BoltIcon from '@mui/icons-material/Bolt';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
 import DoneAllIcon from '@mui/icons-material/DoneAll';
 import { RADIUS } from '@/components/timetable/timetable-theme';
@@ -47,8 +55,8 @@ const FIRST_PAGE = 12;
 
 export interface AllClearWallProps {
   students: Row[];
-  /** Opens the Teams preview for the selected students. Absent when this classroom has nowhere to post. */
-  onShare?: (students: Row[]) => void;
+  /** Opens the personal-note composer for the selected students. */
+  onNote?: (students: Row[]) => void;
   /** Records the selected students as congratulated without posting. */
   onMarkCelebrated?: (students: Row[]) => void;
   /**
@@ -61,12 +69,12 @@ export interface AllClearWallProps {
 
 export default function AllClearWall({
   students,
-  onShare,
+  onNote,
   onMarkCelebrated,
   celebrationsUnavailable = false,
   busy,
 }: AllClearWallProps) {
-  const selectable = !!(onShare || onMarkCelebrated);
+  const selectable = !!(onNote || onMarkCelebrated);
 
   // Most recently finished first. `lastClearedAt` is null for a student who has
   // never missed a class at all, and they sort last rather than first: they
@@ -176,19 +184,19 @@ export default function AllClearWall({
                 Mark as congratulated
               </Button>
             )}
-            {onShare && (
+            {onNote && (
               <Button
                 size="small"
                 variant="outlined"
                 color="success"
                 disabled={busy || n === 0}
-                startIcon={<CampaignOutlinedIcon />}
-                onClick={() => onShare(selectedRows)}
+                startIcon={<ChatBubbleOutlineIcon />}
+                onClick={() => onNote(selectedRows)}
                 // 44px is the minimum comfortable tap target, and a teacher presses
                 // this on a phone between classes.
                 sx={{ textTransform: 'none', fontWeight: 700, minHeight: 44, borderRadius: 2 }}
               >
-                {n > 0 ? `Congratulate (${n}) in Teams` : 'Congratulate in Teams'}
+                {n > 0 ? `Send a note (${n})` : 'Send a note'}
               </Button>
             )}
           </Stack>
@@ -205,7 +213,7 @@ export default function AllClearWall({
       <WallSection
         tone="due"
         heading={selectable ? `Not congratulated yet (${due.length})` : null}
-        intro="These students have nothing left to catch up on. Worth saying so out loud."
+        intro="Nothing left to catch up on. Neram Assistant congratulates each student automatically. A note from you adds the personal touch."
         rows={due}
         selectable={selectable}
         selected={selected}
@@ -404,6 +412,14 @@ function WallCard({
         <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
           {describeClear(row)}
         </Typography>
+        {isQuickFinisher(row) && (
+          <Stack direction="row" alignItems="center" spacing={0.25} sx={{ mt: 0.25 }}>
+            <BoltIcon aria-hidden sx={{ fontSize: 14, color: 'success.dark' }} />
+            <Typography variant="caption" sx={{ fontWeight: 700, color: 'success.dark' }}>
+              Quick to catch up
+            </Typography>
+          </Stack>
+        )}
         {status && (
           // Top-aligned, so on a line that wraps the icon sits beside the first
           // line rather than floating between the two.
@@ -463,12 +479,29 @@ export function describeCelebration(row: Row): { text: string; again: boolean } 
     return { text: 'Cleared again since last congratulated', again: true };
   }
   const when = timeAgo(c.lastAt);
-  const verb = c.source === 'marked' ? 'Marked as congratulated' : 'Congratulated in Teams';
+  const verb =
+    c.source === 'marked'
+      ? 'Marked as congratulated'
+      : c.source === 'auto'
+        ? 'Congratulated automatically'
+        : c.source === 'note'
+          ? 'Note sent'
+          : 'Congratulated in Teams';
   const times = c.count > 1 ? ` (${c.count} times)` : '';
   return { text: when ? `${verb} ${when}${times}` : `${verb}${times}`, again: false };
 }
 
-/** Exported for the Teams preview, which names the same people in the same order. */
+/**
+ * Clears a class within two days of it, as a habit (the median, so one slow
+ * class does not undo it). Named, because the founder asked to recognise the
+ * students who catch up right away.
+ */
+export function isQuickFinisher(row: Row): boolean {
+  const m = row.standing.medianDaysToClear;
+  return row.standing.clearedTotal >= 2 && m !== null && m <= 2;
+}
+
+/** The same people in the same order as the wall shows them. */
 export function allClearNames(students: Row[]): string[] {
   return students.map((s) => s.student.name || s.student.email || 'Student');
 }

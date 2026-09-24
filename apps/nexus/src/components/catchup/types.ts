@@ -8,6 +8,8 @@
 import type { BucketTally, CatchupBucket } from '@/lib/catchup-buckets';
 import type { CatchupStanding } from '@/lib/catchup-standing';
 import type { CelebrationInfo } from '@/lib/catchup-celebration';
+import type { Diagnosis, StudentDiagnosis } from '@/lib/catchup-diagnosis';
+import type { ReasonSource } from '@/lib/absence-reason';
 
 /**
  * `current`, `locked` and `open` are gone.
@@ -57,6 +59,16 @@ export interface Item {
   reason_submitted_at: string | null;
   /** Who said it: 'student' | 'parent' | 'teacher'. Null on rows written before it was stamped. */
   reason_source: string | null;
+  /**
+   * The one reason for this class, wherever it was given: the RSVP, an away
+   * window, or afterwards. `said` is where, in words ("Told us before class").
+   * Optional because a payload cached before 2026-10 has none.
+   */
+  reason?: { code: string; note: string | null; source: ReasonSource; said: string } | null;
+  /** The IST day this class's clock started, when it has. */
+  activated_on?: string | null;
+  /** "40% watched, 2 sittings, last active 5 days ago". */
+  progress?: string;
   followup_sent_at: string | null;
   caught_up_at: string | null;
   excuse_note: string | null;
@@ -69,12 +81,14 @@ export interface Item {
   class: { title: string | null; scheduled_date: string };
 }
 
-/** An item with its student attached, for the feeds that read across students. */
-export type FeedRow = Item & { student: StudentCard };
-
 export interface Row {
   journey_id: string | null;
   student: StudentCard;
+  /**
+   * Why this student is where they are, in one sentence, and the state the
+   * tiles filter on. Optional because a cached payload may predate it.
+   */
+  diagnosis?: StudentDiagnosis;
   /**
    * What is wrong with this student, decided once on the server by
    * `catchupBucket`. The page groups by it and the tiles count it, so the number
@@ -125,31 +139,12 @@ export interface Row {
   items: Item[];
 }
 
-export interface ClassStat {
-  id: string;
-  title: string | null;
-  scheduled_date: string;
-  present: number;
-  missed: number;
-  caughtUp: number;
-  outstanding: number;
-  /** Students stuck because we owe a recording or a recap, not because they stalled. */
-  blocked: number;
-  recap_state: RecapState;
-  recap_id: string | null;
-  has_transcript: boolean;
-  /** Null when there is no Teams meeting, so the attendance panel hides Sync. */
-  teams_meeting_id?: string | null;
-}
-
 export interface Payload {
   classroomId: string | null;
   students: Row[];
   classes: Array<{ id: string; title: string | null; scheduled_date: string }>;
-  classStats: ClassStat[];
-  reasons: FeedRow[];
+  /** Classes still owed, per reason code, plus `none` for unexplained. */
   reasonTally: Record<string, number>;
-  completed: FeedRow[];
   noRecording: Array<{ id: string; title: string | null; scheduled_date: string; affected: number }>;
   pendingRecap: Array<{ id: string; title: string | null; scheduled_date: string; affected: number }>;
   /**
@@ -167,6 +162,8 @@ export interface Payload {
     unexplained: number;
     /** The tiles read this. A count of the buckets on `students`, nothing else. */
     byBucket: BucketTally;
+    /** The tiles read this: students per diagnosis state. */
+    byDiagnosis: Record<Diagnosis, number>;
     /**
      * Dormant students who still have open work, excluded from every number
      * above. Stated on the page rather than dropped in silence, so a missing
@@ -197,13 +194,8 @@ export interface TabProps {
    * to be confirmed and counted first.
    */
   onNudgeMany: (studentIds: string[], journeyIds: string[]) => Promise<void>;
-  /**
-   * Open the Teams preview for the students who owe nothing.
-   *
-   * Optional so a surface that has nowhere to post simply does not offer the
-   * button, rather than offering one that fails when pressed.
-   */
-  onCelebrate?: (students: Row[]) => void;
+  /** Open the personal-note composer for students who owe nothing. */
+  onNote?: (students: Row[]) => void;
   /**
    * Record these students as congratulated without posting anything. For a
    * congratulation that happened outside Nexus, so it is not repeated.

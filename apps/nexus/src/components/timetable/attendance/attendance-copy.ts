@@ -9,13 +9,16 @@
  */
 
 import { reasonShortLabel } from '@/lib/rsvp-reasons';
+import { reasonChip } from '@/lib/absence-reason';
+import { FOLLOWUP_META, stateFromBucket, type FollowupState } from '@/lib/class-followup';
 import type { Insights, StudentInsight } from './types';
 
 function progress(s: StudentInsight): string {
   const a = s.absence;
   if (a?.excused_at) return 'excused';
   if (a?.caught_up_at) return 'caught up';
-  if (a?.recording_watched_at) return 'watched the recording, check not taken';
+  if (s.catchup?.progress) return s.catchup.progress.charAt(0).toLowerCase() + s.catchup.progress.slice(1);
+  if (s.catchup?.watched || a?.recording_watched_at) return 'watched the recording, check not taken';
   return 'recording not watched';
 }
 
@@ -31,49 +34,58 @@ function classHeading(insights: Insights): string {
   return [title, date, start_time ? start_time.substring(0, 5) : null].filter(Boolean).join(', ');
 }
 
+/** The copied groups, in the panel's order: everyone who still owes the class. */
+const COPY_ORDER: FollowupState[] = ['needs_call', 'catching_up', 'waiting_on_us', 'late_joiner'];
+
+function reasonOf(s: StudentInsight): string {
+  const r = s.reason_resolved;
+  if (r) return r.note ? `${reasonChip(r)} (${r.note})` : r.unspecified ? 'told us before class' : `${reasonChip(r)}, ${r.said.toLowerCase()}`;
+  if (s.away_window) return s.away_window;
+  if (s.absence?.reason_code) return reasonShortLabel(s.absence.reason_code);
+  return s.absence?.reason_note || 'reason given';
+}
+
 /**
  * Everyone who has not caught up on this class, grouped the same way the panel
  * groups them, so the text and the screen say the same thing.
  *
  * `only` narrows it to a selection; without it the whole outstanding list is
- * written out.
+ * written out. Students on declared leave are in it: they used to be dropped
+ * from the pasted list altogether, because their bucket matched no group.
  */
 export function buildMissedList(insights: Insights, only?: Set<string>): string {
   const chosen = (s: StudentInsight) => (only && only.size > 0 ? only.has(s.id) : true);
-  const silent = insights.students.filter((s) => s.bucket === 'missed_no_reason' && chosen(s));
-  const explained = insights.students.filter((s) => s.bucket === 'missed_with_reason' && chosen(s));
-  const lateJoiners = insights.students.filter((s) => s.bucket === 'late_joiner' && chosen(s));
+  const byState = new Map<FollowupState, StudentInsight[]>();
+  for (const st of COPY_ORDER) byState.set(st, []);
+  for (const s of insights.students) {
+    if (!chosen(s)) continue;
+    byState.get(s.followup ?? stateFromBucket(s.bucket))?.push(s);
+  }
+  const total = COPY_ORDER.reduce((n, st) => n + (byState.get(st)?.length ?? 0), 0);
 
   const lines: string[] = [classHeading(insights)];
-  lines.push(
-    `Not caught up (${silent.length + explained.length + lateJoiners.length} of ${insights.summary.rosterSize})`,
-    '',
-  );
+  lines.push(`Not caught up (${total} of ${insights.summary.rosterSize})`, '');
 
   let n = 0;
-  if (silent.length) {
-    lines.push(`No reason given (${silent.length})`);
-    for (const s of silent) lines.push(`  ${++n}. ${s.name}, never joined, ${progress(s)}`);
-    lines.push('');
-  }
-  if (explained.length) {
-    lines.push(`Told us why (${explained.length})`);
-    for (const s of explained) {
-      const why = s.absence?.reason_code
-        ? reasonShortLabel(s.absence.reason_code)
-        : s.absence?.reason_note || 'reason given';
+  for (const st of COPY_ORDER) {
+    const list = byState.get(st) || [];
+    if (list.length === 0) continue;
+    lines.push(`${FOLLOWUP_META[st].label} (${list.length})`);
+    for (const s of list) {
+      // Held apart in the pasted text for the same reason as on the screen:
+      // this list gets forwarded, and a late joiner reading as somebody who
+      // skipped a class is the exact misunderstanding to avoid.
+      const why =
+        st === 'needs_call'
+          ? 'no reason given'
+          : st === 'late_joiner'
+            ? 'enrolled later'
+            : st === 'waiting_on_us'
+              ? 'waiting on our recap'
+              : reasonOf(s);
       lines.push(`  ${++n}. ${s.name}, ${why}, ${progress(s)}`);
     }
     lines.push('');
-  }
-  // Held apart in the pasted text for the same reason as on the screen: this
-  // list gets forwarded to a co-teacher or a parent, and a late joiner reading
-  // as somebody who skipped a class is the exact misunderstanding to avoid.
-  if (lateJoiners.length) {
-    lines.push(`Joined after this class (${lateJoiners.length})`);
-    for (const s of lateJoiners) {
-      lines.push(`  ${++n}. ${s.name}, enrolled later, ${progress(s)}`);
-    }
   }
 
   if (n === 0) return `${classHeading(insights)}\nEveryone has caught up on this class.`;

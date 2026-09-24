@@ -10,6 +10,10 @@ import type { DiagnosticStep } from '../DiagnosticsStepList';
 import type { RsvpReasonCode } from '@/lib/rsvp-reasons';
 import type { AttendanceBucket } from '@/lib/attendance-quality';
 import type { RegisterGroup } from '@/lib/attendance-register';
+import type { FollowupState, FollowupTally } from '@/lib/class-followup';
+import type { AssignmentSummary, StudentWork } from '@/lib/class-work';
+import type { RecentAttendance } from '@/lib/recent-attendance';
+import type { ReasonSource } from '@/lib/absence-reason';
 
 /** Register tab. One row per enrolled student, from /api/timetable/attendance-report. */
 export interface AttendanceRecord {
@@ -58,6 +62,20 @@ export interface StudentAbsence {
   followup_sent_at?: string | null;
 }
 
+/** Why they missed it, resolved from the away window, the RSVP or afterwards. */
+export interface InsightReason {
+  code: RsvpReasonCode;
+  note: string | null;
+  source: ReasonSource;
+  /** "Told us before class", "Away 10 Sep to 20 Sep". */
+  said: string;
+  at: string | null;
+  /** Declined the RSVP without saying why. */
+  unspecified: boolean;
+  /** The whole thing in one line: "Exam clash · Away 10 Sep to 20 Sep". */
+  line: string;
+}
+
 /**
  * The catch-up clock for one student on one class.
  *
@@ -82,6 +100,11 @@ export interface StudentCatchup {
   window_days: number;
   /** "the next day", "28 days later". Null while it is unfinished. */
   cleared_after: string | null;
+  /** "40% watched, 2 sittings, last active 5 days ago". */
+  progress?: string;
+  /** A checkpoint has beaten them twice in a row. */
+  stuck?: boolean;
+  last_active_at?: string | null;
 }
 
 export interface AttendanceSummary {
@@ -166,6 +189,16 @@ export interface StudentInsight {
    * describe the same fortnight three different ways.
    */
   away_window?: string | null;
+  /** What is left to do about this class, in one word. See lib/class-followup.ts. */
+  followup?: FollowupState;
+  /** Resolved reason. Null when they came, or told us nothing anywhere. */
+  reason_resolved?: InsightReason | null;
+  days_since_class?: number;
+  days_to_catch_up?: number | null;
+  /** How they have turned up over the last few classes. Missed students only. */
+  recent?: RecentAttendance | null;
+  /** The class's homework, when it set any. */
+  work?: StudentWork | null;
 }
 
 /** Everything about one class's attendance, from /api/timetable/class-insights. */
@@ -213,6 +246,15 @@ export interface Insights {
     declinedAttended: number;
   };
   reasonTally: Record<RsvpReasonCode, number>;
+  /** The class in one picture. Absent from an older server. */
+  followup?: {
+    tally: FollowupTally;
+    missed: number;
+    oldestOpenDays: number | null;
+    medianDaysToCatchUp: number | null;
+    saidComing: number;
+  };
+  work?: AssignmentSummary[];
   students: StudentInsight[];
 }
 
@@ -222,6 +264,12 @@ export interface Insights {
  * Register = the toggles and the repairs, used when Teams got it wrong.
  */
 export type AttendanceTabKey = 'missed' | 'attended' | 'register';
+
+/**
+ * What the panel can open narrowed to: one follow-up state, or the students
+ * who came (or caught up) and have not handed the class's homework in.
+ */
+export type AttendanceFilter = FollowupState | 'not_handed_in';
 
 /**
  * The bag the shell builds once and spreads into each tab, following the
@@ -251,4 +299,6 @@ export interface AttendanceTabProps {
   onMarkAllPresent: () => void;
   onOpenImport: () => void;
   onNotify: (message: string, severity: 'info' | 'warning' | 'success') => void;
+  /** Open the list already narrowed to one group. */
+  initialFilter?: AttendanceFilter | null;
 }

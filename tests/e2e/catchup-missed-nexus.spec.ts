@@ -21,6 +21,18 @@ import { APP_URLS, getTestAuthToken } from '../utils/credentials';
 const NEXUS = APP_URLS.nexus;
 const MISSING = '00000000-0000-0000-0000-000000000000';
 
+/** The diagnosis states, in the order the overview sorts and the tiles read. */
+const DIAGNOSES = [
+  'stuck',
+  'stopped',
+  'not_started',
+  'over_time',
+  'work_left',
+  'on_track',
+  'waiting_on_us',
+  'all_clear',
+];
+
 /**
  * GET a route that may still be compiling.
  *
@@ -41,7 +53,34 @@ async function getWarm(request: any, url: string, headers: Record<string, string
   return res;
 }
 
-test.describe('Nexus — catching up on a missed class', () => {
+/**
+ * A month on the teacher's calendar that has taught classes, walking back from
+ * this month. The E2E classroom on staging has a handful, months apart, so a
+ * single "this month" read would skip for no reason.
+ */
+async function findPastClasses(request: any, auth: { testToken: string; classrooms: any[] }) {
+  const classroomId = auth.classrooms?.[0]?.id;
+  if (!classroomId) return null;
+  const headers = { Authorization: `Bearer ${auth.testToken}` };
+  const now = new Date();
+  for (let back = 0; back < 6; back++) {
+    const first = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back, 1));
+    const last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0));
+    const ymd = (d: Date) => d.toISOString().slice(0, 10);
+    const res = await getWarm(
+      request,
+      `${NEXUS}/api/catchup/calendar?classroomId=${classroomId}&from=${ymd(first)}&to=${ymd(last)}`,
+      headers,
+    );
+    expect(res.status(), 'calendar read').toBe(200);
+    const body = await res.json();
+    const past = (body.classes || []).filter((c: any) => c.health !== 'upcoming');
+    if (past.length > 0) return { classroomId, body: { ...body, classes: past } };
+  }
+  return null;
+}
+
+test.describe('Nexus: catching up on a missed class', () => {
   test('the student catch-up payload is refused without auth', async ({ request }) => {
     const res = await request.get(`${NEXUS}/api/student/catchup-journey`);
     expect(res.status()).not.toBe(200);
@@ -188,18 +227,14 @@ test.describe('Nexus — catching up on a missed class', () => {
     expect(res.status()).toBe(200);
     const body = await res.json();
 
-    for (const key of [
-      'students',
-      'classes',
-      'classStats',
-      'reasons',
-      'reasonTally',
-      'completed',
-      'noRecording',
-      'pendingRecap',
-      'totals',
-    ]) {
+    for (const key of ['classroomId', 'students', 'classes', 'reasonTally', 'noRecording', 'pendingRecap', 'totals']) {
       expect(body).toHaveProperty(key);
+    }
+    // Retired with the four-tab page (2026-10): the Classes list moved to
+    // /api/catchup/calendar, the Reasons and Recently finished feeds into the
+    // student sheet. Shipping them again would pay for work nothing reads.
+    for (const gone of ['classStats', 'reasons', 'completed']) {
+      expect(body, `${gone} should have left the overview`).not.toHaveProperty(gone);
     }
     expect(body.totals).toMatchObject({
       studentsBehind: expect.any(Number),
@@ -209,11 +244,34 @@ test.describe('Nexus — catching up on a missed class', () => {
       explained: expect.any(Number),
       unexplained: expect.any(Number),
     });
+    expect(Object.keys(body.totals.byDiagnosis).sort()).toEqual([...DIAGNOSES].sort());
 
-    // The chase list is a work queue, so the most overdue name is first.
-    const overdueCounts = (body.students || []).map((s: any) => s.missedTotals.overdue);
-    const sorted = [...overdueCounts].sort((a: number, b: number) => b - a);
-    expect(overdueCounts).toEqual(sorted);
+    // The list is a work queue ordered by diagnosis: whoever most needs a
+    // person (Stuck) first, all clear last.
+    const ranks = (body.students || []).map((s: any) => DIAGNOSES.indexOf(s.diagnosis?.state));
+    expect(ranks.every((r: number) => r >= 0), 'every student carries a known diagnosis').toBe(true);
+    expect(ranks).toEqual([...ranks].sort((x: number, y: number) => x - y));
+  });
+
+  test('totals.byDiagnosis is a tally of the rows, so a card and its list agree', async ({ request }) => {
+    const auth = await getTestAuthToken(request, 'teacher');
+    if (!auth) {
+      test.skip(true, 'Nexus dev server / test-login unavailable');
+      return;
+    }
+    const res = await getWarm(request, `${NEXUS}/api/catchup/overview`, {
+      Authorization: `Bearer ${auth.testToken}`,
+    });
+    expect(res.status()).toBe(200);
+    const body = await res.json();
+    for (const d of DIAGNOSES) {
+      const rows = body.students.filter((s: any) => s.diagnosis.state === d).length;
+      expect(body.totals.byDiagnosis[d], `the ${d} card`).toBe(rows);
+    }
+    for (const s of body.students) {
+      expect(typeof s.diagnosis.sentence).toBe('string');
+      expect(s.diagnosis.sentence.length).toBeGreaterThan(0);
+    }
   });
 
   test('every item carries the words the student typed, not just the category', async ({
@@ -236,113 +294,137 @@ test.describe('Nexus — catching up on a missed class', () => {
     const body = await res.json();
 
     const items = (body.students || []).flatMap((s: any) => s.items || []);
-    if (items.length === 0) {
-      test.skip(true, 'No outstanding catch-up items in this environment');
-      return;
-    }
+    test.skip(items.length === 0, 'No catch-up items in this environment (the E2E classroom has no absences)');
     for (const item of items) {
       expect(item).toHaveProperty('reason_note');
       expect(item).toHaveProperty('reason_submitted_at');
       expect(item).toHaveProperty('reason_source');
       expect(item).toHaveProperty('caught_up_at');
+      // The resolved reason (RSVP, away window or afterwards) and the progress
+      // line are what the student sheet reads.
+      expect(item).toHaveProperty('reason');
+      expect(typeof item.progress).toBe('string');
     }
   });
 
-  test('the reasons feed is newest first and every row has a student on it', async ({ request }) => {
+  test('a resolved reason says what, and where the student said it', async ({ request }) => {
+    // Replaces the Reasons feed. The sheet shows "Unwell · Told us before class";
+    // both halves come from here, so both must be present on every reason.
     const auth = await getTestAuthToken(request, 'teacher');
     if (!auth) {
       test.skip(true, 'Nexus dev server / test-login unavailable');
       return;
     }
-
     const res = await getWarm(request, `${NEXUS}/api/catchup/overview`, {
       Authorization: `Bearer ${auth.testToken}`,
     });
+    expect(res.status()).toBe(200);
     const body = await res.json();
-    const reasons = body.reasons || [];
-    if (reasons.length === 0) {
-      test.skip(true, 'Nobody has explained a missed class in this environment');
-      return;
+    const reasons = (body.students || [])
+      .flatMap((s: any) => s.items || [])
+      .map((i: any) => i.reason)
+      .filter(Boolean);
+    test.skip(reasons.length === 0, 'Nobody has explained a missed class in this environment');
+    for (const r of reasons) {
+      expect(['unwell', 'family', 'clash', 'other']).toContain(r.code);
+      expect(['before_class', 'away', 'after_class', 'parent', 'teacher']).toContain(r.source);
+      expect(r.said).toMatch(/^(Told us before class|Told us afterwards|Away|Parent told us|Noted by a teacher)/);
     }
-
-    for (const row of reasons) {
-      expect(row.student).toBeTruthy();
-      expect(row.reason_submitted_at).toBeTruthy();
-    }
-    const stamps = reasons.map((r: any) => r.reason_submitted_at);
-    expect(stamps).toEqual([...stamps].sort().reverse());
   });
 
-  test('finishing a catch-up no longer erases the student from the payload', async ({ request }) => {
-    // The overview used to `continue` past anyone with nothing outstanding, so
-    // "did they actually do it" had no answer anywhere. Completed items now
-    // travel in their own list.
+  // ── The calendar (replaces the Classes and recaps list) ──────────────────
+
+  test('the calendar is refused without auth', async ({ request }) => {
+    const res = await request.get(
+      `${NEXUS}/api/catchup/calendar?classroomId=${MISSING}&from=2026-09-01&to=2026-09-30`,
+    );
+    expect(res.status()).not.toBe(200);
+    expect([400, 401, 403, 500]).toContain(res.status());
+  });
+
+  test('a student cannot read the calendar', async ({ request }) => {
+    const auth = await getTestAuthToken(request, 'student');
+    if (!auth) {
+      test.skip(true, 'Nexus dev server / test-login unavailable');
+      return;
+    }
+    const res = await getWarm(
+      request,
+      `${NEXUS}/api/catchup/calendar?classroomId=${MISSING}&from=2026-09-01&to=2026-09-30`,
+      { Authorization: `Bearer ${auth.testToken}` },
+    );
+    expect(res.status()).toBe(403);
+  });
+
+  test('the calendar refuses a missing range, a backwards one and one over 45 days', async ({ request }) => {
     const auth = await getTestAuthToken(request, 'teacher');
     if (!auth) {
       test.skip(true, 'Nexus dev server / test-login unavailable');
       return;
     }
-
-    const res = await getWarm(request, `${NEXUS}/api/catchup/overview`, {
-      Authorization: `Bearer ${auth.testToken}`,
-    });
-    const body = await res.json();
-    expect(Array.isArray(body.completed)).toBe(true);
-    for (const row of body.completed || []) {
-      expect(row.caught_up_at).toBeTruthy();
-      expect(row.student).toBeTruthy();
-    }
+    const headers = { Authorization: `Bearer ${auth.testToken}` };
+    const missing = await getWarm(request, `${NEXUS}/api/catchup/calendar?classroomId=${MISSING}`, headers);
+    expect(missing.status()).toBe(400);
+    const backwards = await request.get(
+      `${NEXUS}/api/catchup/calendar?classroomId=${MISSING}&from=2026-09-30&to=2026-09-01`,
+      { headers },
+    );
+    expect(backwards.status()).toBe(400);
+    const tooLong = await request.get(
+      `${NEXUS}/api/catchup/calendar?classroomId=${MISSING}&from=2026-07-01&to=2026-09-30`,
+      { headers },
+    );
+    expect(tooLong.status()).toBe(400);
+    // A month grid (up to 42 days) is within the cap.
+    const grid = await request.get(
+      `${NEXUS}/api/catchup/calendar?classroomId=${MISSING}&from=2026-08-31&to=2026-10-11`,
+      { headers },
+    );
+    expect(grid.status()).toBe(200);
+    expect((await grid.json()).classes).toEqual([]);
   });
 
-  test('each recent class reports its recap state, so one screen can act on it', async ({
-    request,
-  }) => {
-    // This is what absorbed /teacher/class-recaps. Without recap_state the merged
-    // tab would have to fetch the old candidates endpoint as well.
+  test('each class on the calendar reports its recap state and health', async ({ request }) => {
+    // This is what absorbed /teacher/class-recaps: without recap_state the
+    // calendar would have to fetch the old candidates endpoint as well.
     const auth = await getTestAuthToken(request, 'teacher');
     if (!auth) {
       test.skip(true, 'Nexus dev server / test-login unavailable');
       return;
     }
-
-    const res = await getWarm(request, `${NEXUS}/api/catchup/overview`, {
-      Authorization: `Bearer ${auth.testToken}`,
-    });
-    const body = await res.json();
-    const stats = body.classStats || [];
-    if (stats.length === 0) {
-      test.skip(true, 'No past classes in this environment');
-      return;
-    }
-    for (const c of stats) {
+    const found = await findPastClasses(request, auth);
+    test.skip(!found, 'No taught classes in the last six months in this environment');
+    const { body } = found!;
+    expect(body.today).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    for (const c of body.classes) {
       expect(['no_recording', 'recording_ready', 'draft', 'published']).toContain(c.recap_state);
-      expect(typeof c.blocked).toBe('number');
+      expect(['upcoming', 'not_taught', 'recap_missing', 'catching_up', 'all_caught_up']).toContain(c.health);
+      for (const k of ['present', 'missed', 'late_joiners', 'caughtUp', 'outstanding', 'blocked']) {
+        expect(typeof c[k], k).toBe('number');
+      }
       expect(c).toHaveProperty('recap_id');
+      // Nobody is blocked on a recap that is already published.
+      if (c.recap_state === 'published') expect(c.blocked).toBe(0);
+      expect(c.blocked).toBeLessThanOrEqual(c.outstanding);
     }
   });
 
   test('the per-class register carries why each absent student was away', async ({ request }) => {
-    // Feeds the Attendance dialog on the timetable, which used to show a toggle
-    // and a join time and nothing about the follow-up.
+    // Feeds the attendance drawer the calendar opens, which used to show a
+    // toggle and a join time and nothing about the follow-up.
     const auth = await getTestAuthToken(request, 'teacher');
     if (!auth) {
       test.skip(true, 'Nexus dev server / test-login unavailable');
       return;
     }
-
-    const overview = await getWarm(request, `${NEXUS}/api/catchup/overview`, {
-      Authorization: `Bearer ${auth.testToken}`,
-    });
-    const body = await overview.json();
-    const cls = (body.classStats || [])[0];
-    if (!cls || !body.classroomId) {
-      test.skip(true, 'No past classes in this environment');
-      return;
-    }
+    const found = await findPastClasses(request, auth);
+    test.skip(!found, 'No taught classes in the last six months in this environment');
+    const { classroomId, body } = found!;
+    const cls = body.classes[0];
 
     const res = await getWarm(
       request,
-      `${NEXUS}/api/timetable/attendance-report?class_id=${cls.id}&classroom_id=${body.classroomId}`,
+      `${NEXUS}/api/timetable/attendance-report?class_id=${cls.id}&classroom_id=${classroomId}`,
       { Authorization: `Bearer ${auth.testToken}` },
     );
     expect(res.status()).toBe(200);

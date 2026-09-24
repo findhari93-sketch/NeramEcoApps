@@ -4,6 +4,7 @@ import {
   getInspirationItem,
   getInspirationItemsForSubmission,
   hideFeaturedSubmission,
+  listClassFeaturedItems,
   listInspirationAttempts,
   searchInspiration,
   setDrawingSharingOptOut,
@@ -192,6 +193,89 @@ describe('hideFeaturedSubmission', () => {
       expect(update.curation).toBe('auto');
       expect(update.is_featured).toBe(false);
     });
+  });
+
+  it("leaves a teacher's hide in place and only drops the pin", () => {
+    const { client, calls } = fakeClient({ data: null, error: null });
+    return hideFeaturedSubmission('sub-1', 'teacher-1', client).then(() => {
+      const updates = calls.filter(([m]) => m === 'update').map(([, a]) => a[0] as Record<string, unknown>);
+      expect(updates).toHaveLength(2);
+      // The curation reset is fenced off from hidden rows...
+      expect(calls).toContainEqual(['neq', ['curation', 'hidden']]);
+      // ...and the hidden row gets an unpin that never touches curation.
+      expect(calls).toContainEqual(['eq', ['curation', 'hidden']]);
+      expect(updates[1]).not.toHaveProperty('curation');
+      expect(updates[1].is_featured).toBe(false);
+    });
+  });
+});
+
+describe('showFeaturedSubmission and a hidden drawing', () => {
+  it("never un-hides a drawing a teacher took off the shelf", () => {
+    const { client, calls } = fakeClient({ data: null, error: null });
+    return showFeaturedSubmission('sub-1', 'teacher-1', undefined, client).then((item) => {
+      expect(calls).toContainEqual(['neq', ['curation', 'hidden']]);
+      expect(item).toBeNull();
+    });
+  });
+});
+
+describe('listClassFeaturedItems', () => {
+  /** Answers each awaited query in turn: features, then the base rows, then avatars. */
+  function sequencedClient(results: Array<{ data: unknown; error: unknown }>) {
+    const calls: Array<[string, unknown[]]> = [];
+    let n = 0;
+    const make = (): any => {
+      const chain: any = new Proxy(
+        {},
+        {
+          get: (_t, prop: string) => {
+            if (prop === 'then') return (resolve: (v: unknown) => void) => resolve(results[n++]);
+            return (...args: unknown[]) => {
+              calls.push([prop, args]);
+              return chain;
+            };
+          },
+        },
+      );
+      return chain;
+    };
+    const client: any = {
+      from: (...args: unknown[]) => { calls.push(['from', args]); return make(); },
+      rpc: (...args: unknown[]) => { calls.push(['rpc', args]); return make(); },
+    };
+    return { client, calls };
+  }
+
+  it('reads nothing for a viewer with no classroom', async () => {
+    const { client, calls } = sequencedClient([]);
+    await expect(listClassFeaturedItems([], 'viewer', {}, client)).resolves.toEqual([]);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('keeps the newest feature per drawing, only what the base shows, with the photo', async () => {
+    const { client, calls } = sequencedClient([
+      {
+        data: [
+          { submission_id: 's1', classroom_id: 'c2', featured_at: '2026-09-23T00:00:00Z', nexus_classrooms: { name: 'Room B' } },
+          { submission_id: 's2', classroom_id: 'c1', featured_at: '2026-09-22T00:00:00Z', nexus_classrooms: { name: 'Room A' } },
+          { submission_id: 's1', classroom_id: 'c1', featured_at: '2026-09-21T00:00:00Z', nexus_classrooms: { name: 'Room A' } },
+        ],
+        error: null,
+      },
+      // s2 was hidden or opted out, so the base (visible scope) does not return it.
+      { data: [row({ id: 'item-1', source_submission_id: 's1', author_id: 'u1' })], error: null },
+      { data: [{ id: 'u1', avatar_url: 'https://x/u1.jpg' }], error: null },
+    ]);
+    const out = await listClassFeaturedItems(['c1', 'c2'], 'viewer', {}, client);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ classroom_id: 'c2', classroom_name: 'Room B', author_avatar_url: 'https://x/u1.jpg' });
+    expect(out[0].row.id).toBe('item-1');
+    // Visibility is the base function's, in the visible scope, never is_visible alone.
+    const rpc = calls.find(([m]) => m === 'rpc')!;
+    expect(rpc[1][0]).toBe('nexus_inspiration_base');
+    expect((rpc[1][1] as any).p_scope).toBe('visible');
+    expect(calls).toContainEqual(['is', ['unfeatured_at', null]]);
   });
 });
 

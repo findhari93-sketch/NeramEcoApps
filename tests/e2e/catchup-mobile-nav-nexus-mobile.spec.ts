@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { APP_URLS, injectAuthForPage } from '../utils/credentials';
 import { assertNoHorizontalOverflow } from '../utils/mobile-helpers';
+import { openTeacherCatchup, skipWelcome } from '../utils/catchup-helpers';
 
 /**
  * Can you reach Catch-up from a phone?
@@ -108,20 +109,23 @@ test.describe('Catch-up is reachable on a phone', () => {
 
     const injected = await injectAuthForPage(page, 'teacher');
     test.skip(!injected, 'Nexus test-login unavailable');
+    await skipWelcome(page);
 
-    await page.goto(`${NEXUS}/teacher/catch-up`, { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(5000);
+    // Waits for the h1 and the view tabs, which render once the overview loads.
+    await openTeacherCatchup(page);
 
     await assertNoHorizontalOverflow(page);
 
-    // All four tabs reachable: the strip scrolls rather than truncating.
-    for (const label of ['Needs action', 'Reasons', 'Standing', 'Classes and recaps']) {
-      const tab = page.getByRole('tab', { name: new RegExp(label, 'i') });
-      if ((await tab.count()) > 0) {
-        await tab.first().click();
-        await page.waitForTimeout(600);
-        await assertNoHorizontalOverflow(page);
-      }
+    // Both views reachable and asserted present. The loop this replaces named
+    // the four retired tabs and silently skipped any it could not find.
+    const views = page.getByRole('tablist', { name: 'Catch-up views' });
+    for (const label of ['Calendar', 'Students']) {
+      const tab = views.getByRole('tab', { name: label });
+      await expect(tab, `the ${label} view must exist`).toBeVisible();
+      await tab.click();
+      await expect(tab).toHaveAttribute('aria-selected', 'true');
+      await page.waitForTimeout(600);
+      await assertNoHorizontalOverflow(page);
     }
 
     await context.close();

@@ -280,6 +280,27 @@ export async function getDrawingSharingOptOut(
  * /teacher/sketchbook/..., posted into a group chat that is forty two students
  * and six staff, so the people it was shown to were the people it locked out.
  */
+/**
+ * The drawing's shelf row and whether a teacher took it off the shelf.
+ *
+ * Featuring reads this before it posts: a drawing a teacher hid is not put back
+ * by someone else praising it, and the Teams card must not link to a page the
+ * class cannot open.
+ */
+export async function getSubmissionShelfItem(
+  submissionId: string,
+  client?: TypedSupabaseClient,
+): Promise<{ id: string; curation: InspirationCuration } | null> {
+  const { data, error } = await db(client)
+    .from('nexus_inspiration_items')
+    .select('id, curation')
+    .eq('source_submission_id', submissionId)
+    .eq('source_kind', 'submission_original')
+    .maybeSingle();
+  if (error) throw error;
+  return (data as { id: string; curation: InspirationCuration } | null) ?? null;
+}
+
 export async function getSubmissionInspirationItemId(
   submissionId: string,
   client?: TypedSupabaseClient,
@@ -329,6 +350,9 @@ export async function showFeaturedSubmission(
     })
     .eq('source_submission_id', submissionId)
     .eq('source_kind', 'submission_original')
+    // A teacher's "Hide from students" stands. Featuring praises the student;
+    // it does not overrule a colleague's judgement about the shelf.
+    .neq('curation', 'hidden')
     .select('id, image_url, thumbnail_url, image_aspect')
     .maybeSingle();
   if (error) throw error;
@@ -357,24 +381,126 @@ export async function showFeaturedSubmission(
  * `auto` means invisible again, while an assignment drawing rated four stars or
  * more returns to being shown by the automatic rule that earned it its place
  * before anyone featured it. `hidden` would suppress that drawing for good,
- * which is a punishment nobody asked for.
+ * which is a punishment nobody asked for. A drawing a teacher had already hidden
+ * stays hidden: un-featuring is not a way to undo that.
  */
 export async function hideFeaturedSubmission(
   submissionId: string,
   curatorId: string,
   client?: TypedSupabaseClient,
 ): Promise<void> {
+  const stamp = { curated_by: curatorId, curated_at: new Date().toISOString() };
   const { error } = await db(client)
     .from('nexus_inspiration_items')
-    .update({
-      curation: 'auto',
-      is_featured: false,
-      curated_by: curatorId,
-      curated_at: new Date().toISOString(),
-    })
+    .update({ curation: 'auto', is_featured: false, ...stamp })
     .eq('source_submission_id', submissionId)
-    .eq('source_kind', 'submission_original');
+    .eq('source_kind', 'submission_original')
+    .neq('curation', 'hidden');
   if (error) throw error;
+  // A drawing a teacher hid keeps its hide; it only loses the pin.
+  const { error: pinError } = await db(client)
+    .from('nexus_inspiration_items')
+    .update({ is_featured: false, ...stamp })
+    .eq('source_submission_id', submissionId)
+    .eq('source_kind', 'submission_original')
+    .eq('curation', 'hidden');
+  if (pinError) throw pinError;
+}
+
+/** A drawing a teacher featured in one of the viewer's classrooms, as Inspiration shows it. */
+export interface ClassFeaturedRow {
+  row: InspirationRow;
+  classroom_id: string;
+  classroom_name: string;
+  featured_at: string;
+  /** users.avatar_url of the author. Null when they opted out of being named. */
+  author_avatar_url: string | null;
+}
+
+const BASE_COLUMNS =
+  'id, source_kind, source_submission_id, source_drawing_question_id, image_url, thumbnail_url, image_aspect, ' +
+  'title_override, brief, category, type_slugs, tag_labels, exam_types, paper_years, is_featured, is_visible, ' +
+  'curation, auto_eligible, score_pct, save_count, source_created_at, author_id, author_name, author_first_name, ' +
+  'author_last_name, author_is_alumni, author_academic_year, author_opted_out, is_saved';
+
+/**
+ * The class wall: live features in these classrooms, newest first, one entry per drawing.
+ *
+ * Featuring is the teacher's word; whether the drawing may be SHOWN is still
+ * nexus_inspiration_base's, read with the caller's scope. So a student who opted
+ * out of sharing, or a drawing a teacher later hid, drops out here exactly as it
+ * does from the grid, and the credit arrives already blanked for an opt-out.
+ */
+export async function listClassFeaturedItems(
+  classroomIds: string[],
+  viewerId: string,
+  opts: { limit?: number; scope?: InspirationScope } = {},
+  client?: TypedSupabaseClient,
+): Promise<ClassFeaturedRow[]> {
+  const limit = Math.min(Math.max(opts.limit ?? 12, 1), 30);
+  if (classroomIds.length === 0) return [];
+
+  // Over-read: one drawing can be featured in two classrooms, and some will be hidden.
+  const { data: features, error: fErr } = await db(client)
+    .from('nexus_sketchbook_features')
+    .select('submission_id, classroom_id, featured_at, nexus_classrooms(name)')
+    .in('classroom_id', classroomIds)
+    .is('unfeatured_at', null)
+    .order('featured_at', { ascending: false })
+    .limit(limit * 3);
+  if (fErr) throw fErr;
+
+  const latest = new Map<string, { classroom_id: string; classroom_name: string; featured_at: string }>();
+  for (const f of (features || []) as Array<{
+    submission_id: string;
+    classroom_id: string;
+    featured_at: string;
+    nexus_classrooms: { name: string } | null;
+  }>) {
+    if (latest.has(f.submission_id)) continue;
+    latest.set(f.submission_id, {
+      classroom_id: f.classroom_id,
+      classroom_name: f.nexus_classrooms?.name ?? '',
+      featured_at: f.featured_at,
+    });
+  }
+  if (latest.size === 0) return [];
+
+  const { data: rows, error: rErr } = await db(client)
+    .rpc('nexus_inspiration_base', {
+      p_types: null,
+      p_exam: null,
+      p_by: null,
+      p_year: null,
+      p_scope: opts.scope ?? 'visible',
+      p_viewer_id: viewerId,
+      p_saved_only: false,
+    })
+    .select(BASE_COLUMNS)
+    .eq('source_kind', 'submission_original')
+    .in('source_submission_id', [...latest.keys()]);
+  if (rErr) throw rErr;
+  const shown = (rows || []) as InspirationRow[];
+
+  const authorIds = [...new Set(shown.map((r) => r.author_id).filter((id): id is string => !!id))];
+  const avatars = new Map<string, string | null>();
+  if (authorIds.length) {
+    const { data: users, error: uErr } = await db(client).from('users').select('id, avatar_url').in('id', authorIds);
+    if (uErr) throw uErr;
+    for (const u of (users || []) as Array<{ id: string; avatar_url: string | null }>) avatars.set(u.id, u.avatar_url);
+  }
+
+  return shown
+    .map((row) => {
+      const f = latest.get(row.source_submission_id as string)!;
+      return {
+        row,
+        ...f,
+        author_avatar_url: row.author_id ? avatars.get(row.author_id) ?? null : null,
+      };
+    })
+    .sort((a, b) => b.featured_at.localeCompare(a.featured_at))
+    .slice(0, limit);
 }
 
 export async function createExemplar(

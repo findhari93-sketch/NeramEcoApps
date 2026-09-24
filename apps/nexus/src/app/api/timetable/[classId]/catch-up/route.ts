@@ -25,6 +25,9 @@ import {
 import { CLASS_IMAGES_EMBED } from '@/lib/class-cover';
 import { CLASS_RESOURCES_EMBED } from '@/lib/class-resources';
 import { isRsvpReasonCode } from '@/lib/rsvp-reasons';
+import { loadAwayWindows } from '@/lib/away-windows';
+import { resolveAbsenceReason, describeReasonSourceForStudent } from '@/lib/absence-reason';
+import { congratulateClears } from '@/lib/catchup-congrats';
 
 /**
  * Catching up on a class you did not sit through.
@@ -185,6 +188,19 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       item = await ensureCatchupItemForClass(access.userId, params.classId, supabase);
     }
 
+    // Cleared without pressing the button (the class test stamps it from inside
+    // the test engine, which cannot reach the messaging code), and nobody has
+    // said well done yet. This is the page they come back to after the test.
+    // The claim inside makes a reload send nothing twice. `in` guards a
+    // database that has not been migrated yet, where there is nothing to claim.
+    if (item?.caught_up_at && 'congratulated_at' in item && !item.congratulated_at) {
+      await congratulateClears(supabase, {
+        studentId: access.userId,
+        classroomId: access.cls.classroom_id,
+        origin: request.nextUrl.origin,
+      });
+    }
+
     const { facts, recap, work, test, itemFacts, shaped } = await readItemState(
       supabase,
       access.userId,
@@ -256,6 +272,31 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       submitted: facts.submitted.has(a.id),
     }));
 
+    // Whatever they already told us, wherever they told us. The screen used to
+    // read only the absence row's own reason, so a student who declined the
+    // RSVP or declared exam leave was asked the same question a second time.
+    const [{ data: rsvpRow }, awayWindows] = await Promise.all([
+      supabase
+        .from('nexus_class_rsvp')
+        .select('response, reason_code, reason, responded_at')
+        .eq('scheduled_class_id', access.cls.id)
+        .eq('student_id', access.userId)
+        .maybeSingle(),
+      access.cls.scheduled_date
+        ? loadAwayWindows(supabase, {
+            studentIds: [access.userId],
+            from: access.cls.scheduled_date,
+            to: access.cls.scheduled_date,
+          })
+        : Promise.resolve([]),
+    ]);
+    const resolvedReason = resolveAbsenceReason({
+      absence: item,
+      rsvp: rsvpRow,
+      awayWindows,
+      classDate: access.cls.scheduled_date,
+    });
+
     return NextResponse.json({
       class: access.cls,
       // Key kept as `absence` so the existing screen keeps compiling. It is now
@@ -298,7 +339,7 @@ export async function GET(request: NextRequest, { params }: Ctx) {
           }
         : null,
       steps: {
-        reasonGiven: !!item?.reason_code,
+        reasonGiven: !!resolvedReason,
         watched: itemFacts.watched,
         workDone: itemFacts.assignmentsOutstanding === 0,
         // "Is this step cleared", not "did they pass it". An optional test is
@@ -339,6 +380,15 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       // A late joiner was not enrolled when this ran, so there is nothing to
       // explain. Asking them why they missed it is a nonsense question.
       reasonRequired: (item?.kind ?? 'no_show') !== 'late_joiner',
+      /** What they already told us, and where, so the screen can say it back. */
+      reason: resolvedReason
+        ? {
+            code: resolvedReason.code,
+            note: resolvedReason.note,
+            source: resolvedReason.source,
+            said: describeReasonSourceForStudent(resolvedReason),
+          }
+        : null,
       hasRecording: !!(access.cls.recording_url || access.cls.youtube_url) || !!recap,
     });
   } catch (err) {
@@ -551,6 +601,13 @@ export async function POST(request: NextRequest, { params }: Ctx) {
           { itemId: item.id, studentId: access.userId, scheduledClassId: params.classId },
           supabase,
         );
+        // Well done, now, personally (Neram Assistant), and a bigger one if that
+        // was the last class. Never fails the tap: it swallows its own errors.
+        await congratulateClears(supabase, {
+          studentId: access.userId,
+          classroomId: access.cls.classroom_id,
+          origin: request.nextUrl.origin,
+        });
         break;
       }
 

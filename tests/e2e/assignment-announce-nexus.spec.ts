@@ -62,17 +62,21 @@ test.describe('Nexus — Assignment announcements', () => {
 
   /** A scheduled class id in this classroom, from whichever source has one. */
   async function findLinkableClass(request: any): Promise<string | null> {
-    const overview = await request.get(
-      `${NEXUS}/api/catchup/overview?classroomId=${encodeURIComponent(classroomId)}`,
-      { headers: authed() },
-    );
-    if (overview.ok()) {
-      const body = await overview.json();
-      // classStats is every recent past class. `classes` next to it is only the
-      // classes somebody MISSED, so it is empty for a healthy classroom and
-      // cannot be the primary source.
-      const first = (body.classStats || [])[0] || (body.classes || [])[0];
-      if (first?.id) return first.id;
+    // The catch-up calendar lists every taught class in a range (at most 45
+    // days per request), whether or not anybody missed it. It replaced the
+    // overview's classStats in 2026-10. Walks back a month at a time.
+    const now = new Date();
+    for (let back = 0; back < 6; back++) {
+      const first = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back, 1));
+      const last = new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + 1, 0));
+      const ymd = (d: Date) => d.toISOString().slice(0, 10);
+      const cal = await request.get(
+        `${NEXUS}/api/catchup/calendar?classroomId=${encodeURIComponent(classroomId)}&from=${ymd(first)}&to=${ymd(last)}`,
+        { headers: authed() },
+      );
+      if (!cal.ok()) break;
+      const found = ((await cal.json()).classes || [])[0];
+      if (found?.id) return found.id;
     }
 
     const recaps = await request.get(
@@ -169,7 +173,7 @@ test.describe('Nexus — Assignment announcements', () => {
     // unrelated endpoint must not decide whether this test covers anything.
     // Two sources are tried because each filters the table differently, and a
     // classroom that trips one usually satisfies the other:
-    //   - catchup/overview's classStats lists every recent past class
+    //   - catchup/calendar lists every taught class in a month
     //   - class-recaps/candidates lists only classes that have a recording
     const classId = await findLinkableClass(request);
     if (!classId) {

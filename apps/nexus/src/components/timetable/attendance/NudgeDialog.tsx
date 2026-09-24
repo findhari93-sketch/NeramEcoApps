@@ -1,17 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
-  Box,
   Button,
-  Checkbox,
   CircularProgress,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
-  FormControlLabel,
   TextField,
   Typography,
 } from '@neram/ui';
@@ -44,6 +41,12 @@ interface NudgeDialogProps {
   sending: boolean;
   outcome: NudgeOutcome | null;
   onSend: (input: { message: string; postToTeams: boolean }) => void;
+  /**
+   * A message written for who is selected: asking for a reason when none of
+   * them gave one, a gentler push when they all did. Editable; empty means the
+   * server's default.
+   */
+  presetMessage?: string;
 }
 
 function summarise(o: NudgeOutcome): string {
@@ -70,9 +73,14 @@ export default function NudgeDialog({
   sending,
   outcome,
   onSend,
+  presetMessage,
 }: NudgeDialogProps) {
-  const [message, setMessage] = useState('');
-  const [postToTeams, setPostToTeams] = useState(true);
+  const [message, setMessage] = useState(presetMessage ?? '');
+  // Reload the preset every time the dialog opens, so a message written for the
+  // silent group does not go to the next selection unchanged.
+  useEffect(() => {
+    if (open) setMessage(presetMessage ?? '');
+  }, [open, presetMessage]);
 
   const preview = names.slice(0, 6).join(', ') + (names.length > 6 ? ` and ${names.length - 6} more` : '');
 
@@ -110,26 +118,12 @@ export default function NudgeDialog({
               helperText="Leave it blank to send the default, which names this class and its date. A link straight to this class in Nexus is added either way."
             />
 
-            <FormControlLabel
-              sx={{ mt: 1 }}
-              control={
-                <Checkbox checked={postToTeams} onChange={(e) => setPostToTeams(e.target.checked)} />
-              }
-              label={
-                <Box>
-                  <Typography variant="body2">Also post in the class Teams channel</Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    Mentions each of them by name, so it shows in their Teams activity as well.
-                  </Typography>
-                </Box>
-              }
-            />
-
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>
-              Each student gets it as your Teams chat and a Nexus notification. Every one of them
-              carries a link that opens this class&rsquo;s catch-up page,
-              so they can start from the message. A parent is copied only for anyone who has already
-              been nudged about this class once.
+              Each student gets it privately from Neram Assistant in Teams, with your name on it,
+              and as a Nexus notification. Nothing is posted in the class group. Every message
+              carries a link that opens this class&rsquo;s catch-up page, so they can start from
+              it. A parent is copied only for anyone who has already been nudged about this class
+              once.
             </Typography>
           </>
         )}
@@ -141,7 +135,7 @@ export default function NudgeDialog({
         {!outcome && (
           <Button
             variant="contained"
-            onClick={() => onSend({ message: message.trim(), postToTeams })}
+            onClick={() => onSend({ message: message.trim(), postToTeams: false })}
             disabled={sending || names.length === 0}
             startIcon={sending ? <CircularProgress size={16} /> : <SendIcon />}
             sx={{ minHeight: 44, textTransform: 'none' }}

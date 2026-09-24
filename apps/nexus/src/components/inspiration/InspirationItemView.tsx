@@ -20,6 +20,7 @@ import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import ZoomInOutlinedIcon from '@mui/icons-material/ZoomInOutlined';
 import ImageNotSupportedOutlinedIcon from '@mui/icons-material/ImageNotSupportedOutlined';
 import PageHeader from '@/components/PageHeader';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import AddSketchSheet from '@/components/sketchbook/AddSketchSheet';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthSWR } from '@/lib/nexus-swr';
@@ -191,9 +192,29 @@ export default function InspirationItemView({ mode, itemId }: { mode: Inspiratio
               </>
             ) : (
               <>
-                <Typography variant="body2" color="text.secondary">
-                  {shown?.credit ?? item.credit}
-                </Typography>
+                {(shown ?? item).author ? (
+                  // A featured drawing puts a face to the name; everything else keeps the plain credit.
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+                    <StudentAvatar
+                      userId={(shown ?? item).author!.id}
+                      name={(shown ?? item).author!.name}
+                      src={(shown ?? item).author!.avatarUrl}
+                      size={40}
+                    />
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        {(shown ?? item).credit}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Featured by a teacher
+                      </Typography>
+                    </Box>
+                  </Box>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">
+                    {shown?.credit ?? item.credit}
+                  </Typography>
+                )}
                 {item.brief && (
                   <Typography variant="body1" sx={{ whiteSpace: 'pre-line', lineHeight: 1.6 }}>
                     {item.brief}

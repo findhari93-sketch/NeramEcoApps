@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
-import ClassAttendancePanel from './ClassAttendancePanel';
+import { SWRConfig } from 'swr';
+import ClassAttendancePanel, { nudgePreset } from './ClassAttendancePanel';
 
 /**
  * The two things worth pinning down here are the request pattern and the
@@ -65,6 +66,8 @@ const INSIGHTS = {
       barelyAttended: false,
       absence: null,
       bucket: 'missed_no_reason',
+      followup: 'needs_call',
+      reason_resolved: null,
     },
     {
       id: 'b',
@@ -84,7 +87,7 @@ const INSIGHTS = {
       absence: {
         id: 'abs-b',
         kind: 'opted_out',
-        reason_code: 'exam',
+        reason_code: 'clash',
         reason_note: null,
         reason_source: 'student',
         reason_submitted_at: '2026-07-30T00:00:00Z',
@@ -94,6 +97,48 @@ const INSIGHTS = {
         followup_sent_at: null,
       },
       bucket: 'missed_with_reason',
+      followup: 'catching_up',
+      reason_resolved: {
+        code: 'clash',
+        note: null,
+        source: 'before_class',
+        said: 'Told us before class',
+        at: '2026-07-30T00:00:00Z',
+        unspecified: false,
+        line: 'Exam clash · Told us before class',
+      },
+    },
+    {
+      // On declared exam leave, with no absence row and no RSVP. The panel
+      // used to file her under "Told us why" and print "No reason given".
+      id: 'f',
+      name: 'Sanjay Kumar',
+      avatar_url: null,
+      phone: null,
+      rsvp: 'attending',
+      reason: null,
+      attended: false,
+      joined_at: null,
+      left_at: null,
+      duration_minutes: null,
+      joinedLate: false,
+      leftEarly: false,
+      droppedMidClass: false,
+      barelyAttended: false,
+      absence: null,
+      away: true,
+      away_window: 'Away 10 Jul to 20 Aug: Exam clash',
+      bucket: 'away',
+      followup: 'catching_up',
+      reason_resolved: {
+        code: 'clash',
+        note: null,
+        source: 'away',
+        said: 'Away 10 Jul to 20 Aug',
+        at: null,
+        unspecified: false,
+        line: 'Exam clash · Away 10 Jul to 20 Aug',
+      },
     },
     {
       id: 'c',
@@ -173,7 +218,10 @@ function mockFetch() {
 }
 
 function renderPanel(props: Partial<React.ComponentProps<typeof ClassAttendancePanel>> = {}) {
+  // A fresh cache per render: the panel reads through SWR, and a cache shared
+  // across tests would answer the second test without a request.
   return render(
+    <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
     <ClassAttendancePanel
       classId="c1"
       classTitle="JEE Preparation B.Arch"
@@ -181,7 +229,8 @@ function renderPanel(props: Partial<React.ComponentProps<typeof ClassAttendanceP
       teamsMeetingId="meeting1"
       getToken={async () => 'token'}
       {...props}
-    />,
+    />
+    </SWRConfig>,
   );
 }
 
@@ -208,13 +257,12 @@ describe('ClassAttendancePanel', () => {
     renderPanel();
     await screen.findByText('Abhitha Saravanan');
 
-    // Twice on purpose: the group heading, and the row's own caption under the
-    // student who gave none. The heading is asserted through its select-all
-    // control, which is unambiguous.
-    expect(screen.getAllByText('No reason given').length).toBe(2);
-    expect(screen.getByRole('checkbox', { name: /Select everyone in Told us why/i })).toBeTruthy();
+    // Once: only the silent student's row says it.
+    expect(screen.getAllByText('No reason given').length).toBe(1);
+    expect(screen.getByRole('checkbox', { name: /Select everyone in Said nothing, not caught up/i })).toBeTruthy();
+    expect(screen.getByRole('checkbox', { name: /Select everyone in Told us why, still catching up/i })).toBeTruthy();
     // Exam clash, said in advance: the row that must NOT read as silence.
-    expect(screen.getByText(/said 30 Jul/)).toBeTruthy();
+    expect(screen.getByText(/Exam clash · Told us before class/)).toBeTruthy();
     // The silent one has not started; that line is what makes her the first
     // name a teacher rings.
     expect(screen.getAllByText(/Recording not watched/i).length).toBeGreaterThan(0);
@@ -265,11 +313,29 @@ describe('ClassAttendancePanel', () => {
     renderPanel();
     await screen.findByText('Abhitha Saravanan');
 
-    fireEvent.click(screen.getByRole('checkbox', { name: /Select everyone in No reason given/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Select everyone in Said nothing/i }));
     expect(screen.getByText('1 selected')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('checkbox', { name: /Select everyone in Told us why/i }));
-    expect(screen.getByText('2 selected')).toBeTruthy();
+    expect(screen.getByText('3 selected')).toBeTruthy();
+  });
+
+  it('says why an away student missed it, never "No reason given"', async () => {
+    renderPanel();
+    await screen.findByText('Sanjay Kumar');
+    expect(screen.getByText(/Exam clash · Away 10 Jul to 20 Aug/)).toBeTruthy();
+    // The one "No reason given" on the screen belongs to the silent student.
+    expect(screen.getAllByText('No reason given')).toHaveLength(1);
+  });
+
+  it('opens narrowed to one group when the drawer card asks for it', async () => {
+    renderPanel({ initialFilter: 'needs_call' });
+    await screen.findByText('Abhitha Saravanan');
+    expect(screen.queryByText('Humaira Safrin')).toBeNull();
+    expect(screen.queryByText('Sanjay Kumar')).toBeNull();
+    // And back out again.
+    fireEvent.click(screen.getByRole('button', { name: /^All/ }));
+    expect(await screen.findByText('Humaira Safrin')).toBeTruthy();
   });
 
   it('ticks every outstanding student from one control, and unticks them again', async () => {
@@ -278,13 +344,13 @@ describe('ClassAttendancePanel', () => {
     renderPanel();
     await screen.findByText('Abhitha Saravanan');
 
-    const selectAll = screen.getByRole('checkbox', { name: /Select all 3 not caught up/i });
+    const selectAll = screen.getByRole('checkbox', { name: /Select all 4 not caught up/i });
     fireEvent.click(selectAll);
-    expect(screen.getByText('3 selected')).toBeTruthy();
+    expect(screen.getByText('4 selected')).toBeTruthy();
     // Reads back the state rather than repeating the invitation.
-    expect(screen.getByText('All 3 selected')).toBeTruthy();
+    expect(screen.getByText('All 4 selected')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('checkbox', { name: /Select all 3 not caught up/i }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Select all 4 not caught up/i }));
     expect(screen.queryByText(/selected/)).toBeNull();
   });
 
@@ -292,10 +358,10 @@ describe('ClassAttendancePanel', () => {
     renderPanel();
     await screen.findByText('Abhitha Saravanan');
 
-    // Four students are absent-or-done in the fixture; three still owe work.
+    // Everyone absent in the fixture still owes work, so all four count.
     // Messaging somebody again about a class they have finished is the bug.
-    fireEvent.click(screen.getByRole('checkbox', { name: /Select all 3 not caught up/i }));
-    expect(screen.getByText('3 selected')).toBeTruthy();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Select all 4 not caught up/i }));
+    expect(screen.getByText('4 selected')).toBeTruthy();
   });
 
   it('calls a late joiner a late joiner, not silent', async () => {
@@ -307,7 +373,7 @@ describe('ClassAttendancePanel', () => {
     ).toBeTruthy();
     expect(screen.getByText(/Joined after this class, enrolled 20 Aug/)).toBeTruthy();
     // Still exactly one row saying "No reason given", and it is not hers.
-    expect(screen.getAllByText('No reason given').length).toBe(2);
+    expect(screen.getAllByText('No reason given').length).toBe(1);
   });
 
   it('offers no Teams sync for a class with no meeting', async () => {
@@ -330,5 +396,17 @@ describe('ClassAttendancePanel', () => {
     expect(screen.getByRole('button', { name: /Previous class/i }).hasAttribute('disabled')).toBe(
       true,
     );
+  });
+});
+
+describe('nudgePreset', () => {
+  it('asks the silent ones why, and only them', () => {
+    expect(nudgePreset(['needs_call', 'needs_call'], 'Perspective', '11 Sep')).toMatch(/have not told us why/);
+    expect(nudgePreset(['catching_up'], 'Perspective', '11 Sep')).toMatch(/^Thanks for telling us why/);
+  });
+
+  it('falls back to the server default for a mixed selection', () => {
+    expect(nudgePreset(['needs_call', 'catching_up'], 'Perspective', '11 Sep')).toBe('');
+    expect(nudgePreset([], 'Perspective', '11 Sep')).toBe('');
   });
 });

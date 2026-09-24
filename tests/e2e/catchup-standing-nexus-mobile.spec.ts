@@ -1,118 +1,128 @@
 import { test, expect } from '@playwright/test';
-import { APP_URLS, injectAuthForPage } from '../utils/credentials';
-import { assertNoHorizontalOverflow } from '../utils/mobile-helpers';
+import { injectAuthForPage } from '../utils/credentials';
+import { assertNoHorizontalOverflow, assertTouchTargetSize } from '../utils/mobile-helpers';
+import { diagnosisTiles, mockCatchupApis, openTeacherCatchup, skipWelcome } from '../utils/catchup-helpers';
+import { CATCHUP_FIXTURE_COUNTS, fixtureNames } from '../fixtures/catchup-overview';
 
 /**
- * The standing surfaces on a phone.
+ * The All clear card on a phone (2026-10 redesign).
  *
- * Two things are new on this page and both add width: a fifth stat tile, which
- * has to wrap to two columns at 375px rather than turning the row into a
- * sideways scroll, and two list sections whose rows carry a name plus two
- * caption lines. A long student name against a long backlog line is the shape
- * that pushes a card past the viewport, and the failure is silent: the page
- * still renders, it just scrolls sideways.
+ * The Standing tab and its class-group "Congratulate in Teams" post are gone.
+ * Students are congratulated automatically as they clear each class; the All
+ * clear stat card opens the wall, and a teacher can add a personal note that
+ * Neram Assistant sends to each student one to one. Nothing on this card may
+ * offer, or even mention, a post to the class group.
  *
- * READ-ONLY. The Teams share is opened as far as its preview and cancelled,
- * because the students named in it are real and the post is public.
+ * Mocked (tests/fixtures/catchup-overview.ts): four all-clear students, two of
+ * them already congratulated automatically. READ-ONLY: the note dialog is
+ * opened and cancelled, never sent, and Mark as congratulated is never pressed.
  */
 
-const NEXUS = APP_URLS.nexus;
 const PHONE = { width: 375, height: 812 };
-// A cold Next dev server compiles the route on first hit, which outlives the
-// 30s default and reports as a bare timeout with nothing to read.
 const COLD_COMPILE_BUDGET = 120_000;
 
-async function openStanding(page: any) {
-  await page.goto(`${NEXUS}/teacher/catch-up?tab=caught-up`, { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(5000);
+async function openAllClear(page: any) {
+  await openTeacherCatchup(page, 'd=all_clear');
+  await expect(page.getByText(/^All clear \(\d+\)$/)).toBeVisible();
 }
 
-test.describe('Catch-up standing on a phone', () => {
+test.describe('Catch-up All clear on a phone', () => {
   test.setTimeout(COLD_COMPILE_BUDGET);
 
   test.beforeEach(async ({ page }) => {
     const injected = await injectAuthForPage(page, 'teacher');
     test.skip(!injected, 'Nexus test-login unavailable');
+    await skipWelcome(page);
+    await mockCatchupApis(page);
+    await page.setViewportSize(PHONE);
   });
 
-  test('five stat tiles wrap instead of scrolling sideways', async ({ page }) => {
-    await page.setViewportSize(PHONE);
-    await page.goto(`${NEXUS}/teacher/catch-up`, { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(5000);
-
-    await expect(page.getByText('all clear', { exact: true })).toBeVisible();
+  test('eight stat cards wrap instead of scrolling sideways', async ({ page }) => {
+    await openTeacherCatchup(page);
+    await expect(diagnosisTiles(page).getByRole('button')).toHaveCount(8);
+    await expect(diagnosisTiles(page).getByRole('button', { name: /All clear/ })).toBeVisible();
     await assertNoHorizontalOverflow(page);
   });
 
-  test('the standing tab fits the screen', async ({ page }) => {
-    await page.setViewportSize(PHONE);
-    await openStanding(page);
-
-    await expect(page.getByRole('tab', { name: /Standing/i })).toBeVisible();
+  test('the All clear card opens the wall and it fits the screen', async ({ page }) => {
+    await openTeacherCatchup(page);
+    const card = diagnosisTiles(page).getByRole('button', { name: /All clear/ });
+    await card.click();
+    await expect(card).toHaveAttribute('aria-pressed', 'true');
+    await expect(page).toHaveURL(/[?&]d=all_clear\b/);
+    await expect(page.getByText(/^All clear \(\d+\)$/)).toBeVisible();
     await assertNoHorizontalOverflow(page);
   });
 
-  test('the tab counts people, not finished classes', async ({ page }) => {
-    // The bug this replaces: "Caught up (7)" meant seven cleared classes in
-    // sixty days and was read as seven finished students, so one student who
-    // had cleared two of her five appeared twice and looked done.
-    await page.setViewportSize(PHONE);
-    await openStanding(page);
-
-    const tab = page.getByRole('tab', { name: /Standing/i });
-    const label = (await tab.textContent()) || '';
-    const match = label.match(/Standing \((\d+)\)/);
-    if (!match) return; // Nobody clear in this environment, nothing to compare.
-
-    const wall = page.getByText(/(\d+) (people are|person is)? ?fully caught up/i).first();
-    if (await wall.count()) {
-      await expect(page.getByText(new RegExp(`All clear \\(${match[1]}\\)`))).toBeVisible();
+  test('the wall counts people, and matches the card', async ({ page }) => {
+    // The bug the old tab had: "Caught up (7)" counted cleared classes and was
+    // read as seven finished students.
+    await openAllClear(page);
+    const n = CATCHUP_FIXTURE_COUNTS.byDiagnosis.all_clear;
+    await expect(page.getByText(`All clear (${n})`, { exact: true })).toBeVisible();
+    await expect(diagnosisTiles(page).getByRole('button', { name: new RegExp(`^${n}\\s*All clear$`) })).toBeVisible();
+    for (const name of fixtureNames('all_clear')) {
+      await expect(page.getByText(name, { exact: true }).first()).toBeVisible();
     }
   });
 
-  test('the Teams share previews the names before anything is posted', async ({ page }) => {
-    await page.setViewportSize(PHONE);
-    await openStanding(page);
+  test('the note is personal, previews the name, and never mentions a group post', async ({ page }) => {
+    await openAllClear(page);
 
-    const share = page.getByRole('button', { name: /Congratulate .*in Teams/i });
-    if ((await share.count()) === 0) {
-      test.skip(true, 'Nobody is fully caught up in this classroom');
-      return;
-    }
+    const send = page.getByRole('button', { name: /^Send a note/ });
+    await expect(send).toBeVisible();
+    // The retired group post must not survive anywhere on the card.
+    await expect(page.getByRole('button', { name: /Congratulate .*in Teams|Post to Teams/i })).toHaveCount(0);
 
-    // Tick exactly one student, so the preview can be checked against the pick.
+    // Tick exactly one student, so the dialog can be checked against the pick.
     const boxes = page.getByRole('checkbox', { name: /^Select / });
     const total = await boxes.count();
+    expect(total, 'the fixture has all-clear students to tick').toBeGreaterThan(0);
     for (let i = 0; i < total; i++) {
       if (await boxes.nth(i).isChecked()) await boxes.nth(i).uncheck();
     }
-    await expect(share).toBeDisabled();
+    await expect(send).toBeDisabled();
     const first = boxes.first();
     const picked = ((await first.getAttribute('aria-label')) || '').replace(/^Select /, '');
     await first.check();
 
-    await expect(share).toHaveText(/Congratulate \(1\) in Teams/);
-    await share.click();
-    // The whole point of the preview: the names are shown in full, not
-    // summarised, because the thing to check is precisely the list.
+    await expect(send).toHaveText(/Send a note \(1\)/);
+    await send.click();
+
     const dialog = page.getByRole('dialog');
-    await expect(dialog.getByRole('button', { name: /Post to Teams/i })).toBeVisible();
+    await expect(dialog.getByText(`Send ${picked} a note`)).toBeVisible();
     await expect(dialog.getByText(picked, { exact: true })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Send note' })).toBeVisible();
+    await expect(dialog.getByText(/privately from Neram Assistant/)).toBeVisible();
+    // No trace of the old class-group post in the composer.
+    await expect(dialog.getByText(/Post to Teams|class group|group post|channel/i)).toHaveCount(0);
     await assertNoHorizontalOverflow(page);
 
     await dialog.getByRole('button', { name: /^Cancel$/ }).click();
-    await expect(page.getByRole('button', { name: /Post to Teams/i })).toHaveCount(0);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+  });
+
+  test('two picks read as "Send 2 students a note"', async ({ page }) => {
+    await openAllClear(page);
+    const boxes = page.getByRole('checkbox', { name: /^Select / });
+    const total = await boxes.count();
+    expect(total).toBeGreaterThanOrEqual(2);
+    for (let i = 0; i < total; i++) {
+      if (await boxes.nth(i).isChecked()) await boxes.nth(i).uncheck();
+    }
+    await boxes.nth(0).check();
+    await boxes.nth(1).check();
+    await page.getByRole('button', { name: 'Send a note (2)' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByText('Send 2 students a note')).toBeVisible();
+    await expect(dialog.getByRole('button', { name: 'Send 2 notes' })).toBeVisible();
+    await dialog.getByRole('button', { name: /^Cancel$/ }).click();
   });
 
   test('the student cards are ticked with a thumb-sized checkbox', async ({ page }) => {
-    await page.setViewportSize(PHONE);
-    await openStanding(page);
-
+    await openAllClear(page);
     const boxes = page.getByRole('checkbox', { name: /^Select / });
-    if ((await boxes.count()) === 0) {
-      test.skip(true, 'Nobody is fully caught up in this classroom');
-      return;
-    }
+    await expect(boxes.first()).toBeAttached();
     // The input is hidden inside MUI's 44px span, so measure the span.
     const hit = await boxes.first().locator('xpath=..').boundingBox();
     expect(hit?.width ?? 0).toBeGreaterThanOrEqual(44);
@@ -120,16 +130,9 @@ test.describe('Catch-up standing on a phone', () => {
     await assertNoHorizontalOverflow(page);
   });
 
-  test('every control on the standing tab is thumb sized', async ({ page }) => {
-    await page.setViewportSize(PHONE);
-    await openStanding(page);
-
-    const buttons = page.locator('button:visible');
-    const n = Math.min(await buttons.count(), 12);
-    for (let i = 0; i < n; i++) {
-      const box = await buttons.nth(i).boundingBox();
-      if (!box) continue;
-      expect(box.height, `button ${i} is ${box.height}px tall`).toBeGreaterThanOrEqual(36);
-    }
+  test('the wall actions are thumb sized', async ({ page }) => {
+    await openAllClear(page);
+    await assertTouchTargetSize(page, 'button:has-text("Send a note")', 44);
+    await assertTouchTargetSize(page, 'button:has-text("Mark as congratulated")', 44);
   });
 });

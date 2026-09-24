@@ -8,6 +8,7 @@ import DayStrip from '../DayStrip';
 import { formatDateISO, type HolidayInfo, type ResolvedBand, type WeekDates } from '../date-utils';
 import { type ClassCardData } from '../ClassCard';
 import type { RsvpSummary } from '@/app/api/timetable/rsvp-dashboard/route';
+import type { CalendarClass } from '@/lib/catchup-calendar';
 
 interface DayViewProps {
   classes: ClassCardData[];
@@ -32,6 +33,8 @@ interface DayViewProps {
   onSlotClick?: (date: string, startTime: string, event?: React.MouseEvent) => void;
   rsvpData?: Record<string, RsvpSummary>;
   scrollToTime?: string;
+  /** Teacher only: catch-up standing per past class, drawn by GridView. */
+  catchupByClassId?: Map<string, CalendarClass>;
 }
 
 /**
@@ -56,6 +59,7 @@ export default function DayView({
   onSlotClick,
   rsvpData,
   scrollToTime,
+  catchupByClassId,
 }: DayViewProps) {
   const theme = useTheme();
   const anchorISO = formatDateISO(anchorDate);
@@ -128,6 +132,7 @@ export default function DayView({
         onSlotClick={onSlotClick}
         rsvpData={rsvpData}
         scrollToTime={scrollToTime}
+        catchupByClassId={catchupByClassId}
       />
     </Box>
   );

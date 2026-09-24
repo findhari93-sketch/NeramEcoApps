@@ -48,6 +48,12 @@ const ACCESSORS: ListAccessors<StudentInsight> = {
 function missedLine(s: StudentInsight): string {
   const absence = s.absence;
   if (absence?.excused_at) return 'Excused by a teacher.';
+  // The server's resolved reason when it sends one: the away window, the RSVP
+  // and the note written afterwards, in one precedence (lib/absence-reason.ts).
+  const r = s.reason_resolved;
+  if (r) return r.note ? `${r.line}: ${r.note}.` : `${r.line}.`;
+  if (s.joinedAfterClass) return 'Joined after this class.';
+  if (s.reason_resolved === null && s.followup) return 'No reason given.';
   // Before the per-class checks, matching the grouping's own precedence. A
   // declared window usually leaves no absence row and no RSVP at all, so
   // without this an away student read as "No reason given" while sitting under
@@ -65,6 +71,7 @@ function missedLine(s: StudentInsight): string {
 /** How far a missed student has got with making it up. */
 function catchupLine(s: StudentInsight): string {
   if (s.absence?.caught_up_at) return 'Caught up.';
+  if (s.catchup?.progress) return `${s.catchup.progress}.`;
   if (s.absence?.recording_watched_at) return 'Watched the recording.';
   return 'Recording not watched.';
 }

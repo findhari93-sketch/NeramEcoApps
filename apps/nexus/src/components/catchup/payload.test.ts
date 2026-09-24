@@ -35,8 +35,10 @@ describe('withPayloadDefaults', () => {
     expect(data.totals.studentsBehind).toBe(4);
     expect(data.totals.outstanding).toBe(21);
     // And the lists the tabs walk are arrays, not undefined.
-    expect(data.classStats).toEqual([]);
-    expect(data.reasons).toEqual([]);
+    expect(data.students).toEqual([]);
+    // The diagnosis tiles read a tally that yesterday's payload never had.
+    expect(data.totals.byDiagnosis.stuck).toBe(0);
+    expect(data.totals.byDiagnosis.all_clear).toBe(0);
   });
 
   it('fills a bucket the tally has never heard of', () => {

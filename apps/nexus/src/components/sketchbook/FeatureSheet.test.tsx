@@ -15,7 +15,7 @@ const auth = vi.hoisted(() => ({
     getToken: async () => 't',
     classrooms: [{ id: 'c1', name: 'JEE B.Arch Session 1' }],
     activeClassroom: { id: 'c1', name: 'JEE B.Arch Session 1' },
-    impersonation: null as unknown,
+    impersonation: { active: false } as { active: boolean },
   },
 }));
 vi.mock('@/hooks/useNexusAuth', () => ({ useNexusAuthContext: () => auth.value }));
@@ -37,7 +37,8 @@ const open = (props: Partial<React.ComponentProps<typeof FeatureSheet>> = {}) =>
 describe('FeatureSheet', () => {
   beforeEach(() => {
     api.featureSketch.mockClear();
-    auth.value.impersonation = null;
+    // The real hook always returns an object; `active` is the only signal.
+    auth.value.impersonation = { active: false };
   });
 
   /**
@@ -86,6 +87,19 @@ describe('FeatureSheet', () => {
     expect(await screen.findByText(/keeps their drawings out of it/)).toBeTruthy();
   });
 
+  it('says a teacher hid it, rather than blaming the student, when the shelf was refused for that', async () => {
+    api.featureSketch.mockResolvedValueOnce({
+      feature: { classroom_id: 'c1', featured_at: '2026-09-19T00:00:00.000Z' },
+      teams: { channel: true, chat: true, errors: [] },
+      shelved: false,
+      hiddenByTeacher: true,
+    } as any);
+    open();
+    fireEvent.click(screen.getByRole('button', { name: 'Feature this work' }));
+    expect(await screen.findByText(/a teacher hid it from students/)).toBeTruthy();
+    expect(screen.queryByText(/keeps their drawings out of it/)).toBeNull();
+  });
+
   it('asks which classroom only after the server says there is a choice', async () => {
     api.featureSketch.mockRejectedValueOnce(
       new Error('You teach this student in more than one classroom. Choose which one to feature in.'),
@@ -97,8 +111,18 @@ describe('FeatureSheet', () => {
   });
 
   it('is off while viewing as a student, because the post needs a real sign-in', () => {
-    auth.value.impersonation = { userId: 'x' };
+    auth.value.impersonation = { active: true };
     open();
     expect(screen.getByRole('button', { name: 'Feature this work' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  /**
+   * The bug that kept featuring dead for every teacher: the sheet treated the
+   * always-present impersonation object as "viewing as a student".
+   */
+  it('stays on for a teacher who is not viewing as a student', () => {
+    open();
+    expect(screen.getByRole('button', { name: 'Feature this work' }).hasAttribute('disabled')).toBe(false);
+    expect(screen.queryByText(/off while viewing as a student/)).toBeNull();
   });
 });

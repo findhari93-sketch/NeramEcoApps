@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { SWRConfig, type Cache } from 'swr';
 import type { InspirationRow } from '@neram/database/queries/nexus';
-import { presentRow } from '@/lib/inspiration-present';
+import { presentClassFeatured, presentRow } from '@/lib/inspiration-present';
 import { makeRow } from '@/lib/inspiration-test-rows';
 
 vi.mock('@/hooks/useNexusAuth', () => ({ useNexusAuthContext: () => ({ getToken: async () => 'token' }) }));
@@ -29,6 +29,7 @@ const uuid = (n: number) => `${String(n).padStart(8, '0')}-1111-4111-8111-111111
 const saves = new Set<string>();
 let rows: InspirationRow[] = [];
 let searchCalls = 0;
+let featuredItems: unknown[] = [];
 
 function searchAnswer(url: string) {
   const params = new URL(url, 'http://localhost').searchParams;
@@ -57,6 +58,9 @@ function stubFetch() {
         if (method === 'POST') saves.add(save[1]);
         else saves.delete(save[1]);
         body = { saved: method === 'POST' };
+      } else if (url.includes('featured=class')) {
+        // The class wall row reads its own list; it is not a grid search.
+        body = { items: featuredItems };
       } else if (url.startsWith('/api/inspiration/search')) {
         searchCalls += 1;
         body = searchAnswer(url);
@@ -97,6 +101,7 @@ describe('InspirationBrowser saving', () => {
   beforeEach(() => {
     saves.clear();
     searchCalls = 0;
+    featuredItems = [];
     cache = new Map();
     rows = [
       makeRow({ id: uuid(1), title_override: 'Alpha', source_created_at: '2026-09-03T10:00:00Z' }),
@@ -151,5 +156,41 @@ describe('InspirationBrowser saving', () => {
     // Reopening re-reads page 0 and nothing else: the pages the student already
     // loaded are only refetched when their cache entry disagrees with the list.
     expect(searchCalls - before).toBe(1);
+  });
+});
+
+describe('Featured from your class', () => {
+  beforeEach(() => {
+    saves.clear();
+    searchCalls = 0;
+    cache = new Map();
+    rows = [makeRow({ id: uuid(1), title_override: 'Alpha' })];
+    featuredItems = [];
+    stubFetch();
+  });
+
+  it('shows the class wall on the home view with the full name of whoever drew it', async () => {
+    featuredItems = [
+      presentClassFeatured(
+        {
+          row: makeRow({ id: uuid(9), title_override: 'Shanghai skyline', is_featured: true }),
+          classroom_id: 'c1',
+          classroom_name: 'JEE B.Arch Session 1',
+          featured_at: '2026-09-23T10:00:00Z',
+          author_avatar_url: null,
+        },
+        { staff: false },
+      ),
+    ];
+    renderBrowser();
+    expect(await screen.findByRole('heading', { name: 'Featured from your class' })).toBeTruthy();
+    const link = await screen.findByRole('link', { name: /Shanghai skyline, by Harshitaa Thiyagu/ });
+    expect(link.getAttribute('href')).toBe(`/student/inspiration/${uuid(9)}`);
+  });
+
+  it('is simply absent when nothing has been featured', async () => {
+    renderBrowser();
+    await screen.findByRole('button', { name: /Save Alpha/ });
+    expect(screen.queryByRole('heading', { name: 'Featured from your class' })).toBeNull();
   });
 });

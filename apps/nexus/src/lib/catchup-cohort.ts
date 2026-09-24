@@ -93,6 +93,8 @@ export async function loadClassroomBacklog(
   supabase: any,
   classroomId: string,
   today: string,
+  /** Narrow to one student (the automatic congratulation asks about one). */
+  opts: { studentId?: string } = {},
 ): Promise<Map<string, StudentBacklog>> {
   const out = new Map<string, StudentBacklog>();
 
@@ -103,11 +105,12 @@ export async function loadClassroomBacklog(
 
   const tracked = new Map<string, any>();
   for (const member of roster.members) {
+    if (opts.studentId && member.user_id !== opts.studentId) continue;
     if (isTracked(member)) tracked.set(member.user_id, member.user);
   }
   if (tracked.size === 0) return out;
 
-  const { data: rows } = await supabase
+  let absenceQuery = supabase
     .from('nexus_class_absences')
     .select(
       'id, student_id, scheduled_class_id, kind, recording_watched_at, caught_up_at, ' +
@@ -115,8 +118,9 @@ export async function loadClassroomBacklog(
         'class:nexus_scheduled_classes(id, title, scheduled_date, start_time, status, ' +
         'recording_url, youtube_url)',
     )
-    .eq('classroom_id', classroomId)
-    .limit(MAX_ITEMS);
+    .eq('classroom_id', classroomId);
+  if (opts.studentId) absenceQuery = absenceQuery.eq('student_id', opts.studentId);
+  const { data: rows } = await absenceQuery.limit(MAX_ITEMS);
 
   const items = (rows || []).filter((r: any) => r.class && tracked.has(r.student_id));
 

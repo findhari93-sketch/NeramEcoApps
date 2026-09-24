@@ -11,7 +11,7 @@ import { APP_URLS } from '../utils/credentials';
  *
  *   the endpoints exist and refuse an anonymous caller
  *   the editor offers one button rather than five
- *   the Catch-up workspace offers the backlog run
+ *   the Catch-up workspace (Calendar view) offers the backlog run
  *   nothing on the student's catch-up screen opens a new tab
  *
  * That last one is the regression this whole change exists for. A student on
@@ -96,13 +96,17 @@ test.describe('Nexus catch-up automation, teacher screens', () => {
     expect(res.status()).not.toBe(404);
   });
 
-  test('the Catch-up workspace has a Classes tab to run the backlog from', async ({ page }) => {
-    const res = await page.goto(`${NEXUS}/teacher/catch-up?tab=classes`).catch(() => null);
-    if (!res) {
-      test.skip(true, 'Nexus dev server unavailable on :3012');
-      return;
+  test('the Catch-up workspace has a Calendar view to run the backlog from', async ({ page }) => {
+    // ?tab=classes is the link the recap editor and old notifications still
+    // carry; it must keep resolving, and the new ?view=calendar URL must too.
+    for (const q of ['tab=classes', 'view=calendar']) {
+      const res = await page.goto(`${NEXUS}/teacher/catch-up?${q}`).catch(() => null);
+      if (!res) {
+        test.skip(true, 'Nexus dev server unavailable on :3012');
+        return;
+      }
+      expect(res.status(), `/teacher/catch-up?${q} must exist`).not.toBe(404);
     }
-    expect(res.status(), 'the tab the editor returns to must exist').not.toBe(404);
   });
 });
 

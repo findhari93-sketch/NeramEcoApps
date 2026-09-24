@@ -25,6 +25,19 @@ import {
   registerGroupOf,
   sessionWindow,
 } from '@/lib/attendance-register';
+import { describeReasonSource, reasonLine, resolveAbsenceReason } from '@/lib/absence-reason';
+import { activityKey, loadCatchupActivity, type CatchupActivity } from '@/lib/catchup-activity';
+import { STUCK_FAILS, daysBetween, describeItemProgress, type DiagItem } from '@/lib/catchup-diagnosis';
+import {
+  MISSED_STATES,
+  daysToCatchUp,
+  followupState,
+  medianOf,
+  tallyFollowup,
+  type FollowupState,
+} from '@/lib/class-followup';
+import { loadClassWork, studentWork, summariseWork, type WorkAudience } from '@/lib/class-work';
+import { loadRecentAttendance, type RecentAttendance } from '@/lib/recent-attendance';
 import {
   AWAY_COLUMNS,
   coveringWindow,
@@ -50,6 +63,31 @@ import {
  * and the two answers could disagree. attendance-report is now the lazy second
  * request, opened only when a teacher goes to repair the register.
  */
+/** The resolved reason in the shape the panel reads. */
+function reasonFor(abs: any, opt: any, awayWindows: AwayWindow[], classDate: string) {
+  const resolved = resolveAbsenceReason({ absence: abs, rsvp: opt ?? null, awayWindows, classDate });
+  if (!resolved) return null;
+  return {
+    code: resolved.code,
+    note: resolved.note,
+    source: resolved.source,
+    said: describeReasonSource(resolved),
+    at: resolved.at,
+    unspecified: !!resolved.unspecified,
+    line: reasonLine(resolved),
+  };
+}
+
+/** Who owes the class's homework, split by where they stand on the class. */
+function workAudience(state: FollowupState): WorkAudience {
+  if (state === 'attended' || state === 'partly') return 'came';
+  if (state === 'caught_up' || state === 'caught_up_silent') return 'caught_up';
+  if (state === 'needs_call' || state === 'catching_up' || state === 'late_joiner' || state === 'waiting_on_us') {
+    return 'catching_up';
+  }
+  return 'other';
+}
+
 export async function GET(request: NextRequest) {
   try {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
@@ -101,7 +139,7 @@ export async function GET(request: NextRequest) {
           .eq('scheduled_class_id', classId),
         supabase
           .from('nexus_class_rsvp')
-          .select('student_id, reason, reason_code')
+          .select('student_id, response, reason, reason_code, responded_at')
           .eq('scheduled_class_id', classId)
           .eq('response', 'not_attending'),
         // Why each absent student was away, how far they have got with making it
@@ -175,6 +213,40 @@ export async function GET(request: NextRequest) {
     ]);
     const today = istTodayYmd();
 
+    // ── The texture behind "not caught up", the class's homework, and how
+    // each missed student has been turning up lately ─────────────────────────
+    //
+    // All three explain rather than decide, so each degrades to "unknown"
+    // instead of failing the panel: a teacher can still act on who missed the
+    // class without knowing how far into the recap they got.
+    const anyFacts: any = [...catchupFacts.values()][0] ?? null;
+    const recapId: string | null = anyFacts?.recapByClass?.get(classId)?.id ?? null;
+    const anyTest: any = anyFacts?.testByClass?.get(classId) ?? null;
+    const missedIds: string[] = members
+      .filter((m: any) => !attById.get(m.user_id)?.attended)
+      .map((m: any) => m.user_id as string);
+    const enrolledAt = new Map<string, string | null>(
+      members.map((m: any) => [m.user_id as string, (m.enrolled_at as string | null) ?? null]),
+    );
+    const [activity, classWork, recent] = await Promise.all([
+      classIdsByStudent.size
+        ? loadCatchupActivity(supabase, {
+            recapIds: recapId ? [recapId] : [],
+            testIds: anyTest?.test_id ? [anyTest.test_id] : [],
+            studentIds: [...classIdsByStudent.keys()],
+          }).catch(() => null as CatchupActivity | null)
+        : Promise.resolve(null as CatchupActivity | null),
+      loadClassWork(supabase, classId).catch(() => ({ assignments: [], subs: new Map() })),
+      measured && missedIds.length
+        ? loadRecentAttendance(supabase, {
+            classroomId,
+            uptoDate: cls.scheduled_date,
+            studentIds: missedIds,
+            enrolledAt,
+          }).catch(() => new Map<string, RecentAttendance>())
+        : Promise.resolve(new Map<string, RecentAttendance>()),
+    ]);
+
     /** The one resolved item for this student and this class, or null. */
     const catchupFor = (studentId: string, abs: any) => {
       const facts = catchupFacts.get(studentId);
@@ -183,7 +255,35 @@ export async function GET(request: NextRequest) {
       const facts0 = toFacts(item, facts);
       const resolved = resolveCatchupBacklog([facts0], { today, windows })[0];
       if (!resolved) return null;
+      const test: any = facts.testByClass?.get(classId) ?? null;
+      const act = recapId ? activity?.recap.get(activityKey(recapId, studentId)) ?? null : null;
+      const testAct = test ? activity?.test.get(activityKey(test.test_id, studentId)) ?? null : null;
+      const work: any[] = facts.assignmentsByClass?.get(classId) || [];
+      const diag: DiagItem = {
+        id: abs.id,
+        status: resolved.status,
+        active: resolved.active,
+        overdue: resolved.overdue,
+        days_left: resolved.daysLeft,
+        activated_on: abs.activated_on ?? null,
+        watched: facts0.watched,
+        assignments_outstanding: work.filter((a: any) => !facts.submitted?.has(a.id)).length,
+        has_test: !!test && test.required !== false,
+        test_passed: !!facts0.testPassed,
+        title: cls.title,
+        scheduled_date: String(cls.scheduled_date),
+        activity: act,
+        test: testAct,
+      };
       return {
+        /**
+         * "40% watched, 2 sittings, last active 5 days ago": the same words the
+         * catch-up page's student sheet uses, from lib/catchup-diagnosis.ts.
+         */
+        progress: describeItemProgress(diag, today),
+        /** A checkpoint has beaten them twice in a row: a reminder will not help. */
+        stuck: (act?.checkpoint?.fails ?? 0) >= STUCK_FAILS,
+        last_active_at: act?.lastActiveAt ?? null,
         status: resolved.status,
         step: resolved.step,
         /** Resolved, not the raw column. See the note above. */
@@ -271,9 +371,32 @@ export async function GET(request: NextRequest) {
             }
           : null,
         catchup: catchupFor(r.user_id, abs),
+        /**
+         * Why they missed it, from wherever they said it: an away window, the
+         * RSVP decline, or afterwards on the catch-up screen. The panel used to
+         * read only the last, so everyone on declared leave sat under "Told us
+         * why" with the words "No reason given" beside their name.
+         */
+        reason_resolved: attended ? null : reasonFor(abs, opt, awayByStudent.get(r.user_id) || [], cls.scheduled_date),
+        days_since_class: Math.max(0, daysBetween(String(cls.scheduled_date), today)),
+        days_to_catch_up: daysToCatchUp(String(cls.scheduled_date), abs?.caught_up_at ?? null),
+        recent: recent.get(r.user_id) ?? null,
+        work: classWork.assignments.length ? studentWork(r.user_id, classWork.assignments, classWork.subs) : null,
       };
+      const followup: FollowupState = followupState({
+        attended,
+        partly: attended && (flags.joinedLate || flags.leftEarly || flags.droppedMidClass || flags.barelyAttended),
+        measured,
+        joinedAfterClass: row.joinedAfterClass,
+        hasReason: !!row.reason_resolved,
+        hasAbsence: !!abs,
+        excused: !!abs?.excused_at,
+        caughtUp: !!abs?.caught_up_at,
+        catchupStatus: row.catchup?.status ?? null,
+      });
       return {
         ...row,
+        followup,
         bucket: bucketFor(row),
         group: registerGroupOf({
           attended,
@@ -295,6 +418,25 @@ export async function GET(request: NextRequest) {
     // below is the older RSVP-vs-actual matrix, which answers a different
     // question (did the RSVP predict the room) and is still shown.
     const stateTally = tallyBuckets(students);
+
+    // The class in one picture: who came, and for everyone who did not, which
+    // corner of told-us-why by caught-up they are in.
+    const followupTally = tallyFollowup(students.map((s: any) => s.followup as FollowupState));
+    const work = summariseWork(
+      classWork.assignments,
+      students.map((s: any) => ({
+        id: s.id,
+        audience: workAudience(s.followup),
+        work: s.work,
+        joinedAfterClass: s.joinedAfterClass,
+      })),
+    );
+    const openDays: number[] = students
+      .filter((s: any) => s.followup === 'needs_call' || s.followup === 'catching_up')
+      .map((s: any) => s.days_since_class as number);
+    const clearDays: number[] = students
+      .map((s: any) => s.days_to_catch_up as number | null)
+      .filter((d: number | null): d is number => d != null);
 
     // RSVP (expected) vs actual, the core comparison.
     const buckets = {
@@ -371,6 +513,18 @@ export async function GET(request: NextRequest) {
           stateTally.away +
           stateTally.late_joiner,
       },
+      followup: {
+        tally: followupTally,
+        missed: students.filter((s: any) => MISSED_STATES.has(s.followup)).length,
+        oldestOpenDays: openDays.length ? Math.max(...openDays) : null,
+        medianDaysToCatchUp: medianOf(clearDays),
+        // Expected to come, against who did. On the default-attending model that
+        // is the roll minus the declines, the away and the late joiners.
+        saidComing: students.filter(
+          (s: any) => s.rsvp === 'attending' && !s.away && !s.joinedAfterClass,
+        ).length,
+      },
+      work,
       buckets,
       reasonTally: tallyReasons(optOuts || []),
       students,

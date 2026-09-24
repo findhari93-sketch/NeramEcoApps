@@ -54,6 +54,10 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   study_material_nudge: '#0ea5e9',
   catchup_digest: '#7c3aed',
   catchup_behind_pace: '#ed6c02',
+  // Good news, so green, like recap_ready: a cleared class and a clean slate.
+  catchup_item_cleared: '#2E7D32',
+  catchup_all_clear: '#2E7D32',
+  catchup_note: '#7c3aed',
   // Green, not amber. This one is good news arriving early, and colouring it
   // like the chase messages beside it would make an offer of help read as
   // another reminder that they are behind.
@@ -179,10 +183,16 @@ function getNavigationUrl(
         ? `/${nexusRole || 'student'}/assignments/${assignmentId}`
         : `/${nexusRole || 'student'}/assignments`;
     }
-    // The daily staff roll-up. Straight to the reasons feed, because "4 students
-    // explained why they missed a class" is only useful next to what they said.
+    // The daily staff roll-up. Reasons now sit on each student and each class
+    // (the separate Reasons feed was folded in, 2026-10), so the page itself.
     case 'catchup_digest':
-      return '/teacher/catch-up?tab=reasons';
+      return '/teacher/catch-up';
+    // Congratulations: a cleared class, a clean slate, or a teacher's note.
+    // All land on the student's own list, where the win is visible.
+    case 'catchup_item_cleared':
+    case 'catchup_all_clear':
+    case 'catchup_note':
+      return '/student/catch-up';
     // A teacher (or the weekly cron) asking a student to catch up. The per-class
     // nudge stamps the class it is about, so land on that class's catch-up page;
     // the pace nudge names no class and opens the backlog instead. Without this

@@ -1,7 +1,18 @@
 'use client';
 
 /**
- * Every recent class, what it still owes, and the button that fixes it.
+ * The Classes view of Catch-up: every class in a month, as a calendar or a list,
+ * what it still owes, and the button that fixes it.
+ *
+ * 2026-10: month scoped and calendar first. This used to be one long list of
+ * the 60 most recent classes, which over a year meant scrolling to find "the
+ * class on 11 Sept". The data now comes from /api/catchup/calendar one month at
+ * a time, the default is a month grid (CatchupCalendar), and the list remains
+ * a toggle for anyone who prefers it. Tapping a class opens the same attendance
+ * drawer either way, which is where "who missed it, why, and how far they got"
+ * is answered. The Timetable deep-links here with ?class= to open that drawer.
+ *
+ * Original notes:
  *
  * This tab is a merge of three screens that were each telling a teacher half the
  * story:
@@ -53,11 +64,17 @@ import {
   Stack,
   TextField,
   Typography,
+  ToggleButton,
+  ToggleButtonGroup,
   alpha,
   useMediaQuery,
   useTheme,
 } from '@neram/ui';
+import Link from 'next/link';
 import AddIcon from '@mui/icons-material/Add';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import CalendarMonthOutlinedIcon from '@mui/icons-material/CalendarMonthOutlined';
+import ViewListOutlinedIcon from '@mui/icons-material/ViewListOutlined';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import CloseIcon from '@mui/icons-material/Close';
 import EventBusyIcon from '@mui/icons-material/EventBusy';
@@ -68,8 +85,32 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { RADIUS } from '@/components/timetable/timetable-theme';
 import ClassAttendancePanel from '@/components/timetable/attendance/ClassAttendancePanel';
 import { SECTION_HEADING_SX, shortDate } from './shared';
-import type { ClassStat, RecapState, TabProps } from './types';
+import type { RecapState } from './types';
 import RecapReviewQueue from '@/components/class-recap/RecapReviewQueue';
+import CatchupCalendar, { monthTitle } from './CatchupCalendar';
+import type { CalendarClass } from '@/lib/catchup-calendar';
+
+/** One class, as the calendar endpoint returns it. */
+type ClassStat = CalendarClass;
+
+export type ClassesDisplay = 'calendar' | 'list';
+
+export interface ClassesViewProps {
+  classroomId: string | null;
+  /** The month's classes; null while loading. */
+  classes: CalendarClass[] | null;
+  today: string;
+  month: string;
+  onMonth: (next: string) => void;
+  display: ClassesDisplay;
+  onDisplay: (next: ClassesDisplay) => void;
+  openClassId: string | null;
+  onOpenClass: (id: string | null) => void;
+  /** Reload after a change (the class drawer, a recap, not taught). */
+  onReload: () => void;
+  /** Set when the teacher came from the Timetable: the drawer offers the way back. */
+  backHref?: string | null;
+}
 
 /**
  * `needs_recap` is gone.
@@ -96,12 +137,24 @@ function recapTone(state: RecapState): 'error' | 'warning' | 'info' | 'success' 
   return 'error';
 }
 
-/** Students who missed this class and have not finished catching up on it. */
+/** Students who owe this class and have not finished catching up on it. */
 function notCaughtUp(c: ClassStat): number {
-  return Math.max(0, c.missed - c.caughtUp);
+  return c.outstanding;
 }
 
-export default function ClassesRecapsTab({ data, onReload }: TabProps) {
+export default function ClassesRecapsTab({
+  classroomId,
+  classes,
+  today,
+  month,
+  onMonth,
+  display,
+  onDisplay,
+  openClassId,
+  onOpenClass,
+  onReload,
+  backHref,
+}: ClassesViewProps) {
   const theme = useTheme();
   const router = useRouter();
   const { getTeacherToken } = useNexusAuthContext();
@@ -118,7 +171,8 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
   const [needsYou, setNeedsYou] = useState<number | null>(null);
   const [busyClass, setBusyClass] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [openClassId, setOpenClassId] = useState<string | null>(null);
+  const setOpenClassId = onOpenClass;
+  const [moreEl, setMoreEl] = useState<HTMLElement | null>(null);
 
   /**
    * The row overflow, and what it can ask for.
@@ -183,26 +237,40 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
     [getTeacherToken],
   );
 
+  // The list reads like the old tab: classes already taught, newest first.
+  // Upcoming ones are only on the calendar, where the date explains them.
+  const classStats = useMemo(
+    () =>
+      (classes || [])
+        .filter((c) => c.health !== 'upcoming' && c.scheduled_date.slice(0, 7) === month)
+        .sort((a, b) => b.scheduled_date.localeCompare(a.scheduled_date)),
+    [classes, month],
+  );
+  const noRecording = useMemo(
+    () => classStats.filter((c) => c.recap_state === 'no_recording' && c.outstanding > 0),
+    [classStats],
+  );
+
   const blockingCount = useMemo(
-    () => data.classStats.filter((c) => c.blocked > 0).length,
-    [data.classStats],
+    () => classStats.filter((c) => c.blocked > 0).length,
+    [classStats],
   );
   /** Classes a student can already open and work through. The normal case. */
   const liveCount = useMemo(
-    () => data.classStats.filter((c) => c.recap_state === 'published').length,
-    [data.classStats],
+    () => classStats.filter((c) => c.recap_state === 'published').length,
+    [classStats],
   );
 
   const outstandingCount = useMemo(
-    () => data.classStats.filter((c) => notCaughtUp(c) > 0).length,
-    [data.classStats],
+    () => classStats.filter((c) => notCaughtUp(c) > 0).length,
+    [classStats],
   );
 
   const rows = useMemo(() => {
-    if (filter === 'blocking') return data.classStats.filter((c) => c.blocked > 0);
-    if (filter === 'not_caught_up') return data.classStats.filter((c) => notCaughtUp(c) > 0);
-    return data.classStats;
-  }, [data.classStats, filter]);
+    if (filter === 'blocking') return classStats.filter((c) => c.blocked > 0);
+    if (filter === 'not_caught_up') return classStats.filter((c) => notCaughtUp(c) > 0);
+    return classStats;
+  }, [classStats, filter]);
 
   /**
    * Walking the schedule inside the drawer.
@@ -212,8 +280,15 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
    * a class that filter excluded would be a different screen from the one they
    * were moving through.
    */
-  const openIndex = openClassId ? rows.findIndex((c) => c.id === openClassId) : -1;
-  const openClass = openIndex >= 0 ? rows[openIndex] : null;
+  // The calendar walks the month in date order; the list walks what it shows.
+  const walk = useMemo(
+    () => (display === 'calendar' ? [...classStats].sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date)) : rows),
+    [display, classStats, rows],
+  );
+  const openIndex = openClassId ? walk.findIndex((c) => c.id === openClassId) : -1;
+  // A deep link can name a class the current filter hides, or an upcoming one.
+  const openClass =
+    openIndex >= 0 ? walk[openIndex] : (classes || []).find((c) => c.id === openClassId) ?? null;
 
   /** Open the recap for a class, creating the draft first if there is not one. */
   const openRecap = useCallback(
@@ -346,7 +421,7 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
   }, [teacherFetch, onReload]);
 
   const createManual = useCallback(async () => {
-    if (!manualTitle.trim() || !manualUrl.trim() || !data.classroomId) return;
+    if (!manualTitle.trim() || !manualUrl.trim() || !classroomId) return;
     setCreatingManual(true);
     setError(null);
     try {
@@ -354,7 +429,7 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
         method: 'POST',
         body: JSON.stringify({
           title: manualTitle.trim(),
-          classroom_id: data.classroomId,
+          classroom_id: classroomId,
           recording_url: manualUrl.trim(),
         }),
       });
@@ -367,7 +442,33 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
     } finally {
       setCreatingManual(false);
     }
-  }, [manualTitle, manualUrl, data.classroomId, teacherFetch, router]);
+  }, [manualTitle, manualUrl, classroomId, teacherFetch, router]);
+
+  const viewSwitch = (
+    <Stack direction="row" spacing={0.5} alignItems="center">
+      <ToggleButtonGroup
+        size="small"
+        exclusive
+        value={display}
+        onChange={(_e, v) => v && onDisplay(v)}
+        aria-label="Show classes as"
+      >
+        <ToggleButton value="calendar" aria-label="Calendar" sx={{ minWidth: 44, minHeight: 44 }}>
+          <CalendarMonthOutlinedIcon fontSize="small" />
+        </ToggleButton>
+        <ToggleButton value="list" aria-label="List" sx={{ minWidth: 44, minHeight: 44 }}>
+          <ViewListOutlinedIcon fontSize="small" />
+        </ToggleButton>
+      </ToggleButtonGroup>
+      <IconButton
+        aria-label="More recap actions"
+        onClick={(e) => setMoreEl(e.currentTarget)}
+        sx={{ width: 44, height: 44 }}
+      >
+        <MoreVertIcon fontSize="small" />
+      </IconButton>
+    </Stack>
+  );
 
   return (
     <Box>
@@ -392,6 +493,9 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
           This screen used to open with a list of work. It opens with a fact
           now, because on a normal evening there is no work: the sweep has
           already published, and the row below is the receipt. */}
+      {/* Only once the month has loaded: "0 of 0 classes ... everyone has
+          caught up" on the way in is a claim about data we do not have yet. */}
+      {classes !== null && (
       <Box
         sx={{
           px: 1.75,
@@ -405,109 +509,60 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
         {/* Not gated on the queue above loading. These numbers came with the
             page and are already true; holding them behind a second request
             would put a skeleton over a fact we have. */}
+        {classStats.length === 0 ? (
+          <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.6 }}>
+            No classes taught in {monthTitle(month)} yet.
+          </Typography>
+        ) : (
         <Typography variant="body2" sx={{ color: 'text.secondary', lineHeight: 1.6 }}>
           <Box component="span" sx={{ fontWeight: 700, color: 'text.primary' }}>
-            {liveCount} of {data.classStats.length} classes
+            {liveCount} of {classStats.length} classes
           </Box>{' '}
-          are live for students, published automatically after each class ended.
+          in {monthTitle(month)} are live for students, published automatically after each class ended.
           {outstandingCount > 0
             ? ` ${outstandingCount} still have someone working through them.`
             : ' Everyone who missed a class has caught up.'}
         </Typography>
-      </Box>
-
-      <Box role="group" aria-label="Filter classes" sx={{
-          display: 'flex',
-          gap: 1,
-          mb: 1,
-          overflowX: 'auto',
-          pb: 0.5,
-          overscrollBehaviorX: 'contain',
-          '&::-webkit-scrollbar': { display: 'none' },
-          scrollbarWidth: 'none',
-          '& .MuiChip-root': { height: 44, borderRadius: 22, px: 0.5, flexShrink: 0, fontWeight: 700 },
-          // Scrolls sideways on a phone instead of wrapping to three lines, and
-          // fades at the edge so the hidden pills still announce themselves.
-          [theme.breakpoints.down('sm')]: {
-            mx: -2,
-            px: 2,
-            maskImage: 'linear-gradient(to right, #000 calc(100% - 32px), transparent)',
-            WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 32px), transparent)',
-          },
-        }}>
-        <Chip
-          label={`All ${data.classStats.length}`}
-          onClick={() => setFilter('all')}
-          color={filter === 'all' ? 'primary' : 'default'}
-          variant={filter === 'all' ? 'filled' : 'outlined'}
-        />
-        {blockingCount > 0 && (
-          <Chip
-            label={`Blocked on us ${blockingCount}`}
-            onClick={() => setFilter(filter === 'blocking' ? 'all' : 'blocking')}
-            color={filter === 'blocking' ? 'error' : 'default'}
-            variant={filter === 'blocking' ? 'filled' : 'outlined'}
-          />
-        )}
-        {outstandingCount > 0 && (
-          <Chip
-            label={`Still catching up ${outstandingCount}`}
-            onClick={() => setFilter(filter === 'not_caught_up' ? 'all' : 'not_caught_up')}
-            color={filter === 'not_caught_up' ? 'warning' : 'default'}
-            variant={filter === 'not_caught_up' ? 'filled' : 'outlined'}
-          />
         )}
       </Box>
+      )}
 
-      {/* Two equal buttons on a phone, where the long labels used to wrap
-          under the pills at two different widths. */}
-      <Box
-        sx={{
-          display: 'grid',
-          gridTemplateColumns: { xs: '1fr 1fr', sm: 'auto auto' },
-          justifyContent: { sm: 'end' },
-          gap: 1,
-          mb: 2,
-          '& .MuiButton-root': { whiteSpace: 'nowrap', minWidth: 0 },
-        }}
+      {/* Rarely needed escape hatches, so they live in a menu rather than
+          above the calendar: the sweep publishes recaps on its own. */}
+      <Menu
+        anchorEl={moreEl}
+        open={!!moreEl}
+        onClose={() => setMoreEl(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
-        {/* An escape hatch, not a chore.
-            Outlined rather than contained on purpose. The sweep now runs every
-            fifteen minutes from 20:45 IST and picks a class up in whichever pass
-            completes it, so there is normally nothing here to prepare. A filled
-            primary button reads as the thing a teacher is supposed to press, and
-            pressing it was exactly the manual step this pipeline exists to
-            remove. Kept because a Teams outage or a spent Gemini budget is still
-            worth being able to retry by hand. */}
-        <Button
-          size="small"
-          variant="outlined"
-          startIcon={<AutoAwesomeIcon />}
-          onClick={prepareMissing}
+        <MenuItem
           disabled={!!prep && !prep.finished}
-          sx={{ minHeight: 44, textTransform: 'none' }}
+          onClick={() => {
+            setMoreEl(null);
+            prepareMissing();
+          }}
+          sx={{ minHeight: 48 }}
         >
-          {prep && !prep.finished ? (
-            'Preparing...'
-          ) : (
-            <>
-              <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>Prepare missing</Box>
-              <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Prepare missing classes</Box>
-            </>
-          )}
-        </Button>
-        <Button
-          size="small"
-          variant="outlined"
-          startIcon={<AddIcon />}
-          onClick={() => setManualOpen(true)}
-          disabled={!data.classroomId}
-          sx={{ minHeight: 44, textTransform: 'none' }}
+          <ListItemIcon>
+            <AutoAwesomeIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Prepare missing classes" secondary="Build checkpoints for recorded classes" />
+        </MenuItem>
+        <MenuItem
+          disabled={!classroomId}
+          onClick={() => {
+            setMoreEl(null);
+            setManualOpen(true);
+          }}
+          sx={{ minHeight: 48 }}
         >
-          <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>From a link</Box>
-          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Recap from a link</Box>
-        </Button>
-      </Box>
+          <ListItemIcon>
+            <AddIcon fontSize="small" />
+          </ListItemIcon>
+          <ListItemText primary="Recap from a link" secondary="For a class not on the timetable" />
+        </MenuItem>
+      </Menu>
 
       {prep && (
         <Box
@@ -583,9 +638,64 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
         </Box>
       )}
 
-      {rows.length === 0 ? (
+      {display === 'calendar' ? (
+        <CatchupCalendar
+          month={month}
+          classes={classes}
+          today={today}
+          onMonth={onMonth}
+          onOpenClass={(id) => setOpenClassId(id)}
+          trailing={viewSwitch}
+        />
+      ) : (
+        <>
+          <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 1.5 }}>
+            <Typography component="h2" sx={{ fontWeight: 800, fontSize: { xs: '1rem', sm: '1.125rem' }, flex: 1, minWidth: 0 }}>
+              {monthTitle(month)}
+            </Typography>
+            {viewSwitch}
+          </Stack>
+          <Box role="group" aria-label="Filter classes" sx={{
+              display: 'flex',
+              gap: 1,
+              mb: 2,
+              flexWrap: 'wrap',
+              '& .MuiChip-root': { height: 44, borderRadius: 22, px: 0.5, fontWeight: 700 },
+            }}>
+            <Chip
+              label={`All ${classStats.length}`}
+              onClick={() => setFilter('all')}
+              color={filter === 'all' ? 'primary' : 'default'}
+              variant={filter === 'all' ? 'filled' : 'outlined'}
+            />
+            {blockingCount > 0 && (
+              <Chip
+                label={`Blocked on us ${blockingCount}`}
+                onClick={() => setFilter(filter === 'blocking' ? 'all' : 'blocking')}
+                color={filter === 'blocking' ? 'error' : 'default'}
+                variant={filter === 'blocking' ? 'filled' : 'outlined'}
+              />
+            )}
+            {outstandingCount > 0 && (
+              <Chip
+                label={`Still catching up ${outstandingCount}`}
+                onClick={() => setFilter(filter === 'not_caught_up' ? 'all' : 'not_caught_up')}
+                color={filter === 'not_caught_up' ? 'warning' : 'default'}
+                variant={filter === 'not_caught_up' ? 'filled' : 'outlined'}
+              />
+            )}
+          </Box>
+      {classes === null ? (
+        <Stack spacing={1}>
+          {[0, 1, 2].map((i) => (
+            <Box key={i} sx={{ height: 132, borderRadius: RADIUS.card, bgcolor: alpha(theme.palette.text.disabled, 0.08) }} />
+          ))}
+        </Stack>
+      ) : rows.length === 0 ? (
         <Alert severity="success" sx={{ borderRadius: 2 }}>
-          Nothing outstanding. Every recent class has what a student needs to catch up on it.
+          {classStats.length === 0
+            ? `No classes were taught in ${monthTitle(month)}.`
+            : 'Nothing outstanding. Every class this month has what a student needs to catch up on it.'}
         </Alert>
       ) : (
         <Stack spacing={1}>
@@ -794,14 +904,16 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
           })}
         </Stack>
       )}
+        </>
+      )}
 
-      {data.noRecording.length > 0 && filter === 'all' && (
+      {noRecording.length > 0 && (display === 'calendar' || filter === 'all') && (
         <Box sx={{ mt: 3.5 }}>
           <Typography sx={SECTION_HEADING_SX}>Counts for nobody</Typography>
           <Alert severity="info" sx={{ borderRadius: 2 }}>
-            {data.noRecording.length === 1
+            {noRecording.length === 1
               ? '1 class has no recording at all, so it holds nobody back and counts against nobody.'
-              : `${data.noRecording.length} classes have no recording at all, so they hold nobody back and count against nobody.`}{' '}
+              : `${noRecording.length} classes have no recording at all, so they hold nobody back and count against nobody.`}{' '}
             Add a recording and every affected student gets the class back on their list on its own.
           </Alert>
         </Box>
@@ -902,7 +1014,7 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
               size="small"
               disabled={notTaughtBusy}
               onClick={() => {
-                const target = data.classStats.find((c) => c.id === undoOffer?.classId);
+                const target = classStats.find((c) => c.id === undoOffer?.classId);
                 setUndoOffer(null);
                 // The row has already gone from `classStats`, so rebuild the
                 // little the undo needs rather than depending on finding it.
@@ -941,8 +1053,20 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
           },
         }}
       >
-        {openClass && data.classroomId && (
+        {openClass && classroomId && (
           <>
+            {backHref && (
+              <Box sx={{ px: 1, pt: 1 }}>
+                <Button
+                  component={Link}
+                  href={backHref}
+                  startIcon={<ArrowBackIcon />}
+                  sx={{ textTransform: 'none', minHeight: 44, fontWeight: 700 }}
+                >
+                  Back to timetable
+                </Button>
+              </Box>
+            )}
             <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, p: 2, pb: 1 }}>
               <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
@@ -967,14 +1091,14 @@ export default function ClassesRecapsTab({ data, onReload }: TabProps) {
               key={openClass.id}
               classId={openClass.id}
               classTitle={openClass.title || 'Class'}
-              classroomId={data.classroomId}
+              classroomId={classroomId}
               teamsMeetingId={openClass.teams_meeting_id ?? null}
               getToken={getTeacherToken}
               onChanged={onReload}
-              navLabel={`${openIndex + 1} of ${rows.length}`}
-              onPrev={openIndex > 0 ? () => setOpenClassId(rows[openIndex - 1].id) : undefined}
+              navLabel={openIndex >= 0 ? `${openIndex + 1} of ${walk.length}` : undefined}
+              onPrev={openIndex > 0 ? () => setOpenClassId(walk[openIndex - 1].id) : undefined}
               onNext={
-                openIndex < rows.length - 1 ? () => setOpenClassId(rows[openIndex + 1].id) : undefined
+                openIndex >= 0 && openIndex < walk.length - 1 ? () => setOpenClassId(walk[openIndex + 1].id) : undefined
               }
             />
           </>

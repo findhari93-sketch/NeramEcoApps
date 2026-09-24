@@ -25,6 +25,9 @@ import {
 } from '../date-utils';
 import { RADIUS, pulseAnimation, statusColor, tagSx } from '../timetable-theme';
 import CalendarEmptyState from './CalendarEmptyState';
+import CatchupBadge, { CatchupDot } from '../CatchupBadge';
+import { catchupSentence } from '../catchup-badge';
+import type { CalendarClass } from '@/lib/catchup-calendar';
 
 const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -77,6 +80,13 @@ interface MonthViewProps {
   todayISO?: string;
   /** Tapping the day-level figure. The one tap target this feature adds. */
   onOpenDayAvailability?: (iso: string) => void;
+  /**
+   * Staff only: catch-up status for past classes, already filtered to the ones
+   * worth a badge. A 20px chip only has room for a dot (the words go in its
+   * label and title); the phone day list shows the full badge. Absent on the
+   * student timetable, which renders exactly as before.
+   */
+  catchupByClassId?: Map<string, CalendarClass>;
 }
 
 /**
@@ -101,6 +111,7 @@ export default function MonthView({
   forecastByDate,
   todayISO,
   onOpenDayAvailability,
+  catchupByClassId,
 }: MonthViewProps) {
   const theme = useTheme();
   const isCompact = useMediaQuery(theme.breakpoints.down('md'));
@@ -112,6 +123,8 @@ export default function MonthView({
   const today = todayISO || formatDateISO(new Date());
   const forecastOn = (iso: string): DayForecast | null =>
     role === 'teacher' && iso >= today ? forecastByDate?.[iso] ?? null : null;
+  const catchupOf = (id: string): CalendarClass | undefined =>
+    role === 'teacher' ? catchupByClassId?.get(id) : undefined;
 
   const classesByDate = useMemo(() => {
     const map: Record<string, ClassCardData[]> = {};
@@ -336,7 +349,9 @@ export default function MonthView({
             <CalendarEmptyState role={role} period="day" />
           ) : (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-              {dayClasses.map((cls) => (
+              {dayClasses.map((cls) => {
+                const catchup = catchupOf(cls.id);
+                const row = (
                 <Box
                   key={cls.id}
                   component="button"
@@ -351,6 +366,10 @@ export default function MonthView({
                     minHeight: 56,
                     px: 1.5,
                     py: 1.25,
+                    // The catch-up badge is laid over the row's foot as a
+                    // sibling link (a link inside a button is invalid), so the
+                    // row keeps a 44px strip clear for its tap target.
+                    ...(catchup && { pb: '52px' }),
                     textAlign: 'left',
                     font: 'inherit',
                     cursor: 'pointer',
@@ -380,7 +399,24 @@ export default function MonthView({
                     </Typography>
                   )}
                 </Box>
-              ))}
+                );
+                if (!catchup) return row;
+                return (
+                  <Box key={cls.id} sx={{ position: 'relative' }}>
+                    {row}
+                    <CatchupBadge
+                      c={catchup}
+                      size="row"
+                      sx={{
+                        position: 'absolute',
+                        left: 15,
+                        bottom: 10,
+                        maxWidth: 'calc(100% - 27px)',
+                      }}
+                    />
+                  </Box>
+                );
+              })}
             </Box>
           )}
         </Box>
@@ -631,13 +667,19 @@ export default function MonthView({
                   {shown.map((cls) => {
                     const live = cls.status === 'live';
                     const declined = myRsvps?.[cls.id] === 'not_attending';
+                    const catchup = catchupOf(cls.id);
+                    // A 20px chip has room for a dot and nothing else, so the
+                    // words ride on the label and the hover title instead.
+                    const chipTitle = `${formatTimeCompact(cls.start_time)} ${cls.title}`;
                     return (
                       <Box
                         key={cls.id}
                         component="button"
                         type="button"
                         onClick={() => onClassClick?.(cls)}
-                        title={`${formatTimeCompact(cls.start_time)} ${cls.title}`}
+                        title={catchup ? `${chipTitle}. ${catchupSentence(catchup)}` : chipTitle}
+                        aria-label={catchup ? `${chipTitle}, ${catchupSentence(catchup)}` : undefined}
+                        data-catchup={catchup?.health}
                         sx={{
                           position: 'relative',
                           zIndex: 1,
@@ -704,6 +746,7 @@ export default function MonthView({
                         >
                           {cls.title}
                         </Box>
+                        {catchup && <CatchupDot c={catchup} sx={{ ml: 'auto' }} />}
                       </Box>
                     );
                   })}

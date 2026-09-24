@@ -207,6 +207,11 @@ export const FEATURES: FeatureDef[] = [
   // holding the test door shut. OFF until the manual message from the Behind on
   // catch-up tile has been used for a week.
   { id: 'staff.test-chase', label: 'Automatic chase for students whose catch-up is holding up a test', surface: 'staff', group: 'Management', paths: [], defaultEnabled: false },
+  // Behaviour switch, not a page. A personal Neram Assistant message the moment
+  // a student clears a missed class, and a bigger one when nothing is left.
+  // Replaced the class-group Teams post (2026-10). ON by default; turn it off
+  // here to pause every automatic congratulation without a deploy.
+  { id: 'staff.catchup-auto-congrats', label: 'Congratulate students automatically when they clear a missed class', surface: 'staff', group: 'Management', paths: [], defaultEnabled: true },
   // Behaviour switch, not a page. Messages Not started students (never entered
   // Nexus) on day 1, 3 and 7. OFF until each live classroom has a connected Teams
   // sender, because a student stuck at the photo gate cannot see the Nexus bell.

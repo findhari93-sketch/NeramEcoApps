@@ -2,6 +2,7 @@
 
 import { Box, Button, Chip, Divider, Typography } from '@neram/ui';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
+import ClassOutcomeCard from './ClassOutcomeCard';
 import ClassCaptureView from '../ClassCaptureView';
 import WrapUpSection from '../WrapUpSection';
 import ClassFeedbackSection from './ClassFeedbackSection';
@@ -30,8 +31,6 @@ export default function AfterTab(props: ClassPanelTabProps) {
     state,
     role,
     classroomId,
-    rsvpSummary,
-    attendanceSummary,
     myAttended,
     myAbsence,
     getToken,
@@ -46,6 +45,12 @@ export default function AfterTab(props: ClassPanelTabProps) {
   } = props;
 
   const isTeacher = role === 'teacher';
+  // The class's own classroom: a Common class can sit in another one, and the
+  // attendance routes 404 on a mismatch.
+  const ownClassroomId =
+    ((cls as unknown as { classroom_id?: string }).classroom_id as string | undefined) ||
+    cls.classroom?.id ||
+    classroomId;
   const { hasRecording, hasMeeting } = state;
 
   // Both derived in class-state, so the chip and the button can never tell the
@@ -55,93 +60,18 @@ export default function AfterTab(props: ClassPanelTabProps) {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      {/* The RSVP-only chip reads as real turnout but is not, so once a class
-          has happened show Total / Opted in / Attended side by side. Attended
-          comes from real Teams/manual data (nexus_attendance), "Not synced yet"
-          until the teacher runs Sync from Teams or Teams itself has not
-          published the report. */}
-      {isTeacher && rsvpSummary && (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, p: 1.5, bgcolor: 'grey.50', borderRadius: 1 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <PeopleAltIcon sx={{ fontSize: 20, color: 'text.secondary' }} />
-            <Typography variant="body2" sx={{ fontWeight: 600 }}>
-              Attendance
-            </Typography>
-            {/* Into the attendance panel, not the RSVP dashboard. On a class
-                that has already run, "details" means who actually came and who
-                still owes it; the RSVP dashboard only knows who said in advance
-                that they would be there, which is the least interesting fact
-                available by this point. */}
-            {onOpenAttendance && (
-              <Typography
-                variant="caption"
-                color="primary"
-                sx={{ ml: 'auto', cursor: 'pointer', fontWeight: 700 }}
-                onClick={() => onOpenAttendance(cls)}
-              >
-                View details →
-              </Typography>
-            )}
-          </Box>
-          <Box sx={{ display: 'flex', gap: 3 }}>
-            {/* "Expected", not "Total". Away students leave this denominator,
-                so on a class that has already run "Total 22, Attended 25" was
-                reachable and read as nonsense. The roll is still stated, beside
-                the away count that explains the gap. */}
-            <Box>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                Expected
-              </Typography>
-              <Typography variant="body1" sx={{ fontWeight: 700 }}>
-                {rsvpSummary.total}
-              </Typography>
-            </Box>
-            {rsvpSummary.away > 0 && (
-              <Box>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                  Away
-                </Typography>
-                <Typography variant="body1" sx={{ fontWeight: 700 }}>
-                  {rsvpSummary.away}
-                </Typography>
-              </Box>
-            )}
-            <Box>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                Opted in
-              </Typography>
-              <Typography variant="body1" sx={{ fontWeight: 700 }}>
-                {rsvpSummary.attending}
-              </Typography>
-            </Box>
-            <Box>
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                Attended
-              </Typography>
-              {cls.attendance_synced_at ? (
-                <Typography variant="body1" sx={{ fontWeight: 700, color: 'success.main' }}>
-                  {attendanceSummary?.present ?? 0}
-                </Typography>
-              ) : (
-                <Typography variant="body2" color="text.secondary">
-                  Not synced yet
-                </Typography>
-              )}
-            </Box>
-          </Box>
-
-          {/* Attendance says who was here. This says what happened to everyone
-              who was not, which is the half the panel never showed. No link of
-              its own: "View details" above opens the same roster, and the
-              cross-class catch-up page this used to jump to lost the class the
-              teacher was looking at. */}
-          {(attendanceSummary?.missed ?? 0) > 0 && (
-            <Typography variant="caption" color="text.secondary">
-              {attendanceSummary?.missed} missed · {attendanceSummary?.explained ?? 0} explained ·{' '}
-              {attendanceSummary?.caughtUp ?? 0} caught up
-            </Typography>
-          )}
-        </Box>
+      {/* How this class went: who came, and for everyone who did not, whether
+          they told us why and whether they have caught up, plus the class's
+          homework. Reads the same payload as the Attendance dialog, so the two
+          can never disagree (the old row read a per-class fan-out the timetable
+          skips in Month view, and printed "Attended 0" beside a dialog of 20). */}
+      {isTeacher && (
+        <ClassOutcomeCard
+          classId={cls.id}
+          classroomId={ownClassroomId}
+          getToken={getToken}
+          onOpen={onOpenAttendance ? (opts) => onOpenAttendance(cls, opts) : undefined}
+        />
       )}
 
       {standing && (

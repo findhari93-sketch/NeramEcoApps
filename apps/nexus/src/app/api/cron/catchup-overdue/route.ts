@@ -4,6 +4,7 @@ import { assertCronRequest } from '@/lib/cron-auth';
 import { sweepOverdueMissedClasses } from '@/lib/catchup-overdue';
 import { FEATURE_FLAGS_KEY, isFeatureEnabled, resolveFlags } from '@/lib/feature-flags';
 import { sweepTestChase } from '@/lib/test-chase';
+import { sweepUncongratulatedClears } from '@/lib/catchup-congrats';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,7 +56,15 @@ export async function GET(request: NextRequest) {
           })
         : null;
 
-    return NextResponse.json({ ok: true, ...result, chase, ms: Date.now() - startedAt });
+    // THIRD PASS: good news the student routes did not get to (a test passed
+    // and the app never reopened). See lib/catchup-congrats.ts.
+    const congrats = await sweepUncongratulatedClears(supabase, { dryRun }).catch((err) => ({
+      pairs: 0,
+      messaged: 0,
+      skipped: err instanceof Error ? err.message : 'failed',
+    }));
+
+    return NextResponse.json({ ok: true, ...result, chase, congrats, ms: Date.now() - startedAt });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Overdue catch-up sweep failed';
     console.error('[cron catchup-overdue] failed:', message);

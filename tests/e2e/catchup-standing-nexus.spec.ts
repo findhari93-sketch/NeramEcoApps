@@ -4,6 +4,10 @@ import { APP_URLS, getTestAuthToken } from '../utils/credentials';
 /**
  * Standing: who owes nothing, and who is ignoring us.
  *
+ * (The Standing tab itself was folded into the All clear stat card in the
+ * 2026-10 redesign, and the class-group Teams post retired. The contracts
+ * below are what that card and the personal note still read and write.)
+ *
  * API level rather than browser level, for the same reason as
  * catchup-missed-nexus.spec.ts: the Entra tenant forces MFA and the test
  * accounts cannot complete an interactive sign-in.
@@ -21,6 +25,7 @@ import { APP_URLS, getTestAuthToken } from '../utils/credentials';
  */
 
 const NEXUS = APP_URLS.nexus;
+const ZERO = '00000000-0000-0000-0000-000000000000';
 
 async function getWarm(request: any, url: string, headers: Record<string, string>) {
   let res = await request.get(url, { headers });
@@ -31,7 +36,7 @@ async function getWarm(request: any, url: string, headers: Record<string, string
   return res;
 }
 
-test.describe('Nexus — catch-up standing', () => {
+test.describe('Nexus: catch-up standing', () => {
   test('the overview is refused without auth', async ({ request }) => {
     const res = await request.get(`${NEXUS}/api/catchup/overview`);
     expect(res.status()).not.toBe(200);
@@ -145,15 +150,15 @@ test.describe('Nexus — catch-up standing', () => {
     expect(buckets.slice(firstClear).every((b: string) => b === 'all_clear')).toBe(true);
   });
 
-  test('the celebration post refuses an unauthenticated caller', async ({ request }) => {
+  test('a note refuses an unauthenticated caller', async ({ request }) => {
     const res = await request.post(`${NEXUS}/api/catchup/celebrate`, {
-      data: { classroomId: '00000000-0000-0000-0000-000000000000', postToTeams: 'channel' },
+      data: { classroomId: ZERO, mode: 'note', studentIds: [] },
     });
     expect(res.status()).not.toBe(200);
     expect([400, 401, 403, 500]).toContain(res.status());
   });
 
-  test('a student cannot post a celebration', async ({ request }) => {
+  test('a student cannot send a note', async ({ request }) => {
     const auth = await getTestAuthToken(request, 'student');
     if (!auth) {
       test.skip(true, 'Nexus dev server / test-login unavailable');
@@ -161,9 +166,48 @@ test.describe('Nexus — catch-up standing', () => {
     }
     const res = await request.post(`${NEXUS}/api/catchup/celebrate`, {
       headers: { Authorization: `Bearer ${auth.testToken}` },
-      data: { classroomId: '00000000-0000-0000-0000-000000000000', postToTeams: 'channel' },
+      data: { classroomId: ZERO, mode: 'note', studentIds: [] },
     });
     expect([401, 403]).toContain(res.status());
+  });
+
+  test('the retired class-group post answers 410 Gone, and posts nothing', async ({ request }) => {
+    // The "Congratulate in Teams" group post was retired in 2026-10. An old tab
+    // or a stale client still sending mode 'post' must be told so plainly, not
+    // silently fall through to a note or a mark.
+    const auth = await getTestAuthToken(request, 'teacher');
+    if (!auth) {
+      test.skip(true, 'Nexus dev server / test-login unavailable');
+      return;
+    }
+    const res = await request.post(`${NEXUS}/api/catchup/celebrate`, {
+      headers: { Authorization: `Bearer ${auth.testToken}` },
+      data: { classroomId: ZERO, mode: 'post', postToTeams: 'channel' },
+    });
+    expect(res.status()).toBe(410);
+    expect((await res.json()).error).toMatch(/retired/i);
+  });
+
+  test('a note naming nobody is refused, never widened to the whole class', async ({ request }) => {
+    // The server intersects the selection with who is clear right now, so an
+    // empty selection must mean nobody. Reading it as "everyone" would message
+    // every all-clear student in the classroom.
+    const auth = await getTestAuthToken(request, 'teacher');
+    if (!auth) {
+      test.skip(true, 'Nexus dev server / test-login unavailable');
+      return;
+    }
+    const headers = { Authorization: `Bearer ${auth.testToken}` };
+    const overview = await getWarm(request, `${NEXUS}/api/catchup/overview`, headers);
+    expect(overview.status()).toBe(200);
+    const classroomId = (await overview.json()).classroomId;
+    test.skip(!classroomId, 'No classroom for this teacher');
+
+    const res = await request.post(`${NEXUS}/api/catchup/celebrate`, {
+      headers,
+      data: { classroomId, mode: 'note', studentIds: [], message: 'E2E: must never be sent' },
+    });
+    expect(res.status()).toBe(400);
   });
 
   // ── Who has already been congratulated ────────────────────────────────────
@@ -244,7 +288,9 @@ test.describe('Nexus — catch-up standing', () => {
       expect(s).toHaveProperty('celebration');
       if (s.celebration) {
         expect(['congratulated', 'cleared_again']).toContain(s.celebration.state);
-        expect(['teams', 'marked']).toContain(s.celebration.source);
+        // 'teams' is history (the retired group post), 'auto' the automatic
+        // per-class congratulation, 'note' a teacher's personal note.
+        expect(['teams', 'marked', 'auto', 'note']).toContain(s.celebration.source);
         expect(s.celebration.count).toBeGreaterThanOrEqual(1);
       }
     }

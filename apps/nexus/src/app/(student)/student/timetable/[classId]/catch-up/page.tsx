@@ -123,6 +123,16 @@ interface CatchUpData {
   blockedReason: string | null;
   /** False for someone who joined after the class ran: nothing to explain. */
   reasonRequired: boolean;
+  /**
+   * What they already told us about this class and where: before class (RSVP),
+   * an away window, or on this screen. Null when nobody has said anything.
+   */
+  reason?: {
+    code: string;
+    note: string | null;
+    source: 'before_class' | 'away' | 'after_class' | 'parent' | 'teacher';
+    said: string;
+  } | null;
   hasRecording: boolean;
   /**
    * The day this must be cleared by. Null until the student starts it: the
@@ -269,6 +279,15 @@ export default function CatchUpPage() {
   // Someone who joined after this class ran. Nothing to explain, and a test to
   // pass at the end.
   const lateJoiner = !data.reasonRequired;
+  // They already told us, before the class or by declaring time away. Asking
+  // again was the single most repeated complaint about this screen, so the
+  // step disappears and one line says their answer back instead.
+  const toldUsEarlier =
+    !!data.reason && (data.reason.source === 'before_class' || data.reason.source === 'away');
+  const askReason = data.reasonRequired && !toldUsEarlier;
+  const reasonLabel = (code: string | null | undefined, note: string | null | undefined) =>
+    [RSVP_REASONS.find((r) => r.code === code)?.label, note?.trim()].filter(Boolean).join(', ') ||
+    'Reason given';
 
   // Numbered in the order they are actually shown, so a newcomer never reads
   // "2. Watch the recording" as their first instruction.
@@ -281,7 +300,7 @@ export default function CatchUpPage() {
   const stepNo = (() => {
     let n = 0;
     return {
-      reason: data.reasonRequired ? ++n : 0,
+      reason: askReason ? ++n : 0,
       watch: ++n,
       work: ++n,
       test: separateTestStep ? ++n : 0,
@@ -466,18 +485,25 @@ export default function CatchUpPage() {
         </Alert>
       )}
 
+      {toldUsEarlier && data.reason && (
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+          {data.reason.said}: {reasonLabel(data.reason.code, data.reason.note)}. No need to tell us again.
+        </Typography>
+      )}
+
       <Stack spacing={1.25}>
         {/* Why. The only part the teacher cannot find out any other way, and
-            only a question worth asking of someone who was actually enrolled. */}
-        {data.reasonRequired && stepBox(
+            only a question worth asking of someone who was actually enrolled
+            and has not already told us. */}
+        {askReason && stepBox(
           stepNo.reason,
           steps.reasonGiven,
           'Tell us why you missed it',
           steps.reasonGiven ? (
             <Typography variant="body2" color="text.secondary">
-              {RSVP_REASONS.find((r) => r.code === data.absence?.reason_code)?.label ||
-                'Reason given'}
-              {data.absence?.reason_note ? `, ${data.absence.reason_note}` : ''}
+              {data.reason
+                ? reasonLabel(data.reason.code, data.reason.note)
+                : reasonLabel(data.absence?.reason_code, data.absence?.reason_note)}
             </Typography>
           ) : (
             <>

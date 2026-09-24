@@ -54,6 +54,8 @@ const ASSISTANT: Record<string, string> = {
     'A student asking about their result. Generated from their own data, and sent to STAFF, who are not who raised it.',
   'apps/nexus/src/lib/notify-students.ts':
     'Class notices: created, moved, cancelled, recording up, week published. An announcement to a class.',
+  'apps/nexus/src/lib/catchup-congrats.ts':
+    'Well done on a cleared class, and on a clean slate. The system noticed; nobody pressed anything.',
 };
 
 /**
@@ -64,6 +66,7 @@ const FROM_TEACHER: Record<string, string> = {
   'apps/nexus/src/app/api/assignments/nudge/route.ts': 'A teacher chasing named students.',
   'apps/nexus/src/app/api/assignments/[id]/route.ts': 'A teacher marked their work.',
   'apps/nexus/src/app/api/catchup/nudge/route.ts': 'A teacher asking why.',
+  'apps/nexus/src/app/api/catchup/celebrate/route.ts': "A teacher's personal note to a student who is all clear.",
   'apps/nexus/src/app/api/timetable/[classId]/catchup-nudge/route.ts': 'A teacher asking why.',
   'apps/nexus/src/app/api/tests/runs/[placementId]/message/route.ts':
     'The Message button on the Students tab: a teacher typed it.',

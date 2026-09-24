@@ -57,3 +57,27 @@ describe('formatInspirationCredit', () => {
     for (const line of all) expect(line).not.toMatch(/—|--/);
   });
 });
+
+describe('featured credit', () => {
+  const featured = (over: Partial<CreditInput> = {}): CreditInput => ({
+    kind: 'submission_original',
+    firstName: 'Harshitaa',
+    lastName: 'Thiyagu',
+    fullName: 'Harshitaa  Thiyagu',
+    isAlumni: false,
+    examYear: 2026,
+    optedOut: false,
+    featured: true,
+    ...over,
+  });
+
+  it('spells the name out in full', () => {
+    expect(formatInspirationCredit(featured())).toBe('Harshitaa Thiyagu · 2026 batch');
+    expect(formatInspirationCredit(featured({ fullName: null }))).toBe('Harshitaa Thiyagu · 2026 batch');
+  });
+
+  it('still hides an opted-out student, and leaves references short', () => {
+    expect(formatInspirationCredit(featured({ optedOut: true }))).toBe('Neram student');
+    expect(formatInspirationCredit(featured({ kind: 'submission_reference' }))).toBe("Neram reference · from Harshitaa T.'s drawing");
+  });
+});

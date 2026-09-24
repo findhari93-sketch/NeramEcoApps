@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { APP_URLS, injectAuthForPage } from '../utils/credentials';
 import { assertNoHorizontalOverflow, assertTouchTargetSize } from '../utils/mobile-helpers';
+import { mockCatchupApis, openTeacherCatchup, skipWelcome, studentRows } from '../utils/catchup-helpers';
 
 /**
  * The catch-up screens in a real browser at a real phone size.
@@ -162,54 +163,92 @@ test.describe('Catch-up (mobile)', () => {
     await context.close();
   });
 
-  test('375px: the teacher can switch tabs without the layout breaking', async ({ browser }) => {
+  test('375px: the teacher can switch views without the layout breaking', async ({ browser }) => {
     const context = await browser.newContext({ viewport: PHONE });
     const page = await context.newPage();
 
     const injected = await injectAuthForPage(page, 'teacher');
     test.skip(!injected, 'Nexus test-login unavailable');
+    await skipWelcome(page);
 
     await page.goto(`${NEXUS}/teacher/catch-up`, { waitUntil: 'domcontentloaded' });
     await waitForScreen(page, /catch-up/i);
 
-    // Asserted present, not skipped when missing. The previous version of this
-    // loop named the old tabs and `continue`d past every one it could not find,
-    // so it stayed green through a rename that removed all of them.
-    for (const label of [/reasons/i, /caught up/i, /classes and recaps/i, /needs action/i]) {
-      const tab = page.getByRole('tab', { name: label }).first();
-      await expect(tab, `the ${label} tab must exist`).toBeVisible();
+    // Asserted present, not skipped when missing. An earlier version of this
+    // loop `continue`d past every tab it could not find, so it stayed green
+    // through a rename that removed all of them. The four tabs are now two views.
+    const views = page.getByRole('tablist', { name: 'Catch-up views' });
+    for (const label of ['Calendar', 'Students']) {
+      const tab = views.getByRole('tab', { name: label });
+      await expect(tab, `the ${label} view must exist`).toBeVisible();
       await tab.click();
+      await expect(tab).toHaveAttribute('aria-selected', 'true');
       await page.waitForTimeout(700);
       await assertNoHorizontalOverflow(page);
+    }
+    // The tabs that were retired stay retired.
+    for (const gone of [/needs action/i, /^reasons/i, /^standing/i, /classes and recaps/i]) {
+      await expect(page.getByRole('tab', { name: gone })).toHaveCount(0);
     }
 
     await context.close();
   });
 
-  test('375px: a reason shows the words the student typed, not just a category', async ({
+  test('375px: the student sheet shows why each class was missed, in their words', async ({
     browser,
   }) => {
+    // Replaces the Reasons feed. A reason now sits on each class in the student
+    // sheet, wherever the student gave it (RSVP, away window, afterwards), and a
+    // class nobody explained says so in red rather than showing nothing.
+    // Mocked: the E2E classroom on staging has no absences to explain.
     const context = await browser.newContext({ viewport: PHONE });
     const page = await context.newPage();
 
     const injected = await injectAuthForPage(page, 'teacher');
     test.skip(!injected, 'Nexus test-login unavailable');
+    await skipWelcome(page);
+    await mockCatchupApis(page);
 
-    await page.goto(`${NEXUS}/teacher/catch-up?tab=reasons`, { waitUntil: 'domcontentloaded' });
-    await waitForScreen(page, /catch-up/i);
+    // Anitha Raman is on track with two classes, an exam clash and an "other",
+    // both told afterwards and both with a note in her own words.
+    await openTeacherCatchup(page, 'd=on_track');
+    await page.getByRole('button', { name: /^Anitha Raman, On track,/ }).click();
 
-    const empty = page.getByText(/nobody has explained a missed class yet/i);
-    if (await empty.isVisible().catch(() => false)) {
-      test.skip(true, 'Nobody has explained a missed class in this environment');
-    }
+    const sheet = page.getByRole('dialog', { name: 'Anitha Raman, catch-up' });
+    await expect(sheet).toBeVisible();
+    await expect(sheet.getByText(/^Classes \(\d+\)$/)).toBeVisible();
+    await expect(sheet.getByText(/Told us before class|Told us afterwards|Away \d+ \w+ to \d+ \w+/).first()).toBeVisible();
+    // The words the student typed, not just the category.
+    await expect(sheet.getByText(/"[^"]+"/).first()).toBeVisible();
 
-    // Either a quote is rendered or the feed says there is nothing. A feed that
-    // lists people and shows no reason is the bug this tab was built to fix.
-    const quoted = page.locator('text=/[""].+[""]/');
-    const chips = page.locator('.MuiChip-root');
-    expect((await quoted.count()) + (await chips.count())).toBeGreaterThan(0);
-
+    // A bottom sheet on a phone: it spans the width and sits on the bottom edge.
+    const box = await sheet.boundingBox();
+    expect(Math.round(box!.width)).toBeGreaterThanOrEqual(370);
+    expect(Math.round(box!.y + box!.height)).toBeGreaterThanOrEqual(810);
+    await assertTouchTargetSize(page, '[role="dialog"] button:has-text("Excuse")', 44);
     await assertNoHorizontalOverflow(page);
+
+    await sheet.getByRole('button', { name: 'Close' }).click();
+    await expect(sheet).toHaveCount(0);
+    await context.close();
+  });
+
+  test('375px: a class nobody explained says "No reason given"', async ({ browser }) => {
+    const context = await browser.newContext({ viewport: PHONE });
+    const page = await context.newPage();
+
+    const injected = await injectAuthForPage(page, 'teacher');
+    test.skip(!injected, 'Nexus test-login unavailable');
+    await skipWelcome(page);
+    await mockCatchupApis(page);
+
+    await openTeacherCatchup(page, 'reason=none');
+    const row = studentRows(page).first();
+    await expect(row).toBeVisible();
+    const name = ((await row.getAttribute('aria-label')) || '').split(',')[0];
+    await row.click();
+    const sheet = page.getByRole('dialog', { name: `${name}, catch-up` });
+    await expect(sheet.getByText('No reason given').first()).toBeVisible();
     await context.close();
   });
 

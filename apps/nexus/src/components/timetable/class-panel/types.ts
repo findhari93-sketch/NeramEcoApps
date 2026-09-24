@@ -1,3 +1,4 @@
+import type { AttendanceFilter, AttendanceTabKey } from '../attendance/types';
 import type { ReactNode } from 'react';
 import type { ClassCardData } from '../ClassCard';
 import type { ClassPrepSummaryClient } from '../PrepGateCard';
@@ -143,7 +144,10 @@ export interface ClassPanelProps {
   onRsvp?: (classId: string, response: 'attending' | 'not_attending') => void;
   onRate?: (cls: ClassCardData) => void;
   /** Open the merged register + analytics dialog for this class. */
-  onOpenAttendance?: (cls: ClassCardData) => void;
+  onOpenAttendance?: (
+    cls: ClassCardData,
+    opts?: { tab?: AttendanceTabKey; filter?: AttendanceFilter | null },
+  ) => void;
   onSyncRecording?: (cls: ClassCardData) => void;
   onCreateMeeting?: (cls: ClassCardData) => void;
   /** Move this class to another day or time. See RescheduleDialog. */

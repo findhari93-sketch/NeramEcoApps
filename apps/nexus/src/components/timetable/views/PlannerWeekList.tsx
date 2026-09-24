@@ -13,6 +13,8 @@ import { LAYOUT, RADIUS, SHADOW, iconTagSx, tagSx } from '../timetable-theme';
 import ClassCoverThumb from '../ClassCoverThumb';
 import { announce, compactLabel } from '@/lib/class-availability';
 import type { RsvpSummary } from '@/app/api/timetable/rsvp-dashboard/route';
+import type { CalendarClass } from '@/lib/catchup-calendar';
+import CatchupBadge from '../CatchupBadge';
 
 const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
@@ -39,6 +41,11 @@ interface PlannerWeekListProps {
    * because it is a distinct intent: attach work, not inspect the class.
    */
   onAssignmentClick?: (cls: ClassCardData, anchor: HTMLElement) => void;
+  /**
+   * Catch-up standing per past class. This is the teacher's landing view, so
+   * it is where "3 to catch up" is most likely to be seen. Absent: nothing drawn.
+   */
+  catchupByClassId?: Map<string, CalendarClass>;
 }
 
 /**
@@ -61,6 +68,7 @@ export default function PlannerWeekList({
   onSelect,
   onAddClass,
   onAssignmentClick,
+  catchupByClassId,
 }: PlannerWeekListProps) {
   const theme = useTheme();
 
@@ -287,6 +295,13 @@ export default function PlannerWeekList({
                             and in the sheet. */}
                         {expected ? ` · ${compactLabel(expected)}` : ''}
                       </Typography>
+                      {/* A link out to the class on the Catch-up calendar. It
+                          stops its own click, like the assignment button beside it. */}
+                      {catchupByClassId?.get(cls.id) && (
+                        <Box sx={{ mt: 0.5, display: 'flex', minWidth: 0 }}>
+                          <CatchupBadge c={catchupByClassId.get(cls.id)!} />
+                        </Box>
+                      )}
                     </Box>
 
                     {/* Icon-only, stacked and right-aligned: a column this narrow

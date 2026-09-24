@@ -6,6 +6,7 @@ import { Box, IconButton, Menu, MenuItem, Skeleton, Typography } from '@neram/ui
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
+import StudentAvatar from '@/components/students/StudentAvatar';
 import type { InspirationCard } from '@/lib/inspiration-present';
 
 const BADGE_LABEL: Record<NonNullable<InspirationCard['badge']>, string> = {
@@ -144,9 +145,19 @@ export default function InspirationTile({ card, href, onOpen, onToggleSave, onHi
       {/* Whose drawing it is. The grid was anonymous, which is a strange way to
           celebrate somebody. formatInspirationCredit has already collapsed this
           to "Neram student" when the author asked not to be named. */}
-      <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
-        {card.credit}
-      </Typography>
+      {card.author ? (
+        // Featured: the face goes with the name. 28px is the smallest size that keeps the ring's glyphs.
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.25, minWidth: 0 }}>
+          <StudentAvatar userId={card.author.id} name={card.author.name} src={card.author.avatarUrl} size={28} />
+          <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block', minWidth: 0 }}>
+            {card.credit}
+          </Typography>
+        </Box>
+      ) : (
+        <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+          {card.credit}
+        </Typography>
+      )}
       {card.staff && !card.staff.visible && card.staff.hiddenReason && (
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
           {card.staff.hiddenReason}

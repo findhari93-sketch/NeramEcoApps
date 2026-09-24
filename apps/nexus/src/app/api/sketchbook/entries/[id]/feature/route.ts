@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
 import {
   getDrawingSharingOptOut, getFeatureOptOut, getLiveFeature, getPracticeDrawing,
-  getSubmissionInspirationItemId, hasAnyLiveFeature, hideFeaturedSubmission, insertFeature,
+  getSubmissionShelfItem, hasAnyLiveFeature, hideFeaturedSubmission, insertFeature,
   markUnfeatured, recordFlip, showFeaturedSubmission,
 } from '@neram/database/queries/nexus';
 import { assertCapability, getRequestUser } from '@/lib/study-materials';
@@ -70,8 +70,12 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     // already sits in; the Inspiration shelf is every student in Nexus, so only
     // this second, wider step is gated by the drawing-sharing choice. The RPC
     // would hide it anyway; refusing here is what lets the teacher be told.
-    const onShelf = !(await getDrawingSharingOptOut(sketch.student_id));
-    const itemId = onShelf ? await getSubmissionInspirationItemId(sketch.id) : null;
+    const sharing = !(await getDrawingSharingOptOut(sketch.student_id));
+    const shelfItem = sharing ? await getSubmissionShelfItem(sketch.id) : null;
+    // A teacher's "Hide from students" stands, and the card must not link to it.
+    const hiddenByTeacher = shelfItem?.curation === 'hidden';
+    const onShelf = sharing && !hiddenByTeacher;
+    const itemId = onShelf ? shelfItem?.id ?? null : null;
 
     const supabase = getSupabaseAdminClient();
     // `ms_assignment_channel_id` predates the generated types regenerating for
@@ -171,7 +175,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     const msg = featuredMessage(firstName(caller.name), (classroom as { name: string }).name, shelved);
     await sendNudge({
-      // The teacher's own Teams chat (their connected login if this token cannot chat).
+      // Sent by Neram Assistant; sendNudge turns `teacher` into the card's "From" line.
       teacher: { authHeader: request.headers.get('Authorization'), userId: caller.id },
       studentIds: [sketch.student_id],
       subject: msg.subject,
@@ -189,7 +193,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       respectDormancy: false,
     });
 
-    return NextResponse.json({ feature, teams, shelved }, { status: 201, headers: NO_STORE });
+    return NextResponse.json({ feature, teams, shelved, hiddenByTeacher }, { status: 201, headers: NO_STORE });
   } catch (err) {
     return errorResponse(err, 'Could not feature the sketch');
   }

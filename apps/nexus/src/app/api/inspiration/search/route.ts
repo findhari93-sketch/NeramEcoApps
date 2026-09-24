@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getInspirationFacets, searchInspiration } from '@neram/database/queries/nexus';
+import {
+  getInspirationFacets,
+  listClassFeaturedItems,
+  listUserClassroomIds,
+  searchInspiration,
+} from '@neram/database/queries/nexus';
 import { resolveInspirationCaller } from '@/lib/inspiration-access';
-import { presentRow } from '@/lib/inspiration-present';
+import { presentClassFeatured, presentRow } from '@/lib/inspiration-present';
+import { staffClassroomIds } from '@/lib/sketchbook-access';
 import { parseInspirationQuery, parseScope, toFilters } from '@/lib/inspiration-query';
 import { errorResponse } from '@/lib/api-errors';
 
@@ -10,6 +16,7 @@ const NO_STORE = { 'Cache-Control': 'no-store' };
 
 /**
  * GET /api/inspiration/search?q=&type=&exam=&by=&year=&sort=&offset=&scope=&saved=1
+ * GET /api/inspiration/search?featured=class   the "Featured from your class" row
  *
  * All ranking and every visibility rule live in nexus_inspiration_search. This
  * route decides only what the caller may ask for (a student is held to the
@@ -20,6 +27,19 @@ export async function GET(request: NextRequest) {
   try {
     const caller = await resolveInspirationCaller(request.headers.get('Authorization'));
     const params = request.nextUrl.searchParams;
+
+    // The class wall rides on this route rather than a new one: the page already
+    // calls it, and the row is just another read of the same visible shelf.
+    if (params.get('featured') === 'class') {
+      const classroomIds = caller.staff
+        ? await staffClassroomIds(caller.user)
+        : await listUserClassroomIds(caller.user.id, 'student');
+      const rows = await listClassFeaturedItems(classroomIds, caller.user.id);
+      return NextResponse.json(
+        { items: rows.map((entry) => presentClassFeatured(entry, { staff: caller.staff })) },
+        { headers: NO_STORE },
+      );
+    }
     const state = parseInspirationQuery(request.nextUrl.search);
     const offset = Math.max(Math.floor(Number(params.get('offset')) || 0), 0);
     const savedOnly = params.get('saved') === '1';

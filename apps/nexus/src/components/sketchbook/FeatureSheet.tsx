@@ -43,13 +43,16 @@ export default function FeatureSheet({ open, onClose, sketchId, studentName, onF
   const [mustChoose, setMustChoose] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [result, setResult] = useState<{ channel: boolean; chat: boolean; errors: string[]; shelved: boolean } | null>(null);
+  const [result, setResult] = useState<{ channel: boolean; chat: boolean; errors: string[]; shelved: boolean; hiddenByTeacher: boolean } | null>(null);
 
   useEffect(() => {
     if (open) { setError(''); setResult(null); setMustChoose(false); setClassroomId(''); }
   }, [open]);
 
-  const blocked = impersonation ? 'Featuring posts to Teams from your own Microsoft account, so it is off while viewing as a student.' : '';
+  // `impersonation` is always an object; only `active` says a student is being viewed.
+  const blocked = impersonation?.active
+    ? 'Featuring posts to your class on Teams from your own Microsoft account, so it is off while viewing as a student.'
+    : '';
   const who = firstName(studentName) === 'Your teacher' ? 'The student' : firstName(studentName);
   // Name the classroom only when there is no doubt which one the server will pick.
   const where = classrooms.length === 1 ? classrooms[0].name : 'your class';
@@ -58,7 +61,7 @@ export default function FeatureSheet({ open, onClose, sketchId, studentName, onF
     setBusy(true); setError('');
     try {
       const r = await featureSketch(getToken, sketchId, classroomId || undefined);
-      setResult({ ...r.teams, shelved: r.shelved });
+      setResult({ ...r.teams, shelved: r.shelved, hiddenByTeacher: !!r.hiddenByTeacher });
       onFeatured({
         classroom_id: r.feature.classroom_id,
         classroom_name: classrooms.find((c) => c.id === r.feature.classroom_id)?.name ?? '',
@@ -108,7 +111,9 @@ export default function FeatureSheet({ open, onClose, sketchId, studentName, onF
             : 'Featured in Nexus.'}
           {result.shelved
             ? ' It is on the Inspiration shelf now.'
-            : ' It is not on the Inspiration shelf, because this student keeps their drawings out of it.'}
+            : result.hiddenByTeacher
+              ? ' It is not on the Inspiration shelf, because a teacher hid it from students there.'
+              : ' It is not on the Inspiration shelf, because this student keeps their drawings out of it.'}
           {result.errors.length > 0 && ` Teams said: ${result.errors.join('; ')}`}
         </Alert>
       )}

@@ -101,13 +101,13 @@ describe('AllClearWall', () => {
     expect(screen.getByText(/Nobody is completely clear yet/i)).toBeTruthy();
   });
 
-  it('offers the Teams share only when there is a handler for it', () => {
+  it('offers the personal note only when there is a handler for it', () => {
     const { rerender } = render(<AllClearWall students={[row('Alpha')]} />);
-    expect(screen.queryByRole('button', { name: /in Teams/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Send a note/i })).toBeNull();
     expect(screen.queryByRole('checkbox')).toBeNull();
 
-    rerender(<AllClearWall students={[row('Alpha')]} onShare={() => {}} />);
-    expect(screen.getByRole('button', { name: /Congratulate \(1\) in Teams/i })).toBeTruthy();
+    rerender(<AllClearWall students={[row('Alpha')]} onNote={() => {}} />);
+    expect(screen.getByRole('button', { name: /Send a note \(1\)/i })).toBeTruthy();
   });
 
   it('hands the share the same order it displays', () => {
@@ -120,12 +120,12 @@ describe('AllClearWall', () => {
           row('Older', { lastClearedAt: '2026-07-01T10:00:00+05:30' }),
           row('Newer', { lastClearedAt: '2026-08-08T10:00:00+05:30' }),
         ]}
-        onShare={(rows) => {
+        onNote={(rows) => {
           handed = rows.map((r) => r.student.name || '');
         }}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: /Congratulate \(2\) in Teams/i }));
+    fireEvent.click(screen.getByRole('button', { name: /Send a note \(2\)/i }));
     expect(handed).toEqual(['Newer', 'Older']);
   });
 
@@ -153,7 +153,7 @@ describe('AllClearWall', () => {
       render(
         <AllClearWall
           students={[congratulated('Humaira'), congratulated('Bavishiya'), fresh('Poheem')]}
-          onShare={(rows) => {
+          onNote={(rows) => {
             handed = rows.map((r) => r.student.name || '');
           }}
           onMarkCelebrated={() => {}}
@@ -167,7 +167,7 @@ describe('AllClearWall', () => {
       expect(checkbox('Bavishiya').checked).toBe(false);
       expect(screen.getAllByText(/Congratulated in Teams .* \(2 times\)/).length).toBe(2);
 
-      fireEvent.click(screen.getByRole('button', { name: /Congratulate \(1\) in Teams/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Send a note \(1\)/i }));
       expect(handed).toEqual(['Poheem']);
     });
 
@@ -176,13 +176,13 @@ describe('AllClearWall', () => {
       render(
         <AllClearWall
           students={[congratulated('Humaira'), fresh('Poheem')]}
-          onShare={(rows) => {
+          onNote={(rows) => {
             handed = rows.map((r) => r.student.name || '');
           }}
         />,
       );
       fireEvent.click(checkbox('Humaira'));
-      fireEvent.click(screen.getByRole('button', { name: /Congratulate \(2\) in Teams/i }));
+      fireEvent.click(screen.getByRole('button', { name: /Send a note \(2\)/i }));
       expect(handed).toEqual(['Poheem', 'Humaira']);
     });
 
@@ -190,12 +190,12 @@ describe('AllClearWall', () => {
       render(
         <AllClearWall
           students={[congratulated('Humaira')]}
-          onShare={() => {}}
+          onNote={() => {}}
           onMarkCelebrated={() => {}}
         />,
       );
       expect(screen.getByText(/Everyone here has been congratulated/)).toBeTruthy();
-      const share = screen.getByRole('button', { name: /Congratulate in Teams/i }) as HTMLButtonElement;
+      const share = screen.getByRole('button', { name: /Send a note/i }) as HTMLButtonElement;
       const mark = screen.getByRole('button', { name: /Mark as congratulated/i }) as HTMLButtonElement;
       expect(share.disabled).toBe(true);
       expect(mark.disabled).toBe(true);
@@ -206,7 +206,7 @@ describe('AllClearWall', () => {
       render(
         <AllClearWall
           students={[fresh('Poheem'), fresh('Jeshurun')]}
-          onShare={() => {}}
+          onNote={() => {}}
           onMarkCelebrated={(rows) => {
             marked = rows.map((r) => r.student.name || '');
           }}
@@ -218,7 +218,7 @@ describe('AllClearWall', () => {
     });
 
     it('clears and re-selects the new group with one control', () => {
-      render(<AllClearWall students={[fresh('Poheem'), fresh('Jeshurun')]} onShare={() => {}} />);
+      render(<AllClearWall students={[fresh('Poheem'), fresh('Jeshurun')]} onNote={() => {}} />);
       fireEvent.click(screen.getByRole('button', { name: /^Clear$/ }));
       expect(checkbox('Poheem').checked).toBe(false);
       expect(checkbox('Jeshurun').checked).toBe(false);
@@ -230,7 +230,7 @@ describe('AllClearWall', () => {
       render(
         <AllClearWall
           students={[congratulated('Humaira', { state: 'cleared_again' })]}
-          onShare={() => {}}
+          onNote={() => {}}
         />,
       );
       expect(screen.getByText('Not congratulated yet (1)')).toBeTruthy();
@@ -242,7 +242,7 @@ describe('AllClearWall', () => {
       render(
         <AllClearWall
           students={[congratulated('Humaira', { source: 'marked', count: 1 })]}
-          onShare={() => {}}
+          onNote={() => {}}
         />,
       );
       expect(screen.getByText(/^Marked as congratulated/)).toBeTruthy();
@@ -251,7 +251,7 @@ describe('AllClearWall', () => {
     it('ticks nobody when the records could not be read', () => {
       // Otherwise a missing table would pre-select, and re-post, everyone.
       render(
-        <AllClearWall students={[fresh('Poheem')]} onShare={() => {}} celebrationsUnavailable />,
+        <AllClearWall students={[fresh('Poheem')]} onNote={() => {}} celebrationsUnavailable />,
       );
       expect(screen.getByText(/Could not check who has already been congratulated/)).toBeTruthy();
       expect(checkbox('Poheem').checked).toBe(false);

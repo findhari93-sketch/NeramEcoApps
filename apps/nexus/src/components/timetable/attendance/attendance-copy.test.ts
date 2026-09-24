@@ -82,7 +82,7 @@ describe('buildMissedList', () => {
       bucket: 'missed_with_reason',
       absence: {
         kind: 'opted_out',
-        reason_code: 'exam',
+        reason_code: 'clash',
         reason_note: null,
         reason_source: 'student',
         reason_submitted_at: '2026-07-30T00:00:00Z',
@@ -120,8 +120,8 @@ describe('buildMissedList', () => {
 
   it('keeps the panel groups and numbers across both of them', () => {
     const text = buildMissedList(insights(roster));
-    expect(text).toContain('No reason given (1)');
-    expect(text).toContain('Told us why (1)');
+    expect(text).toContain('Said nothing, not caught up (1)');
+    expect(text).toContain('Told us why, still catching up (1)');
     expect(text).toMatch(/1\. Abhitha/);
     expect(text).toMatch(/2\. Humaira/);
   });
@@ -140,12 +140,22 @@ describe('buildMissedList', () => {
     // Numbered continuously through all three groups, so a teacher reading it
     // aloud counts the same total the screen shows.
     expect(text).toMatch(/3\. New Arrival/);
-    expect(text).toContain('No reason given (1)');
+    expect(text).toContain('Said nothing, not caught up (1)');
+  });
+
+  it('keeps students on declared leave in the list, with their window', () => {
+    const withAway = [
+      ...roster,
+      student({ id: 'f', name: 'On Leave', bucket: 'away', away: true, away_window: 'Away 10 Jul to 20 Aug: Exam clash' }),
+    ];
+    const text = buildMissedList(insights(withAway));
+    expect(text).toContain('Told us why, still catching up (2)');
+    expect(text).toContain('On Leave, Away 10 Jul to 20 Aug: Exam clash');
   });
 
   it('carries what each one has actually done', () => {
     const text = buildMissedList(insights(roster));
-    expect(text).toContain('never joined, recording not watched');
+    expect(text).toContain('Abhitha SR Saravanan, no reason given, recording not watched');
     expect(text).toContain('watched the recording, check not taken');
   });
 

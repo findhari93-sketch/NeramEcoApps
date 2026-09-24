@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
@@ -18,6 +18,15 @@ import PhoneIcon from '@mui/icons-material/Phone';
 import StudentStageAvatar from '@/components/students/StudentStageAvatar';
 import { knownStageKey } from '@/lib/student-stage';
 import { reasonShortLabel } from '@/lib/rsvp-reasons';
+import {
+  FOLLOWUP_META,
+  MISSED_ORDER,
+  OUTSTANDING,
+  isIrregular,
+  stateFromBucket,
+  type FollowupState,
+  type FollowupTone,
+} from '@/lib/class-followup';
 import type { AttendanceTabProps, StudentInsight } from './types';
 import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
 import { useStudentListView } from '@/components/students/list/useStudentListView';
@@ -32,22 +41,24 @@ const INSIGHT_ACCESSORS: ListAccessors<StudentInsight> = {
 const GROUP_ORDER = [suggestedOrder<StudentInsight>('Grouped by follow-up')];
 
 /**
- * Who was not here, grouped by whether anything is being done about it.
+ * Who was not here, grouped by what is left to do about it.
  *
- * The order of the groups is the whole design. A teacher opening this after a
- * class has one question, "who do I chase", and the answer is the first group:
- * away, said nothing, has not watched the recording. Students who explained
- * themselves come second because they need a look but not a call. Late joiners
- * come third: the work is owed but nobody did anything wrong, so they must never
- * sit in a list headed "No reason given". Anyone who has already caught up is
- * collapsed, because they are finished and showing them expanded buries the four
- * names that matter under twelve that do not.
+ * The groups are the corners of one grid, told us why (or not) against caught
+ * up (or not), plus the states that sit on neither axis. The order is the
+ * teacher's order: the students who said nothing and have not caught up come
+ * first because they are the ones to ring; the ones who explained and are
+ * still working come second because they need a look, not a call. The recap
+ * we have not published comes third, because that one is on us. Everyone who
+ * is finished is collapsed, so four names that matter are not buried under
+ * twelve that do not.
  *
- * Everything here is a selection. The actions live in the shell's bar, so a
- * teacher can tick names across two groups and send one message.
+ * "Told us why" is the resolved reason (lib/absence-reason.ts): a declared
+ * away window and an RSVP decline count, and the row says which it was. This
+ * list used to read only the reason typed after the class, so everyone on exam
+ * leave sat under "Told us why" with "No reason given" printed beside them.
  */
 
-function shortDate(iso: string | null): string | null {
+function shortDate(iso: string | null | undefined): string | null {
   if (!iso) return null;
   try {
     return new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
@@ -56,22 +67,17 @@ function shortDate(iso: string | null): string | null {
   }
 }
 
+/** The state from the server, or worked out from the older bucket field. */
+export function stateOf(s: StudentInsight): FollowupState {
+  return s.followup ?? stateFromBucket(s.bucket);
+}
+
 /**
- * What this student has and has not done about the class they missed, and how
- * long it has been.
- *
- * The clock is the addition, and it is what turns this panel from a record into
- * a review. "Recording not watched" is the same sentence on the day after the
- * class and five weeks later, so a teacher scanning the list could not tell a
- * student who is inside their window from one who has ignored it since term
- * started. Now the two read differently.
- *
- * `catchup.watched` rather than `absence.recording_watched_at`: that column is
- * only ever stamped by the "I have watched it" button, which refuses once a
- * recap is published, so a student who completed the whole gated recap has no
- * stamp at all and used to be reported here as having watched nothing.
+ * What this student has and has not done about the class, and how long it has
+ * been. The server's `catchup.progress` is the catch-up page's own sentence
+ * ("40% watched, 2 sittings, last active 5 days ago"); the clock is added here.
  */
-function progressLine(s: StudentInsight): string {
+export function progressLine(s: StudentInsight): string {
   const a = s.absence;
   const c = s.catchup;
 
@@ -86,7 +92,7 @@ function progressLine(s: StudentInsight): string {
   if (c?.status === 'pending_teacher') return 'Waiting on the recap being published';
 
   const hasWatched = c?.watched ?? !!a?.recording_watched_at;
-  const where = hasWatched ? stepLine(s) : 'Recording not watched';
+  const where = c?.progress || (hasWatched ? 'Watched the recording' : 'Recording not watched');
 
   if (c?.overdue && typeof c.days_left === 'number') {
     const over = Math.abs(c.days_left);
@@ -96,23 +102,21 @@ function progressLine(s: StudentInsight): string {
     return `${where} · ${c.days_left === 1 ? '1 day left' : `${c.days_left} days left`}`;
   }
   // No clock running at all. The window is quoted rather than counted down,
-  // because nothing is late until they choose to start.
-  if (c) return `${where} · not started, ${c.window_days} days once they do`;
-  return where;
+  // because nothing is late until they choose to start. How long the class has
+  // been sitting there is what tells a teacher whether that is fine.
+  const since = typeof s.days_since_class === 'number' ? daysAgo(s.days_since_class) : null;
+  if (c) {
+    return since
+      ? `${where} · class was ${since}, ${c.window_days} days once they start`
+      : `${where} · not started, ${c.window_days} days once they do`;
+  }
+  return since ? `${where} · class was ${since}` : where;
 }
 
-/** Where in the three gates they have got to, once they have watched it. */
-function stepLine(s: StudentInsight): string {
-  switch (s.catchup?.step) {
-    case 'assignment':
-      return 'Watched it, work outstanding';
-    case 'test':
-      return 'Watched it, check not taken yet';
-    case 'done':
-      return 'Everything done, not marked caught up';
-    default:
-      return 'Watched the recording, check not taken yet';
-  }
+function daysAgo(n: number): string {
+  if (n <= 0) return 'today';
+  if (n === 1) return 'yesterday';
+  return `${n} days ago`;
 }
 
 /**
@@ -139,6 +143,73 @@ export function caughtUpSummary(students: StudentInsight[]): string | null {
   return `${base} · median ${median === 1 ? '1 day' : `${median} days`}`;
 }
 
+/** Most urgent first inside "still catching up": over time, stuck, untouched. */
+function urgency(s: StudentInsight): number {
+  const c = s.catchup;
+  if (c?.overdue) return 0;
+  if (c?.stuck) return 1;
+  if (!c?.watched && !c?.active && !c?.last_active_at) return 2;
+  return 3;
+}
+
+/** The reason in one line, whichever route it came by. */
+function ReasonLine({ student }: { student: StudentInsight }) {
+  const a = student.absence;
+  const r = student.reason_resolved;
+  const joined = shortDate(student.enrolled_at ?? null);
+
+  if (student.joinedAfterClass) {
+    // Never "No reason given". They enrolled after this class ran, so there
+    // was nothing for them to explain.
+    return (
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+        Joined after this class{joined && `, enrolled ${joined}`}
+      </Typography>
+    );
+  }
+
+  if (r) {
+    const said = shortDate(r.at);
+    return (
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+        {r.line}
+        {said && r.source !== 'away' && `, ${said}`}
+        {r.note && (
+          // overflowWrap: a student's own words can be one long unbroken string,
+          // and truncating the reason defeats the point of showing it.
+          <Box
+            component="span"
+            sx={{ display: 'block', fontStyle: 'italic', color: 'text.primary', overflowWrap: 'anywhere' }}
+          >
+            &ldquo;{r.note}&rdquo;
+          </Box>
+        )}
+      </Typography>
+    );
+  }
+
+  // An older server without the resolved reason: fall back to the row itself.
+  const code = a?.reason_code ? reasonShortLabel(a.reason_code) : null;
+  if (code || a?.reason_note || student.away_window) {
+    return (
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+        {student.away_window || code}
+        {a?.reason_note && (
+          <Box component="span" sx={{ display: 'block', fontStyle: 'italic', color: 'text.primary', overflowWrap: 'anywhere' }}>
+            &ldquo;{a.reason_note}&rdquo;
+          </Box>
+        )}
+      </Typography>
+    );
+  }
+
+  return (
+    <Typography variant="caption" sx={{ display: 'block', color: 'error.main', fontWeight: 600 }}>
+      No reason given
+    </Typography>
+  );
+}
+
 function MissedRow({
   student,
   selected,
@@ -148,11 +219,10 @@ function MissedRow({
   selected: boolean;
   onSelect: (id: string, next: boolean) => void;
 }) {
-  const a = student.absence;
-  const reason = a?.reason_code ? reasonShortLabel(a.reason_code) : null;
-  const said = shortDate(a?.reason_submitted_at ?? null);
-  const nudged = shortDate(a?.followup_sent_at ?? null);
-  const joined = shortDate(student.enrolled_at ?? null);
+  const nudged = shortDate(student.absence?.followup_sent_at ?? null);
+  const irregular = isIrregular(student.recent);
+  const workMissing = !!student.work && student.work.handedIn < student.work.total;
+  const done = !!student.absence?.caught_up_at || !!student.absence?.excused_at;
 
   return (
     <Box
@@ -191,40 +261,36 @@ function MissedRow({
           {student.name}
         </Typography>
 
-        {student.joinedAfterClass ? (
-          // Never "No reason given". They enrolled after this class ran, so the
-          // absence is an artefact of the calendar rather than a choice, and the
-          // per-class reason route refuses their answer anyway.
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-            Joined after this class
-            {joined && `, enrolled ${joined}`}
-          </Typography>
-        ) : reason || a?.reason_note ? (
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-            {reason}
-            {said && `, said ${said}`}
-            {a?.reason_source === 'parent' && ', by a parent'}
-            {a?.reason_note && (
-              // overflowWrap: a student's own words can be one long unbroken
-              // string, and truncating the reason defeats the point of showing it.
-              <Box
-                component="span"
-                sx={{ display: 'block', fontStyle: 'italic', color: 'text.primary', overflowWrap: 'anywhere' }}
-              >
-                &ldquo;{a.reason_note}&rdquo;
-              </Box>
-            )}
-          </Typography>
-        ) : (
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-            No reason given
-          </Typography>
-        )}
+        <ReasonLine student={student} />
 
-        <Typography variant="caption" color="text.disabled" sx={{ display: 'block' }}>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
           {progressLine(student)}
           {nudged && ` · last nudged ${nudged}`}
         </Typography>
+
+        {(irregular || (workMissing && !done) || student.catchup?.stuck) && (
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
+            {irregular && student.recent && (
+              <Chip
+                size="small"
+                color="error"
+                variant="outlined"
+                label={`Missed ${student.recent.missed} of last ${student.recent.of}`}
+                title={
+                  student.recent.unexplained
+                    ? `${student.recent.unexplained} of them with no reason`
+                    : 'Every one of them with a reason'
+                }
+              />
+            )}
+            {student.catchup?.stuck && (
+              <Chip size="small" color="warning" variant="outlined" label="Stuck on a check" />
+            )}
+            {workMissing && !done && (
+              <Chip size="small" variant="outlined" label="Homework not in" />
+            )}
+          </Box>
+        )}
       </Box>
 
       {/* A number is the fastest route to a student who has gone quiet, and it
@@ -245,16 +311,9 @@ function MissedRow({
 }
 
 /**
- * Tick everyone who still owes work on this class, in one gesture.
- *
- * The group headers could already select a group each, which is not the same
- * thing: chasing a whole class meant finding three separate checkboxes and
- * remembering which ones existed today, and the tab label says "Missed 16" while
- * nothing on the screen could produce 16 ticks. This is that control.
- *
- * It deliberately covers the outstanding groups only. Students who have already
- * caught up are on this tab so a teacher can see the class is closing, not so
- * they can be messaged again about work they have finished.
+ * Tick everyone who still owes work on this class, in one gesture. Covers the
+ * students who can act on it; a recap we have not published is not theirs to
+ * chase, and a finished student is not to be messaged again.
  */
 function SelectAllBar({
   ids,
@@ -304,9 +363,13 @@ function SelectAllBar({
   );
 }
 
+function useToneColor() {
+  const theme = useTheme();
+  return (tone: FollowupTone) => (tone === 'neutral' ? theme.palette.grey[600] : theme.palette[tone].main);
+}
+
 function Group({
-  title,
-  tone,
+  state,
   students,
   selected,
   onSelect,
@@ -314,23 +377,25 @@ function Group({
   defaultOpen,
   note,
 }: {
-  title: string;
-  tone: 'error' | 'warning' | 'info' | 'success';
+  state: FollowupState;
   students: StudentInsight[];
   selected: Set<string>;
   onSelect: (id: string, next: boolean) => void;
   onSelectMany: (ids: string[], next: boolean) => void;
   defaultOpen: boolean;
-  /** One line under the heading. Used to report the group's turnaround. */
   note?: string | null;
 }) {
-  const theme = useTheme();
+  const toneColor = useToneColor();
   const [open, setOpen] = useState(defaultOpen);
+  useEffect(() => setOpen(defaultOpen), [defaultOpen]);
   if (students.length === 0) return null;
 
+  const meta = FOLLOWUP_META[state];
+  const title = meta.label;
   const ids = students.map((s) => s.id);
   const chosen = ids.filter((id) => selected.has(id)).length;
   const all = chosen === ids.length;
+  const color = toneColor(meta.tone);
 
   return (
     <Box sx={{ mb: 1.5 }}>
@@ -342,7 +407,8 @@ function Group({
           px: 0.5,
           py: 0.5,
           borderRadius: 1,
-          bgcolor: alpha(theme.palette[tone].main, 0.1),
+          bgcolor: alpha(color, 0.1),
+          borderLeft: `4px solid ${color}`,
         }}
       >
         {/* Selecting the whole group is the gesture a teacher actually makes:
@@ -357,22 +423,19 @@ function Group({
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography
             variant="caption"
-            sx={{
-              fontWeight: 800,
-              letterSpacing: 0.4,
-              textTransform: 'uppercase',
-              display: 'block',
-            }}
+            sx={{ fontWeight: 800, letterSpacing: 0.4, textTransform: 'uppercase', display: 'block' }}
           >
             {title}
           </Typography>
-          {note && (
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-              {note}
-            </Typography>
-          )}
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+            {note || meta.hint}
+          </Typography>
         </Box>
-        <Chip size="small" color={tone} label={students.length} sx={{ fontWeight: 700 }} />
+        <Chip
+          size="small"
+          label={students.length}
+          sx={{ fontWeight: 700, bgcolor: alpha(color, 0.18), color: 'text.primary' }}
+        />
         <IconButton
           onClick={() => setOpen((v) => !v)}
           aria-label={open ? `Collapse ${title}` : `Expand ${title}`}
@@ -380,7 +443,7 @@ function Group({
           sx={{ minWidth: 44, minHeight: 44 }}
         >
           <ExpandMoreIcon
-            sx={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms' }}
+            sx={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms', '@media (prefers-reduced-motion: reduce)': { transition: 'none' } }}
           />
         </IconButton>
       </Box>
@@ -395,13 +458,18 @@ function Group({
   );
 }
 
+/** Groups open by default: the two a teacher acts on, and whatever they filtered to. */
+const OPEN_BY_DEFAULT = new Set<FollowupState>(['needs_call', 'catching_up', 'waiting_on_us', 'late_joiner']);
+
 export default function MissedTab({
   insights,
   insightsLoading,
   selected,
   onSelect,
   onSelectMany,
+  initialFilter,
 }: AttendanceTabProps) {
+  const toneColor = useToneColor();
   // The shared list first (search, stage filter, paused hidden), then the fixed
   // groups over what it shows, so every count and Select all follows the filter.
   const view = useStudentListView<StudentInsight, 'suggested'>({
@@ -412,33 +480,31 @@ export default function MissedTab({
     urlKeys: false,
   });
 
+  const startFilter =
+    initialFilter && initialFilter !== 'not_handed_in' && MISSED_ORDER.includes(initialFilter)
+      ? initialFilter
+      : null;
+  const [filter, setFilter] = useState<FollowupState | null>(startFilter);
+  useEffect(() => setFilter(startFilter), [startFilter]);
+
   const groups = useMemo(() => {
-    const students = view.shown;
-    return {
-      silent: students.filter((s) => s.bucket === 'missed_no_reason'),
-      // `away` sits with `explained` rather than in a list of its own. This
-      // panel is about ONE class, and for one class a declared window and a
-      // one-off note say the same thing: they told us why. The distinction
-      // between a fortnight of leave and eight separate excuses only carries
-      // information across many classes, which is the register's job.
-      //
-      // What matters here is that away appears at all. Filtering by explicit
-      // bucket name means a group left out of this list vanishes from the panel
-      // entirely, and an away student still owes the catch-up work.
-      explained: students.filter((s) => s.bucket === 'missed_with_reason' || s.bucket === 'away'),
-      lateJoiners: students.filter((s) => s.bucket === 'late_joiner'),
-      done: students.filter((s) => s.bucket === 'caught_up' || s.bucket === 'excused'),
-    };
+    const by = new Map<FollowupState, StudentInsight[]>();
+    for (const st of MISSED_ORDER) by.set(st, []);
+    for (const s of view.shown) {
+      const st = stateOf(s);
+      by.get(st)?.push(s);
+    }
+    by.get('catching_up')?.sort((a, b) => urgency(a) - urgency(b));
+    return by;
   }, [view.shown]);
 
-  /**
-   * Everyone the actions are for, in the order they are shown. Built from the
-   * same three arrays the groups render, so the count on the Select all control
-   * can never claim more people than are on the screen.
-   */
+  /** Everyone the actions are for, in the order they are shown. */
   const outstandingIds = useMemo(
-    () => [...groups.silent, ...groups.explained, ...groups.lateJoiners].map((s) => s.id),
-    [groups],
+    () =>
+      OUTSTANDING.filter((st) => !filter || filter === st)
+        .flatMap((st) => groups.get(st) || [])
+        .map((s) => s.id),
+    [groups, filter],
   );
 
   if (insightsLoading) {
@@ -453,69 +519,85 @@ export default function MissedTab({
 
   if (!insights) return <Alert severity="info">Could not load this class.</Alert>;
 
-  const nobodyMissed = !(insights.students ?? []).some((s) =>
-    ['missed_no_reason', 'missed_with_reason', 'away', 'late_joiner', 'caught_up', 'excused'].includes(
-      String(s.bucket),
-    ),
-  );
-
+  const nobodyMissed = !(insights.students ?? []).some((s) => MISSED_ORDER.includes(stateOf(s)));
   if (nobodyMissed) {
     return (
       <Alert severity="success" sx={{ borderRadius: 2 }}>
-        Everyone on the roster was in this class. Nothing to follow up.
+        {insights.class.measured === false
+          ? 'Attendance for this class has not been synced yet, so nobody is marked as missing it.'
+          : 'Everyone on the roster was in this class. Nothing to follow up.'}
       </Alert>
     );
   }
 
-  // The review line for the whole class: did the people who missed it come back,
-  // and how quickly. Sits on the finished group because that is the group it
-  // describes, and it is the one number a teacher reads after the fact.
   const turnaroundNote = caughtUpSummary(insights.students);
+  const counts = MISSED_ORDER.map((st) => [st, groups.get(st)?.length ?? 0] as const).filter(([, n]) => n > 0);
+  const visible = MISSED_ORDER.filter((st) => !filter || filter === st);
 
   return (
     <>
       <StudentListToolbar view={view} />
+
+      {/* The groups double as filters, one level, no tabs inside tabs. The drawer
+          card opens this already narrowed to the corner that was tapped. */}
+      {counts.length > 1 && (
+        <Box
+          role="group"
+          aria-label="Show one group"
+          sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1.5 }}
+        >
+          <Chip
+            label={`All ${counts.reduce((n, [, c]) => n + c, 0)}`}
+            onClick={() => setFilter(null)}
+            color={filter === null ? 'primary' : 'default'}
+            variant={filter === null ? 'filled' : 'outlined'}
+            aria-pressed={filter === null}
+            sx={{ minHeight: 44, fontWeight: 600 }}
+          />
+          {counts.map(([st, n]) => {
+            const on = filter === st;
+            const color = toneColor(FOLLOWUP_META[st].tone);
+            return (
+              <Chip
+                key={st}
+                label={`${FOLLOWUP_META[st].short} ${n}`}
+                onClick={() => setFilter(on ? null : st)}
+                aria-pressed={on}
+                variant={on ? 'filled' : 'outlined'}
+                icon={
+                  <Box
+                    component="span"
+                    aria-hidden
+                    sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: color, ml: '10px !important' }}
+                  />
+                }
+                sx={{
+                  minHeight: 44,
+                  fontWeight: 600,
+                  ...(on && { bgcolor: alpha(color, 0.18), color: 'text.primary' }),
+                }}
+              />
+            );
+          })}
+        </Box>
+      )}
+
       {outstandingIds.length > 0 && (
         <SelectAllBar ids={outstandingIds} selected={selected} onSelectMany={onSelectMany} />
       )}
-      <Group
-        title="No reason given"
-        tone="error"
-        students={groups.silent}
-        selected={selected}
-        onSelect={onSelect}
-        onSelectMany={onSelectMany}
-        defaultOpen
-      />
-      <Group
-        title="Told us why"
-        tone="warning"
-        students={groups.explained}
-        selected={selected}
-        onSelect={onSelect}
-        onSelectMany={onSelectMany}
-        defaultOpen
-      />
-      {/* Info, not error: they owe the recording, but nobody skipped anything. */}
-      <Group
-        title="Joined after this class"
-        tone="info"
-        students={groups.lateJoiners}
-        selected={selected}
-        onSelect={onSelect}
-        onSelectMany={onSelectMany}
-        defaultOpen
-      />
-      <Group
-        title="Already caught up"
-        tone="success"
-        students={groups.done}
-        selected={selected}
-        onSelect={onSelect}
-        onSelectMany={onSelectMany}
-        defaultOpen={false}
-        note={turnaroundNote}
-      />
+
+      {visible.map((st) => (
+        <Group
+          key={st}
+          state={st}
+          students={groups.get(st) || []}
+          selected={selected}
+          onSelect={onSelect}
+          onSelectMany={onSelectMany}
+          defaultOpen={filter === st || OPEN_BY_DEFAULT.has(st)}
+          note={st === 'caught_up' || st === 'caught_up_silent' ? turnaroundNote : null}
+        />
+      ))}
       <PausedFootnote count={view.pausedHidden} />
     </>
   );

@@ -13,73 +13,55 @@ vi.mock('@/components/curriculum/shared', () => ({
   },
 }));
 vi.mock('@/components/timetable/attendance/ClassAttendancePanel', () => ({
-  default: () => null,
+  default: ({ classTitle }: { classTitle: string }) => <div>panel for {classTitle}</div>,
 }));
 
-import ClassesRecapsTab from './ClassesRecapsTab';
-import { emptyTally } from '@/lib/catchup-buckets';
-import type { ClassStat, Payload, TabProps } from './types';
+import ClassesRecapsTab, { type ClassesViewProps } from './ClassesRecapsTab';
+import { classHealth, type CalendarClass } from '@/lib/catchup-calendar';
 
 /**
- * This tab stopped being a work list.
- *
- * It used to open with a queue of recaps to make and a "Needs a recap" filter,
- * from the days when a recap was made by pressing a button. The sweep now runs
- * every fifteen minutes after a class ends and publishes on its own, so the
- * first thing on the screen is what the automation did, and the only work list
- * is the short one above it: questions a student reported, and the rare recap
- * the pipeline could not publish.
+ * The Classes view of Catch-up (2026-10): month scoped, calendar first, with
+ * the old card list behind a toggle. It stopped being a work list before that:
+ * the sweep publishes recaps on its own, so the view opens with what the
+ * automation did, and the escape hatches live in a menu.
  */
-function classStat(over: Partial<ClassStat> = {}): ClassStat {
-  return {
+const TODAY = '2026-09-24';
+
+function cls(over: Partial<CalendarClass> = {}): CalendarClass {
+  const base = {
     id: 'class-1',
     title: 'Key Indian Monuments',
     scheduled_date: '2026-09-09',
+    start_time: '18:00',
     present: 17,
     missed: 19,
+    late_joiners: 0,
     caughtUp: 2,
     outstanding: 17,
     blocked: 0,
-    recap_state: 'published',
+    recap_state: 'published' as const,
     recap_id: 'recap-1',
     has_transcript: true,
     teams_meeting_id: 'meeting-1',
+    not_taught: false,
     ...over,
   };
+  return { ...base, health: over.health ?? classHealth(base, TODAY) };
 }
 
-function payload(classStats: ClassStat[]): Payload {
+function props(classes: CalendarClass[] | null, over: Partial<ClassesViewProps> = {}): ClassesViewProps {
   return {
     classroomId: 'room-1',
-    students: [],
-    classes: [],
-    classStats,
-    reasons: [],
-    reasonTally: { unwell: 0, family: 0, clash: 0, other: 0 },
-    completed: [],
-    noRecording: [],
-    pendingRecap: [],
-    totals: {
-      studentsBehind: 0,
-      studentsCatchingUp: 0,
-      outstanding: 0,
-      clearedThisMonth: 0,
-      explained: 0,
-      unexplained: 0,
-      byBucket: emptyTally(),
-      hiddenDormant: 0,
-    },
-  };
-}
-
-function props(classStats: ClassStat[]): TabProps {
-  return {
-    data: payload(classStats),
-    busy: null,
-    onAct: vi.fn(),
-    onNudge: vi.fn(),
-    onNudgeMany: vi.fn(async () => {}),
+    classes,
+    today: TODAY,
+    month: '2026-09',
+    onMonth: vi.fn(),
+    display: 'list',
+    onDisplay: vi.fn(),
+    openClassId: null,
+    onOpenClass: vi.fn(),
     onReload: vi.fn(),
+    ...over,
   };
 }
 
@@ -87,116 +69,83 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-describe('the Classes and recaps tab', () => {
-  it('opens by saying what published itself, not by asking for work', async () => {
+describe('the Classes view: list', () => {
+  it('opens by saying what published itself this month, not by asking for work', async () => {
     render(
       <ClassesRecapsTab
-        {...props([
-          classStat({ id: 'c-1' }),
-          classStat({ id: 'c-2', recap_state: 'published', outstanding: 0, missed: 0 }),
-        ])}
+        {...props([cls({ id: 'c-1' }), cls({ id: 'c-2', outstanding: 0, missed: 0 })])}
       />,
     );
-
-    await waitFor(() =>
-      expect(screen.getByText(/2 of 2 classes/)).toBeTruthy(),
-    );
-    expect(screen.getByText(/published automatically after each class ended/)).toBeTruthy();
+    await waitFor(() => expect(screen.getByText(/2 of 2 classes/)).toBeTruthy());
+    expect(screen.getByText(/in September 2026 are live for students/)).toBeTruthy();
   });
 
-  it('offers no "Needs a recap" filter, because making one is not a teacher job', async () => {
-    render(<ClassesRecapsTab {...props([classStat({ recap_state: 'recording_ready' })])} />);
-
-    // A class with a recording and no recap yet: exactly what the old chip
-    // selected for. It is not live, and it is not a teacher's job either.
-    await waitFor(() => expect(screen.getByText(/0 of 1 classes/)).toBeTruthy());
-    expect(screen.queryByText(/Needs a recap/)).toBeNull();
+  it('leaves upcoming classes and other months out of the list', async () => {
+    render(
+      <ClassesRecapsTab
+        {...props([cls({ id: 'past' }), cls({ id: 'soon', scheduled_date: '2026-09-28', title: 'Next week' }), cls({ id: 'aug', scheduled_date: '2026-08-31', title: 'Spill day' })])}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText(/1 of 1 classes/)).toBeTruthy());
+    expect(screen.queryByText('Next week')).toBeNull();
+    expect(screen.queryByText('Spill day')).toBeNull();
   });
 
   it('says so plainly when everyone has caught up', async () => {
+    render(<ClassesRecapsTab {...props([cls({ outstanding: 0, missed: 2, caughtUp: 2 })])} />);
+    await waitFor(() => expect(screen.getByText(/Everyone who missed a class has caught up/)).toBeTruthy());
+  });
+
+  it('keeps the manual backfill in a menu, not as the main action', async () => {
+    render(<ClassesRecapsTab {...props([cls()])} />);
+    expect(screen.queryByRole('button', { name: /Prepare missing classes/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /More recap actions/ }));
+    expect(await screen.findByText('Prepare missing classes')).toBeTruthy();
+    expect(screen.getByText('Recap from a link')).toBeTruthy();
+  });
+
+  it('offers a way out for a session that was not a class, naming who it clears', async () => {
     render(
       <ClassesRecapsTab
-        {...props([classStat({ outstanding: 0, missed: 2, caughtUp: 2 })])}
+        {...props([cls({ title: 'Class Postponed Due to Exams', missed: 18, caughtUp: 1, outstanding: 17 })])}
       />,
     );
-
-    await waitFor(() =>
-      expect(screen.getByText(/Everyone who missed a class has caught up/)).toBeTruthy(),
-    );
-  });
-
-  it('counts the students still working through a class', async () => {
-    render(<ClassesRecapsTab {...props([classStat({ outstanding: 17 })])} />);
-
-    await waitFor(() =>
-      expect(screen.getByText(/1 still have someone working through them/)).toBeTruthy(),
-    );
-  });
-
-  it('keeps the manual backfill reachable but not as the main action', async () => {
-    render(<ClassesRecapsTab {...props([classStat()])} />);
-
-    const button = await screen.findByRole('button', { name: /Prepare missing classes/ });
-    // Outlined, not contained: pressing it is exactly the manual step the
-    // pipeline exists to remove, and it is kept only for a Teams outage or a
-    // spent Gemini budget.
-    expect(button.className).toContain('MuiButton-outlined');
-  });
-
-  /**
-   * The 2026-09-18 card: the tutor opened the meeting only to say the class was
-   * postponed for school exams. Seventeen students were left owing a catch-up
-   * for it, and the two buttons on the row were Continue draft (write a recap
-   * of an announcement) and Follow up 17 (chase them over it). There was no
-   * third option anywhere in Nexus.
-   */
-  it('offers a way out for a session that was not a class', async () => {
-    render(
-      <ClassesRecapsTab
-        {...props([
-          classStat({ title: 'Class Postponed Due to Exams', missed: 18, caughtUp: 1 }),
-        ])}
-      />,
-    );
-
-    const more = await screen.findByRole('button', {
-      name: /More actions for Class Postponed Due to Exams/,
-    });
-    // An overflow rather than a third button: "Follow up 17" and "Continue
-    // draft" already fill the row at 375px.
-    fireEvent.click(more);
-
-    expect(await screen.findByText('No class was taught')).toBeTruthy();
-  });
-
-  it('names who it is about to clear, and promises the register is safe', async () => {
-    render(
-      <ClassesRecapsTab
-        {...props([
-          classStat({ title: 'Class Postponed Due to Exams', missed: 18, caughtUp: 1 }),
-        ])}
-      />,
-    );
-
-    fireEvent.click(
-      await screen.findByRole('button', { name: /More actions for Class Postponed/ }),
-    );
+    fireEvent.click(await screen.findByRole('button', { name: /More actions for Class Postponed/ }));
     fireEvent.click(await screen.findByText('No class was taught'));
-
-    // Attendance first. It is the thing a teacher fears losing, and the only
-    // other lever on a finished class does destroy it.
-    expect(
-      await screen.findByText(/The attendance register stays exactly as it is/),
-    ).toBeTruthy();
+    expect(await screen.findByText(/The attendance register stays exactly as it is/)).toBeTruthy();
     expect(screen.getByText(/17 students stop owing a catch-up/)).toBeTruthy();
     expect(screen.getByText(/1 student has already worked through this/)).toBeTruthy();
   });
 
-  it('shows nothing needing a person when the queue is empty', async () => {
-    render(<ClassesRecapsTab {...props([classStat()])} />);
+  it('shows a skeleton, not an empty state, while the month loads', () => {
+    render(<ClassesRecapsTab {...props(null)} />);
+    expect(screen.queryByText(/No classes were taught/)).toBeNull();
+  });
+});
 
-    await waitFor(() => expect(screen.getByText(/are live for students/)).toBeTruthy());
-    expect(screen.queryByText(/things need you/)).toBeNull();
-    expect(screen.queryByText(/thing needs you/)).toBeNull();
+describe('the Classes view: calendar', () => {
+  it('puts each class on its day with words, not only a colour', async () => {
+    render(<ClassesRecapsTab {...props([cls()], { display: 'calendar' })} />);
+    expect(screen.getByRole('heading', { name: 'September 2026' })).toBeTruthy();
+    // The phone layout (jsdom has no wide viewport): the day cell names the class
+    // and its state in its accessible label.
+    expect(screen.getByRole('gridcell', { name: /Key Indian Monuments: 17 to catch up/ })).toBeTruthy();
+  });
+
+  it('moves between months', () => {
+    const onMonth = vi.fn();
+    render(<ClassesRecapsTab {...props([], { display: 'calendar', onMonth })} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Next month' }));
+    expect(onMonth).toHaveBeenCalledWith('2026-10');
+  });
+
+  it('opens the class drawer from a deep link, with the way back to the timetable', async () => {
+    render(
+      <ClassesRecapsTab
+        {...props([cls()], { display: 'calendar', openClassId: 'class-1', backHref: '/teacher/timetable' })}
+      />,
+    );
+    expect(await screen.findByText('panel for Key Indian Monuments')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /Back to timetable/ }).getAttribute('href')).toBe('/teacher/timetable');
   });
 });

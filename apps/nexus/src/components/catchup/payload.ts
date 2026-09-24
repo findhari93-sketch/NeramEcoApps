@@ -14,6 +14,7 @@
  */
 import { emptyTally, type BucketTally } from '@/lib/catchup-buckets';
 import { EMPTY_STANDING } from '@/lib/catchup-standing';
+import { emptyDiagnosisTally } from '@/lib/catchup-diagnosis';
 import type { Payload } from './types';
 
 /**
@@ -26,10 +27,7 @@ export const EMPTY_PAYLOAD: Payload = {
   classroomId: null,
   students: [],
   classes: [],
-  classStats: [],
-  reasons: [],
   reasonTally: {},
-  completed: [],
   noRecording: [],
   pendingRecap: [],
   celebrationsUnavailable: false,
@@ -41,6 +39,7 @@ export const EMPTY_PAYLOAD: Payload = {
     explained: 0,
     unexplained: 0,
     byBucket: emptyTally(),
+    byDiagnosis: emptyDiagnosisTally(),
     hiddenDormant: 0,
   },
 };
@@ -54,7 +53,10 @@ export const EMPTY_PAYLOAD: Payload = {
  * saying so in the type is what forces every reader through the function below.
  */
 export type CachedPayload = Partial<Omit<Payload, 'totals'>> & {
-  totals?: Partial<Omit<Payload['totals'], 'byBucket'>> & { byBucket?: Partial<BucketTally> };
+  totals?: Partial<Omit<Payload['totals'], 'byBucket' | 'byDiagnosis'>> & {
+    byBucket?: Partial<BucketTally>;
+    byDiagnosis?: Partial<Payload['totals']['byDiagnosis']>;
+  };
 };
 
 /**
@@ -86,6 +88,7 @@ export function withPayloadDefaults(payload: CachedPayload | undefined): Payload
       ...EMPTY_PAYLOAD.totals,
       ...payload.totals,
       byBucket: { ...emptyTally(), ...payload.totals?.byBucket },
+      byDiagnosis: { ...emptyDiagnosisTally(), ...payload.totals?.byDiagnosis },
     },
   };
 }
