@@ -5,6 +5,7 @@ import {
   getSupabaseAdminClient,
   getQBQuestions,
   getTeacherQBQuestions,
+  getBankQuestionAccuracy,
   createQBQuestion,
   addQuestionSource,
   syncTagsForNewQuestion,
@@ -99,6 +100,7 @@ export async function GET(request: NextRequest) {
     // Teachers see all statuses; students only see active questions
     const isTeacher = ['teacher', 'admin'].includes(caller.user_type ?? '');
     let data;
+    let accuracy: Record<string, { answered: number; correct: number }> | undefined;
     if (isTeacher) {
       const statusFilter = params.get('question_status')
         ? params.get('question_status')!.split(',') as QBQuestionStatus[]
@@ -111,6 +113,17 @@ export async function GET(request: NextRequest) {
         page,
         pageSize,
       );
+      // The same opt-in carries "% of students got it right", the measured
+      // replacement for the hand-set difficulty nobody filled in. Best effort:
+      // a failure here drops the chip, never the page of questions.
+      if (includeUsage && !idsOnly && data.questions.length > 0) {
+        try {
+          const map = await getBankQuestionAccuracy(data.questions.map((q: { id: string }) => q.id));
+          accuracy = Object.fromEntries(map);
+        } catch (accErr) {
+          console.error('[QB API] accuracy skipped:', describeError(accErr));
+        }
+      }
     } else {
       data = await getQBQuestions(filters, page, pageSize, caller.id);
     }
@@ -129,7 +142,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ data }, { status: 200 });
+    return NextResponse.json({ data: accuracy ? { ...data, accuracy } : data }, { status: 200 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
     console.error('[QB API] Error:', describeError(err));

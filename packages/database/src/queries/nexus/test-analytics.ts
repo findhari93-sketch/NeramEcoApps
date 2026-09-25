@@ -1102,6 +1102,92 @@ export async function getStudentTestAttemptReview(
   return { test, attempts };
 }
 
+/** How a bank question has gone for students, across every test that used it. */
+export interface NexusBankQuestionAccuracy {
+  /** Students who answered it (each counted once, on their first answer). */
+  answered: number;
+  correct: number;
+}
+
+/** Tests read per call. A page of 20 questions rarely spans more than a handful. */
+const ACCURACY_TEST_CAP = 150;
+/** Attempts read per call, newest first, so a very popular question stays cheap. */
+const ACCURACY_ATTEMPT_CAP = 3000;
+
+/**
+ * "% of students got it right" for a page of bank questions.
+ *
+ * This is the difficulty that means something: a hand-set Easy/Medium/Hard
+ * label was never filled in (97% of the bank sat on the Medium default), while
+ * this is measured. Each student counts once, on the first answer they gave, so
+ * a retake after seeing the solution cannot flatter a question. Drawn papers
+ * are translated back to the bank's lettering before grading, for the same
+ * reason as getQuestionAnalysis.
+ *
+ * Bounded on purpose (tests and attempts are capped). It feeds a chip on a
+ * picker row, not a report, so a slightly partial sample beats a slow page.
+ */
+export async function getBankQuestionAccuracy(
+  questionIds: string[],
+  client?: TypedSupabaseClient,
+): Promise<Map<string, NexusBankQuestionAccuracy>> {
+  const out = new Map<string, NexusBankQuestionAccuracy>();
+  const wanted = new Set(questionIds.filter(Boolean));
+  if (wanted.size === 0) return out;
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data: links, error: linkErr } = await supabase
+    .from(TEST_QUESTIONS)
+    .select('test_id')
+    .in('qb_question_id', [...wanted]);
+  if (linkErr) throw linkErr;
+  const testIds = [...new Set((links || []).map((l: any) => l.test_id).filter(Boolean))].slice(0, ACCURACY_TEST_CAP);
+  if (testIds.length === 0) return out;
+
+  const [{ data: attempts, error: attErr }, draws, { data: questions, error: qErr }] = await Promise.all([
+    supabase
+      .from(ATTEMPTS)
+      .select('test_id, student_id, attempt_number, answers, submitted_at')
+      .in('test_id', testIds)
+      .eq('status', 'submitted')
+      .order('submitted_at', { ascending: false })
+      .limit(ACCURACY_ATTEMPT_CAP),
+    loadAttemptDraws({ testIds }, supabase),
+    supabase
+      .from(QUESTIONS)
+      .select('id, correct_answer, question_format, answer_tolerance')
+      .in('id', [...wanted]),
+  ]);
+  if (attErr) throw attErr;
+  if (qErr) throw qErr;
+  const byId = new Map((questions || []).map((q: any) => [q.id, q]));
+
+  // Oldest first, so the first answer per student is the one that sticks.
+  const sorted = [...(attempts || [])].sort((a: any, b: any) =>
+    String(a.submitted_at || '').localeCompare(String(b.submitted_at || '')),
+  );
+  const seen = new Set<string>();
+  for (const a of sorted as any[]) {
+    const draw = draws.get(attemptDrawKey(a.test_id, a.student_id, a.attempt_number));
+    const answers = answersAsOriginal(a.answers, draw);
+    for (const [questionId, selected] of Object.entries(answers)) {
+      if (!wanted.has(questionId) || selected == null || selected === '') continue;
+      const key = `${questionId}:${a.student_id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const q = byId.get(questionId);
+      if (!q) continue;
+      const row = out.get(questionId) || { answered: 0, correct: 0 };
+      row.answered += 1;
+      if (gradeQBAnswerStrict(q.question_format, selected, q.correct_answer, q.answer_tolerance) === true) {
+        row.correct += 1;
+      }
+      out.set(questionId, row);
+    }
+  }
+  return out;
+}
+
 export interface NexusQuestionAnalysisRow {
   question_id: string;
   question_text: string | null;

@@ -88,6 +88,13 @@ export interface DraftRules {
   attempts: 1 | 3 | null;
   passPct: number;
   shuffle: boolean;
+  /**
+   * How many questions each student is served, drawn per student from the
+   * whole set. null serves every question, which is what every draft saved
+   * before this field existed means, so an old draft needs no migration.
+   * Stored on nexus_tests.questions_to_serve at publish.
+   */
+  questionsToServe: number | null;
 }
 
 /**
@@ -175,7 +182,42 @@ export const DEFAULT_RULES: DraftRules = {
   attempts: null,
   passPct: 60,
   shuffle: true,
+  questionsToServe: null,
 };
+
+/** The smallest subset worth drawing, and the step the control moves in. */
+export const SERVE_STEP = 5;
+/** Below this many questions a random subset is not offered at all. */
+export const MIN_POOL_FOR_DRAW = 10;
+
+/**
+ * A serve count as the test will store it: a whole number from SERVE_STEP up
+ * to one less than the pool, or null for "every question".
+ *
+ * Serving the whole pool IS null. Storing 50 for a 50-question test would make
+ * the detail page read "Pool of 50, 50 per sitting", a pool it is not, and the
+ * server clamps it the same way.
+ */
+export function clampQuestionsToServe(value: unknown, poolSize: number): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Math.floor(Number(value));
+  if (!Number.isFinite(n) || n <= 0) return null;
+  if (poolSize < MIN_POOL_FOR_DRAW) return null;
+  if (n >= poolSize) return null;
+  return Math.max(Math.min(SERVE_STEP, poolSize), n);
+}
+
+/**
+ * How many sittings a student can take before a question comes back.
+ *
+ * pickTestDraw shuffles the pool once per student and hands each attempt the
+ * next window of N, wrapping round at the end. So the first floor(pool / N)
+ * windows never overlap, and the one after that starts repeating.
+ */
+export function sittingsBeforeRepeat(poolSize: number, serve: number | null): number {
+  if (!serve || serve <= 0 || serve >= poolSize) return 1;
+  return Math.floor(poolSize / serve);
+}
 
 export function emptyDraft(draftId: string, createdAt: string): TestDraft {
   return {
@@ -278,8 +320,18 @@ export function draftReducer(state: TestDraft, action: DraftAction): TestDraft {
       return { ...state, pyq, skipReview: pyq.mode === 'faithful' && Boolean(pyq.paperId) };
     }
 
-    case 'patchRules':
-      return { ...state, rules: { ...state.rules, ...action.patch } };
+    case 'patchRules': {
+      const rules = { ...state.rules, ...action.patch };
+      // Clamped on the way in, against the questions the test holds now, so a
+      // stale 50 can never outlive a review step that cut the set to 40.
+      if ('questionsToServe' in action.patch) {
+        rules.questionsToServe = clampQuestionsToServe(
+          action.patch.questionsToServe,
+          state.questions.filter((q) => q.action !== 'skip').length,
+        );
+      }
+      return { ...state, rules };
+    }
 
     case 'setTitle':
       return { ...state, title: action.title };
@@ -396,6 +448,22 @@ export function resolveStep(draft: TestDraft, requested: string | null): WizardS
     if (canEnterStep(draft, WIZARD_STEPS[i])) return WIZARD_STEPS[i];
   }
   return 'source';
+}
+
+/**
+ * The step a URL asks for, reading a bare `?src=` as "open that branch".
+ *
+ * The wizard's own entry URL never carries `src`: picking a source pushes
+ * `step` and `src` together. So `src` without `step` can only be a deep link
+ * from elsewhere (the study material "Build a new test" button, the old import
+ * URL), and those always meant the branch's panel, not the source picker. Only
+ * the URL's `src` counts here, never the draft's, so browser Back to the plain
+ * entry URL still means step 1 while a source is held in memory.
+ */
+export function requestedStepFromUrl(step: string | null, src: SourceKind | null): string | null {
+  if (step) return step;
+  if (!src) return null;
+  return src === 'blank' ? 'review' : 'generate';
 }
 
 // ---------------------------------------------------------------------------
@@ -562,7 +630,10 @@ export function deserialiseDraft(raw: string | null, now: number): TestDraft | n
   if (!Array.isArray(draft.questions)) return null;
   const created = Date.parse(draft.createdAt);
   if (!Number.isFinite(created) || now - created > DRAFT_MAX_AGE_MS) return null;
-  return draft;
+  // Rules gained fields after drafts were first stored (questionsToServe).
+  // Filling them from the defaults keeps an older draft resumable instead of
+  // bumping DRAFT_VERSION and throwing a teacher's work away.
+  return { ...draft, rules: { ...DEFAULT_RULES, ...(draft.rules || {}) } };
 }
 
 /** Worth offering to resume. An untouched draft is noise, not work. */

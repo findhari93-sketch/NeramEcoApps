@@ -14,6 +14,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { newTestHref } from '@/lib/tests-hub-nav';
 import {
   Alert,
   Box,
@@ -364,7 +365,11 @@ export default function StudyTestAuthorDialog({
               onChange={setPicked}
               resetToken={open ? file?.id : null}
               maxListHeight={260}
-              onBuildNew={() => router.push('/teacher/tests/new?src=json')}
+              onBuildNew={() =>
+                // `from` brings the wizard's close button back to this study
+                // material page instead of dropping the teacher on the tests hub.
+                router.push(newTestHref(`${window.location.pathname}${window.location.search}`, { src: 'json' }))
+              }
             />
 
             <Divider sx={{ my: 2 }} />

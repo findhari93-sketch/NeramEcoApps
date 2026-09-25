@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { APP_URLS } from '../utils/credentials';
 
 /**
  * The one test wizard, API level.
@@ -22,7 +23,7 @@ let publishedTestId: string;
 
 test.describe('Nexus test wizard', () => {
   test.describe.configure({ mode: 'serial' });
-  test.use({ baseURL: 'http://localhost:3012' });
+  test.use({ baseURL: APP_URLS.nexus });
 
   test('setup: teacher and student in one classroom, with bank questions', async ({ request }) => {
     const t = await request.post('/api/auth/test-login', {
@@ -164,6 +165,51 @@ test.describe('Nexus test wizard', () => {
     await request.delete(`/api/question-bank/tests/${data.test_id}`, {
       headers: { Authorization: `Bearer ${teacherToken}` },
     });
+  });
+
+  test('publish stores "each student gets" as questions_to_serve, clamped to the pool', async ({ request }) => {
+    const headers = { Authorization: `Bearer ${teacherToken}` };
+    // A subset needs at least ten questions to draw from.
+    const q = await request.get('/api/question-bank/questions?page=1&page_size=12&question_status=active', { headers });
+    const ids: string[] = ((await q.json()).data?.questions || []).map((x: any) => x.id);
+    test.skip(ids.length < 12, 'needs 12 active bank questions');
+
+    const rules = { timed: false, durationMinutes: 30, marksPerQuestion: 1, attempts: null, passPct: 60, shuffle: true };
+    const publish = (title: string, questionsToServe: number | null) =>
+      request.post('/api/question-bank/tests/publish', {
+        headers,
+        data: {
+          title,
+          source: 'bank',
+          test_kind: 'practice_pool',
+          rules: { ...rules, questionsToServe },
+          questions: ids.map((id) => ({ bank_question_id: id, action: 'reuse' })),
+          placements: [],
+          publish: false,
+        },
+      });
+
+    const created: string[] = [];
+    try {
+      const drawn = await publish('E2E wizard pool draw', 10);
+      expect(drawn.status()).toBe(201);
+      const drawnId = (await drawn.json()).data.test_id;
+      created.push(drawnId);
+      const drawnDetail = await (await request.get(`/api/question-bank/tests/${drawnId}`, { headers })).json();
+      expect(drawnDetail.data.test.questions_to_serve).toBe(10);
+
+      // Serving the whole pool, or more, is stored as "every question".
+      const all = await publish('E2E wizard pool all', 50);
+      expect(all.status()).toBe(201);
+      const allId = (await all.json()).data.test_id;
+      created.push(allId);
+      const allDetail = await (await request.get(`/api/question-bank/tests/${allId}`, { headers })).json();
+      expect(allDetail.data.test.questions_to_serve).toBeNull();
+    } finally {
+      for (const id of created) {
+        await request.delete(`/api/question-bank/tests/${id}`, { headers });
+      }
+    }
   });
 
   test('publishing nothing is a sentence, not a stack trace', async ({ request }) => {

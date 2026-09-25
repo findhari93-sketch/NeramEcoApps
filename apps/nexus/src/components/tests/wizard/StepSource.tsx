@@ -11,7 +11,7 @@ import type { SourceKind } from '@/lib/test-wizard-draft';
 /**
  * Step 1. Where do the questions come from?
  *
- * Four sources, one wizard. What kind of test this becomes is NOT asked here
+ * Three sources, one wizard. What kind of test this becomes is NOT asked here
  * and is not asked anywhere in step 1 or 2: a test becomes a class test or a
  * weekly only by where it is placed in step 4. That is the change that lets one
  * wizard replace the five creation paths that existed before it.
@@ -29,7 +29,26 @@ interface SourceOption {
 export default function StepSource({ onPick }: { onPick: (kind: SourceKind) => void }) {
   const theme = useTheme();
 
+  // Bank first: it already holds every JEE Paper 2 and NATA past paper, so it
+  // answers most requests at no cost. ChatGPT second, marked Free, because it
+  // is how most tests here are actually written. The previous-year paper card
+  // is gone: its questions were always in the bank, and a full paper as a mock
+  // is still one tap away, from the bank's Paper filter or the link below.
   const options: SourceOption[] = [
+    {
+      kind: 'bank',
+      icon: <LibraryBooksOutlinedIcon />,
+      title: 'Pick from question bank',
+      blurb:
+        'Every question you already have, past papers included. Filter by exam, topic, source and paper. Reuse, do not regenerate.',
+    },
+    {
+      kind: 'json',
+      icon: <UploadFileOutlinedIcon />,
+      title: 'Write with ChatGPT or Gemini',
+      blurb: 'Copy a ready prompt, attach your chapter PDF, then paste the reply back. You can also upload a JSON file.',
+      footer: <Chip size="small" label="Free" color="success" variant="outlined" sx={{ fontWeight: 700 }} />,
+    },
     {
       kind: 'ai',
       icon: <AutoAwesomeOutlinedIcon />,
@@ -38,56 +57,8 @@ export default function StepSource({ onPick }: { onPick: (kind: SourceKind) => v
         'From a topic, chapter PDF or a class recording transcript. Uses inbuilt Gemini, the cheap default.',
       footer: (
         <Typography variant="caption" sx={{ color: 'primary.dark', fontWeight: 700 }}>
-          Recommended, about ₹1 per test
+          About ₹1 per test
         </Typography>
-      ),
-      recommended: true,
-    },
-    {
-      kind: 'json',
-      icon: <UploadFileOutlinedIcon />,
-      title: 'Upload JSON',
-      blurb:
-        'Paste or drop a file from ChatGPT, Claude or any external tool. Preview before anything is saved.',
-      footer: (
-        <Box
-          sx={{
-            border: '1.5px dashed',
-            borderColor: 'divider',
-            borderRadius: 1.5,
-            px: 1,
-            py: 1,
-            textAlign: 'center',
-          }}
-        >
-          <Typography variant="caption" color="text.secondary">
-            It stays stored with the test
-          </Typography>
-        </Box>
-      ),
-    },
-    {
-      kind: 'bank',
-      icon: <LibraryBooksOutlinedIcon />,
-      title: 'Pick from question bank',
-      blurb:
-        'Filter the questions you already have by subject, chapter, difficulty and year. Reuse, do not regenerate.',
-    },
-    {
-      kind: 'pyq',
-      icon: <HistoryEduOutlinedIcon />,
-      title: 'Previous-year paper',
-      blurb:
-        'JEE Paper 2 or NATA, by year. Imports the full paper as an exam-faithful mock, sections and marking included.',
-      footer: (
-        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-          {['2024', '2023', '2022'].map((y) => (
-            <Chip key={y} size="small" label={y} variant="outlined" sx={{ height: 22 }} />
-          ))}
-          <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
-            and earlier
-          </Typography>
-        </Box>
       ),
     },
   ];
@@ -145,16 +116,21 @@ export default function StepSource({ onPick }: { onPick: (kind: SourceKind) => v
         ))}
       </Box>
 
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
-        or{' '}
+      <Box sx={{ mt: 2, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: { xs: 0.5, sm: 3 } }}>
+        <Button
+          startIcon={<HistoryEduOutlinedIcon />}
+          onClick={() => onPick('pyq')}
+          sx={{ textTransform: 'none', fontWeight: 700, minHeight: 44, justifyContent: 'flex-start' }}
+        >
+          Use a full past paper as a mock
+        </Button>
         <Button
           onClick={() => onPick('blank')}
-          sx={{ textTransform: 'none', p: 0, minWidth: 0, fontWeight: 700, verticalAlign: 'baseline' }}
+          sx={{ textTransform: 'none', fontWeight: 700, minHeight: 44, justifyContent: 'flex-start' }}
         >
-          start blank
-        </Button>{' '}
-        and add questions by hand
-      </Typography>
+          Start blank and add questions by hand
+        </Button>
+      </Box>
     </Box>
   );
 }

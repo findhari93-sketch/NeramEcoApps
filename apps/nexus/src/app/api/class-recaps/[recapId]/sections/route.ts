@@ -4,6 +4,7 @@ import { saveRecapSections, getRecapById, getSupabaseAdminClient } from '@neram/
 import type { GeneratedRecapSection } from '@neram/database';
 import { readRecapDefaults } from '@/lib/recap-defaults';
 import { resolveSectionGate } from '@/lib/recap-gate';
+import { tagRecapCheckpointQuestions } from '@/lib/qb-recap-question-tags';
 
 /**
  * PUT /api/class-recaps/[recapId]/sections
@@ -28,7 +29,7 @@ export async function PUT(
   { params }: { params: Promise<{ recapId: string }> },
 ) {
   try {
-    await verifyTeacher(request.headers.get('Authorization'));
+    const teacher = await verifyTeacher(request.headers.get('Authorization'));
     const { recapId } = await params;
     const body = await request.json().catch(() => ({}));
     const sections = body.sections as GeneratedRecapSection[] | undefined;
@@ -49,6 +50,9 @@ export async function PUT(
     }
 
     await saveRecapSections(recapId, await withGate(recapId, sections));
+    // New checkpoint questions go into the bank untagged; give them the class's
+    // topic tags so a topic-filtered test can find them. Best effort, never throws.
+    await tagRecapCheckpointQuestions(getSupabaseAdminClient(), recapId, { createdBy: teacher.id });
     const recap = await getRecapById(recapId);
     return NextResponse.json({ recap });
   } catch (err) {

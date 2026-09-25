@@ -11,7 +11,7 @@ import {
   Snackbar,
   Typography,
 } from '@neram/ui';
-import ArrowBackOutlinedIcon from '@mui/icons-material/ArrowBackOutlined';
+import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useTestWizardDraft, clearStoredDraft } from '@/hooks/useTestWizardDraft';
 import type { ImportRegistryTag } from '@/lib/qb-import-schema';
@@ -38,6 +38,8 @@ import SourceBankPanel, { bankQuestionToDraft } from './SourceBankPanel';
 import SourcePyqPanel from './SourcePyqPanel';
 import StepReview from './StepReview';
 import StepPlace from './StepPlace';
+import WizardCloseConfirm from './WizardCloseConfirm';
+import { wizardCloseHref, wizardFromLabel } from '@/lib/tests-hub-nav';
 
 /**
  * One wizard for every test.
@@ -87,8 +89,24 @@ export default function TestWizard() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { getToken, isTeacher, activeClassroom } = useNexusAuthContext();
-  const { draft, dispatch, pendingResume, resume, discard, goNext, goBack, goTo, storageWarning } =
+  const { draft, dispatch, pendingResume, resume, discard, goNext, goBack, goTo, dirty, storageWarning } =
     useTestWizardDraft();
+
+  // The wizard is a full-screen task, so it closes rather than goes back, and it
+  // closes to the screen that opened it (a hub tab, or a study material page).
+  const from = searchParams.get('from');
+  const closeHref = wizardCloseHref(from);
+  const fromLabel = wizardFromLabel(from);
+  const [confirmClose, setConfirmClose] = useState(false);
+  const leave = useCallback(() => {
+    setConfirmClose(false);
+    discard();
+    router.push(closeHref);
+  }, [discard, router, closeHref]);
+  const requestClose = useCallback(() => {
+    if (dirty) setConfirmClose(true);
+    else router.push(closeHref);
+  }, [dirty, router, closeHref]);
 
   const [registry, setRegistry] = useState<ImportRegistryTag[]>([]);
   /**
@@ -242,13 +260,24 @@ export default function TestWizard() {
   }, [draft.source, draft.questions, bankSelection.size]);
 
   const questionsReady = useCallback(
-    (payload: { questions: any[]; proposedTags: any[]; title: string; folderPath: string[] }) => {
+    (payload: {
+      questions: any[];
+      proposedTags: any[];
+      title: string;
+      folderPath: string[];
+      /** "Each student gets", from a v3 reply's test.serve or the copied prompt. */
+      serve?: number | null;
+    }) => {
       dispatch({
         type: 'questionsReady',
         questions: payload.questions.map(importRowToDraft),
         title: payload.title,
         folderPath: payload.folderPath,
       });
+      // After questionsReady, so the reducer clamps it against these questions.
+      if (typeof payload.serve === 'number' && payload.serve > 0) {
+        dispatch({ type: 'patchRules', patch: { questionsToServe: payload.serve } });
+      }
       dispatch({
         type: 'setProposedTags',
         tags: (payload.proposedTags || []).map((t: any) => ({ ...t, approved: true })),
@@ -360,7 +389,9 @@ export default function TestWizard() {
   // even before the picker has re-fetched the rows behind it.
   const bankPicked = draft.source === 'bank' ? activeQuestions(draft).length : 0;
   const bankSummary = useMemo(() => {
-    if (bankPicked === 0) return 'Nothing picked yet';
+    // No summary until something is picked: the primary button already says
+    // "Review 0 questions", and at 375px this line was squeezed to "Not...".
+    if (bankPicked === 0) return undefined;
     return `${bankPicked} selected · ${bankPicked} mark${bankPicked === 1 ? '' : 's'} · about ${estimatedMinutes(draft)} min`;
   }, [bankPicked, draft]);
 
@@ -378,16 +409,30 @@ export default function TestWizard() {
     <Box sx={{ px: { xs: 2, md: 3 }, py: 2, pb: { xs: 20, md: 14 }, maxWidth: 1100, mx: 'auto' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
         <IconButton
-          aria-label="Back to tests"
-          onClick={() => router.push('/teacher/tests')}
+          aria-label={fromLabel ? `Close, back to ${fromLabel.replace(/^From /, '')}` : 'Close, back to tests'}
+          onClick={requestClose}
           sx={{ minWidth: 48, minHeight: 48, ml: -1 }}
         >
-          <ArrowBackOutlinedIcon />
+          <CloseOutlinedIcon />
         </IconButton>
-        <Typography variant="h6" sx={{ fontWeight: 700 }}>
-          New test
-        </Typography>
+        <Box sx={{ minWidth: 0 }}>
+          {fromLabel && (
+            <Typography variant="caption" color="text.secondary" component="p" sx={{ lineHeight: 1.2 }}>
+              {fromLabel}
+            </Typography>
+          )}
+          <Typography variant="h6" component="h1" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
+            New test
+          </Typography>
+        </Box>
       </Box>
+
+      <WizardCloseConfirm
+        open={confirmClose}
+        questionCount={draft.questions.length}
+        onKeep={() => setConfirmClose(false)}
+        onDiscard={leave}
+      />
 
       <WizardStepper step={step} />
 
@@ -459,6 +504,15 @@ export default function TestWizard() {
               questions: [...next.values()].map(bankQuestionToDraft),
             });
             dispatch({ type: 'patchBank', patch: { selectedIds: [...next.keys()] } });
+          }}
+          onUseWholePaper={(paperId) => {
+            // The exam-faithful import keeps its own branch, because it brings
+            // sections, marking and timing that a hand-picked list does not.
+            // Handing over the id lets that panel open on this paper.
+            setBankSelection(new Map());
+            dispatch({ type: 'pickSource', source: 'pyq' });
+            dispatch({ type: 'patchPyq', patch: { paperId, mode: 'faithful', blueprint: null } });
+            goTo('generate', 'pyq');
           }}
         />
       )}

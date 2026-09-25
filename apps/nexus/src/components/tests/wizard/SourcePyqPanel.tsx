@@ -17,6 +17,7 @@ import {
   alpha,
   useTheme,
 } from '@neram/ui';
+import { paperTitles } from '@neram/database';
 import type { PaperBlueprint, TestDraft } from '@/lib/test-wizard-draft';
 
 /**
@@ -32,6 +33,8 @@ import type { PaperBlueprint, TestDraft } from '@/lib/test-wizard-draft';
 interface PaperRow {
   id: string;
   year: number;
+  session: string | null;
+  shift: string | null;
   total_questions: number | null;
   duration_minutes: number | null;
   exam_type: string;
@@ -47,7 +50,10 @@ export default function SourcePyqPanel({
   authFetch: (url: string, init?: RequestInit) => Promise<any>;
 }) {
   const theme = useTheme();
-  const [exam, setExam] = useState<'JEE_PAPER_2' | 'NATA'>('JEE_PAPER_2');
+  // Opens on the exam of a paper handed over from the bank, when there is one.
+  const [exam, setExam] = useState<'JEE_PAPER_2' | 'NATA'>(
+    draft.pyq.blueprint?.examType === 'NATA' ? 'NATA' : 'JEE_PAPER_2',
+  );
   const [papers, setPapers] = useState<PaperRow[] | null>(null);
   const [loadingBlueprint, setLoadingBlueprint] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +88,7 @@ export default function SourcePyqPanel({
       const json = await authFetch(`/api/question-bank/papers/${paperId}?structure=1`);
       const bp = json.data?.blueprint;
       const paper = json.data?.paper;
+      if (paper?.exam_type === 'NATA' || paper?.exam_type === 'JEE_PAPER_2') setExam(paper.exam_type);
       onPatch({
         paperId,
         blueprint: {
@@ -100,6 +107,16 @@ export default function SourcePyqPanel({
   };
 
   const blueprint = draft.pyq.blueprint;
+
+  // A paper picked in the question bank ("Use the whole paper as a mock")
+  // arrives as an id with no blueprint yet. Load it once, so the teacher lands
+  // on the paper's structure rather than on an unselected year grid.
+  const handedOver = draft.pyq.paperId && !draft.pyq.blueprint ? draft.pyq.paperId : null;
+  useEffect(() => {
+    if (handedOver) choosePaper(handedOver);
+    // choosePaper is recreated every render; the id is the real trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handedOver]);
 
   return (
     <Box
@@ -136,6 +153,10 @@ export default function SourcePyqPanel({
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(3, 1fr)' }, gap: 1.5 }}>
             {papers.map((p) => {
               const chosen = draft.pyq.paperId === p.id;
+              // A year can hold several sittings (sessions, forenoon and
+              // afternoon), so the card names the sitting, not just the year.
+              // Three bare "2022" cards gave no way to tell them apart.
+              const sitting = paperTitles(p).short_title.replace(String(p.year), '').trim();
               return (
                 <Paper
                   key={p.id}
@@ -163,6 +184,11 @@ export default function SourcePyqPanel({
                   <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
                     {p.year}
                   </Typography>
+                  {sitting && (
+                    <Typography variant="body2" sx={{ lineHeight: 1.3, mb: 0.25 }}>
+                      {sitting}
+                    </Typography>
+                  )}
                   <Typography variant="caption" color="text.secondary">
                     {p.total_questions ?? '?'} Q
                     {p.duration_minutes ? ` · ${Math.round(p.duration_minutes / 60)} h` : ''}
@@ -177,7 +203,7 @@ export default function SourcePyqPanel({
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
         {!draft.pyq.paperId ? (
           <Typography variant="body2" color="text.secondary">
-            Pick a year to see how the paper is built.
+            Pick a paper to see how it is built.
           </Typography>
         ) : loadingBlueprint || !blueprint ? (
           <CircularProgress size={22} />

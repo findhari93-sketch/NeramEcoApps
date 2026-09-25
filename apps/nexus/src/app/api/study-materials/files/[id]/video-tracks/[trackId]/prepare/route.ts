@@ -9,6 +9,7 @@ import {
   withoutUnpassableCheckpoints,
 } from '@/lib/track-recording';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
+import { tagRecapCheckpointQuestions } from '@/lib/qb-recap-question-tags';
 
 /**
  * Gemini is called once per checkpoint, one after another, capped at ten calls,
@@ -135,6 +136,8 @@ export async function POST(
     }
 
     await saveRecapSections(track.id, await stampTrackGate(supabase, track.id, usable));
+    // Tag the new checkpoint questions in the bank. Best effort, never throws.
+    await tagRecapCheckpointQuestions(supabase, track.id, { createdBy: user.id });
     await supabase
       .from('nexus_class_recaps')
       .update({ readiness: 'ready', generated_at: new Date().toISOString() })

@@ -1,13 +1,21 @@
 'use client';
 
 import { useState } from 'react';
-import { Box, Paper, Typography } from '@neram/ui';
-import QuestionPickerList from '@/components/question-bank/QuestionPickerList';
+import { Box, Button, Paper, Typography } from '@neram/ui';
+import QuestionPickerList, { type PickerPaper } from '@/components/question-bank/QuestionPickerList';
+import { paperTitles } from '@neram/database';
 import type { NexusQBQuestionListItem } from '@neram/database';
 import type { DraftQuestion } from '@/lib/test-wizard-draft';
 
 /**
  * Step 2, question-bank branch.
+ *
+ * One bank, past papers included. "Previous-year paper" used to be a separate
+ * source card even though its questions always lived here, and it could not
+ * answer "every Islamic Architecture question across every past paper". Past
+ * papers are now a Source filter; picking one sitting offers the whole paper as
+ * an exam-faithful mock, which is the one job the old card did that a filter
+ * cannot (sections, marking and timing kept).
  *
  * Reuse beats regenerate: no AI cost, already-vetted questions. The "used in N
  * tests" chip is the point of the whole screen, because over-recycling is
@@ -45,16 +53,28 @@ export function bankQuestionToDraft(q: NexusQBQuestionListItem): DraftQuestion {
   };
 }
 
+/**
+ * A wizard test marks itself, so only formats a machine can score belong in it.
+ * The picker's own caption already said so, but nothing passed the filter, and
+ * drawing prompts could be ticked into a test that would score them zero.
+ * Module level so the picker's fetch key stays stable between renders.
+ */
+const SELF_MARKING_FORMATS = ['MCQ', 'NUMERICAL'];
+
 export default function SourceBankPanel({
   getToken,
   selected,
   onChange,
+  onUseWholePaper,
 }: {
   getToken: () => Promise<string | null>;
   selected: Map<string, NexusQBQuestionListItem>;
   onChange: (next: Map<string, NexusQBQuestionListItem>) => void;
+  /** Hands one paper sitting to the exam-faithful mock import. */
+  onUseWholePaper: (paperId: string) => void;
 }) {
   const [total, setTotal] = useState<number | null>(null);
+  const [paper, setPaper] = useState<PickerPaper | null>(null);
 
   return (
     <Paper variant="outlined" sx={{ p: { xs: 1.5, md: 2.5 }, borderRadius: 2 }}>
@@ -69,11 +89,47 @@ export default function SourceBankPanel({
         )}
       </Box>
 
+      {paper && (
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            alignItems: { xs: 'stretch', sm: 'center' },
+            gap: 1.5,
+            p: 1.5,
+            mb: 1.5,
+            borderRadius: 2,
+            border: '1px solid',
+            borderColor: 'primary.light',
+            bgcolor: 'action.hover',
+          }}
+        >
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="body2" sx={{ fontWeight: 700 }}>
+              Use {paperTitles(paper).title} as a full mock?
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Keeps the paper&apos;s sections, marking and timing, so students sit it as they would on exam day.
+            </Typography>
+          </Box>
+          <Button
+            variant="outlined"
+            onClick={() => onUseWholePaper(paper.id)}
+            sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600, flexShrink: 0 }}
+          >
+            Use the whole paper
+          </Button>
+        </Box>
+      )}
+
       <QuestionPickerList
         getToken={getToken}
         selected={selected}
         onChange={onChange}
         showUsage
+        fullFilters
+        formats={SELF_MARKING_FORMATS}
+        onPaperChange={setPaper}
         onTotalChange={setTotal}
       />
     </Paper>

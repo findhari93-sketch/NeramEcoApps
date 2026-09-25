@@ -13,6 +13,7 @@ import { resolveTranscript } from '@/lib/transcript-resolver';
 import { preflight, scoreRecapGeneration } from '@/lib/recap-quality';
 import { readRecapDefaults, questionsToPass } from '@/lib/recap-defaults';
 import { dropStarvedSections, isUsableSection } from '@/lib/recap-autodraft';
+import { tagRecapCheckpointQuestions } from '@/lib/qb-recap-question-tags';
 
 /**
  * POST /api/class-recaps/[recapId]/autopublish
@@ -132,6 +133,8 @@ export async function POST(
     }));
 
     await replaceRecapSections(recapId, graded, supabase);
+    // Tag the new checkpoint questions in the bank. Best effort, never throws.
+    await tagRecapCheckpointQuestions(supabase, recapId);
 
     // Coverage and boundaries against every PLANNED segment rather than the ones
     // that survived, so a thin generation reports "3 of 5 checkpoints have too

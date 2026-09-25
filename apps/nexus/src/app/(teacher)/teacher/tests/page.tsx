@@ -35,6 +35,7 @@ import ExpandMoreOutlinedIcon from '@mui/icons-material/ExpandMoreOutlined';
 import ChevronRightOutlinedIcon from '@mui/icons-material/ChevronRightOutlined';
 import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { hubHref, newTestHref, parseHubTab, type HubTab } from '@/lib/tests-hub-nav';
 import type { NexusTestOverviewGroup, NexusTestOverviewGroupKey, NexusOverviewTest } from '@neram/database';
 
 // Exhaustive on purpose. Adding a NexusTestOverviewGroupKey without a label and
@@ -226,12 +227,24 @@ function GroupSection({
   );
 }
 
-type HubTab = 'library' | 'conducted' | 'location' | 'students';
-
 export default function TeacherTestsHubPage() {
   const router = useRouter();
   const { getToken, activeClassroom } = useNexusAuthContext();
-  const [tab, setTab] = useState<HubTab>('library');
+  // Null until the URL has been read. The tab lives in `?tab=` so that closing
+  // the New test wizard, or Back from a test, lands on the tab the teacher was
+  // on. Read in an effect from window.location rather than useSearchParams,
+  // which would opt this page out of prerendering without a Suspense boundary.
+  const [tab, setTab] = useState<HubTab | null>(null);
+  useEffect(() => {
+    setTab(parseHubTab(new URLSearchParams(window.location.search).get('tab')));
+  }, []);
+  const changeTab = useCallback((next: HubTab) => {
+    setTab(next);
+    // replaceState, not a router navigation: switching tabs is not a page the
+    // teacher expects Back to step through, and it needs no server round trip.
+    window.history.replaceState(null, '', hubHref(next));
+  }, []);
+  const openNewTest = useCallback(() => router.push(newTestHref(tab ?? 'library')), [router, tab]);
   const [groups, setGroups] = useState<NexusTestOverviewGroup[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -299,7 +312,7 @@ export default function TeacherTestsHubPage() {
           variant="contained"
           size="small"
           startIcon={<AddTaskOutlinedIcon />}
-          onClick={() => router.push('/teacher/tests/new')}
+          onClick={openNewTest}
           sx={{ textTransform: 'none', flexShrink: 0, minHeight: 44 }}
         >
           New test
@@ -307,8 +320,8 @@ export default function TeacherTestsHubPage() {
       </Box>
 
       <Tabs
-        value={tab}
-        onChange={(_, v) => setTab(v as HubTab)}
+        value={tab ?? false}
+        onChange={(_, v) => changeTab(v as HubTab)}
         sx={{ mt: 1, borderBottom: 1, borderColor: 'divider', '& .MuiTab-root': { textTransform: 'none', minHeight: 48 } }}
       >
         <Tab value="library" label="Library" />
@@ -369,7 +382,7 @@ export default function TeacherTestsHubPage() {
               variant="contained"
               size="small"
               startIcon={<AutoAwesomeOutlinedIcon />}
-              onClick={() => router.push('/teacher/tests/new')}
+              onClick={openNewTest}
               sx={{ textTransform: 'none', minHeight: 44 }}
             >
               Import from AI

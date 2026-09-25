@@ -46,7 +46,6 @@ import {
   QB_QUESTION_STATUS_LABELS,
   QB_QUESTION_STATUS_COLORS,
 } from '@neram/database';
-import DifficultyChip from '@/components/question-bank/DifficultyChip';
 import SourceBadges from '@/components/question-bank/SourceBadges';
 import CategoryChips from '@/components/question-bank/CategoryChips';
 import MathText from '@/components/common/MathText';
@@ -706,7 +705,6 @@ function QuestionsListContent() {
 
                     {/* Bottom row */}
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
-                      <DifficultyChip difficulty={q.difficulty} size="small" />
                       <CategoryChips categories={q.categories.slice(0, 2)} size="small" />
 
                       {/* Registry tags (up to 3 + overflow count) */}

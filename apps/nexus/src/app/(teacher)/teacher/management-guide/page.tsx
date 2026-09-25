@@ -173,7 +173,7 @@ export default function ManagementGuidePage() {
       steps: [
         'Click "All Questions" from the QB dashboard.',
         'Use the search bar to find questions by text.',
-        'Filter by: Difficulty (Easy/Medium/Hard), Category, Exam Relevance (JEE/NATA/Both), or Status (Draft/Answer Keyed/Complete/Active).',
+        'Filter by: Category, Exam Relevance (JEE/NATA/Both, where JEE and NATA also include questions set for both), Source, or Status (Draft/Answer Keyed/Complete/Active).',
         'Each question card shows: text preview, source badges (exam type, year, session, Q#), difficulty chip, and category chips.',
         'Click the edit button on any question to modify it.',
         'Toggle Active/Inactive to control student visibility per question.',

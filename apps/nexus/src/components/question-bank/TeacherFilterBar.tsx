@@ -102,17 +102,6 @@ export default function TeacherFilterBar({
       onChange: onQuestionFormatChange,
     },
     {
-      key: 'difficulty',
-      label: 'Difficulty',
-      value: difficulty,
-      options: [
-        { value: 'EASY', label: 'Easy' },
-        { value: 'MEDIUM', label: 'Medium' },
-        { value: 'HARD', label: 'Hard' },
-      ],
-      onChange: onDifficultyChange,
-    },
-    {
       key: 'category',
       label: 'Category',
       value: category,

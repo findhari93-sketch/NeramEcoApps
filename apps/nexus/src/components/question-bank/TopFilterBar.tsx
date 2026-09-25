@@ -60,7 +60,6 @@ function chipKeys(chip: QuickChip): (keyof QBFilterState)[] {
 
 const QUICK_CHIPS: QuickChip[] = [
   { label: 'Exam', filterKey: 'exam_type', alsoKeys: ['exam_relevance'] },
-  { label: 'Difficulty', filterKey: 'difficulty' },
   { label: 'Category', filterKey: 'categories' },
   { label: 'Format', filterKey: 'question_format' },
   { label: 'Status', filterKey: 'attempt_status' },

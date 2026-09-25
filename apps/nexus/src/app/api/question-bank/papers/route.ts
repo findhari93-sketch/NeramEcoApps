@@ -26,9 +26,14 @@ export async function GET(request: NextRequest) {
     // The exam pages' to-do list also needs solution counts, which cost two
     // more reads, so that is a second opt-in on top of the breakdown.
     const withSolutions = request.nextUrl.searchParams.get('solutions') === '1';
-    const papers = withBreakdown || withSolutions
+    const all = withBreakdown || withSolutions
       ? await listOriginalPapersWithBreakdown()
       : await listOriginalPapers();
+    // The New test wizard's JEE Paper 2 and NATA tabs ask for one exam. This
+    // used to be ignored, so both tabs listed every paper side by side. The
+    // table holds a few dozen rows, so filtering here costs nothing.
+    const examType = request.nextUrl.searchParams.get('exam_type');
+    const papers = examType ? all.filter((p) => p.exam_type === examType) : all;
 
     if (!withSolutions) return NextResponse.json({ data: papers }, { status: 200 });
 

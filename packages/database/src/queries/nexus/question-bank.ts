@@ -613,6 +613,18 @@ function applyPaperSourceFilters<Q>(query: Q, filters: PaperSourceFilters, prefi
 }
 
 /**
+ * The exam values a filter on one exam should match.
+ *
+ * A question marked BOTH is set for JEE Paper 2 and NATA alike, so filtering on
+ * either exam includes it. Matching exactly hid every BOTH question from both
+ * filters. The nexus_qb_search RPC applies the same rule (migration
+ * 20261008090000), so browse and search agree.
+ */
+export function examRelevanceMatch(exam: QBExamRelevance): QBExamRelevance[] {
+  return exam === 'BOTH' ? ['BOTH'] : [exam, 'BOTH'];
+}
+
+/**
  * Main filtered question list with pagination.
  * Applies all filters from QBFilterState, enriches with sources/topic,
  * and optionally computes attempt_summary per question for a student.
@@ -639,7 +651,7 @@ export async function getQBQuestions(
 
   // Apply filters
   if (filters.exam_relevance) {
-    query = query.eq('exam_relevance', filters.exam_relevance);
+    query = query.in('exam_relevance', examRelevanceMatch(filters.exam_relevance));
   }
   if (filters.categories && filters.categories.length > 0) {
     // Parent slugs (coordinate_geometry, algebra, ...) are never written onto a
@@ -1335,7 +1347,7 @@ export async function getStudentQBStats(
     .eq('is_active', true)
     .eq('status' as any, 'active');
   if (examRelevance) {
-    totalQuery = totalQuery.eq('exam_relevance', examRelevance);
+    totalQuery = totalQuery.in('exam_relevance', examRelevanceMatch(examRelevance));
   }
   // This used to take the total from count:'exact' while reading the rows behind
   // by_category and by_difficulty unranged, so the headline number counted 3,242
@@ -1461,7 +1473,7 @@ export async function getTeacherQBStats(
     .from('nexus_qb_questions')
     .select('*', { count: 'exact' });
   if (examRelevance) {
-    totalQuery = totalQuery.eq('exam_relevance', examRelevance);
+    totalQuery = totalQuery.in('exam_relevance', examRelevanceMatch(examRelevance));
   }
   const { data: allQuestions, count: totalCount, error: totalError } = await totalQuery;
   if (totalError) throw totalError;
@@ -2258,7 +2270,7 @@ export async function getTeacherQBQuestions(
 
   // Standard filters
   if (filters.exam_relevance) {
-    query = query.eq('exam_relevance', filters.exam_relevance);
+    query = query.in('exam_relevance', examRelevanceMatch(filters.exam_relevance));
   }
   if (filters.categories && filters.categories.length > 0) {
     // Parent slugs (coordinate_geometry, algebra, ...) are never written onto a

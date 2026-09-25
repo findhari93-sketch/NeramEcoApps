@@ -21,7 +21,6 @@ import type {
   QBFilterState,
   NexusQBTopic,
   NexusQBTagNode,
-  QBDifficulty,
   QBQuestionFormat,
   QBExamTree,
   QBExamType,
@@ -50,12 +49,6 @@ interface FilterDrawerProps {
    */
   onDraftChange?: (draft: QBFilterState) => void;
 }
-
-const DIFFICULTY_OPTIONS: { value: QBDifficulty; label: string }[] = [
-  { value: 'EASY', label: 'Easy' },
-  { value: 'MEDIUM', label: 'Medium' },
-  { value: 'HARD', label: 'Hard' },
-];
 
 const FORMAT_OPTIONS: { value: QBQuestionFormat; label: string }[] = [
   { value: 'MCQ', label: 'MCQ' },
@@ -444,27 +437,8 @@ export default function FilterDrawer({
           </AccordionDetails>
         </Accordion>
 
-        {/* Difficulty */}
-        <Accordion disableGutters elevation={0}>
-          <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-            <Typography variant="subtitle2">Difficulty</Typography>
-          </AccordionSummary>
-          <AccordionDetails>
-            <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-              {DIFFICULTY_OPTIONS.map((opt) => (
-                <Chip
-                  key={opt.value}
-                  label={opt.label}
-                  onClick={() => toggleArrayValue('difficulty', opt.value)}
-                  variant={(draft.difficulty || []).includes(opt.value) ? 'filled' : 'outlined'}
-                  color={(draft.difficulty || []).includes(opt.value) ? 'primary' : 'default'}
-                  size="small"
-                />
-              ))}
-            </Box>
-          </AccordionDetails>
-        </Accordion>
-
+        {/* No Difficulty filter: it was a hand-set label left on the Medium
+            default for 97% of the bank, so it filtered nothing. */}
         {/* Confidence Level (recalled papers) */}
         <Accordion disableGutters elevation={0}>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>

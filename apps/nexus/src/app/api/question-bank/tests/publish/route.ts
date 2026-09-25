@@ -3,6 +3,7 @@ import { createPlacement, type NexusPlacementContext } from '@neram/database';
 import { verifyQBAccess } from '@/lib/qb-auth';
 import { commitImport, ImportInputError, type CommitRow } from '@/lib/qb-import-service';
 import { saveTestImportPayload, type TestImportSource } from '@/lib/test-import-store';
+import { clampQuestionsToServe } from '@/lib/test-wizard-draft';
 
 /**
  * POST /api/question-bank/tests/publish   (teacher/admin)
@@ -22,6 +23,12 @@ import { saveTestImportPayload, type TestImportSource } from '@/lib/test-import-
  * answering the whole request with a 500 would lose the test they just built
  * along with the message explaining why.
  */
+
+/**
+ * commitImport authors new questions one at a time, and a pasted pool can now
+ * be 300 of them. Well past the platform's short default, well inside this.
+ */
+export const maxDuration = 300;
 
 /** Contexts a generic placement may create. The gated kinds are excluded on purpose. */
 const GENERIC_CONTEXTS: NexusPlacementContext[] = [
@@ -116,6 +123,23 @@ export async function POST(request: NextRequest) {
     }
 
     const { timerType, durationMinutes } = timerFields(rules);
+    // Every question, bank or authored, ends up in the one test commitImport
+    // composes, so the pool is their total. A bank row commitImport skips as a
+    // duplicate only makes the pool smaller, and composeTest clamps again
+    // against the final id list.
+    //
+    // Clamped here as well as in the wizard: the draft can change after the
+    // value was set (review can drop questions) and the body is untrusted. A
+    // count at or above the paper's length means every question, stored as
+    // null, so the detail page never reads "Pool of 40, 40 per sitting".
+    //
+    // Never for an imported paper: its sections are shuffled in place, and
+    // ensureTestDraw's sectioned draw serves the whole paper whatever this
+    // says, while the timer would still size itself to the smaller number.
+    const questionsToServe =
+      body?.source === 'pyq'
+        ? null
+        : clampQuestionsToServe(rules?.questionsToServe, authored.length + bankIds.length);
     const passingPct = Number.isFinite(Number(rules?.passPct)) ? Number(rules.passPct) : null;
 
     // ── 1. Build the test ────────────────────────────────────────────────────
@@ -136,6 +160,9 @@ export async function POST(request: NextRequest) {
       shuffle: Boolean(rules?.shuffle),
       // An imported paper keeps its sections in order and shuffles inside them.
       shuffleSections: body?.source === 'pyq',
+      // Each student's own random subset. Drawn per student by ensureTestDraw;
+      // null serves the whole paper, exactly as before this existed.
+      questionsToServe,
       marksByQuestionId: Object.keys(marksByQuestionId).length > 0 ? marksByQuestionId : undefined,
       isPublished: body?.publish !== false,
       createdFrom: typeof body?.created_from === 'string' ? body.created_from : 'wizard',

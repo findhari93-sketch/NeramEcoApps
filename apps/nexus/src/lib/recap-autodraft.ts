@@ -54,6 +54,7 @@ import {
 } from '@neram/database';
 import { generateSectionsAndQuestions, type GeneratedSection } from './ai-generate';
 import { readStoredTranscript } from './transcript-resolver';
+import { tagRecapCheckpointQuestions } from './qb-recap-question-tags';
 import {
   minUsableQuestions,
   preflight,
@@ -845,6 +846,8 @@ export async function autodraftRecapForClass(
     }));
 
     await replaceRecapSections(recap.id, graded, supabase);
+    // Tag the new checkpoint questions in the bank. Best effort, never throws.
+    await tagRecapCheckpointQuestions(supabase, recap.id);
 
     // Nobody reads these before a student does, so the bar is what stands
     // between a bad generation and a teenager being asked to pass it.

@@ -5,6 +5,7 @@ import { findUnpassableCheckpoint } from '@/lib/checkpoint-validation';
 import { stampTrackGate } from '@/lib/track-recording';
 import { describeRecordingUrl } from '@/lib/chapter-recordings';
 import { getRequestUser, assertStaff } from '@/lib/study-materials';
+import { tagRecapCheckpointQuestions } from '@/lib/qb-recap-question-tags';
 import type { GeneratedRecapSection } from '@neram/database';
 
 /**
@@ -164,6 +165,8 @@ export async function PUT(
 
     const supabase = getSupabaseAdminClient() as any;
     await saveRecapSections(params.trackId, await stampTrackGate(supabase, params.trackId, cleaned));
+    // Tag the new checkpoint questions in the bank. Best effort, never throws.
+    await tagRecapCheckpointQuestions(supabase, params.trackId, { createdBy: user.id });
 
     // Generated and saved, so it is no longer waiting on a human.
     await supabase

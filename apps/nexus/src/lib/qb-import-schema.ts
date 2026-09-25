@@ -73,7 +73,19 @@ export interface ProposedTag {
 }
 
 export interface ImportValidationResult {
-  test: { title: string; folder_path: string[] };
+  test: {
+    title: string;
+    folder_path: string[];
+    /**
+     * v3. The exam every question is written for, unless a question names its
+     * own. Optional so a v2 reply, and any hand-built result, still type-checks.
+     */
+    exam?: ImportExam | null;
+    /** v3. How many questions the teacher asked for in total. Informational. */
+    pool?: number | null;
+    /** v3. How many each student gets. Prefills the wizard's "Each student gets". */
+    serve?: number | null;
+  };
   questions: ImportQuestion[];
   proposedTags: ProposedTag[];
   /** Row-level problems that dropped a row entirely. */
@@ -87,6 +99,12 @@ export interface ImportValidationResult {
    * upload screen can say "nexus-test v2" rather than guessing.
    */
   schema: { name: string | null; version: number | null; recognised: boolean };
+  /**
+   * How many separate JSON replies the paste held. ChatGPT cannot send 150
+   * questions in one message, so a teacher pastes three replies one after
+   * another and they are read as one set. Optional for hand-built results.
+   */
+  replies?: number;
 }
 
 export interface BuildImportPromptOptions {
@@ -118,11 +136,22 @@ export interface BuildImportPromptOptions {
  * an older reply parse WRONG rather than merely parse without a new field.
  */
 export const SCHEMA_NAME = 'nexus-test';
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
+/**
+ * Every version this parser reads correctly. v3 only ADDED optional fields
+ * (test.exam, test.pool, test.serve) and stopped asking for difficulty, so a
+ * v2 reply parses exactly as it always did.
+ */
+const READABLE_VERSIONS: readonly number[] = [2, 3];
 
 /** Dense tagging is the point, so this sits well above the tagging assistant's 5. */
 export const MAX_TAGS_PER_QUESTION = 8;
-const MAX_QUESTIONS_PER_PASTE = 200;
+/**
+ * One import, however many replies it arrived in. 300 leaves room for a
+ * 150-question pool with plenty to spare; commitImport holds the same number.
+ */
+export const MAX_QUESTIONS_PER_IMPORT = 300;
+const MAX_QUESTIONS_PER_PASTE = MAX_QUESTIONS_PER_IMPORT;
 const MIN_QUESTION_CHARS = 10;
 /** Short enough to admit a real one-line quote, long enough to reject "yes". */
 const MIN_SOURCE_QUOTE_CHARS = 15;
@@ -146,24 +175,35 @@ export function importSlugify(input: string): string {
  * meant the "copy the JSON format spec" button in the wizard would have been a
  * second, hand-maintained copy: the exact way a contract and its documentation
  * drift apart.
+ *
+ * v3 moved `exam` up to the test (one value instead of 150 copies of it) and
+ * dropped `difficulty`, which nobody used: 97% of the bank sat on the MEDIUM
+ * default. `pool` and `serve` appear only when the caller knows them, so the
+ * in-app generator's prompt does not show a model a number it never asked for.
  */
-export function importSampleObject(exam: ImportExam = 'BOTH', folder = ''): Record<string, unknown> {
+export function importSampleObject(
+  exam: ImportExam = 'BOTH',
+  folder = '',
+  extra: { title?: string; pool?: number; serve?: number } = {},
+): Record<string, unknown> {
+  const test: Record<string, unknown> = {
+    title: extra.title || 'The chapter name, read from the document',
+    suggested_folder: folder || 'Foundation / The chapter name',
+    exam,
+  };
+  if (typeof extra.pool === 'number' && extra.pool > 0) test.pool = extra.pool;
+  if (typeof extra.serve === 'number' && extra.serve > 0) test.serve = extra.serve;
   return {
     schema: SCHEMA_NAME,
     version: SCHEMA_VERSION,
-    test: {
-      title: 'The chapter name, read from the document',
-      suggested_folder: folder || 'Foundation / The chapter name',
-    },
+    test,
     questions: [
       {
         question: 'The question stem.',
         options: { a: 'first option', b: 'second option', c: 'third option', d: 'fourth option' },
         answer: 'b',
-        explanation: 'Why b is right.',
+        explanation: 'Why b is right, and why the closest wrong option is wrong.',
         source_quote: 'The sentence from the document that makes b the answer.',
-        difficulty: 'MEDIUM',
-        exam,
         image_ref: null,
         tag_slugs: ['history_of_architecture', 'indian_architecture'],
         new_tags: [{ slug: 'mughal_architecture', label: 'Mughal Architecture', group: 'theme' }],
@@ -172,24 +212,31 @@ export function importSampleObject(exam: ImportExam = 'BOTH', folder = ''): Reco
   };
 }
 
+/** The pool and serve the published spec illustrates. */
+export const SPEC_EXAMPLE = { pool: 150, serve: 50 } as const;
+
 /**
- * The format spec, for the wizard's "Copy JSON format spec" button.
+ * The format spec, for the wizard's "Copy the JSON format only" button.
  *
  * Same sample the prompt carries, plus the rules a human reader needs that the
  * model gets in prose. One source, so a teacher pasting this into an external
  * tool gets a reply this parser accepts.
  */
 export const TEST_JSON_SPEC: string = [
-  `// ${SCHEMA_NAME} v${SCHEMA_VERSION} — the reply format Neram accepts`,
+  `// ${SCHEMA_NAME} v${SCHEMA_VERSION}: the reply format Neram accepts`,
   '//',
   '// Reply with ONLY this JSON. No commentary, no markdown fences.',
+  '// A long set may come as several replies. Each reply is one complete object like this one,',
+  '// and they can be pasted into Neram one after another.',
+  '// "test.exam" is NATA, JEE or BOTH and applies to every question. A question may set its own "exam".',
+  '// "test.pool" is how many questions were written, "test.serve" how many each student gets. Both optional.',
   '// "answer" must be an option key (a, b, c, d), not the option text.',
   '// Omit "options" for a numerical-answer question and put the number in "answer".',
   '// "source_quote" is the sentence the answer rests on. Never omit it.',
   '// "image_ref" names a figure the question needs; attach it during review.',
   '// "new_tags" is only for genuinely new THEME topics, and can be omitted.',
   '',
-  JSON.stringify(importSampleObject(), null, 2),
+  JSON.stringify(importSampleObject('BOTH', '', SPEC_EXAMPLE), null, 2),
 ].join('\n');
 
 /**
@@ -220,7 +267,6 @@ export function buildImportPrompt(
     `Read the attached document and write ${count} questions on what it covers.`,
     `Target exam: ${exam}.`,
     'Every question must be answerable from the document. Do not invent facts.',
-    'Spread the difficulty: roughly 30% EASY, 50% MEDIUM, 20% HARD.',
     'Write a one or two sentence explanation for every answer, saying why the answer is right.',
     'Quote, in "source_quote", the sentence or short passage from the document the answer rests on.',
     opts.fromDocument
@@ -269,6 +315,138 @@ function normaliseExam(raw: unknown): ImportExam | null {
   if (v === 'JEE' || v === 'NATA' || v === 'BOTH') return v;
   if (v === 'JEE_PAPER_2' || v === 'JEE PAPER 2') return 'JEE';
   return null;
+}
+
+function positiveInt(raw: unknown): number | null {
+  const n = Math.floor(Number(raw));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+// ---------------------------------------------------------------------------
+// Several replies in one paste
+// ---------------------------------------------------------------------------
+
+interface ScannedValue {
+  text: string;
+  value: unknown;
+}
+
+/**
+ * Where the JSON value opening at `start` closes, or -1 when it never does.
+ *
+ * Brackets inside strings do not count, and a backslash escapes the next
+ * character, so `"a \"}\" b"` is one string rather than a close. A close of the
+ * wrong kind ends the value there: it is not JSON, and the caller moves on.
+ */
+function matchingClose(raw: string, start: number): number {
+  const stack: string[] = [];
+  let inString = false;
+  for (let j = start; j < raw.length; j += 1) {
+    const c = raw[j];
+    if (inString) {
+      if (c === '\\') j += 1;
+      else if (c === '"') inString = false;
+      continue;
+    }
+    if (c === '"') inString = true;
+    else if (c === '{') stack.push('}');
+    else if (c === '[') stack.push(']');
+    else if (c === '}' || c === ']') {
+      if (stack.pop() !== c) return j;
+      if (stack.length === 0) return j;
+    }
+  }
+  return -1;
+}
+
+/** JSON.parse, forgiving the trailing comma chat models add after a last item. */
+function parseLenient(text: string): { ok: true; value: unknown } | { ok: false } {
+  try {
+    return { ok: true, value: JSON.parse(text) };
+  } catch {
+    try {
+      return { ok: true, value: JSON.parse(text.replace(/,(\s*[}\]])/g, '$1')) };
+    } catch {
+      return { ok: false };
+    }
+  }
+}
+
+function isQuestionRow(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const v = value as Record<string, unknown>;
+  return typeof v.question === 'string' || typeof v.question_text === 'string';
+}
+
+/**
+ * Whether a JSON value is something worth reading questions from.
+ *
+ * A whole reply ({ questions: [...] }), a bare array of questions, or one
+ * question on its own (what survives from a reply that was damaged partway).
+ * Anything else, such as a stray `[2]` in the prose between replies, or the
+ * options object inside a damaged question, is ignored.
+ */
+function isReplyShaped(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(isQuestionRow);
+  if (value && typeof value === 'object') {
+    return Array.isArray((value as Record<string, unknown>).questions) || isQuestionRow(value);
+  }
+  return false;
+}
+
+/**
+ * Every top-level JSON object or array in a paste, in order.
+ *
+ * Text between them (markdown fences, "Here is batch 2", a "continue" typed
+ * into the chat and copied along with the reply) is skipped. A candidate that
+ * does not parse is not skipped whole: scanning resumes one character in, so
+ * a stray bracket in the prose cannot swallow the reply that follows it, and
+ * the complete questions inside a damaged reply are still found.
+ */
+function scanJsonValues(raw: string): { values: ScannedValue[]; cutOff: boolean; damaged: boolean } {
+  const values: ScannedValue[] = [];
+  let cutOff = false;
+  let damaged = false;
+  let i = 0;
+  while (i < raw.length) {
+    const ch = raw[i];
+    if (ch !== '{' && ch !== '[') {
+      i += 1;
+      continue;
+    }
+    const end = matchingClose(raw, i);
+    if (end === -1) {
+      // Only a candidate that holds questions counts as a reply cut off
+      // mid-send; an unmatched bracket in the prose is not worth a warning.
+      if (!cutOff && raw.indexOf('"question', i) !== -1) cutOff = true;
+      i += 1;
+      continue;
+    }
+    const text = raw.slice(i, end + 1);
+    const parsed = parseLenient(text);
+    if (parsed.ok) {
+      values.push({ text, value: parsed.value });
+      i = end + 1;
+    } else {
+      if (!damaged && text.includes('"question')) damaged = true;
+      i += 1;
+    }
+  }
+  return { values, cutOff, damaged };
+}
+
+/**
+ * Split a paste holding several JSON replies into one string per reply.
+ *
+ * ChatGPT sends a long set in batches ("I will type continue"), and a teacher
+ * pastes all of them into one box. Objects and arrays are found by scanning
+ * brackets outside strings, so fences and chat text between replies are
+ * dropped. Only values that carry questions are returned.
+ */
+export function splitJsonReplies(raw: string): string[] {
+  return scanJsonValues(String(raw || ''))
+    .values.filter((v) => isReplyShaped(v.value))
+    .map((v) => v.text);
 }
 
 /** Accepts {a:'..',b:'..'} or ['..','..'] or [{id,text}], all of which models emit. */
@@ -358,46 +536,89 @@ export function validateImportJSON(
     schema: unlabelled,
   };
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(extractJSON(raw));
-  } catch {
-    errors.push('Could not read that as JSON. Paste the AI reply exactly, with no extra commentary.');
-    return empty;
-  }
-
-  let rows: unknown[];
-  let testMeta: Record<string, unknown> = {};
-  let schema = unlabelled as ImportValidationResult['schema'];
-  if (Array.isArray(parsed)) {
-    rows = parsed;
-  } else if (parsed && typeof parsed === 'object') {
-    const obj = parsed as Record<string, unknown>;
-    testMeta = (obj.test as Record<string, unknown>) || {};
-    const name = typeof obj.schema === 'string' ? obj.schema.trim() : null;
-    const version = Number.isFinite(Number(obj.version)) ? Number(obj.version) : null;
-    schema = { name, version, recognised: name === SCHEMA_NAME && version === SCHEMA_VERSION };
-    // A newer payload is a warning, not a rejection: the parser only ever reads
-    // fields it knows, so the worst case is that something new is ignored, and
-    // refusing the whole file would be a harsher answer than the risk deserves.
-    if (name === SCHEMA_NAME && version !== null && version > SCHEMA_VERSION) {
-      warnings.push(
-        `This file says ${name} v${version} and this version of Neram reads v${SCHEMA_VERSION}. Anything newer is ignored.`,
-      );
-    }
-    if (Array.isArray(obj.questions)) rows = obj.questions;
-    else {
-      errors.push('Expected a "questions" array. Ask the AI to reply in the exact format from the prompt.');
+  // Several replies pasted one after another are read as one set. A paste
+  // with none that look like a reply falls back to the single-value path, so a
+  // wrong-shaped file still gets the specific message it always got.
+  const scan = scanJsonValues(String(raw || ''));
+  let replies: unknown[] = scan.values.filter((v) => isReplyShaped(v.value)).map((v) => v.value);
+  if (replies.length === 0) {
+    try {
+      replies = [JSON.parse(extractJSON(raw))];
+    } catch {
+      errors.push('Could not read that as JSON. Paste the AI reply exactly, with no extra commentary.');
       return empty;
     }
-  } else {
-    errors.push('Expected a JSON object with a "questions" array.');
-    return empty;
+  }
+  const single = replies.length === 1;
+
+  let rows: unknown[] = [];
+  let testMeta: Record<string, unknown> = {};
+  let schema = unlabelled as ImportValidationResult['schema'];
+  let replyCount = 0;
+  for (const reply of replies) {
+    if (Array.isArray(reply)) {
+      rows = rows.concat(reply);
+      replyCount += 1;
+      continue;
+    }
+    if (!reply || typeof reply !== 'object') {
+      if (single) {
+        errors.push('Expected a JSON object with a "questions" array.');
+        return empty;
+      }
+      continue;
+    }
+    const obj = reply as Record<string, unknown>;
+    if (!Array.isArray(obj.questions)) {
+      // One question on its own is what survives from a damaged reply.
+      if (isQuestionRow(obj)) {
+        rows.push(obj);
+        continue;
+      }
+      if (single) {
+        errors.push('Expected a "questions" array. Ask the AI to reply in the exact format from the prompt.');
+        return empty;
+      }
+      continue;
+    }
+    replyCount += 1;
+    rows = rows.concat(obj.questions as unknown[]);
+    // Every reply repeats the test block; the first value given for each field
+    // wins, so a later batch cannot quietly rename the test.
+    const meta = obj.test && typeof obj.test === 'object' ? (obj.test as Record<string, unknown>) : {};
+    testMeta = { ...meta, ...testMeta };
+    if (schema.name === null && typeof obj.schema === 'string') {
+      const name = obj.schema.trim();
+      const version = Number.isFinite(Number(obj.version)) ? Number(obj.version) : null;
+      schema = {
+        name,
+        version,
+        recognised: name === SCHEMA_NAME && version !== null && READABLE_VERSIONS.includes(version),
+      };
+      // A newer payload is a warning, not a rejection: the parser only ever
+      // reads fields it knows, so the worst case is that something new is
+      // ignored, and refusing the whole file would be a harsher answer than the
+      // risk deserves.
+      if (name === SCHEMA_NAME && version !== null && version > SCHEMA_VERSION) {
+        warnings.push(
+          `This file says ${name} v${version} and this version of Neram reads v${SCHEMA_VERSION}. Anything newer is ignored.`,
+        );
+      }
+    }
+  }
+
+  if (scan.cutOff) {
+    warnings.push(
+      'The last reply stops partway through. Type "continue" in the chat and paste the next reply below this one.',
+    );
+  }
+  if (scan.damaged) {
+    warnings.push('Part of the paste was not valid JSON, so only the complete questions inside it were read.');
   }
 
   if (rows.length === 0) {
     errors.push('The reply contained no questions.');
-    return empty;
+    return { ...empty, replies: replyCount };
   }
   if (rows.length > MAX_QUESTIONS_PER_PASTE) {
     warnings.push(
@@ -405,6 +626,8 @@ export function validateImportJSON(
     );
     rows = rows.slice(0, MAX_QUESTIONS_PER_PASTE);
   }
+
+  const testExam = normaliseExam(testMeta.exam);
 
   const slugToTag = new Map<string, ImportRegistryTag>();
   for (const t of registry) slugToTag.set(t.slug.toLowerCase(), t);
@@ -456,13 +679,15 @@ export function validateImportJSON(
       }
     }
 
+    // v3 stopped asking for difficulty. A reply that still sends one is read
+    // without comment, and one that does not is never nagged: the column keeps
+    // its MEDIUM default either way.
     const difficulty = normaliseDifficulty(r.difficulty);
-    if (!difficulty && r.difficulty != null) {
-      warnings.push(`${label}: unknown difficulty "${String(r.difficulty)}", set to MEDIUM.`);
-    }
     const exam = normaliseExam(r.exam ?? r.exam_relevance);
     if (!exam && (r.exam ?? r.exam_relevance) != null) {
-      warnings.push(`${label}: unknown exam "${String(r.exam ?? r.exam_relevance)}", set to BOTH.`);
+      warnings.push(
+        `${label}: unknown exam "${String(r.exam ?? r.exam_relevance)}", set to ${testExam || 'BOTH'}.`,
+      );
     }
 
     // new_tags first, so a slug used in tag_slugs AND proposed in the same row
@@ -542,7 +767,7 @@ export function validateImportJSON(
           ? r.source_quote.trim()
           : null,
       difficulty: difficulty || 'MEDIUM',
-      exam_relevance: exam || 'BOTH',
+      exam_relevance: exam || testExam || 'BOTH',
       // Named but not carried. Kept so review can ask for the file rather than
       // letting a question that needs a figure reach a student without one.
       image_ref:
@@ -572,12 +797,17 @@ export function validateImportJSON(
     test: {
       title: String(testMeta.title || '').trim(),
       folder_path: parseFolderPath(testMeta.suggested_folder ?? testMeta.folder),
+      exam: testExam,
+      pool: positiveInt(testMeta.pool),
+      serve: positiveInt(testMeta.serve),
     },
     questions,
     proposedTags,
     errors,
     warnings,
     schema,
+    // Damaged fragments are not replies of their own; they belong to one.
+    replies: Math.max(replyCount, 1),
   };
 }
 
@@ -605,7 +835,7 @@ export function validationReport(result: ImportValidationResult): ValidationChec
   const n = result.questions.length;
 
   if (result.schema.recognised) {
-    checks.push({ level: 'ok', message: `Schema valid, ${SCHEMA_NAME} v${SCHEMA_VERSION}` });
+    checks.push({ level: 'ok', message: `Schema valid, ${SCHEMA_NAME} v${result.schema.version ?? SCHEMA_VERSION}` });
   } else if (result.schema.name) {
     checks.push({
       level: 'warning',
@@ -621,13 +851,17 @@ export function validationReport(result: ImportValidationResult): ValidationChec
     checks.push({ level: 'error', message: 'No usable questions in this file' });
   } else {
     const missingAnswer = result.questions.filter((q) => !String(q.correct_answer ?? '').trim()).length;
+    const replies = result.replies ?? 1;
+    // "148 questions read from 3 replies" is the line that tells a teacher who
+    // pasted three ChatGPT replies that all three landed, not just the first.
+    const found =
+      replies > 1
+        ? `${n} question${n === 1 ? '' : 's'} read from ${replies} replies`
+        : `${n} question${n === 1 ? '' : 's'} found`;
     checks.push(
       missingAnswer === 0
-        ? { level: 'ok', message: `${n} question${n === 1 ? '' : 's'} found, all have a correct answer` }
-        : {
-            level: 'error',
-            message: `${n} question${n === 1 ? '' : 's'} found, ${missingAnswer} with no correct answer`,
-          },
+        ? { level: 'ok', message: `${found}, all have a correct answer` }
+        : { level: 'error', message: `${found}, ${missingAnswer} with no correct answer` },
     );
 
     const images = result.questions.filter((q) => q.image_ref);

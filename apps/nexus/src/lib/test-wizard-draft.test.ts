@@ -16,8 +16,11 @@ import {
   parseSourceKind,
   placementRequests,
   prevStep,
+  requestedStepFromUrl,
   resolveStep,
   SOURCE_KINDS,
+  clampQuestionsToServe,
+  sittingsBeforeRepeat,
   totalMarks,
   type DraftQuestion,
   type TestDraft,
@@ -194,6 +197,30 @@ describe('step reachability', () => {
   });
 });
 
+describe('a bare ?src= deep link opens that branch', () => {
+  it('reads src without step as the branch panel, not the source picker', () => {
+    // /teacher/tests/new?src=json is what the study material "Build a new test"
+    // button and the old import URL send. It used to land on step 1.
+    expect(requestedStepFromUrl(null, 'json')).toBe('generate');
+    expect(requestedStepFromUrl(null, 'bank')).toBe('generate');
+    expect(requestedStepFromUrl(null, 'blank')).toBe('review');
+  });
+
+  it('keeps the plain entry URL as step 1, so browser Back still reaches it', () => {
+    expect(requestedStepFromUrl(null, null)).toBeNull();
+    expect(resolveStep(draft({ source: 'json' }), requestedStepFromUrl(null, null))).toBe('source');
+  });
+
+  it('never overrides an explicit step', () => {
+    expect(requestedStepFromUrl('place', 'json')).toBe('place');
+    expect(requestedStepFromUrl('source', 'json')).toBe('source');
+  });
+
+  it('resolves to the JSON panel on a fresh draft seeded from the URL', () => {
+    expect(resolveStep(draft({ source: 'json' }), requestedStepFromUrl(null, 'json'))).toBe('generate');
+  });
+});
+
 describe('parseSourceKind', () => {
   it('accepts every real branch', () => {
     for (const k of SOURCE_KINDS) expect(parseSourceKind(k)).toBe(k);
@@ -359,5 +386,69 @@ describe('persistence', () => {
     expect(isResumable(draft())).toBe(false);
     expect(isResumable(draft({ questions: [question()] }))).toBe(true);
     expect(isResumable(draft({ bank: { selectedIds: ['a'], matchedCount: 1 } }))).toBe(true);
+  });
+});
+
+describe('each student gets a random subset', () => {
+  const many = (n: number) => Array.from({ length: n }, (_, i) => question({ key: `q${i}` }));
+
+  it('defaults to every question', () => {
+    expect(draft().rules.questionsToServe).toBeNull();
+  });
+
+  it('stores a subset through patchRules', () => {
+    const next = draftReducer(draft({ questions: many(150) }), { type: 'patchRules', patch: { questionsToServe: 50 } });
+    expect(next.rules.questionsToServe).toBe(50);
+    expect(next.rules.shuffle).toBe(true);
+  });
+
+  it('clamps to the questions the draft holds, and serving them all is null', () => {
+    const d = draft({ questions: many(40) });
+    expect(draftReducer(d, { type: 'patchRules', patch: { questionsToServe: 80 } }).rules.questionsToServe).toBeNull();
+    expect(draftReducer(d, { type: 'patchRules', patch: { questionsToServe: 40 } }).rules.questionsToServe).toBeNull();
+    expect(draftReducer(d, { type: 'patchRules', patch: { questionsToServe: 2 } }).rules.questionsToServe).toBe(5);
+    expect(draftReducer(d, { type: 'patchRules', patch: { questionsToServe: null } }).rules.questionsToServe).toBeNull();
+  });
+
+  it('counts only the questions that will be in the test', () => {
+    const d = draft({ questions: [...many(12), question({ key: 'skip1', action: 'skip' })] });
+    expect(draftReducer(d, { type: 'patchRules', patch: { questionsToServe: 12 } }).rules.questionsToServe).toBeNull();
+    expect(draftReducer(d, { type: 'patchRules', patch: { questionsToServe: 10 } }).rules.questionsToServe).toBe(10);
+  });
+
+  it('offers no subset below ten questions', () => {
+    expect(clampQuestionsToServe(5, 9)).toBeNull();
+    expect(clampQuestionsToServe(5, 10)).toBe(5);
+  });
+
+  it('reads garbage as every question', () => {
+    expect(clampQuestionsToServe('abc', 100)).toBeNull();
+    expect(clampQuestionsToServe(-4, 100)).toBeNull();
+    expect(clampQuestionsToServe(undefined, 100)).toBeNull();
+    expect(clampQuestionsToServe(12.7, 100)).toBe(12);
+  });
+
+  it('leaves other rules alone', () => {
+    const d = draft({ questions: many(30), rules: { ...draft().rules, questionsToServe: 10 } });
+    const next = draftReducer(d, { type: 'patchRules', patch: { passPct: 70 } });
+    expect(next.rules.questionsToServe).toBe(10);
+    expect(next.rules.passPct).toBe(70);
+  });
+
+  it('counts the sittings before a question repeats the way the draw does', () => {
+    expect(sittingsBeforeRepeat(150, 50)).toBe(3);
+    expect(sittingsBeforeRepeat(40, 15)).toBe(2);
+    expect(sittingsBeforeRepeat(40, null)).toBe(1);
+    expect(sittingsBeforeRepeat(40, 40)).toBe(1);
+  });
+
+  it('resumes a draft saved before the field existed, reading it as every question', () => {
+    const d = draft({ title: 'Old', questions: [question()] });
+    const { questionsToServe: _drop, ...oldRules } = d.rules;
+    const stored = JSON.stringify({ ...d, rules: oldRules });
+    const resumed = deserialiseDraft(stored, NOW);
+    expect(resumed).not.toBeNull();
+    expect(resumed!.rules.questionsToServe).toBeNull();
+    expect(resumed!.rules.passPct).toBe(d.rules.passPct);
   });
 });

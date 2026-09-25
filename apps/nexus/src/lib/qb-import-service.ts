@@ -22,6 +22,7 @@ import {
   NEXUS_TEACHER_TEST_KINDS,
 } from '@neram/database';
 import type { NexusTestKind } from '@neram/database';
+import { MAX_QUESTIONS_PER_IMPORT } from './qb-import-schema';
 import type { TimerType } from '@neram/database';
 
 /* ────────────────────────────── DEDUPE ──────────────────────────────────── */
@@ -267,7 +268,11 @@ export async function commitImport(input: CommitImportInput): Promise<CommitImpo
   const rows = input.rows || [];
   const extraIds = (input.extraQuestionIds || []).filter((id) => typeof id === 'string');
   if (rows.length === 0 && extraIds.length === 0) throw new ImportInputError('Nothing to import');
-  if (rows.length > 200) throw new ImportInputError('Import at most 200 questions at a time');
+  // The same cap the paste validator applies, so a set it accepted is never
+  // refused here at the last step.
+  if (rows.length > MAX_QUESTIONS_PER_IMPORT) {
+    throw new ImportInputError(`Import at most ${MAX_QUESTIONS_PER_IMPORT} questions at a time`);
+  }
 
   const supabase = getSupabaseAdminClient();
   const callerId = input.callerId;

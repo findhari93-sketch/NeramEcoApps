@@ -29,6 +29,7 @@ import { examRelevanceFor } from '@/lib/qb-exam-routes';
  * questions) looked like it did not exist.
  */
 export const MORE_TOOLS: { label: string; desc: string; href: string }[] = [
+  { label: 'Tag coverage', desc: 'Give untagged questions a topic so tests can find them', href: '/teacher/question-bank/tag-coverage' },
   { label: 'Manage papers', desc: 'Publish, activate questions, delete', href: '/teacher/question-bank/papers' },
   { label: 'Student progress', desc: 'Who has read, practised and sat each paper', href: '/teacher/question-bank/papers/overview' },
   { label: 'Bulk solutions', desc: 'Upload explanations for many questions', href: '/teacher/question-bank/solutions' },

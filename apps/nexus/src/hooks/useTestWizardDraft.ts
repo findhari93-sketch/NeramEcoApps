@@ -23,6 +23,7 @@ import {
   nextStep,
   parseSourceKind,
   prevStep,
+  requestedStepFromUrl,
   resolveStep,
   type DraftAction,
   type SourceKind,
@@ -117,8 +118,9 @@ export function useTestWizardDraft(): TestWizardDraftApi {
   }, [dirty, draft.step]);
 
   // ── The URL owns which step renders ────────────────────────────────────────
-  const requested = searchParams.get('step');
+  const rawStep = searchParams.get('step');
   const urlSource = parseSourceKind(searchParams.get('src'));
+  const requested = requestedStepFromUrl(rawStep, urlSource);
 
   /**
    * The source as the URL knows it, before the reducer has caught up.
