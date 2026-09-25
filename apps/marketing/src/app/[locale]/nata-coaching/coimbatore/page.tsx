@@ -14,7 +14,7 @@ export async function generateMetadata({
 }: {
   params: { locale: string };
 }): Promise<Metadata> {
-  const title = `NATA Online Coaching in Coimbatore 2026 | Live Classes, NIT/IIT Faculty | Neram Classes`;
+  const title = `NATA Online Coaching in Coimbatore 2026 | Live Classes, NIT/IIT Faculty`;
   const description = `NATA online coaching for Coimbatore students: live classes by NIT/IIT/SPA alumni, daily drawing practice, 100+ mock tests, 99.9% success rate. Fees from Rs. 15,000.`;
   return {
     title,
@@ -23,7 +23,7 @@ export async function generateMetadata({
       'NATA online coaching Coimbatore, NATA coaching online Coimbatore, NATA classes Coimbatore, best NATA coaching Coimbatore, NATA coaching RS Puram, NATA coaching Saibaba Colony, NATA coaching Peelamedu, NATA preparation Coimbatore',
     alternates: buildAlternates(locale, `/nata-coaching/${city.slug}`),
     openGraph: {
-      title: `NATA Online Coaching in ${city.displayName} | Neram Classes`,
+      title: `NATA Online Coaching in ${city.displayName}`,
       description,
       type: 'website',
       url: `${BASE_URL}/nata-coaching/${city.slug}`,

@@ -76,24 +76,17 @@ export async function generateMetadata({
         { url: '/apple-icon-180x180.png', sizes: '180x180' },
       ],
     },
-    alternates: {
-      canonical: locale === 'en' ? baseUrl : `${baseUrl}/${locale}`,
-      languages: {
-        en: baseUrl,
-        ta: `${baseUrl}/ta`,
-        hi: `${baseUrl}/hi`,
-        kn: `${baseUrl}/kn`,
-        ml: `${baseUrl}/ml`,
-        'x-default': baseUrl,
-      },
-    },
+    // No canonical here. A layout canonical is inherited by every page that does
+    // not set its own, and it made /nata-hub, /jee-barch-hub, /ask-seniors and
+    // /colleges/compare declare the home page as their canonical. Each page sets
+    // its own (buildAlternates in lib/seo/metadata.ts); the home page included.
     openGraph: {
       siteName: 'Neram Classes',
       locale: locale === 'ta' ? 'ta_IN' : locale === 'hi' ? 'hi_IN' : locale === 'kn' ? 'kn_IN' : locale === 'ml' ? 'ml_IN' : 'en_IN',
       type: 'website',
       images: [
         {
-          url: '/og-default.svg',
+          url: '/og-default.png',
           width: 1200,
           height: 630,
           alt: 'Neram Classes - Best NATA & JEE Paper 2 Coaching in India',

@@ -55,16 +55,21 @@ export async function POST(req: NextRequest) {
     const user = await getUserByFirebaseUid(decodedToken.uid, adminClient);
 
     if (user && !user.phone_verified) {
-      await db
+      const { error: phoneError } = await db
         .from('users')
         .update({ phone: formattedPhone, updated_at: new Date().toISOString() })
         .eq('id', user.id);
+      if (phoneError) {
+        console.error('capture-phone: phone update failed:', phoneError.message);
+      }
 
       const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null;
       const now = new Date().toISOString();
       // phone_number_entered = user typed their number
       // otp_requested = OTP is about to be sent (this call happens right before Firebase sends SMS)
-      await db.from('user_funnel_events').insert([
+      // Query builders are thenables with no .catch(): calling it threw a
+      // TypeError, so these events were never written. Read the error instead.
+      const { error: funnelError } = await db.from('user_funnel_events').insert([
         {
           user_id: user.id,
           funnel: 'auth',
@@ -85,7 +90,10 @@ export async function POST(req: NextRequest) {
           ip_address: ip,
           created_at: now,
         },
-      ]).catch(() => {});
+      ]);
+      if (funnelError) {
+        console.error('capture-phone: funnel event insert failed:', funnelError.message);
+      }
     }
 
     return NextResponse.json({ captured: true }, { headers: corsHeaders });

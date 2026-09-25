@@ -1,4 +1,5 @@
 import { Metadata } from 'next';
+import { buildAlternates } from '@/lib/seo/metadata';
 import { Container, Typography, Box, Grid, Paper, Stack, Chip, Button } from '@mui/material';
 import Link from 'next/link';
 import { setRequestLocale } from 'next-intl/server';
@@ -7,9 +8,14 @@ import CollegeListingCard from '@/components/college-hub/CollegeListingCard';
 
 export const revalidate = 86400;
 
-export async function generateMetadata(): Promise<Metadata> {
+export async function generateMetadata({
+  params: { locale },
+}: {
+  params: { locale: string };
+}): Promise<Metadata> {
   return {
-    title: 'JEE Paper 2 B.Arch Colleges: NITs, SPAs, IITs | JoSAA 2026 | Neram',
+    alternates: buildAlternates(locale, '/jee-barch-hub'),
+    title: 'JEE Paper 2 B.Arch Colleges: NITs, SPAs, IITs | JoSAA 2026',
     description:
       'Complete list of NIT, SPA, IIT architecture colleges admitting through JEE Main Paper 2 via JoSAA counseling. Compare cutoffs, fees, and placements.',
     keywords: [

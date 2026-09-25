@@ -6,6 +6,7 @@ import { Box, Typography, Button, Stack, CircularProgress } from '@neram/ui';
 import { neramTokens } from '@neram/ui';
 import { useFirebaseAuth } from '@neram/auth';
 import { useSSOToken } from '@/hooks/useSSOToken';
+import { ssoReturnUrl } from '@/lib/sso-return-url';
 import Link from 'next/link';
 
 import InstallPromptBanner from '@/components/InstallPromptBanner';
@@ -57,7 +58,7 @@ export default function LandingPageContent() {
           const isRecent = ssoAttemptedAt && (Date.now() - Number(ssoAttemptedAt)) < 10000;
           if (!isRecent) {
             sessionStorage.setItem('neram_sso_attempted', String(Date.now()));
-            const currentUrl = window.location.origin + window.location.pathname;
+            const currentUrl = ssoReturnUrl(window.location.href);
             window.location.href = `${MARKETING_URL}/sso?redirect=${encodeURIComponent(currentUrl)}`;
             return;
           }

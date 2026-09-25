@@ -14,14 +14,14 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'NATA & Architecture Entrance Courses - Neram Classes',
+    title: 'NATA & Architecture Entrance Courses',
     description:
       'Explore our comprehensive NATA coaching, JEE Paper 2, and Revit Architecture courses. Year-long, crash course, and foundation programs with expert faculty.',
     keywords:
       'NATA courses, JEE Paper 2 course, architecture entrance courses, NATA coaching program, Revit training',
     alternates: buildAlternates(locale, '/courses'),
     openGraph: {
-      title: 'NATA & Architecture Entrance Courses - Neram Classes',
+      title: 'NATA & Architecture Entrance Courses',
       description:
         'Explore our comprehensive NATA coaching, JEE Paper 2, and Revit Architecture courses. Expert faculty, flexible programs.',
       type: 'website',

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
+import { httpStatusForError, messageOf, throwIfReadFailed } from '@/lib/api-errors';
 
 /**
  * GET /api/timetable/notifications?classroom_id={id}&limit=20&offset=0&countOnly=true
@@ -21,11 +22,12 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseAdminClient() as any;
 
-    const { data: user } = await supabase
+    const { data: user, error: userError } = await supabase
       .from('users')
       .select('id')
       .eq('ms_oid', msUser.oid)
       .single();
+    throwIfReadFailed(userError, 'the signed-in user');
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -39,7 +41,7 @@ export async function GET(request: NextRequest) {
         .eq('classroom_id', classroomId)
         .eq('is_read', false);
 
-      if (error) throw error;
+      throwIfReadFailed(error, 'the unread count');
       return NextResponse.json({ count: count || 0 });
     }
 
@@ -51,12 +53,13 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
-    if (error) throw error;
+    throwIfReadFailed(error, 'the notifications');
 
     return NextResponse.json({ notifications: data || [], count: count || 0 });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to load notifications';
-    return NextResponse.json({ error: message }, { status: 500 });
+    // 401 for an expired token, 503 for a failed read: the poller can tell
+    // "sign in again" from "try later".
+    return NextResponse.json({ error: messageOf(err, 'Failed to load notifications') }, { status: httpStatusForError(err) });
   }
 }
 
@@ -71,11 +74,12 @@ export async function PATCH(request: NextRequest) {
 
     const supabase = getSupabaseAdminClient() as any;
 
-    const { data: user } = await supabase
+    const { data: user, error: userError } = await supabase
       .from('users')
       .select('id')
       .eq('ms_oid', msUser.oid)
       .single();
+    throwIfReadFailed(userError, 'the signed-in user');
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -108,7 +112,8 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ error: 'Provide id or markAll + classroom_id' }, { status: 400 });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to update notification';
-    return NextResponse.json({ error: message }, { status: 500 });
+    // 401 for an expired token, 503 for a failed read: the poller can tell
+    // "sign in again" from "try later".
+    return NextResponse.json({ error: messageOf(err, 'Failed to update notification') }, { status: httpStatusForError(err) });
   }
 }

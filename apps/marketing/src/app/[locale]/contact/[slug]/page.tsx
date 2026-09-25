@@ -64,7 +64,7 @@ export async function generateMetadata({
   const nearbyCities = center?.nearby_cities || [];
   const nearbyText = nearbyCities.length > 0 ? ` Students from ${nearbyCities.slice(0, 3).join(', ')} welcome.` : '';
 
-  const title = `Best NATA Coaching Center in ${cityName} 2026 - Neram Classes`;
+  const title = `Best NATA Coaching Center in ${cityName} 2026`;
   const description = center
     ? `Visit Neram Classes ${center.name} at ${center.address}, ${center.city}. Expert NATA & JEE Paper 2 coaching with IIT/NIT alumni faculty. Online & offline classes.${nearbyText} Call ${center.contact_phone || '+91-9176137043'}.`
     : `Neram Classes NATA coaching center in ${cityName}. Expert architecture entrance exam preparation with IIT/NIT alumni faculty.`;

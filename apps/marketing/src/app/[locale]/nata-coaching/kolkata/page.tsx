@@ -14,7 +14,7 @@ export async function generateMetadata({
 }: {
   params: { locale: string };
 }): Promise<Metadata> {
-  const title = `NATA Online Coaching in Kolkata 2026 | Jadavpur University, IIEST Prep | Neram Classes`;
+  const title = `NATA Online Coaching in Kolkata 2026 | Jadavpur University, IIEST Prep`;
   const description = `NATA online coaching for Kolkata and East India students aiming at Jadavpur University, IIEST Shibpur, Bengal Institute of Technology. Live classes by NIT/IIT/SPA alumni faculty, 99.9% success rate.`;
   return {
     title,
@@ -23,7 +23,7 @@ export async function generateMetadata({
       'NATA online coaching Kolkata, NATA coaching online Kolkata, NATA classes Kolkata, Jadavpur University architecture coaching, IIEST Shibpur coaching, NATA coaching Salt Lake, NATA coaching New Town, NATA preparation Kolkata',
     alternates: buildAlternates(locale, `/nata-coaching/${city.slug}`),
     openGraph: {
-      title: `NATA Online Coaching in ${city.displayName} | Neram Classes`,
+      title: `NATA Online Coaching in ${city.displayName}`,
       description,
       type: 'website',
       url: `${BASE_URL}/nata-coaching/${city.slug}`,

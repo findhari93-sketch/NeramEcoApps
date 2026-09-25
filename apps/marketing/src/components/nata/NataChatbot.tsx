@@ -16,6 +16,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import SendIcon from '@mui/icons-material/Send';
 import Image from 'next/image';
 import VoiceInputButton from '../aintra/VoiceInputButton';
+import { leadAttribution } from '@/lib/attribution';
 
 const ASSISTANT_IMG = '/images/nata-ai-assistant.jpg';
 
@@ -278,6 +279,7 @@ export default function NataChatbot() {
           student_name: leadName.trim(),
           phone: leadPhone.trim(),
           category: 'chatbot_lead',
+          ...leadAttribution(),
         }),
       });
       setLeadCaptured(true);

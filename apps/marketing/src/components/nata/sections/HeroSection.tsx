@@ -195,13 +195,10 @@ export default function HeroSection({ locale }: HeroSectionProps) {
               />
             </motion.div>
 
-            {/* Heading */}
-            <motion.div
-              variants={fadeInLeft}
-              initial="hidden"
-              animate={isInView ? 'visible' : 'hidden'}
-              transition={{ duration: 0.7, ease: [0.05, 0.7, 0.1, 1] }}
-            >
+            {/* Heading and subtitle render visible on the server: they are the
+                LCP text, and a motion wrapper kept them at opacity 0 until
+                hydration. Motion stays on the chip and stats. */}
+            <div>
               <Typography
                 variant="h1"
                 sx={{
@@ -227,19 +224,10 @@ export default function HeroSection({ locale }: HeroSectionProps) {
                   Exam Guide
                 </Box>
               </Typography>
-            </motion.div>
+            </div>
 
             {/* Subtitle */}
-            <motion.div
-              variants={fadeInLeft}
-              initial="hidden"
-              animate={isInView ? 'visible' : 'hidden'}
-              transition={{
-                duration: 0.7,
-                delay: 0.15,
-                ease: [0.05, 0.7, 0.1, 1],
-              }}
-            >
+            <div>
               <Typography
                 variant="h6"
                 sx={{
@@ -253,7 +241,7 @@ export default function HeroSection({ locale }: HeroSectionProps) {
               >
                 Everything you need to know about NATA 2026
               </Typography>
-            </motion.div>
+            </div>
 
             {/* Stats strip */}
             <motion.div

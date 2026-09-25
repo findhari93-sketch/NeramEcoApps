@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient, getRefundRequestByPaymentId } from '@neram/database';
+import { createAdminClient } from '@neram/database';
 import { verifyFirebaseToken } from '../../../_lib/auth';
 
 export async function GET(
@@ -28,11 +28,20 @@ export async function GET(
     }
 
     const supabase = createAdminClient();
-    const refundRequest = await getRefundRequestByPaymentId(paymentId, supabase);
+    // Scoped to the signed-in student, and without staff-only columns
+    // (admin_notes, reviewed_by).
+    const { data: refundRequest, error } = await supabase
+      .from('refund_requests')
+      .select('id, payment_id, lead_profile_id, status, payment_amount, processing_fee, refund_amount, reason_for_joining, reason_for_discontinuing, additional_notes, created_at, updated_at, reviewed_at')
+      .eq('payment_id', paymentId)
+      .eq('user_id', auth.userId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
 
-    return NextResponse.json({
-      refundRequest: refundRequest || null,
-    });
+    return NextResponse.json(
+      { refundRequest: refundRequest || null },
+      { headers: { 'Cache-Control': 'private, no-store' } }
+    );
   } catch (error) {
     console.error('Refund status error:', error);
     return NextResponse.json(

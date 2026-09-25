@@ -8,6 +8,7 @@ import {
   getGoogleUserInfo,
 } from '@/lib/youtube';
 import { createServerClient, User } from '@neram/database';
+import { safeRedirect } from '@/lib/safe-redirect';
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_YOUTUBE_CLIENT_ID || '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_YOUTUBE_CLIENT_SECRET || '';
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
 
   const cookieStore = await cookies();
   const storedState = cookieStore.get('youtube_oauth_state')?.value;
-  const redirectUrl = cookieStore.get('youtube_redirect_url')?.value || MARKETING_URL;
+  const redirectUrl = safeRedirect(cookieStore.get('youtube_redirect_url')?.value, MARKETING_URL, [MARKETING_URL]);
 
   // Clear the cookies
   cookieStore.delete('youtube_oauth_state');

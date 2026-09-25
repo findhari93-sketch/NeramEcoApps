@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { PUBLIC_CACHE_HEADERS } from '../_lib/public-cache';
 import { getSupabaseAdminClient, getHomepageSocialProofs, getSocialProofsByType } from '@neram/database';
 import type { SocialProofType } from '@neram/database';
 
@@ -12,7 +13,7 @@ export async function GET(request: NextRequest) {
     const type = searchParams.get('type') as SocialProofType | null;
     const client = getSupabaseAdminClient();
 
-    const cacheHeaders = { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' };
+    const cacheHeaders = PUBLIC_CACHE_HEADERS;
 
     if (homepage) {
       const data = await getHomepageSocialProofs(client);

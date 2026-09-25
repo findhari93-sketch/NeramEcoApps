@@ -86,6 +86,24 @@ export function describeError(err: unknown): string {
 }
 
 /**
+ * Throw when a `.single()` read failed; return quietly when it merely found no row.
+ *
+ * `.single()` leaves `data` null in both cases, so a route that reads only `data`
+ * answers "not found" for a statement timeout or a dropped proxy connection. The
+ * catch-up drawer got a 404 "Class not found in this classroom" that way for a
+ * class that was there. Only PGRST116 means no row; anything else is our failure,
+ * and a 503 tells the client it is worth trying again.
+ */
+export function throwIfReadFailed(
+  error: { code?: string; message?: string } | null | undefined,
+  what: string,
+): void {
+  if (!error || error.code === 'PGRST116') return;
+  console.error(`[read failed] ${what}: ${describeError(error)}`);
+  throw new ApiError(`Could not load ${what}`, 503);
+}
+
+/**
  * Messages that mean "we know who you are, you may not be here".
  *
  * verifyMsToken's parent branch fails closed on any `par_` token for a route that

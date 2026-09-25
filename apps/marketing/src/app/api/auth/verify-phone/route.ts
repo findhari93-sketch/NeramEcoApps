@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { isSamePhone } from '@/lib/phone';
 import { getAuth } from 'firebase-admin/auth';
 import { getApps } from 'firebase-admin/app';
 import {
@@ -48,6 +49,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: 'Invalid authentication token' },
         { status: 401 }
+      );
+    }
+
+    // Only the number Firebase verified by OTP (the token's phone_number claim)
+    // may be marked verified. Without this, any signed-in user could claim any number.
+    if (!isSamePhone(decodedToken.phone_number, phoneNumber)) {
+      return NextResponse.json(
+        { error: 'PHONE_NOT_VERIFIED', message: 'This phone number has not been verified for your account.' },
+        { status: 403 }
       );
     }
 

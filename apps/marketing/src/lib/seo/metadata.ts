@@ -1,4 +1,5 @@
 import { BASE_URL, SUPPORTED_LOCALES, DEFAULT_LOCALE } from './constants';
+import { indexableLocales } from './indexable-locales';
 
 /**
  * Build a dynamic OG image URL using the /api/og endpoint.
@@ -21,23 +22,29 @@ export function buildOgImage(
  * Build locale-aware canonical + hreflang alternates for Next.js Metadata API.
  * Use this in every page's generateMetadata() to ensure proper SEO.
  *
+ * Only locales in which the page is indexable get an hreflang entry (see
+ * indexable-locales.ts). A request for a noindexed locale copy gets the English
+ * URL as its canonical, so Google consolidates signals on the indexable page.
+ *
  * @param locale - Current page locale (e.g., 'en', 'ta')
  * @param path - Page path WITHOUT locale prefix (e.g., '/about', '/blog/my-post')
  */
-export function buildAlternates(locale: string, path: string) {
+export function buildAlternates(
+  locale: string,
+  path: string
+): { canonical: string; languages?: Record<string, string> } {
+  const url = (l: string) =>
+    // Default locale (en) has no prefix due to localePrefix: 'as-needed'
+    l === DEFAULT_LOCALE ? `${BASE_URL}${path}` : `${BASE_URL}/${l}${path}`;
+
+  const indexable = indexableLocales(path);
+  const canonical = url(indexable.includes(locale) ? locale : DEFAULT_LOCALE);
+  if (indexable.length < 2) return { canonical };
+
   const languages: Record<string, string> = {};
   for (const l of SUPPORTED_LOCALES) {
-    // Default locale (en) has no prefix due to localePrefix: 'as-needed'
-    languages[l] =
-      l === DEFAULT_LOCALE ? `${BASE_URL}${path}` : `${BASE_URL}/${l}${path}`;
+    if (indexable.includes(l)) languages[l] = url(l);
   }
-  languages['x-default'] = `${BASE_URL}${path}`;
-
-  return {
-    canonical:
-      locale === DEFAULT_LOCALE
-        ? `${BASE_URL}${path}`
-        : `${BASE_URL}/${locale}${path}`,
-    languages,
-  };
+  languages['x-default'] = url(DEFAULT_LOCALE);
+  return { canonical, languages };
 }

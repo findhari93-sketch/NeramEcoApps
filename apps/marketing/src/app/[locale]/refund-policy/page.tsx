@@ -11,7 +11,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'Refund Policy - Neram Classes',
+    title: 'Refund Policy',
     description: 'Refund Policy for Neram Classes. Learn about our 24-hour refund window, processing fees, and how to request a refund.',
     alternates: buildAlternates(locale, '/refund-policy'),
   };

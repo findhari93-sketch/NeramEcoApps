@@ -4,7 +4,7 @@ import { createAdminClient, getLeadProfileByPaymentToken } from '@neram/database
 import PaymentLinkContent from './PaymentLinkContent';
 
 export const metadata: Metadata = {
-  title: 'Complete Your Payment - Neram Classes',
+  title: 'Complete Your Payment',
   robots: { index: false, follow: false },
 };
 

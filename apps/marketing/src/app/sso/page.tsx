@@ -4,6 +4,7 @@ import { useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import { Box, Typography, CircularProgress } from '@neram/ui';
+import { safeSsoRedirect } from '@/lib/sso-redirect';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
 
@@ -13,7 +14,7 @@ function SSOInner() {
 
   useEffect(() => {
     async function handleSSO() {
-      const redirectUrl = searchParams.get('redirect') || APP_URL;
+      const redirectUrl = safeSsoRedirect(searchParams.get('redirect'), APP_URL);
 
       if (loading) return;
 

@@ -45,7 +45,10 @@ export default function RefundRequestButton({
 
     async function checkExisting() {
       try {
-        const res = await fetch(`/api/refund/status/${paymentId}`);
+        const idToken = await (user?.raw as any)?.getIdToken?.();
+        const res = await fetch(`/api/refund/status/${paymentId}`, {
+          headers: idToken ? { Authorization: `Bearer ${idToken}` } : undefined,
+        });
         if (res.ok) {
           const data = await res.json();
           if (data.refundRequest) {

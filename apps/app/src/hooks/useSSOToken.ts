@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { signInWithCustomToken } from '@neram/auth';
+import { ssoReturnUrl } from '@/lib/sso-return-url';
 
 const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3010';
 
@@ -78,7 +79,7 @@ export function useSSOToken(): UseSSOTokenResult {
     attemptedRef.current = false;
     setError(null);
     setProcessing(false);
-    const currentUrl = window.location.origin + window.location.pathname;
+    const currentUrl = ssoReturnUrl(window.location.href);
     window.location.href = `${MARKETING_URL}/sso?redirect=${encodeURIComponent(currentUrl)}`;
   }, []);
 

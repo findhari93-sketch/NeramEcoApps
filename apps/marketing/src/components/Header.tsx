@@ -803,7 +803,7 @@ export default function Header() {
                       (link.href !== '/' && pathname.startsWith(link.href));
                     return (
                       <ListItemButton
-                        key={link.href}
+                        key={`${link.href}|${link.label}`}
                         component={Link}
                         href={link.href as any}
                         onClick={handleMenuClose}
@@ -973,7 +973,7 @@ export default function Header() {
                           (link.href !== '/' && pathname.startsWith(link.href));
                         return (
                           <ListItemButton
-                            key={link.href}
+                            key={`${link.href}|${link.label}`}
                             component={Link}
                             href={link.href as any}
                             onClick={toggleMobileMenu}

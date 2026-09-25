@@ -1,3 +1,6 @@
+'use client';
+
+import { useEffect, useState } from 'react';
 import { Box, Typography } from '@mui/material';
 import Link from 'next/link';
 
@@ -6,13 +9,19 @@ interface SponsoredBannerProps {
 }
 
 const BANNERS = [
-  { text: 'Apply for B.Arch 2025 Admissions. Limited seats available.', cta: 'Learn More', href: '/colleges' },
+  { text: 'Apply for B.Arch 2026 Admissions. Limited seats available.', cta: 'Learn More', href: '/colleges' },
   { text: 'Free NATA preparation guide. Download now!', cta: 'Get Free Guide', href: '/colleges' },
   { text: 'Compare top architecture colleges side by side.', cta: 'Compare Now', href: '/colleges/compare' },
 ];
 
 export default function SponsoredBanner({ variant = 'compact' }: SponsoredBannerProps) {
-  const banner = BANNERS[Math.floor(Math.random() * BANNERS.length)];
+  // Rotate after mount. Picking at random during render gave the server and the
+  // browser different banners, which failed hydration on /colleges.
+  const [index, setIndex] = useState(0);
+  useEffect(() => {
+    setIndex(Math.floor(Math.random() * BANNERS.length));
+  }, []);
+  const banner = BANNERS[index];
 
   return (
     <Box

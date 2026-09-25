@@ -104,7 +104,7 @@ test.describe('Catch-up calendar on a laptop', () => {
     const back = drawer.getByRole('link', { name: 'Back to timetable' });
     await expect(back).toBeVisible();
     await expect(back).toHaveAttribute('href', '/teacher/timetable');
-    await assertTouchTargetSize(page, '.MuiDrawer-paper a:has-text("Back to timetable")', 44);
+    await assertTouchTargetSize(page, '.MuiDrawer-paper a[aria-label="Back to timetable"]', 44);
     // The URL keeps the round trip while the drawer is open.
     await expect(page).toHaveURL(/[?&]from=timetable\b/);
   });

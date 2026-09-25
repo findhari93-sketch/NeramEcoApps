@@ -11,7 +11,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'Terms & Conditions - Neram Classes',
+    title: 'Terms & Conditions',
     description: 'Terms and Conditions for using Neram Classes services. Read our policies on enrollment, payments, data usage, and more.',
     alternates: buildAlternates(locale, '/terms'),
   };

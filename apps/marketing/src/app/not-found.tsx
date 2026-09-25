@@ -1,5 +1,5 @@
 import { Metadata } from 'next';
-import Link from 'next/link';
+import { NOT_FOUND_LINKS } from '@/lib/not-found-links';
 
 export const metadata: Metadata = {
   title: 'Page Not Found | Neram Classes',
@@ -7,8 +7,12 @@ export const metadata: Metadata = {
   robots: { index: false, follow: true },
 };
 
+// The root layout is a pass-through (html and body live in [locale]/layout.tsx),
+// so this page, used only for paths outside [locale], must render its own.
 export default function NotFound() {
   return (
+    <html lang="en">
+      <body style={{ margin: 0 }}>
     <div
       style={{
         minHeight: '100vh',
@@ -62,20 +66,13 @@ export default function NotFound() {
             marginBottom: '32px',
           }}
         >
-          {[
-            { href: '/', label: 'Homepage' },
-            { href: '/courses', label: 'Courses' },
-            { href: '/coaching/nata-coaching', label: 'NATA Coaching' },
-            { href: '/nata-2026', label: 'NATA 2026 Guide' },
-            { href: '/apply', label: 'Apply Now' },
-            { href: '/contact', label: 'Contact Us' },
-          ].map((link) => (
+          {NOT_FOUND_LINKS.map((link) => (
             <a
               key={link.href}
               href={link.href}
               style={{
-                padding: '10px 20px',
-                fontSize: '14px',
+                padding: '13px 20px',
+                fontSize: '16px',
                 fontWeight: 500,
                 border: '1px solid rgba(255,255,255,0.15)',
                 borderRadius: '8px',
@@ -107,5 +104,7 @@ export default function NotFound() {
         </a>
       </div>
     </div>
+      </body>
+    </html>
   );
 }

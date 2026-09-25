@@ -21,7 +21,7 @@ import {
   isInternalStaff as isInternalStaffRole,
   resolveStaffRole,
 } from '@/lib/staff-capabilities';
-import { ApiError } from '@/lib/api-errors';
+import { ApiError, httpStatusForError, messageOf, throwIfReadFailed } from '@/lib/api-errors';
 import { classStartIso } from '@/lib/prework';
 import { CLASS_IMAGES_EMBED } from '@/lib/class-cover';
 
@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
     // looked up together. This is the timetable, the heaviest page in the app, and it
     // used to spend three separate round trips here before it began collecting a
     // single class.
-    const [{ data: user }, { data: classroom }] = await Promise.all([
+    const [{ data: user, error: userError }, { data: classroom, error: classroomError }] = await Promise.all([
       // Look up user (need the staff tier so staff can browse archived past-year
       // classrooms, and so an external teacher's view can be session-scoped below)
       supabase
@@ -84,6 +84,12 @@ export async function GET(request: NextRequest) {
         .eq('id', classroomId)
         .single(),
     ]);
+
+    // `.single()` leaves `data` null for a failed read as well as a missing row, and
+    // answering 404 for a timeout showed an empty week with nothing to say why.
+    throwIfReadFailed(userError, 'the signed-in user');
+    // A malformed id (22P02) is a bad request, not our failure: answer it as missing.
+    if (classroomError?.code !== '22P02') throwIfReadFailed(classroomError, 'the classroom');
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -188,8 +194,11 @@ export async function GET(request: NextRequest) {
       prep,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to load timetable';
-    return NextResponse.json({ error: message }, { status: 500 });
+    // 401 for an expired token, 503 for a failed read, so the client can re-auth or retry.
+    return NextResponse.json(
+      { error: messageOf(err, 'Failed to load timetable') },
+      { status: httpStatusForError(err) },
+    );
   }
 }
 

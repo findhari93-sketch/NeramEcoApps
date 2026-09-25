@@ -175,7 +175,7 @@ export async function listOpenRecapQuestionReports(
       `*,
        question:nexus_class_recap_questions(question_text, is_active),
        section:nexus_class_recap_sections(title),
-       student:users(full_name, avatar_url),
+       student:users!nexus_class_recap_question_reports_student_id_fkey(name, avatar_url),
        recap:nexus_class_recaps(classroom_id, scheduled_class_id, class:nexus_scheduled_classes(id, title, scheduled_date))`,
     )
     .eq('status', 'open')
@@ -203,7 +203,7 @@ export async function listOpenRecapQuestionReports(
       question_text: r.question?.question_text ?? null,
       question_active: r.question?.is_active !== false,
       section_title: r.section?.title ?? null,
-      student_name: r.student?.full_name ?? null,
+      student_name: r.student?.name ?? null,
       student_avatar_url: r.student?.avatar_url ?? null,
       class_id: r.recap?.class?.id ?? r.recap?.scheduled_class_id ?? null,
       class_title: r.recap?.class?.title ?? null,

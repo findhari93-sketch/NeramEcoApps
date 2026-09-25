@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
+  Button,
   Checkbox,
   Chip,
   Skeleton,
@@ -11,11 +12,16 @@ import {
   alpha,
   useTheme,
 } from '@neram/ui';
+import AssignmentLateOutlinedIcon from '@mui/icons-material/AssignmentLateOutlined';
+import NotificationsActiveOutlinedIcon from '@mui/icons-material/NotificationsActiveOutlined';
 import StudentStageAvatar from '@/components/students/StudentStageAvatar';
+import { HOMEWORK_REMIND_EVERY_DAYS, shortIstDate } from '@/lib/homework-reminders';
 import { knownStageKey } from '@/lib/student-stage';
 import { rankByTimeInRoom } from '@/lib/attendance-quality';
 import type { AttendanceTabProps, StudentInsight } from './types';
+import InsightsLoadError from './InsightsLoadError';
 import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
+import type { FilterSection } from '@/components/students/list/FilterMenu';
 import { useStudentListView } from '@/components/students/list/useStudentListView';
 import { suggestedOrder, type ListAccessors } from '@/lib/student-list-view';
 
@@ -49,25 +55,20 @@ function formatDuration(minutes: number | null): string {
   return m ? `${h}h ${m}m` : `${h}h`;
 }
 
-function Kpi({ label, value, tone = 'default' }: { label: string; value: string | number; tone?: 'default' | 'good' | 'warn' | 'bad' }) {
-  const color = { default: 'text.primary', good: 'success.main', warn: 'warning.main', bad: 'error.main' }[tone];
+/**
+ * One number in the stat line. Five bordered tiles took two rows of a 480px
+ * drawer before a single name; the same five numbers read as one sentence.
+ */
+function Stat({ value, label, tone = 'default' }: { value: string | number; label: string; tone?: 'default' | 'good' | 'warn' | 'bad' }) {
+  const color = { default: 'text.primary', good: 'success.main', warn: 'warning.dark', bad: 'error.main' }[tone];
   return (
-    <Box
-      sx={{
-        flex: '1 1 96px',
-        minWidth: 92,
-        p: 1.25,
-        border: '1px solid',
-        borderColor: 'divider',
-        borderRadius: 2,
-      }}
-    >
-      <Typography variant="h6" sx={{ fontWeight: 800, color, lineHeight: 1.1 }}>
+    <Box component="span" sx={{ whiteSpace: 'nowrap' }}>
+      <Box component="span" sx={{ fontWeight: 800, color, fontVariantNumeric: 'tabular-nums' }}>
         {value}
-      </Typography>
-      <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+      </Box>{' '}
+      <Box component="span" sx={{ color: 'text.secondary' }}>
         {label}
-      </Typography>
+      </Box>
     </Box>
   );
 }
@@ -99,6 +100,96 @@ function WorkChip({ student }: { student: StudentInsight }) {
   }
   if (w.redo) return <Chip size="small" color="warning" variant="outlined" label="Homework sent back" />;
   return <Chip size="small" color="error" variant="outlined" label="Homework not in" />;
+}
+
+/**
+ * One line above the list: who came and still owes the homework, and the one
+ * thing to do about it. Once reminders are running it says when the next one
+ * goes, so the schedule is never invisible, and offers Stop.
+ */
+function HomeworkStrip({
+  owing,
+  onRemind,
+  onStop,
+  busy,
+}: {
+  owing: StudentInsight[];
+  onRemind: (ids: string[]) => void;
+  onStop?: () => void;
+  busy?: boolean;
+}) {
+  const theme = useTheme();
+  const running = owing.filter((s) => s.homeworkReminder?.active);
+  const notYet = owing.filter((s) => !s.homeworkReminder?.active);
+  const nextOn = running
+    .map((s) => s.homeworkReminder?.nextOn)
+    .filter((d): d is string => !!d)
+    .sort()[0];
+  const tone = running.length ? theme.palette.primary.main : theme.palette.error.main;
+  const Icon = running.length ? NotificationsActiveOutlinedIcon : AssignmentLateOutlinedIcon;
+
+  return (
+    <Box
+      role="region"
+      aria-label="Homework reminders"
+      data-testid="homework-strip"
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        columnGap: 1,
+        rowGap: 0.5,
+        px: 1.5,
+        py: 0.75,
+        mb: 1,
+        borderRadius: 2,
+        border: '1px solid',
+        borderColor: alpha(tone, 0.35),
+        bgcolor: alpha(tone, 0.05),
+      }}
+    >
+      <Icon fontSize="small" sx={{ color: tone }} aria-hidden />
+      <Typography variant="body2" sx={{ flex: '1 1 200px', minWidth: 0 }}>
+        {running.length === 0 ? (
+          <>
+            <b>{owing.length}</b> came but {owing.length === 1 ? 'has' : 'have'} not handed in the homework
+          </>
+        ) : (
+          <>
+            Reminding <b>{running.length === owing.length ? owing.length : `${running.length} of ${owing.length}`}</b>{' '}
+            every {HOMEWORK_REMIND_EVERY_DAYS} days until they hand it in
+            {nextOn ? `. Next ${shortIstDate(nextOn)}` : ''}
+          </>
+        )}
+      </Typography>
+      <Box sx={{ display: 'flex', gap: 0.5, ml: 'auto' }}>
+        {running.length > 0 && onStop && (
+          <Button
+            size="small"
+            color="inherit"
+            onClick={onStop}
+            disabled={busy}
+            sx={{ minHeight: 44, textTransform: 'none' }}
+            data-testid="homework-stop"
+          >
+            Stop
+          </Button>
+        )}
+        {notYet.length > 0 && (
+          <Button
+            size="small"
+            variant={running.length ? 'outlined' : 'contained'}
+            onClick={() => onRemind(notYet.map((s) => s.id))}
+            disabled={busy}
+            sx={{ minHeight: 44, textTransform: 'none', whiteSpace: 'nowrap' }}
+            data-testid="homework-remind"
+          >
+            {running.length ? `Remind ${notYet.length} more` : 'Remind them'}
+          </Button>
+        )}
+      </Box>
+    </Box>
+  );
 }
 
 function AttendedRow({
@@ -201,6 +292,15 @@ function AttendedRow({
             <Chip size="small" color="info" variant="outlined" label="Came anyway" />
           )}
           <WorkChip student={student} />
+          {student.homeworkReminder?.active && homeworkMissing(student) && (
+            <Chip
+              size="small"
+              variant="outlined"
+              icon={<NotificationsActiveOutlinedIcon />}
+              label={`Reminding, next ${shortIstDate(student.homeworkReminder.nextOn)}`}
+              data-testid="homework-reminder-chip"
+            />
+          )}
         </Box>
       </Box>
     </Box>
@@ -210,12 +310,19 @@ function AttendedRow({
 export default function AttendedTab({
   insights,
   insightsLoading,
+  insightsError,
+  insightsRetrying,
+  onRetryInsights,
   selected,
   onSelect,
   initialFilter,
+  onRemindHomework,
+  onStopHomeworkReminders,
+  homeworkBusy,
 }: AttendanceTabProps) {
   const start: AttendedFilter =
     initialFilter === 'not_handed_in' ? 'not_handed_in' : initialFilter === 'partly' ? 'partly' : 'all';
+  const theme = useTheme();
   const [filter, setFilter] = useState<AttendedFilter>(start);
   useEffect(() => setFilter(start), [start]);
 
@@ -223,7 +330,8 @@ export default function AttendedTab({
     () => rankByTimeInRoom((insights?.students ?? []).filter((s) => s.attended)),
     [insights],
   );
-  const missingCount = everyone.filter(homeworkMissing).length;
+  const owing = useMemo(() => everyone.filter(homeworkMissing), [everyone]);
+  const missingCount = owing.length;
   const partlyCount = everyone.filter(isPartly).length;
   const ranked = useMemo(
     () =>
@@ -243,6 +351,35 @@ export default function AttendedTab({
     defaultSort: 'suggested',
     urlKeys: false,
   });
+
+  // Who came is not the end of it: the class set homework, and a student who
+  // sat through the class and handed nothing in needs the same nudge as one
+  // catching up. Offered only when there is something to filter to.
+  const filters: FilterSection[] =
+    missingCount > 0 || partlyCount > 0
+      ? [
+          {
+            id: 'attended',
+            title: 'Show only',
+            mode: 'single',
+            allLabel: 'Everyone who came',
+            value: filter === 'all' ? [] : [filter],
+            onToggle: (key) => setFilter((cur) => (cur === key ? 'all' : (key as AttendedFilter))),
+            onClear: () => setFilter('all'),
+            hideEmpty: true,
+            options: [
+              { key: 'not_handed_in', label: 'Homework not in', count: missingCount, color: theme.palette.error.main },
+              { key: 'partly', label: 'Partly there', count: partlyCount, color: theme.palette.warning.main },
+            ],
+          },
+        ]
+      : [];
+
+  // Before the loading check: SWR reports loading again on every retry, and this
+  // tab used to hold skeletons over a failed load with nothing to press.
+  if (insightsError && !insights) {
+    return <InsightsLoadError message={insightsError} retrying={insightsRetrying} onRetry={onRetryInsights} />;
+  }
 
   if (insightsLoading) {
     return (
@@ -264,17 +401,18 @@ export default function AttendedTab({
 
   return (
     <>
-      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
-        <Kpi label="Attended" value={`${s.present}/${s.rosterSize}`} tone="good" />
-        <Kpi label="Average stay" value={`${s.avgDuration}m`} />
-        <Kpi label="Joined late" value={s.lateCount} tone={s.lateCount ? 'warn' : 'default'} />
-        <Kpi label="Left early" value={s.leftEarlyCount} tone={s.leftEarlyCount ? 'warn' : 'default'} />
-        <Kpi
-          label="Barely there"
-          value={s.barelyAttendedCount}
-          tone={s.barelyAttendedCount ? 'bad' : 'default'}
-        />
-      </Box>
+      <Typography
+        component="p"
+        variant="body2"
+        data-testid="attended-stats"
+        sx={{ display: 'flex', flexWrap: 'wrap', columnGap: 1.5, rowGap: 0.25, mb: 1 }}
+      >
+        <Stat value={`${s.present} of ${s.rosterSize}`} label="came" tone="good" />
+        <Stat value={`${s.avgDuration} min`} label="average stay" />
+        <Stat value={s.lateCount} label="joined late" tone={s.lateCount ? 'warn' : 'default'} />
+        <Stat value={s.leftEarlyCount} label="left early" tone={s.leftEarlyCount ? 'warn' : 'default'} />
+        <Stat value={s.barelyAttendedCount} label="barely there" tone={s.barelyAttendedCount ? 'bad' : 'default'} />
+      </Typography>
 
       {everyone.length === 0 ? (
         <Alert severity="warning" sx={{ borderRadius: 2 }}>
@@ -283,54 +421,24 @@ export default function AttendedTab({
         </Alert>
       ) : (
         <>
-          <Typography
-            variant="caption"
-            sx={{ fontWeight: 800, letterSpacing: 0.4, textTransform: 'uppercase', display: 'block', mb: 0.5 }}
-          >
-            Shortest time in the room first
-          </Typography>
+          {/* The order is the sort ("Shortest time in the room first"), which the
+              Sort button names; the homework and partly-there filters sit with
+              search and stage, as chips on a wide screen and inside the one
+              Filter button in a drawer. */}
+          {onRemindHomework && owing.length > 0 && (
+            <HomeworkStrip
+              owing={owing}
+              onRemind={onRemindHomework}
+              onStop={onStopHomeworkReminders}
+              busy={homeworkBusy}
+            />
+          )}
+          <StudentListToolbar view={view} filters={filters} />
           {s.barelyAttendedCount > 0 && (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
               Anyone in for under {s.barelyAttendedCutoff} minutes of a {s.scheduledMinutes} minute
               class is flagged. They still count as present.
             </Typography>
-          )}
-          <StudentListToolbar view={view} />
-          {/* Who came is not the end of it: the class set homework, and a
-              student who sat through the class and handed nothing in needs the
-              same nudge as one catching up. Shown only when there is something
-              to filter to. */}
-          {(missingCount > 0 || partlyCount > 0) && (
-            <Box role="group" aria-label="Show only" sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
-              <Chip
-                label={`All ${everyone.length}`}
-                onClick={() => setFilter('all')}
-                color={filter === 'all' ? 'primary' : 'default'}
-                variant={filter === 'all' ? 'filled' : 'outlined'}
-                aria-pressed={filter === 'all'}
-                sx={{ minHeight: 44, fontWeight: 600 }}
-              />
-              {missingCount > 0 && (
-                <Chip
-                  label={`Homework not in ${missingCount}`}
-                  onClick={() => setFilter(filter === 'not_handed_in' ? 'all' : 'not_handed_in')}
-                  color={filter === 'not_handed_in' ? 'error' : 'default'}
-                  variant={filter === 'not_handed_in' ? 'filled' : 'outlined'}
-                  aria-pressed={filter === 'not_handed_in'}
-                  sx={{ minHeight: 44, fontWeight: 600 }}
-                />
-              )}
-              {partlyCount > 0 && (
-                <Chip
-                  label={`Partly there ${partlyCount}`}
-                  onClick={() => setFilter(filter === 'partly' ? 'all' : 'partly')}
-                  color={filter === 'partly' ? 'warning' : 'default'}
-                  variant={filter === 'partly' ? 'filled' : 'outlined'}
-                  aria-pressed={filter === 'partly'}
-                  sx={{ minHeight: 44, fontWeight: 600 }}
-                />
-              )}
-            </Box>
           )}
           <Box sx={{ display: 'flex', flexDirection: 'column' }}>
             {view.shown.map((student) => (

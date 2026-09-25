@@ -1,4 +1,5 @@
 import { Metadata } from 'next';
+import { buildAlternates } from '@/lib/seo/metadata';
 import { Container, Typography, Box, Grid, Paper, Stack, Chip, Button } from '@mui/material';
 import Link from 'next/link';
 import { setRequestLocale } from 'next-intl/server';
@@ -7,9 +8,14 @@ import CollegeListingCard from '@/components/college-hub/CollegeListingCard';
 
 export const revalidate = 86400;
 
-export async function generateMetadata(): Promise<Metadata> {
+export async function generateMetadata({
+  params: { locale },
+}: {
+  params: { locale: string };
+}): Promise<Metadata> {
   return {
-    title: 'NATA 2026: B.Arch Colleges Accepting NATA Score | Neram',
+    alternates: buildAlternates(locale, '/nata-hub'),
+    title: 'NATA 2026: B.Arch Colleges Accepting NATA Score',
     description:
       'Complete list of B.Arch colleges in India accepting NATA scores. Compare fees, cutoffs, placements. All COA-approved architecture colleges with NATA admission.',
     keywords: ['NATA colleges', 'B.Arch NATA', 'NATA score colleges', 'architecture colleges NATA'],

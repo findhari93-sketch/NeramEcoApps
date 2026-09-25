@@ -19,6 +19,10 @@ const state = vi.hoisted(() => ({
   absences: [] as Record<string, unknown>[],
   awayWindows: [] as Record<string, unknown>[],
   members: [] as Record<string, unknown>[],
+  userError: null as { code?: string; message: string } | null,
+  classError: null as { code?: string; message: string } | null,
+  authError: null as string | null,
+  listErrorTable: null as string | null,
 }));
 
 function builder(table: string) {
@@ -35,13 +39,25 @@ function builder(table: string) {
     b[method] = chain;
   }
   b.single = () => {
-    if (table === 'users') return Promise.resolve({ data: { id: 'staff-1', user_type: 'teacher' }, error: null });
-    if (table === 'nexus_scheduled_classes') return Promise.resolve({ data: state.classRow, error: null });
+    if (table === 'users') {
+      return Promise.resolve(
+        state.userError
+          ? { data: null, error: state.userError }
+          : { data: { id: 'staff-1', user_type: 'teacher' }, error: null },
+      );
+    }
+    if (table === 'nexus_scheduled_classes') {
+      return Promise.resolve(state.classError ? { data: null, error: state.classError } : { data: state.classRow, error: null });
+    }
     return Promise.resolve({ data: null, error: null });
   };
   b.maybeSingle = b.single;
   b.then = (onFulfilled: (v: unknown) => unknown) =>
-    Promise.resolve({ data: rows(), error: null }).then(onFulfilled);
+    Promise.resolve(
+      state.listErrorTable === table
+        ? { data: null, error: { message: 'TypeError: fetch failed' } }
+        : { data: rows(), error: null },
+    ).then(onFulfilled);
   return b;
 }
 
@@ -54,7 +70,12 @@ vi.mock('@neram/database', () => ({
   toFacts: () => ({}),
 }));
 
-vi.mock('@/lib/ms-verify', () => ({ verifyMsToken: async () => ({ oid: 'ms-oid-1' }) }));
+vi.mock('@/lib/ms-verify', () => ({
+  verifyMsToken: async () => {
+    if (state.authError) throw new Error(state.authError);
+    return { oid: 'ms-oid-1' };
+  },
+}));
 // Real per-student catch-up resolution touches six more tables; nobody in
 // this fixture is absent, so `catchupFor` returns null before it is ever
 // reached. Mocked out anyway so importing the route never needs a real one.
@@ -76,6 +97,10 @@ const call = () =>
 const ist = (hhmm: string) => `2026-09-15T${hhmm}:00+05:30`;
 
 beforeEach(() => {
+  state.userError = null;
+  state.classError = null;
+  state.authError = null;
+  state.listErrorTable = null;
   state.classRow = {
     id: 'class-1',
     title: 'Basic 3D Shape Composition',
@@ -187,3 +212,47 @@ describe('GET /api/timetable/class-insights, one reason and one follow-up state'
   });
 });
 
+
+/**
+ * 2026-09-24, prod: the catch-up drawer asked for a class that exists in the
+ * classroom it named, got 404 "Class not found in this classroom", and the
+ * Attended tab sat on skeletons. The route read `data` and never `error`, so a
+ * failed read and a missing row gave the same answer.
+ */
+describe('GET /api/timetable/class-insights, telling a failed read from a missing class', () => {
+  it('answers 503, not 404, when the class read fails', async () => {
+    state.classError = { code: '57014', message: 'canceling statement due to statement timeout' };
+    const res = await call();
+    expect(res.status).toBe(503);
+    expect((await res.json()).error).toBe('Could not load the class');
+  });
+
+  it('answers 503, not 404, when the users read fails', async () => {
+    state.userError = { message: 'TypeError: fetch failed' };
+    const res = await call();
+    expect(res.status).toBe(503);
+  });
+
+  it('still answers 404 for a class that is not there', async () => {
+    state.classError = { code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned' };
+    const res = await call();
+    expect(res.status).toBe(404);
+  });
+
+  // A failed attendance read used to look like a class Teams had not synced yet,
+  // and a failed absences read dropped every reason and follow-up without a word.
+  it.each(['nexus_attendance', 'nexus_class_absences', 'nexus_class_rsvp', 'nexus_student_away_windows'])(
+    'answers 503 rather than a partial picture when %s cannot be read',
+    async (table) => {
+      state.listErrorTable = table;
+      const res = await call();
+      expect(res.status).toBe(503);
+    },
+  );
+
+  it('answers 401, not 500, when the token is missing', async () => {
+    state.authError = 'Missing or invalid Authorization header';
+    const res = await call();
+    expect(res.status).toBe(401);
+  });
+});

@@ -47,6 +47,7 @@ import {
 import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import { useFormContext } from '../FormContext';
 import type { CourseType, OfflineCenter } from '@neram/database';
+import { leadAttribution } from '@/lib/attribution';
 
 // Course options
 const COURSE_OPTIONS: { value: CourseType; label: string; description: string; icon: React.ReactNode }[] = [
@@ -231,6 +232,7 @@ export default function CourseSelectionStep() {
           email: user.email || undefined,
           preferred_slot: callbackSlot || undefined,
           notes: callbackNotes.trim() || undefined,
+          ...leadAttribution(),
         }),
       });
 

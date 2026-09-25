@@ -5,6 +5,7 @@ import { Box, Snackbar, Alert } from '@neram/ui';
 import { ChatWidget, applicationFormFlow } from '@neram/ui';
 import { useFormContext } from './FormContext';
 import type { ApplicationFormData } from './types';
+import { leadAttribution } from '@/lib/attribution';
 
 interface ChatAssistantProps {
   displayMode: 'floating' | 'panel';
@@ -158,6 +159,7 @@ export default function ChatAssistant({ displayMode }: ChatAssistantProps) {
           course_interest: courseInterest || undefined,
           query_type: 'application_help',
           notes: 'Requested from chat assistant during application form',
+          ...leadAttribution(),
         }),
       });
 

@@ -19,7 +19,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'Best NATA Coaching Centers in India 2026: Compare & Choose | Neram Classes',
+    title: 'Best NATA Coaching Centers in India 2026: Compare & Choose',
     description:
       'Find the best NATA coaching center near you. Compare fees, faculty, batch sizes, and success rates across 150+ cities. Neram Classes, India\'s #1 NATA coaching center since 2009. Online & offline hybrid classes.',
     keywords:

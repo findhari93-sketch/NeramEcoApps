@@ -38,6 +38,9 @@ export class NexusFetchError extends Error {
   }
 }
 
+/** How long one read may take, token included, before it is reported as failed. */
+export const FETCH_DEADLINE_MS = 20_000;
+
 /**
  * GET a Nexus API route with the caller's bearer token.
  *
@@ -47,18 +50,39 @@ export class NexusFetchError extends Error {
  * a class has no assignments.
  */
 export async function fetchWithToken<T>(url: string, getToken: GetToken): Promise<T> {
-  const token = await getToken();
-  const res = await fetch(url, {
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
-  const json = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    throw new NexusFetchError(
-      (json as { error?: string })?.error || `Request failed (${res.status})`,
-      res.status,
-    );
+  // SWR's isLoading stays true for as long as this is pending, so a token call or a
+  // request that never settles was a skeleton for good: no error to show, nothing to
+  // retry. The catch-up drawer's Attended tab sat like that on prod. The deadline
+  // covers the token too, since an MSAL call waiting on a redirect is the likeliest hang.
+  // A timer rather than AbortSignal.timeout, so tests can drive it with fake timers.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_DEADLINE_MS);
+  const timedOut = () => new NexusFetchError('This is taking too long. Check your connection and try again.', 408);
+  try {
+    const token = await Promise.race([
+      getToken(),
+      new Promise<never>((_resolve, reject) => {
+        controller.signal.addEventListener('abort', () => reject(timedOut()));
+      }),
+    ]);
+    const res = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      signal: controller.signal,
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new NexusFetchError(
+        (json as { error?: string })?.error || `Request failed (${res.status})`,
+        res.status,
+      );
+    }
+    return json as T;
+  } catch (err) {
+    if (controller.signal.aborted && !(err instanceof NexusFetchError)) throw timedOut();
+    throw err;
+  } finally {
+    clearTimeout(timer);
   }
-  return json as T;
 }
 
 /**

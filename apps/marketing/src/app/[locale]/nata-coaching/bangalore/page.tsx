@@ -14,7 +14,7 @@ export async function generateMetadata({
 }: {
   params: { locale: string };
 }): Promise<Metadata> {
-  const title = `NATA Online Coaching in Bangalore 2026 | Live Classes, NIT/IIT Faculty | Neram Classes`;
+  const title = `NATA Online Coaching in Bangalore 2026 | Live Classes, NIT/IIT Faculty`;
   const description = `NATA online coaching for Bangalore students: live classes by NIT/IIT/SPA alumni, daily drawing practice, 100+ mock tests, 99.9% success rate. Headquartered in Electronic City. Fees from Rs. 15,000.`;
   return {
     title,
@@ -23,7 +23,7 @@ export async function generateMetadata({
       'NATA online coaching Bangalore, NATA coaching online Bangalore, NATA classes Bangalore, NATA coaching Koramangala, NATA coaching HSR Layout, NATA coaching Whitefield, NATA coaching Indiranagar, NATA coaching Electronic City, NATA preparation Bangalore',
     alternates: buildAlternates(locale, `/nata-coaching/${city.slug}`),
     openGraph: {
-      title: `NATA Online Coaching in ${city.displayName} | Neram Classes`,
+      title: `NATA Online Coaching in ${city.displayName}`,
       description,
       type: 'website',
       url: `${BASE_URL}/nata-coaching/${city.slug}`,

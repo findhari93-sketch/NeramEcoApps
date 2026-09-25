@@ -50,6 +50,8 @@ const ASSISTANT: Record<string, string> = {
     'The application form request. The founder named this one too.',
   'apps/nexus/src/app/api/cron/join-reminders/route.ts': 'A sweep, every morning.',
   'apps/nexus/src/app/api/cron/sketchbook-reminders/route.ts': 'A sweep, every morning.',
+  'apps/nexus/src/app/api/cron/homework-reminders/route.ts':
+    "Homework still not in, every 3 days. The teacher's first reminder carried their name; the repeats are the system.",
   'apps/nexus/src/app/api/student/exams/[examId]/query/route.ts':
     'A student asking about their result. Generated from their own data, and sent to STAFF, who are not who raised it.',
   'apps/nexus/src/lib/notify-students.ts':
@@ -68,6 +70,8 @@ const FROM_TEACHER: Record<string, string> = {
   'apps/nexus/src/app/api/catchup/nudge/route.ts': 'A teacher asking why.',
   'apps/nexus/src/app/api/catchup/celebrate/route.ts': "A teacher's personal note to a student who is all clear.",
   'apps/nexus/src/app/api/timetable/[classId]/catchup-nudge/route.ts': 'A teacher asking why.',
+  'apps/nexus/src/app/api/timetable/[classId]/homework-reminders/route.ts':
+    'A teacher reminding the students who came to hand the homework in.',
   'apps/nexus/src/app/api/tests/runs/[placementId]/message/route.ts':
     'The Message button on the Students tab: a teacher typed it.',
   'apps/nexus/src/app/api/study-materials/files/[id]/nudge/route.ts': 'A teacher pointing at material.',

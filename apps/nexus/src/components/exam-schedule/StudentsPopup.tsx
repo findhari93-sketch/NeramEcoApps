@@ -16,6 +16,7 @@ import {
   IconButton,
   Button,
 } from '@neram/ui';
+import FilterMenu, { ActiveFilterChips, type FilterSection } from '@/components/students/list/FilterMenu';
 import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
 import WbSunnyOutlinedIcon from '@mui/icons-material/WbSunnyOutlined';
 import WbTwilightOutlinedIcon from '@mui/icons-material/WbTwilightOutlined';
@@ -194,29 +195,33 @@ function TeacherAllContent({ students, buckets }: { students: StudentSummary[]; 
     { value: 'no_response', label: 'No Response', count: buckets?.no_response ?? 0 },
   ];
 
+  const current = bucket === 'all' ? null : filters.find((f) => f.value === bucket) ?? null;
+  const section: FilterSection = {
+    id: 'bucket',
+    title: 'Where they are with the exam',
+    mode: 'single',
+    allLabel: 'All',
+    value: bucket === 'all' ? [] : [bucket],
+    onToggle: (key) => setBucket((cur) => (cur === key ? 'all' : (key as BucketFilter))),
+    onClear: () => setBucket('all'),
+    options: filters.filter((f) => f.value !== 'all').map((f) => ({ key: f.value, label: f.label, count: f.count })),
+  };
+
   return (
     <Box>
-      {/* Filter chips */}
-      <Box sx={{ display: 'flex', gap: 0.75, mb: 1.5, flexWrap: 'wrap' }}>
-        {filters.map(f => (
-          <Chip
-            key={f.value}
-            label={`${f.label} (${f.count})`}
-            size="small"
-            variant={bucket === f.value ? 'filled' : 'outlined'}
-            color={bucket === f.value ? 'primary' : 'default'}
-            onClick={() => setBucket(f.value)}
-            sx={{ cursor: 'pointer', fontWeight: 600, fontSize: '0.7rem' }}
-          />
-        ))}
+      {/* One Filter button beside Copy. Six chips wrapped into three lines of
+          a small dialog before a single name. */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+        <FilterMenu
+          label={current ? `${current.label} (${current.count})` : `All (${students.length})`}
+          title="Show students"
+          sections={[section]}
+        />
+        <Box sx={{ flex: 1 }} />
+        {filtered.length > 0 && <CopyButton students={filtered} />}
       </Box>
-
-      {/* Copy button */}
-      {filtered.length > 0 && (
-        <Box sx={{ mb: 1.5, display: 'flex', justifyContent: 'flex-end' }}>
-          <CopyButton students={filtered} />
-        </Box>
-      )}
+      <ActiveFilterChips sections={[section]} />
+      <Box sx={{ mb: 1 }} />
 
       {/* Student list */}
       {filtered.length === 0 ? (

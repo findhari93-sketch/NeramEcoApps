@@ -3,8 +3,8 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@neram/database';
-import crypto from 'crypto';
 import { verifyFirebaseToken } from '../../_lib/auth';
+import { isValidRazorpaySignature, claimPendingPayment } from '@/lib/payments/razorpay-verify';
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,51 +28,63 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify signature
-    const body = razorpay_order_id + '|' + razorpay_payment_id;
-    const expectedSignature = crypto
-      .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET || '')
-      .update(body)
-      .digest('hex');
-
-    if (expectedSignature !== razorpay_signature) {
+    if (!isValidRazorpaySignature({
+      orderId: razorpay_order_id,
+      paymentId: razorpay_payment_id,
+      signature: razorpay_signature,
+      secret: process.env.RAZORPAY_KEY_SECRET,
+    }) || typeof paymentId !== 'string' || !paymentId) {
       return NextResponse.json(
         { error: 'Verification Failed', message: 'Invalid payment signature' },
         { status: 400 }
       );
     }
 
-    // Update payment record (status must be 'paid' to trigger receipt_number generation)
-    let updateQuery = supabase
-      .from('payments' as any)
-      .update({
-        razorpay_payment_id,
-        razorpay_signature,
-        status: 'paid',
-        paid_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', paymentId);
+    // Only the pending row created for this Razorpay order can become paid.
+    const claim = await claimPendingPayment(supabase, {
+      paymentId,
+      orderId: razorpay_order_id,
+      razorpayPaymentId: razorpay_payment_id,
+      signature: razorpay_signature,
+      userId: auth?.userId,
+    });
 
-    // When authenticated, scope to user; for public payments, just query by id
-    if (auth) {
-      updateQuery = updateQuery.eq('user_id', auth.userId);
-    }
-
-    const { data: payment, error: updateError } = await updateQuery
-      .select(`
-        *,
-        lead_profiles(id, user_id, interest_course, payment_scheme, final_fee, full_payment_discount, discount_amount, assigned_fee, selected_course_id)
-      `)
-      .single();
-
-    if (updateError) {
-      console.error('Payment update error:', updateError);
+    if (claim.kind === 'error') {
+      console.error('Payment update error:', claim.error);
       return NextResponse.json(
         { error: 'Database Error', message: 'Failed to update payment' },
         { status: 500 }
       );
     }
+
+    if (claim.kind === 'not_found') {
+      return NextResponse.json(
+        { error: 'Verification Failed', message: 'Payment does not match this order' },
+        { status: 400 }
+      );
+    }
+
+    if (claim.kind === 'already_paid') {
+      // A retried verify for an order that already succeeded: answer with the
+      // receipt, and do not rerun enrolment, installments or notifications.
+      const paid = claim.payment;
+      return NextResponse.json({
+        success: true,
+        message: 'Payment already verified',
+        enrolled: paid.payment_scheme === 'full' ||
+          (paid.payment_scheme === 'installment' && paid.installment_number === 2),
+        receipt: {
+          receiptNumber: paid.receipt_number || null,
+          amount: paid.amount,
+          razorpayPaymentId: razorpay_payment_id,
+          paidAt: paid.paid_at,
+          paymentScheme: paid.payment_scheme,
+        },
+        nextInstallmentDue: null,
+      });
+    }
+
+    const payment = claim.payment;
 
     // Enrich payment with Razorpay details (non-blocking)
     try {
@@ -96,7 +108,8 @@ export async function POST(request: NextRequest) {
       await supabase
         .from('payments' as any)
         .update(enrichment)
-        .eq('id', paymentId);
+        .eq('id', paymentId)
+        .eq('razorpay_order_id', razorpay_order_id);
     } catch (enrichError) {
       console.error('Razorpay enrichment failed (non-blocking):', enrichError);
     }
@@ -124,7 +137,7 @@ export async function POST(request: NextRequest) {
       const dueDate = new Date();
       dueDate.setDate(dueDate.getDate() + 30);
 
-      await supabase
+      const { error: installmentError } = await supabase
         .from('payment_installments' as any)
         .insert({
           lead_profile_id: leadProfile.id,
@@ -134,6 +147,9 @@ export async function POST(request: NextRequest) {
           reminder_date: new Date(dueDate.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
           status: 'pending',
         });
+      if (installmentError) {
+        console.error('Failed to create second installment record:', installmentError);
+      }
     }
 
     // Create or update student profile on full payment OR first installment
@@ -144,14 +160,16 @@ export async function POST(request: NextRequest) {
       const studentUserId = auth?.userId || payment.lead_profiles?.user_id;
       const finalFee = leadProfile.final_fee || 0;
 
-      const { data: existingStudent } = await supabase
+      const { data: existingStudent, error: studentLookupError } = await supabase
         .from('student_profiles' as any)
         .select('id, fee_paid')
         .eq('user_id', studentUserId)
-        .single();
+        .maybeSingle();
 
-      if (!existingStudent) {
-        await supabase
+      if (studentLookupError) {
+        console.error('Student profile lookup failed:', studentLookupError);
+      } else if (!existingStudent) {
+        const { error: studentInsertError } = await supabase
           .from('student_profiles' as any)
           .insert({
             user_id: studentUserId,
@@ -162,10 +180,13 @@ export async function POST(request: NextRequest) {
             payment_status: isFullPayment ? 'paid' : 'pending',
             enrollment_date: new Date().toISOString().split('T')[0],
           });
+        if (studentInsertError) {
+          console.error('Student profile insert failed:', studentInsertError);
+        }
       } else if (payment.payment_scheme === 'installment') {
         // Student profile exists — update fee_paid and fee_due
         const newFeePaid = Number(existingStudent.fee_paid || 0) + Number(payment.amount);
-        await supabase
+        const { error: studentUpdateError } = await supabase
           .from('student_profiles' as any)
           .update({
             fee_paid: newFeePaid,
@@ -174,6 +195,9 @@ export async function POST(request: NextRequest) {
             updated_at: new Date().toISOString(),
           })
           .eq('id', existingStudent.id);
+        if (studentUpdateError) {
+          console.error('Student profile fee update failed:', studentUpdateError);
+        }
       }
     }
 

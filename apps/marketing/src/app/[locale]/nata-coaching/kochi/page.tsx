@@ -14,7 +14,7 @@ export async function generateMetadata({
 }: {
   params: { locale: string };
 }): Promise<Metadata> {
-  const title = `NATA Online Coaching in Kochi 2026 | CET Trivandrum, NIT Calicut Prep | Neram Classes`;
+  const title = `NATA Online Coaching in Kochi 2026 | CET Trivandrum, NIT Calicut Prep`;
   const description = `NATA online coaching for Kochi and Ernakulam students aiming at CET Trivandrum, NIT Calicut, TKM Kollam architecture programs. Live classes by NIT/IIT/SPA alumni faculty.`;
   return {
     title,
@@ -23,7 +23,7 @@ export async function generateMetadata({
       'NATA online coaching Kochi, NATA coaching online Ernakulam, NATA classes Kochi, NIT Calicut architecture coaching, NATA coaching Edappally, NATA coaching Kakkanad, NATA coaching Aluva, NATA preparation Kerala',
     alternates: buildAlternates(locale, `/nata-coaching/${city.slug}`),
     openGraph: {
-      title: `NATA Online Coaching in ${city.displayName} | Neram Classes`,
+      title: `NATA Online Coaching in ${city.displayName}`,
       description,
       type: 'website',
       url: `${BASE_URL}/nata-coaching/${city.slug}`,

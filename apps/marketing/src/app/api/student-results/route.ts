@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { PUBLIC_CACHE_HEADERS } from '../_lib/public-cache';
 import { createAdminClient } from '@neram/database';
 import {
   getStudentResults,
@@ -10,7 +11,7 @@ import {
 } from '@neram/database/queries';
 import type { StudentResultExamType, StudentResultFilters } from '@neram/database';
 
-const cacheHeaders = { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' };
+const cacheHeaders = PUBLIC_CACHE_HEADERS;
 
 /**
  * GET /api/student-results

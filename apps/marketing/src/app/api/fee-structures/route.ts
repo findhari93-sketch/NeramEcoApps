@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { PUBLIC_CACHE_HEADERS } from '../_lib/public-cache';
 import { getActiveFeeStructures } from '@neram/database';
 
 export async function GET(req: NextRequest) {
@@ -22,7 +23,7 @@ export async function GET(req: NextRequest) {
     });
 
     return NextResponse.json({ feeStructures }, {
-      headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' },
+      headers: PUBLIC_CACHE_HEADERS,
     });
   } catch (error) {
     console.error('Error fetching fee structures:', error);

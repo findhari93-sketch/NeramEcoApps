@@ -12,6 +12,7 @@ import type { AttendanceBucket } from '@/lib/attendance-quality';
 import type { RegisterGroup } from '@/lib/attendance-register';
 import type { FollowupState, FollowupTally } from '@/lib/class-followup';
 import type { AssignmentSummary, StudentWork } from '@/lib/class-work';
+import type { HomeworkReminderState } from '@/lib/homework-reminders';
 import type { RecentAttendance } from '@/lib/recent-attendance';
 import type { ReasonSource } from '@/lib/absence-reason';
 
@@ -199,6 +200,8 @@ export interface StudentInsight {
   recent?: RecentAttendance | null;
   /** The class's homework, when it set any. */
   work?: StudentWork | null;
+  /** The every-few-days homework reminder, when one was ever started for this student. */
+  homeworkReminder?: HomeworkReminderState | null;
 }
 
 /** Everything about one class's attendance, from /api/timetable/class-insights. */
@@ -289,6 +292,15 @@ export interface AttendanceTabProps {
   sync: SyncState | null;
   insights: Insights | null;
   insightsLoading: boolean;
+  /**
+   * Why the class could not be loaded, when it could not. Read before
+   * insightsLoading: SWR reports loading again on every retry, and a tab that only
+   * knew "loading" showed skeletons for a failure with nothing to press.
+   */
+  insightsError: string | null;
+  /** True while a retry is in flight. */
+  insightsRetrying: boolean;
+  onRetryInsights: () => void;
   /** Student ids the teacher has ticked, shared across tabs. */
   selected: Set<string>;
   onSelect: (studentId: string, next: boolean) => void;
@@ -301,4 +313,10 @@ export interface AttendanceTabProps {
   onNotify: (message: string, severity: 'info' | 'warning' | 'success') => void;
   /** Open the list already narrowed to one group. */
   initialFilter?: AttendanceFilter | null;
+  /** Open the homework reminder for these students (who came and owe it). */
+  onRemindHomework?: (studentIds: string[]) => void;
+  /** Stop every running homework reminder on this class. */
+  onStopHomeworkReminders?: () => void;
+  /** A stop is in flight. */
+  homeworkBusy?: boolean;
 }

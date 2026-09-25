@@ -14,7 +14,7 @@ export async function generateMetadata({
 }: {
   params: { locale: string };
 }): Promise<Metadata> {
-  const title = `NATA Online Coaching in Hyderabad 2026 | JNAFAU Prep | Neram Classes`;
+  const title = `NATA Online Coaching in Hyderabad 2026 | JNAFAU Prep`;
   const description = `NATA online coaching for Hyderabad students aiming at JNAFAU, JNTU College of Architecture, and other Telugu-state institutes. Live classes by NIT/IIT/SPA alumni faculty, 99.9% success rate.`;
   return {
     title,
@@ -23,7 +23,7 @@ export async function generateMetadata({
       'NATA online coaching Hyderabad, NATA coaching online Hyderabad, NATA classes Hyderabad, JNAFAU coaching, JNTU architecture coaching, NATA coaching Gachibowli, NATA coaching Madhapur, NATA coaching Secunderabad, NATA preparation Hyderabad',
     alternates: buildAlternates(locale, `/nata-coaching/${city.slug}`),
     openGraph: {
-      title: `NATA Online Coaching in ${city.displayName} | Neram Classes`,
+      title: `NATA Online Coaching in ${city.displayName}`,
       description,
       type: 'website',
       url: `${BASE_URL}/nata-coaching/${city.slug}`,

@@ -10,7 +10,7 @@ export default function robots(): MetadataRoute.Robots {
         allow: '/',
         disallow: [
           '/api/',
-          '/_next/',
+          // Never disallow /_next/: Google needs the CSS and JS chunks to render pages.
           '/admin/',
           '/*.json$',
           '/signout',

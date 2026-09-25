@@ -35,7 +35,7 @@ export async function generateMetadata({
 }: {
   params: { locale: string };
 }): Promise<Metadata> {
-  const title = 'Best Online NATA Coaching in India 2026 - Live Classes by IIT/NIT Faculty | Neram Classes';
+  const title = 'Best Online NATA Coaching in India 2026 - Live Classes by IIT/NIT Faculty';
   const description = 'India\'s #1 online NATA coaching with 99.9% success rate. Live interactive classes by IIT/NIT alumni, daily drawing practice, small batches of 25, 100+ mock tests, free AI study app. Join 10,000+ students from 150+ cities.';
 
   return {
@@ -45,7 +45,7 @@ export async function generateMetadata({
       'best online NATA coaching, best NATA online coaching in India, NATA coaching online, online NATA classes, best online coaching for NATA exam, online NATA preparation, NATA live classes online, NATA drawing classes online, NATA online class, NATA coaching from home, NATA coaching app, online architecture coaching India, best NATA coaching center online',
     alternates: buildAlternates(locale, '/best-nata-coaching-online'),
     openGraph: {
-      title: 'Best Online NATA Coaching in India 2026 | Neram Classes',
+      title: 'Best Online NATA Coaching in India 2026',
       description,
       type: 'website',
       url: `${BASE_URL}/best-nata-coaching-online`,
@@ -60,7 +60,7 @@ export async function generateMetadata({
     },
     twitter: {
       card: 'summary_large_image',
-      title: 'Best Online NATA Coaching in India 2026 | Neram Classes',
+      title: 'Best Online NATA Coaching in India 2026',
       description,
     },
   };

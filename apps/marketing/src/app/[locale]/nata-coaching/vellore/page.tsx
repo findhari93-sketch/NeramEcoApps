@@ -14,7 +14,7 @@ export async function generateMetadata({
 }: {
   params: { locale: string };
 }): Promise<Metadata> {
-  const title = `NATA Online Coaching in Vellore 2026 | VIT Architecture Prep | Neram Classes`;
+  const title = `NATA Online Coaching in Vellore 2026 | VIT Architecture Prep`;
   const description = `NATA online coaching for Vellore students. Live classes by NIT/IIT/SPA alumni faculty, 99.9% success rate, daily drawing practice. Target VIT, Anna University, and Bangalore colleges.`;
   return {
     title,
@@ -23,7 +23,7 @@ export async function generateMetadata({
       'NATA online coaching Vellore, NATA coaching online Vellore, NATA classes Vellore, NATA preparation Vellore, NATA coaching Katpadi, NATA coaching Ranipet',
     alternates: buildAlternates(locale, `/nata-coaching/${city.slug}`),
     openGraph: {
-      title: `NATA Online Coaching in ${city.displayName} | Neram Classes`,
+      title: `NATA Online Coaching in ${city.displayName}`,
       description,
       type: 'website',
       url: `${BASE_URL}/nata-coaching/${city.slug}`,

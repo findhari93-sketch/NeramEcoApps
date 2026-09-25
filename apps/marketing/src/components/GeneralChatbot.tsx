@@ -25,6 +25,7 @@ import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import HeadsetMicIcon from '@mui/icons-material/HeadsetMic';
 import Image from 'next/image';
 import VoiceInputButton from './aintra/VoiceInputButton';
+import { leadAttribution } from '@/lib/attribution';
 
 const ASSISTANT_IMG = '/images/nata-ai-assistant2.jpg';
 
@@ -305,6 +306,7 @@ export default function GeneralChatbot() {
           student_name: leadName.trim(),
           phone: leadPhone.trim(),
           category: 'chatbot_lead',
+          ...leadAttribution(),
         }),
       });
       setLeadCaptured(true);

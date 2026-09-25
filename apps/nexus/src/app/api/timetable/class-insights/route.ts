@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
+import { httpStatusForError, messageOf, throwIfReadFailed } from '@/lib/api-errors';
 import {
   getSupabaseAdminClient,
   istTodayYmd,
@@ -37,6 +38,8 @@ import {
   type FollowupState,
 } from '@/lib/class-followup';
 import { loadClassWork, studentWork, summariseWork, type WorkAudience } from '@/lib/class-work';
+import { reminderStateOf, type HomeworkPlanRow } from '@/lib/homework-reminders';
+import { loadClassPlans } from '@/lib/homework-reminder-store';
 import { loadRecentAttendance, type RecentAttendance } from '@/lib/recent-attendance';
 import {
   AWAY_COLUMNS,
@@ -101,17 +104,18 @@ export async function GET(request: NextRequest) {
 
     // Staff gate on user_type, not classroom enrollment: any teacher or admin can
     // review any class, matching /api/timetable/attendance-report.
-    const { data: user } = await supabase
+    const { data: user, error: userError } = await supabase
       .from('users')
       .select('id, user_type')
       .eq('ms_oid', msUser.oid)
       .single();
+    throwIfReadFailed(userError, 'the signed-in user');
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
     if (user.user_type !== 'teacher' && user.user_type !== 'admin') {
       return NextResponse.json({ error: 'Only teachers can view class insights' }, { status: 403 });
     }
 
-    const { data: cls } = await supabase
+    const { data: cls, error: clsError } = await supabase
       .from('nexus_scheduled_classes')
       .select(
         'id, title, scheduled_date, start_time, end_time, classroom_id, status, attendance_synced_at, ' +
@@ -123,12 +127,18 @@ export async function GET(request: NextRequest) {
       .eq('id', classId)
       .eq('classroom_id', classroomId)
       .single();
+    throwIfReadFailed(clsError, 'the class');
     if (!cls) return NextResponse.json({ error: 'Class not found in this classroom' }, { status: 404 });
 
     // Dormant students are excluded, so the attendance rate on this panel counts
     // only the students who are actually expected in the room.
-    const [{ members }, { data: attendance }, { data: optOuts }, { data: absenceRows }, { data: awayRows }] =
-      await Promise.all([
+    const [
+      { members },
+      { data: attendance, error: attendanceError },
+      { data: optOuts, error: optOutsError },
+      { data: absenceRows, error: absencesError },
+      { data: awayRows, error: awayError },
+    ] = await Promise.all([
         // `phone` is not in the roster's base columns, and it is asked for here
         // so a teacher can ring somebody straight off the missed list instead of
         // opening the student page for a number. Staff-only route.
@@ -169,6 +179,14 @@ export async function GET(request: NextRequest) {
           .lte('starts_on', cls.scheduled_date)
           .or(`ends_on.is.null,ends_on.gte.${cls.scheduled_date}`),
       ]);
+
+    // A failed read here is not an empty one. Missing attendance reads as a class
+    // Teams has not synced, and missing absences drop every reason and follow-up, so
+    // a partial answer would mislead where an error only delays.
+    throwIfReadFailed(attendanceError, 'the attendance for this class');
+    throwIfReadFailed(optOutsError, "the class's RSVPs");
+    throwIfReadFailed(absencesError, 'the absences for this class');
+    throwIfReadFailed(awayError, 'the away windows');
 
     const awayByStudent = groupByStudent((awayRows || []) as AwayWindow[]);
 
@@ -246,6 +264,14 @@ export async function GET(request: NextRequest) {
           }).catch(() => new Map<string, RecentAttendance>())
         : Promise.resolve(new Map<string, RecentAttendance>()),
     ]);
+
+    // Who is being reminded about the homework every few days. A failed read
+    // (or a database without the table yet) shows nobody as reminded rather than
+    // failing the whole panel over a secondary line.
+    const reminderPlans = classWork.assignments.length
+      ? await loadClassPlans(supabase, classId).catch(() => [] as HomeworkPlanRow[])
+      : [];
+    const planByStudent = new Map(reminderPlans.map((p) => [p.student_id, p]));
 
     /** The one resolved item for this student and this class, or null. */
     const catchupFor = (studentId: string, abs: any) => {
@@ -382,6 +408,7 @@ export async function GET(request: NextRequest) {
         days_to_catch_up: daysToCatchUp(String(cls.scheduled_date), abs?.caught_up_at ?? null),
         recent: recent.get(r.user_id) ?? null,
         work: classWork.assignments.length ? studentWork(r.user_id, classWork.assignments, classWork.subs) : null,
+        homeworkReminder: planByStudent.has(r.user_id) ? reminderStateOf(planByStudent.get(r.user_id)!) : null,
       };
       const followup: FollowupState = followupState({
         attended,
@@ -530,7 +557,11 @@ export async function GET(request: NextRequest) {
       students,
     });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to load class insights';
-    return NextResponse.json({ error: message }, { status: 500 });
+    // 401 for an expired token and 503 for a failed read, so the drawer can offer the
+    // right way out instead of every failure reading as "the server broke".
+    return NextResponse.json(
+      { error: messageOf(err, 'Failed to load class insights') },
+      { status: httpStatusForError(err) },
+    );
   }
 }

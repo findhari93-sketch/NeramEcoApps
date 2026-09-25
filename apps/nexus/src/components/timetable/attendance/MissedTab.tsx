@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   Alert,
   Box,
+  Button,
   Checkbox,
   Chip,
   Collapse,
@@ -28,6 +29,8 @@ import {
   type FollowupTone,
 } from '@/lib/class-followup';
 import type { AttendanceTabProps, StudentInsight } from './types';
+import InsightsLoadError from './InsightsLoadError';
+import FollowupGrid from './FollowupGrid';
 import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
 import { useStudentListView } from '@/components/students/list/useStudentListView';
 import { suggestedOrder, type ListAccessors } from '@/lib/student-list-view';
@@ -49,8 +52,12 @@ const GROUP_ORDER = [suggestedOrder<StudentInsight>('Grouped by follow-up')];
  * first because they are the ones to ring; the ones who explained and are
  * still working come second because they need a look, not a call. The recap
  * we have not published comes third, because that one is on us. Everyone who
- * is finished is collapsed, so four names that matter are not buried under
- * twelve that do not.
+ * is finished comes last.
+ *
+ * The picture comes first: the same 2x2 grid as the class card, whose corners
+ * are the filter, then every group as one closed line. A teacher sees the
+ * whole class on the first screen and opens the group they want, instead of
+ * scrolling past chip rows and open lists to find it.
  *
  * "Told us why" is the resolved reason (lib/absence-reason.ts): a declared
  * away window and an RSVP decline count, and the row says which it was. This
@@ -232,7 +239,7 @@ function MissedRow({
         alignItems: 'flex-start',
         gap: 0.5,
         px: 0.5,
-        py: 1,
+        py: 0.75,
         borderRadius: 1,
         minHeight: 48,
         cursor: 'pointer',
@@ -253,7 +260,7 @@ function MissedRow({
         userId={student.id}
         name={student.name}
         src={student.avatar_url}
-        size={36}
+        size={32}
         tapToView={false}
       />
       <Box sx={{ flex: 1, minWidth: 0, ml: 1 }}>
@@ -261,36 +268,37 @@ function MissedRow({
           {student.name}
         </Typography>
 
-        <ReasonLine student={student} />
-
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-          {progressLine(student)}
-          {nudged && ` · last nudged ${nudged}`}
-        </Typography>
-
-        {(irregular || (workMissing && !done) || student.catchup?.stuck) && (
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-            {irregular && student.recent && (
-              <Chip
-                size="small"
-                color="error"
-                variant="outlined"
-                label={`Missed ${student.recent.missed} of last ${student.recent.of}`}
-                title={
-                  student.recent.unexplained
-                    ? `${student.recent.unexplained} of them with no reason`
-                    : 'Every one of them with a reason'
-                }
-              />
-            )}
-            {student.catchup?.stuck && (
-              <Chip size="small" color="warning" variant="outlined" label="Stuck on a check" />
-            )}
-            {workMissing && !done && (
-              <Chip size="small" variant="outlined" label="Homework not in" />
-            )}
+        {/* Reason, progress and flags flow onto one line when the drawer is
+            wide enough and stack on a phone, with no width measuring: they are
+            flex items that wrap. */}
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 1.5, rowGap: 0.25 }}>
+          <Box sx={{ minWidth: 0, maxWidth: '100%' }}>
+            <ReasonLine student={student} />
           </Box>
-        )}
+
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', minWidth: 0 }}>
+            {progressLine(student)}
+            {nudged && ` · last nudged ${nudged}`}
+          </Typography>
+
+          {irregular && student.recent && (
+            <Chip
+              size="small"
+              color="error"
+              variant="outlined"
+              label={`Missed ${student.recent.missed} of last ${student.recent.of}`}
+              title={
+                student.recent.unexplained
+                  ? `${student.recent.unexplained} of them with no reason`
+                  : 'Every one of them with a reason'
+              }
+            />
+          )}
+          {student.catchup?.stuck && (
+            <Chip size="small" color="warning" variant="outlined" label="Stuck on a check" />
+          )}
+          {workMissing && !done && <Chip size="small" variant="outlined" label="Homework not in" />}
+        </Box>
       </Box>
 
       {/* A number is the fastest route to a student who has gone quiet, and it
@@ -311,53 +319,86 @@ function MissedRow({
 }
 
 /**
- * Tick everyone who still owes work on this class, in one gesture. Covers the
+ * The line between the picture and the groups: what the list is showing, and
+ * one Select all for everyone who still owes work on this class. It covers the
  * students who can act on it; a recap we have not published is not theirs to
- * chase, and a finished student is not to be messaged again.
+ * chase, and a finished student is not to be messaged again. It used to be a
+ * 48px tinted bar of its own under a row of filter chips.
  */
-function SelectAllBar({
+function ListHeader({
   ids,
   selected,
   onSelectMany,
+  filter,
+  onShowAll,
+  missed,
 }: {
   ids: string[];
   selected: Set<string>;
   onSelectMany: (ids: string[], next: boolean) => void;
+  filter: FollowupState | null;
+  onShowAll: () => void;
+  missed: number;
 }) {
   const chosen = ids.filter((id) => selected.has(id)).length;
-  const all = chosen === ids.length;
+  const all = ids.length > 0 && chosen === ids.length;
   const label = `Select all ${ids.length} not caught up`;
 
   return (
     <Box
-      component="label"
       sx={{
         display: 'flex',
         alignItems: 'center',
         gap: 0.5,
-        mb: 1.5,
-        pr: 1,
-        borderRadius: 1,
-        minHeight: 48,
-        cursor: 'pointer',
-        bgcolor: 'action.hover',
-        '&:hover': { bgcolor: 'action.selected' },
+        minHeight: 44,
+        mb: 0.5,
+        borderBottom: '1px solid',
+        borderColor: 'divider',
       }}
     >
-      <Checkbox
-        checked={all}
-        indeterminate={chosen > 0 && !all}
-        onChange={() => onSelectMany(ids, !all)}
-        sx={{ p: 1.25 }}
-        inputProps={{ 'aria-label': label }}
-      />
-      <Typography variant="body2" sx={{ fontWeight: 700, flex: 1 }}>
-        {all ? `All ${ids.length} selected` : label}
-      </Typography>
-      {chosen > 0 && (
-        <Typography variant="caption" color="text.secondary">
-          {chosen} ticked
+      {/* Filtered, the pressed corner already says what is showing; the line
+          only offers the way back, which fits beside Select all at 375px. */}
+      {filter ? (
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Button
+            size="small"
+            onClick={onShowAll}
+            aria-label={`Showing ${FOLLOWUP_META[filter].short.toLowerCase()} only. Show everyone`}
+            sx={{ minHeight: 44, textTransform: 'none', fontWeight: 700, ml: -1 }}
+          >
+            Show everyone
+          </Button>
+        </Box>
+      ) : (
+        <Typography variant="body2" sx={{ fontWeight: 700, flex: 1, minWidth: 0 }} noWrap>
+          {`${missed} missed it`}
         </Typography>
+      )}
+      {ids.length > 0 && (
+        <Box
+          component="label"
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            minHeight: 44,
+            pr: 1,
+            borderRadius: 1,
+            cursor: 'pointer',
+            flexShrink: 0,
+            '&:hover': { bgcolor: 'action.hover' },
+          }}
+        >
+          <Checkbox
+            checked={all}
+            indeterminate={chosen > 0 && !all}
+            onChange={() => onSelectMany(ids, !all)}
+            sx={{ p: 1.25 }}
+            inputProps={{ 'aria-label': label }}
+          />
+          <Typography variant="body2" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+            {all ? `All ${ids.length} selected` : chosen > 0 ? `${chosen} of ${ids.length}` : `Select all ${ids.length}`}
+          </Typography>
+        </Box>
       )}
     </Box>
   );
@@ -368,6 +409,11 @@ function useToneColor() {
   return (tone: FollowupTone) => (tone === 'neutral' ? theme.palette.grey[600] : theme.palette[tone].main);
 }
 
+/**
+ * One group as a single 48px line: tone bar, tick-all, name, count, chevron.
+ * Closed, a whole class reads as the grid plus a handful of these lines; the
+ * group's explanation shows once it is opened, so a closed header never wraps.
+ */
 function Group({
   state,
   students,
@@ -398,16 +444,14 @@ function Group({
   const color = toneColor(meta.tone);
 
   return (
-    <Box sx={{ mb: 1.5 }}>
+    <Box sx={{ mb: 0.75 }} data-testid={`followup-group-${state}`}>
       <Box
         sx={{
           display: 'flex',
           alignItems: 'center',
-          gap: 0.5,
-          px: 0.5,
-          py: 0.5,
+          minHeight: 48,
           borderRadius: 1,
-          bgcolor: alpha(color, 0.1),
+          bgcolor: alpha(color, 0.08),
           borderLeft: `4px solid ${color}`,
         }}
       >
@@ -420,35 +464,69 @@ function Group({
           sx={{ p: 1.25 }}
           inputProps={{ 'aria-label': `Select everyone in ${title}` }}
         />
-        <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography
-            variant="caption"
-            sx={{ fontWeight: 800, letterSpacing: 0.4, textTransform: 'uppercase', display: 'block' }}
-          >
+        <Box
+          component="button"
+          type="button"
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open}
+          aria-label={`${title}, ${students.length}. ${open ? 'Collapse' : 'Expand'}`}
+          title={meta.hint}
+          sx={{
+            appearance: 'none',
+            font: 'inherit',
+            border: 0,
+            bgcolor: 'transparent',
+            color: 'text.primary',
+            cursor: 'pointer',
+            textAlign: 'left',
+            flex: 1,
+            minWidth: 0,
+            minHeight: 48,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            pr: 0.5,
+            borderRadius: 1,
+            '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 },
+          }}
+        >
+          <Typography component="span" variant="body2" sx={{ fontWeight: 700, flex: 1, minWidth: 0 }} noWrap>
             {title}
           </Typography>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-            {note || meta.hint}
-          </Typography>
-        </Box>
-        <Chip
-          size="small"
-          label={students.length}
-          sx={{ fontWeight: 700, bgcolor: alpha(color, 0.18), color: 'text.primary' }}
-        />
-        <IconButton
-          onClick={() => setOpen((v) => !v)}
-          aria-label={open ? `Collapse ${title}` : `Expand ${title}`}
-          aria-expanded={open}
-          sx={{ minWidth: 44, minHeight: 44 }}
-        >
+          <Box
+            component="span"
+            sx={{
+              minWidth: 28,
+              height: 24,
+              px: 0.75,
+              borderRadius: 99,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontWeight: 700,
+              fontSize: 13,
+              fontVariantNumeric: 'tabular-nums',
+              bgcolor: alpha(color, 0.18),
+            }}
+          >
+            {students.length}
+          </Box>
           <ExpandMoreIcon
-            sx={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 150ms', '@media (prefers-reduced-motion: reduce)': { transition: 'none' } }}
+            aria-hidden
+            sx={{
+              color: 'text.secondary',
+              transform: open ? 'rotate(180deg)' : 'none',
+              transition: 'transform 150ms',
+              '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+            }}
           />
-        </IconButton>
+        </Box>
       </Box>
       <Collapse in={open} unmountOnExit>
         <Box sx={{ pt: 0.5 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', px: 1, pb: 0.25 }}>
+            {note || meta.hint}
+          </Typography>
           {students.map((s) => (
             <MissedRow key={s.id} student={s} selected={selected.has(s.id)} onSelect={onSelect} />
           ))}
@@ -458,18 +536,29 @@ function Group({
   );
 }
 
-/** Groups open by default: the two a teacher acts on, and whatever they filtered to. */
-const OPEN_BY_DEFAULT = new Set<FollowupState>(['needs_call', 'catching_up', 'waiting_on_us', 'late_joiner']);
+/** The states that sit on neither axis of the grid, as a line of tappable words under it. */
+const OFF_GRID: FollowupState[] = ['waiting_on_us', 'late_joiner', 'excused'];
+const OFF_GRID_TEXT: Partial<Record<FollowupState, (n: number) => string>> = {
+  waiting_on_us: (n) => `${n} waiting on the recap`,
+  late_joiner: (n) => `${n} joined later`,
+  excused: (n) => `${n} excused`,
+};
+
+function plural(n: number, one: string, many = `${one}s`): string {
+  return `${n} ${n === 1 ? one : many}`;
+}
 
 export default function MissedTab({
   insights,
   insightsLoading,
+  insightsError,
+  insightsRetrying,
+  onRetryInsights,
   selected,
   onSelect,
   onSelectMany,
   initialFilter,
 }: AttendanceTabProps) {
-  const toneColor = useToneColor();
   // The shared list first (search, stage filter, paused hidden), then the fixed
   // groups over what it shows, so every count and Select all follows the filter.
   const view = useStudentListView<StudentInsight, 'suggested'>({
@@ -486,6 +575,7 @@ export default function MissedTab({
       : null;
   const [filter, setFilter] = useState<FollowupState | null>(startFilter);
   useEffect(() => setFilter(startFilter), [startFilter]);
+  const toggle = (st: FollowupState) => setFilter((cur) => (cur === st ? null : st));
 
   const groups = useMemo(() => {
     const by = new Map<FollowupState, StudentInsight[]>();
@@ -506,6 +596,12 @@ export default function MissedTab({
         .map((s) => s.id),
     [groups, filter],
   );
+
+  // Before the loading check: SWR reports loading again on every retry, and this
+  // tab used to hold skeletons over a failed load with nothing to press.
+  if (insightsError && !insights) {
+    return <InsightsLoadError message={insightsError} retrying={insightsRetrying} onRetry={onRetryInsights} />;
+  }
 
   if (insightsLoading) {
     return (
@@ -531,73 +627,97 @@ export default function MissedTab({
   }
 
   const turnaroundNote = caughtUpSummary(insights.students);
-  const counts = MISSED_ORDER.map((st) => [st, groups.get(st)?.length ?? 0] as const).filter(([, n]) => n > 0);
-  const visible = MISSED_ORDER.filter((st) => !filter || filter === st);
+  const count = (st: FollowupState) => groups.get(st)?.length ?? 0;
+  const missed = MISSED_ORDER.reduce((n, st) => n + count(st), 0);
+  const visible = MISSED_ORDER.filter((st) => (!filter || filter === st) && count(st) > 0);
+  // A group opens itself only when it is the point: the corner that was
+  // tapped, or the only group there is. Otherwise the picture comes first and
+  // the teacher opens what they want to see.
+  const onlyOne = visible.length === 1;
+
+  const f = insights.followup;
+  const timing: string[] = [];
+  if (f?.oldestOpenDays != null && (count('needs_call') || count('catching_up'))) {
+    timing.push(`class was ${plural(f.oldestOpenDays, 'day')} ago`);
+  }
+  if (f?.medianDaysToCatchUp != null) {
+    timing.push(
+      f.medianDaysToCatchUp === 0
+        ? 'most caught up the same day'
+        : `typical catch-up took ${plural(f.medianDaysToCatchUp, 'day')}`,
+    );
+  }
+  const offGrid = OFF_GRID.filter((st) => count(st) > 0);
 
   return (
     <>
       <StudentListToolbar view={view} />
 
-      {/* The groups double as filters, one level, no tabs inside tabs. The drawer
-          card opens this already narrowed to the corner that was tapped. */}
-      {counts.length > 1 && (
-        <Box
-          role="group"
-          aria-label="Show one group"
-          sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1.5 }}
-        >
-          <Chip
-            label={`All ${counts.reduce((n, [, c]) => n + c, 0)}`}
-            onClick={() => setFilter(null)}
-            color={filter === null ? 'primary' : 'default'}
-            variant={filter === null ? 'filled' : 'outlined'}
-            aria-pressed={filter === null}
-            sx={{ minHeight: 44, fontWeight: 600 }}
-          />
-          {counts.map(([st, n]) => {
-            const on = filter === st;
-            const color = toneColor(FOLLOWUP_META[st].tone);
-            return (
-              <Chip
-                key={st}
-                label={`${FOLLOWUP_META[st].short} ${n}`}
-                onClick={() => setFilter(on ? null : st)}
-                aria-pressed={on}
-                variant={on ? 'filled' : 'outlined'}
-                icon={
-                  <Box
-                    component="span"
-                    aria-hidden
-                    sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: color, ml: '10px !important' }}
-                  />
-                }
-                sx={{
-                  minHeight: 44,
-                  fontWeight: 600,
-                  ...(on && { bgcolor: alpha(color, 0.18), color: 'text.primary' }),
-                }}
-              />
-            );
-          })}
+      {/* The picture first: the same grid as the class card, and here each
+          corner IS the filter. Pressed shows that group alone, pressed again
+          shows everyone. It replaced a row of chips that told the same story
+          less clearly and took two lines to do it. */}
+      <FollowupGrid
+        density="compact"
+        counts={{
+          caught_up: count('caught_up'),
+          catching_up: count('catching_up'),
+          caught_up_silent: count('caught_up_silent'),
+          needs_call: count('needs_call'),
+        }}
+        selected={filter}
+        onSelect={toggle}
+      />
+      {(timing.length > 0 || offGrid.length > 0) && (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 0.5, mt: 0.5 }}>
+          {timing.length > 0 && (
+            <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>
+              {timing.join(' · ').replace(/^./, (c) => c.toUpperCase())}
+            </Typography>
+          )}
+          {offGrid.map((st) => (
+            <Button
+              key={st}
+              size="small"
+              onClick={() => toggle(st)}
+              aria-pressed={filter === st}
+              variant={filter === st ? 'contained' : 'text'}
+              disableElevation
+              sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600, px: 1 }}
+            >
+              {OFF_GRID_TEXT[st]!(count(st))}
+            </Button>
+          ))}
         </Box>
       )}
 
-      {outstandingIds.length > 0 && (
-        <SelectAllBar ids={outstandingIds} selected={selected} onSelectMany={onSelectMany} />
-      )}
-
-      {visible.map((st) => (
-        <Group
-          key={st}
-          state={st}
-          students={groups.get(st) || []}
+      <Box sx={{ mt: 1 }}>
+        <ListHeader
+          ids={outstandingIds}
           selected={selected}
-          onSelect={onSelect}
           onSelectMany={onSelectMany}
-          defaultOpen={filter === st || OPEN_BY_DEFAULT.has(st)}
-          note={st === 'caught_up' || st === 'caught_up_silent' ? turnaroundNote : null}
+          filter={filter}
+          onShowAll={() => setFilter(null)}
+          missed={missed}
         />
-      ))}
+        {visible.map((st) => (
+          <Group
+            key={st}
+            state={st}
+            students={groups.get(st) || []}
+            selected={selected}
+            onSelect={onSelect}
+            onSelectMany={onSelectMany}
+            defaultOpen={filter === st || onlyOne}
+            note={st === 'caught_up' || st === 'caught_up_silent' ? turnaroundNote : null}
+          />
+        ))}
+        {visible.length === 0 && (
+          <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: 'center' }}>
+            Nobody here matches the search or stage filter.
+          </Typography>
+        )}
+      </Box>
       <PausedFootnote count={view.pausedHidden} />
     </>
   );

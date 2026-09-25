@@ -81,7 +81,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'Free NATA and B.Arch Admission Tools 2026 | Neram Classes',
+    title: 'Free NATA and B.Arch Admission Tools 2026',
     description:
       '10+ free tools for NATA and JEE Paper 2 B.Arch aspirants. Calculate cutoffs, predict colleges, estimate rank, find exam centers, and plan your architecture career.',
     keywords:

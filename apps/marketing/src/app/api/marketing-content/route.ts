@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { PUBLIC_CACHE_HEADERS } from '../_lib/public-cache';
 import { getPublishedMarketingContent, getAchievementsByAcademicYear, getAchievementAcademicYears } from '@neram/database';
 
 // GET /api/marketing-content - Returns published marketing content
@@ -14,7 +15,7 @@ export async function GET(req: NextRequest) {
     const academicYear = searchParams.get('academic_year');
     const yearsOnly = searchParams.get('years_only') === 'true';
 
-    const cacheHeaders = { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' };
+    const cacheHeaders = PUBLIC_CACHE_HEADERS;
 
     // Special endpoint: get list of academic years
     if (yearsOnly) {

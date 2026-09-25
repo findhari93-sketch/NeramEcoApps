@@ -13,7 +13,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'Demo Class Feedback - Neram Classes',
+    title: 'Demo Class Feedback',
     description:
       'Share your feedback about the Neram Classes demo class experience.',
     alternates: buildAlternates(locale, '/demo-class/survey'),

@@ -36,61 +36,21 @@ export async function GET(request: NextRequest) {
       // Fetch enrollment details so the frontend can show a rich summary
       let applicationNumber = null;
       let enrolledAt = link.used_at || null;
-      let enrolledByFirebaseUid = null;
-
-      // Get the Firebase UID of the user who enrolled (for ownership check)
-      if (link.used_by) {
-        try {
-          const { data: enrolledUser } = await (supabase
-            .from('users') as any)
-            .select('firebase_uid')
-            .eq('id', link.used_by)
-            .maybeSingle();
-          enrolledByFirebaseUid = enrolledUser?.firebase_uid || null;
-        } catch {
-          // Ignore
-        }
-      }
+      // Only whether someone enrolled is shared, never who: the owner check runs
+      // on the server from a verified token.
+      const hasEnrolledUser = Boolean(link.used_by);
 
       // Check if the requesting user is the owner (optional auth)
       let isOwner = false;
       let fullLeadProfile: Record<string, unknown> | null = null;
 
-      // Try Firebase Admin auth first, fallback to direct user lookup
+      // Ownership needs a verified Firebase token. An unverified token is never trusted.
       let authUserId: string | null = null;
       try {
         const auth = await verifyFirebaseToken(request);
         if (auth) authUserId = auth.userId;
       } catch (e) {
         console.warn('[Validate] Firebase token verification failed:', e instanceof Error ? e.message : e);
-      }
-
-      // If Firebase Admin failed, try matching by used_by directly
-      // (the client sends the token, we can verify ownership by checking if the requesting user's firebase_uid matches)
-      if (!authUserId && enrolledByFirebaseUid) {
-        try {
-          const authHeader = request.headers.get('Authorization');
-          if (authHeader?.startsWith('Bearer ')) {
-            // Decode the JWT to get the UID without Admin SDK verification
-            // This is safe because we're only checking ownership, not granting access
-            const tokenParts = authHeader.substring(7).split('.');
-            if (tokenParts.length === 3) {
-              const payload = JSON.parse(atob(tokenParts[1]));
-              if (payload.user_id || payload.sub) {
-                const firebaseUid = payload.user_id || payload.sub;
-                // Look up Supabase user by firebase_uid
-                const { data: matchedUser } = await (supabase
-                  .from('users') as any)
-                  .select('id')
-                  .eq('firebase_uid', firebaseUid)
-                  .maybeSingle();
-                if (matchedUser) authUserId = matchedUser.id;
-              }
-            }
-          }
-        } catch {
-          // Fallback failed — continue without auth
-        }
       }
 
       // Fetch owner user details (email, phone, first_name) for enrichment
@@ -160,7 +120,7 @@ export async function GET(request: NextRequest) {
         amountPaid: link.amount_paid,
         finalFee: link.final_fee,
         enrolledAt,
-        enrolledByFirebaseUid,
+        hasEnrolledUser,
       };
 
       // Include full lead_profile for authenticated owner (for view/edit mode)

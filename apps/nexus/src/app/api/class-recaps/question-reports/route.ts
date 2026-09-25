@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyTeacher } from '@/lib/verify-teacher';
+import { httpStatusForError, messageOf, throwIfReadFailed } from '@/lib/api-errors';
 import {
   getSupabaseAdminClient,
   listOpenRecapQuestionReports,
@@ -24,15 +25,16 @@ export async function GET(request: NextRequest) {
     await verifyTeacher(request.headers.get('Authorization'));
     const supabase = getSupabaseAdminClient() as any;
 
-    const { data: rooms } = await supabase.from('nexus_classrooms').select('id');
+    const { data: rooms, error: roomsError } = await supabase.from('nexus_classrooms').select('id');
+    // Without this a failed read became zero classrooms and an inbox that said
+    // nobody had reported anything.
+    throwIfReadFailed(roomsError, 'the classrooms');
     const classroomIds = ((rooms as Array<{ id: string }>) || []).map((r) => r.id);
 
     const items = await listOpenRecapQuestionReports(classroomIds, supabase);
     return NextResponse.json({ items, count: items.length });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to load reported questions';
-    const status = message === 'Not authorized' ? 403 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json({ error: messageOf(err, 'Failed to load reported questions') }, { status: httpStatusForError(err) });
   }
 }
 
@@ -59,8 +61,6 @@ export async function PATCH(request: NextRequest) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to update the report';
-    const status = message === 'Not authorized' ? 403 : 500;
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json({ error: messageOf(err, 'Failed to update the report') }, { status: httpStatusForError(err) });
   }
 }

@@ -77,6 +77,10 @@
       "schedule": "0 13 * * *"
     },
     {
+      "path": "/api/cron/homework-reminders",
+      "schedule": "30 13 * * *"
+    },
+    {
       "path": "/api/cron/exam-close",
       "schedule": "5 * * * *"
     },

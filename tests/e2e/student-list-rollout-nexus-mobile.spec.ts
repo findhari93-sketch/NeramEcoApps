@@ -40,7 +40,8 @@ for (const screen of SCREENS) {
     test.skip(!(await openList(page, screen.path)), 'Nexus not running, or no students on this screen');
 
     await expect(page.getByRole('searchbox', { name: 'Find a student' }).first()).toBeVisible();
-    await expect(page.getByTestId('stage-filter-button').first()).toBeVisible();
+    // A phone folds the stage filter (and any screen filters) into one Filter button.
+    await expect(page.getByTestId('filter-menu-button').first()).toBeVisible();
 
     const sort = await page.getByTestId('list-sort-button').first().boundingBox();
     expect(sort?.height ?? 0).toBeGreaterThanOrEqual(44);

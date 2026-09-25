@@ -20,7 +20,7 @@ export async function generateMetadata({
     keywords: 'NATA coaching Chennai, NATA coaching Anna Nagar, NATA coaching Adyar, NATA coaching Tambaram, NATA coaching Ashok Nagar, NATA coaching T Nagar, NATA coaching Velachery, NATA classes Chennai neighborhoods',
     alternates: buildAlternates(locale, '/coaching/nata-coaching-chennai'),
     openGraph: {
-      title: 'NATA Coaching Across Chennai, All Neighborhoods | Neram Classes',
+      title: 'NATA Coaching Across Chennai, All Neighborhoods',
       description: 'Find NATA coaching near you in Chennai. Serving Anna Nagar, Adyar, Tambaram, Ashok Nagar, T. Nagar, Velachery & 10+ neighborhoods.',
       type: 'article',
     },

@@ -15,6 +15,7 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import HeadsetMicIcon from '@mui/icons-material/HeadsetMic';
+import { leadAttribution } from '@/lib/attribution';
 
 export interface CallbackDrawerProps {
   ctaLabel?: string;
@@ -112,6 +113,7 @@ export default function CallbackDrawer({
           course_interest: courseInterest,
           query_type: queryType,
           notes: fullNotes,
+          ...leadAttribution(),
         }),
       });
       const data = await res.json();

@@ -5,6 +5,7 @@ import {
   listReportedQuestionIdsForStudent,
   countOpenReportsByRecap,
   resolveRecapQuestionReport,
+  listOpenRecapQuestionReports,
 } from './class-recap-reports';
 import { dropQuestionFromDraw } from './class-recaps';
 
@@ -202,5 +203,51 @@ describe('taking the question out of the paper', () => {
     const out = await dropQuestionFromDraw('draw-nope', 'q-1', db.client);
 
     expect(out).toEqual({ remaining: 0, dropped: false });
+  });
+});
+
+/**
+ * The teacher's inbox query, checked at the PostgREST boundary.
+ *
+ * The report table has two foreign keys to users (student_id and resolved_by),
+ * so a bare `users(...)` embed is ambiguous and PostgREST refuses the whole
+ * select (PGRST201). users also has no full_name column. Either fault alone
+ * made every inbox load a 500 that the client rendered as "no reports".
+ */
+describe('listing open reports for the teacher', () => {
+  function captureClient(rows: any[]) {
+    const calls: { select?: string } = {};
+    const chain: any = {
+      select(cols: string) {
+        calls.select = cols;
+        return chain;
+      },
+      eq: () => chain,
+      order: () => chain,
+      limit: async () => ({ data: rows, error: null }),
+    };
+    return { client: { from: () => chain } as any, calls };
+  }
+
+  it('names which users foreign key to follow, and reads users.name', async () => {
+    const { client, calls } = captureClient([]);
+    await listOpenRecapQuestionReports(['room-1'], client);
+
+    expect(calls.select).toMatch(/student:users!nexus_class_recap_question_reports_student_id_fkey\(\s*name,\s*avatar_url\s*\)/);
+    expect(calls.select).not.toMatch(/full_name/);
+  });
+
+  it("maps the student's name from the embed", async () => {
+    const { client } = captureClient([
+      {
+        id: 'rep-1',
+        status: 'open',
+        student: { name: 'Asha K', avatar_url: 'https://x/a.png' },
+        recap: { classroom_id: 'room-1', scheduled_class_id: 'cls-1', class: null },
+      },
+    ]);
+    const out = await listOpenRecapQuestionReports(['room-1'], client);
+
+    expect(out[0]).toMatchObject({ student_name: 'Asha K', student_avatar_url: 'https://x/a.png' });
   });
 });

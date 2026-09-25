@@ -30,3 +30,13 @@ export function normalisePhone(raw: unknown): string | null {
   if (digits.length >= 11 && digits.length <= 15) return `+${digits}`;
   return null;
 }
+
+/**
+ * True when two numbers are the same phone once normalised. Used to check that
+ * the number a client asks us to mark verified is the one Firebase actually
+ * verified (the `phone_number` claim of the ID token), not any number it sends.
+ */
+export function isSamePhone(a: unknown, b: unknown): boolean {
+  const na = normalisePhone(a);
+  return na !== null && na === normalisePhone(b);
+}

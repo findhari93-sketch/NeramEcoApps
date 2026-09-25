@@ -14,7 +14,7 @@ export async function generateMetadata({
 }: {
   params: { locale: string };
 }): Promise<Metadata> {
-  const title = `NATA Online Coaching in Ahmedabad 2026 | CEPT University Prep | Neram Classes`;
+  const title = `NATA Online Coaching in Ahmedabad 2026 | CEPT University Prep`;
   const description = `NATA online coaching for Ahmedabad and Gandhinagar students aiming at CEPT University, Nirma School of Architecture, SAL, Anant National University. Live classes by NIT/IIT/SPA alumni faculty.`;
   return {
     title,
@@ -23,7 +23,7 @@ export async function generateMetadata({
       'NATA online coaching Ahmedabad, NATA coaching online Ahmedabad, CEPT University coaching, NATA classes Ahmedabad, NATA coaching Satellite, NATA coaching Bopal, NATA coaching Gandhinagar, NATA preparation Gujarat',
     alternates: buildAlternates(locale, `/nata-coaching/${city.slug}`),
     openGraph: {
-      title: `NATA Online Coaching in ${city.displayName} | Neram Classes`,
+      title: `NATA Online Coaching in ${city.displayName}`,
       description,
       type: 'website',
       url: `${BASE_URL}/nata-coaching/${city.slug}`,

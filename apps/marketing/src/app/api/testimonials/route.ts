@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { PUBLIC_CACHE_HEADERS } from '../_lib/public-cache';
 import { createAdminClient } from '@neram/database';
 import {
   getHomepageTestimonials,
@@ -27,7 +28,7 @@ export async function GET(request: NextRequest) {
     const supabase = createAdminClient();
     const { searchParams } = new URL(request.url);
 
-    const cacheHeaders = { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' };
+    const cacheHeaders = PUBLIC_CACHE_HEADERS;
 
     // Homepage testimonials
     if (searchParams.get('homepage') === 'true') {

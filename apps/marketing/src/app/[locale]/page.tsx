@@ -14,7 +14,9 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'Best NATA Coaching in India Since 2009 | 150+ Cities | Neram Classes',
+    // The layout's '%s | Neram Classes' template does not apply to the page in the
+    // layout's own segment, so the home title carries the brand itself.
+    title: { absolute: 'Best NATA Coaching in India Since 2009 | 150+ Cities | Neram Classes' },
     description:
       "India's #1 NATA coaching center since 2009. 150+ coaching centers across India. IIT/NIT/SPA alumni faculty, 99.9% success rate, 10,000+ students. Free AI-powered study app with cutoff calculator & college predictor. Online + offline hybrid classes.",
     keywords:

@@ -14,7 +14,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'Track Support Ticket - Neram Classes',
+    title: 'Track Support Ticket',
     description:
       'Track the status of your support ticket at Neram Classes. Enter your ticket number to view updates.',
     alternates: buildAlternates(locale, '/support/track'),

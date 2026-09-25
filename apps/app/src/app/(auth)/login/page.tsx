@@ -6,9 +6,11 @@ import { Box, Typography, Paper, Divider, Alert, Chip } from '@neram/ui';
 import { setAuthRedirectUrl } from '@neram/auth';
 import AuthButtons from '@/components/AuthButtons';
 import Link from 'next/link';
+import { isTrustedRedirect } from '@/lib/safe-redirect';
 
 // Storage key for YouTube subscribe intent
 const YOUTUBE_SUBSCRIBE_KEY = 'neram_youtube_subscribe_intent';
+const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3010';
 
 export default function LoginPage() {
   const searchParams = useSearchParams();
@@ -20,30 +22,21 @@ export default function LoginPage() {
   // Capture redirect URL from query parameter (for cross-domain auth from marketing site)
   useEffect(() => {
     const redirectUrl = searchParams.get('redirect');
+    if (!redirectUrl) return;
+
+    // A sign-in token is attached to this URL after login, so only our own
+    // hosts are kept. Anything else is dropped and login ends on the dashboard.
+    if (!isTrustedRedirect(redirectUrl, [MARKETING_URL, window.location.origin])) return;
 
     // If this is a YouTube subscribe flow, store the intent
-    if (isYouTubeSubscribe && redirectUrl) {
+    if (isYouTubeSubscribe) {
       sessionStorage.setItem(YOUTUBE_SUBSCRIBE_KEY, JSON.stringify({
         redirectUrl,
         timestamp: Date.now(),
       }));
     }
 
-    if (redirectUrl) {
-      // Validate it's a safe URL (same domain or known domains)
-      try {
-        const url = new URL(redirectUrl);
-        const allowedHosts = ['neramclasses.com', 'www.neramclasses.com', 'app.neramclasses.com', 'localhost'];
-        if (allowedHosts.some(host => url.hostname === host || url.hostname.endsWith('.' + host))) {
-          setAuthRedirectUrl(redirectUrl);
-        }
-      } catch {
-        // If not a valid URL, check if it's a relative path
-        if (redirectUrl.startsWith('/')) {
-          setAuthRedirectUrl(redirectUrl);
-        }
-      }
-    }
+    setAuthRedirectUrl(redirectUrl);
   }, [searchParams, isYouTubeSubscribe]);
 
   return (

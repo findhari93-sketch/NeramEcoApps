@@ -17,7 +17,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'Best NATA Coaching in Chennai 2026: #1 Rated | Neram Classes',
+    title: 'Best NATA Coaching in Chennai 2026: #1 Rated',
     description:
       "Chennai's #1 NATA coaching institute since 2009. IIT/NIT/SPA alumni faculty, 99.9% success rate, free AI study app with college predictor. Online + offline classes. Small batches (max 25). Book free demo class today.",
     keywords:

@@ -14,7 +14,7 @@ export async function generateMetadata({
 }: {
   params: { locale: string };
 }): Promise<Metadata> {
-  const title = `NATA Online Coaching in Delhi NCR 2026 | SPA Delhi Prep | Neram Classes`;
+  const title = `NATA Online Coaching in Delhi NCR 2026 | SPA Delhi Prep`;
   const description = `NATA online coaching for Delhi NCR students aiming at SPA Delhi, USAP, Jamia Millia, Manav Rachna. Live classes by NIT/IIT/SPA alumni, 99.9% success rate. Serves Dwarka, Noida, Gurgaon, Ghaziabad, Faridabad.`;
   return {
     title,
@@ -23,7 +23,7 @@ export async function generateMetadata({
       'NATA online coaching Delhi, NATA coaching online Delhi NCR, SPA Delhi coaching, NATA coaching Noida, NATA coaching Gurgaon, NATA coaching Ghaziabad, NATA coaching Faridabad, NATA classes Delhi, NATA preparation Delhi',
     alternates: buildAlternates(locale, `/nata-coaching/${city.slug}`),
     openGraph: {
-      title: `NATA Online Coaching in ${city.displayName} NCR | Neram Classes`,
+      title: `NATA Online Coaching in ${city.displayName} NCR`,
       description,
       type: 'website',
       url: `${BASE_URL}/nata-coaching/${city.slug}`,

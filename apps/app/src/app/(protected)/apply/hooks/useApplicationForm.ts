@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useCallback, useEffect, use
 import type { ApplicationFormData, FormStep, StepValidation, ValidationError } from '../types';
 import { DEFAULT_FORM_DATA } from '../types';
 import { useFirebaseAuth } from '@neram/auth';
+import { readSharedAttribution } from '@/lib/shared-attribution';
 
 // ============================================
 // LOCAL STORAGE PERSISTENCE
@@ -698,14 +699,16 @@ export function FormProvider({ children }: FormProviderProps) {
     }
   }, [authLoading, user]);
 
-  // UTM parameters from URL
+  // UTM parameters from the URL, else the campaign the marketing site stored
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
-      const utmSource = params.get('utm_source');
-      const utmMedium = params.get('utm_medium');
-      const utmCampaign = params.get('utm_campaign');
-      const referralCode = params.get('ref');
+      const urlHasCampaign = ['utm_source', 'utm_medium', 'utm_campaign'].some((key) => params.get(key));
+      const shared = readSharedAttribution();
+      const utmSource = urlHasCampaign ? params.get('utm_source') : shared.utmSource;
+      const utmMedium = urlHasCampaign ? params.get('utm_medium') : shared.utmMedium;
+      const utmCampaign = urlHasCampaign ? params.get('utm_campaign') : shared.utmCampaign;
+      const referralCode = params.get('ref') || shared.referralCode;
 
       if (utmSource || utmMedium || utmCampaign || referralCode) {
         setFormData((prev) => ({

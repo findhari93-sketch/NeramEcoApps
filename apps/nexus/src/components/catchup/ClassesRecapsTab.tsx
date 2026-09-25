@@ -158,9 +158,10 @@ export default function ClassesRecapsTab({
   const theme = useTheme();
   const router = useRouter();
   const { getTeacherToken } = useNexusAuthContext();
-  // Below lg the drawer takes the whole screen: 380px of roster beside a class
-  // list on a phone is neither.
-  const fullWidthDrawer = useMediaQuery(theme.breakpoints.down('lg'));
+  // Below md the drawer takes the whole screen: a roster squeezed beside a
+  // class list on a phone is neither. From a tablet up it is a wide side sheet,
+  // wide enough that a student's reason and progress sit on one line.
+  const fullWidthDrawer = useMediaQuery(theme.breakpoints.down('md'));
 
   const [filter, setFilter] = useState<Filter>('all');
   /**
@@ -1046,7 +1047,7 @@ export default function ClassesRecapsTab({
         onClose={() => setOpenClassId(null)}
         PaperProps={{
           sx: {
-            width: fullWidthDrawer ? '100%' : 480,
+            width: fullWidthDrawer ? '100%' : { md: 640, lg: 'min(760px, 52vw)' },
             maxWidth: '100%',
             display: 'flex',
             flexDirection: 'column',
@@ -1055,27 +1056,39 @@ export default function ClassesRecapsTab({
       >
         {openClass && classroomId && (
           <>
-            {backHref && (
-              <Box sx={{ px: 1, pt: 1 }}>
-                <Button
+            {/* One row: back (when the timetable sent them), the title, close.
+                The date moved down beside "5 of 7", so the header is a single
+                line and the students start higher. */}
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1, pt: 1, pb: 0.5 }}>
+              {backHref && (
+                <IconButton
                   component={Link}
                   href={backHref}
-                  startIcon={<ArrowBackIcon />}
-                  sx={{ textTransform: 'none', minHeight: 44, fontWeight: 700 }}
+                  aria-label="Back to timetable"
+                  sx={{ minWidth: 44, minHeight: 44 }}
                 >
-                  Back to timetable
-                </Button>
-              </Box>
-            )}
-            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, p: 2, pb: 1 }}>
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
-                  {openClass.title || 'Class'}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {shortDate(openClass.scheduled_date)}
-                </Typography>
-              </Box>
+                  <ArrowBackIcon />
+                </IconButton>
+              )}
+              <Typography
+                variant="h6"
+                component="h2"
+                title={openClass.title || 'Class'}
+                sx={{
+                  flex: 1,
+                  minWidth: 0,
+                  pl: backHref ? 0 : 1,
+                  fontWeight: 700,
+                  lineHeight: 1.3,
+                  fontSize: { xs: 18, sm: 20 },
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                  overflow: 'hidden',
+                }}
+              >
+                {openClass.title || 'Class'}
+              </Typography>
               <IconButton
                 onClick={() => setOpenClassId(null)}
                 aria-label="Close"
@@ -1095,7 +1108,11 @@ export default function ClassesRecapsTab({
               teamsMeetingId={openClass.teams_meeting_id ?? null}
               getToken={getTeacherToken}
               onChanged={onReload}
-              navLabel={openIndex >= 0 ? `${openIndex + 1} of ${walk.length}` : undefined}
+              navLabel={
+                openIndex >= 0
+                  ? `${shortDate(openClass.scheduled_date)} · ${openIndex + 1} of ${walk.length}`
+                  : undefined
+              }
               onPrev={openIndex > 0 ? () => setOpenClassId(walk[openIndex - 1].id) : undefined}
               onNext={
                 openIndex >= 0 && openIndex < walk.length - 1 ? () => setOpenClassId(walk[openIndex + 1].id) : undefined

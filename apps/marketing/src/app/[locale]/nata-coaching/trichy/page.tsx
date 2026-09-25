@@ -14,7 +14,7 @@ export async function generateMetadata({
 }: {
   params: { locale: string };
 }): Promise<Metadata> {
-  const title = `NATA Online Coaching in Trichy 2026 | NIT Trichy B.Arch Prep | Neram Classes`;
+  const title = `NATA Online Coaching in Trichy 2026 | NIT Trichy B.Arch Prep`;
   const description = `NATA online coaching for Trichy students aiming at NIT Trichy and NIT Calicut. Live classes by NIT alumni, NATA + JEE Paper 2 combined prep, 100+ mock tests, 99.9% success rate.`;
   return {
     title,
@@ -23,7 +23,7 @@ export async function generateMetadata({
       'NATA online coaching Trichy, NATA coaching online Tiruchirappalli, NIT Trichy B.Arch coaching, NATA classes Trichy, JEE Paper 2 coaching Trichy, NATA preparation Trichy',
     alternates: buildAlternates(locale, `/nata-coaching/${city.slug}`),
     openGraph: {
-      title: `NATA Online Coaching in ${city.displayName} | Neram Classes`,
+      title: `NATA Online Coaching in ${city.displayName}`,
       description,
       type: 'website',
       url: `${BASE_URL}/nata-coaching/${city.slug}`,

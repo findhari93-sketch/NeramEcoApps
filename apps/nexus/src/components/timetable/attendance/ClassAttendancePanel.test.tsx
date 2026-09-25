@@ -234,6 +234,15 @@ function renderPanel(props: Partial<React.ComponentProps<typeof ClassAttendanceP
   );
 }
 
+/**
+ * The Missed tab opens as a picture (the grid plus one closed line per group).
+ * Open every group, as a teacher tapping each one would, before reading names.
+ */
+async function openGroups() {
+  await screen.findByTestId('followup-grid');
+  for (const b of screen.queryAllByRole('button', { name: /\. Expand$/ })) fireEvent.click(b);
+}
+
 describe('ClassAttendancePanel', () => {
   beforeEach(() => {
     calls = [];
@@ -246,6 +255,7 @@ describe('ClassAttendancePanel', () => {
 
   it('opens on Missed and costs exactly one request', async () => {
     renderPanel();
+    await openGroups();
     await screen.findByText('Abhitha Saravanan');
 
     expect(calls.filter((u) => u.includes('class-insights'))).toHaveLength(1);
@@ -255,6 +265,7 @@ describe('ClassAttendancePanel', () => {
 
   it('separates the students who said nothing from the ones who explained', async () => {
     renderPanel();
+    await openGroups();
     await screen.findByText('Abhitha Saravanan');
 
     // Once: only the silent student's row says it.
@@ -270,6 +281,7 @@ describe('ClassAttendancePanel', () => {
 
   it('fetches the register only when the Register tab is opened, and only once', async () => {
     renderPanel();
+    await openGroups();
     await screen.findByText('Abhitha Saravanan');
 
     fireEvent.click(screen.getByRole('tab', { name: /Register/i }));
@@ -285,6 +297,7 @@ describe('ClassAttendancePanel', () => {
 
   it('ranks the attended list with the shortest stay first', async () => {
     renderPanel();
+    await openGroups();
     await screen.findByText('Abhitha Saravanan');
 
     fireEvent.click(screen.getByRole('tab', { name: /Attended/i }));
@@ -300,6 +313,7 @@ describe('ClassAttendancePanel', () => {
 
   it('hides the action bar until something is selected', async () => {
     renderPanel();
+    await openGroups();
     await screen.findByText('Abhitha Saravanan');
 
     expect(screen.queryByRole('button', { name: /^Nudge$/i })).toBeNull();
@@ -311,6 +325,7 @@ describe('ClassAttendancePanel', () => {
 
   it('selects a whole group from its header checkbox', async () => {
     renderPanel();
+    await openGroups();
     await screen.findByText('Abhitha Saravanan');
 
     fireEvent.click(screen.getByRole('checkbox', { name: /Select everyone in Said nothing/i }));
@@ -322,6 +337,7 @@ describe('ClassAttendancePanel', () => {
 
   it('says why an away student missed it, never "No reason given"', async () => {
     renderPanel();
+    await openGroups();
     await screen.findByText('Sanjay Kumar');
     expect(screen.getByText(/Exam clash · Away 10 Jul to 20 Aug/)).toBeTruthy();
     // The one "No reason given" on the screen belongs to the silent student.
@@ -330,11 +346,14 @@ describe('ClassAttendancePanel', () => {
 
   it('opens narrowed to one group when the drawer card asks for it', async () => {
     renderPanel({ initialFilter: 'needs_call' });
+    // The group the card pointed at opens by itself; nothing to tap.
     await screen.findByText('Abhitha Saravanan');
     expect(screen.queryByText('Humaira Safrin')).toBeNull();
     expect(screen.queryByText('Sanjay Kumar')).toBeNull();
+    expect(screen.getByTestId('followup-cell-needs_call').getAttribute('aria-pressed')).toBe('true');
     // And back out again.
-    fireEvent.click(screen.getByRole('button', { name: /^All/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Show everyone$/ }));
+    await openGroups();
     expect(await screen.findByText('Humaira Safrin')).toBeTruthy();
   });
 
@@ -342,6 +361,7 @@ describe('ClassAttendancePanel', () => {
     // The gap this closes: the tab said "Missed 3" and no single gesture on the
     // screen could produce three ticks.
     renderPanel();
+    await openGroups();
     await screen.findByText('Abhitha Saravanan');
 
     const selectAll = screen.getByRole('checkbox', { name: /Select all 4 not caught up/i });
@@ -356,6 +376,7 @@ describe('ClassAttendancePanel', () => {
 
   it('counts only outstanding students in Select all, never the ones already done', async () => {
     renderPanel();
+    await openGroups();
     await screen.findByText('Abhitha Saravanan');
 
     // Everyone absent in the fixture still owes work, so all four count.
@@ -366,6 +387,7 @@ describe('ClassAttendancePanel', () => {
 
   it('calls a late joiner a late joiner, not silent', async () => {
     renderPanel();
+    await openGroups();
     await screen.findByText('Nithya Raman');
 
     expect(
@@ -376,19 +398,55 @@ describe('ClassAttendancePanel', () => {
     expect(screen.getAllByText('No reason given').length).toBe(1);
   });
 
+  it('opens as a picture: every group closed until it is tapped', async () => {
+    renderPanel();
+    await screen.findByTestId('followup-grid');
+    // The group lines are there, the names are not.
+    expect(screen.getByRole('button', { name: /^Said nothing, not caught up, 1\. Expand$/ })).toBeTruthy();
+    expect(screen.queryByText('Abhitha Saravanan')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /^Said nothing, not caught up, 1\. Expand$/ }));
+    expect(await screen.findByText('Abhitha Saravanan')).toBeTruthy();
+    expect(screen.queryByText('Humaira Safrin')).toBeNull();
+  });
+
+  it('a grid corner is the filter: pressed shows one group, pressed again shows all', async () => {
+    renderPanel();
+    const cell = await screen.findByTestId('followup-cell-needs_call');
+    fireEvent.click(cell);
+    expect(cell.getAttribute('aria-pressed')).toBe('true');
+    // Filtered to one group, which opens by itself.
+    expect(await screen.findByText('Abhitha Saravanan')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Told us why, still catching up/ })).toBeNull();
+    expect(screen.getByRole('button', { name: /^Showing needs a call only\. Show everyone$/ })).toBeTruthy();
+
+    fireEvent.click(cell);
+    expect(cell.getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByRole('button', { name: /^Told us why, still catching up/ })).toBeTruthy();
+  });
+
+  it('keeps the old filter chip row gone', async () => {
+    renderPanel();
+    await screen.findByTestId('followup-grid');
+    expect(screen.queryByRole('group', { name: 'Show one group' })).toBeNull();
+  });
+
   it('offers no Teams sync for a class with no meeting', async () => {
     renderPanel({ teamsMeetingId: null });
+    await openGroups();
     await screen.findByText('Abhitha Saravanan');
     expect(screen.queryByRole('button', { name: /Sync from Teams/i })).toBeNull();
   });
 
   it('shows the prev and next arrows only when the caller supplies them', async () => {
     const { unmount } = renderPanel();
+    await openGroups();
     await screen.findByText('Abhitha Saravanan');
     expect(screen.queryByRole('button', { name: /Next class/i })).toBeNull();
     unmount();
 
     renderPanel({ onNext: () => {}, navLabel: '1 of 6' });
+    await openGroups();
     await screen.findByText('Abhitha Saravanan');
     expect(screen.getByRole('button', { name: /Next class/i })).toBeTruthy();
     // Previous is rendered disabled at the start of the list rather than hidden,
@@ -408,5 +466,98 @@ describe('nudgePreset', () => {
   it('falls back to the server default for a mixed selection', () => {
     expect(nudgePreset(['needs_call', 'catching_up'], 'Perspective', '11 Sep')).toBe('');
     expect(nudgePreset([], 'Perspective', '11 Sep')).toBe('');
+  });
+});
+
+/**
+ * Homework reminders on the Attended tab: the students who came and have not
+ * handed the homework in, reminded now and every 3 days until they do.
+ */
+describe('ClassAttendancePanel, homework reminders', () => {
+  const OWES = { total: 1, handedIn: 0, late: 0, redo: 0, missing: 1, byAssignment: { hw1: 'missing' } };
+  const DONE = { total: 1, handedIn: 1, late: 0, redo: 0, missing: 0, byAssignment: { hw1: 'in' } };
+  let posted: Array<{ url: string; method: string; body: any }> = [];
+
+  function withHomework(reminder: unknown = null) {
+    return {
+      ...INSIGHTS,
+      work: [{ id: 'hw1', title: 'Perspective study', timing: 'homework', expected: 2, handedIn: 1, late: 0, missingCame: 1, missingCaughtUp: 0, missingCatchingUp: 0 }],
+      students: INSIGHTS.students.map((s) =>
+        s.id === 'c' ? { ...s, work: OWES, homeworkReminder: reminder } : s.id === 'd' ? { ...s, work: DONE } : s,
+      ),
+    };
+  }
+
+  function stub(insights: unknown) {
+    posted = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (String(url).includes('homework-reminders')) {
+          posted.push({ url: String(url), method: init?.method ?? 'GET', body: JSON.parse(String(init?.body ?? '{}')) });
+          const body =
+            init?.method === 'PATCH'
+              ? { stopped: 1 }
+              : { counts: { total: 1, chat: 1, teams: 0, inapp: 1, failed: 0 }, repeat: { everyDays: 3, nextOn: '2026-08-03' }, skipped: 0 };
+          return { ok: true, json: async () => body } as unknown as Response;
+        }
+        const body = String(url).includes('class-insights') ? insights : REPORT;
+        return { ok: true, json: async () => body } as unknown as Response;
+      }),
+    );
+  }
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  async function openAttended() {
+    renderPanel();
+    await screen.findByTestId('followup-grid');
+    fireEvent.click(screen.getByRole('tab', { name: /Attended/i }));
+    return screen.findByTestId('homework-strip', {}, { timeout: 5000 });
+  }
+
+  it('says who came without handing it in, and reminds them now and every 3 days', async () => {
+    stub(withHomework());
+    const strip = await openAttended();
+    expect(strip.textContent).toMatch(/1 came but has not handed in the homework/);
+
+    fireEvent.click(screen.getByTestId('homework-remind'));
+    expect(await screen.findByText('"Perspective study"')).toBeTruthy();
+    const repeat = screen.getByRole('checkbox', { name: /Remind again every 3 days until they hand it in/ }) as HTMLInputElement;
+    expect(repeat.checked).toBe(true);
+
+    fireEvent.click(screen.getByTestId('homework-reminder-send'));
+    await screen.findByTestId('homework-next-reminder');
+    expect(posted).toHaveLength(1);
+    expect(posted[0]).toMatchObject({ method: 'POST', body: { classroom_id: 'room1', studentIds: ['c'], repeat: true } });
+  });
+
+  it('shows a running reminder with its next date, and Stop ends it', async () => {
+    stub(withHomework({ active: true, everyDays: 3, nextOn: '2026-08-03', sends: 1, lastSentAt: null, endReason: null }));
+    const strip = await openAttended();
+    expect(strip.textContent).toMatch(/Reminding 1 every 3 days until they hand it in/);
+    expect(screen.getByTestId('homework-reminder-chip').textContent).toMatch(/Reminding, next/);
+    // Nobody left to start, so no Remind button, only Stop.
+    expect(screen.queryByTestId('homework-remind')).toBeNull();
+
+    fireEvent.click(screen.getByTestId('homework-stop'));
+    await waitFor(() => expect(posted).toHaveLength(1));
+    expect(posted[0]).toMatchObject({ method: 'PATCH', body: { action: 'stop', classroom_id: 'room1' } });
+  });
+
+  it('turns the selection bar into a homework reminder on the Attended tab, never "you missed it"', async () => {
+    stub(withHomework());
+    await openAttended();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Rahul Kumar' }));
+    expect(screen.queryByRole('button', { name: /^Nudge$/ })).toBeNull();
+    const remind = screen.getByTestId('selection-remind-homework') as HTMLButtonElement;
+    expect(remind.disabled).toBe(false);
+
+    // Sanjay handed it in: ticking only him leaves nothing to remind.
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Rahul Kumar' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select Sanjay Patel' }));
+    expect((screen.getByTestId('selection-remind-homework') as HTMLButtonElement).disabled).toBe(true);
   });
 });

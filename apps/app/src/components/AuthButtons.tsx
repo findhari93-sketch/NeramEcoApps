@@ -13,9 +13,11 @@ import {
 } from '@neram/ui';
 import { useFirebaseAuth, getAuthRedirectUrl, clearAuthRedirectUrl, getFirebaseAuth, signInWithGoogleYouTube } from '@neram/auth';
 import { trackFunnelEvent, trackFunnelEventImmediate } from '@/lib/funnel-tracker';
+import { isTrustedRedirect, safeRedirect } from '@/lib/safe-redirect';
 
 // Storage key for YouTube subscribe intent
 const YOUTUBE_SUBSCRIBE_KEY = 'neram_youtube_subscribe_intent';
+const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3010';
 
 interface AuthButtonsProps {
   isYouTubeSubscribe?: boolean;
@@ -34,7 +36,7 @@ async function handleYouTubeSubscribeRedirect(accessToken: string | null) {
   if (stored) {
     try {
       const data = JSON.parse(stored);
-      redirectUrl = data.redirectUrl;
+      redirectUrl = safeRedirect(data.redirectUrl, '', [MARKETING_URL, window.location.origin]);
     } catch {
       // Ignore parse errors
     }
@@ -106,7 +108,8 @@ async function handleYouTubeSubscribeRedirect(accessToken: string | null) {
 async function handlePostAuthRedirect(router: ReturnType<typeof useRouter>) {
   const redirectUrl = getAuthRedirectUrl();
 
-  if (redirectUrl) {
+  // The custom token signs in as this visitor: never hand it to another host.
+  if (redirectUrl && isTrustedRedirect(redirectUrl, [MARKETING_URL, window.location.origin])) {
     // IMMEDIATE redirect - don't show dashboard
     try {
       const auth = getFirebaseAuth();

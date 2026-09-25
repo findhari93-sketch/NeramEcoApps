@@ -12,7 +12,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'Application Submitted - Neram Classes',
+    title: 'Application Submitted',
     description:
       'Your application to Neram Classes has been submitted successfully. Our team will contact you within 24 hours.',
     keywords: 'Neram Classes application status',

@@ -96,7 +96,7 @@ interface UsedLinkData {
   amountPaid: number | null;
   finalFee: number | null;
   enrolledAt: string | null;
-  enrolledByFirebaseUid: string | null;
+  hasEnrolledUser?: boolean;
   leadProfile?: LeadProfileData | null;
   isOwner?: boolean;
 }
@@ -195,13 +195,10 @@ export default function EnrollWizard() {
   }, [token, authLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Re-validate when user signs in AFTER initial validate already returned 'used' without owner info
-  // Also re-validate when isOwner is true client-side but leadProfile is missing (server-side ownership check failed)
+  // Also re-validate when the server confirmed ownership but the lead profile is missing
   useEffect(() => {
     if (user && token && tokenStatus === 'used' && usedLinkData) {
-      const isOwnerClientSide = usedLinkData.isOwner || (
-        usedLinkData.enrolledByFirebaseUid && (user.raw as any)?.uid === usedLinkData.enrolledByFirebaseUid
-      );
-      if (!usedLinkData.isOwner || (isOwnerClientSide && !usedLinkData.leadProfile)) {
+      if (!usedLinkData.isOwner || !usedLinkData.leadProfile) {
         validateToken(token, (user.raw as any));
       }
     }
@@ -718,10 +715,7 @@ export default function EnrollWizard() {
   }
 
   if (tokenStatus === 'used') {
-    const isOwner = usedLinkData?.isOwner || (
-      user && usedLinkData?.enrolledByFirebaseUid &&
-      (user.raw as any)?.uid === usedLinkData.enrolledByFirebaseUid
-    );
+    const isOwner = Boolean(usedLinkData?.isOwner);
 
     // Owner viewing their enrollment — show Welcome screen or edit form
     if (isOwner && usedLinkData?.leadProfile) {
@@ -997,7 +991,7 @@ export default function EnrollWizard() {
           Already Enrolled
         </Typography>
         <Typography color="text.secondary" mb={3}>
-          {user && usedLinkData?.enrolledByFirebaseUid && !isOwner
+          {user && usedLinkData?.hasEnrolledUser && !isOwner
             ? 'This enrollment link was used by another student.'
             : 'This enrollment link has already been used.'}
         </Typography>

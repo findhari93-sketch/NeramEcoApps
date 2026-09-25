@@ -180,8 +180,9 @@ const nextConfig = {
 
       // City-specific coaching pages — MUST be first (more specific than /coaching)
       // Old sitemap had /coaching/{city} for 100+ cities; new URL is deeper
-      // Exclude 'nata-coaching' to avoid catching the real page at /coaching/nata-coaching
-      { source: '/coaching/:city((?!nata-coaching).*)', destination: '/coaching/nata-coaching/nata-coaching-centers-in-:city', permanent: true },
+      // Exclude 'nata-coaching*' (real pages and the state hubs) and the real
+      // /coaching/best-nata-coaching-chennai page, which this rule used to 404.
+      { source: '/coaching/:city((?!nata-coaching|best-nata-coaching-chennai$).*)', destination: '/coaching/nata-coaching/nata-coaching-centers-in-:city', permanent: true },
 
       // Core pages (coaching, premium, alumni, careers are handled natively by next-intl)
       { source: '/askSeniors', destination: '/alumni', permanent: true },

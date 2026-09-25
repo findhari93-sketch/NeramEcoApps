@@ -49,7 +49,7 @@ interface NudgeDialogProps {
   presetMessage?: string;
 }
 
-function summarise(o: NudgeOutcome): string {
+export function summarise(o: NudgeOutcome): string {
   const parts: string[] = [];
   const chat = o.counts.chat ?? 0;
   if (chat) parts.push(`${chat} in your Teams chat`);

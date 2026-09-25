@@ -41,12 +41,12 @@ export const revalidate = 86400;
 // Tamil and Hindi serve native script through dedicated localized components further below.
 const localizedMeta: Record<string, { title: string; description: string }> = {
   ta: {
-    title: 'NATA ஆன்லைன் கோச்சிங் 2026 | நேரடி வகுப்புகள், NIT/IIT ஆசிரியர்கள் | Neram Classes',
+    title: 'NATA ஆன்லைன் கோச்சிங் 2026 | நேரடி வகுப்புகள், NIT/IIT ஆசிரியர்கள்',
     description:
       'இந்தியாவின் மிகவும் நம்பகமான NATA ஆன்லைன் கோச்சிங்: NIT/IIT முன்னாள் மாணவர்களின் நேரடி வகுப்புகள், 2009 முதல் 10,000+ ரேங்க் ஸ்கோரர்கள், தினசரி வரைபடப் பயிற்சி, 100+ மாதிரி தேர்வுகள், இலவச டெமோ. கட்டணம் ரூ. 15,000 முதல்.',
   },
   hi: {
-    title: 'NATA ऑनलाइन कोचिंग 2026 | लाइव कक्षाएँ, NIT/IIT शिक्षक | Neram Classes',
+    title: 'NATA ऑनलाइन कोचिंग 2026 | लाइव कक्षाएँ, NIT/IIT शिक्षक',
     description:
       'भारत की सबसे विश्वसनीय NATA ऑनलाइन कोचिंग: NIT/IIT पूर्व छात्र शिक्षकों की लाइव कक्षाएँ, 2009 से 10,000+ रैंक स्कोरर, दैनिक ड्रॉइंग अभ्यास, 100+ मॉक टेस्ट, मुफ्त डेमो। शुल्क रु. 15,000 से।',
   },
@@ -72,7 +72,7 @@ export async function generateMetadata({
       'NATA online coaching, NATA online coaching in India, NATA online coaching 2026, NATA online classes, best NATA online coaching, NATA online preparation, online NATA coaching fees, NATA coaching online with mock test, NATA coaching online live classes, online NATA drawing coaching, NATA coaching from home, NATA coaching app, NATA coaching online Chennai, NATA coaching online Tamil Nadu',
     alternates: buildAlternates(locale, '/nata-online-coaching'),
     openGraph: {
-      title: 'NATA Online Coaching 2026 | Neram Classes',
+      title: 'NATA Online Coaching 2026',
       description,
       type: 'website',
       url: `${BASE_URL}/nata-online-coaching`,
@@ -87,7 +87,7 @@ export async function generateMetadata({
     },
     twitter: {
       card: 'summary_large_image',
-      title: 'NATA Online Coaching 2026 | Neram Classes',
+      title: 'NATA Online Coaching 2026',
       description,
     },
   };

@@ -19,7 +19,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'Best NATA Coaching in India 2026: Top Institute Comparison | Neram Classes',
+    title: 'Best NATA Coaching in India 2026: Top Institute Comparison',
     description:
       'Complete guide to the best NATA coaching institutes in India for 2026. Compare features, success rates, fees, batch sizes, and teaching modes. Find the right NATA coaching for your needs: online, offline, or hybrid.',
     keywords:

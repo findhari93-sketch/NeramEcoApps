@@ -40,7 +40,7 @@ export async function generateMetadata({
 }: {
   params: { locale: string };
 }): Promise<Metadata> {
-  const title = 'NATA Entrance Exam Coaching 2026 | Live Classes, Mock Tests, Drawing | Neram Classes';
+  const title = 'NATA Entrance Exam Coaching 2026 | Live Classes, Mock Tests, Drawing';
   const description =
     'NATA entrance exam coaching by NIT/IIT alumni faculty. Live classes, daily drawing practice, 100+ mock tests, 99.9% success rate since 2009. Free demo class.';
 
@@ -51,7 +51,7 @@ export async function generateMetadata({
       'NATA entrance exam, NATA entrance exam coaching, NATA entrance exam 2026, NATA entrance exam preparation, NATA entrance exam syllabus, NATA entrance exam pattern, NATA entrance exam date, NATA entrance exam mock test, NATA entrance exam drawing, NATA entrance coaching online',
     alternates: buildAlternates(locale, '/nata-entrance-exam-coaching'),
     openGraph: {
-      title: 'NATA Entrance Exam Coaching 2026 | Neram Classes',
+      title: 'NATA Entrance Exam Coaching 2026',
       description,
       type: 'website',
       url: `${BASE_URL}/nata-entrance-exam-coaching`,
@@ -66,7 +66,7 @@ export async function generateMetadata({
     },
     twitter: {
       card: 'summary_large_image',
-      title: 'NATA Entrance Exam Coaching 2026 | Neram Classes',
+      title: 'NATA Entrance Exam Coaching 2026',
       description,
     },
   };

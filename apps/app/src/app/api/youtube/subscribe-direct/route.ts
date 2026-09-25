@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyIdToken, createCustomToken } from '@/lib/firebase-admin';
 import { subscribeToChannel } from '@/lib/youtube';
 import { createServerClient } from '@neram/database';
+import { safeRedirect } from '@/lib/safe-redirect';
 
 const YOUTUBE_CHANNEL_ID = process.env.NEXT_PUBLIC_YOUTUBE_CHANNEL_ID || '';
 const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || 'https://neramclasses.com';
@@ -219,8 +220,9 @@ export async function POST(request: NextRequest) {
     // Create a Firebase custom token for cross-domain auth
     const customToken = await createCustomToken(firebaseUid);
 
-    // Construct the success redirect URL
-    const finalRedirectUrl = redirectUrl || MARKETING_URL;
+    // Construct the success redirect URL. The custom token below signs in as
+    // this visitor, so it only ever goes to one of our own hosts.
+    const finalRedirectUrl = safeRedirect(redirectUrl, MARKETING_URL, [MARKETING_URL]);
     const successUrl = new URL('/youtube-reward', finalRedirectUrl);
     successUrl.searchParams.set('coupon', couponCode);
     successUrl.searchParams.set('name', userName);

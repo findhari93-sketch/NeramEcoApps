@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@neram/database';
 import Razorpay from 'razorpay';
 import { verifyFirebaseToken } from '../../_lib/auth';
+import { resolveCouponDiscount } from '@/lib/payments/coupon-discount';
 
 let razorpayClient: Razorpay | null = null;
 
@@ -26,7 +27,7 @@ export async function POST(request: NextRequest) {
     const auth = await verifyFirebaseToken(request);
 
     const supabase = createAdminClient();
-    const { leadProfileId, paymentScheme, couponCode, couponDiscount, youtubeDiscount, payerName, payerRelationship, publicPayment } = await request.json();
+    const { leadProfileId, paymentScheme, couponCode, youtubeDiscount, payerName, payerRelationship, publicPayment } = await request.json();
 
     // For non-public payments, auth is required
     if (!publicPayment && !auth) {
@@ -79,28 +80,20 @@ export async function POST(request: NextRequest) {
         : Math.ceil(leadProfile.final_fee * 0.55);
     }
 
-    // Validate and apply coupon discount server-side
-    let validatedCouponDiscount = 0;
-    if (couponCode && couponDiscount > 0) {
-      const { data: coupon } = await supabase
-        .from('coupons' as any)
-        .select('*')
-        .eq('code', couponCode)
-        .eq('is_active', true)
-        .single();
-
-      if (coupon) {
-        if (coupon.discount_type === 'percentage') {
-          validatedCouponDiscount = Math.round(leadProfile.final_fee * (coupon.discount_value / 100));
-        } else {
-          validatedCouponDiscount = coupon.discount_value;
-        }
-        // Cap at max discount if set
-        if (coupon.max_discount && validatedCouponDiscount > coupon.max_discount) {
-          validatedCouponDiscount = coupon.max_discount;
-        }
-      }
+    // Validate and apply coupon discount server-side (the client's figure is ignored)
+    const couponResult = await resolveCouponDiscount({
+      code: couponCode,
+      leadProfileId,
+      finalFee: leadProfile.final_fee,
+      client: supabase,
+    });
+    if (!couponResult.ok) {
+      return NextResponse.json(
+        { error: 'Invalid Coupon', message: couponResult.error },
+        { status: 400 }
+      );
     }
+    const validatedCouponDiscount = couponResult.discount;
 
     // Validate YouTube discount (max ₹50)
     const validatedYoutubeDiscount = youtubeDiscount > 0 ? Math.min(Number(youtubeDiscount), 50) : 0;

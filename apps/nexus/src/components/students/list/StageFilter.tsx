@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Badge, Box, Button, Checkbox, Drawer, Typography, useMediaQuery, useTheme } from '@neram/ui';
 import TuneIcon from '@mui/icons-material/Tune';
 import { stageColor } from '@/lib/student-stage';
+import type { FilterSection } from './FilterMenu';
 import {
   STAGE_FILTER_HINT,
   STAGE_FILTER_LABEL,
@@ -21,6 +22,44 @@ import {
  * bottom sheet on a phone, where four chips beside search would wrap into a
  * second and third line.
  */
+
+/**
+ * The same stage filter as one section of a FilterMenu, for the compact
+ * toolbar. Same labels, hints, counts and ring colours as the chips.
+ */
+export function useStageFilterSection({
+  value,
+  counts,
+  onToggle,
+  onClear,
+  disabled = false,
+}: {
+  value: readonly StageFilterKey[];
+  counts: Record<StageFilterKey, number>;
+  onToggle: (key: StageFilterKey) => void;
+  onClear: () => void;
+  disabled?: boolean;
+}): FilterSection {
+  const theme = useTheme();
+  const mode = theme.palette.mode === 'dark' ? 'dark' : 'light';
+  return {
+    id: 'stage',
+    title: 'Stage',
+    mode: 'multi',
+    value,
+    onToggle: (key) => onToggle(key as StageFilterKey),
+    onClear,
+    disabled,
+    options: STAGE_FILTER_ORDER.map((key) => ({
+      key,
+      label: STAGE_FILTER_LABEL[key],
+      hint: STAGE_FILTER_HINT[key],
+      count: counts[key],
+      color: stageColor(STAGE_FILTER_RING[key], mode),
+      dotStyle: key === 'unset' ? 'dotted' : 'ring',
+    })),
+  };
+}
 
 const RESET_BUTTON = { appearance: 'none', font: 'inherit', cursor: 'pointer', textAlign: 'left' } as const;
 

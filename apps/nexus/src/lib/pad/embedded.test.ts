@@ -6,7 +6,7 @@ import { isTeamsPadPath } from './embedded';
 
 describe('isTeamsPadPath', () => {
   it('recognises the pages Teams frames', () => {
-    for (const pathname of ['/pad/teams', '/pad/teams/config', '/pad/stage', '/pad/stage/abc']) {
+    for (const pathname of ['/pad/teams', '/pad/teams/config', '/pad/teams/home', '/pad/stage', '/pad/stage/abc']) {
       expect({ pathname, teams: isTeamsPadPath(pathname) }).toEqual({ pathname, teams: true });
     }
   });
@@ -52,7 +52,7 @@ describe('vercel.json framing headers', () => {
   ];
 
   it('lets Teams and Microsoft 365 frame every Answer Pad page', () => {
-    for (const pathname of ['/pad', '/pad/teams', '/pad/teams/config', '/pad/stage', '/pad/r/482913']) {
+    for (const pathname of ['/pad', '/pad/teams', '/pad/teams/config', '/pad/teams/home', '/pad/stage', '/pad/r/482913']) {
       const headers = headersFor(pathname);
       expect({ pathname, xfo: headers['x-frame-options'] }).toEqual({ pathname, xfo: undefined });
       const csp = headers['content-security-policy'] ?? '';

@@ -9,6 +9,7 @@ import {
   ListItemText,
   Menu,
   MenuItem,
+  Tooltip,
   Typography,
   useMediaQuery,
   useTheme,
@@ -29,11 +30,18 @@ export default function ListSortMenu<K extends string>({
   options,
   onChange,
   title = 'Sort students',
+  compact = false,
 }: {
   value: K;
   options: ReadonlyArray<{ key: K; label: string }>;
   onChange: (key: K) => void;
   title?: string;
+  /**
+   * Icon only, whatever the window width. For a narrow container (a drawer, a
+   * dialog) where the full label pushed the filters onto another line. The
+   * accessible name and tooltip still say the current order.
+   */
+  compact?: boolean;
 }) {
   const theme = useTheme();
   const isPhone = useMediaQuery(theme.breakpoints.down('sm'));
@@ -58,32 +66,49 @@ export default function ListSortMenu<K extends string>({
 
   return (
     <>
-      <Button
-        size="small"
-        variant="outlined"
-        startIcon={<SortIcon />}
-        aria-label={`Sort: ${current}`}
-        aria-haspopup="true"
-        aria-expanded={open}
-        onClick={(e) => setAnchor(e.currentTarget)}
-        data-testid="list-sort-button"
-        sx={{
-          minHeight: 48,
-          textTransform: 'none',
-          fontWeight: 700,
-          borderRadius: 2,
-          bgcolor: 'background.paper',
-          whiteSpace: 'nowrap',
-          flexShrink: 0,
-        }}
-      >
-        <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
-          {current}
-        </Box>
-        <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
-          Sort
-        </Box>
-      </Button>
+      {compact ? (
+        <Tooltip title={`Sort: ${current}`}>
+          <Button
+            size="small"
+            variant="outlined"
+            aria-label={`Sort: ${current}`}
+            aria-haspopup="true"
+            aria-expanded={open}
+            onClick={(e) => setAnchor(e.currentTarget)}
+            data-testid="list-sort-button"
+            sx={{ minHeight: 48, minWidth: 48, px: 1, borderRadius: 2, bgcolor: 'background.paper', flexShrink: 0 }}
+          >
+            <SortIcon />
+          </Button>
+        </Tooltip>
+      ) : (
+        <Button
+          size="small"
+          variant="outlined"
+          startIcon={<SortIcon />}
+          aria-label={`Sort: ${current}`}
+          aria-haspopup="true"
+          aria-expanded={open}
+          onClick={(e) => setAnchor(e.currentTarget)}
+          data-testid="list-sort-button"
+          sx={{
+            minHeight: 48,
+            textTransform: 'none',
+            fontWeight: 700,
+            borderRadius: 2,
+            bgcolor: 'background.paper',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+          }}
+        >
+          <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+            {current}
+          </Box>
+          <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+            Sort
+          </Box>
+        </Button>
+      )}
       {isPhone ? (
         <Drawer
           anchor="bottom"

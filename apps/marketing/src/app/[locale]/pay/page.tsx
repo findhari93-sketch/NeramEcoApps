@@ -13,7 +13,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'Complete Your Payment - Neram Classes',
+    title: 'Complete Your Payment',
     description:
       'Complete your course fee payment securely via Razorpay. Pay in full or choose installments for your NATA / JEE Paper 2 coaching at Neram Classes.',
     robots: {

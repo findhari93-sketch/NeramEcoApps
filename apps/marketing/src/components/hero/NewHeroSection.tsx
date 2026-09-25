@@ -73,10 +73,8 @@ export default function NewHeroSection() {
                   mb: 1.25,
                   fontSize: { xs: '2rem', sm: '2.5rem', md: '3.5rem', lg: '3.5rem' },
                   lineHeight: 1.05,
-                  opacity: 0,
-                  transform: 'translateY(20px)',
-                  animation: 'neramFadeUp 0.9s ease forwards',
-                  animationDelay: '0s',
+                  // No fade on the headline or subhead: they are the LCP text, and
+                  // an element at opacity 0 does not count as painted.
                   '& em': {
                     fontStyle: 'italic',
                     color: 'primary.main',
@@ -117,10 +115,6 @@ export default function NewHeroSection() {
                   fontSize: { xs: '13px', md: '16px' },
                   wordBreak: 'break-word',
                   mb: { xs: 2, md: 3 },
-                  opacity: 0,
-                  transform: 'translateY(16px)',
-                  animation: 'neramFadeUp 0.9s ease forwards',
-                  animationDelay: '0.15s',
                   '& strong': {
                     color: 'text.primary',
                     fontWeight: 500,

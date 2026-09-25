@@ -11,11 +11,13 @@ import {
   Skeleton,
   Tab,
   Tabs,
+  Tooltip,
   Typography,
 } from '@neram/ui';
 import SyncIcon from '@mui/icons-material/Sync';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CampaignIcon from '@mui/icons-material/Campaign';
+import NotificationsActiveOutlinedIcon from '@mui/icons-material/NotificationsActiveOutlined';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import TeamsCsvImportDialog from '../TeamsCsvImportDialog';
@@ -33,12 +35,15 @@ import type {
 } from './types';
 import type { RosterCandidate } from '@/lib/teams-attendance-csv';
 import { insightsKey, useClassInsights } from './useClassInsights';
+import type { HomeworkReminderOutcome } from './HomeworkReminderDialog';
+import { owesHomework } from '@/lib/homework-reminders';
 
 // Lazy: a teacher who opens this to see who to chase never pays for the ranked
 // list's code or the register's, and the register is the rarest of the three.
 const AttendedTab = dynamic(() => import('./AttendedTab'), {
   loading: () => <Skeleton variant="rectangular" height={280} sx={{ borderRadius: 1 }} />,
 });
+const HomeworkReminderDialog = dynamic(() => import('./HomeworkReminderDialog'));
 const RegisterTab = dynamic(() => import('./RegisterTab'), {
   loading: () => <Skeleton variant="rectangular" height={280} sx={{ borderRadius: 1 }} />,
 });
@@ -143,7 +148,9 @@ export default function ClassAttendancePanel({
   // round trip for the same payload.
   const {
     data: insightsData,
+    error: insightsFetchError,
     isLoading: insightsLoading,
+    isValidating: insightsValidating,
     mutate: mutateInsights,
   } = useClassInsights(classId, classroomId, getToken);
   const insights: Insights | null = insightsData ?? null;
@@ -165,6 +172,11 @@ export default function ClassAttendancePanel({
   const [nudgeOpen, setNudgeOpen] = useState(false);
   const [nudging, setNudging] = useState(false);
   const [nudgeOutcome, setNudgeOutcome] = useState<NudgeOutcome | null>(null);
+  // The homework reminder: who it is for, and what came back.
+  const [homeworkIds, setHomeworkIds] = useState<string[] | null>(null);
+  const [homeworkSending, setHomeworkSending] = useState(false);
+  const [homeworkStopping, setHomeworkStopping] = useState(false);
+  const [homeworkOutcome, setHomeworkOutcome] = useState<HomeworkReminderOutcome | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [severity, setSeverity] = useState<'info' | 'warning' | 'success'>('info');
   const [unmatched, setUnmatched] = useState(0);
@@ -424,6 +436,85 @@ export default function ClassAttendancePanel({
     }
   };
 
+  const openHomework = useCallback((ids: string[]) => {
+    setHomeworkOutcome(null);
+    setHomeworkIds(ids);
+  }, []);
+
+  const handleHomeworkSend = async ({ message: text, repeat }: { message: string; repeat: boolean }) => {
+    if (!homeworkIds?.length) return;
+    setHomeworkSending(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(`/api/timetable/${classId}/homework-reminders`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          classroom_id: classroomId,
+          studentIds: homeworkIds,
+          message: text || undefined,
+          repeat,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        notify(data.error || 'Could not send the reminder', 'warning');
+        setHomeworkIds(null);
+        return;
+      }
+      setHomeworkOutcome({ counts: data.counts, repeat: data.repeat ?? null, skipped: data.skipped ?? 0 });
+      await fetchInsights();
+    } catch {
+      notify('Could not send the reminder', 'warning');
+      setHomeworkIds(null);
+    } finally {
+      setHomeworkSending(false);
+    }
+  };
+
+  // Stop needs no confirmation: nothing is lost, and Remind starts it again.
+  const handleHomeworkStop = async () => {
+    setHomeworkStopping(true);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(`/api/timetable/${classId}/homework-reminders`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ classroom_id: classroomId, action: 'stop' }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        notify(data.error || 'Could not stop the reminders', 'warning');
+        return;
+      }
+      notify(
+        data.stopped
+          ? `Stopped the homework reminders for ${data.stopped} ${data.stopped === 1 ? 'student' : 'students'}.`
+          : 'No reminders were running.',
+        'success',
+      );
+      await fetchInsights();
+    } catch {
+      notify('Could not stop the reminders', 'warning');
+    } finally {
+      setHomeworkStopping(false);
+    }
+  };
+
+  // On the Attended tab the selection bar reminds about homework: the catch-up
+  // nudge says "you missed this class", which is wrong for anyone who came.
+  const owingSelected = selectedStudents.filter((s) => s.attended && owesHomework(s.work));
+  const homeworkStudents = (insights?.students ?? []).filter((s) => homeworkIds?.includes(s.id));
+  const homeworkTitles = (() => {
+    const owed = new Set<string>();
+    for (const s of homeworkStudents) {
+      for (const [id, st] of Object.entries(s.work?.byAssignment ?? {})) if (st !== 'in' && st !== 'late') owed.add(id);
+    }
+    return (insights?.work ?? []).filter((a) => owed.has(a.id)).map((a) => a.title);
+  })();
+
   /**
    * The roster in the shape the CSV importer matches against. Built from what
    * the register already fetched, so the import dialog makes no network call at
@@ -448,6 +539,9 @@ export default function ClassAttendancePanel({
     sync,
     insights,
     insightsLoading,
+    insightsError: insightsFetchError ? insightsFetchError.message || 'Could not load this class' : null,
+    insightsRetrying: insightsValidating,
+    onRetryInsights: () => void mutateInsights(),
     selected,
     onSelect,
     onSelectMany,
@@ -456,6 +550,9 @@ export default function ClassAttendancePanel({
     onOpenImport: () => setImportOpen(true),
     onNotify: notify,
     initialFilter: initialFilter ?? null,
+    onRemindHomework: openHomework,
+    onStopHomeworkReminders: handleHomeworkStop,
+    homeworkBusy: homeworkStopping,
   };
 
   const syncFailed = !!sync?.status && sync.status !== 'ok';
@@ -470,6 +567,16 @@ export default function ClassAttendancePanel({
       })
     : '';
 
+  const syncedLabel = insights?.class.attendance_synced_at
+    ? new Date(insights.class.attendance_synced_at).toLocaleString('en-IN', {
+        day: 'numeric',
+        month: 'short',
+        hour: 'numeric',
+        minute: '2-digit',
+      })
+    : null;
+  const syncTitle = syncedLabel ? `Sync from Teams. Last synced ${syncedLabel}` : 'Sync from Teams';
+
   const presetMessage = nudgePreset(
     selectedStudents.map((s) => s.followup),
     insights?.class.title ?? classTitle,
@@ -478,48 +585,58 @@ export default function ClassAttendancePanel({
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', minHeight: 0, flex: 1 }}>
-      {/* Walking the schedule without closing is the whole point of the catch-up
-          mount: a teacher reviewing the week should not have to shut this,
-          find the next class and open it again. */}
-      {(onPrev || onNext) && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1, pb: 0.5 }}>
-          <IconButton onClick={onPrev} disabled={!onPrev} aria-label="Previous class" sx={{ minWidth: 44, minHeight: 44 }}>
-            <ChevronLeftIcon />
-          </IconButton>
-          <Typography variant="caption" color="text.secondary" sx={{ flex: 1, textAlign: 'center' }} noWrap>
-            {navLabel || dateLabel}
-          </Typography>
-          <IconButton onClick={onNext} disabled={!onNext} aria-label="Next class" sx={{ minWidth: 44, minHeight: 44 }}>
-            <ChevronRightIcon />
-          </IconButton>
-        </Box>
-      )}
-
-      {/* Sync sits above the tabs, not inside one. It refreshes all three, so
-          putting it on a tab made it look like it only refreshed that tab, and
-          it used to be offered even for a class with no meeting to sync. */}
-      {teamsMeetingId && (
-        <Box sx={{ px: 2, pb: 1, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-          <Button
-            variant="outlined"
-            size="small"
-            startIcon={syncing ? <CircularProgress size={16} /> : <SyncIcon />}
-            onClick={handleSyncTeams}
-            disabled={syncing || savingAll}
-            sx={{ textTransform: 'none', minHeight: 44 }}
-          >
-            {syncing ? 'Syncing...' : 'Sync from Teams'}
-          </Button>
-          {insights?.class.attendance_synced_at && (
-            <Typography variant="caption" color="text.secondary">
-              Last synced{' '}
-              {new Date(insights.class.attendance_synced_at).toLocaleString('en-IN', {
-                day: 'numeric',
-                month: 'short',
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
+      {/* One line above the tabs: walking the schedule (the catch-up mount)
+          and Sync. They used to be two rows, and with the drawer's own title
+          and date that was four lines of chrome before a single student. Sync
+          sits here, not inside a tab, because it refreshes all three. */}
+      {(onPrev || onNext || teamsMeetingId) && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, px: 1, pb: 0.5, minHeight: 48 }}>
+          {onPrev || onNext ? (
+            <>
+              <IconButton onClick={onPrev} disabled={!onPrev} aria-label="Previous class" sx={{ minWidth: 44, minHeight: 44 }}>
+                <ChevronLeftIcon />
+              </IconButton>
+              <Typography
+                variant="body2"
+                color="text.secondary"
+                sx={{ flex: 1, textAlign: 'center', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}
+                noWrap
+              >
+                {navLabel || dateLabel}
+              </Typography>
+              <IconButton onClick={onNext} disabled={!onNext} aria-label="Next class" sx={{ minWidth: 44, minHeight: 44 }}>
+                <ChevronRightIcon />
+              </IconButton>
+            </>
+          ) : (
+            <Typography variant="caption" color="text.secondary" sx={{ flex: 1, pl: 1 }} noWrap>
+              {syncedLabel ? `Last synced ${syncedLabel}` : 'Not synced from Teams yet'}
             </Typography>
+          )}
+          {teamsMeetingId && (
+            <Tooltip title={syncTitle}>
+              <span>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={handleSyncTeams}
+                  disabled={syncing || savingAll}
+                  aria-label={syncTitle}
+                  data-testid="attendance-sync-button"
+                  startIcon={syncing ? <CircularProgress size={16} /> : <SyncIcon />}
+                  sx={{
+                    minHeight: 44,
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                    ...(onPrev || onNext ? { ml: 0.5 } : {}),
+                  }}
+                >
+                  {syncing ? 'Syncing' : 'Sync'}
+                </Button>
+              </span>
+            </Tooltip>
           )}
         </Box>
       )}
@@ -532,7 +649,9 @@ export default function ClassAttendancePanel({
           px: 1,
           borderBottom: 1,
           borderColor: 'divider',
-          '& .MuiTab-root': { minHeight: 48, textTransform: 'none', fontWeight: 600 },
+          // One line per label: at 375px "Attended 19" wrapped to two and made
+          // the tab bar 72px tall.
+          '& .MuiTab-root': { minHeight: 48, textTransform: 'none', fontWeight: 600, px: 1, whiteSpace: 'nowrap', minWidth: 0 },
         }}
       >
         <Tab value="missed" label={missedCount > 0 ? `Missed ${missedCount}` : 'Missed'} />
@@ -603,18 +722,33 @@ export default function ClassAttendancePanel({
           >
             Copy
           </Button>
-          <Button
-            size="small"
-            variant="contained"
-            startIcon={<CampaignIcon />}
-            onClick={() => {
-              setNudgeOutcome(null);
-              setNudgeOpen(true);
-            }}
-            sx={{ minHeight: 44, textTransform: 'none' }}
-          >
-            Nudge
-          </Button>
+          {tab === 'attended' ? (
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<NotificationsActiveOutlinedIcon />}
+              onClick={() => openHomework(owingSelected.map((s) => s.id))}
+              disabled={owingSelected.length === 0}
+              title={owingSelected.length === 0 ? 'Everyone ticked has handed the homework in' : undefined}
+              sx={{ minHeight: 44, textTransform: 'none' }}
+              data-testid="selection-remind-homework"
+            >
+              Remind about homework
+            </Button>
+          ) : (
+            <Button
+              size="small"
+              variant="contained"
+              startIcon={<CampaignIcon />}
+              onClick={() => {
+                setNudgeOutcome(null);
+                setNudgeOpen(true);
+              }}
+              sx={{ minHeight: 44, textTransform: 'none' }}
+            >
+              Nudge
+            </Button>
+          )}
         </Box>
       )}
 
@@ -634,6 +768,25 @@ export default function ClassAttendancePanel({
         onSend={handleNudge}
         presetMessage={presetMessage}
       />
+
+      {homeworkIds && (
+        <HomeworkReminderDialog
+          open
+          onClose={() => {
+            // A sent reminder clears the ticks, so nobody is reminded twice by a
+            // teacher who did not notice they survived.
+            if (homeworkOutcome) setSelected(new Set());
+            setHomeworkIds(null);
+          }}
+          classTitle={insights?.class.title ?? classTitle}
+          classDateLabel={dateLabel}
+          names={homeworkStudents.map((s) => s.name)}
+          homework={homeworkTitles}
+          sending={homeworkSending}
+          outcome={homeworkOutcome}
+          onSend={handleHomeworkSend}
+        />
+      )}
 
       <TeamsCsvImportDialog
         open={importOpen}

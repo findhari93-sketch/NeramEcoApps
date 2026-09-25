@@ -4,7 +4,6 @@ import type { ReactNode } from 'react';
 import {
   Box,
   Button,
-  CardActionArea,
   Chip,
   Skeleton,
   Typography,
@@ -15,7 +14,6 @@ import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import {
-  FOLLOWUP_META,
   emptyFollowupTally,
   type FollowupState,
   type FollowupTally,
@@ -23,6 +21,7 @@ import {
 } from '@/lib/class-followup';
 import type { AssignmentSummary } from '@/lib/class-work';
 import { useClassInsights } from '../attendance/useClassInsights';
+import FollowupGrid from '../attendance/FollowupGrid';
 import type { AttendanceFilter, AttendanceTabKey, Insights } from '../attendance/types';
 import { SECTION_LABEL_SX } from '../timetable-theme';
 
@@ -106,69 +105,6 @@ function RosterBar({ segments, total }: { segments: Segment[]; total: number }) 
           </Box>
         ))}
       </Box>
-    </Box>
-  );
-}
-
-/**
- * One corner of the grid. The founder's four cases, in their words: told us
- * why or not, caught up or not. Tapping opens exactly those students.
- */
-function Corner({
-  state,
-  count,
-  word,
-  onOpen,
-}: {
-  state: FollowupState;
-  count: number;
-  word: string;
-  onOpen?: () => void;
-}) {
-  const tone = useTone();
-  const color = tone(FOLLOWUP_META[state].tone);
-  const empty = count === 0;
-  const body = (
-    <Box
-      sx={{
-        minHeight: 64,
-        px: 1.25,
-        py: 1,
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        borderLeft: `4px solid ${empty ? 'transparent' : color}`,
-      }}
-    >
-      <Typography sx={{ fontWeight: 800, fontSize: 22, lineHeight: 1.1, color: empty ? 'text.disabled' : 'text.primary' }}>
-        {count}
-      </Typography>
-      <Typography variant="caption" sx={{ fontWeight: 600, color: empty ? 'text.disabled' : 'text.secondary', lineHeight: 1.3 }}>
-        {word}
-      </Typography>
-    </Box>
-  );
-  return (
-    <Box
-      sx={{
-        borderRadius: 1.5,
-        overflow: 'hidden',
-        bgcolor: empty ? 'transparent' : alpha(color, 0.08),
-        border: '1px solid',
-        borderColor: empty ? 'divider' : alpha(color, 0.35),
-      }}
-    >
-      {empty || !onOpen ? (
-        body
-      ) : (
-        <CardActionArea
-          onClick={onOpen}
-          aria-label={`${plural(count, 'student')}: ${FOLLOWUP_META[state].label}. Show them.`}
-          sx={{ '&:focus-visible': { outline: `2px solid ${color}`, outlineOffset: -2 } }}
-        >
-          {body}
-        </CardActionArea>
-      )}
     </Box>
   );
 }
@@ -364,39 +300,15 @@ export default function ClassOutcomeCard({ classId, classroomId, getToken, onOpe
           <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, display: 'block', mb: 0.75 }}>
             Of the {missed} who missed it
           </Typography>
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: 'minmax(64px, auto) minmax(0, 1fr) minmax(0, 1fr)',
-              gap: 1,
-              alignItems: 'stretch',
+          <FollowupGrid
+            counts={{
+              caught_up: t.caught_up,
+              catching_up: t.catching_up,
+              caught_up_silent: t.caught_up_silent,
+              needs_call: t.needs_call,
             }}
-          >
-            <span />
-            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, alignSelf: 'end' }}>
-              Caught up
-            </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, alignSelf: 'end' }}>
-              Not yet
-            </Typography>
-
-            <Typography variant="caption" sx={{ fontWeight: 700, alignSelf: 'center' }}>
-              Told us why
-            </Typography>
-            <Corner state="caught_up" count={t.caught_up} word="All done" onOpen={open('caught_up')} />
-            <Corner state="catching_up" count={t.catching_up} word="Follow up" onOpen={open('catching_up')} />
-
-            <Typography variant="caption" sx={{ fontWeight: 700, alignSelf: 'center' }}>
-              Said nothing
-            </Typography>
-            <Corner
-              state="caught_up_silent"
-              count={t.caught_up_silent}
-              word="Ask why"
-              onOpen={open('caught_up_silent')}
-            />
-            <Corner state="needs_call" count={t.needs_call} word="Needs a call" onOpen={open('needs_call')} />
-          </Box>
+            onSelect={onOpen ? (st) => onOpen({ tab: 'missed', filter: st }) : undefined}
+          />
 
           {timing.length > 0 && (
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>

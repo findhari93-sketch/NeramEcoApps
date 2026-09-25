@@ -256,15 +256,21 @@ export default function EligibilityRosterPanel({
 
       {rows.length > 0 && (
         <Box sx={{ px: 2, pt: 1.5 }}>
-          <StudentListToolbar view={view} />
-        </Box>
-      )}
-
-      {!readOnly && Boolean(examId) && rows.length > 0 && (
-        <Box sx={{ px: 2, pt: 1.5 }}>
-          <Button size="small" onClick={() => setSelecting((v) => !v)} sx={{ minHeight: 44 }}>
-            {selecting ? 'Cancel selecting' : 'Select students'}
-          </Button>
+          {/* Select sits on the toolbar's own row: it was a row of its own. */}
+          <StudentListToolbar
+            view={view}
+            actionsSlot={
+              !readOnly && Boolean(examId) ? (
+                <Button
+                  size="small"
+                  onClick={() => setSelecting((v) => !v)}
+                  sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700, whiteSpace: 'nowrap' }}
+                >
+                  {selecting ? 'Cancel' : 'Select'}
+                </Button>
+              ) : undefined
+            }
+          />
         </Box>
       )}
 

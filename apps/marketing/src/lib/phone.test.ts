@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalisePhone } from './phone';
+import { normalisePhone, isSamePhone } from './phone';
 
 /**
  * Regression: the Chetana duplicate, 2026-07-28. A direct-enrolment student who
@@ -46,5 +46,18 @@ describe('normalisePhone', () => {
     expect(normalisePhone(null)).toBeNull();
     expect(normalisePhone(undefined)).toBeNull();
     expect(normalisePhone(9949414949)).toBeNull();
+  });
+});
+
+describe('isSamePhone', () => {
+  it('matches the token claim against the submitted number in any common shape', () => {
+    expect(isSamePhone('+919949414949', '9949414949')).toBe(true);
+    expect(isSamePhone('+919949414949', '+91 99494 14949')).toBe(true);
+  });
+
+  it('rejects a different number, a missing claim, or junk', () => {
+    expect(isSamePhone('+919949414949', '9949414948')).toBe(false);
+    expect(isSamePhone(undefined, '9949414949')).toBe(false);
+    expect(isSamePhone(null, null)).toBe(false);
   });
 });

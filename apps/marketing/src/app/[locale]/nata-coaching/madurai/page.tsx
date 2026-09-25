@@ -14,7 +14,7 @@ export async function generateMetadata({
 }: {
   params: { locale: string };
 }): Promise<Metadata> {
-  const title = `NATA Online Coaching in Madurai 2026 | Live Classes, NIT/IIT Faculty | Neram Classes`;
+  const title = `NATA Online Coaching in Madurai 2026 | Live Classes, NIT/IIT Faculty`;
   const description = `NATA online coaching for Madurai students: live evening batches by NIT/IIT/SPA alumni, daily drawing practice, 100+ mock tests, 99.9% success rate. Fees from Rs. 15,000.`;
   return {
     title,
@@ -23,7 +23,7 @@ export async function generateMetadata({
       'NATA online coaching Madurai, NATA coaching online Madurai, NATA classes Madurai, best NATA coaching Madurai, NATA coaching K.K. Nagar, NATA preparation Madurai, NATA coaching Tamil Nadu south',
     alternates: buildAlternates(locale, `/nata-coaching/${city.slug}`),
     openGraph: {
-      title: `NATA Online Coaching in ${city.displayName} | Neram Classes`,
+      title: `NATA Online Coaching in ${city.displayName}`,
       description,
       type: 'website',
       url: `${BASE_URL}/nata-coaching/${city.slug}`,

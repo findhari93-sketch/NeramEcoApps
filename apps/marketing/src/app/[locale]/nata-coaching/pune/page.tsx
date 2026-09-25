@@ -14,7 +14,7 @@ export async function generateMetadata({
 }: {
   params: { locale: string };
 }): Promise<Metadata> {
-  const title = `NATA Online Coaching in Pune 2026 | BNCA, Sinhgad, MIT Prep | Neram Classes`;
+  const title = `NATA Online Coaching in Pune 2026 | BNCA, Sinhgad, MIT Prep`;
   const description = `NATA online coaching for Pune students aiming at BNCA, Sinhgad, MIT, D Y Patil architecture colleges. Live classes by NIT/IIT/SPA alumni faculty, daily drawing practice, 99.9% success rate.`;
   return {
     title,
@@ -23,7 +23,7 @@ export async function generateMetadata({
       'NATA online coaching Pune, NATA coaching online Pune, NATA classes Pune, BNCA coaching, Sinhgad architecture coaching, NATA coaching Kothrud, NATA coaching Aundh, NATA coaching Pimpri Chinchwad, NATA preparation Pune',
     alternates: buildAlternates(locale, `/nata-coaching/${city.slug}`),
     openGraph: {
-      title: `NATA Online Coaching in ${city.displayName} | Neram Classes`,
+      title: `NATA Online Coaching in ${city.displayName}`,
       description,
       type: 'website',
       url: `${BASE_URL}/nata-coaching/${city.slug}`,

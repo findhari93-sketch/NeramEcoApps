@@ -17,14 +17,31 @@ const manifest = JSON.parse(readFileSync(path.join(NEXUS, 'teams-app/manifest.js
 const APP_ID = 'aa039c70-50d2-4c91-bd0e-5675df5e50ff';
 
 describe('Teams app manifest', () => {
-  it('is the existing Neram Assistant app, version 1.3.0, still carrying My Work', () => {
+  it('is the existing Neram Assistant app, version 1.3.1, with its Home tab', () => {
     expect(manifest.id).toBe('df4f6b2d-ea18-46d1-8934-f508ac248e6c');
-    expect(manifest.version).toBe('1.3.0');
+    expect(manifest.version).toBe('1.3.1');
     expect(Number(manifest.manifestVersion)).toBeGreaterThanOrEqual(1.21);
     expect(manifest.$schema).toContain(`/v${manifest.manifestVersion}/`);
+    // entityId unchanged, so an existing install upgrades in place.
     expect(manifest.staticTabs).toEqual([
-      expect.objectContaining({ entityId: 'nexusAssignments', contentUrl: 'https://nexus.neramclasses.com/student/assignments' }),
+      expect.objectContaining({
+        entityId: 'nexusAssignments',
+        contentUrl: 'https://nexus.neramclasses.com/pad/teams/home',
+        websiteUrl: 'https://nexus.neramclasses.com/student/assignments',
+      }),
     ]);
+    expect(existsSync(path.join(NEXUS, 'src/app/(pad)/pad/teams/home/page.tsx'))).toBe(true);
+  });
+
+  // Every Activity item Neram Assistant sends opens this tab. It used to point at
+  // /student/assignments, which sends X-Frame-Options: SAMEORIGIN and signs in by
+  // redirect, so every click showed a broken page inside Teams. A tab page has to
+  // be one Teams may frame AND one that skips the MSAL sign-in.
+  it('points every personal tab at a page Teams may frame and that never redirects to sign in', () => {
+    for (const tab of manifest.staticTabs as Array<{ contentUrl: string }>) {
+      const url = new URL(tab.contentUrl);
+      expect(isTeamsPadPath(url.pathname), tab.contentUrl).toBe(true);
+    }
   });
 
   // The admin center refused the 1.3.0 upload with one line: 'Property

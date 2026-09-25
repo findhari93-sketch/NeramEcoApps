@@ -32,6 +32,7 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { LoginModal } from '@neram/ui';
 import { useFirebaseAuth } from '@neram/auth';
+import { getStoredAttribution } from '@/lib/attribution';
 
 // Slide transition for bottom sheet on mobile
 const SlideTransition = (props: TransitionProps & { children: React.ReactElement }) => (
@@ -265,6 +266,7 @@ export default function DemoClassPageContent() {
       setSubmitting(true);
       setError(null);
 
+      const attribution = getStoredAttribution();
       const response = await fetch('/api/demo-class/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -277,6 +279,10 @@ export default function DemoClassPageContent() {
           interestCourse: formData.interestCourse,
           city: formData.city,
           firebaseUid: user?.id,
+          utmSource: attribution.utm_source,
+          utmMedium: attribution.utm_medium,
+          utmCampaign: attribution.utm_campaign,
+          referralCode: attribution.referral_code,
         }),
       });
 

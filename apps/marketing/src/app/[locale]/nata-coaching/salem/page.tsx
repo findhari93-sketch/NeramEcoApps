@@ -14,7 +14,7 @@ export async function generateMetadata({
 }: {
   params: { locale: string };
 }): Promise<Metadata> {
-  const title = `NATA Online Coaching in Salem 2026 | Live Classes, NIT/IIT Faculty | Neram Classes`;
+  const title = `NATA Online Coaching in Salem 2026 | Live Classes, NIT/IIT Faculty`;
   const description = `NATA online coaching for Salem and western Tamil Nadu students (Erode, Namakkal, Dharmapuri). Live classes by NIT/IIT/SPA alumni, daily drawing practice, 99.9% success rate.`;
   return {
     title,
@@ -23,7 +23,7 @@ export async function generateMetadata({
       'NATA online coaching Salem, NATA coaching online Salem, NATA classes Salem, NATA coaching Erode, NATA coaching Namakkal, NATA preparation western Tamil Nadu',
     alternates: buildAlternates(locale, `/nata-coaching/${city.slug}`),
     openGraph: {
-      title: `NATA Online Coaching in ${city.displayName} | Neram Classes`,
+      title: `NATA Online Coaching in ${city.displayName}`,
       description,
       type: 'website',
       url: `${BASE_URL}/nata-coaching/${city.slug}`,

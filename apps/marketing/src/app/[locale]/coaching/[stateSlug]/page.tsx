@@ -35,6 +35,8 @@ import {
   generateCourseSchema,
 } from '@/lib/seo/schemas';
 import { buildOgImage } from '@/lib/seo/metadata';
+import { notFound } from 'next/navigation';
+import { parseStateCoachingSlug, stateCoachingPath, stateCoachingSegment } from '@/lib/seo/state-coaching-slug';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -105,22 +107,35 @@ function toTitleCase(slug: string | undefined): string {
 
 // English only — state pages have no translations; generating locale variants
 // creates duplicate content and wastes crawl budget.
+// The segment is the whole public slug (nata-coaching-in-{state}); see
+// lib/seo/state-coaching-slug.ts for why the folder is not nata-coaching-in-[state].
 export function generateStaticParams() {
   const states = getIndianStates();
-  return states.map((state) => ({ locale: 'en', state: state.slug }));
+  return states.map((state) => ({ locale: 'en', stateSlug: stateCoachingSegment(state.slug) }));
+}
+
+// Anything else under /coaching/ that is not a known state hub is a 404, not a
+// blank indexable page.
+export const dynamicParams = false;
+
+function resolveState(stateSlug: string) {
+  const state = parseStateCoachingSlug(stateSlug);
+  const stateInfo = state ? getIndianStates().find((s) => s.slug === state) : undefined;
+  return state && stateInfo ? { state, stateInfo } : null;
 }
 
 export async function generateMetadata({
-  params: { locale, state },
+  params: { stateSlug },
 }: {
-  params: { locale: string; state: string };
+  params: { locale: string; stateSlug: string };
 }): Promise<Metadata> {
-  const states = getIndianStates();
-  const stateInfo = states.find((s) => s.slug === state);
-  const stateDisplay = stateInfo?.display || toTitleCase(state);
-  const pagePath = `/coaching/nata-coaching-in-${state}`;
+  const resolved = resolveState(stateSlug);
+  if (!resolved) return {};
+  const { state, stateInfo } = resolved;
+  const stateDisplay = stateInfo.display || toTitleCase(state);
+  const pagePath = stateCoachingPath(state);
 
-  const title = `Best NATA Coaching in ${stateDisplay} 2026 - Online & Offline Classes | Neram Classes`;
+  const title = `Best NATA Coaching in ${stateDisplay} 2026 - Online & Offline Classes`;
   const description = `Join the #1 rated NATA coaching in ${stateDisplay}. Expert IIT/NIT faculty, online & offline classes, 99.9% success rate, free AI study app. Enroll for NATA 2026 preparation with Neram Classes.`;
 
   return {
@@ -162,16 +177,16 @@ export async function generateMetadata({
 // ─── Page Component ──────────────────────────────────────────────────────────
 
 interface PageProps {
-  params: { locale: string; state: string };
+  params: { locale: string; stateSlug: string };
 }
 
-export default function NataCoachingStatePage({ params: { locale, state } }: PageProps) {
+export default function NataCoachingStatePage({ params: { locale, stateSlug } }: PageProps) {
   setRequestLocale(locale);
 
-  // Get state data
-  const states = getIndianStates();
-  const stateInfo = states.find((s) => s.slug === state);
-  const stateDisplay = stateInfo?.display || toTitleCase(state);
+  const resolved = resolveState(stateSlug);
+  if (!resolved) notFound();
+  const { state, stateInfo } = resolved;
+  const stateDisplay = stateInfo.display || toTitleCase(state);
   const stateLocations = getLocationsByState(state);
   const cityNames = stateLocations.map((l) => l.cityDisplay);
   const cityCount = stateLocations.length;
@@ -182,7 +197,7 @@ export default function NataCoachingStatePage({ params: { locale, state } }: Pag
   // Get state-specific SEO content (may be undefined)
   const stateSeo = getStateSeoContent(state);
   const faqs = stateSeo?.faqs || genericFaqs;
-  const pagePath = `/coaching/nata-coaching-in-${state}`;
+  const pagePath = stateCoachingPath(state);
 
   return (
     <>
@@ -192,7 +207,7 @@ export default function NataCoachingStatePage({ params: { locale, state } }: Pag
         data={generateBreadcrumbSchema([
           { name: 'Home', url: BASE_URL },
           { name: 'Coaching', url: `${BASE_URL}/coaching` },
-          { name: 'NATA Coaching', url: `${BASE_URL}/coaching/best-nata-coaching-india` },
+          { name: 'NATA Coaching', url: `${BASE_URL}/nata-online-coaching` },
           { name: `NATA Coaching in ${stateDisplay}` },
         ])}
       />
@@ -904,14 +919,14 @@ export default function NataCoachingStatePage({ params: { locale, state } }: Pag
             <Grid container spacing={2}>
               {[
                 {
-                  label: 'Best NATA Coaching in India',
-                  href: '/coaching/best-nata-coaching-india',
-                  desc: 'Compare coaching centers nationwide',
+                  label: 'Online NATA Coaching',
+                  href: '/nata-online-coaching',
+                  desc: 'Learn from anywhere in India',
                 },
                 {
-                  label: 'Online NATA Coaching',
-                  href: '/best-nata-coaching-online',
-                  desc: 'Learn from anywhere in India',
+                  label: 'NATA Coaching Fees',
+                  href: '/fees',
+                  desc: 'Course plans, EMI and scholarships',
                 },
                 {
                   label: 'NATA 2026 Complete Guide',

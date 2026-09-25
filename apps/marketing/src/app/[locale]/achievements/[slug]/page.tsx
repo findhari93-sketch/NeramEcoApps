@@ -37,7 +37,7 @@ export async function generateMetadata({ params: { locale, slug } }: PageProps):
 
   if (!result) {
     return {
-      title: 'Result Not Found | Neram Classes',
+      title: 'Result Not Found',
       description: 'The student result you are looking for could not be found.',
     };
   }

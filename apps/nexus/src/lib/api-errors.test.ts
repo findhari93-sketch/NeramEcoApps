@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ApiError, httpStatusForError, errorResponse, describeError } from './api-errors';
+import { ApiError, httpStatusForError, errorResponse, describeError, throwIfReadFailed } from './api-errors';
 
 /**
  * This helper decides what a client is told when a route throws, and it is on the
@@ -145,5 +145,37 @@ describe('errorResponse', () => {
     const res = errorResponse(null, 'Failed to load the roster');
     expect(res.status).toBe(500);
     expect(await res.json()).toEqual({ error: 'Failed to load the roster' });
+  });
+});
+
+/**
+ * `.single()` leaves `data` null both when no row matched and when the read
+ * failed, so a route that reads only `data` answers "not found" for a timeout.
+ * On 2026-09-24 the catch-up drawer got a 404 "Class not found in this
+ * classroom" for a class that existed in that classroom.
+ */
+describe('a failed read is not a missing row', () => {
+  it('lets PGRST116 (no row) through, so the caller can answer 404', () => {
+    expect(() => throwIfReadFailed({ code: 'PGRST116', message: 'no rows' }, 'the class')).not.toThrow();
+    expect(() => throwIfReadFailed(null, 'the class')).not.toThrow();
+  });
+
+  it('turns any other error into a 503 that names what could not be read', () => {
+    const err = (() => {
+      try {
+        throwIfReadFailed({ code: '57014', message: 'canceling statement due to statement timeout' }, 'the class');
+      } catch (e) {
+        return e;
+      }
+    })();
+    expect(err).toBeInstanceOf(ApiError);
+    expect(httpStatusForError(err)).toBe(503);
+    expect((err as Error).message).toBe('Could not load the class');
+  });
+
+  it('treats a dropped connection with no code as a failure too', () => {
+    expect(() => throwIfReadFailed({ message: 'TypeError: fetch failed' }, 'the signed-in user')).toThrow(
+      'Could not load the signed-in user',
+    );
   });
 });

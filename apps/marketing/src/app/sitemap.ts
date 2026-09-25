@@ -4,6 +4,7 @@ import { getAllCenterSeoSlugs } from '@neram/database/queries';
 import { getSitemapLocations, getIndianStates } from '@neram/database';
 import { getAllCollegeSlugs, getActiveStates, getNIRFRankedCollegeSlugs } from '@/lib/college-hub/queries';
 import { ROUTED_HUB_SLUGS } from '@/data/counselling-2026';
+import { coursesData } from '@/data/courses';
 
 const baseUrl = 'https://neramclasses.com';
 
@@ -25,10 +26,13 @@ const staticPages: Array<{ path: string; lastModified: string; i18n?: boolean }>
   { path: '/fees', lastModified: '2026-03-01', i18n: true },
   { path: '/demo-class', lastModified: '2026-03-05', i18n: true },
   { path: '/centers', lastModified: '2026-02-25', i18n: true },
-  // College Hub (i18n: true — hreflang for all 5 locales)
-  { path: '/colleges', lastModified: '2026-04-12', i18n: true },
-  { path: '/colleges/tnea', lastModified: '2026-04-12', i18n: true },
-  { path: '/colleges/josaa', lastModified: '2026-04-12', i18n: true },
+  { path: '/testimonials', lastModified: '2026-09-24' },
+  { path: '/achievements', lastModified: '2026-09-24' },
+  // College Hub: English only. next.config.js sends noindex on /(ta|hi|kn|ml)/colleges/*,
+  // so listing those variants only fed Google URLs it was told not to index.
+  { path: '/colleges', lastModified: '2026-04-12' },
+  { path: '/colleges/tnea', lastModified: '2026-04-12' },
+  { path: '/colleges/josaa', lastModified: '2026-04-12' },
   { path: '/nata-hub', lastModified: '2026-04-13', i18n: true },
   { path: '/jee-barch-hub', lastModified: '2026-04-13', i18n: true },
   // Exam Hub: AAT 2026 + PGETA 2026 (architecture entrance hubs, all-locale)
@@ -50,8 +54,8 @@ const staticPages: Array<{ path: string; lastModified: string; i18n?: boolean }>
   { path: '/pgeta-2026/participating-institutes', lastModified: '2026-05-01', i18n: true },
   { path: '/pgeta-2026/preparation', lastModified: '2026-05-01', i18n: true },
   { path: '/pgeta-2026/score-validity', lastModified: '2026-05-01', i18n: true },
-  { path: '/colleges/rankings/nirf', lastModified: '2026-04-13', i18n: true },
-  { path: '/colleges/rankings/archindex', lastModified: '2026-04-13', i18n: true },
+  { path: '/colleges/rankings/nirf', lastModified: '2026-04-13' },
+  { path: '/colleges/rankings/archindex', lastModified: '2026-04-13' },
   { path: '/scholarship', lastModified: '2026-02-01', i18n: true },
   { path: '/youtube-reward', lastModified: '2026-01-10', i18n: true },
   { path: '/free-resources', lastModified: '2026-02-15', i18n: true },
@@ -156,17 +160,9 @@ const staticPages: Array<{ path: string; lastModified: string; i18n?: boolean }>
   { path: '/counseling/keam-arch/faq', lastModified: '2026-05-08' },
 ];
 
-// Course slugs
-const courseSlugs = [
-  'neet-preparation',
-  'jee-main-advanced',
-  'foundation-course',
-  'board-exam-preparation',
-  'nda-preparation',
-  'ca-foundation',
-  'nata-coaching-online',
-  'jee-paper-2-coaching',
-];
+// Course slugs come from the same data the /courses/[slug] route renders, so the
+// sitemap can never list a course page that 404s (it used to list 8 retired slugs).
+const courseSlugs = Object.keys(coursesData);
 
 // Blog post slugs (static until database integration)
 const blogSlugs = [
@@ -261,22 +257,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     });
   }
 
-  // Course pages: all locales (course pages use translations)
-  for (const locale of locales) {
-    for (const slug of courseSlugs) {
-      const path = `/courses/${slug}`;
-      entries.push({
-        url: localeUrl(locale, path),
-        lastModified: new Date('2026-03-01'),
-        changeFrequency: 'weekly',
-        priority: 0.8,
-        alternates: {
-          languages: Object.fromEntries(
-            locales.map((l) => [l, localeUrl(l, path)])
-          ),
-        },
-      });
-    }
+  // Course pages: English only (course content in data/courses.ts is English)
+  for (const slug of courseSlugs) {
+    entries.push({
+      url: `${baseUrl}/courses/${slug}`,
+      lastModified: new Date('2026-03-01'),
+      changeFrequency: 'weekly',
+      priority: 0.8,
+    });
   }
 
   // Blog posts: English only (blog content is hardcoded English)
@@ -337,17 +325,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const activeStates = await getActiveStates();
     for (const { state_slug } of activeStates) {
       const statePath = `/colleges/${state_slug}`;
-      for (const locale of locales) {
-        entries.push({
-          url: localeUrl(locale, statePath),
-          lastModified: new Date('2026-04-12'),
-          changeFrequency: 'weekly' as const,
-          priority: 0.85,
-          alternates: {
-            languages: Object.fromEntries(locales.map((l) => [l, localeUrl(l, statePath)])),
-          },
-        });
-      }
+      // English only: non-English /colleges/* variants are noindexed in next.config.js.
+      entries.push({
+        url: `${baseUrl}${statePath}`,
+        lastModified: new Date('2026-04-12'),
+        changeFrequency: 'weekly' as const,
+        priority: 0.85,
+      });
     }
   } catch (err) {
     console.error('Failed to fetch college state slugs for sitemap:', err);
@@ -358,17 +342,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const collegeSlugs = await getAllCollegeSlugs();
     for (const { state, slug } of collegeSlugs) {
       const collegePath = `/colleges/${state}/${slug}`;
-      for (const locale of locales) {
-        entries.push({
-          url: localeUrl(locale, collegePath),
-          lastModified: new Date('2026-04-12'),
-          changeFrequency: 'weekly' as const,
-          priority: 0.8,
-          alternates: {
-            languages: Object.fromEntries(locales.map((l) => [l, localeUrl(l, collegePath)])),
-          },
-        });
-      }
+      // English only: non-English /colleges/* variants are noindexed in next.config.js.
+      entries.push({
+        url: `${baseUrl}${collegePath}`,
+        lastModified: new Date('2026-04-12'),
+        changeFrequency: 'weekly' as const,
+        priority: 0.8,
+      });
     }
   } catch (err) {
     console.error('Failed to fetch college slugs for sitemap:', err);
@@ -379,17 +359,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     const nirfSlugs = await getNIRFRankedCollegeSlugs();
     for (const slug of nirfSlugs) {
       const path = `/colleges/rankings/nirf/${slug}`;
-      for (const locale of locales) {
-        entries.push({
-          url: localeUrl(locale, path),
-          lastModified: new Date('2026-05-20'),
-          changeFrequency: 'monthly' as const,
-          priority: 0.7,
-          alternates: {
-            languages: Object.fromEntries(locales.map((l) => [l, localeUrl(l, path)])),
-          },
-        });
-      }
+      // English only: non-English /colleges/* variants are noindexed in next.config.js.
+      entries.push({
+        url: `${baseUrl}${path}`,
+        lastModified: new Date('2026-05-20'),
+        changeFrequency: 'monthly' as const,
+        priority: 0.7,
+      });
     }
   } catch (err) {
     console.error('Failed to fetch NIRF college slugs for sitemap:', err);

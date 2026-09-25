@@ -14,7 +14,7 @@ export async function generateMetadata({
 }: {
   params: { locale: string };
 }): Promise<Metadata> {
-  const title = `NATA Online Coaching in Mumbai 2026 | Sir JJ College Prep | Neram Classes`;
+  const title = `NATA Online Coaching in Mumbai 2026 | Sir JJ College Prep`;
   const description = `NATA online coaching for Mumbai and MMR students aiming at Sir JJ College of Architecture, KRVIA, Rachana Sansad, and Rizvi. Live classes by NIT/IIT/SPA alumni faculty.`;
   return {
     title,
@@ -23,7 +23,7 @@ export async function generateMetadata({
       'NATA online coaching Mumbai, NATA coaching online Mumbai, NATA classes Mumbai, JJ College architecture coaching, KRVIA coaching, NATA coaching Andheri, NATA coaching Powai, NATA coaching Thane, NATA coaching Navi Mumbai, NATA preparation Mumbai',
     alternates: buildAlternates(locale, `/nata-coaching/${city.slug}`),
     openGraph: {
-      title: `NATA Online Coaching in ${city.displayName} | Neram Classes`,
+      title: `NATA Online Coaching in ${city.displayName}`,
       description,
       type: 'website',
       url: `${BASE_URL}/nata-coaching/${city.slug}`,

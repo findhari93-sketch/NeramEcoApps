@@ -36,7 +36,7 @@ export async function generateMetadata({
 }: {
   params: { locale: string };
 }): Promise<Metadata> {
-  const title = 'NATA Cutoff Trends 2015 to 2025: Year-Wise Analysis | Neram Classes';
+  const title = 'NATA Cutoff Trends 2015 to 2025: Year-Wise Analysis';
   const description =
     'A 10-year NATA cutoff trend analysis covering top architecture colleges in India. Year-wise qualifying scores, college-level cutoff patterns, and what they mean for NATA 2026 aspirants.';
   return {
