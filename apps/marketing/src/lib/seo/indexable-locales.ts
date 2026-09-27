@@ -31,7 +31,9 @@ export const ENGLISH_ONLY_SECTIONS = [
  * or indexed), even though next.config.js has no header rule for them: the
  * coaching city, state and Chennai pages noindex themselves outside English.
  */
-const SELF_NOINDEXED_SECTIONS = ['coaching'];
+// The review and story pages render translated chrome in every locale, but the
+// reviews themselves are mostly English, so only the English copy is indexed.
+const SELF_NOINDEXED_SECTIONS = ['coaching', 'reviews', 'learner-stories'];
 
 /** Sections with real translations in only some locales. */
 const PARTIAL_TRANSLATIONS: Record<string, readonly string[]> = {

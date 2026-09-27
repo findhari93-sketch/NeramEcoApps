@@ -7,7 +7,18 @@ import type {
   PipelineStage,
   LifecycleStatus,
   CandidateSegment,
+  LifecycleStage,
+  EngagementState,
 } from '@neram/database';
+
+const LIFECYCLE_STAGES = ['prospect', 'lead', 'applicant', 'enrolled', 'active_student', 'paused', 'alumni', 'archived'];
+const ENGAGEMENT_STATES = ['new', 'engaged', 'low', 'inactive', 'dormant'];
+const IDENTITIES = ['firebase', 'microsoft', 'all'];
+
+/** Only known values reach the query; anything else is ignored. */
+function oneOf<T extends string>(value: string | null, allowed: string[]): T | undefined {
+  return value && allowed.includes(value) ? (value as T) : undefined;
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -54,6 +65,11 @@ export async function GET(request: NextRequest) {
       candidateSegment,
       dateFrom: searchParams.get('date_from') || undefined,
       dateTo: searchParams.get('date_to') || undefined,
+      // Lifecycle dimensions (user_lifecycle_view). ?identity=microsoft lists the
+      // Microsoft-only students the Firebase-only CRM view never showed.
+      lifecycleStage: oneOf<LifecycleStage>(searchParams.get('lifecycle_stage'), LIFECYCLE_STAGES),
+      engagement: oneOf<EngagementState>(searchParams.get('engagement'), ENGAGEMENT_STATES),
+      identity: oneOf<'firebase' | 'microsoft' | 'all'>(searchParams.get('identity'), IDENTITIES),
       limit: parseInt(searchParams.get('limit') || '25', 10),
       offset: parseInt(searchParams.get('offset') || '0', 10),
       orderBy: searchParams.get('order_by') || 'created_at',

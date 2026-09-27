@@ -35,6 +35,7 @@ import MyLocationIcon from '@mui/icons-material/MyLocation';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import { AuthGate } from '@/components/AuthGate';
+import { useToolOpened } from '@/hooks/useToolOpened';
 
 interface NataExamCenter {
   id: string;
@@ -288,6 +289,7 @@ function CenterCard({
 }
 
 export default function ExamCentersPage() {
+  useToolOpened('exam_center_locator');
   const { user } = useFirebaseAuth();
   const [selectedState, setSelectedState] = useState('');
   const [selectedCity, setSelectedCity] = useState('');

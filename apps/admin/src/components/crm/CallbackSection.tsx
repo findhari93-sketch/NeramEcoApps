@@ -47,7 +47,7 @@ const OUTCOME_CONFIG: Record<CallbackOutcome, { color: string; bgColor: string; 
 };
 
 function formatDateTime(dateStr: string | null): string {
-  if (!dateStr) return '--';
+  if (!dateStr) return 'Not set';
   return new Date(dateStr).toLocaleString('en-IN', {
     day: '2-digit',
     month: 'short',

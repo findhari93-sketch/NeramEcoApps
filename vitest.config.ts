@@ -12,6 +12,7 @@ export default defineConfig({
       'apps/**/*.test.{ts,tsx}',
       'packages/**/*.test.{ts,tsx}',
       'tests/**/*.test.{ts,tsx}',
+      'scripts/**/*.test.{ts,mjs}',
     ],
     exclude: [
       '**/node_modules/**',

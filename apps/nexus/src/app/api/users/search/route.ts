@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     const { data: localUsers, error } = await supabase
       .from('users')
       .select('id, name, email, avatar_url, ms_oid, user_type')
-      .eq('status', 'active')
+      .eq('is_disabled', false)
       .not('ms_oid', 'is', null)
       .or(`name.ilike.%${safe}%,email.ilike.%${safe}%`)
       .order('name')

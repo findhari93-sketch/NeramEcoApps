@@ -39,7 +39,7 @@ function formatCurrency(amount: number): string {
 }
 
 function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '--';
+  if (!dateStr) return 'Not set';
   return new Date(dateStr).toLocaleDateString('en-IN', {
     day: '2-digit',
     month: 'short',
@@ -257,7 +257,7 @@ export default function RefundSection({ detail, adminId, onStatusChange }: Refun
                           )}
                           {rr.status !== 'pending' && (
                             <Typography variant="caption" color="text.secondary" sx={{ fontSize: 11 }}>
-                              {rr.reviewed_at ? formatDate(rr.reviewed_at) : '--'}
+                              {rr.reviewed_at ? formatDate(rr.reviewed_at) : 'Not set'}
                             </Typography>
                           )}
                         </TableCell>
@@ -366,7 +366,7 @@ export default function RefundSection({ detail, adminId, onStatusChange }: Refun
 
               {actionType === 'reject' && (
                 <Alert severity="info" sx={{ mb: 2, fontSize: 12 }}>
-                  The student will be notified with your reason for rejection. This cannot be undone — the student cannot re-request a refund for this payment.
+                  The student will be notified with your reason for rejection. This cannot be undone. The student cannot re-request a refund for this payment.
                 </Alert>
               )}
 

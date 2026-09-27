@@ -22,6 +22,7 @@ import PhoneIcon from '@mui/icons-material/Phone';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import { trackTaxonomyEvent } from '@/lib/funnel-tracker';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
 
@@ -173,6 +174,7 @@ export default function ApplyCallbackContent() {
       }
 
       setSuccess(true);
+      trackTaxonomyEvent('callback_requested', { source: 'apply_callback_page' });
     } catch (err) {
       console.error('Callback request error:', err);
       setError(t('errorGeneric'));

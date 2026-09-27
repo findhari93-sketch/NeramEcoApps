@@ -27,7 +27,17 @@ import type {
 export interface CreateApplicationInput {
   user_id: string;
   // Personal info
+  first_name?: string;
   father_name?: string;
+  email?: string;
+  phone?: string;
+  parent_phone?: string;
+  /** ISO date, YYYY-MM-DD */
+  date_of_birth?: string;
+  gender?: 'male' | 'female' | 'other';
+  // Fee (self-service): the programme the applicant picked, and where the fee came from
+  fee_structure_id?: string;
+  fee_source?: 'standard' | 'admin' | 'link';
   // Location
   country?: string;
   city?: string;

@@ -55,6 +55,10 @@ import WorkSection from '@/components/students/profile/WorkSection';
 import SketchbookSection from '@/components/sketchbook/SketchbookSection';
 import FeeSection from '@/components/students/profile/FeeSection';
 import TimelineSection from '@/components/students/profile/TimelineSection';
+import AllActivitySection from '@/components/students/profile/AllActivitySection';
+import LifecycleFactsCard from '@/components/students/profile/LifecycleFactsCard';
+import { adminDuplicatesUrl } from '@/lib/admin-links';
+import type { StudentLifecyclePayload } from '@/lib/lifecycle-display';
 import { formatCurrencyINR } from '@/lib/student-profile-fields';
 import { describeClassificationChange } from '@/lib/student-stage';
 import { useRefreshStudentStageFacts } from '@/lib/stage-facts-cache';
@@ -85,6 +89,9 @@ export default function StudentProfilePage() {
 
   const [performance, setPerformance] = useState<StudentPerformancePayload | null>(null);
   const [perfState, setPerfState] = useState<FetchState>({ loading: false, error: null });
+
+  const [lifecycle, setLifecycle] = useState<StudentLifecyclePayload | null>(null);
+  const [lifecycleState, setLifecycleState] = useState<FetchState>({ loading: false, error: null });
 
   const [drawer, setDrawer] = useState<ClassifyMode | null>(null);
   // Set by the language chip, so the sheet opens scrolled to Language.
@@ -166,6 +173,7 @@ export default function StudentProfilePage() {
   // they must produce exactly one request between them.
   const perfRequested = useRef(false);
   const financeRequested = useRef(false);
+  const lifecycleRequested = useRef(false);
 
   // ── Lazy loaders, fired by a section becoming visible ─────────────────────
   const loadPerformance = useCallback(async () => {
@@ -216,6 +224,36 @@ export default function StudentProfilePage() {
       });
     }
   }, [canSeeFinance, activeClassroom, studentId, getToken]);
+
+  // Lifecycle facts (stage, engagement, last active, duplicates) from the shared
+  // User 360 model. Its own request, so a slow lifecycle read never holds up the
+  // phone number and the sections below.
+  const loadLifecycle = useCallback(async () => {
+    if (!activeClassroom || lifecycleRequested.current) return;
+    lifecycleRequested.current = true;
+    setLifecycleState({ loading: true, error: null });
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(
+        `/api/students/${studentId}/lifecycle?classroom=${activeClassroom.id}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!res.ok) throw new Error('Could not load where this student is.');
+      setLifecycle(await res.json());
+      setLifecycleState({ loading: false, error: null });
+    } catch (err) {
+      lifecycleRequested.current = false;
+      setLifecycleState({
+        loading: false,
+        error: err instanceof Error ? err.message : 'Could not load where this student is.',
+      });
+    }
+  }, [activeClassroom, studentId, getToken]);
+
+  useEffect(() => {
+    if (core) void loadLifecycle();
+  }, [core, loadLifecycle]);
 
   // The fee section is only ever mounted for a capable caller, so fetch as soon
   // as we know the caller is capable rather than waiting for an expand.
@@ -303,7 +341,8 @@ export default function StudentProfilePage() {
     ...(canSeeFinance ? [{ id: 'profile-fees', label: 'Fees and payments' }] : []),
     { id: 'profile-documents', label: 'Documents' },
     { id: 'profile-guardian', label: 'Parent and guardian' },
-    { id: 'profile-timeline', label: 'Activity' },
+    { id: 'profile-all-activity', label: 'All activity' },
+    { id: 'profile-timeline', label: 'Nexus history' },
   ];
 
   const header = (
@@ -344,8 +383,23 @@ export default function StudentProfilePage() {
     />
   );
 
+  const lifecycleCard = (
+    <LifecycleFactsCard
+      facts={lifecycle}
+      loading={lifecycleState.loading}
+      error={lifecycleState.error}
+      onRetry={() => void loadLifecycle()}
+      duplicatesHref={adminDuplicatesUrl(core.student.id, {
+        nexusOrigin: typeof window === 'undefined' ? null : window.location.origin,
+        configured: process.env.NEXT_PUBLIC_ADMIN_URL ?? null,
+      })}
+    />
+  );
+
   const sections = (
     <>
+      {isDesktop && lifecycleCard}
+
       {/* Performance is classroom-scoped while identity and fees are global.
           Saying so stops a teacher reading one classroom's attendance as the
           student's whole record. */}
@@ -431,6 +485,12 @@ export default function StudentProfilePage() {
         />
       </Box>
 
+      <AllActivitySection
+        studentId={core.student.id}
+        classroomId={activeClassroom?.id ?? null}
+        getToken={getToken}
+      />
+
       <TimelineSection events={timeline} />
     </>
   );
@@ -459,6 +519,7 @@ export default function StudentProfilePage() {
         <>
           {header}
           {standingCard}
+          {lifecycleCard}
           {sections}
         </>
       )}

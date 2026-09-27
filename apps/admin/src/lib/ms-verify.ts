@@ -30,6 +30,15 @@ export async function verifyMsToken(authHeader: string | null): Promise<MsUserIn
     throw new Error('Missing or invalid Authorization header');
   }
 
+  // E2E only, never in production: `test_<base64 email>`, the same token the
+  // Nexus test-login issues and middleware.ts accepts. It names an email; the
+  // caller still has to exist as a staff user for /api/auth/me to answer 200.
+  if (process.env.NODE_ENV !== 'production' && token.startsWith('test_')) {
+    const email = Buffer.from(token.slice('test_'.length), 'base64').toString('utf8');
+    if (!email.includes('@')) throw new Error('Malformed test token');
+    return { oid: `test-oid:${email.toLowerCase()}`, email, name: 'E2E Test User' };
+  }
+
   const response = await fetch('https://graph.microsoft.com/v1.0/me', {
     headers: { Authorization: `Bearer ${token}` },
   });

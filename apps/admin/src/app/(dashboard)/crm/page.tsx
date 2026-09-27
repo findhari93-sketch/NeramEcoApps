@@ -10,6 +10,9 @@ import {
   Tooltip,
   Paper,
   CircularProgress,
+  TextField,
+  MenuItem,
+  Button,
   useMediaQuery,
   useTheme,
 } from '@neram/ui';
@@ -19,15 +22,18 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import AddAPhotoIcon from '@mui/icons-material/AddAPhoto';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
+import FilterAltOffOutlinedIcon from '@mui/icons-material/FilterAltOffOutlined';
 import type {
   UserJourney,
   PipelineStageCounts,
   PipelineStage,
   ExamStatus,
   CandidateSegment,
+  LifecycleStage,
+  EngagementState,
 } from '@neram/database';
-import { PIPELINE_STAGE_CONFIG } from '@neram/database';
-import type { MRT_PaginationState, MRT_SortingState } from 'material-react-table';
+import { PIPELINE_STAGE_CONFIG, LIFECYCLE_STAGE_LABELS, ENGAGEMENT_LABELS } from '@neram/database';
+import type { MRT_PaginationState, MRT_SortingState, MRT_ColumnFiltersState } from 'material-react-table';
 import PipelineFunnel from '../../../components/crm/PipelineFunnel';
 import UsersTable from '../../../components/crm/UsersTable';
 import BulkDeleteDialog from '../../../components/crm/BulkDeleteDialog';
@@ -37,6 +43,34 @@ import { useAdminProfile } from '@/contexts/AdminProfileContext';
 import { useBatches } from '@/contexts/BatchContext';
 
 type LifecycleView = 'active' | 'archived' | 'candidates';
+type IdentityFilter = 'firebase' | 'microsoft' | 'all';
+
+const IDENTITY_OPTIONS: Array<{ value: IdentityFilter; label: string }> = [
+  { value: 'firebase', label: 'Google sign-in' },
+  { value: 'microsoft', label: 'Microsoft only' },
+  { value: 'all', label: 'Everyone' },
+];
+const LIFECYCLE_STAGE_KEYS = Object.keys(LIFECYCLE_STAGE_LABELS) as LifecycleStage[];
+const ENGAGEMENT_KEYS = Object.keys(ENGAGEMENT_LABELS) as EngagementState[];
+
+/** Column filters the API supports: column id to query param. */
+const COLUMN_FILTER_PARAMS: Record<string, string> = {
+  application_status: 'application_status',
+  interest_course: 'interest_course',
+};
+
+function readParam<T extends string>(value: string | null, allowed: readonly T[]): T | '' {
+  return value && (allowed as readonly string[]).includes(value) ? (value as T) : '';
+}
+
+/** Put one query param in the address bar without a navigation. */
+function replaceUrlParam(key: string, value: string | null) {
+  const params = new URLSearchParams(window.location.search);
+  if (value) params.set(key, value);
+  else params.delete(key);
+  const qs = params.toString();
+  window.history.replaceState(null, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
+}
 
 export default function CRMPage() {
   const router = useRouter();
@@ -81,6 +115,24 @@ export default function CRMPage() {
   ]);
   const [globalFilter, setGlobalFilter] = useState('');
 
+  // Lifecycle dimensions (user_lifecycle_view). Default identity = Google
+  // sign-in, which is the list as it always was.
+  const [identity, setIdentity] = useState<IdentityFilter>(
+    readParam(searchParams.get('identity'), ['firebase', 'microsoft', 'all'] as const) || 'firebase'
+  );
+  const [lifecycleStage, setLifecycleStage] = useState<LifecycleStage | ''>(
+    readParam(searchParams.get('lifecycle_stage'), LIFECYCLE_STAGE_KEYS)
+  );
+  const [engagement, setEngagement] = useState<EngagementState | ''>(
+    readParam(searchParams.get('engagement'), ENGAGEMENT_KEYS)
+  );
+  const [columnFilters, setColumnFilters] = useState<MRT_ColumnFiltersState>(() =>
+    Object.keys(COLUMN_FILTER_PARAMS)
+      .map((id) => ({ id, value: searchParams.get(COLUMN_FILTER_PARAMS[id]) }))
+      .filter((f) => !!f.value) as MRT_ColumnFiltersState
+  );
+  const showLifecycleColumns = identity !== 'firebase' || !!lifecycleStage || !!engagement;
+
   // Delete dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [usersToDelete, setUsersToDelete] = useState<UserJourney[]>([]);
@@ -118,6 +170,14 @@ export default function CRMPage() {
         params.set('batch', selectedBatch);
       }
 
+      if (identity !== 'firebase') params.set('identity', identity);
+      if (lifecycleStage) params.set('lifecycle_stage', lifecycleStage);
+      if (engagement) params.set('engagement', engagement);
+      for (const f of columnFilters) {
+        const param = COLUMN_FILTER_PARAMS[f.id];
+        if (param && typeof f.value === 'string' && f.value) params.set(param, f.value);
+      }
+
       if (sorting.length > 0) {
         params.set('order_by', sorting[0].id);
         params.set('order_dir', sorting[0].desc ? 'desc' : 'asc');
@@ -135,7 +195,7 @@ export default function CRMPage() {
     } finally {
       setLoading(false);
     }
-  }, [pagination, sorting, activeStage, globalFilter, showDeadLeads, showIrrelevant, lifecycleView, candidateSegment, selectedBatch]);
+  }, [pagination, sorting, activeStage, globalFilter, showDeadLeads, showIrrelevant, lifecycleView, candidateSegment, selectedBatch, identity, lifecycleStage, engagement, columnFilters]);
 
   useEffect(() => {
     fetchUsers();
@@ -196,6 +256,43 @@ export default function CRMPage() {
     }
     const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
     window.history.replaceState(null, '', newUrl);
+  };
+
+  const resetToFirstPage = () => setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+
+  const handleIdentityChange = (value: IdentityFilter) => {
+    setIdentity(value);
+    resetToFirstPage();
+    replaceUrlParam('identity', value === 'firebase' ? null : value);
+  };
+
+  const handleLifecycleStageChange = (value: LifecycleStage | '') => {
+    setLifecycleStage(value);
+    resetToFirstPage();
+    replaceUrlParam('lifecycle_stage', value || null);
+  };
+
+  const handleEngagementChange = (value: EngagementState | '') => {
+    setEngagement(value);
+    resetToFirstPage();
+    replaceUrlParam('engagement', value || null);
+  };
+
+  const handleColumnFiltersChange = (filters: MRT_ColumnFiltersState) => {
+    setColumnFilters(filters);
+    resetToFirstPage();
+    for (const [id, param] of Object.entries(COLUMN_FILTER_PARAMS)) {
+      const f = filters.find((x) => x.id === id);
+      replaceUrlParam(param, f && typeof f.value === 'string' && f.value ? f.value : null);
+    }
+  };
+
+  const filtersActive = identity !== 'firebase' || !!lifecycleStage || !!engagement || columnFilters.length > 0;
+  const clearFilters = () => {
+    handleIdentityChange('firebase');
+    handleLifecycleStageChange('');
+    handleEngagementChange('');
+    handleColumnFiltersChange([]);
   };
 
   const handleRowClick = (userId: string) => {
@@ -613,6 +710,83 @@ export default function CRMPage() {
         </Box>
       </Box>
 
+      {/* Lifecycle filters: who (sign-in), where (stage), how active */}
+      <Box
+        role="group"
+        aria-label="Filter users"
+        sx={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 1,
+          alignItems: 'center',
+          mb: { xs: 1.5, md: 2 },
+          '& .MuiInputBase-root': { minHeight: 44 },
+        }}
+      >
+        <TextField
+          select
+          size="small"
+          label="Sign-in"
+          value={identity}
+          onChange={(e) => handleIdentityChange(e.target.value as IdentityFilter)}
+          fullWidth={false}
+          SelectProps={{ displayEmpty: true }}
+          InputLabelProps={{ shrink: true }}
+          sx={{ width: { xs: 'calc(50% - 4px)', sm: 180 } }}
+        >
+          {IDENTITY_OPTIONS.map((o) => (
+            <MenuItem key={o.value} value={o.value}>
+              {o.label}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Stage"
+          value={lifecycleStage}
+          onChange={(e) => handleLifecycleStageChange(e.target.value as LifecycleStage | '')}
+          fullWidth={false}
+          SelectProps={{ displayEmpty: true }}
+          InputLabelProps={{ shrink: true }}
+          sx={{ width: { xs: 'calc(50% - 4px)', sm: 180 } }}
+        >
+          <MenuItem value="">Any stage</MenuItem>
+          {LIFECYCLE_STAGE_KEYS.map((k) => (
+            <MenuItem key={k} value={k}>
+              {LIFECYCLE_STAGE_LABELS[k]}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Activity"
+          value={engagement}
+          onChange={(e) => handleEngagementChange(e.target.value as EngagementState | '')}
+          fullWidth={false}
+          SelectProps={{ displayEmpty: true }}
+          InputLabelProps={{ shrink: true }}
+          sx={{ width: { xs: 'calc(50% - 4px)', sm: 210 } }}
+        >
+          <MenuItem value="">Any activity</MenuItem>
+          {ENGAGEMENT_KEYS.map((k) => (
+            <MenuItem key={k} value={k}>
+              {ENGAGEMENT_LABELS[k]}
+            </MenuItem>
+          ))}
+        </TextField>
+        {filtersActive && (
+          <Button
+            onClick={clearFilters}
+            startIcon={<FilterAltOffOutlinedIcon />}
+            sx={{ minHeight: 44, textTransform: 'none', flex: { xs: '1 1 calc(50% - 4px)', sm: '0 0 auto' } }}
+          >
+            Clear filters
+          </Button>
+        )}
+      </Box>
+
       {/* Error */}
       {error && (
         <Alert severity="error" sx={{ mb: { xs: 1.5, md: 2 }, borderRadius: 1 }}>
@@ -702,6 +876,9 @@ export default function CRMPage() {
           onRestore={handleRestore}
           onVerifyStatus={handleVerifyRequest}
           isFullscreen={isFullscreen}
+          columnFilters={columnFilters}
+          onColumnFiltersChange={handleColumnFiltersChange}
+          showLifecycleColumns={showLifecycleColumns}
         />
       </Paper>
 

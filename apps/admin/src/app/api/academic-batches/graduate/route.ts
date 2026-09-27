@@ -5,6 +5,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getRequestAdminId } from '@/lib/request-admin';
 import { listStudentsByYear, graduateStudentsToAlumni, updateAcademicBatch } from '@neram/database';
 import { offboardMicrosoftAccounts } from '@/lib/ms-offboard';
 
@@ -23,8 +24,10 @@ const ACADEMIC_YEAR_REGEX = /^[0-9]{4}-[0-9]{2}$/;
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { code, adminId, offboardMicrosoft = false, reason } = body;
-
+    const { code, adminId: bodyAdminId, offboardMicrosoft = false, reason } = body;
+    // The verified caller from middleware.ts; the body value is only a fallback
+    // for ADMIN_API_AUTH_MODE=report and is never trusted when the header is set.
+    const adminId = getRequestAdminId(request) ?? bodyAdminId;
     if (!code || !ACADEMIC_YEAR_REGEX.test(code)) {
       return NextResponse.json({ error: 'code must be in YYYY-YY format, e.g. 2025-26.' }, { status: 400 });
     }

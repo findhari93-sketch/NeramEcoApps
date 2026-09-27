@@ -76,15 +76,37 @@ export async function listUserJourneys(
     candidateSegment,
     dateFrom,
     dateTo,
+    lifecycleStage,
+    engagement,
+    identity,
     limit = 25,
     offset = 0,
     orderBy = 'created_at',
     orderDirection = 'desc',
   } = options;
 
+  // user_journey_view is user_lifecycle_view limited to people with a Firebase
+  // sign-in (the Leads list). The wider view is read only when a caller asks for
+  // Microsoft-only people or one of the lifecycle dimensions, so the default
+  // list keeps working before the lifecycle migration reaches an environment.
+  const wantsLifecycleView = Boolean(lifecycleStage || engagement || (identity && identity !== 'firebase'));
   let query = supabase
-    .from('user_journey_view')
+    .from(wantsLifecycleView ? 'user_lifecycle_view' : 'user_journey_view')
     .select('*', { count: 'exact' });
+
+  if (identity === 'microsoft') {
+    query = query.eq('has_microsoft', true).eq('has_firebase', false);
+  } else if (identity === 'firebase' && wantsLifecycleView) {
+    query = query.eq('has_firebase', true);
+  }
+
+  if (lifecycleStage) {
+    query = query.eq('lifecycle_stage', lifecycleStage);
+  }
+
+  if (engagement) {
+    query = query.eq('engagement', engagement);
+  }
 
   // Apply filters
   if (pipelineStage) {
@@ -190,26 +212,9 @@ export async function listUserJourneys(
     throw error;
   }
 
-  // Enrich with is_disabled from the users table (not in view yet)
-  const rows = data || [];
-  let disableMap: Record<string, boolean> = {};
-  if (rows.length > 0) {
-    const ids = rows.map((r: any) => r.id).filter(Boolean);
-    const { data: disableData } = await supabase
-      .from('users')
-      .select('id, is_disabled')
-      .in('id', ids);
-    if (disableData) {
-      for (const u of disableData) {
-        disableMap[u.id] = (u as any).is_disabled ?? false;
-      }
-    }
-  }
-
-  const users = rows.map((r: any) => ({
-    ...r,
-    is_disabled: disableMap[r.id] ?? false,
-  })) as UserJourney[];
+  // is_disabled is a view column (since 20260622); the old per-page re-fetch
+  // from users was redundant.
+  const users = (data || []) as UserJourney[];
 
   return {
     users,
@@ -849,12 +854,27 @@ export async function adminBulkDeleteUsers(
 ): Promise<BulkDeleteResult> {
   const supabase = client || getSupabaseAdminClient();
 
+  // Keep a trace before the rows (and their user_profile_history) disappear.
+  // Best effort: the log must not block a delete staff asked for, but a failure
+  // is reported rather than silently dropped.
+  const { data: doomed } = await (supabase as any)
+    .from('users')
+    .select('id, name, email, phone, user_type, firebase_uid, ms_oid, created_at, academic_year')
+    .in('id', userIds);
+
   const { data, error } = await supabase.rpc('admin_bulk_delete_users', {
     user_ids: userIds,
     admin_id: adminId,
   });
 
   if (error) throw error;
+
+  if (doomed && doomed.length) {
+    const { error: logError } = await (supabase as any).from('user_deletion_log').insert(
+      doomed.map((u: any) => ({ user_id: u.id, snapshot: u, deleted_by: adminId || null })),
+    );
+    if (logError) console.warn('adminBulkDeleteUsers: deletion not logged:', logError.message);
+  }
 
   if (!data || data.length === 0) {
     throw new Error('Delete function returned no data');
@@ -1093,6 +1113,9 @@ export async function markUserAsDeadLead(
     })
     .eq('user_id', userId)
     .in('status', ['pending', 'scheduled', 'attempted']);
+
+  // Audit (lifecycle plan M5): this used to leave no history at all.
+  await recordUserHistory(supabase, userId, 'contacted_status', null, { value: 'dead_lead', reason }, adminId);
 }
 
 /**
@@ -1126,6 +1149,8 @@ export async function markUserAsIrrelevant(
     })
     .eq('user_id', userId)
     .in('status', ['pending', 'scheduled', 'attempted']);
+
+  await recordUserHistory(supabase, userId, 'contacted_status', null, { value: 'irrelevant', reason }, adminId);
 }
 
 // ============================================
@@ -1964,14 +1989,10 @@ export async function bulkSetAcademicYear(
  * actions call: it just retags users.student_program so the student appears on the
  * right list (/alumni vs /software).
  *
- * Moving to 'software' also tries to re-assert nexus_access_enabled = false so the
- * student is locked out of Nexus (they are already closed by the rebuild gate by
- * default; this guarantees it even if they had been admitted). That access flip is
- * best-effort: the nexus_access_enabled column ships with the separate "Nexus rebuild
- * gate" feature and may not exist in every environment yet, so a failure there must
- * not block the re-tag. Reversible: moving back to 'architecture' leaves the access
- * flag alone (architecture students are still admitted one-by-one via the existing
- * student-access tool).
+ * It does not change Nexus access. Access is classroom enrolment (see
+ * packages/database/src/queries/nexus/classrooms.ts); the old
+ * users.nexus_access_enabled flag this used to set was read by nothing
+ * (0 rows true on prod, 2026-09-25) and is no longer written.
  */
 export async function bulkSetStudentProgram(
   userIds: string[],
@@ -1993,18 +2014,6 @@ export async function bulkSetStudentProgram(
     .select('id');
 
   if (error) throw error;
-
-  // Software students stay out of Nexus during the rebuild. Best-effort: the column
-  // is owned by the separate rebuild-gate feature and may not be applied on this env.
-  if (program === 'software') {
-    const { error: accessError } = await supabase
-      .from('users')
-      .update({ nexus_access_enabled: false })
-      .in('id', userIds);
-    if (accessError) {
-      console.warn('bulkSetStudentProgram: could not set nexus_access_enabled (column may not exist yet):', accessError.message);
-    }
-  }
 
   for (const row of data || []) {
     await recordUserHistory(supabase, row.id, 'student_program', null, program, adminId);

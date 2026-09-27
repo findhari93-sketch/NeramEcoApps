@@ -230,6 +230,8 @@ export async function getLeadsWithoutFirstTouch(
       .from('users')
       .select('id, name, phone, email')
       .eq('user_type', 'lead')
+      // Legacy users.status. Kept deliberately: dropping it would start first-touch
+      // messages to 10 older 'pending' leads (2026-09-25). Decide that on purpose.
       .eq('status', 'active')
       .not('firebase_uid', 'is', null);
 

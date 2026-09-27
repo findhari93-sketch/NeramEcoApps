@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Box,
   Typography,
@@ -25,6 +25,10 @@ import AcademicDetailsStep from './components/AcademicDetailsStep';
 import CourseSelectionStep from './components/CourseSelectionStep';
 import ReviewStep from './components/ReviewStep';
 import ApplicationDashboard from './components/ApplicationDashboard';
+import { trackFunnelEvent, trackFunnelEventImmediate } from '@/lib/funnel-tracker';
+
+/** Statuses that mean the person already sent an application. */
+const SUBMITTED_STATUSES = ['submitted', 'under_review', 'approved', 'rejected', 'pending_verification', 'enrolled', 'partial_payment'];
 
 // ============================================
 // INNER FORM COMPONENT (uses context)
@@ -52,10 +56,22 @@ function ApplyFormContent() {
     showPhoneVerification,
     setShowPhoneVerification,
     onPhoneVerified,
+    existingApplications,
   } = useFormContext();
 
   const [showSuccess, setShowSuccess] = useState(false);
   const [chatComplete, setChatComplete] = useState(false);
+
+  // application_started: the first step is on screen for someone who has not
+  // yet sent an application. Sent once per visit.
+  const startedSent = useRef(false);
+  const readyForForm = !isAuthLoading && returningUserCheckComplete && !(isReturningUser && returnUserMode === 'dashboard');
+  const hasSubmitted = (existingApplications || []).some((a: any) => SUBMITTED_STATUSES.includes(a?.status));
+  useEffect(() => {
+    if (startedSent.current || !readyForForm || activeStep !== 0 || hasSubmitted) return;
+    startedSent.current = true;
+    trackFunnelEvent({ funnel: 'application', event: 'application_started', status: 'started', metadata: { has_draft: !!draftId } });
+  }, [readyForForm, activeStep, hasSubmitted, draftId]);
 
   // Loading state while checking returning user
   if (isAuthLoading || !returningUserCheckComplete) {
@@ -111,6 +127,14 @@ function ApplyFormContent() {
         const error = await response.json();
         throw new Error(error.message || 'Failed to submit application');
       }
+
+      const result = await response.json().catch(() => null);
+      trackFunnelEventImmediate({
+        funnel: 'application',
+        event: 'application_completed',
+        status: 'completed',
+        metadata: { application_id: result?.leadProfileId ?? null, course: formData.course.interestCourse ?? null },
+      });
 
       clearSavedForm();
       setShowSuccess(true);

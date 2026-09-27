@@ -3,6 +3,7 @@ import { getNexusSetting, getSupabaseAdminClient } from '@neram/database';
 import { assertCronRequest } from '@/lib/cron-auth';
 import { FEATURE_FLAGS_KEY, isFeatureEnabled, resolveFlags } from '@/lib/feature-flags';
 import { joinReminderDue, joinReminderMessage } from '@/lib/not-started';
+import { readNotStartedSchedule } from '@/lib/lifecycle-schedule';
 import { hasMicrosoftAccount } from '@/lib/microsoft-account';
 import { sendNudge } from '@/lib/nudge-delivery';
 import { shareBaseUrl } from '@/lib/class-share-links';
@@ -68,6 +69,9 @@ export async function GET(request: NextRequest) {
       .eq('dormant_source', 'auto');
     if (error) throw error;
 
+    // Reminder days come from Admin, Settings, Lifecycle rules (defaults 1, 3, 7).
+    const schedule = await readNotStartedSchedule(supabase);
+
     // One reminder per student even with two Not started enrolments: the newest wins.
     const now = Date.now();
     const byStudent = new Map<string, Candidate>();
@@ -80,7 +84,7 @@ export async function GET(request: NextRequest) {
         continue;
       }
       const sent = Number(row.join_reminders_sent) || 0;
-      const step = joinReminderDue(row.dormant_since, sent, now);
+      const step = joinReminderDue(row.dormant_since, sent, now, schedule.joinReminderDays);
       if (!step) continue;
       const existing = byStudent.get(row.user_id);
       if (existing && existing.enrolledAt >= row.enrolled_at) continue;

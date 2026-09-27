@@ -16,8 +16,7 @@ import {
   updateUser,
   getOrCreateUserFromFirebase,
   checkPhoneExists,
-  getSupabaseAdminClient,
-} from '@neram/database';
+  getSupabaseAdminClient, recordDuplicateCandidate } from '@neram/database';
 
 // Firebase Admin is initialized in _lib/auth.ts — ensure it's imported
 import '@/app/api/_lib/auth';
@@ -88,6 +87,14 @@ export async function POST(req: NextRequest) {
     // Check if this phone number is already used by a DIFFERENT user
     const existingPhoneUser = await checkPhoneExists(phoneNumber, user.id, adminClient);
     if (existingPhoneUser) {
+      // The caller just proved (OTP) that they own this phone, and another row
+      // holds it: almost always the same person with two accounts (phone-first
+      // apply form, then Google). Queue the pair for a human; never auto-merge.
+      await recordDuplicateCandidate(
+        { userA: user.id, userB: existingPhoneUser.id, reason: 'phone_otp_conflict', confidence: 'strong', detectedBy: 'signin' },
+        adminClient,
+      );
+
       return NextResponse.json(
         {
           error: 'PHONE_ALREADY_EXISTS',

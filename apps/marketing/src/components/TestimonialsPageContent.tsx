@@ -294,7 +294,12 @@ function StatBox({ value, label }: { value: string; label: string }) {
 
 // ─── Main Component ─────────────────────────────────────────────────────────
 
-export default function TestimonialsPageContent() {
+export default function TestimonialsPageContent({
+  averageRating = null,
+}: {
+  /** From published reviews (server helper); null hides the rating rather than guessing one. */
+  averageRating?: number | null;
+} = {}) {
   const t = useTranslations('testimonials');
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -512,17 +517,17 @@ export default function TestimonialsPageContent() {
                 maxWidth: 600,
               }}
             >
+              {/* Only numbers read from published reviews; nothing is shown as a guess. */}
               {stats ? (
                 <>
-                  <StatBox value={`${stats.total > 0 ? stats.total.toLocaleString() : '2500'}+`} label={t('students')} />
-                  <StatBox value={`${stats.citiesCount > 0 ? stats.citiesCount : '50'}+`} label={t('cities')} />
-                  <StatBox value={stats.avgRating > 0 ? `${stats.avgRating}` : '4.8'} label={t('avgRating')} />
+                  <StatBox value={stats.total.toLocaleString()} label={t('students')} />
+                  <StatBox value={String(stats.citiesCount)} label={t('cities')} />
+                  {averageRating != null && <StatBox value={averageRating.toFixed(1)} label={t('avgRating')} />}
                 </>
               ) : (
                 <>
-                  <StatBox value="2500+" label={t('students')} />
-                  <StatBox value="50+" label={t('cities')} />
-                  <StatBox value="4.8" label={t('avgRating')} />
+                  <Skeleton variant="rounded" width={88} height={52} sx={{ bgcolor: 'rgba(255,255,255,0.08)', m: 1 }} />
+                  <Skeleton variant="rounded" width={88} height={52} sx={{ bgcolor: 'rgba(255,255,255,0.08)', m: 1 }} />
                 </>
               )}
             </Box>

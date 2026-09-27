@@ -34,7 +34,7 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
         {label}
       </Typography>
       <Typography variant="body2" component="div" sx={{ flex: 1, fontSize: 13 }}>
-        {value || <span style={{ color: '#bdbdbd' }}>--</span>}
+        {value || <span style={{ color: '#757575' }}>Not set</span>}
       </Typography>
     </Box>
   );
@@ -173,7 +173,7 @@ export default function UserProfileSection({ detail }: UserProfileSectionProps) 
         <InfoRow label="Last Name" value={user.last_name} />
         <InfoRow label="Email" value={
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            {user.email || '--'}
+            {user.email || 'Not set'}
             {user.email_verified && (
               <Chip label="Verified" size="small" sx={{ height: 20, fontSize: 10, fontWeight: 600, bgcolor: '#4CAF5014', color: '#2E7D32', borderRadius: 1 }} />
             )}
@@ -181,7 +181,7 @@ export default function UserProfileSection({ detail }: UserProfileSectionProps) 
         } />
         <InfoRow label="Phone" value={
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-            <CopyablePhone phone={user.phone} mono fallback="--" />
+            <CopyablePhone phone={user.phone} mono fallback="Not set" />
             {user.phone_verified && (
               <Chip label="Verified" size="small" sx={{ height: 20, fontSize: 10, fontWeight: 600, bgcolor: '#4CAF5014', color: '#2E7D32', borderRadius: 1 }} />
             )}

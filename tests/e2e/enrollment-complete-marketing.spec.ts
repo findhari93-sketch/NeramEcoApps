@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { adminApiHeaders } from '../utils/admin-api';
 
 /**
  * Enrollment Complete API - Validation & Edge Case Tests
@@ -13,7 +14,8 @@ import { test, expect } from '@playwright/test';
 // Helper: create a test enrollment link via admin API and return { id, token }
 async function createTestLink(request: any): Promise<{ id: string; token: string }> {
   // Resolve admin user ID
-  const meRes = await request.get('http://localhost:3013/api/auth/me?msOid=5b3c917c-7d27-4bda-b009-26460aee806c', {
+  const meRes = await request.get('http://localhost:3013/api/auth/me', {
+      headers: adminApiHeaders(),
     failOnStatusCode: false,
   });
   if (meRes.status() !== 200) {
@@ -22,6 +24,7 @@ async function createTestLink(request: any): Promise<{ id: string; token: string
   const adminId = (await meRes.json()).user.id;
 
   const res = await request.post('http://localhost:3013/api/direct-enrollment', {
+      headers: adminApiHeaders(),
     data: {
       adminId,
       studentName: 'E2E Enroll Complete Test',
@@ -49,10 +52,12 @@ async function createTestLink(request: any): Promise<{ id: string; token: string
 // Helper: cleanup test link
 async function cleanupTestLink(request: any, linkId: string) {
   await request.patch(`http://localhost:3013/api/direct-enrollment/${linkId}`, {
+      headers: adminApiHeaders(),
     data: { status: 'cancelled' },
     failOnStatusCode: false,
   });
   await request.delete(`http://localhost:3013/api/direct-enrollment/${linkId}`, {
+      headers: adminApiHeaders(),
     failOnStatusCode: false,
   });
 }
@@ -170,6 +175,7 @@ test.describe('GET /api/enroll/validate - Edge Cases', () => {
 
     // Cancel the link via admin API
     await request.patch(`http://localhost:3013/api/direct-enrollment/${link.id}`, {
+      headers: adminApiHeaders(),
       data: { status: 'cancelled' },
     });
 

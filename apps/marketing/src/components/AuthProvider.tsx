@@ -4,6 +4,7 @@ import { ReactNode, useEffect, useState } from 'react';
 import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import type { AccountTier } from '@neram/database';
 import { AccountTierProvider } from '@/contexts/AccountTierContext';
+import { signupAttributionFields } from '@neram/database/analytics';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
 
@@ -25,7 +26,9 @@ export default function AuthProvider({ children }: { children: ReactNode }) {
         const res = await fetch(`${APP_URL}/api/auth/register-user`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ idToken }),
+          // Cross-origin: the app cannot see this site's cookies, so send the
+          // anonymous id and campaign touch with the sign-up.
+          body: JSON.stringify({ idToken, ...signupAttributionFields() }),
         });
         if (res.ok) {
           const data = await res.json();

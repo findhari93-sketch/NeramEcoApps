@@ -75,7 +75,8 @@ export async function GET(request: NextRequest) {
       }
 
       if (byEmail) {
-        if (!byEmail.ms_oid) {
+        // Never persist the synthetic id an off-production test token carries.
+        if (!byEmail.ms_oid && !caller.oid.startsWith('test-oid:')) {
           await (supabase as any)
             .from('users')
             .update({ ms_oid: caller.oid })

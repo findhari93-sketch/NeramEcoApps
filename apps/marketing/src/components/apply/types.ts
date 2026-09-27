@@ -32,7 +32,8 @@ export interface PersonalInfoData {
   phoneVerified: boolean;
   phoneVerifiedAt: string | null;
   dateOfBirth: string;
-  gender: 'male' | 'female' | 'other';
+  /** Optional. Empty string means not given. */
+  gender: 'male' | 'female' | 'other' | '';
 }
 
 /**
@@ -106,6 +107,10 @@ export interface CourseSelectionData {
   selectedCenterName: string | null;
   hybridLearningAccepted: boolean;
   learningMode: 'hybrid' | 'online_only';
+  /** The fee_structures row the applicant picked on "Your course". */
+  feeStructureId: string | null;
+  feeStructureLabel: string | null;
+  programType: 'year_long' | 'crash_course' | null;
 }
 
 /**
@@ -150,7 +155,7 @@ export const DEFAULT_FORM_DATA: ApplicationFormData = {
     phoneVerified: false,
     phoneVerifiedAt: null,
     dateOfBirth: '',
-    gender: 'male',
+    gender: '',
   },
   location: {
     country: 'IN',
@@ -181,6 +186,9 @@ export const DEFAULT_FORM_DATA: ApplicationFormData = {
     selectedCenterName: null,
     hybridLearningAccepted: false,
     learningMode: 'hybrid',
+    feeStructureId: null,
+    feeStructureLabel: null,
+    programType: null,
   },
   payment: {
     paymentDate: new Date().toISOString().split('T')[0],
@@ -204,14 +212,13 @@ export const DEFAULT_FORM_DATA: ApplicationFormData = {
 // FORM STEP TYPES
 // ============================================
 
+/** 0 About you, 1 Your course (with Your studies), 2 Review, 3 Pay and enrol. */
 export type FormStep = 0 | 1 | 2 | 3;
 
-export const STEP_LABELS = [
-  'Personal Information',
-  'Academic Details',
-  'Course Selection',
-  'Review & Submit',
-] as const;
+/** i18n keys under apply.steps.* , in step order. */
+export const STEP_KEYS = ['aboutYou', 'yourCourse', 'review', 'pay'] as const;
+export type StepKey = (typeof STEP_KEYS)[number];
+export const STEP_COUNT = STEP_KEYS.length;
 
 // ============================================
 // VALIDATION TYPES

@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { adminApiHeaders } from '../utils/admin-api';
 
 /**
  * Direct Enrollment → Student Directory - Cross-App Integration Tests
@@ -15,7 +16,8 @@ import { test, expect } from '@playwright/test';
 
 // Helper: resolve admin user ID
 async function getAdminUserId(request: any): Promise<string> {
-  const res = await request.get('http://localhost:3013/api/auth/me?msOid=5b3c917c-7d27-4bda-b009-26460aee806c', {
+  const res = await request.get('http://localhost:3013/api/auth/me', {
+      headers: adminApiHeaders(),
     failOnStatusCode: false,
   });
   if (res.status() !== 200) {
@@ -35,6 +37,7 @@ test.describe('Direct Enrollment → Student Directory (Cross-App Integration)',
     adminId = await getAdminUserId(request);
 
     const res = await request.post('http://localhost:3013/api/direct-enrollment', {
+      headers: adminApiHeaders(),
       data: {
         adminId,
         studentName: 'E2E Integration Test Student',
@@ -103,6 +106,7 @@ test.describe('Direct Enrollment → Student Directory (Cross-App Integration)',
 
     // Cancel the link to simulate state change (we can't do Firebase auth to actually complete)
     const res = await request.patch(`http://localhost:3013/api/direct-enrollment/${linkId}`, {
+      headers: adminApiHeaders(),
       data: { status: 'cancelled' },
     });
     expect(res.status()).toBe(200);
@@ -139,6 +143,7 @@ test.describe('Direct Enrollment → Student Directory (Cross-App Integration)',
   test('Step 6: Admin student directory API responds correctly', async ({ request }) => {
     // Verify the students API is healthy and returns the expected structure
     const res = await request.get('http://localhost:3013/api/students?limit=5', {
+      headers: adminApiHeaders(),
       failOnStatusCode: false,
     });
 
@@ -166,6 +171,7 @@ test.describe('Direct Enrollment → Student Directory (Cross-App Integration)',
   test('Step 7: Admin onboarding steps definitions API responds', async ({ request }) => {
     // Verify the onboarding step definitions endpoint works
     const res = await request.get('http://localhost:3013/api/onboarding-steps', {
+      headers: adminApiHeaders(),
       failOnStatusCode: false,
     });
 
@@ -177,10 +183,12 @@ test.describe('Direct Enrollment → Student Directory (Cross-App Integration)',
     // Cleanup: delete the test link
     if (linkId) {
       await request.patch(`http://localhost:3013/api/direct-enrollment/${linkId}`, {
+      headers: adminApiHeaders(),
         data: { status: 'cancelled' },
         failOnStatusCode: false,
       });
       await request.delete(`http://localhost:3013/api/direct-enrollment/${linkId}`, {
+      headers: adminApiHeaders(),
         failOnStatusCode: false,
       });
     }

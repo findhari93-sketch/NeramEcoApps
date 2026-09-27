@@ -19,7 +19,20 @@ import {
 
 // ─── Organization Schema ────────────────────────────────────────────────────
 
-export function generateOrganizationSchema() {
+/**
+ * A data-driven AggregateRating (from published reviews, see lib/review-stats.ts).
+ * Never hardcode one: pass it only where the page has read it from the data.
+ */
+export interface AggregateRatingJsonLd {
+  '@type': 'AggregateRating';
+  ratingValue: string;
+  ratingCount: string;
+  reviewCount: string;
+  bestRating: '5';
+  worstRating: '1';
+}
+
+export function generateOrganizationSchema(aggregateRating?: AggregateRatingJsonLd | null) {
   return {
     '@context': 'https://schema.org',
     '@type': 'EducationalOrganization',
@@ -89,13 +102,7 @@ export function generateOrganizationSchema() {
       { '@type': 'City', name: 'Delhi' },
       { '@type': 'City', name: 'Dubai' },
     ],
-    aggregateRating: {
-      '@type': 'AggregateRating',
-      ratingValue: '4.8',
-      reviewCount: '2500',
-      bestRating: '5',
-      worstRating: '1',
-    },
+    ...(aggregateRating ? { aggregateRating } : {}),
     numberOfEmployees: {
       '@type': 'QuantitativeValue',
       value: 50,
@@ -540,13 +547,6 @@ export function generateSoftwareApplicationSchema() {
       priceCurrency: 'INR',
       availability: 'https://schema.org/InStock',
     },
-    aggregateRating: {
-      '@type': 'AggregateRating',
-      ratingValue: '4.8',
-      ratingCount: '2500',
-      bestRating: '5',
-      worstRating: '1',
-    },
     featureList: APP_FEATURES,
     softwareVersion: '2.0',
     datePublished: '2024-01-01',
@@ -631,7 +631,7 @@ export function generateReviewSchema(testimonial: {
 
 // ─── TN Hub Page Schema (EducationalOrganization with areaServed) ───────────
 
-export function generateTNHubOrganizationSchema(districts: string[]) {
+export function generateTNHubOrganizationSchema(districts: string[], aggregateRating?: AggregateRatingJsonLd | null) {
   return {
     '@context': 'https://schema.org',
     '@type': 'EducationalOrganization',
@@ -654,13 +654,7 @@ export function generateTNHubOrganizationSchema(districts: string[]) {
       availableLanguage: ['English', 'Tamil'],
     },
     sameAs: SOCIAL_PROFILES,
-    aggregateRating: {
-      '@type': 'AggregateRating',
-      ratingValue: '4.9',
-      reviewCount: '90',
-      bestRating: '5',
-      worstRating: '1',
-    },
+    ...(aggregateRating ? { aggregateRating } : {}),
     areaServed: districts.map((d) => ({
       '@type': 'City',
       name: d,
@@ -701,23 +695,16 @@ export function generateTNHubOrganizationSchema(districts: string[]) {
 
 // ─── Testimonials Page Schema (aggregate rating) ────────────────────────────
 
-export function generateTestimonialsPageSchema(stats: {
-  total: number;
-  avgRating: number;
-}) {
+/** Null when there is no data-driven rating, so the caller emits nothing. */
+export function generateTestimonialsPageSchema(aggregateRating: AggregateRatingJsonLd | null) {
+  if (!aggregateRating) return null;
   return {
     '@context': 'https://schema.org',
     '@type': 'EducationalOrganization',
     '@id': `${BASE_URL}/#organization`,
     name: ORG_NAME,
     url: BASE_URL,
-    aggregateRating: {
-      '@type': 'AggregateRating',
-      ratingValue: String(stats.avgRating),
-      reviewCount: String(stats.total),
-      bestRating: '5',
-      worstRating: '1',
-    },
+    aggregateRating,
   };
 }
 
@@ -763,24 +750,6 @@ export function generateStateHubSchema(state: { display: string; cities: string[
           },
         },
       })),
-    },
-  };
-}
-
-// ─── Aggregate Rating Schema (standalone) ──────────────────────────────────────
-
-export function generateAggregateRatingSchema() {
-  return {
-    '@context': 'https://schema.org',
-    '@type': 'EducationalOrganization',
-    '@id': `${BASE_URL}/#organization`,
-    name: ORG_NAME,
-    aggregateRating: {
-      '@type': 'AggregateRating',
-      ratingValue: '4.9',
-      reviewCount: '90',
-      bestRating: '5',
-      worstRating: '1',
     },
   };
 }
@@ -916,12 +885,6 @@ export function generateOnlineCourseSchema() {
       availability: 'https://schema.org/InStock',
       url: `${BASE_URL}/apply`,
       validFrom: '2026-01-01',
-    },
-    aggregateRating: {
-      '@type': 'AggregateRating',
-      ratingValue: '4.8',
-      reviewCount: '2500',
-      bestRating: '5',
     },
   };
 }

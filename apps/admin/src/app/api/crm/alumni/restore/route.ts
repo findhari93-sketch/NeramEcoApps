@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getRequestAdminId } from '@/lib/request-admin';
 import { restoreAlumniToActive } from '@neram/database';
 import { reinstateMicrosoftAccounts } from '@/lib/ms-offboard';
 
@@ -18,8 +19,10 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { userIds, adminId, reinstateMicrosoft = true } = body;
-
+    const { userIds, adminId: bodyAdminId, reinstateMicrosoft = true } = body;
+    // The verified caller from middleware.ts; the body value is only a fallback
+    // for ADMIN_API_AUTH_MODE=report and is never trusted when the header is set.
+    const adminId = getRequestAdminId(request) ?? bodyAdminId;
     if (!Array.isArray(userIds) || userIds.length === 0) {
       return NextResponse.json({ error: 'userIds must be a non-empty array' }, { status: 400 });
     }

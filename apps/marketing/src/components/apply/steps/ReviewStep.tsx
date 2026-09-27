@@ -1,410 +1,247 @@
 'use client';
 
+import { useState } from 'react';
 import {
   Box,
   Typography,
   Card,
   CardContent,
-  Grid,
   Divider,
   Chip,
   FormControlLabel,
   Checkbox,
   Button,
-  Alert,
-  IconButton,
+  Stack,
 } from '@neram/ui';
-import {
-  PersonOutlined,
-  SchoolOutlined,
-  MenuBookOutlined,
-  EditOutlined,
-  CheckCircleOutlined,
-  LocationOnOutlined,
-  PhoneOutlined,
-  EmailOutlined,
-  CalendarTodayOutlined,
-} from '@mui/icons-material';
+import EditOutlined from '@mui/icons-material/EditOutlined';
+import CheckCircleOutlined from '@mui/icons-material/CheckCircleOutlined';
+import { useTranslations } from 'next-intl';
 import { useFormContext } from '../FormContext';
+import type { FormStep } from '../types';
 import { APPLICANT_CATEGORY_OPTIONS, CASTE_CATEGORY_OPTIONS, SCHOOL_TYPE_OPTIONS } from '@neram/database';
-import Link from 'next/link';
+import LegalDrawer from '@/components/legal/LegalDrawer';
 
-// Course type labels
-const COURSE_LABELS: Record<string, string> = {
-  nata: 'NATA',
-  jee_paper2: 'JEE Paper 2',
-  both: 'Both NATA & JEE Paper 2',
-  not_sure: 'Not Sure Yet',
+const COURSE_KEYS: Record<string, string> = {
+  nata: 'yourCourse.nata',
+  jee_paper2: 'yourCourse.jee',
+  both: 'yourCourse.both',
+  not_sure: 'yourCourse.notSure',
 };
 
-// Gender labels
-const GENDER_LABELS: Record<string, string> = {
-  male: 'Male',
-  female: 'Female',
-  other: 'Other',
-  prefer_not_to_say: 'Prefer not to say',
+const GENDER_KEYS: Record<string, string> = {
+  male: 'aboutYou.genderMale',
+  female: 'aboutYou.genderFemale',
+  other: 'aboutYou.genderOther',
 };
-
-interface ReviewSectionProps {
-  title: string;
-  icon: React.ReactNode;
-  stepIndex: number;
-  onEdit: (step: number) => void;
-  children: React.ReactNode;
-}
-
-function ReviewSection({ title, icon, stepIndex, onEdit, children }: ReviewSectionProps) {
-  return (
-    <Card variant="outlined" sx={{ mb: 2 }}>
-      <CardContent>
-        <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
-          <Box display="flex" alignItems="center" gap={1}>
-            {icon}
-            <Typography variant="subtitle1" fontWeight={600}>
-              {title}
-            </Typography>
-          </Box>
-          <IconButton size="small" onClick={() => onEdit(stepIndex)} aria-label={`Edit ${title}`}>
-            <EditOutlined fontSize="small" />
-          </IconButton>
-        </Box>
-        {children}
-      </CardContent>
-    </Card>
-  );
-}
 
 interface ReviewItemProps {
   label: string;
   value?: string | number | null;
-  icon?: React.ReactNode;
+  trailing?: React.ReactNode;
 }
 
-function ReviewItem({ label, value, icon }: ReviewItemProps) {
+function ReviewItem({ label, value, trailing }: ReviewItemProps) {
   if (value === null || value === undefined || value === '') return null;
   return (
-    <Box display="flex" alignItems="flex-start" gap={1} mb={1}>
-      {icon && <Box sx={{ color: 'text.secondary', mt: 0.25 }}>{icon}</Box>}
-      <Box>
-        <Typography variant="caption" color="text.secondary" display="block">
-          {label}
-        </Typography>
+    <Box sx={{ mb: 1.25 }}>
+      <Typography variant="caption" color="text.secondary" display="block">
+        {label}
+      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
         <Typography variant="body2">{value}</Typography>
+        {trailing}
       </Box>
     </Box>
   );
 }
 
 interface ReviewStepProps {
-  onEditStep: (step: number) => void;
+  onEditStep: (step: FormStep) => void;
 }
 
+/**
+ * Step 3, Review: three groups (About you, Your course, Contact), each with
+ * one Edit that returns to the step that owns it, then the terms. What
+ * happens next belongs to the pay step, so no delivery promises here.
+ */
 export default function ReviewStep({ onEditStep }: ReviewStepProps) {
+  const t = useTranslations('apply');
   const { formData, setTermsAccepted } = useFormContext();
   const { personal, location, academic, course, termsAccepted } = formData;
+  const [legalOpen, setLegalOpen] = useState(false);
+  const [legalTab, setLegalTab] = useState(0);
 
-  // Get category label
-  const getCategoryLabel = () => {
-    const category = APPLICANT_CATEGORY_OPTIONS.find(
-      (opt) => opt.value === academic.applicantCategory
-    );
-    return category?.label || academic.applicantCategory || 'Not selected';
-  };
+  const categoryLabel = APPLICANT_CATEGORY_OPTIONS.find((opt) => opt.value === academic.applicantCategory)?.label || null;
+  const casteLabel = CASTE_CATEGORY_OPTIONS.find((opt) => opt.value === academic.casteCategory)?.label || null;
+  const schoolTypeLabel = SCHOOL_TYPE_OPTIONS.find((opt) => opt.value === academic.schoolType)?.label || null;
 
-  // Get caste category label
-  const getCasteCategoryLabel = () => {
-    const caste = CASTE_CATEGORY_OPTIONS.find((opt) => opt.value === academic.casteCategory);
-    return caste?.label || academic.casteCategory || '';
-  };
+  const dob = personal.dateOfBirth
+    ? new Date(personal.dateOfBirth).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
+    : null;
 
-  // Get school type label
-  const getSchoolTypeLabel = () => {
-    if (!academic.schoolType) return null;
-    const schoolType = SCHOOL_TYPE_OPTIONS.find((opt) => opt.value === academic.schoolType);
-    return schoolType?.label || academic.schoolType;
-  };
+  const locationLine = [location.city, location.state, location.country === 'IN' ? 'India' : location.country]
+    .filter(Boolean)
+    .join(', ');
 
-  // Format date of birth
-  const formatDob = () => {
-    if (!personal.dateOfBirth) return null;
-    return new Date(personal.dateOfBirth).toLocaleDateString('en-IN', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
-  };
-
-  // Get academic details based on category
-  const renderAcademicDetails = () => {
-    const { applicantCategory, schoolStudentData, diplomaStudentData, collegeStudentData, workingProfessionalData } =
-      academic;
-
+  const renderStudies = () => {
+    const { applicantCategory, schoolStudentData, diplomaStudentData, collegeStudentData, workingProfessionalData } = academic;
     switch (applicantCategory) {
       case 'school_student':
         return (
           <>
-            <ReviewItem label="Current Class" value={schoolStudentData?.current_class} />
-            <ReviewItem label="School Name" value={schoolStudentData?.school_name} />
+            <ReviewItem label="Class" value={schoolStudentData?.current_class} />
+            <ReviewItem label="School" value={schoolStudentData?.school_name} />
             <ReviewItem label="Board" value={schoolStudentData?.board} />
-            <ReviewItem label="School Type" value={getSchoolTypeLabel()} />
-            {schoolStudentData?.previous_percentage && (
-              <ReviewItem
-                label="Previous Year Percentage"
-                value={`${schoolStudentData.previous_percentage}%`}
-              />
-            )}
+            <ReviewItem label={t('yourCourse.schoolType')} value={schoolTypeLabel} />
           </>
         );
-
       case 'diploma_student':
         return (
           <>
-            <ReviewItem label="College Name" value={diplomaStudentData?.college_name} />
+            <ReviewItem label="College" value={diplomaStudentData?.college_name} />
             <ReviewItem label="Department" value={diplomaStudentData?.department} />
-            <ReviewItem
-              label="Completed Grade Before Diploma"
-              value={diplomaStudentData?.completed_grade === '10th' ? '10th Standard' : '12th Standard'}
-            />
-            {diplomaStudentData?.marks && (
-              <ReviewItem label="Marks/Percentage" value={`${diplomaStudentData.marks}%`} />
-            )}
+            <ReviewItem label="Completed before diploma" value={diplomaStudentData?.completed_grade} />
           </>
         );
-
       case 'college_student':
         return (
           <>
-            <ReviewItem label="College Name" value={collegeStudentData?.college_name} />
+            <ReviewItem label="College" value={collegeStudentData?.college_name} />
             <ReviewItem label="Department" value={collegeStudentData?.department} />
-            <ReviewItem label="Year of Study" value={collegeStudentData?.year_of_study ? `${collegeStudentData.year_of_study} Year` : null} />
-            <ReviewItem label="12th Completed Year" value={collegeStudentData?.twelfth_year} />
-            {collegeStudentData?.twelfth_percentage && (
-              <ReviewItem label="12th Percentage" value={`${collegeStudentData.twelfth_percentage}%`} />
-            )}
-            <ReviewItem label="Reason for Exam" value={collegeStudentData?.reason_for_exam} />
+            <ReviewItem label="Year of study" value={collegeStudentData?.year_of_study} />
+            <ReviewItem label="12th completed in" value={collegeStudentData?.twelfth_year} />
           </>
         );
-
       case 'working_professional':
         return (
           <>
-            <ReviewItem label="12th Completed Year" value={workingProfessionalData?.twelfth_year} />
+            <ReviewItem label="12th completed in" value={workingProfessionalData?.twelfth_year} />
             <ReviewItem label="Occupation" value={workingProfessionalData?.occupation} />
           </>
         );
-
       default:
         return null;
     }
   };
 
-  return (
-    <Box>
-      <Typography variant="h6" gutterBottom fontWeight={600}>
-        Review Your Application
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Please review all the information before submitting. Click the edit icon to make changes.
-      </Typography>
-
-      {/* Personal Information */}
-      <ReviewSection
-        title="Personal Information"
-        icon={<PersonOutlined color="primary" />}
-        stepIndex={0}
-        onEdit={onEditStep}
-      >
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6}>
-            <ReviewItem label="First Name" value={personal.firstName} />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <ReviewItem label="Father's Name" value={personal.fatherName} />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <ReviewItem
-              label="Email"
-              value={personal.email}
-              icon={<EmailOutlined fontSize="small" />}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <Box display="flex" alignItems="center" gap={1}>
-              <ReviewItem
-                label="Phone"
-                value={personal.phone}
-                icon={<PhoneOutlined fontSize="small" />}
-              />
-              {personal.phoneVerified && (
-                <Chip
-                  label="Verified"
-                  size="small"
-                  color="success"
-                  icon={<CheckCircleOutlined />}
-                  sx={{ ml: 1 }}
-                />
-              )}
-            </Box>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <ReviewItem
-              label="Date of Birth"
-              value={formatDob()}
-              icon={<CalendarTodayOutlined fontSize="small" />}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <ReviewItem label="Gender" value={GENDER_LABELS[personal.gender || ''] || null} />
-          </Grid>
-        </Grid>
-
-        <Divider sx={{ my: 2 }} />
-
-        <Box display="flex" alignItems="flex-start" gap={1}>
-          <LocationOnOutlined color="action" sx={{ mt: 0.25 }} />
-          <Box>
-            <Typography variant="caption" color="text.secondary" display="block">
-              Location
-            </Typography>
-            <Typography variant="body2">
-              {[location.city, location.state, location.country === 'IN' ? 'India' : location.country].filter(Boolean).join(', ')}
-            </Typography>
-            {location.pincode && (
-              <Typography variant="caption" color="text.secondary">
-                PIN: {location.pincode}
-              </Typography>
-            )}
-          </Box>
-        </Box>
-      </ReviewSection>
-
-      {/* Academic Details */}
-      <ReviewSection
-        title="Academic Details"
-        icon={<SchoolOutlined color="primary" />}
-        stepIndex={1}
-        onEdit={onEditStep}
-      >
-        <Box mb={2}>
-          <Chip
-            label={getCategoryLabel()}
-            color="primary"
-            variant="outlined"
-            sx={{ fontWeight: 600 }}
-          />
-        </Box>
-
-        <Grid container spacing={2}>
-          <Grid item xs={12} sm={6}>
-            {renderAcademicDetails()}
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <ReviewItem label="Caste Category" value={getCasteCategoryLabel()} />
-            <ReviewItem label="Target Exam Year" value={academic.targetExamYear} />
-          </Grid>
-        </Grid>
-      </ReviewSection>
-
-      {/* Course Selection */}
-      <ReviewSection
-        title="Course Selection"
-        icon={<MenuBookOutlined color="primary" />}
-        stepIndex={2}
-        onEdit={onEditStep}
-      >
-        <Box mb={2}>
-          <Typography variant="body2" fontWeight={600}>
-            Selected Course
-          </Typography>
-          <Typography variant="h6" color="primary.main">
-            {COURSE_LABELS[course.interestCourse || ''] || 'Not selected'}
-          </Typography>
-        </Box>
-
-        <Box mb={2}>
-          <Typography variant="body2" fontWeight={600}>
-            Learning Mode
-          </Typography>
-          <Chip
-            label={course.learningMode === 'online_only' ? '100% Online Classes' : 'Hybrid (Online + Offline)'}
-            color={course.learningMode === 'online_only' ? 'success' : 'primary'}
-            size="small"
-            icon={<CheckCircleOutlined />}
-            sx={{ mt: 0.5 }}
-          />
-        </Box>
-
-        {course.learningMode === 'hybrid' && course.selectedCenterId && (
-          <Box>
-            <Typography variant="body2" fontWeight={600}>
-              Preferred Offline Center
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {course.selectedCenterName || 'Center Selected'}
-            </Typography>
-          </Box>
-        )}
-      </ReviewSection>
-
-      {/* Phone Verification Warning */}
-      {!personal.phoneVerified && (
-        <Alert severity="warning" sx={{ mb: 3 }}>
-          <Typography variant="body2" fontWeight={600}>
-            Phone Not Verified
-          </Typography>
-          <Typography variant="body2">
-            Please go back to Step 1 and verify your phone number to submit your application.
+  const Section = ({ title, step, children }: { title: string; step: FormStep; children: React.ReactNode }) => (
+    <Card variant="outlined" sx={{ mb: 2 }}>
+      <CardContent>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+          <Typography variant="subtitle1" fontWeight={600} component="h2">
+            {title}
           </Typography>
           <Button
-            variant="outlined"
             size="small"
-            sx={{ mt: 1 }}
-            onClick={() => onEditStep(0)}
+            startIcon={<EditOutlined fontSize="small" />}
+            onClick={() => onEditStep(step)}
+            aria-label={t('review.edit', { section: title })}
+            sx={{ minHeight: 44 }}
           >
-            Go to Personal Info
+            {t('review.editShort')}
           </Button>
-        </Alert>
-      )}
+        </Box>
+        {children}
+      </CardContent>
+    </Card>
+  );
 
-      {/* Terms and Conditions */}
-      <Card variant="outlined" sx={{ mb: 3, bgcolor: 'grey.50' }}>
+  const legalLink = (tab: number) =>
+    function LegalLink(chunks: React.ReactNode) {
+      return (
+        <Box
+          component="button"
+          type="button"
+          onClick={() => {
+            setLegalTab(tab);
+            setLegalOpen(true);
+          }}
+          sx={{ all: 'unset', color: 'primary.main', textDecoration: 'underline', cursor: 'pointer', minHeight: 44 }}
+        >
+          {chunks}
+        </Box>
+      );
+    };
+
+  return (
+    <Box>
+      <Typography variant="h5" component="h1" gutterBottom fontWeight={700}>
+        {t('review.title')}
+      </Typography>
+      <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
+        {t('review.subtitle')}
+      </Typography>
+
+      <Section title={t('review.aboutYou')} step={0}>
+        <ReviewItem label={t('aboutYou.studentName')} value={personal.firstName} />
+        <ReviewItem label={t('aboutYou.fatherName')} value={personal.fatherName} />
+        <ReviewItem label={t('aboutYou.dateOfBirth')} value={dob} />
+        <ReviewItem label={t('aboutYou.gender')} value={personal.gender ? t(GENDER_KEYS[personal.gender]) : null} />
+        <ReviewItem
+          label={t('aboutYou.location')}
+          value={locationLine}
+          trailing={location.pincode ? <Typography variant="caption" color="text.secondary">PIN {location.pincode}</Typography> : null}
+        />
+      </Section>
+
+      <Section title={t('review.yourCourse')} step={1}>
+        <ReviewItem label={t('review.course')} value={course.interestCourse ? t(COURSE_KEYS[course.interestCourse]) : null} />
+        <ReviewItem label={t('review.programme')} value={course.feeStructureLabel || t('review.notChosen')} />
+        <ReviewItem
+          label={t('review.mode')}
+          value={course.learningMode === 'online_only' ? t('yourCourse.online') : t('yourCourse.hybrid')}
+        />
+        {course.learningMode === 'hybrid' && course.selectedCenterId && (
+          <ReviewItem label={t('review.centre')} value={course.selectedCenterName || course.selectedCenterId} />
+        )}
+        <Divider sx={{ my: 1.5 }} />
+        {categoryLabel && (
+          <Box sx={{ mb: 1.5 }}>
+            <Chip label={categoryLabel} color="primary" variant="outlined" sx={{ fontWeight: 600 }} />
+          </Box>
+        )}
+        {renderStudies()}
+        <ReviewItem label={t('yourCourse.examYear')} value={academic.targetExamYear} />
+        <ReviewItem label={t('yourCourse.casteCategory')} value={casteLabel} />
+      </Section>
+
+      <Section title={t('review.contact')} step={0}>
+        <ReviewItem
+          label={t('aboutYou.phone')}
+          value={personal.phone}
+          trailing={
+            personal.phoneVerified ? (
+              <Chip label={t('aboutYou.verified')} size="small" color="success" icon={<CheckCircleOutlined />} />
+            ) : null
+          }
+        />
+        <ReviewItem label={t('aboutYou.parentPhone')} value={personal.parentPhone} />
+        <ReviewItem label={t('aboutYou.email')} value={personal.email} />
+      </Section>
+
+      <Card variant="outlined" sx={{ mb: 2, bgcolor: 'grey.50' }}>
         <CardContent>
-          <FormControlLabel
-            control={
-              <Checkbox
-                checked={termsAccepted}
-                onChange={(e) => setTermsAccepted(e.target.checked)}
-              />
-            }
-            label={
-              <Typography variant="body2">
-                I confirm that all the information provided is accurate and I agree to the{' '}
-                <Link href="/terms" target="_blank" style={{ color: 'inherit' }}>
-                  Terms & Conditions
-                </Link>{' '}
-                and{' '}
-                <Link href="/privacy" target="_blank" style={{ color: 'inherit' }}>
-                  Privacy Policy
-                </Link>
-                .
-              </Typography>
-            }
-          />
+          <Stack>
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={termsAccepted}
+                  onChange={(e) => setTermsAccepted(e.target.checked)}
+                  inputProps={{ name: 'termsAccepted' } as React.InputHTMLAttributes<HTMLInputElement>}
+                  sx={{ minWidth: 44, minHeight: 44 }}
+                />
+              }
+              label={
+                <Typography variant="body2">
+                  {t.rich('review.terms', { terms: legalLink(0), refund: legalLink(1) })}
+                </Typography>
+              }
+            />
+          </Stack>
         </CardContent>
       </Card>
 
-      {/* Submission Info */}
-      <Alert severity="info" icon={false}>
-        <Typography variant="body2">
-          <strong>What happens next?</strong>
-        </Typography>
-        <ul style={{ margin: '8px 0', paddingLeft: 20 }}>
-          <li>You will receive a confirmation email with your application number</li>
-          <li>Our team will review your application within 24-48 hours</li>
-          <li>You will be notified about the next steps via email and SMS</li>
-          <li>You can track your application status in your dashboard</li>
-        </ul>
-      </Alert>
+      <LegalDrawer open={legalOpen} onClose={() => setLegalOpen(false)} initialTab={legalTab} />
     </Box>
   );
 }

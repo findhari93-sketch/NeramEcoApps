@@ -112,12 +112,27 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
+      # A failed push used to be swallowed silently. It is now reported on the run
+      # page. Set the repo variable DB_PUSH_STRICT=true (after the migration ledger
+      # is repaired with scripts/db/ledger-diff.mjs) to make a failure fail the job.
       - name: Push database migrations (Staging)
-        continue-on-error: true
+        id: dbpush
+        continue-on-error: ${{ vars.DB_PUSH_STRICT != 'true' }}
         run: pnpm supabase db push
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD_STAGING }}
+
+      - name: Report migration failure (Staging)
+        if: steps.dbpush.outcome == 'failure'
+        run: |
+          echo "::error title=Migrations not applied (Staging)::supabase db push failed. New migrations may be missing on Staging. Run node scripts/db/ledger-diff.mjs --env staging and apply by MCP."
+          {
+            echo "### Migrations not applied (Staging)"
+            echo ""
+            echo "\`supabase db push\` failed, so any new file in \`supabase/migrations/\` may be missing on Staging."
+            echo "Run \`node scripts/db/ledger-diff.mjs --env staging\` to list what the ledger is missing."
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ===========================================
   # DATABASE MIGRATIONS (Production)
@@ -150,12 +165,27 @@ jobs:
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
 
+      # A failed push used to be swallowed silently. It is now reported on the run
+      # page. Set the repo variable DB_PUSH_STRICT=true (after the migration ledger
+      # is repaired with scripts/db/ledger-diff.mjs) to make a failure fail the job.
       - name: Push database migrations (Production)
-        continue-on-error: true
+        id: dbpush
+        continue-on-error: ${{ vars.DB_PUSH_STRICT != 'true' }}
         run: pnpm supabase db push
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD_PRODUCTION }}
+
+      - name: Report migration failure (Production)
+        if: steps.dbpush.outcome == 'failure'
+        run: |
+          echo "::error title=Migrations not applied (Production)::supabase db push failed. New migrations may be missing on Production. Run node scripts/db/ledger-diff.mjs --env production and apply by MCP."
+          {
+            echo "### Migrations not applied (Production)"
+            echo ""
+            echo "\`supabase db push\` failed, so any new file in \`supabase/migrations/\` may be missing on Production."
+            echo "Run \`node scripts/db/ledger-diff.mjs --env production\` to list what the ledger is missing."
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ===========================================
   # BUILD & DEPLOY: Marketing

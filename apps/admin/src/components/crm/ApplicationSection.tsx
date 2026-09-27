@@ -82,7 +82,7 @@ function InfoRow({ label, value, icon }: { label: string; value: React.ReactNode
         </Typography>
       </Box>
       <Typography variant="body2" component="div" sx={{ flex: 1, fontSize: 13 }}>
-        {value || <span style={{ color: '#bdbdbd' }}>--</span>}
+        {value || <span style={{ color: '#757575' }}>Not set</span>}
       </Typography>
     </Box>
   );
@@ -524,7 +524,7 @@ export default function ApplicationSection({
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                 <SchoolIcon sx={{ fontSize: 18, color: effectiveStatus === 'enrolled' ? '#1B5E20' : '#E65100' }} />
                 <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: 13, color: effectiveStatus === 'enrolled' ? '#1B5E20' : '#E65100' }}>
-                  {effectiveStatus === 'enrolled' ? 'Enrollment Confirmed' : 'Partial Payment — Enrollment Pending'}
+                  {effectiveStatus === 'enrolled' ? 'Enrollment Confirmed' : 'Partial Payment, Enrollment Pending'}
                 </Typography>
               </Box>
 

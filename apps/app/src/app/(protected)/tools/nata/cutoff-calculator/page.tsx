@@ -43,6 +43,7 @@ import { useFirebaseAuth } from '@neram/auth';
 import { useScoreAutoSave } from './useScoreAutoSave';
 import { PurposePrompt } from './PurposePrompt';
 import type { CalculationPurpose } from '@neram/database';
+import { useToolOpened } from '@/hooks/useToolOpened';
 
 // ─── Types & Constants ───────────────────────────────────────────────
 
@@ -1081,6 +1082,7 @@ function InfoSection() {
 // ─── Main Page Component ─────────────────────────────────────────────
 
 export default function CutoffCalculatorPage() {
+  useToolOpened('nata_cutoff_calculator');
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const state = useCalculatorState();

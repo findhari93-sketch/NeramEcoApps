@@ -7,10 +7,10 @@
  */
 
 import { collectDeviceInfo } from './device-collector';
-import { getDeviceFingerprint } from './device-fingerprint';
+import { getOrCreateAnonymousId, getSessionId, type Funnel } from '@neram/database/analytics';
 
 interface FunnelEventPayload {
-  funnel: 'auth' | 'onboarding' | 'application';
+  funnel: Funnel;
   event: string;
   status: 'started' | 'completed' | 'failed' | 'skipped';
   error_message?: string;
@@ -20,7 +20,8 @@ interface FunnelEventPayload {
 }
 
 interface QueuedEvent extends FunnelEventPayload {
-  anonymous_id: string;
+  anonymous_id: string | null;
+  session_id: string | null;
   device_type: string;
   browser: string;
   os: string;
@@ -31,7 +32,6 @@ interface QueuedEvent extends FunnelEventPayload {
 let eventQueue: QueuedEvent[] = [];
 let flushTimer: ReturnType<typeof setTimeout> | null = null;
 let cachedDeviceInfo: { device_type: string; browser: string; os: string } | null = null;
-let cachedFingerprint: string | null = null;
 let currentIdToken: string | null = null;
 
 const FLUSH_INTERVAL_MS = 5000;
@@ -59,14 +59,13 @@ export async function trackFunnelEvent(payload: FunnelEventPayload): Promise<voi
       };
     }
 
-    // Get fingerprint for anonymous tracking
-    if (!cachedFingerprint) {
-      cachedFingerprint = await getDeviceFingerprint();
-    }
-
+    // A random first-party id shared with the marketing site (neram_anon_id
+    // cookie). Not the device fingerprint: that stays in user_device_sessions for
+    // device diagnostics and is not an analytics identifier.
     const event: QueuedEvent = {
       ...payload,
-      anonymous_id: cachedFingerprint,
+      anonymous_id: getOrCreateAnonymousId(),
+      session_id: getSessionId(),
       device_type: cachedDeviceInfo.device_type,
       browser: cachedDeviceInfo.browser,
       os: cachedDeviceInfo.os,

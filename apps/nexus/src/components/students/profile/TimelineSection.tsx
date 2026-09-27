@@ -17,7 +17,9 @@ const KIND_LABEL: Record<TimelineKind, string> = {
 };
 
 /**
- * A merged feed of everything dated we hold about this student.
+ * A merged feed of everything dated Nexus holds about this student (documents,
+ * enrolment and classification changes, the application form, first sign-in).
+ * The cross-app history is AllActivitySection, just above it.
  *
  * Payment events are merged in by the page only when the finance fetch
  * succeeded, so this component needs no capability check of its own: a teacher's
@@ -39,7 +41,7 @@ export default function TimelineSection({ events }: { events: ProfileTimelineEve
   return (
     <ProfileSection
       id="profile-timeline"
-      title="Activity"
+      title="Nexus history"
       headline={events.length ? `${events.length} recorded events` : 'Nothing recorded'}
     >
       {events.length === 0 ? (

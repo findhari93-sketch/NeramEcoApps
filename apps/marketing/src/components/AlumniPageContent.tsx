@@ -6,70 +6,12 @@ import {
   Container,
   Typography,
   Grid,
-  Card,
-  CardContent,
-  Avatar,
   Chip,
   Button,
 } from '@neram/ui';
 import Link from 'next/link';
-
-const successStories = [
-  {
-    name: 'Priya Venkatesh',
-    rank: 'AIR 12',
-    exam: 'NATA 2024',
-    college: 'IIT Kharagpur - B.Arch',
-    image: '/images/alumni/priya.jpg',
-    testimonial: 'The structured approach and personal attention at Neram Classes helped me crack NATA with flying colors. The drawing classes were exceptional!',
-    year: 2024,
-  },
-  {
-    name: 'Arjun Krishnan',
-    rank: 'AIR 45',
-    exam: 'JEE Paper 2 2024',
-    college: 'NIT Trichy - B.Arch',
-    image: '/images/alumni/arjun.jpg',
-    testimonial: 'From struggling with aptitude to securing a top rank - my journey at Neram Classes was transformative. Forever grateful to my mentors!',
-    year: 2024,
-  },
-  {
-    name: 'Sneha Reddy',
-    rank: 'AIR 78',
-    exam: 'NATA 2024',
-    college: 'SPA Delhi',
-    image: '/images/alumni/sneha.jpg',
-    testimonial: 'The mock tests and feedback sessions were game-changers. They identified my weak areas and helped me improve systematically.',
-    year: 2024,
-  },
-  {
-    name: 'Karthik Subramaniam',
-    rank: 'AIR 156',
-    exam: 'NATA 2023',
-    college: 'CEPT University',
-    image: '/images/alumni/karthik.jpg',
-    testimonial: "Best decision I made was joining Neram Classes. The faculty's expertise in architecture entrance exams is unmatched.",
-    year: 2023,
-  },
-  {
-    name: 'Meera Nair',
-    rank: 'AIR 23',
-    exam: 'JEE Paper 2 2023',
-    college: 'IIT Roorkee - B.Arch',
-    image: '/images/alumni/meera.jpg',
-    testimonial: 'The comprehensive study material and regular assessments kept me on track throughout my preparation journey.',
-    year: 2023,
-  },
-  {
-    name: 'Rahul Sharma',
-    rank: 'AIR 89',
-    exam: 'NATA 2023',
-    college: 'BIT Mesra - B.Arch',
-    image: '/images/alumni/rahul.jpg',
-    testimonial: 'Online classes were just as effective as offline. The doubt-clearing sessions helped me overcome all my challenges.',
-    year: 2023,
-  },
-];
+import { ReviewCard } from '@/components/reviews/ReviewParts';
+import type { PublicReview } from '@/lib/reviews/json-ld';
 
 const stats = [
   { value: '500+', label: 'Top 100 Ranks' },
@@ -93,7 +35,18 @@ const topColleges = [
   'Anna University',
 ];
 
-export default function AlumniPageContent() {
+/**
+ * Stories come from published reviews that name the college the student joined
+ * (consent and moderation already passed). The block is hidden when there are none.
+ */
+export default function AlumniPageContent({ stories = [], reviewsHref = '/reviews' }: { stories?: PublicReview[]; reviewsHref?: string }) {
+  const t = useTranslations('alumniStories');
+  const tr = useTranslations('reviews');
+  const cardLabels = {
+    stars: (rating: number) => tr('starsLabel', { rating }),
+    joined: (college: string) => tr('joined', { college }),
+    featured: tr('featured'),
+  };
   return (
     <Box>
       {/* Hero Section */}
@@ -135,50 +88,36 @@ export default function AlumniPageContent() {
         </Container>
       </Box>
 
-      {/* Success Stories Section */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
-        <Container maxWidth="lg">
-          <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 2, fontWeight: 700 }}>
-            Featured Alumni
-          </Typography>
-          <Typography variant="h6" align="center" color="text.secondary" sx={{ mb: 6 }}>
-            Hear from our successful students
-          </Typography>
+      {/* Success Stories Section: published data only */}
+      {stories.length > 0 && (
+        <Box component="section" aria-labelledby="alumni-stories-title" sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
+          <Container maxWidth="lg">
+            <Typography id="alumni-stories-title" variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 2, fontWeight: 700, fontSize: { xs: '1.75rem', md: '2.5rem' } }}>
+              {t('title')}
+            </Typography>
+            <Typography variant="h6" component="p" align="center" color="text.secondary" sx={{ mb: { xs: 4, md: 6 }, fontSize: { xs: '1rem', md: '1.25rem' } }}>
+              {t('subtitle')}
+            </Typography>
 
-          <Grid container spacing={4}>
-            {successStories.map((story, index) => (
-              <Grid item xs={12} md={6} lg={4} key={index}>
-                <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-                  <CardContent sx={{ flexGrow: 1, p: 4 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-                      <Avatar
-                        src={story.image}
-                        alt={story.name}
-                        sx={{ width: 64, height: 64, mr: 2 }}
-                      />
-                      <Box>
-                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                          {story.name}
-                        </Typography>
-                        <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
-                          <Chip label={story.rank} size="small" color="success" />
-                          <Chip label={story.exam} size="small" variant="outlined" />
-                        </Box>
-                      </Box>
-                    </Box>
-                    <Typography variant="body2" color="primary" sx={{ mb: 2, fontWeight: 500 }}>
-                      {story.college}
-                    </Typography>
-                    <Typography variant="body1" color="text.secondary" sx={{ fontStyle: 'italic' }}>
-                      &quot;{story.testimonial}&quot;
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        </Container>
-      </Box>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', lg: '1fr 1fr 1fr' }, gap: { xs: 2, md: 3 } }}>
+              {stories.map((story) => (
+                <ReviewCard key={story.id} review={story} labels={cardLabels} />
+              ))}
+            </Box>
+
+            <Box sx={{ textAlign: 'center', mt: 4 }}>
+              <Button
+                variant="outlined"
+                component={Link}
+                href={reviewsHref}
+                sx={{ minHeight: 48, px: 3, textTransform: 'none', fontWeight: 600 }}
+              >
+                {t('readAll')}
+              </Button>
+            </Box>
+          </Container>
+        </Box>
+      )}
 
       {/* Top Colleges Section */}
       <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>

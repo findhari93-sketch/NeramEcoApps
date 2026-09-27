@@ -71,6 +71,9 @@ import BusinessCenterIcon from '@mui/icons-material/BusinessCenter';
 import AnalyticsIcon from '@mui/icons-material/Analytics';
 import MarkEmailReadIcon from '@mui/icons-material/MarkEmailRead';
 import HistoryEduIcon from '@mui/icons-material/HistoryEdu';
+import PhoneCallbackIcon from '@mui/icons-material/PhoneCallback';
+import MergeTypeIcon from '@mui/icons-material/MergeType';
+import AutorenewIcon from '@mui/icons-material/Autorenew';
 import { useMicrosoftAuth } from '@neram/auth';
 import NotificationBell from './NotificationBell';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -78,7 +81,19 @@ import { useSidebar } from '@/contexts/SidebarContext';
 const TRANSITION = 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)';
 const MOBILE_DRAWER_WIDTH = 280;
 
-type BadgeKey = 'careers' | 'leads' | 'students' | 'demo_classes' | 'support_tickets' | 'app_feedback' | 'qa_moderation' | 'payments' | 'chat_history';
+type BadgeKey =
+  | 'careers'
+  | 'leads'
+  | 'students'
+  | 'demo_classes'
+  | 'support_tickets'
+  | 'app_feedback'
+  | 'qa_moderation'
+  | 'payments'
+  | 'chat_history'
+  | 'duplicates'
+  | 'follow_ups'
+  | 'lifecycle';
 
 interface MenuItem {
   text: string;
@@ -105,6 +120,9 @@ const menuGroups: MenuGroup[] = [
     label: 'People & CRM',
     items: [
       { text: 'Users (CRM)', icon: PeopleIcon, path: '/crm' },
+      { text: 'Follow-ups', icon: PhoneCallbackIcon, path: '/follow-ups', hasBadge: 'follow_ups' },
+      { text: 'Duplicates', icon: MergeTypeIcon, path: '/duplicates', hasBadge: 'duplicates' },
+      { text: 'Lifecycle', icon: AutorenewIcon, path: '/lifecycle', hasBadge: 'lifecycle' },
       { text: 'Exam Batches', icon: CalendarMonthIcon, path: '/exam-batches' },
       { text: 'Leads', icon: PersonSearchIcon, path: '/leads', hasBadge: 'leads' },
       { text: 'Students', icon: SchoolIcon, path: '/students', hasBadge: 'students' },
@@ -210,6 +228,9 @@ export default function Sidebar() {
     qa_moderation: 0,
     payments: 0,
     chat_history: 0,
+    duplicates: 0,
+    follow_ups: 0,
+    lifecycle: 0,
   });
 
   const fetchMessageUnreadCount = useCallback(async () => {

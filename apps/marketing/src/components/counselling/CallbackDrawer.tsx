@@ -16,6 +16,7 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import HeadsetMicIcon from '@mui/icons-material/HeadsetMic';
 import { leadAttribution } from '@/lib/attribution';
+import { trackTaxonomyEvent } from '@/lib/funnel-tracker';
 
 export interface CallbackDrawerProps {
   ctaLabel?: string;
@@ -122,6 +123,7 @@ export default function CallbackDrawer({
         return;
       }
       setSuccess(true);
+      trackTaxonomyEvent('callback_requested', { source: 'counselling_drawer', context, course_interest: courseInterest || null });
       setName('');
       setPhone('');
       setEmail('');

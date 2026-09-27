@@ -83,7 +83,10 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
           width: isMobile ? '100%' : `calc(100% - ${sidebarWidth}px)`,
           bgcolor: 'background.default',
           transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+          // clip, not hidden: hidden makes <main> a scroll container, which stops
+          // position: sticky (the mobile top bar, the User 360 header) from sticking.
           overflow: 'hidden',
+          '@supports (overflow: clip)': { overflow: 'clip' },
         }}
       >
         {isMobile && <MobileTopBar />}

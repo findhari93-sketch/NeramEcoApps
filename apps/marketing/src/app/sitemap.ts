@@ -5,6 +5,9 @@ import { getSitemapLocations, getIndianStates } from '@neram/database';
 import { getAllCollegeSlugs, getActiveStates, getNIRFRankedCollegeSlugs } from '@/lib/college-hub/queries';
 import { ROUTED_HUB_SLUGS } from '@/data/counselling-2026';
 import { coursesData } from '@/data/courses';
+import { getReviewSummary } from '@/lib/review-stats';
+import { loadLearnerStories } from '@/lib/reviews/data';
+import { MIN_ITEMS_FOR_INDEX, REVIEW_EXAMS, reviewsPath, shouldIndexReviewsPage } from '@/lib/reviews/rules';
 
 const baseUrl = 'https://neramclasses.com';
 
@@ -397,6 +400,34 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'weekly' as const,
       priority: 0.85,
     });
+  }
+
+  // ─── Reviews and learner stories (English only, data-gated) ────────────
+  // Listed only while the page is indexable: a review page needs enough
+  // published ratings for an honest AggregateRating, the stories page needs
+  // enough verified outcomes. Until then the pages noindex themselves.
+  try {
+    const summaries = await Promise.all(REVIEW_EXAMS.map((exam) => getReviewSummary(exam)));
+    REVIEW_EXAMS.forEach((exam, i) => {
+      if (!shouldIndexReviewsPage(summaries[i])) return;
+      entries.push({
+        url: `${baseUrl}${reviewsPath(exam)}`,
+        lastModified: new Date('2026-09-26'),
+        changeFrequency: 'weekly' as const,
+        priority: exam === 'all' ? 0.8 : 0.7,
+      });
+    });
+    const { outcomes } = await loadLearnerStories();
+    if (outcomes.length >= MIN_ITEMS_FOR_INDEX) {
+      entries.push({
+        url: `${baseUrl}/learner-stories`,
+        lastModified: new Date('2026-09-26'),
+        changeFrequency: 'weekly' as const,
+        priority: 0.7,
+      });
+    }
+  } catch (err) {
+    console.error('Failed to read review stats for sitemap:', err);
   }
 
   // ─── Counselling concept explainers (English-only) ──────────────────────

@@ -153,6 +153,17 @@ export type { FieldOption, FieldError, ApplicationAnswers } from './utils/applic
 export { log, createLogger } from './utils/logger';
 export type { Logger } from './utils/logger';
 export { rewriteStorageUrl } from './utils/storage-url';
+export {
+  deriveAccountStatus,
+  deriveLifecycleStage,
+  deriveEngagement,
+  profileCompleteness,
+  LIFECYCLE_STAGE_LABELS,
+  LIFECYCLE_STAGE_MEANINGS,
+  ENGAGEMENT_LABELS,
+  ACTIVITY_SOURCE_LABELS,
+} from './utils/lifecycle-rules';
+export type { LifecycleInput } from './utils/lifecycle-rules';
 export { createUnsubscribeToken, verifyUnsubscribeToken } from './utils/unsubscribe-token';
 export { fetchAllRows, countRowsByKey, countRowsForIds } from './utils/paged-rows';
 export {

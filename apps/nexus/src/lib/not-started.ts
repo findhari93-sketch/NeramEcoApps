@@ -68,19 +68,34 @@ export function joinReminderDue(
   dormantSince: string | null | undefined,
   sent: number | null | undefined,
   now: number = Date.now(),
+  schedule: readonly number[] = JOIN_REMINDER_DAYS,
 ): 1 | 2 | 3 | null {
   const days = daysSince(dormantSince, now);
   if (days === null) return null;
+  // Three reminder messages exist (joinReminderMessage 1, 2, 3), so at most the
+  // first three configured days are used.
+  const steps = normalizeReminderSchedule(schedule);
   const already = Math.max(0, Number(sent) || 0);
-  if (already >= JOIN_REMINDER_DAYS.length) return null;
-  return days >= JOIN_REMINDER_DAYS[already] ? ((already + 1) as 1 | 2 | 3) : null;
+  if (already >= steps.length) return null;
+  return days >= steps[already] ? ((already + 1) as 1 | 2 | 3) : null;
+}
+
+/** Sorted, de-duplicated, positive whole days; at most three; the default when empty. */
+export function normalizeReminderSchedule(schedule: readonly number[] | null | undefined): number[] {
+  const clean = [...new Set((schedule || []).filter((d) => Number.isInteger(d) && d > 0))].sort((a, b) => a - b).slice(0, 3);
+  return clean.length ? clean : [...JOIN_REMINDER_DAYS];
 }
 
 /** Not started long enough that staff should decide: remind again, or pause with a reason. */
-export function needsDecision(row: ParticipationRow | null | undefined, now: number = Date.now()): boolean {
+export function needsDecision(
+  row: ParticipationRow | null | undefined,
+  now: number = Date.now(),
+  decisionDays: number = NOT_STARTED_DECISION_DAYS,
+): boolean {
   if (!isNotStarted(row)) return false;
   const days = daysSince(row?.dormant_since, now);
-  return days !== null && days >= NOT_STARTED_DECISION_DAYS;
+  const threshold = Number.isInteger(decisionDays) && decisionDays > 0 ? decisionDays : NOT_STARTED_DECISION_DAYS;
+  return days !== null && days >= threshold;
 }
 
 /** Paused by staff, but opened Nexus after they were paused. Staff decide; nothing flips on its own. */
@@ -221,12 +236,17 @@ export interface DormantRow extends ParticipationRow {
   attendance?: { attended?: number | null } | null;
 }
 
-export function matchesDormantView(row: DormantRow, view: DormantView, now: number = Date.now()): boolean {
+export function matchesDormantView(
+  row: DormantRow,
+  view: DormantView,
+  now: number = Date.now(),
+  decisionDays: number = NOT_STARTED_DECISION_DAYS,
+): boolean {
   switch (view) {
     case 'not_started':
       return isNotStarted(row);
     case 'not_started_long':
-      return needsDecision(row, now);
+      return needsDecision(row, now, decisionDays);
     case 'paused':
       return isPausedByStaff(row);
     case 'back_in_nexus':
@@ -236,12 +256,22 @@ export function matchesDormantView(row: DormantRow, view: DormantView, now: numb
   }
 }
 
-export function dormantViewCounts(rows: DormantRow[], now: number = Date.now()): Record<DormantView, number> {
+export function dormantViewCounts(
+  rows: DormantRow[],
+  now: number = Date.now(),
+  decisionDays: number = NOT_STARTED_DECISION_DAYS,
+): Record<DormantView, number> {
   const counts = { all: 0, not_started: 0, not_started_long: 0, paused: 0, back_in_nexus: 0 };
   for (const row of rows) {
-    for (const view of DORMANT_VIEWS) if (matchesDormantView(row, view, now)) counts[view] += 1;
+    for (const view of DORMANT_VIEWS) if (matchesDormantView(row, view, now, decisionDays)) counts[view] += 1;
   }
   return counts;
+}
+
+/** "2 weeks", "1 week", "10 days": how the decision point reads in labels. */
+export function waitPeriodLabel(days: number): string {
+  if (days % 7 === 0) return days === 7 ? '1 week' : `${days / 7} weeks`;
+  return `${days} days`;
 }
 
 export type DormantDetailKind = 'paused' | 'back_in_nexus' | 'not_started' | 'photo_step' | 'teams' | 'reminded';

@@ -24,6 +24,7 @@ import {
   CancelIcon,
 } from '@neram/ui';
 import { AuthGate } from '@/components/AuthGate';
+import { useToolOpened } from '@/hooks/useToolOpened';
 
 // Education status options
 const EDUCATION_OPTIONS = [
@@ -71,6 +72,7 @@ interface EligibilityResult {
 }
 
 export default function NataEligibilityCheckerPage() {
+  useToolOpened('nata_eligibility_checker');
   const [education, setEducation] = useState('');
   const [subjects, setSubjects] = useState<string[]>([]);
   const [aggregate, setAggregate] = useState('');

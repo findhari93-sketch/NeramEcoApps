@@ -39,7 +39,7 @@ function formatCurrency(amount: number): string {
 }
 
 function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '--';
+  if (!dateStr) return 'Not set';
   return new Date(dateStr).toLocaleDateString('en-IN', {
     day: '2-digit',
     month: 'short',
@@ -211,7 +211,7 @@ export default function PaymentSection({ detail }: PaymentSectionProps) {
                     <TableRow key={payment.id} sx={{ '&:hover': { bgcolor: 'action.hover' }, '&:last-child td': { borderBottom: 0 } }}>
                       <TableCell sx={{ fontSize: 12.5, py: 1.25 }}>{formatDate(payment.paid_at || payment.created_at)}</TableCell>
                       <TableCell sx={{ fontFamily: 'monospace', fontWeight: 600, fontSize: 12.5, py: 1.25 }}>{formatCurrency(payment.amount)}</TableCell>
-                      <TableCell sx={{ fontSize: 12.5, py: 1.25, textTransform: 'capitalize' }}>{payment.payment_method || '--'}</TableCell>
+                      <TableCell sx={{ fontSize: 12.5, py: 1.25, textTransform: 'capitalize' }}>{payment.payment_method || 'Not set'}</TableCell>
                       <TableCell sx={{ py: 1.25 }}>
                         <Chip
                           label={payment.status}
@@ -249,7 +249,7 @@ export default function PaymentSection({ detail }: PaymentSectionProps) {
                           </Box>
                         ) : (
                           <Typography variant="caption" sx={{ fontFamily: 'monospace', fontSize: 11, color: 'text.secondary' }}>
-                            {payment.receipt_number || '--'}
+                            {payment.receipt_number || 'Not set'}
                           </Typography>
                         )}
                       </TableCell>
@@ -316,7 +316,7 @@ export default function PaymentSection({ detail }: PaymentSectionProps) {
                             ? <span style={{ color: inst.late_fee_waived ? '#78909C' : '#D32F2F' }}>
                                 {formatCurrency(inst.late_fee)}{inst.late_fee_waived ? ' (waived)' : ''}
                               </span>
-                            : <span style={{ color: '#bdbdbd' }}>--</span>}
+                            : <span style={{ color: '#757575' }}>Not set</span>}
                         </TableCell>
                       </TableRow>
                     );

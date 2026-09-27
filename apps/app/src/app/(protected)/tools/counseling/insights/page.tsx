@@ -30,6 +30,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import { useFirebaseAuth } from '@neram/auth';
 import { AuthGate } from '@/components/AuthGate';
+import { useToolOpened } from '@/hooks/useToolOpened';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -88,6 +89,7 @@ function getConversionColor(rate: number | null): string {
 // ─── Page ──────────────────────────────────────────────
 
 export default function CounselingInsightsPage() {
+  useToolOpened('counseling_insights');
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const { user } = useFirebaseAuth();

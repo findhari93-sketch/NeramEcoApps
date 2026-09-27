@@ -38,6 +38,7 @@ import ScholarshipSection from './components/ScholarshipSection';
 import UsernameSection from './components/UsernameSection';
 import AccountSection from './components/AccountSection';
 import ProfileSkeleton from './components/ProfileSkeleton';
+import ReviewPromptCard from '@/components/ReviewPromptCard';
 
 interface SectionConfig {
   id: string;
@@ -281,6 +282,8 @@ export default function ProfilePage() {
             <AccountSection profile={basicProfile as any} />
           </Paper>
         )}
+
+        <ReviewPromptCard from="profile" sx={{ mt: 2 }} />
       </Box>
     );
   }
@@ -328,6 +331,8 @@ export default function ProfilePage() {
               <AccountSection profile={basicProfile as any} />
             </Paper>
           )}
+
+          <ReviewPromptCard from="profile" sx={{ mt: 2 }} />
         </Grid>
 
         {/* Main Content */}

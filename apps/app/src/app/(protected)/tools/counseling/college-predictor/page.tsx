@@ -44,6 +44,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import SortIcon from '@mui/icons-material/Sort';
 import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import { AuthGate } from '@/components/AuthGate';
+import { useToolOpened } from '@/hooks/useToolOpened';
 
 // ─── Types ──────────────────────────────────────────────
 
@@ -504,6 +505,7 @@ function FilterPanel({
 // ─── Main Page ──────────────────────────────────────────
 
 export default function CounselingCollegePredictorPage() {
+  useToolOpened('college_predictor_counseling');
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const searchParams = useSearchParams();

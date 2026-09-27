@@ -417,6 +417,19 @@ export interface LeadProfile extends Timestamps {
 
   // Application number (auto-generated)
   application_number: string | null;
+  // Applicant contact snapshot (users.* stays canonical)
+  first_name: string | null;
+  email: string | null;
+  phone: string | null;
+  parent_phone: string | null;
+  date_of_birth: string | null;
+  gender: 'male' | 'female' | 'other' | null;
+  // Google Ads click ids (attribution)
+  gclid: string | null;
+  wbraid: string | null;
+  // Self-service fee
+  fee_structure_id: string | null;
+  fee_source: 'standard' | 'admin' | 'link' | null;
 
   // Source tracking
   source: ApplicationSource;
@@ -3077,7 +3090,7 @@ export const PIPELINE_STAGE_CONFIG: Record<PipelineStage, { label: string; color
 /**
  * Unified user journey row returned from user_journey_view
  */
-export interface UserJourney {
+export interface UserJourney extends UserLifecycleColumns {
   // Core user fields
   id: string;
   name: string;
@@ -3196,10 +3209,59 @@ export interface UserJourneyListOptions {
   candidateSegment?: CandidateSegment;   // suggestion-only smart segments
   dateFrom?: string;
   dateTo?: string;
+  /** Lifecycle dimensions (user_lifecycle_view, migration 20261010090100). */
+  lifecycleStage?: LifecycleStage;
+  engagement?: EngagementState;
+  /** 'firebase' (default Leads list), 'microsoft' (Microsoft-only people), 'all'. */
+  identity?: 'firebase' | 'microsoft' | 'all';
   limit?: number;
   offset?: number;
   orderBy?: string;
   orderDirection?: 'asc' | 'desc';
+}
+
+/** user_lifecycle_view.lifecycle_stage. Derived, never stored. */
+export type LifecycleStage =
+  | 'prospect'
+  | 'lead'
+  | 'applicant'
+  | 'enrolled'
+  | 'active_student'
+  | 'paused'
+  | 'alumni'
+  | 'archived';
+
+/** user_lifecycle_view.engagement, from users.last_meaningful_activity_at. */
+export type EngagementState = 'new' | 'engaged' | 'low' | 'inactive' | 'dormant';
+
+/** user_lifecycle_view.nexus_access. Mirrors the Nexus sign-in gate; read-only. */
+export type NexusAccessState = 'enrolled' | 'not_started' | 'alumni' | 'none';
+
+/** Extra columns user_lifecycle_view adds on top of UserJourney. */
+export interface UserLifecycleColumns {
+  has_firebase?: boolean;
+  has_microsoft?: boolean;
+  personal_email?: string | null;
+  first_touch?: Record<string, string> | null;
+  account_status?: 'active' | 'deactivated';
+  lifecycle_stage?: LifecycleStage;
+  crm_stage?: PipelineStage;
+  engagement?: EngagementState;
+  last_meaningful_activity_at?: string | null;
+  last_meaningful_activity_source?: string | null;
+  preparation_goal?: string | null;
+  target_exams?: string[];
+  target_year?: number | null;
+  current_standard?: string | null;
+  profile_missing?: string[];
+  nexus_access?: NexusAccessState;
+  nexus_classroom_id?: string | null;
+  nexus_classroom_name?: string | null;
+  participation_status?: string | null;
+  dormant_source?: string | null;
+  nexus_last_login_at?: string | null;
+  is_alumni?: boolean;
+  student_program?: string | null;
 }
 
 /**
@@ -10041,13 +10103,23 @@ export interface StudentResultStats {
 // User Funnel Events
 // ============================================
 
-export type FunnelType = 'auth' | 'onboarding' | 'application';
+export type FunnelType =
+  | 'auth'
+  | 'onboarding'
+  | 'application'
+  | 'tool'
+  | 'marketing'
+  | 'enrollment'
+  | 'feedback'
+  | 'engagement';
 export type FunnelEventStatus = 'started' | 'completed' | 'failed' | 'skipped';
 
 export interface UserFunnelEvent {
   id: string;
   user_id: string | null;
   anonymous_id: string | null;
+  /** Browser-tab session id (sessionStorage). Null for events from before 2026-10. */
+  session_id?: string | null;
   funnel: FunnelType;
   event: string;
   status: FunnelEventStatus;

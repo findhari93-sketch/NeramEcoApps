@@ -32,6 +32,7 @@
 
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../client';
 import { getUserByPhone } from './users';
+import { findUserIdByIdentity, recordIdentity } from './identity';
 
 export type MsReconcileAction =
   | 'matched_ms_oid'
@@ -86,6 +87,25 @@ export async function reconcileMsIdentity(
   client: TypedSupabaseClient | undefined,
   input: ReconcileMsIdentityInput,
 ): Promise<ReconcileMsIdentityResult> {
+  const result = await reconcileMsIdentityInner(client, input);
+  // Record the Microsoft identity on whichever row it resolved to (never in a
+  // dry run). Fail-soft: see identity.ts.
+  if (!input.dryRun && result.user?.id) {
+    await recordIdentity(
+      result.user.id,
+      'microsoft',
+      input.msOid,
+      { email: input.upn || null },
+      client || getSupabaseAdminClient(),
+    );
+  }
+  return result;
+}
+
+async function reconcileMsIdentityInner(
+  client: TypedSupabaseClient | undefined,
+  input: ReconcileMsIdentityInput,
+): Promise<ReconcileMsIdentityResult> {
   const supabase = client || getSupabaseAdminClient();
   const { msOid, upn, allowCreate = true, dryRun = false } = input;
   if (!msOid) throw new Error('reconcileMsIdentity: msOid is required');
@@ -107,10 +127,15 @@ export async function reconcileMsIdentity(
     return { user: { ...row, ...updates }, action, linked: Object.keys(updates).length > 0 };
   }
 
-  // 1) ms_oid — already the right row.
+  // 1) ms_oid — already the right row (primary column, then a recorded identity).
   {
     const { data } = await supabase.from('users').select('*').eq('ms_oid', msOid).maybeSingle();
     if (data) return { user: data, action: 'matched_ms_oid', linked: false };
+    const aliasUserId = await findUserIdByIdentity('microsoft', msOid, supabase);
+    if (aliasUserId) {
+      const { data: aliased } = await supabase.from('users').select('*').eq('id', aliasUserId).maybeSingle();
+      if (aliased) return { user: aliased, action: 'matched_ms_oid', linked: false };
+    }
   }
 
   const safeUpn = upn ? escapeIlike(upn) : null;

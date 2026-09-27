@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { PROD_ADMIN_ORIGIN, adminCrmUrl, adminOriginFor } from './admin-links';
+import { PROD_ADMIN_ORIGIN, adminCrmUrl, adminDuplicatesUrl, adminOriginFor } from './admin-links';
 
 describe('adminOriginFor', () => {
   it('pairs each Nexus host with its Admin twin', () => {
@@ -31,5 +31,13 @@ describe('adminCrmUrl', () => {
     expect(
       adminCrmUrl('u-1', { nexusOrigin: 'http://localhost:3012', section: 'application' }),
     ).toBe('http://localhost:3013/crm/u-1?section=application');
+  });
+});
+
+describe('adminDuplicatesUrl', () => {
+  it('opens the Duplicates queue filtered to the student', () => {
+    expect(adminDuplicatesUrl('u 1', { nexusOrigin: 'https://staging-nexus.neramclasses.com' })).toBe(
+      'https://staging-admin.neramclasses.com/duplicates?user=u%201',
+    );
   });
 });

@@ -1,14 +1,17 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getRequestAdminId } from '@/lib/request-admin';
 import { adminBulkDeleteUsers, createAdminClient } from '@neram/database';
 import { getFirebaseAdminAuth } from '@/lib/firebase-admin';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { userIds, adminId } = body;
-
+    const { userIds, adminId: bodyAdminId } = body;
+    // The verified caller from middleware.ts; the body value is only a fallback
+    // for ADMIN_API_AUTH_MODE=report and is never trusted when the header is set.
+    const adminId = getRequestAdminId(request) ?? bodyAdminId;
     if (!Array.isArray(userIds) || userIds.length === 0) {
       return NextResponse.json(
         { error: 'userIds array is required' },

@@ -2,7 +2,8 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdminClient } from '@neram/database';
+import { getRequestAdminId } from '@/lib/request-admin';
+import { getSupabaseAdminClient, recordUserHistory } from '@neram/database';
 
 /**
  * POST /api/crm/users/[id]/disable
@@ -19,8 +20,10 @@ export async function POST(
 ) {
   try {
     const body = await request.json();
-    const { adminId, reason } = body;
-
+    const { adminId: bodyAdminId, reason } = body;
+    // The verified caller from middleware.ts; the body value is only a fallback
+    // for ADMIN_API_AUTH_MODE=report and is never trusted when the header is set.
+    const adminId = getRequestAdminId(request) ?? bodyAdminId;
     if (!adminId) {
       return NextResponse.json({ error: 'adminId is required' }, { status: 400 });
     }
@@ -48,6 +51,7 @@ export async function POST(
       .eq('id', params.id);
 
     if (error) throw error;
+    await recordUserHistory(supabase, params.id, 'is_disabled', false, { value: true, reason: reason || null }, adminId);
 
     return NextResponse.json({ success: true, is_disabled: true });
   } catch (error: any) {
@@ -65,6 +69,7 @@ export async function DELETE(
 ) {
   try {
     const supabase = getSupabaseAdminClient();
+    const adminId = getRequestAdminId(request);
 
     const { error } = await supabase
       .from('users')
@@ -76,6 +81,7 @@ export async function DELETE(
       .eq('id', params.id);
 
     if (error) throw error;
+    if (adminId) await recordUserHistory(supabase, params.id, 'is_disabled', true, false, adminId);
 
     return NextResponse.json({ success: true, is_disabled: false });
   } catch (error: any) {

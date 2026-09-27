@@ -12,10 +12,8 @@ const MARKETING_URL = 'http://localhost:3010';
 test.describe('Application Form - UI', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto(`${MARKETING_URL}/en/apply`);
-    // Wait for the form to load
-    await page.waitForSelector('form, [class*="Stepper"], [class*="stepper"]', {
-      timeout: 15000,
-    });
+    await page.waitForSelector('main', { timeout: 15000 });
+    await page.getByRole('button', { name: /type it myself/i }).click();
   });
 
   test('should load the application page', async ({ page }) => {
@@ -26,7 +24,7 @@ test.describe('Application Form - UI', () => {
 
   test('should display Step 1 - Personal Information by default', async ({ page }) => {
     // Step 1 content should be visible
-    await expect(page.getByText(/personal information/i).first()).toBeVisible();
+    await expect(page.getByRole('heading', { name: /about you/i })).toBeVisible();
 
     // Key fields should be present
     await expect(page.locator('input[name="firstName"], [data-testid="firstName"]').or(
@@ -48,18 +46,18 @@ test.describe('Application Form - UI', () => {
   });
 
   test('should have Next button visible on first step', async ({ page }) => {
-    const nextButton = page.getByRole('button', { name: /next/i });
+    const nextButton = page.getByRole('button', { name: /^continue$/i });
     await expect(nextButton).toBeVisible();
   });
 
   test('should show validation warning when proceeding without filling required fields', async ({ page }) => {
     // Try to click Next without filling fields
-    const nextButton = page.getByRole('button', { name: /next/i });
+    const nextButton = page.getByRole('button', { name: /^continue$/i });
     await nextButton.click();
 
     // Should show phone verification modal or validation error
     // (phone verification is required on step 0)
-    const hasVerificationModal = await page.locator('[class*="Modal"], [role="dialog"]').isVisible().catch(() => false);
+    const hasVerificationModal = page.getByRole('dialog').first().waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
     const hasValidationWarning = await page.getByText(/required|verification/i).first().isVisible().catch(() => false);
 
     expect(hasVerificationModal || hasValidationWarning).toBeTruthy();
@@ -70,6 +68,7 @@ test.describe('Application Form - Field Rendering', () => {
   test('should render country selector', async ({ page }) => {
     await page.goto(`${MARKETING_URL}/en/apply`);
     await page.waitForSelector('main', { timeout: 15000 });
+    await page.getByRole('button', { name: /type it myself/i }).click();
 
     // Country field should exist - could be MUI Autocomplete, Select, or text with "Country" label
     const countryField = page.getByText(/country/i).first();
@@ -79,6 +78,7 @@ test.describe('Application Form - Field Rendering', () => {
   test('should render pincode field for Indian applicants', async ({ page }) => {
     await page.goto(`${MARKETING_URL}/en/apply`);
     await page.waitForSelector('main', { timeout: 15000 });
+    await page.getByRole('button', { name: /type it myself/i }).click();
 
     // Pincode field should be visible for default country (IN)
     const pincodeField = page.getByLabel(/pin\s*code|pincode/i).or(
@@ -135,18 +135,20 @@ test.describe('Application Form - Mobile Responsiveness', () => {
   test('should render properly on mobile', async ({ page }) => {
     await page.goto(`${MARKETING_URL}/en/apply`);
     await page.waitForSelector('main', { timeout: 15000 });
+    await page.getByRole('button', { name: /type it myself/i }).click();
 
     // Form should be visible
     await expect(page.locator('main')).toBeVisible();
 
     // Step content should be readable on mobile
-    const stepContent = page.getByText(/personal information/i).first();
+    const stepContent = page.getByRole('heading', { name: /about you/i });
     await expect(stepContent).toBeVisible();
   });
 
   test('should show mobile step counter instead of stepper', async ({ page }) => {
     await page.goto(`${MARKETING_URL}/en/apply`);
     await page.waitForSelector('main', { timeout: 15000 });
+    await page.getByRole('button', { name: /type it myself/i }).click();
 
     // Mobile should show "Step X of Y" text
     const stepText = page.getByText(/step \d+ of \d+/i);
@@ -156,8 +158,9 @@ test.describe('Application Form - Mobile Responsiveness', () => {
   test('navigation buttons should be accessible on mobile', async ({ page }) => {
     await page.goto(`${MARKETING_URL}/en/apply`);
     await page.waitForSelector('main', { timeout: 15000 });
+    await page.getByRole('button', { name: /type it myself/i }).click();
 
-    const nextButton = page.getByRole('button', { name: /next/i });
+    const nextButton = page.getByRole('button', { name: /^continue$/i });
     await expect(nextButton).toBeVisible();
 
     // Button should have minimum touch target height (48px)

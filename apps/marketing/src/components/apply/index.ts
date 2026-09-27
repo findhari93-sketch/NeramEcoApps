@@ -1,10 +1,10 @@
 /**
  * Application Form Components
  *
- * Export all components for the multi-step application wizard
+ * Export all components for the four-step application flow
  */
 
-export { default as ApplyFormWizard } from './ApplyFormWizard';
+export { default as ApplyFlow } from './ApplyFlow';
 export { FormProvider, useFormContext } from './FormContext';
 export * from './types';
 export * from './steps';

@@ -9,7 +9,14 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyIdToken } from '@/lib/firebase-admin';
-import { getOrCreateUserFromFirebase, updateUser, getUserByFirebaseUid, getSupabaseAdminClient, computeAccountTier, createAutoMessage, schedulePhoneDrip, insertFunnelEvent, linkAnonymousEvents } from '@neram/database';
+import { getOrCreateUserFromFirebase, updateUser, getUserByFirebaseUid, getSupabaseAdminClient, computeAccountTier, createAutoMessage, schedulePhoneDrip, insertFunnelEvent, linkAnonymousEvents, recordFirstTouch } from '@neram/database';
+import {
+  ANON_ID_COOKIE,
+  isValidAnonymousId,
+  readCookie,
+  readFirstTouchCookie,
+  sanitizeFirstTouch,
+} from '@neram/database/analytics';
 
 import { getCorsHeaders } from '@/lib/cors';
 import { isEnrolledStudent } from '@/lib/enrollment';
@@ -22,7 +29,19 @@ export async function OPTIONS(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const corsHeaders = getCorsHeaders(req.headers.get('Origin'));
   try {
-    const { idToken } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { idToken } = body;
+
+    // Where this person came from: the body (cross-origin callers) or the shared
+    // .neramclasses.com cookies (same-origin calls from this app).
+    const cookieHeader = req.headers.get('cookie');
+    const anonymousId = isValidAnonymousId(body.anonymous_id)
+      ? body.anonymous_id
+      : (() => {
+          const fromCookie = readCookie(cookieHeader, ANON_ID_COOKIE);
+          return isValidAnonymousId(fromCookie) ? fromCookie : null;
+        })();
+    const firstTouch = sanitizeFirstTouch(body.first_touch) ?? readFirstTouchCookie(cookieHeader);
 
     if (!idToken) {
       return NextResponse.json(
@@ -73,10 +92,18 @@ export async function POST(req: NextRequest) {
       photoURL: decodedToken.picture || null,
     });
 
+    // First touch is recorded once, on the account's creation; for anyone, the
+    // anonymous journey from this browser becomes theirs.
+    if (isNewUser) {
+      await recordFirstTouch(adminClient, user.id, { anonymousId, firstTouch });
+    } else if (anonymousId) {
+      await linkAnonymousEvents(adminClient, anonymousId, user.id);
+    }
+
     // Track registration completion
     await insertFunnelEvent(adminClient, {
       user_id: user.id,
-      anonymous_id: null,
+      anonymous_id: anonymousId,
       funnel: 'auth',
       event: 'register_user_completed',
       status: 'completed',

@@ -310,18 +310,6 @@ export default function BestNataCoachingOnlinePage({ params: { locale } }: PageP
         ])}
       />
       <JsonLd data={generateSoftwareApplicationSchema()} />
-      <JsonLd data={{
-        '@context': 'https://schema.org',
-        '@type': 'EducationalOrganization',
-        name: 'Neram Classes',
-        aggregateRating: {
-          '@type': 'AggregateRating',
-          ratingValue: '4.9',
-          reviewCount: '90',
-          bestRating: '5',
-          worstRating: '1',
-        },
-      }} />
 
       <Box>
         {/* Hero Section */}

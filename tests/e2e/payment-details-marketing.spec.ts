@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { adminApiHeaders } from '../utils/admin-api';
 
 /**
  * Payment Details Step - E2E Tests
@@ -18,8 +19,9 @@ test.setTimeout(90_000);
 
 async function resolveAdminId(request: any): Promise<string> {
   const meRes = await request.get(
-    'http://localhost:3013/api/auth/me?msOid=5b3c917c-7d27-4bda-b009-26460aee806c',
-    { failOnStatusCode: false, timeout: 15_000 }
+    'http://localhost:3013/api/auth/me',
+    {
+      headers: adminApiHeaders(), failOnStatusCode: false, timeout: 15_000 }
   );
   if (meRes.status() !== 200) {
     throw new Error('Could not resolve admin user ID — is admin app running on port 3013?');
@@ -34,6 +36,7 @@ async function createTestLink(
   const adminId = await resolveAdminId(request);
 
   const res = await request.post('http://localhost:3013/api/direct-enrollment', {
+      headers: adminApiHeaders(),
     data: {
       adminId,
       studentName: 'E2E Payment Details Test',
@@ -64,6 +67,7 @@ async function createTestLink(
 async function cleanupTestLink(request: any, linkId: string) {
   try {
     await request.patch(`http://localhost:3013/api/direct-enrollment/${linkId}`, {
+      headers: adminApiHeaders(),
       data: { status: 'cancelled' },
       failOnStatusCode: false,
       timeout: 10_000,
@@ -71,6 +75,7 @@ async function cleanupTestLink(request: any, linkId: string) {
   } catch { /* ignore cleanup errors */ }
   try {
     await request.delete(`http://localhost:3013/api/direct-enrollment/${linkId}`, {
+      headers: adminApiHeaders(),
       failOnStatusCode: false,
       timeout: 10_000,
     });
@@ -335,6 +340,7 @@ test.describe('Enrollment Page - Payment Details Step UI', () => {
 
     // Cancel the link to simulate expiry
     await request.patch(`http://localhost:3013/api/direct-enrollment/${link.id}`, {
+      headers: adminApiHeaders(),
       data: { status: 'cancelled' },
       timeout: 10_000,
     });
@@ -438,7 +444,8 @@ test.describe('Cross-App - Payment Details in Admin View', () => {
     try {
       const res = await request.get(
         `http://localhost:3013/api/direct-enrollment/${link.id}`,
-        { timeout: 15_000 }
+        {
+      headers: adminApiHeaders(), timeout: 15_000 }
       );
       expect(res.status()).toBe(200);
 
@@ -457,6 +464,7 @@ test.describe('Cross-App - Payment Details in Admin View', () => {
       const patchRes = await request.patch(
         `http://localhost:3013/api/direct-enrollment/${link.id}`,
         {
+      headers: adminApiHeaders(),
           data: { adminNotes: 'Updated with payment proof' },
           timeout: 15_000,
         }
@@ -466,7 +474,8 @@ test.describe('Cross-App - Payment Details in Admin View', () => {
       // Verify via GET
       const getRes = await request.get(
         `http://localhost:3013/api/direct-enrollment/${link.id}`,
-        { timeout: 15_000 }
+        {
+      headers: adminApiHeaders(), timeout: 15_000 }
       );
       expect(getRes.status()).toBe(200);
 
@@ -483,7 +492,8 @@ test.describe('Cross-App - Payment Details in Admin View', () => {
     try {
       const res = await request.get(
         'http://localhost:3013/api/direct-enrollment?page=1&limit=5',
-        { timeout: 15_000 }
+        {
+      headers: adminApiHeaders(), timeout: 15_000 }
       );
       expect(res.status()).toBe(200);
 

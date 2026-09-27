@@ -415,13 +415,6 @@ export default function NataOnlineCoachingPage({ params: { locale } }: PageProps
             modes: ['online'],
             price: 15000,
           }),
-          aggregateRating: {
-            '@type': 'AggregateRating',
-            ratingValue: '4.9',
-            reviewCount: '90',
-            bestRating: '5',
-            worstRating: '1',
-          },
         }}
       />
       <JsonLd data={generateOnlineCourseSchema()} />

@@ -543,13 +543,16 @@ export default function ApplicationDashboard() {
           selectedCenterName: null,
           hybridLearningAccepted: false,
           learningMode: 'hybrid',
+          feeStructureId: null,
+          feeStructureLabel: null,
+          programType: null,
         },
         termsAccepted: false,
       }));
     }
     setDraftId(null);
     setReturnUserMode('add-course');
-    setActiveStep(2 as FormStep);
+    setActiveStep(1 as FormStep);
   };
 
   const handleNewApplication = () => {

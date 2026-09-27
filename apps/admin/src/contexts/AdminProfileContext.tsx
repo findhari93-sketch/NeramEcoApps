@@ -1,8 +1,15 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from 'react';
-import { useMicrosoftAuth, getAccessToken, loginScopes } from '@neram/auth';
+import { useMicrosoftAuth, getAccessToken, getAccessTokenSilent, loginScopes } from '@neram/auth';
 import type { AuthUser } from '@neram/auth';
+import { installAdminApiAuth } from '@/lib/api-auth-fetch';
+
+// Every /api/ call from the dashboard now carries the staff member's token, which
+// middleware.ts verifies. Installed at module load so it is in place before any
+// child component's effect fetches. Silent only: a failed refresh sends the call
+// without a token and the route answers 401, rather than redirecting mid-click.
+installAdminApiAuth(() => getAccessTokenSilent(loginScopes.default));
 
 interface AdminProfile {
   supabaseUserId: string | null;

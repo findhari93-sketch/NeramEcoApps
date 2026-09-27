@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { createAdminClient } from '@neram/database';
+import { createAdminClient, istDayBounds } from '@neram/database';
 
 const ZERO_COUNTS = {
   leads: 0,
@@ -13,6 +13,9 @@ const ZERO_COUNTS = {
   qa_moderation: 0,
   payments: 0,
   chat_history: 0,
+  duplicates: 0,
+  follow_ups: 0,
+  lifecycle: 0,
 };
 
 // GET /api/admin-badges - Get action-required badge counts for sidebar menu items
@@ -23,7 +26,10 @@ export async function GET() {
     // Chat history: conversations from the last 24 hours that haven't been reviewed
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
-    const [leads, students, demos, tickets, feedback, qa, payments, chatHistory] = await Promise.all([
+    // Follow-ups due before the end of today, India time (same rule as countDueFollowUps).
+    const { end: endOfTodayIst } = istDayBounds();
+
+    const [leads, students, demos, tickets, feedback, qa, payments, chatHistory, duplicates, followUps, lifecycle] = await Promise.all([
       // Leads: phone verified but WA not confirmed, OR submitted but call not made
       supabase
         .from('lead_profiles')
@@ -75,6 +81,24 @@ export async function GET() {
         .gte('created_at', twentyFourHoursAgo)
         .is('admin_correction', null)
         .is('thumbs_up', null),
+
+      // Duplicates: open pairs waiting for a merge or dismiss decision
+      supabase
+        .from('user_duplicate_candidates')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'open'),
+
+      // Follow-ups: open callbacks due today or overdue
+      supabase
+        .from('crm_follow_ups')
+        .select('callback_id', { count: 'exact', head: true })
+        .lt('due_at', endOfTodayIst.toISOString()),
+
+      // Lifecycle: open suggestions from the daily rules
+      supabase
+        .from('lifecycle_suggestions')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'open'),
     ]);
 
     return NextResponse.json({
@@ -86,6 +110,9 @@ export async function GET() {
       qa_moderation: qa.count ?? 0,
       payments: payments.count ?? 0,
       chat_history: chatHistory.count ?? 0,
+      duplicates: duplicates.count ?? 0,
+      follow_ups: followUps.count ?? 0,
+      lifecycle: lifecycle.count ?? 0,
     });
   } catch (err) {
     console.error('Error fetching admin badge counts:', err);

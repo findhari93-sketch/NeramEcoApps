@@ -35,6 +35,7 @@ import PeopleIcon from '@mui/icons-material/People';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { AuthGate } from '@/components/AuthGate';
 import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
+import { useToolOpened } from '@/hooks/useToolOpened';
 
 interface CounselingSystem {
   id: string;
@@ -72,6 +73,7 @@ interface SimilarStudent {
 }
 
 export default function CounselingRankPredictorPage() {
+  useToolOpened('rank_predictor');
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const searchParams = useSearchParams();

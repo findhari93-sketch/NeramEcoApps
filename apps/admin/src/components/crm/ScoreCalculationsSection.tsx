@@ -87,7 +87,7 @@ function CalcRow({ calc }: { calc: ScoreCalculation }) {
               fontWeight={700}
               sx={{ fontFamily: 'monospace', fontSize: 14 }}
             >
-              {String(result.finalCutoff ?? '--')}
+              {String(result.finalCutoff ?? 'Not set')}
             </Typography>
             <Typography variant="caption" color="text.secondary">
               /400

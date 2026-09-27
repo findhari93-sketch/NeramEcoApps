@@ -138,13 +138,6 @@ export function generateChennaiNeighborhoodSchema(neighborhood: ChennaiNeighborh
     },
     sameAs: [...SOCIAL_PROFILES, GOOGLE_BUSINESS_URL],
     areaServed: { '@type': 'City', name: 'Chennai' },
-    aggregateRating: {
-      '@type': 'AggregateRating',
-      ratingValue: '4.9',
-      reviewCount: '50',
-      bestRating: '5',
-      worstRating: '1',
-    },
     parentOrganization: {
       '@id': `${BASE_URL}/#organization`,
     },

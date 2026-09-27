@@ -35,6 +35,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import { searchCoaColleges, getCOAColleges, getCOACities } from '@neram/database';
+import { useToolOpened } from '@/hooks/useToolOpened';
 
 // ─── Status config ────────────────────────────────────────────────────────────
 const STATUS = {
@@ -326,6 +327,7 @@ function BrowseTab() {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function COACheckerPage() {
+  useToolOpened('coa_checker');
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 

@@ -27,6 +27,7 @@ import {
 } from '@neram/ui';
 import { AuthGate } from '@/components/AuthGate';
 import Link from 'next/link';
+import { useToolOpened } from '@/hooks/useToolOpened';
 
 // Fee constants (per attempt)
 const FEES: Record<string, number> = {
@@ -124,6 +125,7 @@ const TIPS = [
 ];
 
 export default function NataCostCalculatorPage() {
+  useToolOpened('nata_cost_calculator');
   const [category, setCategory] = useState('General/OBC(N-CL)');
   const [attempts, setAttempts] = useState('1');
   const [homeState, setHomeState] = useState('');

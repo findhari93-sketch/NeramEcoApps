@@ -198,7 +198,7 @@ export default function LeadsPage() {
   };
 
   const handleRowClick = (userId: string) => {
-    router.push(`/crm/${userId}`);
+    router.push(`/crm/${userId}?from=leads`);
   };
 
   const handleDiagnosticsClick = (user: UserJourney) => {

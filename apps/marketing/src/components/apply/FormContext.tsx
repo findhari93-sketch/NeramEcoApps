@@ -1,27 +1,54 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import type { ApplicationFormData, FormStep, StepValidation, ValidationError } from './types';
-import { DEFAULT_FORM_DATA, STEP_LABELS } from './types';
+import type { ApplicationFormData, FormStep, StepValidation } from './types';
+import { DEFAULT_FORM_DATA, STEP_COUNT } from './types';
 import { useFirebaseAuth } from '@neram/auth';
 import { getCountryConfig } from './countryConfig';
 import { captureAttributionFromUrl } from '@/lib/attribution';
+import { trackTaxonomyEvent } from '@/lib/funnel-tracker';
+import {
+  validateStep as validateStepData,
+  buildDraftPayload,
+  buildSubmitPayload,
+  remapSavedStep,
+  submitRequest,
+  SAVED_STATE_VERSION,
+} from './validation';
 
 // ============================================
 // LOCAL STORAGE PERSISTENCE
 // ============================================
 
 const STORAGE_KEY = 'neram_application_draft';
+const STARTED_KEY = 'neram_application_started';
+
+export interface SubmittedApplication {
+  id: string;
+  applicationNumber: string | null;
+}
 
 interface SavedFormState {
+  version?: number;
   formData: ApplicationFormData;
   activeStep: FormStep;
   savedAt: string;
+  submittedApplication?: SubmittedApplication | null;
 }
 
-function saveToStorage(formData: ApplicationFormData, activeStep: FormStep): void {
+function saveToStorage(
+  formData: ApplicationFormData,
+  activeStep: FormStep,
+  submittedApplication: SubmittedApplication | null,
+): void {
   try {
-    const state: SavedFormState = { formData, activeStep, savedAt: new Date().toISOString() };
+    const state: SavedFormState = {
+      version: SAVED_STATE_VERSION,
+      formData,
+      activeStep,
+      savedAt: new Date().toISOString(),
+      submittedApplication,
+    };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
     // localStorage full or unavailable
@@ -56,75 +83,14 @@ function clearStorage(): void {
 }
 
 // ============================================
-// DRAFT PAYLOAD BUILDER
-// ============================================
-
-function buildDraftPayload(formData: ApplicationFormData, stepCompleted: number) {
-  // Always include base fields
-  const payload: Record<string, unknown> = {
-    status: 'draft',
-    form_step_completed: stepCompleted + 1, // 1-indexed: step 0 completed = 1
-    first_name: formData.personal.firstName || undefined,
-    phone_verified: formData.personal.phoneVerified,
-    phone_verified_at: formData.personal.phoneVerifiedAt || undefined,
-    utm_source: formData.utmSource || undefined,
-    utm_medium: formData.utmMedium || undefined,
-    utm_campaign: formData.utmCampaign || undefined,
-    referral_code: formData.referralCode || undefined,
-    gclid: formData.gclid || undefined,
-    wbraid: formData.wbraid || undefined,
-  };
-
-  // Step 0 data: Personal + Location
-  if (stepCompleted >= 0) {
-    payload.father_name = formData.personal.fatherName || undefined;
-    payload.country = formData.location.country || 'IN';
-    payload.city = formData.location.city || undefined;
-    payload.state = formData.location.state || undefined;
-    payload.district = formData.location.district || undefined;
-    payload.pincode = formData.location.pincode || undefined;
-    payload.address = formData.location.address || undefined;
-    payload.latitude = formData.location.latitude ?? undefined;
-    payload.longitude = formData.location.longitude ?? undefined;
-    payload.location_source = formData.location.locationSource || undefined;
-    payload.detected_location = formData.location.detectedLocation || undefined;
-  }
-
-  // Step 1 data: Academic
-  if (stepCompleted >= 1) {
-    payload.applicant_category = formData.academic.applicantCategory || undefined;
-    payload.caste_category = formData.academic.casteCategory || undefined;
-    payload.target_exam_year = formData.academic.targetExamYear || undefined;
-    payload.school_type = formData.academic.schoolType || undefined;
-
-    // Get the appropriate academic data based on category
-    let academicData = null;
-    switch (formData.academic.applicantCategory) {
-      case 'school_student': academicData = formData.academic.schoolStudentData; break;
-      case 'diploma_student': academicData = formData.academic.diplomaStudentData; break;
-      case 'college_student': academicData = formData.academic.collegeStudentData; break;
-      case 'working_professional': academicData = formData.academic.workingProfessionalData; break;
-    }
-    if (academicData) payload.academic_data = academicData;
-  }
-
-  // Step 2 data: Course
-  if (stepCompleted >= 2) {
-    payload.interest_course = formData.course.interestCourse || undefined;
-    payload.selected_course_id = formData.course.selectedCourseId || undefined;
-    payload.selected_center_id = formData.course.selectedCenterId || undefined;
-    payload.hybrid_learning_accepted = formData.course.hybridLearningAccepted;
-    payload.learning_mode = formData.course.learningMode || 'hybrid';
-  }
-
-  return payload;
-}
-
-// ============================================
 // CONTEXT TYPE
 // ============================================
 
 export type ReturnUserMode = 'dashboard' | 'edit' | 'add-course' | 'new-form';
+
+export type SubmitResult =
+  | { ok: true; id: string; applicationNumber: string | null }
+  | { ok: false; error: string };
 
 interface FormContextType {
   // Form data
@@ -165,6 +131,8 @@ interface FormContextType {
 
   // Persistence
   clearSavedForm: () => void;
+  /** Stop saving the form on this device and drop what is saved (after payment). */
+  forgetDraft: () => void;
 
   // Draft save to DB
   saveDraftToDb: (stepCompleted: number) => Promise<boolean>;
@@ -189,155 +157,16 @@ interface FormContextType {
 
   // Refresh applications (after payment, etc.)
   refreshApplications: () => Promise<void>;
+
+  // Submission (Review step)
+  submitApplication: () => Promise<SubmitResult>;
+  submittedApplication: SubmittedApplication | null;
+
+  // Analytics: fires application_started once per browser session
+  markApplicationStarted: () => void;
 }
 
 const FormContext = createContext<FormContextType | null>(null);
-
-// ============================================
-// VALIDATION HELPERS
-// ============================================
-
-function validatePersonalInfo(data: ApplicationFormData): StepValidation {
-  const errors: ValidationError[] = [];
-
-  if (!data.personal.firstName || data.personal.firstName.length < 2) {
-    errors.push({ field: 'firstName', message: 'First name is required (min 2 characters)' });
-  }
-
-  if (!data.personal.fatherName || data.personal.fatherName.length < 2) {
-    errors.push({ field: 'fatherName', message: "Father's name is required (min 2 characters)" });
-  }
-
-  if (!data.personal.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.personal.email)) {
-    errors.push({ field: 'email', message: 'Valid email is required' });
-  }
-
-  const countryConfig = getCountryConfig(data.location.country);
-  // Skip phone format validation if already verified (phone was validated at verification time)
-  if (!data.personal.phoneVerified) {
-    if (!data.personal.phone || !countryConfig.phonePattern.test(data.personal.phone)) {
-      errors.push({ field: 'phone', message: `Valid ${countryConfig.phoneLength}-digit phone number is required` });
-    }
-  }
-
-  if (!data.personal.phoneVerified) {
-    errors.push({ field: 'phoneVerified', message: 'Phone verification is required' });
-  }
-
-  if (!data.personal.dateOfBirth) {
-    errors.push({ field: 'dateOfBirth', message: 'Date of birth is required' });
-  }
-
-  if (!data.personal.gender) {
-    errors.push({ field: 'gender', message: 'Gender is required' });
-  }
-
-  // Location validation (country-aware)
-  if (countryConfig.postalCode.required) {
-    if (!data.location.pincode || (countryConfig.postalCode.format && !countryConfig.postalCode.format.test(data.location.pincode))) {
-      errors.push({ field: 'pincode', message: `Valid ${countryConfig.postalCode.label.toLowerCase()} is required` });
-    }
-  }
-
-  if (countryConfig.locationFields.cityRequired && !data.location.city) {
-    errors.push({ field: 'city', message: 'City is required' });
-  }
-
-  if (countryConfig.locationFields.stateRequired && !data.location.state) {
-    errors.push({ field: 'state', message: `${countryConfig.locationFields.stateLabel} is required` });
-  }
-
-  return { isValid: errors.length === 0, errors };
-}
-
-function validateAcademicDetails(data: ApplicationFormData): StepValidation {
-  const errors: ValidationError[] = [];
-
-  if (!data.academic.applicantCategory) {
-    errors.push({ field: 'applicantCategory', message: 'Please select your category' });
-    return { isValid: false, errors };
-  }
-
-  if (!data.academic.casteCategory) {
-    errors.push({ field: 'casteCategory', message: 'Please select your caste category' });
-  }
-
-  if (!data.academic.targetExamYear) {
-    errors.push({ field: 'targetExamYear', message: 'Please select target exam year' });
-  }
-
-  // Category-specific validation
-  switch (data.academic.applicantCategory) {
-    case 'school_student':
-      if (!data.academic.schoolStudentData?.current_class) {
-        errors.push({ field: 'currentClass', message: 'Current class is required' });
-      }
-      if (!data.academic.schoolStudentData?.school_name) {
-        errors.push({ field: 'schoolName', message: 'School name is required' });
-      }
-      if (!data.academic.schoolStudentData?.board) {
-        errors.push({ field: 'board', message: 'Board is required' });
-      }
-      break;
-
-    case 'diploma_student':
-      if (!data.academic.diplomaStudentData?.college_name) {
-        errors.push({ field: 'collegeName', message: 'College name is required' });
-      }
-      if (!data.academic.diplomaStudentData?.department) {
-        errors.push({ field: 'department', message: 'Department is required' });
-      }
-      if (!data.academic.diplomaStudentData?.completed_grade) {
-        errors.push({ field: 'completedGrade', message: 'Please select grade completed before diploma' });
-      }
-      break;
-
-    case 'college_student':
-      if (!data.academic.collegeStudentData?.college_name) {
-        errors.push({ field: 'collegeName', message: 'College name is required' });
-      }
-      if (!data.academic.collegeStudentData?.department) {
-        errors.push({ field: 'department', message: 'Department is required' });
-      }
-      if (!data.academic.collegeStudentData?.year_of_study) {
-        errors.push({ field: 'yearOfStudy', message: 'Year of study is required' });
-      }
-      if (!data.academic.collegeStudentData?.twelfth_year) {
-        errors.push({ field: 'twelfthYear', message: '12th completion year is required' });
-      }
-      break;
-
-    case 'working_professional':
-      if (!data.academic.workingProfessionalData?.twelfth_year) {
-        errors.push({ field: 'twelfthYear', message: '12th completion year is required' });
-      }
-      break;
-  }
-
-  return { isValid: errors.length === 0, errors };
-}
-
-function validateCourseSelection(data: ApplicationFormData): StepValidation {
-  const errors: ValidationError[] = [];
-
-  if (!data.course.interestCourse) {
-    errors.push({ field: 'interestCourse', message: 'Please select a course' });
-  }
-
-  // Center selection is optional but hybrid acceptance is tracked
-
-  return { isValid: errors.length === 0, errors };
-}
-
-function validateReview(data: ApplicationFormData): StepValidation {
-  const errors: ValidationError[] = [];
-
-  if (!data.termsAccepted) {
-    errors.push({ field: 'termsAccepted', message: 'Please accept the terms and conditions' });
-  }
-
-  return { isValid: errors.length === 0, errors };
-}
 
 // ============================================
 // PROVIDER COMPONENT
@@ -358,7 +187,9 @@ export function FormProvider({ children }: FormProviderProps) {
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [draftId, setDraftId] = useState<string | null>(null);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
+  const [submittedApplication, setSubmittedApplication] = useState<SubmittedApplication | null>(null);
   const hasRestoredRef = useRef(false);
+  const draftForgottenRef = useRef(false);
 
   // Returning user state
   const [existingApplications, setExistingApplications] = useState<any[]>([]);
@@ -385,22 +216,41 @@ export function FormProvider({ children }: FormProviderProps) {
         saved.formData.academic.applicantCategory = (mapped || null) as any;
       }
 
-      setFormData(saved.formData);
-      setActiveStepState(saved.activeStep);
+      // Older drafts have no feeStructureId etc.; merge over the defaults so
+      // every key exists, then reopen on the remapped step.
+      setFormData({
+        ...DEFAULT_FORM_DATA,
+        ...saved.formData,
+        personal: { ...DEFAULT_FORM_DATA.personal, ...saved.formData.personal },
+        location: { ...DEFAULT_FORM_DATA.location, ...saved.formData.location },
+        academic: { ...DEFAULT_FORM_DATA.academic, ...saved.formData.academic },
+        course: { ...DEFAULT_FORM_DATA.course, ...saved.formData.course },
+      });
+      // Never reopen on Pay from the device: the session may be gone or the
+      // device shared. A signed-in applicant reaches Pay again from the
+      // dashboard's Continue to payment.
+      setActiveStepState(remapSavedStep(saved));
     }
   }, []);
 
   // Auto-save form data and step to localStorage on every change
   useEffect(() => {
     if (!hasRestoredRef.current) return; // Don't save until initial restore is done
-    saveToStorage(formData, activeStep);
+    if (draftForgottenRef.current) return; // Paid: nothing left to resume on this device
+    saveToStorage(formData, activeStep, null);
   }, [formData, activeStep]);
+
+  const forgetDraft = useCallback(() => {
+    draftForgottenRef.current = true;
+    clearStorage();
+  }, []);
 
   const clearSavedForm = useCallback(() => {
     clearStorage();
     setFormData(DEFAULT_FORM_DATA);
     setActiveStepState(0);
     setDraftId(null);
+    setSubmittedApplication(null);
   }, []);
 
   // Prefill form from an existing submitted application
@@ -468,7 +318,6 @@ export function FormProvider({ children }: FormProviderProps) {
       }
 
       const payload = buildDraftPayload(formData, stepCompleted);
-      console.log('[Draft Save] Saving step', stepCompleted, 'payload keys:', Object.keys(payload));
 
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
@@ -486,7 +335,6 @@ export function FormProvider({ children }: FormProviderProps) {
       clearTimeout(timeoutId);
 
       const result = await response.json();
-      console.log('[Draft Save] Response:', result.success, result.error || '');
 
       if (result.success && result.data?.id) {
         setDraftId(result.data.id);
@@ -570,9 +418,9 @@ export function FormProvider({ children }: FormProviderProps) {
             prefilled.add('dateOfBirth');
           }
 
-          if (profile.gender) {
+          if (profile.gender === 'male' || profile.gender === 'female' || profile.gender === 'other') {
             setFormData((prev) => {
-              if (prev.personal.gender && prev.personal.gender !== 'male') return prev;
+              if (prev.personal.gender) return prev;
               return { ...prev, personal: { ...prev.personal, gender: profile.gender } };
             });
             prefilled.add('gender');
@@ -645,25 +493,14 @@ export function FormProvider({ children }: FormProviderProps) {
         console.error('Error pre-filling from onboarding:', error);
       }
 
-      // Fallback: use Google displayName if first name / father's name not yet filled
+      // Fallback: the first word of the Google display name is a fair guess at
+      // the student's first name. The rest of it is NOT the father's name
+      // (it is usually a surname or an initial), so that guess is gone.
       if (user.name) {
-        const nameParts = user.name.trim().split(/\s+/);
-        const firstName = nameParts[0] || '';
-        const fatherName = nameParts.slice(1).join(' ') || '';
-
+        const firstName = user.name.trim().split(/\s+/)[0] || '';
         if (firstName && !prefilled.has('firstName')) {
-          setFormData((prev) => ({
-            ...prev,
-            personal: { ...prev.personal, firstName },
-          }));
+          setFormData((prev) => (prev.personal.firstName ? prev : { ...prev, personal: { ...prev.personal, firstName } }));
           prefilled.add('firstName');
-        }
-        if (fatherName && !prefilled.has('fatherName')) {
-          setFormData((prev) => ({
-            ...prev,
-            personal: { ...prev.personal, fatherName },
-          }));
-          prefilled.add('fatherName');
         }
       }
 
@@ -704,6 +541,10 @@ export function FormProvider({ children }: FormProviderProps) {
                 personal: {
                   ...prev.personal,
                   fatherName: prev.personal.fatherName || draft.father_name || '',
+                  email: prev.personal.email || draft.email || '',
+                  parentPhone: prev.personal.parentPhone || draft.parent_phone || '',
+                  dateOfBirth: prev.personal.dateOfBirth || draft.date_of_birth || '',
+                  gender: prev.personal.gender || draft.gender || '',
                   phoneVerified: prev.personal.phoneVerified || draft.phone_verified || false,
                   phoneVerifiedAt: prev.personal.phoneVerifiedAt || draft.phone_verified_at || null,
                 },
@@ -738,11 +579,13 @@ export function FormProvider({ children }: FormProviderProps) {
                   selectedCenterId: prev.course.selectedCenterId || draft.selected_center_id || null,
                   hybridLearningAccepted: prev.course.hybridLearningAccepted || draft.hybrid_learning_accepted || false,
                   learningMode: prev.course.learningMode || draft.learning_mode || 'hybrid',
+                  feeStructureId: prev.course.feeStructureId || draft.fee_structure_id || null,
                 },
               }));
 
-              // Restore step progress if localStorage didn't have a more advanced step
-              const dbStep = Math.min((draft.form_step_completed || 1) - 1, 3);
+              // form_step_completed is 1-indexed and counts the OLD steps for
+              // drafts saved before this release; remap the same way localStorage is.
+              const dbStep = remapSavedStep({ activeStep: (draft.form_step_completed || 1) - 1 });
               setActiveStepState((prev) => Math.max(prev, dbStep) as FormStep);
             } else if (submittedApps.length > 0) {
               // Returning user with submitted application(s)
@@ -860,7 +703,7 @@ export function FormProvider({ children }: FormProviderProps) {
   }, []);
 
   const goToNextStep = useCallback(() => {
-    setActiveStepState((prev) => Math.min(prev + 1, 3) as FormStep);
+    setActiveStepState((prev) => Math.min(prev + 1, STEP_COUNT - 1) as FormStep);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
@@ -869,23 +712,7 @@ export function FormProvider({ children }: FormProviderProps) {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
-  const validateStep = useCallback(
-    (step: FormStep): StepValidation => {
-      switch (step) {
-        case 0:
-          return validatePersonalInfo(formData);
-        case 1:
-          return validateAcademicDetails(formData);
-        case 2:
-          return validateCourseSelection(formData);
-        case 3:
-          return validateReview(formData);
-        default:
-          return { isValid: true, errors: [] };
-      }
-    },
-    [formData]
-  );
+  const validateStep = useCallback((step: FormStep): StepValidation => validateStepData(step, formData), [formData]);
 
   const stepValidations: Record<FormStep, StepValidation> = {
     0: validateStep(0),
@@ -969,6 +796,55 @@ export function FormProvider({ children }: FormProviderProps) {
     }
   }, [user, setReturnUserMode, setActiveStep]);
 
+  const markApplicationStarted = useCallback(() => {
+    try {
+      if (sessionStorage.getItem(STARTED_KEY)) return;
+      sessionStorage.setItem(STARTED_KEY, '1');
+    } catch {
+      // sessionStorage unavailable: fire once per mount instead
+    }
+    trackTaxonomyEvent('application_started');
+  }, []);
+
+  /**
+   * Review pressed "Continue to payment": write the application (POST, or
+   * PATCH when editing a submitted one), remember what came back so the pay
+   * step and a reload both find it, and leave the draft in localStorage until
+   * payment succeeds or the user starts over.
+   */
+  const submitApplication = useCallback(async (): Promise<SubmitResult> => {
+    setIsSubmitting(true);
+    setSubmissionError(null);
+    try {
+      const idToken = await (user?.raw as any)?.getIdToken?.();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (idToken) headers.Authorization = `Bearer ${idToken}`;
+
+      const { method, url } = submitRequest({ returnUserMode, draftId, submittedId: submittedApplication?.id ?? null });
+      const response = await fetch(url, {
+        method,
+        headers,
+        body: JSON.stringify(buildSubmitPayload(formData)),
+      });
+      const result = await response.json();
+      if (!result?.success || !result.data?.id) {
+        const error = result?.error || 'errors.submitFailed';
+        setSubmissionError(error);
+        return { ok: false, error };
+      }
+      const submitted = { id: result.data.id as string, applicationNumber: (result.data.application_number as string) || null };
+      setSubmittedApplication(submitted);
+      setDraftId(submitted.id);
+      return { ok: true, ...submitted };
+    } catch (error) {
+      console.error('Submission error:', error);
+      setSubmissionError('errors.submitFailed');
+      return { ok: false, error: 'errors.submitFailed' };
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [user, returnUserMode, draftId, formData, submittedApplication]);
+
   const value: FormContextType = {
     formData,
     setFormData,
@@ -979,7 +855,7 @@ export function FormProvider({ children }: FormProviderProps) {
     goToNextStep,
     goToPreviousStep,
     isFirstStep: activeStep === 0,
-    isLastStep: activeStep === 3,
+    isLastStep: activeStep === STEP_COUNT - 1,
     validateStep,
     stepValidations,
     showPhoneVerification,
@@ -992,6 +868,7 @@ export function FormProvider({ children }: FormProviderProps) {
     submissionError,
     setSubmissionError,
     clearSavedForm,
+    forgetDraft,
     saveDraftToDb,
     isSavingDraft,
     draftId,
@@ -1006,6 +883,9 @@ export function FormProvider({ children }: FormProviderProps) {
     prefillFromExistingApplication,
     removeApplication,
     refreshApplications,
+    submitApplication,
+    submittedApplication,
+    markApplicationStarted,
   };
 
   return <FormContext.Provider value={value}>{children}</FormContext.Provider>;

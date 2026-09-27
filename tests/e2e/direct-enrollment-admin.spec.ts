@@ -12,7 +12,7 @@ import { test, expect } from '@playwright/test';
 
 // Helper: resolve a real admin user ID (FK constraint on created_by → users.id)
 async function getAdminUserId(request: any): Promise<string> {
-  const res = await request.get('http://localhost:3013/api/auth/me?msOid=5b3c917c-7d27-4bda-b009-26460aee806c', {
+  const res = await request.get('http://localhost:3013/api/auth/me', {
     failOnStatusCode: false,
   });
   if (res.status() === 200) {
@@ -291,7 +291,7 @@ test.describe('Direct Enrollment API - Auth & Notifications', () => {
 
   test('GET /api/auth/me should return user for valid msOid', async ({ request }) => {
     // Use the known admin user's msOid
-    const response = await request.get('/api/auth/me?msOid=5b3c917c-7d27-4bda-b009-26460aee806c', {
+    const response = await request.get('/api/auth/me', {
       failOnStatusCode: false,
     });
 

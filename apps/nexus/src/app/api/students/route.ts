@@ -9,6 +9,7 @@ import { activityOf } from '@/lib/student-roster-view';
 import { isApplicationForm } from '@/lib/application-form';
 import { pickStudentPlace } from '@/lib/student-place';
 import { backInNexus, isNotStarted, needsDecision } from '@/lib/not-started';
+import { readNotStartedSchedule } from '@/lib/lifecycle-schedule';
 import {
   matchesSegment,
   segmentCounts,
@@ -107,7 +108,7 @@ export async function GET(request: NextRequest) {
     // ambiguous and PostgREST rejects it.
     let enrollmentQuery = supabase
       .from('nexus_enrollments')
-      .select('id, user_id, enrolled_at, batch_id, is_active, current_standard, current_standard_source, current_standard_set_at, participation_status, dormant_since, dormant_reason, dormant_source, dormant_by, join_reminders_sent, user:users!nexus_enrollments_user_id_fkey!inner(id, name, email, personal_email, linked_classroom_email, avatar_url, ms_oid, nexus_access_enabled, academic_year, home_language, limited_english, is_alumni, nexus_first_login_at, nexus_last_login_at), batch:nexus_batches(id, name)')
+      .select('id, user_id, enrolled_at, batch_id, is_active, current_standard, current_standard_source, current_standard_set_at, participation_status, dormant_since, dormant_reason, dormant_source, dormant_by, join_reminders_sent, user:users!nexus_enrollments_user_id_fkey!inner(id, name, email, personal_email, linked_classroom_email, avatar_url, ms_oid, academic_year, home_language, limited_english, is_alumni, nexus_first_login_at, nexus_last_login_at), batch:nexus_batches(id, name)')
       .eq('classroom_id', classroomId)
       .eq('role', 'student')
       .eq('is_active', true)
@@ -367,7 +368,6 @@ export async function GET(request: NextRequest) {
         linked_classroom_email: string | null;
         avatar_url: string | null;
         ms_oid: string | null;
-        nexus_access_enabled: boolean | null;
         academic_year: string | null;
         home_language: string | null;
         limited_english: boolean | null;
@@ -406,7 +406,6 @@ export async function GET(request: NextRequest) {
         // city. The roster joins them for display with placeLabel().
         city: placeByUser.get(userId)?.city ?? null,
         state: placeByUser.get(userId)?.state ?? null,
-        nexus_access_enabled: user.nexus_access_enabled ?? false,
         // Same value under two names for one release. `exam_batch` is the older
         // name and still has consumers; `academic_year` matches the column and the
         // field the classification route writes.
@@ -511,7 +510,9 @@ export async function GET(request: NextRequest) {
     // paused student who has opened Nexus since (bring back, or leave paused).
     const notStartedRows = students.filter((s: any) => s.dormant_source === 'auto');
     const pausedRows = students.filter((s: any) => s.dormant_source === 'staff');
-    const notStartedNeedsDecision = notStartedRows.filter((s: any) => needsDecision(s, nowMs)).length;
+    // The decision point comes from Admin, Settings, Lifecycle rules (default 14 days).
+    const { decisionDays } = await readNotStartedSchedule(supabase);
+    const notStartedNeedsDecision = notStartedRows.filter((s: any) => needsDecision(s, nowMs, decisionDays)).length;
     const backInNexusCount = pausedRows.filter((s: any) => backInNexus(s, s.last_seen_at)).length;
 
     const counts = {
@@ -531,6 +532,8 @@ export async function GET(request: NextRequest) {
       pausedByStaff: pausedRows.length,
       notStartedNeedsDecision,
       backInNexus: backInNexusCount,
+      // The configured decision point, so the page filters and words it the same way.
+      notStartedDecisionDays: decisionDays,
     };
 
     // Server-side segment narrowing is applied LAST, after the counts, and only

@@ -7,6 +7,7 @@ import {
   getDefaultClassroom,
   removeEnrollments,
   ensureCatchupJourney,
+  insertFunnelEvent,
 } from '@neram/database';
 import { addStudentToClassroomTeams } from '@neram/auth';
 
@@ -112,6 +113,31 @@ export async function POST(
       .single();
 
     if (error) throw error;
+
+    // Analytics (lifecycle plan M3b): one enrollment_completed event per grant.
+    // Best effort: insertFunnelEvent logs and returns null on failure, and the
+    // try/catch covers anything unexpected, so the grant never fails on it.
+    try {
+      await insertFunnelEvent(supabase, {
+        user_id: userId,
+        anonymous_id: null,
+        funnel: 'enrollment',
+        event: 'enrollment_completed',
+        status: 'completed',
+        error_message: null,
+        error_code: null,
+        metadata: { classroom_id: classroomId },
+        device_session_id: null,
+        device_type: null,
+        browser: null,
+        os: null,
+        ip_address: null,
+        source_app: 'admin',
+        page_url: null,
+      });
+    } catch (eventErr: any) {
+      console.warn('[nexus-enroll] enrollment_completed event failed:', eventErr?.message);
+    }
 
     // Build the catch-up backlog for everything taught before today. This route
     // upserts nexus_enrollments directly rather than going through enrollUser

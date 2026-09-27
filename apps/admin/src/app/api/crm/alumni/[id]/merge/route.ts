@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getRequestAdminId } from '@/lib/request-admin';
 import { mergeUserRecords } from '@neram/database';
 import { detectDuplicate } from '@/lib/user-merge-detect';
 
@@ -22,7 +23,10 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ error: 'Invalid user id.' }, { status: 400 });
     }
     const body = await request.json().catch(() => ({}));
-    const { adminId, loserId } = body;
+    const { adminId: bodyAdminId, loserId } = body;
+    // The verified caller from middleware.ts; the body value is only a fallback
+    // for ADMIN_API_AUTH_MODE=report and is never trusted when the header is set.
+    const adminId = getRequestAdminId(request) ?? bodyAdminId;
     if (!adminId || !UUID_REGEX.test(adminId)) {
       return NextResponse.json({ error: 'adminId must be a valid UUID (Supabase user ID).' }, { status: 400 });
     }

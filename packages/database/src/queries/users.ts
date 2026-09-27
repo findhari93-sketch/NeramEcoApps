@@ -10,6 +10,7 @@ import type {
   User, LeadProfile, StudentProfile, UserType, UserStatus,
   Payment, ScholarshipApplication, PaymentInstallment,
 } from '../types';
+import { findUserIdByIdentity, recordIdentity, escapeIlikeValue } from './identity';
 
 // ============================================
 // USER QUERIES
@@ -46,19 +47,22 @@ export async function getUserByEmail(
   client?: TypedSupabaseClient
 ): Promise<User | null> {
   const supabase = client || getSupabaseBrowserClient();
-  
+  if (!email) return null;
+
+  // Case-insensitive: Google lowercases addresses, Entra keeps admin-set casing,
+  // so "Name@neramclasses.com" and "name@neramclasses.com" are one person.
+  // limit(2) instead of single(): until users_email_lower_key exists everywhere a
+  // case-variant pair can match twice, and single() would report "not found".
   const { data, error } = await supabase
     .from('users')
     .select('*')
-    .eq('email', email)
-    .single();
-  
-  if (error) {
-    if (error.code === 'PGRST116') return null;
-    throw error;
-  }
-  
-  return data;
+    .ilike('email', escapeIlikeValue(email))
+    .order('created_at', { ascending: true })
+    .limit(2);
+
+  if (error) throw error;
+  if (!data || data.length === 0) return null;
+  return data.find((u: User) => u.email === email) ?? data[0];
 }
 
 /**
@@ -96,19 +100,21 @@ export async function getUserByFirebaseUid(
   client?: TypedSupabaseClient
 ): Promise<User | null> {
   const supabase = client || getSupabaseBrowserClient();
-  
+
   const { data, error } = await supabase
     .from('users')
     .select('*')
     .eq('firebase_uid', firebaseUid)
-    .single();
-  
-  if (error) {
-    if (error.code === 'PGRST116') return null;
-    throw error;
-  }
-  
-  return data;
+    .maybeSingle();
+
+  if (error) throw error;
+  if (data) return data;
+
+  // A second Firebase uid for the same person (e.g. phone OTP after Google)
+  // lives in user_identities, not in users.firebase_uid.
+  const aliasUserId = await findUserIdByIdentity('firebase', firebaseUid, supabase);
+  if (!aliasUserId) return null;
+  return getUserById(aliasUserId, supabase);
 }
 
 /**
@@ -227,10 +233,17 @@ export async function checkPhoneExists(
 /**
  * Get or create user from Firebase auth.
  *
- * Lookup order: Firebase UID → Phone → Email → Create new.
- * If the phone is already taken by another user, the new account is
- * created WITHOUT the phone to avoid duplicates. The user must verify
- * their phone separately, which will detect the conflict.
+ * Lookup order: Firebase uid (users.firebase_uid, then user_identities) → the
+ * token's phone → email (case-insensitive) → create.
+ *
+ * A match by phone or email is the same person signing in another way (Google,
+ * then phone OTP). The uid is ADDED as an identity; users.firebase_uid is only
+ * filled when empty and never overwritten. Overwriting it made the column
+ * flip-flop between a person's two Firebase uids on alternate sign-ins.
+ *
+ * If the phone is already taken by another user, the new account is created
+ * WITHOUT the phone to avoid duplicates. The user must verify their phone
+ * separately, which will detect the conflict.
  */
 export async function getOrCreateUserFromFirebase(
   firebaseUser: {
@@ -260,35 +273,44 @@ export async function getOrCreateUserFromFirebase(
     return updates;
   }
 
-  // First, try to find by Firebase UID
-  let user = await getUserByFirebaseUid(firebaseUser.uid, supabase);
-  if (user) {
-    // Update any missing profile fields from Firebase data
-    const updates = buildProfileUpdates(user);
-    if (Object.keys(updates).length > 0) {
-      return { user: await updateUser(user.id, updates, supabase), isNewUser: false };
-    }
+  const remember = (userId: string) =>
+    recordIdentity(
+      userId,
+      'firebase',
+      firebaseUser.uid,
+      { email: firebaseUser.email ?? null, phone: firebaseUser.phoneNumber ?? null },
+      supabase,
+    );
+
+  // Attach this sign-in to an existing person without taking over their
+  // primary uid: fill users.firebase_uid only when it is empty.
+  async function attach(existing: User): Promise<{ user: User; isNewUser: boolean }> {
+    const updates: Record<string, unknown> = { ...buildProfileUpdates(existing) };
+    if (!existing.firebase_uid) updates.firebase_uid = firebaseUser.uid;
+    const user = Object.keys(updates).length > 0 ? await updateUser(existing.id, updates, supabase) : existing;
+    await remember(user.id);
     return { user, isNewUser: false };
   }
 
-  // Try to find by phone — if found, link this Firebase UID to that existing user
-  if (firebaseUser.phoneNumber) {
-    user = await getUserByPhone(firebaseUser.phoneNumber, supabase);
-    if (user) {
-      // Link Firebase UID and sync profile data
-      const updates = { firebase_uid: firebaseUser.uid, ...buildProfileUpdates(user) };
-      return { user: await updateUser(user.id, updates, supabase), isNewUser: false };
-    }
+  // First, the uid itself (primary column, then any recorded second identity).
+  let user = await getUserByFirebaseUid(firebaseUser.uid, supabase);
+  if (user) {
+    const updates = buildProfileUpdates(user);
+    const result = Object.keys(updates).length > 0 ? await updateUser(user.id, updates, supabase) : user;
+    await remember(result.id);
+    return { user: result, isNewUser: false };
   }
 
-  // Try to find by email
+  // The token's phone is verified by Firebase: same person.
+  if (firebaseUser.phoneNumber) {
+    user = await getUserByPhone(firebaseUser.phoneNumber, supabase);
+    if (user) return attach(user);
+  }
+
+  // Same verified email, whatever the casing.
   if (firebaseUser.email) {
     user = await getUserByEmail(firebaseUser.email, supabase);
-    if (user) {
-      // Link Firebase UID and sync profile data
-      const updates = { firebase_uid: firebaseUser.uid, ...buildProfileUpdates(user) };
-      return { user: await updateUser(user.id, updates, supabase), isNewUser: false };
-    }
+    if (user) return attach(user);
   }
 
   // Before creating: double-check phone isn't already taken
@@ -298,10 +320,8 @@ export async function getOrCreateUserFromFirebase(
   if (firebaseUser.phoneNumber) {
     const existingPhoneUser = await checkPhoneExists(firebaseUser.phoneNumber, undefined, supabase);
     if (existingPhoneUser) {
-      // Phone already belongs to another account — create without phone
-      // User will need to verify phone separately, which will detect the conflict
       console.warn(
-        `Phone ${firebaseUser.phoneNumber} already belongs to user ${existingPhoneUser.id}. ` +
+        `Phone already belongs to user ${existingPhoneUser.id}. ` +
         `Creating new user (Firebase UID: ${firebaseUser.uid}) without phone.`
       );
       phoneForNewUser = null;
@@ -327,6 +347,7 @@ export async function getOrCreateUserFromFirebase(
     last_login_at: new Date().toISOString(),
     metadata: null,
   }, supabase);
+  await remember(newUser.id);
   return { user: newUser, isNewUser: true };
 }
 

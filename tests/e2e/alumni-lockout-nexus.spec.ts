@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { adminApiHeaders } from '../utils/admin-api';
 import { APP_URLS } from '../utils/credentials';
 
 /**
@@ -62,6 +63,7 @@ test.describe('Nexus — alumni lockout', () => {
     // Graduate the student via the admin API. Self-skip if unavailable (admin
     // server down or migration not yet applied).
     const gradRes = await request.post(`${ADMIN}/api/crm/alumni/graduate`, {
+      headers: adminApiHeaders(),
       data: { userIds: [studentId], academicYear: '2025-26', adminId, reason: 'E2E lockout test' },
     });
     if (gradRes.status() !== 200) {
@@ -88,6 +90,7 @@ test.describe('Nexus — alumni lockout', () => {
     } finally {
       // Cleanup: restore the student so reruns and other specs see them active.
       await request.post(`${ADMIN}/api/crm/alumni/restore`, {
+      headers: adminApiHeaders(),
         data: { userIds: [studentId], adminId },
       });
     }
@@ -95,6 +98,7 @@ test.describe('Nexus — alumni lockout', () => {
 
   test('mobile: graduated screen has no horizontal overflow at 375px', async ({ page, request }) => {
     const gradRes = await request.post(`${ADMIN}/api/crm/alumni/graduate`, {
+      headers: adminApiHeaders(),
       data: { userIds: [studentId], academicYear: '2025-26', adminId, reason: 'E2E mobile' },
     });
     if (gradRes.status() !== 200) {
@@ -111,6 +115,7 @@ test.describe('Nexus — alumni lockout', () => {
       expect(scrollW).toBeLessThanOrEqual(375 + 1);
     } finally {
       await request.post(`${ADMIN}/api/crm/alumni/restore`, {
+      headers: adminApiHeaders(),
         data: { userIds: [studentId], adminId },
       });
     }

@@ -97,6 +97,8 @@ import {
   joinReminderMessage,
   matchesDormantView,
   type DormantView,
+  NOT_STARTED_DECISION_DAYS,
+  waitPeriodLabel,
 } from '@/lib/not-started';
 import { patchQuery, readSearch } from '@/lib/list-url-state';
 import {
@@ -121,6 +123,7 @@ const SEGMENTS: StudentSegment[] = [
 ];
 
 interface StudentCounts {
+  notStartedDecisionDays?: number;
   total: number;
   active: number;
   awaitingMicrosoft: number;
@@ -152,7 +155,7 @@ interface StudentCounts {
 const DORMANT_EMPTY_TITLE: Record<DormantView, string> = {
   all: 'Nobody is dormant',
   not_started: 'Everyone has entered Nexus',
-  not_started_long: 'Nobody has been waiting over 2 weeks',
+  not_started_long: 'Nobody has been waiting that long',
   paused: 'Nobody is paused by staff',
   back_in_nexus: 'No paused student has come back',
 };
@@ -210,6 +213,8 @@ export default function TeacherStudents() {
 
   const [students, setStudents] = useState<EnrolledStudent[]>([]);
   const [counts, setCounts] = useState<StudentCounts>(EMPTY_COUNTS);
+  // Admin, Settings, Lifecycle rules; the students route sends it with the counts.
+  const decisionDays = counts.notStartedDecisionDays ?? NOT_STARTED_DECISION_DAYS;
   const [batches, setBatches] = useState<StudentBatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -484,7 +489,7 @@ export default function TeacherStudents() {
           { stage: stageKeyOf(s.study_stage), dormant: s.participation_status === 'dormant' },
           segment,
         );
-        return inSegment && (segment !== 'dormant' || matchesDormantView(s, dormantView, now));
+        return inSegment && (segment !== 'dormant' || matchesDormantView(s, dormantView, now, decisionDays));
       });
       if (trimmedQuery) rows = rankPeople(rows, trimmedQuery);
     }
@@ -513,10 +518,14 @@ export default function TeacherStudents() {
     limitedOnly,
     sort,
     now,
+    decisionDays,
   ]);
 
   /** The Dormant segment's own counts, over the same rows the list filters. */
-  const dormantCounts = useMemo(() => dormantViewCounts(students, now), [students, now]);
+  const dormantCounts = useMemo(
+    () => dormantViewCounts(students, now, decisionDays),
+    [students, now, decisionDays],
+  );
 
   // Offered only when the search found nobody, so a near miss is one tap away.
   const searchSuggestions = useMemo(
@@ -1114,7 +1123,9 @@ export default function TeacherStudents() {
     : narrowingActive
       ? 'No students match these filters'
       : segment === 'dormant'
-        ? DORMANT_EMPTY_TITLE[dormantView]
+        ? dormantView === 'not_started_long'
+          ? `Nobody has been waiting over ${waitPeriodLabel(decisionDays)}`
+          : DORMANT_EMPTY_TITLE[dormantView]
         : segment === 'unset'
           ? 'Every student has a study stage'
           : `No students in ${SEGMENT_LABEL[segment]}`;
@@ -1222,7 +1233,7 @@ export default function TeacherStudents() {
 
         {segment === 'dormant' && !trimmedQuery && !mismatchOnly && (
           <Box sx={{ mb: 1 }}>
-            <DormantViewBar value={dormantView} counts={dormantCounts} onChange={handleDormantViewChange} />
+            <DormantViewBar value={dormantView} counts={dormantCounts} onChange={handleDormantViewChange} decisionDays={decisionDays} />
           </Box>
         )}
 

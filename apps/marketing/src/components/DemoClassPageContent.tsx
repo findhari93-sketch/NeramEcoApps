@@ -33,6 +33,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { LoginModal } from '@neram/ui';
 import { useFirebaseAuth } from '@neram/auth';
 import { getStoredAttribution } from '@/lib/attribution';
+import { trackTaxonomyEvent } from '@/lib/funnel-tracker';
 
 // Slide transition for bottom sheet on mobile
 const SlideTransition = (props: TransitionProps & { children: React.ReactElement }) => (
@@ -294,6 +295,7 @@ export default function DemoClassPageContent() {
 
       setSuccess(true);
       setShowForm(false);
+      trackTaxonomyEvent('demo_requested', { source: 'demo_class_page', interest_course: formData.interestCourse || null });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong');
     } finally {

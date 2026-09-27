@@ -20,6 +20,8 @@ describe('indexableLocales', () => {
     expect(indexableLocales('/nata-2026/syllabus')).toEqual(['en']);
     expect(indexableLocales('/nata-coaching/chennai')).toEqual(['en']);
     expect(indexableLocales('/coaching/nata-coaching/nata-coaching-centers-in-pune')).toEqual(['en']);
+    expect(indexableLocales('/reviews/nata/page/2')).toEqual(['en']);
+    expect(indexableLocales('/learner-stories')).toEqual(['en']);
   });
 
   it('keeps the partial and full translations', () => {

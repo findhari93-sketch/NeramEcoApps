@@ -270,6 +270,16 @@ export default defineConfig({
         baseURL: 'http://localhost:3013',
         // Reuse saved teacher authentication state (admins use same MS auth)
         storageState: TEACHER_AUTH_FILE,
+        // apps/admin/src/middleware.ts now requires a staff token on every /api/
+        // call. Off production it accepts `test_<base64 email>`, the same form the
+        // Nexus test-login issues, so admin API specs need no per-call header.
+        extraHTTPHeaders: {
+          Authorization: `Bearer test_${Buffer.from(
+            process.env.E2E_TEST_ADMIN_EMAIL ||
+              process.env.E2E_TEST_TEACHER_EMAIL ||
+              'e2etestingteacher@neramclasses.com',
+          ).toString('base64')}`,
+        },
       },
       testMatch: /.*admin.*\.spec\.ts/,
       dependencies: ['setup'],

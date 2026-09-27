@@ -18,7 +18,7 @@ interface DemoClassSectionProps {
 }
 
 function formatDate(dateStr: string | null): string {
-  if (!dateStr) return '--';
+  if (!dateStr) return 'Not set';
   return new Date(dateStr).toLocaleDateString('en-IN', {
     day: '2-digit',
     month: 'short',

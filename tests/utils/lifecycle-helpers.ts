@@ -7,29 +7,19 @@
  */
 
 import type { APIRequestContext } from '@playwright/test';
+import { adminApiHeaders } from './admin-api';
 
 const ADMIN_URL = 'http://localhost:3013';
 const MARKETING_URL = 'http://localhost:3010';
 
-// Known admin MS OID for test environment
-const ADMIN_MS_OID = '5b3c917c-7d27-4bda-b009-26460aee806c';
 
 // ─── Admin ID Resolution ───
 
 /**
- * Resolve the admin Supabase user ID from the known MS OID.
- * Reuses the pattern from payment-details-marketing.spec.ts.
+ * The test admin's users.id. The admin app ignores `?msOid=` now and resolves
+ * the caller from the token, so this delegates to the shared helper.
  */
-export async function resolveAdminId(request: APIRequestContext): Promise<string> {
-  const res = await request.get(
-    `${ADMIN_URL}/api/auth/me?msOid=${ADMIN_MS_OID}`,
-    { failOnStatusCode: false, timeout: 15_000 }
-  );
-  if (res.status() !== 200) {
-    throw new Error('Could not resolve admin user ID — is admin app running on port 3013?');
-  }
-  return (await res.json()).user.id;
-}
+export { resolveAdminId } from './admin-api';
 
 // ─── Test Lead Management ───
 
@@ -61,6 +51,7 @@ export async function createTestLead(
   };
 
   const res = await request.post(`${ADMIN_URL}/api/leads`, {
+      headers: adminApiHeaders(),
     data: payload,
     timeout: 15_000,
   });
@@ -110,6 +101,7 @@ export async function approveLead(
   const res = await request.patch(
     `${ADMIN_URL}/api/crm/users/${userId}/status`,
     {
+      headers: adminApiHeaders(),
       data: {
         action: 'approve',
         adminId,
@@ -146,6 +138,7 @@ export async function rejectLead(
   const res = await request.patch(
     `${ADMIN_URL}/api/crm/users/${userId}/status`,
     {
+      headers: adminApiHeaders(),
       data: {
         action: 'reject',
         adminId,
@@ -175,7 +168,8 @@ export async function getLeadDetail(
 ): Promise<any> {
   const res = await request.get(
     `${ADMIN_URL}/api/crm/users/${userId}`,
-    { failOnStatusCode: false, timeout: 15_000 }
+    {
+      headers: adminApiHeaders(), failOnStatusCode: false, timeout: 15_000 }
   );
   if (res.status() !== 200) {
     return null;
@@ -196,7 +190,8 @@ export async function checkAdminNotification(
 ): Promise<{ found: boolean; notifications: any[] }> {
   const res = await request.get(
     `${ADMIN_URL}/api/notifications?eventType=${eventType}&limit=${limit}`,
-    { failOnStatusCode: false, timeout: 15_000 }
+    {
+      headers: adminApiHeaders(), failOnStatusCode: false, timeout: 15_000 }
   );
 
   if (res.status() !== 200) {
@@ -224,6 +219,7 @@ export async function cleanupTestLead(
 ): Promise<void> {
   try {
     await request.delete(`${ADMIN_URL}/api/leads/${userId}`, {
+      headers: adminApiHeaders(),
       failOnStatusCode: false,
       timeout: 10_000,
     });

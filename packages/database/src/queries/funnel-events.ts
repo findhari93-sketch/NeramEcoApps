@@ -47,6 +47,28 @@ const EVENT_LABELS: Record<string, string> = {
   'application_step_started': 'Application Step Started',
   'application_step_completed': 'Application Step Completed',
   'application_submitted': 'Application Submitted',
+  // object_action events (see @neram/database/analytics EVENT_TAXONOMY)
+  'tool_opened': 'Opened a tool',
+  'tool_completed': 'Used a tool',
+  'tool_failed': 'Tool error',
+  'landing_page_viewed': 'Viewed a landing page',
+  'course_page_viewed': 'Viewed a course page',
+  'tool_page_viewed': 'Viewed a tool page',
+  'demo_requested': 'Requested a demo class',
+  'callback_requested': 'Requested a callback',
+  'application_started': 'Started the application',
+  'application_completed': 'Completed the application',
+  'payment_started': 'Started a payment',
+  'payment_completed': 'Paid',
+  'payment_failed': 'Payment failed',
+  'enrollment_completed': 'Enrolled',
+  'feedback_requested': 'Asked for feedback',
+  'feedback_submitted': 'Gave feedback',
+  'review_consent_given': 'Agreed to publish a review',
+  'review_submitted': 'Submitted a review',
+  'review_published': 'Review published',
+  'nexus_signed_in': 'Signed in to Nexus',
+  'profile_completed': 'Completed profile',
 };
 
 export { AUTH_EVENT_ORDER, EVENT_LABELS };
@@ -292,3 +314,40 @@ export async function getBatchUserAuthDiagnostics(
 
   return result;
 }
+
+/**
+ * Record where a new account came from, once. Never overwrites an existing
+ * first touch (a later campaign is not the first touch), and never throws: a
+ * failure here must not fail sign-up.
+ */
+export async function recordFirstTouch(
+  client: TypedSupabaseClient,
+  userId: string,
+  input: { anonymousId?: string | null; firstTouch?: Record<string, string> | null },
+): Promise<boolean> {
+  const updates: Record<string, unknown> = {};
+  if (input.anonymousId) updates.anonymous_id = input.anonymousId;
+  if (input.firstTouch) {
+    updates.first_touch = input.firstTouch;
+    updates.first_touch_at = new Date().toISOString();
+  }
+  if (Object.keys(updates).length === 0) return false;
+  try {
+    const { error } = await client
+      .from('users')
+      .update(updates)
+      .eq('id', userId)
+      .is('first_touch_at', null)
+      .is('anonymous_id', null);
+    if (error) {
+      console.warn('[funnel] first touch not recorded:', error.message);
+      return false;
+    }
+    if (input.anonymousId) await linkAnonymousEvents(client, input.anonymousId, userId);
+    return true;
+  } catch (err) {
+    console.warn('[funnel] first touch not recorded:', err);
+    return false;
+  }
+}
+

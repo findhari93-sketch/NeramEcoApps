@@ -65,7 +65,7 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
         {label}
       </Typography>
       <Typography variant="body2" sx={{ flex: 1, fontSize: 13 }}>
-        {value || <span style={{ color: '#bdbdbd' }}>--</span>}
+        {value || <span style={{ color: '#757575' }}>Not set</span>}
       </Typography>
     </Box>
   );

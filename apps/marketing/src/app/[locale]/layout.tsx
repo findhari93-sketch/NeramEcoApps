@@ -5,15 +5,11 @@ import { notFound } from 'next/navigation';
 import { Poppins, Inter, Noto_Sans_Tamil } from 'next/font/google';
 import { ThemeRegistry, marketingLightTheme, marketingDarkTheme } from '@neram/ui';
 import { locales } from '@/i18n';
-import Header from '@/components/Header';
-import Footer from '@/components/Footer';
 import AuthProvider from '@/components/AuthProvider';
-import { BroadcastBanner, ImportantDateBanner, StickyAchievementWidget } from '@/components/marketing-content';
-import dynamic from 'next/dynamic';
-const GeneralChatbot = dynamic(() => import('@/components/GeneralChatbot'), { ssr: false });
-const ComparisonTray = dynamic(() => import('@/components/college-hub/ComparisonTray'), { ssr: false });
+import SiteChrome from '@/components/SiteChrome';
 import GoogleAdsTag from '@/components/GoogleAdsTag';
 import AttributionCapture from '@/components/AttributionCapture';
+import PageViewBeacon from '@/components/PageViewBeacon';
 import EnvBadge from '@/components/EnvBadge';
 import '@/styles/globals.css';
 
@@ -157,6 +153,7 @@ export default async function RootLayout({
         />
         <GoogleAdsTag />
         <AttributionCapture />
+        <PageViewBeacon />
         <NextIntlClientProvider messages={messages}>
           <ThemeRegistry
             options={{ key: 'neram-mui' }}
@@ -165,14 +162,7 @@ export default async function RootLayout({
             defaultMode="light"
           >
             <AuthProvider>
-              <BroadcastBanner locale={locale} />
-              <ImportantDateBanner locale={locale} />
-              <Header />
-              <main>{children}</main>
-              <Footer />
-              <StickyAchievementWidget locale={locale} />
-              <ComparisonTray />
-              <GeneralChatbot />
+              <SiteChrome locale={locale}>{children}</SiteChrome>
             </AuthProvider>
           </ThemeRegistry>
         </NextIntlClientProvider>

@@ -6,6 +6,7 @@ import { createAdminClient } from '@neram/database';
 import Razorpay from 'razorpay';
 import { verifyFirebaseToken } from '../../_lib/auth';
 import { resolveCouponDiscount } from '@/lib/payments/coupon-discount';
+import { anonymousIdFromRequest, orderIdPrefix, recordServerEvent } from '@/lib/analytics/server-events';
 
 let razorpayClient: Razorpay | null = null;
 
@@ -154,6 +155,21 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
+
+    // First-party analytics (M3b). Never fails the request; no secrets in metadata.
+    await recordServerEvent(supabase, {
+      event: 'payment_started',
+      status: 'started',
+      userId: effectiveUserId || null,
+      anonymousId: anonymousIdFromRequest(request),
+      metadata: {
+        amount,
+        payment_scheme: paymentScheme || null,
+        order_id_prefix: orderIdPrefix(order.id),
+        coupon_applied: validatedCouponDiscount > 0,
+        public_payment: !!publicPayment,
+      },
+    });
 
     return NextResponse.json({
       success: true,

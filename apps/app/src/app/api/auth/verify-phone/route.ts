@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { isSamePhone } from '@/lib/phone-match';
 import { verifyIdToken } from '@/lib/firebase-admin';
-import { getUserByFirebaseUid, updateUser, getOrCreateUserFromFirebase, checkPhoneExists, getSupabaseAdminClient, insertFunnelEvent } from '@neram/database';
+import { getUserByFirebaseUid, updateUser, getOrCreateUserFromFirebase, checkPhoneExists, getSupabaseAdminClient, insertFunnelEvent, recordDuplicateCandidate } from '@neram/database';
 
 import { getCorsHeaders } from '@/lib/cors';
 
@@ -96,6 +96,14 @@ export async function POST(req: NextRequest) {
         source_app: 'app',
         page_url: null,
       }).catch(() => {});
+
+      // The caller just proved (OTP) that they own this phone, and another row
+      // holds it: almost always the same person with two accounts (phone-first
+      // apply form, then Google). Queue the pair for a human; never auto-merge.
+      await recordDuplicateCandidate(
+        { userA: user.id, userB: existingPhoneUser.id, reason: 'phone_otp_conflict', confidence: 'strong', detectedBy: 'signin' },
+        adminClient,
+      );
 
       return NextResponse.json(
         {

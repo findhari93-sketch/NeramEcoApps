@@ -112,7 +112,7 @@ test.describe('Admin Students Page - Delete Flow', () => {
 });
 
 async function getAdminId(request: any): Promise<string> {
-  const res = await request.get('http://localhost:3013/api/auth/me?msOid=5b3c917c-7d27-4bda-b009-26460aee806c');
+  const res = await request.get('http://localhost:3013/api/auth/me');
   if (res.status() === 200) {
     return (await res.json()).user.id;
   }

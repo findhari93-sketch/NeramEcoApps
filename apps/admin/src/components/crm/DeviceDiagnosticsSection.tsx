@@ -212,9 +212,9 @@ export default function DeviceDiagnosticsSection({ userId }: DeviceDiagnosticsSe
                           </TableCell>
                           <TableCell sx={{ fontSize: 12 }}>{s.browser} {s.browser_version}</TableCell>
                           <TableCell sx={{ fontSize: 12 }}>
-                            {s.latitude ? `${s.latitude.toFixed(3)}, ${s.longitude?.toFixed(3)}` : '--'}
+                            {s.latitude ? `${s.latitude.toFixed(3)}, ${s.longitude?.toFixed(3)}` : 'Not set'}
                           </TableCell>
-                          <TableCell sx={{ fontSize: 12 }}>{s.connection_type || '--'}</TableCell>
+                          <TableCell sx={{ fontSize: 12 }}>{s.connection_type || 'Not set'}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -277,7 +277,7 @@ export default function DeviceDiagnosticsSection({ userId }: DeviceDiagnosticsSe
                               {e.error_message}
                             </TableCell>
                             <TableCell sx={{ fontSize: 12, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {e.page_url?.replace(/^https?:\/\/[^/]+/, '') || '--'}
+                              {e.page_url?.replace(/^https?:\/\/[^/]+/, '') || 'Not set'}
                             </TableCell>
                           </TableRow>
                         ))}

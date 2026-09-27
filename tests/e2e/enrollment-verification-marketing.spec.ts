@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { adminApiHeaders } from '../utils/admin-api';
 
 /**
  * Enrollment Verification E2E Tests (Marketing App)
@@ -83,8 +84,9 @@ test.describe('Enrollment Page - Expired Link CTAs', () => {
   test.beforeAll(async ({ request }) => {
     // Get admin user ID
     const meRes = await request.get(
-      'http://localhost:3013/api/auth/me?msOid=5b3c917c-7d27-4bda-b009-26460aee806c',
-      { failOnStatusCode: false }
+      'http://localhost:3013/api/auth/me',
+      {
+      headers: adminApiHeaders(), failOnStatusCode: false }
     );
 
     if (meRes.status() !== 200) {
@@ -96,6 +98,7 @@ test.describe('Enrollment Page - Expired Link CTAs', () => {
 
     // Create a link
     const createRes = await request.post('http://localhost:3013/api/direct-enrollment', {
+      headers: adminApiHeaders(),
       data: {
         adminId,
         studentName: 'E2E Expired Link Test',
@@ -117,6 +120,7 @@ test.describe('Enrollment Page - Expired Link CTAs', () => {
 
       // Cancel it to simulate expired
       await request.patch(`http://localhost:3013/api/direct-enrollment/${expiredLinkId}`, {
+      headers: adminApiHeaders(),
         data: { status: 'cancelled' },
       });
     }
@@ -185,6 +189,7 @@ test.describe('Enrollment Page - Expired Link CTAs', () => {
     // Cleanup
     if (expiredLinkId) {
       await request.delete(`http://localhost:3013/api/direct-enrollment/${expiredLinkId}`, {
+      headers: adminApiHeaders(),
         failOnStatusCode: false,
       });
     }
@@ -199,8 +204,9 @@ test.describe('Enrollment Page - Valid Link + Auth Gate', () => {
 
   test.beforeAll(async ({ request }) => {
     const meRes = await request.get(
-      'http://localhost:3013/api/auth/me?msOid=5b3c917c-7d27-4bda-b009-26460aee806c',
-      { failOnStatusCode: false }
+      'http://localhost:3013/api/auth/me',
+      {
+      headers: adminApiHeaders(), failOnStatusCode: false }
     );
 
     if (meRes.status() !== 200) return;
@@ -208,6 +214,7 @@ test.describe('Enrollment Page - Valid Link + Auth Gate', () => {
     const adminId = (await meRes.json()).user.id;
 
     const createRes = await request.post('http://localhost:3013/api/direct-enrollment', {
+      headers: adminApiHeaders(),
       data: {
         adminId,
         studentName: 'E2E Valid Link Test',
@@ -271,10 +278,12 @@ test.describe('Enrollment Page - Valid Link + Auth Gate', () => {
   test.afterAll(async ({ request }) => {
     if (validLinkId) {
       await request.patch(`http://localhost:3013/api/direct-enrollment/${validLinkId}`, {
+      headers: adminApiHeaders(),
         data: { status: 'cancelled' },
         failOnStatusCode: false,
       });
       await request.delete(`http://localhost:3013/api/direct-enrollment/${validLinkId}`, {
+      headers: adminApiHeaders(),
         failOnStatusCode: false,
       });
     }
@@ -316,8 +325,9 @@ test.describe('Enrollment Wizard - Phone Verification UI', () => {
   test('marketing enrollment validate API should respond for valid tokens', async ({ request }) => {
     // Create a link via admin API
     const meRes = await request.get(
-      'http://localhost:3013/api/auth/me?msOid=5b3c917c-7d27-4bda-b009-26460aee806c',
-      { failOnStatusCode: false }
+      'http://localhost:3013/api/auth/me',
+      {
+      headers: adminApiHeaders(), failOnStatusCode: false }
     );
 
     if (meRes.status() !== 200) {
@@ -328,6 +338,7 @@ test.describe('Enrollment Wizard - Phone Verification UI', () => {
     const adminId = (await meRes.json()).user.id;
 
     const createRes = await request.post('http://localhost:3013/api/direct-enrollment', {
+      headers: adminApiHeaders(),
       data: {
         adminId,
         studentName: 'E2E Phone Verify Test',
@@ -360,10 +371,12 @@ test.describe('Enrollment Wizard - Phone Verification UI', () => {
 
     // Cleanup
     await request.patch(`http://localhost:3013/api/direct-enrollment/${linkId}`, {
+      headers: adminApiHeaders(),
       data: { status: 'cancelled' },
       failOnStatusCode: false,
     });
     await request.delete(`http://localhost:3013/api/direct-enrollment/${linkId}`, {
+      headers: adminApiHeaders(),
       failOnStatusCode: false,
     });
   });

@@ -768,8 +768,14 @@ const getBaseThemeOptions = (mode: PaletteMode): ThemeOptions => ({
           padding: 2,
           '&.Mui-checked': {
             transform: 'translateX(20px)',
+            // A white thumb on the primary track. Left to MUI's default the thumb
+            // takes the primary colour too and disappears into the track (found
+            // on the admin Lifecycle rules switch, 2026-09-26). The Nexus
+            // variant already did this.
+            color: '#FFFFFF',
             '& + .MuiSwitch-track': {
               opacity: 1,
+              backgroundColor: primaryColors[500],
             },
           },
         },

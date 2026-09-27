@@ -20,6 +20,19 @@ import { verifyFirebaseToken } from '../_lib/auth';
 
 const log = createLogger('[Application API]');
 
+// Applicant fields the form collects. Validated here so a bad value never
+// reaches the RPC's casts.
+const GENDERS = ['male', 'female', 'other'] as const;
+const FEE_SOURCES = ['standard', 'admin', 'link'] as const;
+const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const digits = (value: unknown): string => (typeof value === 'string' ? value.replace(/\D/g, '') : '');
+const isoDate = (value: unknown): string | undefined =>
+  typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
+const validGender = (value: unknown): 'male' | 'female' | 'other' | undefined =>
+  (GENDERS as readonly string[]).includes(value as string) ? (value as 'male' | 'female' | 'other') : undefined;
+const validEmail = (value: unknown): string | undefined =>
+  typeof value === 'string' && EMAIL.test(value.trim()) ? value.trim().toLowerCase() : undefined;
+
 interface ApplicationResponse {
   success: boolean;
   data?: unknown;
@@ -184,7 +197,18 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
     // Prepare application data — strip undefined values and sanitize UUIDs
     const raw: CreateApplicationInput = {
       user_id: auth.userId,
+      first_name: body.first_name || undefined,
       father_name: body.father_name,
+      email: validEmail(body.email),
+      phone: digits(body.phone) || undefined,
+      parent_phone: digits(body.parent_phone) || undefined,
+      date_of_birth: isoDate(body.date_of_birth),
+      gender: validGender(body.gender),
+      fee_structure_id: body.fee_structure_id || undefined,
+      fee_source:
+        body.fee_structure_id && (FEE_SOURCES as readonly string[]).includes(body.fee_source)
+          ? (body.fee_source as 'standard' | 'admin' | 'link')
+          : undefined,
       country: body.country || 'IN',
       city: body.city,
       state: body.state,
@@ -367,9 +391,26 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
       }
     }
 
-    // Update user's first_name if provided
-    if (body.first_name) {
-      await (supabase.from('users') as any).update({ first_name: body.first_name }).eq('id', auth.userId);
+    // Mirror the applicant's own details onto users. first_name, date of birth
+    // and gender always (the form is the freshest source); email and phone only
+    // into an empty column, because both are unique and a Google sign-in may
+    // already own a different value. Never blocks the application.
+    try {
+      const profile: Record<string, unknown> = {};
+      if (raw.first_name) profile.first_name = raw.first_name;
+      if (raw.date_of_birth) profile.date_of_birth = raw.date_of_birth;
+      if (raw.gender) profile.gender = raw.gender;
+      if (Object.keys(profile).length) {
+        await (supabase.from('users') as any).update(profile).eq('id', auth.userId);
+      }
+      if (raw.email) {
+        await (supabase.from('users') as any).update({ email: raw.email }).eq('id', auth.userId).is('email', null);
+      }
+      if (raw.phone) {
+        await (supabase.from('users') as any).update({ phone: raw.phone }).eq('id', auth.userId).is('phone', null);
+      }
+    } catch (mirrorErr) {
+      console.error('[Application API] users mirror failed:', mirrorErr);
     }
 
     // Stamp the academic-year cohort from the applicant's own answer. Only set
@@ -407,7 +448,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
       }
 
       // Use actual phone from form data, not 'N/A' fallback
-      const studentPhone = auth.phone || body.phone || body.parent_phone || '';
+      const studentPhone = raw.phone || auth.phone || raw.parent_phone || '';
 
       // Send confirmation emails (non-blocking)
       if (auth.email) {
@@ -493,7 +534,7 @@ export async function PATCH(request: NextRequest): Promise<NextResponse<Applicat
     // Verify ownership
     const { data: existing, error: fetchError } = await (supabase
       .from('lead_profiles') as any)
-      .select('id, user_id, status')
+      .select('id, user_id, status, fee_source')
       .eq('id', applicationId)
       .single();
 
@@ -525,18 +566,38 @@ export async function PATCH(request: NextRequest): Promise<NextResponse<Applicat
     // Whitelist allowed update fields (no status, admin fields, or user_id)
     const updateData: Record<string, unknown> = {};
     const ALLOWED_FIELDS = [
-      'first_name', 'father_name',
+      'first_name', 'father_name', 'email', 'phone', 'parent_phone', 'date_of_birth', 'gender',
       'country', 'city', 'state', 'district', 'pincode', 'address',
       'latitude', 'longitude', 'location_source', 'detected_location',
       'applicant_category', 'caste_category', 'target_exam_year', 'school_type',
       'interest_course', 'selected_course_id', 'selected_center_id',
-      'hybrid_learning_accepted', 'learning_mode',
+      'hybrid_learning_accepted', 'learning_mode', 'fee_structure_id',
     ];
 
     for (const field of ALLOWED_FIELDS) {
       if (body[field] !== undefined) {
         updateData[field] = body[field];
       }
+    }
+
+    // The same guards as POST: a bad value is dropped, never forwarded.
+    if (updateData.email !== undefined) {
+      const email = validEmail(updateData.email);
+      if (email) updateData.email = email; else delete updateData.email;
+    }
+    if (updateData.phone !== undefined) {
+      const phone = digits(updateData.phone);
+      if (phone) updateData.phone = phone; else delete updateData.phone;
+    }
+    if (updateData.parent_phone !== undefined) {
+      const phone = digits(updateData.parent_phone);
+      if (phone) updateData.parent_phone = phone; else delete updateData.parent_phone;
+    }
+    if (updateData.date_of_birth !== undefined && !isoDate(updateData.date_of_birth)) delete updateData.date_of_birth;
+    if (updateData.gender !== undefined && !validGender(updateData.gender)) delete updateData.gender;
+    // An admin-set or link fee keeps its source; fee_source says where final_fee came from.
+    if (updateData.fee_structure_id && (!existing.fee_source || existing.fee_source === 'standard')) {
+      updateData.fee_source = 'standard';
     }
 
     // Handle academic_data separately

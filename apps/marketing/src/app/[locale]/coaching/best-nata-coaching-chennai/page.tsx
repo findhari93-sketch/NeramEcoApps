@@ -68,13 +68,6 @@ const chennaiSchema = {
     { '@type': 'City', name: 'Vellore' },
     { '@type': 'City', name: 'Pondicherry' },
   ],
-  aggregateRating: {
-    '@type': 'AggregateRating',
-    ratingValue: '4.9',
-    reviewCount: '50',
-    bestRating: '5',
-    worstRating: '1',
-  },
   priceRange: '₹₹',
   knowsAbout: [
     'NATA Exam Preparation',

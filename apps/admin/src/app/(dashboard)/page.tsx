@@ -3,6 +3,7 @@
 import { Box, Typography } from '@neram/ui';
 import DashboardStats from '@/components/DashboardStats';
 import WhatsAppHealthBanner from '@/components/WhatsAppHealthBanner';
+import ConversionCard from '@/components/ConversionCard';
 
 export default function DashboardPage() {
   return (
@@ -18,14 +19,7 @@ export default function DashboardPage() {
 
       <DashboardStats />
 
-      <Box sx={{ mt: 2 }}>
-        <Typography variant="h6" gutterBottom>
-          Recent Activity
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          Recent activity will be displayed here
-        </Typography>
-      </Box>
+      <ConversionCard />
     </Box>
   );
 }

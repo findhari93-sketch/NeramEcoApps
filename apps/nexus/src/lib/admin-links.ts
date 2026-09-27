@@ -45,3 +45,15 @@ export function adminCrmUrl(
   const query = options.section ? `?section=${encodeURIComponent(options.section)}` : '';
   return `${base}/crm/${encodeURIComponent(userId)}${query}`;
 }
+
+/**
+ * The Admin Duplicates queue, filtered to one person. Only admins can act there;
+ * Nexus links to it so staff know where the review happens.
+ */
+export function adminDuplicatesUrl(
+  userId: string,
+  options: { nexusOrigin?: string | null; configured?: string | null } = {},
+): string {
+  const base = adminOriginFor(options.nexusOrigin, options.configured);
+  return `${base}/duplicates?user=${encodeURIComponent(userId)}`;
+}

@@ -24,6 +24,29 @@ import React from 'react';
 import type { TransitionProps } from '@mui/material/transitions';
 import { ConnectToOffice } from '../ChatWidget/ConnectToOffice';
 
+/**
+ * Where this visitor came from, for a cross-origin sign-up (the app cannot read
+ * the marketing site's cookies from this request). The server validates the
+ * anonymous id and keeps only known attribution keys, so the raw values are
+ * sent as they are. Never throws.
+ */
+function signupOriginFields(): { anonymous_id?: string; first_touch?: unknown } {
+  if (typeof document === 'undefined') return {};
+  const out: { anonymous_id?: string; first_touch?: unknown } = {};
+  try {
+    for (const part of document.cookie.split(';')) {
+      const [rawName, ...rest] = part.split('=');
+      const name = rawName.trim();
+      const value = decodeURIComponent(rest.join('=').trim());
+      if (name === 'neram_anon_id' && value) out.anonymous_id = value;
+      if (name === 'neram_attribution' && value) out.first_touch = JSON.parse(value);
+    }
+  } catch {
+    // An unreadable cookie only means no first touch is recorded.
+  }
+  return out;
+}
+
 // ============================================
 // TYPES
 // ============================================
@@ -235,7 +258,7 @@ export default function LoginModal({
     const response = await fetch(`${apiBaseUrl}/api/auth/register-user`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ idToken }),
+      body: JSON.stringify({ idToken, ...signupOriginFields() }),
     });
     if (!response.ok) {
       throw new Error(`Registration failed: ${response.status}`);

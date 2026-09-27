@@ -7,6 +7,7 @@ import {
   type MRT_PaginationState,
   type MRT_SortingState,
   type MRT_RowSelectionState,
+  type MRT_ColumnFiltersState,
   useMaterialReactTable,
 } from 'material-react-table';
 import {
@@ -43,8 +44,13 @@ import LockOpenIcon from '@mui/icons-material/LockOpen';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import UnarchiveOutlinedIcon from '@mui/icons-material/UnarchiveOutlined';
 import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
-import type { UserJourney, PipelineStage } from '@neram/database';
-import { PIPELINE_STAGE_CONFIG } from '@neram/database';
+import BoltIcon from '@mui/icons-material/Bolt';
+import FiberNewOutlinedIcon from '@mui/icons-material/FiberNewOutlined';
+import TrendingDownIcon from '@mui/icons-material/TrendingDown';
+import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
+import BedtimeOutlinedIcon from '@mui/icons-material/BedtimeOutlined';
+import type { UserJourney, PipelineStage, EngagementState } from '@neram/database';
+import { PIPELINE_STAGE_CONFIG, LIFECYCLE_STAGE_LABELS, ENGAGEMENT_LABELS } from '@neram/database';
 import AuthStatusBadge from '../leads/AuthStatusBadge';
 import CopyablePhone from '@/components/CopyablePhone';
 
@@ -69,7 +75,25 @@ interface UsersTableProps {
   onBulkArchiveRequest?: (users: UserJourney[]) => void;
   onVerifyStatus?: (user: UserJourney) => void;
   isFullscreen?: boolean;
+  /**
+   * Server-side column filters. Only the Application and Course columns filter,
+   * and only when the parent passes onColumnFiltersChange and forwards the
+   * values to /api/crm/users. Without it the column filter UI is hidden, so no
+   * filter control ever does nothing.
+   */
+  columnFilters?: MRT_ColumnFiltersState;
+  onColumnFiltersChange?: (filters: MRT_ColumnFiltersState) => void;
+  /** Show Stage and Last active (rows from user_lifecycle_view carry them). */
+  showLifecycleColumns?: boolean;
 }
+
+const ENGAGEMENT_ICON: Record<EngagementState, typeof BoltIcon> = {
+  new: FiberNewOutlinedIcon,
+  engaged: BoltIcon,
+  low: TrendingDownIcon,
+  inactive: HourglassEmptyIcon,
+  dormant: BedtimeOutlinedIcon,
+};
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '-';
@@ -456,6 +480,9 @@ export default function UsersTable(props: UsersTableProps) {
     onBulkArchiveRequest,
     onVerifyStatus,
     isFullscreen,
+    columnFilters,
+    onColumnFiltersChange,
+    showLifecycleColumns,
   } = props;
 
   const theme = useTheme();
@@ -644,10 +671,6 @@ export default function UsersTable(props: UsersTableProps) {
         accessorKey: 'pipeline_stage',
         header: 'Pipeline',
         size: 140,
-        filterVariant: 'select',
-        filterSelectOptions: Object.entries(PIPELINE_STAGE_CONFIG).map(
-          ([value, config]) => ({ value, text: config.label })
-        ),
         Cell: ({ row }) => {
           const stage = row.original.pipeline_stage;
           const config = PIPELINE_STAGE_CONFIG[stage];
@@ -669,6 +692,55 @@ export default function UsersTable(props: UsersTableProps) {
           );
         },
       },
+      ...(showLifecycleColumns
+        ? ([
+            {
+              accessorKey: 'lifecycle_stage',
+              header: 'Stage',
+              size: 130,
+              Cell: ({ row }) => {
+                const stage = row.original.lifecycle_stage;
+                if (!stage) {
+                  return (
+                    <Typography variant="caption" color="text.secondary">
+                      Unknown
+                    </Typography>
+                  );
+                }
+                return (
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    {LIFECYCLE_STAGE_LABELS[stage] || stage}
+                  </Typography>
+                );
+              },
+            },
+            {
+              accessorKey: 'last_meaningful_activity_at',
+              header: 'Last active',
+              size: 150,
+              Cell: ({ row }) => {
+                const at = row.original.last_meaningful_activity_at;
+                const engagement = row.original.engagement;
+                const Icon = engagement ? ENGAGEMENT_ICON[engagement] : null;
+                return (
+                  <Box>
+                    <Typography variant="body2" sx={{ fontSize: 12, fontWeight: 500 }}>
+                      {at ? timeAgo(at) : 'No activity'}
+                    </Typography>
+                    {engagement && Icon && (
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: 'text.secondary' }}>
+                        <Icon sx={{ fontSize: 14 }} aria-hidden />
+                        <Typography variant="caption" sx={{ fontSize: 11 }}>
+                          {ENGAGEMENT_LABELS[engagement]}
+                        </Typography>
+                      </Box>
+                    )}
+                  </Box>
+                );
+              },
+            },
+          ] as MRT_ColumnDef<UserJourney>[])
+        : []),
       {
         id: 'auth_status',
         header: 'Auth',
@@ -694,6 +766,7 @@ export default function UsersTable(props: UsersTableProps) {
         accessorKey: 'application_status',
         header: 'Application',
         size: 145,
+        enableColumnFilter: true,
         filterVariant: 'select',
         filterSelectOptions: [
           { value: 'draft', text: 'Draft' },
@@ -734,6 +807,7 @@ export default function UsersTable(props: UsersTableProps) {
         accessorKey: 'interest_course',
         header: 'Course',
         size: 110,
+        enableColumnFilter: true,
         filterVariant: 'select',
         filterSelectOptions: [
           { value: 'nata', text: 'NATA' },
@@ -880,7 +954,7 @@ export default function UsersTable(props: UsersTableProps) {
         ),
       },
     ],
-    []
+    [showLifecycleColumns, onDiagnosticsClick]
   );
 
   const table = useMaterialReactTable({
@@ -895,6 +969,7 @@ export default function UsersTable(props: UsersTableProps) {
       isLoading: loading,
       showProgressBars: loading,
       rowSelection,
+      ...(onColumnFiltersChange ? { columnFilters: columnFilters ?? [] } : {}),
     },
     manualPagination: true,
     manualSorting: true,
@@ -911,10 +986,20 @@ export default function UsersTable(props: UsersTableProps) {
     },
     onGlobalFilterChange: onGlobalFilterChange,
     onRowSelectionChange: setRowSelection,
+    ...(onColumnFiltersChange
+      ? {
+          onColumnFiltersChange: (updater: any) => {
+            const current = columnFilters ?? [];
+            onColumnFiltersChange(typeof updater === 'function' ? updater(current) : updater);
+          },
+        }
+      : {}),
+    // Columns do not filter unless they opt in (Application, Course).
+    defaultColumn: { enableColumnFilter: false },
 
     // Features
     enableGlobalFilter: true,
-    enableColumnFilters: true,
+    enableColumnFilters: Boolean(onColumnFiltersChange),
     enableSorting: true,
     enableHiding: true,
     enableDensityToggle: false,

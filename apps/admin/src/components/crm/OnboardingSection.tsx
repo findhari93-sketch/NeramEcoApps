@@ -100,7 +100,7 @@ export default function OnboardingSection({ detail }: OnboardingSectionProps) {
                 {onboardingResponses.map((resp, index) => {
                   const question = (resp as any).question;
                   const response = resp.response as any;
-                  let displayValue = '--';
+                  let displayValue = 'Not set';
 
                   if ('value' in response) displayValue = response.value;
                   else if ('values' in response) displayValue = response.values.join(', ');

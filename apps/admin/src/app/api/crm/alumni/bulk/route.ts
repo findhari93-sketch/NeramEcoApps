@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getRequestAdminId } from '@/lib/request-admin';
 import { bulkCreateManualAlumni } from '@neram/database';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -18,7 +19,10 @@ const MAX_ROWS = 500;
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { adminId } = body;
+    const { adminId: bodyAdminId } = body;
+    // The verified caller from middleware.ts; the body value is only a fallback
+    // for ADMIN_API_AUTH_MODE=report and is never trusted when the header is set.
+    const adminId = getRequestAdminId(request) ?? bodyAdminId;
     const rows: any[] = Array.isArray(body.rows) ? body.rows : [];
 
     if (!adminId || !UUID_REGEX.test(adminId)) {

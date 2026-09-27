@@ -5,7 +5,11 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema, generateTestimonialsPageSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import TestimonialsPageContent from '@/components/TestimonialsPageContent';
+import { getAggregateRating, getReviewSummary } from '@/lib/review-stats';
+import { hasEnoughRatings } from '@/lib/reviews/rules';
 
+// ISR: the rating below comes from published reviews (cached for an hour).
+export const revalidate = 3600;
 
 const baseUrl = 'https://neramclasses.com';
 
@@ -27,26 +31,30 @@ export async function generateMetadata({
   return {
     title: 'Student Reviews & Success Stories',
     description:
-      'Read reviews from 2500+ students across India who achieved their architecture dreams with Neram Classes. Filter by city, course, year, and learning mode.',
+      'Read published reviews from Neram Classes students who prepared for NATA and JEE Paper 2. Filter by city, course, year, and learning mode.',
     keywords:
       'Neram Classes reviews, NATA coaching reviews, student testimonials, architecture coaching success stories, NATA student results',
     alternates: buildAlternates(locale, '/testimonials'),
     openGraph: {
       title: 'Student Success Stories',
       description:
-        'Real reviews from NATA & JEE Paper 2 students who achieved top ranks with Neram Classes coaching.',
+        'Published reviews from NATA and JEE Paper 2 students who prepared with Neram Classes.',
       type: 'website',
       url: locale === 'en' ? `${baseUrl}/testimonials` : `${baseUrl}/${locale}/testimonials`,
     },
   };
 }
 
-export default function TestimonialsPage({
+export default async function TestimonialsPage({
   params: { locale },
 }: {
   params: { locale: string };
 }) {
   setRequestLocale(locale);
+
+  // Data-driven only: null (and no AggregateRating) until enough published ratings exist.
+  const [aggregateRating, summary] = await Promise.all([getAggregateRating('all'), getReviewSummary('all')]);
+  const ratingSchema = generateTestimonialsPageSchema(aggregateRating);
 
   return (
     <>
@@ -56,14 +64,11 @@ export default function TestimonialsPage({
             { name: 'Home', url: baseUrl },
             { name: 'Testimonials', url: `${baseUrl}/testimonials` },
           ]),
-          generateTestimonialsPageSchema({
-            total: 2500,
-            avgRating: 4.8,
-          }),
+          ...(ratingSchema ? [ratingSchema] : []),
         ]}
       />
       <Suspense>
-        <TestimonialsPageContent />
+        <TestimonialsPageContent averageRating={hasEnoughRatings(summary) ? summary.average : null} />
       </Suspense>
     </>
   );

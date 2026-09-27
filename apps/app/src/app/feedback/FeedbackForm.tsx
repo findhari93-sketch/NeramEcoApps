@@ -22,6 +22,9 @@ import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import DesignServicesIcon from '@mui/icons-material/DesignServices';
 import SpeedIcon from '@mui/icons-material/Speed';
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz';
+import CheckIcon from '@mui/icons-material/Check';
+import ReviewPromptCard from '@/components/ReviewPromptCard';
+import { FEEDBACK_TOPICS, type FeedbackTopic } from '@/lib/learner-feedback';
 
 const CATEGORIES = [
   { value: 'bug_report', label: 'Bug Report', icon: BugReportIcon, color: '#d32f2f' },
@@ -43,6 +46,7 @@ export default function FeedbackForm() {
   const [rating, setRating] = useState<number | null>(null);
   const [hoverRating, setHoverRating] = useState(-1);
   const [category, setCategory] = useState('');
+  const [topics, setTopics] = useState<FeedbackTopic[]>([]);
   const [description, setDescription] = useState('');
   const [appVersion, setAppVersion] = useState('');
   const [email, setEmail] = useState('');
@@ -93,6 +97,7 @@ export default function FeedbackForm() {
         body: JSON.stringify({
           rating,
           category,
+          topics,
           description: description.trim(),
           app_version: appVersion.trim() || undefined,
           email: email.trim() || undefined,
@@ -118,12 +123,17 @@ export default function FeedbackForm() {
   const handleReset = () => {
     setRating(null);
     setCategory('');
+    setTopics([]);
     setDescription('');
     setAppVersion('');
     setEmail('');
     setSubmitted(false);
     setFeedbackNumber('');
     setError('');
+  };
+
+  const toggleTopic = (slug: FeedbackTopic) => {
+    setTopics((prev) => (prev.includes(slug) ? prev.filter((t) => t !== slug) : [...prev, slug]));
   };
 
   const isValid = rating && category && description.trim().length >= 10;
@@ -316,7 +326,7 @@ export default function FeedbackForm() {
                         borderRadius: 6,
                         px: 2,
                         py: 1,
-                        minHeight: 44,
+                        minHeight: 48,
                         fontWeight: isSelected ? 600 : 400,
                         borderColor: isSelected ? c.color : 'divider',
                         bgcolor: isSelected ? c.color : 'transparent',
@@ -328,6 +338,44 @@ export default function FeedbackForm() {
                       }}
                     >
                       {c.label}
+                    </Button>
+                  );
+                })}
+              </Box>
+            </Box>
+
+            {/* ── Topics (optional, multi-select) ── */}
+            <Box component="fieldset" sx={{ border: 0, p: 0, m: 0, mb: 3, minWidth: 0 }}>
+              <Typography component="legend" variant="subtitle2" sx={{ mb: 0.5, p: 0 }}>
+                Which areas does it touch?{' '}
+                <Typography component="span" variant="body2" color="text.secondary">
+                  (optional, pick any)
+                </Typography>
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                {FEEDBACK_TOPICS.map((t) => {
+                  const on = topics.includes(t.slug);
+                  return (
+                    <Button
+                      key={t.slug}
+                      variant={on ? 'contained' : 'outlined'}
+                      size="small"
+                      aria-pressed={on}
+                      onClick={() => toggleTopic(t.slug)}
+                      startIcon={on ? <CheckIcon sx={{ fontSize: '18px !important' }} /> : undefined}
+                      disableElevation
+                      sx={{
+                        textTransform: 'none',
+                        borderRadius: 6,
+                        px: 2,
+                        minHeight: 48,
+                        fontWeight: on ? 600 : 400,
+                        color: on ? 'primary.contrastText' : 'text.primary',
+                        borderColor: on ? 'primary.main' : 'divider',
+                        '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+                      }}
+                    >
+                      {t.label}
                     </Button>
                   );
                 })}
@@ -401,9 +449,14 @@ export default function FeedbackForm() {
                 'Submit Feedback'
               )}
             </Button>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center', mt: 1.5 }}>
+              This feedback is private. Only the Neram team reads it.
+            </Typography>
           </Paper>
         )}
+        <ReviewPromptCard from="feedback" sx={{ mt: 2 }} />
       </Container>
     </Box>
   );
 }
+

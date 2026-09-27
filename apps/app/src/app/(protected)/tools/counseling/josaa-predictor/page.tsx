@@ -44,6 +44,7 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { getFirebaseAuth, useFirebaseAuth } from '@neram/auth';
 import { AuthGate } from '@/components/AuthGate';
 import { partitionByIit, dedupeIitByInstitute } from '@/lib/josaa-zones';
+import { useToolOpened } from '@/hooks/useToolOpened';
 
 type Chance = 'safe' | 'probable' | 'reach';
 type Category = 'OPEN' | 'OBC-NCL' | 'SC' | 'ST' | 'EWS';
@@ -873,5 +874,6 @@ function CompareResultsTable({ rows, years, homeState }: { rows: any[]; years: n
 }
 
 export default function JosaaPredictorPage() {
+  useToolOpened('josaa_predictor');
   return <PredictorContent />;
 }

@@ -6,8 +6,16 @@
  * Uses sendBeacon as fallback for page unload scenarios.
  */
 
+import {
+  EVENT_TAXONOMY,
+  getOrCreateAnonymousId,
+  getSessionId,
+  type Funnel,
+  type TaxonomyEvent,
+} from '@neram/database/analytics';
+
 interface FunnelEventPayload {
-  funnel: 'auth' | 'onboarding' | 'application';
+  funnel: Funnel;
   event: string;
   status: 'started' | 'completed' | 'failed' | 'skipped';
   error_message?: string;
@@ -18,6 +26,7 @@ interface FunnelEventPayload {
 
 interface QueuedEvent extends FunnelEventPayload {
   anonymous_id: string | null;
+  session_id: string | null;
   device_type: string;
   browser: string;
   os: string;
@@ -68,7 +77,10 @@ export function trackFunnelEvent(payload: FunnelEventPayload): void {
 
     const event: QueuedEvent = {
       ...payload,
-      anonymous_id: null,
+      // Shared with the tools app through the neram_anon_id cookie, so the
+      // journey before sign-up links to the person afterwards.
+      anonymous_id: getOrCreateAnonymousId(),
+      session_id: getSessionId(),
       device_type: cachedDeviceInfo.device_type,
       browser: cachedDeviceInfo.browser,
       os: cachedDeviceInfo.os,
@@ -140,4 +152,17 @@ if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', () => {
     flushEvents();
   });
+}
+
+/**
+ * Track a first-party taxonomy event (object_action, see EVENT_TAXONOMY in
+ * @neram/database/analytics). The funnel comes from the taxonomy, so a caller
+ * cannot file an event under the wrong funnel. Never throws.
+ */
+export function trackTaxonomyEvent(
+  event: TaxonomyEvent,
+  metadata?: Record<string, unknown>,
+  status: FunnelEventPayload['status'] = 'completed',
+): void {
+  trackFunnelEvent({ funnel: EVENT_TAXONOMY[event], event, status, metadata });
 }

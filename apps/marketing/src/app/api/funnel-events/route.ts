@@ -3,17 +3,22 @@ export const dynamic = 'force-dynamic';
 /**
  * Funnel Events API (Marketing)
  *
- * POST /api/funnel-events - Save funnel events from marketing site
- * No auth required (events may be pre-auth)
+ * POST /api/funnel-events - Save first-party analytics events from the public
+ * site. No auth: these are mostly pre-signup page and form events, keyed by the
+ * neram_anon_id cookie and linked to the person when they sign up.
+ *
+ * Events are validated one by one (@neram/database/analytics): an unknown funnel
+ * or malformed name is dropped instead of failing the whole batch.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient, insertFunnelEventsBatch } from '@neram/database';
 import type { UserFunnelEventInsert } from '@neram/database';
+import { normalizeFunnelEvents } from '@neram/database/analytics';
 
 export async function POST(req: NextRequest) {
   try {
-    const body = await req.json();
+    const body = await req.json().catch(() => ({}));
     const { events } = body;
 
     if (!Array.isArray(events) || events.length === 0) {
@@ -24,32 +29,16 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Too many events (max 50)' }, { status: 400 });
     }
 
-    const supabase = getSupabaseAdminClient();
-
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
       || req.headers.get('x-real-ip')
       || null;
 
-    const insertEvents: UserFunnelEventInsert[] = events.map((evt: Record<string, unknown>) => ({
-      user_id: null,
-      anonymous_id: (evt.anonymous_id as string) || null,
-      funnel: evt.funnel,
-      event: evt.event,
-      status: (evt.status as string) || 'started',
-      error_message: (evt.error_message as string) || null,
-      error_code: (evt.error_code as string) || null,
-      metadata: (evt.metadata as Record<string, unknown>) || {},
-      device_type: (evt.device_type as string) || null,
-      browser: (evt.browser as string) || null,
-      os: (evt.os as string) || null,
-      ip_address: ip,
-      source_app: 'marketing',
-      page_url: (evt.page_url as string) || null,
-      device_session_id: null,
-    } as UserFunnelEventInsert));
-
-    const inserted = await insertFunnelEventsBatch(supabase, insertEvents);
-    return NextResponse.json({ inserted });
+    const { rows, dropped } = normalizeFunnelEvents(events, { userId: null, ip, sourceApp: 'marketing' });
+    const inserted = await insertFunnelEventsBatch(
+      getSupabaseAdminClient(),
+      rows as unknown as UserFunnelEventInsert[],
+    );
+    return NextResponse.json({ inserted, dropped });
   } catch (error) {
     console.error('Funnel events API error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

@@ -155,13 +155,6 @@ export default function NataCoachingPage({ params: { locale } }: PageProps) {
             },
           ],
         },
-        aggregateRating: {
-          '@type': 'AggregateRating',
-          ratingValue: '4.8',
-          reviewCount: '2500',
-          bestRating: '5',
-          worstRating: '1',
-        },
       }} />
       <Box>
         {/* Hero Section */}

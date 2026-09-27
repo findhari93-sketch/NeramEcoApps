@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@neram/database';
 import { verifyFirebaseToken } from '../../_lib/auth';
 import { isValidRazorpaySignature, claimPendingPayment } from '@/lib/payments/razorpay-verify';
+import { anonymousIdFromRequest, orderIdPrefix, recordServerEvent } from '@/lib/analytics/server-events';
 
 export async function POST(request: NextRequest) {
   try {
@@ -34,6 +35,14 @@ export async function POST(request: NextRequest) {
       signature: razorpay_signature,
       secret: process.env.RAZORPAY_KEY_SECRET,
     }) || typeof paymentId !== 'string' || !paymentId) {
+      await recordServerEvent(supabase, {
+        event: 'payment_failed',
+        status: 'failed',
+        userId: auth?.userId || null,
+        anonymousId: anonymousIdFromRequest(request),
+        errorCode: 'invalid_signature',
+        metadata: { order_id_prefix: orderIdPrefix(razorpay_order_id), public_payment: !!publicPayment },
+      });
       return NextResponse.json(
         { error: 'Verification Failed', message: 'Invalid payment signature' },
         { status: 400 }
@@ -58,6 +67,14 @@ export async function POST(request: NextRequest) {
     }
 
     if (claim.kind === 'not_found') {
+      await recordServerEvent(supabase, {
+        event: 'payment_failed',
+        status: 'failed',
+        userId: auth?.userId || null,
+        anonymousId: anonymousIdFromRequest(request),
+        errorCode: 'order_mismatch',
+        metadata: { order_id_prefix: orderIdPrefix(razorpay_order_id), public_payment: !!publicPayment },
+      });
       return NextResponse.json(
         { error: 'Verification Failed', message: 'Payment does not match this order' },
         { status: 400 }
@@ -85,6 +102,22 @@ export async function POST(request: NextRequest) {
     }
 
     const payment = claim.payment;
+
+    // First-party analytics (M3b): the pending row just became paid. Retries
+    // (already_paid above) are not counted again. Never fails the request.
+    await recordServerEvent(supabase, {
+      event: 'payment_completed',
+      status: 'completed',
+      userId: auth?.userId || payment.lead_profiles?.user_id || null,
+      anonymousId: anonymousIdFromRequest(request),
+      metadata: {
+        amount: Number(payment.amount) || null,
+        payment_scheme: payment.payment_scheme || null,
+        installment_number: payment.installment_number ?? null,
+        order_id_prefix: orderIdPrefix(razorpay_order_id),
+        public_payment: !!publicPayment,
+      },
+    });
 
     // Enrich payment with Razorpay details (non-blocking)
     try {

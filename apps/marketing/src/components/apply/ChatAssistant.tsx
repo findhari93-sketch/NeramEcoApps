@@ -6,6 +6,7 @@ import { ChatWidget, applicationFormFlow } from '@neram/ui';
 import { useFormContext } from './FormContext';
 import type { ApplicationFormData } from './types';
 import { leadAttribution } from '@/lib/attribution';
+import { trackTaxonomyEvent } from '@/lib/funnel-tracker';
 
 interface ChatAssistantProps {
   displayMode: 'floating' | 'panel';
@@ -166,6 +167,7 @@ export default function ChatAssistant({ displayMode }: ChatAssistantProps) {
       const result = await response.json();
 
       if (result.success) {
+        trackTaxonomyEvent('callback_requested', { source: 'apply_chat_assistant' });
         setSnackbar({
           open: true,
           message: 'Our team will call you back shortly!',

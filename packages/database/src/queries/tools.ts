@@ -6,6 +6,7 @@
  */
 
 import { getSupabaseBrowserClient, getSupabaseAdminClient, TypedSupabaseClient } from '../client';
+import { getUserByFirebaseUid } from './users';
 import type { ExamCenter, ToolUsageLog, ExamType } from '../types';
 
 // ============================================
@@ -285,19 +286,41 @@ export interface LogToolUsageInput {
   referrer?: string;
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
- * Log tool usage
+ * Log tool usage.
+ *
+ * Always writes with the service-role client. The tool routes pass the browser
+ * (anon) client and the Firebase uid; anon has no INSERT policy on
+ * tool_usage_logs and user_id is a uuid FK to users, so every insert failed and
+ * the table recorded nothing (0 rows in the 30 days to 2026-09-25). `client` is
+ * now ignored for the write, and a non-uuid userId is resolved as a Firebase uid
+ * (primary column or user_identities).
+ *
+ * Also emits a `tool_completed` event so tool use appears in the one event
+ * stream (analytics_events) next to sign-ups and applications.
  */
 export async function logToolUsage(
   data: LogToolUsageInput,
-  client?: TypedSupabaseClient
+  _client?: TypedSupabaseClient
 ): Promise<ToolUsageLog> {
-  const supabase = client || getSupabaseAdminClient();
+  const supabase = getSupabaseAdminClient();
+
+  let userId: string | null = null;
+  if (data.userId) {
+    if (UUID_RE.test(data.userId)) {
+      userId = data.userId;
+    } else {
+      const user = await getUserByFirebaseUid(data.userId, supabase).catch(() => null);
+      userId = user?.id ?? null;
+    }
+  }
 
   const { data: log, error } = await supabase
     .from('tool_usage_logs')
     .insert({
-      user_id: data.userId || null,
+      user_id: userId,
       session_id: data.sessionId || null,
       tool_name: data.toolName,
       input_data: data.inputData,
@@ -311,6 +334,22 @@ export async function logToolUsage(
     .single();
 
   if (error) throw error;
+
+  // Best effort: the log row above is the record; the event is for funnels.
+  await supabase
+    .from('user_funnel_events')
+    .insert({
+      user_id: userId,
+      funnel: 'tool',
+      event: 'tool_completed',
+      status: 'completed',
+      metadata: { tool: data.toolName, execution_time_ms: data.executionTimeMs ?? null },
+      source_app: 'app',
+    } as any)
+    .then(({ error: evtError }: { error: { message: string } | null }) => {
+      if (evtError) console.warn('[tools] tool_completed event not recorded:', evtError.message);
+    });
+
   return log as ToolUsageLog;
 }
 

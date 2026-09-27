@@ -1,5 +1,7 @@
 'use client';
 
+import { NOT_STARTED_DECISION_DAYS, waitPeriodLabel } from '@/lib/not-started';
+
 import { Box, Chip, alpha, useTheme } from '@neram/ui';
 import type { DormantView } from '@/lib/not-started';
 import { dormantColor, notStartedColor } from '@/lib/student-stage';
@@ -28,10 +30,13 @@ export default function DormantViewBar({
   value,
   counts,
   onChange,
+  decisionDays = NOT_STARTED_DECISION_DAYS,
 }: {
   value: DormantView;
   counts: Record<DormantView, number>;
   onChange: (view: DormantView) => void;
+  /** Admin, Settings, Lifecycle rules. Default 14. */
+  decisionDays?: number;
 }) {
   const theme = useTheme();
   const mode = theme.palette.mode === 'dark' ? 'dark' : 'light';
@@ -94,7 +99,7 @@ export default function DormantViewBar({
       )}
       {value === 'not_started_long' && (
         <Chip
-          label={`Joined over 2 weeks ago (${counts.not_started_long})`}
+          label={`Joined over ${waitPeriodLabel(decisionDays)} ago (${counts.not_started_long})`}
           // The whole 44px chip clears the filter, not just the small cross.
           onClick={() => onChange('not_started')}
           onDelete={() => onChange('not_started')}

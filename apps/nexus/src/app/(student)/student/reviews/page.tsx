@@ -19,6 +19,7 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import ExperienceReviewCard from '@/components/reviews/ExperienceReviewCard';
 
 interface ReviewTask {
   id: string;
@@ -53,7 +54,7 @@ const PLATFORM_CONFIG: Record<string, { label: string; color: string; icon: Reac
 
 export default function StudentReviewsPage() {
   const theme = useTheme();
-  const { getToken } = useNexusAuthContext();
+  const { getToken, user } = useNexusAuthContext();
   const [tasks, setTasks] = useState<ReviewTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [completing, setCompleting] = useState<string | null>(null);
@@ -114,10 +115,20 @@ export default function StudentReviewsPage() {
   return (
     <Box>
       <Typography variant="h5" component="h1" sx={{ fontWeight: 700, mb: 0.5 }}>
-        Review Requests
+        Reviews
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5 }}>
-        Help us grow by leaving reviews on these platforms
+        Share your experience with Neram, and help us grow on review sites.
+      </Typography>
+
+      {/* Neram's own testimonial, kept apart from the review-site requests below. */}
+      <ExperienceReviewCard getToken={getToken} studentName={user?.name ?? null} />
+
+      <Typography variant="subtitle1" component="h2" sx={{ fontWeight: 700, mb: 1.5 }}>
+        Review requests
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mt: -1, mb: 2 }}>
+        Leave a review on these sites when your teachers ask.
       </Typography>
 
       {loading ? (

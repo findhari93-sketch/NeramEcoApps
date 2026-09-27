@@ -1,502 +1,382 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
+/**
+ * Testimonials: the moderation queue and the library in one flat page
+ * (lifecycle plan M6).
+ *
+ * Tabs by where a testimonial stands (Waiting for review, Public, Not public,
+ * All) and a source filter (learners or staff entered). Nothing a learner
+ * writes goes public without their consent (or a guardian's) and a staff
+ * Publish. Staff testimonials keep the existing Add and Edit pages.
+ */
+
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  Box,
-  Typography,
-  Button,
-  Chip,
-  Card,
-  CardContent,
-  Grid,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  CircularProgress,
   Alert,
-  UserAvatar,
-  IconButton,
-  Tooltip,
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  InputAdornment,
   Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TablePagination,
+  Skeleton,
+  Snackbar,
+  Tab,
+  Tabs,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
 } from '@neram/ui';
 import AddIcon from '@mui/icons-material/Add';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import StarIcon from '@mui/icons-material/Star';
-import LocationCityIcon from '@mui/icons-material/LocationCity';
-import FormatQuoteIcon from '@mui/icons-material/FormatQuote';
-import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import SearchIcon from '@mui/icons-material/Search';
-import type { Testimonial, TestimonialLearningMode } from '@neram/database';
+import FormatQuoteIcon from '@mui/icons-material/FormatQuote';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
+import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined';
+import AllInclusiveIcon from '@mui/icons-material/AllInclusive';
+import ModerationCard, { type ModerationTestimonial } from '@/components/testimonials/ModerationCard';
+import { a11yRootSx } from '@/components/user360/shared';
+import {
+  ACTION_LABELS,
+  API_ACTION,
+  MODERATION_TABS,
+  needsConfirmation,
+  MODERATION_TAB_LABELS,
+  apiStatusForTab,
+  resolveModerationTab,
+  resolveSourceFilter,
+  rowMatchesTab,
+  testimonialText,
+  type ModerationActionKey,
+  type ModerationTab,
+  type SourceFilter,
+} from '@/lib/testimonial-moderation';
 
-interface TestimonialStats {
-  total: number;
-  avgRating: number;
-  citiesCount: number;
-  featuredCount: number;
-}
+const EMPTY_TEXT: Record<ModerationTab, string> = {
+  waiting: 'Nothing is waiting for review. New learner testimonials land here.',
+  confirm: 'Every public testimonial has been confirmed by a staff member.',
+  public: 'No testimonial is public yet.',
+  not_public: 'No private, approved, rejected or taken-down testimonials.',
+  all: 'No testimonials yet.',
+};
+
+const SUCCESS_TEXT: Record<ModerationActionKey, string> = {
+  approve: 'Approved. It stays private until someone publishes it.',
+  publish: 'Published. It now shows on the website.',
+  reject: 'Marked as not published.',
+  withdraw: 'Taken down from the website.',
+  confirm: 'Confirmed as genuine. It now counts on the reviews page and in the rating.',
+};
 
 export default function TestimonialsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const tab = resolveModerationTab(searchParams.get('view'));
+  const source = resolveSourceFilter(searchParams.get('source'));
 
-  // Data
-  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
-  const [totalCount, setTotalCount] = useState(0);
-  const [stats, setStats] = useState<TestimonialStats | null>(null);
+  const [rows, setRows] = useState<ModerationTestimonial[]>([]);
+  const [pending, setPending] = useState<number | null>(null);
+  const [toConfirm, setToConfirm] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [deleteLoading, setDeleteLoading] = useState<string | null>(null);
-
-  // Pagination
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(25);
-
-  // Filters
+  const [error, setError] = useState('');
   const [search, setSearch] = useState('');
-  const [searchDebounced, setSearchDebounced] = useState('');
-  const [yearFilter, setYearFilter] = useState<string>('');
-  const [cityFilter, setCityFilter] = useState('');
-  const [courseFilter, setCourseFilter] = useState('');
-  const [modeFilter, setModeFilter] = useState<string>('');
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [toast, setToast] = useState('');
+  const [reasonFor, setReasonFor] = useState<{ t: ModerationTestimonial; action: 'reject' | 'withdraw' } | null>(null);
+  const [reason, setReason] = useState('');
+  const [reasonError, setReasonError] = useState('');
 
-  // Filter options (extracted from data)
-  const [filterOptions, setFilterOptions] = useState<{
-    years: number[];
-    cities: string[];
-    courses: string[];
-  }>({ years: [], cities: [], courses: [] });
+  const setQuery = (next: { view?: ModerationTab; source?: SourceFilter }) => {
+    const params = new URLSearchParams();
+    const v = next.view ?? tab;
+    const s = next.source ?? source;
+    if (v !== 'waiting') params.set('view', v);
+    if (s !== 'all') params.set('source', s);
+    const qs = params.toString();
+    router.replace(`/testimonials${qs ? `?${qs}` : ''}`, { scroll: false });
+  };
 
-  // Debounce search
-  useEffect(() => {
-    const timer = setTimeout(() => setSearchDebounced(search), 400);
-    return () => clearTimeout(timer);
-  }, [search]);
-
-  const fetchTestimonials = useCallback(async () => {
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError('');
     try {
-      setLoading(true);
-      setError(null);
-
-      const params = new URLSearchParams();
-      params.set('include_stats', 'true');
-      params.set('limit', String(rowsPerPage));
-      params.set('offset', String(page * rowsPerPage));
-      if (searchDebounced) params.set('search', searchDebounced);
-      if (yearFilter) params.set('year', yearFilter);
-      if (cityFilter) params.set('city', cityFilter);
-      if (courseFilter) params.set('course_name', courseFilter);
-      if (modeFilter) params.set('learning_mode', modeFilter);
-
-      const res = await fetch(`/api/testimonials?${params.toString()}`);
-      const json = await res.json();
-
-      if (!res.ok) {
-        throw new Error(json.error || 'Failed to fetch testimonials');
+      const qs = new URLSearchParams({ status: apiStatusForTab(tab), source });
+      const readsPublished = apiStatusForTab(tab) === 'published' && source === 'all';
+      // The Needs confirmation count covers every source, so it needs the published list.
+      const [res, publishedRes] = await Promise.all([
+        fetch(`/api/testimonials/moderation?${qs.toString()}`),
+        readsPublished ? Promise.resolve(null) : fetch('/api/testimonials/moderation?status=published&source=all'),
+      ]);
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || 'Could not load testimonials.');
+      const list: ModerationTestimonial[] = json.testimonials || [];
+      setRows(list.filter((r) => rowMatchesTab(r.publication_status, tab, r.moderated_at)));
+      setPending(typeof json.pending === 'number' ? json.pending : null);
+      let published: ModerationTestimonial[] | null = readsPublished ? list : null;
+      if (publishedRes && publishedRes.ok) {
+        const pj = await publishedRes.json().catch(() => ({}));
+        published = pj.testimonials || [];
       }
-
-      setTestimonials(json.data || []);
-      setTotalCount(json.count || 0);
-      if (json.stats) {
-        setStats(json.stats);
-      }
-
-      // Build filter options from all testimonials (first load only)
-      if (!filterOptions.years.length && json.data?.length) {
-        const years = ([...new Set(json.data.map((t: Testimonial) => t.year))] as number[]).sort(
-          (a, b) => b - a
-        );
-        const cities = [...new Set(json.data.map((t: Testimonial) => t.city))].sort();
-        const courses = [...new Set(json.data.map((t: Testimonial) => t.course_name))].sort();
-        setFilterOptions({ years: years as number[], cities: cities as string[], courses: courses as string[] });
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setToConfirm(published ? published.filter(needsConfirmation).length : null);
+    } catch (e: any) {
+      setError(e.message || 'Could not load testimonials.');
+      setRows([]);
     } finally {
       setLoading(false);
     }
-  }, [page, rowsPerPage, searchDebounced, yearFilter, cityFilter, courseFilter, modeFilter]);
+  }, [tab, source]);
 
   useEffect(() => {
-    fetchTestimonials();
-  }, [fetchTestimonials]);
+    load();
+  }, [load]);
 
-  const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to deactivate "${name}"'s testimonial?`)) return;
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((r) =>
+      [r.student_name, r.city, r.consent_display_name, testimonialText(r.content)]
+        .filter(Boolean)
+        .some((v) => String(v).toLowerCase().includes(q)),
+    );
+  }, [rows, search]);
 
+  const moderate = async (t: ModerationTestimonial, action: ModerationActionKey, note?: string) => {
+    setBusyId(t.id);
+    setError('');
     try {
-      setDeleteLoading(id);
-      const res = await fetch(`/api/testimonials/${id}`, { method: 'DELETE' });
-      if (!res.ok) {
-        const json = await res.json();
-        throw new Error(json.error || 'Failed to delete');
-      }
-      fetchTestimonials();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete testimonial');
+      const res = await fetch(`/api/testimonials/${t.id}/moderate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: API_ACTION[action], note: note?.trim() || undefined }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || 'Could not update the testimonial.');
+      setToast(SUCCESS_TEXT[action]);
+      setReasonFor(null);
+      setReason('');
+      await load();
+    } catch (e: any) {
+      if (reasonFor) setReasonError(e.message);
+      else setError(e.message);
     } finally {
-      setDeleteLoading(null);
+      setBusyId(null);
     }
   };
 
-  const handleChangePage = (_event: unknown, newPage: number) => {
-    setPage(newPage);
-  };
-
-  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
-  };
-
-  const getExamLabel = (exam: string) => {
-    switch (exam) {
-      case 'NATA': return 'NATA';
-      case 'JEE_PAPER_2': return 'JEE Paper 2';
-      case 'BOTH': return 'Both';
-      default: return exam;
+  const onAction = (t: ModerationTestimonial, action: ModerationActionKey) => {
+    if (action === 'reject' || action === 'withdraw') {
+      setReason('');
+      setReasonError('');
+      setReasonFor({ t, action });
+      return;
     }
+    moderate(t, action);
   };
 
-  const getModeColor = (mode: TestimonialLearningMode) => {
-    switch (mode) {
-      case 'online': return 'info';
-      case 'hybrid': return 'warning';
-      case 'offline': return 'success';
-      default: return 'default';
+  const confirmReason = () => {
+    if (!reasonFor) return;
+    if (reasonFor.action === 'reject' && !reason.trim()) {
+      setReasonError('Add a short reason. It is kept with the testimonial for other staff.');
+      return;
     }
+    moderate(reasonFor.t, reasonFor.action, reason);
   };
 
   return (
-    <Box>
-      {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Box>
-          <Typography variant="h4" component="h1" gutterBottom fontWeight="bold">
+    <Box sx={{ ...a11yRootSx, minWidth: 0 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 2, flexWrap: 'wrap', mb: 2 }}>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="h4" component="h1" fontWeight="bold">
             Testimonials
           </Typography>
           <Typography variant="body1" color="text.secondary">
-            Manage student testimonials displayed on the marketing site
+            Review what learners send, decide what goes on the website, and manage staff entered testimonials.
           </Typography>
         </Box>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
           onClick={() => router.push('/testimonials/create')}
+          sx={{ textTransform: 'none', fontWeight: 600, minHeight: 44, boxShadow: 'none' }}
         >
-          Add Testimonial
+          Add testimonial
         </Button>
       </Box>
 
-      {/* Stats Cards */}
-      {stats && (
-        <Grid container spacing={2} sx={{ mb: 2.5 }}>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card>
-              <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <FormatQuoteIcon color="primary" sx={{ fontSize: 40 }} />
-                <Box>
-                  <Typography variant="h4" fontWeight="bold">
-                    {stats.total}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Total Testimonials
-                  </Typography>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card>
-              <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <EmojiEventsIcon color="warning" sx={{ fontSize: 40 }} />
-                <Box>
-                  <Typography variant="h4" fontWeight="bold">
-                    {stats.featuredCount}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Featured
-                  </Typography>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card>
-              <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <StarIcon color="info" sx={{ fontSize: 40 }} />
-                <Box>
-                  <Typography variant="h4" fontWeight="bold">
-                    {stats.avgRating || '-'}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Avg Rating
-                  </Typography>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={12} sm={6} md={3}>
-            <Card>
-              <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                <LocationCityIcon color="success" sx={{ fontSize: 40 }} />
-                <Box>
-                  <Typography variant="h4" fontWeight="bold">
-                    {stats.citiesCount}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    Cities
-                  </Typography>
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
-      )}
+      <Tabs
+        value={tab}
+        onChange={(_e, v) => setQuery({ view: v })}
+        variant="scrollable"
+        scrollButtons="auto"
+        allowScrollButtonsMobile
+        aria-label="Testimonial status"
+        sx={{
+          borderBottom: '1px solid',
+          borderColor: 'grey.200',
+          mb: 2,
+          '& .MuiTab-root': { minHeight: 48, textTransform: 'none', fontWeight: 600, fontSize: 14 },
+        }}
+      >
+        {MODERATION_TABS.map((t) => (
+          <Tab
+            key={t}
+            value={t}
+            id={`mod-tab-${t}`}
+            aria-controls="mod-panel"
+            label={
+              t === 'waiting' && pending !== null
+                ? `${MODERATION_TAB_LABELS[t]} (${pending})`
+                : t === 'confirm' && toConfirm !== null
+                  ? `${MODERATION_TAB_LABELS[t]} (${toConfirm})`
+                  : MODERATION_TAB_LABELS[t]
+            }
+          />
+        ))}
+      </Tabs>
 
-      {/* Filter Bar */}
-      <Card sx={{ mb: 2.5 }}>
-        <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-          <Grid container spacing={1.5} alignItems="center">
-            <Grid item xs={12} sm={3}>
-              <TextField
-                size="small"
-                fullWidth
-                placeholder="Search by name..."
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(0); }}
-                InputProps={{
-                  startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary', fontSize: 20 }} />,
-                }}
-              />
-            </Grid>
-            <Grid item xs={6} sm={2}>
-              <FormControl size="small" fullWidth>
-                <InputLabel>Year</InputLabel>
-                <Select
-                  value={yearFilter}
-                  label="Year"
-                  onChange={(e) => { setYearFilter(e.target.value); setPage(0); }}
-                >
-                  <MenuItem value="">All Years</MenuItem>
-                  {filterOptions.years.map((y) => (
-                    <MenuItem key={y} value={String(y)}>{y}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={6} sm={2}>
-              <FormControl size="small" fullWidth>
-                <InputLabel>City</InputLabel>
-                <Select
-                  value={cityFilter}
-                  label="City"
-                  onChange={(e) => { setCityFilter(e.target.value); setPage(0); }}
-                >
-                  <MenuItem value="">All Cities</MenuItem>
-                  {filterOptions.cities.map((c) => (
-                    <MenuItem key={c} value={c}>{c}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={6} sm={2.5}>
-              <FormControl size="small" fullWidth>
-                <InputLabel>Course</InputLabel>
-                <Select
-                  value={courseFilter}
-                  label="Course"
-                  onChange={(e) => { setCourseFilter(e.target.value); setPage(0); }}
-                >
-                  <MenuItem value="">All Courses</MenuItem>
-                  {filterOptions.courses.map((c) => (
-                    <MenuItem key={c} value={c}>{c}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            <Grid item xs={6} sm={2.5}>
-              <FormControl size="small" fullWidth>
-                <InputLabel>Mode</InputLabel>
-                <Select
-                  value={modeFilter}
-                  label="Mode"
-                  onChange={(e) => { setModeFilter(e.target.value); setPage(0); }}
-                >
-                  <MenuItem value="">All Modes</MenuItem>
-                  <MenuItem value="online">Online</MenuItem>
-                  <MenuItem value="hybrid">Hybrid</MenuItem>
-                  <MenuItem value="offline">Offline</MenuItem>
-                </Select>
-              </FormControl>
-            </Grid>
-          </Grid>
-        </CardContent>
-      </Card>
+      <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
+        <ToggleButtonGroup
+          value={source}
+          exclusive
+          onChange={(_e, v) => v && setQuery({ source: v })}
+          aria-label="Who wrote it"
+          size="small"
+          sx={{ flexWrap: 'wrap', '& .MuiToggleButton-root': { minHeight: 44, textTransform: 'none', px: 1.5, gap: 0.75 } }}
+        >
+          <ToggleButton value="all" aria-label="All sources">
+            <AllInclusiveIcon fontSize="small" aria-hidden /> All sources
+          </ToggleButton>
+          <ToggleButton value="learner" aria-label="Learners">
+            <SchoolOutlinedIcon fontSize="small" aria-hidden /> Learners
+          </ToggleButton>
+          <ToggleButton value="staff" aria-label="Staff entered">
+            <BadgeOutlinedIcon fontSize="small" aria-hidden /> Staff entered
+          </ToggleButton>
+        </ToggleButtonGroup>
+        <TextField
+          size="small"
+          placeholder="Search name, city or text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          inputProps={{ 'aria-label': 'Search testimonials' }}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon fontSize="small" />
+              </InputAdornment>
+            ),
+          }}
+          sx={{ flex: 1, minWidth: { xs: '100%', sm: 240 }, maxWidth: { sm: 360 }, '& .MuiInputBase-root': { minHeight: 44 } }}
+        />
+      </Box>
 
-      {/* Error */}
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+        <Alert
+          severity="error"
+          role="alert"
+          sx={{ mb: 2 }}
+          onClose={() => setError('')}
+          action={
+            <Button color="inherit" onClick={load} sx={{ minHeight: 44 }}>
+              Try again
+            </Button>
+          }
+        >
           {error}
         </Alert>
       )}
 
-      {/* Table */}
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-          <CircularProgress />
-        </Box>
-      ) : testimonials.length === 0 ? (
-        <Paper sx={{ textAlign: 'center', py: 8 }}>
-          <FormatQuoteIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
-          <Typography variant="body1" color="text.secondary" gutterBottom>
-            No testimonials found
+      <Box id="mod-panel" role="tabpanel" aria-labelledby={`mod-tab-${tab}`} aria-busy={loading}>
+        {loading ? (
+          <Box sx={{ display: 'grid', gap: 2 }}>
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} variant="rounded" height={220} />
+            ))}
+          </Box>
+        ) : visible.length === 0 ? (
+          <Paper elevation={0} sx={{ textAlign: 'center', py: 6, px: 2, border: '1px solid', borderColor: 'grey.200', borderRadius: 1 }}>
+            <FormatQuoteIcon sx={{ fontSize: 44, color: 'text.disabled' }} aria-hidden />
+            <Typography variant="body1" sx={{ mt: 1, fontWeight: 600 }}>
+              {search.trim() ? 'No testimonial matches your search.' : EMPTY_TEXT[tab]}
+            </Typography>
+            {source !== 'all' && !search.trim() && (
+              <Button onClick={() => setQuery({ source: 'all' })} sx={{ mt: 1, textTransform: 'none', minHeight: 44 }}>
+                Show all sources
+              </Button>
+            )}
+          </Paper>
+        ) : (
+          <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0,1fr)', xl: 'minmax(0,1fr) minmax(0,1fr)' } }}>
+            {visible.map((t) => (
+              <ModerationCard key={t.id} t={t} busy={busyId === t.id} onAction={onAction} />
+            ))}
+          </Box>
+        )}
+        {!loading && rows.length >= 100 && (
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1.5 }}>
+            Showing the latest 100. Use the tabs and the source filter to narrow the list.
           </Typography>
+        )}
+      </Box>
+
+      <Dialog
+        open={!!reasonFor}
+        onClose={() => busyId === null && setReasonFor(null)}
+        maxWidth="sm"
+        fullWidth
+        aria-labelledby="reason-title"
+      >
+        <DialogTitle id="reason-title">
+          {reasonFor?.action === 'reject' ? 'Not publish this testimonial?' : 'Take this testimonial down?'}
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            {reasonFor?.action === 'reject'
+              ? 'It stays in the records but never shows on the website. The reason is kept for other staff.'
+              : 'It will stop showing on the website right away. You can publish it again later.'}
+          </Typography>
+          <TextField
+            label={reasonFor?.action === 'reject' ? 'Reason (required)' : 'Reason (optional)'}
+            fullWidth
+            multiline
+            minRows={2}
+            value={reason}
+            onChange={(e) => {
+              setReason(e.target.value);
+              if (reasonError) setReasonError('');
+            }}
+            error={!!reasonError}
+            helperText={reasonError || ' '}
+            FormHelperTextProps={{ role: reasonError ? 'alert' : undefined }}
+            autoFocus
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setReasonFor(null)} disabled={busyId !== null} sx={{ textTransform: 'none', minHeight: 44 }}>
+            Cancel
+          </Button>
           <Button
             variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => router.push('/testimonials/create')}
-            sx={{ mt: 2 }}
+            color="error"
+            onClick={confirmReason}
+            disabled={busyId !== null}
+            sx={{ textTransform: 'none', minHeight: 44, boxShadow: 'none' }}
           >
-            Add Your First Testimonial
+            {busyId !== null ? 'Saving...' : reasonFor ? ACTION_LABELS[reasonFor.action] : ''}
           </Button>
-        </Paper>
-      ) : (
-        <Paper sx={{ width: '100%', overflow: 'hidden' }}>
-          <TableContainer sx={{ maxHeight: 600 }}>
-            <Table stickyHeader size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell sx={{ width: 50 }}>Photo</TableCell>
-                  <TableCell sx={{ minWidth: 140 }}>Name</TableCell>
-                  <TableCell sx={{ width: 100 }}>Exam</TableCell>
-                  <TableCell sx={{ width: 110 }}>Score / Rank</TableCell>
-                  <TableCell sx={{ width: 100 }}>City</TableCell>
-                  <TableCell sx={{ minWidth: 120 }}>Course</TableCell>
-                  <TableCell sx={{ width: 80 }}>Mode</TableCell>
-                  <TableCell sx={{ width: 60 }}>Year</TableCell>
-                  <TableCell sx={{ width: 80 }}>Featured</TableCell>
-                  <TableCell sx={{ width: 80 }}>Homepage</TableCell>
-                  <TableCell sx={{ width: 70 }}>Active</TableCell>
-                  <TableCell sx={{ width: 100 }}>Actions</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {testimonials.map((t) => (
-                  <TableRow
-                    key={t.id}
-                    hover
-                    onClick={() => router.push(`/testimonials/${t.id}`)}
-                    sx={{ cursor: 'pointer' }}
-                  >
-                    <TableCell>
-                      <UserAvatar src={t.student_photo} name={t.student_name} size={32} tapToView={false} />
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" fontWeight={500} noWrap>
-                        {t.student_name}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Chip label={getExamLabel(t.exam_type)} size="small" variant="outlined" />
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2">
-                        {t.score != null ? `Score: ${t.score}` : ''}
-                        {t.score != null && t.rank != null ? ' / ' : ''}
-                        {t.rank != null ? `Rank: ${t.rank}` : ''}
-                        {t.score == null && t.rank == null ? '-' : ''}
-                      </Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" noWrap>{t.city}</Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Typography variant="body2" noWrap>{t.course_name}</Typography>
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={t.learning_mode}
-                        size="small"
-                        color={getModeColor(t.learning_mode) as any}
-                        variant="outlined"
-                      />
-                    </TableCell>
-                    <TableCell>{t.year}</TableCell>
-                    <TableCell>
-                      <Chip
-                        label={t.is_featured ? 'Yes' : 'No'}
-                        size="small"
-                        color={t.is_featured ? 'warning' : 'default'}
-                        variant={t.is_featured ? 'filled' : 'outlined'}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={t.is_homepage ? 'Yes' : 'No'}
-                        size="small"
-                        color={t.is_homepage ? 'primary' : 'default'}
-                        variant={t.is_homepage ? 'filled' : 'outlined'}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Chip
-                        label={t.is_active ? 'Active' : 'Inactive'}
-                        size="small"
-                        color={t.is_active ? 'success' : 'error'}
-                        variant={t.is_active ? 'filled' : 'outlined'}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Box sx={{ display: 'flex', gap: 0.5 }} onClick={(e) => e.stopPropagation()}>
-                        <Tooltip title="Edit">
-                          <IconButton
-                            size="small"
-                            onClick={() => router.push(`/testimonials/${t.id}`)}
-                          >
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Deactivate">
-                          <IconButton
-                            size="small"
-                            color="error"
-                            onClick={() => handleDelete(t.id, t.student_name)}
-                            disabled={deleteLoading === t.id}
-                          >
-                            {deleteLoading === t.id ? (
-                              <CircularProgress size={16} />
-                            ) : (
-                              <DeleteIcon fontSize="small" />
-                            )}
-                          </IconButton>
-                        </Tooltip>
-                      </Box>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-          <TablePagination
-            rowsPerPageOptions={[10, 25, 50, 100]}
-            component="div"
-            count={totalCount}
-            rowsPerPage={rowsPerPage}
-            page={page}
-            onPageChange={handleChangePage}
-            onRowsPerPageChange={handleChangeRowsPerPage}
-          />
-        </Paper>
-      )}
+        </DialogActions>
+      </Dialog>
+
+      <Snackbar
+        open={!!toast}
+        autoHideDuration={4000}
+        onClose={() => setToast('')}
+        message={toast}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
     </Box>
   );
 }

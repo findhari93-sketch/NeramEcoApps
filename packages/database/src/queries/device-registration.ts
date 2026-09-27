@@ -299,7 +299,7 @@ export async function getDeviceDistributionStats(
     .from('users')
     .select('id')
     .eq('user_type', 'student')
-    .eq('status', 'active');
+    .eq('is_disabled', false);
   studentsQuery = applyDeviceBatchFilter(studentsQuery, options.batch, options.currentBatchCode);
   const { data: students } = await studentsQuery;
 
@@ -356,7 +356,7 @@ export async function getStudentDeviceSummaries(
     .from('users')
     .select('id, name, email, avatar_url, academic_year', { count: 'exact' })
     .eq('user_type', 'student')
-    .eq('status', 'active')
+    .eq('is_disabled', false)
     .order('name', { ascending: true })
     .range(offset, offset + limit - 1);
 
