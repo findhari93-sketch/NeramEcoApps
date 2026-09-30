@@ -1,10 +1,12 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import StudentStageAvatar from './StudentStageAvatar';
 import * as facts from './StudentStageFactsProvider';
+import * as snapshot from './StudentSnapshotProvider';
 import type { LanguageKey } from '@/lib/student-language';
 import { INFO_RING_LABEL_RE, INFO_RING_TESTID } from '@/lib/student-info-ring';
 import type { StageKey } from '@/lib/student-stage';
+import type { LevelKey } from '@/lib/student-level';
 
 /**
  * The language mark at bottom-left.
@@ -31,6 +33,7 @@ interface StubFact {
   limitedEnglish?: boolean;
   stage?: StageKey;
   dormant?: boolean;
+  level?: LevelKey | null;
 }
 
 function stubFacts(map: Record<string, StubFact>) {
@@ -45,6 +48,8 @@ function stubFacts(map: Record<string, StubFact>) {
             name: null,
             language: map[id].language,
             limitedEnglish: map[id].limitedEnglish === true,
+            drawingLevel: map[id].level ?? null,
+            overallLevel: map[id].level ?? null,
           }
         : null,
   });
@@ -196,5 +201,74 @@ describe('StudentStageAvatar ring source', () => {
   it('falls back to Not set when nothing identifies the student', () => {
     render(<StudentStageAvatar name="Stranger" />);
     expect(ring().getAttribute('aria-label')).toMatch(/^Not set:/);
+  });
+});
+
+describe('StudentStageAvatar level bars and snapshot tap', () => {
+  const bars = () => screen.queryByTestId('level-badge');
+
+  it('draws the overall level top-left at 30, 40 and 48, and says it', () => {
+    for (const size of [30, 40, 48]) {
+      stubFacts({ s1: { language: 'english', level: 'mid' } });
+      const { unmount } = render(<StudentStageAvatar name="Nithya Raman" userId="s1" size={size} />);
+      expect(bars()?.getAttribute('data-level')).toBe('mid');
+      expect(ring().getAttribute('aria-label')).toMatch(/Overall level: Mid \(drawing\)\./);
+      unmount();
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('drops the bars below the glyph floor and draws nothing when not rated', () => {
+    stubFacts({ s1: { language: 'english', level: 'top' } });
+    const { unmount } = render(<StudentStageAvatar name="Nithya Raman" userId="s1" size={24} />);
+    expect(bars()).toBeNull();
+    unmount();
+    stubFacts({ s1: { language: 'english' } });
+    render(<StudentStageAvatar name="Nithya Raman" userId="s1" size={40} />);
+    expect(bars()).toBeNull();
+  });
+
+  it('opens the snapshot on tap, and not the row around it', () => {
+    stubFacts({ s1: { language: 'english', level: 'top' } });
+    const openSnapshot = vi.fn();
+    vi.spyOn(snapshot, 'useStudentSnapshot').mockReturnValue({ openSnapshot });
+    const rowClick = vi.fn();
+    render(
+      <div onClick={rowClick}>
+        <StudentStageAvatar name="Nithya Raman" userId="s1" />
+      </div>,
+    );
+    fireEvent.click(ring());
+    expect(openSnapshot).toHaveBeenCalledWith('s1');
+    expect(rowClick).not.toHaveBeenCalled();
+    expect(ring().getAttribute('role')).toBe('button');
+  });
+
+  it('leaves the tap to the row when the caller passes tapToView={false}', () => {
+    stubFacts({ s1: { language: 'english' } });
+    const openSnapshot = vi.fn();
+    vi.spyOn(snapshot, 'useStudentSnapshot').mockReturnValue({ openSnapshot });
+    const rowClick = vi.fn();
+    render(
+      <div onClick={rowClick}>
+        <StudentStageAvatar name="Nithya Raman" userId="s1" tapToView={false} />
+      </div>,
+    );
+    fireEvent.click(ring());
+    expect(openSnapshot).not.toHaveBeenCalled();
+    expect(rowClick).toHaveBeenCalled();
+    expect(ring().getAttribute('role')).toBeNull();
+  });
+
+  it('stays a plain face outside the teacher layout or with snapshot={false}', () => {
+    stubFacts({ s1: { language: 'english' } });
+    const { unmount } = render(<StudentStageAvatar name="Nithya Raman" userId="s1" />);
+    expect(ring().getAttribute('role')).toBeNull();
+    unmount();
+    const openSnapshot = vi.fn();
+    vi.spyOn(snapshot, 'useStudentSnapshot').mockReturnValue({ openSnapshot });
+    render(<StudentStageAvatar name="Nithya Raman" userId="s1" snapshot={false} />);
+    fireEvent.click(ring());
+    expect(openSnapshot).not.toHaveBeenCalled();
   });
 });

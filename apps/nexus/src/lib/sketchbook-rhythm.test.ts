@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   istDate, weekStart, addDays, goalForWeek, computeRhythm, thenAndNow, milestoneReached, rhythmLine,
+  practiceDate, isValidTimeZone, lastWeekLine, weekRangeLabel,
 } from './sketchbook-rhythm';
 
 // 2026-09-09 is a Wednesday.
@@ -14,6 +15,60 @@ describe('istDate', () => {
   });
   it('keeps an afternoon timestamp on the same day', () => {
     expect(istDate('2026-09-09T06:00:00.000Z')).toBe('2026-09-09');
+  });
+});
+
+describe('practiceDate (the student\'s own clock, 4 am rollover)', () => {
+  // NXS-0129: uploaded 2026-09-23 18:44 UTC. 12:14 am Thursday in IST, 10:44 pm Wednesday in Dubai.
+  const UPLOAD = '2026-09-23T18:44:37.312Z';
+  it('puts a Dubai student\'s Wednesday night sketch on Wednesday', () => {
+    expect(practiceDate(UPLOAD, 'Asia/Dubai')).toBe('2026-09-23');
+  });
+  it('counts an upload before 4 am IST for the evening before', () => {
+    expect(practiceDate(UPLOAD, 'Asia/Kolkata')).toBe('2026-09-23');
+    expect(practiceDate(UPLOAD)).toBe('2026-09-23');
+  });
+  it('starts the new day at 4 am', () => {
+    expect(practiceDate('2026-09-23T22:29:00.000Z', 'Asia/Kolkata')).toBe('2026-09-23'); // 3:59 am
+    expect(practiceDate('2026-09-23T22:31:00.000Z', 'Asia/Kolkata')).toBe('2026-09-24'); // 4:01 am
+  });
+  it('follows a student in America', () => {
+    // 11 pm Wednesday in New York is Thursday morning in India.
+    expect(practiceDate('2026-09-24T03:00:00.000Z', 'America/New_York')).toBe('2026-09-23');
+  });
+  it('falls back to IST for a missing or unknown zone', () => {
+    expect(practiceDate('2026-09-24T06:00:00.000Z', null)).toBe('2026-09-24');
+    expect(practiceDate('2026-09-24T06:00:00.000Z', 'Not/AZone')).toBe('2026-09-24');
+  });
+  it('validates zone names', () => {
+    expect(isValidTimeZone('Asia/Dubai')).toBe(true);
+    expect(isValidTimeZone('Not/AZone')).toBe(false);
+    expect(isValidTimeZone('')).toBe(false);
+    expect(isValidTimeZone(undefined)).toBe(false);
+  });
+});
+
+describe('lastWeek and the card lines', () => {
+  it('keeps last Sunday\'s drawings visible after the week turns over (NXS-0129)', () => {
+    const r = computeRhythm(['2026-09-20', '2026-09-23'], '2026-09-24', NO_HISTORY);
+    expect(r.today).toBe('2026-09-24');
+    expect(r.week.start).toBe('2026-09-21');
+    expect(r.week.count).toBe(1);
+    expect(r.lastWeek?.start).toBe('2026-09-14');
+    expect(r.lastWeek?.count).toBe(1);
+    expect(lastWeekLine(r)).toBe('Last week: 1 of 3 days.');
+  });
+  it('says when last week met its goal', () => {
+    const r = computeRhythm(['2026-09-14', '2026-09-16', '2026-09-20'], '2026-09-24', NO_HISTORY);
+    expect(lastWeekLine(r)).toBe('Last week: 3 of 3 days. Goal met.');
+  });
+  it('has no last-week line when last week was not tracked', () => {
+    const r = computeRhythm([], '2026-09-24', NO_HISTORY);
+    expect(lastWeekLine({ ...r, lastWeek: null })).toBeNull();
+  });
+  it('labels the week with real dates', () => {
+    expect(weekRangeLabel('2026-09-21')).toBe('21 to 27 Sep');
+    expect(weekRangeLabel('2026-09-28')).toBe('28 Sep to 4 Oct');
   });
 });
 

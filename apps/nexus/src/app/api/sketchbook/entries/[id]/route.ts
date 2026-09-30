@@ -3,7 +3,8 @@ import { getSupabaseAdminClient } from '@neram/database';
 import { getSketchbookSketch, hasAnyLiveFeature, repairPracticeDay } from '@neram/database/queries/nexus';
 import { getRequestUser } from '@/lib/study-materials';
 import { ApiError, errorResponse } from '@/lib/api-errors';
-import { istDate } from '@/lib/sketchbook-rhythm';
+import { practiceDate } from '@/lib/sketchbook-rhythm';
+import { loadStudentTimeZones } from '@/lib/drawing-activity-store';
 
 /**
  * DELETE /api/sketchbook/entries/[id]   (the student who drew it)
@@ -28,7 +29,10 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     const supabase = getSupabaseAdminClient();
     const { error } = await supabase.from('drawing_submissions').delete().eq('id', sketch.id);
     if (error) throw error;
-    await repairPracticeDay(caller.id, istDate(sketch.submitted_at), istDate);
+    // Recount on the student's own clock, the one the upload was dated on.
+    const timeZone = (await loadStudentTimeZones([caller.id]))[caller.id];
+    const dayOf = (iso: string) => practiceDate(iso, timeZone);
+    await repairPracticeDay(caller.id, dayOf(sketch.submitted_at), dayOf);
 
     return new NextResponse(null, { status: 204, headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {

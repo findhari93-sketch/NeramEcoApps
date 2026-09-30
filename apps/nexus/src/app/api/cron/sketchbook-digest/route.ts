@@ -37,6 +37,10 @@ export async function GET(request: NextRequest) {
     }
 
     const supabase = getSupabaseAdminClient() as any;
+    // IST on purpose, unlike the student's own sketchbook (practiceDate): this
+    // date also keys the staff logs (sentOn, digest_date, "already messaged
+    // today"), which must share one calendar. Run at 9:30 pm IST, it gives the same
+    // quiet-day count as the student's clock for India, the Gulf and the Americas.
     const today = istDate(new Date());
     const dayStart = `${today}T00:00:00+05:30`;
 

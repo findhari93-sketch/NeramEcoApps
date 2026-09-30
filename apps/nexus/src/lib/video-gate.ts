@@ -32,6 +32,13 @@ export interface GateCheckpoint {
   id: string;
   /** Where this checkpoint's stretch of the recording ends. */
   endSeconds: number;
+  /**
+   * Where its stretch starts, when the caller has it. Usually the previous
+   * checkpoint's end, but not when a stretch was never made a checkpoint: a
+   * pre-class wait the generator dropped, or one a teacher removed. That gap is
+   * nobody's to watch, so a played ceiling never holds a student in front of it.
+   */
+  startSeconds?: number;
   passed: boolean;
 }
 
@@ -41,13 +48,25 @@ export interface VideoGateInput {
   duration: number;
   /** Highest point genuinely reached this session. */
   furthestSeconds: number;
+  /**
+   * How far the student has actually played, when the caller knows it: the
+   * server's credited point (see creditedPlayedUntil) raised by this session's
+   * playback. Forward seeks inside the owed section stop here, so a tap on the
+   * bar cannot land on the checkpoint and open its quiz with nothing watched
+   * (NXS-0130). Omitted, the whole owed section stays scrubbable, which is what
+   * the callers that have not opted in still get.
+   */
+  playedUntilSeconds?: number;
   mode: VideoGateMode;
 }
 
 export interface VideoGate {
   /** Hard ceiling on the scrub track. 0 means "not known yet", not "locked". */
   unlockedUntil: number;
-  /** Where a seek arriving by another route is snapped back to. */
+  /**
+   * How far a control may move the playhead. At or below unlockedUntil: with a
+   * played point it is where the student has watched to, otherwise the boundary.
+   */
   seekCeiling: number;
   /** The checkpoint whose quiz opens at the boundary. */
   activeCheckpointId: string | null;
@@ -96,11 +115,9 @@ function isUsable(checkpoint: GateCheckpoint): boolean {
 }
 
 export function computeGate(input: VideoGateInput): VideoGate {
-  // furthestSeconds is deliberately not read. See seekCeiling below: capping it
-  // at the boundary is the same as ignoring it, and ignoring it is harder to get
-  // wrong later. It stays on the input type because callers have it to hand and
-  // a future non-gated mode may want it.
-  const { checkpoints, duration, mode } = input;
+  // furthestSeconds is deliberately not read: it moves with any seek, so it
+  // cannot say what was watched. playedUntilSeconds is the number that can.
+  const { checkpoints, duration, mode, playedUntilSeconds } = input;
   const dur = knownDuration(duration);
   // A checkpoint with no usable end cannot bind anything. Dropping it beats
   // gating at zero, which would lock the student out of a video entirely
@@ -138,14 +155,38 @@ export function computeGate(input: VideoGateInput): VideoGate {
       ? Math.min(active.endSeconds, Math.max(1, dur - TAIL_EPSILON_SECONDS))
       : active.endSeconds;
 
+  // Two ceilings with two jobs. unlockedUntil is where playback stops and the
+  // quiz opens. seekCeiling is how far a control may jump, and a jump that
+  // reaches the boundary opens the quiz just the same, which is how a student
+  // who had watched 11 seconds was asked about thirteen minutes (NXS-0130). So
+  // when the caller knows what was played, a jump stops there instead. The
+  // floor is the start of the owed section: everything before it is passed,
+  // and that is theirs to move around in whatever this number says.
+  let seekCeiling = unlockedUntil > 0 ? unlockedUntil : Number.POSITIVE_INFINITY;
+  if (playedUntilSeconds !== undefined) {
+    let owedStart = 0;
+    for (const checkpoint of usable) {
+      if (checkpoint.endSeconds < active.endSeconds && checkpoint.endSeconds > owedStart) {
+        owedStart = checkpoint.endSeconds;
+      }
+    }
+    const declaredStart = active.startSeconds;
+    if (
+      declaredStart !== undefined &&
+      Number.isFinite(declaredStart) &&
+      declaredStart > owedStart &&
+      declaredStart < active.endSeconds
+    ) {
+      owedStart = declaredStart;
+    }
+    const played =
+      Number.isFinite(playedUntilSeconds) && playedUntilSeconds > 0 ? playedUntilSeconds : 0;
+    seekCeiling = Math.min(unlockedUntil, Math.max(owedStart, played));
+  }
+
   return {
     unlockedUntil,
-    // furthestSeconds deliberately does NOT appear here. It exists so a student
-    // who reached 20:00 and jumped back to 5:00 can scrub forward again, which
-    // is reasonable, but it must never become a way to bank a position past an
-    // unpassed checkpoint and then seek to it. Capping it at the boundary is the
-    // same as ignoring it, so it is ignored.
-    seekCeiling: unlockedUntil > 0 ? unlockedUntil : Number.POSITIVE_INFINITY,
+    seekCeiling,
     activeCheckpointId: active.id,
     currentSegmentPassed: false,
     maxRate: OWED_RATE,

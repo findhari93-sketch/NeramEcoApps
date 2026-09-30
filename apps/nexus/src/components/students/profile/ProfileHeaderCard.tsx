@@ -19,6 +19,7 @@ import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlin
 import StudentStageAvatar from '@/components/students/StudentStageAvatar';
 import ExamYearChip from '@/components/students/ExamYearChip';
 import LanguageChip from '@/components/students/LanguageChip';
+import DrawingLevelControl from '@/components/students/DrawingLevelControl';
 import { DormantChip, StudentStageChip } from '@/components/students/StudentStageChip';
 import ViewAsStudentButton from '@/components/ViewAsStudentButton';
 import { stageKeyOf } from '@/lib/student-stage';
@@ -124,6 +125,7 @@ export default function ProfileHeaderCard({
         limitedEnglish={student.limited_english}
         onClick={onEditLanguage}
       />
+      <DrawingLevelControl studentId={student.id} studentName={student.name} source="profile" />
     </Box>
   );
 
@@ -145,6 +147,8 @@ export default function ProfileHeaderCard({
             limitedEnglish={student.limited_english}
             src={student.avatar_url}
             name={student.name || ''}
+            userId={student.id}
+            snapshot={false}
             size={96}
           />
         </Box>
@@ -230,6 +234,8 @@ export default function ProfileHeaderCard({
           limitedEnglish={student.limited_english}
           src={student.avatar_url}
           name={student.name || ''}
+          userId={student.id}
+          snapshot={false}
           size={48}
         />
         <Box sx={{ minWidth: 0, flex: 1 }}>

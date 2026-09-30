@@ -22,6 +22,7 @@ import type {
   LifecycleStatus,
   ExamStatus,
   StudentProgram,
+  PeopleBreakdownRow,
 } from '../types';
 
 // ============================================
@@ -43,6 +44,7 @@ import {
   ACADEMIC_YEAR_REGEX,
   currentAcademicYear,
 } from '../utils/academic-year';
+import { ACTIVITY_GROUPS } from '../utils/lifecycle-rules';
 
 // ============================================
 // LIST USER JOURNEYS (CRM main table)
@@ -78,6 +80,9 @@ export async function listUserJourneys(
     dateTo,
     lifecycleStage,
     engagement,
+    activityGroup,
+    examYearMin,
+    examYearMax,
     identity,
     limit = 25,
     offset = 0,
@@ -89,7 +94,9 @@ export async function listUserJourneys(
   // sign-in (the Leads list). The wider view is read only when a caller asks for
   // Microsoft-only people or one of the lifecycle dimensions, so the default
   // list keeps working before the lifecycle migration reaches an environment.
-  const wantsLifecycleView = Boolean(lifecycleStage || engagement || (identity && identity !== 'firebase'));
+  const wantsLifecycleView = Boolean(
+    lifecycleStage || engagement || activityGroup || (identity && identity !== 'firebase')
+  );
   let query = supabase
     .from(wantsLifecycleView ? 'user_lifecycle_view' : 'user_journey_view')
     .select('*', { count: 'exact' });
@@ -106,6 +113,16 @@ export async function listUserJourneys(
 
   if (engagement) {
     query = query.eq('engagement', engagement);
+  } else if (activityGroup && ACTIVITY_GROUPS[activityGroup]) {
+    query = query.in('engagement', ACTIVITY_GROUPS[activityGroup].states);
+  }
+
+  // Exam season (exam_year, migration 20261018090000): both views carry it.
+  if (examYearMin !== undefined) {
+    query = query.gte('exam_year', examYearMin);
+  }
+  if (examYearMax !== undefined) {
+    query = query.lte('exam_year', examYearMax);
   }
 
   // Apply filters
@@ -226,87 +243,27 @@ export async function listUserJourneys(
 // PIPELINE STAGE COUNTS
 // ============================================
 
+const PIPELINE_STAGES: PipelineStage[] = [
+  'new_lead',
+  'demo_requested',
+  'demo_attended',
+  'phone_verified',
+  'application_submitted',
+  'admin_approved',
+  'payment_complete',
+  'enrolled',
+];
+
 /**
- * Get counts of users in each pipeline stage
+ * One exact head count per pipeline stage, in parallel. These used to download
+ * the rows and count them in JavaScript, which stopped at PostgREST's 1,000-row
+ * limit, so every card and total on /crm and /leads read at most 1,000.
  */
-export async function getPipelineStageCounts(
-  options: { excludeArchived?: boolean } = {},
-  client?: TypedSupabaseClient
+async function countPipelineStages(
+  supabase: TypedSupabaseClient,
+  applyFilters: (query: any) => any,
+  stages: PipelineStage[] = PIPELINE_STAGES
 ): Promise<PipelineStageCounts> {
-  const supabase = client || getSupabaseAdminClient();
-  const { excludeArchived = true } = options;
-
-  // When excluding archived (the default), the RPC (which counts every row)
-  // would be wrong, so count client-side over the active subset. The dataset
-  // is small enough (~thousands) for this to be fine.
-  if (excludeArchived) {
-    const { data: rows, error } = await supabase
-      .from('user_journey_view')
-      .select('pipeline_stage')
-      .eq('lifecycle_status', 'active');
-
-    if (error) throw error;
-
-    const counts: PipelineStageCounts = {
-      new_lead: 0,
-      demo_requested: 0,
-      demo_attended: 0,
-      phone_verified: 0,
-      application_submitted: 0,
-      admin_approved: 0,
-      payment_complete: 0,
-      enrolled: 0,
-      total: 0,
-    };
-
-    if (rows) {
-      for (const row of rows) {
-        const stage = row.pipeline_stage as PipelineStage;
-        if (stage in counts) counts[stage]++;
-        counts.total++;
-      }
-    }
-
-    return counts;
-  }
-
-  // Use SQL aggregation instead of fetching all rows
-  const { data, error } = await (supabase as any).rpc('get_pipeline_stage_counts');
-
-  // Fallback to client-side counting if RPC doesn't exist
-  if (error) {
-    const { data: rows, error: fallbackError } = await supabase
-      .from('user_journey_view')
-      .select('pipeline_stage');
-
-    if (fallbackError) throw fallbackError;
-
-    const counts: PipelineStageCounts = {
-      new_lead: 0,
-      demo_requested: 0,
-      demo_attended: 0,
-      phone_verified: 0,
-      application_submitted: 0,
-      admin_approved: 0,
-      payment_complete: 0,
-      enrolled: 0,
-      total: 0,
-    };
-
-    if (rows) {
-      for (const row of rows) {
-        const stage = row.pipeline_stage as PipelineStage;
-        if (stage in counts) {
-          counts[stage]++;
-        }
-        counts.total++;
-      }
-    }
-
-    return counts;
-  }
-
-  // Build counts from RPC result
   const counts: PipelineStageCounts = {
     new_lead: 0,
     demo_requested: 0,
@@ -319,17 +276,33 @@ export async function getPipelineStageCounts(
     total: 0,
   };
 
-  if (data) {
-    for (const row of data) {
-      const stage = row.pipeline_stage as PipelineStage;
-      if (stage in counts) {
-        counts[stage] = Number(row.cnt);
-      }
-      counts.total += Number(row.cnt);
-    }
-  }
+  const results = await Promise.all(
+    stages.map((stage) =>
+      applyFilters(
+        supabase.from('user_journey_view').select('id', { count: 'exact', head: true })
+      ).eq('pipeline_stage', stage)
+    )
+  );
+
+  results.forEach(({ count, error }, i) => {
+    if (error) throw error;
+    counts[stages[i]] = count || 0;
+    counts.total += count || 0;
+  });
 
   return counts;
+}
+
+/**
+ * Get counts of users in each pipeline stage (exact, no row cap).
+ */
+export async function getPipelineStageCounts(
+  options: { excludeArchived?: boolean } = {},
+  client?: TypedSupabaseClient
+): Promise<PipelineStageCounts> {
+  const supabase = client || getSupabaseAdminClient();
+  const { excludeArchived = true } = options;
+  return countPipelineStages(supabase, (q) => (excludeArchived ? q.eq('lifecycle_status', 'active') : q));
 }
 
 /**
@@ -340,42 +313,36 @@ export async function getLeadPipelineStageCounts(
   client?: TypedSupabaseClient
 ): Promise<PipelineStageCounts> {
   const supabase = client || getSupabaseAdminClient();
-
-  let query = supabase
-    .from('user_journey_view')
-    .select('pipeline_stage');
-
   // Exclude users already linked to a classroom (they're identified students)
-  query = query.is('linked_classroom_email', null);
+  return countPipelineStages(
+    supabase,
+    (q) => q.is('linked_classroom_email', null),
+    PIPELINE_STAGES.filter((s) => !excludeStages.includes(s))
+  );
+}
 
-  const { data: rows, error } = await query;
+// ============================================
+// PEOPLE BREAKDOWN (admin People page counts)
+// ============================================
 
+/**
+ * Exact grouped counts for the admin People page (/crm): one row per
+ * lifecycle_status x exam_year x exam_year_source x lifecycle_stage x
+ * engagement, from crm_people_breakdown() (migration 20261018090000). A few
+ * hundred rows at most, so the page can total seasons, activity and stages
+ * without the 1,000-row cap.
+ */
+export async function getPeopleBreakdown(
+  options: { identity?: 'firebase' | 'microsoft' | 'all'; contactedStatus?: string | null } = {},
+  client?: TypedSupabaseClient
+): Promise<PeopleBreakdownRow[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await (supabase as any).rpc('crm_people_breakdown', {
+    p_identity: options.identity || 'all',
+    p_contacted: options.contactedStatus || null,
+  });
   if (error) throw error;
-
-  const counts: PipelineStageCounts = {
-    new_lead: 0,
-    demo_requested: 0,
-    demo_attended: 0,
-    phone_verified: 0,
-    application_submitted: 0,
-    admin_approved: 0,
-    payment_complete: 0,
-    enrolled: 0,
-    total: 0,
-  };
-
-  if (rows) {
-    for (const row of rows) {
-      const stage = row.pipeline_stage as PipelineStage;
-      if (excludeStages.includes(stage)) continue;
-      if (stage in counts) {
-        counts[stage]++;
-      }
-      counts.total++;
-    }
-  }
-
-  return counts;
+  return ((data || []) as PeopleBreakdownRow[]).map((r) => ({ ...r, n: Number(r.n) || 0 }));
 }
 
 // ============================================

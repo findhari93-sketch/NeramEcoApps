@@ -913,7 +913,7 @@ export async function getComposedTestQuestions(
       // They were missing from this select while the review UI rendered them,
       // so every attempt in the product showed a blank explanation.
       .select(
-        'id, question_text, question_image_url, question_format, options, correct_answer, answer_tolerance, explanation_brief, explanation_detailed, drawing_parts, solution_video_url',
+        'id, question_text, question_image_url, question_format, options, correct_answer, answer_tolerance, explanation_brief, explanation_detailed, drawing_parts, solution_video_url, is_active',
       )
       .in('id', qbIds);
     for (const q of data || []) qbMap.set(q.id, q);
@@ -951,6 +951,9 @@ export async function getComposedTestQuestions(
       // Text and marks only. A test never shows a solution before submit, so the
       // per-part solution image and video are dropped where the row is read.
       drawing_parts: stripDrawingPartSolutions(src?.drawing_parts),
+      // Read by ensureTestDraw so a retired question stays out of new sittings.
+      // Only a bank row can be retired; a verified question has no such column.
+      is_active: src?.is_active !== false,
     };
     if (withAnswers) {
       out.correct_answer = src?.correct_answer ?? null;
@@ -1132,18 +1135,33 @@ export async function ensureTestDraw(
   },
   client?: TypedSupabaseClient,
 ): Promise<NexusTestDraw | null> {
+  // A retired question (is_active false on the bank row) is left out of every
+  // NEW sitting. Deactivating the greeting trivia on 2026-09-09 changed nothing
+  // for students because this read never looked at the flag, so the final
+  // checks built before then kept serving it (NXS-0130). A sitting that already
+  // has a draw keeps its paper, which is what its grade and review are about.
+  // Never down to nothing: a paper with no questions cannot be sat.
+  const live = input.questions.filter((q) => q.is_active !== false);
+  const pool = live.length > 0 ? live : input.questions;
+  const hasRetired = pool.length < input.questions.length;
+
   const serve = Number(input.serve);
-  const isPool = Number.isFinite(serve) && serve > 0 && serve < input.questions.length;
-  if (!isPool && !input.sectionShuffle) return null;
+  const isPool = Number.isFinite(serve) && serve > 0 && serve < pool.length;
+  if (!isPool && !input.sectionShuffle && !hasRetired) return null;
 
   const existing = await getTestDraw(input.testId, input.studentId, input.attemptNumber, client);
   if (existing) return existing;
 
   const supabase = client || getSupabaseAdminClient();
   const seed = testDrawSeed(input.studentId, input.testId);
-  const questionIds = input.sectionShuffle
+  // Only retirement asked for a draw: serve the live paper as it stands, in its
+  // stored order with its options unpermuted, exactly as it read before.
+  const wholePaper = !isPool && !input.sectionShuffle;
+  const questionIds = wholePaper
+    ? pool.map((q) => q.question_id)
+    : input.sectionShuffle
     ? pickSectionedDraw(
-        input.questions.map((q) => ({
+        pool.map((q) => ({
           id: q.question_id,
           section: q.section ?? null,
           section_order: q.section_order ?? null,
@@ -1157,13 +1175,13 @@ export async function ensureTestDraw(
         seed,
       )
     : pickTestDraw(
-        input.questions.map((q) => q.question_id),
+        pool.map((q) => q.question_id),
         serve,
         input.attemptNumber,
         seed,
       );
-  const drawn = input.questions.filter((q) => questionIds.includes(q.question_id));
-  const optionMaps = buildTestOptionMaps(drawn, input.attemptNumber, seed);
+  const drawn = pool.filter((q) => questionIds.includes(q.question_id));
+  const optionMaps = wholePaper ? {} : buildTestOptionMaps(drawn, input.attemptNumber, seed);
 
   const { error } = await supabase.from(DRAWS).insert({
     test_id: input.testId,

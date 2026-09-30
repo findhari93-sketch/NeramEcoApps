@@ -22,6 +22,7 @@ import type {
   FoundationIssueAction,
   FoundationIssuePriority,
   FoundationIssueCategory,
+  FoundationIssueResolutionCode,
   NexusFoundationTranscript,
   TranscriptEntry,
   NexusFoundationWatchSessionUpsert,
@@ -848,6 +849,7 @@ export async function assignFoundationIssue(
   client?: TypedSupabaseClient
 ): Promise<NexusFoundationIssue> {
   const supabase = client || getSupabaseAdminClient();
+  const current = await readIssueState(supabase, issueId);
   const { data, error } = await supabase
     .from('nexus_foundation_issues')
     .update({
@@ -855,6 +857,7 @@ export async function assignFoundationIssue(
       assigned_by: assignedBy,
       assigned_at: new Date().toISOString(),
       status: 'in_progress' as FoundationIssueStatus,
+      auto_close_at: null,
       updated_at: new Date().toISOString(),
     })
     .eq('id', issueId)
@@ -862,13 +865,16 @@ export async function assignFoundationIssue(
     .single();
   if (error) throw error;
 
-  await supabase.from('nexus_foundation_issue_activity').insert({
+  await logIssueActivity(supabase, {
     issue_id: issueId,
     actor_id: assignedBy,
     action: 'assigned',
     target_user_id: assignedTo,
-    old_status: 'open',
+    old_status: current?.status ?? 'open',
     new_status: 'in_progress',
+    // "Assigned to Priya" is the student's answer to "is anyone looking at
+    // this". It carries a name and a status, nothing internal.
+    visible_to_student: true,
   });
 
   return data as unknown as NexusFoundationIssue;
@@ -943,11 +949,11 @@ export async function resolveFoundationIssue(
   issueId: string,
   resolvedBy: string,
   resolutionNote: string,
-  client?: TypedSupabaseClient
+  client?: TypedSupabaseClient,
+  resolutionCode?: FoundationIssueResolutionCode
 ): Promise<NexusFoundationIssue> {
   const supabase = client || getSupabaseAdminClient();
-  const autoCloseAt = new Date();
-  autoCloseAt.setDate(autoCloseAt.getDate() + 3);
+  const current = await readIssueState(supabase, issueId);
 
   const { data, error } = await supabase
     .from('nexus_foundation_issues')
@@ -956,9 +962,12 @@ export async function resolveFoundationIssue(
       resolved_by: resolvedBy,
       resolved_at: new Date().toISOString(),
       resolution_note: resolutionNote,
-      auto_close_at: autoCloseAt.toISOString(),
+      // Named only when passed: resolution_code ships in its own migration, and
+      // naming an unknown column makes PostgREST refuse the whole update.
+      ...(resolutionCode ? { resolution_code: resolutionCode } : {}),
+      auto_close_at: daysFromNow(CONFIRM_AUTO_CLOSE_DAYS),
       updated_at: new Date().toISOString(),
-    })
+    } as never)
     .eq('id', issueId)
     .select()
     .single();
@@ -968,7 +977,9 @@ export async function resolveFoundationIssue(
     issue_id: issueId,
     actor_id: resolvedBy,
     action: 'resolved',
-    old_status: 'in_progress',
+    // Read, not assumed: a ticket can be resolved from open or from
+    // waiting_on_student as well, and the thread should say which.
+    old_status: current?.status ?? 'in_progress',
     new_status: 'awaiting_confirmation',
     reason: resolutionNote,
     // The resolution note is written FOR the reporter, and the ticket then asks
@@ -1009,20 +1020,195 @@ export async function confirmFoundationIssue(
   return data as unknown as NexusFoundationIssue;
 }
 
+/**
+ * "Still happening". The ticket goes back to whoever had it, as in_progress, so
+ * the person who knows the history picks it up again rather than the queue. A
+ * ticket nobody owned goes back to open.
+ *
+ * Works from awaiting_confirmation and from closed; the route decides who may
+ * reopen what (the student only for a few days after closing).
+ */
 export async function reopenFoundationIssue(
   issueId: string,
-  studentId: string,
+  actorId: string,
   reason: string,
   client?: TypedSupabaseClient
 ): Promise<NexusFoundationIssue> {
   const supabase = client || getSupabaseAdminClient();
+  const current = await readIssueState(supabase, issueId);
+  const nextStatus: FoundationIssueStatus = current?.assigned_to ? 'in_progress' : 'open';
   const { data, error } = await supabase
     .from('nexus_foundation_issues')
     .update({
-      status: 'open' as FoundationIssueStatus,
+      status: nextStatus,
       resolved_by: null,
       resolved_at: null,
       resolution_note: null,
+      // Cleared only when there is one to clear, so a database without the
+      // lifecycle migration never sees the column named.
+      ...(current?.resolution_code ? { resolution_code: null } : {}),
+      auto_close_at: null,
+      updated_at: new Date().toISOString(),
+    } as never)
+    .eq('id', issueId)
+    .select()
+    .single();
+  if (error) throw error;
+
+  await supabase.from('nexus_foundation_issue_activity').insert({
+    issue_id: issueId,
+    actor_id: actorId,
+    action: 'reopened',
+    old_status: current?.status ?? 'awaiting_confirmation',
+    new_status: nextStatus,
+    reason,
+    // The student wrote this reason themselves, so it is theirs to see.
+    visible_to_student: true,
+  });
+
+  return data as unknown as NexusFoundationIssue;
+}
+
+/** How long each student-turn status waits before the cron closes it. */
+export const CONFIRM_AUTO_CLOSE_DAYS = 3;
+export const WAITING_AUTO_CLOSE_DAYS = 7;
+
+function daysFromNow(days: number): string {
+  return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+/**
+ * The ticket as it is right now, for old_status and for the moves that depend on
+ * who owns it. `*` rather than named columns, so resolution_code is read when
+ * the column exists and is simply absent when it does not.
+ */
+async function readIssueState(
+  supabase: TypedSupabaseClient,
+  issueId: string
+): Promise<{ status: FoundationIssueStatus; assigned_to: string | null; resolution_code?: string | null } | null> {
+  const { data } = await supabase
+    .from('nexus_foundation_issues')
+    .select('*')
+    .eq('id', issueId)
+    .single();
+  return (data as any) ?? null;
+}
+
+/**
+ * An activity row that records a status move. Logged, not thrown: the move has
+ * already happened, and failing the request would tell staff it had not.
+ */
+async function logIssueActivity(
+  supabase: TypedSupabaseClient,
+  row: Record<string, unknown>
+): Promise<void> {
+  const { error } = await supabase.from('nexus_foundation_issue_activity').insert(row as never);
+  if (error) console.error(`issue activity (${String(row.action)}) was not written:`, error);
+}
+
+/**
+ * "Start working". The one-tap acknowledgement: the ticket becomes in_progress
+ * and, when nobody owns it yet, the person who pressed the button owns it. An
+ * existing assignee is kept, so pressing it on a colleague's ticket does not
+ * quietly take it from them.
+ */
+export async function startFoundationIssue(
+  issueId: string,
+  actorId: string,
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationIssue> {
+  const supabase = client || getSupabaseAdminClient();
+  const current = await readIssueState(supabase, issueId);
+  const now = new Date().toISOString();
+  const claim = !current?.assigned_to;
+
+  const { data, error } = await supabase
+    .from('nexus_foundation_issues')
+    .update({
+      status: 'in_progress' as FoundationIssueStatus,
+      ...(claim ? { assigned_to: actorId, assigned_by: actorId, assigned_at: now } : {}),
+      auto_close_at: null,
+      updated_at: now,
+    })
+    .eq('id', issueId)
+    .select()
+    .single();
+  if (error) throw error;
+
+  await logIssueActivity(supabase, {
+    issue_id: issueId,
+    actor_id: actorId,
+    action: 'accepted',
+    old_status: current?.status ?? 'open',
+    new_status: 'in_progress',
+    visible_to_student: true,
+  });
+
+  return data as unknown as NexusFoundationIssue;
+}
+
+/**
+ * "Ask student". The ticket becomes the student's turn, with the question as a
+ * visible row in their thread, and closes on its own after
+ * WAITING_AUTO_CLOSE_DAYS of silence. The question stamps last_reply_at like any
+ * other message, so it lights the student's unread dot and nav badge.
+ */
+export async function requestIssueInfo(
+  issueId: string,
+  actorId: string,
+  message: string,
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationIssue> {
+  const supabase = client || getSupabaseAdminClient();
+  const current = await readIssueState(supabase, issueId);
+  const now = new Date().toISOString();
+  const claim = !current?.assigned_to;
+
+  const { data, error } = await supabase
+    .from('nexus_foundation_issues')
+    .update({
+      status: 'waiting_on_student' as FoundationIssueStatus,
+      ...(claim ? { assigned_to: actorId, assigned_by: actorId, assigned_at: now } : {}),
+      auto_close_at: daysFromNow(WAITING_AUTO_CLOSE_DAYS),
+      last_reply_at: now,
+      updated_at: now,
+    })
+    .eq('id', issueId)
+    .select()
+    .single();
+  if (error) throw error;
+
+  await logIssueActivity(supabase, {
+    issue_id: issueId,
+    actor_id: actorId,
+    action: 'info_requested',
+    reason: message,
+    old_status: current?.status ?? 'in_progress',
+    new_status: 'waiting_on_student',
+    visible_to_student: true,
+  });
+
+  return data as unknown as NexusFoundationIssue;
+}
+
+/**
+ * Back to staff's turn. Called by the route when the student replies to a
+ * waiting ticket (byStudent), and when staff press "Resume".
+ */
+export async function resumeFoundationIssue(
+  issueId: string,
+  actorId: string,
+  opts?: { byStudent?: boolean },
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationIssue> {
+  const supabase = client || getSupabaseAdminClient();
+  const current = await readIssueState(supabase, issueId);
+  const nextStatus: FoundationIssueStatus = current?.assigned_to ? 'in_progress' : 'open';
+
+  const { data, error } = await supabase
+    .from('nexus_foundation_issues')
+    .update({
+      status: nextStatus,
       auto_close_at: null,
       updated_at: new Date().toISOString(),
     })
@@ -1031,14 +1217,57 @@ export async function reopenFoundationIssue(
     .single();
   if (error) throw error;
 
-  await supabase.from('nexus_foundation_issue_activity').insert({
+  await logIssueActivity(supabase, {
     issue_id: issueId,
-    actor_id: studentId,
-    action: 'reopened',
-    old_status: 'awaiting_confirmation',
-    new_status: 'open',
-    reason,
-    // The student wrote this reason themselves, so it is theirs to see.
+    actor_id: actorId,
+    action: opts?.byStudent ? 'student_replied' : 'marked_in_progress',
+    old_status: current?.status ?? 'waiting_on_student',
+    new_status: nextStatus,
+    visible_to_student: true,
+  });
+
+  return data as unknown as NexusFoundationIssue;
+}
+
+/**
+ * "Close now". Staff end the ticket without asking the student to confirm: a
+ * duplicate, a won't-fix, or a fix already confirmed on a call. The note and the
+ * outcome are both written for the student, so the row is visible.
+ */
+export async function closeFoundationIssueByStaff(
+  issueId: string,
+  actorId: string,
+  resolutionCode: FoundationIssueResolutionCode,
+  note: string,
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationIssue> {
+  const supabase = client || getSupabaseAdminClient();
+  const current = await readIssueState(supabase, issueId);
+  const now = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from('nexus_foundation_issues')
+    .update({
+      status: 'closed' as FoundationIssueStatus,
+      resolved_by: actorId,
+      resolved_at: now,
+      resolution_note: note,
+      resolution_code: resolutionCode,
+      auto_close_at: null,
+      updated_at: now,
+    } as never)
+    .eq('id', issueId)
+    .select()
+    .single();
+  if (error) throw error;
+
+  await logIssueActivity(supabase, {
+    issue_id: issueId,
+    actor_id: actorId,
+    action: 'closed_by_staff',
+    reason: note,
+    old_status: current?.status ?? 'in_progress',
+    new_status: 'closed',
     visible_to_student: true,
   });
 
@@ -1078,6 +1307,24 @@ export async function getExpiredAwaitingIssues(
     .from('nexus_foundation_issues')
     .select('*')
     .eq('status', 'awaiting_confirmation')
+    .lt('auto_close_at', new Date().toISOString());
+  if (error) throw error;
+  return (data || []) as unknown as NexusFoundationIssue[];
+}
+
+/**
+ * Every ticket whose student-turn clock has run out: awaiting_confirmation after
+ * CONFIRM_AUTO_CLOSE_DAYS, waiting_on_student after WAITING_AUTO_CLOSE_DAYS.
+ * Each status sets its own auto_close_at, so one comparison covers both.
+ */
+export async function getExpiredAutoCloseIssues(
+  client?: TypedSupabaseClient
+): Promise<NexusFoundationIssue[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('nexus_foundation_issues')
+    .select('*')
+    .in('status', ['awaiting_confirmation', 'waiting_on_student'])
     .lt('auto_close_at', new Date().toISOString());
   if (error) throw error;
   return (data || []) as unknown as NexusFoundationIssue[];

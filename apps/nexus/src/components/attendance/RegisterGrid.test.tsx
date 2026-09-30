@@ -279,7 +279,7 @@ describe('RegisterGrid', () => {
       ready: true,
       factsFor: (id) =>
         id === 's1'
-          ? { stage: '12th', dormant: false, photo: null, name: null, language: 'tamil', limitedEnglish: false }
+          ? { stage: '12th', dormant: false, photo: null, name: null, language: 'tamil', limitedEnglish: false, drawingLevel: null, overallLevel: null }
           : null,
     });
 

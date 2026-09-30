@@ -5,6 +5,7 @@ import { useAuthSWR } from '@/lib/nexus-swr';
 import { STAGE_FACTS_KEY } from '@/lib/stage-facts-cache';
 import { languageKeyOf, type LanguageKey } from '@/lib/student-language';
 import { stageKeyOf, type StageKey } from '@/lib/student-stage';
+import { isLevelKey, type LevelKey } from '@/lib/student-level';
 
 /**
  * Who each student is, fetched once and readable from any avatar on screen.
@@ -44,6 +45,10 @@ export interface StudentStageFacts {
   language: LanguageKey;
   /** users.limited_english. Flips the avatar mark to its outlined form. */
   limitedEnglish: boolean;
+  /** Teacher-only drawing level. Null means not rated. */
+  drawingLevel: LevelKey | null;
+  /** The one level the avatar's bars show. */
+  overallLevel: LevelKey | null;
 }
 
 interface StageFactsContextValue {
@@ -72,6 +77,8 @@ interface Payload {
       name: string | null;
       language?: string | null;
       limitedEnglish?: boolean;
+      drawingLevel?: string | null;
+      overallLevel?: string | null;
     }
   >;
 }
@@ -112,6 +119,8 @@ export default function StudentStageFactsProvider({ children }: { children: Reac
         // Anything unrecorded reads as English, which is what the UI shows.
         language: languageKeyOf(row.language),
         limitedEnglish: row.limitedEnglish === true,
+        drawingLevel: isLevelKey(row.drawingLevel) ? row.drawingLevel : null,
+        overallLevel: isLevelKey(row.overallLevel) ? row.overallLevel : null,
       });
     }
 

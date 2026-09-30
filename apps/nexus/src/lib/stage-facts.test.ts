@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { foldStudentFacts } from './stage-facts';
+import { applySkillLevels, foldStudentFacts } from './stage-facts';
 
 /**
  * The fold behind every info ring in the app.
@@ -161,5 +161,26 @@ describe('foldStudentFacts', () => {
       }),
     ]);
     expect(facts.u1.language).toBe('hindi');
+  });
+});
+
+describe('applySkillLevels', () => {
+  it('lays a drawing level over a known student and derives the overall level', () => {
+    const facts = foldStudentFacts([member({ user_id: 'u1' }), member({ user_id: 'u2' })]);
+    applySkillLevels(facts, [{ student_id: 'u1', skill: 'drawing', level: 'mid' }]);
+    expect(facts.u1.drawingLevel).toBe('mid');
+    expect(facts.u1.overallLevel).toBe('mid');
+    expect(facts.u2.drawingLevel).toBeNull();
+    expect(facts.u2.overallLevel).toBeNull();
+  });
+
+  it('ignores rows for unknown students and unknown level words', () => {
+    const facts = foldStudentFacts([member({ user_id: 'u1' })]);
+    applySkillLevels(facts, [
+      { student_id: 'ghost', skill: 'drawing', level: 'top' },
+      { student_id: 'u1', skill: 'drawing', level: 'excellent' },
+    ]);
+    expect(facts.ghost).toBeUndefined();
+    expect(facts.u1.overallLevel).toBeNull();
   });
 });

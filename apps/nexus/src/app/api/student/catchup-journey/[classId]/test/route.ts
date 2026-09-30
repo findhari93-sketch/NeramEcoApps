@@ -6,6 +6,7 @@ import {
   getServedTestQuestions,
   nextAttemptNumber,
   gradeTestOneShot,
+  healRecapCompletions,
 } from '@neram/database';
 
 /**
@@ -110,6 +111,11 @@ async function isTestOpen(
       .eq('status', 'completed')
       .maybeSingle();
     if (progress) return true;
+
+    // Every checkpoint passed but the completion write never landed (NXS-0127).
+    // Same rule loadClassFacts applies, so the panel and the paper agree.
+    const healed = await healRecapCompletions(studentId, [recap.id], supabase);
+    if (healed.has(recap.id)) return true;
   }
 
   return !!item.test_unlocked_at;

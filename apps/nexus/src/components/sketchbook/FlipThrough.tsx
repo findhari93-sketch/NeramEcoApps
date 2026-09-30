@@ -13,6 +13,7 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useNavBadges } from '@/components/NavBadgeProvider';
 import { useStudentStageFacts } from '@/components/students/StudentStageFactsProvider';
 import StudentStageAvatar from '@/components/students/StudentStageAvatar';
+import DrawingLevelControl from '@/components/students/DrawingLevelControl';
 import type { StageKey } from '@/lib/student-stage';
 import { drawingSourceLabel } from '@/lib/drawing-source';
 import { flipReviewHref } from '@/lib/review-context';
@@ -366,6 +367,10 @@ export default function FlipThrough({ classroomId }: { classroomId: string }) {
           <Box sx={{ minWidth: 0 }}>
             <Typography variant="subtitle1" sx={{ fontWeight: 600, lineHeight: 1.2 }} noWrap>{current.student.name || 'Student'}</Typography>
             <Typography variant="caption" color="text.secondary">{fmt(current.submitted_at)}</Typography>
+            {/* The level this sheet is judged against. Managers change it here. */}
+            <Box sx={{ mt: 0.5 }}>
+              <DrawingLevelControl studentId={current.student.id} studentName={current.student.name} source="flip" />
+            </Box>
           </Box>
           {current.source_type !== 'sketchbook' && <Chip size="small" label={drawingSourceLabel(current.source_type)} sx={{ ml: 1, height: 24 }} />}
         </Box>

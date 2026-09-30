@@ -11,6 +11,7 @@ import PractisedFrom from '@/components/drawings/PractisedFrom';
 import PageHeader from '@/components/PageHeader';
 import { drawingSourceLabel } from '@/lib/drawing-source';
 import { REACTION_LABEL } from '@/lib/sketchbook-messages';
+import { formatPracticeDay } from '@/lib/sketchbook-rhythm';
 import type { GridSketch } from './SketchGrid';
 
 interface SketchPageViewProps {
@@ -26,8 +27,12 @@ interface SketchPageViewProps {
   studentName?: string | null;
 }
 
-const fmtLong = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' });
+const LONG = { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' } as const;
+/** The day it counts for on the student's clock, else its IST day (an older cached payload). */
+const fmtLong = (sketch: GridSketch) =>
+  sketch.practiceDate
+    ? formatPracticeDay(sketch.practiceDate, LONG)
+    : new Date(sketch.submitted_at).toLocaleDateString('en-IN', { ...LONG, timeZone: 'Asia/Kolkata' });
 
 export default function SketchPageView({ sketch, mode, backHref, getToken, onDelete, actions, review, studentName }: SketchPageViewProps) {
   const [confirm, setConfirm] = useState(false);
@@ -38,7 +43,7 @@ export default function SketchPageView({ sketch, mode, backHref, getToken, onDel
     <Box sx={{ pb: 4 }}>
       <PageHeader
         title={studentName ? `${studentName}'s ${sketch.source_type === 'sketchbook' ? 'sketch' : 'drawing'}` : drawingSourceLabel(sketch.source_type)}
-        subtitle={fmtLong(sketch.submitted_at)}
+        subtitle={fmtLong(sketch)}
         backHref={backHref}
       />
 

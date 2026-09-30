@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { Box, Button, Stack, Typography } from '@neram/ui';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
@@ -11,6 +12,7 @@ import { captureScreenshot } from '@/lib/capture-screenshot';
 import { clearPersistentCache } from '@/lib/swr-cache';
 import { clearCachedAuth } from '@/lib/auth-cache';
 import ReportIssueDialog from '@/components/issues/ReportIssueDialog';
+import SupportAgentOutlinedIcon from '@mui/icons-material/SupportAgentOutlined';
 
 /** Comfortably over the 44px minimum, and the 48px this repo asks for. */
 const TAP = 48;
@@ -36,6 +38,7 @@ export default function RouteErrorScreen({ error, reset, title, body, reportTitl
   // The issue route takes a staff or student token only, so a parent, or someone
   // not signed in yet, would be offered a button that cannot work.
   const canReport = !!user && nexusRole !== 'parent';
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [autoShot, setAutoShot] = useState<File | null>(null);
 
@@ -112,6 +115,21 @@ export default function RouteErrorScreen({ error, reset, title, body, reportTitl
             sx={{ textTransform: 'none', minHeight: TAP, px: 3 }}
           >
             Report this issue
+          </Button>
+        )}
+        {/*
+          Signed out, or a parent: the issue route cannot take their report, but
+          /help can, and it reaches staff in Teams without an account.
+        */}
+        {!canReport && (
+          <Button
+            component="a"
+            href={`/help?problem=page_error&from=${encodeURIComponent(pathname || '/')}`}
+            variant="outlined"
+            startIcon={<SupportAgentOutlinedIcon />}
+            sx={{ textTransform: 'none', minHeight: TAP, px: 3 }}
+          >
+            Get help
           </Button>
         )}
       </Stack>

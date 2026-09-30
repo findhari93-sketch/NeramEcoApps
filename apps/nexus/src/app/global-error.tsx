@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { clearPersistentCache } from '@/lib/swr-cache';
 import { clearCachedAuth } from '@/lib/auth-cache';
+import { SUPPORT_PHONE, whatsAppLink } from '@/lib/support-contact';
 
 /**
  * Last-resort boundary for crashes in the root layout itself, where the app's
@@ -80,6 +81,24 @@ export default function GlobalError({ error }: { error: Error & { digest?: strin
             >
               Clear saved data and reload
             </button>
+          </div>
+          {/* Plain links: no providers or theme exist at this level. */}
+          <p style={{ color: '#555', fontSize: 15, marginTop: 24, marginBottom: 4 }}>Still stuck?</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'center' }}>
+            <a
+              href="/help?problem=page_error&from=%2F"
+              style={{ ...buttonBase, display: 'inline-flex', alignItems: 'center', boxSizing: 'border-box', textDecoration: 'none', border: '1px solid #1565c0', color: '#1565c0' }}
+            >
+              Get help
+            </a>
+            <a
+              href={whatsAppLink(SUPPORT_PHONE)}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ ...buttonBase, display: 'inline-flex', alignItems: 'center', boxSizing: 'border-box', textDecoration: 'none', border: 'none', background: '#0F7A3F', color: '#fff' }}
+            >
+              WhatsApp us
+            </a>
           </div>
         </div>
       </body>

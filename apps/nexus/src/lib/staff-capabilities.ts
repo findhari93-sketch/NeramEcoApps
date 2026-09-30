@@ -97,6 +97,7 @@ export type Capability =
   | 'coord.student.view'
   | 'coord.student.stage'
   | 'coord.student.dormancy'
+  | 'coord.student.level'
   | 'coord.student.finance'
   | 'coord.attendance.view'
   | 'coord.nudge'
@@ -167,6 +168,11 @@ const SHARED_STAFF: readonly Capability[] = [
  * One route still serves both. It asserts whichever capability the request body
  * actually needs, after parsing and before touching the database.
  *
+ * `coord.student.level` is here by the founder's call (30 Sep 2026): a student's
+ * Top / Mid / Needs practice level decides how much teacher time they get, so
+ * setting it stays with the people who plan that time. Teachers still SEE it on
+ * every avatar; they just cannot change it.
+ *
  * `coord.student.finance` is here for a different reason: it is not a teaching
  * signal at all. It gates what a family owes and has paid, plus the two fields
  * that decide scholarship eligibility (caste category and its certificate) and
@@ -192,6 +198,7 @@ const MANAGER_EXTRA: readonly Capability[] = [
   'structure.plan.delete',
   'teach.timetable.schedule',
   'coord.student.dormancy',
+  'coord.student.level',
   'coord.student.finance',
   'coord.photo_ms_push',
   'impersonate.any',
@@ -340,6 +347,7 @@ export const ALL_CAPABILITIES: readonly Capability[] = [
   'coord.student.view',
   'coord.student.stage',
   'coord.student.dormancy',
+  'coord.student.level',
   'coord.student.finance',
   'coord.attendance.view',
   'coord.nudge',

@@ -16652,6 +16652,7 @@ export type Database = {
         | "foundation_issue_closed"
         | "foundation_issue_comment"
         | "foundation_issue_recheck_requested"
+        | "foundation_issue_info_requested"
         | "assignment_nudge"
         | "study_material_nudge"
       notification_recipient_role: "admin" | "team_lead" | "team_member"
@@ -16978,6 +16979,7 @@ export const Constants = {
         "foundation_issue_closed",
         "foundation_issue_comment",
         "foundation_issue_recheck_requested",
+        "foundation_issue_info_requested",
         "assignment_nudge",
         "study_material_nudge",
       ],

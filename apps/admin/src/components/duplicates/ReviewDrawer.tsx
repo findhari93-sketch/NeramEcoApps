@@ -20,6 +20,7 @@ import {
   Tooltip,
 } from '@neram/ui';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import CloseIcon from '@mui/icons-material/Close';
 import MergeTypeIcon from '@mui/icons-material/MergeType';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
@@ -220,25 +221,26 @@ export default function ReviewDrawer({
           display: 'flex',
           alignItems: 'center',
           gap: 1,
-          px: 1,
+          pl: { xs: 2, md: 3 },
+          pr: 1,
           py: 0.5,
         }}
       >
-        <Tooltip title="Back to the list">
+        <Typography id="review-drawer-title" variant="h6" component="h2" fontWeight={700} sx={{ flex: 1, minWidth: 0 }} noWrap>
+          Review pair
+        </Typography>
+        <Tooltip title="Close">
           <span>
             <IconButton
               onClick={closeIfIdle}
               disabled={phase === 'merging'}
-              aria-label="Back to the list"
+              aria-label="Close"
               sx={{ width: 44, height: 44, ...FOCUS_RING }}
             >
-              <ArrowBackIcon />
+              <CloseIcon />
             </IconButton>
           </span>
         </Tooltip>
-        <Typography id="review-drawer-title" variant="h6" component="h2" fontWeight={700} sx={{ flex: 1, minWidth: 0 }} noWrap>
-          Review pair
-        </Typography>
       </Box>
 
       <Box sx={{ p: { xs: 2, md: 3 } }}>

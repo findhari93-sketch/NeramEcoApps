@@ -22,7 +22,7 @@ describe('StudentIdentityLine', () => {
       ready: true,
       factsFor: (id) =>
         id === 's1'
-          ? { stage: '11th', dormant: false, photo: null, name: null, language: 'english', limitedEnglish: false }
+          ? { stage: '11th', dormant: false, photo: null, name: null, language: 'english', limitedEnglish: false, drawingLevel: null, overallLevel: null }
           : null,
     });
 

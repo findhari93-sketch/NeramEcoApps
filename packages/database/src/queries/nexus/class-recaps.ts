@@ -1227,6 +1227,87 @@ export async function markRecapCompletedIfAllPassed(
   return allPassed;
 }
 
+/**
+ * Which of these recaps have every live checkpoint passed, given the recap's
+ * non-archived sections and the section ids this student has passed. A recap
+ * with no sections is never complete, the same as markRecapCompletedIfAllPassed.
+ */
+export function recapsWithAllCheckpointsPassed(
+  sections: { id: string; recap_id: string }[],
+  passedSectionIds: Set<string>,
+): Set<string> {
+  const allPassed = new Map<string, boolean>();
+  for (const s of sections) {
+    const sofar = allPassed.get(s.recap_id) ?? true;
+    allPassed.set(s.recap_id, sofar && passedSectionIds.has(s.id));
+  }
+  return new Set([...allPassed].filter(([, ok]) => ok).map(([id]) => id));
+}
+
+/**
+ * The read-time half of markRecapCompletedIfAllPassed, for NXS-0127.
+ *
+ * Completion was written in exactly one place: the checkpoint quiz POST, after
+ * the passing attempt was already inserted. When that request died between the
+ * two, the attempts said "every checkpoint passed" and the progress row said
+ * "in_progress" forever, and every gate reading the row kept the final check
+ * locked. Nothing repaired it.
+ *
+ * So the gates ask the same question of the attempts for any recap whose row is
+ * not completed, and write the row back when the answer is yes. Unlike the
+ * removed test_unlocked_at self-heal (NXS-0141), there is no penalty for this to
+ * undo: recap completion is already permanent once the checkpoints are passed,
+ * and a failed final check never clears it.
+ *
+ * The write is best-effort. The returned set is the answer either way.
+ */
+export async function healRecapCompletions(
+  studentId: string,
+  recapIds: string[],
+  client?: TypedSupabaseClient,
+): Promise<Set<string>> {
+  if (!recapIds.length) return new Set();
+  const supabase = client || getSupabaseAdminClient();
+
+  const { data: sections, error: secErr } = await supabase
+    .from(SECTIONS)
+    .select('id, recap_id')
+    .in('recap_id', recapIds)
+    .is('archived_at', null);
+  if (secErr) throw secErr;
+  if (!sections?.length) return new Set();
+
+  const { data: passed, error: attErr } = await supabase
+    .from(ATTEMPTS)
+    .select('section_id')
+    .eq('student_id', studentId)
+    .in('section_id', sections.map((s) => s.id))
+    .eq('passed', true);
+  if (attErr) throw attErr;
+
+  const healed = recapsWithAllCheckpointsPassed(
+    sections,
+    new Set((passed || []).map((a) => a.section_id)),
+  );
+  if (!healed.size) return healed;
+
+  const now = new Date().toISOString();
+  const { error: writeErr } = await supabase.from(PROGRESS).upsert(
+    [...healed].map((recapId) => ({
+      student_id: studentId,
+      recap_id: recapId,
+      status: 'completed',
+      completed_at: now,
+      updated_at: now,
+    })),
+    { onConflict: 'student_id,recap_id' },
+  );
+  if (writeErr) {
+    console.error('[recap] completion heal write failed (non-fatal):', writeErr.message);
+  }
+  return healed;
+}
+
 // ── Teacher / management listing ──
 
 /**

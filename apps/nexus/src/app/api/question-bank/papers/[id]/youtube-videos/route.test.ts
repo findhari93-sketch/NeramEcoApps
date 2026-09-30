@@ -155,6 +155,46 @@ describe('GET /api/question-bank/papers/[id]/youtube-videos', () => {
     expect(res.status).toBe(502);
   });
 
+  it("also returns titles that fit the teacher's sample, which the built-in rules cannot read", async () => {
+    mocks.results.set('nexus_qb_original_papers', {
+      data: { id: 'p2019', exam_type: 'JEE_PAPER_2', year: 2019, session: 'Session 2', shift: 'afternoon' },
+      count: 3,
+    });
+    fetchMock.mockResolvedValueOnce(
+      page([
+        'Q no 9 | Session 2 AN 2019 B.Arch | Math explained',
+        'Q no 9 | Session 1 AN 2019 B.Arch | Math explained',
+        'Q no 50 - JEE 2019 Solution Video Session 2 AN - Aptitude Solution',
+      ]),
+    );
+    const sample = encodeURIComponent('Q no 5 | Session 2 AN 2019 B.Arch | Aptitude explained');
+    const { data } = await (await GET(req(`?sample=${sample}`), params)).json();
+    expect(data.videos.map((v: { title: string }) => v.title)).toEqual([
+      'Q no 9 | Session 2 AN 2019 B.Arch | Math explained',
+      'Q no 50 - JEE 2019 Solution Video Session 2 AN - Aptitude Solution',
+    ]);
+    expect(data.videos[0].parsed).toMatchObject({ number: 9, section: 'math', year: 2019 });
+    expect(data.sampleKey).toBe('session 2 an 2019 b arch explained');
+  });
+
+  it('ignores a sample that does not name the year', async () => {
+    fetchMock.mockResolvedValueOnce(page(['Q no 9 - Math explained']));
+    const { data } = await (await GET(req(`?sample=${encodeURIComponent('Q no 5 - Aptitude explained')}`), params)).json();
+    expect(data.videos).toEqual([]);
+    expect(data.sampleKey).toBeNull();
+  });
+
+  it('says the daily limit is used up, not that the connection is broken, when YouTube runs out of quota', async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      json: async () => ({ error: { errors: [{ reason: 'quotaExceeded' }] } }),
+    });
+    const res = await GET(req(), params);
+    expect(res.status).toBe(429);
+    expect((await res.json()).error).toContain('daily limit');
+  });
+
   it('refuses a student', async () => {
     mocks.staff.mockResolvedValue({ ok: false, response: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) });
     expect((await GET(req(), params)).status).toBe(403);

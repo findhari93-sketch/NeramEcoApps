@@ -1,6 +1,11 @@
 /**
- * Sketchbook rhythm engine. PURE: no Date.now(), no database, no timezone
- * guesses. Every date in and out is a YYYY-MM-DD string in Asia/Kolkata.
+ * Sketchbook rhythm engine. PURE: no Date.now(), no database. Every date in and
+ * out is a YYYY-MM-DD practice day on the STUDENT's own clock: the local date of
+ * the moment minus 4 hours, in their device time zone (users.timezone, falling
+ * back to Asia/Kolkata). A student in Dubai who draws at 10:44 pm on Wednesday
+ * gets a Wednesday dot, and a sketch uploaded at 12:30 am counts for the evening
+ * before it. The SQL twin is nexus_practice_date (migration 20261019090000).
+ * Classes, tests and deadlines stay on IST; only the sketchbook is personal.
  *
  * Why a weekly goal and not a daily chain: a chain punishes hardest right after
  * the best run (school exams, travel, one tired night) and most students quit
@@ -32,7 +37,11 @@ export interface WeekRhythm {
 }
 
 export interface Rhythm {
+  /** The student's practice day right now, the day the week was built around. */
+  today: string;
   week: WeekRhythm;
+  /** The week before this one, so a Sunday drawing stays visible after Monday. */
+  lastWeek: WeekRhythm | null;
   /** Consecutive weeks meeting the goal, ending last week, plus this week once met. */
   run: number;
   bestRun: number;
@@ -43,6 +52,33 @@ export interface Rhythm {
 }
 
 const DAY_MS = 86_400_000;
+
+export const DEFAULT_TIME_ZONE = 'Asia/Kolkata';
+/** A practice day runs from 4 am to 4 am, local time. */
+export const DAY_ROLLOVER_HOUR = 4;
+
+export function isValidTimeZone(tz: unknown): tz is string {
+  if (typeof tz !== 'string' || tz.length === 0 || tz.length > 64) return false;
+  try {
+    new Intl.DateTimeFormat('en-CA', { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** The day a moment counts for in the sketchbook, on the student's clock. */
+export function practiceDate(iso: string | Date, timeZone?: string | null): string {
+  const d = typeof iso === 'string' ? new Date(iso) : iso;
+  const shifted = new Date(d.getTime() - DAY_ROLLOVER_HOUR * 3_600_000);
+  const tz = isValidTimeZone(timeZone) ? timeZone : DEFAULT_TIME_ZONE;
+  return shifted.toLocaleDateString('en-CA', { timeZone: tz });
+}
+
+/** Formats a YYYY-MM-DD practice day as itself, with no time zone shift. */
+export function formatPracticeDay(date: string, opts: Intl.DateTimeFormatOptions): string {
+  return new Date(`${date}T00:00:00Z`).toLocaleDateString('en-IN', { ...opts, timeZone: 'UTC' });
+}
 
 export function istDate(iso: string | Date): string {
   const d = typeof iso === 'string' ? new Date(iso) : iso;
@@ -107,9 +143,10 @@ export function computeRhythm(
   const set = new Set(practiceDates);
   const thisStart = weekStart(today);
   const week = weekOf(thisStart, set, history, fallbackGoal);
+  const lastWeek = weekOf(addDays(thisStart, -7), set, history, fallbackGoal);
 
   if (set.size === 0) {
-    return { week, run: 0, bestRun: 0, totalDays: 0, lastPracticeDate: null, quietDays: null };
+    return { today, week, lastWeek, run: 0, bestRun: 0, totalDays: 0, lastPracticeDate: null, quietDays: null };
   }
 
   const sorted = [...set].sort();
@@ -136,7 +173,9 @@ export function computeRhythm(
   }
 
   return {
+    today,
     week,
+    lastWeek,
     run,
     bestRun,
     totalDays: set.size,
@@ -172,4 +211,21 @@ export function rhythmLine(r: Rhythm): string {
   }
   if (r.week.met) return `${base} Goal met.`;
   return base;
+}
+
+/** "Last week: 1 of 3 days." Null when last week was not tracked for this student. */
+export function lastWeekLine(r: Rhythm): string | null {
+  if (!r.lastWeek) return null;
+  const { count, goal, met } = r.lastWeek;
+  return `Last week: ${count} of ${goal} ${goal === 1 ? 'day' : 'days'}.${met ? ' Goal met.' : ''}`;
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "21 to 27 Sep", or "28 Sep to 4 Oct" across a month edge. */
+export function weekRangeLabel(start: string): string {
+  const end = addDays(start, 6);
+  const [sm, sd] = [Number(start.slice(5, 7)), Number(start.slice(8, 10))];
+  const [em, ed] = [Number(end.slice(5, 7)), Number(end.slice(8, 10))];
+  return sm === em ? `${sd} to ${ed} ${MONTHS[em - 1]}` : `${sd} ${MONTHS[sm - 1]} to ${ed} ${MONTHS[em - 1]}`;
 }

@@ -1,4 +1,5 @@
 import { isFeatureEnabled, type FlagMap } from './feature-flags';
+import type { Capability } from './staff-capabilities';
 
 /**
  * Drawings: one destination for a student's drawing life.
@@ -33,7 +34,7 @@ import { isFeatureEnabled, type FlagMap } from './feature-flags';
 export type HubRole = 'teacher' | 'student';
 
 /** Tab keys. `to-mark` and `wall` join here with the milestones that build them. */
-export type HubTabKey = 'flip' | 'rhythm' | 'inspiration' | 'mine';
+export type HubTabKey = 'flip' | 'rhythm' | 'levels' | 'inspiration' | 'mine';
 
 export interface HubTab {
   key: HubTabKey;
@@ -45,6 +46,8 @@ export interface HubTab {
    * the tab's route, or the bar offers a tab whose page answers "unavailable".
    */
   flag?: string;
+  /** Shown only to staff who hold this capability, e.g. Levels for managers. */
+  capability?: Capability;
 }
 
 /** Where the hub itself lives, per role. */
@@ -62,6 +65,9 @@ const TABS: Record<HubRole, HubTab[]> = {
   teacher: [
     { key: 'flip', label: 'Flip through' },
     { key: 'rhythm', label: 'Class rhythm' },
+    // Sort the class by drawing level, one student at a time. Managers only,
+    // because only they set a level (coord.student.level).
+    { key: 'levels', label: 'Levels', capability: 'coord.student.level' },
     { key: 'inspiration', label: 'Inspiration', href: INSPIRATION_PATH.teacher, flag: 'staff.inspiration' },
   ],
   student: [
@@ -75,9 +81,19 @@ export function hubTabs(role: HubRole): HubTab[] {
   return TABS[role];
 }
 
-/** The tabs this viewer may actually see. */
-export function visibleHubTabs(role: HubRole, flags: FlagMap): HubTab[] {
-  return TABS[role].filter((t) => !t.flag || isFeatureEnabled(t.flag, flags));
+/**
+ * The tabs this viewer may actually see. A tab with a capability is hidden
+ * unless `can` is passed and grants it, so a caller that does not know the
+ * viewer's capabilities never shows a manager-only tab.
+ */
+export function visibleHubTabs(
+  role: HubRole,
+  flags: FlagMap,
+  can?: (capability: Capability) => boolean,
+): HubTab[] {
+  return TABS[role].filter(
+    (t) => (!t.flag || isFeatureEnabled(t.flag, flags)) && (!t.capability || !!can?.(t.capability)),
+  );
 }
 
 /**

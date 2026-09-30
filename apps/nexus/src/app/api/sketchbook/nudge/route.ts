@@ -37,6 +37,10 @@ export async function POST(request: NextRequest) {
     const mine = await staffClassroomIds(caller);
     if (!mine.includes(classroomId)) throw new ApiError('You do not teach this classroom.', 403);
 
+    // IST on purpose, unlike the student's own sketchbook (practiceDate): this
+    // date also keys the staff logs (sentOn, digest_date, "already messaged
+    // today"), which must share one calendar. A student abroad can read one day
+    // off near midnight IST.
     const today = istDate(new Date());
     const [roster, settings] = await Promise.all([loadClassroomRoster(classroomId), loadClassroomSketchbookSettings(classroomId)]);
     const wanted = new Set(requested);

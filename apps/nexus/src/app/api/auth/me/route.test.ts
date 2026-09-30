@@ -16,11 +16,13 @@ import { NextRequest } from 'next/server';
 const verifyMsToken = vi.fn();
 const reconcileMsIdentity = vi.fn();
 const results: Record<string, unknown> = {};
+const writes: Array<{ table: string; patch: Record<string, unknown> }> = [];
 
 /** A chainable stand-in for the PostgREST builder; each table answers from `results`. */
 function table(name: string) {
   const b: Record<string, unknown> = {};
-  for (const m of ['select', 'eq', 'is', 'in', 'order', 'limit', 'update', 'insert']) b[m] = () => b;
+  for (const m of ['select', 'eq', 'is', 'in', 'order', 'limit', 'insert', 'or']) b[m] = () => b;
+  b.update = (patch: Record<string, unknown>) => { writes.push({ table: name, patch }); return b; };
   b.maybeSingle = async () => results[`${name}.row`] ?? { data: null, error: null };
   b.single = b.maybeSingle;
   b.then = (ok: (v: unknown) => unknown, bad: (e: unknown) => unknown) =>
@@ -41,7 +43,8 @@ vi.mock('@/lib/not-started-server', () => ({ recordNexusEntry: vi.fn(async () =>
 
 import { GET } from './route';
 
-const request = () => new NextRequest('http://localhost/api/auth/me', { headers: { Authorization: 'Bearer t' } });
+const request = (extra: Record<string, string> = {}) =>
+  new NextRequest('http://localhost/api/auth/me', { headers: { Authorization: 'Bearer t', ...extra } });
 
 const student = {
   id: 'u1',
@@ -62,6 +65,7 @@ beforeEach(() => {
   verifyMsToken.mockReset();
   reconcileMsIdentity.mockReset();
   for (const k of Object.keys(results)) delete results[k];
+  writes.length = 0;
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
 
@@ -109,5 +113,35 @@ describe('GET /api/auth/me status codes', () => {
     results['nexus_enrollments.list'] = { data: [{ role: 'student', classroom }], error: null };
     const body = await (await GET(request())).json();
     expect(body.user.ms_oid).toBe('o1');
+  });
+});
+
+describe('GET /api/auth/me device time zone (NXS-0129)', () => {
+  const signIn = () => {
+    verifyMsToken.mockResolvedValueOnce({ oid: 'o1', email: student.email, name: student.name });
+    results['users.row'] = { data: student, error: null };
+    results['nexus_enrollments.list'] = { data: [{ role: 'student', classroom }], error: null };
+  };
+  const zoneWrites = () => writes.filter((w) => w.table === 'users' && 'timezone' in w.patch);
+
+  it("saves a student's device time zone in its own write", async () => {
+    signIn();
+    const res = await GET(request({ 'X-Time-Zone': 'Asia/Dubai' }));
+    expect(res.status).toBe(200);
+    expect(zoneWrites()).toEqual([{ table: 'users', patch: { timezone: 'Asia/Dubai' } }]);
+    // Never folded into the login stamp, so a missing column cannot cost the stamp.
+    expect(writes.find((w) => 'last_login_at' in w.patch)?.patch).not.toHaveProperty('timezone');
+  });
+
+  it('ignores a zone that is not a real one', async () => {
+    signIn();
+    await GET(request({ 'X-Time-Zone': 'Not/AZone' }));
+    expect(zoneWrites()).toEqual([]);
+  });
+
+  it('writes nothing without the header', async () => {
+    signIn();
+    await GET(request());
+    expect(zoneWrites()).toEqual([]);
   });
 });

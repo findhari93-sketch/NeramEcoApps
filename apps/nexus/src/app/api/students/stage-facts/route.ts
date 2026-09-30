@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient, loadClassroomRoster } from '@neram/database';
-import { foldStudentFacts, type StageFactMember } from '@/lib/stage-facts';
+import { applySkillLevels, foldStudentFacts, type SkillLevelRow, type StageFactMember } from '@/lib/stage-facts';
 
 /**
  * GET /api/students/stage-facts   (staff)
@@ -69,6 +69,18 @@ export async function GET(request: NextRequest) {
     // One fact per student, not per enrolment. See lib/stage-facts.ts for why
     // the fields fold three different ways.
     const facts = foldStudentFacts(members);
+
+    // The teacher-only level (Top / Mid / Needs practice) rides the same lookup,
+    // so every avatar can draw its bars with no route change. The table holds
+    // one row per rated student per skill, a few hundred at most, so it is read
+    // whole and matched in memory rather than through a long .in() list. A
+    // failure here costs the bars, never the ring.
+    const { data: levelRows, error: levelError } = await supabase
+      .from('nexus_student_skill_levels')
+      .select('student_id, skill, level')
+      .limit(5000);
+    if (levelError) console.error('[stage-facts] levels', levelError.message);
+    applySkillLevels(facts, (levelRows ?? []) as SkillLevelRow[]);
 
     return NextResponse.json({ facts, count: Object.keys(facts).length });
   } catch (err) {

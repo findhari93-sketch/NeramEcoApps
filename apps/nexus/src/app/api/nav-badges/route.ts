@@ -178,6 +178,8 @@ export async function GET(request: NextRequest) {
         // left out. That is the one state actually waiting on the student, so a
         // ticket asking them to confirm a fix used to produce no badge at all:
         // the number went quiet at exactly the moment it had something to say.
+        // waiting_on_student (staff asked them a question) counts for the same
+        // reason, since 20261020090000.
         supabase.rpc('nexus_issue_badge_counts', { p_user_id: user.id, p_is_staff: false }),
 
         // Classes this student still owes. Not a rolling window like the staff

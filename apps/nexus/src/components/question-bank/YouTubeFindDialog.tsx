@@ -13,8 +13,13 @@
  * Replacements and skipped titles are listed under "Needs a look", with the
  * reason, because those are exactly where a hand-pasted mistake or a title
  * typo shows up.
+ *
+ * The teacher can paste one real title from the paper as a sample. Uploads
+ * worded the same way, apart from the number and section word, are taken as
+ * this paper's however the channel names the session. Remembered per paper
+ * on this device.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box,
   Button,
@@ -24,6 +29,7 @@ import {
   DialogTitle,
   IconButton,
   LinearProgress,
+  TextField,
   Typography,
   useMediaQuery,
   useTheme,
@@ -33,6 +39,7 @@ import TravelExploreIcon from '@mui/icons-material/TravelExplore';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import {
   matchPaperVideos,
+  readSampleTitle,
   type FindPaper,
   type FindResult,
   type FindRow,
@@ -45,9 +52,11 @@ export interface YouTubeFindDialogProps {
   onClose: () => void;
   paperId: string;
   rows: FindRow[];
-  /** For the example title shown before searching. */
+  /** For the sample title offered before searching. */
   examType: string | null;
   year: number | null;
+  session?: string | null;
+  shift?: string | null;
   getToken: () => Promise<string | null>;
   /** Whether this person can connect YouTube in Settings (system.settings). */
   canConnect: boolean;
@@ -68,6 +77,8 @@ export default function YouTubeFindDialog({
   rows,
   examType,
   year,
+  session = null,
+  shift = null,
   getToken,
   canConnect,
   onFill,
@@ -79,13 +90,39 @@ export default function YouTubeFindDialog({
   const [severalPapers, setSeveralPapers] = useState(false);
   const run = useRef(0);
 
+  const exam = examType === 'NATA' ? 'NATA' : 'JEE';
+  const shiftWord = shift === 'forenoon' ? ' FN' : shift === 'afternoon' ? ' AN' : '';
+  const sitting = session ? ` ${session}${shiftWord}` : '';
+  const example = `Q no 22 - ${exam} ${year ?? 2014} Solution Video${sitting} - Math Solution`;
+  const storageKey = `qb-yt-sample:${paperId}`;
+  const [sample, setSample] = useState(example);
+  const sampleRead = useMemo(() => (year ? readSampleTitle(sample, { year }) : null), [sample, year]);
+  const sampleOk = !sampleRead || sampleRead.ok;
+
   useEffect(() => {
-    if (open) setPhase({ kind: 'intro' });
-    else run.current += 1; // closing stops a search in flight
+    if (open) {
+      setPhase({ kind: 'intro' });
+      let saved: string | null = null;
+      try {
+        saved = window.localStorage.getItem(storageKey);
+      } catch {
+        // Private windows can refuse storage; the generated sample still works.
+      }
+      setSample(saved || example);
+    } else run.current += 1; // closing stops a search in flight
+    // Only on open: from there the sample is the teacher's to edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const exam = examType === 'NATA' ? 'NATA' : 'JEE';
-  const example = `Q no 22 - ${exam} ${year ?? 2014} Solution Video`;
+  const changeSample = (value: string) => {
+    setSample(value);
+    try {
+      if (value.trim() && value.trim() !== example) window.localStorage.setItem(storageKey, value.trim());
+      else window.localStorage.removeItem(storageKey);
+    } catch {
+      // Remembering the sample is a convenience only.
+    }
+  };
 
   const search = async () => {
     const mine = ++run.current;
@@ -95,10 +132,14 @@ export default function YouTubeFindDialog({
     let pageToken: string | null = null;
     let paper: FindPaper | null = null;
     let paperCount = 1;
+    let sampleKey: string | null = null;
     try {
       const token = await getToken();
       do {
-        const qs: string = pageToken ? `?pageToken=${encodeURIComponent(pageToken)}` : '';
+        const params = new URLSearchParams();
+        if (pageToken) params.set('pageToken', pageToken);
+        if (sample.trim()) params.set('sample', sample.trim());
+        const qs: string = params.toString() ? `?${params.toString()}` : '';
         const res: Response = await fetch(`/api/question-bank/papers/${paperId}/youtube-videos${qs}`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
@@ -118,13 +159,18 @@ export default function YouTubeFindDialog({
         pageToken = data.nextPageToken ?? null;
         paper = data.paper ?? paper;
         paperCount = data.paperCountThatYear ?? paperCount;
+        sampleKey = data.sampleKey ?? null;
         setChannel(data.channelTitle ?? null);
         setSeveralPapers(paperCount > 1);
         setPhase({ kind: 'searching', checked, found: videos.length });
       } while (pageToken);
 
       if (!paper) return;
-      setPhase({ kind: 'result', checked, result: matchPaperVideos(videos, rows, paper, { paperCountThatYear: paperCount }) });
+      setPhase({
+        kind: 'result',
+        checked,
+        result: matchPaperVideos(videos, rows, paper, { paperCountThatYear: paperCount, sampleKey: sampleKey ?? undefined }),
+      });
     } catch {
       if (run.current === mine) setPhase({ kind: 'error', message: 'Could not reach YouTube. Check the connection and try again.' });
     }
@@ -152,13 +198,23 @@ export default function YouTubeFindDialog({
       <DialogContent dividers>
         {phase.kind === 'intro' && (
           <Box>
-            <Typography variant="body2" sx={{ mb: 1 }}>
-              Looks through {channel ?? 'the channel'}&apos;s uploads for titles like this, and fills in the links for
-              the questions they name:
+            <Typography variant="body2" sx={{ mb: 1.5 }}>
+              Looks through {channel ?? 'the channel'}&apos;s uploads for titles like this one, and fills in the links
+              for the questions they name. Paste the title of any one video from this paper, copied from YouTube
+              Studio.
             </Typography>
-            <Box component="pre" sx={{ m: 0, mb: 1.5, p: 1.5, borderRadius: 1, bgcolor: 'action.hover', fontSize: '0.85rem', whiteSpace: 'pre-wrap' }}>
-              {example} - Math Solution
-            </Box>
+            <TextField
+              label="A title from this paper"
+              value={sample}
+              onChange={(e) => changeSample(e.target.value)}
+              fullWidth
+              multiline
+              minRows={2}
+              error={!sampleOk}
+              helperText={sampleHelp(sampleRead)}
+              inputProps={{ spellCheck: false }}
+              sx={{ mb: 1.5, '& textarea': { fontFamily: 'monospace', fontSize: '1rem' } }}
+            />
             {severalPapers && (
               <Typography variant="body2" sx={{ mb: 1 }}>
                 {year} has several papers, so a title must also name the session and shift, for example &quot;{exam} {year}
@@ -186,7 +242,9 @@ export default function YouTubeFindDialog({
           </Box>
         )}
 
-        {phase.kind === 'result' && <ResultView result={phase.result} example={example} />}
+        {phase.kind === 'result' && (
+          <ResultView result={phase.result} checked={phase.checked} channel={channel} sample={sample.trim() || example} />
+        )}
 
         {phase.kind === 'not-connected' && (
           <Box role="alert">
@@ -224,7 +282,12 @@ export default function YouTubeFindDialog({
           </Button>
         )}
         {(phase.kind === 'intro' || phase.kind === 'error') && (
-          <Button variant="contained" onClick={search} sx={{ minHeight: 44, textTransform: 'none' }}>
+          <Button
+            variant="contained"
+            onClick={search}
+            disabled={phase.kind === 'intro' && !sampleOk}
+            sx={{ minHeight: 44, textTransform: 'none' }}
+          >
             {phase.kind === 'error' ? 'Try again' : 'Search the channel'}
           </Button>
         )}
@@ -245,16 +308,44 @@ export default function YouTubeFindDialog({
   );
 }
 
-function ResultView({ result, example }: { result: FindResult; example: string }) {
+const SECTION_NAME = { math: 'Math', aptitude: 'Aptitude', drawing: 'Drawing' } as const;
+
+/** Under the sample: how it reads, or why it cannot be used. */
+function sampleHelp(read: ReturnType<typeof readSampleTitle> | null): string {
+  if (!read) return ' ';
+  if (!read.ok) return read.reason;
+  const section = read.section ? `, ${SECTION_NAME[read.section]}` : '';
+  return `Reads as question ${read.number}${section}. Titles that differ only in the number and section word are this paper's.`;
+}
+
+function ResultView({
+  result,
+  checked,
+  channel,
+  sample,
+}: {
+  result: FindResult;
+  checked: number;
+  channel: string | null;
+  sample: string;
+}) {
   const { counts } = result;
   const total = result.items.length;
   const look = result.items.filter((i) => i.status === 'replaces' || i.status.startsWith('skipped'));
+  // Says whether YouTube returned the channel at all, which is the first
+  // question when a paper comes back empty.
+  const read = `Read ${checked.toLocaleString('en-IN')} upload${checked === 1 ? '' : 's'}${channel ? ` from ${channel}` : ''}.`;
 
   if (total === 0) {
     return (
-      <Typography variant="body2">
-        No videos for this paper on the channel. Check that their titles start like &quot;{example}&quot;.
-      </Typography>
+      <Box>
+        <Typography variant="body2" fontWeight={700}>
+          No videos for this paper on the channel.
+        </Typography>
+        <Typography variant="body2" sx={{ mt: 0.5 }}>
+          {read} Check that the sample is copied exactly from one of this paper&apos;s videos: &quot;{sample}&quot;.
+        </Typography>
+      </Box>
     );
   }
 
@@ -268,6 +359,9 @@ function ResultView({ result, example }: { result: FindResult; example: string }
       </Box>
       <Typography variant="body2" sx={{ mt: 0.5 }}>
         {counts.new} new, {counts.replaces} replace a saved link, {counts.same} already saved
+      </Typography>
+      <Typography variant="caption" color="text.secondary" component="p" sx={{ m: 0, mt: 0.25 }}>
+        {read}
       </Typography>
 
       {look.length > 0 && (

@@ -21,6 +21,8 @@ import {
 } from '../../utils/catchup';
 // Pure of this module: test-access.ts imports nothing from here, so no cycle.
 import { grantCatchupTestWindow } from './test-access';
+// Also pure of this module: class-recaps.ts imports only the client.
+import { healRecapCompletions } from './class-recaps';
 
 const JOURNEYS = 'nexus_catchup_journeys';
 const ITEMS = 'nexus_class_absences';
@@ -972,9 +974,21 @@ export async function loadClassFacts(
       : Promise.resolve({ data: [] }),
   ]);
 
+  // A recap whose checkpoints are all passed is complete, whatever the stored
+  // row says. The quiz POST writes completion after the attempt, so a request
+  // that died in between left the final check locked for good (NXS-0127).
+  // Costs nothing when every row already says completed.
+  const completedRecaps = new Set<string>((progress || []).map((p: any) => p.recap_id));
+  const unconfirmed = recapIds.filter((id) => !completedRecaps.has(id));
+  if (unconfirmed.length) {
+    for (const id of await healRecapCompletions(studentId, unconfirmed, supabase)) {
+      completedRecaps.add(id);
+    }
+  }
+
   return {
     recapByClass,
-    completedRecaps: new Set((progress || []).map((p: any) => p.recap_id)),
+    completedRecaps,
     assignmentsByClass,
     submitted: new Set([...(docs || []), ...(draws || [])].map((s: any) => s.assignment_id)),
     testByClass,

@@ -7,6 +7,7 @@ import { isGraphApiUrl } from '@/lib/class-links';
 import { isInternalStaff, resolveStaffRole } from '@/lib/staff-capabilities';
 import { grantVideoAccess, isProtectedVideoEnabled } from '@/lib/video-grant';
 import { mayWatchUngated } from '@/lib/recap-obligation';
+import { startedPlainBeforeRecap } from '@/lib/plain-watch-head-start';
 
 /**
  * GET /api/timetable/[classId]/recording-stream
@@ -115,7 +116,19 @@ export async function GET(request: NextRequest, { params }: Ctx) {
           .maybeSingle(),
       ]);
 
-      if (!mayWatchUngated(absence, !!recap)) {
+      // Only asked when the answer would otherwise be a refusal, so an ordinary
+      // rewatch costs no extra reads. A watch already under way when the recap
+      // went live keeps its stream (NXS-0123).
+      const startedBeforeRecap =
+        !mayWatchUngated(absence, !!recap) && recap?.id
+          ? await startedPlainBeforeRecap(supabase, {
+              studentId: access.userId,
+              classId: params.classId,
+              recapId: recap.id,
+            })
+          : false;
+
+      if (!mayWatchUngated(absence, !!recap, startedBeforeRecap)) {
         return NextResponse.json(
           {
             error:

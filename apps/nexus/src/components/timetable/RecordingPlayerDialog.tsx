@@ -132,10 +132,11 @@ export default function RecordingPlayerDialog({
   /**
    * Handed to the player, which calls it when the URL runs out mid-watch.
    *
-   * One refusal is not worth a Try again: a guided recap can be published while
-   * a student is partway through this ungated copy (pressing Watch here queues
-   * one), and from then on the route sends them to catch-up. Asking again gets
-   * the same answer, so the dialog switches to its "Do catch-up" state instead.
+   * A guided recap published partway through this watch (pressing Watch on the
+   * catch-up screen queues one) no longer refuses the renewal: the route sees the
+   * plain grant issued before it went live and lets them finish (NXS-0123). A
+   * refusal that does arrive is still final, so it switches the dialog to its
+   * "Do catch-up" state rather than offering a Try again that would fail too.
    */
   const renew = useMemo(
     () => async () => {

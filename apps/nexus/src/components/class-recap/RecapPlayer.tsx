@@ -40,6 +40,8 @@ import { useAuthFetch } from '@/components/curriculum/shared';
 
 export interface RecapPlayerSection {
   id: string;
+  /** Lets the gate skip a stretch before the first checkpoint that nobody owes. */
+  start_timestamp_seconds?: number;
   end_timestamp_seconds: number;
   passed: boolean;
 }
@@ -92,6 +94,11 @@ export default function RecapPlayer({
   const [watermark, setWatermark] = useState<Watermark | null>(null);
   const [resumeAt, setResumeAt] = useState(0);
   const [duration, setDuration] = useState(0);
+  /**
+   * How far the student has really played: the server's credited point, then
+   * raised by this session's ticks. It only grows through playback, because a
+   * control cannot seek past it (see playedUntilSeconds on computeGate).
+   */
   const [furthest, setFurthest] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -122,11 +129,13 @@ export default function RecapPlayer({
       computeGate({
         checkpoints: sections.map((s) => ({
           id: s.id,
+          startSeconds: s.start_timestamp_seconds,
           endSeconds: s.end_timestamp_seconds,
           passed: s.passed,
         })),
         duration,
         furthestSeconds: furthest,
+        playedUntilSeconds: furthest,
         mode,
       }),
     [sections, duration, furthest, mode],
@@ -210,6 +219,10 @@ export default function RecapPlayer({
       // failed first load comes back through here, and the server's value is
       // the same one it gave before.
       setResumeAt((prev) => (prev > 0 ? prev : Number(data.resume_at) || 0));
+      // Not resume_at: that rises with any seek. A response without the field
+      // falls back to it, which is the old behaviour rather than a lockout.
+      const played = Number(data.played_until ?? data.resume_at) || 0;
+      setFurthest((prev) => (played > prev ? played : prev));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load recording');
     } finally {

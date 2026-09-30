@@ -72,4 +72,15 @@ describe('mayWatchUngated', () => {
     expect(mayWatchUngated(null, true)).toBe(true);
     expect(mayWatchUngated(undefined, true)).toBe(true);
   });
+
+  // NXS-0123. Pressing Watch queues the recap, the sweep publishes it forty
+  // minutes in, and the next ten minute renewal used to be refused: the video
+  // blanked and the forty minutes counted for nothing.
+  it('lets a student who started the plain recording before the recap finish it', () => {
+    expect(mayWatchUngated(OPEN, true, true)).toBe(true);
+  });
+
+  it('still refuses when the plain watch did not start before the recap', () => {
+    expect(mayWatchUngated(OPEN, true, false)).toBe(false);
+  });
 });

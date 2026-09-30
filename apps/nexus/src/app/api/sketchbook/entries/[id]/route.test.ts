@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const m = vi.hoisted(() => ({ getRequestUser: vi.fn(), getSketchbookSketch: vi.fn(), hasAnyLiveFeature: vi.fn(), repairPracticeDay: vi.fn(), del: vi.fn() }));
+const m = vi.hoisted(() => ({ getRequestUser: vi.fn(), getSketchbookSketch: vi.fn(), hasAnyLiveFeature: vi.fn(), repairPracticeDay: vi.fn(), del: vi.fn(), zones: vi.fn() }));
 
 vi.mock('@/lib/study-materials', () => ({ getRequestUser: (h: string | null) => m.getRequestUser(h) }));
 vi.mock('@neram/database', () => ({
@@ -13,6 +13,8 @@ vi.mock('@neram/database/queries/nexus', () => ({
   repairPracticeDay: (...a: unknown[]) => m.repairPracticeDay(...a),
 }));
 
+vi.mock('@/lib/drawing-activity-store', () => ({ loadStudentTimeZones: async (ids: string[]) => m.zones(ids) }));
+
 import { DELETE } from './route';
 
 const del = () => new NextRequest('http://localhost/api/sketchbook/entries/d1', { method: 'DELETE', headers: { Authorization: 'Bearer t' } });
@@ -23,6 +25,7 @@ describe('DELETE /api/sketchbook/entries/[id]', () => {
     vi.clearAllMocks();
     m.getRequestUser.mockResolvedValue({ id: 's1', user_type: 'student' });
     m.hasAnyLiveFeature.mockResolvedValue(false);
+    m.zones.mockResolvedValue({ s1: null });
   });
 
   it('keeps a sketch the teacher has reviewed', async () => {
@@ -38,5 +41,16 @@ describe('DELETE /api/sketchbook/entries/[id]', () => {
     expect(res.status).toBe(204);
     expect(m.del).toHaveBeenCalled();
     expect(m.repairPracticeDay).toHaveBeenCalled();
+  });
+
+  it("recounts the day on the student's own clock (NXS-0129)", async () => {
+    // 18:44 UTC is 10:44 pm Wednesday in Dubai, 12:14 am Thursday in IST.
+    m.zones.mockResolvedValue({ s1: 'Asia/Dubai' });
+    m.getSketchbookSketch.mockResolvedValue({ id: 'd1', student_id: 's1', reviewed_at: null, submitted_at: '2026-09-23T18:44:37Z' });
+    const res = await DELETE(del(), ctx);
+    expect(res.status).toBe(204);
+    const [, day, dayOf] = m.repairPracticeDay.mock.calls[0];
+    expect(day).toBe('2026-09-23');
+    expect(dayOf('2026-09-24T10:00:00Z')).toBe('2026-09-24');
   });
 });

@@ -2,6 +2,9 @@ import { describe, it, expect } from 'vitest';
 import {
   parseSolutionTitle,
   matchPaperVideos,
+  readSampleTitle,
+  readTitleForSample,
+  titleKey,
   type FoundVideo,
   type FindRow,
 } from './youtube-solution-titles';
@@ -292,5 +295,89 @@ describe('parseSolutionTitle, the wordings seen on session papers', () => {
 
   it('does not read the English word "an" as the afternoon shift', () => {
     expect(parseSolutionTitle('Q no 5 - JEE 2020 an easy Math Solution')?.shift).toBeNull();
+  });
+});
+
+describe('a sample title typed by the teacher', () => {
+  const paper = { exam_type: 'JEE_PAPER_2', year: 2019, session: 'Session 2', shift: 'afternoon' };
+  const SAMPLE = 'Q no 50 - JEE 2019 Solution Video Session 2 AN - Aptitude Solution';
+
+  it('reads the number and section out of the sample and keeps the rest as the key', () => {
+    const read = readSampleTitle(SAMPLE, paper);
+    expect(read).toMatchObject({ ok: true, number: 50, section: 'aptitude' });
+    // Only the number and the section word change between one video and the next.
+    expect(titleKey('Q no 3 - JEE 2019 Solution Video Session 2 AN - Math Solution')).toBe(read.ok && read.key);
+    expect(titleKey('Q no 3 - JEE 2019 Solution Video Session 1 AN - Math Solution')).not.toBe(read.ok && read.key);
+  });
+
+  it('ignores case, spacing and dashes when comparing', () => {
+    expect(titleKey('Q no 3 -  jee 2019 solution video session 2 AN : Maths Solution')).toBe(titleKey(SAMPLE));
+  });
+
+  it('refuses a sample with no question number', () => {
+    expect(readSampleTitle('JEE 2019 Solution Video Session 2 AN', paper)).toMatchObject({ ok: false });
+  });
+
+  it('refuses a sample that does not name the year, so other years are never picked up', () => {
+    const read = readSampleTitle('Q no 5 - Aptitude Solution', paper);
+    expect(read.ok).toBe(false);
+    expect(!read.ok && read.reason).toContain('2019');
+  });
+
+  it('reads a title the built-in rules cannot, as long as it fits the sample', () => {
+    const sample = 'Q no 5 | Session 2 AN 2019 B.Arch | Aptitude explained';
+    const read = readSampleTitle(sample, paper);
+    expect(read.ok).toBe(true);
+    const key = read.ok ? read.key : '';
+    expect(parseSolutionTitle('Q no 9 | Session 2 AN 2019 B.Arch | Math explained')).toBeNull();
+    expect(readTitleForSample('Q no 9 | Session 2 AN 2019 B.Arch | Math explained', key, paper)).toMatchObject({
+      number: 9,
+      section: 'math',
+      exam: 'JEE_PAPER_2',
+      year: 2019,
+      session: 2,
+      shift: 'afternoon',
+    });
+    expect(readTitleForSample('Q no 9 | Session 1 AN 2019 B.Arch | Math explained', key, paper)).toBeNull();
+  });
+
+  it('takes a title that fits the sample even when it names no session on a year with several papers', () => {
+    const sample = 'Q no 1 - JEE 2019 Solution Video - Paper 3 - Math Solution';
+    const read = readSampleTitle(sample, paper);
+    const key = read.ok ? read.key : '';
+    const title = 'Q no 12 - JEE 2019 Solution Video - Paper 3 - Aptitude Solution';
+    const v: FoundVideo = { videoId: 'sampleFit01', title, publishedAt: '2026-09-25T00:00:00Z', parsed: readTitleForSample(title, key, paper)! };
+    const rows = [row(12, { id: 'a12', section: 'aptitude' })];
+    const withSample = matchPaperVideos([v], rows, paper, { paperCountThatYear: 3, sampleKey: key });
+    expect(withSample.fills).toEqual([expect.objectContaining({ questionId: 'a12' })]);
+    // Without the sample it could be any 2019 paper, so it is left for a person.
+    const without = matchPaperVideos([{ ...v, parsed: parseSolutionTitle(title)! }], rows, paper, { paperCountThatYear: 3 });
+    expect(without.items[0].status).toBe('skipped-no-session');
+  });
+
+  it('fills the whole of 2019 Session 2 (AN) as the channel titles it', () => {
+    const rows: FindRow[] = [];
+    const add = (section: FindRow['section'], count: number) => {
+      for (let i = 1; i <= count; i++) rows.push(row(i, { id: `${section}-${i}`, section }));
+    };
+    add('math_mcq', 30);
+    add('aptitude', 50);
+    add('drawing', 3);
+    const key = (readSampleTitle(SAMPLE, paper) as { key: string }).key;
+    const titles = [
+      ...Array.from({ length: 30 }, (_, i) => `Q no ${i + 1} - JEE 2019 Solution Video Session 2 AN - Math Solution`),
+      ...Array.from({ length: 50 }, (_, i) => `Q no ${i + 1} - JEE 2019 Solution Video Session 2 AN - Aptitude Solution`),
+      // The other 2019 papers on the same channel stay out.
+      'Q no 4 - JEE 2019 Solution Video Session 1 AN - Aptitude Solution',
+      'Q no 4 - JEE 2019 Solution Video Session 1 FN - Aptitude Solution',
+    ];
+    const videos = titles.map((t, i) => ({
+      videoId: `s2an${String(i).padStart(7, '0')}`,
+      title: t,
+      publishedAt: '2026-09-25T00:00:00Z',
+      parsed: readTitleForSample(t, key, paper) ?? parseSolutionTitle(t)!,
+    }));
+    const result = matchPaperVideos(videos, rows, paper, { paperCountThatYear: 3, sampleKey: key });
+    expect(result.counts).toMatchObject({ new: 80, skipped: 0 });
   });
 });

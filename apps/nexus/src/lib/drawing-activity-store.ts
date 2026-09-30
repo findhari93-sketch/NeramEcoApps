@@ -49,6 +49,27 @@ export async function loadDrawingDays(studentIds: string[], since: string): Prom
   return out;
 }
 
+/**
+ * Each student's device time zone (users.timezone, migration 20261019090000),
+ * null when unknown. The sketchbook's "today" is on this clock (practiceDate).
+ * Never throws: an environment without the column reads as all IST, which is
+ * what every student was on before, rather than a sketchbook that will not open.
+ */
+export async function loadStudentTimeZones(studentIds: string[]): Promise<Record<string, string | null>> {
+  const out: Record<string, string | null> = {};
+  for (const id of studentIds) out[id] = null;
+  if (studentIds.length === 0) return out;
+  const { data, error } = await client().from('users').select('id, timezone').in('id', studentIds);
+  if (error) {
+    console.error('[sketchbook] could not read student time zones:', error.message);
+    return out;
+  }
+  for (const row of (data || []) as Array<{ id: string; timezone: string | null }>) {
+    out[row.id] = row.timezone ?? null;
+  }
+  return out;
+}
+
 export async function loadLatestSketches(studentIds: string[]): Promise<Record<string, LatestSketch>> {
   const out: Record<string, LatestSketch> = {};
   if (studentIds.length === 0) return out;

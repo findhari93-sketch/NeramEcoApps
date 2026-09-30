@@ -122,6 +122,10 @@ export default function StudyTrackWatchPage() {
       const embed = await authFetch(embedUrl);
       setWatermark(embed.watermark || null);
       setResumeAt(Number(embed.resume_at) || 0);
+      // What was really watched, not resume_at, which rises with any seek
+      // (NXS-0130). Missing, it falls back to the old behaviour.
+      const played = Number(embed.played_until ?? embed.resume_at) || 0;
+      setFurthest((prev) => (played > prev ? played : prev));
       setSource(
         embed.mode === 'youtube'
           ? { kind: 'youtube', youtubeId: embed.youtube_id }
@@ -153,11 +157,13 @@ export default function StudyTrackWatchPage() {
       computeGate({
         checkpoints: sections.map((s) => ({
           id: s.id,
+          startSeconds: s.start_timestamp_seconds,
           endSeconds: s.end_timestamp_seconds,
           passed: s.passed,
         })),
         duration,
         furthestSeconds: furthest,
+        playedUntilSeconds: furthest,
         mode,
       }),
     [sections, duration, furthest, mode],

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { extractYouTubeId } from '@/lib/youtube';
+import { creditedPlayedUntil } from '@/lib/watch-progress';
 import { grantVideoAccess } from '@/lib/video-grant';
 import { isInternalStaff, resolveStaffRole } from '@/lib/staff-capabilities';
 import { errorResponse } from '@/lib/api-errors';
@@ -92,7 +93,7 @@ export async function GET(
 
     const { data: progress } = await supabase
       .from('nexus_class_recap_progress')
-      .select('last_video_position_seconds')
+      .select('last_video_position_seconds, watched_seconds')
       .eq('student_id', user.id)
       .eq('recap_id', recapId)
       .maybeSingle();
@@ -102,6 +103,11 @@ export async function GET(
       code: shortCode(user.id),
     };
     const resumeAt = Number(progress?.last_video_position_seconds) || 0;
+    // The stored position rises with any seek, so it says where they got to, not
+    // what they saw. This is what the player lets a forward seek reach and where
+    // it resumes at the latest. A student who watched 11 seconds and tapped the
+    // bar was resuming on checkpoint 1 with its quiz open (NXS-0130).
+    const playedUntil = creditedPlayedUntil(resumeAt, progress?.watched_seconds);
 
     if (recap.video_source === 'youtube') {
       const youtubeId = extractYouTubeId(recap.recording_url);
@@ -117,6 +123,7 @@ export async function GET(
           protection: 'embedded',
           watermark,
           resume_at: resumeAt,
+          played_until: playedUntil,
         },
         { headers: { 'Cache-Control': 'no-store' } },
       );
@@ -142,6 +149,7 @@ export async function GET(
         expires_at: grant.expiresAt,
         watermark,
         resume_at: resumeAt,
+        played_until: playedUntil,
       },
       // Never cached: the grant inside is short-lived and viewer-specific.
       { headers: { 'Cache-Control': 'no-store' } },

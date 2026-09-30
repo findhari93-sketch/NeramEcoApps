@@ -77,13 +77,23 @@ export function watchModeFor(row: ObligationRow | null | undefined): VideoGateMo
  *
  * Nothing owed, in either case, is an ordinary rewatch and always allowed.
  *
+ * One exception to the refusal, `startedBeforeRecap` (NXS-0123): the student
+ * began the plain recording before the recap went live. Pressing Watch is what
+ * queues the recap, and the sweep can publish it partway through that very
+ * watch. Refusing then blanked the video at the next ten minute renewal and threw
+ * away everything watched so far. They finish the way they started, and the final
+ * check still stands between them and clearing the class. See
+ * `lib/plain-watch-head-start.ts` for how it is decided.
+ *
  * Staff are not modelled here. They never owe a class, and the route checks that
  * before it gets this far.
  */
 export function mayWatchUngated(
   row: ObligationRow | null | undefined,
   hasPublishedRecap: boolean,
+  startedBeforeRecap = false,
 ): boolean {
   if (!hasOpenObligation(row)) return true;
-  return !hasPublishedRecap;
+  if (!hasPublishedRecap) return true;
+  return startedBeforeRecap;
 }

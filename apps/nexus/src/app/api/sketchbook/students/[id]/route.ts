@@ -11,7 +11,6 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   try {
     const caller = await getRequestUser(request.headers.get('Authorization'));
     await assertStaffSeesStudent(caller, params.id);
-    const today = istDate(new Date());
     const sketchId = request.nextUrl.searchParams.get('sketch');
     let monthParam = request.nextUrl.searchParams.get('month');
     if (sketchId) {
@@ -19,9 +18,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       if (!row || row.student_id !== params.id) throw new ApiError('Drawing not found', 404);
       monthParam = istDate(row.submitted_at).slice(0, 7);
     }
-    const month = monthParam || today.slice(0, 7);
+    const month = monthParam || istDate(new Date()).slice(0, 7);
     if (!/^\d{4}-\d{2}$/.test(month)) throw new ApiError('month must be YYYY-MM', 400);
-    const payload = await buildSketchbookPayload(params.id, month, { summaryOnly: false, today, viewer: 'staff' });
+    const payload = await buildSketchbookPayload(params.id, month, { summaryOnly: false, viewer: 'staff' });
     return NextResponse.json(payload, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return errorResponse(err, 'Could not load the sketchbook');

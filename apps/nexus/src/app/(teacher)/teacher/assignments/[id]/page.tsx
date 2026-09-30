@@ -62,6 +62,8 @@ import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
 import ShareAssignmentDialog from '@/components/assignments/ShareAssignmentDialog';
 import AssignmentSetupDialog from '@/components/assignments/AssignmentSetupDialog';
 import QuestionsSummaryCard from '@/components/assignments/QuestionsSummaryCard';
+import ReferenceImagePreview from '@/components/assignments/ReferenceImagePreview';
+import StageViewerDialog from '@/components/assignments/workspace/StageViewerDialog';
 import FilterTiles from '@/components/assignments/FilterTiles';
 import ClassPickerField, {
   formatClassDay,
@@ -162,6 +164,7 @@ export default function AssignmentReviewPage() {
   const [counts, setCounts] = useState<Record<string, number>>({ total: 0, submitted: 0, late: 0, missing: 0 });
   const [tab, setTab] = useState<RosterTab>('submitted');
   const [dTab, setDTab] = useState<DBucket>('submitted');
+  const [refViewerSrc, setRefViewerSrc] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [snack, setSnack] = useState<{ msg: string; sev: 'success' | 'error' } | null>(null);
   const [reviewIndex, setReviewIndex] = useState<number | null>(null);
@@ -648,37 +651,53 @@ export default function AssignmentReviewPage() {
                     {assignment.assignment_type === 'drawing' ? 'Reference / expected output' : 'Image'}
                     {refImages.length > 1 ? ` (${refImages.length})` : ''}
                   </Typography>
-                  {/* One image fills the width; several tile into a square grid that
-                      stays touch-friendly at 375px. Tap opens the full-size file. */}
-                  <Box
-                    sx={{
-                      display: 'grid',
-                      gridTemplateColumns: refImages.length === 1 ? '1fr' : 'repeat(auto-fill, minmax(140px, 1fr))',
-                      gap: 1,
-                      mt: 0.5,
-                    }}
-                  >
-                    {refImages.map((src, i) => (
-                      <Box
-                        key={`${src}-${i}`}
-                        component="img"
-                        src={src}
-                        alt={refImages.length > 1 ? `Reference ${i + 1}` : 'reference'}
-                        onClick={() => window.open(src, '_blank', 'noopener')}
-                        sx={{
-                          display: 'block',
-                          width: '100%',
-                          cursor: 'pointer',
-                          ...(refImages.length === 1
-                            ? { maxWidth: '100%', maxHeight: 240, objectFit: 'contain', justifySelf: 'start' }
-                            : { aspectRatio: '1 / 1', objectFit: 'cover' }),
-                          borderRadius: 2,
-                          border: '1px solid',
-                          borderColor: 'divider',
-                        }}
-                      />
-                    ))}
-                  </Box>
+                  {/* One image fills the width at a readable size (a tall poster
+                      shows its top and says there is more); several tile into a
+                      square grid that stays touch-friendly at 375px. Tap opens the
+                      full-screen viewer, which fits a tall image to the width. */}
+                  {refImages.length === 1 ? (
+                    <Box sx={{ mt: 0.5 }}>
+                      <ReferenceImagePreview src={refImages[0]} onOpen={setRefViewerSrc} />
+                    </Box>
+                  ) : (
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+                        gap: 1,
+                        mt: 0.5,
+                      }}
+                    >
+                      {refImages.map((src, i) => (
+                        <Box
+                          key={`${src}-${i}`}
+                          component="button"
+                          type="button"
+                          onClick={() => setRefViewerSrc(src)}
+                          aria-label={`Open reference ${i + 1}`}
+                          sx={{
+                            p: 0,
+                            display: 'block',
+                            overflow: 'hidden',
+                            cursor: 'zoom-in',
+                            borderRadius: 2,
+                            border: '1px solid',
+                            borderColor: 'divider',
+                            bgcolor: 'grey.50',
+                            '&:focus-visible': { outline: '3px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+                          }}
+                        >
+                          <Box
+                            component="img"
+                            src={src}
+                            alt=""
+                            loading="lazy"
+                            sx={{ display: 'block', width: '100%', aspectRatio: '1 / 1', objectFit: 'cover', objectPosition: 'top' }}
+                          />
+                        </Box>
+                      ))}
+                    </Box>
+                  )}
                 </Box>
               )}
               {assignment.attachments && assignment.attachments.length > 0 && (
@@ -1176,6 +1195,8 @@ export default function AssignmentReviewPage() {
           }}
         />
       )}
+
+      <StageViewerDialog src={refViewerSrc} alt="Reference image, full screen" onClose={() => setRefViewerSrc(null)} />
 
       {assignment && (
         <ShareAssignmentDialog

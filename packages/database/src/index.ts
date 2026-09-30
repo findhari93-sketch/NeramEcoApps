@@ -162,8 +162,14 @@ export {
   LIFECYCLE_STAGE_MEANINGS,
   ENGAGEMENT_LABELS,
   ACTIVITY_SOURCE_LABELS,
+  deriveExamYear,
+  batchCodeForExamYear,
+  examYearForBatchCode,
+  ACTIVITY_GROUPS,
+  activityGroupOf,
+  PEOPLE_STAGE_LABELS,
 } from './utils/lifecycle-rules';
-export type { LifecycleInput } from './utils/lifecycle-rules';
+export type { LifecycleInput, ExamYearSource, ActivityGroup } from './utils/lifecycle-rules';
 export { createUnsubscribeToken, verifyUnsubscribeToken } from './utils/unsubscribe-token';
 export { fetchAllRows, countRowsByKey, countRowsForIds } from './utils/paged-rows';
 export {

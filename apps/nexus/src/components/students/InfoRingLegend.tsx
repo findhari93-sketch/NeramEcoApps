@@ -14,6 +14,8 @@ import {
 import { REDUCED_MOTION_QUERY } from '@/components/timetable/timetable-theme';
 import StudentStageAvatar from './StudentStageAvatar';
 import LanguageMark from './LanguageMark';
+import LevelMark from './LevelMark';
+import { LEVEL_KEYS, LEVEL_LABEL, LEVEL_MEANING } from '@/lib/student-level';
 
 /**
  * The key to the student info ring.
@@ -188,6 +190,23 @@ export default function InfoRingLegend({ open, onClose, intro = null }: InfoRing
         <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', lineHeight: 1.5, pl: 5 }}>
           The letter is outlined instead of filled, whichever language it is.
         </Typography>
+
+        <Divider sx={{ my: 2 }} />
+        <Typography sx={{ fontWeight: 700, fontSize: '0.8125rem', mb: 0.5 }}>
+          The bars: overall level (staff only)
+        </Typography>
+        <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary', lineHeight: 1.5, mb: 1 }}>
+          Purple bars at the top left of the photo. Based on drawing for now; aptitude and maths join
+          later. No bars means not rated yet. Tap a face to see the details.
+        </Typography>
+        {LEVEL_KEYS.map((key) => (
+          <LegendRow
+            key={key}
+            title={LEVEL_LABEL[key]}
+            body={LEVEL_MEANING[key]}
+            swatch={<LevelMark level={key} size={22} testId={`legend-level-${key}`} />}
+          />
+        ))}
       </Box>
     </Drawer>
   );

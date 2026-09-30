@@ -18,6 +18,7 @@ import {
   solutionVideosOf,
 } from '@neram/database';
 import { questionImageSlots, solutionGapMessage } from '@/lib/qb-image-needs';
+import { optionLetter } from '@/lib/qb-option-ids';
 import MathText from '@/components/common/MathText';
 import AltRouteIcon from '@mui/icons-material/AltRoute';
 import ChecklistIcon from '@mui/icons-material/Checklist';
@@ -81,6 +82,10 @@ export default function PaperQuestionRow({
   const isDrawing = question.question_format === 'DRAWING_PROMPT';
   const parts = isDrawing ? readDrawingParts(question.drawing_parts) : null;
   const answer = question.correct_answer;
+  // The letter a student sees for the keyed option, by its position. An id
+  // like `opt_4_<timestamp>` otherwise printed whole and ran into the tags.
+  const answerIndex = question.options?.findIndex((o) => o.id === answer) ?? -1;
+  const answerLabel = answerIndex >= 0 ? optionLetter(answerIndex) : answer?.toUpperCase();
   const statusColor = QB_QUESTION_STATUS_COLORS[question.status] || '#9e9e9e';
   const statusLabel = QB_QUESTION_STATUS_LABELS[question.status] || question.status;
 
@@ -225,7 +230,7 @@ export default function PaperQuestionRow({
             </Tooltip>
           ) : answer?.trim() ? (
             <Typography variant="caption" fontWeight={700}>
-              {answer.toUpperCase()}
+              {answerLabel}
             </Typography>
           ) : !keyNeeded ? (
             <Tooltip title="No answer key needed" arrow>

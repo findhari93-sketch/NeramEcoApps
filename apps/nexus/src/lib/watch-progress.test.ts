@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { createWatchAccumulator, MAX_TICK_GAP_SECONDS } from './watch-progress';
+import {
+  createWatchAccumulator,
+  creditedPlayedUntil,
+  MAX_TICK_GAP_SECONDS,
+  PLAYED_GRACE_SECONDS,
+} from './watch-progress';
 
 /** A run of realistic <video> timeupdate ticks, 250ms apart. */
 function play(acc: ReturnType<typeof createWatchAccumulator>, from: number, to: number) {
@@ -141,5 +146,38 @@ describe('junk from the player is ignored', () => {
     acc.record(-10, 600);
     expect(acc.snapshot().position).toBeCloseTo(before.position, 5);
     expect(acc.snapshot().watchedDelta).toBeCloseTo(before.watchedDelta, 5);
+  });
+});
+
+describe('creditedPlayedUntil: how far the server believes a student watched', () => {
+  /**
+   * The stored position is a monotonic high-water mark and a seek raises it, so
+   * on its own it says where they got to, not what they saw. Capping it at the
+   * watched time (plus a little for lost flushes) is what lets a student who
+   * was parked on a checkpoint by a stray tap resume where they really were.
+   */
+  it('pulls back a position reached by a seek (the NXS-0130 row)', () => {
+    expect(creditedPlayedUntil(786, 11)).toBe(11 + PLAYED_GRACE_SECONDS);
+  });
+
+  it('leaves an honest watcher where they were', () => {
+    expect(creditedPlayedUntil(1000, 1000)).toBe(1000);
+    // A rewatch adds watched time without moving the position.
+    expect(creditedPlayedUntil(1000, 1400)).toBe(1000);
+  });
+
+  it('absorbs a few lost flushes without costing the student their place', () => {
+    expect(creditedPlayedUntil(1000, 970)).toBe(1000);
+  });
+
+  it('keeps a server reset at zero', () => {
+    expect(creditedPlayedUntil(0, 900)).toBe(0);
+  });
+
+  it('treats missing or nonsense values as nothing watched', () => {
+    expect(creditedPlayedUntil(null, null)).toBe(0);
+    expect(creditedPlayedUntil(Number.NaN, 50)).toBe(0);
+    expect(creditedPlayedUntil(300, undefined)).toBe(PLAYED_GRACE_SECONDS);
+    expect(creditedPlayedUntil(-20, -5)).toBe(0);
   });
 });

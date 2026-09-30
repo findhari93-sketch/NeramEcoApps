@@ -30,7 +30,13 @@ const withPWA = require('next-pwa')({
   dest: 'public',
   register: true,
   skipWaiting: true,
-  disable: process.env.NODE_ENV === 'development',
+  // OFF. next-pwa 5.6 injects its register script into the Pages Router entry
+  // (main.js), which an App Router app never loads, so this worker was never
+  // registered on any device (checked on production 2026-09-30). The rules below
+  // have never run. Nexus now registers its own small worker, public/nexus-sw.js,
+  // which only serves the offline screen when a page cannot load. Two workers
+  // cannot share the "/" scope, so this stays off unless that one is removed.
+  disable: true,
   // NOTE: public/sw.js and public/workbox-*.js are GENERATED and gitignored here, so
   // this takes effect on the next build with no artifact to commit.
   runtimeCaching: [apiNetworkOnly, ...runtimeCachingWithoutApis],

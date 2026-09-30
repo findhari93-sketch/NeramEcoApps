@@ -33,6 +33,8 @@ function stubStudents(ids: string[]) {
             name: null,
             language: 'tamil',
             limitedEnglish: false,
+            drawingLevel: null,
+            overallLevel: null,
           }
         : null,
   });

@@ -20,6 +20,7 @@ import {
 import { listParentChildren, getChildClassrooms } from '@/lib/parent-auth';
 import { planEntry } from '@/lib/not-started';
 import { recordNexusEntry } from '@/lib/not-started-server';
+import { isValidTimeZone } from '@/lib/sketchbook-rhythm';
 import {
   TIMETABLE_WINDOW_KEY,
   parseWindow,
@@ -228,6 +229,26 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // The student's device time zone, for the sketchbook's own-clock days
+    // (sketchbook-rhythm.ts practiceDate, migration 20261019090000). Its own
+    // write, never read back here and never fatal: the filter makes it a no-op
+    // when nothing changed, and an environment without the column costs only
+    // IST days, not a sign-in. Skipped while impersonating: that is the
+    // teacher's device, not the student's.
+    const deviceTimeZone = request.headers.get('x-time-zone');
+    const timeZoneWrite =
+      !msUser.impersonatorUserId && user.user_type === 'student' && isValidTimeZone(deviceTimeZone)
+        ? Promise.resolve(
+            supabase
+              .from('users')
+              .update({ timezone: deviceTimeZone } as any)
+              .eq('id', user.id)
+              .or(`timezone.is.null,timezone.neq."${deviceTimeZone}"`),
+          ).then(({ error }) => {
+            if (error) console.warn('[auth/me] time zone not saved:', error.message);
+          }, () => {})
+        : Promise.resolve();
+
     // Everything left to do needs only `user.id`, and nothing here reads anything
     // another line here produces, so it all goes at once.
     //
@@ -264,6 +285,8 @@ export async function GET(request: NextRequest) {
         getNexusSetting(FEATURE_FLAGS_KEY),
         getNexusSetting(TIMETABLE_WINDOW_KEY),
       ]),
+
+      timeZoneWrite,
     ]);
 
     if (updates.name) user = { ...user, name: updates.name };

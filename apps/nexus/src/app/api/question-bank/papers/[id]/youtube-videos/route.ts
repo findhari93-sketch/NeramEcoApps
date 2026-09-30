@@ -2,11 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyQBStaff } from '@/lib/qb-auth';
 import { getSupabaseAdminClient } from '@neram/database';
 import { getUploadAccessToken, YouTubeAuthError } from '@/lib/youtube-oauth';
-import { parseSolutionTitle, type FoundVideo } from '@/lib/youtube-solution-titles';
+import {
+  parseSolutionTitle,
+  readSampleTitle,
+  readTitleForSample,
+  type FoundVideo,
+} from '@/lib/youtube-solution-titles';
 import { describeError } from '@/lib/api-errors';
 
 /**
- * GET /api/question-bank/papers/[id]/youtube-videos?pageToken=
+ * GET /api/question-bank/papers/[id]/youtube-videos?pageToken=&sample=
  *
  * One stretch of the channel's uploads, keeping only the solution videos whose
  * titles name this paper ("Q no 22 - JEE 2014 Solution Video"). The browser
@@ -18,6 +23,10 @@ import { describeError } from '@/lib/api-errors';
  * through the grant the class-recording backup already holds
  * (nexus_youtube_credentials, youtube.readonly). The token never leaves the
  * server. Quota: 1 unit per 50 uploads read.
+ *
+ * `sample` is one real title from this paper, typed by the teacher. Uploads
+ * worded the same way (only the number and section word differ) come back
+ * too, even when the built-in title rules cannot read them.
  *
  * Deliberately a button, not a schedule: a teacher runs it for one paper,
  * checks what it found, and saves.
@@ -76,6 +85,9 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     // Every channel's uploads playlist is its id with UC swapped for UU.
     const playlistId = `UU${String(credentials.youtube_channel_id).slice(2)}`;
     let pageToken = request.nextUrl.searchParams.get('pageToken') || null;
+    const sample = (request.nextUrl.searchParams.get('sample') ?? '').slice(0, 300);
+    const sampleRead = sample ? readSampleTitle(sample, paper) : null;
+    const sampleKey = sampleRead?.ok ? sampleRead.key : null;
     let checked = 0;
     const videos: FoundVideo[] = [];
 
@@ -87,6 +99,16 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       if (pageToken) url.searchParams.set('pageToken', pageToken);
 
       const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
+      if (res.status === 403) {
+        const body = await res.json().catch(() => ({}));
+        const reasons: string[] = (body?.error?.errors ?? []).map((e: { reason?: string }) => e?.reason ?? '');
+        if (reasons.some((r) => /quota|rateLimit/i.test(r))) {
+          return NextResponse.json(
+            { error: "YouTube's daily limit for this channel is used up. Try again tomorrow, or paste the links with Paste a list." },
+            { status: 429 },
+          );
+        }
+      }
       if (res.status === 401 || res.status === 403) {
         return notConnected('YouTube refused the request. Reconnect it in Settings.');
       }
@@ -99,9 +121,11 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       for (const item of items) {
         const title: string = item?.snippet?.title ?? '';
         const videoId: string | undefined = item?.snippet?.resourceId?.videoId;
-        const parsed = parseSolutionTitle(title);
-        if (!videoId || !parsed) continue;
-        if (parsed.exam !== paper.exam_type || parsed.year !== paper.year) continue;
+        if (!videoId) continue;
+        const fitsSample = sampleKey ? readTitleForSample(title, sampleKey, paper) : null;
+        const parsed = fitsSample ?? parseSolutionTitle(title);
+        if (!parsed) continue;
+        if (!fitsSample && (parsed.exam !== paper.exam_type || parsed.year !== paper.year)) continue;
         videos.push({ videoId, title, publishedAt: item?.snippet?.publishedAt ?? '', parsed });
       }
       pageToken = json.nextPageToken ?? null;
@@ -116,6 +140,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         paper: { exam_type: paper.exam_type, year: paper.year, session: paper.session, shift: paper.shift },
         paperCountThatYear: paperCountThatYear ?? 1,
         channelTitle: credentials.youtube_channel_title ?? null,
+        sampleKey,
       },
     });
   } catch (err) {

@@ -14,7 +14,8 @@ export interface PracticeKeyboardActions {
   help: () => void;
 }
 
-const LETTERS = ['a', 'b', 'c', 'd'];
+// A question can carry a fifth option (E), such as "None of the above".
+const LETTERS = ['a', 'b', 'c', 'd', 'e'];
 const GO_TO_MS = 1500;
 
 /** Typing, so a key is a letter rather than a shortcut. */
@@ -101,6 +102,7 @@ export function usePracticeKeyboard(actions: PracticeKeyboardActions, enabled: b
         case '2':
         case '3':
         case '4':
+        case '5':
           e.preventDefault();
           ref.current.selectOption(Number(key) - 1);
           return;
@@ -108,6 +110,7 @@ export function usePracticeKeyboard(actions: PracticeKeyboardActions, enabled: b
         case 'b':
         case 'c':
         case 'd':
+        case 'e':
           e.preventDefault();
           ref.current.selectOption(LETTERS.indexOf(key));
           return;

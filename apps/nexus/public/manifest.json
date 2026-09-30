@@ -2,7 +2,7 @@
   "name": "Nexus — Neram Classroom",
   "short_name": "Nexus",
   "id": "/",
-  "description": "Classroom management platform for Neram Classes teachers. Manage assignments, attendance, grading, and Microsoft Teams integration.",
+  "description": "The Neram Classes classroom for students and teachers: classes, assignments, drawings, tests and Microsoft Teams in one place.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

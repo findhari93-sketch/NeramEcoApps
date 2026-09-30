@@ -2653,6 +2653,7 @@ export type NotificationEventType =
   | 'foundation_issue_closed'
   | 'foundation_issue_comment'
   | 'foundation_issue_recheck_requested'
+  | 'foundation_issue_info_requested'
   | 'study_material_comment_added'
   | 'assignment_reviewed'
   | 'auto_first_touch_sent';
@@ -3212,6 +3213,11 @@ export interface UserJourneyListOptions {
   /** Lifecycle dimensions (user_lifecycle_view, migration 20261010090100). */
   lifecycleStage?: LifecycleStage;
   engagement?: EngagementState;
+  /** Activity group from lifecycle-rules ACTIVITY_GROUPS; ignored when engagement is set. */
+  activityGroup?: 'recent' | 'quiet' | 'gone';
+  /** Exam season bounds on user_lifecycle_view.exam_year, inclusive. */
+  examYearMin?: number;
+  examYearMax?: number;
   /** 'firebase' (default Leads list), 'microsoft' (Microsoft-only people), 'all'. */
   identity?: 'firebase' | 'microsoft' | 'all';
   limit?: number;
@@ -3262,6 +3268,20 @@ export interface UserLifecycleColumns {
   nexus_last_login_at?: string | null;
   is_alumni?: boolean;
   student_program?: string | null;
+  /** The exam this person is preparing for (migration 20261018090000). */
+  exam_year?: number | null;
+  /** batch | stated | signup. 'signup' means estimated from the sign-up date. */
+  exam_year_source?: 'batch' | 'stated' | 'signup' | null;
+}
+
+/** One row of crm_people_breakdown(): a count per combination. */
+export interface PeopleBreakdownRow {
+  lifecycle_status: string;
+  exam_year: number | null;
+  exam_year_source: 'batch' | 'stated' | 'signup' | null;
+  lifecycle_stage: LifecycleStage;
+  engagement: EngagementState;
+  n: number;
 }
 
 /**
@@ -6377,7 +6397,28 @@ export interface NexusFoundationWatchSessionUpsert {
 // Foundation feedback & issues
 
 export type FoundationReactionType = 'like' | 'dislike';
-export type FoundationIssueStatus = 'open' | 'in_progress' | 'resolved' | 'awaiting_confirmation' | 'closed';
+/**
+ * Ticket lifecycle. waiting_on_student and awaiting_confirmation are the
+ * student's turn; open and in_progress are staff's. 'resolved' is legacy (the
+ * resolve action has written awaiting_confirmation since 2026-03) and survives
+ * on old rows only.
+ */
+export type FoundationIssueStatus =
+  | 'open'
+  | 'in_progress'
+  | 'waiting_on_student'
+  | 'resolved'
+  | 'awaiting_confirmation'
+  | 'closed';
+
+/** How a ticket ended. no_response is written by the auto-close cron only. */
+export type FoundationIssueResolutionCode =
+  | 'fixed'
+  | 'answered'
+  | 'not_a_bug'
+  | 'duplicate'
+  | 'wont_fix'
+  | 'no_response';
 
 export interface NexusFoundationReaction {
   id: string;
@@ -6411,7 +6452,13 @@ export type FoundationIssueAction =
   | 'reopened'
   | 'comment'
   | 'confirmed'
-  | 'auto_closed';
+  | 'auto_closed'
+  /** Staff asked the student for more; status -> waiting_on_student. */
+  | 'info_requested'
+  /** The student answered a waiting ticket; status -> in_progress on its own. */
+  | 'student_replied'
+  /** Staff closed without asking the student to confirm. */
+  | 'closed_by_staff';
 
 /**
  * A single captured log/error entry attached to a reported issue (staff-only).
@@ -6442,6 +6489,8 @@ export interface NexusFoundationIssue {
   resolved_by: string | null;
   resolved_at: string | null;
   resolution_note: string | null;
+  /** How the ticket ended. Null while it is still in play, and after a reopen. */
+  resolution_code?: FoundationIssueResolutionCode | null;
   ticket_number: string;
   category: FoundationIssueCategory;
   screenshot_urls: string[] | null;
@@ -7443,6 +7492,11 @@ export interface NexusComposedQuestion {
    * shows a solution before the student submits. Null for everything else.
    */
   drawing_parts?: QBDrawingParts | null;
+  /**
+   * False when the bank row was retired. Such a question is left out of every
+   * new sitting but still read for a sitting that already drew it.
+   */
+  is_active?: boolean;
 }
 
 /**

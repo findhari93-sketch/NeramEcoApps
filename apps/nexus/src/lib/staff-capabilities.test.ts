@@ -114,6 +114,7 @@ describe('teacher tier (external, restricted)', () => {
     'structure.plan.delete',
     'teach.timetable.schedule',
     'coord.student.dormancy',
+    'coord.student.level',
     'coord.student.finance',
     'coord.photo_ms_push',
     'impersonate.any',
@@ -170,6 +171,16 @@ describe('teacher tier (external, restricted)', () => {
     expect(can('teacher', 'coord.student.dormancy')).toBe(false);
     expect(can('manager', 'coord.student.dormancy')).toBe(true);
     expect(can('admin', 'coord.student.dormancy')).toBe(true);
+  });
+
+  it('sees a student level but cannot set it', () => {
+    // The level decides how much teacher time a student gets, so the people who
+    // plan that time set it. Teachers read it on every avatar through
+    // coord.student.view.
+    expect(can('teacher', 'coord.student.view')).toBe(true);
+    expect(can('teacher', 'coord.student.level')).toBe(false);
+    expect(can('manager', 'coord.student.level')).toBe(true);
+    expect(can('admin', 'coord.student.level')).toBe(true);
   });
 
   it('cannot see what a family owes or has paid', () => {

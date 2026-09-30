@@ -28,7 +28,6 @@ import {
   Switch,
 } from '@neram/ui';
 import DeleteIcon from '@mui/icons-material/Delete';
-import AddIcon from '@mui/icons-material/Add';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import type {
   NexusQBQuestion,
@@ -46,6 +45,8 @@ import type { ImageState } from '@/lib/bulk-upload-schema';
 import QuestionCard from './QuestionCard';
 import ImageUploadZone from './ImageUploadZone';
 import DedupeWarning, { type DedupeCandidate } from './DedupeWarning';
+import OptionAddBar from './OptionAddBar';
+import { defaultOptions, normalizeOptionIds, withOptionAdded } from '@/lib/qb-option-ids';
 
 interface QuestionFormWizardProps {
   initialData?: NexusQBQuestion;
@@ -94,15 +95,14 @@ const STEPS = [
   'Review',
 ];
 
-function createDefaultOption(idx: number): NexusQBQuestionOption {
-  return { id: `opt_${idx}_${Date.now()}`, text: '' };
-}
-
 function getInitialFormData(
   initialData?: NexusQBQuestion,
   sources?: NexusQBQuestionSource[]
 ): FormData {
   const source = sources?.[0];
+  // An option saved as `opt_4_<timestamp>` loads as the next letter, so the
+  // next save repairs it.
+  const normalized = normalizeOptionIds(initialData?.options ?? [], initialData?.correct_answer);
   return {
     exam_type: source?.exam_type ?? 'NATA',
     year: source?.year ? String(source.year) : String(new Date().getFullYear()),
@@ -114,15 +114,13 @@ function getInitialFormData(
     question_image: initialData?.question_image_url
       ? { url: initialData.question_image_url, uploaded: true }
       : undefined,
-    options: initialData?.options?.length
-      ? initialData.options
-      : [createDefaultOption(0), createDefaultOption(1), createDefaultOption(2), createDefaultOption(3)],
-    option_images: (initialData?.options ?? []).reduce<Record<string, ImageState | undefined>>((acc, opt) => {
+    options: normalized.options.length ? normalized.options : defaultOptions(),
+    option_images: normalized.options.reduce<Record<string, ImageState | undefined>>((acc, opt) => {
       if (opt.image_url) acc[opt.id] = { url: opt.image_url, uploaded: true };
       return acc;
     }, {}),
-    correct_option_id: initialData?.correct_answer ?? '',
-    correct_answer: initialData?.correct_answer ?? '',
+    correct_option_id: normalized.correctAnswer,
+    correct_answer: normalized.correctAnswer,
     answer_tolerance: initialData?.answer_tolerance ? String(initialData.answer_tolerance) : '',
     categories: initialData?.categories ?? [],
     difficulty: initialData?.difficulty ?? 'MEDIUM',
@@ -261,11 +259,12 @@ export default function QuestionFormWizard({
     });
   };
 
-  const handleAddOption = () => {
-    setForm((prev) => ({
-      ...prev,
-      options: [...prev.options, createDefaultOption(prev.options.length)],
-    }));
+  const handleAddOption = (text?: string, textHi?: string) => {
+    setForm((prev) => {
+      const quick = text ? { text, text_hi: textHi } : undefined;
+      const options = withOptionAdded(prev.options, quick, (id) => Boolean(prev.option_images[id]));
+      return options ? { ...prev, options } : prev;
+    });
   };
 
   const handleRemoveOption = (idx: number) => {
@@ -569,16 +568,7 @@ export default function QuestionFormWizard({
                     )}
                   </Box>
                 ))}
-                {form.options.length < 8 && (
-                  <Button
-                    startIcon={<AddIcon />}
-                    size="small"
-                    onClick={handleAddOption}
-                    sx={{ mt: 0.5, textTransform: 'none' }}
-                  >
-                    Add Option
-                  </Button>
-                )}
+                <OptionAddBar options={form.options} optionImages={form.option_images} onAdd={handleAddOption} />
               </Box>
             )}
 

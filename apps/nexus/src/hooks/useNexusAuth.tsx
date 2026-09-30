@@ -644,8 +644,17 @@ export function useNexusAuth(): NexusAuthState {
         if (!token || stale()) return;
 
         deadline = setTimeout(() => controller.abort(), ME_TIMEOUT_MS);
+        const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+        // The device's time zone, so the sketchbook counts days on the
+        // student's own clock (a student in Dubai is not on IST).
+        try {
+          const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          if (timeZone) headers['X-Time-Zone'] = timeZone;
+        } catch {
+          // No Intl time zone: the server keeps IST.
+        }
         const response = await fetch('/api/auth/me', {
-          headers: { Authorization: `Bearer ${token}` },
+          headers,
           signal: controller.signal,
         });
 

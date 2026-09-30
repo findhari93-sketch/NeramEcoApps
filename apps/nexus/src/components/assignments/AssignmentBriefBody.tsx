@@ -7,6 +7,7 @@
  * Shared by the document assignment page and the drawing workspace's brief
  * section, so the two cannot drift apart in what they show or how they open it.
  */
+import { useState } from 'react';
 import { Box, Button, Stack, Typography } from '@neram/ui';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
@@ -18,6 +19,8 @@ import NeramVideoPlayer from '@/components/video/NeramVideoPlayer';
 import { OPEN_GATE } from '@/lib/video-gate';
 import { extractYouTubeId } from '@/lib/youtube';
 import AssignmentBrief from './AssignmentBrief';
+import ReferenceImagePreview from './ReferenceImagePreview';
+import StageViewerDialog from './workspace/StageViewerDialog';
 import type { AssignmentRecording, StudentAssignmentDetail } from './workspace/types';
 
 /** The multi-image set, falling back to the single legacy content image. */
@@ -36,14 +39,15 @@ export default function AssignmentBriefBody({
   detail: StudentAssignmentDetail;
   recording: AssignmentRecording;
   onOpenAttachment: (studyFileId: string) => void;
-  /** Defaults to a new tab. */
+  /** Defaults to this body's own full-screen viewer. */
   onOpenImage?: (src: string) => void;
   /** Square thumbnails even for a single image, for a narrow panel. */
   compactImages?: boolean;
 }) {
   const youtubeId = recording.url && recording.source === 'youtube' ? extractYouTubeId(recording.url) : null;
   const refImages = referenceImagesOf(detail);
-  const openImage = onOpenImage ?? ((src: string) => window.open(src, '_blank', 'noopener'));
+  const [viewerSrc, setViewerSrc] = useState<string | null>(null);
+  const openImage = onOpenImage ?? setViewerSrc;
   const squareImages = compactImages || refImages.length > 1;
 
   return (
@@ -93,46 +97,48 @@ export default function AssignmentBriefBody({
               {refImages.length > 1 ? `Reference (${refImages.length})` : 'Reference'}
             </Typography>
           )}
-          <Box
-            sx={{
-              display: 'grid',
-              gridTemplateColumns: squareImages ? 'repeat(auto-fill, minmax(96px, 1fr))' : '1fr',
-              gap: 1,
-            }}
-          >
-            {refImages.map((src, i) => (
-              <Box
-                key={`${src}-${i}`}
-                component="button"
-                type="button"
-                onClick={() => openImage(src)}
-                aria-label={refImages.length > 1 ? `Open reference ${i + 1}` : 'Open the reference image'}
-                sx={{
-                  p: 0,
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  borderRadius: 2,
-                  overflow: 'hidden',
-                  cursor: 'pointer',
-                  bgcolor: 'grey.50',
-                  display: 'block',
-                  '&:focus-visible': { outline: '3px solid', outlineColor: 'primary.main', outlineOffset: 2 },
-                }}
-              >
+          {/* One image at a readable size: a tall poster shows its top at full
+              width and says there is more, instead of a thin strip. */}
+          {!squareImages ? (
+            <ReferenceImagePreview src={refImages[0]} onOpen={openImage} />
+          ) : (
+            <Box
+              sx={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(96px, 1fr))',
+                gap: 1,
+              }}
+            >
+              {refImages.map((src, i) => (
                 <Box
-                  component="img"
-                  src={src}
-                  alt=""
-                  loading="lazy"
+                  key={`${src}-${i}`}
+                  component="button"
+                  type="button"
+                  onClick={() => openImage(src)}
+                  aria-label={refImages.length > 1 ? `Open reference ${i + 1}` : 'Open the reference image'}
                   sx={{
-                    width: '100%',
+                    p: 0,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    borderRadius: 2,
+                    overflow: 'hidden',
+                    cursor: 'pointer',
+                    bgcolor: 'grey.50',
                     display: 'block',
-                    ...(squareImages ? { aspectRatio: '1 / 1', objectFit: 'cover' } : {}),
+                    '&:focus-visible': { outline: '3px solid', outlineColor: 'primary.main', outlineOffset: 2 },
                   }}
-                />
-              </Box>
-            ))}
-          </Box>
+                >
+                  <Box
+                    component="img"
+                    src={src}
+                    alt=""
+                    loading="lazy"
+                    sx={{ width: '100%', display: 'block', aspectRatio: '1 / 1', objectFit: 'cover', objectPosition: 'top' }}
+                  />
+                </Box>
+              ))}
+            </Box>
+          )}
         </Box>
       )}
 
@@ -196,6 +202,10 @@ export default function AssignmentBriefBody({
             })}
           </Stack>
         </Box>
+      )}
+
+      {!onOpenImage && (
+        <StageViewerDialog src={viewerSrc} alt="Reference image, full screen" onClose={() => setViewerSrc(null)} />
       )}
     </Stack>
   );

@@ -6,6 +6,7 @@ import { Box, CircularProgress, Typography } from '@neram/ui';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { isPathEnabled } from '@/lib/feature-flags';
 import { takeReturnPath } from '@/lib/return-path';
+import SlowStartHelp from '@/components/help/SlowStartHelp';
 
 const STUDY_MATERIALS_PATH = '/student/study-materials';
 
@@ -75,6 +76,7 @@ export default function RootRedirect() {
       <Typography variant="body2" color="text.secondary">
         Loading Nexus...
       </Typography>
+      <SlowStartHelp from="/" />
     </Box>
   );
 }

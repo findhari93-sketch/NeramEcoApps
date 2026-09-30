@@ -140,7 +140,9 @@ export default function StudentExamPage() {
     );
   }
 
-  if (error || !view) {
+  // A response without a window is the staff shape of this route. Rendering it
+  // would read view.window.opens_at and crash the page (NXS-0126).
+  if (error || !view || !view.window) {
     return (
       <Box sx={{ px: 2, py: 3 }}>
         <Alert severity="info">{error || 'There is no exam on this class.'}</Alert>

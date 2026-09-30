@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import Link from 'next/link';
 import {
   Box,
   Typography,
@@ -23,18 +24,18 @@ import AddAPhotoIcon from '@mui/icons-material/AddAPhoto';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import FilterAltOffOutlinedIcon from '@mui/icons-material/FilterAltOffOutlined';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import type {
   UserJourney,
-  PipelineStageCounts,
-  PipelineStage,
   ExamStatus,
-  CandidateSegment,
   LifecycleStage,
-  EngagementState,
+  ActivityGroup,
+  PeopleBreakdownRow,
 } from '@neram/database';
-import { PIPELINE_STAGE_CONFIG, LIFECYCLE_STAGE_LABELS, ENGAGEMENT_LABELS } from '@neram/database';
+import { LIFECYCLE_STAGE_LABELS, activityGroupOf } from '@neram/database';
 import type { MRT_PaginationState, MRT_SortingState, MRT_ColumnFiltersState } from 'material-react-table';
-import PipelineFunnel from '../../../components/crm/PipelineFunnel';
+import PeopleSummary from '../../../components/crm/PeopleSummary';
+import { summarisePeople, formatCount, type Season } from '@/lib/people-summary';
 import UsersTable from '../../../components/crm/UsersTable';
 import BulkDeleteDialog from '../../../components/crm/BulkDeleteDialog';
 import ArchiveDialog from '../../../components/crm/ArchiveDialog';
@@ -42,16 +43,27 @@ import VerifyStatusDialog from '../../../components/crm/VerifyStatusDialog';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
 import { useBatches } from '@/contexts/BatchContext';
 
-type LifecycleView = 'active' | 'archived' | 'candidates';
+type LifecycleView = 'active' | 'archived';
 type IdentityFilter = 'firebase' | 'microsoft' | 'all';
+type Outcome = 'dead_lead' | 'irrelevant';
 
 const IDENTITY_OPTIONS: Array<{ value: IdentityFilter; label: string }> = [
-  { value: 'firebase', label: 'Google sign-in' },
-  { value: 'microsoft', label: 'Microsoft only' },
   { value: 'all', label: 'Everyone' },
+  { value: 'firebase', label: 'Google or phone sign-in' },
+  { value: 'microsoft', label: 'Microsoft only' },
+];
+const OUTCOME_OPTIONS: Array<{ value: Outcome | ''; label: string }> = [
+  { value: '', label: 'Any' },
+  { value: 'dead_lead', label: 'Not interested (dead lead)' },
+  { value: 'irrelevant', label: 'Irrelevant' },
 ];
 const LIFECYCLE_STAGE_KEYS = Object.keys(LIFECYCLE_STAGE_LABELS) as LifecycleStage[];
-const ENGAGEMENT_KEYS = Object.keys(ENGAGEMENT_LABELS) as EngagementState[];
+const SEASONS: readonly Season[] = ['current', 'later', 'earlier', 'all'];
+const ACTIVITY_KEYS: readonly ActivityGroup[] = ['recent', 'quiet', 'gone'];
+const VIEW_HINTS: Record<LifecycleView, string> = {
+  active: 'Leads and students you are working with now.',
+  archived: 'Moved out of the working list by staff. They can still sign in, and you can restore them.',
+};
 
 /** Column filters the API supports: column id to query param. */
 const COLUMN_FILTER_PARAMS: Record<string, string> = {
@@ -83,28 +95,43 @@ export default function CRMPage() {
 
   const [users, setUsers] = useState<UserJourney[]>([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [pipelineCounts, setPipelineCounts] = useState<PipelineStageCounts | null>(null);
+  // Exact grouped counts for the season, activity and stage cards.
+  const [breakdown, setBreakdown] = useState<PeopleBreakdownRow[] | null>(null);
+  const [allAccounts, setAllAccounts] = useState<number | null>(null);
+  const [archiveSuggestions, setArchiveSuggestions] = useState(0);
+  const [currentExamYear, setCurrentExamYear] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [syncingPhotos, setSyncingPhotos] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
-  const [activeStage, setActiveStage] = useState<PipelineStage | null>(
-    (searchParams.get('stage') as PipelineStage) || null
-  );
-  const [showDeadLeads, setShowDeadLeads] = useState(
-    searchParams.get('dead_leads') === 'true'
-  );
-  const [showIrrelevant, setShowIrrelevant] = useState(
-    searchParams.get('irrelevant') === 'true'
-  );
   const [lifecycleView, setLifecycleView] = useState<LifecycleView>(
-    (searchParams.get('lifecycle') as LifecycleView) || 'active'
+    searchParams.get('lifecycle') === 'archived' ? 'archived' : 'active'
   );
-  const [candidateSegment, setCandidateSegment] = useState<CandidateSegment>(
-    (searchParams.get('candidate') as CandidateSegment) || 'no_phone_dormant'
+  // The season control starts from the global exam batch (profile menu) unless
+  // the address already names one: 'all' there means All seasons here.
+  const [season, setSeason] = useState<Season>(
+    readParam(searchParams.get('season'), SEASONS) || (selectedBatch === 'all' ? 'all' : 'current')
   );
+  // Older links used ?engagement= and ?dead_leads= / ?irrelevant=; map them.
+  const [activity, setActivity] = useState<ActivityGroup | ''>(
+    readParam(searchParams.get('activity'), ACTIVITY_KEYS) ||
+      (searchParams.get('engagement') ? activityGroupOf(searchParams.get('engagement')) : '')
+  );
+  const [outcome, setOutcome] = useState<Outcome | ''>(
+    readParam(searchParams.get('outcome'), ['dead_lead', 'irrelevant'] as const) ||
+      (searchParams.get('dead_leads') === 'true'
+        ? 'dead_lead'
+        : searchParams.get('irrelevant') === 'true'
+        ? 'irrelevant'
+        : '')
+  );
+
+  // The Candidates tab moved to the Lifecycle page's archive suggestions.
+  useEffect(() => {
+    if (searchParams.get('lifecycle') === 'candidates') router.replace('/lifecycle?kind=archive_lead');
+  }, [searchParams, router]);
 
   const [pagination, setPagination] = useState<MRT_PaginationState>({
     pageIndex: 0,
@@ -115,23 +142,18 @@ export default function CRMPage() {
   ]);
   const [globalFilter, setGlobalFilter] = useState('');
 
-  // Lifecycle dimensions (user_lifecycle_view). Default identity = Google
-  // sign-in, which is the list as it always was.
+  // Everyone by default, so Microsoft-only students are counted too.
   const [identity, setIdentity] = useState<IdentityFilter>(
-    readParam(searchParams.get('identity'), ['firebase', 'microsoft', 'all'] as const) || 'firebase'
+    readParam(searchParams.get('identity'), ['firebase', 'microsoft', 'all'] as const) || 'all'
   );
   const [lifecycleStage, setLifecycleStage] = useState<LifecycleStage | ''>(
     readParam(searchParams.get('lifecycle_stage'), LIFECYCLE_STAGE_KEYS)
-  );
-  const [engagement, setEngagement] = useState<EngagementState | ''>(
-    readParam(searchParams.get('engagement'), ENGAGEMENT_KEYS)
   );
   const [columnFilters, setColumnFilters] = useState<MRT_ColumnFiltersState>(() =>
     Object.keys(COLUMN_FILTER_PARAMS)
       .map((id) => ({ id, value: searchParams.get(COLUMN_FILTER_PARAMS[id]) }))
       .filter((f) => !!f.value) as MRT_ColumnFiltersState
   );
-  const showLifecycleColumns = identity !== 'firebase' || !!lifecycleStage || !!engagement;
 
   // Delete dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -152,27 +174,13 @@ export default function CRMPage() {
       params.set('limit', String(pagination.pageSize));
       params.set('offset', String(pagination.pageIndex * pagination.pageSize));
 
-      if (activeStage) params.set('pipeline_stage', activeStage);
-      if (showDeadLeads) params.set('is_dead_lead', 'true');
-      if (showIrrelevant) params.set('is_irrelevant', 'true');
       if (globalFilter) params.set('search', globalFilter);
-
-      // Lifecycle focus view
-      if (lifecycleView === 'archived') {
-        params.set('lifecycle_status', 'archived');
-      } else if (lifecycleView === 'candidates') {
-        params.set('candidate', candidateSegment);
-      }
-
-      // Global exam-batch scope. Skip in the candidates view (its 'old_cohort'
-      // segment already filters by year and would conflict).
-      if (lifecycleView !== 'candidates' && selectedBatch) {
-        params.set('batch', selectedBatch);
-      }
-
-      if (identity !== 'firebase') params.set('identity', identity);
+      if (lifecycleView === 'archived') params.set('lifecycle_status', 'archived');
+      params.set('season', season);
+      params.set('identity', identity);
+      if (outcome) params.set('outcome', outcome);
       if (lifecycleStage) params.set('lifecycle_stage', lifecycleStage);
-      if (engagement) params.set('engagement', engagement);
+      if (activity) params.set('activity', activity);
       for (const f of columnFilters) {
         const param = COLUMN_FILTER_PARAMS[f.id];
         if (param && typeof f.value === 'string' && f.value) params.set(param, f.value);
@@ -189,17 +197,57 @@ export default function CRMPage() {
       const data = await res.json();
       setUsers(data.users);
       setTotalCount(data.total);
-      setPipelineCounts(data.pipelineCounts);
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [pagination, sorting, activeStage, globalFilter, showDeadLeads, showIrrelevant, lifecycleView, candidateSegment, selectedBatch, identity, lifecycleStage, engagement, columnFilters]);
+  }, [pagination, sorting, globalFilter, lifecycleView, season, identity, outcome, lifecycleStage, activity, columnFilters]);
+
+  // The counts depend only on sign-in and call outcome; season, stage and
+  // activity are worked out on the page from the same breakdown.
+  const fetchSummary = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({ summary: 'only', identity });
+      if (outcome) params.set('outcome', outcome);
+      const res = await fetch(`/api/crm/users?${params.toString()}`);
+      if (!res.ok) throw new Error('Failed to load the counts');
+      const data = await res.json();
+      setBreakdown(data.breakdown || []);
+      setAllAccounts(data.allAccounts ?? null);
+      setArchiveSuggestions(data.archiveSuggestions || 0);
+      setCurrentExamYear(data.currentExamYear ?? null);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  }, [identity, outcome]);
 
   useEffect(() => {
     fetchUsers();
   }, [fetchUsers]);
+
+  useEffect(() => {
+    fetchSummary();
+  }, [fetchSummary]);
+
+  /** After a change to someone (archive, restore, mark), refresh list and counts. */
+  const refreshAll = useCallback(async () => {
+    await Promise.all([fetchUsers(), fetchSummary()]);
+  }, [fetchUsers, fetchSummary]);
+
+  const summary = useMemo(
+    () =>
+      breakdown && currentExamYear !== null
+        ? summarisePeople(breakdown, {
+            view: lifecycleView,
+            season,
+            currentExamYear,
+            activity: activity || null,
+            stage: lifecycleStage || null,
+          })
+        : null,
+    [breakdown, currentExamYear, lifecycleView, season, activity, lifecycleStage]
+  );
 
   // Escape key to exit fullscreen
   useEffect(() => {
@@ -214,56 +262,12 @@ export default function CRMPage() {
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [isFullscreen]);
 
-  const handleStageClick = (stage: PipelineStage | null) => {
-    setActiveStage(stage);
-    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-
-    const params = new URLSearchParams(window.location.search);
-    if (stage) {
-      params.set('stage', stage);
-    } else {
-      params.delete('stage');
-    }
-    const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
-    window.history.replaceState(null, '', newUrl);
-  };
-
-  const handleToggleDeadLeads = () => {
-    const next = !showDeadLeads;
-    setShowDeadLeads(next);
-    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-
-    const params = new URLSearchParams(window.location.search);
-    if (next) {
-      params.set('dead_leads', 'true');
-    } else {
-      params.delete('dead_leads');
-    }
-    const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
-    window.history.replaceState(null, '', newUrl);
-  };
-
-  const handleToggleIrrelevant = () => {
-    const next = !showIrrelevant;
-    setShowIrrelevant(next);
-    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-
-    const params = new URLSearchParams(window.location.search);
-    if (next) {
-      params.set('irrelevant', 'true');
-    } else {
-      params.delete('irrelevant');
-    }
-    const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
-    window.history.replaceState(null, '', newUrl);
-  };
-
   const resetToFirstPage = () => setPagination((prev) => ({ ...prev, pageIndex: 0 }));
 
   const handleIdentityChange = (value: IdentityFilter) => {
     setIdentity(value);
     resetToFirstPage();
-    replaceUrlParam('identity', value === 'firebase' ? null : value);
+    replaceUrlParam('identity', value === 'all' ? null : value);
   };
 
   const handleLifecycleStageChange = (value: LifecycleStage | '') => {
@@ -272,10 +276,25 @@ export default function CRMPage() {
     replaceUrlParam('lifecycle_stage', value || null);
   };
 
-  const handleEngagementChange = (value: EngagementState | '') => {
-    setEngagement(value);
+  const handleActivityChange = (value: ActivityGroup | null) => {
+    setActivity(value || '');
     resetToFirstPage();
-    replaceUrlParam('engagement', value || null);
+    replaceUrlParam('engagement', null);
+    replaceUrlParam('activity', value);
+  };
+
+  const handleSeasonChange = (value: Season) => {
+    setSeason(value);
+    resetToFirstPage();
+    replaceUrlParam('season', value === 'current' ? null : value);
+  };
+
+  const handleOutcomeChange = (value: Outcome | '') => {
+    setOutcome(value);
+    resetToFirstPage();
+    replaceUrlParam('dead_leads', null);
+    replaceUrlParam('irrelevant', null);
+    replaceUrlParam('outcome', value || null);
   };
 
   const handleColumnFiltersChange = (filters: MRT_ColumnFiltersState) => {
@@ -287,11 +306,13 @@ export default function CRMPage() {
     }
   };
 
-  const filtersActive = identity !== 'firebase' || !!lifecycleStage || !!engagement || columnFilters.length > 0;
+  const filtersActive =
+    identity !== 'all' || !!outcome || !!lifecycleStage || !!activity || columnFilters.length > 0;
   const clearFilters = () => {
-    handleIdentityChange('firebase');
+    handleIdentityChange('all');
+    handleOutcomeChange('');
     handleLifecycleStageChange('');
-    handleEngagementChange('');
+    handleActivityChange(null);
     handleColumnFiltersChange([]);
   };
 
@@ -324,7 +345,7 @@ export default function CRMPage() {
       setNotice(
         `Microsoft photos synced: ${data.synced} updated, ${data.unchanged} unchanged, ${data.noPhoto} without a photo${blockedNote}${failed}.`
       );
-      await fetchUsers();
+      await refreshAll();
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -351,7 +372,7 @@ export default function CRMPage() {
         body: user.is_disabled ? undefined : JSON.stringify({ adminId: supabaseUserId }),
       });
       if (!res.ok) throw new Error('Failed to update user access');
-      await fetchUsers();
+      await refreshAll();
     } catch (err: any) {
       setError(err.message);
     }
@@ -366,7 +387,7 @@ export default function CRMPage() {
         body: JSON.stringify({ reason: 'Marked from CRM table', adminId: supabaseUserId }),
       });
       if (!res.ok) throw new Error('Failed to mark as dead lead');
-      await fetchUsers();
+      await refreshAll();
     } catch (err: any) {
       setError(err.message);
     }
@@ -381,7 +402,7 @@ export default function CRMPage() {
         body: JSON.stringify({ reason: 'Marked from CRM table', adminId: supabaseUserId }),
       });
       if (!res.ok) throw new Error('Failed to mark as irrelevant');
-      await fetchUsers();
+      await refreshAll();
     } catch (err: any) {
       setError(err.message);
     }
@@ -411,35 +432,18 @@ export default function CRMPage() {
     // Close dialog and refresh
     setDeleteDialogOpen(false);
     setUsersToDelete([]);
-    await fetchUsers();
+    await refreshAll();
   };
 
   // ─── Lifecycle: archive / restore / verify ───────────────────────────
   const handleLifecycleViewChange = (view: LifecycleView) => {
     setLifecycleView(view);
-    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-
-    const params = new URLSearchParams(window.location.search);
-    if (view === 'active') {
-      params.delete('lifecycle');
-      params.delete('candidate');
-    } else {
-      params.set('lifecycle', view);
-      if (view === 'candidates') params.set('candidate', candidateSegment);
-      else params.delete('candidate');
-    }
-    const newUrl = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
-    window.history.replaceState(null, '', newUrl);
-  };
-
-  const handleCandidateSegmentChange = (segment: CandidateSegment) => {
-    setCandidateSegment(segment);
-    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
-    const params = new URLSearchParams(window.location.search);
-    params.set('lifecycle', 'candidates');
-    params.set('candidate', segment);
-    const newUrl = `${window.location.pathname}?${params.toString()}`;
-    window.history.replaceState(null, '', newUrl);
+    // Stages differ between the views (Archived holds archived and alumni).
+    setLifecycleStage('');
+    replaceUrlParam('lifecycle_stage', null);
+    resetToFirstPage();
+    replaceUrlParam('candidate', null);
+    replaceUrlParam('lifecycle', view === 'active' ? null : view);
   };
 
   const handleArchiveRequest = (selectedUsers: UserJourney[]) => {
@@ -474,7 +478,7 @@ export default function CRMPage() {
 
     setArchiveDialogOpen(false);
     setUsersToArchive([]);
-    await fetchUsers();
+    await refreshAll();
   };
 
   const handleRestore = async (user: UserJourney) => {
@@ -486,7 +490,7 @@ export default function CRMPage() {
         body: JSON.stringify({ adminId: supabaseUserId }),
       });
       if (!res.ok) throw new Error('Failed to restore user');
-      await fetchUsers();
+      await refreshAll();
     } catch (err: any) {
       setError(err.message);
     }
@@ -515,10 +519,18 @@ export default function CRMPage() {
     }
     setVerifyDialogOpen(false);
     setUserToVerify(null);
-    await fetchUsers();
+    await refreshAll();
   };
 
-  const activeStageConfig = activeStage ? PIPELINE_STAGE_CONFIG[activeStage] : null;
+  const totals = summary?.totals;
+  const unfiltered = identity === 'all' && !outcome;
+  const headerLine = !totals
+    ? 'Loading counts...'
+    : unfiltered && allAccounts !== null
+    ? `${formatCount(allAccounts)} accounts: ${formatCount(totals.active)} current leads and students, ${formatCount(
+        totals.archived
+      )} archived, ${formatCount(Math.max(0, allAccounts - totals.all))} staff and parents`
+    : `${formatCount(totals.active)} current and ${formatCount(totals.archived)} archived match the sign-in and call outcome filters`;
 
   return (
     <Box>
@@ -555,129 +567,69 @@ export default function CRMPage() {
               fontWeight={700}
               sx={{ lineHeight: 1.2 }}
             >
-              User Management
+              People
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: 12, md: 14 } }}>
-              {!pipelineCounts
-                ? 'Loading...'
-                : lifecycleView === 'archived'
-                ? `${totalCount} archived ${totalCount === 1 ? 'user' : 'users'} (hidden from the active view)`
-                : lifecycleView === 'candidates'
-                ? `${totalCount} suggested for review, archive the ones who are done`
-                : `${pipelineCounts.total} active users across all stages`}
+            <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: 13, md: 14 } }}>
+              {headerLine}
             </Typography>
           </Box>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-          {/* Lifecycle focus segmented control */}
+          {/* Current / Archived */}
           <Box
-            sx={{
-              display: 'inline-flex',
-              p: 0.375,
-              gap: 0.375,
-              borderRadius: 1.25,
-              bgcolor: 'grey.100',
-            }}
+            role="group"
+            aria-label="Which people"
+            sx={{ display: 'inline-flex', p: 0.375, gap: 0.375, borderRadius: 1.25, bgcolor: 'grey.100' }}
           >
             {([
-              { key: 'active', label: 'Active' },
-              { key: 'archived', label: 'Archived' },
-              { key: 'candidates', label: 'Candidates' },
-            ] as { key: LifecycleView; label: string }[]).map((seg) => {
+              { key: 'active', label: 'Current', count: totals?.active },
+              { key: 'archived', label: 'Archived', count: totals?.archived },
+            ] as { key: LifecycleView; label: string; count?: number }[]).map((seg) => {
               const selected = lifecycleView === seg.key;
               return (
-                <Box
-                  key={seg.key}
-                  component="button"
-                  onClick={() => handleLifecycleViewChange(seg.key)}
-                  sx={{
-                    border: 'none',
-                    cursor: 'pointer',
-                    px: 1.25,
-                    py: 0.5,
-                    borderRadius: 1,
-                    fontSize: 13,
-                    fontWeight: 600,
-                    fontFamily: 'inherit',
-                    bgcolor: selected ? 'background.paper' : 'transparent',
-                    color: selected ? 'primary.main' : 'text.secondary',
-                    boxShadow: selected ? '0 1px 2px rgba(0,0,0,0.12)' : 'none',
-                    transition: 'all 0.15s',
-                    '&:hover': { color: selected ? 'primary.main' : 'text.primary' },
-                  }}
-                >
-                  {seg.label}
-                </Box>
+                <Tooltip key={seg.key} title={VIEW_HINTS[seg.key]} arrow>
+                  <Box
+                    component="button"
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => handleLifecycleViewChange(seg.key)}
+                    sx={{
+                      border: 'none',
+                      cursor: 'pointer',
+                      minHeight: 44,
+                      px: 1.5,
+                      borderRadius: 1,
+                      fontSize: 14,
+                      fontWeight: 600,
+                      fontFamily: 'inherit',
+                      bgcolor: selected ? 'background.paper' : 'transparent',
+                      color: selected ? 'primary.main' : 'text.secondary',
+                      boxShadow: selected ? '0 1px 2px rgba(0,0,0,0.12)' : 'none',
+                      transition: 'color 150ms, background-color 150ms',
+                      '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+                      '&:hover': { color: selected ? 'primary.main' : 'text.primary' },
+                      '&:focus-visible': { outline: '3px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+                    }}
+                  >
+                    {seg.label}
+                    {seg.count !== undefined && ` · ${formatCount(seg.count)}`}
+                  </Box>
+                </Tooltip>
               );
             })}
           </Box>
 
-          {/* Candidate sub-segments (suggestions only) */}
-          {lifecycleView === 'candidates' && (
-            <>
-              <Chip
-                label="No phone + dormant"
-                onClick={() => handleCandidateSegmentChange('no_phone_dormant')}
-                variant={candidateSegment === 'no_phone_dormant' ? 'filled' : 'outlined'}
-                size="small"
-                color={candidateSegment === 'no_phone_dormant' ? 'primary' : 'default'}
-                sx={{ fontWeight: 500, height: { xs: 32, md: 'auto' } }}
-              />
-              <Chip
-                label="Old cohort"
-                onClick={() => handleCandidateSegmentChange('old_cohort')}
-                variant={candidateSegment === 'old_cohort' ? 'filled' : 'outlined'}
-                size="small"
-                color={candidateSegment === 'old_cohort' ? 'primary' : 'default'}
-                sx={{ fontWeight: 500, height: { xs: 32, md: 'auto' } }}
-              />
-            </>
+          {archiveSuggestions > 0 && (
+            <Button
+              component={Link}
+              href="/lifecycle?kind=archive_lead"
+              endIcon={<ArrowForwardIcon />}
+              sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}
+            >
+              {formatCount(archiveSuggestions)} suggested to archive
+            </Button>
           )}
 
-          <Chip
-            label="Dead Leads"
-            onClick={handleToggleDeadLeads}
-            onDelete={showDeadLeads ? handleToggleDeadLeads : undefined}
-            variant={showDeadLeads ? 'filled' : 'outlined'}
-            size="small"
-            sx={{
-              fontWeight: 500,
-              height: { xs: 32, md: 'auto' },
-              bgcolor: showDeadLeads ? 'grey.700' : undefined,
-              color: showDeadLeads ? 'common.white' : 'text.secondary',
-              borderColor: showDeadLeads ? 'grey.700' : 'grey.300',
-              '&:hover': {
-                bgcolor: showDeadLeads ? 'grey.800' : 'grey.100',
-              },
-            }}
-          />
-          <Chip
-            label="Irrelevant"
-            onClick={handleToggleIrrelevant}
-            onDelete={showIrrelevant ? handleToggleIrrelevant : undefined}
-            variant={showIrrelevant ? 'filled' : 'outlined'}
-            size="small"
-            sx={{
-              fontWeight: 500,
-              height: { xs: 32, md: 'auto' },
-              bgcolor: showIrrelevant ? '#E65100' : undefined,
-              color: showIrrelevant ? 'common.white' : 'text.secondary',
-              borderColor: showIrrelevant ? '#E65100' : 'grey.300',
-              '&:hover': {
-                bgcolor: showIrrelevant ? '#BF360C' : 'grey.100',
-              },
-            }}
-          />
-          {activeStage && (
-            <Chip
-              label={`Filtered: ${activeStageConfig?.label}`}
-              onDelete={() => handleStageClick(null)}
-              color="primary"
-              variant="outlined"
-              size="small"
-              sx={{ fontWeight: 500, height: { xs: 32, md: 'auto' } }}
-            />
-          )}
           <Tooltip title="Sync Microsoft profile photos for all staff & students">
             <span>
               <IconButton size="small" onClick={handleSyncMsPhotos} disabled={syncingPhotos}>
@@ -691,7 +643,7 @@ export default function CRMPage() {
           </Tooltip>
           <Tooltip title="Refresh data">
             <span>
-              <IconButton size="small" onClick={fetchUsers} disabled={loading}>
+              <IconButton size="small" onClick={refreshAll} disabled={loading} aria-label="Refresh">
                 <RefreshIcon fontSize="small" />
               </IconButton>
             </span>
@@ -713,7 +665,7 @@ export default function CRMPage() {
       {/* Lifecycle filters: who (sign-in), where (stage), how active */}
       <Box
         role="group"
-        aria-label="Filter users"
+        aria-label="Filter people"
         sx={{
           display: 'flex',
           flexWrap: 'wrap',
@@ -732,7 +684,7 @@ export default function CRMPage() {
           fullWidth={false}
           SelectProps={{ displayEmpty: true }}
           InputLabelProps={{ shrink: true }}
-          sx={{ width: { xs: 'calc(50% - 4px)', sm: 180 } }}
+          sx={{ width: { xs: 'calc(50% - 4px)', sm: 220 } }}
         >
           {IDENTITY_OPTIONS.map((o) => (
             <MenuItem key={o.value} value={o.value}>
@@ -743,36 +695,17 @@ export default function CRMPage() {
         <TextField
           select
           size="small"
-          label="Stage"
-          value={lifecycleStage}
-          onChange={(e) => handleLifecycleStageChange(e.target.value as LifecycleStage | '')}
+          label="Call outcome"
+          value={outcome}
+          onChange={(e) => handleOutcomeChange(e.target.value as Outcome | '')}
           fullWidth={false}
           SelectProps={{ displayEmpty: true }}
           InputLabelProps={{ shrink: true }}
-          sx={{ width: { xs: 'calc(50% - 4px)', sm: 180 } }}
+          sx={{ width: { xs: 'calc(50% - 4px)', sm: 230 } }}
         >
-          <MenuItem value="">Any stage</MenuItem>
-          {LIFECYCLE_STAGE_KEYS.map((k) => (
-            <MenuItem key={k} value={k}>
-              {LIFECYCLE_STAGE_LABELS[k]}
-            </MenuItem>
-          ))}
-        </TextField>
-        <TextField
-          select
-          size="small"
-          label="Activity"
-          value={engagement}
-          onChange={(e) => handleEngagementChange(e.target.value as EngagementState | '')}
-          fullWidth={false}
-          SelectProps={{ displayEmpty: true }}
-          InputLabelProps={{ shrink: true }}
-          sx={{ width: { xs: 'calc(50% - 4px)', sm: 210 } }}
-        >
-          <MenuItem value="">Any activity</MenuItem>
-          {ENGAGEMENT_KEYS.map((k) => (
-            <MenuItem key={k} value={k}>
-              {ENGAGEMENT_LABELS[k]}
+          {OUTCOME_OPTIONS.map((o) => (
+            <MenuItem key={o.value || 'any'} value={o.value}>
+              {o.label}
             </MenuItem>
           ))}
         </TextField>
@@ -801,14 +734,19 @@ export default function CRMPage() {
         </Alert>
       )}
 
-      {/* Pipeline funnel — hidden in fullscreen */}
+      {/* Season, activity and stage cards (the cards are the filters); hidden in fullscreen */}
       {!isFullscreen && (
         <Box sx={{ mb: { xs: 1.5, md: 2 } }}>
-          <PipelineFunnel
-            counts={pipelineCounts}
-            activeStage={activeStage}
-            onStageClick={handleStageClick}
-            loading={loading && !pipelineCounts}
+          <PeopleSummary
+            summary={summary}
+            view={lifecycleView}
+            season={season}
+            currentExamYear={currentExamYear}
+            activity={activity || null}
+            stage={lifecycleStage || null}
+            onSeasonChange={handleSeasonChange}
+            onActivityChange={handleActivityChange}
+            onStageChange={(value) => handleLifecycleStageChange(value || '')}
           />
         </Box>
       )}
@@ -849,7 +787,7 @@ export default function CRMPage() {
             }}
           >
             <Typography variant="body2" fontWeight={600}>
-              User Management — Fullscreen
+              People, full screen
             </Typography>
             <IconButton size="small" onClick={() => setIsFullscreen(false)}>
               <FullscreenExitIcon fontSize="small" />
@@ -878,7 +816,7 @@ export default function CRMPage() {
           isFullscreen={isFullscreen}
           columnFilters={columnFilters}
           onColumnFiltersChange={handleColumnFiltersChange}
-          showLifecycleColumns={showLifecycleColumns}
+          peopleView
         />
       </Paper>
 

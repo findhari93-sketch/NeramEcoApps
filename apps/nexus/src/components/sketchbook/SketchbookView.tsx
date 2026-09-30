@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import {
   Box, Fab, IconButton, Menu, MenuItem, ListItemIcon, ListItemText, Switch, Typography, useMediaQuery, useTheme,
 } from '@neram/ui';
@@ -12,7 +12,7 @@ import RhythmCard from './RhythmCard';
 import SketchGrid, { type GridSketch } from './SketchGrid';
 import ThenAndNowCard from './ThenAndNowCard';
 import type { SketchbookPayload } from '@/lib/sketchbook-payload';
-import { istDate, weekStart, daysBetween } from '@/lib/sketchbook-rhythm';
+import { istDate } from '@/lib/sketchbook-rhythm';
 
 interface SketchbookViewProps {
   payload: SketchbookPayload | null;
@@ -47,17 +47,12 @@ export default function SketchbookView({
   const [savingOptOut, setSavingOptOut] = useState(false);
   const [savingShare, setSavingShare] = useState(false);
 
-  const todayIndex = useMemo(() => {
-    const today = istDate(new Date());
-    return daysBetween(weekStart(today), today);
-  }, []);
-
   const thisMonth = istDate(new Date()).slice(0, 7);
   const canGoNewer = month < thisMonth;
 
   return (
     <Box>
-      <RhythmCard rhythm={payload?.rhythm ?? null} loading={loading} todayIndex={todayIndex} />
+      <RhythmCard rhythm={payload?.rhythm ?? null} loading={loading} />
       {payload?.thenAndNow && <ThenAndNowCard first={payload.thenAndNow.first} latest={payload.thenAndNow.latest} />}
 
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1, minHeight: 48 }}>

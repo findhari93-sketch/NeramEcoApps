@@ -51,6 +51,8 @@ export interface StudentAvatarProps {
   tapToView?: boolean;
   /** Force the small corner glyph off, e.g. beside a chip that already says it. */
   showGlyph?: boolean;
+  /** False keeps a tap on the photo instead of opening the student snapshot. */
+  snapshot?: boolean;
   /** Styles for the avatar itself, applied whether or not it ends up ringed. */
   sx?: SxProps<Theme>;
 }
@@ -67,6 +69,7 @@ export default function StudentAvatar({
   clickable,
   tapToView,
   showGlyph,
+  snapshot,
   sx,
 }: StudentAvatarProps) {
   const { factsFor } = useStudentStageFacts();
@@ -111,6 +114,8 @@ export default function StudentAvatar({
         clickable={clickable}
         tapToView={tapToView}
         showGlyph={showGlyph}
+        userId={userId}
+        snapshot={snapshot}
         sx={sx}
       />
     );

@@ -1,5 +1,6 @@
 import type { RosterMember, RosterMemberUser } from '@neram/database';
 import { languageKeyOf, type LanguageKey } from './student-language';
+import { isLevelKey, overallLevel, type LevelKey } from './student-level';
 
 /**
  * One fact per student, folded from however many enrolments they hold.
@@ -27,6 +28,10 @@ export interface StudentFact {
   language: LanguageKey;
   /** users.limited_english. Flips the mark to its outlined form. */
   limitedEnglish: boolean;
+  /** nexus_student_skill_levels, skill 'drawing'. Null means not rated. */
+  drawingLevel: LevelKey | null;
+  /** The one level the avatar shows. See overallLevel() in student-level.ts. */
+  overallLevel: LevelKey | null;
 }
 
 /** The roster row this fold reads: the base users embed plus the language columns. */
@@ -72,6 +77,8 @@ export function foldStudentFacts(members: StageFactMember[]): Record<string, Stu
         name: member.user?.name ?? null,
         language: languageKeyOf(member.user?.home_language),
         limitedEnglish: member.user?.limited_english === true,
+        drawingLevel: null,
+        overallLevel: null,
       };
       newest.set(member.user_id, at);
       continue;
@@ -87,4 +94,29 @@ export function foldStudentFacts(members: StageFactMember[]): Record<string, Stu
   }
 
   return facts;
+}
+
+/** One row of nexus_student_skill_levels, as the stage-facts route selects it. */
+export interface SkillLevelRow {
+  student_id: string;
+  skill: string;
+  level: string;
+}
+
+/**
+ * Lays the levels over the folded facts, in place. Levels belong to the student,
+ * not to an enrolment, so there is nothing to fold: a row either names a known
+ * student or is ignored (an alumnus, someone no longer enrolled). An unknown
+ * level word is ignored too rather than trusted, so a bad row reads as "Not
+ * rated" instead of drawing a mark nobody chose.
+ */
+export function applySkillLevels(facts: Record<string, StudentFact>, rows: readonly SkillLevelRow[]): void {
+  for (const row of rows) {
+    const fact = facts[row.student_id];
+    if (!fact || row.skill !== 'drawing' || !isLevelKey(row.level)) continue;
+    fact.drawingLevel = row.level;
+  }
+  for (const fact of Object.values(facts)) {
+    fact.overallLevel = overallLevel({ drawing: fact.drawingLevel });
+  }
 }

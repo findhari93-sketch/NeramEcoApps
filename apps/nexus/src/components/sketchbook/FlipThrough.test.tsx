@@ -11,7 +11,7 @@ vi.mock('@/lib/nexus-swr', () => ({ useAuthSWR: (...a: unknown[]) => swr(...a) }
 vi.mock('./sketchbook-api', async (importOriginal) => ({ ...(await importOriginal<typeof import('./sketchbook-api')>()), ...api }));
 vi.mock('@/hooks/useNexusAuth', () => ({
   useNexusAuthContext: () => ({
-    getToken: async () => 't', getTeacherToken: async () => 'teacher-t',
+    getToken: async () => 't', getTeacherToken: async () => 'teacher-t', can: () => false,
     classrooms: [{ id: 'c1', name: 'Class 1' }], activeClassroom: { id: 'c1', name: 'Class 1' }, impersonation: null,
   }),
 }));

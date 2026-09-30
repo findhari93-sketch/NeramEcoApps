@@ -37,7 +37,7 @@ function stub(map: Record<string, Partial<Fact> & Pick<Fact, 'stage'>>) {
     ready: true,
     factsFor: (id) =>
       id && map[id]
-        ? { dormant: false, photo: null, name: null, language: 'english', limitedEnglish: false, ...map[id] }
+        ? { dormant: false, photo: null, name: null, language: 'english', limitedEnglish: false, drawingLevel: null, overallLevel: null, ...map[id] } as Fact
         : null,
   });
 }

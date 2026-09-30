@@ -4,9 +4,11 @@ import {
   getQBHelpUsed, getQBPracticeOrigins, listLiveFeatures, listSketchbookMonth,
   type QBPracticeOrigin, type SketchbookFeatureFact, type SketchbookSketchRow, type SketchbookViewer,
 } from '@neram/database/queries/nexus';
-import { computeRhythm, daysBetween, istDate, type Rhythm } from '@/lib/sketchbook-rhythm';
+import { computeRhythm, daysBetween, istDate, practiceDate, type Rhythm } from '@/lib/sketchbook-rhythm';
 import { clampDates, proratedGoal, trackingStart } from '@/lib/sketchbook-status';
-import { loadDrawingDays, loadStudentRhythmContext, type StudentRhythmContext } from '@/lib/drawing-activity-store';
+import {
+  loadDrawingDays, loadStudentRhythmContext, loadStudentTimeZones, type StudentRhythmContext,
+} from '@/lib/drawing-activity-store';
 import { reviewKindOf, summarizeReview, type ReviewKind, type ReviewSummary } from '@/lib/drawing-source';
 import { heldIdsFrom, isReleasedForStudent } from '@/lib/student-drawing-payload';
 import { loadManualEvaluations } from '@/lib/student-drawing-payload-server';
@@ -30,6 +32,8 @@ export interface SketchbookEntry extends SketchbookSketchRow {
    * teacher can see would be a record the student cannot argue with.
    */
   helpUsed: string[];
+  /** The day this drawing counts for on the student's clock, the same day its dot is on. */
+  practiceDate: string | null;
 }
 
 export interface SketchbookPayload {
@@ -44,6 +48,8 @@ export interface SketchbookPayload {
   featureOptOut: boolean;
   /** The student asked to keep their drawings out of Inspiration. */
   shareOptOut: boolean;
+  /** The student's device time zone, null when unknown (then IST). */
+  timeZone: string | null;
 }
 
 /**
@@ -51,12 +57,19 @@ export interface SketchbookPayload {
  * computes it: any drawing upload is a practice day, nothing before their own
  * tracking start counts, and a week tracking joined part way through has a
  * smaller goal. Shared by the payload and the add-sketch response.
+ *
+ * "Today" is the student's own practice day (their device time zone, 4 am
+ * rollover), so the week the teacher peeks at is the week the student sees.
  */
 export async function loadStudentRhythm(
   studentId: string,
-  today: string,
-): Promise<{ rhythm: Rhythm; context: StudentRhythmContext | null; dates: string[]; start: string }> {
-  const context = await loadStudentRhythmContext(studentId);
+  now: Date = new Date(),
+): Promise<{
+  rhythm: Rhythm; context: StudentRhythmContext | null; dates: string[]; start: string; timeZone: string | null;
+}> {
+  const [context, zones] = await Promise.all([loadStudentRhythmContext(studentId), loadStudentTimeZones([studentId])]);
+  const timeZone = zones[studentId] ?? null;
+  const today = practiceDate(now, timeZone);
   const start = context
     ? trackingStart({ classroomStartedOn: context.startedOn, enrolledAt: context.enrolledAt, reactivatedOn: context.reactivatedOn })
     : SKETCHBOOK_LAUNCH;
@@ -70,7 +83,15 @@ export async function loadStudentRhythm(
   if (goal !== rhythm.week.goal) {
     rhythm.week = { ...rhythm.week, goal, met: rhythm.week.count >= goal };
   }
-  return { rhythm, context, dates, start };
+  // Last week is shown only when it overlapped tracking, and judged the same way.
+  const last = rhythm.lastWeek;
+  if (last && daysBetween(start, last.start) <= -7) {
+    rhythm.lastWeek = null;
+  } else if (last) {
+    const lastGoal = proratedGoal(last.goal, last.start, start);
+    if (lastGoal !== last.goal) rhythm.lastWeek = { ...last, goal: lastGoal, met: last.count >= lastGoal };
+  }
+  return { rhythm, context, dates, start, timeZone };
 }
 
 /**
@@ -85,7 +106,7 @@ export function entryFor(
   heldIds: ReadonlySet<string>,
   seenBy: SketchbookEntry['seenBy'],
   featured: SketchbookFeatureFact[],
-  practice: { origin?: QBPracticeOrigin | null; helpUsed?: string[] } = {},
+  practice: { origin?: QBPracticeOrigin | null; helpUsed?: string[]; timeZone?: string | null } = {},
 ): SketchbookEntry {
   const released = viewer === 'staff' || isReleasedForStudent(row, heldIds);
   const visible = released ? row : { ...row, tutor_rating: null, tutor_marks: null, reaction: null, reviewed_at: null };
@@ -98,6 +119,7 @@ export function entryFor(
     review: summarizeReview(row, released),
     practisedFrom: practice.origin ?? null,
     helpUsed: practice.helpUsed ?? [],
+    practiceDate: row.submitted_at ? practiceDate(row.submitted_at, practice.timeZone) : null,
   };
 }
 
@@ -115,10 +137,10 @@ export function canDeleteOwnSketch(entry: SketchbookEntry): boolean {
 export async function buildSketchbookPayload(
   studentId: string,
   month: string,
-  opts: { summaryOnly: boolean; today: string; viewer: SketchbookViewer },
+  opts: { summaryOnly: boolean; viewer: SketchbookViewer; now?: Date },
 ): Promise<SketchbookPayload> {
-  const [{ rhythm, context, dates }, total, optOut, shareOptOut] = await Promise.all([
-    loadStudentRhythm(studentId, opts.today),
+  const [{ rhythm, context, dates, timeZone }, total, optOut, shareOptOut] = await Promise.all([
+    loadStudentRhythm(studentId, opts.now),
     countSketches(studentId, opts.viewer),
     getFeatureOptOut(studentId),
     getDrawingSharingOptOut(studentId),
@@ -135,6 +157,7 @@ export async function buildSketchbookPayload(
     practiceDaysThisMonth: dates.filter((d) => d.startsWith(month)).length,
     featureOptOut: optOut,
     shareOptOut,
+    timeZone,
   };
   if (opts.summaryOnly) return base;
 
@@ -166,6 +189,7 @@ export async function buildSketchbookPayload(
     entryFor(r, opts.viewer, heldIds, seen[r.id] ?? null, features[r.id] ?? [], {
       origin: (r.question_id && origins[r.question_id]) || null,
       helpUsed: help[r.id] ?? [],
+      timeZone,
     }),
   );
   // Same rule as thenAndNow() in the engine (8+ drawings, 30+ days apart), but

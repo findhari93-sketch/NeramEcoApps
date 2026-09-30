@@ -48,6 +48,9 @@ import BulkSelectBar from '@/components/students/BulkSelectBar';
 import { InfoRingLegendButton } from '@/components/students/InfoRingLegend';
 import ClassifyDrawer, { type ClassifyMode, type ClassifyPayload } from '@/components/students/ClassifyDrawer';
 import LanguageFilterBar from '@/components/students/LanguageFilterBar';
+import DrawingLevelFilterBar from '@/components/students/DrawingLevelFilterBar';
+import { useStudentStageFacts } from '@/components/students/StudentStageFactsProvider';
+import { LEVEL_FILTER_KEYS, countLevels, matchesLevelFilter, type LevelFilterKey } from '@/lib/student-level';
 import NeedsAttentionCard from '@/components/students/NeedsAttentionCard';
 import PrefillReviewSheet, {
   type PrefillSuggestion,
@@ -247,6 +250,10 @@ export default function TeacherStudents() {
   const [languages, setLanguages] = useState<LanguageKey[]>([]);
   /** The separate "cannot follow English" narrowing. It ANDs with the languages. */
   const [limitedOnly, setLimitedOnly] = useState(false);
+  // Overall level (teacher-only), read from the session lookup so the pills, the
+  // avatar bars and a level just changed in a snapshot always agree.
+  const [levels, setLevels] = useState<LevelFilterKey[]>([]);
+  const { factsFor } = useStudentStageFacts();
 
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -307,6 +314,17 @@ export default function TeacherStudents() {
     }
     setLanguages(parseLanguageParam(params.get('lang')));
     setLimitedOnly(params.get('limited') === '1');
+    setLevels(
+      (params.get('lvl') || '')
+        .split(',')
+        .filter((k): k is LevelFilterKey => (LEVEL_FILTER_KEYS as readonly string[]).includes(k)),
+    );
+  }, []);
+
+  const handleLevelsChange = useCallback((next: LevelFilterKey[]) => {
+    setLevels(next);
+    setSelectedIds(new Set());
+    patchQuery({ lvl: next.length ? next.join(',') : null });
   }, []);
 
   const handleLanguagesChange = useCallback((next: LanguageKey[]) => {
@@ -478,7 +496,7 @@ export default function TeacherStudents() {
   // relevance order. Browsing uses the chosen sort. The sign-in and account
   // filters apply either way, and always show as chips, so a narrowed list is
   // never a mystery.
-  const { visibleStudents, languageCounts, limitedCount } = useMemo(() => {
+  const { visibleStudents, languageCounts, limitedCount, levelCounts } = useMemo(() => {
     let rows: EnrolledStudent[];
     if (trimmedQuery && !mismatchOnly) {
       rows = rankPeople(students, trimmedQuery);
@@ -502,10 +520,15 @@ export default function TeacherStudents() {
     // A different question from "which language", so it narrows what is left
     // rather than widening it.
     if (limitedOnly) rows = rows.filter((s) => s.limited_english === true);
+    // Counted before its own narrowing, like the languages.
+    const levelOf = (s: EnrolledStudent) => factsFor(s.id)?.overallLevel ?? null;
+    const byLevel = countLevels(rows.map(levelOf));
+    rows = rows.filter((s) => matchesLevelFilter(levelOf(s), levels));
     return {
       visibleStudents: trimmedQuery ? rows : sortStudents(rows, sort),
       languageCounts: byLanguage,
       limitedCount: limitedTotal,
+      levelCounts: byLevel,
     };
   }, [
     students,
@@ -516,6 +539,8 @@ export default function TeacherStudents() {
     filters,
     languages,
     limitedOnly,
+    levels,
+    factsFor,
     sort,
     now,
     decisionDays,
@@ -1228,6 +1253,12 @@ export default function TeacherStudents() {
               onChange={handleLanguagesChange}
               onLimitedChange={handleLimitedOnlyChange}
             />
+          </Box>
+        )}
+
+        {!mismatchOnly && (
+          <Box sx={{ mb: 1 }}>
+            <DrawingLevelFilterBar value={levels} counts={levelCounts} onChange={handleLevelsChange} />
           </Box>
         )}
 

@@ -4,8 +4,10 @@ import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Box, Button, Typography, CircularProgress, Alert } from '@neram/ui';
 import { getMsalErrorMessage } from '@neram/auth';
+import SupportAgentOutlinedIcon from '@mui/icons-material/SupportAgentOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { isSafeInternalPath, rememberReturnPath, takeReturnPath } from '@/lib/return-path';
+import SlowStartHelp from '@/components/help/SlowStartHelp';
 
 function LoginContent() {
   const router = useRouter();
@@ -84,6 +86,7 @@ function LoginContent() {
       <Box sx={{ textAlign: 'center', py: 4 }}>
         <CircularProgress />
         <Typography sx={{ mt: 2 }}>Authenticating...</Typography>
+        <SlowStartHelp from="/login" />
       </Box>
     );
   }
@@ -160,6 +163,25 @@ function LoginContent() {
         }}
       >
         Parent? Sign in with the ID Neram gave you
+      </Button>
+
+      {/*
+        The only way off this page for someone whose sign-in keeps failing. It
+        needs no account, and lands with staff in Teams (see /help).
+      */}
+      <Button
+        component="a"
+        href="/help?problem=cant_sign_in&from=%2Flogin"
+        variant="text"
+        startIcon={<SupportAgentOutlinedIcon />}
+        sx={{
+          mt: 0.5,
+          textTransform: 'none',
+          minHeight: 48,
+          fontSize: '0.95rem',
+        }}
+      >
+        Can&apos;t sign in? Get help
       </Button>
 
       <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>

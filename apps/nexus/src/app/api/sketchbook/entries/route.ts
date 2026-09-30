@@ -5,7 +5,7 @@ import {
 } from '@neram/database/queries/nexus';
 import { getRequestUser } from '@/lib/study-materials';
 import { ApiError, errorResponse } from '@/lib/api-errors';
-import { istDate } from '@/lib/sketchbook-rhythm';
+import { practiceDate } from '@/lib/sketchbook-rhythm';
 import { loadStudentRhythm } from '@/lib/sketchbook-payload';
 import { parseQuality } from '@/lib/image-quality';
 
@@ -79,10 +79,12 @@ export async function POST(request: NextRequest) {
       if (qualityError) console.error('[sketchbook] could not store the photo measurement:', qualityError.message);
     }
 
-    const today = istDate(submission.submitted_at || new Date());
+    // The rhythm counts every drawing upload on the student's own clock; see
+    // loadStudentRhythm. The same clock dates this sketch for the ledger.
+    const { rhythm, timeZone } = await loadStudentRhythm(caller.id);
+    const today = practiceDate(submission.submitted_at || new Date(), timeZone);
     // The practice-days table is now only the points ledger (one award per
-    // sketchbook day). The rhythm itself counts every drawing upload; see
-    // loadStudentRhythm.
+    // sketchbook day).
     const { isNewDay } = await upsertPracticeDay(caller.id, today, submission.id);
 
     const classroom = await getStudentPrimaryClassroom(caller.id);
@@ -100,8 +102,6 @@ export async function POST(request: NextRequest) {
         metadata: { submission_id: submission.id, practice_date: today },
       }).catch(() => {});
     }
-
-    const { rhythm } = await loadStudentRhythm(caller.id, today);
 
     return NextResponse.json(
       { sketch: { ...submission, status: 'completed', thumbnail_url: thumbnailUrl, inspiration_item_id: inspirationItemId }, rhythm, isNewDay },

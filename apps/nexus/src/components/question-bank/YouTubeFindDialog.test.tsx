@@ -136,10 +136,47 @@ describe('YouTubeFindDialog', () => {
     expect(screen.queryByRole('link', { name: 'Open Settings' })).toBeNull();
   });
 
-  it('says when nothing on the channel matches this paper', async () => {
+  it('says when nothing on the channel matches this paper, and how many uploads it read', async () => {
     fetchMock.mockResolvedValue(pageResponse([], 40, null));
     open();
     fireEvent.click(screen.getByRole('button', { name: 'Search the channel' }));
     expect(await screen.findByText(/No videos for this paper/)).not.toBeNull();
+    expect(screen.getByText(/Read 40 uploads from neramClasses/)).not.toBeNull();
+  });
+
+  describe('the sample title', () => {
+    beforeEach(() => window.localStorage.clear());
+
+    it("offers this paper's session and shift in the sample it starts with", () => {
+      open({ year: 2019, session: 'Session 2', shift: 'afternoon' });
+      const field = screen.getByLabelText('A title from this paper') as HTMLTextAreaElement;
+      expect(field.value).toBe('Q no 22 - JEE 2019 Solution Video Session 2 AN - Math Solution');
+      expect(screen.getByText(/Reads as question 22, Math/)).not.toBeNull();
+    });
+
+    it('sends the sample the teacher pasted with every page', async () => {
+      fetchMock.mockResolvedValue(pageResponse([], 40, null));
+      open({ year: 2019, session: 'Session 2', shift: 'afternoon' });
+      const sample = 'Q no 50 - JEE 2019 Solution Video Session 2 AN - Aptitude Solution';
+      fireEvent.change(screen.getByLabelText('A title from this paper'), { target: { value: sample } });
+      expect(screen.getByText(/Reads as question 50, Aptitude/)).not.toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Search the channel' }));
+      await screen.findByText(/No videos for this paper/);
+      expect(new URL(String(fetchMock.mock.calls[0][0]), 'http://x').searchParams.get('sample')).toBe(sample);
+    });
+
+    it('will not search with a sample that has no question number or year', () => {
+      open({ year: 2019 });
+      fireEvent.change(screen.getByLabelText('A title from this paper'), { target: { value: 'Q no 5 - Aptitude Solution' } });
+      expect(screen.getByText(/must name the year \(2019\)/)).not.toBeNull();
+      expect((screen.getByRole('button', { name: 'Search the channel' }) as HTMLButtonElement).disabled).toBe(true);
+    });
+
+    it('remembers the pasted sample for this paper', () => {
+      const sample = 'Q no 50 - JEE 2019 Solution Video Session 2 AN - Aptitude Solution';
+      open({ year: 2019 });
+      fireEvent.change(screen.getByLabelText('A title from this paper'), { target: { value: sample } });
+      expect(window.localStorage.getItem('qb-yt-sample:p2014')).toBe(sample);
+    });
   });
 });

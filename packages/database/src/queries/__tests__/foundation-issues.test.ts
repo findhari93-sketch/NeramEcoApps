@@ -11,6 +11,13 @@ import {
   addIssueComment,
   getIssueActivityLog,
   markIssueSeen,
+  startFoundationIssue,
+  requestIssueInfo,
+  resumeFoundationIssue,
+  closeFoundationIssueByStaff,
+  getExpiredAutoCloseIssues,
+  assignFoundationIssue,
+  WAITING_AUTO_CLOSE_DAYS,
 } from '../nexus/foundation';
 
 /**
@@ -33,6 +40,7 @@ function createChainableMock() {
     delete: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     lt: vi.fn().mockReturnThis(),
+    in: vi.fn().mockReturnThis(),
     order: vi.fn().mockReturnThis(),
     single: vi.fn(() => Promise.resolve(resolvedValue)),
     then: vi.fn((resolve: any) => resolve(resolvedValue)),
@@ -46,7 +54,7 @@ function createChainableMock() {
 
   // Make chainable methods return the chain
   for (const method of [
-    'select', 'eq', 'lt', 'order', 'insert', 'update', 'delete',
+    'select', 'eq', 'lt', 'in', 'order', 'insert', 'update', 'delete',
   ]) {
     const original = chain[method];
     chain[method] = vi.fn((...args: any[]) => {
@@ -312,9 +320,12 @@ describe('confirmFoundationIssue', () => {
 
 describe('reopenFoundationIssue', () => {
   test('should set status to open and clear resolution fields', async () => {
+    // One mock value answers both the state read and the update, so this is
+    // the ticket as it stands BEFORE the reopen: unowned, awaiting confirmation.
     const mockIssue = {
       id: 'issue-1',
-      status: 'open',
+      status: 'awaiting_confirmation',
+      assigned_to: null,
       resolved_by: null,
       resolved_at: null,
       resolution_note: null,
@@ -344,6 +355,181 @@ describe('reopenFoundationIssue', () => {
         reason: 'Still broken',
       })
     );
+  });
+
+  test('goes back to the same assignee as in_progress, not to the queue', async () => {
+    const { mock, setResolvedValue } = createChainableMock();
+    setResolvedValue({ data: { id: 'issue-1', status: 'closed', assigned_to: 'teacher-1' }, error: null });
+
+    await reopenFoundationIssue('issue-1', 'student-1', 'Back again', mock);
+
+    expect(mock.update).toHaveBeenCalledWith(expect.objectContaining({ status: 'in_progress' }));
+    expect(mock.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'reopened', old_status: 'closed', new_status: 'in_progress' })
+    );
+  });
+
+  test('names resolution_code only when there is one to clear', async () => {
+    const withoutCode = createChainableMock();
+    withoutCode.setResolvedValue({ data: { id: 'i', status: 'awaiting_confirmation', assigned_to: null }, error: null });
+    await reopenFoundationIssue('i', 's', 'x', withoutCode.mock);
+    expect(withoutCode.mock.update.mock.calls[0][0]).not.toHaveProperty('resolution_code');
+
+    const withCode = createChainableMock();
+    withCode.setResolvedValue({ data: { id: 'i', status: 'closed', assigned_to: null, resolution_code: 'fixed' }, error: null });
+    await reopenFoundationIssue('i', 's', 'x', withCode.mock);
+    expect(withCode.mock.update.mock.calls[0][0]).toHaveProperty('resolution_code', null);
+  });
+});
+
+// ============================================
+// lifecycle moves
+// ============================================
+
+describe('startFoundationIssue', () => {
+  test('claims an unowned ticket and tells the student in their thread', async () => {
+    const { mock, setResolvedValue } = createChainableMock();
+    setResolvedValue({ data: { id: 'issue-1', status: 'open', assigned_to: null }, error: null });
+
+    await startFoundationIssue('issue-1', 'teacher-1', mock);
+
+    expect(mock.update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'in_progress', assigned_to: 'teacher-1', assigned_by: 'teacher-1' })
+    );
+    expect(mock.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'accepted',
+        old_status: 'open',
+        new_status: 'in_progress',
+        visible_to_student: true,
+      })
+    );
+  });
+
+  test('keeps an existing assignee', async () => {
+    const { mock, setResolvedValue } = createChainableMock();
+    setResolvedValue({ data: { id: 'issue-1', status: 'open', assigned_to: 'teacher-2' }, error: null });
+
+    await startFoundationIssue('issue-1', 'teacher-1', mock);
+
+    expect(mock.update.mock.calls[0][0]).not.toHaveProperty('assigned_to');
+  });
+});
+
+describe('requestIssueInfo', () => {
+  test(`waits on the student, closes in ${WAITING_AUTO_CLOSE_DAYS} days, and lights their unread dot`, async () => {
+    const { mock, setResolvedValue } = createChainableMock();
+    setResolvedValue({ data: { id: 'issue-1', status: 'in_progress', assigned_to: 'teacher-1' }, error: null });
+
+    await requestIssueInfo('issue-1', 'teacher-1', 'Which browser?', mock);
+
+    const update = mock.update.mock.calls[0][0];
+    expect(update.status).toBe('waiting_on_student');
+    expect(update.last_reply_at).toBeDefined();
+    const days = (new Date(update.auto_close_at).getTime() - Date.now()) / 86400000;
+    expect(days).toBeGreaterThan(WAITING_AUTO_CLOSE_DAYS - 0.1);
+    expect(days).toBeLessThan(WAITING_AUTO_CLOSE_DAYS + 0.1);
+
+    expect(mock.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'info_requested',
+        reason: 'Which browser?',
+        new_status: 'waiting_on_student',
+        visible_to_student: true,
+      })
+    );
+  });
+});
+
+describe('resumeFoundationIssue', () => {
+  test('a student reply hands it back to the assignee and stops the clock', async () => {
+    const { mock, setResolvedValue } = createChainableMock();
+    setResolvedValue({ data: { id: 'issue-1', status: 'waiting_on_student', assigned_to: 'teacher-1' }, error: null });
+
+    await resumeFoundationIssue('issue-1', 'student-1', { byStudent: true }, mock);
+
+    expect(mock.update).toHaveBeenCalledWith(expect.objectContaining({ status: 'in_progress', auto_close_at: null }));
+    expect(mock.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'student_replied', old_status: 'waiting_on_student', visible_to_student: true })
+    );
+  });
+
+  test('staff pressing Resume is logged as their move', async () => {
+    const { mock, setResolvedValue } = createChainableMock();
+    setResolvedValue({ data: { id: 'issue-1', status: 'waiting_on_student', assigned_to: 'teacher-1' }, error: null });
+
+    await resumeFoundationIssue('issue-1', 'teacher-1', { byStudent: false }, mock);
+
+    expect(mock.insert).toHaveBeenCalledWith(expect.objectContaining({ action: 'marked_in_progress' }));
+  });
+});
+
+describe('closeFoundationIssueByStaff', () => {
+  test('closes with the outcome and note, and no confirmation clock', async () => {
+    const { mock, setResolvedValue } = createChainableMock();
+    setResolvedValue({ data: { id: 'issue-1', status: 'in_progress', assigned_to: 'teacher-1' }, error: null });
+
+    await closeFoundationIssueByStaff('issue-1', 'teacher-1', 'duplicate', 'Same as NXS-0100', mock);
+
+    expect(mock.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'closed',
+        resolution_code: 'duplicate',
+        resolution_note: 'Same as NXS-0100',
+        resolved_by: 'teacher-1',
+        auto_close_at: null,
+      })
+    );
+    expect(mock.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'closed_by_staff', old_status: 'in_progress', new_status: 'closed' })
+    );
+  });
+});
+
+describe('assignFoundationIssue', () => {
+  test('logs the real old status, visible to the student', async () => {
+    const { mock, setResolvedValue } = createChainableMock();
+    setResolvedValue({ data: { id: 'issue-1', status: 'waiting_on_student', assigned_to: null }, error: null });
+
+    await assignFoundationIssue('issue-1', 'teacher-2', 'teacher-1', mock);
+
+    expect(mock.insert).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'assigned', old_status: 'waiting_on_student', visible_to_student: true })
+    );
+  });
+});
+
+describe('resolveFoundationIssue outcome', () => {
+  test('writes resolution_code when given and the real previous status', async () => {
+    const { mock, setResolvedValue } = createChainableMock();
+    setResolvedValue({ data: { id: 'issue-1', status: 'waiting_on_student', assigned_to: 't' }, error: null });
+
+    await resolveFoundationIssue('issue-1', 't', 'Answered on call', mock, 'answered');
+
+    expect(mock.update.mock.calls[0][0]).toHaveProperty('resolution_code', 'answered');
+    expect(mock.insert).toHaveBeenCalledWith(expect.objectContaining({ old_status: 'waiting_on_student' }));
+  });
+
+  test('never names resolution_code when not given, so an unmigrated database still accepts it', async () => {
+    const { mock, setResolvedValue } = createChainableMock();
+    setResolvedValue({ data: { id: 'issue-1', status: 'in_progress', assigned_to: 't' }, error: null });
+
+    await resolveFoundationIssue('issue-1', 't', 'Fixed', mock);
+
+    expect(mock.update.mock.calls[0][0]).not.toHaveProperty('resolution_code');
+  });
+});
+
+describe('getExpiredAutoCloseIssues', () => {
+  test('finds both student-turn statuses past their clock', async () => {
+    const { mock, setResolvedValue } = createChainableMock();
+    setResolvedValue({ data: [{ id: 'a' }, { id: 'b' }], error: null });
+
+    const result = await getExpiredAutoCloseIssues(mock);
+
+    expect(mock.in).toHaveBeenCalledWith('status', ['awaiting_confirmation', 'waiting_on_student']);
+    expect(mock.lt).toHaveBeenCalledWith('auto_close_at', expect.any(String));
+    expect(result).toHaveLength(2);
   });
 });
 

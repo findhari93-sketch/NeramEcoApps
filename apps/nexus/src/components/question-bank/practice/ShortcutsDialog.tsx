@@ -6,7 +6,7 @@ import CloseIcon from '@mui/icons-material/Close';
 const SHORTCUTS: { keys: string[]; description: string }[] = [
   { keys: ['→', 'J'], description: 'Next question' },
   { keys: ['←', 'K'], description: 'Previous question' },
-  { keys: ['A', 'B', 'C', 'D'], description: 'Choose an option (or 1 to 4)' },
+  { keys: ['A', 'B', 'C', 'D', 'E'], description: 'Choose an option (or 1 to 5)' },
   { keys: ['Enter'], description: 'Check the answer, then go to the next' },
   { keys: ['G', '18'], description: 'Jump to question 18' },
   { keys: ['?'], description: 'Show these shortcuts' },

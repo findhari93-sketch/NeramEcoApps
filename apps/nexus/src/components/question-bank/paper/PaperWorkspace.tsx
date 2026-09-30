@@ -70,7 +70,7 @@ export interface PaperWorkspaceProps {
   /** Tag ids per question id, the same batch tagCounts is derived from. */
   tagsByQuestion?: Record<string, string[]>;
   /** The paper being viewed, for the form's Source panel. */
-  paper?: PaperFallback;
+  paper?: PaperFallback & { shift?: string | null };
   /**
    * Source rows by question id. The source row is more precise than the paper:
    * it carries that question's own session, shift and printed number. Without it
@@ -642,6 +642,8 @@ export default function PaperWorkspace({
           rows={findRows}
           examType={paper?.exam_type ?? null}
           year={paper?.year ?? null}
+          session={paper?.session ?? null}
+          shift={paper?.shift ?? null}
           getToken={getToken}
           canConnect={canConnectYouTube}
           onFill={(fills) => {

@@ -163,6 +163,7 @@ export default function RecapWatch({
     () =>
       (recap?.sections || []).map((s) => ({
         id: s.id,
+        start_timestamp_seconds: s.start_timestamp_seconds,
         end_timestamp_seconds: s.end_timestamp_seconds,
         passed: passedIds.has(s.id),
       })),

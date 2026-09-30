@@ -225,7 +225,7 @@ export default function ControlBar(props: ControlBarProps) {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, pb: 0.5, px: 0.5 }}>
           <LockRoundedIcon sx={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }} />
           <Typography sx={{ fontSize: 11, color: 'rgba(255,255,255,0.7)' }}>
-            The rest unlocks when you pass this checkpoint
+            Skipping ahead opens as you watch and pass each checkpoint
           </Typography>
         </Box>
       )}

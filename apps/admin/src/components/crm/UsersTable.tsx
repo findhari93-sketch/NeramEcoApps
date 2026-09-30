@@ -50,7 +50,13 @@ import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import BedtimeOutlinedIcon from '@mui/icons-material/BedtimeOutlined';
 import type { UserJourney, PipelineStage, EngagementState } from '@neram/database';
-import { PIPELINE_STAGE_CONFIG, LIFECYCLE_STAGE_LABELS, ENGAGEMENT_LABELS } from '@neram/database';
+import {
+  PIPELINE_STAGE_CONFIG,
+  LIFECYCLE_STAGE_LABELS,
+  ENGAGEMENT_LABELS,
+  PEOPLE_STAGE_LABELS,
+  ACTIVITY_SOURCE_LABELS,
+} from '@neram/database';
 import AuthStatusBadge from '../leads/AuthStatusBadge';
 import CopyablePhone from '@/components/CopyablePhone';
 
@@ -85,6 +91,44 @@ interface UsersTableProps {
   onColumnFiltersChange?: (filters: MRT_ColumnFiltersState) => void;
   /** Show Stage and Last active (rows from user_lifecycle_view carry them). */
   showLifecycleColumns?: boolean;
+  /**
+   * The People page (/crm): Exam year instead of Exam Batch, one plain-words
+   * Stage column instead of Pipeline, and Last active says what they did.
+   */
+  peopleView?: boolean;
+}
+
+/** "2027", or "2027 est." when the year was guessed from the sign-up date. */
+function ExamYearText({ user, compact }: { user: UserJourney; compact?: boolean }) {
+  const year = user.exam_year;
+  if (!year) {
+    return (
+      <Typography variant="caption" color="text.secondary">
+        --
+      </Typography>
+    );
+  }
+  const estimated = user.exam_year_source === 'signup';
+  const text = (
+    <Typography
+      component="span"
+      variant={compact ? 'caption' : 'body2'}
+      sx={{ fontWeight: 600, color: estimated ? 'text.secondary' : 'text.primary', whiteSpace: 'nowrap' }}
+    >
+      {compact ? `${year} exam` : year}
+      {estimated && (
+        <Box component="span" sx={{ fontWeight: 500, ml: 0.5 }}>
+          est.
+        </Box>
+      )}
+    </Typography>
+  );
+  if (!estimated) return text;
+  return (
+    <Tooltip title="Estimated from the sign-up date. They have not told us their exam year." arrow>
+      {text}
+    </Tooltip>
+  );
 }
 
 const ENGAGEMENT_ICON: Record<EngagementState, typeof BoltIcon> = {
@@ -177,7 +221,15 @@ function handleExportCsv(rows: UserJourney[]) {
 }
 
 // ─── Mobile Card View ───────────────────────────────────────────────
-function MobileUserCard({ user, onClick }: { user: UserJourney; onClick: () => void }) {
+function MobileUserCard({
+  user,
+  onClick,
+  peopleView,
+}: {
+  user: UserJourney;
+  onClick: () => void;
+  peopleView?: boolean;
+}) {
   const stage = user.pipeline_stage;
   const config = PIPELINE_STAGE_CONFIG[stage];
   const isArchived = user.lifecycle_status === 'archived';
@@ -276,6 +328,16 @@ function MobileUserCard({ user, onClick }: { user: UserJourney; onClick: () => v
 
         {/* Status chips row */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.75, flexWrap: 'wrap' }}>
+          {peopleView ? (
+            <>
+              <Chip
+                label={user.lifecycle_stage ? PEOPLE_STAGE_LABELS[user.lifecycle_stage] : 'Unknown'}
+                size="small"
+                sx={{ height: 22, fontSize: 11, fontWeight: 600, borderRadius: 0.75, bgcolor: 'grey.100' }}
+              />
+              <ExamYearText user={user} compact />
+            </>
+          ) : (
           <Chip
             label={config?.label || stage}
             size="small"
@@ -290,6 +352,7 @@ function MobileUserCard({ user, onClick }: { user: UserJourney; onClick: () => v
               height: 22,
             }}
           />
+          )}
           {user.interest_course && (
             <Chip
               label={courseLabels[user.interest_course] || user.interest_course}
@@ -336,7 +399,7 @@ function MobileUserCard({ user, onClick }: { user: UserJourney; onClick: () => v
               {formatCurrency(user.total_paid)}
             </Typography>
           )}
-          {user.academic_year && (
+          {!peopleView && user.academic_year && (
             <Chip label={user.academic_year} size="small" sx={{ height: 20, fontSize: 9, fontFamily: 'monospace', bgcolor: 'grey.100', color: 'text.secondary', borderRadius: 0.75 }} />
           )}
           {user.contacted_status === 'dead_lead' && (
@@ -363,6 +426,7 @@ function MobileCardList({
   globalFilter,
   onGlobalFilterChange,
   onRowClick,
+  peopleView,
 }: UsersTableProps) {
   const totalPages = Math.ceil(totalCount / pagination.pageSize);
 
@@ -419,6 +483,7 @@ function MobileCardList({
             <MobileUserCard
               key={user.id}
               user={user}
+              peopleView={peopleView}
               onClick={() => onRowClick(user.id)}
             />
           ))}
@@ -483,6 +548,7 @@ export default function UsersTable(props: UsersTableProps) {
     columnFilters,
     onColumnFiltersChange,
     showLifecycleColumns,
+    peopleView,
   } = props;
 
   const theme = useTheme();
@@ -612,7 +678,18 @@ export default function UsersTable(props: UsersTableProps) {
           </Box>
         ),
       },
-      {
+      ...(peopleView
+        ? ([
+            {
+              accessorKey: 'exam_year',
+              header: 'Exam year',
+              size: 150,
+              enableColumnFilter: false,
+              Cell: ({ row }) => <ExamYearText user={row.original} />,
+            },
+          ] as MRT_ColumnDef<UserJourney>[])
+        : []),
+      ...(peopleView ? [] : ([{
         accessorKey: 'academic_year',
         header: 'Exam Batch',
         size: 110,
@@ -642,7 +719,7 @@ export default function UsersTable(props: UsersTableProps) {
             />
           );
         },
-      },
+      }] as MRT_ColumnDef<UserJourney>[])),
       {
         accessorKey: 'phone',
         header: 'Phone',
@@ -667,7 +744,7 @@ export default function UsersTable(props: UsersTableProps) {
           );
         },
       },
-      {
+      ...(peopleView ? [] : ([{
         accessorKey: 'pipeline_stage',
         header: 'Pipeline',
         size: 140,
@@ -691,13 +768,13 @@ export default function UsersTable(props: UsersTableProps) {
             />
           );
         },
-      },
-      ...(showLifecycleColumns
+      }] as MRT_ColumnDef<UserJourney>[])),
+      ...(showLifecycleColumns || peopleView
         ? ([
             {
               accessorKey: 'lifecycle_stage',
               header: 'Stage',
-              size: 130,
+              size: peopleView ? 190 : 130,
               Cell: ({ row }) => {
                 const stage = row.original.lifecycle_stage;
                 if (!stage) {
@@ -709,7 +786,7 @@ export default function UsersTable(props: UsersTableProps) {
                 }
                 return (
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    {LIFECYCLE_STAGE_LABELS[stage] || stage}
+                    {(peopleView ? PEOPLE_STAGE_LABELS[stage] : LIFECYCLE_STAGE_LABELS[stage]) || stage}
                   </Typography>
                 );
               },
@@ -722,6 +799,22 @@ export default function UsersTable(props: UsersTableProps) {
                 const at = row.original.last_meaningful_activity_at;
                 const engagement = row.original.engagement;
                 const Icon = engagement ? ENGAGEMENT_ICON[engagement] : null;
+                if (peopleView) {
+                  // The activity cards already say how active; say what they did.
+                  const source = row.original.last_meaningful_activity_source;
+                  return (
+                    <Box>
+                      <Typography variant="body2" sx={{ fontSize: 13, fontWeight: 500 }}>
+                        {at ? timeAgo(at) : 'Nothing yet'}
+                      </Typography>
+                      {at && source && (
+                        <Typography variant="caption" sx={{ fontSize: 12, color: 'text.secondary' }}>
+                          {ACTIVITY_SOURCE_LABELS[source] || source}
+                        </Typography>
+                      )}
+                    </Box>
+                  );
+                }
                 return (
                   <Box>
                     <Typography variant="body2" sx={{ fontSize: 12, fontWeight: 500 }}>
@@ -954,7 +1047,7 @@ export default function UsersTable(props: UsersTableProps) {
         ),
       },
     ],
-    [showLifecycleColumns, onDiagnosticsClick]
+    [showLifecycleColumns, peopleView, onDiagnosticsClick]
   );
 
   const table = useMaterialReactTable({

@@ -8,6 +8,7 @@ import { useNavBadges } from '@/components/NavBadgeProvider';
 import DrawingsHubShell from '@/components/drawings/DrawingsHubShell';
 import FlipThrough from '@/components/sketchbook/FlipThrough';
 import ClassRhythmList from '@/components/sketchbook/ClassRhythmList';
+import DrawingLevelSort from '@/components/sketchbook/DrawingLevelSort';
 import { HUB_PATH, activeHubTab, type HubTabKey } from '@/lib/drawings-hub';
 import { patchQuery, readSearch } from '@/lib/list-url-state';
 import { useDraftSweep } from '@/hooks/useDraftSweep';
@@ -19,7 +20,8 @@ import { useDraftSweep } from '@/hooks/useDraftSweep';
  */
 export default function TeacherDrawingsPage() {
   useDraftSweep();
-  const { activeClassroom } = useNexusAuthContext();
+  const { activeClassroom, can } = useNexusAuthContext();
+  const canSetLevels = can('coord.student.level');
   const { getBadgeCount } = useNavBadges();
   const [tab, setTab] = useState<HubTabKey>('flip');
   const pending = getBadgeCount(HUB_PATH.teacher);
@@ -49,15 +51,21 @@ export default function TeacherDrawingsPage() {
   return (
     <DrawingsHubShell
       role="teacher"
-      active={tab}
+      active={tab === 'levels' && !canSetLevels ? 'flip' : tab}
       subtitle={activeClassroom.name}
       backHref="/teacher/dashboard"
       countFor={(key) => (key === 'flip' ? pending : undefined)}
       onSelect={select}
     >
-      {tab === 'rhythm'
-        ? <ClassRhythmList classroomId={activeClassroom.id} />
-        : <FlipThrough classroomId={activeClassroom.id} />}
+      {tab === 'rhythm' ? (
+        <ClassRhythmList classroomId={activeClassroom.id} />
+      ) : tab === 'levels' && canSetLevels ? (
+        // Managers only. A teacher who follows a ?view=levels link lands on
+        // Flip through, which is what the tab bar shows them too.
+        <DrawingLevelSort key={activeClassroom.id} classroomId={activeClassroom.id} />
+      ) : (
+        <FlipThrough classroomId={activeClassroom.id} />
+      )}
     </DrawingsHubShell>
   );
 }

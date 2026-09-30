@@ -27,9 +27,16 @@ export type ExamAccess =
   | { ok: true; caller: ExamCaller; exam: NexusExam }
   | { ok: false; response: NextResponse };
 
-/** Staff means anyone with a staff_role or the teaching flag, never user_type === 'admin'. */
+/**
+ * Staff means anyone with a staff_role, or a teacher/admin user_type with none
+ * (the same fallback as resolveStaffRole).
+ *
+ * NEVER can_teach: it defaults to true on every users row, students included,
+ * so reading it made every student staff (NXS-0126). It only decides who may
+ * tutor a class, among people who are already staff.
+ */
 export function isStaff(caller: { user_type: string; staff_role: string | null; can_teach: boolean }): boolean {
-  return Boolean(caller.staff_role) || caller.can_teach || caller.user_type === 'teacher' || caller.user_type === 'admin';
+  return Boolean(caller.staff_role) || caller.user_type === 'teacher' || caller.user_type === 'admin';
 }
 
 export async function resolveExamCaller(

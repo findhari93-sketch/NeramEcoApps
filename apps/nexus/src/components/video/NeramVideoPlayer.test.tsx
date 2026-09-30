@@ -22,10 +22,16 @@ import type { VideoGate } from '@/lib/video-gate';
 const WATERMARK = { name: 'Test Student', code: 'NX-ABC123' };
 
 /** A gate as computeGate would return it, without needing checkpoint fixtures. */
-function gateFor({ unlocked = 120, passed = false }: { unlocked?: number; passed?: boolean } = {}): VideoGate {
+function gateFor({
+  unlocked = 120,
+  passed = false,
+  ceiling,
+}: { unlocked?: number; passed?: boolean; ceiling?: number } = {}): VideoGate {
   return {
     unlockedUntil: unlocked,
-    seekCeiling: unlocked > 0 ? unlocked : Number.POSITIVE_INFINITY,
+    // `ceiling` is the played point computeGate derives from playedUntilSeconds.
+    // Without it the gate is the older shape, where the two are the same.
+    seekCeiling: ceiling ?? (unlocked > 0 ? unlocked : Number.POSITIVE_INFINITY),
     activeCheckpointId: passed ? null : 'cp',
     currentSegmentPassed: passed,
     maxRate: passed ? 1.5 : 1,
@@ -108,7 +114,13 @@ beforeEach(() => {
 });
 
 function setup(
-  opts: { unlocked?: number; passed?: boolean; resumeAt?: number; onLoadedMetadata?: () => void } = {},
+  opts: {
+    unlocked?: number;
+    passed?: boolean;
+    ceiling?: number;
+    resumeAt?: number;
+    onLoadedMetadata?: () => void;
+  } = {},
 ) {
   const ref = createRef<HTMLVideoElement>() as React.MutableRefObject<HTMLVideoElement | null>;
   const onCheckpointReached = vi.fn();
@@ -395,6 +407,60 @@ describe('NeramVideoPlayer: resuming', () => {
     const { video } = setup({ onLoadedMetadata });
     fire(video, 'loadedmetadata');
     expect(onLoadedMetadata).toHaveBeenCalledWith(600);
+  });
+});
+
+describe('NeramVideoPlayer: a skip cannot reach the quiz (NXS-0130)', () => {
+  /**
+   * A student watched 11 seconds, tapped the bar, and landed exactly on the
+   * checkpoint: a press past the lock used to be clamped onto the boundary, and
+   * the next tick opened the quiz. The position was saved, so every later visit
+   * resumed there and asked the questions before a frame played. With a played
+   * ceiling below the boundary, controls stop at what was watched instead.
+   */
+  it('lands a press in the unwatched part of the section on the played point', () => {
+    const { video, ctl, onCheckpointReached, onBlockedSeek } = setup({ unlocked: 120, ceiling: 11 });
+    fire(video, 'loadedmetadata');
+    const rail = railAt();
+    act(() => {
+      fireEvent.pointerDown(rail, { pointerId: 1, clientX: xForSeconds(500) });
+      fireEvent.pointerUp(rail, { pointerId: 1, clientX: xForSeconds(500) });
+    });
+    expect(ctl.now()).toBe(11);
+    expect(onBlockedSeek).toHaveBeenCalled();
+    fire(video, 'timeupdate');
+    expect(onCheckpointReached).not.toHaveBeenCalled();
+  });
+
+  it('resumes at the played point, and pressing play does not open the quiz', () => {
+    const { video, ctl, onCheckpointReached } = setup({ unlocked: 120, ceiling: 71, resumeAt: 120 });
+    fire(video, 'loadedmetadata');
+    expect(ctl.now()).toBe(71);
+    fire(video, 'timeupdate'); // the resume-seek's own tick
+    video.play();
+    fire(video, 'timeupdate');
+    expect(onCheckpointReached).not.toHaveBeenCalled();
+    expect(ctl.isPaused()).toBe(false);
+  });
+
+  it('does not fight ordinary playback that runs ahead of the played point', () => {
+    // The played ceiling trails the playhead by a render while it plays. The
+    // snap-back guards the checkpoint, not the played point, so it must not
+    // yank a student back mid-sentence.
+    const { video, ctl } = setup({ unlocked: 120, ceiling: 11 });
+    ctl.seekTo(40);
+    fire(video, 'seeked');
+    fire(video, 'timeupdate');
+    expect(ctl.now()).toBe(40);
+  });
+
+  it('still opens the quiz when playback genuinely reaches the checkpoint', () => {
+    const { video, ctl, onCheckpointReached } = setup({ unlocked: 120, ceiling: 119 });
+    video.play();
+    ctl.seekTo(120.2);
+    fire(video, 'timeupdate');
+    expect(onCheckpointReached).toHaveBeenCalledTimes(1);
+    expect(ctl.isPaused()).toBe(true);
   });
 });
 

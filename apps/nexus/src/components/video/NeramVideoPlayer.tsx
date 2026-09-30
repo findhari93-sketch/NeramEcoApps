@@ -40,9 +40,14 @@ import type { TextTrackDescriptor, VideoSource, VideoSurfaceEvents, VideoTranspo
  *   1. Every control that can move the playhead calls `requestSeek`, which
  *      clamps to `gate.seekCeiling` before the transport ever sees it. The scrub
  *      bar additionally cannot express the gesture: its thumb sticks at the lock.
+ *      With a played point that ceiling is where the student has watched to, so
+ *      a jump cannot land on the checkpoint and open its quiz (NXS-0130).
  *   2. Any seek arriving another way (console, OS media key, a surface we do not
- *      control) is snapped back on `seeked`, before the frame it jumped to is
- *      painted, and on the next tick for the YouTube path which has no `seeked`.
+ *      control) is snapped back to the checkpoint boundary on `seeked`, before
+ *      the frame it jumped to is painted, and on the next tick for the YouTube
+ *      path which has no `seeked`. The boundary, not the played point: that one
+ *      trails the playhead by a render while it plays, and snapping to it would
+ *      yank a student back mid-sentence.
  *   3. Playback pauses at the boundary and asks the caller to open the quiz.
  *      There is deliberately no "already fired" latch: a failed quiz fetch must
  *      not retire the checkpoint.
@@ -372,7 +377,9 @@ export default function NeramVideoPlayer({
    */
   const clampIfBeyond = useCallback(
     (time: number): boolean => {
-      const ceiling = gateRef.current.seekCeiling;
+      // The checkpoint, not seekCeiling. See rule 2 above.
+      const { unlockedUntil, seekCeiling } = gateRef.current;
+      const ceiling = unlockedUntil > 0 ? unlockedUntil : seekCeiling;
       if (!Number.isFinite(ceiling)) return false;
       if (time <= ceiling + SEEK_TOLERANCE_SECONDS) return false;
       transportRef.current?.seek(Math.max(0, ceiling));
@@ -450,11 +457,12 @@ export default function NeramVideoPlayer({
         // A renewed stream goes back to where the old one stopped; a first load
         // goes to the caller's resume point.
         const pending = pendingResumeRef.current;
-        // Clamped to the boundary, not trusted as stored. The old inline player
-        // banked whatever position the student dragged the native scrubber to,
-        // so restoring it verbatim would hand the skip straight back.
-        const unlocked = gateRef.current.unlockedUntil;
-        const ceiling = unlocked > 0 ? Math.min(unlocked, dur) : dur;
+        // Clamped to how far a control may reach, not trusted as stored. The
+        // stored point rises with any seek, so restoring it verbatim resumed a
+        // student who had watched 11 seconds on checkpoint 1, and the quiz opened
+        // the moment they pressed play (NXS-0130).
+        const { seekCeiling } = gateRef.current;
+        const ceiling = Number.isFinite(seekCeiling) ? Math.min(seekCeiling, dur) : dur;
         const target = Math.min(pending ? pending.at : resumeRef.current, ceiling);
         if (target > 0 && target < dur - 1) {
           suppressNextCheckpointRef.current = true;

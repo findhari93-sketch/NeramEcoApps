@@ -17,24 +17,57 @@
 import React from 'react';
 import { Box, Chip, Skeleton, Typography, alpha, useTheme } from '@neram/ui';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import FiberNewOutlinedIcon from '@mui/icons-material/FiberNewOutlined';
+import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
+import AssignmentIndOutlinedIcon from '@mui/icons-material/AssignmentIndOutlined';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import TaskAltIcon from '@mui/icons-material/TaskAlt';
+import ReplayIcon from '@mui/icons-material/Replay';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import KeyboardReturnIcon from '@mui/icons-material/KeyboardReturn';
+import ScheduleIcon from '@mui/icons-material/Schedule';
+import ReplyIcon from '@mui/icons-material/Reply';
+import type { SvgIconComponent } from '@mui/icons-material';
 import type { NexusFoundationIssueActivity } from '@neram/database/types';
 
 /** What each non-comment row says in the timeline. */
 const ACTION_LABELS: Record<string, string> = {
   created: 'reported this issue',
-  assigned: 'assigned this issue',
-  accepted: 'accepted this issue',
-  delegated: 'delegated this issue',
-  returned: 'returned this issue',
-  marked_in_progress: 'marked as in progress',
-  resolved: 'marked this as fixed',
-  reopened: 'reopened this issue',
+  assigned: 'assigned this ticket',
+  accepted: 'picked this up',
+  delegated: 'delegated this ticket',
+  returned: 'returned this to the queue',
+  marked_in_progress: 'moved this back to in progress',
+  resolved: 'marked this as resolved',
+  reopened: 'reopened this ticket',
   comment: 'commented',
-  confirmed: 'confirmed this is resolved',
-  auto_closed: 'auto-closed, no response after 3 days',
+  confirmed: 'confirmed it is fixed',
+  auto_closed: 'closed on its own',
+  info_requested: 'asked for more information',
+  student_replied: 'replied, so this is back in progress',
+  closed_by_staff: 'closed this ticket',
 };
 
-export function actionLabel(action: string): string {
+/** One icon per kind of move, so the history scans without reading every line. */
+const ACTION_ICONS: Record<string, SvgIconComponent> = {
+  created: FiberNewOutlinedIcon,
+  assigned: AssignmentIndOutlinedIcon,
+  accepted: PlayCircleOutlineIcon,
+  delegated: SwapHorizIcon,
+  returned: KeyboardReturnIcon,
+  marked_in_progress: PlayCircleOutlineIcon,
+  resolved: CheckCircleOutlineIcon,
+  reopened: ReplayIcon,
+  confirmed: TaskAltIcon,
+  auto_closed: ScheduleIcon,
+  student_replied: ReplyIcon,
+  closed_by_staff: TaskAltIcon,
+};
+
+export function actionLabel(action: string, targetName?: string | null): string {
+  if (action === 'assigned' && targetName) return `assigned this to ${targetName}`;
+  if (action === 'delegated' && targetName) return `delegated this to ${targetName}`;
   return ACTION_LABELS[action] || action;
 }
 
@@ -103,21 +136,59 @@ export default function IssueThread({
         const internal = a.visible_to_student === false;
         const isMessage = a.action === 'comment';
 
+        // A question from staff is the one history row somebody has to answer,
+        // so it is a card, not a line: amber, labelled in words, and quoting the
+        // question in full.
+        if (a.action === 'info_requested') {
+          return (
+            <Box
+              key={a.id}
+              sx={{
+                p: 1.25,
+                borderRadius: 2,
+                border: 1,
+                borderColor: alpha(theme.palette.warning.main, 0.4),
+                bgcolor: alpha(theme.palette.warning.main, 0.08),
+                overflowWrap: 'anywhere',
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+                <HelpOutlineIcon sx={{ fontSize: '1rem', color: 'warning.dark' }} aria-hidden />
+                <Typography variant="caption" sx={{ fontWeight: 700, color: 'warning.dark' }}>
+                  {mine ? 'You' : a.actor_name || 'Someone'} asked for more information
+                </Typography>
+              </Box>
+              <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                {a.reason}
+              </Typography>
+              <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem', display: 'block', mt: 0.5 }}>
+                {formatTimestamp(a.created_at)}
+              </Typography>
+            </Box>
+          );
+        }
+
         // A status move carries no words, so it reads as a line of history
         // rather than as a bubble somebody has to answer.
         if (!isMessage) {
+          const Icon = ACTION_ICONS[a.action];
           return (
-            <Box key={a.id} sx={{ px: 0.5 }}>
-              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', lineHeight: 1.5 }}>
-                <Box component="span" sx={{ fontWeight: 600, color: 'text.primary' }}>
-                  {a.actor_name || 'Someone'}
-                </Box>{' '}
-                {actionLabel(a.action)}
-                {a.reason ? `: "${a.reason}"` : ''}
-              </Typography>
-              <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.7rem' }}>
-                {formatTimestamp(a.created_at)}
-              </Typography>
+            <Box key={a.id} sx={{ px: 0.5, display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+              {Icon && (
+                <Icon sx={{ fontSize: '1rem', color: 'text.secondary', mt: '2px', flexShrink: 0 }} aria-hidden />
+              )}
+              <Box sx={{ minWidth: 0, overflowWrap: 'anywhere' }}>
+                <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', lineHeight: 1.5 }}>
+                  <Box component="span" sx={{ fontWeight: 600, color: 'text.primary' }}>
+                    {mine ? 'You' : a.actor_name || 'Someone'}
+                  </Box>{' '}
+                  {actionLabel(a.action, a.target_user_name)}
+                  {a.reason ? `: "${a.reason}"` : ''}
+                </Typography>
+                <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: '0.7rem' }}>
+                  {formatTimestamp(a.created_at)}
+                </Typography>
+              </Box>
             </Box>
           );
         }

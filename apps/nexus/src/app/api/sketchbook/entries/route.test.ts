@@ -89,6 +89,15 @@ describe('POST /api/sketchbook/entries', () => {
     expect(m.update).toHaveBeenCalledWith({ image_quality: quality });
   });
 
+  it('dates the practice day on the student\'s own clock (NXS-0129)', async () => {
+    // 18:44 UTC is 10:44 pm Wednesday in Dubai and 12:14 am Thursday in IST.
+    m.createDrawingSubmission.mockResolvedValue({ id: 'd1', submitted_at: '2026-09-23T18:44:37Z' });
+    m.loadStudentRhythm.mockResolvedValue({ rhythm: { week: { count: 1, goal: 3 } }, timeZone: 'Asia/Dubai' });
+    const res = await POST(post(BASE));
+    expect(res.status).toBe(201);
+    expect(m.upsertPracticeDay).toHaveBeenCalledWith('s1', '2026-09-23', 'd1');
+  });
+
   it('adds the sketch even when the measurement is junk', async () => {
     const res = await POST(post({ ...BASE, image_quality: { sharpness: 'lots' } }));
     expect(res.status).toBe(201);

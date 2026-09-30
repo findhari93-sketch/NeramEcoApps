@@ -76,6 +76,11 @@ interface CatchUpData {
   absence: { reason_code: string | null; reason_note: string | null; kind?: string } | null;
   assignments: Array<{ id: string; title: string; assignment_type: string; submitted: boolean }>;
   recap: { id: string; status: string } | null;
+  /**
+   * A guided recap went live after this student started the plain recording, so
+   * they finish on the plain recording and `recap` is null for them (NXS-0123).
+   */
+  finish_as_started?: boolean;
   /** Null until a teacher has built the class test for this class. */
   test: {
     placement_id: string;
@@ -655,9 +660,36 @@ export default function CatchUpPage() {
                   and gets a plain video deserves to know why, and to know it is
                   temporary rather than the way this class works. */}
               <Typography variant="caption" color="text.secondary" sx={{ width: '100%', mt: 0.5 }}>
-                The guided version with checkpoints is still being prepared for this class. Watch
-                the recording now and it will be here next time.
+                {data.finish_as_started
+                  ? 'You started this recording before the guided version was ready, so carry on here. When you have watched it, press I have watched it and the final check opens.'
+                  : 'The guided version with checkpoints is still being prepared for this class. Watch the recording now and it will be here next time.'}
               </Typography>
+
+              {/* The final check that the checkpoints would have opened, opened
+                  here by the watch instead. Only once it is open: its locked copy
+                  talks about checkpoints this student does not have. */}
+              {data.finish_as_started &&
+                test &&
+                test.source !== 'class_test' &&
+                (test.unlocked || test.passed) && (
+                  <Box sx={{ width: '100%' }}>
+                    <FinalCheckPanel
+                      test={{
+                        passing_pct: test.passing_pct,
+                        unlocked: test.unlocked,
+                        passed: test.passed,
+                        attempts: test.attempts ?? 0,
+                        last_score_pct: test.last_score_pct ?? null,
+                        last_attempt_at: test.last_attempt_at ?? null,
+                        best_score_pct: test.best_score_pct ?? null,
+                        question_count: test.question_count ?? null,
+                        must_get_right: test.must_get_right ?? null,
+                      }}
+                      onStart={() => router.push(test.href || `/student/catch-up/${cls.id}/test`)}
+                      onRewatch={() => setPlayerOpen(true)}
+                    />
+                  </Box>
+                )}
             </Stack>
           ),
         )}

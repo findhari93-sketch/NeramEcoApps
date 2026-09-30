@@ -64,6 +64,8 @@ import MathField from '@/components/common/MathField';
 // The keyword guess has one home, in lib/qb-image-needs.ts. A second copy
 // here would drift the moment either changed.
 import { questionNeedsImage } from '@/lib/qb-image-needs';
+import { defaultOptions, normalizeOptionIds, optionLetter, withOptionAdded } from '@/lib/qb-option-ids';
+import OptionAddBar from '../OptionAddBar';
 
 /**
  * Every drawing question in the bank is worth this, so a blank means "nobody has
@@ -150,10 +152,6 @@ interface FormData {
   drawing_parts: DrawingPartsForm | null;
 }
 
-function createDefaultOption(idx: number): NexusQBQuestionOption {
-  return { id: `opt_${idx}_${Date.now()}`, text: '' };
-}
-
 function getInitialFormData(
   question: NexusQBQuestion,
   sources?: NexusQBQuestionSource[],
@@ -161,6 +159,9 @@ function getInitialFormData(
   tagIds?: string[],
 ): FormData {
   const source = sources?.[0];
+  // An option saved as `opt_4_<timestamp>` loads as the next letter, so the
+  // next save repairs it.
+  const normalized = normalizeOptionIds(question.options ?? [], question.correct_answer);
   // Source row, then the paper, then nothing. Never a made-up exam: showing the
   // wrong exam confidently is worse than showing a blank.
   return {
@@ -174,15 +175,13 @@ function getInitialFormData(
     question_image: question.question_image_url
       ? { url: question.question_image_url, uploaded: true }
       : undefined,
-    options: question.options?.length
-      ? question.options
-      : [createDefaultOption(0), createDefaultOption(1), createDefaultOption(2), createDefaultOption(3)],
-    option_images: (question.options ?? []).reduce<Record<string, ImageState | undefined>>((acc, opt) => {
+    options: normalized.options.length ? normalized.options : defaultOptions(),
+    option_images: normalized.options.reduce<Record<string, ImageState | undefined>>((acc, opt) => {
       if (opt.image_url) acc[opt.id] = { url: opt.image_url, uploaded: true };
       return acc;
     }, {}),
-    correct_option_id: question.correct_answer ?? '',
-    correct_answer: question.correct_answer ?? '',
+    correct_option_id: normalized.correctAnswer,
+    correct_answer: normalized.correctAnswer,
     answer_tolerance: question.answer_tolerance ? String(question.answer_tolerance) : '',
     categories: question.categories ?? [],
     tag_ids: tagIds ?? [],
@@ -357,11 +356,12 @@ export default function QuestionEditForm({
     setDirty(true);
   }, []);
 
-  const addOption = useCallback(() => {
-    setForm((prev) => ({
-      ...prev,
-      options: [...prev.options, createDefaultOption(prev.options.length)],
-    }));
+  const addOption = useCallback((text?: string, textHi?: string) => {
+    setForm((prev) => {
+      const quick = text ? { text, text_hi: textHi } : undefined;
+      const options = withOptionAdded(prev.options, quick, (id) => Boolean(prev.option_images[id]));
+      return options ? { ...prev, options } : prev;
+    });
     setDirty(true);
   }, []);
 
@@ -809,19 +809,19 @@ export default function QuestionEditForm({
                     size="small"
                     checked={form.correct_option_id === opt.id}
                     onChange={() => updateField('correct_option_id', opt.id)}
-                    inputProps={{ 'aria-label': `Mark option ${opt.id.toUpperCase()} correct` }}
+                    inputProps={{ 'aria-label': `Mark option ${optionLetter(idx)} correct` }}
                     sx={{ p: 1 }}
                   />
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <MathField
-                      label={`Option ${opt.id.toUpperCase()}`}
+                      label={`Option ${optionLetter(idx)}`}
                       value={opt.text ?? ''}
                       onChange={(next) => handleOptionTextChange(opt.id, next)}
                       minRows={1}
                     />
                     {showHindi && (
                       <TextField
-                        label={`Option ${opt.id.toUpperCase()} (Hindi)`}
+                        label={`Option ${optionLetter(idx)} (Hindi)`}
                         value={opt.text_hi ?? ''}
                         onChange={(e) => handleOptionTextHiChange(opt.id, e.target.value)}
                         fullWidth
@@ -833,7 +833,7 @@ export default function QuestionEditForm({
                         <ImageUploadZone
                           image={form.option_images[opt.id]}
                           onChange={(img) => handleOptionImageChange(opt.id, img)}
-                          label={`Option ${String.fromCharCode(65 + idx)} image`}
+                          label={`Option ${optionLetter(idx)} image`}
                           height={80}
                           getToken={getToken}
                           subfolder="options"
@@ -845,7 +845,7 @@ export default function QuestionEditForm({
                       is the floor, and there is no undo for a deleted option. */}
                   {form.options.length > 2 && (
                     <IconButton
-                      aria-label={`Remove option ${opt.id.toUpperCase()}`}
+                      aria-label={`Remove option ${optionLetter(idx)}`}
                       onClick={() => removeOption(opt.id)}
                       sx={{ p: 1 }}
                     >
@@ -854,9 +854,7 @@ export default function QuestionEditForm({
                   )}
                 </Box>
               ))}
-              <Button size="small" startIcon={<AddIcon />} onClick={addOption} sx={{ textTransform: 'none' }}>
-                Add Option
-              </Button>
+              <OptionAddBar options={form.options} optionImages={form.option_images} onAdd={addOption} />
             </Box>
           )}
 

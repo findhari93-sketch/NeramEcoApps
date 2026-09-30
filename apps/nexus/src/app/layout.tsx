@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import { NeramThemeProvider, nexusLightTheme, nexusDarkTheme } from '@neram/ui';
 import Providers from './providers';
 import EnvBadge from '@/components/EnvBadge';
+import OfflineReady from '@/components/help/OfflineReady';
 import 'katex/dist/katex.min.css';
 import './globals.css';
 
@@ -61,6 +62,7 @@ export default function RootLayout({
         >
           <Providers>{children}</Providers>
           <EnvBadge />
+          <OfflineReady />
         </NeramThemeProvider>
       </body>
     </html>

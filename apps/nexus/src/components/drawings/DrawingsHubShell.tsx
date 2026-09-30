@@ -53,8 +53,8 @@ export default function DrawingsHubShell({
   children,
 }: DrawingsHubShellProps) {
   const router = useRouter();
-  const { featureFlags } = useNexusAuthContext();
-  const tabs = visibleHubTabs(role, featureFlags);
+  const { featureFlags, can } = useNexusAuthContext();
+  const tabs = visibleHubTabs(role, featureFlags, can);
 
   // A flag can hide the tab the URL is on (Inspiration switched off while a
   // teacher sits on it). Falling back to the first tab keeps MUI from warning
@@ -76,9 +76,12 @@ export default function DrawingsHubShell({
             if (tab?.href || !ownsInPageTabs) router.push(hubHref(role, next));
             else onSelect?.(next);
           }}
+          // On a phone the theme's 24px tab padding pushed the third tab off
+          // screen behind two 40px arrows. Tighter tabs share the row instead;
+          // if a long count still overflows, the row swipes (no arrows below sm)
+          // and the half-visible tab says there is more.
           variant="scrollable"
           scrollButtons="auto"
-          allowScrollButtonsMobile
           aria-label="Drawings"
           sx={{ mb: 2, minHeight: 48 }}
         >
@@ -89,7 +92,13 @@ export default function DrawingsHubShell({
                 key={t.key}
                 value={t.key}
                 label={count ? `${t.label} (${count})` : t.label}
-                sx={{ minHeight: 48 }}
+                sx={{
+                  minHeight: 48,
+                  whiteSpace: 'nowrap',
+                  px: { xs: 1, sm: 3 },
+                  minWidth: { xs: 0, sm: 90 },
+                  flex: { xs: '1 0 auto', sm: '0 0 auto' },
+                }}
               />
             );
           })}

@@ -7,6 +7,12 @@ import {
   profileCompleteness,
   LIFECYCLE_STAGE_LABELS,
   LIFECYCLE_STAGE_MEANINGS,
+  deriveExamYear,
+  batchCodeForExamYear,
+  examYearForBatchCode,
+  activityGroupOf,
+  ACTIVITY_GROUPS,
+  PEOPLE_STAGE_LABELS,
 } from './lifecycle-rules';
 
 const now = new Date('2026-09-25T12:00:00Z');
@@ -62,5 +68,68 @@ describe('profileCompleteness', () => {
     expect(profileCompleteness([])).toEqual({ percent: 100, items: [] });
     expect(profileCompleteness(['phone_verified', 'city'])).toEqual({ percent: 67, items: ['Phone not verified', 'City'] });
     expect(profileCompleteness(null).percent).toBe(100);
+  });
+});
+
+describe('deriveExamYear (mirrors exam_year in user_lifecycle_view, 20261018090000)', () => {
+  it('a batch wins over a stated year and the sign-up date', () => {
+    expect(deriveExamYear({ academicYear: '2026-27', targetYear: 2028, createdAt: '2026-03-01T00:00:00Z' })).toEqual({
+      year: 2027,
+      source: 'batch',
+    });
+  });
+
+  it('a stated year wins over the sign-up date', () => {
+    expect(deriveExamYear({ targetYear: 2028, createdAt: '2026-08-01T00:00:00Z' })).toEqual({ year: 2028, source: 'stated' });
+  });
+
+  it('an odd batch value is ignored, not parsed', () => {
+    expect(deriveExamYear({ academicYear: '2027', createdAt: '2026-08-01T00:00:00Z' }).source).toBe('signup');
+  });
+
+  it.each([
+    // 30 June 23:59 India time is still the 2026 season.
+    ['2026-06-30T18:29:00Z', 2026],
+    // 1 July 00:00 India time (30 June 18:30 UTC) starts the 2027 season.
+    ['2026-06-30T18:30:00Z', 2027],
+    ['2026-03-15T10:00:00Z', 2026],
+    ['2026-12-31T10:00:00Z', 2027],
+    ['2027-01-10T10:00:00Z', 2027],
+  ])('sign-up at %s is the %i exam, estimated', (createdAt, year) => {
+    expect(deriveExamYear({ createdAt })).toEqual({ year, source: 'signup' });
+  });
+
+  it('nothing to go on gives no year', () => {
+    expect(deriveExamYear({})).toEqual({ year: null, source: null });
+  });
+});
+
+describe('batch codes and exam years', () => {
+  it('convert both ways', () => {
+    expect(batchCodeForExamYear(2027)).toBe('2026-27');
+    expect(batchCodeForExamYear(2030)).toBe('2029-30');
+    expect(examYearForBatchCode('2026-27')).toBe(2027);
+    expect(examYearForBatchCode('current')).toBeNull();
+    expect(examYearForBatchCode(null)).toBeNull();
+  });
+});
+
+describe('activity groups', () => {
+  it('fold the five engagement states into three', () => {
+    expect(activityGroupOf('new')).toBe('recent');
+    expect(activityGroupOf('engaged')).toBe('recent');
+    expect(activityGroupOf('low')).toBe('recent');
+    expect(activityGroupOf('inactive')).toBe('quiet');
+    expect(activityGroupOf('dormant')).toBe('gone');
+    expect(activityGroupOf(null)).toBe('gone');
+  });
+
+  it('cover every engagement state exactly once', () => {
+    const states = Object.values(ACTIVITY_GROUPS).flatMap((g) => g.states).sort();
+    expect(states).toEqual(['dormant', 'engaged', 'inactive', 'low', 'new']);
+  });
+
+  it('have plain-words stage labels for every stage', () => {
+    expect(Object.keys(PEOPLE_STAGE_LABELS).sort()).toEqual(Object.keys(LIFECYCLE_STAGE_LABELS).sort());
   });
 });

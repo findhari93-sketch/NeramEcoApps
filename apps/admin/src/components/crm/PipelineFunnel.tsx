@@ -94,7 +94,7 @@ export default function PipelineFunnel({
         <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.primary' }}>
           {counts.total} total users
         </Typography>
-        <Tooltip title="Users can appear in multiple stages. Counts below are per-stage, not unique." arrow>
+        <Tooltip title="Each person is counted once, at the furthest stage they have reached." arrow>
           <Typography
             variant="caption"
             sx={{

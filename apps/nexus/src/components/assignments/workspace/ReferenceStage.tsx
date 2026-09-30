@@ -18,6 +18,7 @@ export default function ReferenceStage({
   onExpand: (src: string) => void;
 }) {
   const [index, setIndex] = useState(0);
+  const [ratios, setRatios] = useState<Record<string, number>>({});
 
   if (images.length === 0) {
     return (
@@ -34,6 +35,10 @@ export default function ReferenceStage({
   }
 
   const current = images[Math.min(index, images.length - 1)];
+  // A tall reference (a worksheet, a long poster of exercises) fitted to the
+  // stage's height is a thin strip; past this height-to-width ratio it fits
+  // the width and scrolls instead.
+  const tall = (ratios[current] ?? 0) > 1.6;
 
   return (
     <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -57,12 +62,31 @@ export default function ReferenceStage({
         </IconButton>
       </Box>
 
-      <Box sx={{ flex: 1, minHeight: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' }}>
+      <Box
+        key={current}
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          alignItems: tall ? 'flex-start' : 'center',
+          justifyContent: 'center',
+          overflowX: 'hidden',
+          overflowY: tall ? 'auto' : 'hidden',
+        }}
+      >
         <Box
           component="img"
           src={current}
           alt={images.length > 1 ? `Reference ${index + 1} from your teacher` : 'Reference from your teacher'}
-          sx={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block', borderRadius: 1 }}
+          onLoad={(e: React.SyntheticEvent<HTMLImageElement>) => {
+            const img = e.currentTarget;
+            if (img.naturalWidth) setRatios((r) => ({ ...r, [current]: img.naturalHeight / img.naturalWidth }));
+          }}
+          sx={
+            tall
+              ? { width: '100%', maxWidth: 720, height: 'auto', flexShrink: 0, display: 'block', borderRadius: 1 }
+              : { maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', display: 'block', borderRadius: 1 }
+          }
         />
       </Box>
 

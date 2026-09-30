@@ -22,7 +22,6 @@ import {
 } from '@neram/ui';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import DeleteIcon from '@mui/icons-material/Delete';
-import AddIcon from '@mui/icons-material/Add';
 import SaveIcon from '@mui/icons-material/Save';
 import CloseIcon from '@mui/icons-material/Close';
 import type {
@@ -47,6 +46,8 @@ import type { ImageState } from '@/lib/bulk-upload-schema';
 import ImageUploadZone from './ImageUploadZone';
 import DrawingQuestionPanel from './DrawingQuestionPanel';
 import MathText from '@/components/common/MathText';
+import { defaultOptions, normalizeOptionIds, withOptionAdded } from '@/lib/qb-option-ids';
+import OptionAddBar from './OptionAddBar';
 
 /** What a question's Source & Format panel needs when it has no source row. */
 type PaperFallback = Pick<NexusQBOriginalPaper, 'exam_type' | 'year' | 'session'>;
@@ -103,16 +104,15 @@ interface FormData {
   drawing_marks: string;
 }
 
-function createDefaultOption(idx: number): NexusQBQuestionOption {
-  return { id: `opt_${idx}_${Date.now()}`, text: '' };
-}
-
 function getInitialFormData(
   question: NexusQBQuestion,
   sources?: NexusQBQuestionSource[],
   paper?: PaperFallback
 ): FormData {
   const source = sources?.[0];
+  // An option saved as `opt_4_<timestamp>` loads as the next letter, so the
+  // next save repairs it.
+  const normalized = normalizeOptionIds(question.options ?? [], question.correct_answer);
   // Source row, then the paper, then nothing. Never a made-up exam: showing the
   // wrong exam confidently is worse than showing a blank.
   return {
@@ -126,15 +126,13 @@ function getInitialFormData(
     question_image: question.question_image_url
       ? { url: question.question_image_url, uploaded: true }
       : undefined,
-    options: question.options?.length
-      ? question.options
-      : [createDefaultOption(0), createDefaultOption(1), createDefaultOption(2), createDefaultOption(3)],
-    option_images: (question.options ?? []).reduce<Record<string, ImageState | undefined>>((acc, opt) => {
+    options: normalized.options.length ? normalized.options : defaultOptions(),
+    option_images: normalized.options.reduce<Record<string, ImageState | undefined>>((acc, opt) => {
       if (opt.image_url) acc[opt.id] = { url: opt.image_url, uploaded: true };
       return acc;
     }, {}),
-    correct_option_id: question.correct_answer ?? '',
-    correct_answer: question.correct_answer ?? '',
+    correct_option_id: normalized.correctAnswer,
+    correct_answer: normalized.correctAnswer,
     answer_tolerance: question.answer_tolerance ? String(question.answer_tolerance) : '',
     categories: question.categories ?? [],
     difficulty: question.difficulty ?? 'MEDIUM',
@@ -257,11 +255,12 @@ export default function InlineQuestionEditor({
     setDirty(true);
   }, []);
 
-  const addOption = useCallback(() => {
-    setForm((prev) => ({
-      ...prev,
-      options: [...prev.options, createDefaultOption(prev.options.length)],
-    }));
+  const addOption = useCallback((text?: string, textHi?: string) => {
+    setForm((prev) => {
+      const quick = text ? { text, text_hi: textHi } : undefined;
+      const options = withOptionAdded(prev.options, quick, (id) => Boolean(prev.option_images[id]));
+      return options ? { ...prev, options } : prev;
+    });
     setDirty(true);
   }, []);
 
@@ -558,9 +557,7 @@ export default function InlineQuestionEditor({
                   </Box>
                 ))}
               </RadioGroup>
-              <Button size="small" startIcon={<AddIcon />} onClick={addOption} sx={{ textTransform: 'none' }}>
-                Add Option
-              </Button>
+              <OptionAddBar options={form.options} optionImages={form.option_images} onAdd={addOption} />
             </Box>
           )}
 

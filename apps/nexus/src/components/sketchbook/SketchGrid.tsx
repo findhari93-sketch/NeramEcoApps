@@ -7,6 +7,7 @@ import StarOutlinedIcon from '@mui/icons-material/StarOutlined';
 import ReviewStateBadge, { tileBadgeSx } from '@/components/drawings/ReviewStateBadge';
 import { drawingSourceLabel, reviewStateWords } from '@/lib/drawing-source';
 import { helpUsedWords } from '@/lib/qb-help-used';
+import { formatPracticeDay } from '@/lib/sketchbook-rhythm';
 import type { SketchbookPayload } from '@/lib/sketchbook-payload';
 
 export type GridSketch = SketchbookPayload['sketches'][number];
@@ -26,7 +27,10 @@ interface SketchGridProps {
 const SKELETON_COUNT = 9;
 
 function tileLabel(s: GridSketch, viewer: 'own' | 'teacher'): string {
-  const date = new Date(s.submitted_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
+  // The day it counts for on the student's clock, the same day its dot is on.
+  const date = s.practiceDate
+    ? formatPracticeDay(s.practiceDate, { day: 'numeric', month: 'short' })
+    : new Date(s.submitted_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' });
   const parts = [`${drawingSourceLabel(s.source_type)} from ${date}`];
   if (s.practisedFrom) parts.push(`practised from ${s.practisedFrom.label}`);
   if (s.source_type === 'question_bank') parts.push(helpUsedWords(s.helpUsed).toLowerCase());

@@ -49,6 +49,8 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   // Amber, and louder than a plain reply on purpose: this one asks the reader
   // to go and do something before the ticket can close.
   foundation_issue_recheck_requested: '#ed6c02',
+  // Amber for the same reason: the ticket is waiting on the reader's answer.
+  foundation_issue_info_requested: '#ed6c02',
   assignment_nudge: '#7c3aed',
   assignment_reviewed: '#2E7D32',
   study_material_nudge: '#0ea5e9',
@@ -99,7 +101,8 @@ function getNavigationUrl(
     // ticket already open. The fallback is the bare list, never null: an
     // unmapped row renders and then does nothing when tapped.
     case 'foundation_issue_comment':
-    case 'foundation_issue_recheck_requested': {
+    case 'foundation_issue_recheck_requested':
+    case 'foundation_issue_info_requested': {
       const href = notification.metadata?.href as string | undefined;
       if (href && href.startsWith('/')) return href;
       return `/${nexusRole || 'student'}/issues`;

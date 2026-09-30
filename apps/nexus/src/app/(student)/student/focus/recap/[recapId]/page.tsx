@@ -109,7 +109,10 @@ export default function FocusRecapPage() {
       }
       setWatermark(embedRes.watermark || { name: 'Neram student', code: 'NX-000000' });
       setResumeAt(Number(embedRes.resume_at) || 0);
-      setFurthest(Number(embedRes.resume_at) || 0);
+      // Seeded from what was watched, not from resume_at, which rises with any
+      // seek. Seeding from it is what let a stray tap park a student on
+      // checkpoint 1 for good (NXS-0130).
+      setFurthest(Number(embedRes.played_until ?? embedRes.resume_at) || 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not open this recording');
     }
@@ -144,17 +147,24 @@ export default function FocusRecapPage() {
       computeGate({
         checkpoints: sections.map((s) => ({
           id: s.id,
+          startSeconds: s.start_timestamp_seconds,
           endSeconds: s.end_timestamp_seconds,
           passed: s.passed,
         })),
         duration,
         furthestSeconds: furthest,
+        playedUntilSeconds: furthest,
         mode: watchMode,
       }),
     [sections, duration, furthest, watchMode],
   );
 
   const passedCount = sections.filter((s) => s.passed).length;
+  /**
+   * Where the player will actually pick up: the stored point, pulled back to how
+   * far a seek may reach. The chip must not promise 13:06 and start at 1:11.
+   */
+  const resumeFrom = Number.isFinite(gate.seekCeiling) ? Math.min(resumeAt, gate.seekCeiling) : resumeAt;
 
   /** Checkpoint positions drawn on the scrub bar. */
   const marks = useMemo(
@@ -349,11 +359,11 @@ export default function FocusRecapPage() {
               label={`${passedCount} of ${sections.length} checkpoints passed`}
               sx={{ bgcolor: 'rgba(255,255,255,0.12)', color: '#fff' }}
             />
-            {resumeAt > 0 && (
+            {resumeFrom > 0 && (
               <Chip
                 size="small"
-                label={`Resuming from ${Math.floor(resumeAt / 60)}:${String(
-                  Math.floor(resumeAt % 60),
+                label={`Resuming from ${Math.floor(resumeFrom / 60)}:${String(
+                  Math.floor(resumeFrom % 60),
                 ).padStart(2, '0')}`}
                 sx={{ bgcolor: 'rgba(255,255,255,0.12)', color: '#fff' }}
               />
@@ -372,10 +382,10 @@ export default function FocusRecapPage() {
             startIcon={<PlayArrowRoundedIcon />}
             sx={{ minHeight: 56, px: 4, fontSize: 16, fontWeight: 700, borderRadius: 99 }}
           >
-            {resumeAt > 0 ? 'Resume watching' : 'Start watching'}
+            {resumeFrom > 0 ? 'Resume watching' : 'Start watching'}
           </Button>
 
-          {resumeAt > 0 && (
+          {resumeFrom > 0 && (
             <Box sx={{ mt: 1.5 }}>
               <Button
                 onClick={() => {

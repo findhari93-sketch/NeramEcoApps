@@ -4,7 +4,7 @@ import { HUB_PATH, activeHubTab, hubHref, hubTabs, visibleHubTabs } from './draw
 
 describe('drawings hub tabs', () => {
   it('gives a teacher Flip through, Class rhythm and Inspiration, in that order', () => {
-    expect(hubTabs('teacher').map((t) => t.key)).toEqual(['flip', 'rhythm', 'inspiration']);
+    expect(hubTabs('teacher').map((t) => t.key)).toEqual(['flip', 'rhythm', 'levels', 'inspiration']);
   });
 
   it('gives a student their sketchbook and Inspiration', () => {
@@ -91,5 +91,15 @@ describe('drawings hub: flags', () => {
       (['teacher', 'student'] as const).map((r) => [r, hubTabs(r).find((t) => t.key === 'inspiration')?.flag]),
     );
     expect(byRole).toEqual({ teacher: 'staff.inspiration', student: 'student.inspiration' });
+  });
+});
+
+describe('manager-only tabs', () => {
+  it('shows Levels only to a viewer who can set a level', () => {
+    const flags = {} as Parameters<typeof visibleHubTabs>[1];
+    expect(visibleHubTabs('teacher', flags).map((t) => t.key)).not.toContain('levels');
+    expect(visibleHubTabs('teacher', flags, () => false).map((t) => t.key)).not.toContain('levels');
+    expect(visibleHubTabs('teacher', flags, (c) => c === 'coord.student.level').map((t) => t.key)).toContain('levels');
+    expect(hubHref('teacher', 'levels')).toBe('/teacher/sketchbook?view=levels');
   });
 });

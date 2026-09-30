@@ -394,7 +394,9 @@ test.describe('Foundation Issues — Enterprise Ticket System', () => {
   });
 
   // ── Reopen: Student reopens ──
-  test('PATCH reopen issue (student) should set back to open', async ({ request }) => {
+  // The ticket was assigned earlier in this suite, so a reopen hands it back to
+  // that owner as in_progress rather than dropping it into the open queue.
+  test('PATCH reopen issue (student) should go back to its owner', async ({ request }) => {
     const res = await request.patch(`/api/foundation/issues/${createdIssueId}`, {
       headers: authHeader(studentToken),
       data: {
@@ -404,7 +406,7 @@ test.describe('Foundation Issues — Enterprise Ticket System', () => {
     });
     expect(res.status()).toBe(200);
     const body = await res.json();
-    expect(body.issue.status).toBe('open');
+    expect(body.issue.status).toBe('in_progress');
     expect(body.issue.auto_close_at).toBeNull();
     expect(body.issue.resolved_by).toBeNull();
   });

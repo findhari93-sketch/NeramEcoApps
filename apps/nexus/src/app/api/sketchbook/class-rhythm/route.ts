@@ -3,10 +3,10 @@ import { getSketchbookGoalHistory, isTracked, loadClassroomRoster } from '@neram
 import { getRequestUser } from '@/lib/study-materials';
 import { ApiError, errorResponse } from '@/lib/api-errors';
 import { staffClassroomIds } from '@/lib/sketchbook-access';
-import { computeRhythm, istDate } from '@/lib/sketchbook-rhythm';
+import { computeRhythm, istDate, practiceDate } from '@/lib/sketchbook-rhythm';
 import { clampDates, quietClock, rhythmStatus, trackingStart } from '@/lib/sketchbook-status';
 import {
-  loadClassroomSketchbookSettings, loadDrawingDays, loadLatestSketches, loadReactivations,
+  loadClassroomSketchbookSettings, loadDrawingDays, loadLatestSketches, loadReactivations, loadStudentTimeZones,
 } from '@/lib/drawing-activity-store';
 import { loadRemindersThisCycle } from '@/lib/sketchbook-reminder-store';
 
@@ -19,7 +19,8 @@ import { loadRemindersThisCycle } from '@/lib/sketchbook-reminder-store';
  * server, so no list or number on the screen includes them, and `pausedCount`
  * lets the screen say how many are hidden. Each student is judged only from
  * their own tracking start (sketchbook-status.ts), and any drawing upload
- * counts as a practice day.
+ * counts as a practice day. Each student's week is on their own clock
+ * (practiceDate), so a student abroad shows the teacher the week they see.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -53,25 +54,28 @@ export async function GET(request: NextRequest) {
     }
     const since = ids.length ? Object.values(starts).reduce((a, b) => (b < a ? b : a)) : settings.startedOn;
 
-    const [days, latest, reminders] = await Promise.all([
+    const now = new Date();
+    const [days, latest, reminders, zones] = await Promise.all([
       loadDrawingDays(ids, since),
       loadLatestSketches(ids),
       loadRemindersThisCycle(ids),
+      loadStudentTimeZones(ids),
     ]);
 
     const students = tracked.map((m) => {
       const start = starts[m.user_id];
-      const dates = clampDates(days[m.user_id] || [], start, today);
-      const rhythm = computeRhythm(dates, today, history, settings.goal);
+      const studentToday = practiceDate(now, zones[m.user_id]);
+      const dates = clampDates(days[m.user_id] || [], start, studentToday);
+      const rhythm = computeRhythm(dates, studentToday, history, settings.goal);
       // Reminders only count toward "Needs a call" in the CURRENT quiet stretch;
       // a drawing since then started a new one.
-      const { since: cycleStart } = quietClock(start, dates.length ? dates[dates.length - 1] : null, today);
+      const { since: cycleStart } = quietClock(start, dates.length ? dates[dates.length - 1] : null, studentToday);
       const log = reminders[m.user_id];
       const current = !!log && log.cycleStart === cycleStart;
       const autoSteps = current ? log.autoSteps : 0;
       const s = rhythmStatus({
         dates,
-        today,
+        today: studentToday,
         start,
         goal: rhythm.week.goal,
         enrolledOn: m.enrolled_at ? istDate(m.enrolled_at) : null,

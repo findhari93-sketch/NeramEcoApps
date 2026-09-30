@@ -281,8 +281,19 @@ export async function POST(
     let recapCompleted = false;
     let catchupTestUnlocked = false;
     if (passed) {
-      await upsertRecapProgress(user.id, recapId, { last_section_id: sectionId });
-      recapCompleted = await markRecapCompletedIfAllPassed(user.id, recapId);
+      // The attempt is already saved, so a failure here must not turn a pass
+      // into a 500. NXS-0127 was this block not landing: the student saw "2 of 2
+      // passed" and a locked final check. healRecapCompletions now repairs a
+      // lost completion on the next read, so these writes are best-effort.
+      try {
+        await upsertRecapProgress(user.id, recapId, { last_section_id: sectionId });
+        recapCompleted = await markRecapCompletedIfAllPassed(user.id, recapId);
+      } catch (progressErr) {
+        console.error(
+          '[recap] completion write failed (non-fatal):',
+          progressErr instanceof Error ? progressErr.message : progressErr,
+        );
+      }
 
       // Finishing the recap is what opens the class test on a catch-up backlog
       // item. Best-effort: a student who has just passed their last checkpoint

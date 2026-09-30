@@ -88,6 +88,66 @@ export function parseSolutionTitle(title: string): ParsedSolutionTitle | null {
   };
 }
 
+/**
+ * A title with its question number and section word taken out, lowercased,
+ * punctuation and spacing flattened. Two videos of one paper differ only in
+ * those two places, so their keys are equal: "Q no 50 - JEE 2019 Solution
+ * Video Session 2 AN - Aptitude Solution" and "Q no 3 - ... - Math Solution"
+ * both read "jee 2019 solution video session 2 an solution". Null when the
+ * title names no question.
+ */
+export function titleKey(title: string): string | null {
+  const q = Q_LABEL.exec(title ?? '');
+  if (!q) return null;
+  const rest = title.slice(0, q.index) + ' ' + title.slice(q.index + q[0].length);
+  return rest
+    .replace(/\b(?:math(?:s|ematics)?|aptitude|drawing)\b/gi, ' ')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+export type SampleRead =
+  | { ok: true; key: string; number: number; section: TitleSection | null }
+  | { ok: false; reason: string };
+
+/**
+ * The teacher's sample: one real title from this paper, pasted from YouTube
+ * Studio. Every upload whose key matches it is this paper's, however the
+ * channel happens to word its titles. It must name the year, or a loose sample
+ * ("Q no 5 - Aptitude Solution") would pull in every year on the channel.
+ */
+export function readSampleTitle(sample: string, paper: Pick<FindPaper, 'year'>): SampleRead {
+  const text = (sample ?? '').trim();
+  const q = Q_LABEL.exec(text);
+  if (!q || !Number(q[1])) {
+    return { ok: false, reason: 'Paste a title with its question number in it, like "Q no 12".' };
+  }
+  const key = titleKey(text) ?? '';
+  if (!key.split(' ').includes(String(paper.year))) {
+    return { ok: false, reason: `The title must name the year (${paper.year}), so other years' videos are not picked up.` };
+  }
+  return { ok: true, key, number: Number(q[1]), section: sectionOf(text) };
+}
+
+/**
+ * A title read through the sample: this paper's, with its number and section,
+ * or null when it does not fit. Used for titles the built-in rules cannot read.
+ */
+export function readTitleForSample(title: string, sampleKey: string, paper: FindPaper): ParsedSolutionTitle | null {
+  if (!sampleKey || titleKey(title) !== sampleKey) return null;
+  const number = Number(Q_LABEL.exec(title)?.[1]);
+  if (!number) return null;
+  return {
+    number,
+    exam: paper.exam_type === 'NATA' ? 'NATA' : 'JEE_PAPER_2',
+    year: paper.year,
+    section: sectionOf(title),
+    session: sessionNumber(paper.session),
+    shift: paper.shift === 'forenoon' || paper.shift === 'afternoon' ? paper.shift : null,
+  };
+}
+
 export interface FoundVideo {
   videoId: string;
   title: string;
@@ -323,7 +383,7 @@ export function matchPaperVideos(
   videos: FoundVideo[],
   rows: FindRow[],
   paper: FindPaper,
-  { paperCountThatYear = 1 }: { paperCountThatYear?: number } = {},
+  { paperCountThatYear = 1, sampleKey }: { paperCountThatYear?: number; sampleKey?: string } = {},
 ): FindResult {
   const items: FindReviewItem[] = [];
   const paperSession = sessionNumber(paper.session);
@@ -334,6 +394,12 @@ export function matchPaperVideos(
   // ours, and one naming neither could be any of them.
   const ours: FoundVideo[] = [];
   for (const v of videos) {
+    // A title worded like the teacher's sample is this paper's: the sample
+    // already names the session, whatever words the channel used for it.
+    if (sampleKey && titleKey(v.title) === sampleKey) {
+      ours.push(v);
+      continue;
+    }
     const p = v.parsed;
     if (p.exam !== paper.exam_type || p.year !== paper.year) continue;
     if (severalPapers) {

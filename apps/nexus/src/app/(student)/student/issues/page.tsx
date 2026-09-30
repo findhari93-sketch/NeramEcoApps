@@ -14,11 +14,8 @@ import {
   Tab,
   Button,
   Dialog,
-  DialogTitle,
   DialogContent,
-  DialogActions,
   TextField,
-  IconButton,
   Snackbar,
   Alert,
   Collapse,
@@ -27,6 +24,9 @@ import AddIcon from '@mui/icons-material/Add';
 import ReportProblemOutlinedIcon from '@mui/icons-material/ReportProblemOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
+import ReplayIcon from '@mui/icons-material/Replay';
+import InboxOutlinedIcon from '@mui/icons-material/InboxOutlined';
+import ReplyIcon from '@mui/icons-material/Reply';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import PhotoOutlinedIcon from '@mui/icons-material/PhotoOutlined';
 import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
@@ -35,7 +35,6 @@ import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import EventOutlinedIcon from '@mui/icons-material/EventOutlined';
 import HelpOutlineOutlinedIcon from '@mui/icons-material/HelpOutlineOutlined';
 import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
-import CloseIcon from '@mui/icons-material/Close';
 import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import CircleIcon from '@mui/icons-material/Circle';
@@ -44,11 +43,30 @@ import ReportIssueDialog from '@/components/issues/ReportIssueDialog';
 import IssueThread from '@/components/issues/IssueThread';
 import IssueReplyComposer from '@/components/issues/IssueReplyComposer';
 import { ISSUE_PARAM, findIssueForRef } from '@/lib/issue-link';
+import IssueStatusTracker from '@/components/issues/IssueStatusTracker';
+import ResponsiveSheet from '@/components/study-materials/recordings/ResponsiveSheet';
+import {
+  statusMeta,
+  studentQueueOf,
+  canStudentReopen,
+  closesInText,
+  OUTCOME_LABEL,
+  STUDENT_REOPEN_DAYS,
+  type StudentQueue,
+} from '@/lib/issue-status';
 import type {
   NexusFoundationIssueWithDetails,
   NexusFoundationIssueActivity,
   FoundationIssueCategory,
+  FoundationIssueResolutionCode,
 } from '@neram/database/types';
+
+/**
+ * The student's filters. "Needs you" first and by default when it has anything
+ * in it: a ticket waiting on the student's answer is the only kind they can move.
+ */
+type StudentView = StudentQueue | 'all';
+const VIEW_ORDER: StudentView[] = ['needs_you', 'active', 'closed', 'all'];
 
 const CATEGORY_CONFIG: Record<FoundationIssueCategory, { label: string; icon: React.ReactNode; color: string }> = {
   bug: { label: 'Bug', icon: <BugReportOutlinedIcon sx={{ fontSize: '0.8rem' }} />, color: '#d32f2f' },
@@ -66,10 +84,11 @@ export default function StudentIssuesPage() {
   const searchParams = useSearchParams();
   const [issues, setIssues] = useState<NexusFoundationIssueWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
-  // Tabs: 0 = Open (priority), 1 = Awaiting, 2 = Closed, 3 = All
-  const [tab, setTab] = useState(0);
+  const [view, setView] = useState<StudentView>('active');
   const tabTouchedRef = useRef(false);
   const [createOpen, setCreateOpen] = useState(false);
+  // "Report it again" opens the same dialog, pre-filled to name the old ticket.
+  const [followUpOf, setFollowUpOf] = useState<NexusFoundationIssueWithDetails | null>(null);
 
   const [reopenIssueId, setReopenIssueId] = useState<string | null>(null);
   const [reopenReason, setReopenReason] = useState('');
@@ -93,7 +112,7 @@ export default function StudentIssuesPage() {
   /**
    * ?issue=NXS-0125 opens that ticket's conversation.
    *
-   * The address the Teams chat and the bell both point at. The tab moves to All
+   * The address the Teams chat and the bell both point at. The view moves to All
    * first, because the ticket a message is about is usually one waiting on the
    * student or already answered, and neither sits under Open. Runs once per
    * reference so the ticket can be collapsed again while the link is still in
@@ -107,7 +126,7 @@ export default function StudentIssuesPage() {
     if (!match) return;
     deepLinkedRef.current = ref;
     tabTouchedRef.current = true;
-    setTab(3);
+    setView('all');
     void openThread(match.id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, issues]);
@@ -124,12 +143,11 @@ export default function StudentIssuesPage() {
         const data = await res.json();
         const list: NexusFoundationIssueWithDetails[] = data.issues || [];
         setIssues(list);
-        // Open issues are what the student needs to act on, so Open is the
-        // default tab. If nothing is open on first load, fall back to All so
-        // they do not land on an empty page.
+        // Land on what needs the student first, then on what is still in
+        // play, and only then on everything, so nobody opens an empty list.
         if (options?.initial && !tabTouchedRef.current) {
-          const hasOpen = list.some((i) => i.status === 'open' || i.status === 'in_progress');
-          if (!hasOpen) setTab(3);
+          const has = (q: StudentQueue) => list.some((i) => studentQueueOf(i.status) === q);
+          setView(has('needs_you') ? 'needs_you' : has('active') ? 'active' : 'all');
         }
       }
     } catch (err) {
@@ -194,7 +212,15 @@ export default function StudentIssuesPage() {
     }
     const data = await res.json();
     setThreads((prev) => ({ ...prev, [issueId]: [...(prev[issueId] || []), data.activity] }));
-    setSnackbar({ open: true, message: 'Sent. Your teacher has been told.', severity: 'success' });
+    // Answering a question hands the ticket back to staff on the server; show
+    // the new status straight away rather than at the next visit.
+    const wasWaiting = issues.find((i) => i.id === issueId)?.status === 'waiting_on_student';
+    if (wasWaiting) fetchIssues();
+    setSnackbar({
+      open: true,
+      message: wasWaiting ? 'Sent. Your ticket is back with your teacher.' : 'Sent. Your teacher has been told.',
+      severity: 'success',
+    });
   }
 
   /** A staff reply written since this student last opened the ticket. */
@@ -204,36 +230,27 @@ export default function StudentIssuesPage() {
     return new Date(issue.last_reply_at) > new Date(issue.student_seen_at);
   }
 
-  const filteredIssues = issues.filter((issue) => {
-    if (tab === 0) return issue.status === 'open' || issue.status === 'in_progress';
-    if (tab === 1) return issue.status === 'awaiting_confirmation';
-    if (tab === 2) return issue.status === 'resolved' || issue.status === 'closed';
-    return true; // tab === 3: All
-  });
+  const filteredIssues = issues.filter((issue) => view === 'all' || studentQueueOf(issue.status) === view);
 
-  const openCount = issues.filter((i) => i.status === 'open' || i.status === 'in_progress').length;
-  const awaitingCount = issues.filter((i) => i.status === 'awaiting_confirmation').length;
-  const closedCount = issues.filter((i) => i.status === 'resolved' || i.status === 'closed').length;
+  const viewCounts = issues.reduce<Record<StudentView, number>>(
+    (acc, issue) => {
+      acc[studentQueueOf(issue.status)] += 1;
+      acc.all += 1;
+      return acc;
+    },
+    { needs_you: 0, active: 0, closed: 0, all: 0 },
+  );
 
-  const statusColor = (status: string) => {
-    if (status === 'open') return 'warning';
-    if (status === 'in_progress') return 'info';
-    if (status === 'awaiting_confirmation') return 'success';
-    if (status === 'closed') return 'default';
-    if (status === 'resolved') return 'success';
-    return 'default';
+  const VIEW_LABEL: Record<StudentView, string> = {
+    needs_you: 'Needs you',
+    active: 'Active',
+    closed: 'Closed',
+    all: 'All',
   };
 
-  const statusLabel = (status: string) => {
-    const labels: Record<string, string> = {
-      open: 'Open',
-      in_progress: 'In Progress',
-      resolved: 'Resolved',
-      awaiting_confirmation: 'Awaiting Confirmation',
-      closed: 'Closed',
-    };
-    return labels[status] || status;
-  };
+  // One vocabulary for both issues pages: lib/issue-status.ts.
+  const statusColor = (status: string) => statusMeta(status).color;
+  const statusLabel = (status: string) => statusMeta(status).studentLabel;
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -244,13 +261,6 @@ export default function StudentIssuesPage() {
     if (diffDays === 1) return 'Yesterday';
     if (diffDays < 7) return `${diffDays} days ago`;
     return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-  };
-
-  const getDaysUntilAutoClose = (autoCloseAt: string | null) => {
-    if (!autoCloseAt) return null;
-    const diff = new Date(autoCloseAt).getTime() - Date.now();
-    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-    return Math.max(0, days);
   };
 
   const handleConfirm = async (issueId: string) => {
@@ -264,7 +274,7 @@ export default function StudentIssuesPage() {
         body: JSON.stringify({ action: 'confirm' }),
       });
       if (res.ok) {
-        setSnackbar({ open: true, message: 'Ticket closed. Thank you for confirming!', severity: 'success' });
+        setSnackbar({ open: true, message: 'Thanks for confirming. The ticket is closed.', severity: 'success' });
         fetchIssues();
       } else {
         throw new Error('Failed');
@@ -288,15 +298,17 @@ export default function StudentIssuesPage() {
         body: JSON.stringify({ action: 'reopen', reason: reopenReason.trim() }),
       });
       if (res.ok) {
-        setSnackbar({ open: true, message: 'Ticket reopened. Staff will review again.', severity: 'success' });
+        setSnackbar({ open: true, message: 'Reopened. Your teacher has been told.', severity: 'success' });
         setReopenIssueId(null);
         setReopenReason('');
         fetchIssues();
       } else {
-        throw new Error('Failed');
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed');
       }
-    } catch {
-      setSnackbar({ open: true, message: 'Failed to reopen. Please try again.', severity: 'error' });
+    } catch (err) {
+      const message = err instanceof Error && err.message !== 'Failed' ? err.message : 'Could not reopen it. Please try again.';
+      setSnackbar({ open: true, message, severity: 'error' });
     } finally {
       setActionLoading(false);
     }
@@ -315,7 +327,7 @@ export default function StudentIssuesPage() {
             My Issues
           </Typography>
           <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.85rem' }}>
-            Track and manage your reported issues
+            See where each problem you reported is, and answer your teacher here
           </Typography>
         </Box>
         <Button
@@ -323,30 +335,62 @@ export default function StudentIssuesPage() {
           size="small"
           startIcon={<AddIcon />}
           onClick={() => setCreateOpen(true)}
-          sx={{ textTransform: 'none', minHeight: 36, mt: 0.5 }}
+          sx={{ textTransform: 'none', minHeight: 44, mt: 0.5, flexShrink: 0 }}
         >
           Create Ticket
         </Button>
       </Box>
 
       <Tabs
-        value={tab}
-        onChange={(_, v) => {
+        value={view}
+        onChange={(_, v: StudentView) => {
           tabTouchedRef.current = true;
-          setTab(v);
+          setView(v);
         }}
         variant="scrollable"
         scrollButtons={false}
+        aria-label="Filter your tickets"
         sx={{
           mb: 2, mt: 1.5,
-          minHeight: 36,
-          '& .MuiTab-root': { minHeight: 36, textTransform: 'none', fontSize: '0.85rem', py: 0.5 },
+          minHeight: 48,
+          // Compact enough that all four fit at 375px: "Needs you" is the one
+          // that matters and must never be scrolled out of sight.
+          '& .MuiTab-root': { minHeight: 48, minWidth: 0, px: 1.25, textTransform: 'none', fontSize: '0.875rem', py: 0.5 },
         }}
       >
-        <Tab label={`Open (${openCount})`} />
-        <Tab label={`Awaiting (${awaitingCount})`} />
-        <Tab label={`Closed (${closedCount})`} />
-        <Tab label={`All (${issues.length})`} />
+        {VIEW_ORDER.map((v) => (
+          <Tab
+            key={v}
+            value={v}
+            label={
+              v === 'needs_you' && viewCounts.needs_you > 0 ? (
+                <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
+                  {VIEW_LABEL[v]}
+                  <Box
+                    component="span"
+                    sx={{
+                      minWidth: 20,
+                      height: 20,
+                      px: 0.75,
+                      borderRadius: 10,
+                      bgcolor: 'warning.main',
+                      color: 'warning.contrastText',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {viewCounts.needs_you}
+                  </Box>
+                </Box>
+              ) : (
+                `${VIEW_LABEL[v]} (${viewCounts[v]})`
+              )
+            }
+          />
+        ))}
       </Tabs>
 
       {loading ? (
@@ -361,20 +405,20 @@ export default function StudentIssuesPage() {
           <Typography variant="body2" color="text.secondary">
             {issues.length === 0
               ? 'No issues reported yet. Use "Create Ticket" to report your first issue.'
-              : tab === 0
-                ? 'No open issues right now. Everything you reported has been handled.'
-                : tab === 1
-                  ? 'Nothing is waiting for your confirmation.'
-                  : 'No issues in this category.'}
+              : view === 'needs_you'
+                ? 'Nothing is waiting on you. Your teachers will tell you when something is.'
+                : view === 'active'
+                  ? 'Nothing is being worked on right now.'
+                  : 'No tickets here.'}
           </Typography>
-          {issues.length > 0 && tab !== 3 && (
+          {issues.length > 0 && view !== 'all' && (
             <Button
               size="small"
               onClick={() => {
                 tabTouchedRef.current = true;
-                setTab(3);
+                setView('all');
               }}
-              sx={{ textTransform: 'none', mt: 1, minHeight: 36 }}
+              sx={{ textTransform: 'none', mt: 1, minHeight: 44 }}
             >
               View all {issues.length} issue{issues.length !== 1 ? 's' : ''}
             </Button>
@@ -384,7 +428,12 @@ export default function StudentIssuesPage() {
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           {filteredIssues.map((issue) => {
             const catConfig = CATEGORY_CONFIG[issue.category as FoundationIssueCategory] || CATEGORY_CONFIG.other;
-            const daysLeft = getDaysUntilAutoClose(issue.auto_close_at);
+            const closes = closesInText(issue.auto_close_at);
+            const teacher = issue.assigned_to_name || issue.resolved_by_name || 'Your teacher';
+            const outcome = issue.resolution_code
+              ? OUTCOME_LABEL[issue.resolution_code as FoundationIssueResolutionCode]
+              : null;
+            const waiting = issue.status === 'waiting_on_student';
 
             return (
               <Paper
@@ -394,7 +443,7 @@ export default function StudentIssuesPage() {
                   p: 2,
                   borderRadius: 2,
                   borderLeftWidth: 3,
-                  borderLeftColor: catConfig.color,
+                  borderLeftColor: waiting ? theme.palette.warning.main : catConfig.color,
                 }}
               >
                 <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 0.75 }}>
@@ -486,7 +535,72 @@ export default function StudentIssuesPage() {
                   Reported {formatDate(issue.created_at)}
                 </Typography>
 
-                {(issue.status === 'awaiting_confirmation' || issue.status === 'resolved' || issue.status === 'closed') && issue.resolution_note && (
+                {/* Where it is, then what is happening in one plain sentence, then
+                    the one thing the student can do about it, if anything. */}
+                <Box sx={{ mt: 1.25 }}>
+                  <IssueStatusTracker status={issue.status} role="student" compact />
+                  <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: 'text.secondary', fontWeight: 600 }}>
+                    {statusMeta(issue.status).studentLabel}
+                  </Typography>
+                </Box>
+
+                {issue.status === 'open' && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.75 }}>
+                    <InboxOutlinedIcon sx={{ fontSize: '1rem', color: 'text.secondary' }} aria-hidden />
+                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+                      We have got it. A teacher will pick this up soon.
+                    </Typography>
+                  </Box>
+                )}
+
+                {issue.status === 'in_progress' && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 0.75 }}>
+                    <HourglassEmptyIcon sx={{ fontSize: '1rem', color: theme.palette.info.main }} aria-hidden />
+                    <Typography variant="body2" sx={{ color: 'info.dark' }}>
+                      {teacher} is working on this.
+                    </Typography>
+                  </Box>
+                )}
+
+                {waiting && (
+                  <Box
+                    sx={{
+                      mt: 1,
+                      p: 1.5,
+                      borderRadius: 1.5,
+                      bgcolor: alpha(theme.palette.warning.main, 0.08),
+                      border: `1px solid ${alpha(theme.palette.warning.main, 0.35)}`,
+                    }}
+                  >
+                    <Typography variant="body2" sx={{ fontWeight: 700, color: 'warning.dark', mb: 0.25 }}>
+                      {teacher} needs more from you
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: 'text.secondary', mb: 1 }}>
+                      Open the conversation to see the question and reply. Your reply sends the ticket back to
+                      your teacher{closes ? `. It ${closes} if there is no reply` : ''}.
+                    </Typography>
+                    <Button
+                      variant="contained"
+                      color="warning"
+                      startIcon={<ReplyIcon />}
+                      onClick={() => {
+                        if (expandedId !== issue.id) void openThread(issue.id);
+                        // Straight to the box they came to type in, once it has rendered.
+                        window.setTimeout(() => {
+                          const box = document.querySelector<HTMLTextAreaElement>(`#issue-thread-${issue.id} textarea`);
+                          box?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+                          box?.focus({ preventScroll: true });
+                        }, 450);
+                      }}
+                      sx={{ textTransform: 'none', minHeight: 44, fontWeight: 600 }}
+                    >
+                      Reply
+                    </Button>
+                  </Box>
+                )}
+
+                {(issue.status === 'awaiting_confirmation' || issue.status === 'resolved' || issue.status === 'closed') &&
+                  (issue.resolution_note || outcome) && (
                   <Box
                     sx={{
                       mt: 1,
@@ -496,15 +610,18 @@ export default function StudentIssuesPage() {
                       border: `1px solid ${alpha(theme.palette.success.main, 0.15)}`,
                     }}
                   >
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.25 }}>
-                      <CheckCircleOutlineIcon sx={{ fontSize: '0.85rem', color: theme.palette.success.main }} />
-                      <Typography variant="caption" sx={{ fontWeight: 600, color: theme.palette.success.main }}>
-                        Resolved{issue.resolved_by_name ? ` by ${issue.resolved_by_name}` : ''}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.25, flexWrap: 'wrap' }}>
+                      <CheckCircleOutlineIcon sx={{ fontSize: '1rem', color: theme.palette.success.main }} aria-hidden />
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: 'success.dark' }}>
+                        {outcome || 'Resolved'}
+                        {issue.resolved_by_name ? ` by ${issue.resolved_by_name}` : ''}
                       </Typography>
                     </Box>
-                    <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                      {issue.resolution_note}
-                    </Typography>
+                    {issue.resolution_note && (
+                      <Typography variant="body2" sx={{ color: 'text.secondary', overflowWrap: 'anywhere' }}>
+                        {issue.resolution_note}
+                      </Typography>
+                    )}
                   </Box>
                 )}
 
@@ -518,49 +635,66 @@ export default function StudentIssuesPage() {
                       border: `1px solid ${alpha(theme.palette.info.main, 0.15)}`,
                     }}
                   >
-                    <Typography variant="caption" sx={{ fontWeight: 600, color: theme.palette.info.main, display: 'block', mb: 1 }}>
-                      Did this fix work for you?
+                    <Typography variant="body2" sx={{ fontWeight: 700, color: 'info.dark', mb: 1 }}>
+                      Is it working for you now?
                     </Typography>
                     <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
                       <Button
-                        size="small"
                         variant="contained"
                         color="success"
                         onClick={() => handleConfirm(issue.id)}
                         disabled={actionLoading}
-                        sx={{ textTransform: 'none', minHeight: 44, px: 2, fontSize: '0.85rem' }}
+                        startIcon={<CheckCircleOutlineIcon />}
+                        sx={{ textTransform: 'none', minHeight: 44, px: 2 }}
                       >
-                        Yes, it works
+                        Yes, it is fixed
                       </Button>
                       <Button
-                        size="small"
                         variant="outlined"
                         color="warning"
                         onClick={() => setReopenIssueId(issue.id)}
                         disabled={actionLoading}
-                        sx={{ textTransform: 'none', minHeight: 44, px: 2, fontSize: '0.85rem' }}
+                        startIcon={<ReplayIcon />}
+                        sx={{ textTransform: 'none', minHeight: 44, px: 2 }}
                       >
-                        Reopen
+                        Still happening
                       </Button>
-                      {daysLeft !== null && (
-                        <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.7rem' }}>
-                          Auto-closes in {daysLeft} day{daysLeft !== 1 ? 's' : ''}
-                        </Typography>
-                      )}
                     </Box>
+                    {closes && (
+                      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block', mt: 1 }}>
+                        If you do not answer, the ticket {closes}.
+                      </Typography>
+                    )}
                   </Box>
                 )}
 
-                {issue.status === 'in_progress' && (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.75 }}>
-                    <HourglassEmptyIcon sx={{ fontSize: '0.8rem', color: theme.palette.info.main }} />
-                    <Typography variant="caption" sx={{ color: theme.palette.info.main }}>
-                      Being reviewed by your teacher
-                    </Typography>
+                {(issue.status === 'closed' || issue.status === 'resolved') && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1, flexWrap: 'wrap' }}>
+                    {canStudentReopen(issue) ? (
+                      <Button
+                        size="small"
+                        startIcon={<ReplayIcon />}
+                        onClick={() => setReopenIssueId(issue.id)}
+                        disabled={actionLoading}
+                        sx={{ textTransform: 'none', minHeight: 44 }}
+                      >
+                        Still a problem? Reopen
+                      </Button>
+                    ) : (
+                      <Button
+                        size="small"
+                        startIcon={<AddIcon />}
+                        onClick={() => setFollowUpOf(issue)}
+                        sx={{ textTransform: 'none', minHeight: 44 }}
+                      >
+                        Still a problem? Report it again
+                      </Button>
+                    )}
                   </Box>
                 )}
 
                 {/*
+                  The conversation.                {/*
                   The conversation.
                   Collapsed until asked for, because most tickets have nothing
                   said on them, and an empty thread on every card would bury the
@@ -593,7 +727,7 @@ export default function StudentIssuesPage() {
                   </Button>
 
                   <Collapse in={expandedId === issue.id} unmountOnExit>
-                    <Box sx={{ pt: 1 }}>
+                    <Box id={`issue-thread-${issue.id}`} sx={{ pt: 1 }}>
                       <IssueThread
                         activity={threads[issue.id] || []}
                         viewerId={user?.id || null}
@@ -624,42 +758,65 @@ export default function StudentIssuesPage() {
         onSuccess={fetchIssues}
       />
 
-      <Dialog open={!!reopenIssueId} onClose={() => setReopenIssueId(null)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700 }}>
-          Reopen Issue
-          <IconButton onClick={() => setReopenIssueId(null)} sx={{ position: 'absolute', right: 8, top: 8 }}>
-            <CloseIcon />
-          </IconButton>
-        </DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
-            Please describe why the issue is not resolved:
-          </Typography>
-          <TextField
-            label="Reason"
-            placeholder="e.g. The video still doesn't play after the fix..."
-            value={reopenReason}
-            onChange={(e) => setReopenReason(e.target.value)}
-            size="small"
-            fullWidth
-            multiline
-            rows={3}
-            required
-          />
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={() => setReopenIssueId(null)} sx={{ textTransform: 'none' }}>Cancel</Button>
-          <Button
-            variant="contained"
-            color="warning"
-            onClick={handleReopen}
-            disabled={actionLoading || !reopenReason.trim()}
-            sx={{ textTransform: 'none' }}
-          >
-            {actionLoading ? 'Reopening...' : 'Reopen Ticket'}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      {/* "Report it again": a fresh ticket that names the old one, for a
+          problem that came back after the reopen window closed. Keyed so each
+          follow-up starts from its own prefill. */}
+      {followUpOf && (
+        <ReportIssueDialog
+          key={followUpOf.id}
+          open
+          onClose={() => setFollowUpOf(null)}
+          getToken={getToken}
+          pageUrl="/student/issues"
+          defaultCategory={followUpOf.category as FoundationIssueCategory}
+          prefill={{
+            title: `Follow-up to ${followUpOf.ticket_number}: ${followUpOf.title}`.slice(0, 120),
+            category: followUpOf.category as FoundationIssueCategory,
+          }}
+          onSuccess={() => {
+            setFollowUpOf(null);
+            fetchIssues();
+          }}
+        />
+      )}
+
+      <ResponsiveSheet
+        open={!!reopenIssueId}
+        onClose={() => setReopenIssueId(null)}
+        title="Still happening?"
+        description={`Tell your teacher what is still wrong. The ticket goes back to them. You can reopen a closed ticket for ${STUDENT_REOPEN_DAYS} days.`}
+        disableClose={actionLoading}
+        actions={
+          <>
+            <Button onClick={() => setReopenIssueId(null)} disabled={actionLoading} sx={{ textTransform: 'none' }}>
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              color="warning"
+              onClick={handleReopen}
+              disabled={actionLoading || !reopenReason.trim()}
+              startIcon={<ReplayIcon />}
+              sx={{ textTransform: 'none', fontWeight: 600 }}
+            >
+              {actionLoading ? 'Reopening...' : 'Reopen ticket'}
+            </Button>
+          </>
+        }
+      >
+        <TextField
+          label="What is still wrong?"
+          placeholder="e.g. The video still does not play after the fix"
+          value={reopenReason}
+          onChange={(e) => setReopenReason(e.target.value)}
+          fullWidth
+          multiline
+          minRows={3}
+          required
+          autoFocus
+          inputProps={{ style: { fontSize: 16 } }}
+        />
+      </ResponsiveSheet>
 
       <Dialog open={!!previewImage} onClose={() => setPreviewImage(null)} maxWidth="md">
         <DialogContent sx={{ p: 0 }}>

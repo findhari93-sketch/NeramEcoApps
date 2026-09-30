@@ -11,6 +11,7 @@ import { useSidebarContext } from '@/components/SidebarProvider';
 import PanelProvider, { usePanelContext } from '@/components/PanelProvider';
 import NavBadgeProvider from '@/components/NavBadgeProvider';
 import StudentStageFactsProvider from '@/components/students/StudentStageFactsProvider';
+import StudentSnapshotProvider from '@/components/students/StudentSnapshotProvider';
 import FeatureGate from '@/components/FeatureGate';
 
 function TeacherLayoutInner({ children }: { children: React.ReactNode }) {
@@ -66,7 +67,11 @@ export default function TeacherLayout({ children }: { children: React.ReactNode 
               wear its info ring; the student layout never mounts this, so the
               same components render plain faces there. */}
           <StudentStageFactsProvider>
-            <TeacherLayoutInner>{children}</TeacherLayoutInner>
+            {/* Tap a student's face for their snapshot (levels, latest drawings).
+                Teacher layout only, like the lookup above. */}
+            <StudentSnapshotProvider>
+              <TeacherLayoutInner>{children}</TeacherLayoutInner>
+            </StudentSnapshotProvider>
           </StudentStageFactsProvider>
         </NavBadgeProvider>
       </PanelProvider>

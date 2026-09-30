@@ -8,6 +8,9 @@ import { languageKeyOf, languageSentence, type LanguageKey } from '@/lib/student
 import { DormantIcon, stageIconFor } from './StageGlyph';
 import { useStudentStageFacts } from './StudentStageFactsProvider';
 import LanguageMark from './LanguageMark';
+import LevelMark from './LevelMark';
+import { useStudentSnapshot } from './StudentSnapshotProvider';
+import { levelSentence, type LevelKey } from '@/lib/student-level';
 
 /**
  * A student avatar wearing the STUDENT INFO RING.
@@ -30,6 +33,14 @@ import LanguageMark from './LanguageMark';
  *               filled when they cannot follow English. A plain English student
  *               keeps a bare corner, and the label says so either way.
  *               Bottom-right stays free for the Teams presence dot.
+ *   bars        top-left, teachers only: the OVERALL level as signal bars, 3
+ *               Top, 2 Mid, 1 Needs practice, nothing when not rated. Today the
+ *               overall level is the drawing level (lib/student-level.ts).
+ *
+ * TAP opens the student snapshot (StudentSnapshotProvider, teacher layout only)
+ * wherever a tap used to open the photo. Long-press still opens the photo. A
+ * caller that passes `tapToView={false}` sits inside a row with its own action,
+ * and that row keeps it: the tap bubbles exactly as before.
  *
  * It WRAPS GraphAvatar and UserAvatar rather than modifying either, so all their
  * existing call sites keep working untouched and adopting this is a one-line
@@ -95,6 +106,17 @@ export interface StudentStageAvatarProps {
   tapToView?: boolean;
   /** Force the corner marks off (glyph and த), e.g. where the adjacent chip already says it. */
   showGlyph?: boolean;
+  /**
+   * The overall level for the top-left bars. Same rule as `stage`: an explicit
+   * value wins (including null), otherwise the session lookup by `userId`.
+   */
+  level?: LevelKey | null;
+  /**
+   * False keeps the tap on the photo instead of opening the snapshot, for a face
+   * that is already on the student's own page (the profile header) or inside a
+   * surface that is itself about this student.
+   */
+  snapshot?: boolean;
   useGraph?: boolean;
   /**
    * Styles for the avatar INSIDE the ring, merged after the dormant treatment so
@@ -123,6 +145,8 @@ export default function StudentStageAvatar({
   tapToView,
   showGlyph = true,
   useGraph,
+  level,
+  snapshot = true,
   sx,
 }: StudentStageAvatarProps) {
   const theme = useTheme();
@@ -139,6 +163,12 @@ export default function StudentStageAvatar({
   const isDormant = dormant !== undefined ? dormant : !!facts?.dormant;
   const spoken = language === undefined ? (facts?.language ?? 'english') : languageKeyOf(language);
   const limited = language === undefined ? !!facts?.limitedEnglish : !!limitedEnglish;
+  const ringLevel = level !== undefined ? level : facts?.overallLevel ?? null;
+  const snapshotCtx = useStudentSnapshot();
+  // Only where a tap used to open the photo, and only for a student the staff
+  // lookup knows. A caller's explicit tapToView={false} means the tap belongs to
+  // the row around this face, and it keeps belonging there.
+  const opensSnapshot = snapshot && tapToView !== false && !!snapshotCtx && !!userId && !!facts;
   const mode = theme.palette.mode === 'dark' ? 'dark' : 'light';
 
   const ringColor = isDormant ? dormantColor(mode) : stageColor(ringStage, mode);
@@ -149,7 +179,7 @@ export default function StudentStageAvatar({
   const speech = infoRingSpeech({
     stage: ringStage,
     dormant: isDormant,
-    languageSentence: languageSentence(spoken, limited),
+    languageSentence: [languageSentence(spoken, limited), levelSentence(ringLevel)].filter(Boolean).join(' ') || null,
   });
 
   const withGlyph = showGlyph && size >= MIN_GLYPH_SIZE;
@@ -172,7 +202,7 @@ export default function StudentStageAvatar({
       sx={avatarSx}
       presenceStatus={presenceStatus}
       clickable={clickable}
-      tapToView={tapToView}
+      tapToView={opensSnapshot ? false : tapToView}
       fallbackSrc={fallbackSrc ?? src}
     />
   ) : (
@@ -183,7 +213,7 @@ export default function StudentStageAvatar({
       size={size}
       sx={avatarSx}
       clickable={clickable}
-      tapToView={tapToView}
+      tapToView={opensSnapshot ? false : tapToView}
     />
   );
 
@@ -192,11 +222,32 @@ export default function StudentStageAvatar({
   // stay legible on the 30px table avatar.
   const markSize = Math.max(14, Math.round(size * 0.36));
 
+  const open = (e: React.SyntheticEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (userId) snapshotCtx?.openSnapshot(userId);
+  };
+  const snapshotProps = opensSnapshot
+    ? {
+        role: 'button',
+        tabIndex: 0,
+        'aria-haspopup': 'dialog' as const,
+        'aria-label': `${speech.ariaLabel} Opens the student snapshot.`,
+        'data-opens-snapshot': 'true',
+        onClick: open,
+        onKeyDown: (e: React.KeyboardEvent) => {
+          if (e.key === 'Enter' || e.key === ' ') open(e);
+        },
+      }
+    : { 'aria-label': speech.ariaLabel };
+
   return (
-    <Tooltip title={speech.title} arrow enterTouchDelay={0} leaveTouchDelay={4000}>
+    // A tap opens the snapshot, so the tooltip waits for a deliberate press
+    // instead of flashing on every tap.
+    <Tooltip title={speech.title} arrow enterTouchDelay={opensSnapshot ? 600 : 0} leaveTouchDelay={4000}>
       <Box
         data-testid={INFO_RING_TESTID}
-        aria-label={speech.ariaLabel}
+        {...snapshotProps}
         sx={{
           position: 'relative',
           flexShrink: 0,
@@ -209,6 +260,20 @@ export default function StudentStageAvatar({
           // A faint wash inside the ring so the state survives on a photo whose
           // edge happens to sit near the ring colour.
           bgcolor: alpha(ringColor, 0.08),
+          ...(opensSnapshot
+            ? {
+                cursor: 'pointer',
+                '&:focus-visible': { outline: `3px solid ${theme.palette.primary.main}`, outlineOffset: 2 },
+                // A 30px face is a 38px ring: stretch the tap area to 44px
+                // without moving the layout.
+                '&::after': {
+                  content: '""',
+                  position: 'absolute',
+                  inset: Math.min(0, (size + 8 - 44) / 2),
+                  borderRadius: '50%',
+                },
+              }
+            : {}),
         }}
       >
         {avatar}
@@ -235,6 +300,20 @@ export default function StudentStageAvatar({
               }}
             />
           </Box>
+        )}
+        {withGlyph && ringLevel && (
+          <LevelMark
+            level={ringLevel}
+            size={glyphSize}
+            testId="level-badge"
+            sx={{
+              position: 'absolute',
+              top: -2,
+              left: -2,
+              // Separates the mark from the photo and ring it overlaps, in both themes.
+              border: `1.5px solid ${theme.palette.background.paper}`,
+            }}
+          />
         )}
         {withGlyph && (
           <LanguageMark

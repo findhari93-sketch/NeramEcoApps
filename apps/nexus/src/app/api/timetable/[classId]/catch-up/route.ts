@@ -28,6 +28,8 @@ import { isRsvpReasonCode } from '@/lib/rsvp-reasons';
 import { loadAwayWindows } from '@/lib/away-windows';
 import { resolveAbsenceReason, describeReasonSourceForStudent } from '@/lib/absence-reason';
 import { congratulateClears } from '@/lib/catchup-congrats';
+import { hasOpenObligation } from '@/lib/recap-obligation';
+import { startedPlainBeforeRecap } from '@/lib/plain-watch-head-start';
 
 /**
  * Catching up on a class you did not sit through.
@@ -160,6 +162,26 @@ async function readItemState(supabase: any, userId: string, cls: any, item: any)
 }
 
 /**
+ * Does this student finish the class on the plain recording, although a guided
+ * recap now exists? True only when they started the plain recording before the
+ * recap went live and have not already completed the recap (NXS-0123).
+ *
+ * Both verbs ask this one function, and the stream route asks the same grant
+ * question, so the screen, the video and "I have watched it" cannot disagree.
+ */
+async function finishesAsStarted(
+  supabase: any,
+  userId: string,
+  classId: string,
+  item: any,
+  recap: { id: string } | null,
+  facts: { completedRecaps: Set<string> },
+): Promise<boolean> {
+  if (!recap || !hasOpenObligation(item) || facts.completedRecaps.has(recap.id)) return false;
+  return startedPlainBeforeRecap(supabase, { studentId: userId, classId, recapId: recap.id });
+}
+
+/**
  * GET /api/timetable/[classId]/catch-up
  *
  * The checklist: what is still outstanding, and what is available to do it with.
@@ -201,12 +223,25 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       });
     }
 
-    const { facts, recap, work, test, itemFacts, shaped } = await readItemState(
+    const { facts, recap: publishedRecap, work, test, itemFacts, shaped } = await readItemState(
       supabase,
       access.userId,
       access.cls,
       item,
     );
+
+    // Started on the plain recording before the guided recap went live: the
+    // screen stays on the plain recording, so the recap is not offered and not
+    // named in the blocked reason (NXS-0123).
+    const asStarted = await finishesAsStarted(
+      supabase,
+      access.userId,
+      access.cls.id,
+      item,
+      publishedRecap,
+      facts,
+    );
+    const recap = asStarted ? null : publishedRecap;
 
     // The second `test_unlocked_at` self-heal used to sit here, and removing it
     // is the fix for NXS-0141. It repaired a lost unlock by stamping the column
@@ -305,6 +340,8 @@ export async function GET(request: NextRequest, { params }: Ctx) {
       journey,
       assignments,
       recap: recap ? { id: recap.id, status: 'published' } : null,
+      /** A guided recap exists, but this student finishes on the plain recording. */
+      finish_as_started: asStarted,
       test: test
         ? {
             placement_id: test.id,
@@ -480,7 +517,12 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       );
     }
 
-    const { recap, test, itemFacts } = await readItemState(supabase, access.userId, access.cls, item);
+    const { facts, recap, test, itemFacts } = await readItemState(
+      supabase,
+      access.userId,
+      access.cls,
+      item,
+    );
     const patch: Record<string, unknown> = {};
 
     switch (body.action) {
@@ -564,7 +606,15 @@ export async function POST(request: NextRequest, { params }: Ctx) {
         // self-declaration alongside it would make the checkpoints optional,
         // which is the whole thing they are there to prevent. The button is only
         // meaningful for a legacy absence whose class has nothing but a raw link.
-        if (recap) {
+        //
+        // Except for a student who started the plain recording before the recap
+        // went live (NXS-0123). Their watch counts, and the final check it would
+        // have unlocked opens on it instead, so the checkpoints are replaced by
+        // the paper built from the same recording rather than skipped.
+        const asStarted = recap
+          ? await finishesAsStarted(supabase, access.userId, access.cls.id, item, recap, facts)
+          : false;
+        if (recap && !asStarted) {
           return NextResponse.json(
             { error: 'Finish the guided recap to clear this step.' },
             { status: 400 },
@@ -573,6 +623,12 @@ export async function POST(request: NextRequest, { params }: Ctx) {
         // Idempotent: re-watching should not move the first-watched timestamp.
         if (!item.recording_watched_at) {
           patch.recording_watched_at = new Date().toISOString();
+        }
+        // The stamp is the fallback both test readers already honour
+        // (isCatchupTestAvailable and the test route's isTestOpen), and a failed
+        // attempt no longer clears it.
+        if (asStarted && test?.source === 'catchup' && !item.test_unlocked_at) {
+          patch.test_unlocked_at = new Date().toISOString();
         }
         // Same rule as request_recap: declaring you watched it starts the clock
         // if one is free, and never takes it from another class.

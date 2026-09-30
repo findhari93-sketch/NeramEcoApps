@@ -88,3 +88,35 @@ export function createWatchAccumulator(
     },
   };
 }
+
+/**
+ * Slack for flushes that never landed. Each one drops at most ten seconds of
+ * watched time (the client clears its accumulator optimistically), so a minute
+ * covers several without letting a seek buy more than a minute of skip.
+ */
+export const PLAYED_GRACE_SECONDS = 60;
+
+/**
+ * How far the server believes a student actually watched, for seeding the
+ * player's played ceiling.
+ *
+ * The stored position is a GREATEST high-water mark and a seek raises it, so on
+ * its own it records where they got to, not what they saw. While a checkpoint is
+ * owed playback is held at 1x, so someone watching straight through has at least
+ * as many watched seconds as their position. Capping the position at that
+ * (plus the grace) pulls back a point reached by a jump and leaves a real
+ * watcher alone. NXS-0130's row was position 786 with 11 seconds watched.
+ *
+ * Applied on read rather than written back: the stored value stays monotonic
+ * and a server reset to zero stays zero.
+ */
+export function creditedPlayedUntil(
+  position: number | null | undefined,
+  watchedSeconds: number | null | undefined,
+): number {
+  const pos = Number(position);
+  const watched = Number(watchedSeconds);
+  const safePos = Number.isFinite(pos) && pos > 0 ? pos : 0;
+  const safeWatched = Number.isFinite(watched) && watched > 0 ? watched : 0;
+  return Math.min(safePos, safeWatched + PLAYED_GRACE_SECONDS);
+}

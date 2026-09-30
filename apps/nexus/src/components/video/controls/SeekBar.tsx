@@ -222,6 +222,15 @@ export default function SeekBar({
   );
 
   const hoveringLocked = hover !== null && lockedAt !== null && hover.t > lockedAt;
+  // Kept on the bar near either end. Centred on the pointer, a label over the
+  // last few percent of the track hung half off the screen on a phone.
+  const hoverShift = (() => {
+    if (!hover) return 'translateX(-50%)';
+    const width = trackRef.current?.getBoundingClientRect().width ?? 0;
+    if (hover.x < 80) return 'translateX(0)';
+    if (width > 0 && hover.x > width - 80) return 'translateX(-100%)';
+    return 'translateX(-50%)';
+  })();
 
   return (
     <Box sx={{ position: 'relative', width: '100%' }}>
@@ -232,7 +241,7 @@ export default function SeekBar({
             position: 'absolute',
             bottom: 'calc(100% + 4px)',
             left: hover.x,
-            transform: 'translateX(-50%)',
+            transform: hoverShift,
             // A plain box, not MUI Tooltip: Tooltip portals (which reintroduces
             // the fullscreen problem this player just solved) and its enter delay
             // is wrong for something that must track a moving cursor.
@@ -251,7 +260,7 @@ export default function SeekBar({
         >
           {hoveringLocked && <LockRoundedIcon sx={{ fontSize: 12 }} />}
           <Typography sx={{ fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-            {hoveringLocked ? 'Pass this checkpoint first' : formatClock(hover.t)}
+            {hoveringLocked ? 'Not watched yet' : formatClock(hover.t)}
           </Typography>
         </Box>
       )}
@@ -271,7 +280,7 @@ export default function SeekBar({
         aria-valuenow={Math.round(displayed)}
         aria-valuetext={
           lockedAt !== null
-            ? `${formatSpoken(displayed)} of ${formatSpoken(duration)}. Locked after ${formatSpoken(lockedAt)} until you pass the checkpoint.`
+            ? `${formatSpoken(displayed)} of ${formatSpoken(duration)}. Locked after ${formatSpoken(lockedAt)} until you watch that far and pass the checkpoint.`
             : `${formatSpoken(displayed)} of ${formatSpoken(duration)}`
         }
         aria-disabled={disabled || undefined}
