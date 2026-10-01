@@ -387,6 +387,7 @@ async function createStandaloneMeeting(
 
   const post = (body: Record<string, unknown>) =>
     fetch('https://graph.microsoft.com/v1.0/me/onlineMeetings', {
+      cache: 'no-store',
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -516,6 +517,7 @@ async function createGroupCalendarEvent(
   const res = await fetch(
     `https://graph.microsoft.com/v1.0/groups/${teamId}/calendar/events`,
     {
+      cache: 'no-store',
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -585,6 +587,7 @@ async function createPersonalCalendarEvent(
   };
 
   const res = await fetch('https://graph.microsoft.com/v1.0/me/events', {
+    cache: 'no-store',
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -676,7 +679,7 @@ async function postToTeamsChannel(
   const findChannel = async (name: string) => {
     const res = await fetch(
       `https://graph.microsoft.com/v1.0/teams/${teamId}/channels?$filter=displayName eq '${name.replace(/'/g, "''")}'`,
-      { headers: { Authorization: `Bearer ${token}` } }
+      { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }
     );
     if (!res.ok) return null;
     const data = await res.json();
@@ -699,6 +702,7 @@ async function postToTeamsChannel(
   const res = await fetch(
     `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channel.id}/messages`,
     {
+      cache: 'no-store',
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -729,6 +733,7 @@ async function postToTeamsGroupChat(
   const res = await fetch(
     `https://graph.microsoft.com/v1.0/chats/${chatId}/messages`,
     {
+      cache: 'no-store',
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,

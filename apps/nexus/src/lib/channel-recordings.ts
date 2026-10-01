@@ -119,7 +119,7 @@ export async function resolveGeneralChannelId(
 ): Promise<string | null> {
   const res = await fetch(
     `${GRAPH}/teams/${teamId}/channels?$filter=displayName eq 'General'&$select=id`,
-    { headers: { Authorization: `Bearer ${token}` } },
+    { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } },
   );
 
   if (res.ok) {
@@ -129,6 +129,7 @@ export async function resolveGeneralChannelId(
   }
 
   const primaryRes = await fetch(`${GRAPH}/teams/${teamId}/primaryChannel?$select=id`, {
+    cache: 'no-store',
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!primaryRes.ok) return null;
@@ -160,7 +161,7 @@ export async function fetchRecordingsFromChannel(
 
   const folderRes = await fetch(
     `${GRAPH}/teams/${teamId}/channels/${channelId}/filesFolder`,
-    { headers: { Authorization: `Bearer ${token}` } },
+    { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } },
   );
   if (!folderRes.ok) {
     throw new Error(`Failed to get channel filesFolder: ${folderRes.status}`);
@@ -267,6 +268,7 @@ async function listVideoFiles(
 
   while (url && page < MAX_PAGES) {
     const res: Response = await fetch(url, {
+      cache: 'no-store',
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) {

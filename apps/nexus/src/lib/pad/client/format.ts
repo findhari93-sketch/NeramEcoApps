@@ -78,6 +78,19 @@ export function nextLabel(previous: string | null | undefined): string {
   return `${head}${next}${partOfQuestion ? '' : tail}`;
 }
 
+/**
+ * A question bank question's text as one short plain line for the console:
+ * the $ math delimiters dropped (no KaTeX there), spaces collapsed, and cut at
+ * a word with an ellipsis past `max` characters. Empty when there is no text.
+ */
+export function qbPreview(text: string | null | undefined, max = 160): string {
+  const plain = (text ?? '').replace(/\\\$/g, '\u0000').replace(/\$+/g, '').replace(/\u0000/g, '$').replace(/\s+/g, ' ').trim();
+  if (plain.length <= max) return plain;
+  const cut = plain.slice(0, max);
+  const space = cut.lastIndexOf(' ');
+  return `${(space > max * 0.6 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}
+
 export function scoreLabel(score: StudentScore | null | undefined): string {
   if (!score || score.total_graded === 0) return 'No score yet';
   return `${score.correct} of ${score.total_graded}`;

@@ -19,6 +19,7 @@ import { EXAMS } from '@/lib/seo/exam-config';
 import type { StateFacts } from '@/lib/seo/location-facts';
 import { classroomPlaces, hubNames, inr, stateAnswer, stateFaqs } from '@/lib/seo/location-copy';
 import { generateBreadcrumbSchema, generateFAQSchema, generateLocationCourseSchema } from '@/lib/seo/schemas';
+import { stateToolLinks } from '@/lib/seo/app-tool-links';
 import { Breadcrumbs, FactTable, FaqList, LinkGrid, Section, StickyCta, STICKY_CTA_HEIGHT, type Crumb, type LinkItem } from './parts';
 
 export interface StateCoachingPageProps {
@@ -162,6 +163,10 @@ export function StateCoachingPage({ facts, locale, cities, siblingExam }: StateC
           )}
         </Section>
       )}
+
+      <Section id="free-tools" title={`Free tools for students in ${state.name}`}>
+        <LinkGrid items={stateToolLinks(state.slug, state.name, facts.collegeCount > 0)} />
+      </Section>
 
       {content && (
         <Section id="local" title={`Architecture in ${state.name}`}>

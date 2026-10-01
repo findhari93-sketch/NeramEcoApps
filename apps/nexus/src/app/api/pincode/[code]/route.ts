@@ -1,7 +1,17 @@
+// Kept force-dynamic on purpose. Without it Next 14 would cache each pincode
+// path as an ISR entry (a billed ISR write per new pincode) and auto-cache the
+// Supabase reads below. Caching belongs at the CDN instead: see PUBLIC_CACHE.
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
+
+/**
+ * A pincode's district and state do not change, and this route needs no auth,
+ * so a successful answer is shared at Vercel's edge for a day (and served stale
+ * for a week while it refreshes). Repeat lookups never reach the function.
+ */
+const PUBLIC_CACHE = { 'Cache-Control': 'public, s-maxage=86400, stale-while-revalidate=604800' };
 
 interface PinCodeResponse {
   success: boolean;
@@ -47,7 +57,7 @@ export async function GET(
     try {
       const { data } = await supabase
         .from('pin_code_cache')
-        .select('*')
+        .select('city, district, state, hit_count')
         .eq('pincode', `IN:${code}`)
         .eq('country', 'IN')
         .gt('expires_at', new Date().toISOString())
@@ -76,7 +86,7 @@ export async function GET(
           state: cached.state || '',
           country: 'IN',
         },
-      });
+      }, { headers: PUBLIC_CACHE });
     }
 
     // Fetch from India Post API
@@ -84,6 +94,7 @@ export async function GET(
     const timeout = setTimeout(() => controller.abort(), 5000);
 
     const response = await fetch(`https://api.postalpincode.in/pincode/${code}`, {
+      cache: 'no-store',
       headers: { Accept: 'application/json' },
       signal: controller.signal,
     });
@@ -127,7 +138,7 @@ export async function GET(
       // Cache write failed — not critical
     }
 
-    return NextResponse.json({ success: true, data: result });
+    return NextResponse.json({ success: true, data: result }, { headers: PUBLIC_CACHE });
   } catch (error) {
     console.error('Pincode lookup error:', error);
     return NextResponse.json({ success: false, error: 'Failed to lookup pincode' }, { status: 500 });

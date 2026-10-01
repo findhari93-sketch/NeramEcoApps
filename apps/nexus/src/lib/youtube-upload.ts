@@ -218,6 +218,7 @@ export async function initiateUpload(
   fetchImpl: typeof fetch = fetch,
 ): Promise<InitiateResult> {
   const res = await fetchImpl(UPLOAD_ENDPOINT, {
+    cache: 'no-store',
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
@@ -257,6 +258,7 @@ export async function queryUploadOffset(
   fetchImpl: typeof fetch = fetch,
 ): Promise<UploadResponseKind> {
   const res = await fetchImpl(sessionUri, {
+    cache: 'no-store',
     method: 'PUT',
     headers: { 'Content-Range': `bytes */${total}` },
   });
@@ -280,6 +282,7 @@ export async function uploadChunk(
   fetchImpl: typeof fetch = fetch,
 ): Promise<UploadResponseKind> {
   const res = await fetchImpl(sessionUri, {
+    cache: 'no-store',
     method: 'PUT',
     headers: { 'Content-Range': buildContentRange(start, chunk.length, total) },
     body: chunk as any,

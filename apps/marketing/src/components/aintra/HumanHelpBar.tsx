@@ -3,14 +3,15 @@
 import { Box, Typography } from '@mui/material';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
+import { openTawkChat } from '@/lib/tawk';
 
 /**
  * Compact "talk to a human" bar shown inside the embedded Aintra chats.
  * Gives students a WhatsApp and a Tawk.to live-chat fallback so they are
  * never stuck when the AI is unavailable (e.g. Gemini quota/credit issues).
  *
- * Tawk.to is loaded globally by GeneralChatbot on every [locale] page, so
- * window.Tawk_API is available here; we fall back to the contact page if not.
+ * Tawk.to is loaded on demand (lib/tawk.ts) when Live chat is tapped; we fall
+ * back to the contact page if it cannot load.
  */
 
 const WHATSAPP_NUMBER = '919176137043';
@@ -24,21 +25,11 @@ function openWhatsApp() {
   }
 }
 
-function openLiveChat() {
+async function openLiveChat() {
   if (typeof window === 'undefined') return;
-  const tawk = (window as unknown as { Tawk_API?: Record<string, unknown> }).Tawk_API;
-  const maximize = tawk?.maximize as undefined | (() => void);
-  const showWidget = tawk?.showWidget as undefined | (() => void);
-  if (typeof maximize === 'function') {
-    try {
-      if (typeof showWidget === 'function') showWidget();
-      maximize();
-      return;
-    } catch {
-      // fall through to contact page
-    }
-  }
-  window.open('/en/contact', '_blank', 'noopener,noreferrer');
+  if (await openTawkChat({ hideOnMinimize: true })) return;
+  // After an await a new tab would be popup-blocked, so go to the contact page.
+  window.location.assign('/contact');
 }
 
 export default function HumanHelpBar({ label = 'Need human help?' }: { label?: string }) {

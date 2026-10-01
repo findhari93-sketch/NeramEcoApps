@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient, loadClassroomRoster } from '@neram/database';
-import { applySkillLevels, foldStudentFacts, type SkillLevelRow, type StageFactMember } from '@/lib/stage-facts';
+import {
+  applySkillLevels,
+  compactStudentFacts,
+  foldStudentFacts,
+  type SkillLevelRow,
+  type StageFactMember,
+} from '@/lib/stage-facts';
 
 /**
  * GET /api/students/stage-facts   (staff)
@@ -82,7 +88,9 @@ export async function GET(request: NextRequest) {
     if (levelError) console.error('[stage-facts] levels', levelError.message);
     applySkillLevels(facts, (levelRows ?? []) as SkillLevelRow[]);
 
-    return NextResponse.json({ facts, count: Object.keys(facts).length });
+    // Default-valued fields are left off the wire; the provider fills them back
+    // in. See compactStudentFacts.
+    return NextResponse.json({ facts: compactStudentFacts(facts), count: Object.keys(facts).length });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load student classifications';
     // 401 rather than 500 when the caller simply is not signed in: the badge is

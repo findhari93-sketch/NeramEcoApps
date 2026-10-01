@@ -48,6 +48,7 @@ export async function sendTelegramMessage(
     const timeout = setTimeout(() => controller.abort(), 10000);
 
     const response = await fetch(`${TELEGRAM_API_BASE}${token}/sendMessage`, {
+      cache: 'no-store',
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

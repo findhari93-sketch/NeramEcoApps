@@ -1,6 +1,8 @@
 'use client';
 
 import { Box, Typography, Stack, Button, Chip } from '@neram/ui';
+import { alpha } from '@mui/material/styles';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import Link from 'next/link';
 import type { QBAccessInfo } from '@neram/database';
 
@@ -19,13 +21,13 @@ export default function ContributionPrompt({ accessInfo }: ContributionPromptPro
         p: 2,
         mb: 2,
         borderRadius: 1,
-        bgcolor: 'warning.50',
+        bgcolor: (theme) => alpha(theme.palette.warning.main, theme.palette.mode === 'light' ? 0.08 : 0.14),
         border: '1px solid',
-        borderColor: 'warning.200',
+        borderColor: (theme) => alpha(theme.palette.warning.main, 0.4),
       }}
     >
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
-        <Typography variant="body1" fontWeight={700}>
+        <Typography variant="body1" component="h2" fontWeight={700}>
           Help rebuild NATA questions
         </Typography>
         {score > 0 && (
@@ -33,26 +35,27 @@ export default function ContributionPrompt({ accessInfo }: ContributionPromptPro
             label={`${score} pts`}
             size="small"
             color="warning"
-            sx={{ height: 22, fontSize: '0.75rem' }}
+            variant="outlined"
+            sx={{ height: 24, fontSize: '0.75rem' }}
           />
         )}
       </Stack>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
         Since NATA never releases official questions, this bank depends on students like you.
-        Contribute to unlock more questions — each contribution point unlocks 2 more views.
+        Contribute to unlock more questions: each contribution point unlocks 2 more views.
       </Typography>
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
         <Button
           component={Link}
           href="/tools/nata/question-bank/new"
           variant="contained"
-          size="small"
-          sx={{ minHeight: 36 }}
+          startIcon={<AddRoundedIcon />}
+          sx={{ minHeight: 44 }}
         >
-          Post a Question (+5)
+          Post a question (5 points)
         </Button>
         <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>
-          Improvements +3 | Sessions +2 | Comments +1
+          Improvements earn 3 points, sessions 2, comments 1.
         </Typography>
       </Stack>
     </Box>

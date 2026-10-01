@@ -71,7 +71,7 @@ export async function POST(
         const token = await getAppOnlyToken();
         const graphRes = await fetch(
           `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(email)}?$select=id,userPrincipalName`,
-          { headers: { Authorization: `Bearer ${token}` } }
+          { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }
         );
         if (graphRes.ok) {
           const msUser = await graphRes.json();

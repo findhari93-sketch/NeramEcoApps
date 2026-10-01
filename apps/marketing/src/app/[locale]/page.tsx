@@ -3,8 +3,13 @@ import { setRequestLocale } from 'next-intl/server';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateOrganizationSchema, generateWebSiteSchema, generateBreadcrumbSchema, generateFAQSchema, generateFounderPersonSchema } from '@/lib/seo/schemas';
 import HomePageContent from '@/components/HomePageContent';
-import { getActiveAskSeniorsEvent, getAskSeniorsColleges } from '@neram/database';
+import { getCachedAskSeniorsEvent, getCachedAskSeniorsColleges } from '@/lib/ask-seniors-data';
+import ClientIntl from '@/components/i18n/ClientIntl';
 
+// ISR daily. The only data here is the #AskSeniors block (tagged 'ask-seniors',
+// purged on admin event edits). It used to be hourly, which rebuilt the home
+// page 24 times a day in every locale.
+export const revalidate = 86400;
 
 const baseUrl = 'https://neramclasses.com';
 
@@ -50,8 +55,8 @@ export default async function HomePage({
   setRequestLocale(locale);
 
   const [askSeniorsEvent, askSeniorsColleges] = await Promise.all([
-    getActiveAskSeniorsEvent().catch(() => null),
-    getAskSeniorsColleges().catch(() => []),
+    getCachedAskSeniorsEvent().catch(() => null),
+    getCachedAskSeniorsColleges().catch(() => []),
   ]);
 
   return (
@@ -102,7 +107,7 @@ export default async function HomePage({
           answer: 'Neram offers two platforms. The free app (aiArchitek at app.neramclasses.com) gives everyone access to the NATA cutoff calculator, college predictor for 5,000+ colleges, exam center locator, and a question bank preview, with no login required. Nexus (nexus.neramclasses.com) is India\'s first NATA-exclusive learning platform, designed by architects and available only to enrolled Neram students. Nexus includes the complete question bank with papers from 2005 to 2026 individually written in English and regional languages, drawing evaluation by expert tutors, structured course plans with foundation chapters, a full video library with recorded classes, live class timetable, leaderboard, self-learning modules, mini-modules, an AI-powered study assistant, and a parent monitoring dashboard. Nexus is the only app in India with this depth of NATA-specific resources for self-learning, supported by Microsoft. Enroll at Neram Classes to unlock Nexus.',
         },
       ])} />
-      <HomePageContent askSeniorsEvent={askSeniorsEvent} askSeniorsColleges={askSeniorsColleges} />
+      <ClientIntl locale={locale} namespaces={['home', 'youtube']}><HomePageContent askSeniorsEvent={askSeniorsEvent} askSeniorsColleges={askSeniorsColleges} /></ClientIntl>
 
       {/* SEO Content — server-rendered for full crawler visibility */}
       <section style={{ backgroundColor: '#060d1f', color: '#ffffff', padding: '64px 0' }}>

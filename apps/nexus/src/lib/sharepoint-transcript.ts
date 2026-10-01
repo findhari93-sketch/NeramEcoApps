@@ -120,7 +120,7 @@ export async function fetchTranscriptFromSharePoint(
   const shareId = encodeSharingUrl(sharepointUrl);
   const driveItemRes = await fetch(
     `https://graph.microsoft.com/v1.0/shares/${shareId}/driveItem`,
-    { headers },
+    { cache: 'no-store', headers },
   );
 
   if (!driveItemRes.ok) {
@@ -144,7 +144,7 @@ export async function fetchTranscriptFromSharePoint(
     if (parentId) {
       const childrenRes = await fetch(
         `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${parentId}/children`,
-        { headers },
+        { cache: 'no-store', headers },
       );
       if (childrenRes.ok) {
         const childrenData = await childrenRes.json();
@@ -153,7 +153,7 @@ export async function fetchTranscriptFromSharePoint(
           const downloadUrl =
             vttFile['@microsoft.graph.downloadUrl'] ||
             `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${vttFile.id}/content`;
-          const vttRes = await fetch(downloadUrl, { headers });
+          const vttRes = await fetch(downloadUrl, { cache: 'no-store', headers });
           if (vttRes.ok) return await vttRes.text();
         }
       }

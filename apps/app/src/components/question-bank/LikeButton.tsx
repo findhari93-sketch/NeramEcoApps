@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { IconButton, Typography, Box } from '@neram/ui';
+import FavoriteIcon from '@mui/icons-material/Favorite';
+import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 
 interface LikeButtonProps {
   liked: boolean;
@@ -43,16 +45,20 @@ export default function LikeButton({ liked: initialLiked, count: initialCount, o
       <IconButton
         onClick={handleClick}
         disabled={loading}
-        size={size}
+        aria-label={liked ? 'Unlike' : 'Like'}
+        aria-pressed={liked}
         sx={{
+          width: 44,
+          height: 44,
           color: liked ? 'error.main' : 'text.secondary',
-          transition: 'color 0.2s, transform 0.2s',
-          '&:active': { transform: 'scale(1.2)' },
+          transition: 'color 0.2s',
         }}
       >
-        <span style={{ fontSize: size === 'small' ? '1rem' : '1.25rem' }}>
-          {liked ? '\u2764\uFE0F' : '\u{1F90D}'}
-        </span>
+        {liked ? (
+          <FavoriteIcon sx={{ fontSize: size === 'small' ? '1.125rem' : '1.375rem' }} />
+        ) : (
+          <FavoriteBorderIcon sx={{ fontSize: size === 'small' ? '1.125rem' : '1.375rem' }} />
+        )}
       </IconButton>
       <Typography variant="body2" color="text.secondary" sx={{ fontSize: size === 'small' ? '0.75rem' : '0.875rem' }}>
         {count}

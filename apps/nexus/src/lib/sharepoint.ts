@@ -44,7 +44,7 @@ function encodeSharingUrl(url: string): string {
 async function shareDownloadUrl(encoded: string, token: string): Promise<string | null> {
   const res = await fetch(
     `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem`,
-    { headers: { Authorization: `Bearer ${token}` } }
+    { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }
   );
   if (res.ok) {
     const data = await res.json();
@@ -56,7 +56,7 @@ async function shareDownloadUrl(encoded: string, token: string): Promise<string 
   // Fallback: /content 302-redirects to a short-lived pre-authenticated download URL.
   const contentRes = await fetch(
     `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem/content`,
-    { headers: { Authorization: `Bearer ${token}` }, redirect: 'manual' }
+    { cache: 'no-store', headers: { Authorization: `Bearer ${token}` }, redirect: 'manual' }
   );
   if (contentRes.status === 302) {
     return contentRes.headers.get('Location');
@@ -112,7 +112,7 @@ export async function getSharePointStreamUrl(sharepointUrl: string): Promise<str
         // Get the site
         const siteRes = await fetch(
           `https://graph.microsoft.com/v1.0/sites/${u.hostname}:/sites/${siteName}`,
-          { headers: { Authorization: `Bearer ${token}` } }
+          { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }
         );
 
         if (siteRes.ok) {
@@ -121,7 +121,7 @@ export async function getSharePointStreamUrl(sharepointUrl: string): Promise<str
           const relativePath = filePath.replace(`/sites/${siteName}`, '');
           const fileRes = await fetch(
             `https://graph.microsoft.com/v1.0/sites/${site.id}/drive/root:${relativePath}?$select=id,@microsoft.graph.downloadUrl`,
-            { headers: { Authorization: `Bearer ${token}` } }
+            { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }
           );
 
           if (fileRes.ok) {
@@ -143,7 +143,7 @@ export async function getSharePointStreamUrl(sharepointUrl: string): Promise<str
         const siteName = siteMatch[1];
         const siteRes = await fetch(
           `https://graph.microsoft.com/v1.0/sites/${u.hostname}:/sites/${siteName}`,
-          { headers: { Authorization: `Bearer ${token}` } }
+          { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }
         );
 
         if (siteRes.ok) {
@@ -151,7 +151,7 @@ export async function getSharePointStreamUrl(sharepointUrl: string): Promise<str
           // Search by UniqueId
           const searchRes = await fetch(
             `https://graph.microsoft.com/v1.0/sites/${site.id}/drive/root/search(q='${uniqueId}')?$select=id,@microsoft.graph.downloadUrl`,
-            { headers: { Authorization: `Bearer ${token}` } }
+            { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }
           );
 
           if (searchRes.ok) {
@@ -199,7 +199,7 @@ export async function resolveShareUrlToItem(shareUrl: string): Promise<ResolvedS
   const encoded = encodeSharingUrl(shareUrl);
   const res = await fetch(
     `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem?$select=id,name,file,size`,
-    { headers: { Authorization: `Bearer ${token}` } }
+    { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }
   );
   if (!res.ok) {
     const err = await res.text().catch(() => '');
@@ -253,6 +253,7 @@ export async function getSharePointPdfRendition(target: {
   }
 
   const res = await fetch(url, {
+    cache: 'no-store',
     headers: { Authorization: `Bearer ${token}` },
     redirect: 'manual',
   });
@@ -344,7 +345,7 @@ async function collectDriveItems(
   let url: string | null = firstUrl;
 
   for (let page = 0; url && page < MAX_PAGES; page++) {
-    const res: Response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const res: Response = await fetch(url, { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) {
       const err = await res.text().catch(() => '');
       // Page one failing is the request failing. A later page failing is not
@@ -472,6 +473,7 @@ export async function createViewLink(itemId: string): Promise<string | null> {
   const res = await fetch(
     `https://graph.microsoft.com/v1.0/sites/${siteId}/drive/items/${itemId}/createLink`,
     {
+      cache: 'no-store',
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: 'view', scope: 'organization' }),
@@ -513,7 +515,7 @@ export async function getSiteId(token: string): Promise<string> {
 
   const res = await fetch(
     `https://graph.microsoft.com/v1.0/sites/${hostname}:${path}`,
-    { headers: { Authorization: `Bearer ${token}` } }
+    { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }
   );
 
   if (!res.ok) {
@@ -550,6 +552,7 @@ export async function uploadToSharePoint(
     const res = await fetch(
       `https://graph.microsoft.com/v1.0/sites/${siteId}/drive/root:/${filePath}:/content`,
       {
+        cache: 'no-store',
         method: 'PUT',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -571,6 +574,7 @@ export async function uploadToSharePoint(
     const sessionRes = await fetch(
       `https://graph.microsoft.com/v1.0/sites/${siteId}/drive/root:/${filePath}:/createUploadSession`,
       {
+        cache: 'no-store',
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -602,6 +606,7 @@ export async function uploadToSharePoint(
       const chunk = buffer.slice(offset, end);
 
       lastResponse = await fetch(uploadUrl, {
+        cache: 'no-store',
         method: 'PUT',
         headers: {
           'Content-Length': String(chunk.length),
@@ -629,6 +634,7 @@ export async function uploadToSharePoint(
   const shareRes = await fetch(
     `https://graph.microsoft.com/v1.0/sites/${siteId}/drive/items/${item.id}/createLink`,
     {
+      cache: 'no-store',
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -652,7 +658,7 @@ export async function uploadToSharePoint(
   // Get a direct download URL for the file
   const downloadRes = await fetch(
     `https://graph.microsoft.com/v1.0/sites/${siteId}/drive/items/${item.id}?select=@microsoft.graph.downloadUrl`,
-    { headers: { Authorization: `Bearer ${token}` } }
+    { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }
   );
 
   let downloadUrl = sharingUrl;
@@ -681,7 +687,7 @@ export async function getSharePointDownloadUrl(itemId: string): Promise<string> 
   // We must request without $select or use /content redirect to get the download URL.
   const res = await fetch(
     `https://graph.microsoft.com/v1.0/sites/${siteId}/drive/items/${itemId}`,
-    { headers: { Authorization: `Bearer ${token}` } }
+    { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }
   );
 
   if (res.ok) {
@@ -694,7 +700,7 @@ export async function getSharePointDownloadUrl(itemId: string): Promise<string> 
   // Fallback: use /content endpoint which returns a 302 redirect to the download URL
   const contentRes = await fetch(
     `https://graph.microsoft.com/v1.0/sites/${siteId}/drive/items/${itemId}/content`,
-    { headers: { Authorization: `Bearer ${token}` }, redirect: 'manual' }
+    { cache: 'no-store', headers: { Authorization: `Bearer ${token}` }, redirect: 'manual' }
   );
   if (contentRes.status === 302) {
     const location = contentRes.headers.get('Location');
@@ -723,7 +729,7 @@ export async function getSharePointThumbnailUrl(
 
   const res = await fetch(
     `https://graph.microsoft.com/v1.0/sites/${siteId}/drive/items/${itemId}/thumbnails/0/${size}`,
-    { headers: { Authorization: `Bearer ${token}` } }
+    { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }
   );
   if (!res.ok) return null;
   const data = await res.json().catch(() => null);
@@ -742,6 +748,7 @@ export async function deleteFromSharePoint(
   const res = await fetch(
     `https://graph.microsoft.com/v1.0/sites/${siteId}/drive/items/${itemId}`,
     {
+      cache: 'no-store',
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     }

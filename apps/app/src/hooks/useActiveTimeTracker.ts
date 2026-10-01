@@ -3,7 +3,33 @@
 import { useEffect, useRef, useCallback } from 'react';
 
 const IDLE_THRESHOLD_MS = 15_000; // 15 seconds of no activity = idle
-const HEARTBEAT_INTERVAL_MS = 60_000; // Send heartbeat every 60 seconds
+// Send heartbeat every 5 minutes. Seconds counted since the last send are
+// flushed on hide and pagehide (sendHeartbeatOnExit), so none are lost.
+const HEARTBEAT_INTERVAL_MS = 300_000;
+const HEARTBEAT_URL = '/api/devices/heartbeat';
+
+/**
+ * Deliver a batch while the page is going away. sendBeacon survives unload;
+ * when it is missing or refuses (queue full), a keepalive fetch does the same.
+ */
+export function sendHeartbeatOnExit(payload: Record<string, unknown>): void {
+  const body = JSON.stringify(payload);
+  try {
+    if (typeof navigator.sendBeacon === 'function' && navigator.sendBeacon(HEARTBEAT_URL, body)) return;
+  } catch {
+    // fall through to fetch
+  }
+  try {
+    void fetch(HEARTBEAT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      keepalive: true,
+    }).catch(() => {});
+  } catch {
+    // Heartbeat failures should never break the app
+  }
+}
 
 interface UseActiveTimeTrackerOptions {
   deviceId: string | null;
@@ -44,7 +70,9 @@ export function useActiveTimeTracker({
     try {
       // Collect location if available
       let location: { latitude: number; longitude: number; accuracy: number } | null = null;
-      if (navigator.geolocation) {
+      // Only read location the student already allowed. A background timer must
+      // never be the thing that pops a permission prompt.
+      if (navigator.geolocation && (await geolocationGranted())) {
         location = await new Promise((resolve) => {
           navigator.geolocation.getCurrentPosition(
             (pos) => resolve({
@@ -90,6 +118,9 @@ export function useActiveTimeTracker({
 
     // Tick every second to count active vs idle
     tickIntervalRef.current = setInterval(() => {
+      // A hidden tab is neither active nor idle; with nothing counted the
+      // heartbeat skips its request (no polling from background tabs).
+      if (document.visibilityState === 'hidden') return;
       const timeSinceActivity = Date.now() - lastActivityRef.current;
       if (timeSinceActivity > IDLE_THRESHOLD_MS) {
         isActiveRef.current = false;
@@ -100,36 +131,38 @@ export function useActiveTimeTracker({
       }
     }, 1000);
 
-    // Heartbeat every 60 seconds
+    // Heartbeat every 5 minutes
     heartbeatIntervalRef.current = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
 
-    // Send beacon on page hide (tab close, navigate away)
-    const onVisibilityChange = () => {
-      if (document.visibilityState === 'hidden') {
-        const active = activeSecondsRef.current;
-        const idle = idleSecondsRef.current;
-        activeSecondsRef.current = 0;
-        idleSecondsRef.current = 0;
+    // Flush the counted seconds when the page is hidden or torn down (tab
+    // close, navigate away, app switch). Counters reset first, so a pagehide
+    // followed by visibilitychange never sends the same seconds twice.
+    const flushOnExit = () => {
+      const active = activeSecondsRef.current;
+      const idle = idleSecondsRef.current;
+      activeSecondsRef.current = 0;
+      idleSecondsRef.current = 0;
 
-        if (active > 0 || idle > 0) {
-          navigator.sendBeacon(
-            '/api/devices/heartbeat',
-            JSON.stringify({
-              idToken,
-              deviceId,
-              sessionId,
-              activeSeconds: active,
-              idleSeconds: idle,
-            })
-          );
-        }
+      if (active > 0 || idle > 0) {
+        sendHeartbeatOnExit({
+          idToken,
+          deviceId,
+          sessionId,
+          activeSeconds: active,
+          idleSeconds: idle,
+        });
       }
     };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flushOnExit();
+    };
     document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('pagehide', flushOnExit);
 
     return () => {
       events.forEach((e) => window.removeEventListener(e, onActivity));
       document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('pagehide', flushOnExit);
       if (tickIntervalRef.current) clearInterval(tickIntervalRef.current);
       if (heartbeatIntervalRef.current) clearInterval(heartbeatIntervalRef.current);
 
@@ -137,4 +170,14 @@ export function useActiveTimeTracker({
       sendHeartbeat();
     };
   }, [enabled, deviceId, idToken, sessionId, sendHeartbeat]);
+}
+
+async function geolocationGranted(): Promise<boolean> {
+  try {
+    if (!navigator.permissions?.query) return false;
+    const status = await navigator.permissions.query({ name: 'geolocation' as PermissionName });
+    return status.state === 'granted';
+  } catch {
+    return false;
+  }
 }

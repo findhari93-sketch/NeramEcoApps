@@ -27,7 +27,7 @@ const ASK_SENIORS_COLLEGE_SLUGS = [
 ];
 
 export async function getActiveAskSeniorsEvent(): Promise<AskSeniorsEvent | null> {
-  const supabase = createAdminClientISR(3600);
+  const supabase = createAdminClientISR(86400);
   const { data, error } = await supabase
     .from('ask_seniors_events')
     .select('*')
@@ -41,7 +41,7 @@ export async function getActiveAskSeniorsEvent(): Promise<AskSeniorsEvent | null
 }
 
 export async function getAskSeniorsColleges(): Promise<AskSeniorsCollege[]> {
-  const supabase = createAdminClientISR(3600);
+  const supabase = createAdminClientISR(86400);
   const { data, error } = await supabase
     .from('colleges')
     .select('id, slug, state_slug, name, short_name, city, logo_url')

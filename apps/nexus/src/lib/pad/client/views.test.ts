@@ -1,11 +1,12 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { answerTypeLabel, displayAnswer, displayKeys, scoreLabel } from './format';
-import { deriveStudentView, nextRoundId, studentAnnouncement, type PendingSubmit } from './student-view';
+import { deriveStudentView, isTimeUp, nextRoundId, qbButtonTexts, studentAnnouncement, type PendingSubmit } from './student-view';
 import {
   consoleAnnouncement,
   deriveConsoleView,
   groupParticipation,
+  effectiveKeys,
   keyChoices,
   mcqLetters,
   reminderMessage,
@@ -385,5 +386,106 @@ describe('reminderMessage', () => {
     expect(reminderMessage({ ...nothing, recipients: 3, sent: 2, partial: 1 })).toBe('Reminder sent to 3 students.');
     expect(reminderMessage({ ...nothing, recipients: 1, sent: 1 })).toBe('Reminder sent to 1 student.');
     expect(reminderMessage({ ...nothing, recipients: 4, failed: 4 })).toBe('The reminder could not be sent. Try again in a moment.');
+  });
+});
+
+describe('a timed question on the student pad', () => {
+  const seen = new Set(['p1']);
+  const CLOSES = '2026-09-10T10:00:30Z';
+  const before = Date.parse(CLOSES) - 5_000;
+  const after = Date.parse(CLOSES) + 500;
+  const timed = (overrides: Partial<StudentPrompt> = {}) => studentPrompt({ closes_at: CLOSES, time_limit_s: 30, ...overrides });
+
+  it('knows when the time is up on the server clock, and never for an untimed question', () => {
+    expect(isTimeUp(timed(), before)).toBe(false);
+    expect(isTimeUp(timed(), Date.parse(CLOSES))).toBe(true);
+    expect(isTimeUp(timed(), after)).toBe(true);
+    expect(isTimeUp(studentPrompt(), after)).toBe(false);
+    expect(isTimeUp(timed(), null)).toBe(false);
+  });
+
+  it('answers as usual while time is left', () => {
+    expect(deriveStudentView(studentSnap({ prompt: timed() }), null, seen, before)).toMatchObject({ kind: 'answering', selected: null });
+  });
+
+  it('locks at 0 while the snapshot still says open, keeping the answer that stands', () => {
+    const view = deriveStudentView(studentSnap({ prompt: timed(), my_response: mine('C') }), null, seen, after);
+    expect(view).toMatchObject({ kind: 'locked', answer: 'C', timeUp: true });
+    expect(studentAnnouncement(view)).toBe('Time is up. Your answer C is locked.');
+  });
+
+  it('says time is up for a student who did not answer, and not that they joined late', () => {
+    const view = deriveStudentView(studentSnap({ prompt: timed() }), null, seen, after);
+    expect(view).toMatchObject({ kind: 'missed', reason: 'time-up', revealed: false });
+    expect(studentAnnouncement(view)).toBe('Time is up.');
+    // Auto-closed by the server: the same words.
+    expect(deriveStudentView(studentSnap({ prompt: timed({ state: 'closed', version: 2 }) }), null, seen, after)).toMatchObject({ reason: 'time-up' });
+    expect(deriveStudentView(studentSnap({ prompt: timed({ state: 'closed', version: 2 }) }), null, new Set(), after)).toMatchObject({
+      reason: 'joined-after-close',
+    });
+  });
+
+  it('keeps a tap made before 0 on its way, over the answer the server holds', () => {
+    expect(deriveStudentView(studentSnap({ prompt: timed(), my_response: mine('A') }), pending('retrying'), seen, after)).toMatchObject({
+      kind: 'saving',
+      answer: 'B',
+      retrying: true,
+    });
+    expect(deriveStudentView(studentSnap({ prompt: timed() }), pending('sending'), seen, after)).toMatchObject({ kind: 'saving', answer: 'B' });
+  });
+
+  it('shows the answer that stands after a time-up refusal', () => {
+    const refused: PendingSubmit = { promptId: 'p1', answer: 'D', status: 'refused', standing: 'A', timeUp: true, version: 1 };
+    expect(deriveStudentView(studentSnap({ prompt: timed(), my_response: mine('A') }), refused, seen, before)).toMatchObject({
+      kind: 'locked',
+      answer: 'A',
+      timeUp: true,
+    });
+    const noAnswer: PendingSubmit = { promptId: 'p1', answer: 'D', status: 'refused', standing: null, timeUp: true, version: 1 };
+    expect(deriveStudentView(studentSnap({ prompt: timed({ state: 'closed', version: 2 }) }), noAnswer, seen, after)).toMatchObject({
+      kind: 'missed',
+      reason: 'time-up',
+    });
+  });
+
+  it('opens again when the teacher adds time to a question whose time was up', () => {
+    const refused: PendingSubmit = { promptId: 'p1', answer: 'D', status: 'refused', standing: 'A', timeUp: true, version: 2 };
+    const reopened = studentSnap({ prompt: timed({ version: 3, closes_at: '2026-09-10T10:01:00Z' }), my_response: mine('A') });
+    expect(deriveStudentView(reopened, refused, seen, after)).toMatchObject({ kind: 'answering', selected: 'A', save: 'saved' });
+  });
+});
+
+describe('qbButtonTexts', () => {
+  const option = (text: string | null, image_url: string | null = null) => ({ text, image_url });
+
+  it('puts short plain option texts on the buttons', () => {
+    expect(qbButtonTexts({ options: [option('Both correct'), option('Only I'), option(null, 'https://x/c.png'), option('None')] })).toEqual([
+      'Both correct',
+      'Only I',
+      null,
+      'None',
+    ]);
+  });
+
+  it('leaves math and long texts for the question panel', () => {
+    expect(qbButtonTexts({ options: [option('$x^2$'), option('a'.repeat(60)), option(String.raw`\frac{1}{2}`), option(null)] })).toBeNull();
+    expect(qbButtonTexts({ options: [] })).toBeNull();
+    expect(qbButtonTexts(null)).toBeNull();
+  });
+});
+
+describe('effectiveKeys', () => {
+  it("grades with the teacher's key, else the question bank's, and never a poll", () => {
+    expect(effectiveKeys(teacherPrompt({ correct_keys: ['D'], suggested_keys: ['B'] }))).toEqual(['D']);
+    expect(effectiveKeys(teacherPrompt({ correct_keys: null, suggested_keys: ['B'] }))).toEqual(['B']);
+    expect(effectiveKeys(teacherPrompt({ ungraded: true, suggested_keys: ['B'] }))).toBeNull();
+    expect(effectiveKeys(teacherPrompt())).toBeNull();
+  });
+
+  it("counts the bank's answer as decided, so Reveal is one tap", () => {
+    expect(deriveConsoleView(teacherSnap({ prompt: teacherPrompt({ state: 'closed', suggested_keys: ['B'] }) }))).toMatchObject({
+      kind: 'closed',
+      decided: true,
+    });
   });
 });

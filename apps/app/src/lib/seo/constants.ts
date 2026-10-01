@@ -6,17 +6,17 @@ export const ORG_NAME = 'Neram Classes';
 export const ORG_LOGO = `${MARKETING_URL}/logo.png`;
 
 export const APP_DESCRIPTION =
-  'India\'s best free NATA preparation app by Neram Classes. AI-powered cutoff calculator, college predictor for 5000+ colleges, exam center finder, and community question bank. Install as PWA for offline NATA study.';
+  'India\'s best free NATA preparation app by Neram Classes. cutoff calculator, B.Arch college predictor, exam centre finder, and community question bank. Install as PWA for offline NATA study.';
 
 export const APP_FEATURES = [
   'NATA Cutoff Calculator',
-  'College Predictor (5000+ colleges)',
+  'B.Arch College Predictor',
   'Exam Center Locator',
   'Community Question Bank',
   'Image Crop Tool for Applications',
   'Progress Tracking Dashboard',
-  'PWA — Install on any device',
-  'Completely Free — No hidden costs',
+  'Installs on any phone as an app',
+  'Free, with no hidden costs',
 ];
 
 export const SOCIAL_PROFILES = [

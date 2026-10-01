@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { PUBLIC_CACHE_HEADERS } from '@/app/api/_lib/public-cache';
 import { createAdminClient } from '@neram/database';
 import { getCenterBySeoSlug } from '@neram/database/queries';
 
@@ -45,7 +46,7 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ success: true, data: center });
+    return NextResponse.json({ success: true, data: center }, { headers: PUBLIC_CACHE_HEADERS });
   } catch (error) {
     console.error('Get center by slug error:', error);
     return NextResponse.json(

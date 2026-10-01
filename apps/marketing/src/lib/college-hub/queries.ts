@@ -32,12 +32,14 @@ const LISTING_SELECT = `
   avg_placement_salary, min_placement_salary, max_placement_salary, city_slug
 `;
 
-// Dynamic: called from /colleges?state=...&sort=... — page reads searchParams
-// so it's always SSR. Use the regular no-store admin client here.
+// Filtered listing. Default client is the no-store admin client (Aintra tool,
+// /api/colleges/browse, which the CDN caches). The /colleges page passes the ISR
+// client for its default first page (getCollegesISR) so the page stays static.
 export async function getColleges(
-  filters: CollegeFilters = {}
+  filters: CollegeFilters = {},
+  client?: ReturnType<typeof getSupabaseAdminClient>
 ): Promise<{ data: CollegeListItem[]; count: number }> {
-  const supabase = getSupabaseAdminClient();
+  const supabase = client ?? getSupabaseAdminClient();
   const {
     state,
     type,
@@ -90,6 +92,11 @@ export async function getColleges(
   const { data, error, count } = await query;
   if (error) throw error;
   return { data: (data ?? []) as CollegeListItem[], count: count ?? 0 };
+}
+
+/** getColleges through the ISR client: cached with the page, revalidated daily. */
+export function getCollegesISR(filters: CollegeFilters = {}) {
+  return getColleges(filters, createAdminClientISR(ISR_COLLEGE));
 }
 
 // ISR: state listing pages are prerendered via generateStaticParams

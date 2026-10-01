@@ -1,0 +1,18 @@
+{
+  "_readme": "Marketing /tools/{slug} landing pages that 301 to the live tool on app.neramclasses.com. A slug redirects only when it is listed in `enabled`. Enable one only after (1) a Search Console export of 90 days of clicks for that URL is reviewed, (2) the app page has been indexed for 4 weeks, (3) the app page covers what this page offers. Remove the slug from `enabled` to roll back. ai-chatbot stays on marketing.",
+  "enabled": [],
+  "map": {
+    "cutoff-calculator": "/tools/nata/cutoff-calculator",
+    "exam-centers": "/tools/nata/exam-centers",
+    "eligibility-checker": "/tools/nata/eligibility-checker",
+    "cost-calculator": "/tools/nata/cost-calculator",
+    "image-resizer": "/tools/nata/image-crop",
+    "exam-planner": "/tools/nata/exam-planner",
+    "question-bank": "/tools/nata/question-bank",
+    "college-predictor": "/tools/counseling/college-predictor",
+    "josaa-barch-predictor": "/tools/counseling/josaa-predictor",
+    "rank-predictor": "/tools/counseling/rank-predictor",
+    "counseling-insights": "/tools/counseling/insights",
+    "coa-checker": "/tools/counseling/coa-checker"
+  }
+}

@@ -3,33 +3,42 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { createAdminClient, istDayBounds } from '@neram/database';
+import { ZERO_BADGES, badgeWindow, normalizeBadgeCounts } from '@/lib/admin-badges';
 
-const ZERO_COUNTS = {
-  leads: 0,
-  students: 0,
-  demo_classes: 0,
-  support_tickets: 0,
-  app_feedback: 0,
-  qa_moderation: 0,
-  payments: 0,
-  chat_history: 0,
-  duplicates: 0,
-  follow_ups: 0,
-  lifecycle: 0,
-};
+const NO_STORE = { 'Cache-Control': 'no-store' };
 
-// GET /api/admin-badges - Get action-required badge counts for sidebar menu items
+// GET /api/admin-badges - Every sidebar badge plus the bell's unread count, in one
+// call. One SQL function (admin_badge_counts, migration 20261026090000) answers all
+// 14 counts. Response keys: the 11 menu badges, plus careers, messages_unread and
+// notifications_unread, which used to be three separate polled routes. Those routes
+// still exist for any other caller.
 export async function GET() {
+  const supabase = createAdminClient();
+  const { chatSince, followUpBefore } = badgeWindow();
   try {
-    const supabase = createAdminClient();
+    const { data, error } = await supabase.rpc('admin_badge_counts', {
+      p_chat_since: chatSince,
+      p_follow_up_before: followUpBefore,
+    });
+    if (error) throw error;
+    return NextResponse.json(normalizeBadgeCounts(data), { headers: NO_STORE });
+  } catch (rpcErr) {
+    // The function ships in a migration; until it is applied in an environment,
+    // fall back to the old per-table counts so the sidebar never goes blank.
+    console.warn('[admin-badges] RPC unavailable, using per-table counts:', (rpcErr as any)?.message);
+    return NextResponse.json(await legacyCounts(supabase), { headers: NO_STORE });
+  }
+}
 
+async function legacyCounts(supabase: ReturnType<typeof createAdminClient>) {
+  try {
     // Chat history: conversations from the last 24 hours that haven't been reviewed
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
     // Follow-ups due before the end of today, India time (same rule as countDueFollowUps).
     const { end: endOfTodayIst } = istDayBounds();
 
-    const [leads, students, demos, tickets, feedback, qa, payments, chatHistory, duplicates, followUps, lifecycle] = await Promise.all([
+    const [leads, students, demos, tickets, feedback, qa, payments, chatHistory, duplicates, followUps, lifecycle, careers, messages, notifications] = await Promise.all([
       // Leads: phone verified but WA not confirmed, OR submitted but call not made
       supabase
         .from('lead_profiles')
@@ -99,9 +108,12 @@ export async function GET() {
         .from('lifecycle_suggestions')
         .select('id', { count: 'exact', head: true })
         .eq('status', 'open'),
+      supabase.from('job_applications').select('id', { count: 'exact', head: true }).eq('status', 'new'),
+      supabase.from('contact_messages').select('id', { count: 'exact', head: true }).eq('status', 'unread'),
+      supabase.from('admin_notifications').select('id', { count: 'exact', head: true }).eq('is_read', false),
     ]);
 
-    return NextResponse.json({
+    return normalizeBadgeCounts({
       leads: leads.count ?? 0,
       students: students.count ?? 0,
       demo_classes: demos.count ?? 0,
@@ -113,9 +125,12 @@ export async function GET() {
       duplicates: duplicates.count ?? 0,
       follow_ups: followUps.count ?? 0,
       lifecycle: lifecycle.count ?? 0,
+      careers: careers.count ?? 0,
+      messages_unread: messages.count ?? 0,
+      notifications_unread: notifications.count ?? 0,
     });
   } catch (err) {
     console.error('Error fetching admin badge counts:', err);
-    return NextResponse.json(ZERO_COUNTS);
+    return { ...ZERO_BADGES };
   }
 }

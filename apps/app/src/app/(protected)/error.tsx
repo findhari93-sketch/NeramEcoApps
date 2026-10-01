@@ -35,6 +35,9 @@ export default function ProtectedError({
   };
 
   useEffect(() => {
+    // After a deploy, an open tab asks for chunks that no longer exist. "Try
+    // again" cannot fix that; one reload picks up the new build.
+    if (isChunkLoadError(error) && reloadOnce()) return;
     recordError({
       message: `Page crashed: ${error.message}${error.digest ? ` (digest ${error.digest})` : ''}`,
       stack: error.stack || null,
@@ -107,4 +110,25 @@ export default function ProtectedError({
       )}
     </Box>
   );
+}
+
+function isChunkLoadError(error: Error): boolean {
+  return (
+    error.name === 'ChunkLoadError' ||
+    /Loading chunk [\w-]+ failed|Failed to fetch dynamically imported module|Importing a module script failed/i.test(
+      error.message,
+    )
+  );
+}
+
+/** Reload at most once per tab session, so a real outage cannot loop. */
+function reloadOnce(): boolean {
+  try {
+    if (sessionStorage.getItem('chunk-reload-attempted') === '1') return false;
+    sessionStorage.setItem('chunk-reload-attempted', '1');
+  } catch {
+    return false;
+  }
+  window.location.reload();
+  return true;
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { deadlineFetch, SUPABASE_REST_DEADLINE_MS } from './fetch-deadline';
+import { deadlineFetch, SUPABASE_REST_DEADLINE_MS, toServerSupabaseUrl } from './fetch-deadline';
 
 /**
  * Server-side Supabase calls must not hang for as long as the platform allows.
@@ -77,5 +77,24 @@ describe('deadlineFetch', () => {
     const res = await deadlineFetch('https://db.example.com/rest/v1/users', {});
     expect(res.status).toBe(200);
     expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+describe('SUPABASE_SERVER_URL in a browser', () => {
+  // This file runs under jsdom, so `window` exists: the browser must keep the
+  // public (proxied) URL even if the server-only variable were somehow present.
+  beforeEach(() => {
+    vi.stubEnv('NEXT_PUBLIC_SUPABASE_URL', 'https://db.example.com');
+    vi.stubEnv('SUPABASE_SERVER_URL', 'https://abcdefghijklmnop.supabase.co');
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('is never used', async () => {
+    expect(toServerSupabaseUrl('https://db.example.com/rest/v1/users')).toBe('https://db.example.com/rest/v1/users');
+    void deadlineFetch('https://db.example.com/rest/v1/users', {});
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls[0].url).toBe('https://db.example.com/rest/v1/users');
   });
 });

@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PadClientError } from '@/lib/pad/client/pad-fetch';
 import type { PadHost } from '@/lib/pad/client/pad-host';
 import type { StudentPrompt, StudentSnapshot } from '@/lib/pad/client/types';
@@ -442,6 +442,136 @@ describe('StudentPad', () => {
     rerender(pad());
     expect(screen.getByText("Your teacher accepted your reason. This question won't count against you.")).toBeTruthy();
     expect(document.body.textContent).not.toMatch(NO_DASHES);
+  });
+
+  describe('a timed question from Present to class', () => {
+    const NOW = Date.parse('2026-09-10T10:00:00Z');
+    const at = (seconds: number) => new Date(NOW + seconds * 1_000).toISOString();
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('shows the time left beside the question, and warns in the last ten seconds once', () => {
+      mocks.snapshot = snap({ prompt: prompt({ label: '38', closes_at: at(42), time_limit_s: 60 }) });
+      const { rerender } = render(pad());
+      expect(screen.getByRole('timer', { name: '0:42 left' })).toBeTruthy();
+      expect(screen.queryByText(/seconds left/)).toBeNull();
+
+      mocks.snapshot = snap({ server_time: at(1), prompt: prompt({ label: '38', closes_at: at(9), time_limit_s: 60, version: 2 }) });
+      rerender(pad());
+      expect(screen.getByRole('timer', { name: /^0:0[89] left$/ })).toBeTruthy();
+      expect(screen.getByText(/^[89] seconds left$/)).toBeTruthy();
+    });
+
+    it('locks the answer at 0 even before the snapshot says closed, keeping the answer that stands', () => {
+      vi.useFakeTimers({ now: NOW });
+      mocks.snapshot = snap({ prompt: prompt({ closes_at: at(2), time_limit_s: 30 }), my_response: response('B') });
+      render(pad());
+      expect(screen.getByRole('group', { name: 'Choose your answer' })).toBeTruthy();
+
+      act(() => {
+        vi.advanceTimersByTime(2_500);
+      });
+      expect(screen.getByText('Time is up')).toBeTruthy();
+      expect(screen.getByText('Your answer B is locked. Your teacher will share the answer, now or after class.')).toBeTruthy();
+      expect(screen.queryByRole('group', { name: 'Choose your answer' })).toBeNull();
+      expect(document.body.textContent).not.toMatch(NO_DASHES);
+    });
+
+    it('says time is up to a student who did not answer in time', () => {
+      mocks.snapshot = snap({ prompt: prompt({ closes_at: at(-1), time_limit_s: 30 }) });
+      render(pad());
+      expect(screen.getByText('Time is up')).toBeTruthy();
+      expect(screen.getByText('No answer reached your teacher in time. Wait for the next question.')).toBeTruthy();
+      expect(screen.queryByRole('group', { name: 'Choose your answer' })).toBeNull();
+    });
+
+    it('keeps sending a tap made before 0, and never cancels it', async () => {
+      vi.useFakeTimers({ now: NOW });
+      mocks.snapshot = snap({ prompt: prompt({ closes_at: at(2), time_limit_s: 30 }) });
+      mocks.padFetch.mockReturnValue(new Promise(() => undefined));
+      render(pad());
+
+      fireEvent.click(screen.getByRole('button', { name: 'Answer C' }));
+      act(() => {
+        vi.advanceTimersByTime(2_500);
+      });
+      expect(screen.getByText('Sending your answer')).toBeTruthy();
+      expect(screen.getByText('Sending C.')).toBeTruthy();
+      expect(mocks.padFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows the answer that stands when the server says the time was up', async () => {
+      mocks.snapshot = snap({ prompt: prompt({ closes_at: at(20), time_limit_s: 30 }), my_response: response('A') });
+      mocks.padFetch.mockRejectedValue(
+        new PadClientError(409, 'PROMPT_NOT_OPEN', 'PROMPT_NOT_OPEN', { code: 'PROMPT_NOT_OPEN', state: 'closed', time_up: true, answer: 'A' }),
+      );
+      render(pad());
+
+      fireEvent.click(screen.getByRole('button', { name: 'Answer D' }));
+      expect(await screen.findByText('Time is up')).toBeTruthy();
+      expect(screen.getByText('Your answer A is locked. Your teacher will share the answer, now or after class.')).toBeTruthy();
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+  });
+
+  describe('a question bank question', () => {
+    const qb = {
+      format: 'mcq',
+      text: 'Which of these is a load bearing wall?',
+      image_url: 'https://db.neramclasses.com/storage/v1/object/public/qb/q1.png',
+      options: [
+        { text: 'Both correct', image_url: null },
+        { text: 'Only the first one, when the span is longer than the height of the room by a wide margin', image_url: null },
+        { text: null, image_url: 'https://db.neramclasses.com/storage/v1/object/public/qb/c.png' },
+        { text: 'None', image_url: null },
+      ],
+      solution: null,
+    };
+
+    it('keeps the answer buttons first and folds the question away in the Teams side panel', () => {
+      mocks.snapshot = snap({ prompt: prompt({ label: '38', qb }) });
+      render(pad());
+
+      const buttons = screen.getAllByRole('button', { name: /^Answer / });
+      const toggle = screen.getByRole('button', { name: 'Show question' });
+      expect(buttons).toHaveLength(4);
+      expect(buttons[3].compareDocumentPosition(toggle) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(toggle.getAttribute('aria-expanded')).toBe('false');
+      expect(document.getElementById(toggle.getAttribute('aria-controls') ?? '')).toBeTruthy();
+      expect(screen.queryByText('Which of these is a load bearing wall?')).toBeNull();
+
+      // Short plain options sit on the buttons; the long one stays letter only.
+      expect(screen.getByRole('button', { name: 'Answer A, Both correct' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Answer B' })).toBeTruthy();
+
+      fireEvent.click(toggle);
+      expect(screen.getByRole('button', { name: 'Hide question' }).getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByText('Which of these is a load bearing wall?')).toBeTruthy();
+    });
+
+    it('shows the question open on the browser pad: text, picture, the long option and figure options to enlarge', () => {
+      mocks.snapshot = snap({ prompt: prompt({ label: '38', qb }) });
+      render(<StudentPad host={{ ...host, kind: 'browser', frame: 'content' }} sessionId="s1" />);
+
+      expect(screen.getByRole('button', { name: 'Hide question' }).getAttribute('aria-expanded')).toBe('true');
+      expect(screen.getByText('Which of these is a load bearing wall?')).toBeTruthy();
+      expect((screen.getByAltText('Picture for Q.38') as HTMLImageElement).src).toBe(qb.image_url);
+      expect(screen.getByText('B.')).toBeTruthy();
+      expect(screen.getByText(qb.options[1].text as string)).toBeTruthy();
+      // Already on the buttons: not listed twice.
+      expect(screen.queryByText('A.')).toBeNull();
+      expect(screen.getByRole('button', { name: 'Show option C larger' })).toBeTruthy();
+      expect((screen.getByAltText('Option C') as HTMLImageElement).src).toBe(qb.options[2].image_url);
+    });
+
+    it('never shows an answer for the question', () => {
+      mocks.snapshot = snap({ prompt: prompt({ label: '38', qb }) });
+      render(<StudentPad host={{ ...host, kind: 'browser', frame: 'content' }} sessionId="s1" />);
+      expect(document.body.textContent).not.toMatch(/question bank|correct answer|The answer was|Solution/i);
+      expect(document.body.textContent).not.toMatch(NO_DASHES);
+    });
   });
 
   it('explains when the student is not on the class list', () => {

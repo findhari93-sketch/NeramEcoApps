@@ -107,6 +107,9 @@ export function useWatchTracker({
   const sessionIdRef = useRef(sessionId);
   sessionIdRef.current = sessionId;
 
+  // What the last heartbeat reported, so an unchanged state is not re-sent.
+  const lastSentRef = useRef('');
+
   // ── Build heartbeat payload ────────────────────────────────────────────
 
   const buildPayload = useCallback((): HeartbeatPayload => {
@@ -137,6 +140,18 @@ export function useWatchTracker({
       if (!token) return;
 
       const payload = buildPayload();
+      // Nothing new since the last beat (a paused video on an open tab): skip
+      // the request rather than re-send identical numbers every 30 seconds.
+      const fingerprint = [
+        payload.watched_seconds,
+        Math.round(payload.furthest_position),
+        payload.play_count,
+        payload.pause_count,
+        payload.seek_count,
+        payload.rewind_count,
+      ].join(':');
+      if (fingerprint === lastSentRef.current) return;
+      lastSentRef.current = fingerprint;
 
       await fetch(API_ENDPOINT, {
         method: 'POST',
@@ -308,13 +323,24 @@ export function useWatchTracker({
   useEffect(() => {
     if (!enabled || !user) return;
 
+    // Paused while the tab is hidden: nothing new can be watched there. One
+    // beat goes out as the tab hides, so nothing tracked so far is lost.
     heartbeatInterval.current = setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
       if (watchedSecondsSet.current.size > 0) {
         sendHeartbeat();
       }
     }, HEARTBEAT_INTERVAL_MS);
 
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden' && watchedSecondsSet.current.size > 0) {
+        sendHeartbeat();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
     return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
       if (heartbeatInterval.current) {
         clearInterval(heartbeatInterval.current);
         heartbeatInterval.current = null;

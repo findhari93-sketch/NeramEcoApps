@@ -211,6 +211,7 @@ async function fetchZippopotamPostalCode(
     const response = await fetch(
       `https://api.zippopotam.us/${country.toLowerCase()}/${code}`,
       {
+        cache: 'no-store',
         headers: { Accept: 'application/json' },
         signal: controller.signal,
       }
@@ -258,7 +259,9 @@ async function fetchIndianPinCode(pincode: string): Promise<PinCodeResponse['dat
     const response = await fetch(`https://api.postalpincode.in/pincode/${pincode}`, {
       headers: { Accept: 'application/json' },
       signal: controller.signal,
-      next: { revalidate: 3600 },
+      // Pincode to post office data is effectively static: keep it 30 days so a
+      // popular pincode is not rewritten to the Data Cache every hour.
+      next: { revalidate: 2592000 },
     });
 
     clearTimeout(timeout);

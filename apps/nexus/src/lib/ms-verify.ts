@@ -333,6 +333,7 @@ export async function verifyMsToken(
   let response: Response;
   try {
     response = await fetch('https://graph.microsoft.com/v1.0/me', {
+      cache: 'no-store',
       headers: { Authorization: `Bearer ${token}` },
       signal: controller.signal,
     });

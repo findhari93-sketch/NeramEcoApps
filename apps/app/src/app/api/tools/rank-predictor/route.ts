@@ -15,6 +15,7 @@ import {
   getSupabaseBrowserClient,
 } from '@neram/database';
 import { verifyIdToken } from '@/lib/firebase-admin';
+import { toPublicCandidates } from '@/lib/public-candidate';
 
 async function verifyUser(request: NextRequest): Promise<{ uid: string } | null> {
   const authHeader = request.headers.get('authorization');
@@ -181,7 +182,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       prediction: transformedPrediction,
-      similarStudents: prediction?.similarStudents || [],
+      // Allowlisted: where similar students landed, never who they are
+      similarStudents: toPublicCandidates(prediction?.similarStudents),
       system: { id: system.id, code: system.code, name: system.name },
       year: targetYear,
       availableYears,

@@ -69,7 +69,7 @@ describe('verifyBotRequest', () => {
       serviceUrl: SERVICE_URL,
       channelId: 'msteams',
     });
-    expect(fetchSpy).toHaveBeenCalledWith(BOT_CONNECTOR_KEYS_URL);
+    expect(fetchSpy).toHaveBeenCalledWith(BOT_CONNECTOR_KEYS_URL, { cache: 'no-store' });
   });
 
   it('requires a Bearer token', async () => {

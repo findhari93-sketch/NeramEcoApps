@@ -1,9 +1,9 @@
 import { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Help & Support | NATA Tools - Neram Classes',
+  title: 'Help and Support',
   description:
-    'Get instant help with NATA preparation. Chat with our support team for guidance on cutoff scores, college selection, exam centers, and course enrollment.',
+    'Get help with aiArchitek tools and NATA preparation. Chat with the Neram Classes team, raise a ticket, email or call us.',
   keywords: [
     'NATA help',
     'NATA support',
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     'architecture coaching support',
   ],
   openGraph: {
-    title: 'Help & Support | NATA Tools - Neram Classes',
+    title: 'Help and Support | aiArchitek by Neram Classes',
     description:
       'Chat with our support team for guidance on NATA preparation, college selection, and course enrollment.',
     type: 'website',
@@ -20,8 +20,8 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Help & Support | NATA Tools',
-    description: 'Get instant help with NATA preparation from Neram Classes.',
+    title: 'Help and Support | aiArchitek',
+    description: 'Get help with NATA preparation and aiArchitek tools from Neram Classes.',
   },
   alternates: {
     canonical: 'https://app.neramclasses.com/tools/help',

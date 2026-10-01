@@ -56,6 +56,11 @@ export async function padFeatureEnabled(role: PadRole): Promise<boolean> {
   return isFeatureEnabled(PAD_FEATURE[role], await loadFlags());
 }
 
+/** Any Nexus feature flag, from the same briefly held copy (Present to class checks staff.qb-present). */
+export async function nexusFeatureEnabled(id: string): Promise<boolean> {
+  return isFeatureEnabled(id, await loadFlags());
+}
+
 /**
  * Authenticate first (a bad token is a 401 whatever the flags say), then gate
  * on the flag for the caller's surface.

@@ -4,6 +4,7 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import FeesPageContent from '@/components/FeesPageContent';
 import { buildAlternates } from '@/lib/seo/metadata';
+import ClientIntl from '@/components/i18n/ClientIntl';
 
 
 const baseUrl = 'https://neramclasses.com';
@@ -25,7 +26,7 @@ export default function FeesPage({ params: { locale } }: { params: { locale: str
         { name: 'Home', url: baseUrl },
         { name: 'Fees', url: `${baseUrl}/fees` },
       ])} />
-      <FeesPageContent />
+      <ClientIntl locale={locale} namespaces={['fees']}><FeesPageContent /></ClientIntl>
     </>
   );
 }

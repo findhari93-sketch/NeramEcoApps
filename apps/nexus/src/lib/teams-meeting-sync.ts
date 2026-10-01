@@ -99,6 +99,7 @@ export async function fetchGroupCalendarView(
 
   while (url && events.length < maxEvents) {
     const res: Response = await fetch(url, {
+      cache: 'no-store',
       headers: {
         Authorization: `Bearer ${token}`,
         Prefer: 'outlook.timezone="Asia/Kolkata"',

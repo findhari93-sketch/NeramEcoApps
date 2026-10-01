@@ -22,8 +22,6 @@ import {
   Button,
   Chip,
   CircularProgress,
-  ImageViewerDialog,
-  Skeleton,
   Stack,
   TextField,
   ToggleButton,
@@ -40,13 +38,16 @@ import HowToVoteRounded from '@mui/icons-material/HowToVoteRounded';
 import HelpOutlineRounded from '@mui/icons-material/HelpOutlineRounded';
 import LockRounded from '@mui/icons-material/LockRounded';
 import NotificationsActiveRounded from '@mui/icons-material/NotificationsActiveRounded';
+import TimerOffRounded from '@mui/icons-material/TimerOffRounded';
 import WifiOffRounded from '@mui/icons-material/WifiOffRounded';
 import { SKIP_REASON_LABELS, displayAnswer, displayKeys, promptTitle, scoreLabel } from '@/lib/pad/client/format';
 import { PadClientError, padFetch } from '@/lib/pad/client/pad-fetch';
 import type { PadHost } from '@/lib/pad/client/pad-host';
+import { secondsLeft as secondsUntil, useServerNow } from '@/lib/pad/client/server-clock';
 import {
   deriveStudentView,
   nextRoundId,
+  qbButtonTexts,
   studentAnnouncement,
   type PendingSubmit,
   type SaveState,
@@ -56,7 +57,10 @@ import type { AnswerType, SkipReason, StudentPrompt, StudentSnapshot } from '@/l
 import { roundName } from '@/lib/pad/round-results';
 import AnswerInput from './AnswerInput';
 import LiveAnnouncement from './LiveAnnouncement';
+import PadCountdown from './PadCountdown';
+import QuestionPicture from './QuestionPicture';
 import RoundResultCard, { roundEndedLine } from './RoundResultCard';
+import ShowQuestion from './ShowQuestion';
 import { usePadHeartbeat, usePadSnapshot } from './usePadSnapshot';
 
 const MAX_RETRY_DELAY_MS = 8_000;
@@ -179,6 +183,18 @@ function RoundPad({
 
   const promptId = snapshot?.prompt?.id ?? null;
   const promptState = snapshot?.prompt?.state ?? null;
+  const closesAt = snapshot?.session.status === 'live' ? (snapshot.prompt?.closes_at ?? null) : null;
+  /** The prompt's version as this pad last saw it, kept with a refusal so a later reopen is noticed. */
+  const promptVersion = useRef<number | null>(null);
+  promptVersion.current = snapshot?.prompt?.version ?? null;
+
+  // The server's clock, ticking only while a timed question is on screen: quickly
+  // while it is open, slowly once it has closed (to tell "time is up" apart).
+  const serverNow = useServerNow(snapshot?.server_time, {
+    tickMs: promptState === 'open' ? 250 : 5_000,
+    active: Boolean(closesAt) && promptState !== 'revealed',
+  });
+  const timeLeft = promptState === 'open' ? secondsUntil(closesAt, serverNow) : null;
 
   useEffect(() => {
     if (promptId && promptState === 'open') seenOpen.current.add(promptId);
@@ -215,7 +231,14 @@ function RoundPad({
           if (refusal?.code === 'PROMPT_NOT_OPEN' || refusal?.code === 'SESSION_NOT_LIVE') {
             // Too late to change it. The server says which answer stands, if any.
             const standing = typeof refusal.detail.answer === 'string' ? refusal.detail.answer : null;
-            setPending({ promptId: targetPromptId, answer, status: 'refused', standing });
+            setPending({
+              promptId: targetPromptId,
+              answer,
+              status: 'refused',
+              standing,
+              timeUp: refusal.detail.time_up === true,
+              ...(promptVersion.current !== null ? { version: promptVersion.current } : {}),
+            });
             void refresh();
             return;
           }
@@ -258,7 +281,7 @@ function RoundPad({
     }
   }, [nudgedAt]);
 
-  const view = deriveStudentView(snapshot, pending, seenOpen.current);
+  const view = deriveStudentView(snapshot, pending, seenOpen.current, closesAt ? serverNow : null);
 
   if (error && !snapshot) {
     return <ConnectionProblem code={error.code} offline={error.offline} />;
@@ -301,6 +324,7 @@ function RoundPad({
         nudgedAt={nudgedAt}
         onSkip={skip}
         compact={compact}
+        timeLeft={timeLeft}
       />
     </Stack>
   );
@@ -317,6 +341,7 @@ function ViewBody({
   nudgedAt,
   onSkip,
   compact,
+  timeLeft,
 }: {
   view: StudentView;
   host: PadHost;
@@ -328,6 +353,8 @@ function ViewBody({
   nudgedAt: string | null;
   onSkip: (promptId: string, reason: SkipReason | null, note: string | null) => Promise<void>;
   compact: boolean;
+  /** Seconds left on a timed question, or null for no timer. */
+  timeLeft: number | null;
 }) {
   switch (view.kind) {
     case 'loading':
@@ -348,6 +375,9 @@ function ViewBody({
     case 'answering': {
       const title = promptTitle(view.prompt);
       const approval = mySkip?.approval ?? null;
+      const qb = view.prompt.qb ?? null;
+      // A question bank question's short plain options go on the buttons; the rest stay in Show question.
+      const optionTexts = view.prompt.option_texts ?? qbButtonTexts(qb);
       const choose = (answer: string) => {
         // Tapping the answer already chosen changes nothing.
         if (answer === view.selected && view.save !== 'retrying') return;
@@ -371,9 +401,12 @@ function ViewBody({
             </Alert>
           )}
           <Stack spacing={0.5}>
-            <Typography variant="h5" component="h2" fontWeight={800} sx={{ overflowWrap: 'anywhere' }}>
-              {title}
-            </Typography>
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ minWidth: 0 }}>
+              <Typography variant="h5" component="h2" fontWeight={800} sx={{ overflowWrap: 'anywhere', flex: 1, minWidth: 0 }}>
+                {title}
+              </Typography>
+              {timeLeft !== null && <PadCountdown seconds={timeLeft} />}
+            </Stack>
             {view.prompt.question_text && (
               <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', lineHeight: 1.5 }}>
                 {view.prompt.question_text}
@@ -390,7 +423,7 @@ function ViewBody({
             key={view.prompt.id}
             answerType={view.prompt.answer_type}
             optionCount={view.prompt.option_count}
-            optionTexts={view.prompt.option_texts}
+            optionTexts={optionTexts}
             disabled={false}
             error={inputError}
             initialValue={draft}
@@ -398,6 +431,16 @@ function ViewBody({
             onAnswer={choose}
           />
           {view.selected && <ChosenAnswer answer={displayAnswer(view.prompt.answer_type, view.selected)} save={view.save} />}
+          {qb && (
+            <ShowQuestion
+              key={`qb-${view.prompt.id}`}
+              qb={qb}
+              title={title}
+              compact={compact}
+              defaultOpen={!(compact || host.frame === 'sidePanel')}
+              onButtons={optionTexts}
+            />
+          )}
           <Typography variant="body2" color="text.secondary">
             {CHANGE_HINT}
           </Typography>
@@ -427,6 +470,13 @@ function ViewBody({
       );
 
     case 'locked':
+      if (view.timeUp) {
+        return (
+          <StatusCard prompt={view.prompt} tone="primary" icon={<TimerOffRounded />} title="Time is up">
+            {`Your answer ${displayAnswer(view.prompt.answer_type, view.answer)} is locked. Your teacher will share the answer, now or after class.`}
+          </StatusCard>
+        );
+      }
       return (
         <StatusCard prompt={view.prompt} tone="primary" icon={<LockRounded />} title={`Locked: ${displayAnswer(view.prompt.answer_type, view.answer)}`}>
           Answering has closed. Your teacher will share the answer, now or after class.
@@ -434,8 +484,10 @@ function ViewBody({
       );
 
     case 'missed': {
-      const title =
-        view.reason === 'closed-before-arrival'
+      const timeUp = view.reason === 'time-up' && !view.revealed;
+      const title = timeUp
+        ? 'Time is up'
+        : view.reason === 'closed-before-arrival' || view.reason === 'time-up'
           ? 'This question closed before your answer arrived'
           : view.reason === 'joined-after-close'
             ? 'This question closed before you joined'
@@ -443,12 +495,14 @@ function ViewBody({
       const keys = displayKeys(view.prompt.answer_type, view.prompt.correct_keys);
       return (
         <Stack spacing={1.5}>
-          <StatusCard prompt={view.prompt} tone="neutral" icon={<HourglassTopRounded />} title={title}>
+          <StatusCard prompt={view.prompt} tone="neutral" icon={timeUp ? <TimerOffRounded /> : <HourglassTopRounded />} title={title}>
             {view.revealed
               ? view.prompt.ungraded
                 ? 'That one was a poll. The next question will appear here.'
                 : `The answer was ${keys}. The next question will appear here.`
-              : 'Wait for the next question.'}
+              : timeUp
+                ? 'No answer reached your teacher in time. Wait for the next question.'
+                : 'Wait for the next question.'}
           </StatusCard>
           {mySkip?.approval === 'approved' && (
             <Alert severity="success" role="status">
@@ -507,61 +561,6 @@ function ChosenAnswer({ answer, save }: { answer: string; save: SaveState | null
         <Chip size="small" variant="outlined" icon={<WifiOffRounded />} label="No connection, still trying" sx={{ fontWeight: 700 }} />
       )}
     </Stack>
-  );
-}
-
-/**
- * The teacher's picture of the question, sized to the pad. A tap opens it full
- * screen, which is how a student on a phone reads a small snip of the paper.
- */
-function QuestionPicture({ url, title, compact }: { url: string; title: string; compact: boolean }) {
-  const [loaded, setLoaded] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const [open, setOpen] = useState(false);
-  const alt = `Picture for ${title}`;
-
-  if (failed) {
-    return (
-      <Typography variant="body2" color="text.secondary">
-        The picture could not load. Look at the shared screen instead.
-      </Typography>
-    );
-  }
-
-  return (
-    <>
-      <Box
-        component="button"
-        type="button"
-        onClick={() => setOpen(true)}
-        aria-label={`Show the picture for ${title} full screen`}
-        sx={{
-          position: 'relative',
-          display: 'block',
-          width: '100%',
-          minHeight: loaded ? 0 : 120,
-          p: 0,
-          border: '1px solid',
-          borderColor: 'divider',
-          borderRadius: 2,
-          overflow: 'hidden',
-          bgcolor: 'background.paper',
-          cursor: 'zoom-in',
-          '&:focus-visible': { outline: '3px solid', outlineOffset: 2 },
-        }}
-      >
-        {!loaded && <Skeleton variant="rectangular" sx={{ position: 'absolute', inset: 0, height: '100%' }} />}
-        <Box
-          component="img"
-          src={url}
-          alt={alt}
-          onLoad={() => setLoaded(true)}
-          onError={() => setFailed(true)}
-          sx={{ display: 'block', width: '100%', height: 'auto', maxHeight: compact ? '30vh' : '45vh', objectFit: 'contain' }}
-        />
-      </Box>
-      <ImageViewerDialog open={open} onClose={() => setOpen(false)} src={url} alt={alt} name={title} />
-    </>
   );
 }
 

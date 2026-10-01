@@ -25,8 +25,8 @@ export default function ConfidenceIndicator({ level, size = 'small' }: Confidenc
       color={config.color}
       variant="outlined"
       sx={{
-        height: size === 'small' ? 22 : 28,
-        fontSize: size === 'small' ? '0.7rem' : '0.8rem',
+        height: size === 'small' ? 24 : 28,
+        fontSize: size === 'small' ? '0.75rem' : '0.8125rem',
       }}
     />
   );

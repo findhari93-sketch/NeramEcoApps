@@ -197,21 +197,19 @@ export default function EditQuestionDialog({
                   <Chip
                     key={tag}
                     label={tag}
-                    size="small"
                     onDelete={() => handleRemoveTag(tag)}
                   />
                 ))}
               </Stack>
               <Stack direction="row" spacing={1}>
                 <TextField
-                  size="small"
                   label="Add tag (optional)"
                   value={tagInput}
                   onChange={(e) => setTagInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddTag(); } }}
                   sx={{ flex: 1 }}
                 />
-                <Button variant="outlined" size="small" onClick={handleAddTag} disabled={!tagInput.trim()}>
+                <Button variant="outlined" onClick={handleAddTag} disabled={!tagInput.trim()} sx={{ minHeight: 56 }}>
                   Add
                 </Button>
               </Stack>

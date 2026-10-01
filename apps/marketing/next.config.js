@@ -6,6 +6,16 @@ const withNextIntl = createNextIntlPlugin('./src/i18n.ts');
 // Retired "best NATA coaching in {city}" blog guides -> their city page slug.
 const RETIRED_CITY_GUIDES = require('./src/data/geo/retired-city-guides.json');
 
+// Tool landings that now 301 to app.neramclasses.com (only slugs in `enabled`).
+const APP_TOOL_REDIRECTS = require('./src/data/app-tool-redirects.json');
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.neramclasses.com';
+const appToolRedirects = APP_TOOL_REDIRECTS.enabled
+  .filter((slug) => APP_TOOL_REDIRECTS.map[slug])
+  .flatMap((slug) => [
+    { source: `/tools/${slug}`, destination: `${APP_URL}${APP_TOOL_REDIRECTS.map[slug]}`, permanent: true },
+    { source: `/:locale(ta|hi|kn|ml)/tools/${slug}`, destination: `${APP_URL}${APP_TOOL_REDIRECTS.map[slug]}`, permanent: true },
+  ]);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -14,7 +24,7 @@ const nextConfig = {
     // Supabase generated types are out of sync with actual DB schema
     ignoreBuildErrors: true,
   },
-  transpilePackages: ['@neram/ai', '@neram/ui', '@neram/database', '@neram/i18n', '@neram/auth'],
+  transpilePackages: ['@neram/ai', '@neram/ui', '@neram/database', '@neram/i18n', '@neram/auth', '@neram/geo'],
   images: {
     minimumCacheTTL: 2592000, // 30 days — Supabase storage images are immutable
     remotePatterns: [
@@ -157,6 +167,8 @@ const nextConfig = {
         destination: 'https://neramclasses.com/:path*',
         permanent: true,
       },
+
+      ...appToolRedirects,
 
       // /en/* → /* redirect (English is default locale, no prefix needed)
       { source: '/en', destination: '/', permanent: true },

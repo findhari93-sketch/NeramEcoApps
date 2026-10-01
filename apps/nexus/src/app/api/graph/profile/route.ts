@@ -68,6 +68,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const response = await fetch(graphUrl, {
+      cache: 'no-store',
       headers: { Authorization: `Bearer ${graphToken}` },
     });
 

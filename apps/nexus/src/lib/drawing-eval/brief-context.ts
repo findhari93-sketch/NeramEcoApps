@@ -173,7 +173,7 @@ export async function fetchImagePart(
   url: string,
 ): Promise<{ base64: string; mimeType: string } | null> {
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) return null;
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.byteLength === 0 || buf.byteLength > MAX_INLINE_BYTES) return null;

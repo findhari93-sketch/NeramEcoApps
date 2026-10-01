@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { PUBLIC_CACHE_HEADERS } from '@/app/api/_lib/public-cache';
 import { createAdminClient } from '@neram/database';
 import { getActiveCenters, getCenterBySlug } from '@neram/database/queries';
 
@@ -38,15 +39,18 @@ export async function GET(request: NextRequest): Promise<NextResponse<CentersRes
           { status: 404 }
         );
       }
-      return NextResponse.json({ success: true, data: center });
+      return NextResponse.json({ success: true, data: center }, { headers: PUBLIC_CACHE_HEADERS });
     }
 
     const centers = await getActiveCenters(supabase);
 
-    return NextResponse.json({
-      success: true,
-      data: centers,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        data: centers,
+      },
+      { headers: PUBLIC_CACHE_HEADERS },
+    );
   } catch (error) {
     console.error('Get centers error:', error);
     return NextResponse.json(

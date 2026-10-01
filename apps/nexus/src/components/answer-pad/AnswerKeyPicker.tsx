@@ -15,16 +15,20 @@ import { Box, Button, CircularProgress, Stack, TextField, ToggleButton, Typograp
 import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded';
 import HowToVoteRounded from '@mui/icons-material/HowToVoteRounded';
 import VisibilityRounded from '@mui/icons-material/VisibilityRounded';
-import { displayAnswer } from '@/lib/pad/client/format';
-import { keyChoices, toggleKey } from '@/lib/pad/client/teacher-view';
+import { displayAnswer, displayKeys } from '@/lib/pad/client/format';
+import { effectiveKeys, keyChoices, toggleKey } from '@/lib/pad/client/teacher-view';
 import type { TeacherPrompt } from '@/lib/pad/client/types';
 
-export type KeyPickerPrompt = Pick<TeacherPrompt, 'answer_type' | 'option_count' | 'correct_keys' | 'ungraded'>;
+export type KeyPickerPrompt = Pick<TeacherPrompt, 'answer_type' | 'option_count' | 'correct_keys' | 'ungraded'> &
+  Partial<Pick<TeacherPrompt, 'suggested_keys'>>;
 export type AnswerGroups = ReadonlyArray<{ value: string; count: number }>;
 
-/** A key, or Poll / Don't grade: either lets the question be revealed. */
-export function hasDecision(prompt: Pick<KeyPickerPrompt, 'correct_keys' | 'ungraded'>): boolean {
-  return prompt.ungraded || (prompt.correct_keys?.length ?? 0) > 0;
+/**
+ * A key, the question bank's answer, or Poll / Don't grade: any of them lets the
+ * question be revealed (Reveal grades with the bank's answer when no key was chosen).
+ */
+export function hasDecision(prompt: Pick<KeyPickerPrompt, 'correct_keys' | 'ungraded' | 'suggested_keys'>): boolean {
+  return prompt.ungraded || (effectiveKeys(prompt)?.length ?? 0) > 0;
 }
 
 export function AnswerBars({ prompt, groups }: { prompt: KeyPickerPrompt; groups: AnswerGroups }) {
@@ -79,7 +83,10 @@ export default function AnswerKeyPicker({
 }) {
   const labelId = useId();
   const [extraKey, setExtraKey] = useState('');
-  const choices = keyChoices(prompt, groups);
+  const keys = effectiveKeys(prompt);
+  // No key chosen yet, and the question bank has one: it shows as chosen, so Reveal is one tap.
+  const fromBank = !prompt.ungraded && !prompt.correct_keys?.length && (keys?.length ?? 0) > 0;
+  const choices = keyChoices({ ...prompt, correct_keys: keys }, groups);
   const typed = prompt.answer_type === 'numeric' || prompt.answer_type === 'text';
   const decided = hasDecision(prompt);
 
@@ -87,7 +94,7 @@ export default function AnswerKeyPicker({
     event.preventDefault();
     const value = extraKey.trim();
     if (!value) return;
-    const next = toggleKey(prompt.ungraded ? null : prompt.correct_keys, value);
+    const next = toggleKey(prompt.ungraded ? null : keys, value);
     if (next) onKeys(next);
     setExtraKey('');
   };
@@ -101,7 +108,8 @@ export default function AnswerKeyPicker({
         <Box role="group" aria-labelledby={labelId} sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(88px, 1fr))', gap: 1 }}>
           {choices.map((choice) => {
             // Tapping the only key does nothing: a graded question always keeps an answer.
-            const next = toggleKey(prompt.ungraded ? null : prompt.correct_keys, choice.value);
+            // Over the bank's answer, a tap chooses that one key (and confirms the bank's, tapped).
+            const next = fromBank ? [choice.value] : toggleKey(prompt.ungraded ? null : prompt.correct_keys, choice.value);
             return (
               <ToggleButton
                 key={choice.value}
@@ -118,6 +126,11 @@ export default function AnswerKeyPicker({
             );
           })}
         </Box>
+        {fromBank && (
+          <Typography variant="caption" color="text.secondary">
+            {`From the question bank: ${displayKeys(prompt.answer_type, keys)}`}
+          </Typography>
+        )}
 
         {typed && (
           <Stack component="form" direction="row" spacing={1} onSubmit={addKey}>

@@ -205,6 +205,9 @@ importers:
       '@neram/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@neram/geo':
+        specifier: workspace:*
+        version: link:../../packages/geo
       '@neram/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
@@ -278,6 +281,9 @@ importers:
       '@neram/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@neram/geo':
+        specifier: workspace:*
+        version: link:../../packages/geo
       '@neram/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
@@ -477,6 +483,12 @@ importers:
       resend:
         specifier: ^2.1.0
         version: 2.1.0
+    devDependencies:
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
+
+  packages/geo:
     devDependencies:
       typescript:
         specifier: ^5.3.3

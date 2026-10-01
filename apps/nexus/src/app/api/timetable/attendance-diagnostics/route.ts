@@ -191,7 +191,7 @@ export async function GET(request: NextRequest) {
     const filter = `JoinWebUrl eq '${joinUrl.replace(/'/g, "''")}'`;
     const lookupRes = await fetch(
       `https://graph.microsoft.com/v1.0/users/${organizerOid}/onlineMeetings?$filter=${encodeURIComponent(filter)}&$select=id`,
-      { headers: { Authorization: `Bearer ${appToken}` } },
+      { cache: 'no-store', headers: { Authorization: `Bearer ${appToken}` } },
     );
     const lookupBody = lookupRes.ok ? '' : (await lookupRes.text().catch(() => '')).slice(0, 400);
 
@@ -233,7 +233,7 @@ export async function GET(request: NextRequest) {
     // and every class meeting here is a channel meeting.
     const reportsRes = await fetch(
       `https://graph.microsoft.com/v1.0/users/${organizerOid}/onlineMeetings/${meetingId}/attendanceReports`,
-      { headers: { Authorization: `Bearer ${appToken}` } },
+      { cache: 'no-store', headers: { Authorization: `Bearer ${appToken}` } },
     );
 
     if (!reportsRes.ok) {
@@ -290,7 +290,7 @@ export async function GET(request: NextRequest) {
     // present means the access policy does not extend to transcripts.
     const transcriptsRes = await fetch(
       `https://graph.microsoft.com/v1.0/users/${organizerOid}/onlineMeetings/${meetingId}/transcripts`,
-      { headers: { Authorization: `Bearer ${appToken}` } },
+      { cache: 'no-store', headers: { Authorization: `Bearer ${appToken}` } },
     );
     const transcriptBody = transcriptsRes.ok
       ? ''

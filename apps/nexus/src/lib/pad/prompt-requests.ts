@@ -48,7 +48,21 @@ export interface AskRequest {
   optionTexts: Array<string | null> | null;
   /** The open question to close first ("Close Q.31 and ask Q.32"); null to ask only when nothing is open. */
   closePromptId: string | null;
+  /**
+   * The question bank question shown on the presenter. The server reads its
+   * answer buttons and key from the bank; answerType and optionCount count only
+   * when answerTypeChosen says the teacher picked them.
+   */
+  qbQuestionId: string | null;
+  /** True when the body named answerType: with a bank question, the teacher's choice over the bank's. */
+  answerTypeChosen: boolean;
+  /** Seconds until answers stop; null for no timer. */
+  timeLimitSec: number | null;
 }
+
+/** The presenter offers 30 seconds to 5 minutes; the database allows up to an hour. */
+export const MIN_TIME_LIMIT_SEC = 5;
+export const MAX_TIME_LIMIT_SEC = 3600;
 
 /** An optional string field: absent, null or a string within the limit. */
 function optionalText(value: unknown, max: number): { ok: true; value: string | null } | { ok: false } {
@@ -97,6 +111,21 @@ export function parseAskRequest(body: unknown): Parsed<AskRequest> {
     closePromptId = input.closePromptId.toLowerCase();
   }
 
+  let qbQuestionId: string | null = null;
+  if (input.qbQuestionId !== undefined && input.qbQuestionId !== null) {
+    if (!isUuid(input.qbQuestionId)) return { ok: false, field: 'qbQuestionId' };
+    qbQuestionId = input.qbQuestionId.toLowerCase();
+  }
+
+  let timeLimitSec: number | null = null;
+  if (input.timeLimitSec !== undefined && input.timeLimitSec !== null) {
+    const raw = input.timeLimitSec;
+    if (typeof raw !== 'number' || !Number.isInteger(raw) || raw < MIN_TIME_LIMIT_SEC || raw > MAX_TIME_LIMIT_SEC) {
+      return { ok: false, field: 'timeLimitSec' };
+    }
+    timeLimitSec = raw;
+  }
+
   return {
     ok: true,
     value: {
@@ -108,8 +137,22 @@ export function parseAskRequest(body: unknown): Parsed<AskRequest> {
       text: text.value,
       imageUrl: imageUrl.value,
       optionTexts,
+      qbQuestionId,
+      answerTypeChosen: input.answerType !== undefined && input.answerType !== null,
+      timeLimitSec,
     },
   };
+}
+
+/** More time on a question (1 to 600 seconds), or stop its timer. */
+export type TimerRequest = { clear: true; addSeconds: null } | { clear: false; addSeconds: number };
+
+export function parseTimerRequest(body: unknown): Parsed<TimerRequest> {
+  const input = record(body);
+  if (input.clear === true) return { ok: true, value: { clear: true, addSeconds: null } };
+  const add = input.addSeconds;
+  if (typeof add !== 'number' || !Number.isInteger(add) || add < 1 || add > 600) return { ok: false, field: 'addSeconds' };
+  return { ok: true, value: { clear: false, addSeconds: add } };
 }
 
 /** The picture for a question already asked: a new upload's address, or null to take it off. */

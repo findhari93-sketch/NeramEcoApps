@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidateMarketing, TESTIMONIAL_TAGS } from '@/lib/marketing-revalidate';
 import {
   getSupabaseAdminClient,
   listTestimonialsAdmin,
@@ -133,6 +134,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Purge the marketing review pages (bounded wait, never fails the save).
+    await revalidateMarketing(TESTIMONIAL_TAGS, { adminOrigin: request.nextUrl.origin });
     return NextResponse.json({ data }, { status: 201 });
   } catch (error) {
     console.error('Error creating testimonial:', error);

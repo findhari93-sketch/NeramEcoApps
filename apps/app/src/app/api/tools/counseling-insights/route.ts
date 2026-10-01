@@ -24,6 +24,10 @@ import {
  * With systemId only: returns available years
  * With systemId + year: returns full insights (funnel, community, colleges)
  */
+// Same answer for every student and it changes only when new lists are
+// imported, so let the CDN serve it (as the rank predictor's GET does).
+const SHARED_CACHE = { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' } };
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -35,7 +39,7 @@ export async function GET(request: NextRequest) {
     // No systemId → return systems list
     if (!systemId) {
       const systems = await getCounselingSystems(supabase);
-      return NextResponse.json({ systems });
+      return NextResponse.json({ systems }, SHARED_CACHE);
     }
 
     // Get available years
@@ -43,7 +47,7 @@ export async function GET(request: NextRequest) {
 
     // No year specified → return years only
     if (!yearParam) {
-      return NextResponse.json({ yearsWithSource });
+      return NextResponse.json({ yearsWithSource }, SHARED_CACHE);
     }
 
     const year = parseInt(yearParam, 10);
@@ -82,7 +86,7 @@ export async function GET(request: NextRequest) {
         allotment: allotmentCommunity,
       },
       colleges: collegeStats,
-    });
+    }, SHARED_CACHE);
   } catch (error: any) {
     console.error('Counseling insights error:', error);
     return NextResponse.json({ error: error.message }, { status: 500 });

@@ -15,14 +15,12 @@ export default function AdminBadge({ isAdminPost, authorUserType, size = 'small'
     <Chip
       label="Official"
       size={size}
+      color="warning"
+      variant="outlined"
       sx={{
-        height: size === 'small' ? 20 : 24,
-        fontSize: size === 'small' ? '0.65rem' : '0.75rem',
+        height: size === 'small' ? 24 : 28,
+        fontSize: size === 'small' ? '0.75rem' : '0.8125rem',
         fontWeight: 700,
-        backgroundColor: 'warning.light',
-        color: 'warning.dark',
-        border: '1px solid',
-        borderColor: 'warning.main',
       }}
     />
   );

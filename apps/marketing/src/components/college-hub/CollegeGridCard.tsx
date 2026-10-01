@@ -4,10 +4,10 @@ import { Box, Card, Chip, Stack, Typography } from '@mui/material';
 import Image from 'next/image';
 import Link from 'next/link';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
-import type { CollegeListItem } from '@/lib/college-hub/types';
+import type { ListingCollege } from '@/lib/college-hub/listing-filter';
 
 interface CollegeGridCardProps {
-  college: CollegeListItem;
+  college: ListingCollege;
   rank: number;
 }
 

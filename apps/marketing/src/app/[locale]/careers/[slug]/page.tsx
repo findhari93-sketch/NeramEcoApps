@@ -3,11 +3,28 @@ import { notFound } from 'next/navigation';
 import { setRequestLocale } from 'next-intl/server';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
-import { createServerClient, getPublishedJobBySlug } from '@neram/database';
+import { unstable_cache } from 'next/cache';
+import { createAdminClientISR, getPublishedJobBySlug } from '@neram/database';
+import { CACHE_TAGS } from '@/lib/cache-tags';
 import type { JobPosting, EmploymentType } from '@neram/database';
 import JobDetailContent from '@/components/careers/JobDetailContent';
 
-export const revalidate = 3600;
+// ISR daily. The read was a no-store client, which made this page render on
+// every request; it is now cached (ISR client inside unstable_cache).
+export const revalidate = 86400;
+
+// An empty list registers the route for on-demand ISR. Without it Next 14 renders
+// every request dynamically, and the revalidate above never takes effect. It adds
+// no build files, so the 15k file cap is safe.
+export function generateStaticParams() {
+  return [];
+}
+
+const getJob = unstable_cache(
+  async (slug: string) => getPublishedJobBySlug(slug, createAdminClientISR(86400)),
+  ['marketing-job-by-slug-v1'],
+  { revalidate: 86400, tags: [CACHE_TAGS.careers] },
+);
 
 const baseUrl = 'https://neramclasses.com';
 
@@ -57,8 +74,7 @@ export async function generateMetadata({
 }: {
   params: { locale: string; slug: string };
 }): Promise<Metadata> {
-  const client = createServerClient();
-  const job = await getPublishedJobBySlug(slug, client);
+  const job = await getJob(slug);
 
   if (!job) {
     return {
@@ -90,8 +106,7 @@ export default async function CareerDetailPage({
 }) {
   setRequestLocale(locale);
 
-  const client = createServerClient();
-  const job = await getPublishedJobBySlug(slug, client);
+  const job = await getJob(slug);
 
   if (!job) {
     notFound();

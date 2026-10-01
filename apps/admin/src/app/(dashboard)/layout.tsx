@@ -10,6 +10,7 @@ import NotificationBell from '@/components/NotificationBell';
 import { AdminProfileProvider } from '@/contexts/AdminProfileContext';
 import { BatchProvider } from '@/contexts/BatchContext';
 import { SidebarProvider, useSidebar } from '@/contexts/SidebarContext';
+import { AdminBadgesProvider } from '@/contexts/AdminBadgesContext';
 
 function MobileTopBar() {
   const { setMobileOpen } = useSidebar();
@@ -71,7 +72,10 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
     return null;
   }
 
+  // Badges poll only once a user is signed in (the provider mounts here, after the
+  // auth check), so the login redirect never fires a count request.
   return (
+    <AdminBadgesProvider>
     <Box sx={{ display: 'flex', minHeight: '100vh' }}>
       <Sidebar />
       <Box
@@ -95,6 +99,7 @@ function DashboardContent({ children }: { children: React.ReactNode }) {
         </Box>
       </Box>
     </Box>
+    </AdminBadgesProvider>
   );
 }
 

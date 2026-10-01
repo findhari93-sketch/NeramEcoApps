@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidateMarketing, TESTIMONIAL_TAGS } from '@/lib/marketing-revalidate';
 import { moderateTestimonial } from '@neram/database';
 import type { ModerationAction } from '@neram/database';
 import { getRequestAdminId } from '@/lib/request-admin';
@@ -21,6 +22,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   }
   try {
     const result = await moderateTestimonial(params.id, body.action, adminId, body.note ?? null);
+    // Purge the marketing review pages (bounded wait, never fails the save).
+    await revalidateMarketing(TESTIMONIAL_TAGS, { adminOrigin: request.nextUrl.origin });
     return NextResponse.json({ success: true, ...result });
   } catch (error: any) {
     if (error?.status) return NextResponse.json({ error: error.message }, { status: error.status });

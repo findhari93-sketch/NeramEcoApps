@@ -92,6 +92,7 @@ async function postToken(
   fetchImpl: typeof fetch,
 ): Promise<TokenExchange> {
   const res = await fetchImpl(TOKEN_ENDPOINT, {
+    cache: 'no-store',
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(body),
@@ -155,7 +156,7 @@ export async function fetchChannel(
 ): Promise<{ id: string; title: string } | null> {
   const res = await fetchImpl(
     'https://www.googleapis.com/youtube/v3/channels?part=id,snippet&mine=true',
-    { headers: { Authorization: `Bearer ${accessToken}` } },
+    { cache: 'no-store', headers: { Authorization: `Bearer ${accessToken}` } },
   );
   if (!res.ok) return null;
   const json = await res.json().catch(() => ({}));

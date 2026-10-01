@@ -21,22 +21,28 @@ export interface PollInputs {
   failures: number;
 }
 
-const HIDDEN_MS = 60_000;
 const SUBSCRIBED_MS = 30_000;
-/** The live counter while students are answering. */
+/** The live counter while students are answering. Live UX, so it stays fast. */
 const TEACHER_OPEN_MS = 2_000;
-const TEACHER_IDLE_MS = 5_000;
+/** Nothing is being counted, so the console can afford to look less often. */
+const TEACHER_IDLE_MS = 10_000;
 /** A student must see OPEN within a few seconds of ASK. */
-const STUDENT_MS = 3_000;
+const STUDENT_MS = 5_000;
 const MAX_BACKOFF_MS = 30_000;
 
-/** Milliseconds until the next poll, or null to stop polling. */
+/**
+ * Milliseconds until the next poll, or null to stop polling.
+ *
+ * A hidden tab or panel does not poll at all: nobody can see the answer, and
+ * every consumer already refetches once on visibilitychange, so the screen is
+ * current again the moment it is looked at.
+ */
 export function nextPollDelay(inputs: PollInputs): number | null {
   if (inputs.sessionStatus === 'ended') return null;
+  if (inputs.hidden) return null;
 
   let delay: number;
-  if (inputs.hidden) delay = HIDDEN_MS;
-  else if (inputs.realtime === 'subscribed') delay = SUBSCRIBED_MS;
+  if (inputs.realtime === 'subscribed') delay = SUBSCRIBED_MS;
   else if (inputs.role === 'teacher') delay = inputs.promptState === 'open' ? TEACHER_OPEN_MS : TEACHER_IDLE_MS;
   else delay = STUDENT_MS;
 

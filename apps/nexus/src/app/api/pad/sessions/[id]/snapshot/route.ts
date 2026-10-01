@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { resolvePadCaller } from '@/lib/pad/caller';
 import { PadRefusal, callPad, padErrorResponse, padJson } from '@/lib/pad/rpc';
 import { isUuid } from '@/lib/pad/session-binding';
-import { loadSessionMeta, padDb, rosterIds } from '@/lib/pad/sessions';
+import { hintSession, loadSessionMeta, padDb, rosterIds } from '@/lib/pad/sessions';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,6 +17,10 @@ export const dynamic = 'force-dynamic';
  * the classroom roster). Students get their own view: the newest prompt, their
  * own answer, and grading only after Reveal. touch=1 also records that the
  * student's pad is open, which the heartbeat does otherwise.
+ *
+ * Both snapshots first close a question whose time is up (pad_expire_due).
+ * The read that did so tells every other screen, since none of them changed
+ * anything themselves.
  */
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
@@ -34,6 +38,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         p_session: params.id,
         p_roster: await rosterIds(meta.classroom_id, meta.batch_id),
       });
+      if (snapshot.auto_closed === true) await hintSession(params.id, 'everyone');
       return padJson(snapshot);
     }
 
@@ -42,6 +47,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       p_session: params.id,
       p_touch: request.nextUrl.searchParams.get('touch') === '1',
     });
+    if (snapshot.auto_closed === true) await hintSession(params.id, 'everyone');
     return padJson(snapshot);
   } catch (err) {
     return padErrorResponse(err, 'snapshot');

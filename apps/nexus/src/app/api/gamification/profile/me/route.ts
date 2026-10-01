@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     url.pathname = `/api/gamification/profile/${user.id}`;
     const proxyResponse = await fetch(url.toString(), {
+      cache: 'no-store',
       headers: { Authorization: request.headers.get('Authorization') || '' },
     });
 

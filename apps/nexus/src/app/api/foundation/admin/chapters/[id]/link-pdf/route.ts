@@ -52,7 +52,7 @@ export async function POST(
     const encoded = encodeSharingUrl(url);
     const res = await fetch(
       `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem?$select=id,name,webUrl,file,size`,
-      { headers: { Authorization: `Bearer ${token}` } }
+      { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }
     );
 
     if (!res.ok) {
@@ -76,7 +76,7 @@ export async function POST(
     // Get a download URL for the item
     const dlRes = await fetch(
       `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem?$select=id,@microsoft.graph.downloadUrl`,
-      { headers: { Authorization: `Bearer ${token}` } }
+      { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }
     );
 
     let downloadUrl = url; // fallback to original URL

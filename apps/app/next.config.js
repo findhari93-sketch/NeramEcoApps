@@ -21,6 +21,14 @@ const authNetworkOnly = {
   handler: 'NetworkOnly',
 };
 
+// Same-origin API responses are per-user and keyed by URL only in Workbox, so a
+// cached copy could be served to the next account signed in on the device.
+// Never cache them.
+const apiNetworkOnly = {
+  urlPattern: ({ url, sameOrigin }) => sameOrigin && url.pathname.startsWith('/api/'),
+  handler: 'NetworkOnly',
+};
+
 // NOTE: apps/app/public/sw.js + workbox-*.js are GENERATED artifacts. After
 // changing this config, rebuild (pnpm build) so the new rule is baked in, then
 // commit the regenerated sw.js.
@@ -29,7 +37,7 @@ const withPWA = require('next-pwa')({
   register: true,
   skipWaiting: true,
   disable: process.env.NODE_ENV === 'development',
-  runtimeCaching: [authNetworkOnly, ...defaultRuntimeCaching],
+  runtimeCaching: [authNetworkOnly, apiNetworkOnly, ...defaultRuntimeCaching],
 });
 
 /** @type {import('next').NextConfig} */
@@ -40,7 +48,7 @@ const nextConfig = {
     // Supabase generated types are out of sync with actual DB schema
     ignoreBuildErrors: true,
   },
-  transpilePackages: ['@neram/ui', '@neram/database', '@neram/auth', '@neram/i18n'],
+  transpilePackages: ['@neram/ui', '@neram/database', '@neram/auth', '@neram/i18n', '@neram/geo'],
   async rewrites() {
     return [
       {
@@ -51,10 +59,14 @@ const nextConfig = {
   },
   async redirects() {
     return [
+      // Old tool URLs. Each points straight at the live page (no chains).
       { source: '/tools/cutoff-calculator', destination: '/tools/nata/cutoff-calculator', permanent: true },
-      { source: '/tools/college-predictor', destination: '/tools/nata/college-predictor', permanent: true },
+      { source: '/tools/college-predictor', destination: '/tools/counseling/college-predictor', permanent: true },
+      { source: '/tools/nata/college-predictor', destination: '/tools/counseling/college-predictor', permanent: true },
+      { source: '/tools/nata/rank-predictor', destination: '/tools/counseling/rank-predictor', permanent: true },
       { source: '/tools/exam-centers', destination: '/tools/nata/exam-centers', permanent: true },
       { source: '/tools/josaa-predictor', destination: '/tools/counseling/josaa-predictor', permanent: true },
+      { source: '/tools/question-bank', destination: '/tools/nata/question-bank', permanent: true },
     ];
   },
   images: {

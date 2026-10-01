@@ -1,12 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Accordion, AccordionDetails, AccordionSummary,
   Alert, Box, Button, Checkbox, Chip, CircularProgress, Dialog, DialogActions,
   DialogContent, DialogTitle, Divider, FormControl, FormControlLabel, IconButton,
   InputLabel, MenuItem, Paper, Select, Snackbar, Stack, Table, TableBody,
-  TableCell, TableContainer, TableHead, TableRow, TextField, Typography,
+  TableCell, TableContainer, TableHead, TablePagination, TableRow, TextField, Typography,
 } from '@mui/material';
 import UpgradeIcon from '@mui/icons-material/Upgrade';
 import EmailIcon from '@mui/icons-material/Email';
@@ -23,6 +23,7 @@ import { useMicrosoftAuth } from '@neram/auth';
 import type { CollegeOutreachRow, CollegeTier, ContactStatus, CollegeStatus } from '@/lib/college-outreach/types';
 import type { OutreachTemplateVariant } from '@/lib/college-outreach/templates';
 import { parseRecipientList } from '@/lib/college-outreach/templates';
+import { EMPTY_OUTREACH_STATS, type OutreachStats } from '@/lib/college-outreach/list-stats';
 
 const TIER_COLORS: Record<CollegeTier, 'default' | 'info' | 'warning' | 'success'> = {
   free: 'default',
@@ -95,6 +96,14 @@ export default function CollegeOutreachPage() {
 
   const [colleges, setColleges] = useState<CollegeOutreachRow[]>([]);
   const [loading, setLoading] = useState(false);
+  // The table is paged on the server; total and stats cover every match.
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(100);
+  const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState<OutreachStats>(EMPTY_OUTREACH_STATS);
+  // Merge picker: every active college, loaded when the dialog opens.
+  const [mergeOptions, setMergeOptions] = useState<Array<{ id: string; name: string; city: string | null }>>([]);
+  const [mergeOptionsLoading, setMergeOptionsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [filterState, setFilterState] = useState('');
@@ -141,11 +150,13 @@ export default function CollegeOutreachPage() {
   const staffName = user?.name || user?.email || 'Neram Staff';
   const staffEmail = user?.email || '';
 
-  const fetchColleges = useCallback(async () => {
+  const fetchColleges = useCallback(async (pageIndex = 0, pageSize = rowsPerPage) => {
     setLoading(true);
     setError(null);
     try {
       const params = new URLSearchParams();
+      params.set('limit', String(pageSize));
+      params.set('offset', String(pageIndex * pageSize));
       if (filterState) params.set('state', filterState);
       if (filterTier) params.set('tier', filterTier);
       if (filterStatus) params.set('status', filterStatus);
@@ -156,12 +167,18 @@ export default function CollegeOutreachPage() {
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Failed to load'); return; }
       setColleges(data.colleges);
+      setTotal(data.total ?? data.colleges.length);
+      setStats(data.stats ?? EMPTY_OUTREACH_STATS);
+      setPage(pageIndex);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
       setLoading(false);
     }
-  }, [filterState, filterTier, filterStatus, filterLifecycle, filterNeedsEmail, searchQuery]);
+  }, [filterState, filterTier, filterStatus, filterLifecycle, filterNeedsEmail, searchQuery, rowsPerPage]);
+
+  // After an edit or lifecycle change, reload the page the user is on.
+  const reloadCurrentPage = useCallback(() => fetchColleges(page), [fetchColleges, page]);
 
   function openDeactivateDialog(college: CollegeOutreachRow) {
     setLifecycleTarget(college);
@@ -182,7 +199,7 @@ export default function CollegeOutreachPage() {
       if (!res.ok) { setError(data.error || 'Update failed'); return; }
       setToast(`${college.name} set to ${status}`);
       setDeactivateDialogOpen(false);
-      fetchColleges();
+      reloadCurrentPage();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Update failed');
     } finally {
@@ -194,6 +211,13 @@ export default function CollegeOutreachPage() {
     setMergeTarget(college);
     setMergeSurvivorId('');
     setMergeDialogOpen(true);
+    // The survivor can be any active college, not just one on this page.
+    setMergeOptionsLoading(true);
+    fetch('/api/college-outreach/list?lifecycle=active&fields=options', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => setMergeOptions(d.colleges ?? []))
+      .catch(() => setMergeOptions([]))
+      .finally(() => setMergeOptionsLoading(false));
   }
 
   async function handleMerge() {
@@ -210,7 +234,7 @@ export default function CollegeOutreachPage() {
       if (!res.ok) { setError(data.error || 'Merge failed'); return; }
       setToast(`${mergeTarget.name} merged as duplicate`);
       setMergeDialogOpen(false);
-      fetchColleges();
+      reloadCurrentPage();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Merge failed');
     } finally {
@@ -260,7 +284,7 @@ export default function CollegeOutreachPage() {
       if (!res.ok) { setError(data.error || 'Save failed'); return; }
       setToast(`Saved: ${editTarget.name}`);
       setEditDialogOpen(false);
-      fetchColleges();
+      reloadCurrentPage();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed');
     } finally {
@@ -291,7 +315,7 @@ export default function CollegeOutreachPage() {
       const data = await res.json();
       if (!res.ok) { setError(data.error || 'Upgrade failed'); return; }
       setTierDialogOpen(false);
-      fetchColleges();
+      reloadCurrentPage();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upgrade failed');
     } finally {
@@ -391,7 +415,7 @@ export default function CollegeOutreachPage() {
       const suffix = extras.length ? ` (${extras.join(', ')})` : '';
       setToast(`Sent to ${count} contact${count === 1 ? '' : 's'}${suffix}.`);
       setOutreachDialogOpen(false);
-      fetchColleges();
+      reloadCurrentPage();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Send failed');
     } finally {
@@ -422,22 +446,6 @@ export default function CollegeOutreachPage() {
     window.location.href = `mailto:${encodeURIComponent(to)}?${params.toString()}`;
   }
 
-  const stats = useMemo(() => {
-    return colleges.reduce(
-      (acc, c) => {
-        acc.total++;
-        if (c.contact_status === 'never_contacted' || !c.contact_status) acc.neverContacted++;
-        if (c.contact_status === 'emailed_v1') acc.emailed++;
-        if (c.contact_status === 'replied' || c.contact_status === 'engaged' || c.contact_status === 'claimed') acc.engaged++;
-        if (c.contact_status === 'partner') acc.partner++;
-        if (!c.admissions_email && !c.email) acc.needsEmail++;
-        if (!c.neram_tier || c.neram_tier === 'free') acc.free++;
-        else acc.paid++;
-        return acc;
-      },
-      { total: 0, neverContacted: 0, emailed: 0, engaged: 0, partner: 0, needsEmail: 0, free: 0, paid: 0 },
-    );
-  }, [colleges]);
 
   return (
     <Box>
@@ -475,7 +483,7 @@ export default function CollegeOutreachPage() {
             size="small"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && fetchColleges()}
+            onKeyDown={(e) => e.key === 'Enter' && fetchColleges(0)}
             sx={{ minWidth: 220, flex: 1 }}
           />
           <FormControl size="small" sx={{ minWidth: 160 }}>
@@ -548,7 +556,7 @@ export default function CollegeOutreachPage() {
             control={<Checkbox checked={filterNeedsEmail} onChange={(e) => setFilterNeedsEmail(e.target.checked)} />}
             label="Needs email"
           />
-          <Button variant="contained" onClick={fetchColleges} startIcon={<RefreshIcon />} disabled={loading}>
+          <Button variant="contained" onClick={() => fetchColleges(0)} startIcon={<RefreshIcon />} disabled={loading}>
             {loading ? 'Loading...' : 'Apply'}
           </Button>
         </Stack>
@@ -641,6 +649,21 @@ export default function CollegeOutreachPage() {
             )}
           </TableBody>
         </Table>
+        <TablePagination
+          component="div"
+          count={total}
+          page={page}
+          onPageChange={(_, next) => fetchColleges(next)}
+          rowsPerPage={rowsPerPage}
+          rowsPerPageOptions={[50, 100, 200]}
+          onRowsPerPageChange={(e) => {
+            const size = parseInt(e.target.value, 10);
+            setRowsPerPage(size);
+            fetchColleges(0, size);
+          }}
+          showFirstButton
+          showLastButton
+        />
       </TableContainer>
 
       {/* Tier dialog */}
@@ -822,8 +845,9 @@ export default function CollegeOutreachPage() {
               <FormControl fullWidth size="small">
                 <InputLabel>Merge into (survivor)</InputLabel>
                 <Select value={mergeSurvivorId} label="Merge into (survivor)"
+                  disabled={mergeOptionsLoading}
                   onChange={(e) => setMergeSurvivorId(e.target.value)}>
-                  {colleges.filter((o) => o.id !== mergeTarget.id).map((o) => (
+                  {mergeOptions.filter((o) => o.id !== mergeTarget.id).map((o) => (
                     <MenuItem key={o.id} value={o.id}>{o.name} ({o.city})</MenuItem>
                   ))}
                 </Select>

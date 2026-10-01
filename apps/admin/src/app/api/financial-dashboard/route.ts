@@ -3,19 +3,51 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
+import { buildFinancialDashboardResponse, previousPeriod } from '@/lib/financial-dashboard';
 
+// GET /api/financial-dashboard?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD
+//
+// One SQL call (financial_dashboard_summary, migration 20261026090000) instead of
+// 16 sequential queries, and sums done in SQL instead of over unpaged selects that
+// stopped at 1,000 rows. The response shape is unchanged. If the function is not
+// deployed in this environment yet, the old per-table path below answers instead.
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const startDate = searchParams.get('startDate');
     const endDate = searchParams.get('endDate');
 
-    if (!startDate || !endDate) {
-      return NextResponse.json({ error: 'startDate and endDate are required' }, { status: 400 });
+    if (!startDate || !endDate || !DATE_RE.test(startDate) || !DATE_RE.test(endDate)) {
+      return NextResponse.json({ error: 'startDate and endDate are required (YYYY-MM-DD)' }, { status: 400 });
     }
 
     const supabase = getSupabaseAdminClient();
+    const { prevStart, prevEnd } = previousPeriod(startDate, endDate);
+    const { data, error } = await supabase.rpc('financial_dashboard_summary', {
+      p_start: startDate,
+      p_end: endDate,
+      p_prev_start: prevStart,
+      p_prev_end: prevEnd,
+      p_months: 6,
+      // "Today" as the old route saw it: the server clock in UTC.
+      p_today: new Date().toISOString().slice(0, 10),
+    });
+    if (!error && data) {
+      return NextResponse.json(buildFinancialDashboardResponse(data));
+    }
+    console.warn('[financial-dashboard] RPC unavailable, using per-table reads:', error?.message);
+    return NextResponse.json(await legacyDashboard(supabase, startDate, endDate));
+  } catch (error: any) {
+    console.error('Dashboard error:', error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** The pre-RPC implementation, kept only as a fallback. */
+async function legacyDashboard(supabase: any, startDate: string, endDate: string) {
+  {
     // 1. Get all financial transactions in date range
     const { data: transactions } = await supabase
       .from('financial_transactions')
@@ -161,7 +193,7 @@ export async function GET(request: NextRequest) {
       topAssignmentInfo = aInfo ? { ...aInfo, total: topAssignmentAmount } : null;
     }
 
-    return NextResponse.json({
+    return {
       summary: {
         total_income: totalIncome,
         student_fee_income: studentFeeIncome,
@@ -181,9 +213,6 @@ export async function GET(request: NextRequest) {
         highest_single_expense: highestSingleExpense,
         top_assignment: topAssignmentInfo,
       },
-    });
-  } catch (error: any) {
-    console.error('Dashboard error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    };
   }
 }

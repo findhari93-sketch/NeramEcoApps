@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getRequestUser, assertCapability } from '@/lib/study-materials';
 import { errorResponse } from '@/lib/api-errors';
 import { getSupabaseAdminClient, getCurrentBatch, isTracked, pairStatus } from '@neram/database';
+import { attendanceCountsByStudent, fetchAttendanceCounts } from '@/lib/attendance-counts';
 import { pickClassroomEmail } from '@/lib/classroom-email';
 import { isAwaitingMicrosoft } from '@/lib/microsoft-account';
 import { findRosterDuplicates } from '@/lib/roster-duplicates';
@@ -225,11 +226,9 @@ export async function GET(request: NextRequest) {
       signInResult,
       pausedByResult,
     ] = await Promise.all([
-      // Attendance records for all students in this classroom's classes
-      supabase
-        .from('nexus_attendance')
-        .select('student_id, attended')
-        .in('student_id', studentIds),
+      // Attendance counts per student in this classroom's classes, counted in
+      // SQL (one row per student, no 1,000-row cap). lib/attendance-counts.ts.
+      fetchAttendanceCounts(supabase, [classroomId], studentIds),
 
       // Total completed classes in classroom
       supabase
@@ -339,15 +338,7 @@ export async function GET(request: NextRequest) {
     const totalChecklistItems = checklistTotalResult.count || 0;
 
     // Build attendance stats per student
-    const attendanceByStudent = (attendanceResult.data || []).reduce(
-      (acc: Record<string, { attended: number; total: number }>, row: any) => {
-        if (!acc[row.student_id]) acc[row.student_id] = { attended: 0, total: 0 };
-        acc[row.student_id].total += 1;
-        if (row.attended) acc[row.student_id].attended += 1;
-        return acc;
-      },
-      {} as Record<string, { attended: number; total: number }>,
-    );
+    const attendanceByStudent = attendanceCountsByStudent(attendanceResult.data);
 
     // Build checklist stats per student
     const checklistByStudent = (checklistProgressResult.data || []).reduce(

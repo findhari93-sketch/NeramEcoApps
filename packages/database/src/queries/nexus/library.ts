@@ -14,6 +14,56 @@ import type {
 // VIDEOS
 // ============================================
 
+/**
+ * Every library_videos column a list, card, row, bookmark, continue-watching
+ * tile or the review queue reads. Deliberately NOT '*': that shipped
+ * transcript_text and transcript_segments (a whole class transcript per row)
+ * plus the search_vector / search_text_norm scaffolding on every list response,
+ * and nothing in a list renders any of them. Only getVideoById, the single-video
+ * detail, still reads the transcript. Pinned by library-columns.test.ts.
+ */
+export const LIBRARY_CARD_COLUMNS = [
+  'id',
+  'youtube_video_id',
+  'youtube_channel_id',
+  'original_title',
+  'original_description',
+  'youtube_thumbnail_url',
+  'youtube_thumbnail_hq_url',
+  'duration_seconds',
+  'published_at',
+  'privacy_status',
+  'transcript_language',
+  'transcript_is_generated',
+  'transcript_status',
+  'suggested_title',
+  'suggested_description',
+  'language',
+  'exam',
+  'category',
+  'subcategories',
+  'topics',
+  'difficulty',
+  'key_concepts',
+  'is_practical_demo',
+  'ai_confidence',
+  'classification_status',
+  'classification_error',
+  'approved_title',
+  'approved_description',
+  'review_status',
+  'reviewed_by',
+  'reviewed_at',
+  'admin_notes',
+  'is_published',
+  'view_count',
+  'total_watch_seconds',
+  'bookmark_count',
+  'synced_at',
+  'created_at',
+  'updated_at',
+].join(',');
+
 export async function getPublishedVideos(
   filters?: {
     category?: string;
@@ -31,7 +81,7 @@ export async function getPublishedVideos(
   const supabase = client || getSupabaseAdminClient();
   let query = supabase
     .from('library_videos')
-    .select('*', { count: 'exact' })
+    .select(LIBRARY_CARD_COLUMNS, { count: 'exact' })
     .eq('is_published', true);
 
   if (filters?.category) query = query.eq('category', filters.category);
@@ -61,7 +111,7 @@ export async function getPublishedVideos(
 
   const { data, error, count } = await query;
   if (error) throw error;
-  return { videos: (data || []) as LibraryVideo[], total: count || 0 };
+  return { videos: (data || []) as unknown as LibraryVideo[], total: count || 0 };
 }
 
 /**
@@ -156,13 +206,13 @@ export async function getVideosByCategory(
   const supabase = client || getSupabaseAdminClient();
   const { data, error } = await supabase
     .from('library_videos')
-    .select('*')
+    .select(LIBRARY_CARD_COLUMNS)
     .eq('is_published', true)
     .eq('category', category)
     .order('published_at', { ascending: false })
     .limit(limit);
   if (error) throw error;
-  return (data || []) as LibraryVideo[];
+  return (data || []) as unknown as LibraryVideo[];
 }
 
 export async function getRelatedVideos(
@@ -175,7 +225,7 @@ export async function getRelatedVideos(
   const supabase = client || getSupabaseAdminClient();
   const { data, error } = await supabase
     .from('library_videos')
-    .select('*')
+    .select(LIBRARY_CARD_COLUMNS)
     .eq('is_published', true)
     .eq('category', category)
     .neq('id', videoId)
@@ -183,7 +233,7 @@ export async function getRelatedVideos(
     .order('view_count', { ascending: false })
     .limit(limit);
   if (error) throw error;
-  return (data || []) as LibraryVideo[];
+  return (data || []) as unknown as LibraryVideo[];
 }
 
 export async function getVideoCategories(
@@ -218,7 +268,7 @@ export async function getReviewQueue(
   const supabase = client || getSupabaseAdminClient();
   let query = supabase
     .from('library_videos')
-    .select('*', { count: 'exact' });
+    .select(LIBRARY_CARD_COLUMNS, { count: 'exact' });
 
   if (filters?.status) {
     query = query.eq('review_status', filters.status);
@@ -241,7 +291,7 @@ export async function getReviewQueue(
 
   const { data, error, count } = await query;
   if (error) throw error;
-  return { videos: (data || []) as LibraryVideo[], total: count || 0 };
+  return { videos: (data || []) as unknown as LibraryVideo[], total: count || 0 };
 }
 
 export async function updateVideoReview(
@@ -275,9 +325,9 @@ export async function bulkApproveVideos(
       reviewed_at: new Date().toISOString(),
     })
     .in('id', videoIds)
-    .select();
+    .select(LIBRARY_CARD_COLUMNS);
   if (error) throw error;
-  return (data || []) as LibraryVideo[];
+  return (data || []) as unknown as LibraryVideo[];
 }
 
 export async function getReviewStats(
@@ -343,7 +393,7 @@ export async function getCollectionWithVideos(
       *,
       items:library_collection_items(
         *,
-        video:library_videos(*)
+        video:library_videos(${LIBRARY_CARD_COLUMNS})
       )
     `)
     .eq('id', collectionId)
@@ -447,7 +497,7 @@ export async function getStudentBookmarks(
   const supabase = client || getSupabaseAdminClient();
   const { data, error } = await supabase
     .from('library_bookmarks')
-    .select('*, video:library_videos(*)')
+    .select(`*, video:library_videos(${LIBRARY_CARD_COLUMNS})`)
     .eq('student_id', studentId)
     .order('created_at', { ascending: false });
   if (error) throw error;
@@ -492,7 +542,7 @@ export async function getContinueWatching(
   const supabase = client || getSupabaseAdminClient();
   const { data, error } = await supabase
     .from('library_watch_history')
-    .select('*, video:library_videos(*)')
+    .select(`*, video:library_videos(${LIBRARY_CARD_COLUMNS})`)
     .eq('student_id', studentId)
     .eq('completed', false)
     .order('last_watched_at', { ascending: false })

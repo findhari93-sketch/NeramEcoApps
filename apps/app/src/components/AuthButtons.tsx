@@ -13,7 +13,7 @@ import {
 } from '@neram/ui';
 import { useFirebaseAuth, getAuthRedirectUrl, clearAuthRedirectUrl, getFirebaseAuth, signInWithGoogleYouTube } from '@neram/auth';
 import { trackFunnelEvent, trackFunnelEventImmediate } from '@/lib/funnel-tracker';
-import { isTrustedRedirect, safeRedirect } from '@/lib/safe-redirect';
+import { safeRedirect, resolvePostAuthTarget } from '@/lib/safe-redirect';
 
 // Storage key for YouTube subscribe intent
 const YOUTUBE_SUBSCRIBE_KEY = 'neram_youtube_subscribe_intent';
@@ -106,10 +106,19 @@ async function handleYouTubeSubscribeRedirect(accessToken: string | null) {
  *    (phone verification will happen on tools-app)
  */
 async function handlePostAuthRedirect(router: ReturnType<typeof useRouter>) {
-  const redirectUrl = getAuthRedirectUrl();
+  const target = resolvePostAuthTarget(getAuthRedirectUrl(), window.location.origin, [MARKETING_URL]);
+
+  // Back to the page inside this app that sent them to sign in (a tool).
+  // Already signed in here, so no token.
+  if (target.kind === 'path') {
+    clearAuthRedirectUrl();
+    router.push(target.path);
+    return;
+  }
 
   // The custom token signs in as this visitor: never hand it to another host.
-  if (redirectUrl && isTrustedRedirect(redirectUrl, [MARKETING_URL, window.location.origin])) {
+  if (target.kind === 'token') {
+    const redirectUrl = target.url;
     // IMMEDIATE redirect - don't show dashboard
     try {
       const auth = getFirebaseAuth();

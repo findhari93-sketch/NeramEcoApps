@@ -1,0 +1,4143 @@
+{
+ "exam_type": "JEE_PAPER_2",
+ "papers": [
+  {
+   "year": 2005,
+   "papers": 1
+  },
+  {
+   "year": 2006,
+   "papers": 1
+  },
+  {
+   "year": 2007,
+   "papers": 1
+  },
+  {
+   "year": 2008,
+   "papers": 1
+  },
+  {
+   "year": 2009,
+   "papers": 1
+  },
+  {
+   "year": 2010,
+   "papers": 1
+  },
+  {
+   "year": 2011,
+   "papers": 1
+  },
+  {
+   "year": 2012,
+   "papers": 1
+  },
+  {
+   "year": 2013,
+   "papers": 1
+  },
+  {
+   "year": 2014,
+   "papers": 1
+  },
+  {
+   "year": 2015,
+   "papers": 1
+  },
+  {
+   "year": 2016,
+   "papers": 1
+  },
+  {
+   "year": 2017,
+   "papers": 1
+  },
+  {
+   "year": 2018,
+   "papers": 1
+  },
+  {
+   "year": 2019,
+   "papers": 3
+  },
+  {
+   "year": 2020,
+   "papers": 2
+  },
+  {
+   "year": 2026,
+   "papers": 1
+  }
+ ],
+ "totals": [
+  {
+   "section": "math",
+   "year": 2006,
+   "questions": 40
+  },
+  {
+   "section": "math",
+   "year": 2007,
+   "questions": 40
+  },
+  {
+   "section": "math",
+   "year": 2008,
+   "questions": 25
+  },
+  {
+   "section": "math",
+   "year": 2009,
+   "questions": 25
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "questions": 30
+  },
+  {
+   "section": "math",
+   "year": 2011,
+   "questions": 25
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "questions": 30
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "questions": 30
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "questions": 30
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "questions": 30
+  },
+  {
+   "section": "math",
+   "year": 2016,
+   "questions": 30
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "questions": 30
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "questions": 30
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "questions": 90
+  },
+  {
+   "section": "math",
+   "year": 2020,
+   "questions": 15
+  },
+  {
+   "section": "math",
+   "year": 2026,
+   "questions": 25
+  },
+  {
+   "section": "aptitude",
+   "year": 2005,
+   "questions": 47
+  },
+  {
+   "section": "aptitude",
+   "year": 2006,
+   "questions": 50
+  },
+  {
+   "section": "aptitude",
+   "year": 2007,
+   "questions": 48
+  },
+  {
+   "section": "aptitude",
+   "year": 2008,
+   "questions": 50
+  },
+  {
+   "section": "aptitude",
+   "year": 2009,
+   "questions": 55
+  },
+  {
+   "section": "aptitude",
+   "year": 2010,
+   "questions": 50
+  },
+  {
+   "section": "aptitude",
+   "year": 2011,
+   "questions": 54
+  },
+  {
+   "section": "aptitude",
+   "year": 2012,
+   "questions": 50
+  },
+  {
+   "section": "aptitude",
+   "year": 2013,
+   "questions": 50
+  },
+  {
+   "section": "aptitude",
+   "year": 2014,
+   "questions": 50
+  },
+  {
+   "section": "aptitude",
+   "year": 2015,
+   "questions": 50
+  },
+  {
+   "section": "aptitude",
+   "year": 2016,
+   "questions": 50
+  },
+  {
+   "section": "aptitude",
+   "year": 2017,
+   "questions": 50
+  },
+  {
+   "section": "aptitude",
+   "year": 2018,
+   "questions": 50
+  },
+  {
+   "section": "aptitude",
+   "year": 2019,
+   "questions": 150
+  },
+  {
+   "section": "aptitude",
+   "year": 2020,
+   "questions": 97
+  },
+  {
+   "section": "aptitude",
+   "year": 2026,
+   "questions": 49
+  },
+  {
+   "section": "drawing",
+   "year": 2008,
+   "questions": 10
+  }
+ ],
+ "cells": [
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "binomial_theorem",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2007,
+   "chapter": "binomial_theorem",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2008,
+   "chapter": "binomial_theorem",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2009,
+   "chapter": "binomial_theorem",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "binomial_theorem",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2011,
+   "chapter": "binomial_theorem",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "binomial_theorem",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "binomial_theorem",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "binomial_theorem",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "binomial_theorem",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2016,
+   "chapter": "binomial_theorem",
+   "questions": 3
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "chapter": "binomial_theorem",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "binomial_theorem",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "binomial_theorem",
+   "questions": 4
+  },
+  {
+   "section": "math",
+   "year": 2026,
+   "chapter": "binomial_theorem",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "complex_numbers",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2007,
+   "chapter": "complex_numbers",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2008,
+   "chapter": "complex_numbers",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2009,
+   "chapter": "complex_numbers",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "complex_numbers",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2011,
+   "chapter": "complex_numbers",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "complex_numbers",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "complex_numbers",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "complex_numbers",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "complex_numbers",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2016,
+   "chapter": "complex_numbers",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "chapter": "complex_numbers",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "complex_numbers",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "complex_numbers",
+   "questions": 3
+  },
+  {
+   "section": "math",
+   "year": 2020,
+   "chapter": "complex_numbers",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2026,
+   "chapter": "complex_numbers",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "determinants",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2007,
+   "chapter": "determinants",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2008,
+   "chapter": "determinants",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "determinants",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2011,
+   "chapter": "determinants",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "determinants",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "determinants",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "determinants",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "determinants",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2016,
+   "chapter": "determinants",
+   "questions": 4
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "chapter": "determinants",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "determinants",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "determinants",
+   "questions": 4
+  },
+  {
+   "section": "math",
+   "year": 2020,
+   "chapter": "determinants",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2026,
+   "chapter": "determinants",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "functions",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2008,
+   "chapter": "functions",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2009,
+   "chapter": "functions",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "functions",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2011,
+   "chapter": "functions",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "functions",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "functions",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "functions",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "functions",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2016,
+   "chapter": "functions",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "functions",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "functions",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "logarithms",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2009,
+   "chapter": "mathematical_logic",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "mathematical_logic",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2011,
+   "chapter": "mathematical_logic",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "mathematical_logic",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "mathematical_logic",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "mathematical_logic",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "mathematical_logic",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2016,
+   "chapter": "mathematical_logic",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "chapter": "mathematical_logic",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "mathematical_logic",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "mathematical_logic",
+   "questions": 3
+  },
+  {
+   "section": "math",
+   "year": 2020,
+   "chapter": "mathematical_logic",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "matrices",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2008,
+   "chapter": "matrices",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2009,
+   "chapter": "matrices",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "matrices",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2011,
+   "chapter": "matrices",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "matrices",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "matrices",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "matrices",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "matrices",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "matrices",
+   "questions": 3
+  },
+  {
+   "section": "math",
+   "year": 2026,
+   "chapter": "matrices",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "permutations_and_combinations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2007,
+   "chapter": "permutations_and_combinations",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2008,
+   "chapter": "permutations_and_combinations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2009,
+   "chapter": "permutations_and_combinations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "permutations_and_combinations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2011,
+   "chapter": "permutations_and_combinations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "permutations_and_combinations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "permutations_and_combinations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "permutations_and_combinations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "permutations_and_combinations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2016,
+   "chapter": "permutations_and_combinations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "chapter": "permutations_and_combinations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "permutations_and_combinations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "permutations_and_combinations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2026,
+   "chapter": "permutations_and_combinations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "quadratic_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2007,
+   "chapter": "quadratic_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2008,
+   "chapter": "quadratic_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2009,
+   "chapter": "quadratic_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "quadratic_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2011,
+   "chapter": "quadratic_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "quadratic_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "quadratic_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "quadratic_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "quadratic_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2016,
+   "chapter": "quadratic_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "chapter": "quadratic_equations",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "quadratic_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "quadratic_equations",
+   "questions": 4
+  },
+  {
+   "section": "math",
+   "year": 2026,
+   "chapter": "quadratic_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "sequences_and_series",
+   "questions": 3
+  },
+  {
+   "section": "math",
+   "year": 2007,
+   "chapter": "sequences_and_series",
+   "questions": 3
+  },
+  {
+   "section": "math",
+   "year": 2008,
+   "chapter": "sequences_and_series",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2009,
+   "chapter": "sequences_and_series",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "sequences_and_series",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "sequences_and_series",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "sequences_and_series",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "sequences_and_series",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "sequences_and_series",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2016,
+   "chapter": "sequences_and_series",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "chapter": "sequences_and_series",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "sequences_and_series",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "sequences_and_series",
+   "questions": 6
+  },
+  {
+   "section": "math",
+   "year": 2020,
+   "chapter": "sequences_and_series",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2026,
+   "chapter": "sequences_and_series",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2008,
+   "chapter": "sets_and_relations",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2009,
+   "chapter": "sets_and_relations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "sets_and_relations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "chapter": "sets_and_relations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "sets_and_relations",
+   "questions": 3
+  },
+  {
+   "section": "math",
+   "year": 2020,
+   "chapter": "sets_and_relations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2026,
+   "chapter": "sets_and_relations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "applications_of_derivatives",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2007,
+   "chapter": "applications_of_derivatives",
+   "questions": 5
+  },
+  {
+   "section": "math",
+   "year": 2008,
+   "chapter": "applications_of_derivatives",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2009,
+   "chapter": "applications_of_derivatives",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "applications_of_derivatives",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2011,
+   "chapter": "applications_of_derivatives",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "applications_of_derivatives",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "applications_of_derivatives",
+   "questions": 3
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "applications_of_derivatives",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "applications_of_derivatives",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2016,
+   "chapter": "applications_of_derivatives",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "chapter": "applications_of_derivatives",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "applications_of_derivatives",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "applications_of_derivatives",
+   "questions": 3
+  },
+  {
+   "section": "math",
+   "year": 2020,
+   "chapter": "applications_of_derivatives",
+   "questions": 3
+  },
+  {
+   "section": "math",
+   "year": 2026,
+   "chapter": "applications_of_derivatives",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "area_under_curves",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2007,
+   "chapter": "area_under_curves",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "area_under_curves",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2011,
+   "chapter": "area_under_curves",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "area_under_curves",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "area_under_curves",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2016,
+   "chapter": "area_under_curves",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "chapter": "area_under_curves",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "area_under_curves",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "area_under_curves",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2026,
+   "chapter": "area_under_curves",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2007,
+   "chapter": "continuity",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "continuity",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "continuity",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "continuity",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "continuity",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "continuity",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2026,
+   "chapter": "continuity",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "definite_integrals",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2007,
+   "chapter": "definite_integrals",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2008,
+   "chapter": "definite_integrals",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "definite_integrals",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2011,
+   "chapter": "definite_integrals",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "definite_integrals",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "definite_integrals",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "definite_integrals",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "definite_integrals",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2016,
+   "chapter": "definite_integrals",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "chapter": "definite_integrals",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "definite_integrals",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "definite_integrals",
+   "questions": 6
+  },
+  {
+   "section": "math",
+   "year": 2026,
+   "chapter": "definite_integrals",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "differentiability",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2007,
+   "chapter": "differentiability",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2008,
+   "chapter": "differentiability",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2009,
+   "chapter": "differentiability",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "differentiability",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2011,
+   "chapter": "differentiability",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "differentiability",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "differentiability",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "chapter": "differentiability",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "differentiability",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "differentiability",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "differential_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2009,
+   "chapter": "differential_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "differential_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2011,
+   "chapter": "differential_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "differential_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "differential_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "differential_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "differential_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2016,
+   "chapter": "differential_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "chapter": "differential_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "differential_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "differential_equations",
+   "questions": 3
+  },
+  {
+   "section": "math",
+   "year": 2026,
+   "chapter": "differential_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2007,
+   "chapter": "indefinite_integrals",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2009,
+   "chapter": "indefinite_integrals",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "indefinite_integrals",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "indefinite_integrals",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "indefinite_integrals",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "indefinite_integrals",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2016,
+   "chapter": "indefinite_integrals",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "chapter": "indefinite_integrals",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "indefinite_integrals",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "indefinite_integrals",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2020,
+   "chapter": "indefinite_integrals",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2007,
+   "chapter": "limits",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2008,
+   "chapter": "limits",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2009,
+   "chapter": "limits",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2011,
+   "chapter": "limits",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "limits",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "limits",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2016,
+   "chapter": "limits",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "chapter": "limits",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "limits",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "limits",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "mean_value_theorems",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2007,
+   "chapter": "mean_value_theorems",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2008,
+   "chapter": "mean_value_theorems",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "mean_value_theorems",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2011,
+   "chapter": "mean_value_theorems",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "mean_value_theorems",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "mean_value_theorems",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "mean_value_theorems",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "methods_of_differentiation",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "methods_of_differentiation",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "methods_of_differentiation",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2026,
+   "chapter": "methods_of_differentiation",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2008,
+   "chapter": "areas_of_triangles",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "areas_of_triangles",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2026,
+   "chapter": "areas_of_triangles",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "circles",
+   "questions": 3
+  },
+  {
+   "section": "math",
+   "year": 2007,
+   "chapter": "circles",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2008,
+   "chapter": "circles",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "circles",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "circles",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "circles",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "circles",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "circles",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "chapter": "circles",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "circles",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "circles",
+   "questions": 5
+  },
+  {
+   "section": "math",
+   "year": 2020,
+   "chapter": "circles",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2026,
+   "chapter": "circles",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "conic_sections_general",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2007,
+   "chapter": "ellipse",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2008,
+   "chapter": "ellipse",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2009,
+   "chapter": "ellipse",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2011,
+   "chapter": "ellipse",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "ellipse",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "ellipse",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "ellipse",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "chapter": "ellipse",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "ellipse",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "ellipse",
+   "questions": 4
+  },
+  {
+   "section": "math",
+   "year": 2020,
+   "chapter": "ellipse",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "hyperbola",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2008,
+   "chapter": "hyperbola",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2009,
+   "chapter": "hyperbola",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "hyperbola",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "hyperbola",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2016,
+   "chapter": "hyperbola",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "chapter": "hyperbola",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "hyperbola",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "hyperbola",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "locus",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "locus",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "locus",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "locus",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "locus",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "parabola",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2009,
+   "chapter": "parabola",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2011,
+   "chapter": "parabola",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "parabola",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "parabola",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "parabola",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2016,
+   "chapter": "parabola",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "parabola",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "parabola",
+   "questions": 3
+  },
+  {
+   "section": "math",
+   "year": 2026,
+   "chapter": "parabola",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "straight_lines",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2007,
+   "chapter": "straight_lines",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2009,
+   "chapter": "straight_lines",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "straight_lines",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2011,
+   "chapter": "straight_lines",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "straight_lines",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "straight_lines",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "straight_lines",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "straight_lines",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2016,
+   "chapter": "straight_lines",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "chapter": "straight_lines",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "straight_lines",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "straight_lines",
+   "questions": 3
+  },
+  {
+   "section": "math",
+   "year": 2020,
+   "chapter": "straight_lines",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2026,
+   "chapter": "straight_lines",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "3d_geometry",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2007,
+   "chapter": "3d_geometry",
+   "questions": 3
+  },
+  {
+   "section": "math",
+   "year": 2008,
+   "chapter": "3d_geometry",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "3d_geometry",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2011,
+   "chapter": "3d_geometry",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "3d_geometry",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "3d_geometry",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "3d_geometry",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "3d_geometry",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2016,
+   "chapter": "3d_geometry",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "chapter": "3d_geometry",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "3d_geometry",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "3d_geometry",
+   "questions": 6
+  },
+  {
+   "section": "math",
+   "year": 2020,
+   "chapter": "3d_geometry",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2026,
+   "chapter": "3d_geometry",
+   "questions": 3
+  },
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "vectors",
+   "questions": 4
+  },
+  {
+   "section": "math",
+   "year": 2007,
+   "chapter": "vectors",
+   "questions": 4
+  },
+  {
+   "section": "math",
+   "year": 2009,
+   "chapter": "vectors",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "vectors",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "vectors",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "vectors",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "vectors",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "vectors",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2016,
+   "chapter": "vectors",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "chapter": "vectors",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "vectors",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "vectors",
+   "questions": 3
+  },
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "probability",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2007,
+   "chapter": "probability",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2009,
+   "chapter": "probability",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "probability",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2011,
+   "chapter": "probability",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "probability",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "probability",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "probability",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2015,
+   "chapter": "probability",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2016,
+   "chapter": "probability",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "chapter": "probability",
+   "questions": 3
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "probability",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "probability",
+   "questions": 3
+  },
+  {
+   "section": "math",
+   "year": 2020,
+   "chapter": "probability",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2026,
+   "chapter": "probability",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "statistics",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2007,
+   "chapter": "statistics",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2009,
+   "chapter": "statistics",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "statistics",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2011,
+   "chapter": "statistics",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "statistics",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "statistics",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "statistics",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "statistics",
+   "questions": 3
+  },
+  {
+   "section": "math",
+   "year": 2026,
+   "chapter": "statistics",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "trigonometric_ratios_and_identities",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2009,
+   "chapter": "trigonometric_ratios_and_identities",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "trigonometric_ratios_and_identities",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2011,
+   "chapter": "trigonometric_ratios_and_identities",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2012,
+   "chapter": "trigonometric_ratios_and_identities",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "trigonometric_ratios_and_identities",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "chapter": "trigonometric_ratios_and_identities",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "trigonometric_ratios_and_identities",
+   "questions": 2
+  },
+  {
+   "section": "math",
+   "year": 2026,
+   "chapter": "trigonometric_ratios_and_identities",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "inverse_trigonometric_functions",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "inverse_trigonometric_functions",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2016,
+   "chapter": "inverse_trigonometric_functions",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "inverse_trigonometric_functions",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "inverse_trigonometric_functions",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2026,
+   "chapter": "inverse_trigonometric_functions",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2013,
+   "chapter": "heights_and_distances",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2014,
+   "chapter": "heights_and_distances",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2017,
+   "chapter": "heights_and_distances",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2006,
+   "chapter": "trigonometric_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2018,
+   "chapter": "trigonometric_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2019,
+   "chapter": "trigonometric_equations",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2007,
+   "chapter": "properties_of_triangles",
+   "questions": 1
+  },
+  {
+   "section": "math",
+   "year": 2010,
+   "chapter": "properties_of_triangles",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2005,
+   "chapter": "orthographic_projection",
+   "questions": 13
+  },
+  {
+   "section": "aptitude",
+   "year": 2006,
+   "chapter": "orthographic_projection",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2007,
+   "chapter": "orthographic_projection",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2008,
+   "chapter": "orthographic_projection",
+   "questions": 5
+  },
+  {
+   "section": "aptitude",
+   "year": 2009,
+   "chapter": "orthographic_projection",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2010,
+   "chapter": "orthographic_projection",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2012,
+   "chapter": "orthographic_projection",
+   "questions": 8
+  },
+  {
+   "section": "aptitude",
+   "year": 2013,
+   "chapter": "orthographic_projection",
+   "questions": 11
+  },
+  {
+   "section": "aptitude",
+   "year": 2014,
+   "chapter": "orthographic_projection",
+   "questions": 13
+  },
+  {
+   "section": "aptitude",
+   "year": 2015,
+   "chapter": "orthographic_projection",
+   "questions": 21
+  },
+  {
+   "section": "aptitude",
+   "year": 2016,
+   "chapter": "orthographic_projection",
+   "questions": 12
+  },
+  {
+   "section": "aptitude",
+   "year": 2017,
+   "chapter": "orthographic_projection",
+   "questions": 23
+  },
+  {
+   "section": "aptitude",
+   "year": 2018,
+   "chapter": "orthographic_projection",
+   "questions": 15
+  },
+  {
+   "section": "aptitude",
+   "year": 2019,
+   "chapter": "orthographic_projection",
+   "questions": 57
+  },
+  {
+   "section": "aptitude",
+   "year": 2020,
+   "chapter": "orthographic_projection",
+   "questions": 40
+  },
+  {
+   "section": "aptitude",
+   "year": 2026,
+   "chapter": "orthographic_projection",
+   "questions": 7
+  },
+  {
+   "section": "aptitude",
+   "year": 2005,
+   "chapter": "spatial_visualization",
+   "questions": 17
+  },
+  {
+   "section": "aptitude",
+   "year": 2006,
+   "chapter": "spatial_visualization",
+   "questions": 15
+  },
+  {
+   "section": "aptitude",
+   "year": 2007,
+   "chapter": "spatial_visualization",
+   "questions": 10
+  },
+  {
+   "section": "aptitude",
+   "year": 2008,
+   "chapter": "spatial_visualization",
+   "questions": 14
+  },
+  {
+   "section": "aptitude",
+   "year": 2009,
+   "chapter": "spatial_visualization",
+   "questions": 15
+  },
+  {
+   "section": "aptitude",
+   "year": 2010,
+   "chapter": "spatial_visualization",
+   "questions": 14
+  },
+  {
+   "section": "aptitude",
+   "year": 2011,
+   "chapter": "spatial_visualization",
+   "questions": 17
+  },
+  {
+   "section": "aptitude",
+   "year": 2012,
+   "chapter": "spatial_visualization",
+   "questions": 7
+  },
+  {
+   "section": "aptitude",
+   "year": 2013,
+   "chapter": "spatial_visualization",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2014,
+   "chapter": "spatial_visualization",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2015,
+   "chapter": "spatial_visualization",
+   "questions": 5
+  },
+  {
+   "section": "aptitude",
+   "year": 2016,
+   "chapter": "spatial_visualization",
+   "questions": 5
+  },
+  {
+   "section": "aptitude",
+   "year": 2017,
+   "chapter": "spatial_visualization",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2018,
+   "chapter": "spatial_visualization",
+   "questions": 6
+  },
+  {
+   "section": "aptitude",
+   "year": 2019,
+   "chapter": "spatial_visualization",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2020,
+   "chapter": "spatial_visualization",
+   "questions": 10
+  },
+  {
+   "section": "aptitude",
+   "year": 2026,
+   "chapter": "spatial_visualization",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2005,
+   "chapter": "surface_counting",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2006,
+   "chapter": "surface_counting",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2007,
+   "chapter": "surface_counting",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2008,
+   "chapter": "surface_counting",
+   "questions": 5
+  },
+  {
+   "section": "aptitude",
+   "year": 2009,
+   "chapter": "surface_counting",
+   "questions": 5
+  },
+  {
+   "section": "aptitude",
+   "year": 2010,
+   "chapter": "surface_counting",
+   "questions": 5
+  },
+  {
+   "section": "aptitude",
+   "year": 2011,
+   "chapter": "surface_counting",
+   "questions": 5
+  },
+  {
+   "section": "aptitude",
+   "year": 2012,
+   "chapter": "surface_counting",
+   "questions": 6
+  },
+  {
+   "section": "aptitude",
+   "year": 2013,
+   "chapter": "surface_counting",
+   "questions": 5
+  },
+  {
+   "section": "aptitude",
+   "year": 2014,
+   "chapter": "surface_counting",
+   "questions": 6
+  },
+  {
+   "section": "aptitude",
+   "year": 2015,
+   "chapter": "surface_counting",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2016,
+   "chapter": "surface_counting",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2026,
+   "chapter": "surface_counting",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2006,
+   "chapter": "mirror_image",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2007,
+   "chapter": "mirror_image",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2008,
+   "chapter": "mirror_image",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2009,
+   "chapter": "mirror_image",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2010,
+   "chapter": "mirror_image",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2011,
+   "chapter": "mirror_image",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2012,
+   "chapter": "mirror_image",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2013,
+   "chapter": "mirror_image",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2014,
+   "chapter": "mirror_image",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2015,
+   "chapter": "mirror_image",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2016,
+   "chapter": "mirror_image",
+   "questions": 7
+  },
+  {
+   "section": "aptitude",
+   "year": 2017,
+   "chapter": "mirror_image",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2018,
+   "chapter": "mirror_image",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2019,
+   "chapter": "mirror_image",
+   "questions": 15
+  },
+  {
+   "section": "aptitude",
+   "year": 2020,
+   "chapter": "mirror_image",
+   "questions": 9
+  },
+  {
+   "section": "aptitude",
+   "year": 2026,
+   "chapter": "mirror_image",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2005,
+   "chapter": "embedded_figure",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2006,
+   "chapter": "embedded_figure",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2008,
+   "chapter": "embedded_figure",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2009,
+   "chapter": "embedded_figure",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2010,
+   "chapter": "embedded_figure",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2011,
+   "chapter": "embedded_figure",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2012,
+   "chapter": "embedded_figure",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2013,
+   "chapter": "embedded_figure",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2014,
+   "chapter": "embedded_figure",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2016,
+   "chapter": "embedded_figure",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2017,
+   "chapter": "embedded_figure",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2019,
+   "chapter": "embedded_figure",
+   "questions": 15
+  },
+  {
+   "section": "aptitude",
+   "year": 2020,
+   "chapter": "embedded_figure",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2005,
+   "chapter": "counting_figures",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2006,
+   "chapter": "counting_figures",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2007,
+   "chapter": "counting_figures",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2008,
+   "chapter": "counting_figures",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2009,
+   "chapter": "counting_figures",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2010,
+   "chapter": "counting_figures",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2011,
+   "chapter": "counting_figures",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2012,
+   "chapter": "counting_figures",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2013,
+   "chapter": "counting_figures",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2014,
+   "chapter": "counting_figures",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2005,
+   "chapter": "pattern_recognition",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2006,
+   "chapter": "pattern_recognition",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2007,
+   "chapter": "pattern_recognition",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2008,
+   "chapter": "pattern_recognition",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2009,
+   "chapter": "pattern_recognition",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2010,
+   "chapter": "pattern_recognition",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2011,
+   "chapter": "pattern_recognition",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2012,
+   "chapter": "pattern_recognition",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2013,
+   "chapter": "pattern_recognition",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2014,
+   "chapter": "pattern_recognition",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2015,
+   "chapter": "pattern_recognition",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2016,
+   "chapter": "pattern_recognition",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2017,
+   "chapter": "pattern_recognition",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2018,
+   "chapter": "pattern_recognition",
+   "questions": 6
+  },
+  {
+   "section": "aptitude",
+   "year": 2019,
+   "chapter": "pattern_recognition",
+   "questions": 10
+  },
+  {
+   "section": "aptitude",
+   "year": 2026,
+   "chapter": "pattern_recognition",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2005,
+   "chapter": "odd_one_out",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2006,
+   "chapter": "odd_one_out",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2007,
+   "chapter": "odd_one_out",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2009,
+   "chapter": "odd_one_out",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2010,
+   "chapter": "odd_one_out",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2011,
+   "chapter": "odd_one_out",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2012,
+   "chapter": "odd_one_out",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2013,
+   "chapter": "odd_one_out",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2014,
+   "chapter": "odd_one_out",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2017,
+   "chapter": "odd_one_out",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2018,
+   "chapter": "odd_one_out",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2019,
+   "chapter": "odd_one_out",
+   "questions": 5
+  },
+  {
+   "section": "aptitude",
+   "year": 2020,
+   "chapter": "odd_one_out",
+   "questions": 5
+  },
+  {
+   "section": "aptitude",
+   "year": 2026,
+   "chapter": "odd_one_out",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2005,
+   "chapter": "puzzle",
+   "questions": 27
+  },
+  {
+   "section": "aptitude",
+   "year": 2005,
+   "chapter": "analogy",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2012,
+   "chapter": "analogy",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2005,
+   "chapter": "architecture_gk",
+   "questions": 20
+  },
+  {
+   "section": "aptitude",
+   "year": 2006,
+   "chapter": "architecture_gk",
+   "questions": 11
+  },
+  {
+   "section": "aptitude",
+   "year": 2007,
+   "chapter": "architecture_gk",
+   "questions": 10
+  },
+  {
+   "section": "aptitude",
+   "year": 2008,
+   "chapter": "architecture_gk",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2009,
+   "chapter": "architecture_gk",
+   "questions": 9
+  },
+  {
+   "section": "aptitude",
+   "year": 2010,
+   "chapter": "architecture_gk",
+   "questions": 6
+  },
+  {
+   "section": "aptitude",
+   "year": 2011,
+   "chapter": "architecture_gk",
+   "questions": 6
+  },
+  {
+   "section": "aptitude",
+   "year": 2012,
+   "chapter": "architecture_gk",
+   "questions": 7
+  },
+  {
+   "section": "aptitude",
+   "year": 2013,
+   "chapter": "architecture_gk",
+   "questions": 6
+  },
+  {
+   "section": "aptitude",
+   "year": 2014,
+   "chapter": "architecture_gk",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2015,
+   "chapter": "architecture_gk",
+   "questions": 6
+  },
+  {
+   "section": "aptitude",
+   "year": 2016,
+   "chapter": "architecture_gk",
+   "questions": 11
+  },
+  {
+   "section": "aptitude",
+   "year": 2017,
+   "chapter": "architecture_gk",
+   "questions": 9
+  },
+  {
+   "section": "aptitude",
+   "year": 2018,
+   "chapter": "architecture_gk",
+   "questions": 9
+  },
+  {
+   "section": "aptitude",
+   "year": 2019,
+   "chapter": "architecture_gk",
+   "questions": 36
+  },
+  {
+   "section": "aptitude",
+   "year": 2020,
+   "chapter": "architecture_gk",
+   "questions": 22
+  },
+  {
+   "section": "aptitude",
+   "year": 2026,
+   "chapter": "architecture_gk",
+   "questions": 27
+  },
+  {
+   "section": "aptitude",
+   "year": 2014,
+   "chapter": "geography_gk",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2018,
+   "chapter": "geography_gk",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2006,
+   "chapter": "building_science",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2007,
+   "chapter": "building_science",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2008,
+   "chapter": "building_science",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2009,
+   "chapter": "building_science",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2010,
+   "chapter": "building_science",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2011,
+   "chapter": "building_science",
+   "questions": 7
+  },
+  {
+   "section": "aptitude",
+   "year": 2012,
+   "chapter": "building_science",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2013,
+   "chapter": "building_science",
+   "questions": 6
+  },
+  {
+   "section": "aptitude",
+   "year": 2014,
+   "chapter": "building_science",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2015,
+   "chapter": "building_science",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2016,
+   "chapter": "building_science",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2017,
+   "chapter": "building_science",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2018,
+   "chapter": "building_science",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2019,
+   "chapter": "building_science",
+   "questions": 5
+  },
+  {
+   "section": "aptitude",
+   "year": 2020,
+   "chapter": "building_science",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2026,
+   "chapter": "building_science",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2006,
+   "chapter": "design_fundamentals",
+   "questions": 5
+  },
+  {
+   "section": "aptitude",
+   "year": 2007,
+   "chapter": "design_fundamentals",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2009,
+   "chapter": "design_fundamentals",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2010,
+   "chapter": "design_fundamentals",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2012,
+   "chapter": "design_fundamentals",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2013,
+   "chapter": "design_fundamentals",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2014,
+   "chapter": "design_fundamentals",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2016,
+   "chapter": "design_fundamentals",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2017,
+   "chapter": "design_fundamentals",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2019,
+   "chapter": "design_fundamentals",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2020,
+   "chapter": "design_fundamentals",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2026,
+   "chapter": "design_fundamentals",
+   "questions": 4
+  },
+  {
+   "section": "aptitude",
+   "year": 2006,
+   "chapter": "building_materials",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2007,
+   "chapter": "building_materials",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2008,
+   "chapter": "building_materials",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2009,
+   "chapter": "building_materials",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2010,
+   "chapter": "building_materials",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2011,
+   "chapter": "building_materials",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2012,
+   "chapter": "building_materials",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2013,
+   "chapter": "building_materials",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2014,
+   "chapter": "building_materials",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2016,
+   "chapter": "building_materials",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2019,
+   "chapter": "building_materials",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2020,
+   "chapter": "building_materials",
+   "questions": 3
+  },
+  {
+   "section": "aptitude",
+   "year": 2026,
+   "chapter": "building_materials",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2006,
+   "chapter": "building_services",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2007,
+   "chapter": "building_services",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2010,
+   "chapter": "building_services",
+   "questions": 2
+  },
+  {
+   "section": "aptitude",
+   "year": 2012,
+   "chapter": "building_services",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2013,
+   "chapter": "building_services",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2017,
+   "chapter": "building_services",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2018,
+   "chapter": "building_services",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2019,
+   "chapter": "building_services",
+   "questions": 1
+  },
+  {
+   "section": "aptitude",
+   "year": 2026,
+   "chapter": "building_services",
+   "questions": 1
+  }
+ ],
+ "chapters": [
+  {
+   "slug": "binomial_theorem",
+   "label": "Binomial Theorem",
+   "unit": "algebra",
+   "unit_label": "Algebra",
+   "unit_order": 1,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "complex_numbers",
+   "label": "Complex Numbers",
+   "unit": "algebra",
+   "unit_label": "Algebra",
+   "unit_order": 1,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "determinants",
+   "label": "Determinants",
+   "unit": "algebra",
+   "unit_label": "Algebra",
+   "unit_order": 1,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "functions",
+   "label": "Functions",
+   "unit": "algebra",
+   "unit_label": "Algebra",
+   "unit_order": 1,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "logarithms",
+   "label": "Logarithms",
+   "unit": "algebra",
+   "unit_label": "Algebra",
+   "unit_order": 1,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "mathematical_logic",
+   "label": "Mathematical Logic",
+   "unit": "algebra",
+   "unit_label": "Algebra",
+   "unit_order": 1,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "matrices",
+   "label": "Matrices",
+   "unit": "algebra",
+   "unit_label": "Algebra",
+   "unit_order": 1,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "permutations_and_combinations",
+   "label": "Permutations & Combinations",
+   "unit": "algebra",
+   "unit_label": "Algebra",
+   "unit_order": 1,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "quadratic_equations",
+   "label": "Quadratic Equations",
+   "unit": "algebra",
+   "unit_label": "Algebra",
+   "unit_order": 1,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "sequences_and_series",
+   "label": "Sequences & Series",
+   "unit": "algebra",
+   "unit_label": "Algebra",
+   "unit_order": 1,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "sets_and_relations",
+   "label": "Sets & Relations",
+   "unit": "algebra",
+   "unit_label": "Algebra",
+   "unit_order": 1,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "applications_of_derivatives",
+   "label": "Applications of Derivatives",
+   "unit": "calculus",
+   "unit_label": "Calculus",
+   "unit_order": 2,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "area_under_curves",
+   "label": "Area Under Curves",
+   "unit": "calculus",
+   "unit_label": "Calculus",
+   "unit_order": 2,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "continuity",
+   "label": "Continuity",
+   "unit": "calculus",
+   "unit_label": "Calculus",
+   "unit_order": 2,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "definite_integrals",
+   "label": "Definite Integrals",
+   "unit": "calculus",
+   "unit_label": "Calculus",
+   "unit_order": 2,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "differentiability",
+   "label": "Differentiability",
+   "unit": "calculus",
+   "unit_label": "Calculus",
+   "unit_order": 2,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "differential_equations",
+   "label": "Differential Equations",
+   "unit": "calculus",
+   "unit_label": "Calculus",
+   "unit_order": 2,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "indefinite_integrals",
+   "label": "Indefinite Integrals",
+   "unit": "calculus",
+   "unit_label": "Calculus",
+   "unit_order": 2,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "limits",
+   "label": "Limits",
+   "unit": "calculus",
+   "unit_label": "Calculus",
+   "unit_order": 2,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "mean_value_theorems",
+   "label": "Mean Value Theorems",
+   "unit": "calculus",
+   "unit_label": "Calculus",
+   "unit_order": 2,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "methods_of_differentiation",
+   "label": "Methods of Differentiation",
+   "unit": "calculus",
+   "unit_label": "Calculus",
+   "unit_order": 2,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "areas_of_triangles",
+   "label": "Areas of Triangles",
+   "unit": "coordinate_geometry",
+   "unit_label": "Coordinate Geometry",
+   "unit_order": 3,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "circles",
+   "label": "Circles",
+   "unit": "coordinate_geometry",
+   "unit_label": "Coordinate Geometry",
+   "unit_order": 3,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "conic_sections_general",
+   "label": "Conic Sections (General)",
+   "unit": "coordinate_geometry",
+   "unit_label": "Coordinate Geometry",
+   "unit_order": 3,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "ellipse",
+   "label": "Ellipse",
+   "unit": "coordinate_geometry",
+   "unit_label": "Coordinate Geometry",
+   "unit_order": 3,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "hyperbola",
+   "label": "Hyperbola",
+   "unit": "coordinate_geometry",
+   "unit_label": "Coordinate Geometry",
+   "unit_order": 3,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "locus",
+   "label": "Locus",
+   "unit": "coordinate_geometry",
+   "unit_label": "Coordinate Geometry",
+   "unit_order": 3,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "parabola",
+   "label": "Parabola",
+   "unit": "coordinate_geometry",
+   "unit_label": "Coordinate Geometry",
+   "unit_order": 3,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "straight_lines",
+   "label": "Straight Lines",
+   "unit": "coordinate_geometry",
+   "unit_label": "Coordinate Geometry",
+   "unit_order": 3,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "3d_geometry",
+   "label": "3D Geometry",
+   "unit": "vectors_and_3d_geometry",
+   "unit_label": "Vectors & 3D Geometry",
+   "unit_order": 4,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "vectors",
+   "label": "Vectors",
+   "unit": "vectors_and_3d_geometry",
+   "unit_label": "Vectors & 3D Geometry",
+   "unit_order": 4,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "probability",
+   "label": "Probability",
+   "unit": "probability_and_statistics",
+   "unit_label": "Probability & Statistics",
+   "unit_order": 5,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "statistics",
+   "label": "Statistics",
+   "unit": "probability_and_statistics",
+   "unit_label": "Probability & Statistics",
+   "unit_order": 5,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "trigonometric_ratios_and_identities",
+   "label": "Trigonometric Ratios & Identities",
+   "unit": "trigonometry",
+   "unit_label": "Trigonometry",
+   "unit_order": 6,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "inverse_trigonometric_functions",
+   "label": "Inverse Trigonometric Functions",
+   "unit": "trigonometry",
+   "unit_label": "Trigonometry",
+   "unit_order": 6,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "heights_and_distances",
+   "label": "Heights & Distances",
+   "unit": "trigonometry",
+   "unit_label": "Trigonometry",
+   "unit_order": 6,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "trigonometric_equations",
+   "label": "Trigonometric Equations",
+   "unit": "trigonometry",
+   "unit_label": "Trigonometry",
+   "unit_order": 6,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "properties_of_triangles",
+   "label": "Properties of Triangles",
+   "unit": "trigonometry",
+   "unit_label": "Trigonometry",
+   "unit_order": 6,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "orthographic_projection",
+   "label": "Orthographic Projection",
+   "unit": "orthographic_projection",
+   "unit_label": "Orthographic Projection",
+   "unit_order": 0,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "spatial_visualization",
+   "label": "Spatial Visualization",
+   "unit": "spatial_visualization",
+   "unit_label": "Spatial Visualization",
+   "unit_order": 0,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "surface_counting",
+   "label": "Surface Counting",
+   "unit": "surface_counting",
+   "unit_label": "Surface Counting",
+   "unit_order": 0,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "mirror_image",
+   "label": "Mirror Image",
+   "unit": "mirror_image",
+   "unit_label": "Mirror Image",
+   "unit_order": 0,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "embedded_figure",
+   "label": "Embedded Figure",
+   "unit": "embedded_figure",
+   "unit_label": "Embedded Figure",
+   "unit_order": 0,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "counting_figures",
+   "label": "Counting Figures",
+   "unit": "counting_figures",
+   "unit_label": "Counting Figures",
+   "unit_order": 0,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "pattern_recognition",
+   "label": "Pattern Recognition",
+   "unit": "pattern_recognition",
+   "unit_label": "Pattern Recognition",
+   "unit_order": 0,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "odd_one_out",
+   "label": "Odd One Out",
+   "unit": "odd_one_out",
+   "unit_label": "Odd One Out",
+   "unit_order": 0,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "puzzle",
+   "label": "Puzzle",
+   "unit": "puzzle",
+   "unit_label": "Puzzle",
+   "unit_order": 0,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "analogy",
+   "label": "Analogy",
+   "unit": "analogy",
+   "unit_label": "Analogy",
+   "unit_order": 0,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "architecture_gk",
+   "label": "Architecture GK",
+   "unit": "architecture_gk",
+   "unit_label": "Architecture GK",
+   "unit_order": 0,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "geography_gk",
+   "label": "Geography GK",
+   "unit": "geography_gk",
+   "unit_label": "Geography GK",
+   "unit_order": 0,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "building_science",
+   "label": "Building Science",
+   "unit": "building_science",
+   "unit_label": "Building Science",
+   "unit_order": 0,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "design_fundamentals",
+   "label": "Design Fundamentals",
+   "unit": "design_fundamentals",
+   "unit_label": "Design Fundamentals",
+   "unit_order": 0,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "building_materials",
+   "label": "Building Materials",
+   "unit": "building_materials",
+   "unit_label": "Building Materials",
+   "unit_order": 0,
+   "chapter_order": 0,
+   "has_children": false
+  },
+  {
+   "slug": "building_services",
+   "label": "Building Services",
+   "unit": "building_services",
+   "unit_label": "Building Services",
+   "unit_order": 0,
+   "chapter_order": 0,
+   "has_children": false
+  }
+ ]
+}

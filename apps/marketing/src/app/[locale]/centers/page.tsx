@@ -3,6 +3,7 @@ import { setRequestLocale } from 'next-intl/server';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import CentersPageContent from '@/components/CentersPageContent';
+import ClientIntl from '@/components/i18n/ClientIntl';
 
 
 const baseUrl = 'https://neramclasses.com';
@@ -26,7 +27,7 @@ export default function CentersPage({ params: { locale } }: { params: { locale: 
         { name: 'Home', url: baseUrl },
         { name: 'Centers', url: `${baseUrl}/centers` },
       ])} />
-      <CentersPageContent />
+      <ClientIntl locale={locale} namespaces={['centers']}><CentersPageContent /></ClientIntl>
     </>
   );
 }

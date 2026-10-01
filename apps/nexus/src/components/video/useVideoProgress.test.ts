@@ -1,6 +1,6 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { useVideoProgress } from './useVideoProgress';
+import { useVideoProgress, FLUSH_INTERVAL_MS } from './useVideoProgress';
 
 /**
  * Regression coverage for NXS-0119: a token captured once at mount and handed
@@ -51,12 +51,12 @@ describe('useVideoProgress', () => {
 
     act(() => result.current.onTick(5, 100));
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(10_000);
+      await vi.advanceTimersByTimeAsync(30_000);
     });
 
     act(() => result.current.onTick(20, 100));
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(10_000);
+      await vi.advanceTimersByTimeAsync(30_000);
     });
 
     expect(fetchSpy).toHaveBeenCalledTimes(2);
@@ -82,7 +82,7 @@ describe('useVideoProgress', () => {
 
     // No onTick() call: the accumulator has nothing pending.
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(10_000);
+      await vi.advanceTimersByTimeAsync(30_000);
     });
 
     expect(getToken).not.toHaveBeenCalled();
@@ -105,7 +105,7 @@ describe('useVideoProgress', () => {
 
     act(() => result.current.onTick(5, 100));
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(10_000);
+      await vi.advanceTimersByTimeAsync(30_000);
     });
 
     expect(fetchSpy).not.toHaveBeenCalled();
@@ -170,5 +170,60 @@ describe('useVideoProgress', () => {
     });
 
     expect(fetchSpy).not.toHaveBeenCalled();
+  });
+  it('saves every 30 seconds of playback, not every 10', async () => {
+    expect(FLUSH_INTERVAL_MS).toBe(30_000);
+    vi.useFakeTimers();
+    const fetchSpy = mockFetchOk();
+    vi.stubGlobal('fetch', fetchSpy);
+    const getToken = vi.fn(async () => 'token');
+
+    const { result } = renderHook(() =>
+      useVideoProgress({ endpoint: '/api/test/progress', getToken, enabled: true }),
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    fetchSpy.mockClear();
+
+    act(() => result.current.onTick(5, 100));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(20_000);
+    });
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['pause', 'ended'])('flushes as soon as a video fires %s', async (eventName) => {
+    const fetchSpy = mockFetchOk();
+    vi.stubGlobal('fetch', fetchSpy);
+    const getToken = vi.fn(async () => 'token');
+
+    const { result } = renderHook(() =>
+      useVideoProgress({ endpoint: '/api/test/progress', getToken, enabled: true }),
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    fetchSpy.mockClear();
+
+    const video = document.createElement('video');
+    document.body.appendChild(video);
+    act(() => result.current.onTick(42, 100));
+    await act(async () => {
+      // Media events do not bubble; the hook listens in the capture phase.
+      video.dispatchEvent(new Event(eventName, { bubbles: false }));
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    video.remove();
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
+    expect(body.last_video_position_seconds).toBe(42);
   });
 });

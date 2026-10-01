@@ -22,6 +22,7 @@ import { EXAMS } from '@/lib/seo/exam-config';
 import type { CityFacts } from '@/lib/seo/location-facts';
 import { cityAnswer, cityFaqs, cityTitle, hubNames, inr } from '@/lib/seo/location-copy';
 import { generateBreadcrumbSchema, generateFAQSchema, generateLocationCourseSchema } from '@/lib/seo/schemas';
+import { appToolLinks, stateToolLinks } from '@/lib/seo/app-tool-links';
 import { Breadcrumbs, FactTable, FaqList, LinkGrid, Section, StickyCta, STICKY_CTA_HEIGHT, type Crumb, type LinkItem } from './parts';
 
 export interface CityCoachingPageProps {
@@ -236,7 +237,13 @@ export function CityCoachingPage({ facts, locale, nearby, siblingExam }: CityCoa
           </Box>
           <Typography sx={{ mt: 1.5, color: 'text.secondary', fontSize: '0.9375rem' }}>
             From the NATA {facts.testCities[0].year} test city list. The list can change each year, so check the official
-            brochure before you apply. <Link href="/tools/exam-centers">Find all NATA exam centres</Link>.
+            brochure before you apply.{' '}
+            {place.kind === 'india' ? (
+              <a href={appToolLinks.examCentresCity(place.stateSlug, place.slug)}>Find the nearest NATA test city to {place.name}</a>
+            ) : (
+              <Link href="/tools/exam-centers">Find all NATA exam centres</Link>
+            )}
+            .
           </Typography>
         </Section>
       )}
@@ -292,6 +299,12 @@ export function CityCoachingPage({ facts, locale, nearby, siblingExam }: CityCoa
       {nearby.length > 0 && (
         <Section id="nearby" title="Nearby cities">
           <LinkGrid items={nearby} />
+        </Section>
+      )}
+
+      {place.kind === 'india' && facts.state && (
+        <Section id="free-tools" title={`Free tools for students in ${facts.state.name}`}>
+          <LinkGrid items={stateToolLinks(facts.state.slug, facts.state.name, facts.stateCollegeCount > 0)} />
         </Section>
       )}
 

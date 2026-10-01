@@ -28,6 +28,7 @@ export async function getAppOnlyToken(): Promise<string> {
   const res = await fetch(
     `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
     {
+      cache: 'no-store',
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({

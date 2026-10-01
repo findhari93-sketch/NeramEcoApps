@@ -100,6 +100,7 @@ export async function searchAllDriveItems(
   if (!q) return { items: [], moreAvailable: false };
 
   const res = await fetch(SEARCH_URL, {
+    cache: 'no-store',
     method: 'POST',
     headers: { Authorization: `Bearer ${msToken}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({

@@ -447,6 +447,104 @@ describe('TeacherConsole', () => {
     await waitFor(() => expect(bodiesFor('/api/pad/prompts/p1/reveal')).toHaveLength(1));
   });
 
+  describe('a question asked from Present to class', () => {
+    const qb = {
+      format: 'mcq',
+      text: 'Find $x$ when the wall is load bearing',
+      image_url: null,
+      options: [
+        { text: 'One', image_url: null },
+        { text: 'Two', image_url: null },
+        { text: 'Three', image_url: null },
+        { text: 'Four', image_url: null },
+      ],
+      solution: null,
+    };
+
+    it('shows the time left with +15s while open, and keeps Close at 0', async () => {
+      mocks.snapshot = snap({ prompt: prompt({ label: '38', qb, qb_question_id: 'q1', closes_at: '2026-09-10T10:00:42Z', time_limit_s: 60 }) });
+      handlers['/api/pad/prompts/p1/timer'] = () => ({ promptId: 'p1', state: 'open', version: 2, changed: true, closesAt: '2026-09-10T10:00:57Z', reopened: false });
+      const { rerender } = render(<TeacherConsole host={host} />);
+
+      expect(await screen.findByRole('timer', { name: /^0:4[12] left$/ })).toBeTruthy();
+      // No question_text: the bank's text, plain, with no KaTeX.
+      expect(screen.getByText('Find x when the wall is load bearing')).toBeTruthy();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Add 15 seconds' }));
+      await waitFor(() => expect(bodiesFor('/api/pad/prompts/p1/timer')).toEqual([{ addSeconds: 15 }]));
+      await waitFor(() => expect(mocks.refresh).toHaveBeenCalled());
+
+      // Time is up but still open: the console never closes it itself.
+      mocks.snapshot = snap({
+        server_time: '2026-09-10T10:01:00Z',
+        prompt: prompt({ label: '38', qb, closes_at: '2026-09-10T10:00:57Z', time_limit_s: 60, version: 2 }),
+      });
+      rerender(<TeacherConsole host={host} />);
+      expect(await screen.findByRole('timer', { name: 'Time is up' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Close answers' })).toBeTruthy();
+      expect(bodiesFor('/api/pad/prompts/p1/close')).toEqual([]);
+      expect(document.body.textContent).not.toMatch(NO_DASHES);
+    });
+
+    it("preselects the bank's answer, so Reveal is one tap, and another key can still be chosen", async () => {
+      const groups = [
+        { value: 'B', count: 12 },
+        { value: 'C', count: 8 },
+      ];
+      mocks.snapshot = snap({ prompt: prompt({ state: 'closed', version: 2, qb, qb_question_id: 'q1', suggested_keys: ['B'] }), groups });
+      handlers['/api/pad/prompts/p1/reveal'] = () => ({ promptId: 'p1', state: 'revealed', version: 3, changed: true });
+      handlers['/api/pad/prompts/p1/key'] = () => ({ promptId: 'p1', state: 'closed', version: 3, changed: true });
+      render(<TeacherConsole host={host} />);
+
+      expect(await screen.findByText('From the question bank: B')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'B, 12 answered, marked correct' }).getAttribute('aria-pressed')).toBe('true');
+      const reveal = screen.getByRole('button', { name: 'Reveal answer' }) as HTMLButtonElement;
+      expect(reveal.disabled).toBe(false);
+
+      fireEvent.click(screen.getByRole('button', { name: 'C, 8 answered' }));
+      await waitFor(() => expect(bodiesFor('/api/pad/prompts/p1/key')).toEqual([{ keys: ['C'] }]));
+
+      await waitFor(() => expect((screen.getByRole('button', { name: 'Reveal answer' }) as HTMLButtonElement).disabled).toBe(false));
+      fireEvent.click(screen.getByRole('button', { name: 'Reveal answer' }));
+      await waitFor(() => expect(bodiesFor('/api/pad/prompts/p1/reveal')).toHaveLength(1));
+    });
+
+    it("shows the teacher's own key over the bank's, with no caption", async () => {
+      mocks.snapshot = snap({ prompt: prompt({ state: 'closed', version: 3, qb, suggested_keys: ['B'], correct_keys: ['D'] }), groups: [] });
+      render(<TeacherConsole host={host} />);
+      expect(await screen.findByRole('button', { name: 'D, 0 answered, marked correct' })).toBeTruthy();
+      expect(screen.queryByText(/From the question bank/)).toBeNull();
+    });
+
+    it('offers +15s on the newest question whose time was up, which reopens it', async () => {
+      mocks.snapshot = snap({
+        server_time: '2026-09-10T10:01:05Z',
+        prompt: prompt({ state: 'closed', version: 2, closes_at: '2026-09-10T10:01:00Z', closed_at: '2026-09-10T10:01:01Z', time_limit_s: 60 }),
+      });
+      handlers['/api/pad/prompts/p1/timer'] = () => ({ promptId: 'p1', state: 'open', version: 3, changed: true, closesAt: '2026-09-10T10:01:20Z', reopened: true });
+      render(<TeacherConsole host={host} />);
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Add 15 seconds' }));
+      await waitFor(() => expect(bodiesFor('/api/pad/prompts/p1/timer')).toEqual([{ addSeconds: 15 }]));
+    });
+
+    it('offers no +15s on a question the teacher closed early, or one with no timer', async () => {
+      mocks.snapshot = snap({
+        server_time: '2026-09-10T10:00:30Z',
+        prompt: prompt({ state: 'closed', version: 2, closes_at: '2026-09-10T10:01:00Z', time_limit_s: 60 }),
+      });
+      const { rerender } = render(<TeacherConsole host={host} />);
+      await screen.findByRole('button', { name: 'Reveal answer' });
+      expect(screen.queryByRole('button', { name: 'Add 15 seconds' })).toBeNull();
+
+      mocks.snapshot = snap();
+      rerender(<TeacherConsole host={host} />);
+      await screen.findByLabelText('20 of 30 answered');
+      expect(screen.queryByRole('button', { name: 'Add 15 seconds' })).toBeNull();
+      expect(screen.queryByRole('timer')).toBeNull();
+    });
+  });
+
   it('marks a question as a poll instead of choosing a key', async () => {
     mocks.snapshot = snap({ prompt: prompt({ state: 'closed', version: 2 }) });
     handlers['/api/pad/prompts/p1/key'] = () => ({ promptId: 'p1', state: 'closed', version: 3, changed: true });

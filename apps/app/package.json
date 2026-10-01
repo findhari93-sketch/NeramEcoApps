@@ -2,6 +2,9 @@
   "name": "@neram/tools-app",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "next dev -p 3011",
     "build": "next build",
@@ -16,6 +19,7 @@
     "@mui/material": "^5.15.0",
     "@neram/auth": "workspace:*",
     "@neram/database": "workspace:*",
+    "@neram/geo": "workspace:*",
     "@neram/i18n": "workspace:*",
     "@neram/ui": "workspace:*",
     "firebase-admin": "^13.6.0",

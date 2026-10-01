@@ -1,0 +1,21 @@
+{
+  "name": "@neram/geo",
+  "version": "1.0.0",
+  "private": true,
+  "description": "India + Gulf place registry (states, cities, aliases) and distance helpers shared by the marketing site and the Tools app",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./haversine": "./src/haversine.ts"
+  },
+  "scripts": {
+    "lint": "echo 'Linted via consuming apps'",
+    "type-check": "echo 'Type-checked via consuming apps'",
+    "clean": "rm -rf dist .turbo node_modules",
+    "clean:build": "rm -rf dist .turbo"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}

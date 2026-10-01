@@ -212,7 +212,7 @@ async function graphFetch(url: string, init?: RequestInit): Promise<Response> {
     throw new SlidesError('GRAPH_UNAVAILABLE');
   }
   try {
-    return await fetch(url, { ...init, headers: { ...(init?.headers || {}), Authorization: `Bearer ${token}` } });
+    return await fetch(url, { cache: 'no-store', ...init, headers: { ...(init?.headers || {}), Authorization: `Bearer ${token}` } });
   } catch {
     throw new SlidesError('GRAPH_UNAVAILABLE');
   }
@@ -258,7 +258,7 @@ async function convertToPdf(item: SlidesSourceItem): Promise<Uint8Array> {
   const location = res.headers.get('location');
   if (res.status >= 300 && res.status < 400 && location) {
     try {
-      pdfRes = await fetch(location);
+      pdfRes = await fetch(location, { cache: 'no-store' });
     } catch {
       throw new SlidesError('GRAPH_UNAVAILABLE');
     }

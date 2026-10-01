@@ -4,6 +4,7 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import YouTubeRewardPageContent from '@/components/YouTubeRewardPageContent';
 import { buildAlternates } from '@/lib/seo/metadata';
+import ClientIntl from '@/components/i18n/ClientIntl';
 
 
 const baseUrl = 'https://neramclasses.com';
@@ -45,7 +46,7 @@ export default function YouTubeRewardPage({
           { name: 'YouTube Reward', url: `${baseUrl}/youtube-reward` },
         ])}
       />
-      <YouTubeRewardPageContent />
+      <ClientIntl locale={locale} namespaces={['youtubeReward']}><YouTubeRewardPageContent /></ClientIntl>
     </>
   );
 }

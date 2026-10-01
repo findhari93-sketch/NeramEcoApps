@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') as UserStatus | null;
     const search = searchParams.get('search') || undefined;
     const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
+    const limit = Math.min(100, Math.max(1, parseInt(searchParams.get('limit') || '20') || 20));
     const offset = (page - 1) * limit;
 
     const supabase = getSupabaseAdminClient();
@@ -28,31 +28,39 @@ export async function GET(request: NextRequest) {
       orderDirection: 'desc',
     }, supabase);
 
-    // Get lead profiles for each user
-    const leadsWithProfiles = await Promise.all(
-      users.map(async (user) => {
-        const { data: profile } = await supabase
-          .from('lead_profiles' as any)
-          .select('*')
-          .eq('user_id', user.id)
-          .single();
+    // Lead profiles for the whole page in ONE query (this was one query per user).
+    // No admin screen calls GET /api/leads today (POST is used by the E2E
+    // lifecycle helpers), so it is kept working but cheap.
+    const ids = users.map((u) => u.id);
+    const profileByUser: Record<string, any> = {};
+    if (ids.length) {
+      const { data: profiles } = await supabase
+        .from('lead_profiles' as any)
+        .select('user_id, interest_course, city, state, source, reviewed_at, admin_notes, created_at')
+        .in('user_id', ids)
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false });
+      // Newest first, so the first row per user is the current application.
+      for (const p of profiles || []) if (!profileByUser[p.user_id]) profileByUser[p.user_id] = p;
+    }
 
-        return {
-          id: user.id,
-          name: user.name,
-          email: user.email,
-          phone: user.phone,
-          status: user.status,
-          course: profile?.interest_course || null,
-          city: profile?.city || null,
-          state: profile?.state || null,
-          source: profile?.source || null,
-          createdAt: user.created_at,
-          reviewedAt: profile?.reviewed_at || null,
-          adminNotes: profile?.admin_notes || null,
-        };
-      })
-    );
+    const leadsWithProfiles = users.map((user) => {
+      const profile = profileByUser[user.id];
+      return {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        status: user.status,
+        course: profile?.interest_course || null,
+        city: profile?.city || null,
+        state: profile?.state || null,
+        source: profile?.source || null,
+        createdAt: user.created_at,
+        reviewedAt: profile?.reviewed_at || null,
+        adminNotes: profile?.admin_notes || null,
+      };
+    });
 
     return NextResponse.json({
       leads: leadsWithProfiles,

@@ -13,15 +13,12 @@ import {
   Divider,
   Chip,
   CircularProgress,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
 } from '@mui/material';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import SaveIcon from '@mui/icons-material/Save';
 import TourIcon from '@mui/icons-material/Tour';
+import CollegeSearchField, { type CollegeSearchOption } from '@/components/college-hub/CollegeSearchField';
 
 interface VirtualTourScene {
   id: string;
@@ -35,13 +32,6 @@ interface VirtualTourScene {
   }>;
 }
 
-interface CollegeOption {
-  id: string;
-  name: string;
-  short_name: string | null;
-  neram_tier: string;
-}
-
 function generateSceneId(label: string): string {
   return label
     .toLowerCase()
@@ -50,30 +40,16 @@ function generateSceneId(label: string): string {
 }
 
 export default function VirtualTourAdminPage() {
-  const [colleges, setColleges] = useState<CollegeOption[]>([]);
-  const [selectedCollegeId, setSelectedCollegeId] = useState('');
+  // Platinum colleges are searched on the server as staff type. The old list read
+  // `data.colleges` from a route that answers `data.data`, so it was always empty.
+  const [selectedCollege, setSelectedCollege] = useState<CollegeSearchOption | null>(null);
+  const selectedCollegeId = selectedCollege?.id ?? '';
   const [scenes, setScenes] = useState<VirtualTourScene[]>([]);
   const [collegeName, setCollegeName] = useState('');
   const [loading, setLoading] = useState(false);
-  const [fetchingColleges, setFetchingColleges] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState('');
-
-  useEffect(() => {
-    async function loadColleges() {
-      try {
-        const res = await fetch('/api/college-hub/colleges?tier=platinum&limit=100');
-        const data = await res.json();
-        setColleges(data.colleges || []);
-      } catch {
-        setError('Failed to load colleges. Refresh the page.');
-      } finally {
-        setFetchingColleges(false);
-      }
-    }
-    loadColleges();
-  }, []);
 
   useEffect(() => {
     if (!selectedCollegeId) return;
@@ -175,33 +151,13 @@ export default function VirtualTourAdminPage() {
 
       {/* College selector */}
       <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2, mb: 3 }}>
-        <FormControl fullWidth size="small" disabled={fetchingColleges}>
-          <InputLabel>Select Platinum College</InputLabel>
-          <Select
-            value={selectedCollegeId}
-            onChange={(e) => setSelectedCollegeId(e.target.value)}
-            label="Select Platinum College"
-          >
-            {colleges.map((c) => (
-              <MenuItem key={c.id} value={c.id}>
-                {c.short_name || c.name}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-        {fetchingColleges && (
-          <Stack direction="row" alignItems="center" gap={1} sx={{ mt: 1.5 }}>
-            <CircularProgress size={14} />
-            <Typography variant="caption" color="text.secondary">
-              Loading colleges...
-            </Typography>
-          </Stack>
-        )}
-        {!fetchingColleges && colleges.length === 0 && (
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-            No Platinum-tier colleges found.
-          </Typography>
-        )}
+        <CollegeSearchField
+          label="Platinum college"
+          tier="platinum"
+          value={selectedCollege}
+          onChange={setSelectedCollege}
+          helperText="Only Platinum-tier colleges are listed."
+        />
       </Paper>
 
       {loading && (

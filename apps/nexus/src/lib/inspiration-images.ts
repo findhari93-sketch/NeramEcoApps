@@ -32,7 +32,7 @@ export async function prepareItemImage(item: ItemImageWork): Promise<void> {
     // Never fetch an address outside this project's storage, and never follow
     // a redirect out of it.
     if (!isProjectStorageUrl(item.image_url)) throw new Error('Image not in project storage');
-    const res = await fetch(item.image_url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS), redirect: 'error' });
+    const res = await fetch(item.image_url, { cache: 'no-store', signal: AbortSignal.timeout(FETCH_TIMEOUT_MS), redirect: 'error' });
     if (!res.ok) throw new Error(`Image fetch failed (${res.status})`);
     const contentLength = Number(res.headers.get('content-length'));
     if (Number.isFinite(contentLength) && contentLength > MAX_IMAGE_BYTES) {

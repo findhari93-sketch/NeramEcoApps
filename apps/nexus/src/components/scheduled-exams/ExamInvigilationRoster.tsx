@@ -123,10 +123,22 @@ export default function ExamInvigilationRoster({
 
   // Poll only while the window is actually open. An exam that finished three
   // days ago must not have a browser tab asking about it every 20 seconds.
+  // A hidden tab does not poll either; coming back refreshes at once, so the
+  // roster is current the moment the invigilator looks at it again.
   useEffect(() => {
     if (!isLive) return;
-    const id = setInterval(load, 20_000);
-    return () => clearInterval(id);
+    const id = setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
+      void load();
+    }, 20_000);
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void load();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, [isLive, load]);
 
   // The shared student list: search, sort, info ring filter. The counters are

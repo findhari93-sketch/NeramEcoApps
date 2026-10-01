@@ -4,7 +4,7 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateCollegesListingMetadata } from '@/lib/college-hub/seo';
 import { generateListingBreadcrumbSchema } from '@/lib/college-hub/schema-markup';
 import {
-  getColleges,
+  getCollegesISR,
   getLandingStats,
   getActiveStates,
   getCollegeCountByType,
@@ -23,54 +23,25 @@ import {
   BrowseAllSection,
 } from '@/components/college-hub/landing';
 import ExploreCategoriesSection from '@/components/college-hub/landing/ExploreCategoriesSection';
-import type { CollegeFilters } from '@/lib/college-hub/types';
+import { BROWSE_PAGE_SIZE, toListingCollege } from '@/lib/college-hub/listing-filter';
 
 // Matches the rest of the college hub. This data is seasonal, not hourly.
 export const revalidate = 86400;
 
 type Props = {
   params: { locale: string };
-  searchParams: {
-    state?: string;
-    type?: string;
-    counseling?: string;
-    exam?: string;
-    city?: string;
-    coa?: string;
-    naac?: string;
-    minFee?: string;
-    maxFee?: string;
-    q?: string;
-    sort?: string;
-    page?: string;
-    rating?: string;
-  };
 };
 
 export async function generateMetadata({ params: { locale } }: Props): Promise<Metadata> {
   return generateCollegesListingMetadata(locale);
 }
 
-export default async function CollegesPage({ params: { locale }, searchParams }: Props) {
+export default async function CollegesPage({ params: { locale } }: Props) {
   setRequestLocale(locale);
 
-  // Parse filters for the Browse All section
-  const filters: CollegeFilters = {
-    state: searchParams.state,
-    type: searchParams.type,
-    counselingSystem: searchParams.counseling as CollegeFilters['counselingSystem'],
-    exam: searchParams.exam as CollegeFilters['exam'],
-    city: searchParams.city,
-    coa: searchParams.coa === 'true' ? true : undefined,
-    naacGrade: searchParams.naac,
-    minFee: searchParams.minFee ? Number(searchParams.minFee) : undefined,
-    maxFee: searchParams.maxFee ? Number(searchParams.maxFee) : undefined,
-    search: searchParams.q,
-    sortBy: (searchParams.sort as CollegeFilters['sortBy']) ?? 'arch_index',
-    page: searchParams.page ? Number(searchParams.page) : 1,
-    limit: 30,
-  };
-
+  // No searchParams here: reading them made this "ISR" page render on every
+  // request. The Browse All section gets the default first page; filtered views
+  // are fetched by the section from the edge-cached /api/colleges/browse.
   // Fetch all data in parallel — wrap each query so one failure doesn't crash the page
   let colleges: any[] = [];
   let count = 0;
@@ -84,7 +55,7 @@ export default async function CollegesPage({ params: { locale }, searchParams }:
 
   try {
     const results = await Promise.allSettled([
-      getColleges(filters),
+      getCollegesISR({ sortBy: 'arch_index', page: 1, limit: BROWSE_PAGE_SIZE }),
       getLandingStats(),
       getActiveStates(),
       getCollegeCountByType(),
@@ -112,8 +83,6 @@ export default async function CollegesPage({ params: { locale }, searchParams }:
   } catch (err) {
     console.error('[CollegeHub] Promise.allSettled failed:', err);
   }
-
-  const totalPages = Math.ceil(count / 30);
 
   const breadcrumb = generateListingBreadcrumbSchema([
     { name: 'Home', path: '' },
@@ -156,10 +125,8 @@ export default async function CollegesPage({ params: { locale }, searchParams }:
 
       {/* Section 7: Browse All (existing filter + grid) */}
       <BrowseAllSection
-        colleges={colleges}
-        totalCount={count}
-        totalPages={totalPages}
-        filters={filters}
+        initialColleges={colleges.map(toListingCollege)}
+        initialCount={count}
         cityCounts={cityData}
         typeCounts={typeData}
       />

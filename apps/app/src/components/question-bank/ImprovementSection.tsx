@@ -2,8 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Box, Typography, Stack, Avatar, Button, TextField, Divider, Alert, Card, CardContent, Chip, CircularProgress,
+  Box, Typography, Stack, Avatar, Button, TextField, Divider, Alert, Card, CardContent, Chip, CircularProgress, Skeleton,
 } from '@neram/ui';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandLessIcon from '@mui/icons-material/ExpandLess';
+import EditNoteRoundedIcon from '@mui/icons-material/EditNoteRounded';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import type { QuestionImprovementDisplay, VoteType } from '@neram/database';
 import VoteButton from './VoteButton';
 import AdminBadge from './AdminBadge';
@@ -40,38 +44,45 @@ export default function ImprovementSection({
   const [newBody, setNewBody] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
+  const [submitError, setSubmitError] = useState('');
+  const [loadError, setLoadError] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   const fetchImprovements = useCallback(async () => {
     setLoading(true);
+    setLoadError(false);
     try {
       const token = await getAuthToken();
       const headers: Record<string, string> = {};
       if (token) headers.Authorization = `Bearer ${token}`;
 
       const res = await fetch(`/api/questions/${questionId}/improvements`, { headers });
-      if (res.ok) {
-        const data = await res.json();
-        setImprovements(data.data || []);
-      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setImprovements(data.data || []);
+      setLoaded(true);
     } catch (error) {
       console.error('Error fetching improvements:', error);
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
   }, [questionId, getAuthToken]);
 
+  // Load once when first opened
   useEffect(() => {
-    if (expanded && improvements.length === 0) {
+    if (expanded && !loaded && !loading && !loadError) {
       fetchImprovements();
     }
-  }, [expanded, fetchImprovements, improvements.length]);
+  }, [expanded, loaded, loading, loadError, fetchImprovements]);
 
   const handleSubmit = async () => {
     if (!newBody.trim() || submitting) return;
     setSubmitting(true);
+    setSubmitError('');
     try {
       const token = await getAuthToken();
-      if (!token) return;
+      if (!token) throw new Error('Not authenticated');
 
       const res = await fetch(`/api/questions/${questionId}/improvements`, {
         method: 'POST',
@@ -88,9 +99,13 @@ export default function ImprovementSection({
         setSubmitSuccess(true);
         setTimeout(() => setSubmitSuccess(false), 5000);
         fetchImprovements();
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setSubmitError(data.error || 'Could not submit your improvement. Your text is still here, please try again.');
       }
     } catch (error) {
       console.error('Error submitting improvement:', error);
+      setSubmitError('Could not submit your improvement. Your text is still here, please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -109,7 +124,9 @@ export default function ImprovementSection({
       body: JSON.stringify({ vote }),
     });
 
+    if (!res.ok) throw new Error('Vote failed');
     const data = await res.json();
+    if (!data?.data) throw new Error('Vote failed');
     return data.data;
   };
 
@@ -121,23 +138,33 @@ export default function ImprovementSection({
       <Divider sx={{ mb: 2 }} />
 
       {/* Header */}
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
+      <Stack
+        direction="row"
+        alignItems="center"
+        justifyContent="space-between"
+        flexWrap="wrap"
+        useFlexGap
+        spacing={1}
+        sx={{ mb: 1.5 }}
+      >
         <Button
           onClick={() => setExpanded(!expanded)}
-          size="small"
-          sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.95rem' }}
+          endIcon={expanded ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+          aria-expanded={expanded}
+          aria-controls={`improvements-${questionId}`}
+          sx={{ minHeight: 44, px: 1, ml: -1, fontWeight: 600, color: 'text.primary' }}
         >
-          Suggested Improvements ({displayCount})
-          <span style={{ marginLeft: 4, fontSize: '0.8rem' }}>{expanded ? '▲' : '▼'}</span>
+          Suggested improvements ({displayCount})
         </Button>
 
         {isAuthenticated && !showForm && (
           <Button
             variant="outlined"
-            size="small"
+            startIcon={<EditNoteRoundedIcon />}
             onClick={() => { setExpanded(true); setShowForm(true); }}
+            sx={{ minHeight: 44 }}
           >
-            Suggest Improvement
+            Suggest an improvement
           </Button>
         )}
       </Stack>
@@ -149,7 +176,7 @@ export default function ImprovementSection({
       )}
 
       {expanded && (
-        <Box>
+        <Box id={`improvements-${questionId}`}>
           {/* Submit form */}
           {showForm && (
             <Card variant="outlined" sx={{ mb: 2 }}>
@@ -165,21 +192,28 @@ export default function ImprovementSection({
                   placeholder="Write your improved version of this question..."
                   value={newBody}
                   onChange={(e) => setNewBody(e.target.value)}
-                  inputProps={{ maxLength: 5000 }}
-                  helperText={`${newBody.length}/5000`}
+                  inputProps={{ maxLength: 5000, 'aria-label': 'Your improved version of this question' }}
+                  helperText={newBody.trim().length > 0 && newBody.trim().length < 20
+                    ? `At least 20 characters (${newBody.trim().length}/20)`
+                    : `${newBody.length}/5000`}
                   sx={{ mb: 1.5 }}
                 />
+                {submitError && (
+                  <Alert severity="error" role="alert" sx={{ mb: 1.5 }}>
+                    {submitError}
+                  </Alert>
+                )}
                 <Stack direction="row" spacing={1} justifyContent="flex-end">
-                  <Button size="small" onClick={() => setShowForm(false)} disabled={submitting}>
+                  <Button onClick={() => setShowForm(false)} disabled={submitting} sx={{ minHeight: 44 }}>
                     Cancel
                   </Button>
                   <Button
                     variant="contained"
-                    size="small"
                     onClick={handleSubmit}
                     disabled={!newBody.trim() || newBody.trim().length < 20 || submitting}
+                    sx={{ minHeight: 44 }}
                   >
-                    {submitting ? <CircularProgress size={16} /> : 'Submit for Review'}
+                    {submitting ? <CircularProgress size={18} color="inherit" aria-label="Submitting" /> : 'Submit for review'}
                   </Button>
                 </Stack>
               </CardContent>
@@ -188,15 +222,31 @@ export default function ImprovementSection({
 
           {/* Loading */}
           {loading && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}>
-              <CircularProgress size={24} />
+            <Box aria-hidden="true" sx={{ mb: 1.5 }}>
+              <Skeleton variant="rounded" height={88} sx={{ mb: 1 }} />
+              <Skeleton variant="rounded" height={88} />
             </Box>
           )}
 
+          {!loading && loadError && (
+            <Alert
+              severity="error"
+              role="alert"
+              sx={{ mb: 1.5 }}
+              action={
+                <Button color="inherit" onClick={fetchImprovements} startIcon={<RefreshIcon />} sx={{ minHeight: 44 }}>
+                  Retry
+                </Button>
+              }
+            >
+              Could not load improvements.
+            </Alert>
+          )}
+
           {/* Improvements list */}
-          {!loading && improvements.length === 0 && !showForm && (
+          {!loading && !loadError && improvements.length === 0 && !showForm && (
             <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>
-              No approved improvements yet. Be the first to suggest one!
+              No approved improvements yet. Be the first to suggest one.
             </Typography>
           )}
 
@@ -224,25 +274,26 @@ export default function ImprovementSection({
 
                   {/* Content */}
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
+                    <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 0.5 }}>
                       <Avatar
                         src={imp.author?.avatar_url || undefined}
-                        sx={{ width: 22, height: 22, fontSize: '0.7rem' }}
+                        alt=""
+                        sx={{ width: 24, height: 24, fontSize: '0.75rem' }}
                       >
                         {(imp.author?.name || 'U')[0]}
                       </Avatar>
-                      <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
+                      <Typography variant="body2" color="text.secondary">
                         {imp.author?.name || 'Anonymous'}
                       </Typography>
-                      <Typography variant="body2" color="text.disabled" sx={{ fontSize: '0.75rem' }}>
+                      <Typography variant="caption" color="text.secondary">
                         {timeAgo(imp.created_at)}
                       </Typography>
                       <AdminBadge authorUserType={imp.author?.user_type} />
                       {imp.is_accepted && (
-                        <Chip label="Best Version" size="small" color="success" sx={{ height: 20, fontSize: '0.65rem' }} />
+                        <Chip label="Best version" size="small" color="success" sx={{ height: 24, fontSize: '0.75rem' }} />
                       )}
                       {idx === 0 && !imp.is_accepted && improvements.length > 1 && (
-                        <Chip label="Top Voted" size="small" color="primary" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
+                        <Chip label="Top voted" size="small" color="primary" variant="outlined" sx={{ height: 24, fontSize: '0.75rem' }} />
                       )}
                     </Stack>
 
@@ -251,7 +302,7 @@ export default function ImprovementSection({
                     </Typography>
 
                     {!isAuthenticated && (
-                      <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, fontSize: '0.75rem' }}>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
                         {imp.vote_score} {imp.vote_score === 1 ? 'vote' : 'votes'}
                       </Typography>
                     )}

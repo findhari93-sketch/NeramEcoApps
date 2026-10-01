@@ -71,6 +71,7 @@ export async function GET(request: Request) {
       };
 
       const res = await fetch('https://api.indexnow.org/indexnow', {
+        cache: 'no-store',
         method: 'POST',
         headers: { 'Content-Type': 'application/json; charset=utf-8' },
         body: JSON.stringify(payload),

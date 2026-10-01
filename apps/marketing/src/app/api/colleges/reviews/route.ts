@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { PUBLIC_CACHE_HEADERS } from '@/app/api/_lib/public-cache';
 import { createAdminClient } from '@neram/database';
 
 // GET /api/colleges/reviews?college_id=xxx
@@ -22,7 +23,7 @@ export async function GET(request: NextRequest) {
     .limit(20);
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ data: data ?? [] });
+  return NextResponse.json({ data: data ?? [] }, { headers: PUBLIC_CACHE_HEADERS });
 }
 
 // POST /api/colleges/reviews

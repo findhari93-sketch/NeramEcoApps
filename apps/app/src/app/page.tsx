@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import type { Metadata } from 'next';
 import { Box, Typography, CircularProgress } from '@neram/ui';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateSoftwareApplicationSchema, generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
@@ -23,6 +24,10 @@ function LoadingFallback() {
     </Box>
   );
 }
+
+export const metadata: Metadata = {
+  alternates: { canonical: '/' },
+};
 
 export default function HomePage() {
   return (

@@ -6,6 +6,7 @@ import { classifyPrework, classEndIso } from '@/lib/prework';
 import { applyClassPrepGate } from '@/lib/class-prep-server';
 import { isObligationClosed } from '@/lib/catchup-buckets';
 import { CLASS_IMAGES_EMBED } from '@/lib/class-cover';
+import { SCHEDULED_CLASS_LIST_COLUMNS, selectWithColumnFallback } from '@/lib/scheduled-class-columns';
 
 /**
  * The class_images embed feeds the cover shown in front of every finished class.
@@ -15,6 +16,12 @@ import { CLASS_IMAGES_EMBED } from '@/lib/class-cover';
  * already hands those same rows to any enrolled student.
  */
 const CLASS_SELECT = `*, topic:nexus_topics(id, title, category), course_topic:nexus_course_topics(id, title), teacher:users!nexus_scheduled_classes_teacher_id_fkey(id, name, avatar_url), batch:nexus_batches!nexus_scheduled_classes_batch_id_fkey(id, name), classroom:nexus_classrooms!nexus_scheduled_classes_classroom_id_fkey(id, name, type), ${CLASS_IMAGES_EMBED}`;
+
+/**
+ * Same read with an explicit column list (see lib/scheduled-class-columns.ts),
+ * falling back to CLASS_SELECT if this database is missing a listed column.
+ */
+const CLASS_LIST_SELECT = CLASS_SELECT.replace(/^\*,/, `${SCHEDULED_CLASS_LIST_COLUMNS},`);
 
 /**
  * GET /api/timetable/my-schedule?start={date}&end={date}
@@ -72,28 +79,31 @@ export async function GET(request: NextRequest) {
 
     // Fetch classes from all enrolled classrooms in parallel
     const classPromises = enrollments.map(async (enrollment) => {
-      let query = supabase
-        .from('nexus_scheduled_classes')
-        .select(CLASS_SELECT)
-        .eq('classroom_id', enrollment.classroom_id)
-        .gte('scheduled_date', start)
-        .lte('scheduled_date', end)
-        .order('scheduled_date', { ascending: true })
-        .order('start_time', { ascending: true });
+      const buildQuery = (columns: string) => {
+        let query = supabase
+          .from('nexus_scheduled_classes')
+          .select(columns)
+          .eq('classroom_id', enrollment.classroom_id)
+          .gte('scheduled_date', start)
+          .lte('scheduled_date', end)
+          .order('scheduled_date', { ascending: true })
+          .order('start_time', { ascending: true });
 
-      // For students: filter by batch (classroom-wide + their batch), and hide
-      // classes the teacher is still drafting.
-      if (enrollment.role === 'student') {
-        query = query.eq('publish_state', 'published');
-        if (enrollment.batch_id) {
-          query = query.or(`batch_id.is.null,batch_id.eq.${enrollment.batch_id}`);
-        } else {
-          query = query.is('batch_id', null);
+        // For students: filter by batch (classroom-wide + their batch), and hide
+        // classes the teacher is still drafting.
+        if (enrollment.role === 'student') {
+          query = query.eq('publish_state', 'published');
+          if (enrollment.batch_id) {
+            query = query.or(`batch_id.is.null,batch_id.eq.${enrollment.batch_id}`);
+          } else {
+            query = query.is('batch_id', null);
+          }
         }
-      }
+        return query;
+      };
 
-      const { data } = await query;
-      return data || [];
+      const { data } = await selectWithColumnFallback(buildQuery, CLASS_LIST_SELECT, CLASS_SELECT, 'my-schedule');
+      return (data || []) as any[];
     });
 
     const allClassArrays = await Promise.all(classPromises);

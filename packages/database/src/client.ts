@@ -9,7 +9,7 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from './types';
-import { deadlineFetch } from './fetch-deadline';
+import { deadlineFetch, toServerSupabaseUrl } from './fetch-deadline';
 
 // ============================================
 // ENVIRONMENT VARIABLES
@@ -64,7 +64,8 @@ export function createServerClient(): TypedSupabaseClient {
     },
     global: {
       fetch: (url, options = {}) => {
-        return fetch(url, { ...options, cache: 'no-store' as RequestCache });
+        // Server only: SUPABASE_SERVER_URL, when set, skips the Cloudflare hop.
+        return fetch(toServerSupabaseUrl(url), { ...options, cache: 'no-store' as RequestCache });
       },
     },
   });
@@ -124,7 +125,8 @@ export function createAdminClientISR(revalidateSeconds: number): TypedSupabaseCl
     },
     global: {
       fetch: (url, options = {}) => {
-        return fetch(url, {
+        // Server only: SUPABASE_SERVER_URL, when set, skips the Cloudflare hop.
+        return fetch(toServerSupabaseUrl(url), {
           ...options,
           next: { revalidate: revalidateSeconds },
         } as RequestInit);

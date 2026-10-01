@@ -4,6 +4,7 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import ScholarshipPageContent from '@/components/ScholarshipPageContent';
 import { buildAlternates } from '@/lib/seo/metadata';
+import ClientIntl from '@/components/i18n/ClientIntl';
 
 
 const baseUrl = 'https://neramclasses.com';
@@ -25,7 +26,7 @@ export default function ScholarshipPage({ params: { locale } }: { params: { loca
         { name: 'Home', url: baseUrl },
         { name: 'Scholarship', url: `${baseUrl}/scholarship` },
       ])} />
-      <ScholarshipPageContent />
+      <ClientIntl locale={locale} namespaces={['scholarship']}><ScholarshipPageContent /></ClientIntl>
     </>
   );
 }

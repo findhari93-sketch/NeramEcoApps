@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isTrustedRedirect, safeRedirect } from './safe-redirect';
+import { isTrustedRedirect, safeRedirect, safeInternalPath, resolvePostAuthTarget } from './safe-redirect';
 
 const MARKETING = 'https://neramclasses.com';
 
@@ -51,5 +51,71 @@ describe('safeRedirect', () => {
   it('falls back for an untrusted target', () => {
     expect(safeRedirect('https://attacker.example/', MARKETING)).toBe(MARKETING);
     expect(safeRedirect(null, MARKETING)).toBe(MARKETING);
+  });
+});
+
+/**
+ * 2026-10-01: public tool pages send signed-out visitors to
+ * /login?redirect=/tools/... and the student must land back on that tool.
+ * A relative path used to throw in new URL() and fall through to /dashboard.
+ */
+describe('safeInternalPath', () => {
+  it('accepts app paths with a query', () => {
+    expect(safeInternalPath('/tools/nata/cutoff-calculator')).toBe('/tools/nata/cutoff-calculator');
+    expect(safeInternalPath('/tools/nata/exam-centers/tamil-nadu/hosur?x=1')).toBe(
+      '/tools/nata/exam-centers/tamil-nadu/hosur?x=1'
+    );
+  });
+
+  it('refuses protocol-relative, backslash and encoded host tricks', () => {
+    expect(safeInternalPath('//evil.com')).toBeNull();
+    expect(safeInternalPath('/\\evil.com')).toBeNull();
+    expect(safeInternalPath('/%2F%2Fevil.com')).toBeNull();
+    expect(safeInternalPath('/%5Cevil.com')).toBeNull();
+    expect(safeInternalPath('/tools\n/x')).toBeNull();
+  });
+
+  it('refuses absolute URLs, login loops and API paths', () => {
+    expect(safeInternalPath('https://evil.com/')).toBeNull();
+    expect(safeInternalPath('javascript:alert(1)')).toBeNull();
+    expect(safeInternalPath('/login?redirect=/x')).toBeNull();
+    expect(safeInternalPath('/api/auth/exchange-token')).toBeNull();
+  });
+
+  it('refuses empty and very long values', () => {
+    expect(safeInternalPath('')).toBeNull();
+    expect(safeInternalPath(null)).toBeNull();
+    expect(safeInternalPath('/' + 'a'.repeat(600))).toBeNull();
+  });
+});
+
+describe('resolvePostAuthTarget', () => {
+  const APP = 'https://app.neramclasses.com';
+
+  it('sends a path back inside the app with no token', () => {
+    expect(resolvePostAuthTarget('/tools/nata/cutoff-calculator', APP)).toEqual({
+      kind: 'path',
+      path: '/tools/nata/cutoff-calculator',
+    });
+  });
+
+  it('never puts a token on a same-origin absolute URL', () => {
+    expect(resolvePostAuthTarget(`${APP}/tools/nata/exam-centers?state=kerala`, APP, [MARKETING])).toEqual({
+      kind: 'path',
+      path: '/tools/nata/exam-centers?state=kerala',
+    });
+  });
+
+  it('gives the marketing site a token', () => {
+    expect(resolvePostAuthTarget('https://neramclasses.com/apply', APP, [MARKETING])).toEqual({
+      kind: 'token',
+      url: 'https://neramclasses.com/apply',
+    });
+  });
+
+  it('falls back to the dashboard for foreign hosts and bad paths', () => {
+    expect(resolvePostAuthTarget('https://attacker.example/', APP)).toEqual({ kind: 'dashboard' });
+    expect(resolvePostAuthTarget('//attacker.example/', APP)).toEqual({ kind: 'dashboard' });
+    expect(resolvePostAuthTarget(null, APP)).toEqual({ kind: 'dashboard' });
   });
 });

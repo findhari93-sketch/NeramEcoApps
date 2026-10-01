@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
 import {
   AppBar,
@@ -37,7 +38,11 @@ import { locales, localeLabels, type Locale } from '@/i18n';
 import { useTranslations } from 'next-intl';
 import AuthButton from './AuthButton';
 import UserNotificationBell from './UserNotificationBell';
-import SearchDialog from './SearchDialog';
+// Search (dialog + Fuse + the ~70 KB generated index) is its own chunk, fetched
+// on the first open (or on hover/focus of the search button) instead of being
+// shipped with the header on every page.
+const loadSearchDialog = () => import('./SearchDialog');
+const SearchDialog = dynamic(loadSearchDialog, { ssr: false });
 import { useApplicationStatus, type AppStatusSummary } from '@/hooks/useApplicationStatus';
 import { useGoToApp } from '@/hooks/useGoToApp';
 
@@ -317,7 +322,17 @@ export default function Header() {
   const isEnrolled = appStatus === 'enrolled' || appStatus === 'partial_payment';
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchOpen, setSearchOpenState] = useState(false);
+  // Mount the dialog only after the first open; it stays mounted afterwards so
+  // its close transition and recent searches keep working.
+  const [searchMounted, setSearchMounted] = useState(false);
+  const setSearchOpen = (next: boolean) => {
+    if (next) setSearchMounted(true);
+    setSearchOpenState(next);
+  };
+  const preloadSearch = () => {
+    void loadSearchDialog();
+  };
 
   // Desktop: which group's popover is open
   const [openMenu, setOpenMenu] = useState<{ key: string; anchorEl: HTMLElement } | null>(null);
@@ -566,6 +581,8 @@ export default function Header() {
             {/* ── Desktop Search ── */}
             <Box
               onClick={() => setSearchOpen(true)}
+              onPointerEnter={preloadSearch}
+              onFocus={preloadSearch}
               role="button"
               tabIndex={0}
               onKeyDown={(e) => e.key === 'Enter' && setSearchOpen(true)}
@@ -622,6 +639,7 @@ export default function Header() {
             <IconButton
               color="inherit"
               onClick={() => setSearchOpen(true)}
+              onPointerDown={preloadSearch}
               aria-label="Search"
               sx={{
                 display: { xs: 'flex', md: 'none' },
@@ -1159,7 +1177,7 @@ export default function Header() {
       </AppBar>
 
       {/* Spacer */}
-      <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
+      {searchMounted && <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />}
       <Toolbar
         disableGutters
         sx={{ minHeight: { xs: 56, md: 64 }, mt: 'var(--broadcast-banner-height, 0px)' }}

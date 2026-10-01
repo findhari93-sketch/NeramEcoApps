@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Box, IconButton, Typography } from '@neram/ui';
+import ArrowUpwardRoundedIcon from '@mui/icons-material/ArrowUpwardRounded';
+import ArrowDownwardRoundedIcon from '@mui/icons-material/ArrowDownwardRounded';
 import type { VoteType } from '@neram/database';
 
 interface VoteButtonProps {
@@ -23,6 +25,14 @@ export default function VoteButton({
   const [userVote, setUserVote] = useState<VoteType | null>(initialVote);
   const [loading, setLoading] = useState(false);
 
+  // Follow fresh data from the parent (for example after the signed-in reload)
+  useEffect(() => {
+    if (loading) return;
+    setScore(initialScore);
+    setUserVote(initialVote);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialScore, initialVote]);
+
   const handleVote = async (vote: VoteType, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -35,22 +45,20 @@ export default function VoteButton({
     const prevVote = userVote;
 
     if (userVote === vote) {
-      // Removing vote
       setUserVote(null);
       setScore(score + (vote === 'up' ? -1 : 1));
     } else if (userVote === null) {
-      // New vote
       setUserVote(vote);
       setScore(score + (vote === 'up' ? 1 : -1));
     } else {
-      // Switching vote direction
       setUserVote(vote);
       setScore(score + (vote === 'up' ? 2 : -2));
     }
 
     try {
       const result = await onVote(vote);
-      setUserVote(result.vote);
+      if (!result || typeof result.voteScore !== 'number') throw new Error('Vote failed');
+      setUserVote(result.vote ?? null);
       setScore(result.voteScore);
     } catch {
       setUserVote(prevVote);
@@ -60,11 +68,17 @@ export default function VoteButton({
     }
   };
 
-  const iconSize = size === 'small' ? '1rem' : '1.25rem';
-  const btnSize = size === 'small' ? 32 : 40;
+  const iconSize = size === 'small' ? '1.125rem' : '1.375rem';
+  const btnSx = {
+    width: 44,
+    height: 44,
+    transition: 'color 0.2s',
+  } as const;
 
   return (
     <Box
+      role="group"
+      aria-label={`Votes: ${score}`}
       sx={{
         display: 'flex',
         flexDirection: direction === 'vertical' ? 'column' : 'row',
@@ -72,30 +86,24 @@ export default function VoteButton({
         gap: 0,
       }}
     >
-      {/* Upvote */}
       <IconButton
         onClick={(e) => handleVote('up', e)}
         disabled={loading}
-        size="small"
-        sx={{
-          width: btnSize,
-          height: btnSize,
-          color: userVote === 'up' ? 'warning.main' : 'text.secondary',
-          transition: 'color 0.2s, transform 0.15s',
-          '&:active': { transform: 'scale(1.15)' },
-        }}
-        aria-label="Upvote"
+        aria-label={userVote === 'up' ? 'Remove upvote' : 'Upvote'}
+        aria-pressed={userVote === 'up'}
+        sx={{ ...btnSx, color: userVote === 'up' ? 'warning.main' : 'text.secondary' }}
       >
-        <span style={{ fontSize: iconSize, lineHeight: 1 }}>&#9650;</span>
+        <ArrowUpwardRoundedIcon sx={{ fontSize: iconSize }} />
       </IconButton>
 
-      {/* Score */}
       <Typography
         variant="body2"
         fontWeight={700}
+        aria-hidden="true"
         sx={{
-          fontSize: size === 'small' ? '0.8rem' : '0.95rem',
-          color: userVote === 'up' ? 'warning.main' : userVote === 'down' ? 'info.main' : 'text.primary',
+          fontSize: size === 'small' ? '0.875rem' : '1rem',
+          // Plain text colour keeps 4.5:1 contrast; the arrow carries the vote colour
+          color: 'text.primary',
           minWidth: 20,
           textAlign: 'center',
           userSelect: 'none',
@@ -104,21 +112,14 @@ export default function VoteButton({
         {score}
       </Typography>
 
-      {/* Downvote */}
       <IconButton
         onClick={(e) => handleVote('down', e)}
         disabled={loading}
-        size="small"
-        sx={{
-          width: btnSize,
-          height: btnSize,
-          color: userVote === 'down' ? 'info.main' : 'text.secondary',
-          transition: 'color 0.2s, transform 0.15s',
-          '&:active': { transform: 'scale(1.15)' },
-        }}
-        aria-label="Downvote"
+        aria-label={userVote === 'down' ? 'Remove downvote' : 'Downvote'}
+        aria-pressed={userVote === 'down'}
+        sx={{ ...btnSx, color: userVote === 'down' ? 'info.main' : 'text.secondary' }}
       >
-        <span style={{ fontSize: iconSize, lineHeight: 1 }}>&#9660;</span>
+        <ArrowDownwardRoundedIcon sx={{ fontSize: iconSize }} />
       </IconButton>
     </Box>
   );

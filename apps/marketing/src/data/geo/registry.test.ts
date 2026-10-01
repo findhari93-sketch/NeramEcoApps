@@ -2,8 +2,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { HUB_REGISTRY } from '@/data/counselling-2026';
-import { INDIAN_CITIES, GULF_CITIES, STATES, getCity, getState, resolveCitySlug, cityForName, stateSlugForName } from '.';
-import CITY_ALIASES from './city-aliases.json';
+import { INDIAN_CITIES, GULF_CITIES, STATES, getCity, getState, resolveCitySlug, cityForName, stateSlugForName, CITY_ALIAS_MAP as CITY_ALIASES } from '.';
 import { CITY_CONTENT } from './content/cities';
 import { STATE_CONTENT } from './content/states';
 

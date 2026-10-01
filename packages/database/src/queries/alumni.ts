@@ -8,7 +8,7 @@
  */
 
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../client';
-import { fetchAllRows } from '../utils/paged-rows';
+import { fetchAllRows, IN_LIST_CHUNK } from '../utils/paged-rows';
 import { getUserJourneyDetail } from './crm';
 import { listColleges } from './colleges';
 
@@ -129,26 +129,33 @@ export async function getAlumniDirectory(
   const supabase = client || getSupabaseAdminClient();
   const { search, academicYear, collegeId, course, verified } = options;
 
-  let uq = supabase
-    .from('users')
-    .select('id, name, email, avatar_url, academic_year, alumni_since')
-    .eq('is_alumni', true);
-  if (search) uq = uq.or(`name.ilike.%${search}%,email.ilike.%${search}%`);
-  if (academicYear) uq = uq.eq('academic_year', academicYear);
-  uq = uq
-    .order('academic_year', { ascending: false, nullsFirst: false })
-    .order('name', { ascending: true })
-    .limit(5000);
-
-  const { data: users, error } = await uq;
-  if (error) throw error;
-  const ids = (users || []).map((u: any) => u.id);
+  // Every page: the old `.limit(5000)` was silently capped at PostgREST's 1,000
+  // rows. About 70 alumni on production today, so this is one page; the directory
+  // is filtered client-side and does not need server pagination yet.
+  const users = (await fetchAllRows(() => {
+    let uq = supabase
+      .from('users')
+      .select('id, name, email, avatar_url, academic_year, alumni_since')
+      .eq('is_alumni', true);
+    if (search) uq = uq.or(`name.ilike.%${search}%,email.ilike.%${search}%`);
+    if (academicYear) uq = uq.eq('academic_year', academicYear);
+    return uq
+      .order('academic_year', { ascending: false, nullsFirst: false })
+      .order('name', { ascending: true })
+      .order('id', { ascending: true });
+  })) as any[];
+  const ids = users.map((u: any) => u.id);
   if (ids.length === 0) return { alumni: [], total: 0 };
 
-  const [{ data: profiles }, { data: activity }] = await Promise.all([
-    supabase.from('alumni_profiles').select('*').in('user_id', ids),
-    supabase.from('admin_student_activity').select('student_id, submission_count').in('student_id', ids),
+  // Ids in chunks so a long list never overflows the request URL.
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += IN_LIST_CHUNK) chunks.push(ids.slice(i, i + IN_LIST_CHUNK));
+  const [profileParts, activityParts] = await Promise.all([
+    Promise.all(chunks.map((c) => supabase.from('alumni_profiles').select('*').in('user_id', c))),
+    Promise.all(chunks.map((c) => supabase.from('admin_student_activity').select('student_id, submission_count').in('student_id', c))),
   ]);
+  const profiles = profileParts.flatMap((r: any) => r.data || []);
+  const activity = activityParts.flatMap((r: any) => r.data || []);
 
   const profByUser: Record<string, any> = {};
   for (const p of profiles || []) profByUser[p.user_id] = p;

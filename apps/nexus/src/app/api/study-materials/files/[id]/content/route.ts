@@ -76,7 +76,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         : await getSharePointDownloadUrl(file.sharepoint_item_id as string);
     }
 
-    const upstream = await fetch(downloadUrl, { redirect: 'follow' });
+    const upstream = await fetch(downloadUrl, { cache: 'no-store', redirect: 'follow' });
     if (!upstream.ok || !upstream.body) {
       return NextResponse.json({ error: 'Could not fetch file' }, { status: 502 });
     }

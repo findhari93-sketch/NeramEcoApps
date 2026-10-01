@@ -130,7 +130,7 @@ export default function DeleteQuestionDialog({
               multiline
               minRows={3}
               label="Reason for deletion"
-              placeholder="Why do you want to delete this question? (e.g., duplicate, incorrect, personal information...)"
+              placeholder="Why do you want to delete this question? For example: duplicate, incorrect or personal information."
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               helperText={`${reason.length} characters (min 5)`}

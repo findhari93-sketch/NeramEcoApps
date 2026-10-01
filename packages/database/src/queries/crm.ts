@@ -45,6 +45,7 @@ import {
   currentAcademicYear,
 } from '../utils/academic-year';
 import { ACTIVITY_GROUPS } from '../utils/lifecycle-rules';
+import { fetchAllRows, IN_LIST_CHUNK } from '../utils/paged-rows';
 
 // ============================================
 // LIST USER JOURNEYS (CRM main table)
@@ -350,6 +351,48 @@ export async function getPeopleBreakdown(
 // ============================================
 
 /**
+ * Column lists for the User 360 detail reads, from an audit of every reader
+ * (components/crm/*Section, components/user360 tabs, alumni/[id], AlumniDetailDrawer,
+ * StudentDetailDrawer, computePipelineStage) on 2026-10-01, checked against the
+ * staging and production schemas. A screen that starts reading a new column must
+ * add it here. users, lead_profiles and student_profiles stay '*' because their
+ * whole rows feed the edit dialogs; demo registrations and onboarding responses
+ * keep '*' on the parent row and only narrow the joined table.
+ */
+export const JOURNEY_COLUMNS = {
+  payments:
+    'id, user_id, lead_profile_id, status, amount, currency, paid_at, created_at, payment_method, payment_scheme, ' +
+    'receipt_number, receipt_url, installment_number, razorpay_payment_id, razorpay_method, razorpay_vpa, ' +
+    'razorpay_card_last4, razorpay_card_network, razorpay_fee, razorpay_tax, payer_name, payer_relationship, ' +
+    'screenshot_url, screenshot_verified, verified_at',
+  installments:
+    'id, lead_profile_id, installment_number, amount, due_date, status, late_fee, late_fee_waived, paid_amount, paid_at, payment_id',
+  onboardingSession: 'id, user_id, status, completed_at, questions_answered, total_questions, started_at, skipped_at',
+  documents: 'id, user_id, document_type, file_name, file_url, is_verified, created_at',
+  scholarship:
+    'id, lead_profile_id, user_id, scholarship_status, school_id_card_url, income_certificate_url, aadhar_card_url, ' +
+    'mark_sheet_url, school_name, annual_income_range, government_school_years, submitted_at, revision_notes, ' +
+    'approved_fee, verified_at, verified_by, admin_notes, rejection_reason, created_at',
+  // Nothing in admin reads the claims themselves today (the delete summary counts
+  // them through its own route), so this is a narrow identifying set.
+  cashbackClaims: 'id, status, amount, cashback_type, created_at, processed_at',
+  profileHistory:
+    'id, user_id, field_name, old_value, new_value, change_source, changed_by, created_at, changed_by_user:users!changed_by(id, name, email)',
+  adminNotes: 'id, user_id, admin_id, admin_name, note, created_at',
+  callbackRequests: 'id, user_id, status, is_dead_lead, scheduled_callback_at, notes, created_at',
+  callbackAttempts: 'id, user_id, callback_request_id, outcome, admin_name, attempted_at, comments, rescheduled_to',
+  demoRegistrations:
+    '*, slot:demo_class_slots(id, title, slot_date, slot_time, duration_minutes, demo_mode), survey:demo_class_surveys(id, overall_rating, teaching_rating, enrollment_interest, liked_most, suggestions)',
+  onboardingResponses: '*, question:onboarding_questions(id, question_text)',
+  nexusEnrollments:
+    'id, user_id, classroom_id, role, is_active, enrolled_at, current_standard, participation_status, dormant_source, removed_at, removal_reason_category, ' +
+    'classroom:nexus_classrooms(id, name, type, academic_year, is_archived)',
+  nexusDocuments: 'id, student_id, title, category, status, file_url, file_type, sharepoint_web_url, uploaded_at',
+  nexusOnboarding: 'id, student_id, status, current_standard, academic_year, submitted_at, created_at',
+  nexusExamPlans: 'id, student_id, exam_type, state, application_number, created_at',
+} as const;
+
+/**
  * Get full user journey detail for the CRM detail page.
  * Fetches all related data in parallel for performance.
  */
@@ -359,21 +402,37 @@ export async function getUserJourneyDetail(
 ): Promise<UserJourneyDetail | null> {
   const supabase = client || getSupabaseAdminClient();
 
-  // Fetch user first
-  const { data: user, error: userError } = await supabase
-    .from('users')
-    .select('*')
-    .eq('id', userId)
-    .single();
+  // Round 1: the user and their current application, in parallel. The lead
+  // profile id is needed to scope installments and the scholarship in SQL.
+  const [{ data: user, error: userError }, leadProfileResult] = await Promise.all([
+    supabase
+      .from('users')
+      .select('*')
+      .eq('id', userId)
+      .single(),
+
+    // Lead profile (most recent non-deleted)
+    supabase
+      .from('lead_profiles')
+      .select('*')
+      .eq('user_id', userId)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
 
   if (userError) {
     if (userError.code === 'PGRST116') return null;
     throw userError;
   }
 
-  // Fetch all related data in parallel
+  const leadProfile = leadProfileResult.data as LeadProfile | null;
+  const leadProfileId: string | null = leadProfile?.id ?? null;
+  const none = <T,>(data: T) => Promise.resolve({ data, error: null });
+
+  // Round 2: everything else in parallel.
   const [
-    leadProfileResult,
     studentProfileResult,
     demoRegsResult,
     paymentsResult,
@@ -392,16 +451,6 @@ export async function getUserJourneyDetail(
     nexusOnboardingResult,
     nexusExamPlansResult,
   ] = await Promise.all([
-    // Lead profile (most recent non-deleted)
-    supabase
-      .from('lead_profiles')
-      .select('*')
-      .eq('user_id', userId)
-      .is('deleted_at', null)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-
     // Student profile
     supabase
       .from('student_profiles')
@@ -412,62 +461,72 @@ export async function getUserJourneyDetail(
     // Demo registrations with slot and survey info
     supabase
       .from('demo_class_registrations')
-      .select('*, slot:demo_class_slots(*), survey:demo_class_surveys(*)')
+      .select(JOURNEY_COLUMNS.demoRegistrations)
       .eq('user_id', userId)
       .order('created_at', { ascending: false }),
 
     // Payments
     supabase
       .from('payments')
-      .select('*')
+      .select(JOURNEY_COLUMNS.payments)
       .eq('user_id', userId)
       .order('created_at', { ascending: false }),
 
-    // Payment installments (need lead_profile_id, fetch all and filter)
-    supabase
-      .from('payment_installments')
-      .select('*')
-      .order('installment_number', { ascending: true }),
+    // Payment installments for this user's application. This used to read the
+    // whole table and filter in JS, which also stopped at PostgREST's 1,000 rows.
+    leadProfileId
+      ? supabase
+          .from('payment_installments')
+          .select(JOURNEY_COLUMNS.installments)
+          .eq('lead_profile_id', leadProfileId)
+          .order('installment_number', { ascending: true })
+      : none([]),
 
     // Onboarding session
     supabase
       .from('onboarding_sessions')
-      .select('*')
+      .select(JOURNEY_COLUMNS.onboardingSession)
       .eq('user_id', userId)
       .maybeSingle(),
 
     // Onboarding responses with question details
     supabase
       .from('onboarding_responses')
-      .select('*, question:onboarding_questions(*)')
+      .select(JOURNEY_COLUMNS.onboardingResponses)
       .eq('user_id', userId)
       .order('responded_at', { ascending: true }),
 
     // Application documents
     supabase
       .from('application_documents')
-      .select('*')
+      .select(JOURNEY_COLUMNS.documents)
       .eq('user_id', userId)
       .order('created_at', { ascending: false }),
 
-    // Scholarship application (via lead profile, fetched below)
-    supabase
-      .from('scholarship_applications')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(10),
+    // Scholarship application for this user's application, newest first. This
+    // used to take the 10 newest scholarships of ANYONE and pick this user's from
+    // them, so most users showed none.
+    leadProfileId
+      ? supabase
+          .from('scholarship_applications')
+          .select(JOURNEY_COLUMNS.scholarship)
+          .eq('lead_profile_id', leadProfileId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : none(null),
 
     // Cashback claims
     supabase
       .from('cashback_claims')
-      .select('*')
+      .select(JOURNEY_COLUMNS.cashbackClaims)
       .eq('user_id', userId)
       .order('created_at', { ascending: false }),
 
     // Profile history
     supabase
       .from('user_profile_history')
-      .select('*, changed_by_user:users!changed_by(id, name, email)')
+      .select(JOURNEY_COLUMNS.profileHistory)
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(50),
@@ -475,28 +534,28 @@ export async function getUserJourneyDetail(
     // Admin notes
     supabase
       .from('admin_user_notes')
-      .select('*')
+      .select(JOURNEY_COLUMNS.adminNotes)
       .eq('user_id', userId)
       .order('created_at', { ascending: false }),
 
     // Callback requests
     supabase
       .from('callback_requests')
-      .select('*')
+      .select(JOURNEY_COLUMNS.callbackRequests)
       .eq('user_id', userId)
       .order('created_at', { ascending: false }),
 
     // Callback attempts
     supabase
       .from('callback_attempts')
-      .select('*')
+      .select(JOURNEY_COLUMNS.callbackAttempts)
       .eq('user_id', userId)
       .order('attempted_at', { ascending: false }),
 
     // Nexus classroom enrollments
     supabase
       .from('nexus_enrollments')
-      .select('*, classroom:nexus_classrooms(*)')
+      .select(JOURNEY_COLUMNS.nexusEnrollments)
       .eq('user_id', userId)
       .eq('role', 'student')
       .eq('is_active', true)
@@ -505,14 +564,14 @@ export async function getUserJourneyDetail(
     // Nexus student documents (identity, academic, exam docs from Nexus onboarding)
     supabase
       .from('nexus_student_documents')
-      .select('*')
+      .select(JOURNEY_COLUMNS.nexusDocuments)
       .eq('student_id', userId)
       .order('uploaded_at', { ascending: false }),
 
     // Nexus onboarding status (most recent)
     supabase
       .from('nexus_student_onboarding')
-      .select('*')
+      .select(JOURNEY_COLUMNS.nexusOnboarding)
       .eq('student_id', userId)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -521,26 +580,13 @@ export async function getUserJourneyDetail(
     // Nexus student exam plans
     supabase
       .from('nexus_student_exam_plans')
-      .select('*')
+      .select(JOURNEY_COLUMNS.nexusExamPlans)
       .eq('student_id', userId)
       .order('created_at', { ascending: false }),
   ]);
 
-  const leadProfile = leadProfileResult.data as LeadProfile | null;
-
-  // Filter installments by lead_profile_id
-  const installments = leadProfile
-    ? (installmentsResult.data || []).filter(
-        (i: any) => i.lead_profile_id === leadProfile.id
-      )
-    : [];
-
-  // Filter scholarship by lead_profile_id
-  const scholarshipApplication = leadProfile
-    ? (scholarshipResult.data || []).find(
-        (s: any) => s.lead_profile_id === leadProfile.id
-      ) || null
-    : null;
+  const installments = (installmentsResult.data || []) as any[];
+  const scholarshipApplication = (scholarshipResult.data || null) as any;
 
   // Compute pipeline stage
   const pipelineStage = computePipelineStage(
@@ -1643,43 +1689,46 @@ export async function listActiveNexusStudents(
   const supabase = client || getSupabaseAdminClient();
   const { search, academicYear, activity = 'all', program = 'architecture' } = options;
 
-  let query = supabase
-    .from('users')
-    .select('id, name, email, avatar_url, ms_oid, academic_year, last_login_at')
-    .eq('is_alumni', false)
-    .eq('user_type', 'student')
-    .eq('student_program', program);
+  const build = () => {
+    let query = supabase
+      .from('users')
+      .select('id, name, email, avatar_url, ms_oid, academic_year, last_login_at')
+      .eq('is_alumni', false)
+      .eq('user_type', 'student')
+      .eq('student_program', program);
 
-  // Hide synthetic E2E test accounts (e2e-<purpose>@…, incl. timestamped leftovers)
-  // from the human admin views. Anchored on the dash so the canonical e2etesting*
-  // Microsoft accounts (asserted on by alumni-graduate-admin.spec.ts) stay visible.
-  query = query.or('email.is.null,email.not.ilike.e2e-*');
+    // Hide synthetic E2E test accounts (e2e-<purpose>@…, incl. timestamped leftovers)
+    // from the human admin views. Anchored on the dash so the canonical e2etesting*
+    // Microsoft accounts (asserted on by alumni-graduate-admin.spec.ts) stay visible.
+    query = query.or('email.is.null,email.not.ilike.e2e-*');
 
-  if (search) {
-    query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%`);
-  }
-  if (academicYear === 'none') {
-    query = query.is('academic_year', null);
-  } else if (academicYear && academicYear !== 'all') {
-    query = query.eq('academic_year', academicYear);
-  }
+    if (search) {
+      query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%`);
+    }
+    if (academicYear === 'none') {
+      query = query.is('academic_year', null);
+    } else if (academicYear && academicYear !== 'all') {
+      query = query.eq('academic_year', academicYear);
+    }
 
-  query = query.order('name', { ascending: true }).limit(5000);
+    return query.order('name', { ascending: true }).order('id', { ascending: true });
+  };
 
-  const { data: rows, error } = await query;
-  if (error) throw error;
-
-  const students = rows || [];
+  // Every page (the old `.limit(5000)` was capped at 1,000 rows by PostgREST).
+  // The population is a few hundred, so one page today; paging only guards growth.
+  const students = (await fetchAllRows(build)) as any[];
   const ids = students.map((s: any) => s.id);
 
   // Submission counts from the pre-aggregated activity view (LEFT-join semantics:
-  // a student with no submissions simply has no row -> 0).
+  // a student with no submissions simply has no row -> 0). Ids go in chunks so a
+  // long list never overflows the request URL.
   const countsById: Record<string, number> = {};
-  if (ids.length) {
+  for (let i = 0; i < ids.length; i += IN_LIST_CHUNK) {
+    const chunk = ids.slice(i, i + IN_LIST_CHUNK);
     const { data: activityRows } = await supabase
       .from('admin_student_activity')
       .select('student_id, submission_count')
-      .in('student_id', ids);
+      .in('student_id', chunk);
     for (const a of activityRows || []) {
       countsById[(a as any).student_id] = Number((a as any).submission_count) || 0;
     }
@@ -1769,59 +1818,61 @@ export async function listStudentsByYear(
   const supabase = client || getSupabaseAdminClient();
   const { search, year = 'current', status, program = 'architecture', paymentStatus, currentBatchCode, includePastActive } = options;
 
-  let query = supabase
-    .from('users')
-    .select(
+  const build = () => {
+    let query = supabase
+      .from('users')
+      .select(
+        `
+        id, name, first_name, last_name, email, personal_email, linked_classroom_email,
+        phone, avatar_url, academic_year, is_alumni, last_login_at, date_of_birth,
+        nexus_first_login_at, nexus_last_login_at, ms_oid,
+        student_profiles!student_profiles_user_id_fkey (
+          id, student_id, enrollment_date, total_fee, fee_paid, fee_due,
+          payment_status, ms_teams_email
+        )
       `
-      id, name, first_name, last_name, email, personal_email, linked_classroom_email,
-      phone, avatar_url, academic_year, is_alumni, last_login_at, date_of_birth,
-      nexus_first_login_at, nexus_last_login_at, ms_oid,
-      student_profiles!student_profiles_user_id_fkey (
-        id, student_id, enrollment_date, total_fee, fee_paid, fee_due,
-        payment_status, ms_teams_email
       )
-    `
-    )
-    .eq('user_type', 'student')
-    .eq('student_program', program);
+      .eq('user_type', 'student')
+      .eq('student_program', program);
 
-  // Hide synthetic E2E accounts (same guard as listActiveNexusStudents).
-  query = query.or('email.is.null,email.not.ilike.e2e-*');
+    // Hide synthetic E2E accounts (same guard as listActiveNexusStudents).
+    query = query.or('email.is.null,email.not.ilike.e2e-*');
 
-  // Lifecycle filter (an explicit status wins over the year-derived default).
-  if (status === 'active') query = query.eq('is_alumni', false);
-  else if (status === 'graduated') query = query.eq('is_alumni', true);
+    // Lifecycle filter (an explicit status wins over the year-derived default).
+    if (status === 'active') query = query.eq('is_alumni', false);
+    else if (status === 'graduated') query = query.eq('is_alumni', true);
 
-  // Year axis. Multiple .or() calls are AND-combined by PostgREST, which is what
-  // we want (e.g. the e2e guard AND the year group AND the search group).
-  if (year === 'current') {
-    if (status === undefined) query = query.eq('is_alumni', false);
-    if (!includePastActive) {
-      const cy = currentBatchCode || currentAcademicYear();
-      // Current cohort = the current code OR a FUTURE code (a student whose own exam
-      // year is later, e.g. a class-11 student in 2027-28 who attends this year's
-      // classes) OR untagged. gte works because 'YYYY-YY' sorts lexicographically.
-      query = query.or(`academic_year.gte.${cy},academic_year.is.null`);
+    // Year axis. Multiple .or() calls are AND-combined by PostgREST, which is what
+    // we want (e.g. the e2e guard AND the year group AND the search group).
+    if (year === 'current') {
+      if (status === undefined) query = query.eq('is_alumni', false);
+      if (!includePastActive) {
+        const cy = currentBatchCode || currentAcademicYear();
+        // Current cohort = the current code OR a FUTURE code (a student whose own exam
+        // year is later, e.g. a class-11 student in 2027-28 who attends this year's
+        // classes) OR untagged. gte works because 'YYYY-YY' sorts lexicographically.
+        query = query.or(`academic_year.gte.${cy},academic_year.is.null`);
+      }
+      // includePastActive: omit the year predicate so the result is every non-alumni
+      // architecture student (past ∪ current ∪ future ∪ untagged). The admin route then
+      // tags the past-batch rows so they can be surfaced and promoted.
+    } else if (year === 'none') {
+      query = query.is('academic_year', null);
+    } else if (year && year !== 'all') {
+      query = query.eq('academic_year', year);
     }
-    // includePastActive: omit the year predicate so the result is every non-alumni
-    // architecture student (past ∪ current ∪ future ∪ untagged). The admin route then
-    // tags the past-batch rows so they can be surfaced and promoted.
-  } else if (year === 'none') {
-    query = query.is('academic_year', null);
-  } else if (year && year !== 'all') {
-    query = query.eq('academic_year', year);
-  }
 
-  if (search) {
-    query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`);
-  }
+    if (search) {
+      query = query.or(`name.ilike.%${search}%,email.ilike.%${search}%,phone.ilike.%${search}%`);
+    }
+    return query;
+  };
 
-  query = query.order('name', { ascending: true }).limit(5000);
+  // Read every page. `.limit(5000)` here was silently capped at PostgREST's 1,000
+  // rows. A builder is single-use, so each page re-applies the filters above.
+  const rows = await fetchAllRows(() => build().order('name', { ascending: true }).order('id', { ascending: true }));
 
-  const { data: rows, error } = await query;
-  if (error) throw error;
-
-  let students: HubStudent[] = (rows || []).map((u: any) => {
+  let students: HubStudent[] = (rows as any[]).map((u: any) => {
     const sp = Array.isArray(u.student_profiles) ? u.student_profiles[0] : u.student_profiles;
     return {
       id: u.id,
@@ -1882,6 +1933,14 @@ export async function getRevenueByYear(
   const supabase = client || getSupabaseAdminClient();
   const { program = 'architecture' } = options;
 
+  // One grouped SQL call (revenue_by_year, migration 20261026090000). The JS
+  // tally below read every fee row in one unpaged select, so it would stop
+  // counting at PostgREST's 1,000-row ceiling. Kept as a fallback for an
+  // environment that does not have the function yet.
+  const rpc = await (supabase as any).rpc('revenue_by_year', { p_program: program });
+  if (!rpc.error && Array.isArray(rpc.data)) return mapRevenueByYearRows(rpc.data);
+  console.warn('[crm] revenue_by_year RPC unavailable, using table reads:', rpc.error?.message);
+
   const { data, error } = await supabase
     .from('student_profiles')
     .select(
@@ -1910,11 +1969,35 @@ export async function getRevenueByYear(
     buckets.set(year, b);
   }
 
-  return [...buckets.values()].sort((a, b) => {
+  return sortRevenueYears([...buckets.values()]);
+}
+
+/** Unstamped (null) bucket first, then years newest first. */
+function sortRevenueYears(rows: YearRevenue[]): YearRevenue[] {
+  return rows.sort((a, b) => {
     if (a.year === null) return -1;
     if (b.year === null) return 1;
     return b.year.localeCompare(a.year);
   });
+}
+
+/** Map revenue_by_year rows (bigint/numeric arrive as strings or numbers) to YearRevenue. */
+export function mapRevenueByYearRows(rows: any[]): YearRevenue[] {
+  const n = (v: unknown) => {
+    const x = Number(v);
+    return Number.isFinite(x) ? x : 0;
+  };
+  return sortRevenueYears(
+    (rows || []).map((r) => ({
+      year: r.year ?? null,
+      studentCount: n(r.student_count),
+      totalFee: n(r.total_fee),
+      collected: n(r.collected),
+      pending: n(r.pending),
+      fullyPaidCount: n(r.fully_paid_count),
+      partialCount: n(r.partial_count),
+    })),
+  );
 }
 
 /**
