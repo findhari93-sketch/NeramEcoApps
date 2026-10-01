@@ -66,6 +66,15 @@ const CATEGORY_COLORS: Record<string, number> = {
   functions: 12,
   sets_and_relations: 13,
   mathematical_logic: 14,
+  trigonometric_ratios: 1,
+  trigonometric_equations: 1,
+  inverse_trigonometry: 15,
+  properties_of_triangles: 5,
+  heights_and_distances: 6,
+  limits: 9,
+  differentiation: 8,
+  area_under_curves: 2,
+  logarithms: 13,
 };
 
 export default function CategoryChips({ categories, size = 'small', onCategoryClick }: CategoryChipsProps) {

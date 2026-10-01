@@ -44,7 +44,7 @@ export default function ChennaiNeighborhoodPage({ neighborhood }: Props) {
             </Button>
             <Button
               component={Link}
-              href="/coaching/best-nata-coaching-chennai"
+              href="/coaching/nata-coaching/nata-coaching-centers-in-chennai"
               variant="outlined"
               size="large"
               sx={{ borderColor: '#fff', color: '#fff', fontWeight: 600 }}
@@ -203,7 +203,7 @@ export default function ChennaiNeighborhoodPage({ neighborhood }: Props) {
             ))}
             <Chip
               component={Link}
-              href="/coaching/best-nata-coaching-chennai"
+              href="/coaching/nata-coaching/nata-coaching-centers-in-chennai"
               label="Chennai Overview"
               clickable
               color="warning"

@@ -6,11 +6,15 @@
 export type PromptState = 'open' | 'closed' | 'revealed';
 export type SkipReason = 'dont_know' | 'cant_see' | 'need_time' | 'tech_problem' | 'other';
 export type AnswerType = 'mcq' | 'numeric' | 'text' | 'yesno';
+/** The teacher's decision on a reason: approved excuses the student from the question. */
+export type SkipApproval = 'approved' | 'rejected';
 
 export interface StudentScore {
   correct: number;
   wrong: number;
   skipped: number;
+  /** Questions the teacher excused (an accepted reason): counted neither for nor against. */
+  excused?: number;
   absent: number;
   total_graded: number;
 }
@@ -40,11 +44,29 @@ export interface StudentSnapshot {
   ok: true;
   role: 'student';
   server_time: string;
-  session: { id: string; status: 'live' | 'ended'; hint_topic: string; classroom_name: string | null };
+  session: {
+    id: string;
+    status: 'live' | 'ended';
+    hint_topic: string;
+    classroom_name: string | null;
+    /** Round 1, Round 2 of this class. */
+    round_no?: number | null;
+    /** When the teacher published this round's results; null until then. */
+    results_published_at?: string | null;
+    /** Once this round has ended: the round that followed it in the same class, if one is running. */
+    next_session_id?: string | null;
+  };
   prompt: StudentPrompt | null;
-  my_response: { answer: string; raw_answer: string; responded_at: string; is_correct: boolean | null } | null;
-  /** "I can't answer", and why, for the current question. Null once an answer is locked. */
-  my_skip: { reason: SkipReason; note: string | null } | null;
+  my_response: {
+    answer: string;
+    raw_answer: string;
+    responded_at: string;
+    /** How many times they changed it while the question was open. */
+    change_count?: number;
+    is_correct: boolean | null;
+  } | null;
+  /** "I can't answer", and why, for the current question. Null once an answer is given. */
+  my_skip: { reason: SkipReason; note: string | null; approval?: SkipApproval | null } | null;
   /** When the teacher last nudged this student on the open question. Null once they answered or said why. */
   nudged_at: string | null;
   score: StudentScore;
@@ -79,6 +101,28 @@ export interface PromptCounts {
   correct: number;
   incorrect: number;
   answered_off_roster: number;
+  excused?: number;
+  /** Students who opened the pad this round (never drops, never staff): the live denominator. */
+  joined?: number;
+  answered_joined?: number;
+  excused_joined?: number;
+}
+
+/** A student who joined this round and has not answered the newest question. Teacher only. */
+export interface WaitingStudent {
+  student_id: string;
+  name: string | null;
+  reason: SkipReason | null;
+  note: string | null;
+  approval: SkipApproval | null;
+  nudged_at: string | null;
+  /** Their pad reported in within the last 90 seconds. */
+  pad_open: boolean;
+}
+
+export interface PersonRef {
+  student_id: string;
+  name: string | null;
 }
 
 export interface HistoryEntry {
@@ -114,13 +158,19 @@ export interface TeacherSnapshot {
     ended_at: string | null;
     presence_basis: 'app' | 'meeting';
     bot_in_meeting: boolean;
+    round_no?: number | null;
+    results_published_at?: string | null;
   };
-  readiness: { enrolled: number; connected: number; in_meeting: number };
+  readiness: { enrolled: number; joined?: number; connected: number; in_meeting: number };
+  /** Who opened the pad this round, and who on the class list has not. Teacher only. */
+  people?: { joined: PersonRef[]; not_joined: PersonRef[] };
+  /** Who joined and has not answered the newest question (open or closed), with any reason. Teacher only. */
+  waiting?: WaitingStudent[];
   prompt: TeacherPrompt | null;
   counts: PromptCounts | null;
   groups: Array<{ value: string; count: number }>;
-  /** Students on the list who said why they cannot answer the current question: counts only, never who. */
-  skips: { total: number; by_reason: Partial<Record<SkipReason, number>> };
+  /** Reasons given on the current question, counted; `approved` of them excused by the teacher. Names are in `waiting`. */
+  skips: { total: number; by_reason: Partial<Record<SkipReason, number>>; approved?: number };
   history: HistoryEntry[];
 }
 
@@ -128,11 +178,13 @@ export interface ParticipationRow {
   student_id: string;
   name: string | null;
   on_roster: boolean;
-  participation: 'answered' | 'silent' | 'absent';
+  participation: 'answered' | 'excused' | 'silent' | 'absent';
   result: 'correct' | 'incorrect' | 'ungraded' | null;
   answer: string | null;
   joined_mid_prompt: boolean;
-  /** Why they did not answer, when they said (only after the question closed). */
+  /** Why they did not answer, when they said. */
   skip_reason?: SkipReason | null;
   skip_note?: string | null;
+  skip_approval?: SkipApproval | null;
+  nudged?: boolean;
 }

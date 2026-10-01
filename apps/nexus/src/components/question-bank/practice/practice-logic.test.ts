@@ -5,6 +5,7 @@ import {
   patchAttemptSummary,
   progressOf,
   reconcileCurrent,
+  showsDifficulty,
   statusOf,
   stepFrom,
   topicCaption,
@@ -92,5 +93,22 @@ describe('topicCaption', () => {
     expect(topicCaption(['mathematics'], { mathematics: 'Mathematics' })).toBe('Mathematics');
     expect(topicCaption(['some_new_topic'])).toBe('Some new topic');
     expect(topicCaption([])).toBeNull();
+  });
+});
+
+describe('showsDifficulty', () => {
+  it('hides it on a paper question in the aptitude section', () => {
+    expect(showsDifficulty({ section: 'aptitude', categories: ['aptitude', 'orthographic_projection'] })).toBe(false);
+  });
+  it('keeps it on maths and drawing sections', () => {
+    expect(showsDifficulty({ section: 'math_mcq', categories: ['mathematics'] })).toBe(true);
+    expect(showsDifficulty({ section: 'drawing', categories: ['drawing'] })).toBe(true);
+  });
+  it('falls back to categories when the question has no paper section', () => {
+    expect(showsDifficulty({ section: null, categories: ['aptitude', 'mirror_image'] })).toBe(false);
+    expect(showsDifficulty({ section: null, categories: ['general_aptitude'] })).toBe(false);
+    expect(showsDifficulty({ section: null, categories: ['mathematics', 'trigonometry'] })).toBe(true);
+    expect(showsDifficulty({ section: null, categories: ['mathematics', 'aptitude'] })).toBe(true);
+    expect(showsDifficulty({ categories: null })).toBe(true);
   });
 });

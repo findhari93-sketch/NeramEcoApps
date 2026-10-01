@@ -61,7 +61,7 @@ import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlin
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ViewAsStudentButton from '@/components/ViewAsStudentButton';
-import { buildIssueMarkdown, screenshotPublicUrls } from '@/lib/issue-report-bundle';
+import { buildIssueMarkdown, reopenSnapshotsOf, screenshotPublicUrls } from '@/lib/issue-report-bundle';
 import { renderFactsForTeacher, type ResultFacts } from '@/lib/exam-result-explain';
 import { copyScreenshotsToClipboard } from '@/lib/screenshot-clipboard';
 import type {
@@ -69,6 +69,7 @@ import type {
   FoundationIssueStatus,
   FoundationIssuePriority,
   NexusFoundationIssueActivity,
+  FoundationIssueLogEntry,
 } from '@neram/database/types';
 import StudentAvatar from '@/components/students/StudentAvatar';
 import IssueThread from '@/components/issues/IssueThread';
@@ -660,7 +661,7 @@ export default function TeacherIssuesPage() {
           onSend={handleSendComment}
           placeholder="Reply to the student..."
           allowInternal
-          helperText="Sends a Teams message from Neram Assistant with your name on it, plus a Nexus alert, with a link back to this ticket."
+          helperText="Sends this as a message from your own Teams chat with the student, plus a Nexus alert, with a link back to this ticket."
         />
       )}
     </Box>
@@ -1172,66 +1173,101 @@ export default function TeacherIssuesPage() {
       )}
 
       {/* Technical details (staff-only): source app, device info, and the
-          auto-captured console/network errors. Never shown to the student. */}
+          auto-captured console/network errors. Never shown to the student.
+          A student's "Still happening" sends a fresh set, shown first and open,
+          because after a fix the original report's logs describe the old bug. */}
       {(() => {
-        const di = (selectedIssue.device_info as Record<string, unknown> | null) || null;
-        const logs = selectedIssue.console_logs || [];
         const str = (v: unknown) => (v === null || v === undefined || v === '' ? null : String(v));
-        const deviceBits = di
-          ? [
-              str(di.device_type),
-              [str(di.browser), str(di.browser_version)].filter(Boolean).join(' ') || null,
-              [str(di.os), str(di.os_version)].filter(Boolean).join(' ') || null,
-              di.screen_width && di.screen_height ? `${di.screen_width}×${di.screen_height}` : null,
-              str(di.connection_type),
-              di.is_pwa ? 'PWA' : null,
-            ].filter(Boolean)
-          : [];
-        if (!di && logs.length === 0 && !selectedIssue.source_app) return null;
-        return (
-          <Box component="details" sx={{ mt: 1.5 }}>
+        const deviceBitsOf = (di: Record<string, unknown> | null | undefined) =>
+          di
+            ? [
+                str(di.device_type),
+                [str(di.browser), str(di.browser_version)].filter(Boolean).join(' ') || null,
+                [str(di.os), str(di.os_version)].filter(Boolean).join(' ') || null,
+                di.screen_width && di.screen_height ? `${di.screen_width}×${di.screen_height}` : null,
+                str(di.connection_type),
+                di.is_pwa ? 'PWA' : null,
+              ].filter(Boolean) as string[]
+            : [];
+        const logsBox = (logs: FoundationIssueLogEntry[]) =>
+          logs.length > 0 && (
             <Box
-              component="summary"
-              sx={{ cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700, color: 'text.secondary', userSelect: 'none' }}
+              sx={{
+                mt: 1,
+                p: 1,
+                borderRadius: 1,
+                bgcolor: alpha(theme.palette.text.primary, 0.04),
+                maxHeight: 220,
+                overflow: 'auto',
+                fontFamily: 'monospace',
+                fontSize: '0.7rem',
+              }}
             >
-              Technical details{logs.length ? ` · ${logs.length} log${logs.length > 1 ? 's' : ''}` : ''}
-            </Box>
-            <Box sx={{ mt: 1, display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-              <Chip size="small" variant="outlined" label={`app: ${selectedIssue.source_app || 'nexus'}`} />
-              {deviceBits.map((b, i) => (
-                <Chip key={i} size="small" variant="outlined" label={b} />
+              {logs.map((log, i) => (
+                <Box
+                  key={i}
+                  sx={{
+                    mb: 0.5,
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    color: log.level === 'error' ? 'error.main' : log.level === 'warn' ? 'warning.main' : 'text.secondary',
+                  }}
+                >
+                  [{log.level}] {log.message}
+                  {log.stack ? `
+${log.stack}` : ''}
+                </Box>
               ))}
             </Box>
-            {logs.length > 0 && (
-              <Box
-                sx={{
-                  mt: 1,
-                  p: 1,
-                  borderRadius: 1,
-                  bgcolor: alpha(theme.palette.text.primary, 0.04),
-                  maxHeight: 220,
-                  overflow: 'auto',
-                  fontFamily: 'monospace',
-                  fontSize: '0.7rem',
-                }}
-              >
-                {logs.map((log, i) => (
-                  <Box
-                    key={i}
-                    sx={{
-                      mb: 0.5,
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-word',
-                      color: log.level === 'error' ? 'error.main' : log.level === 'warn' ? 'warning.main' : 'text.secondary',
-                    }}
-                  >
-                    [{log.level}] {log.message}
-                    {log.stack ? `\n${log.stack}` : ''}
+          );
+        const summarySx = { cursor: 'pointer', fontSize: '0.72rem', fontWeight: 700, color: 'text.secondary', userSelect: 'none', py: 0.5 } as const;
+        const countText = (n: number) => (n ? ` · ${n} log${n > 1 ? 's' : ''}` : '');
+
+        const di = (selectedIssue.device_info as Record<string, unknown> | null) || null;
+        const logs = selectedIssue.console_logs || [];
+        const deviceBits = deviceBitsOf(di);
+        const reopens = reopenSnapshotsOf(selectedIssue).slice().reverse();
+        if (!di && logs.length === 0 && !selectedIssue.source_app && reopens.length === 0) return null;
+        return (
+          <>
+            {reopens.map((r, idx) => {
+              const bits = deviceBitsOf(r.device_info);
+              const rLogs = r.console_logs || [];
+              return (
+                <Box component="details" key={`${r.at}-${idx}`} open={idx === 0} sx={{ mt: 1.5 }}>
+                  <Box component="summary" sx={{ ...summarySx, color: 'warning.dark' }}>
+                    Reopened {formatTimestamp(r.at)}{countText(rLogs.length)}
                   </Box>
+                  {r.reason && (
+                    <Typography variant="body2" sx={{ mt: 0.5, fontStyle: 'italic' }}>
+                      &ldquo;{r.reason}&rdquo;
+                    </Typography>
+                  )}
+                  <Box sx={{ mt: 1, display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                    {r.page_url && <Chip size="small" variant="outlined" label={`from: ${r.page_url}`} />}
+                    {bits.map((b, i) => (
+                      <Chip key={i} size="small" variant="outlined" label={b} />
+                    ))}
+                    {rLogs.length === 0 && <Chip size="small" variant="outlined" label="no errors caught" />}
+                  </Box>
+                  {logsBox(rLogs)}
+                </Box>
+              );
+            })}
+            <Box component="details" sx={{ mt: 1.5 }}>
+              <Box component="summary" sx={summarySx}>
+                {reopens.length ? 'Original report technical details' : 'Technical details'}
+                {countText(logs.length)}
+              </Box>
+              <Box sx={{ mt: 1, display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                <Chip size="small" variant="outlined" label={`app: ${selectedIssue.source_app || 'nexus'}`} />
+                {deviceBits.map((b, i) => (
+                  <Chip key={i} size="small" variant="outlined" label={b} />
                 ))}
               </Box>
-            )}
-          </Box>
+              {logsBox(logs)}
+            </Box>
+          </>
         );
       })()}
 
@@ -1789,7 +1825,7 @@ export default function TeacherIssuesPage() {
         <DialogTitle sx={{ fontWeight: 700 }}>Ask them to check it again</DialogTitle>
         <DialogContent>
           <Typography variant="body2" sx={{ color: 'text.secondary', mb: 2 }}>
-            Sends a Teams message from Neram Assistant with your name on it, plus a Nexus alert,
+            Sends a message from your own Teams chat with the student, plus a Nexus alert,
             with a link back to this ticket. It asks them to try it once more and answer here.
           </Typography>
           <TextField

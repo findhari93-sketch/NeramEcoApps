@@ -1,4 +1,5 @@
-import { BASE_URL, ORG_NAME, ORG_PHONE, ORG_EMAIL, SOCIAL_PROFILES, ORG_LOGO } from '@/lib/seo/constants';
+import { BASE_URL, ORG_NAME } from '@/lib/seo/constants';
+import { generateLocationCourseSchema } from '@/lib/seo/schemas';
 
 export interface ChennaiNeighborhood {
   slug: string;
@@ -32,7 +33,7 @@ export const chennaiNeighborhoods: ChennaiNeighborhood[] = [
     description: 'Anna Nagar is one of Chennai\'s most well-planned residential localities, known for its wide roads, parks, and excellent educational institutions. Many Class 11 and 12 students from Anna Nagar aspire to architecture careers, given the neighborhood\'s own example of good urban planning. The Anna Nagar Tower, a 135-foot landmark built in 1968, is itself a lesson in structural design and a popular sketching subject for NATA aspirants.',
     whyStudentsChoose: 'Anna Nagar students choose Neram because our Ashok Nagar center is just 1 metro stop away (Anna Nagar East to Ashok Nagar). For those who prefer studying from home, our live online classes offer the same curriculum with real-time drawing feedback. Several Anna Nagar students have scored 140+ in NATA through our program.',
     metaTitle: 'Best NATA Coaching in Anna Nagar, Chennai 2026 | Neram Classes',
-    metaDescription: 'NATA coaching for Anna Nagar, Chennai students. IIT/NIT alumni faculty, 99.9% success rate, free AI study app. Ashok Nagar center just 1 metro stop away. Online + offline classes. Max 25 per batch.',
+    metaDescription: 'NATA coaching for Anna Nagar, Chennai students. Classroom and live online batches, free NATA study app. Ashok Nagar center just 1 metro stop away. Online + offline classes. Max 25 per batch.',
     metaKeywords: 'NATA coaching Anna Nagar, NATA classes Anna Nagar Chennai, best NATA coaching near Anna Nagar, architecture coaching Anna Nagar, NATA preparation Anna Nagar',
   },
   {
@@ -46,7 +47,7 @@ export const chennaiNeighborhoods: ChennaiNeighborhood[] = [
     description: 'Adyar, home to IIT Madras, is Chennai\'s educational heartland. The neighborhood\'s proximity to one of India\'s premier engineering and architecture campuses gives students daily exposure to world-class institutional design. The IIT Madras campus itself, designed with climate-responsive architecture, is a frequent subject in NATA drawing practice. Adyar\'s tree-lined streets and the Theosophical Society\'s heritage buildings offer rich sketching opportunities for aspiring architects.',
     whyStudentsChoose: 'Adyar students benefit from being near IIT Madras. Many of our faculty are IIT Madras alumni who can arrange campus visits for drawing practice sessions. Our hybrid model means Adyar students can attend online on busy days and visit our Ashok Nagar center on weekends for intensive drawing workshops.',
     metaTitle: 'Best NATA Coaching in Adyar, Chennai 2026 | Neram Classes',
-    metaDescription: 'NATA coaching for Adyar, Chennai students. Near IIT Madras campus. IIT/NIT alumni faculty, 99.9% success rate, free AI study app. Online + offline hybrid classes. Max 25 per batch.',
+    metaDescription: 'NATA coaching for Adyar, Chennai students. Near IIT Madras campus. Classroom and live online batches, free NATA study app. Online + offline hybrid classes. Max 25 per batch.',
     metaKeywords: 'NATA coaching Adyar, NATA classes Adyar Chennai, best NATA coaching near Adyar, architecture coaching Adyar, NATA preparation Adyar Chennai',
   },
   {
@@ -60,7 +61,7 @@ export const chennaiNeighborhoods: ChennaiNeighborhood[] = [
     description: 'Tambaram, located in South Chennai, is a rapidly developing educational hub. Home to Madras Christian College (one of Asia\'s oldest colleges), Tambaram offers students a blend of colonial and modern architecture to study. The area\'s suburban railway connectivity makes it a convenient base for students from Chengalpattu, Kanchipuram, and South Chennai. Neram has a dedicated sub-center in Tambaram (Thiruneermalai, Jain Alpine Meadows) specifically to serve students in this region.',
     whyStudentsChoose: 'Tambaram students have two options: attend at our Tambaram sub-center (Thiruneermalai) for convenience, or take the suburban train to Mambalam and walk to our Ashok Nagar main center. Students from Chengalpattu, Mahabalipuram, and East Coast Road also attend at Tambaram. Our online option is popular with Tambaram students during exam season.',
     metaTitle: 'Best NATA Coaching in Tambaram, Chennai 2026 | Neram Classes',
-    metaDescription: 'NATA coaching in Tambaram, Chennai. Dedicated sub-center at Thiruneermalai + main center at Ashok Nagar. IIT/NIT alumni faculty, 99.9% success rate. Online + offline classes. Serving Chengalpattu, Kanchipuram students too.',
+    metaDescription: 'NATA coaching in Tambaram, Chennai. Dedicated sub-center at Thiruneermalai + main center at Ashok Nagar. Classroom and live online batches. Online + offline classes. Serving Chengalpattu, Kanchipuram students too.',
     metaKeywords: 'NATA coaching Tambaram, NATA classes Tambaram Chennai, best NATA coaching near Tambaram, architecture coaching Tambaram, NATA coaching Chengalpattu, NATA coaching East Tambaram',
   },
   {
@@ -74,7 +75,7 @@ export const chennaiNeighborhoods: ChennaiNeighborhood[] = [
     description: 'Ashok Nagar is where Neram Classes\' flagship Chennai center is located on PT Rajan Road, Sector 13. This centrally located neighborhood is one of Chennai\'s most accessible areas, served by the Blue Line Metro, multiple bus routes, and major arterial roads. Ashok Nagar\'s central position means students from T. Nagar (5 min), K.K. Nagar (10 min), Saidapet (5 min), and West Mambalam (10 min) can reach the center easily.',
     whyStudentsChoose: 'Ashok Nagar students have the advantage of walking to our center. No commute time means more time for drawing practice. Being in the same neighborhood, many students attend daily evening batches after school. The Ashok Nagar Metro station makes the center accessible from across Chennai.',
     metaTitle: 'NATA Coaching Center in Ashok Nagar, Chennai: Neram Classes Flagship',
-    metaDescription: 'Visit Neram Classes flagship NATA coaching center at PT Rajan Road, Ashok Nagar, Chennai. Ashok Nagar Metro (5 min walk). IIT/NIT alumni faculty, 99.9% success rate, max 25 per batch. Free demo class.',
+    metaDescription: 'Visit Neram Classes flagship NATA coaching center at PT Rajan Road, Ashok Nagar, Chennai. Ashok Nagar Metro (5 min walk). Classroom and live online batches. Free demo class.',
     metaKeywords: 'NATA coaching Ashok Nagar, Neram Classes Ashok Nagar, NATA coaching center Chennai, NATA classes Ashok Nagar, architecture coaching Ashok Nagar Chennai, NATA coaching near Saidapet',
   },
   {
@@ -88,7 +89,7 @@ export const chennaiNeighborhoods: ChennaiNeighborhood[] = [
     description: 'Velachery, South Chennai\'s IT corridor hub, has seen rapid urbanization with modern apartment complexes and commercial towers, offering students real-world examples of contemporary urban architecture. The contrast between Velachery\'s older residential areas and its modern developments makes it an interesting study in urban transformation. Many IT professionals\' children in Velachery aspire to architecture careers.',
     whyStudentsChoose: 'Velachery students typically join our live online classes during weekdays (saving the 30-minute commute) and attend the Ashok Nagar center on weekends for intensive drawing practice. Our hybrid model is specifically designed for students in areas like Velachery, OMR, and Sholinganallur who want expert coaching without daily commuting.',
     metaTitle: 'Best NATA Coaching for Velachery, Chennai Students 2026 | Neram Classes',
-    metaDescription: 'NATA coaching for Velachery, Chennai students. Online weekday classes + weekend offline at Ashok Nagar center. IIT/NIT alumni faculty, 99.9% success rate, free AI study app. Max 25 per batch.',
+    metaDescription: 'NATA coaching for Velachery, Chennai students. Online weekday classes + weekend offline at Ashok Nagar center. Classroom and live online batches, free NATA study app. Max 25 per batch.',
     metaKeywords: 'NATA coaching Velachery, NATA classes Velachery Chennai, best NATA coaching near Velachery, architecture coaching Velachery, NATA coaching OMR, NATA coaching Sholinganallur',
   },
   {
@@ -102,7 +103,7 @@ export const chennaiNeighborhoods: ChennaiNeighborhood[] = [
     description: 'T. Nagar, Chennai\'s commercial and cultural heart, is known for Ranganathan Street\'s bustling commercial architecture and Pondy Bazaar\'s Art Deco buildings. The neighborhood\'s mix of heritage structures, modern retail spaces, and residential towers provides aspiring architects a living classroom of diverse architectural styles. T. Nagar\'s central location makes it one of the best-connected neighborhoods in Chennai.',
     whyStudentsChoose: 'T. Nagar students are just 10 minutes from our Ashok Nagar center, making it the closest major neighborhood. Many T. Nagar students walk to our center after school. The proximity means they can attend daily classes without wasting time on commuting, giving them more drawing practice hours.',
     metaTitle: 'Best NATA Coaching near T. Nagar, Chennai 2026 | Neram Classes',
-    metaDescription: 'NATA coaching for T. Nagar (Thyagaraya Nagar), Chennai students. Just 10 minutes from Ashok Nagar center. IIT/NIT alumni faculty, 99.9% success rate, free AI study app. Daily classes + online option.',
+    metaDescription: 'NATA coaching for T. Nagar (Thyagaraya Nagar), Chennai students. Just 10 minutes from Ashok Nagar center. Classroom and live online batches, free NATA study app. Daily classes + online option.',
     metaKeywords: 'NATA coaching T Nagar, NATA classes T Nagar Chennai, best NATA coaching near T Nagar, architecture coaching Thyagaraya Nagar, NATA coaching Pondy Bazaar, NATA coaching West Mambalam',
   },
 ];
@@ -111,35 +112,19 @@ export function getNeighborhoodBySlug(slug: string): ChennaiNeighborhood | undef
   return chennaiNeighborhoods.find((n) => n.slug === slug);
 }
 
+/**
+ * A neighbourhood page is a Course offered to that area, linked to the real
+ * classroom that serves it. It used to declare its own EducationalOrganization
+ * at the Ashok Nagar address: six "businesses" for one centre.
+ */
 export function generateChennaiNeighborhoodSchema(neighborhood: ChennaiNeighborhood) {
-  return {
-    '@context': 'https://schema.org',
-    '@type': 'EducationalOrganization',
-    '@id': `${BASE_URL}/coaching/nata-coaching-chennai/${neighborhood.slug}`,
-    name: `${ORG_NAME}: NATA Coaching for ${neighborhood.name}, Chennai`,
+  const centre = neighborhood.slug === 'tambaram' ? 'nata-coaching-center-in-tambaram' : 'nata-coaching-center-in-chennai';
+  return generateLocationCourseSchema({
+    name: `NATA Coaching for ${neighborhood.name}, Chennai`,
+    description: `NATA coaching for students in ${neighborhood.name}, Chennai: classroom batches at the Neram Classes ${neighborhood.slug === 'tambaram' ? 'Tambaram' : 'Ashok Nagar'} centre and live online classes.`,
     url: `${BASE_URL}/coaching/nata-coaching-chennai/${neighborhood.slug}`,
-    logo: ORG_LOGO,
-    image: ORG_LOGO,
-    description: `Best NATA coaching for students in ${neighborhood.name}, Chennai. ${neighborhood.distanceFromCenter}. IIT/NIT/SPA alumni faculty, 99.9% success rate, free AI study app, max 25 per batch.`,
-    telephone: ORG_PHONE,
-    email: ORG_EMAIL,
-    address: {
-      '@type': 'PostalAddress',
-      streetAddress: CHENNAI_CENTER_ADDRESS,
-      addressLocality: 'Chennai',
-      addressRegion: 'Tamil Nadu',
-      postalCode: '600083',
-      addressCountry: 'IN',
-    },
-    geo: {
-      '@type': 'GeoCoordinates',
-      latitude: CHENNAI_CENTER_COORDS.lat,
-      longitude: CHENNAI_CENTER_COORDS.lng,
-    },
-    sameAs: [...SOCIAL_PROFILES, GOOGLE_BUSINESS_URL],
-    areaServed: { '@type': 'City', name: 'Chennai' },
-    parentOrganization: {
-      '@id': `${BASE_URL}/#organization`,
-    },
-  };
+    exam: 'NATA',
+    area: { type: 'Place', name: `${neighborhood.name}, Chennai`, containedIn: { type: 'State', name: 'Tamil Nadu' } },
+    classroom: { name: `${ORG_NAME} Chennai`, url: `${BASE_URL}/contact/${centre}` },
+  });
 }

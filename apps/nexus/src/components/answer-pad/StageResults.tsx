@@ -8,17 +8,22 @@
  * Everyone in the meeting loads this on their own device with their own Teams
  * sign-in, and every one of them sees the same class-level numbers
  * (lib/pad/stage.ts): no names, and no breakdown of answers before the reveal.
+ * The one exception is a round's published results, between rounds: the top
+ * five by name and correct count, the class average and how many took part.
+ * Never anyone below the top five.
  */
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Box, Stack, Typography, alpha, useTheme } from '@neram/ui';
 import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded';
+import EmojiEventsRounded from '@mui/icons-material/EmojiEventsRounded';
 import { displayAnswer, displayKeys, promptTitle } from '@/lib/pad/client/format';
 import { padFetch } from '@/lib/pad/client/pad-fetch';
 import type { PadHost } from '@/lib/pad/client/pad-host';
 import { nextPollDelay, type RealtimeState } from '@/lib/pad/client/poll-policy';
 import { loadRealtimeClient } from '@/lib/pad/client/realtime-client';
-import type { StageView } from '@/lib/pad/stage';
+import { roundName } from '@/lib/pad/round-results';
+import type { StageResults as StageRoundResults, StageView } from '@/lib/pad/stage';
 import LiveAnnouncement from './LiveAnnouncement';
 
 /** The server holds one reading for two seconds, so a second fetch after a hint picks up a change the first missed. */
@@ -116,7 +121,9 @@ export function useStageView(host: PadHost): StageState {
   useEffect(() => {
     if (!meetingId) return;
     const hidden = document.visibilityState === 'hidden';
-    const delay = stage
+    // Results between rounds come from an ended round with no Realtime topic, so
+    // look again now and then to pick up the next round when the teacher starts it.
+    const delay = stage && !stage.results
       ? nextPollDelay({
           role: 'student',
           realtime,
@@ -137,6 +144,7 @@ export function useStageView(host: PadHost): StageState {
 /** What a screen reader says when the shared screen changes. The live count is not announced. */
 export function stageAnnouncement(stage: StageView | null): string {
   if (!stage) return 'The Answer Pad is not running in this meeting.';
+  if (stage.results) return `${roundName(stage.results.round_no)} results are up.`;
   const prompt = stage.prompt;
   if (!prompt) return 'Waiting for the first question.';
   if (prompt.reveal) return prompt.reveal.ungraded ? `${promptTitle(prompt)} poll results.` : `${promptTitle(prompt)} answer revealed.`;
@@ -171,9 +179,125 @@ function Stat({ label, value, color }: { label: string; value: number; color: st
   );
 }
 
+/** Rows rise in one after another; nothing moves for anyone who asked for less motion. */
+const RISE = {
+  '@keyframes padStageRise': {
+    from: { opacity: 0, transform: 'translateY(12px)' },
+    to: { opacity: 1, transform: 'none' },
+  },
+} as const;
+
+function RoundResultsBody({ results, classroomName }: { results: StageRoundResults; classroomName: string | null }) {
+  const theme = useTheme();
+  const top = results.top.slice(0, 5);
+  const tiles: Array<{ label: string; value: string }> = [
+    { label: 'Class average', value: results.average_score === null ? 'Not graded' : `${results.average_score}%` },
+    { label: 'Took part', value: String(results.took_part) },
+    { label: 'Questions', value: String(results.questions) },
+  ];
+
+  return (
+    <Stack spacing={{ xs: 2, sm: 3 }} sx={RISE}>
+      <Box>
+        <Stack direction="row" spacing={1.5} alignItems="center">
+          <EmojiEventsRounded sx={{ color: theme.palette.warning.main, fontSize: 'clamp(1.75rem, 5vw, 2.75rem)' }} aria-hidden />
+          <Typography component="h1" sx={HEADING}>
+            {`${roundName(results.round_no)} results`}
+          </Typography>
+        </Stack>
+        {classroomName && (
+          <Typography color="text.secondary" sx={{ ...BODY, mt: 0.5, overflowWrap: 'anywhere' }}>
+            {classroomName}
+          </Typography>
+        )}
+      </Box>
+
+      <Box sx={{ display: 'grid', gap: { xs: 2, sm: 4 }, gridTemplateColumns: { xs: '1fr', md: 'minmax(0, 1.5fr) minmax(0, 1fr)' }, alignItems: 'start' }}>
+        {top.length > 0 ? (
+          <Stack component="ol" aria-label="Top five" spacing={{ xs: 1, sm: 1.25 }} sx={{ listStyle: 'none', m: 0, p: 0 }}>
+            {top.map((row, index) => {
+              const first = row.rank === 1;
+              const name = row.name?.trim() || 'A student';
+              const score = `${row.correct} of ${row.counted}`;
+              return (
+                <Stack
+                  component="li"
+                  key={`${row.rank}-${index}`}
+                  aria-label={`Rank ${row.rank}: ${name}, ${score} correct`}
+                  direction="row"
+                  spacing={{ xs: 1.5, sm: 2 }}
+                  alignItems="center"
+                  sx={{
+                    p: { xs: 1.25, sm: 1.75 },
+                    borderRadius: 3,
+                    border: '1px solid',
+                    borderColor: first ? alpha(theme.palette.warning.main, 0.6) : 'divider',
+                    bgcolor: first ? alpha(theme.palette.warning.main, 0.12) : alpha(theme.palette.text.primary, 0.03),
+                    animation: 'padStageRise 420ms ease-out both',
+                    animationDelay: `${index * 90}ms`,
+                    '@media (prefers-reduced-motion: reduce)': { animation: 'none' },
+                  }}
+                >
+                  <Box
+                    aria-hidden
+                    sx={{
+                      width: { xs: 44, sm: 60 },
+                      height: { xs: 44, sm: 60 },
+                      flexShrink: 0,
+                      borderRadius: '50%',
+                      display: 'grid',
+                      placeItems: 'center',
+                      fontWeight: 800,
+                      fontSize: { xs: '1.25rem', sm: '1.75rem' },
+                      fontVariantNumeric: 'tabular-nums',
+                      bgcolor: first ? theme.palette.warning.main : alpha(theme.palette.primary.main, 0.14),
+                      color: first ? theme.palette.warning.contrastText : theme.palette.text.primary,
+                    }}
+                  >
+                    {row.rank}
+                  </Box>
+                  <Typography sx={{ ...BODY, fontSize: first ? 'clamp(1.2rem, 3vw, 1.8rem)' : BODY.fontSize, fontWeight: 800, flex: 1, minWidth: 0, overflowWrap: 'anywhere' }}>
+                    {name}
+                  </Typography>
+                  <Typography sx={{ ...BODY, fontWeight: 700, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{score}</Typography>
+                </Stack>
+              );
+            })}
+          </Stack>
+        ) : (
+          <Typography color="text.secondary" sx={BODY}>
+            No top five this round. The next round is a fresh start.
+          </Typography>
+        )}
+
+        <Stack direction={{ xs: 'row', md: 'column' }} spacing={1.5}>
+          {tiles.map((tile) => (
+            <Stack
+              key={tile.label}
+              role="group"
+              aria-label={`${tile.label}: ${tile.value}`}
+              spacing={0.25}
+              sx={{ flex: 1, minWidth: 0, p: { xs: 1.25, sm: 2 }, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+            >
+              <Typography sx={{ ...BODY, fontSize: 'clamp(0.875rem, 2vw, 1.2rem)' }} color="text.secondary">
+                {tile.label}
+              </Typography>
+              <Typography sx={{ ...BIG, fontSize: 'clamp(1.5rem, 5vw, 3rem)' }}>{tile.value}</Typography>
+            </Stack>
+          ))}
+        </Stack>
+      </Box>
+    </Stack>
+  );
+}
+
 function StageBody({ stage }: { stage: StageView }) {
   const theme = useTheme();
   const { prompt } = stage;
+
+  if (stage.results) {
+    return <RoundResultsBody results={stage.results} classroomName={stage.session.classroom_name} />;
+  }
 
   if (!prompt) {
     return <Notice title={stage.session.classroom_name ?? 'Answer Pad'}>Waiting for the first question.</Notice>;

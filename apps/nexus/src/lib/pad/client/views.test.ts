@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { answerTypeLabel, displayAnswer, displayKeys, scoreLabel } from './format';
-import { deriveStudentView, studentAnnouncement, type PendingSubmit } from './student-view';
+import { deriveStudentView, nextRoundId, studentAnnouncement, type PendingSubmit } from './student-view';
 import {
   consoleAnnouncement,
   deriveConsoleView,
@@ -61,28 +61,59 @@ describe('deriveStudentView', () => {
     expect(deriveStudentView(studentSnap({ prompt: null }), null, seen)).toEqual({ kind: 'idle', classroomName: 'NATA Batch' });
   });
 
-  it('shows the class as ended, whatever else the snapshot holds', () => {
-    expect(deriveStudentView(studentSnap({ session: { id: 's1', status: 'ended', hint_topic: 'x', classroom_name: null } }), pending('sending'), seen)).toEqual({ kind: 'ended' });
+  it('shows the round as ended, whatever else the snapshot holds, and whether results are out', () => {
+    const ended = (extra: Partial<StudentSnapshot['session']>) =>
+      studentSnap({ session: { id: 's1', status: 'ended', hint_topic: 'x', classroom_name: null, ...extra } });
+    expect(deriveStudentView(ended({ round_no: 2 }), pending('sending'), seen)).toEqual({ kind: 'ended', roundNo: 2, published: false });
+    expect(deriveStudentView(ended({ round_no: 2, results_published_at: '2026-09-10T11:00:00Z' }), null, seen)).toEqual({
+      kind: 'ended',
+      roundNo: 2,
+      published: true,
+    });
+    expect(deriveStudentView(ended({}), null, seen)).toEqual({ kind: 'ended', roundNo: null, published: false });
   });
 
-  it('offers the answer controls while OPEN', () => {
-    expect(deriveStudentView(studentSnap(), null, seen)).toMatchObject({ kind: 'answering' });
+  it('offers the answer controls while OPEN, with nothing chosen yet', () => {
+    expect(deriveStudentView(studentSnap(), null, seen)).toEqual({ kind: 'answering', prompt: studentPrompt(), selected: null, save: null });
   });
 
-  it('shows Locking while the answer is on its way, and says so when it is retrying', () => {
-    expect(deriveStudentView(studentSnap(), pending('sending'), seen)).toMatchObject({ kind: 'locking', answer: 'B', retrying: false });
-    expect(deriveStudentView(studentSnap(), pending('retrying'), seen)).toMatchObject({ kind: 'locking', retrying: true });
-    // Still locking even if a snapshot shows CLOSE before the submit has answered.
-    expect(deriveStudentView(studentSnap({ prompt: studentPrompt({ state: 'closed' }) }), pending('sending'), seen)).toMatchObject({ kind: 'locking' });
+  it('keeps the options live after answering, showing the saved answer as chosen', () => {
+    expect(deriveStudentView(studentSnap({ my_response: mine('C') }), null, seen)).toMatchObject({ kind: 'answering', selected: 'C', save: 'saved' });
   });
 
-  it("trusts the server's locked answer over anything the pad is still sending", () => {
-    expect(deriveStudentView(studentSnap({ my_response: mine('C') }), pending('retrying'), seen)).toMatchObject({ kind: 'locked', answer: 'C', closed: false });
-    expect(deriveStudentView(studentSnap({ prompt: studentPrompt({ state: 'closed' }), my_response: mine('C') }), null, seen)).toMatchObject({ kind: 'locked', closed: true });
+  it('shows the answer being sent as chosen, even over the one the server holds', () => {
+    expect(deriveStudentView(studentSnap(), pending('sending'), seen)).toMatchObject({ kind: 'answering', selected: 'B', save: 'sending' });
+    expect(deriveStudentView(studentSnap(), pending('retrying'), seen)).toMatchObject({ kind: 'answering', selected: 'B', save: 'retrying' });
+    // Changing C to B: B is on its way.
+    expect(deriveStudentView(studentSnap({ my_response: mine('C') }), pending('sending'), seen)).toMatchObject({ selected: 'B', save: 'sending' });
+  });
+
+  it('locks at CLOSE, and the server answer wins over anything still being sent', () => {
+    const closed = studentSnap({ prompt: studentPrompt({ state: 'closed' }), my_response: mine('C') });
+    expect(deriveStudentView(closed, null, seen)).toMatchObject({ kind: 'locked', answer: 'C' });
+    expect(deriveStudentView(closed, pending('retrying'), seen)).toMatchObject({ kind: 'locked', answer: 'C' });
+  });
+
+  it('shows Sending when the question closes while the only answer is still on its way', () => {
+    const closed = studentSnap({ prompt: studentPrompt({ state: 'closed' }) });
+    expect(deriveStudentView(closed, pending('sending'), seen)).toMatchObject({ kind: 'saving', answer: 'B', retrying: false });
+    expect(deriveStudentView(closed, pending('retrying'), seen)).toMatchObject({ kind: 'saving', retrying: true });
+  });
+
+  it('shows the answer that stands when a late change was refused, even on an older snapshot', () => {
+    const refused: PendingSubmit = { promptId: 'p1', answer: 'D', status: 'refused', standing: 'A' };
+    expect(deriveStudentView(studentSnap({ my_response: mine('A') }), refused, seen)).toMatchObject({ kind: 'locked', answer: 'A' });
+    expect(deriveStudentView(studentSnap({ prompt: studentPrompt({ state: 'closed' }), my_response: mine('A') }), refused, seen)).toMatchObject({
+      kind: 'locked',
+      answer: 'A',
+    });
   });
 
   it('ignores a pending answer for a previous question', () => {
-    expect(deriveStudentView(studentSnap({ prompt: studentPrompt({ id: 'p2', sequence: 2 }) }), pending('refused', 'p1'), seen)).toMatchObject({ kind: 'answering' });
+    expect(deriveStudentView(studentSnap({ prompt: studentPrompt({ id: 'p2', sequence: 2 }) }), pending('refused', 'p1'), seen)).toMatchObject({
+      kind: 'answering',
+      selected: null,
+    });
   });
 
   it('tells apart the three ways of missing a question', () => {
@@ -100,6 +131,19 @@ describe('deriveStudentView', () => {
     expect(deriveStudentView(revealed({}, mine('A', false)), null, seen)).toMatchObject({ kind: 'result', outcome: 'incorrect' });
     expect(deriveStudentView(revealed({ ungraded: true, correct_keys: null }, mine('A', null)), null, seen)).toMatchObject({ kind: 'result', outcome: 'poll' });
     expect(deriveStudentView(revealed({}, null), null, unseen)).toMatchObject({ kind: 'missed', reason: 'joined-after-close', revealed: true });
+  });
+});
+
+describe('nextRoundId', () => {
+  const session = (extra: Partial<StudentSnapshot['session']>) => studentSnap({ session: { ...studentSnap().session, ...extra } });
+
+  it('follows the next round only once this one has ended and names another', () => {
+    expect(nextRoundId(null)).toBeNull();
+    expect(nextRoundId(session({ status: 'live', next_session_id: 's2' }))).toBeNull();
+    expect(nextRoundId(session({ status: 'ended', next_session_id: null }))).toBeNull();
+    expect(nextRoundId(session({ status: 'ended' }))).toBeNull();
+    expect(nextRoundId(session({ status: 'ended', next_session_id: 's1' }))).toBeNull();
+    expect(nextRoundId(session({ status: 'ended', next_session_id: 's2' }))).toBe('s2');
   });
 });
 
@@ -282,8 +326,10 @@ describe('screen reader announcements', () => {
       deriveStudentView(null, null, seen),
       deriveStudentView(studentSnap({ prompt: null }), null, seen),
       deriveStudentView(studentSnap(), null, seen),
+      deriveStudentView(studentSnap(), pending('sending'), seen),
       deriveStudentView(studentSnap(), pending('retrying'), seen),
       deriveStudentView(studentSnap({ my_response: mine('B') }), null, seen),
+      deriveStudentView(studentSnap({ prompt: studentPrompt({ state: 'closed' }), my_response: mine('B') }), null, seen),
       deriveStudentView(
         studentSnap({ prompt: studentPrompt({ state: 'revealed', ungraded: false, correct_keys: ['B'] }), my_response: mine('B', true) }),
         null,
@@ -295,10 +341,27 @@ describe('screen reader announcements', () => {
       'Connecting to your class.',
       'Connected. Waiting for a question.',
       'Question 1 is open.',
-      'Still trying to lock your answer.',
-      'Your answer is locked.',
+      'Saving your answer.',
+      'Still trying to save your answer.',
+      'Your answer B is saved.',
+      'Answering has closed. Your answer B is locked.',
       'Correct.',
     ]);
+    for (const line of said) expect(line).not.toMatch(/[–—]|--/);
+  });
+
+  it('says when a round ends and when its result is ready', () => {
+    const seen = new Set(['p1']);
+    const ended = (published: boolean) =>
+      deriveStudentView(
+        studentSnap({
+          session: { id: 's1', status: 'ended', hint_topic: 'x', classroom_name: null, round_no: 1, results_published_at: published ? '2026-09-10T11:00:00Z' : null },
+        }),
+        null,
+        seen,
+      );
+    expect(studentAnnouncement(ended(false))).toBe('This round has ended.');
+    expect(studentAnnouncement(ended(true))).toBe('This round has ended. Your result is ready.');
   });
 
   it('announces console state changes, not every change of the counter', () => {

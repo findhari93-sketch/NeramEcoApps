@@ -3,6 +3,9 @@ const createNextIntlPlugin = require('next-intl/plugin');
 
 const withNextIntl = createNextIntlPlugin('./src/i18n.ts');
 
+// Retired "best NATA coaching in {city}" blog guides -> their city page slug.
+const RETIRED_CITY_GUIDES = require('./src/data/geo/retired-city-guides.json');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -163,26 +166,36 @@ const nextConfig = {
       { source: '/inner-page', destination: '/about', permanent: true },
 
       // ─── NATA Online Coaching SEO consolidation ─────────────────────────
-      // Three competing URLs collapsed to a single canonical at /nata-online-coaching.
+      // Competing "online coaching" URLs collapse to /nata-online-coaching.
       // Permanent 301 so link equity transfers. Must appear before the /coaching/:city
-      // catch-all below so the literal /coaching/nata-coaching and
-      // /coaching/best-nata-coaching-india matches are not consumed by it.
+      // catch-all below so the literal /coaching/best-nata-coaching-india match is not
+      // consumed by it.
+      // /coaching/nata-coaching is NOT redirected: it is the all-India directory of
+      // state and city coaching pages, and the legacy "near me" URLs below land on it.
       { source: '/best-nata-coaching-online', destination: '/nata-online-coaching', permanent: true },
-      { source: '/coaching/nata-coaching', destination: '/nata-online-coaching', permanent: true },
       { source: '/coaching/best-nata-coaching-india', destination: '/nata-online-coaching', permanent: true },
-      // Parent /nata-coaching path has no index page; redirect to canonical so it does not 404.
-      { source: '/nata-coaching', destination: '/nata-online-coaching', permanent: true },
+      // Parent /nata-coaching path has no index page; send it to the directory.
+      { source: '/nata-coaching', destination: '/coaching/nata-coaching', permanent: true },
       // Locale-prefixed variants (non-default locales served under /ta, /hi, /kn, /ml)
       { source: '/:locale(ta|hi|kn|ml)/best-nata-coaching-online', destination: '/:locale/nata-online-coaching', permanent: true },
-      { source: '/:locale(ta|hi|kn|ml)/coaching/nata-coaching', destination: '/:locale/nata-online-coaching', permanent: true },
       { source: '/:locale(ta|hi|kn|ml)/coaching/best-nata-coaching-india', destination: '/:locale/nata-online-coaching', permanent: true },
-      { source: '/:locale(ta|hi|kn|ml)/nata-coaching', destination: '/:locale/nata-online-coaching', permanent: true },
+      { source: '/:locale(ta|hi|kn|ml)/nata-coaching', destination: '/coaching/nata-coaching', permanent: true },
+
+      // Location coaching pages are English only. The ta/hi/kn/ml copies were
+      // untranslated duplicates that cost one ISR render per locale per city.
+      { source: '/:locale(ta|hi|kn|ml)/coaching/:seg(nata-coaching|jee-paper-2-coaching)', destination: '/coaching/:seg', permanent: true },
+      { source: '/:locale(ta|hi|kn|ml)/coaching/:seg(nata-coaching|jee-paper-2-coaching)/:path*', destination: '/coaching/:seg/:path*', permanent: true },
+      { source: '/:locale(ta|hi|kn|ml)/coaching/:seg((?:nata|jee-paper-2)-coaching-in-[^/]+)', destination: '/coaching/:seg', permanent: true },
+
+      // JEE Paper 2 has one national target page. The JEE location pages live under
+      // /coaching/jee-paper-2-coaching/{slug}; the bare segment has no index page.
+      { source: '/coaching/jee-paper-2-coaching', destination: '/jee-paper-2-preparation', permanent: true },
 
       // City-specific coaching pages — MUST be first (more specific than /coaching)
-      // Old sitemap had /coaching/{city} for 100+ cities; new URL is deeper
-      // Exclude 'nata-coaching*' (real pages and the state hubs) and the real
-      // /coaching/best-nata-coaching-chennai page, which this rule used to 404.
-      { source: '/coaching/:city((?!nata-coaching|best-nata-coaching-chennai$).*)', destination: '/coaching/nata-coaching/nata-coaching-centers-in-:city', permanent: true },
+      // Old sitemap had /coaching/{city} for 100+ cities; new URL is deeper.
+      // One segment only. Excludes the real pages and state hubs ('nata-coaching*',
+      // 'jee-paper-2-coaching*') and /coaching/best-nata-coaching-chennai.
+      { source: '/coaching/:city((?!nata-coaching|jee-paper-2-coaching|best-nata-coaching-chennai$)[^/]+)', destination: '/coaching/nata-coaching/nata-coaching-centers-in-:city', permanent: true },
 
       // Core pages (coaching, premium, alumni, careers are handled natively by next-intl)
       { source: '/askSeniors', destination: '/alumni', permanent: true },
@@ -214,16 +227,30 @@ const nextConfig = {
 
       // Coaching program pages, point legacy slugs straight at the canonical to avoid redirect chains
       { source: '/nata-coaching-online', destination: '/nata-online-coaching', permanent: true },
-      { source: '/jee-paper-2-coaching', destination: '/courses/jee-paper-2-coaching', permanent: true },
+      // /jee-paper-2-preparation owns the "JEE Paper 2 coaching" search intent.
+      { source: '/jee-paper-2-coaching', destination: '/jee-paper-2-preparation', permanent: true },
 
       // Blog post year update: 2025 → 2026
       { source: '/blog/nata-2025-preparation-strategy', destination: '/blog/nata-2026-preparation-strategy', permanent: true },
 
-      // Blog posts that were renamed (old slug had -online suffix, new site dropped it)
-      { source: '/blog/best-nata-coaching-chennai-online', destination: '/blog/best-nata-coaching-chennai', permanent: true },
-      { source: '/blog/best-nata-coaching-coimbatore-online', destination: '/blog/best-nata-coaching-coimbatore', permanent: true },
-      { source: '/blog/best-nata-coaching-madurai-online', destination: '/blog/best-nata-coaching-madurai', permanent: true },
-      { source: '/blog/best-nata-coaching-trichy-online', destination: '/blog/best-nata-coaching-trichy', permanent: true },
+      // ─── Location page consolidation (one page per city) ────────────────
+      // The /nata-coaching/{city} pages, the "best NATA coaching in {city}" blog
+      // guides and the Chennai / Tamil Nadu duplicates competed with the city and
+      // state pages for the same searches. Each now 301s to its one canonical page.
+      { source: '/nata-coaching/:city', destination: '/coaching/nata-coaching/nata-coaching-centers-in-:city', permanent: true },
+      { source: '/:locale(ta|hi|kn|ml)/nata-coaching/:city', destination: '/coaching/nata-coaching/nata-coaching-centers-in-:city', permanent: true },
+      ...Object.entries(RETIRED_CITY_GUIDES).flatMap(([guide, city]) => [
+        { source: `/blog/${guide}`, destination: `/coaching/nata-coaching/nata-coaching-centers-in-${city}`, permanent: true },
+        { source: `/blog/${guide}-online`, destination: `/coaching/nata-coaching/nata-coaching-centers-in-${city}`, permanent: true },
+        { source: `/:locale(ta|hi|kn|ml)/blog/${guide}`, destination: `/coaching/nata-coaching/nata-coaching-centers-in-${city}`, permanent: true },
+      ]),
+      { source: '/coaching/best-nata-coaching-chennai', destination: '/coaching/nata-coaching/nata-coaching-centers-in-chennai', permanent: true },
+      { source: '/coaching/nata-coaching-chennai', destination: '/coaching/nata-coaching/nata-coaching-centers-in-chennai', permanent: true },
+      { source: '/coaching/nata-coaching-center-in-tamil-nadu', destination: '/coaching/nata-coaching-in-tamil-nadu', permanent: true },
+      { source: '/coaching/nata-coaching-center', destination: '/coaching/nata-coaching', permanent: true },
+      { source: '/:locale(ta|hi|kn|ml)/coaching/:seg(best-nata-coaching-chennai|nata-coaching-chennai)', destination: '/coaching/nata-coaching/nata-coaching-centers-in-chennai', permanent: true },
+      { source: '/:locale(ta|hi|kn|ml)/coaching/nata-coaching-center-in-tamil-nadu', destination: '/coaching/nata-coaching-in-tamil-nadu', permanent: true },
+      { source: '/:locale(ta|hi|kn|ml)/coaching/nata-coaching-center', destination: '/coaching/nata-coaching', permanent: true },
       // /blog, /blog/:slug, /privacy, /terms are handled natively by next-intl (no redirect needed)
 
       // Application redirect to tools app
@@ -244,8 +271,12 @@ const nextConfig = {
       { source: '/nata-coaching-dubai', destination: '/coaching/nata-coaching/nata-coaching-centers-in-dubai', permanent: true },
       { source: '/nata-coaching-kochi', destination: '/coaching/nata-coaching/nata-coaching-centers-in-kochi', permanent: true },
 
+      // The old "centers in {city}" format must be matched before the catch-all below,
+      // which would otherwise turn it into .../nata-coaching-centers-in-centers-in-{city} (404).
+      { source: '/nata-coaching-centers-in-:city', destination: '/coaching/nata-coaching/nata-coaching-centers-in-:city', permanent: true },
+
       // Catch-all for old location format
-      { source: '/nata-coaching-:city', destination: '/coaching/nata-coaching/nata-coaching-centers-in-:city', permanent: true },
+      { source: '/nata-coaching-:city', destination:'/coaching/nata-coaching/nata-coaching-centers-in-:city', permanent: true },
 
       // Old JEE/NATA content pages (from WordPress era)
       { source: '/jee-paper-2-formula-sheet', destination: '/jee-paper-2-preparation', permanent: true },

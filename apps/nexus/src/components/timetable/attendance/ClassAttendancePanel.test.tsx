@@ -157,6 +157,7 @@ const INSIGHTS = {
       barelyAttended: true,
       absence: null,
       bucket: 'attended',
+      pad: { rounds: 1, questions: 18, attempted: 4, correct: 3, notActive: true },
     },
     {
       id: 'd',
@@ -175,6 +176,7 @@ const INSIGHTS = {
       barelyAttended: false,
       absence: null,
       bucket: 'attended',
+      pad: { rounds: 1, questions: 18, attempted: 17, correct: 14, notActive: false },
     },
     {
       // Enrolled three weeks after this class ran. Nothing for her to explain.
@@ -309,6 +311,18 @@ describe('ClassAttendancePanel', () => {
     // Six minutes above ninety. compareDocumentPosition returns FOLLOWING (4)
     // when `long` comes after `short` in the document.
     expect(short.compareDocumentPosition(long) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('shows how much each student answered in the Answer Pad, and flags the quiet ones', async () => {
+    renderPanel();
+    await openGroups();
+    await screen.findByText('Abhitha Saravanan');
+
+    fireEvent.click(screen.getByRole('tab', { name: /Attended/i }));
+    await screen.findByText('Rahul Kumar', {}, { timeout: 5000 });
+    expect(screen.getByText('Pad 4 of 18')).toBeTruthy();
+    expect(screen.getByText('Pad 17 of 18')).toBeTruthy();
+    expect(screen.getAllByText('Quiet in the pad')).toHaveLength(1);
   });
 
   it('hides the action bar until something is selected', async () => {

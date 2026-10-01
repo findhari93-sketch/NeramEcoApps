@@ -66,6 +66,10 @@ export interface SessionReport {
     created_at: string;
     ended_at: string | null;
     enrolled: number;
+    /** Round 1, Round 2 of this class (migration 20261024090000). */
+    round_no?: number | null;
+    results_published_at?: string | null;
+    changed_since_publish?: boolean;
   };
   prompts: ReportPrompt[];
   students: ReportStudent[];
@@ -117,21 +121,48 @@ export const REPORT_CSV_HEADERS = [
   'Skipped',
   'Graded questions',
   'Score',
+  'Attempted',
+  'Not attempted',
+  'Right out of attempted',
+  'Rank',
+  'Rank out of',
 ];
 
-export function reportCsvRows(report: Pick<SessionReport, 'students'>): CsvValue[][] {
-  return report.students.map((student) => [
-    student.name ?? 'Unnamed student',
-    student.on_roster ? 'Yes' : 'No',
-    student.answered,
-    student.silent,
-    student.absent,
-    student.correct,
-    student.wrong,
-    student.skipped,
-    student.total_graded,
-    scorePercent(student),
-  ]);
+/** The round results' numbers for one student, as pad_session_results ranks them. */
+export interface CsvRanking {
+  attempted: number;
+  no_answer: number;
+  accuracy_pct: number | null;
+  rank: number | null;
+  ranked_of: number;
+}
+
+/**
+ * One row per student. The last five columns come from the round results
+ * (attempted, rank) when they have loaded; a student who never joined the round
+ * has no rank and those cells stay empty.
+ */
+export function reportCsvRows(report: Pick<SessionReport, 'students'>, ranking: Readonly<Record<string, CsvRanking>> = {}): CsvValue[][] {
+  return report.students.map((student) => {
+    const ranked = ranking[student.student_id];
+    return [
+      student.name ?? 'Unnamed student',
+      student.on_roster ? 'Yes' : 'No',
+      student.answered,
+      student.silent,
+      student.absent,
+      student.correct,
+      student.wrong,
+      student.skipped,
+      student.total_graded,
+      scorePercent(student),
+      ranked ? ranked.attempted : '',
+      ranked ? ranked.no_answer : '',
+      ranked && ranked.accuracy_pct !== null ? `${ranked.accuracy_pct}%` : '',
+      ranked?.rank ?? '',
+      ranked ? ranked.ranked_of : '',
+    ];
+  });
 }
 
 /** The class date as India sees it, YYYY-MM-DD. */

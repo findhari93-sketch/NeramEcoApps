@@ -15,6 +15,7 @@ import type { AssignmentSummary, StudentWork } from '@/lib/class-work';
 import type { HomeworkReminderState } from '@/lib/homework-reminders';
 import type { RecentAttendance } from '@/lib/recent-attendance';
 import type { ReasonSource } from '@/lib/absence-reason';
+import type { StudentPadActivity } from '@/lib/pad/class-activity';
 
 /** Register tab. One row per enrolled student, from /api/timetable/attendance-report. */
 export interface AttendanceRecord {
@@ -202,6 +203,8 @@ export interface StudentInsight {
   work?: StudentWork | null;
   /** The every-few-days homework reminder, when one was ever started for this student. */
   homeworkReminder?: HomeworkReminderState | null;
+  /** Answer Pad activity in this class, when they opened the pad. Absent from an older server. */
+  pad?: StudentPadActivity | null;
 }
 
 /** Everything about one class's attendance, from /api/timetable/class-insights. */
@@ -258,6 +261,8 @@ export interface Insights {
     saidComing: number;
   };
   work?: AssignmentSummary[];
+  /** The Answer Pad in this class: null when it never ran. Absent from an older server. */
+  pad?: { rounds: number; joined: number; answered: number } | null;
   students: StudentInsight[];
 }
 

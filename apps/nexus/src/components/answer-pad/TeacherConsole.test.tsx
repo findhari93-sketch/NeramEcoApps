@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PadClientError } from '@/lib/pad/client/pad-fetch';
 import type { PadHost } from '@/lib/pad/client/pad-host';
-import type { HistoryEntry, ParticipationRow, TeacherPrompt, TeacherSnapshot } from '@/lib/pad/client/types';
+import type { HistoryEntry, ParticipationRow, TeacherPrompt, TeacherSnapshot, WaitingStudent } from '@/lib/pad/client/types';
 import TeacherConsole from './TeacherConsole';
 
 /**
@@ -125,6 +125,10 @@ function row(name: string, overrides: Partial<ParticipationRow> = {}): Participa
   };
 }
 
+function waitingRow(name: string, overrides: Partial<WaitingStudent> = {}): WaitingStudent {
+  return { student_id: `id-${name}`, name, reason: null, note: null, approval: null, nudged_at: null, pad_open: true, ...overrides };
+}
+
 function historyEntry(overrides: Partial<HistoryEntry> = {}): HistoryEntry {
   return {
     id: 'p1',
@@ -211,7 +215,7 @@ describe('TeacherConsole', () => {
     render(<TeacherConsole host={host} />);
 
     await screen.findByRole('button', { name: 'Ask question 1' });
-    expect(screen.getByText('Win + Shift + S to snip the question, then Ctrl + V here.')).toBeTruthy();
+    expect(screen.getByText('Snip with Win + Shift + S, then press Ctrl + V here.')).toBeTruthy();
     choosePicture();
     await waitFor(() => expect(mocks.padUpload).toHaveBeenCalledWith(host, '/api/pad/sessions/s1/image', expect.any(File), 'snip.png'));
 
@@ -233,33 +237,77 @@ describe('TeacherConsole', () => {
     );
   });
 
-  it('shows how many said why they cannot answer, and nudges the rest once a minute', async () => {
-    mocks.snapshot = snap({ skips: { total: 3, by_reason: { dont_know: 2, cant_see: 1 } } });
+  it('lists who is still waiting by name, accepts reasons, and nudges only the silent ones once a minute', async () => {
+    mocks.snapshot = snap({
+      counts: { ...COUNTS, joined: 22, answered_joined: 12, excused_joined: 0 },
+      skips: { total: 3, by_reason: { dont_know: 2, cant_see: 1 }, approved: 0 },
+      waiting: [
+        waitingRow('Asha', { reason: 'dont_know' }),
+        waitingRow('Bala', { reason: 'dont_know' }),
+        waitingRow('Chitra', { reason: 'cant_see', note: 'screen froze' }),
+        ...['Dev', 'Esha', 'Farid', 'Gita', 'Hari', 'Isha', 'Jay'].map((name) => waitingRow(name)),
+      ],
+    });
     handlers['/api/pad/prompts/p1/nudge'] = () => ({ inPad: 4, chat: 3, chatDelivered: 3 });
+    handlers['/api/pad/prompts/p1/excuse'] = () => ({ changed: true, count: 3 });
     render(<TeacherConsole host={host} />);
 
-    expect(await screen.findByText("3 can't answer: 2 don't know, 1 can't see it")).toBeTruthy();
-    // 30 on the list, 20 answered, 3 said why: 7 are waiting.
-    fireEvent.click(screen.getByRole('button', { name: "Nudge the 7 who haven't answered" }));
+    // Out of the 22 who joined, not the class list of 30.
+    expect(await screen.findByLabelText('12 of 22 answered')).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Waiting on 10' })).toBeTruthy();
+    expect(screen.getByText("I can't see the question: screen froze")).toBeTruthy();
 
+    fireEvent.click(screen.getByRole('button', { name: 'Accept all 3 reasons' }));
+    await waitFor(() =>
+      expect(bodiesFor('/api/pad/prompts/p1/excuse')).toEqual([{ studentIds: ['id-Asha', 'id-Bala', 'id-Chitra'], approve: true }]),
+    );
+
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Nudge 7' }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(screen.getByRole('button', { name: 'Nudge 7' }));
     expect(await screen.findByText('Nudged 4 on their pad and 3 by Teams chat.')).toBeTruthy();
     const again = await screen.findByRole('button', { name: /^Nudge again in \d+s$/ });
     expect((again as HTMLButtonElement).disabled).toBe(true);
-    // Counts only: nobody's name reached the console.
-    expect(mocks.padFetch.mock.calls.some(([, path]) => String(path).includes('participation'))).toBe(false);
     expect(document.body.textContent).not.toMatch(NO_DASHES);
   });
 
+  it('turns one reason down, and hides every name for a teacher sharing the whole screen', async () => {
+    mocks.snapshot = snap({ waiting: [waitingRow('Asha', { reason: 'need_time' }), waitingRow('Bala')] });
+    handlers['/api/pad/prompts/p1/excuse'] = () => ({ changed: true, count: 1 });
+    render(<TeacherConsole host={host} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: "Turn down Asha's reason" }));
+    await waitFor(() => expect(bodiesFor('/api/pad/prompts/p1/excuse')).toEqual([{ studentIds: ['id-Asha'], approve: false }]));
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Hide names' })[0]);
+    await waitFor(() => expect(screen.queryByText('Asha')).toBeNull());
+    expect(screen.getByText('1 gave a reason, 1 has not answered. Names are hidden.')).toBeTruthy();
+  });
+
   it('waits out the minute when another nudge went out a moment ago', async () => {
-    mocks.snapshot = snap();
+    mocks.snapshot = snap({ waiting: ['Asha', 'Bala'].map((name) => waitingRow(name)) });
     handlers['/api/pad/prompts/p1/nudge'] = () => {
       throw new PadClientError(429, 'RATE_LIMITED', 'RATE_LIMITED', { retry_after_seconds: 42 });
     };
     render(<TeacherConsole host={host} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: "Nudge the 10 who haven't answered" }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Nudge 2' }));
     expect(await screen.findByText('You nudged a moment ago.')).toBeTruthy();
     expect(await screen.findByRole('button', { name: /^Nudge again in (41|42)s$/ })).toBeTruthy();
+  });
+
+  it('prepares the next question while this one is open, then closes it and asks in one go', async () => {
+    mocks.snapshot = snap({ prompt: prompt({ label: '31' }), history: [historyEntry({ label: '31' })] });
+    handlers['/api/pad/prompts/ask'] = () => ({ promptId: 'p2', sequence: 2, state: 'open', version: 1, changed: true, closedPromptId: 'p1' });
+    render(<TeacherConsole host={host} />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Prepare Q.32' }));
+    fireEvent.change(screen.getByLabelText('Question (optional)'), { target: { value: 'Find the odd one out' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Close Q.31 and ask Q.32' }));
+    await waitFor(() =>
+      expect(bodiesFor('/api/pad/prompts/ask')).toEqual([
+        { sessionId: 's1', answerType: 'mcq', optionCount: 4, label: '32', text: 'Find the odd one out', closePromptId: 'p1' },
+      ]),
+    );
   });
 
   it('adds a picture to the open question, and students see it', async () => {
@@ -267,8 +315,8 @@ describe('TeacherConsole', () => {
     handlers['/api/pad/prompts/p1/picture'] = () => ({ promptId: 'p1', state: 'open', version: 2, changed: true });
     render(<TeacherConsole host={host} />);
 
-    await screen.findByText('Question 1 is open');
-    expect(screen.getByText('Add a picture')).toBeTruthy();
+    await screen.findByText('Question 1 open');
+    expect(screen.getByText('Add a picture to this question')).toBeTruthy();
     choosePicture();
     await waitFor(() => expect(bodiesFor('/api/pad/prompts/p1/picture')).toEqual([{ imageUrl: PICTURE }]));
   });
@@ -278,7 +326,7 @@ describe('TeacherConsole', () => {
     handlers['/api/pad/prompts/p1/details'] = () => ({ promptId: 'p1', state: 'open', version: 2, changed: true });
     render(<TeacherConsole host={host} />);
 
-    expect(await screen.findByText('Q.38 is open')).toBeTruthy();
+    expect(await screen.findByText('Q.38 open')).toBeTruthy();
     expect(screen.getByText('Which statement is correct?')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Edit question number and text' }));
@@ -301,7 +349,7 @@ describe('TeacherConsole', () => {
     const { rerender } = render(<TeacherConsole host={host} />);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Decide later, ask the next question' }));
-    expect(await screen.findByText('Q.38 is waiting for its answer. Set it from Questions so far, or from the class report after class.')).toBeTruthy();
+    expect(await screen.findByText('Q.38 is waiting for its answer. Set it from Questions so far, or from the report after class.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Ask Q.39' }));
     await waitFor(() => expect(bodiesFor('/api/pad/prompts/ask')).toEqual([{ sessionId: 's1', answerType: 'mcq', optionCount: 4, label: '39' }]));
 
@@ -349,7 +397,7 @@ describe('TeacherConsole', () => {
     expect(bodiesFor('/api/pad/sessions')).toEqual([]);
   });
 
-  it('shows only a count while students are answering: no names, no answers', async () => {
+  it('shows the live count while students answer, without fetching anyone\'s answer', async () => {
     mocks.snapshot = snap();
     render(<TeacherConsole host={host} />);
 
@@ -429,7 +477,7 @@ describe('TeacherConsole', () => {
     render(<TeacherConsole host={host} />);
 
     expect(await screen.findByText('Answer: B')).toBeTruthy();
-    for (const name of ['Correct: 12', 'Incorrect: 8', 'Present but silent: 6', 'Absent: 4']) {
+    for (const name of ['Correct: 12', 'Incorrect: 8', 'No answer: 6', 'Not in the pad: 4']) {
       expect(screen.getByRole('group', { name })).toBeTruthy();
     }
 
@@ -437,7 +485,7 @@ describe('TeacherConsole', () => {
     expect(await screen.findByText('Asha')).toBeTruthy();
     expect(screen.getByText('Joined mid-question')).toBeTruthy();
     expect(screen.getByText("Said: I can't see the question")).toBeTruthy();
-    for (const heading of ['Correct (1)', 'Incorrect (1)', 'Present but silent (1)', 'Absent (1)']) {
+    for (const heading of ['Correct (1)', 'Incorrect (1)', 'No answer (1)', 'Not in the pad (1)']) {
       expect(screen.getByText(heading)).toBeTruthy();
     }
     expect(screen.getByRole('button', { name: 'Ask question 2' })).toBeTruthy();
@@ -544,9 +592,10 @@ describe('TeacherConsole', () => {
     };
     render(<TeacherConsole host={host} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'End class' }));
-    fireEvent.click(screen.getByRole('button', { name: 'End' }));
-    expect(await screen.findByText('Q.38 has no answer yet. You can set it later from the class report, and scores update then.')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'End round' }));
+    expect(screen.getByText('End Answer Pad? The meeting carries on, students keep their answers, and you can start the next round here.')).toBeTruthy();
+    fireEvent.click(screen.getAllByRole('button', { name: 'End round' })[1]);
+    expect(await screen.findByText("Q.38 has no answer yet. It won't count until you set it from the report, and scores update then.")).toBeTruthy();
 
     await waitFor(() => expect((screen.getByRole('button', { name: 'End anyway' }) as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(screen.getByRole('button', { name: 'End anyway' }));

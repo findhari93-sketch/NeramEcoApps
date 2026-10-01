@@ -46,6 +46,8 @@ export interface AskRequest {
   imageUrl: string | null;
   /** Multiple choice only: one entry per option, null where left blank. */
   optionTexts: Array<string | null> | null;
+  /** The open question to close first ("Close Q.31 and ask Q.32"); null to ask only when nothing is open. */
+  closePromptId: string | null;
 }
 
 /** An optional string field: absent, null or a string within the limit. */
@@ -89,10 +91,17 @@ export function parseAskRequest(body: unknown): Parsed<AskRequest> {
     optionTexts = answerType === 'mcq' ? (raw as Array<string | null>) : null;
   }
 
+  let closePromptId: string | null = null;
+  if (input.closePromptId !== undefined && input.closePromptId !== null) {
+    if (!isUuid(input.closePromptId)) return { ok: false, field: 'closePromptId' };
+    closePromptId = input.closePromptId.toLowerCase();
+  }
+
   return {
     ok: true,
     value: {
       sessionId: input.sessionId.toLowerCase(),
+      closePromptId,
       answerType: answerType as AnswerType,
       optionCount,
       label: label.value,
@@ -181,4 +190,34 @@ export function parseSubmitRequest(body: unknown): Parsed<SubmitRequest> {
     return { ok: false, field: 'answer' };
   }
   return { ok: true, value: { promptId: input.promptId.toLowerCase(), answer: input.answer } };
+}
+
+
+export interface ExcuseRequest {
+  /** The students to decide for; null when deciding by reason. */
+  studentIds: string[] | null;
+  /** Every reason of this kind; null when naming students. */
+  reason: SkipReason | null;
+  /** true accepts (excused), false turns down, null clears the decision. */
+  approve: boolean | null;
+}
+
+/** The teacher's decision on "I can't answer" reasons: named students, or every reason of one kind. */
+export function parseExcuseRequest(body: unknown): Parsed<ExcuseRequest> {
+  const input = record(body);
+  let studentIds: string[] | null = null;
+  if (input.studentIds !== undefined && input.studentIds !== null) {
+    const raw = input.studentIds;
+    if (!Array.isArray(raw) || raw.length === 0 || raw.length > 500 || !raw.every(isUuid)) return { ok: false, field: 'studentIds' };
+    studentIds = (raw as string[]).map((id) => id.toLowerCase());
+  }
+  let reason: SkipReason | null = null;
+  if (input.reason !== undefined && input.reason !== null) {
+    if (typeof input.reason !== 'string' || !(SKIP_REASONS as readonly string[]).includes(input.reason)) return { ok: false, field: 'reason' };
+    reason = input.reason as SkipReason;
+  }
+  if (!studentIds && !reason) return { ok: false, field: 'studentIds' };
+  const approve = input.approve === undefined ? true : input.approve;
+  if (approve !== null && typeof approve !== 'boolean') return { ok: false, field: 'approve' };
+  return { ok: true, value: { studentIds, reason, approve } };
 }

@@ -32,7 +32,7 @@ export async function generateMetadata({
 const faqs = [
   {
     question: 'Is there NATA coaching in Anna Nagar, Chennai?',
-    answer: 'Yes, Neram Classes serves Anna Nagar students through our Ashok Nagar center (just 1 metro stop away, Anna Nagar East Metro to Ashok Nagar Metro) and live online classes. Our hybrid model means you can attend offline at the center or study from home in Anna Nagar with the same IIT/NIT alumni faculty. Max 25 per batch, 99.9% success rate.',
+    answer: 'Yes, Neram Classes serves Anna Nagar students through our Ashok Nagar center (just 1 metro stop away, Anna Nagar East Metro to Ashok Nagar Metro) and live online classes. Our hybrid model means you can attend offline at the center or study from home in Anna Nagar with the same IIT/NIT alumni faculty. Classroom and live online batches.',
   },
   {
     question: 'How far is Neram Classes from Anna Nagar?',
@@ -52,7 +52,7 @@ export default function Page({ params: { locale } }: { params: { locale: string 
       <JsonLd data={generateBreadcrumbSchema([
         { name: 'Home', url: BASE_URL },
         { name: 'Coaching', url: `${BASE_URL}/coaching` },
-        { name: 'NATA Coaching Chennai', url: `${BASE_URL}/coaching/nata-coaching-chennai` },
+        { name: 'NATA Coaching Chennai', url: `${BASE_URL}/coaching/nata-coaching/nata-coaching-centers-in-chennai` },
         { name: `NATA Coaching ${neighborhood.name}` },
       ])} />
       <JsonLd data={generateFAQSchema(faqs)} />

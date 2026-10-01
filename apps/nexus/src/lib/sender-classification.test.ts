@@ -26,8 +26,15 @@ import { describe, it, expect } from 'vitest';
  *   NO_CHAT       Reaches no Teams chat at all by design.
  *
  * And one rule under all three, checked at the door itself: nudge-delivery.ts
- * never posts a chat with a person's token, and no file but teams-messaging.ts
- * touches sendTeamsChatMessage.
+ * posts a chat with a person's token ONLY through its `personal` option, and no
+ * file but the door touches sendTeamsChatMessage.
+ *
+ * THE ONE EXCEPTION (founder, 2026-09-30): a support ticket is a conversation
+ * between two people. Its messages go as a real 1:1 chat from the sender's own
+ * Teams, both ways, because a student's replies that only reached a page went
+ * unseen for days (NXS-0126). Only the files in PERSONAL_CHAT may pass
+ * `personal`. Anything else that wants it is the clutter the 2026-09-24 rule
+ * exists to stop.
  *
  * Adding a sendNudge call? Put it in one of the three lists, with the reason.
  */
@@ -95,6 +102,17 @@ const FROM_TEACHER: Record<string, string> = {
     'A teacher checked the mistake these students reported and says what came of it, often with the reason. They may want to answer.',
   'apps/nexus/src/app/api/pad/prompts/[id]/nudge/route.ts':
     'The teacher pressed Nudge in a live class: "we are on Q.38, a guess is fine". The student may answer back with why.',
+  'apps/nexus/src/app/api/pad/sessions/[id]/publish/route.ts':
+    'The teacher published their class round: this student\'s own score and how active they were. They may want to ask about a question.',
+};
+
+/**
+ * May send a 1:1 chat from a person's own Teams (`personal`). A ticket is a
+ * two-person conversation; nothing else is.
+ */
+const PERSONAL_CHAT: Record<string, string> = {
+  'apps/nexus/src/app/api/foundation/issues/[id]/route.ts':
+    'Ticket replies and moves, staff to student and student to staff (founder, 2026-09-30).',
 };
 
 /** Deliberately no Teams chat, so no identity to get wrong. */
@@ -195,18 +213,33 @@ describe('who a student message comes from', () => {
     expect(all.filter((p) => !live.has(p))).toEqual([]);
   });
 
-  it('never posts a chat as a person at the door', () => {
+  it('posts a chat as a person at the door only through `personal`', () => {
     const door = stripComments(readFileSync(join(REPO_ROOT, DOOR), 'utf8'));
-    expect(door).not.toMatch(/\bsendTeamsChatMessage\b/);
     expect(door).not.toMatch(/\bgetSenderAccessToken\b/);
+    // Exactly one call, and it is fed from input.personal.
+    expect(door.match(/\bsendTeamsChatMessage\(/g) || []).toHaveLength(1);
+    expect(door).toMatch(/const \{ delegatedToken, html \} = input\.personal;/);
   });
 
-  it('keeps sendTeamsChatMessage inside teams-messaging.ts, called by nobody', () => {
+  it('keeps sendTeamsChatMessage between teams-messaging.ts and the door', () => {
     const users = walk(NEXUS_SRC)
       .map((f) => relative(REPO_ROOT, f).split(sep).join('/'))
-      .filter((p) => p !== 'apps/nexus/src/lib/teams-messaging.ts')
+      .filter((p) => p !== 'apps/nexus/src/lib/teams-messaging.ts' && p !== DOOR)
       .filter((p) => /\bsendTeamsChatMessage\b/.test(stripComments(readFileSync(join(REPO_ROOT, p), 'utf8'))));
     expect(users).toEqual([]);
+  });
+
+  it('lets only a ticket conversation send from a person\'s own Teams', () => {
+    const users = walk(NEXUS_SRC)
+      .map((f) => relative(REPO_ROOT, f).split(sep).join('/'))
+      .filter((p) => p !== DOOR)
+      .filter((p) => {
+        const code = stripComments(readFileSync(join(REPO_ROOT, p), 'utf8'));
+        return /nudge-delivery/.test(code) && /\bpersonal:\s*\{/.test(code);
+      });
+    expect(users.filter((p) => !PERSONAL_CHAT[p])).toEqual([]);
+    // And the allowlist is not stale.
+    expect(Object.keys(PERSONAL_CHAT).filter((p) => !users.includes(p))).toEqual([]);
   });
 
   // The crons reach the Assistant through senderLookup rather than by naming it,

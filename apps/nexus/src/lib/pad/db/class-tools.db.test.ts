@@ -43,6 +43,12 @@ async function padOpen(s: LiveSession, studentId: string) {
   await t.appPresence(s.sessionId, studentId, at(now, -60_000), now);
 }
 
+/** Joined this round earlier, and the pad has been closed for five minutes. */
+async function padLeft(s: LiveSession, studentId: string) {
+  const now = new Date();
+  await t.appPresence(s.sessionId, studentId, at(now, -600_000), at(now, -300_000));
+}
+
 describe('the picture and option text', () => {
   it("asks with a picture of the paper and each option's text, and both reach the student", async () => {
     const s = await liveSession(1);
@@ -132,10 +138,10 @@ describe("I can't answer", () => {
     const student = s.students[0];
 
     expect(await t.skip(student, promptId, 'dont_know')).toEqual({ ok: true, status: 'saved', reason: 'dont_know', note: null });
-    expect((await t.studentSnapshot(student, s.sessionId)).my_skip).toEqual({ reason: 'dont_know', note: null });
+    expect((await t.studentSnapshot(student, s.sessionId)).my_skip).toEqual({ reason: 'dont_know', note: null, approval: null });
 
     expect(await t.skip(student, promptId, 'other', '  my screen   froze ')).toMatchObject({ ok: true, reason: 'other', note: 'my screen froze' });
-    expect((await t.studentSnapshot(student, s.sessionId)).my_skip).toEqual({ reason: 'other', note: 'my screen froze' });
+    expect((await t.studentSnapshot(student, s.sessionId)).my_skip).toEqual({ reason: 'other', note: 'my screen froze', approval: null });
 
     expect(await t.skip(student, promptId, null)).toEqual({ ok: true, status: 'cleared' });
     expect((await t.studentSnapshot(student, s.sessionId)).my_skip).toBeNull();
@@ -167,7 +173,7 @@ describe("I can't answer", () => {
     expect(await t.skip(s.students[0], promptId, 'dont_know')).toMatchObject({ ok: false, code: 'PROMPT_NOT_OPEN' });
   });
 
-  it('gives the teacher counts by reason while the question is open, and names only after Close', async () => {
+  it('shows the session teacher, while open, counts by reason and who is still waiting, by name', async () => {
     const s = await liveSession(4);
     const promptId = await openPrompt(s);
     await t.skip(s.students[0], promptId, 'dont_know');
@@ -176,9 +182,13 @@ describe("I can't answer", () => {
     await t.submit(s.students[3], promptId, 'A');
 
     const open = await t.teacherSnapshot(s.teacherId, s.sessionId, s.students);
-    expect(open.skips).toEqual({ total: 3, by_reason: { dont_know: 2, cant_see: 1 } });
-    expect(JSON.stringify(open)).not.toContain(s.students[0]);
-    expect(await t.participation(s.teacherId, promptId, s.students)).toMatchObject({ ok: false, code: 'PROMPT_OPEN' });
+    expect(open.skips).toEqual({ total: 3, by_reason: { dont_know: 2, cant_see: 1 }, approved: 0 });
+    expect(open.counts).toMatchObject({ joined: 4, answered_joined: 1 });
+    expect(open.waiting.map((w: { student_id: string }) => w.student_id).sort()).toEqual(s.students.slice(0, 3).sort());
+    expect(open.waiting.find((w: { student_id: string }) => w.student_id === s.students[2])).toMatchObject({ reason: 'cant_see', approval: null });
+    // Students never get names: their snapshot carries only their own row.
+    const student = await t.studentSnapshot(s.students[3], s.sessionId);
+    expect(JSON.stringify(student)).not.toContain(s.students[0]);
 
     await t.close(s.teacherId, promptId);
     const named = await t.participation(s.teacherId, promptId, s.students);
@@ -200,16 +210,19 @@ describe("I can't answer", () => {
 });
 
 describe('the nudge', () => {
-  it('marks everyone who has neither answered nor said why, split by whether their pad is open', async () => {
-    const s = await liveSession(4);
-    const [answered, explained, open, closed] = s.students;
+  it('marks every student who joined and has neither answered nor said why, split by whether their pad is open', async () => {
+    const s = await liveSession(5);
+    const [answered, explained, open, closed, neverJoined] = s.students;
     const promptId = await openPrompt(s);
     await t.submit(answered, promptId, 'A');
     await t.skip(explained, promptId, 'dont_know');
     await padOpen(s, open);
+    await padLeft(s, closed);
 
     const result = await t.nudge(s.teacherId, promptId, s.students);
     expect(result).toEqual({ ok: true, pad_open: [open], pad_closed: [closed] });
+    // A student on the class list who never opened the pad this round is not chased.
+    expect((await t.studentSnapshot(neverJoined, s.sessionId)).nudged_at).toBeNull();
 
     // Only the nudged students see the banner.
     expect((await t.studentSnapshot(open, s.sessionId)).nudged_at).toEqual(expect.any(String));
@@ -227,6 +240,7 @@ describe('the nudge', () => {
   it('nudges a question at most once a minute, and again after', async () => {
     const s = await liveSession(2);
     const promptId = await openPrompt(s);
+    for (const student of s.students) await padOpen(s, student);
     expect(await t.nudge(s.teacherId, promptId, s.students)).toMatchObject({ ok: true });
 
     const again = await t.nudge(s.teacherId, promptId, s.students);
@@ -256,6 +270,8 @@ describe('the nudge', () => {
     const s = await liveSession(2);
     const promptId = await openPrompt(s);
     const stranger = await t.user('student');
+    for (const student of s.students) await padOpen(s, student);
+    await t.appPresence(s.sessionId, stranger, new Date(Date.now() - 60_000), new Date());
     const result = await t.nudge(s.teacherId, promptId, [...s.students, stranger]);
     expect([...result.pad_open, ...result.pad_closed].sort()).toEqual([...s.students].sort());
   });

@@ -331,9 +331,15 @@ export class PadTestDb {
     sessionId: string,
     answerType: string | null = 'mcq',
     optionCount: number | null = 4,
-    opts: { label?: string | null; text?: string | null; imageUrl?: string | null; optionTexts?: Array<string | null> | null } = {},
+    opts: {
+      label?: string | null;
+      text?: string | null;
+      imageUrl?: string | null;
+      optionTexts?: Array<string | null> | null;
+      closePromptId?: string | null;
+    } = {},
   ): Promise<Json> {
-    return this.fn(`select pad_ask($1::uuid, $2::uuid, $3::text, $4::int, $5::text, $6::text, $7::text, $8::text[]) as r`, [
+    return this.fn(`select pad_ask($1::uuid, $2::uuid, $3::text, $4::int, $5::text, $6::text, $7::text, $8::text[], $9::uuid) as r`, [
       actor,
       sessionId,
       answerType,
@@ -342,7 +348,50 @@ export class PadTestDb {
       opts.text ?? null,
       opts.imageUrl ?? null,
       opts.optionTexts ?? null,
+      opts.closePromptId ?? null,
     ]);
+  }
+
+  excuse(
+    actor: string | null,
+    promptId: string,
+    opts: { students?: readonly string[] | null; reason?: string | null; approve?: boolean | null } = {},
+  ): Promise<Json> {
+    return this.fn(`select pad_excuse($1::uuid, $2::uuid, $3::uuid[], $4::text, $5::boolean) as r`, [
+      actor,
+      promptId,
+      opts.students ? uuidArray(opts.students) : null,
+      opts.reason ?? null,
+      opts.approve === undefined ? true : opts.approve,
+    ]);
+  }
+
+  nextRound(actor: string | null, sessionId: string, confirmUnrevealed = false): Promise<Json> {
+    return this.fn(`select pad_next_round($1::uuid, $2::uuid, $3::boolean) as r`, [actor, sessionId, confirmUnrevealed]);
+  }
+
+  results(actor: string | null, sessionId: string, roster: readonly string[]): Promise<Json> {
+    return this.fn(`select pad_session_results($1::uuid, $2::uuid, $3::uuid[]) as r`, [actor, sessionId, uuidArray(roster)]);
+  }
+
+  publish(actor: string | null, sessionId: string, roster: readonly string[], publish = true): Promise<Json> {
+    return this.fn(`select pad_publish_results($1::uuid, $2::uuid, $3::uuid[], $4::boolean) as r`, [actor, sessionId, uuidArray(roster), publish]);
+  }
+
+  markNotified(actor: string | null, sessionId: string): Promise<Json> {
+    return this.fn(`select pad_mark_results_notified($1::uuid, $2::uuid) as r`, [actor, sessionId]);
+  }
+
+  studentResults(actor: string | null, sessionId: string, roster: readonly string[]): Promise<Json> {
+    return this.fn(`select pad_student_results($1::uuid, $2::uuid, $3::uuid[]) as r`, [actor, sessionId, uuidArray(roster)]);
+  }
+
+  storeResults(actor: string | null, sessionId: string, roster: readonly string[]): Promise<Json> {
+    return this.fn(`select pad_store_round_results($1::uuid, $2::uuid, $3::uuid[]) as r`, [actor, sessionId, uuidArray(roster)]);
+  }
+
+  classRounds(actor: string | null, classId: string, roster: readonly string[], as: 'teacher' | 'student'): Promise<Json> {
+    return this.fn(`select pad_class_rounds($1::uuid, $2::uuid, $3::uuid[], $4::text) as r`, [actor, classId, uuidArray(roster), as]);
   }
 
   details(actor: string | null, promptId: string, label: string | null, text: string | null): Promise<Json> {

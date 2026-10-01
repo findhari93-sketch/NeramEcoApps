@@ -16,6 +16,15 @@
  *      "From Hari" and carries a "Message Hari" button, so a student who wants
  *      to answer can start that chat themselves.
  *      lib/sender-classification.test.ts holds this line.
+ *
+ *      ONE EXCEPTION, founder 2026-09-30: a support ticket is a conversation
+ *      between two people, the student and whoever is fixing it. Its messages
+ *      go as a real 1:1 chat from the sender's own Teams (`personal`), both
+ *      ways, so the teacher sees the student's replies in their chat list and
+ *      the student can answer a person. Replies that went only to a page nobody
+ *      opened is what this fixes. If that chat does not land, the message falls
+ *      through to the Assistant (when a person was named) and then the feed. Only
+ *      the files in PERSONAL_CHAT in sender-classification.test.ts may pass it.
  *   1. A Microsoft Teams Activity-feed ping ("Neram Assistant"), ONLY when no
  *      chat landed. Chat first: a chat already raises a Teams alert, and two
  *      alerts for one message is how students learn to mute the app.
@@ -61,14 +70,15 @@ import { sendTeamsActivityNotification } from '@neram/auth';
 import { postGroupMessage, type GroupPostResult } from './teams-group-post';
 import type { TeamsMention } from './teams-class-announcements';
 import { assistantEnabled, sendAssistantMessage, type AssistantFrom } from './teams-assistant';
+import { sendTeamsChatMessage } from './teams-messaging';
 
 export interface NudgeResult {
   studentId: string;
   name: string | null;
-  /** A Teams 1:1 chat from Neram Assistant landed. */
+  /** A Teams 1:1 chat landed, from Neram Assistant or (tickets only) from the sender's own Teams. */
   chat: boolean;
-  /** Who it came from, when a chat landed. Always the Assistant now; kept for the receipts. */
-  chatSender?: 'assistant';
+  /** Who it came from, when a chat landed: the Assistant, or the person themselves on a ticket. */
+  chatSender?: 'assistant' | 'person';
   teams: boolean;
   inapp: boolean;
   ok: boolean;
@@ -148,6 +158,14 @@ export interface SendNudgeInput {
     from?: AssistantFromRef | null;
     card?: string | null;
   };
+
+  /**
+   * Support tickets only: a real 1:1 chat from the sender's own Teams, tried
+   * before anything else. `delegatedToken` must carry Chat.ReadWrite and
+   * ChatMessage.Send (a teacher's getTeacherToken, a student's
+   * getChatTokenSilent). `html` is the chat body, {firstName} filled per recipient.
+   */
+  personal?: { delegatedToken: string; html: string };
 
   /** The Nexus bell only: no Teams chat, no activity feed. For a caller that offers "do not ping". */
   bellOnly?: boolean;
@@ -399,9 +417,34 @@ export async function sendNudge(
     return { results: skipped, counts: tally(skipped) };
   }
 
-  // 0) The chat, from Neram Assistant only.
-  const chatBy = new Map<string, { ok: boolean; reason?: string; sender?: 'assistant' }>();
-  const chatWanted = Boolean(input.assistant);
+  // 0) The chat: the sender's own (tickets only), else Neram Assistant.
+  const chatBy = new Map<string, { ok: boolean; reason?: string; sender?: 'assistant' | 'person' }>();
+  const chatWanted = Boolean(input.assistant || input.personal);
+
+  /**
+   * A ticket conversation: the sender's own 1:1 chat. A recipient it does not
+   * reach keeps the reason and falls through to the Assistant below (when a
+   * person was named) and then to the feed, so a refused token never costs the
+   * message.
+   */
+  if (input.personal && !input.bellOnly) {
+    const { delegatedToken, html } = input.personal;
+    for (let i = 0; i < studentIds.length; i += CHAT_CONCURRENCY) {
+      const batch = studentIds.slice(i, i + CHAT_CONCURRENCY);
+      await Promise.all(
+        batch.map(async (sid) => {
+          const u = usersBy.get(sid);
+          const recipient = u?.ms_oid || teamsBy.get(sid) || null;
+          if (!recipient) {
+            chatBy.set(sid, { ok: false, reason: 'No Microsoft account on file for a personal chat' });
+            return;
+          }
+          const r = await sendTeamsChatMessage(delegatedToken, recipient, applyTokens(html, tokensFor(sid)));
+          chatBy.set(sid, r.ok ? { ok: true, sender: 'person' } : { ok: false, reason: `Personal chat did not send (${r.reason || r.status})` });
+        }),
+      );
+    }
+  }
 
   /**
    * Neram Assistant.
@@ -415,17 +458,21 @@ export async function sendNudge(
    * removed): the receipt says why, and the activity feed and the bell carry the
    * message. Never a teacher's own chat (founder, 2026-09-24).
    */
-  if (input.assistant) {
+  // Only the people a personal chat did not already reach.
+  const assistantIds = studentIds.filter((sid) => chatBy.get(sid)?.ok !== true);
+  if (input.assistant && assistantIds.length) {
     const { link, card: callerCard } = input.assistant;
     const from = await resolveAssistantFrom(input.assistant.from, supabase);
     const allowed = await assistantEnabled(supabase);
     if (!allowed) {
-      for (const sid of studentIds) {
-        chatBy.set(sid, { ok: false, reason: 'Neram Assistant is switched off' });
+      for (const sid of assistantIds) {
+        // A personal chat that failed first keeps its reason: it is the one to act on.
+        const prior = chatBy.get(sid)?.reason;
+        chatBy.set(sid, { ok: false, reason: prior ? `${prior}; Neram Assistant is switched off` : 'Neram Assistant is switched off' });
       }
     }
-    for (let i = 0; allowed && i < studentIds.length; i += CHAT_CONCURRENCY) {
-      const batch = studentIds.slice(i, i + CHAT_CONCURRENCY);
+    for (let i = 0; allowed && i < assistantIds.length; i += CHAT_CONCURRENCY) {
+      const batch = assistantIds.slice(i, i + CHAT_CONCURRENCY);
       await Promise.all(
         batch.map(async (sid) => {
           const u = usersBy.get(sid);
@@ -520,7 +567,7 @@ ${plainFor}` },
       }
 
       const parts = [
-        chat ? 'assistant' : '',
+        chat ? (chatResult?.sender === 'person' ? 'chat' : 'assistant') : '',
         teams ? 'teams' : '',
         inapp ? 'inapp' : '',
       ].filter(Boolean);
@@ -595,6 +642,8 @@ export async function notifyUser(
      * existed. Build it with plainToHtmlWithLink.
      */
     html?: string;
+    /** Support tickets only: the sender's own 1:1 chat. See SendNudgeInput.personal. */
+    personal?: SendNudgeInput['personal'];
   } = {},
 ): Promise<NudgeResult | null> {
   try {
@@ -608,6 +657,7 @@ export async function notifyUser(
       ...(opts.html ? { html: opts.html } : {}),
       ...(opts.teacher ? { teacher: opts.teacher } : {}),
       ...(opts.audience ? { audience: opts.audience } : {}),
+      ...(opts.personal ? { personal: opts.personal } : {}),
       source: { kind: n.event_type },
     });
     return results[0] ?? null;

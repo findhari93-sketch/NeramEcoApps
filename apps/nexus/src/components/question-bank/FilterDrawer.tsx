@@ -48,7 +48,32 @@ interface FilterDrawerProps {
    * request and feed it back through `matchCount`.
    */
   onDraftChange?: (draft: QBFilterState) => void;
+  /**
+   * What the page link already pins down (e.g. one paper's Mathematics). The
+   * drawer never offers a choice outside it: no Exam Type chips when the exam
+   * is fixed, no Year chips when the year is, and no Aptitude or Drawing chips
+   * inside a Mathematics section.
+   */
+  lockedScope?: QBLockedScope;
 }
+
+export interface QBLockedScope {
+  exam_type?: string | null;
+  year?: number | null;
+  /** nexus_qb_questions.section, e.g. 'math_mcq'. */
+  section?: string | null;
+  /** 'recalled' for student-recalled papers, the only ones with confidence tiers. */
+  paper_source?: string | null;
+}
+
+// Which broad subject a section belongs to. Inside a section the General
+// group (Mathematics / Aptitude / Drawing) is a choice of one, so it is hidden.
+const SECTION_SUBJECT: Record<string, QBCategory> = {
+  math_mcq: 'mathematics',
+  math_numerical: 'mathematics',
+  aptitude: 'aptitude',
+  drawing: 'drawing',
+};
 
 const FORMAT_OPTIONS: { value: QBQuestionFormat; label: string }[] = [
   { value: 'MCQ', label: 'MCQ' },
@@ -122,7 +147,11 @@ export default function FilterDrawer({
   categoryCounts,
   categoryTree,
   onDraftChange,
+  lockedScope,
 }: FilterDrawerProps) {
+  const lockedExam = lockedScope?.exam_type || null;
+  const lockedYear = lockedScope?.year ?? null;
+  const lockedSubject = lockedScope?.section ? SECTION_SUBJECT[lockedScope.section] ?? null : null;
   const [draft, setDraft] = useState<QBFilterState>(filters);
 
   const handleOpen = () => setDraft(filters);
@@ -147,7 +176,8 @@ export default function FilterDrawer({
   // Derive available years from the exam tree based on selected exam type
   const availableYears = useMemo(() => {
     if (!examTree) return [];
-    const selectedExamType = draft.exam_type;
+    // The link's exam wins over the drawer's, exactly as in the list request.
+    const selectedExamType = lockedExam || draft.exam_type;
     const yearsSet = new Set<number>();
 
     for (const exam of examTree.exams) {
@@ -159,7 +189,7 @@ export default function FilterDrawer({
     }
 
     return Array.from(yearsSet).sort((a, b) => b - a);
-  }, [examTree, draft.exam_type]);
+  }, [examTree, draft.exam_type, lockedExam]);
 
   // Only the maths roots go into the tree. Everything else stays as chip groups
   // until those tags get a parent_id of their own.
@@ -178,6 +208,9 @@ export default function FilterDrawer({
   const renderChipGroups = () => {
     const seen = new Set<string>();
     return CATEGORY_GROUPS.map((group) => {
+      if (lockedSubject && group.key === 'broad') return null;
+      // Aptitude topic groups make no sense inside a Mathematics section.
+      if (lockedSubject && lockedSubject !== 'aptitude' && group.key !== 'broad') return null;
       const availableCats = group.categories.filter((cat) => {
         if (seen.has(cat)) return false;
         if (!categoryCounts?.[cat]) return false;
@@ -282,7 +315,7 @@ export default function FilterDrawer({
         <Typography variant="h6" fontWeight={600}>
           Filters
         </Typography>
-        <IconButton onClick={onClose} size="small">
+        <IconButton onClick={onClose} aria-label="Close filters" sx={{ width: 44, height: 44 }}>
           <CloseIcon />
         </IconButton>
       </Box>
@@ -314,7 +347,7 @@ export default function FilterDrawer({
         )}
 
         {/* Exam Type */}
-        {examTree && (
+        {examTree && !lockedExam && (
           <Accordion disableGutters elevation={0} defaultExpanded>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Typography variant="subtitle2">Exam Type</Typography>
@@ -341,7 +374,7 @@ export default function FilterDrawer({
         )}
 
         {/* Year */}
-        {availableYears.length > 0 && (
+        {availableYears.length > 1 && lockedYear === null && (
           <Accordion disableGutters elevation={0} defaultExpanded>
             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
               <Typography variant="subtitle2">Year</Typography>
@@ -392,7 +425,7 @@ export default function FilterDrawer({
                 {renderChipGroups()}
 
                 {/* Maths, as the real parent -> child hierarchy */}
-                {mathRoots.length > 0 && (
+                {mathRoots.length > 0 && (!lockedSubject || lockedSubject === 'mathematics') && (
                   <Box sx={{ mt: 1 }}>
                     <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block', fontWeight: 600 }}>
                       Math Topics
@@ -411,7 +444,8 @@ export default function FilterDrawer({
               // Fallback: static groups filtered by exam type
               CATEGORY_GROUPS
                 .filter((group) => {
-                  const selectedExam = draft.exam_type || 'ALL';
+                  if (lockedSubject) return false;
+                  const selectedExam = (lockedExam || draft.exam_type || 'ALL') as QBExamType | 'ALL';
                   return group.exams.includes(selectedExam);
                 })
                 .map((group) => (
@@ -440,6 +474,8 @@ export default function FilterDrawer({
         {/* No Difficulty filter: it was a hand-set label left on the Medium
             default for 97% of the bank, so it filtered nothing. */}
         {/* Confidence Level (recalled papers) */}
+        {/* Official papers carry no confidence tier, so on one the chips filter nothing. */}
+        {(lockedYear === null || lockedScope?.paper_source === 'recalled') && (
         <Accordion disableGutters elevation={0}>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             <Typography variant="subtitle2">Confidence Level</Typography>
@@ -459,8 +495,10 @@ export default function FilterDrawer({
             </Box>
           </AccordionDetails>
         </Accordion>
+        )}
 
-        {/* Question Format */}
+        {/* Question Format: a section already fixes it. */}
+        {!lockedSubject && (
         <Accordion disableGutters elevation={0}>
           <AccordionSummary expandIcon={<ExpandMoreIcon />}>
             <Typography variant="subtitle2">Question Format</Typography>
@@ -480,6 +518,7 @@ export default function FilterDrawer({
             </Box>
           </AccordionDetails>
         </Accordion>
+        )}
 
         {/* Attempt Status */}
         <Accordion disableGutters elevation={0}>

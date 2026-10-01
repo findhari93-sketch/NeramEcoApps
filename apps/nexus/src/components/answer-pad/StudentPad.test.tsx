@@ -14,15 +14,23 @@ import StudentPad from './StudentPad';
 
 const mocks = vi.hoisted(() => ({
   snapshot: null as unknown,
+  /** Snapshots for other rounds, by session id; anything else gets `snapshot`. */
+  bySession: {} as Record<string, unknown>,
+  sessions: [] as string[],
   error: null as unknown,
   refresh: vi.fn(async () => undefined),
   padFetch: vi.fn(),
 }));
 
 vi.mock('./usePadSnapshot', () => ({
-  usePadSnapshot: () => ({ snapshot: mocks.snapshot, error: mocks.error, realtime: 'unavailable', refresh: mocks.refresh }),
+  usePadSnapshot: ({ sessionId }: { sessionId: string }) => {
+    mocks.sessions.push(sessionId);
+    return { snapshot: mocks.bySession[sessionId] ?? mocks.snapshot, error: mocks.error, realtime: 'unavailable', refresh: mocks.refresh };
+  },
   usePadHeartbeat: () => undefined,
 }));
+
+vi.mock('@/components/students/StudentAvatar', () => ({ default: () => null }));
 
 vi.mock('@/lib/pad/client/pad-fetch', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/pad/client/pad-fetch')>()),
@@ -87,9 +95,14 @@ const NO_DASHES = /[–—]|--/;
 
 beforeEach(() => {
   mocks.snapshot = null;
+  mocks.bySession = {};
+  mocks.sessions = [];
   mocks.error = null;
   mocks.padFetch.mockReset();
+  mocks.refresh.mockClear();
 });
+
+const LOCK_WORDS = /lock it|can't change it|Lock answer/i;
 
 describe('StudentPad', () => {
   it('shows it is connected and waiting before the first question, with no score yet', () => {
@@ -111,7 +124,7 @@ describe('StudentPad', () => {
     mocks.snapshot = snap({ prompt: prompt({ label: '38', state: 'closed' }), my_response: response('C') });
     rerender(pad());
     expect(screen.getByText('Q.38')).toBeTruthy();
-    expect(screen.getByText('Answer locked: C')).toBeTruthy();
+    expect(screen.getByText('Locked: C')).toBeTruthy();
     expect(screen.getByText('Answering has closed. Your teacher will share the answer, now or after class.')).toBeTruthy();
     expect(document.body.textContent).not.toMatch(NO_DASHES);
   });
@@ -196,35 +209,85 @@ describe('StudentPad', () => {
     }
   });
 
-  it('locks an answer with one tap and shows Locking while it travels', async () => {
+  it('saves an answer with one tap, shows it as chosen, and keeps the options live', async () => {
     mocks.snapshot = snap();
     mocks.padFetch.mockReturnValue(new Promise(() => undefined));
     render(pad());
 
+    expect(screen.getByText('You can change your answer until your teacher closes answers.')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Answer B' }));
 
     expect(mocks.padFetch).toHaveBeenCalledWith(host, '/api/pad/submit', { method: 'POST', body: { promptId: 'p1', answer: 'B' } });
-    expect(await screen.findByText('Locking your answer')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Answer A' })).toBeNull();
+    expect(await screen.findByText('Your answer: B')).toBeTruthy();
+    expect(screen.getByText('Saving')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Answer B' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Answer A' }).getAttribute('aria-pressed')).toBe('false');
+    expect(document.body.textContent).not.toMatch(LOCK_WORDS);
   });
 
-  it('keeps trying to lock the answer while the connection is down', async () => {
+  it('changes the answer with another tap while the question is open', async () => {
+    mocks.snapshot = snap({ my_response: response('B') });
+    mocks.padFetch.mockResolvedValue({ status: 'changed', answer: 'C' });
+    const { rerender } = render(pad());
+
+    expect(screen.getByText('Your answer: B')).toBeTruthy();
+    expect(screen.getByText('Saved')).toBeTruthy();
+
+    // Tapping the chosen answer again sends nothing.
+    fireEvent.click(screen.getByRole('button', { name: 'Answer B' }));
+    expect(mocks.padFetch).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Answer C' }));
+    await waitFor(() =>
+      expect(mocks.padFetch).toHaveBeenCalledWith(host, '/api/pad/submit', { method: 'POST', body: { promptId: 'p1', answer: 'C' } }),
+    );
+    await waitFor(() => expect(mocks.refresh).toHaveBeenCalled());
+
+    // The server's answer wins once the refresh lands.
+    mocks.snapshot = snap({ my_response: { ...response('C'), change_count: 1 } });
+    rerender(pad());
+    expect(await screen.findByText('Your answer: C')).toBeTruthy();
+    expect(screen.getByText('Saved')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Answer C' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('keeps trying to save the answer while the connection is down', async () => {
     mocks.snapshot = snap();
     mocks.padFetch.mockRejectedValue(new PadClientError(0, 'OFFLINE', 'No connection'));
     const { unmount } = render(pad());
 
     fireEvent.click(screen.getByRole('button', { name: 'Answer C' }));
 
-    expect(await screen.findByText('Still trying to lock your answer')).toBeTruthy();
-    expect(screen.getByText(/Your answer C will lock as soon as you are back online/)).toBeTruthy();
+    expect(await screen.findByText('No connection, still trying')).toBeTruthy();
+    expect(screen.getByText('Your answer: C')).toBeTruthy();
     unmount();
   });
 
-  it("shows the server's locked answer after a reload instead of the answer buttons", () => {
+  it("shows the server's saved answer after a reload, with the options still live", () => {
     mocks.snapshot = snap({ my_response: response('B') });
     render(pad());
-    expect(screen.getByText('Answer locked: B')).toBeTruthy();
+    expect(screen.getByText('Your answer: B')).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Choose your answer' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Answer B' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('locks the answer when the teacher closes answers', () => {
+    mocks.snapshot = snap({ prompt: prompt({ state: 'closed', version: 2 }), my_response: response('B') });
+    render(pad());
+    expect(screen.getByText('Locked: B')).toBeTruthy();
     expect(screen.queryByRole('group', { name: 'Choose your answer' })).toBeNull();
+    expect(document.body.textContent).not.toMatch(NO_DASHES);
+  });
+
+  it('shows the answer that stands, not an error, when a change arrives after close', async () => {
+    mocks.snapshot = snap({ my_response: response('A') });
+    mocks.padFetch.mockRejectedValue(new PadClientError(409, 'PROMPT_NOT_OPEN', 'PROMPT_NOT_OPEN', { code: 'PROMPT_NOT_OPEN', state: 'closed', answer: 'A' }));
+    render(pad());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Answer D' }));
+    expect(await screen.findByText('Locked: A')).toBeTruthy();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByText(/could not be sent/)).toBeNull();
   });
 
   it('says so when the question closed before the answer arrived', async () => {
@@ -252,7 +315,7 @@ describe('StudentPad', () => {
     render(pad());
 
     fireEvent.change(screen.getByLabelText('Your number'), { target: { value: '12..5' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Lock answer' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save answer' }));
 
     expect(await screen.findByText('That answer does not fit this question. Please check it.')).toBeTruthy();
     expect((screen.getByLabelText('Your number') as HTMLInputElement).value).toBe('12..5');
@@ -287,20 +350,98 @@ describe('StudentPad', () => {
   it('drops the header and the long hint in the pop-up, so the answer buttons fit without scrolling', () => {
     mocks.snapshot = snap();
     render(<StudentPad host={host} sessionId="s1" compact />);
-    expect(screen.getByText('Tap an answer to lock it.')).toBeTruthy();
+    expect(screen.queryByText('Tap your answer.')).toBeNull();
+    expect(screen.getByText('You can change your answer until your teacher closes answers.')).toBeTruthy();
     expect(screen.queryByText('NATA Evening Batch')).toBeNull();
     expect(screen.queryByText('No score yet')).toBeNull();
     expect(screen.getAllByRole('button', { name: /^Answer / })).toHaveLength(4);
   });
 
-  it('shows the final score when the class ends', () => {
+  it('says the round has ended and results are coming, until the teacher publishes', () => {
     mocks.snapshot = snap({
-      session: { id: 's1', status: 'ended', hint_topic: 'pad-x', classroom_name: 'NATA Evening Batch' },
+      session: { id: 's1', status: 'ended', hint_topic: 'pad-x', classroom_name: 'NATA Evening Batch', round_no: 2, results_published_at: null },
       score: { correct: 3, wrong: 1, skipped: 0, absent: 1, total_graded: 4 },
     });
     render(pad());
-    expect(screen.getByText('This class has ended')).toBeTruthy();
-    expect(screen.getByText('You got 3 of 4 graded questions.')).toBeTruthy();
+    expect(screen.getByText('Results coming soon')).toBeTruthy();
+    expect(screen.getByText('Round 2 has ended. Your teacher will share the results soon.')).toBeTruthy();
+    expect(mocks.padFetch).not.toHaveBeenCalled();
+    expect(document.body.textContent).not.toMatch(NO_DASHES);
+  });
+
+  it('shows the round result card once the teacher publishes', async () => {
+    mocks.snapshot = snap({
+      session: { id: 's1', status: 'ended', hint_topic: 'pad-x', classroom_name: 'NATA Evening Batch', round_no: 2, results_published_at: '2026-09-10T11:00:00Z' },
+    });
+    mocks.padFetch.mockResolvedValue({
+      published: true,
+      status: 'ended',
+      round_no: 2,
+      me: {
+        student_id: 'me',
+        name: 'Asha',
+        correct: 12,
+        wrong: 4,
+        no_answer: 2,
+        excused: 0,
+        away: 0,
+        counted: 18,
+        attempted: 16,
+        answered: 16,
+        present_for: 18,
+        score_pct: 67,
+        accuracy_pct: 75,
+        participation_pct: 89,
+        label: 'good',
+        not_active: false,
+        rank: 7,
+        ranked_of: 22,
+        in_top: false,
+      },
+      top: [],
+      class: { questions: 18, graded: 18, took_part: 22, average_score: 61 },
+    });
+    render(pad());
+
+    expect(await screen.findByText('12 of 16')).toBeTruthy();
+    expect(screen.getByText('7 of 22')).toBeTruthy();
+    expect(mocks.padFetch).toHaveBeenCalledWith(host, '/api/pad/sessions/s1/my-result');
+    expect(screen.getByText('Good')).toBeTruthy();
+    expect(screen.getByText('Class average 61%')).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(NO_DASHES);
+  });
+
+  it('follows the next round on its own when the teacher starts one', () => {
+    mocks.snapshot = snap({
+      session: { id: 's1', status: 'ended', hint_topic: 'pad-x', classroom_name: 'NATA Evening Batch', round_no: 1, next_session_id: 's2' },
+    });
+    mocks.bySession.s2 = snap({
+      session: { id: 's2', status: 'live', hint_topic: 'pad-y', classroom_name: 'NATA Evening Batch', round_no: 2 },
+      prompt: prompt({ id: 'p9', label: '7' }),
+    });
+    render(pad());
+
+    expect(mocks.sessions).toContain('s2');
+    expect(screen.getByRole('heading', { name: 'Q.7' })).toBeTruthy();
+    expect(screen.getByText('NATA Evening Batch · Round 2')).toBeTruthy();
+    expect(screen.queryByText('Results coming soon')).toBeNull();
+  });
+
+  it("tells the student when the teacher accepts their reason, or asks them to try", () => {
+    mocks.snapshot = snap({ my_skip: { reason: 'dont_know', note: null, approval: 'approved' } });
+    const { rerender } = render(pad());
+    expect(screen.getByText("Your teacher accepted your reason. This question won't count against you.")).toBeTruthy();
+
+    mocks.snapshot = snap({ my_skip: { reason: 'dont_know', note: null, approval: 'rejected' } });
+    rerender(pad());
+    expect(screen.getByText('Your teacher would like you to try this one. A guess is fine.')).toBeTruthy();
+    expect(screen.queryByText(/accepted your reason/)).toBeNull();
+
+    // Still there after the question closes, so the student knows it did not count.
+    mocks.snapshot = snap({ prompt: prompt({ state: 'closed', version: 2 }), my_skip: { reason: 'dont_know', note: null, approval: 'approved' } });
+    rerender(pad());
+    expect(screen.getByText("Your teacher accepted your reason. This question won't count against you.")).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(NO_DASHES);
   });
 
   it('explains when the student is not on the class list', () => {

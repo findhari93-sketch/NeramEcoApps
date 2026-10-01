@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { parseSitemap, selectRecent, type SitemapEntry } from '@/lib/seo/sitemaps';
 
 const INDEXNOW_KEY = '9a2eee830f3b46a198a5633703432138';
 const HOST = 'neramclasses.com';
@@ -24,6 +25,7 @@ export async function GET(request: Request) {
     // Fetch sitemap
     const sitemapRes = await fetch(SITEMAP_URL, {
       headers: { 'User-Agent': 'NeramClasses-IndexNow/1.0' },
+      cache: 'no-store',
     });
     if (!sitemapRes.ok) {
       return NextResponse.json(
@@ -32,13 +34,25 @@ export async function GET(request: Request) {
       );
     }
 
-    const xml = await sitemapRes.text();
+    // /sitemap.xml is an index: follow it into each child sitemap.
+    const root = parseSitemap(await sitemapRes.text());
+    let entries: SitemapEntry[] = root.entries;
+    if (root.kind === 'index') {
+      entries = [];
+      for (const child of root.entries) {
+        const res = await fetch(child.loc, { headers: { 'User-Agent': 'NeramClasses-IndexNow/1.0' }, cache: 'no-store' });
+        if (res.ok) entries.push(...parseSitemap(await res.text()).entries);
+      }
+    }
 
-    // Extract URLs from sitemap XML
-    const urlMatches = xml.match(/<loc>(.*?)<\/loc>/g) || [];
-    const urls = urlMatches.map((m) => m.replace(/<\/?loc>/g, ''));
+    // Daily runs submit only what changed in the last two days; ?full=1 resubmits everything.
+    const full = new URL(request.url).searchParams.get('full') === '1';
+    const urls = full ? entries.map((e) => e.loc) : selectRecent(entries, 2);
 
     if (urls.length === 0) {
+      if (!full && entries.length > 0) {
+        return NextResponse.json({ success: true, total: 0, submitted: 0, note: 'No URLs changed in the last 2 days' });
+      }
       return NextResponse.json({ error: 'No URLs found in sitemap' }, { status: 500 });
     }
 

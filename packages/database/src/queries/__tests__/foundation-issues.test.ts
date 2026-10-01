@@ -380,6 +380,56 @@ describe('reopenFoundationIssue', () => {
     await reopenFoundationIssue('i', 's', 'x', withCode.mock);
     expect(withCode.mock.update.mock.calls[0][0]).toHaveProperty('resolution_code', null);
   });
+
+  test("keeps the student's device snapshot on context.reopens and adds new screenshots", async () => {
+    const { mock, setResolvedValue } = createChainableMock();
+    setResolvedValue({
+      data: {
+        id: 'i',
+        status: 'awaiting_confirmation',
+        assigned_to: 'teacher-1',
+        context: { facts: { score: 1 } },
+        screenshot_urls: ['old.png'],
+      },
+      error: null,
+    });
+
+    await reopenFoundationIssue('i', 's', 'Still broken', mock, {
+      at: '2026-09-30T12:00:00.000Z',
+      page_url: '/student/issues',
+      device_info: { browser: 'Chrome' },
+      console_logs: [{ level: 'error', message: 'HTTP 500 /api/x', at: '2026-09-30T11:59:00.000Z' }],
+      screenshot_urls: ['new.png'],
+    });
+
+    const update = mock.update.mock.calls[0][0];
+    // Existing context (a result dispute's facts) is kept.
+    expect(update.context.facts).toEqual({ score: 1 });
+    expect(update.context.reopens).toHaveLength(1);
+    expect(update.context.reopens[0]).toMatchObject({ reason: 'Still broken', page_url: '/student/issues' });
+    expect(update.screenshot_urls).toEqual(['old.png', 'new.png']);
+  });
+
+  test('keeps at most five reopen snapshots, newest last', async () => {
+    const old = Array.from({ length: 5 }, (_, i) => ({ at: `2026-09-0${i + 1}T00:00:00.000Z` }));
+    const { mock, setResolvedValue } = createChainableMock();
+    setResolvedValue({ data: { id: 'i', status: 'closed', assigned_to: null, context: { reopens: old } }, error: null });
+
+    await reopenFoundationIssue('i', 's', 'Again', mock, { at: '2026-09-30T00:00:00.000Z' });
+
+    const reopens = mock.update.mock.calls[0][0].context.reopens;
+    expect(reopens).toHaveLength(5);
+    expect(reopens[0].at).toBe('2026-09-02T00:00:00.000Z');
+    expect(reopens[4].at).toBe('2026-09-30T00:00:00.000Z');
+  });
+
+  test('without a snapshot, context and screenshots are not touched', async () => {
+    const { mock, setResolvedValue } = createChainableMock();
+    setResolvedValue({ data: { id: 'i', status: 'closed', assigned_to: null, context: { facts: {} } }, error: null });
+    await reopenFoundationIssue('i', 'staff', 'x', mock);
+    expect(mock.update.mock.calls[0][0]).not.toHaveProperty('context');
+    expect(mock.update.mock.calls[0][0]).not.toHaveProperty('screenshot_urls');
+  });
 });
 
 // ============================================

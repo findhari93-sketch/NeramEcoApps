@@ -32,32 +32,25 @@ const INDEXNOW_ENDPOINTS = [
 ];
 
 // Marketing site URLs (static pages)
+// Canonical money pages only (no /en/ prefix: English is unprefixed). The daily
+// /api/cron/indexnow route submits everything else from the sitemap index.
 const MARKETING_URLS = [
   '/',
-  '/en',
-  '/en/about',
-  '/en/courses',
-  '/en/courses/nata',
-  '/en/courses/jee-paper-2',
-  '/en/coaching',
-  '/en/coaching/nata-coaching',
-  '/en/apply',
-  '/en/tools',
-  '/en/blog',
-  '/en/contact',
-  '/en/nata-syllabus',
-  '/en/nata-preparation-guide',
-  '/en/nata-important-questions',
-  '/en/how-to-score-150-in-nata',
-  '/en/best-books-nata-jee',
-  '/en/previous-year-papers',
-  '/en/free-resources',
-  '/en/results',
-  '/en/premium',
-  '/en/alumni',
-  '/en/careers',
-  '/en/terms',
-  '/en/privacy',
+  '/nata-online-coaching',
+  '/coaching/nata-coaching',
+  '/jee-paper-2-preparation',
+  '/fees',
+  '/courses',
+  '/apply',
+  '/demo-class',
+  '/nata-2026',
+  '/aat-2026',
+  '/pgeta-2026',
+  '/colleges',
+  '/counseling',
+  '/blog',
+  '/about',
+  '/contact',
 ];
 
 // App/Tools URLs

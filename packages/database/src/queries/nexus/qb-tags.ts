@@ -133,19 +133,34 @@ function isDescendantOf(
  * counted twice under Coordinate Geometry.
  */
 export async function getQBSubjectTagTree(
-  scope?: { exam_type?: string | null; year?: number | null; session?: string | null; shift?: string | null },
+  scope?: {
+    exam_type?: string | null;
+    year?: number | null;
+    session?: string | null;
+    shift?: string | null;
+    /** nexus_qb_questions.section values, e.g. ['math_mcq']. Empty or absent = every section. */
+    section?: string[] | null;
+  },
   client?: TypedSupabaseClient,
 ): Promise<{ tree: NexusQBTagNode[]; counts: Record<string, number> }> {
   const supabase = client || getSupabaseAdminClient();
-  const [tags, countsRes] = await Promise.all([
+  const base = {
+    p_exam_type: scope?.exam_type ?? null,
+    p_year: scope?.year ?? null,
+    p_session: scope?.session ?? null,
+    p_shift: scope?.shift ?? null,
+  };
+  const [tags, firstRes] = await Promise.all([
     listQBTags({ group: 'subject' }, supabase),
-    supabase.rpc('nexus_qb_category_counts', {
-      p_exam_type: scope?.exam_type ?? null,
-      p_year: scope?.year ?? null,
-      p_session: scope?.session ?? null,
-      p_shift: scope?.shift ?? null,
-    }),
+    supabase.rpc('nexus_qb_category_counts', { ...base, p_section: scope?.section?.length ? scope.section : null }),
   ]);
+  let countsRes = firstRes;
+  // Code can go live before 20261025090000 adds p_section (CI does not stop on
+  // a failed migration). PostgREST then finds no matching function; fall back
+  // to the old signature so the drawer keeps its counts, unscoped by section.
+  if (countsRes.error && (countsRes.error as { code?: string }).code === 'PGRST202') {
+    countsRes = await supabase.rpc('nexus_qb_category_counts', base);
+  }
   if (countsRes.error) throw countsRes.error;
 
   const countMap = new Map<string, QBTagCount>();

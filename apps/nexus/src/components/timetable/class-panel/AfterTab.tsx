@@ -2,6 +2,7 @@
 
 import { Box, Button, Chip, Divider, Typography } from '@neram/ui';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
+import AnswerPadRoundsCard from './AnswerPadRoundsCard';
 import ClassOutcomeCard from './ClassOutcomeCard';
 import ClassCaptureView from '../ClassCaptureView';
 import WrapUpSection from '../WrapUpSection';
@@ -82,6 +83,10 @@ export default function AfterTab(props: ClassPanelTabProps) {
           sx={{ alignSelf: 'flex-start' }}
         />
       )}
+
+      {/* The Answer Pad rounds run in this class: every round for the teacher,
+          published results for a student. Draws nothing when none ran. */}
+      <AnswerPadRoundsCard classId={cls.id} getToken={getToken} />
 
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
         {/* One button. Attendance, Insights and the RSVP dashboard were three,

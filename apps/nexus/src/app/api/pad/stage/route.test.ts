@@ -6,6 +6,7 @@ import type { TeacherSnapshot } from '@/lib/pad/client/types';
 const mocks = vi.hoisted(() => ({
   caller: vi.fn(),
   live: vi.fn(),
+  published: vi.fn(),
   meta: vi.fn(),
   roster: vi.fn(),
   callPad: vi.fn(),
@@ -14,6 +15,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/pad/caller', () => ({ resolvePadCaller: mocks.caller }));
 vi.mock('@/lib/pad/sessions', () => ({
   liveSessionForMeeting: mocks.live,
+  publishedSessionForMeeting: mocks.published,
   loadSessionMeta: mocks.meta,
   rosterIds: mocks.roster,
   padDb: () => ({}),
@@ -83,6 +85,7 @@ beforeEach(() => {
   __clearStageCaches();
   mocks.caller.mockReset().mockResolvedValue(TEACHER);
   mocks.live.mockReset().mockResolvedValue('s1');
+  mocks.published.mockReset().mockResolvedValue(null);
   mocks.meta.mockReset().mockResolvedValue({ id: 's1', classroom_id: 'c1', batch_id: null, teacher_id: 'teacher-1', status: 'live', meeting_id: 'meeting-1' });
   mocks.roster.mockReset().mockResolvedValue(['u1', 'u2']);
   mocks.callPad.mockReset().mockImplementation(async (_db: unknown, fn: string) => (fn === 'pad_teacher_snapshot' ? SNAPSHOT : { ok: true }));
@@ -126,6 +129,35 @@ describe('GET /api/pad/stage', () => {
     mocks.caller.mockResolvedValue({ ...TEACHER, user: { id: 'teacher-2' } });
     expect((await call()).status).toBe(403);
     expect(teacherSnapshotCalls()).toHaveLength(0);
+  });
+
+  it('between rounds shows the published top five and the class, and nobody below them', async () => {
+    mocks.live.mockResolvedValue(null);
+    mocks.published.mockResolvedValue('s1');
+    mocks.meta.mockResolvedValue({ id: 's1', classroom_id: 'c1', batch_id: null, teacher_id: 'teacher-1', status: 'ended', meeting_id: 'meeting-1' });
+    mocks.callPad.mockImplementation(async (_db: unknown, fn: string) =>
+      fn === 'pad_session_results'
+        ? {
+            ok: true,
+            session: { id: 's1', status: 'ended', round_no: 2, classroom_name: 'NATA Evening Batch', scheduled_class_id: null, created_at: '', ended_at: '', results_published_at: '', changed_since_publish: false },
+            class: { questions: 18, graded: 17, took_part: 22, average_score: 61 },
+            top: [{ student_id: 'u1', name: 'Asha', rank: 1, correct: 15, counted: 17 }],
+            students: [
+              { student_id: 'u1', name: 'Asha', correct: 15, score_pct: 88 },
+              { student_id: 'u9', name: 'Low Scorer', correct: 2, score_pct: 12 },
+            ],
+          }
+        : { ok: true },
+    );
+    const body = await (await call()).json();
+    expect(body.stage.results).toEqual({
+      round_no: 2,
+      top: [{ name: 'Asha', rank: 1, correct: 15, counted: 17 }],
+      average_score: 61,
+      took_part: 22,
+      questions: 18,
+    });
+    expect(JSON.stringify(body)).not.toMatch(/Low Scorer|u9|u1/);
   });
 
   it('answers null while no session is live in the meeting, and asks for a meeting id', async () => {

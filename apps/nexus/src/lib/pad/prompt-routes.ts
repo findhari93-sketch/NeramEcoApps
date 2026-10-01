@@ -9,6 +9,7 @@ import { assertPadStaff, resolvePadCaller } from './caller';
 import { PadRefusal, callPad, padErrorResponse, padJson } from './rpc';
 import { isUuid } from './session-binding';
 import { hintPrompt, padDb, type HintAudience } from './sessions';
+import { storeRoundResultsForPrompt } from './store-results';
 
 export interface TransitionResult extends Record<string, unknown> {
   changed: boolean;
@@ -35,7 +36,11 @@ export function promptTransitionRoute(
       if (!isUuid(params.id)) throw new PadRefusal('NOT_FOUND');
 
       const result = await callPad<TransitionResult>(padDb(), fn, { p_actor: caller.user.id, p_prompt: params.id });
-      if (result.changed) await hintPrompt(params.id, audience);
+      if (result.changed) {
+        await hintPrompt(params.id, audience);
+        // Revealing from the report after the round ended updates the stored results.
+        if (fn === 'pad_reveal') await storeRoundResultsForPrompt(params.id.toLowerCase(), caller.user.id);
+      }
       return padJson(transitionBody(result));
     } catch (err) {
       return padErrorResponse(err, context);

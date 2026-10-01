@@ -101,6 +101,23 @@ export function topicCaption(categories: string[] | null | undefined, labels?: R
   return labels?.[specific] ?? QB_CATEGORY_LABELS[specific as QBCategory] ?? humanise(specific);
 }
 
+const APTITUDE_CATEGORIES = ['aptitude', 'general_aptitude'];
+
+/**
+ * Whether a question's difficulty is worth printing. Not for aptitude: a
+ * figure puzzle is easy once you know the trick and hard until you do, so
+ * "Medium" on it says nothing. Maths keeps its difficulty.
+ *
+ * A paper question carries its section. A question never tied to a paper
+ * falls back to its categories.
+ */
+export function showsDifficulty(q: { section?: string | null; categories?: string[] | null }): boolean {
+  if (q.section) return q.section !== 'aptitude';
+  const cats = q.categories ?? [];
+  const aptitude = cats.some((c) => APTITUDE_CATEGORIES.includes(c)) && !cats.includes('mathematics');
+  return !aptitude;
+}
+
 function humanise(slug: string): string {
   const words = slug.replace(/_/g, ' ').trim();
   return words.charAt(0).toUpperCase() + words.slice(1);

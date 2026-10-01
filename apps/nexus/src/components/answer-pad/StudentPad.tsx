@@ -1,12 +1,18 @@
 'use client';
 
 /**
- * The student's Answer Pad for one live session.
+ * The student's Answer Pad for one round of a live class.
  *
  * Renders only what the snapshot says, plus the one answer this pad is sending.
- * A dropped connection never loses an answer: the pad keeps retrying, and the
- * server keeps the first answer, so a retry can never change it. It never shows
- * anything about anyone else's answers.
+ * An answer is SELECTED, not locked: while the question is open, tapping another
+ * option changes it, and the newest answer is the one saved. When the teacher
+ * closes answers it locks, and the server's answer is the one shown. A dropped
+ * connection never loses an answer: the pad keeps retrying the newest choice.
+ * It never shows anything about anyone else's answers.
+ *
+ * When a round ends the pad shows the result once the teacher publishes it, and
+ * when the teacher starts the next round the pad follows it on its own, so the
+ * student never has to rejoin.
  */
 
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
@@ -27,6 +33,7 @@ import {
 } from '@neram/ui';
 import CancelRounded from '@mui/icons-material/CancelRounded';
 import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded';
+import EmojiPeopleRounded from '@mui/icons-material/EmojiPeopleRounded';
 import EventAvailableRounded from '@mui/icons-material/EventAvailableRounded';
 import HourglassTopRounded from '@mui/icons-material/HourglassTopRounded';
 import HowToVoteRounded from '@mui/icons-material/HowToVoteRounded';
@@ -37,13 +44,30 @@ import WifiOffRounded from '@mui/icons-material/WifiOffRounded';
 import { SKIP_REASON_LABELS, displayAnswer, displayKeys, promptTitle, scoreLabel } from '@/lib/pad/client/format';
 import { PadClientError, padFetch } from '@/lib/pad/client/pad-fetch';
 import type { PadHost } from '@/lib/pad/client/pad-host';
-import { deriveStudentView, studentAnnouncement, type PendingSubmit, type StudentView } from '@/lib/pad/client/student-view';
+import {
+  deriveStudentView,
+  nextRoundId,
+  studentAnnouncement,
+  type PendingSubmit,
+  type SaveState,
+  type StudentView,
+} from '@/lib/pad/client/student-view';
 import type { AnswerType, SkipReason, StudentPrompt, StudentSnapshot } from '@/lib/pad/client/types';
+import { roundName } from '@/lib/pad/round-results';
 import AnswerInput from './AnswerInput';
 import LiveAnnouncement from './LiveAnnouncement';
+import RoundResultCard, { roundEndedLine } from './RoundResultCard';
 import { usePadHeartbeat, usePadSnapshot } from './usePadSnapshot';
 
 const MAX_RETRY_DELAY_MS = 8_000;
+/**
+ * After a round ends the snapshot poll stops (poll-policy.ts). Realtime hints
+ * carry Publish and the next round when they work, so this slow check runs
+ * only for a pad without Realtime, and gives up after a while: every check is a
+ * function call, and a class of forty idle pads would otherwise add up.
+ */
+const ENDED_CHECK_MS = 30_000;
+const ENDED_CHECK_FOR_MS = 20 * 60_000;
 
 function submitErrorMessage(code: string | null): string {
   switch (code) {
@@ -69,24 +93,45 @@ function skipErrorMessage(code: string | null): string {
   }
 }
 
-function answerHint(answerType: AnswerType, compact: boolean): string {
-  const action = answerType === 'mcq' || answerType === 'yesno' ? 'Tap an answer to lock it.' : 'Type your answer, then lock it.';
-  return compact ? action : `${action} You can't change it afterwards.`;
+function answerHint(answerType: AnswerType): string {
+  return answerType === 'mcq' || answerType === 'yesno' ? 'Tap your answer.' : 'Type your answer, then tap Save answer.';
 }
 
-export default function StudentPad({
-  host,
-  sessionId,
-  onEnded,
-  compact = false,
-}: {
+export const CHANGE_HINT = 'You can change your answer until your teacher closes answers.';
+const ACCEPTED_LINE = "Your teacher accepted your reason. This question won't count against you.";
+const TRY_IT_LINE = 'Your teacher would like you to try this one. A guess is fine.';
+
+interface StudentPadProps {
   host: PadHost;
   sessionId: string;
   onEnded?: () => void;
   /** The question pop-up: no header and shorter words, so the answer buttons fit without scrolling. */
   compact?: boolean;
-}) {
-  const { snapshot, error, refresh } = usePadSnapshot<StudentSnapshot>({ host, sessionId, role: 'student' });
+}
+
+/**
+ * Follows the class from round to round. The round shown is the one it was
+ * given, until a round it shows ends and names the next one; a new session
+ * from the parent (a rejoin, a room code) always wins.
+ */
+export default function StudentPad(props: StudentPadProps) {
+  const [followed, setFollowed] = useState<{ from: string; to: string } | null>(null);
+  const sessionId = followed && followed.from === props.sessionId ? followed.to : props.sessionId;
+  const given = props.sessionId;
+  const follow = useCallback((next: string) => setFollowed({ from: given, to: next }), [given]);
+
+  // A fresh pad per round: nothing from the last round's questions carries over.
+  return <RoundPad key={sessionId} {...props} sessionId={sessionId} onNextRound={follow} />;
+}
+
+function RoundPad({
+  host,
+  sessionId,
+  onEnded,
+  compact = false,
+  onNextRound,
+}: StudentPadProps & { onNextRound: (sessionId: string) => void }) {
+  const { snapshot, error, realtime, refresh } = usePadSnapshot<StudentSnapshot>({ host, sessionId, role: 'student' });
   const ended = snapshot?.session.status === 'ended';
   usePadHeartbeat(host, sessionId, snapshot?.session.status === 'live');
 
@@ -98,8 +143,32 @@ export default function StudentPad({
   useEffect(() => {
     if (ended) onEnded?.();
   }, [ended, onEnded]);
+
+  // The teacher started the next round: go straight to it.
+  const next = nextRoundId(snapshot);
+  useEffect(() => {
+    if (next) onNextRound(next);
+  }, [next, onNextRound]);
+
+  // An ended round still changes twice: its results, and the next round. With
+  // Realtime both arrive as hints; without it, check now and then.
+  useEffect(() => {
+    if (!ended || next || realtime === 'subscribed') return;
+    const started = Date.now();
+    const timer = setInterval(() => {
+      if (Date.now() - started > ENDED_CHECK_FOR_MS) {
+        clearInterval(timer);
+        return;
+      }
+      if (document.visibilityState !== 'hidden') void refresh();
+    }, ENDED_CHECK_MS);
+    return () => clearInterval(timer);
+  }, [ended, next, realtime, refresh]);
+
   const seenOpen = useRef(new Set<string>());
   const mounted = useRef(true);
+  /** Each tap supersedes the one before: only the newest choice keeps retrying. */
+  const latestSubmit = useRef(0);
 
   useEffect(() => {
     mounted.current = true;
@@ -124,22 +193,29 @@ export default function StudentPad({
 
   const submit = useCallback(
     async (targetPromptId: string, answer: string) => {
+      latestSubmit.current += 1;
+      const mine = latestSubmit.current;
+      const current = () => mounted.current && latestSubmit.current === mine;
       setInputError(null);
       setPending({ promptId: targetPromptId, answer, status: 'sending' });
 
-      for (let attempt = 0; mounted.current; attempt += 1) {
+      for (let attempt = 0; current(); attempt += 1) {
         try {
           await padFetch(host, '/api/pad/submit', { method: 'POST', body: { promptId: targetPromptId, answer } });
-          if (!mounted.current) return;
-          setPending(null);
+          if (!current()) return;
+          // Fetch the saved answer before letting go of the pending one, so the
+          // choice does not flicker back to the previous answer in between.
           await refresh();
+          if (current()) setPending(null);
           return;
         } catch (err) {
-          if (!mounted.current) return;
+          if (!current()) return;
           const refusal = err instanceof PadClientError ? err : null;
 
           if (refusal?.code === 'PROMPT_NOT_OPEN' || refusal?.code === 'SESSION_NOT_LIVE') {
-            setPending({ promptId: targetPromptId, answer, status: 'refused' });
+            // Too late to change it. The server says which answer stands, if any.
+            const standing = typeof refusal.detail.answer === 'string' ? refusal.detail.answer : null;
+            setPending({ promptId: targetPromptId, answer, status: 'refused', standing });
             void refresh();
             return;
           }
@@ -150,8 +226,8 @@ export default function StudentPad({
             return;
           }
 
-          // Offline, a server hiccup or a token refresh: try again. The first answer wins,
-          // so a retry can only ever lock the same answer.
+          // Offline, a server hiccup or a token refresh: try again. Saving the same
+          // answer twice changes nothing, so a retry is always safe.
           setPending({ promptId: targetPromptId, answer, status: 'retrying' });
           await new Promise((resolve) => setTimeout(resolve, Math.min(1_000 * 2 ** attempt, MAX_RETRY_DELAY_MS)));
         }
@@ -194,6 +270,7 @@ export default function StudentPad({
         <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
           <Typography variant="subtitle2" color="text.secondary" sx={{ minWidth: 0, overflowWrap: 'anywhere' }}>
             {snapshot?.session.classroom_name ?? 'Answer Pad'}
+            {snapshot?.session.round_no ? ` · ${roundName(snapshot.session.round_no)}` : ''}
           </Typography>
           {snapshot && (
             <Chip
@@ -215,8 +292,9 @@ export default function StudentPad({
       <LiveAnnouncement message={studentAnnouncement(view)} />
       <ViewBody
         view={view}
-        score={snapshot?.score ?? null}
-        draft={draft}
+        host={host}
+        sessionId={sessionId}
+        draft={draft || snapshot?.my_response?.raw_answer || ''}
         inputError={inputError}
         onAnswer={submit}
         mySkip={snapshot?.my_skip ?? null}
@@ -230,7 +308,8 @@ export default function StudentPad({
 
 function ViewBody({
   view,
-  score,
+  host,
+  sessionId,
   draft,
   inputError,
   onAnswer,
@@ -240,7 +319,8 @@ function ViewBody({
   compact,
 }: {
   view: StudentView;
-  score: StudentSnapshot['score'] | null;
+  host: PadHost;
+  sessionId: string;
   draft: string;
   inputError: string | null;
   onAnswer: (promptId: string, answer: string) => void;
@@ -267,9 +347,25 @@ function ViewBody({
 
     case 'answering': {
       const title = promptTitle(view.prompt);
+      const approval = mySkip?.approval ?? null;
+      const choose = (answer: string) => {
+        // Tapping the answer already chosen changes nothing.
+        if (answer === view.selected && view.save !== 'retrying') return;
+        onAnswer(view.prompt.id, answer);
+      };
       return (
         <Stack spacing={compact ? 1.5 : 2}>
-          {nudgedAt && !mySkip && (
+          {approval === 'approved' && (
+            <Alert severity="success" role="status">
+              {ACCEPTED_LINE}
+            </Alert>
+          )}
+          {approval === 'rejected' && !view.selected && (
+            <Alert severity="info" icon={<EmojiPeopleRounded />} role="status">
+              {TRY_IT_LINE}
+            </Alert>
+          )}
+          {nudgedAt && !mySkip && !view.selected && (
             <Alert severity="info" icon={<NotificationsActiveRounded />} role="status">
               {`Your teacher is waiting for your answer to ${title}. A guess is fine, or tap I can't answer.`}
             </Alert>
@@ -285,9 +381,11 @@ function ViewBody({
             )}
           </Stack>
           {view.prompt.image_url && <QuestionPicture key={view.prompt.image_url} url={view.prompt.image_url} title={title} compact={compact} />}
-          <Typography variant="body2" color="text.secondary">
-            {answerHint(view.prompt.answer_type, compact)}
-          </Typography>
+          {!compact && (
+            <Typography variant="body2" color="text.secondary">
+              {answerHint(view.prompt.answer_type)}
+            </Typography>
+          )}
           <AnswerInput
             key={view.prompt.id}
             answerType={view.prompt.answer_type}
@@ -296,37 +394,42 @@ function ViewBody({
             disabled={false}
             error={inputError}
             initialValue={draft}
-            onAnswer={(answer) => onAnswer(view.prompt.id, answer)}
+            selected={view.selected}
+            onAnswer={choose}
           />
-          <CantAnswer
-            key={`skip-${view.prompt.id}`}
-            mySkip={mySkip}
-            onSkip={(reason, note) => onSkip(view.prompt.id, reason, note)}
-          />
+          {view.selected && <ChosenAnswer answer={displayAnswer(view.prompt.answer_type, view.selected)} save={view.save} />}
+          <Typography variant="body2" color="text.secondary">
+            {CHANGE_HINT}
+          </Typography>
+          {!view.selected && (
+            <CantAnswer
+              key={`skip-${view.prompt.id}`}
+              mySkip={mySkip}
+              onSkip={(reason, note) => onSkip(view.prompt.id, reason, note)}
+            />
+          )}
         </Stack>
       );
     }
 
-    case 'locking':
+    case 'saving':
       return (
         <StatusCard
           prompt={view.prompt}
           tone="neutral"
           icon={view.retrying ? <WifiOffRounded /> : <CircularProgress size={28} aria-hidden />}
-          title={view.retrying ? 'Still trying to lock your answer' : 'Locking your answer'}
+          title={view.retrying ? 'Still trying to send your answer' : 'Sending your answer'}
         >
           {view.retrying
-            ? `No connection yet. Your answer ${displayAnswer(view.prompt.answer_type, view.answer)} will lock as soon as you are back online.`
+            ? `No connection yet. The pad keeps trying to send ${displayAnswer(view.prompt.answer_type, view.answer)} as soon as you are back online.`
             : `Sending ${displayAnswer(view.prompt.answer_type, view.answer)}.`}
         </StatusCard>
       );
 
     case 'locked':
       return (
-        <StatusCard prompt={view.prompt} tone="primary" icon={<LockRounded />} title={`Answer locked: ${displayAnswer(view.prompt.answer_type, view.answer)}`}>
-          {view.closed
-            ? 'Answering has closed. Your teacher will share the answer, now or after class.'
-            : 'Wait for your teacher to close the question.'}
+        <StatusCard prompt={view.prompt} tone="primary" icon={<LockRounded />} title={`Locked: ${displayAnswer(view.prompt.answer_type, view.answer)}`}>
+          Answering has closed. Your teacher will share the answer, now or after class.
         </StatusCard>
       );
 
@@ -339,13 +442,20 @@ function ViewBody({
             : "You didn't answer this one";
       const keys = displayKeys(view.prompt.answer_type, view.prompt.correct_keys);
       return (
-        <StatusCard prompt={view.prompt} tone="neutral" icon={<HourglassTopRounded />} title={title}>
-          {view.revealed
-            ? view.prompt.ungraded
-              ? 'That one was a poll. The next question will appear here.'
-              : `The answer was ${keys}. The next question will appear here.`
-            : 'Wait for the next question.'}
-        </StatusCard>
+        <Stack spacing={1.5}>
+          <StatusCard prompt={view.prompt} tone="neutral" icon={<HourglassTopRounded />} title={title}>
+            {view.revealed
+              ? view.prompt.ungraded
+                ? 'That one was a poll. The next question will appear here.'
+                : `The answer was ${keys}. The next question will appear here.`
+              : 'Wait for the next question.'}
+          </StatusCard>
+          {mySkip?.approval === 'approved' && (
+            <Alert severity="success" role="status">
+              {ACCEPTED_LINE}
+            </Alert>
+          )}
+        </Stack>
       );
     }
 
@@ -371,14 +481,33 @@ function ViewBody({
     }
 
     case 'ended':
+      if (view.published) return <RoundResultCard host={host} sessionId={sessionId} roundNo={view.roundNo} />;
       return (
-        <StatusCard tone="neutral" icon={<EventAvailableRounded />} title="This class has ended">
-          {score && score.total_graded > 0
-            ? `You got ${score.correct} of ${score.total_graded} graded questions.`
-            : 'There were no graded questions in this class.'}
+        <StatusCard tone="neutral" icon={<EventAvailableRounded />} title="Results coming soon">
+          {roundEndedLine(view.roundNo)}
         </StatusCard>
       );
   }
+}
+
+/** "Your answer: B" under the options, and whether it has reached the teacher. */
+function ChosenAnswer({ answer, save }: { answer: string; save: SaveState | null }) {
+  return (
+    <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" useFlexGap>
+      <Typography variant="body1" fontWeight={700} sx={{ overflowWrap: 'anywhere' }}>
+        {`Your answer: ${answer}`}
+      </Typography>
+      {save === 'saved' && (
+        <Chip size="small" color="success" variant="outlined" icon={<CheckCircleRounded />} label="Saved" sx={{ fontWeight: 700 }} />
+      )}
+      {save === 'sending' && (
+        <Chip size="small" variant="outlined" icon={<CircularProgress size={14} aria-hidden />} label="Saving" sx={{ fontWeight: 700 }} />
+      )}
+      {save === 'retrying' && (
+        <Chip size="small" variant="outlined" icon={<WifiOffRounded />} label="No connection, still trying" sx={{ fontWeight: 700 }} />
+      )}
+    </Stack>
+  );
 }
 
 /**

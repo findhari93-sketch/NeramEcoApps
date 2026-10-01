@@ -14,6 +14,8 @@ import {
   ListItemIcon,
   ListItemText,
   Snackbar,
+  Alert,
+  Button,
   alpha,
   useTheme,
   useMediaQuery,
@@ -57,11 +59,18 @@ interface FoundationLearningContentProps {
   chapterId: string;
   /** URL for the back button. Defaults to '/student/foundation' */
   backUrl?: string;
+  /**
+   * Open this section instead of where the student left off, e.g. from a
+   * question bank "What to study" link. The video gate still applies: a
+   * section past an unpassed checkpoint opens at the checkpoint.
+   */
+  initialSectionId?: string | null;
 }
 
 export default function FoundationLearningContent({
   chapterId,
   backUrl = '/student/foundation',
+  initialSectionId = null,
 }: FoundationLearningContentProps) {
   const theme = useTheme();
   const router = useRouter();
@@ -81,6 +90,9 @@ export default function FoundationLearningContent({
   const [msToken, setMsToken] = useState<string | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [chapterComplete, setChapterComplete] = useState(false);
+  /** Where a deep link asked the video to start, in seconds. */
+  const [deepLinkStart, setDeepLinkStart] = useState<number | null>(null);
+  const [deepLinkTitle, setDeepLinkTitle] = useState<string | null>(null);
 
   const saveTimerRef = useRef<NodeJS.Timeout | null>(null);
   const lastSavedPosRef = useRef(0);
@@ -137,7 +149,16 @@ export default function FoundationLearningContent({
         }
 
         // Only update section index on initial load, not silent refreshes
-        if (!silent) {
+        const linkedIdx = initialSectionId
+          ? chapterData.sections.findIndex((s: any) => s.id === initialSectionId)
+          : -1;
+        if (!silent && linkedIdx >= 0) {
+          const linked = chapterData.sections[linkedIdx];
+          setCurrentSectionIndex(linkedIdx);
+          setDeepLinkStart(linked.start_timestamp_seconds ?? 0);
+          setDeepLinkTitle(linked.title);
+          setContentTab('watch');
+        } else if (!silent) {
           if (chapterData.progress?.last_section_id) {
             const idx = chapterData.sections.findIndex(
               (s: any) => s.id === chapterData.progress.last_section_id
@@ -168,7 +189,7 @@ export default function FoundationLearningContent({
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [chapterId, getToken]);
+  }, [chapterId, getToken, initialSectionId]);
 
   useEffect(() => {
     if (!authLoading) fetchChapter();
@@ -574,13 +595,14 @@ export default function FoundationLearningContent({
             onSectionEnd={handleSectionEnd}
             onTimeUpdate={handleTimeUpdate}
             onFullscreenChange={setQuizHost}
+            startAt={deepLinkStart}
           />
         ) : (
           <VideoPlayer
             videoId={chapter.youtube_video_id!}
             sections={sections}
             currentSectionIndex={currentSectionIndex}
-            resumePosition={progress?.last_video_position_seconds}
+            resumePosition={deepLinkStart ?? progress?.last_video_position_seconds}
             onSectionEnd={handleSectionEnd}
             onTimeUpdate={handleTimeUpdate}
             onFullscreenChange={setQuizHost}
@@ -612,9 +634,9 @@ export default function FoundationLearningContent({
         }}
       >
         <IconButton
-          size="small"
           onClick={() => router.push(backUrl)}
-          sx={{ mr: 0.5 }}
+          aria-label={deepLinkTitle ? 'Back to the question' : 'Back'}
+          sx={{ mr: 0.5, width: 44, height: 44 }}
         >
           <ArrowBackIcon />
         </IconButton>
@@ -657,6 +679,24 @@ export default function FoundationLearningContent({
           </>
         )}
       </Box>
+
+      {/* Opened from a question bank "What to study" link */}
+      {deepLinkTitle && (
+        <Alert
+          severity="info"
+          icon={<OndemandVideoOutlinedIcon fontSize="inherit" />}
+          sx={{ mb: 1.5, mx: { xs: 2, sm: 0 }, alignItems: 'center' }}
+          action={
+            backUrl !== '/student/foundation' ? (
+              <Button color="inherit" size="small" onClick={() => router.push(backUrl)} sx={{ minHeight: 44, textTransform: 'none' }}>
+                Back to the question
+              </Button>
+            ) : undefined
+          }
+        >
+          This section answers your question: <strong>{deepLinkTitle}</strong>
+        </Alert>
+      )}
 
       {/* Content tabs (Watch / Read) — only if both video and PDF exist */}
       {showContentTabs && (

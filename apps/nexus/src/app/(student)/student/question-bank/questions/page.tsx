@@ -29,18 +29,11 @@ import JumpToQuestion from '@/components/question-bank/practice/JumpToQuestion';
 import SelectionBar from '@/components/question-bank/practice/SelectionBar';
 import ShortcutsDialog from '@/components/question-bank/practice/ShortcutsDialog';
 import CreateTestDialog, { type CreateTestSettings } from '@/components/question-bank/practice/CreateTestDialog';
+import { safeBackPath } from '@/lib/safe-back-path';
 
 /** Stable identity, so a render with no counts does not re-trigger consumers. */
 const EMPTY_COUNTS: Record<string, number> = {};
 
-/**
- * Where Back goes when the link says, e.g. a paper's Practice button. Only a
- * path inside the student app: anything else would make this an open redirect.
- */
-function safeBackPath(value: string | null): string | null {
-  if (!value || !value.startsWith('/student/') || value.startsWith('//') || value.includes(':')) return null;
-  return value;
-}
 
 /**
  * The student question bank's practice screen.
@@ -101,9 +94,17 @@ export default function QuestionListPage() {
       ...(exam ? { exam_type: exam } : {}),
       ...(year ? { year: String(year) } : {}),
       ...(sessionName ? { session: sessionName } : {}),
+      // Shift and section too, or the drawer counts both shifts and every
+      // section of the paper while the list shows one section of one shift.
+      ...(shift ? { shift } : {}),
+      ...(section ? { section } : {}),
     }),
   );
   const categoryCounts = catCountsRes?.data ?? EMPTY_COUNTS;
+  const lockedScope = useMemo(
+    () => ({ exam_type: exam, year, section, paper_source: paperSource }),
+    [exam, year, section, paperSource],
+  );
   const categoryTree = useMemo(() => catCountsRes?.tree ?? [], [catCountsRes]);
   const categoryLabels = useMemo(() => categoryLabelMap(categoryTree), [categoryTree]);
 
@@ -653,7 +654,8 @@ export default function QuestionListPage() {
         examTree={examTree}
         matchCount={matchCount}
         onDraftChange={setDraftFilters}
-        contextLabel={paperLabel ?? undefined}
+        contextLabel={(section && paperLabel ? `${paperLabel}, ${qbSectionLabel(section)}` : paperLabel) ?? undefined}
+        lockedScope={lockedScope}
       />
       <Snackbar
         open={snackbar.open}

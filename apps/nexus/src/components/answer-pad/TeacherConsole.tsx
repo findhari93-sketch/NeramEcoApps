@@ -34,6 +34,7 @@ import {
   ToggleButton,
   Tooltip,
   Typography,
+  alpha,
   useTheme,
 } from '@neram/ui';
 import AddRounded from '@mui/icons-material/AddRounded';
@@ -47,7 +48,6 @@ import HelpOutlineRounded from '@mui/icons-material/HelpOutlineRounded';
 import HowToVoteRounded from '@mui/icons-material/HowToVoteRounded';
 import MoreVertRounded from '@mui/icons-material/MoreVertRounded';
 import NotificationsActiveRounded from '@mui/icons-material/NotificationsActiveRounded';
-import BackHandRounded from '@mui/icons-material/BackHandRounded';
 import OpenInNewRounded from '@mui/icons-material/OpenInNewRounded';
 import PersonOffRounded from '@mui/icons-material/PersonOffRounded';
 import RemoveRounded from '@mui/icons-material/RemoveRounded';
@@ -57,7 +57,10 @@ import ScreenShareRounded from '@mui/icons-material/ScreenShareRounded';
 import StopCircleRounded from '@mui/icons-material/StopCircleRounded';
 import StopScreenShareRounded from '@mui/icons-material/StopScreenShareRounded';
 import VolumeOffRounded from '@mui/icons-material/VolumeOffRounded';
-import { SKIP_REASON_LABELS, answerTypeLabel, displayKeys, nextLabel, promptTitle, skipSummary } from '@/lib/pad/client/format';
+import GroupsRounded from '@mui/icons-material/GroupsRounded';
+import HowToRegRounded from '@mui/icons-material/HowToRegRounded';
+import PostAddRounded from '@mui/icons-material/PostAddRounded';
+import { SKIP_REASON_LABELS, answerTypeLabel, displayKeys, nextLabel, promptTitle } from '@/lib/pad/client/format';
 import { PadClientError, padFetch, padUpload } from '@/lib/pad/client/pad-fetch';
 import type { PadHost } from '@/lib/pad/client/pad-host';
 import type { RealtimeState } from '@/lib/pad/client/poll-policy';
@@ -69,6 +72,7 @@ import {
   historyChipLabel,
   reminderMessage,
   revealSummary,
+  roundTitle,
   type ReminderResult,
   type SummaryItem,
 } from '@/lib/pad/client/teacher-view';
@@ -76,7 +80,12 @@ import type { AnswerType, HistoryEntry, ParticipationRow, TeacherPrompt, Teacher
 import { nudgeResultMessage, type NudgeResult } from '@/lib/pad/nudge-message';
 import { compressImage } from '@/utils/imageCompression';
 import AnswerKeyPicker, { AnswerBars } from './AnswerKeyPicker';
+import { HideNamesButton, useHideNames } from './HideNames';
 import LiveAnnouncement from './LiveAnnouncement';
+import OptionNames from './OptionNames';
+import PresenterBanner from './PresenterBanner';
+import RoundResults from './RoundResults';
+import WaitingList from './WaitingList';
 import { usePadSnapshot } from './usePadSnapshot';
 
 type StartResponse =
@@ -238,7 +247,14 @@ export default function TeacherConsole({ host, sessionId }: { host: PadHost; ses
       );
 
     case 'running':
-      return <LiveConsole host={host} sessionId={start.sessionId} onStartAgain={sessionId ? undefined : () => startSession()} />;
+      return (
+        <LiveConsole
+          key={start.sessionId}
+          host={host}
+          sessionId={start.sessionId}
+          onRound={(next) => setStart({ kind: 'running', sessionId: next })}
+        />
+      );
   }
 }
 
@@ -341,7 +357,11 @@ function useStageShare(host: PadHost) {
   return { allowed: !!stage && allowed, sharing, busy, problem, clearProblem: () => setProblem(null), toggle };
 }
 
-function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; sessionId: string; onStartAgain?: () => void }) {
+/**
+ * @param onRound switches the console to another round (Start Round 2). The
+ *   next round keeps the meeting, the class and the room code.
+ */
+function LiveConsole({ host, sessionId, onRound }: { host: PadHost; sessionId: string; onRound: (sessionId: string) => void }) {
   const { snapshot, error, realtime, refresh } = usePadSnapshot<TeacherSnapshot>({ host, sessionId, role: 'teacher' });
   const [busy, setBusy] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -359,6 +379,8 @@ function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; session
   const [deferred, setDeferred] = useState<ReadonlySet<string>>(() => new Set());
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  /** The next question's form while one is open ("Prepare Q.32"). */
+  const [nextOpen, setNextOpen] = useState(false);
   const share = useStageShare(host);
 
   const view = deriveConsoleView(snapshot);
@@ -381,9 +403,20 @@ function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; session
 
   const post = useCallback((path: string, body?: unknown) => padFetch(host, path, { method: 'POST', body }), [host]);
 
-  // A reminder's result belongs to the question it was sent for.
+  // A reminder's result belongs to the question it was sent for, and the
+  // next-question form folds away once that question has been asked.
   const currentPromptId = snapshot?.prompt?.id ?? null;
-  useEffect(() => setReminder(null), [currentPromptId]);
+  useEffect(() => {
+    setReminder(null);
+    setNextOpen(false);
+  }, [currentPromptId]);
+
+  // The minute between nudges, from this console's press or from the server's
+  // record (another console, or before a reload), measured on the server's clock.
+  const lastNudgedAt = snapshot?.prompt?.state === 'open' ? snapshot.prompt.last_nudged_at : null;
+  const serverNudgeLimit =
+    lastNudgedAt && snapshot ? Date.now() + (Date.parse(lastNudgedAt) + NUDGE_INTERVAL_MS - Date.parse(snapshot.server_time)) : null;
+  const nudgeSeconds = useSecondsLeft(Math.max(nudge?.promptId === currentPromptId ? (nudge.until ?? 0) : 0, serverNudgeLimit ?? 0) || null);
 
   /** The question's picture: shrunk in the browser (a pasted screenshot is often several MB), then stored for this class. */
   const uploadPicture = useCallback(
@@ -414,7 +447,8 @@ function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; session
       setReminder(reminderMessage(result));
     });
 
-  const ask = () =>
+  /** @param closePromptId the question open now, closed first in the same call ("Close Q.31 and ask Q.32"). */
+  const ask = (closePromptId?: string) =>
     act('ask', async () => {
       const label = askLabel.trim();
       const text = askText.trim();
@@ -429,6 +463,7 @@ function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; session
         ...(text ? { text } : {}),
         ...(askImage ? { imageUrl: askImage } : {}),
         ...(withOptions ? { optionTexts } : {}),
+        ...(closePromptId ? { closePromptId } : {}),
       });
       setAskText('');
       setAskImage(null);
@@ -455,6 +490,16 @@ function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; session
 
   const saveDetails = (promptId: string, label: string | null, text: string | null) =>
     act('details', () => post(`/api/pad/prompts/${promptId}/details`, { label, text }));
+
+  /** Accept (excuse), turn down, or undo "I can't answer" reasons. */
+  const decideReasons = (promptId: string, studentIds: string[], approve: boolean | null) =>
+    act('excuse', () => post(`/api/pad/prompts/${promptId}/excuse`, { studentIds, approve }));
+
+  const nextRound = () =>
+    act('next-round', async () => {
+      const next = await padFetch<{ sessionId: string }>(host, `/api/pad/sessions/${sessionId}/next-round`, { method: 'POST', body: {} });
+      if (next.sessionId && next.sessionId !== sessionId) onRound(next.sessionId);
+    });
 
   const setKeys = (promptId: string, keys: string[]) => act('key', () => post(`/api/pad/prompts/${promptId}/key`, { keys }));
   const setPoll = (promptId: string) => act('key', () => post(`/api/pad/prompts/${promptId}/key`, { ungraded: true }));
@@ -505,7 +550,7 @@ function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; session
   // A closed question waits for its answer once a newer one exists or the teacher said Decide later.
   const waiting = (entry: HistoryEntry) => entry.state === 'closed' && (entry.id !== snapshot.prompt?.id || deferred.has(entry.id));
 
-  const askControls = (
+  const renderAsk = (closing: TeacherPrompt | null) => (
     <AskControls
       answerType={askType}
       optionCount={optionCount}
@@ -518,14 +563,16 @@ function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; session
       image={askImage}
       onImage={setAskImage}
       uploadPicture={uploadPicture}
+      readClipboard={host.readClipboard}
       options={askOptions}
       onOptions={setAskOptions}
       busy={busy === 'ask'}
       disabled={busy !== null}
-      buttonLabel={askButton}
-      onAsk={ask}
+      buttonLabel={closing ? `Close ${promptTitle(closing)} and ${askButton.charAt(0).toLowerCase()}${askButton.slice(1)}` : askButton}
+      onAsk={() => ask(closing?.id)}
     />
   );
+  const askControls = renderAsk(null);
 
   return (
     <Stack spacing={2} sx={{ width: '100%' }}>
@@ -535,7 +582,7 @@ function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; session
             {session.classroom_name ?? 'Answer Pad'}
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            {`Started ${formatTime(session.created_at)}`}
+            {`${roundTitle(session.round_no)} · started ${formatTime(session.created_at)}`}
           </Typography>
         </Box>
         {host.popOut && view.kind !== 'ended' && (
@@ -556,10 +603,12 @@ function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; session
         </IconButton>
         {view.kind !== 'ended' && (
           <Button color="error" size="small" onClick={() => setEndStep({ unrevealed: null })} disabled={busy !== null} sx={{ minHeight: 44, flexShrink: 0 }}>
-            End class
+            End round
           </Button>
         )}
       </Stack>
+
+      {view.kind !== 'ended' && <PresenterBanner host={host} sessionId={sessionId} />}
 
       <Menu anchorEl={menuAnchor} open={!!menuAnchor} onClose={() => setMenuAnchor(null)}>
         {showShareItem && (
@@ -613,24 +662,25 @@ function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; session
       )}
 
       {endStep && (
-        <Alert
-          severity="warning"
-          action={
-            <Stack direction="row" spacing={0.5}>
-              <Button color="inherit" size="small" onClick={() => endClass(endStep.unrevealed !== null)} disabled={busy !== null} sx={{ minHeight: 44 }}>
-                {endStep.unrevealed !== null ? 'End anyway' : 'End'}
+        <Alert severity="warning">
+          <Stack spacing={1}>
+            <span>
+              {endStep.unrevealed === null
+                ? `End ${roundTitle(session.round_no)}? The meeting carries on, students keep their answers, and you can start the next round here.`
+                : endStep.unrevealed.count > 1
+                  ? `${endStep.unrevealed.count} questions have no answer yet, starting with ${endStep.unrevealed.title}. They won't count until you set them from the report, and scores update then.`
+                  : `${endStep.unrevealed.title} has no answer yet. It won't count until you set it from the report, and scores update then.`}
+            </span>
+            {/* Under the words, not beside them: two buttons beside a sentence leave it a column at 320px. */}
+            <Stack direction="row" spacing={1}>
+              <Button variant="outlined" color="inherit" size="small" onClick={() => endClass(endStep.unrevealed !== null)} disabled={busy !== null} sx={{ minHeight: 44 }}>
+                {endStep.unrevealed !== null ? 'End anyway' : 'End round'}
               </Button>
               <Button color="inherit" size="small" onClick={() => setEndStep(null)} sx={{ minHeight: 44 }}>
-                Cancel
+                Keep going
               </Button>
             </Stack>
-          }
-        >
-          {endStep.unrevealed === null
-            ? 'End the Answer Pad for this class?'
-            : endStep.unrevealed.count > 1
-              ? `${endStep.unrevealed.count} questions have no answer yet, starting with ${endStep.unrevealed.title}. You can set them later from the class report, and scores update then.`
-              : `${endStep.unrevealed.title} has no answer yet. You can set it later from the class report, and scores update then.`}
+          </Stack>
         </Alert>
       )}
 
@@ -643,7 +693,15 @@ function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; session
 
       <LiveAnnouncement message={consoleAnnouncement(view)} />
       <Box>
-        {view.kind === 'ended' && <EndedPanel snapshot={snapshot} onStartAgain={onStartAgain} />}
+        {view.kind === 'ended' && (
+          <RoundResults
+            host={host}
+            sessionId={sessionId}
+            share={{ allowed: share.allowed, sharing: share.sharing, busy: share.busy, toggle: () => void share.toggle() }}
+            onNextRound={nextRound}
+            nextRoundBusy={busy === 'next-round'}
+          />
+        )}
 
         {view.kind === 'ready' && (
           <Stack spacing={2}>
@@ -653,28 +711,57 @@ function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; session
         )}
 
         {view.kind === 'open' && (
-          <OpenPanel
-            prompt={view.prompt}
-            answered={view.answered}
-            enrolled={view.enrolled}
-            offRoster={view.offRoster}
-            busy={busy === 'close'}
-            disabled={busy !== null}
-            onClose={() => act('close', () => post(`/api/pad/prompts/${view.prompt.id}/close`))}
-            onDetails={(label, text) => saveDetails(view.prompt.id, label, text)}
-            skips={snapshot.skips}
-            lastNudgedAt={view.prompt.last_nudged_at}
-            serverTime={snapshot.server_time}
-            nudge={nudge?.promptId === view.prompt.id ? nudge : null}
-            nudging={busy === 'nudge'}
-            onNudge={() => nudgeClass(view.prompt.id)}
-            uploadPicture={uploadPicture}
-            onPicture={(imageUrl) => setPicture(view.prompt.id, imageUrl)}
-            canRemind={snapshot.session.bot_in_meeting}
-            reminding={busy === 'remind'}
-            reminder={reminder}
-            onRemind={remind}
-          />
+          <Stack spacing={2}>
+            <OpenPanel
+              prompt={view.prompt}
+              answered={view.answered}
+              total={view.enrolled}
+              offRoster={view.offRoster}
+              people={snapshot.people}
+              serverTime={snapshot.server_time}
+              busy={busy === 'close'}
+              disabled={busy !== null}
+              onClose={() => act('close', () => post(`/api/pad/prompts/${view.prompt.id}/close`))}
+              onDetails={(label, text) => saveDetails(view.prompt.id, label, text)}
+              uploadPicture={uploadPicture}
+              readClipboard={host.readClipboard}
+              onPicture={(imageUrl) => setPicture(view.prompt.id, imageUrl)}
+              canRemind={snapshot.session.bot_in_meeting}
+              reminding={busy === 'remind'}
+              reminder={reminder}
+              onRemind={remind}
+            />
+            <WaitingList
+              rows={snapshot.waiting}
+              open
+              disabled={busy !== null}
+              onDecide={(ids, approve) => decideReasons(view.prompt.id, ids, approve)}
+              nudge={{
+                secondsLeft: nudgeSeconds,
+                busy: busy === 'nudge',
+                message: nudge?.promptId === view.prompt.id ? nudge.message : null,
+                onNudge: () => nudgeClass(view.prompt.id),
+              }}
+            />
+            {/* The next question, prepared while students answer this one. */}
+            <Paper variant="outlined" component="section" aria-label="Next question" sx={{ p: 1.5 }}>
+              <Button
+                fullWidth
+                onClick={() => setNextOpen(!nextOpen)}
+                aria-expanded={nextOpen}
+                startIcon={<PostAddRounded />}
+                endIcon={<ExpandMoreRounded sx={{ transform: nextOpen ? 'rotate(180deg)' : 'none', transition: 'transform 150ms', '@media (prefers-reduced-motion: reduce)': { transition: 'none' } }} />}
+                sx={{ minHeight: 48, justifyContent: 'space-between', fontWeight: 700 }}
+              >
+                <Box component="span" sx={{ flex: 1, textAlign: 'left' }}>
+                  {`Prepare ${askLabel.trim() ? promptTitle({ sequence: nextSequence, label: askLabel }) : 'the next question'}`}
+                </Box>
+              </Button>
+              <Collapse in={nextOpen} unmountOnExit>
+                <Box sx={{ pt: 1.5 }}>{renderAsk(view.prompt)}</Box>
+              </Collapse>
+            </Paper>
+          </Stack>
         )}
 
         {view.kind === 'closed' &&
@@ -694,22 +781,29 @@ function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; session
                   </Button>
                 }
               >
-                {`${promptTitle(view.prompt)} is waiting for its answer. Set it from Questions so far, or from the class report after class.`}
+                {`${promptTitle(view.prompt)} is waiting for its answer. Set it from Questions so far, or from the report after class.`}
               </Alert>
               {askControls}
             </Stack>
           ) : (
-            <ClosedPanel
-              prompt={view.prompt}
-              groups={snapshot.groups}
-              busy={busy}
-              onReopen={() => act('reopen', () => post(`/api/pad/prompts/${view.prompt.id}/reopen`))}
-              onDetails={(label, text) => saveDetails(view.prompt.id, label, text)}
-              onKeys={(keys) => setKeys(view.prompt.id, keys)}
-              onPoll={() => setPoll(view.prompt.id)}
-              onReveal={() => reveal(view.prompt.id)}
-              onDecideLater={() => setDeferred((current) => new Set([...current, view.prompt.id]))}
-            />
+            <Stack spacing={2}>
+              <ClosedPanel
+                host={host}
+                prompt={view.prompt}
+                groups={snapshot.groups}
+                refreshKey={snapshot.server_time}
+                busy={busy}
+                onReopen={() => act('reopen', () => post(`/api/pad/prompts/${view.prompt.id}/reopen`))}
+                onDetails={(label, text) => saveDetails(view.prompt.id, label, text)}
+                onKeys={(keys) => setKeys(view.prompt.id, keys)}
+                onPoll={() => setPoll(view.prompt.id)}
+                onReveal={() => reveal(view.prompt.id)}
+                onDecideLater={() => setDeferred((current) => new Set([...current, view.prompt.id]))}
+              />
+              {(snapshot.waiting ?? []).some((row) => row.reason) && (
+                <WaitingList rows={snapshot.waiting} open={false} disabled={busy !== null} onDecide={(ids, approve) => decideReasons(view.prompt.id, ids, approve)} nudge={null} />
+              )}
+            </Stack>
           ))}
 
         {view.kind === 'revealed' && (
@@ -718,8 +812,10 @@ function LiveConsole({ host, sessionId, onStartAgain }: { host: PadHost; session
               host={host}
               prompt={view.prompt}
               snapshot={snapshot}
-              busy={busy !== null}
+              busy={busy}
               onDetails={(label, text) => saveDetails(view.prompt.id, label, text)}
+              onKeys={(keys) => setKeys(view.prompt.id, keys)}
+              onPoll={() => setPoll(view.prompt.id)}
             />
             <Divider />
             {askControls}
@@ -826,11 +922,14 @@ function ReadinessPanel({ snapshot, host, realtime }: { snapshot: TeacherSnapsho
         Before you ask
       </Typography>
       <Typography variant="h4" component="p" fontWeight={800} sx={{ fontVariantNumeric: 'tabular-nums' }}>
-        {`${readiness.connected} of ${readiness.enrolled}`}
+        {`${readiness.joined ?? readiness.connected} of ${readiness.enrolled}`}
       </Typography>
       <Typography variant="body2" color="text.secondary">
-        students have the pad open
+        {readiness.joined === undefined ? 'students have the pad open' : `students have joined, ${readiness.connected} with it open now`}
         {session.presence_basis === 'meeting' ? `, ${readiness.in_meeting} in the meeting` : ''}
+      </Typography>
+      <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 0.5 }}>
+        Each question counts the students who joined, not the whole class list.
       </Typography>
 
       <Stack spacing={0.75} sx={{ mt: 1.5 }}>
@@ -861,6 +960,7 @@ function AskControls({
   image,
   onImage,
   uploadPicture,
+  readClipboard,
   options,
   onOptions,
   busy,
@@ -882,6 +982,8 @@ function AskControls({
   image: string | null;
   onImage: (url: string | null) => void;
   uploadPicture: (file: File) => Promise<{ url: string }>;
+  /** Teams' own clipboard, for the Paste button (the browser's is blocked in the Teams frame). */
+  readClipboard?: () => Promise<Blob | null>;
   /** Multiple choice only: text for each option, blank where the letter is enough. */
   options: string[];
   onOptions: (options: string[]) => void;
@@ -922,10 +1024,11 @@ function AskControls({
       />
       <ImageUploadField
         label="Picture (optional)"
-        helperText="Win + Shift + S to snip the question, then Ctrl + V here."
+        helperText="Snip with Win + Shift + S, then press Ctrl + V here."
         value={image}
         onChange={onImage}
         upload={uploadPicture}
+        readClipboard={readClipboard}
         enableGlobalPaste
         previewable
         height={96}
@@ -1085,19 +1188,16 @@ function QuestionHeading({
 function OpenPanel({
   prompt,
   answered,
-  enrolled,
+  total,
   offRoster,
+  people,
+  serverTime,
   busy,
   disabled,
   onClose,
   onDetails,
-  skips,
-  lastNudgedAt,
-  serverTime,
-  nudge,
-  nudging,
-  onNudge,
   uploadPicture,
+  readClipboard,
   onPicture,
   canRemind,
   reminding,
@@ -1106,20 +1206,17 @@ function OpenPanel({
 }: {
   prompt: TeacherPrompt;
   answered: number;
-  enrolled: number;
+  /** Students who joined this round, less anyone excused on this question. */
+  total: number;
   offRoster: number;
+  people: TeacherSnapshot['people'];
+  serverTime: string;
   busy: boolean;
   disabled: boolean;
   onClose: () => void;
   onDetails: (label: string | null, text: string | null) => void;
-  /** Who said why they cannot answer: counts only, never who. */
-  skips: TeacherSnapshot['skips'];
-  lastNudgedAt: string | null;
-  serverTime: string;
-  nudge: { message: string; until: number | null } | null;
-  nudging: boolean;
-  onNudge: () => void;
   uploadPicture: (file: File) => Promise<{ url: string }>;
+  readClipboard?: () => Promise<Blob | null>;
   onPicture: (imageUrl: string | null) => void;
   /** Only with the bot in the meeting: it is the bot that sends the reminder. */
   canRemind: boolean;
@@ -1127,17 +1224,22 @@ function OpenPanel({
   reminder: string | null;
   onRemind: () => void;
 }) {
+  const theme = useTheme();
   const [editing, setEditing] = useState(false);
-  // The minute between nudges, from this console's press or from the server's
-  // record (another console, or before a reload), measured on the server's clock.
-  const serverLimit = lastNudgedAt ? Date.now() + (Date.parse(lastNudgedAt) + NUDGE_INTERVAL_MS - Date.parse(serverTime)) : null;
-  const secondsLeft = useSecondsLeft(Math.max(nudge?.until ?? 0, serverLimit ?? 0) || null);
-  const waiting = Math.max(0, enrolled - answered - (skips?.total ?? 0));
-  const summary = skipSummary(skips);
+  const [showPeople, setShowPeople] = useState(false);
+  const [hidden, setHidden] = useHideNames();
+  const elapsed = useElapsed(prompt.opened_at, serverTime);
+  const joined = people?.joined.length ?? null;
+  const notJoined = people?.not_joined ?? [];
+  const share = total > 0 ? Math.min(100, Math.round((answered / total) * 100)) : 0;
+
   return (
     <Stack alignItems="center" spacing={1.5}>
       <Stack direction="row" alignItems="center" spacing={0.5}>
-        <Chip color="success" label={`${promptTitle(prompt)} is open`} />
+        <Chip color="success" label={`${promptTitle(prompt)} open`} />
+        <Typography variant="body2" color="text.secondary" aria-label={`Open for ${elapsed}`} sx={{ fontVariantNumeric: 'tabular-nums', minWidth: 40 }}>
+          {elapsed}
+        </Typography>
         <IconButton aria-label="Edit question number and text" aria-expanded={editing} onClick={() => setEditing(!editing)} sx={{ width: 44, height: 44 }}>
           <EditRounded fontSize="small" />
         </IconButton>
@@ -1151,29 +1253,83 @@ function OpenPanel({
           </Typography>
         )
       )}
-      <Typography
-        component="p"
-        aria-label={`${answered} of ${enrolled} answered`}
-        sx={{ fontSize: 'clamp(3rem, 18vw, 4.5rem)', fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}
-      >
-        {answered}
-        <Box component="span" sx={{ color: 'text.secondary', fontWeight: 600 }}>
-          {` / ${enrolled}`}
+
+      <Box sx={{ width: '100%', textAlign: 'center' }}>
+        <Typography
+          component="p"
+          aria-label={`${answered} of ${total} answered`}
+          sx={{ fontSize: 'clamp(3rem, 18vw, 4.5rem)', fontWeight: 800, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}
+        >
+          {answered}
+          <Box component="span" sx={{ color: 'text.secondary', fontWeight: 600, fontSize: '0.55em' }}>
+            {` of ${total}`}
+          </Box>
+        </Typography>
+        <Typography variant="body2" color="text.secondary">
+          answered
+        </Typography>
+        <Box
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={share}
+          aria-label="Answered so far"
+          sx={{ mt: 1, height: 6, borderRadius: 3, bgcolor: alpha(theme.palette.text.primary, 0.08), overflow: 'hidden' }}
+        >
+          <Box
+            sx={{
+              width: `${share}%`,
+              height: '100%',
+              bgcolor: theme.palette.success.main,
+              transition: 'width 300ms ease-out',
+              '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+            }}
+          />
         </Box>
-      </Typography>
-      <Typography variant="body2" color="text.secondary">
-        answered
-      </Typography>
+      </Box>
+
+      {joined !== null && (
+        <Box sx={{ width: '100%' }}>
+          <Button
+            variant="text"
+            size="small"
+            onClick={() => setShowPeople(!showPeople)}
+            aria-expanded={showPeople}
+            startIcon={<GroupsRounded />}
+            sx={{ minHeight: 44, width: '100%', justifyContent: 'center', textAlign: 'center' }}
+          >
+            {notJoined.length > 0 ? `${joined} joined · ${notJoined.length} on the class list have not opened the pad` : `${joined} joined, the whole class list`}
+          </Button>
+          <Collapse in={showPeople} unmountOnExit>
+            <Paper variant="outlined" sx={{ p: 1.5 }}>
+              <Stack direction="row" alignItems="center">
+                <Typography variant="body2" fontWeight={700} sx={{ flex: 1 }}>
+                  {`Not opened the pad (${notJoined.length})`}
+                </Typography>
+                <HideNamesButton hidden={hidden} onChange={setHidden} />
+              </Stack>
+              <Typography variant="caption" color="text.secondary" component="p">
+                They are not counted and not nudged. Most are not in the class today.
+              </Typography>
+              {hidden ? (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  Names are hidden.
+                </Typography>
+              ) : (
+                <Typography variant="body2" sx={{ mt: 0.5, overflowWrap: 'anywhere' }}>
+                  {notJoined.length === 0 ? 'Everyone on the class list has opened it.' : notJoined.map((person) => person.name ?? 'Unnamed student').join(', ')}
+                </Typography>
+              )}
+            </Paper>
+          </Collapse>
+        </Box>
+      )}
       {offRoster > 0 && (
         <Typography variant="caption" color="text.secondary">
           {`plus ${offRoster} not on the class list`}
         </Typography>
       )}
-      {summary && (
-        <Typography variant="body2" sx={{ textAlign: 'center', fontWeight: 600 }}>
-          {summary}
-        </Typography>
-      )}
+
       <Button
         fullWidth
         variant="contained"
@@ -1185,23 +1341,6 @@ function OpenPanel({
       >
         Close answers
       </Button>
-      {waiting > 0 && (
-        <Button
-          fullWidth
-          variant="outlined"
-          onClick={onNudge}
-          disabled={disabled || secondsLeft > 0}
-          startIcon={nudging ? <CircularProgress size={18} color="inherit" aria-hidden /> : <BackHandRounded />}
-          sx={{ minHeight: 48, fontWeight: 700 }}
-        >
-          {secondsLeft > 0 ? `Nudge again in ${secondsLeft}s` : `Nudge the ${waiting} who haven't answered`}
-        </Button>
-      )}
-      {nudge && (
-        <Typography variant="body2" color="text.secondary" role="status" sx={{ textAlign: 'center' }}>
-          {nudge.message}
-        </Typography>
-      )}
       {canRemind && (
         <Button
           fullWidth
@@ -1220,16 +1359,17 @@ function OpenPanel({
         </Typography>
       )}
       <Box sx={{ width: '100%' }}>
+        {/* Click or drop only: while a question is open, Ctrl + V pastes into the next question's form. */}
         <ImageUploadField
-          label={prompt.image_url ? 'Picture' : 'Add a picture'}
-          helperText="Win + Shift + S, then Ctrl + V. Students see it on their pad."
+          label={prompt.image_url ? 'Picture' : 'Add a picture to this question'}
+          helperText="Students see it on their pad."
           value={prompt.image_url}
           onChange={onPicture}
           upload={uploadPicture}
-          enableGlobalPaste
+          readClipboard={readClipboard}
           previewable
           dense
-          height={96}
+          height={80}
           disabled={disabled}
         />
       </Box>
@@ -1237,9 +1377,24 @@ function OpenPanel({
   );
 }
 
+/** "1:05": how long the question has been open, on the server's clock. */
+function useElapsed(openedAt: string, serverTime: string): string {
+  const [now, setNow] = useState(() => Date.now());
+  // The server's clock at this snapshot, less the device's: a fast or slow laptop clock never shows a wrong time.
+  const [offset] = useState(() => Date.parse(serverTime) - Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1_000);
+    return () => clearInterval(timer);
+  }, []);
+  const seconds = Math.max(0, Math.floor((now + offset - Date.parse(openedAt)) / 1_000));
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+}
+
 function ClosedPanel({
+  host,
   prompt,
   groups,
+  refreshKey,
   busy,
   onReopen,
   onDetails,
@@ -1248,8 +1403,10 @@ function ClosedPanel({
   onReveal,
   onDecideLater,
 }: {
+  host: PadHost;
   prompt: TeacherPrompt;
   groups: Array<{ value: string; count: number }>;
+  refreshKey: string;
   busy: string | null;
   onReopen: () => void;
   onDetails: (label: string | null, text: string | null) => void;
@@ -1272,7 +1429,7 @@ function ClosedPanel({
         }
       />
 
-      <AnswerBars prompt={prompt} groups={groups} />
+      <OptionNames host={host} prompt={prompt} groups={groups} refreshKey={refreshKey} />
 
       <AnswerKeyPicker prompt={prompt} groups={groups} busy={busy} onKeys={onKeys} onPoll={onPoll} onReveal={onReveal} />
 
@@ -1280,7 +1437,7 @@ function ClosedPanel({
         Decide later, ask the next question
       </Button>
       <Typography variant="caption" color="text.secondary">
-        Not sure yet? Check it after class and set it from the class report. Scores update then.
+        Not sure yet? Check it after class and set it from the report. Scores update then.
       </Typography>
     </Stack>
   );
@@ -1337,6 +1494,7 @@ const SUMMARY_ICONS: Record<SummaryItem['key'], ReactNode> = {
   incorrect: <CancelRounded />,
   answered: <HowToVoteRounded />,
   silent: <VolumeOffRounded />,
+  excused: <HowToRegRounded />,
   absent: <PersonOffRounded />,
 };
 
@@ -1346,31 +1504,51 @@ function RevealedPanel({
   snapshot,
   busy,
   onDetails,
+  onKeys,
+  onPoll,
 }: {
   host: PadHost;
   prompt: TeacherPrompt;
   snapshot: TeacherSnapshot;
-  busy: boolean;
+  busy: string | null;
   onDetails: (label: string | null, text: string | null) => void;
+  /** Correcting the answer after Reveal regrades everyone. */
+  onKeys: (keys: string[]) => void;
+  onPoll: () => void;
 }) {
   const theme = useTheme();
+  const [changing, setChanging] = useState(false);
 
   const tone: Record<SummaryItem['key'], string> = {
     correct: theme.palette.success.main,
     incorrect: theme.palette.error.main,
     answered: theme.palette.primary.main,
     silent: theme.palette.warning.dark,
+    excused: theme.palette.info.main,
     absent: theme.palette.text.secondary,
   };
 
   return (
     <Stack spacing={2}>
-      <QuestionHeading prompt={prompt} suffix="revealed" busy={busy} onDetails={onDetails} />
-      {prompt.ungraded ? (
-        <Chip icon={<HowToVoteRounded />} label="Poll, not graded" sx={{ alignSelf: 'flex-start' }} />
-      ) : (
-        <Typography>{`Answer: ${displayKeys(prompt.answer_type, prompt.correct_keys)}`}</Typography>
-      )}
+      <QuestionHeading prompt={prompt} suffix="revealed" busy={busy !== null} onDetails={onDetails} />
+      <Stack direction="row" alignItems="center" spacing={1} useFlexGap flexWrap="wrap">
+        {prompt.ungraded ? (
+          <Chip icon={<HowToVoteRounded />} label="Poll, not graded" />
+        ) : (
+          <Typography sx={{ flex: 1 }}>{`Answer: ${displayKeys(prompt.answer_type, prompt.correct_keys)}`}</Typography>
+        )}
+        <Button size="small" variant="text" onClick={() => setChanging(!changing)} aria-expanded={changing} sx={{ minHeight: 44 }}>
+          {changing ? 'Done' : 'Change the answer'}
+        </Button>
+      </Stack>
+      <Collapse in={changing} unmountOnExit>
+        <Paper variant="outlined" sx={{ p: 1.5 }}>
+          <Typography variant="caption" color="text.secondary" component="p" sx={{ mb: 1 }}>
+            Everyone is regraded, and students see the change on their pad.
+          </Typography>
+          <AnswerKeyPicker prompt={prompt} groups={snapshot.groups} busy={busy} onKeys={onKeys} onPoll={onPoll} onReveal={() => setChanging(false)} hideReveal />
+        </Paper>
+      </Collapse>
 
       <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1 }}>
         {revealSummary(snapshot.counts, prompt.ungraded).map((item) => (
@@ -1396,6 +1574,9 @@ function RevealedPanel({
         ))}
       </Box>
 
+      {/* Who picked what: the wrong bars are who got it wrong. */}
+      <OptionNames host={host} prompt={prompt} groups={snapshot.groups} refreshKey={snapshot.server_time} />
+
       <ParticipationDetails host={host} promptId={prompt.id} ungraded={prompt.ungraded} startOpen={false} />
     </Stack>
   );
@@ -1405,8 +1586,9 @@ const DETAIL_ORDER: Array<{ key: SummaryItem['key']; title: string }> = [
   { key: 'correct', title: 'Correct' },
   { key: 'incorrect', title: 'Incorrect' },
   { key: 'answered', title: 'Answered' },
-  { key: 'silent', title: 'Present but silent' },
-  { key: 'absent', title: 'Absent' },
+  { key: 'silent', title: 'No answer' },
+  { key: 'excused', title: 'Excused' },
+  { key: 'absent', title: 'Not in the pad' },
 ];
 
 function ParticipationDetails({ host, promptId, ungraded, startOpen }: { host: PadHost; promptId: string; ungraded: boolean; startOpen: boolean }) {
@@ -1470,29 +1652,6 @@ function ParticipationDetails({ host, promptId, ungraded, startOpen }: { host: P
             </Stack>
           ))}
         </Stack>
-      )}
-    </Stack>
-  );
-}
-
-function EndedPanel({ snapshot, onStartAgain }: { snapshot: TeacherSnapshot; onStartAgain?: () => void }) {
-  const asked = snapshot.history.length;
-  const waitingCount = snapshot.history.filter((entry) => entry.state !== 'revealed').length;
-  return (
-    <Stack spacing={2}>
-      <Alert severity="success">{asked === 0 ? 'Class ended. No questions were asked.' : `Class ended after ${asked} question${asked === 1 ? '' : 's'}.`}</Alert>
-      {waitingCount > 0 && (
-        <Alert severity="info" icon={<ScheduleRounded />}>
-          {`${waitingCount} question${waitingCount === 1 ? ' is' : 's are'} waiting for an answer. Set ${waitingCount === 1 ? 'it' : 'them'} from the class report.`}
-        </Alert>
-      )}
-      <Button variant="contained" href={`/teacher/answer-pad/sessions/${snapshot.session.id}`} target="_blank" rel="noopener noreferrer" sx={{ minHeight: 48 }}>
-        Open the class report
-      </Button>
-      {onStartAgain && (
-        <Button variant="text" onClick={onStartAgain} sx={{ minHeight: 44 }}>
-          Start a new session
-        </Button>
       )}
     </Stack>
   );

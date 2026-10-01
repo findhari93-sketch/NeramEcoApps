@@ -36,7 +36,7 @@ const faqs = [
   },
   {
     question: 'What is the best NATA coaching for OMR/Velachery students?',
-    answer: 'Neram Classes offers the best NATA coaching for Velachery, OMR, and Sholinganallur students. Our hybrid online-offline model means you study from home on weekdays and attend intensive drawing sessions at Ashok Nagar on weekends. IIT/NIT faculty, max 25 per batch, 99.9% success rate.',
+    answer: 'Neram Classes offers the best NATA coaching for Velachery, OMR, and Sholinganallur students. Our hybrid online-offline model means you study from home on weekdays and attend intensive drawing sessions at Ashok Nagar on weekends. Classroom and live online batches with drawing feedback.',
   },
   {
     question: 'Can I do NATA coaching online from Velachery?',
@@ -52,7 +52,7 @@ export default function Page({ params: { locale } }: { params: { locale: string 
       <JsonLd data={generateBreadcrumbSchema([
         { name: 'Home', url: BASE_URL },
         { name: 'Coaching', url: `${BASE_URL}/coaching` },
-        { name: 'NATA Coaching Chennai', url: `${BASE_URL}/coaching/nata-coaching-chennai` },
+        { name: 'NATA Coaching Chennai', url: `${BASE_URL}/coaching/nata-coaching/nata-coaching-centers-in-chennai` },
         { name: `NATA Coaching ${neighborhood.name}` },
       ])} />
       <JsonLd data={generateFAQSchema(faqs)} />

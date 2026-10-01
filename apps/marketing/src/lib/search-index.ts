@@ -333,14 +333,14 @@ const STATIC_INDEX: SearchEntry[] = [
     category: 'coaching',
   },
   {
-    path: '/coaching/nata-coaching-center-in-tamil-nadu',
+    path: '/coaching/nata-coaching-in-tamil-nadu',
     title: 'NATA Coaching Centers in Tamil Nadu',
     description: 'Find NATA coaching centers across all 38 districts of Tamil Nadu.',
     keywords: ['tamil nadu', 'nata center', 'offline coaching', 'chennai', 'coimbatore'],
     category: 'coaching',
   },
   {
-    path: '/coaching/nata-coaching-chennai',
+    path: '/coaching/nata-coaching/nata-coaching-centers-in-chennai',
     title: 'NATA Coaching in Chennai',
     description: 'NATA coaching centers in Chennai: Anna Nagar, Adyar, Tambaram, T. Nagar, Velachery.',
     keywords: ['chennai', 'nata coaching chennai', 'anna nagar', 'adyar', 'tambaram'],

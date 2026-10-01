@@ -6,7 +6,8 @@
  * pad_* function, so the guard triggers and the audit log see all of them.
  */
 
-import { getSupabaseAdminClient, loadClassroomRoster } from '@neram/database';
+import { getSupabaseAdminClient, loadClassroomRoster, type RosterMemberUser } from '@neram/database';
+import { resolveStaffRole } from '@/lib/staff-capabilities';
 import { TtlCache } from '@/lib/ttl-cache';
 import type { PadCaller } from './caller';
 import { CLASS_BINDING_COLUMNS, type ScheduledClassCandidate } from './meeting-binding';
@@ -85,6 +86,24 @@ export async function liveSessionForMeeting(meetingId: string): Promise<string |
   return (data as { id: string } | null)?.id ?? null;
 }
 
+/**
+ * The newest round in a meeting whose results are published, for the meeting
+ * screen between rounds. Only when no round is live there.
+ */
+export async function publishedSessionForMeeting(meetingId: string): Promise<string | null> {
+  const { data, error } = await padDb()
+    .from('pad_sessions')
+    .select('id')
+    .eq('meeting_id', meetingId)
+    .eq('status', 'ended')
+    .not('results_published_at', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as { id: string } | null)?.id ?? null;
+}
+
 /** A session's room code, which never changes once the session exists. */
 export async function sessionRoomCode(sessionId: string): Promise<string | null> {
   const { data, error } = await padDb().from('pad_sessions').select('room_code').eq('id', sessionId).maybeSingle();
@@ -115,7 +134,8 @@ export interface RosterView {
 
 /**
  * The denominator: loadClassroomRoster's tracked ids, the single definition of
- * who counts towards a classroom (dormant and alumni excluded). A minute of
+ * who counts towards a classroom (dormant and alumni excluded), minus anyone
+ * who is staff (a teacher enrolled as a student to see the class). A minute of
  * caching means a student enrolled mid-class is counted from the next minute.
  */
 const rosterCache = new TtlCache<RosterView>(60_000, 200);
@@ -125,10 +145,20 @@ export async function rosterFor(classroomId: string, batchId: string | null): Pr
   const cached = rosterCache.get(key);
   if (cached) return cached;
 
-  const roster = await loadClassroomRoster(classroomId, { batchId });
+  const roster = await loadClassroomRoster<RosterMemberUser & { user_type: string | null; staff_role: string | null; can_teach: boolean | null }>(
+    classroomId,
+    { batchId, userColumns: 'user_type, staff_role, can_teach' },
+  );
   const names: Record<string, string | null> = {};
-  for (const member of roster.members) names[member.user_id] = member.user.name;
-  const view: RosterView = { ids: roster.ids, names };
+  const ids: string[] = [];
+  for (const member of roster.members) {
+    // A teacher on the class list as a student is still a teacher: never counted, never nudged.
+    if (resolveStaffRole(member.user)) continue;
+    if (!roster.ids.includes(member.user_id)) continue;
+    names[member.user_id] = member.user.name;
+    ids.push(member.user_id);
+  }
+  const view: RosterView = { ids, names };
   rosterCache.set(key, view);
   return view;
 }

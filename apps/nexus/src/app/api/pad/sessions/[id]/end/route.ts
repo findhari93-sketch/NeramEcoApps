@@ -3,6 +3,7 @@ import { assertPadStaff, resolvePadCaller } from '@/lib/pad/caller';
 import { PadRefusal, callPad, padErrorResponse, padJson } from '@/lib/pad/rpc';
 import { isUuid } from '@/lib/pad/session-binding';
 import { padDb } from '@/lib/pad/sessions';
+import { storeRoundResults } from '@/lib/pad/store-results';
 
 /**
  * POST /api/pad/sessions/:id/end  (session teacher)
@@ -29,6 +30,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       p_session: params.id,
       p_confirm_unrevealed: confirmUnrevealed,
     });
+    // Each student's result is stored against the class as the round ends.
+    if (result.changed) await storeRoundResults(params.id.toLowerCase(), caller.user.id);
     return padJson({ changed: result.changed });
   } catch (err) {
     return padErrorResponse(err, 'end session');

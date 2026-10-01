@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { buildQBTagTree, buildQBDescendantMap, findOrCreateQBTag, qbSlugify, type QBTagCount } from './qb-tags';
+import { describe, it, expect, vi } from 'vitest';
+import { buildQBTagTree, buildQBDescendantMap, findOrCreateQBTag, getQBSubjectTagTree, qbSlugify, type QBTagCount } from './qb-tags';
 import type { NexusQBTag } from '../../types';
 
 function tag(slug: string, id: string, parent_id: string | null = null, sort_order = 0): NexusQBTag {
@@ -297,5 +297,36 @@ describe('qbSlugify', () => {
     expect(qbSlugify('One Point Perspective')).toBe('one_point_perspective');
     expect(qbSlugify('Shadows & Shading')).toBe('shadows_shading');
     expect(qbSlugify('  3D Visualization  ')).toBe('3d_visualization');
+  });
+});
+
+describe('getQBSubjectTagTree', () => {
+  /** A client whose tag list is empty and whose RPC answers from `rpc`. */
+  function client(rpc: (args: Record<string, unknown>) => { data: unknown; error: unknown }) {
+    const query: any = {
+      select: () => query,
+      order: () => query,
+      eq: () => query,
+      then: (resolve: (v: unknown) => void) => resolve({ data: [], error: null }),
+    };
+    return { from: () => query, rpc: vi.fn((_name: string, args: Record<string, unknown>) => Promise.resolve(rpc(args))) } as any;
+  }
+
+  it('scopes the counts to the section being practised', async () => {
+    const c = client(() => ({ data: [{ slug: 'mathematics', self_count: 30, rollup_count: 30 }], error: null }));
+    const { counts } = await getQBSubjectTagTree({ exam_type: 'JEE_PAPER_2', year: 2019, section: ['math_mcq'] }, c);
+    expect(c.rpc).toHaveBeenCalledWith('nexus_qb_category_counts', expect.objectContaining({ p_section: ['math_mcq'] }));
+    expect(counts).toEqual({ mathematics: 30 });
+  });
+
+  it('falls back to the old signature when the section migration is not applied yet', async () => {
+    const c = client((args) =>
+      'p_section' in args
+        ? { data: null, error: { code: 'PGRST202', message: 'Could not find the function' } }
+        : { data: [{ slug: 'mathematics', self_count: 60, rollup_count: 60 }], error: null },
+    );
+    const { counts } = await getQBSubjectTagTree({ exam_type: 'JEE_PAPER_2', section: ['math_mcq'] }, c);
+    expect(c.rpc).toHaveBeenCalledTimes(2);
+    expect(counts).toEqual({ mathematics: 60 });
   });
 });

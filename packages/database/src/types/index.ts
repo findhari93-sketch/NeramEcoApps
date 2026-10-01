@@ -6474,6 +6474,19 @@ export interface FoundationIssueLogEntry {
   at: string;
 }
 
+/**
+ * What a student's device reported when they said "still happening". Kept on
+ * the ticket's staff-only `context.reopens`, one per reopen, newest last.
+ */
+export interface FoundationIssueReopenSnapshot {
+  at: string;
+  reason?: string;
+  page_url?: string | null;
+  device_info?: Record<string, unknown> | null;
+  console_logs?: FoundationIssueLogEntry[] | null;
+  screenshot_urls?: string[] | null;
+}
+
 export interface NexusFoundationIssue {
   id: string;
   student_id: string;
@@ -6759,7 +6772,16 @@ export type QBCategory =
   | 'functions'
   | 'sets_and_relations'
   | 'mathematical_logic'
-  | 'logarithms';
+  | 'logarithms'
+  // Chapters added with the NCERT study references (20261025090100)
+  | 'trigonometric_ratios'
+  | 'trigonometric_equations'
+  | 'inverse_trigonometry'
+  | 'properties_of_triangles'
+  | 'heights_and_distances'
+  | 'limits'
+  | 'differentiation'
+  | 'area_under_curves';
 
 // QB Interfaces
 
@@ -7785,6 +7807,100 @@ export interface NexusQBQuestionDetail extends NexusQBQuestionWithSources {
   attempts: NexusQBStudentAttempt[];
   repeat_sources: NexusQBQuestionSource[];
   is_studied: boolean;
+  /** Added by GET /api/question-bank/questions/[id]; absent elsewhere. */
+  study?: QBQuestionStudyView | null;
+  /** Staff only: the stored row, reviewed or not. */
+  study_row?: NexusQBQuestionStudy | null;
+}
+
+// ── "What to study": NCERT + Foundation references (20261025090100) ─────────
+
+/** One row of nexus_ncert_sections. section_no NULL = the whole chapter. */
+export interface NexusNcertSection {
+  ref: string; // 'c11.2' chapter, 'c11.2.4' section
+  subject: string;
+  class_level: number;
+  chapter_no: number;
+  chapter_title: string;
+  section_no: string | null;
+  section_title: string | null;
+  pdf_file: string;
+  edition: string;
+  sort_order: number;
+  is_active: boolean;
+}
+
+/** A concept as stored in nexus_qb_question_study.concepts. */
+export interface QBStudyConceptInput {
+  name: string;
+  why?: string | null;
+  ncert_ref?: string | null;
+  foundation_section_id?: string | null;
+}
+
+export type QBStudySource = 'ai' | 'staff';
+
+/** One row of nexus_qb_question_study. */
+export interface NexusQBQuestionStudy {
+  question_id: string;
+  primary_slug: string | null;
+  also_uses: string[];
+  concepts: QBStudyConceptInput[];
+  source: QBStudySource;
+  model: string | null;
+  confidence: number | null;
+  rationale: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** An NCERT reference, resolved for display. */
+export interface QBNcertRef {
+  ref: string;
+  class_level: number;
+  chapter_no: number;
+  chapter_title: string;
+  section_no: string | null;
+  section_title: string | null;
+  url: string;
+  /** The JEE chapter goes beyond what NCERT now covers; this is the nearest reading. */
+  beyond_ncert?: boolean;
+}
+
+/** A Foundation book section, resolved for display. */
+export interface QBFoundationRef {
+  chapter_id: string;
+  chapter_number: number;
+  chapter_title: string;
+  section_id: string;
+  section_title: string;
+}
+
+export interface QBStudyChapter {
+  slug: string;
+  label: string;
+  ncert: QBNcertRef[];
+}
+
+export interface QBStudyConcept {
+  name: string;
+  why: string | null;
+  ncert: QBNcertRef | null;
+  foundation: QBFoundationRef | null;
+}
+
+/**
+ * What GET /api/question-bank/questions/[id] returns as `study`.
+ * `source: 'chapter'` means no per-question row is visible yet, so only the
+ * chapter's default NCERT reading is shown.
+ */
+export interface QBQuestionStudyView {
+  primary: QBStudyChapter | null;
+  also_uses: QBStudyChapter[];
+  concepts: QBStudyConcept[];
+  source: QBStudySource | 'chapter';
 }
 
 // QB Filter & Stats Types
@@ -8029,6 +8145,14 @@ export const QB_CATEGORY_LABELS: Record<QBCategory, string> = {
   sets_and_relations: 'Sets & Relations',
   mathematical_logic: 'Mathematical Logic',
   logarithms: 'Logarithms',
+  trigonometric_ratios: 'Trigonometric Ratios & Identities',
+  trigonometric_equations: 'Trigonometric Equations',
+  inverse_trigonometry: 'Inverse Trigonometric Functions',
+  properties_of_triangles: 'Properties of Triangles',
+  heights_and_distances: 'Heights & Distances',
+  limits: 'Limits',
+  differentiation: 'Methods of Differentiation',
+  area_under_curves: 'Area Under Curves',
 };
 
 /**
@@ -8068,8 +8192,11 @@ export const QB_CATEGORY_GROUP_LABELS: Partial<Record<QBCategory, string>> = {
   areas_of_triangles: 'Coordinate Geometry',
   conic_sections: 'Coordinate Geometry',
 
+  limits: 'Calculus',
   continuity: 'Calculus',
   differentiability: 'Calculus',
+  differentiation: 'Calculus',
+  area_under_curves: 'Calculus',
   applications_of_derivatives: 'Calculus',
   mean_value_theorems: 'Calculus',
   indefinite_integrals: 'Calculus',
@@ -8077,6 +8204,11 @@ export const QB_CATEGORY_GROUP_LABELS: Partial<Record<QBCategory, string>> = {
   differential_equations: 'Calculus',
 
   trigonometry: 'Trigonometry',
+  trigonometric_ratios: 'Trigonometry',
+  trigonometric_equations: 'Trigonometry',
+  inverse_trigonometry: 'Trigonometry',
+  properties_of_triangles: 'Trigonometry',
+  heights_and_distances: 'Trigonometry',
 
   vectors: 'Vectors & 3D Geometry',
   '3d_geometry': 'Vectors & 3D Geometry',

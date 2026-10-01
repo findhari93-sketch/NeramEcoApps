@@ -54,6 +54,19 @@ describe('ClassOutcomeCard', () => {
     expect(screen.getByText('25 were expected after RSVPs and leave')).toBeTruthy();
   });
 
+  it('adds how many answered in the Answer Pad, only when the class ran it', async () => {
+    body = payload({ attended: 20 }, { pad: { rounds: 2, joined: 22, answered: 21 } });
+    renderCard();
+    expect(await screen.findByText('Answer Pad: 21 of 22 who opened it answered (2 rounds)')).toBeTruthy();
+  });
+
+  it('says nothing about the Answer Pad for a class that never ran it', async () => {
+    body = payload({ attended: 20 });
+    renderCard();
+    await screen.findByText('20 came');
+    expect(screen.queryByTestId('outcome-pad')).toBeNull();
+  });
+
   it('puts the missed students in the four corners and opens each one', async () => {
     body = payload({ attended: 20, catching_up: 10, needs_call: 5, caught_up: 1 });
     const onOpen = renderCard();

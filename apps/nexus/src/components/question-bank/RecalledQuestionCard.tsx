@@ -7,6 +7,7 @@ import type { NexusQBQuestionListItem, QBConfidenceTier } from '@neram/database'
 import ConfidenceTierBadge from './ConfidenceTierBadge';
 import CategoryChips from './CategoryChips';
 import DifficultyChip from './DifficultyChip';
+import { showsDifficulty } from './practice/practice-logic';
 import MathText from '@/components/common/MathText';
 
 const TIER_BORDER_COLORS: Record<QBConfidenceTier, string> = {
@@ -77,7 +78,7 @@ export default function RecalledQuestionCard({
             size="small"
             sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600 }}
           />
-          <DifficultyChip difficulty={question.difficulty} />
+          {showsDifficulty(question) && <DifficultyChip difficulty={question.difficulty} />}
           {question.figure_type === 'placeholder' && (
             <Chip
               icon={<ImageIcon sx={{ fontSize: 12 }} />}

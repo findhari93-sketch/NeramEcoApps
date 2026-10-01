@@ -19,6 +19,7 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateArticleSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { blogPosts as sharedBlogPosts } from '@/lib/blog/posts';
 import { buildAlternates } from '@/lib/seo/metadata';
+import RETIRED_CITY_GUIDES from '@/data/geo/retired-city-guides.json';
 
 
 interface PageProps {
@@ -1029,6 +1030,8 @@ export function generateStaticParams() {
   const params: { locale: string; slug: string }[] = [];
   for (const locale of locales) {
     for (const slug of Object.keys(blogPosts)) {
+      // City guides 301 to the city coaching pages; do not prebuild them.
+      if (slug in RETIRED_CITY_GUIDES) continue;
       params.push({ locale, slug });
     }
   }

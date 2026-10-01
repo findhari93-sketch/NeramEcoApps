@@ -567,7 +567,7 @@ async function resolvePaperSourceIds(
 
 type PaperSourceFilters = Pick<
   QBFilterState,
-  'exam_type' | 'source_year' | 'source_session' | 'source_shift'
+  'exam_type' | 'source_year' | 'source_session' | 'source_shift' | 'exam_years'
 >;
 
 /**
@@ -598,6 +598,11 @@ function applyPaperSourceFilters<Q>(query: Q, filters: PaperSourceFilters, prefi
   let q = (query as any).eq(`${prefix}exam_type`, filters.exam_type);
   if (filters.source_year) {
     q = q.eq(`${prefix}year`, filters.source_year);
+  } else if (filters.exam_years && filters.exam_years.length > 0) {
+    // The drawer's Year chips on an exam-scoped page ("JEE Paper 2, all
+    // years"). The legacy exam_years branch below only runs without an exam,
+    // so these chips used to filter nothing.
+    q = q.in(`${prefix}year`, filters.exam_years);
   }
   if (filters.source_session) {
     const parsed = parseSessionKey(filters.source_session);

@@ -46,6 +46,13 @@ export interface PadHost {
    * as a modal over the meeting, which is worse than the panel.
    */
   popOut?: (sessionId: string) => Promise<void>;
+  /**
+   * Read an image off the clipboard through the host. Teams refuses the
+   * browser's navigator.clipboard.read() inside its frames, so the Paste button
+   * tries this first. Resolves null when there is no image or the host says no;
+   * Ctrl + V into the focused field is the fallback that always works.
+   */
+  readClipboard?: () => Promise<Blob | null>;
 }
 
 export interface InjectedTestHost {
@@ -229,6 +236,31 @@ export function consolePopOut(teams: TeamsJs, context: PopOutContext, origin: st
 }
 
 /**
+ * TeamsJS's own clipboard read, when this Teams client offers it. Deprecated
+ * upstream and not in every client, so it is only a first try.
+ */
+export function teamsClipboardReader(teams: {
+  clipboard?: { isSupported(): boolean; read(): Promise<Blob> };
+}): (() => Promise<Blob | null>) | undefined {
+  const clipboard = teams.clipboard;
+  let supported = false;
+  try {
+    supported = !!clipboard && clipboard.isSupported();
+  } catch {
+    supported = false;
+  }
+  if (!clipboard || !supported) return undefined;
+  return async () => {
+    try {
+      const blob = await clipboard.read();
+      return blob && blob.type.startsWith('image/') ? blob : null;
+    } catch {
+      return null;
+    }
+  };
+}
+
+/**
  * Connect to Teams, or resolve null when the page is not running inside it.
  * TeamsJS is loaded on demand so the browser pages never download it.
  */
@@ -274,6 +306,7 @@ export async function connectTeamsHost(): Promise<PadHost | null> {
     // Only the side panel can put something on the meeting screen, and only in a meeting.
     stage: frame === 'sidePanel' && context.meeting?.id ? stageSharing(teams) : undefined,
     popOut: frame === 'sidePanel' ? consolePopOut(teams, context, window.location.origin) : undefined,
+    readClipboard: teamsClipboardReader(teams),
     getToken: cachedTokenGetter(() => teams.authentication.getAuthToken()),
     onResume: (handler) => {
       resumeHandlers.add(handler);

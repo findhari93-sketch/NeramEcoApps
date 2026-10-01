@@ -65,6 +65,7 @@ export default function AnswerKeyPicker({
   onKeys,
   onPoll,
   onReveal,
+  hideReveal = false,
 }: {
   prompt: KeyPickerPrompt;
   groups: AnswerGroups;
@@ -73,6 +74,8 @@ export default function AnswerKeyPicker({
   onKeys: (keys: string[]) => void;
   onPoll: () => void;
   onReveal: () => void;
+  /** Correcting an answer already revealed: each tap regrades at once, so there is nothing to reveal. */
+  hideReveal?: boolean;
 }) {
   const labelId = useId();
   const [extraKey, setExtraKey] = useState('');
@@ -144,18 +147,20 @@ export default function AnswerKeyPicker({
         </ToggleButton>
       </Stack>
 
-      <Button
-        fullWidth
-        variant="contained"
-        size="large"
-        onClick={onReveal}
-        disabled={!decided || busy !== null}
-        startIcon={busy === 'reveal' ? <CircularProgress size={22} color="inherit" aria-hidden /> : <VisibilityRounded />}
-        sx={{ minHeight: 56, fontWeight: 800 }}
-      >
-        Reveal answer
-      </Button>
-      {!decided && (
+      {!hideReveal && (
+        <Button
+          fullWidth
+          variant="contained"
+          size="large"
+          onClick={onReveal}
+          disabled={!decided || busy !== null}
+          startIcon={busy === 'reveal' ? <CircularProgress size={22} color="inherit" aria-hidden /> : <VisibilityRounded />}
+          sx={{ minHeight: 56, fontWeight: 800 }}
+        >
+          Reveal answer
+        </Button>
+      )}
+      {!hideReveal && !decided && (
         <Typography variant="caption" color="text.secondary">
           Choose the correct answer, or mark it as a poll, to reveal.
         </Typography>

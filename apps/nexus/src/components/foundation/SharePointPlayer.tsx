@@ -49,6 +49,11 @@ interface SharePointPlayerProps {
    * held here.
    */
   onFullscreenChange?: (el: HTMLElement | null) => void;
+  /**
+   * Seek here once the video is ready (a question bank link to one section).
+   * Clamped by the gate like any other seek.
+   */
+  startAt?: number | null;
 }
 
 /**
@@ -84,6 +89,7 @@ export default function SharePointPlayer({
   onSectionEnd,
   onTimeUpdate,
   onFullscreenChange,
+  startAt = null,
 }: SharePointPlayerProps) {
   const transportRef = useRef<VideoTransport | null>(null);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
@@ -204,6 +210,22 @@ export default function SharePointPlayer({
     };
   }, []);
 
+  // Once per startAt: a renewed stream URL reloads metadata and must not jump
+  // the student back to the linked section mid-watch.
+  const startedAtRef = useRef<number | null>(null);
+  const handleLoadedMetadata = useCallback(
+    (d: number) => {
+      setDuration(d);
+      if (startAt != null && startedAtRef.current !== startAt) {
+        startedAtRef.current = startAt;
+        const ceiling = gateRef.current.seekCeiling;
+        const target = Number.isFinite(ceiling) ? Math.min(startAt, ceiling) : startAt;
+        transportRef.current?.seek(Math.max(0, target));
+      }
+    },
+    [startAt],
+  );
+
   const handleTick = useCallback((seconds: number) => {
     setFurthest((f) => (seconds > f ? seconds : f));
     onTimeUpdateRef.current?.(seconds);
@@ -259,7 +281,7 @@ export default function SharePointPlayer({
         marks={marks}
         onTimeUpdate={handleTick}
         onCheckpointReached={handleBoundary}
-        onLoadedMetadata={setDuration}
+        onLoadedMetadata={handleLoadedMetadata}
         allowFullscreen
         onFullscreenChange={onFullscreenChange}
       />

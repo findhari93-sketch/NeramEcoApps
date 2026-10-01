@@ -44,22 +44,40 @@ describe('SUBMIT', () => {
     expect(res.responded_at).toBeTruthy();
   });
 
-  it('keeps the first answer: a duplicate or a different second answer returns the first', async () => {
+  it('lets a student change their answer while the question is open, and counts the changes', async () => {
     const s = await liveSession();
     const promptId = await openPrompt(s);
     await t.submit(s.students[0], promptId, 'C');
-    expect(await t.submit(s.students[0], promptId, 'C')).toMatchObject({ ok: true, status: 'duplicate', answer: 'C' });
-    expect(await t.submit(s.students[0], promptId, 'A')).toMatchObject({ ok: true, status: 'duplicate', answer: 'C' });
-    const [{ n }] = await t.rows<{ n: number }>(`select count(*)::int as n from pad_responses where prompt_id = $1`, [promptId]);
-    expect(n).toBe(1);
+    expect(await t.submit(s.students[0], promptId, 'C')).toMatchObject({ ok: true, status: 'unchanged', answer: 'C' });
+    expect(await t.submit(s.students[0], promptId, 'A')).toMatchObject({ ok: true, status: 'changed', answer: 'A' });
+    expect(await t.submit(s.students[0], promptId, 'b')).toMatchObject({ ok: true, status: 'changed', answer: 'B' });
+    const rows = await t.rows<{ n: number; answer: string; changes: number }>(
+      `select count(*) over ()::int as n, norm_answer as answer, change_count as changes from pad_responses where prompt_id = $1`,
+      [promptId],
+    );
+    expect(rows).toEqual([{ n: 1, answer: 'B', changes: 2 }]);
+    const snap = await t.studentSnapshot(s.students[0], s.sessionId);
+    expect(snap.my_response).toMatchObject({ answer: 'B', change_count: 2 });
   });
 
-  it('returns the locked answer to a retry that arrives after CLOSE', async () => {
+  it('locks the answer at CLOSE: a retry of the same answer succeeds, a change is refused and says what stands', async () => {
     const s = await liveSession();
     const promptId = await openPrompt(s);
     await t.submit(s.students[0], promptId, 'B');
     await t.close(s.teacherId, promptId);
-    expect(await t.submit(s.students[0], promptId, 'B')).toMatchObject({ ok: true, status: 'duplicate', answer: 'B' });
+    expect(await t.submit(s.students[0], promptId, 'B')).toMatchObject({ ok: true, status: 'unchanged', answer: 'B' });
+    expect(await t.submit(s.students[0], promptId, 'D')).toEqual({ ok: false, code: 'PROMPT_NOT_OPEN', state: 'closed', answer: 'B' });
+    const [row] = await t.rows<{ answer: string }>(`select norm_answer as answer from pad_responses where prompt_id = $1`, [promptId]);
+    expect(row.answer).toBe('B');
+  });
+
+  it('lets a student change again when the teacher reopens the question', async () => {
+    const s = await liveSession();
+    const promptId = await openPrompt(s);
+    await t.submit(s.students[0], promptId, 'B');
+    await t.close(s.teacherId, promptId);
+    await t.reopen(s.teacherId, promptId);
+    expect(await t.submit(s.students[0], promptId, 'C')).toMatchObject({ ok: true, status: 'changed', answer: 'C' });
   });
 
   it('rejects a first answer after CLOSE and after REVEAL, and logs it', async () => {

@@ -12,10 +12,15 @@ const TEACHER_HINT_THROTTLE_MS = 1_000;
  *
  * Body: { promptId, answer }
  *
- * Tap = lock. The first answer wins: a retry, a double tap or a second device
- * gets { status: 'duplicate' } with the answer already locked, even after the
- * prompt has closed, which is how the pad recovers from a network drop. An
- * answer arriving after CLOSE is refused with 409 PROMPT_NOT_OPEN.
+ * Tap = select. While the prompt is OPEN the student may change their answer:
+ *   - status 'accepted'  their first answer;
+ *   - status 'changed'   a different answer replaced it (change_count goes up);
+ *   - status 'unchanged' the same answer again (a retry, a double tap, a second
+ *     device). This also succeeds after CLOSE, which is how the pad recovers
+ *     from a network drop without saying "too late" about an answer that counted.
+ * A different answer arriving after CLOSE is refused with 409 PROMPT_NOT_OPEN,
+ * and the refusal carries `answer`: the answer that stands (absent when they
+ * never answered). The pad shows that answer as locked, not as an error.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -25,12 +30,12 @@ export async function POST(request: NextRequest) {
     const parsed = parseSubmitRequest(await request.json().catch(() => null));
     if (!parsed.ok) throw new PadRefusal('INVALID_INPUT', { field: parsed.field });
 
-    const result = await callPad<{ status: 'accepted' | 'duplicate'; answer: string; raw_answer: string; responded_at: string }>(
+    const result = await callPad<{ status: 'accepted' | 'changed' | 'unchanged'; answer: string; raw_answer: string; responded_at: string }>(
       padDb(),
       'pad_submit',
       { p_actor: caller.user.id, p_prompt: parsed.value.promptId, p_raw: parsed.value.answer },
     );
-    if (result.status === 'accepted') {
+    if (result.status !== 'unchanged') {
       await hintPrompt(parsed.value.promptId, 'teacher', { throttleMs: TEACHER_HINT_THROTTLE_MS });
     }
 

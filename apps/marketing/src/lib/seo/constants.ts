@@ -7,12 +7,16 @@ export const ORG_PHONE = '+91-9176137043';
 export const ORG_EMAIL = 'info@neramclasses.com';
 export const ORG_FOUNDED = '2009';
 export const ORG_FORMALLY_ESTABLISHED = '2016';
+// Verifiable facts only (see lib/seo/facts.ts). Unverifiable claims such as "#1",
+// success percentages and "150+ cities" were removed: they weaken the entity for
+// Google and AI assistants and risk a structured-data manual action.
 export const ORG_DESCRIPTION =
-  "India's #1 NATA and JEE Paper 2 coaching institute since 2009. Expert IIT/NIT/SPA alumni faculty, AI-powered study app, 99.9% success rate, 10,000+ students trained across 150+ cities in India and Gulf countries. Online and offline hybrid coaching with free tools.";
+  'NATA, JEE Main Paper 2 (B.Arch), AAT and PGETA coaching since 2009. Live online classes across India and the Gulf, classroom batches in Tamil Nadu and Bangalore, drawing feedback, mock tests and free NATA tools.';
 
 // Differentiator tagline used across pages and structured data
-export const ORG_SLOGAN = "India's #1 AI-Powered NATA Coaching Since 2009";
-export const ORG_BEST_KNOWN_FOR = 'AI-powered study platform with free NATA tools, hybrid online-offline coaching across 150+ cities, and 99.9% success rate since 2009';
+export const ORG_SLOGAN = 'Architecture entrance coaching since 2009';
+export const ORG_BEST_KNOWN_FOR =
+  'Live online and classroom coaching for NATA and JEE Paper 2, with free NATA tools such as a cutoff calculator, college predictor and exam centre finder';
 
 export const ORG_ADDRESS = {
   streetAddress: 'Electronic City Phase 1, Near M5 Mall',

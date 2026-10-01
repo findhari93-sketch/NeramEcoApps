@@ -1138,12 +1138,12 @@ export default function NataOnlineCoachingPage({ params: { locale } }: PageProps
             </Typography>
             <Grid container spacing={3}>
               {[
-                { city: 'Chennai', tamil: 'சென்னை', href: '/nata-coaching/chennai', desc: 'Anna Nagar, Adyar, T. Nagar, Tambaram, Velachery, OMR' },
-                { city: 'Coimbatore', tamil: 'கோயம்புத்தூர்', href: '/nata-coaching/coimbatore', desc: 'RS Puram, Saibaba Colony, Peelamedu, Saravanampatti' },
-                { city: 'Madurai', tamil: 'மதுரை', href: '/nata-coaching/madurai', desc: 'K.K. Nagar, Anna Nagar, Tallakulam, Goripalayam' },
-                { city: 'Trichy', tamil: 'திருச்சி', href: '/nata-coaching/trichy', desc: 'Cantonment, Thillai Nagar, Srirangam, NIT Trichy prep' },
-                { city: 'Salem', tamil: 'சேலம்', href: '/nata-coaching/salem', desc: 'Hasthampatti, Fairlands, Suramangalam, Erode, Namakkal' },
-                { city: 'Vellore', tamil: 'வேலூர்', href: '/nata-coaching/vellore', desc: 'Katpadi, Sathuvachari, Gandhi Nagar, VIT prep' },
+                { city: 'Chennai', tamil: 'சென்னை', href: '/coaching/nata-coaching/nata-coaching-centers-in-chennai', desc: 'Anna Nagar, Adyar, T. Nagar, Tambaram, Velachery, OMR' },
+                { city: 'Coimbatore', tamil: 'கோயம்புத்தூர்', href: '/coaching/nata-coaching/nata-coaching-centers-in-coimbatore', desc: 'RS Puram, Saibaba Colony, Peelamedu, Saravanampatti' },
+                { city: 'Madurai', tamil: 'மதுரை', href: '/coaching/nata-coaching/nata-coaching-centers-in-madurai', desc: 'K.K. Nagar, Anna Nagar, Tallakulam, Goripalayam' },
+                { city: 'Trichy', tamil: 'திருச்சி', href: '/coaching/nata-coaching/nata-coaching-centers-in-trichy', desc: 'Cantonment, Thillai Nagar, Srirangam, NIT Trichy prep' },
+                { city: 'Salem', tamil: 'சேலம்', href: '/coaching/nata-coaching/nata-coaching-centers-in-salem', desc: 'Hasthampatti, Fairlands, Suramangalam, Erode, Namakkal' },
+                { city: 'Vellore', tamil: 'வேலூர்', href: '/coaching/nata-coaching/nata-coaching-centers-in-vellore', desc: 'Katpadi, Sathuvachari, Gandhi Nagar, VIT prep' },
               ].map((entry) => (
                 <Grid item xs={12} sm={6} md={4} key={entry.href}>
                   <Card
@@ -1185,14 +1185,14 @@ export default function NataOnlineCoachingPage({ params: { locale } }: PageProps
             </Typography>
             <Grid container spacing={3}>
               {[
-                { city: 'Bangalore', href: '/nata-coaching/bangalore', desc: 'BMS, RV College, MSRIT, Christ University. Koramangala, HSR, Whitefield, Electronic City.' },
-                { city: 'Hyderabad', href: '/nata-coaching/hyderabad', desc: 'JNAFAU, JNTU architecture. Madhapur, Gachibowli, Banjara Hills, Kondapur, Secunderabad.' },
-                { city: 'Mumbai', href: '/nata-coaching/mumbai', desc: 'Sir JJ, KRVIA, Rachana Sansad, Rizvi. Andheri, Bandra, Powai, Thane, Navi Mumbai.' },
-                { city: 'Delhi NCR', href: '/nata-coaching/delhi', desc: 'SPA Delhi, USAP, Jamia Millia. South Delhi, Dwarka, Noida, Gurgaon, Ghaziabad, Faridabad.' },
-                { city: 'Pune', href: '/nata-coaching/pune', desc: 'BNCA, Sinhgad, MIT, D Y Patil. Kothrud, Aundh, Baner, Viman Nagar, Pimpri-Chinchwad.' },
-                { city: 'Kolkata', href: '/nata-coaching/kolkata', desc: 'Jadavpur University, IIEST Shibpur, Bengal Institute. Salt Lake, New Town, Howrah, Tollygunge.' },
-                { city: 'Kochi', href: '/nata-coaching/kochi', desc: 'CET Trivandrum, NIT Calicut, TKM Kollam. Edappally, Kakkanad, Vyttila, Aluva.' },
-                { city: 'Ahmedabad', href: '/nata-coaching/ahmedabad', desc: 'CEPT University, Nirma, SAL, Anant. Satellite, Vastrapur, Bopal, Gandhinagar.' },
+                { city: 'Bangalore', href: '/coaching/nata-coaching/nata-coaching-centers-in-bangalore', desc: 'BMS, RV College, MSRIT, Christ University. Koramangala, HSR, Whitefield, Electronic City.' },
+                { city: 'Hyderabad', href: '/coaching/nata-coaching/nata-coaching-centers-in-hyderabad', desc: 'JNAFAU, JNTU architecture. Madhapur, Gachibowli, Banjara Hills, Kondapur, Secunderabad.' },
+                { city: 'Mumbai', href: '/coaching/nata-coaching/nata-coaching-centers-in-mumbai', desc: 'Sir JJ, KRVIA, Rachana Sansad, Rizvi. Andheri, Bandra, Powai, Thane, Navi Mumbai.' },
+                { city: 'Delhi NCR', href: '/coaching/nata-coaching/nata-coaching-centers-in-delhi', desc: 'SPA Delhi, USAP, Jamia Millia. South Delhi, Dwarka, Noida, Gurgaon, Ghaziabad, Faridabad.' },
+                { city: 'Pune', href: '/coaching/nata-coaching/nata-coaching-centers-in-pune', desc: 'BNCA, Sinhgad, MIT, D Y Patil. Kothrud, Aundh, Baner, Viman Nagar, Pimpri-Chinchwad.' },
+                { city: 'Kolkata', href: '/coaching/nata-coaching/nata-coaching-centers-in-kolkata', desc: 'Jadavpur University, IIEST Shibpur, Bengal Institute. Salt Lake, New Town, Howrah, Tollygunge.' },
+                { city: 'Kochi', href: '/coaching/nata-coaching/nata-coaching-centers-in-kochi', desc: 'CET Trivandrum, NIT Calicut, TKM Kollam. Edappally, Kakkanad, Vyttila, Aluva.' },
+                { city: 'Ahmedabad', href: '/coaching/nata-coaching/nata-coaching-centers-in-ahmedabad', desc: 'CEPT University, Nirma, SAL, Anant. Satellite, Vastrapur, Bopal, Gandhinagar.' },
               ].map((entry) => (
                 <Grid item xs={12} sm={6} md={3} key={entry.href}>
                   <Card
@@ -1265,7 +1265,7 @@ export default function NataOnlineCoachingPage({ params: { locale } }: PageProps
                 },
                 {
                   title: 'NATA Coaching in Tamil Nadu',
-                  href: '/coaching/nata-coaching-center-in-tamil-nadu',
+                  href: '/coaching/nata-coaching-in-tamil-nadu',
                   desc: 'Online and offline NATA coaching across all 38 Tamil Nadu districts.',
                 },
                 {

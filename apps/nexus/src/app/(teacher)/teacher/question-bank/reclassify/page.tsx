@@ -16,7 +16,8 @@ import {
 } from '@neram/ui';
 import PageHeader from '@/components/PageHeader';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import { QB_CATEGORY_LABELS, type QBCategory } from '@neram/database';
+import { QB_CATEGORY_LABELS, type QBCategory, type QBQuestionStudyView } from '@neram/database';
+import { ncertLabel, foundationLabel } from '@/components/question-bank/StudyRefsPanel';
 
 interface Proposal {
   id: string;
@@ -28,6 +29,27 @@ interface Proposal {
   source: 'keyword' | 'ai' | 'manual';
   confidence: number | null;
   rationale: string | null;
+  study?: QBQuestionStudyView | null;
+}
+
+/** What students will see once this is applied: also-uses and the concepts. */
+function StudyPreview({ study }: { study: QBQuestionStudyView }) {
+  if (study.also_uses.length === 0 && study.concepts.length === 0) return null;
+  return (
+    <Box sx={{ mt: 0.75 }}>
+      {study.also_uses.length > 0 && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+          Also uses: {study.also_uses.map((c) => c.label).join(', ')}
+        </Typography>
+      )}
+      {study.concepts.map((c, i) => (
+        <Typography key={`${c.name}-${i}`} variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+          {c.name}
+          {c.ncert ? ` · NCERT ${ncertLabel(c.ncert)}` : c.foundation ? ` · ${foundationLabel(c.foundation)}` : ' · not in NCERT'}
+        </Typography>
+      ))}
+    </Box>
+  );
 }
 
 const label = (slug: string) => QB_CATEGORY_LABELS[slug as QBCategory] ?? slug;
@@ -124,7 +146,7 @@ export default function ReclassifyPage() {
     <Box sx={{ p: { xs: 1.5, md: 3 }, pb: 12, maxWidth: 900, mx: 'auto' }}>
       <PageHeader
         title="Re-classify topics"
-        subtitle="Proposed sub-topics for coordinate geometry questions. Nothing changes for students until you apply."
+        subtitle="Proposed chapter changes, with what students will be told to study. Nothing changes for students until you apply."
         breadcrumbs={[{ label: 'Question Bank', href: '/teacher/question-bank' }]}
         backHref="/teacher/question-bank"
       />
@@ -151,7 +173,7 @@ export default function ReclassifyPage() {
             Nothing waiting for review
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            Run scripts/qb-propose-subtopics.ts to stage a new batch.
+            Run scripts/qb-classify-study.ts to stage a new batch.
           </Typography>
         </Box>
       ) : (
@@ -224,9 +246,12 @@ export default function ReclassifyPage() {
                     ))}
                   </Stack>
 
+                  {p.study && <StudyPreview study={p.study} />}
+
                   {p.rationale && (
-                    <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 0.5 }}>
-                      {p.source}: {p.rationale}
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                      {p.source}
+                      {p.confidence !== null ? ` (${Math.round(p.confidence * 100)}% sure)` : ''}: {p.rationale}
                     </Typography>
                   )}
                 </Box>

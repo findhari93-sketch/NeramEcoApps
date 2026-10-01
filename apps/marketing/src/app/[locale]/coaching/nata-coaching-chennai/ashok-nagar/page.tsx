@@ -52,7 +52,7 @@ export default function Page({ params: { locale } }: { params: { locale: string 
       <JsonLd data={generateBreadcrumbSchema([
         { name: 'Home', url: BASE_URL },
         { name: 'Coaching', url: `${BASE_URL}/coaching` },
-        { name: 'NATA Coaching Chennai', url: `${BASE_URL}/coaching/nata-coaching-chennai` },
+        { name: 'NATA Coaching Chennai', url: `${BASE_URL}/coaching/nata-coaching/nata-coaching-centers-in-chennai` },
         { name: `NATA Coaching ${neighborhood.name}` },
       ])} />
       <JsonLd data={generateFAQSchema(faqs)} />

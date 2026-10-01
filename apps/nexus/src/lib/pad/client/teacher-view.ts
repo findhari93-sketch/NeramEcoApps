@@ -4,7 +4,7 @@
  */
 
 import { promptTitle } from './format';
-import type { HistoryEntry, ParticipationRow, PromptCounts, TeacherPrompt, TeacherSnapshot } from './types';
+import type { HistoryEntry, ParticipationRow, PromptCounts, TeacherPrompt, TeacherSnapshot, WaitingStudent } from './types';
 
 export type ConsoleView =
   | { kind: 'loading' }
@@ -22,13 +22,17 @@ export function deriveConsoleView(snapshot: TeacherSnapshot | null): ConsoleView
   if (!prompt) return { kind: 'ready' };
 
   if (prompt.state === 'open') {
+    const counts = snapshot.counts;
+    // Out of the students who JOINED this round (opened the pad; it never drops,
+    // never counts staff), less anyone the teacher excused. The class list is
+    // the fallback for a server that does not send it yet.
+    const joined = counts?.joined;
     return {
       kind: 'open',
       prompt,
-      // The live counter counts the class list only; anyone else is shown apart.
-      answered: snapshot.counts?.answered ?? prompt.answered_count,
-      enrolled: snapshot.counts?.enrolled ?? snapshot.readiness.enrolled,
-      offRoster: snapshot.counts?.answered_off_roster ?? 0,
+      answered: joined === undefined ? (counts?.answered ?? prompt.answered_count) : (counts?.answered_joined ?? 0),
+      enrolled: joined === undefined ? (counts?.enrolled ?? snapshot.readiness.enrolled) : Math.max(0, joined - (counts?.excused_joined ?? 0)),
+      offRoster: counts?.answered_off_roster ?? 0,
     };
   }
   if (prompt.state === 'closed') {
@@ -43,7 +47,7 @@ export function consoleAnnouncement(view: ConsoleView): string {
     case 'loading':
       return 'Loading the console.';
     case 'ended':
-      return 'Class ended.';
+      return 'Round ended.';
     case 'ready':
       return 'Ready to ask.';
     case 'open':
@@ -152,7 +156,7 @@ export function toggleKey(current: readonly string[] | null | undefined, value: 
 }
 
 export interface SummaryItem {
-  key: 'correct' | 'incorrect' | 'answered' | 'silent' | 'absent';
+  key: 'correct' | 'incorrect' | 'answered' | 'silent' | 'excused' | 'absent';
   label: string;
   count: number;
 }
@@ -161,8 +165,9 @@ export interface SummaryItem {
 export function revealSummary(counts: PromptCounts | null, ungraded: boolean): SummaryItem[] {
   if (!counts) return [];
   const presence: SummaryItem[] = [
-    { key: 'silent', label: 'Present but silent', count: counts.silent },
-    { key: 'absent', label: 'Absent', count: counts.absent },
+    { key: 'silent', label: 'No answer', count: counts.silent },
+    ...(counts.excused ? [{ key: 'excused' as const, label: 'Excused', count: counts.excused }] : []),
+    { key: 'absent', label: 'Not in the pad', count: counts.absent },
   ];
   if (ungraded) return [{ key: 'answered', label: 'Answered', count: counts.answered }, ...presence];
   return [
@@ -174,9 +179,93 @@ export function revealSummary(counts: PromptCounts | null, ungraded: boolean): S
 
 export type ParticipationGroups = Record<SummaryItem['key'], ParticipationRow[]>;
 
+/** "Round 2", or "Answer Pad" before a round has a number. */
+export function roundTitle(roundNo: number | null | undefined): string {
+  return roundNo ? `Round ${roundNo}` : 'Answer Pad';
+}
+
+export interface WaitingView {
+  /** Reasons waiting for the teacher's decision, first; then turned-down reasons; then no word at all. */
+  waiting: WaitingStudent[];
+  /** Reasons the teacher accepted: out of this question's count. */
+  excused: WaitingStudent[];
+  /** Students the Nudge button would reach: no answer and no reason. */
+  nudgeable: number;
+  /** Reasons with no decision yet. */
+  undecided: number;
+}
+
+function byStudentName(a: { name: string | null; student_id: string }, b: { name: string | null; student_id: string }): number {
+  return (a.name ?? '').localeCompare(b.name ?? '') || a.student_id.localeCompare(b.student_id);
+}
+
+/** The Waiting list, in the order a teacher acts on it. */
+export function waitingView(rows: readonly WaitingStudent[] | undefined): WaitingView {
+  const list = rows ?? [];
+  const undecided = list.filter((row) => row.reason && row.approval === null).sort(byStudentName);
+  const rejected = list.filter((row) => row.reason && row.approval === 'rejected').sort(byStudentName);
+  const silent = list.filter((row) => !row.reason).sort(byStudentName);
+  return {
+    waiting: [...undecided, ...rejected, ...silent],
+    excused: list.filter((row) => row.reason && row.approval === 'approved').sort(byStudentName),
+    nudgeable: silent.length,
+    undecided: undecided.length,
+  };
+}
+
+export interface AnswerNames {
+  value: string;
+  count: number;
+  names: ParticipationRow[];
+}
+
+/**
+ * Who picked each answer, for the bars: every letter (or Yes and No) in order,
+ * or for numbers and text the answers given, most given first.
+ */
+export function namesByAnswer(
+  prompt: Pick<TeacherPrompt, 'answer_type' | 'option_count'>,
+  rows: readonly ParticipationRow[],
+): AnswerNames[] {
+  const byValue = new Map<string, ParticipationRow[]>();
+  for (const row of rows) {
+    if (row.participation !== 'answered' || row.answer === null) continue;
+    const list = byValue.get(row.answer) ?? [];
+    list.push(row);
+    byValue.set(row.answer, list);
+  }
+  for (const list of byValue.values()) list.sort(byStudentName);
+
+  const values =
+    prompt.answer_type === 'mcq'
+      ? mcqLetters(prompt.option_count)
+      : prompt.answer_type === 'yesno'
+        ? ['yes', 'no']
+        : [...byValue.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0])).map(([value]) => value);
+  return values.map((value) => ({ value, count: byValue.get(value)?.length ?? 0, names: byValue.get(value) ?? [] }));
+}
+
+/** Present for the question but no answer, and excused, for the rows under the bars. */
+export function unansweredNames(rows: readonly ParticipationRow[]): { silent: ParticipationRow[]; excused: ParticipationRow[] } {
+  const sorted = [...rows].sort(byStudentName);
+  return {
+    silent: sorted.filter((row) => row.participation === 'silent'),
+    excused: sorted.filter((row) => row.participation === 'excused'),
+  };
+}
+
+/** "Asha, Ravi and 3 more", for a tooltip that has to stay short. */
+export function namesPreview(rows: ReadonlyArray<{ name: string | null }>, max = 12): string {
+  const names = rows.map((row) => row.name ?? 'Unnamed student');
+  if (names.length === 0) return 'Nobody';
+  if (names.length === 1) return names[0];
+  if (names.length <= max) return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  return `${names.slice(0, max).join(', ')} and ${names.length - max} more`;
+}
+
 /** The named details, sorted into the same groups as the summary. */
 export function groupParticipation(rows: readonly ParticipationRow[], ungraded: boolean): ParticipationGroups {
-  const groups: ParticipationGroups = { correct: [], incorrect: [], answered: [], silent: [], absent: [] };
+  const groups: ParticipationGroups = { correct: [], incorrect: [], answered: [], silent: [], excused: [], absent: [] };
   for (const row of rows) {
     if (row.participation !== 'answered') groups[row.participation].push(row);
     else if (ungraded || row.result === 'ungraded' || row.result === null) groups.answered.push(row);

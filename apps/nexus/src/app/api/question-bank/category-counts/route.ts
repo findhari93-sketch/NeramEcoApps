@@ -24,14 +24,24 @@ export async function GET(request: NextRequest) {
     const year = params.get('year') ? parseInt(params.get('year')!, 10) : null;
     const sessionKey = params.get('session');
     const parsed = sessionKey ? parseSessionKey(sessionKey) : null;
+    // The practice page sends the shift on its own (?shift=forenoon). Older
+    // callers fold it into the session key ("Session 1 (Forenoon)").
+    const shift = params.get('shift') || parsed?.shift || null;
+    // Same values as nexus_qb_questions.section, comma-separated. Without it a
+    // student scoped to one paper's Mathematics saw Aptitude and Drawing counts.
+    const section = (params.get('section') || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
 
     const { tree, counts } = await getQBSubjectTagTree(
-      examType
+      examType || section.length > 0
         ? {
             exam_type: examType,
-            year,
-            session: parsed?.session ?? null,
-            shift: parsed?.shift ?? null,
+            year: examType ? year : null,
+            session: examType ? parsed?.session ?? null : null,
+            shift: examType ? shift : null,
+            section: section.length > 0 ? section : null,
           }
         : undefined,
     );

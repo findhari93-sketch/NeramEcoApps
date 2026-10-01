@@ -34,7 +34,9 @@ import DrawingPracticePanel from './DrawingPracticePanel';
 import SourceBadges from './SourceBadges';
 import RepeatBadges from './RepeatBadges';
 import DifficultyChip from './DifficultyChip';
+import { showsDifficulty } from './practice/practice-logic';
 import CategoryChips from './CategoryChips';
+import StudyRefsPanel from './StudyRefsPanel';
 import MCQOptions from './MCQOptions';
 import FigureViewer from './FigureViewer';
 import MathText from '@/components/common/MathText';
@@ -91,6 +93,19 @@ interface QuestionDetailProps {
   hideNav?: boolean;
   /** Hide Submit and Next Question, for a caller that renders its own. */
   hideActions?: boolean;
+}
+
+const BROAD_SUBJECTS = new Set(['mathematics', 'aptitude', 'drawing']);
+
+/**
+ * The chapter chips under a question. "Mathematics" beside "Functions" says
+ * nothing the chapter does not, so a broad subject shows only when it is all
+ * the question has.
+ */
+export function chapterChips(categories: string[] | null | undefined): string[] {
+  const all = categories || [];
+  const chapters = all.filter((c) => !BROAD_SUBJECTS.has(c));
+  return chapters.length > 0 ? chapters : all;
 }
 
 interface SolutionTab {
@@ -619,10 +634,15 @@ function QuestionDetailBody({
         </Accordion>
       )}
 
+      {/* What to study: a hint on request before the answer, open after it. */}
+      {question.question_format !== 'DRAWING_PROMPT' && (
+        <StudyRefsPanel key={question.id} study={question.study} submitted={submitted} />
+      )}
+
       {/* Category + Difficulty footer */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 2 }}>
-        <DifficultyChip difficulty={question.difficulty} />
-        <CategoryChips categories={question.categories || []} />
+        {showsDifficulty(question) && <DifficultyChip difficulty={question.difficulty} />}
+        <CategoryChips categories={chapterChips(question.categories)} />
       </Box>
 
       {/* The video is promised before the answer, and only opens after it. */}

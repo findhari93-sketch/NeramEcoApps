@@ -10,6 +10,8 @@ import {
   getQuestionTagIds,
   setQuestionTags,
   refreshPaperStats,
+  getQBQuestionStudyView,
+  getQBQuestionStudyRow,
 } from '@neram/database';
 import { getLinkedDrawingQuestionId } from '@neram/database/queries/nexus';
 import { resolveStaffRole } from '@/lib/staff-capabilities';
@@ -53,7 +55,18 @@ export async function GET(
       drawing_question_id = await getLinkedDrawingQuestionId(id);
     }
 
-    const tag_ids = await getQuestionTagIds(id);
+    const isStaff = resolveStaffRole(caller) !== null;
+    // "What to study" rides on this payload, so opening a question stays one
+    // invocation. A failure here must never cost the student the question.
+    const [tag_ids, study, study_row] = await Promise.all([
+      getQuestionTagIds(id),
+      getQBQuestionStudyView(id, data.categories).catch((err) => {
+        console.error('[QB API] study refs:', describeError(err));
+        return null;
+      }),
+      // Staff also get the stored row, unreviewed or not, for the editor.
+      isStaff ? getQBQuestionStudyRow(id).catch(() => null) : Promise.resolve(null),
+    ]);
 
     /**
      * `?origin=1`: which upload produced this question.
@@ -66,11 +79,14 @@ export async function GET(
      * teacher uploaded which file.
      */
     let origin = null;
-    if (request.nextUrl.searchParams.get('origin') === '1' && resolveStaffRole(caller) !== null) {
+    if (request.nextUrl.searchParams.get('origin') === '1' && isStaff) {
       origin = await getQuestionOrigin(id).catch(() => null);
     }
 
-    return NextResponse.json({ data: { ...data, drawing_question_id, tag_ids, origin } }, { status: 200 });
+    return NextResponse.json(
+      { data: { ...data, drawing_question_id, tag_ids, origin, study, ...(isStaff ? { study_row } : {}) } },
+      { status: 200 },
+    );
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
     console.error('[QB API] Error:', describeError(err));

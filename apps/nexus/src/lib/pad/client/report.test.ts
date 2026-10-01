@@ -137,11 +137,20 @@ describe('CSV', () => {
       }),
     );
     expect(rows).toEqual([
-      ['Asha', 'Yes', 4, 0, 0, 3, 1, 0, 4, '75%'],
-      ['Chitra', 'Yes', 0, 2, 2, 0, 0, 2, 2, '0%'],
-      ['Unnamed student', 'No', 1, 0, 0, 0, 1, 0, 1, '0%'],
+      ['Asha', 'Yes', 4, 0, 0, 3, 1, 0, 4, '75%', '', '', '', '', ''],
+      ['Chitra', 'Yes', 0, 2, 2, 0, 0, 2, 2, '0%', '', '', '', '', ''],
+      ['Unnamed student', 'No', 1, 0, 0, 0, 1, 0, 1, '0%', '', '', '', '', ''],
     ]);
     expect(rows.every((row) => row.length === REPORT_CSV_HEADERS.length)).toBe(true);
+  });
+
+  it('adds attempted, not attempted, accuracy and rank from the round results', () => {
+    const asha = student('Asha', { answered: 4, correct: 3, wrong: 1, total_graded: 4 });
+    const rows = reportCsvRows(report({ students: [asha] }), {
+      [asha.student_id]: { attempted: 4, no_answer: 0, accuracy_pct: 75, rank: 2, ranked_of: 22 },
+    });
+    expect(rows[0].slice(10)).toEqual([4, 0, '75%', 2, 22]);
+    expect(REPORT_CSV_HEADERS.slice(10)).toEqual(['Attempted', 'Not attempted', 'Right out of attempted', 'Rank', 'Rank out of']);
   });
 
   it('keeps a comma in a name inside its column and defuses a formula', () => {

@@ -5,6 +5,7 @@ import {
   getQBProposalSummary,
   setQBProposalStatus,
   applyQBCategoryProposals,
+  markQBStudyReviewedForProposals,
 } from '@neram/database';
 import type { QBProposalStatus } from '@neram/database';
 
@@ -73,6 +74,10 @@ export async function PATCH(request: NextRequest) {
 
     if (action === 'apply') {
       const result = await applyQBCategoryProposals(ids, access.caller.id);
+      // The approved chapter's "What to study" goes live with it. Never fails the apply.
+      await markQBStudyReviewedForProposals(ids, access.caller.id).catch((err) =>
+        console.error('QB category-proposals: marking study rows reviewed failed:', err),
+      );
       return NextResponse.json({ data: result });
     }
 
@@ -81,6 +86,11 @@ export async function PATCH(request: NextRequest) {
       action === 'approve' ? 'approved' : 'rejected',
       access.caller.id,
     );
+    if (action === 'approve') {
+      await markQBStudyReviewedForProposals(ids, access.caller.id).catch((err) =>
+        console.error('QB category-proposals: marking study rows reviewed failed:', err),
+      );
+    }
     return NextResponse.json({ data: { updated } });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to update proposals';

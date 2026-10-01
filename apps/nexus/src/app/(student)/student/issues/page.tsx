@@ -45,6 +45,10 @@ import IssueReplyComposer from '@/components/issues/IssueReplyComposer';
 import { ISSUE_PARAM, findIssueForRef } from '@/lib/issue-link';
 import IssueStatusTracker from '@/components/issues/IssueStatusTracker';
 import ResponsiveSheet from '@/components/study-materials/recordings/ResponsiveSheet';
+import ScreenshotUploader from '@/components/issues/ScreenshotUploader';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import { collectDeviceInfo } from '@/lib/device-collector';
+import { getRecentErrors } from '@/lib/error-buffer';
 import {
   statusMeta,
   studentQueueOf,
@@ -80,7 +84,7 @@ const CATEGORY_CONFIG: Record<FoundationIssueCategory, { label: string; icon: Re
 
 export default function StudentIssuesPage() {
   const theme = useTheme();
-  const { getToken, user } = useNexusAuthContext();
+  const { getToken, getChatTokenSilent, user } = useNexusAuthContext();
   const searchParams = useSearchParams();
   const [issues, setIssues] = useState<NexusFoundationIssueWithDetails[]>([]);
   const [loading, setLoading] = useState(true);
@@ -92,6 +96,12 @@ export default function StudentIssuesPage() {
 
   const [reopenIssueId, setReopenIssueId] = useState<string | null>(null);
   const [reopenReason, setReopenReason] = useState('');
+  const [reopenShots, setReopenShots] = useState<string[]>([]);
+  // Screenshots belong to the ticket they were added for; a sheet opened on
+  // another ticket starts empty.
+  useEffect(() => {
+    setReopenShots([]);
+  }, [reopenIssueId]);
   const [actionLoading, setActionLoading] = useState(false);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false, message: '', severity: 'success',
@@ -193,6 +203,22 @@ export default function StudentIssuesPage() {
   }, [getToken, threads]);
 
   /**
+   * Headers for a move that tells staff something. The chat token, when this
+   * device can get one silently, lets the server send it as a 1:1 Teams chat
+   * from the student to the teacher on the ticket, so it is seen in Teams and
+   * not only on a page the teacher may not open. Without one the teacher still
+   * gets a Teams alert and the bell.
+   */
+  async function staffBoundHeaders(token: string): Promise<Record<string, string>> {
+    const chat = await getChatTokenSilent().catch(() => null);
+    return {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      ...(chat ? { 'X-Teams-Chat-Token': chat } : {}),
+    };
+  }
+
+  /**
    * Reply on the ticket.
    *
    * Throws on failure so the composer keeps what was typed. A support box that
@@ -203,7 +229,7 @@ export default function StudentIssuesPage() {
     if (!token) throw new Error('Not signed in');
     const res = await fetch(`/api/foundation/issues/${issueId}`, {
       method: 'PATCH',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: await staffBoundHeaders(token),
       body: JSON.stringify({ action: 'comment', comment: text }),
     });
     if (!res.ok) {
@@ -270,7 +296,7 @@ export default function StudentIssuesPage() {
       if (!token) return;
       const res = await fetch(`/api/foundation/issues/${issueId}`, {
         method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        headers: await staffBoundHeaders(token),
         body: JSON.stringify({ action: 'confirm' }),
       });
       if (res.ok) {
@@ -292,15 +318,33 @@ export default function StudentIssuesPage() {
     try {
       const token = await getToken();
       if (!token) return;
+      // The same technical picture a new report carries, taken now: the fix has
+      // happened since the first report, so its logs no longer describe the
+      // problem. Staff-only on the server; never shown back to the student.
+      let deviceInfo: ReturnType<typeof collectDeviceInfo> | undefined;
+      try {
+        deviceInfo = collectDeviceInfo();
+      } catch {
+        deviceInfo = undefined;
+      }
+      const consoleLogs = getRecentErrors();
       const res = await fetch(`/api/foundation/issues/${reopenIssueId}`, {
         method: 'PATCH',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'reopen', reason: reopenReason.trim() }),
+        headers: await staffBoundHeaders(token),
+        body: JSON.stringify({
+          action: 'reopen',
+          reason: reopenReason.trim(),
+          device_info: deviceInfo,
+          console_logs: consoleLogs.length > 0 ? consoleLogs : undefined,
+          screenshot_urls: reopenShots.length > 0 ? reopenShots : undefined,
+          page_url: window.location.pathname,
+        }),
       });
       if (res.ok) {
         setSnackbar({ open: true, message: 'Reopened. Your teacher has been told.', severity: 'success' });
         setReopenIssueId(null);
         setReopenReason('');
+        setReopenShots([]);
         fetchIssues();
       } else {
         const data = await res.json().catch(() => ({}));
@@ -694,7 +738,6 @@ export default function StudentIssuesPage() {
                 )}
 
                 {/*
-                  The conversation.                {/*
                   The conversation.
                   Collapsed until asked for, because most tickets have nothing
                   said on them, and an empty thread on every card would bury the
@@ -734,11 +777,19 @@ export default function StudentIssuesPage() {
                         loading={threadLoading === issue.id}
                         emptyText="Nothing said yet. Ask here if something is unclear."
                       />
-                      {issue.status !== 'closed' && (
+                      {/* Open on a closed ticket too, for the reopen window: a
+                          student who confirmed a fix could not answer the
+                          teacher's follow-up (NXS-0126). A message does not
+                          reopen anything; "Still a problem? Reopen" does. */}
+                      {(issue.status !== 'closed' || canStudentReopen(issue)) && (
                         <IssueReplyComposer
                           onSend={(text) => sendReply(issue.id, text)}
                           placeholder="Reply to your teacher..."
-                          helperText="Your teacher gets this on Nexus. Please keep the conversation here, not on Teams."
+                          helperText={
+                            issue.status === 'closed'
+                              ? 'This ticket is closed. Your teacher still gets your message. If the problem is back, use Reopen instead.'
+                              : 'Your teacher gets this on Nexus and in Teams.'
+                          }
                         />
                       )}
                     </Box>
@@ -784,7 +835,7 @@ export default function StudentIssuesPage() {
         open={!!reopenIssueId}
         onClose={() => setReopenIssueId(null)}
         title="Still happening?"
-        description={`Tell your teacher what is still wrong. The ticket goes back to them. You can reopen a closed ticket for ${STUDENT_REOPEN_DAYS} days.`}
+        description={`Try it once more first, then tell your teacher what is still wrong. The ticket goes back to them. You can reopen a closed ticket for ${STUDENT_REOPEN_DAYS} days.`}
         disableClose={actionLoading}
         actions={
           <>
@@ -816,6 +867,22 @@ export default function StudentIssuesPage() {
           autoFocus
           inputProps={{ style: { fontSize: 16 } }}
         />
+        <Typography variant="body2" sx={{ fontWeight: 600, mt: 2, mb: 1 }}>
+          Add a screenshot (optional)
+        </Typography>
+        <ScreenshotUploader
+          screenshots={reopenShots}
+          onScreenshotsChange={setReopenShots}
+          getToken={getToken}
+          maxCount={3}
+          disabled={actionLoading}
+        />
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', mt: 1.5, color: 'text.secondary' }}>
+          <InfoOutlinedIcon sx={{ fontSize: '1.1rem', mt: '2px' }} aria-hidden />
+          <Typography variant="body2" sx={{ lineHeight: 1.5 }}>
+            Details from this device (browser, screen and any recent errors) are attached automatically, so your teacher can see what went wrong.
+          </Typography>
+        </Box>
       </ResponsiveSheet>
 
       <Dialog open={!!previewImage} onClose={() => setPreviewImage(null)} maxWidth="md">

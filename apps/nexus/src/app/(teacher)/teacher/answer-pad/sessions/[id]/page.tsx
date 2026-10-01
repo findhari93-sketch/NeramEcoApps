@@ -8,11 +8,34 @@
  * A question whose answer the teacher left for later is settled here, after the
  * class: the answers the class gave are counted beside each choice, and once it
  * is revealed every score updates (scores are computed, never stored).
+ *
+ * A session is a round (Round 1, Round 2 in the same class). Its ranked results
+ * come from /results, and publishing them is done here, once the round has
+ * ended: each student then sees their own result, the top five and the class
+ * average, and the first publish sends each their own result in a Teams chat.
  */
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
-import { Alert, Box, Button, Chip, CircularProgress, ImageViewerDialog, Paper, Stack, Typography } from '@neram/ui';
+import {
+  Alert,
+  Box,
+  Button,
+  Chip,
+  CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle,
+  FormHelperText,
+  ImageViewerDialog,
+  Paper,
+  Skeleton,
+  Stack,
+  Typography,
+} from '@neram/ui';
+import CampaignRounded from '@mui/icons-material/CampaignRounded';
 import DownloadRounded from '@mui/icons-material/DownloadRounded';
 import RefreshRounded from '@mui/icons-material/RefreshRounded';
 import ScheduleRounded from '@mui/icons-material/ScheduleRounded';
@@ -25,6 +48,7 @@ import {
   REPORT_CSV_HEADERS,
   promptOutcome,
   reportCsvRows,
+  type CsvRanking,
   reportErrorMessage,
   reportFilename,
   reportSkips,
@@ -33,6 +57,59 @@ import {
   type ReportPrompt,
   type SessionReport,
 } from '@/lib/pad/client/report';
+import { RESULT_LABELS, roundName, type ResultLabel, type RoundResults, type RoundStudentRow } from '@/lib/pad/round-results';
+
+/** The round fields the report route now carries beside the session. */
+type RoundSession = SessionReport['session'] & {
+  round_no?: number | null;
+  results_published_at?: string | null;
+  changed_since_publish?: boolean;
+};
+
+const LABEL_COLOR: Record<ResultLabel, 'success' | 'info' | 'warning'> = {
+  strong: 'success',
+  good: 'info',
+  needs_practice: 'warning',
+};
+
+/** What the teacher reads when publishing or withdrawing is refused. */
+function publishMessage(code: string | null): string {
+  switch (code) {
+    case 'INVALID_TRANSITION':
+      return 'End the round in the meeting first, then publish.';
+    case 'NOT_SESSION_TEACHER':
+      return 'Only the teacher who ran this round can publish its results.';
+    default:
+      return 'The results could not be published. Please try again.';
+  }
+}
+
+/** Only a payload shaped like round results is drawn; anything else counts as not loaded. */
+function asResults(body: unknown): RoundResults | null {
+  const value = body as Partial<RoundResults> | null;
+  return value && typeof value === 'object' && value.session && value.class && Array.isArray(value.students) && Array.isArray(value.top)
+    ? (value as RoundResults)
+    : null;
+}
+
+/** The round results' numbers by student, for the CSV's last columns. */
+function csvRanking(results: RoundResults | null): Record<string, CsvRanking> {
+  const out: Record<string, CsvRanking> = {};
+  for (const row of results?.students ?? []) {
+    out[row.student_id] = { attempted: row.attempted, no_answer: row.no_answer, accuracy_pct: row.accuracy_pct, rank: row.rank, ranked_of: row.ranked_of };
+  }
+  return out;
+}
+
+/** Ranked first, ties by name; anyone without a rank (never answered) after. */
+function rankedStudents(rows: RoundStudentRow[]): RoundStudentRow[] {
+  return [...rows].sort((a, b) => {
+    const ra = a.rank ?? Number.POSITIVE_INFINITY;
+    const rb = b.rank ?? Number.POSITIVE_INFINITY;
+    if (ra !== rb) return ra - rb;
+    return (a.name ?? '').localeCompare(b.name ?? '');
+  });
+}
 
 /** What the teacher reads when setting an answer after class is refused. */
 function settleMessage(code: string | null): string {
@@ -119,14 +196,24 @@ export default function AnswerPadReportPage() {
   const [busy, setBusy] = useState<string | null>(null);
   const [settleError, setSettleError] = useState<string | null>(null);
   const [viewing, setViewing] = useState<{ src: string; title: string } | null>(null);
+  const [results, setResults] = useState<RoundResults | null>(null);
+  const [confirmPublish, setConfirmPublish] = useState(false);
+  const [publishing, setPublishing] = useState<'publish' | 'withdraw' | null>(null);
+  const [publishNote, setPublishNote] = useState<{ severity: 'success' | 'error'; text: string } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const token = await getToken();
       if (!token) return;
-      const res = await fetch(`/api/pad/sessions/${id}/report`, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+      const headers = { Authorization: `Bearer ${token}` };
+      // The ranked results are read beside the report, so the two always show the same moment.
+      const [res, resultsRes] = await Promise.all([
+        fetch(`/api/pad/sessions/${id}/report`, { headers, cache: 'no-store' }),
+        fetch(`/api/pad/sessions/${id}/results`, { headers, cache: 'no-store' }).catch(() => null),
+      ]);
       const body = await res.json().catch(() => ({}));
+      setResults(resultsRes && resultsRes.ok ? asResults(await resultsRes.json().catch(() => null)) : null);
       if (!res.ok) {
         setError(reportErrorMessage(res.status, typeof body.code === 'string' ? body.code : null));
         return;
@@ -168,6 +255,42 @@ export default function AnswerPadReportPage() {
     }
   };
 
+  /** Publish (or withdraw) the round's results, then reload so the page shows the server's state. */
+  const publish = async (on: boolean) => {
+    setPublishing(on ? 'publish' : 'withdraw');
+    setPublishNote(null);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(`/api/pad/sessions/${id}/publish`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(on ? {} : { publish: false }),
+      });
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setPublishNote({ severity: 'error', text: publishMessage(typeof result.code === 'string' ? result.code : null) });
+      } else if (!on) {
+        setPublishNote({ severity: 'success', text: 'Results withdrawn. Students no longer see them.' });
+      } else {
+        const notified = typeof result.notified === 'number' ? result.notified : 0;
+        setPublishNote({
+          severity: 'success',
+          text:
+            notified > 0
+              ? `Results published. ${notified === 1 ? '1 student was' : `${notified} students were`} sent their result in Teams.`
+              : 'Results published. Students see the update in Nexus.',
+        });
+      }
+    } catch {
+      setPublishNote({ severity: 'error', text: 'No connection. Check your network and try again.' });
+    } finally {
+      setPublishing(null);
+      setConfirmPublish(false);
+      await load();
+    }
+  };
+
   if (!report) {
     return loading ? (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
@@ -178,18 +301,35 @@ export default function AnswerPadReportPage() {
     );
   }
 
-  const { session, prompts, students } = report;
+  const { prompts, students } = report;
+  const session = report.session as RoundSession;
   const totals = reportTotals(report);
   const live = session.status === 'live';
+  const roundNo = results?.session.round_no ?? session.round_no ?? null;
+  const publishedAt = results ? results.session.results_published_at : (session.results_published_at ?? null);
+  const changedSincePublish = results ? results.session.changed_since_publish : !!session.changed_since_publish;
+  const excusedOf = (student: object) => (student as { excused?: number }).excused ?? 0;
+  const showExcused = students.some((student) => excusedOf(student) > 0);
   const settling: ReportPrompt | null = prompts.find((prompt) => prompt.id === settlingId && prompt.state === 'closed') ?? null;
 
   return (
     <Stack spacing={3}>
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} justifyContent="space-between" alignItems={{ xs: 'stretch', sm: 'flex-start' }}>
         <Box sx={{ minWidth: 0 }}>
-          <Typography variant="h5" component="h1" fontWeight={800}>
-            Answer Pad report
-          </Typography>
+          {roundNo ? (
+            <>
+              <Typography variant="overline" component="p" color="text.secondary" sx={{ lineHeight: 1.5 }}>
+                Answer Pad report
+              </Typography>
+              <Typography variant="h5" component="h1" fontWeight={800}>
+                {roundName(roundNo)}
+              </Typography>
+            </>
+          ) : (
+            <Typography variant="h5" component="h1" fontWeight={800}>
+              Answer Pad report
+            </Typography>
+          )}
           <Typography color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
             {`${session.classroom_name ?? 'Class'}, ${formatWhen(session.created_at)}`}
           </Typography>
@@ -209,7 +349,7 @@ export default function AnswerPadReportPage() {
           <Button
             variant="contained"
             startIcon={<DownloadRounded />}
-            onClick={() => downloadCsv(reportFilename(report), REPORT_CSV_HEADERS, reportCsvRows(report))}
+            onClick={() => downloadCsv(reportFilename(report), REPORT_CSV_HEADERS, reportCsvRows(report, csvRanking(results)))}
             disabled={students.length === 0}
             sx={{ minHeight: 44 }}
           >
@@ -234,6 +374,196 @@ export default function AnswerPadReportPage() {
             : `${totals.unrevealed} questions have no answer yet, so they are not graded. Set them below and every score updates.`}
         </Alert>
       )}
+
+      <Stack spacing={1.5} component="section" aria-labelledby="pad-report-results">
+        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} justifyContent="space-between" alignItems={{ xs: 'stretch', sm: 'flex-start' }}>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="h6" component="h2" fontWeight={800} id="pad-report-results">
+              Results
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              Ranked by most correct, out of everyone who opened the pad. Students with the same number correct share a rank.
+            </Typography>
+          </Box>
+          <Box sx={{ flexShrink: 0 }}>
+            {publishedAt ? (
+              <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                <Chip color="success" variant="outlined" label={`Published ${formatWhen(publishedAt)}`} sx={{ fontWeight: 600 }} />
+                <Button variant="text" onClick={() => void publish(false)} disabled={publishing !== null} sx={{ minHeight: 44 }}>
+                  {publishing === 'withdraw' ? 'Withdrawing' : 'Withdraw'}
+                </Button>
+              </Stack>
+            ) : (
+              <Stack spacing={0.5} alignItems={{ xs: 'stretch', sm: 'flex-end' }}>
+                <Button
+                  variant="contained"
+                  startIcon={<CampaignRounded />}
+                  onClick={() => setConfirmPublish(true)}
+                  disabled={live || publishing !== null}
+                  aria-describedby={live ? 'pad-report-publish-help' : undefined}
+                  sx={{ minHeight: 44 }}
+                >
+                  Publish results
+                </Button>
+                {live && <FormHelperText id="pad-report-publish-help">End the round in the meeting first</FormHelperText>}
+              </Stack>
+            )}
+          </Box>
+        </Stack>
+
+        {publishNote && (
+          <Alert severity={publishNote.severity} onClose={() => setPublishNote(null)}>
+            {publishNote.text}
+          </Alert>
+        )}
+
+        {publishedAt && changedSincePublish && (
+          <Alert
+            severity="info"
+            action={
+              <Button color="inherit" onClick={() => void publish(true)} disabled={publishing !== null} sx={{ minHeight: 44 }}>
+                Publish again
+              </Button>
+            }
+          >
+            Results changed after you published. Publish again so students see the latest marks.
+          </Alert>
+        )}
+
+        {!results ? (
+          loading ? (
+            <Stack spacing={1} aria-busy="true" aria-label="Loading the results">
+              <Skeleton variant="rectangular" height={72} sx={{ borderRadius: 2 }} />
+              <Skeleton variant="rectangular" height={160} sx={{ borderRadius: 2 }} />
+            </Stack>
+          ) : (
+            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+              <Typography color="text.secondary">The ranked results could not load.</Typography>
+              <Button variant="text" startIcon={<RefreshRounded />} onClick={() => load()} sx={{ minHeight: 44 }}>
+                Try again
+              </Button>
+            </Stack>
+          )
+        ) : (
+          <>
+            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', md: 'repeat(4, minmax(0, 1fr))' }, gap: 1.5 }}>
+              <Stat
+                label="Took part"
+                value={typeof results.class.enrolled === 'number' ? `${results.class.took_part} of ${results.class.enrolled}` : results.class.took_part}
+              />
+              <Stat label="Class average" value={results.class.average_score === null ? 'No score yet' : `${results.class.average_score}%`} />
+              <Stat label="Questions" value={results.class.questions} />
+              <Stat label="Graded" value={results.class.graded} />
+            </Box>
+
+            {results.top.length > 0 && (
+              <Box>
+                <Typography variant="subtitle2" component="h3" fontWeight={800} sx={{ mb: 1 }}>
+                  Top five (shown to the class)
+                </Typography>
+                <Box
+                  component="ol"
+                  aria-label="Top five"
+                  sx={{ listStyle: 'none', m: 0, p: 0, display: 'grid', gap: 1, gridTemplateColumns: { xs: '1fr', sm: 'repeat(auto-fill, minmax(220px, 1fr))' } }}
+                >
+                  {results.top.map((row) => (
+                    <Box
+                      component="li"
+                      key={row.student_id}
+                      aria-label={`Rank ${row.rank}: ${row.name ?? 'Unnamed student'}, ${row.correct} of ${row.counted} correct`}
+                      sx={{ display: 'flex', alignItems: 'center', gap: 1.25, p: 1.25, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'background.paper' }}
+                    >
+                      <Typography sx={{ width: '2ch', fontWeight: 800, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>{row.rank}</Typography>
+                      <StudentAvatar userId={row.student_id} name={row.name ?? ''} size={32} sx={{ flexShrink: 0 }} />
+                      <Typography sx={{ flex: 1, minWidth: 0, fontWeight: 600, overflowWrap: 'anywhere' }}>{row.name ?? 'Unnamed student'}</Typography>
+                      <Typography variant="body2" color="text.secondary" sx={{ flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+                        {`${row.correct} of ${row.counted}`}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+            )}
+
+            {results.students.length === 0 ? (
+              <Typography color="text.secondary">Nobody joined this round.</Typography>
+            ) : (
+              <TableFrame caption="Each student's result, ranked by most correct" minWidth={720}>
+                <thead>
+                  <tr>
+                    <th scope="col" className="num">
+                      Rank
+                    </th>
+                    <th scope="col">Student</th>
+                    <th scope="col" className="num">
+                      Attempted
+                    </th>
+                    <th scope="col" className="num">
+                      Not attempted
+                    </th>
+                    <th scope="col" className="num">
+                      Right
+                    </th>
+                    <th scope="col" className="num">
+                      Score
+                    </th>
+                    <th scope="col">Result</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rankedStudents(results.students).map((row) => (
+                    <tr key={row.student_id}>
+                      <td className="num">{row.rank ? `${row.rank} of ${row.ranked_of}` : ''}</td>
+                      <th scope="row" className="wrap">
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <StudentAvatar userId={row.student_id} name={row.name ?? ''} size={32} sx={{ flexShrink: 0 }} />
+                          <span>{row.name ?? 'Unnamed student'}</span>
+                        </Stack>
+                      </th>
+                      <td className="num">{row.counted > 0 ? row.attempted : ''}</td>
+                      <td className="num">{row.counted > 0 ? row.no_answer : ''}</td>
+                      <td className="num">{row.counted > 0 ? `${row.correct} of ${row.attempted}` : 'Not graded'}</td>
+                      <td className="num">{row.score_pct === null ? '' : `${row.score_pct}%`}</td>
+                      <td>
+                        <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                          {row.label && <Chip size="small" variant="outlined" color={LABEL_COLOR[row.label]} label={RESULT_LABELS[row.label]} />}
+                          {row.not_active && <Chip size="small" variant="outlined" label="Not active" />}
+                        </Stack>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </TableFrame>
+            )}
+          </>
+        )}
+      </Stack>
+
+      <Dialog
+        open={confirmPublish}
+        onClose={() => {
+          if (!publishing) setConfirmPublish(false);
+        }}
+        aria-labelledby="pad-publish-title"
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle id="pad-publish-title">{`Publish ${roundName(roundNo)} results?`}</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Each student sees what they attempted, what they got right, their own rank, each question, the top 5 and the class average. Each student also gets a Teams chat from Neram Assistant with
+            their own result (first publish only).
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={() => setConfirmPublish(false)} disabled={publishing !== null} sx={{ minHeight: 44 }}>
+            Cancel
+          </Button>
+          <Button variant="contained" onClick={() => void publish(true)} disabled={publishing !== null} sx={{ minHeight: 44 }}>
+            {publishing === 'publish' ? 'Publishing' : 'Publish'}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Stack spacing={1.5} component="section" aria-labelledby="pad-report-questions">
         <Typography variant="h6" component="h2" fontWeight={800} id="pad-report-questions">
@@ -413,6 +743,11 @@ export default function AnswerPadReportPage() {
                 <th scope="col" className="num">
                   Absent
                 </th>
+                {showExcused && (
+                  <th scope="col" className="num">
+                    Excused
+                  </th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -433,6 +768,7 @@ export default function AnswerPadReportPage() {
                   <td className="num">{student.skipped}</td>
                   <td className="num">{student.answered}</td>
                   <td className="num">{student.absent}</td>
+                  {showExcused && <td className="num">{excusedOf(student)}</td>}
                 </tr>
               ))}
             </tbody>

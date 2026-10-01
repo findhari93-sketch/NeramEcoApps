@@ -32,11 +32,11 @@ export async function generateMetadata({
 const faqs = [
   {
     question: 'Is there NATA coaching in Adyar, Chennai?',
-    answer: 'Yes, Neram Classes serves Adyar students through our Ashok Nagar center (8 km away) and live online classes. Being near IIT Madras, Adyar students benefit from our IIT Madras alumni faculty who can arrange campus drawing practice sessions. Max 25 per batch, 99.9% success rate.',
+    answer: 'Yes, Neram Classes serves Adyar students through our Ashok Nagar center (8 km away) and live online classes. Being near IIT Madras, Adyar students benefit from our IIT Madras alumni faculty who can arrange campus drawing practice sessions. Classroom and live online batches.',
   },
   {
     question: 'Which is the best NATA coaching near Adyar?',
-    answer: 'Neram Classes, with our center at Ashok Nagar (25 min from Adyar), is the top choice for Adyar students. Key advantages: only institute with free AI study app, IIT/NIT alumni faculty, max 25 per batch, hybrid online-offline model, and 99.9% success rate since 2009.',
+    answer: 'Neram Classes, with our center at Ashok Nagar (25 min from Adyar), is the top choice for Adyar students. Neram has taught NATA since 2009, with classroom and live online batches, drawing feedback and a free NATA study app.',
   },
   {
     question: 'Can I attend NATA coaching online from Adyar?',
@@ -52,7 +52,7 @@ export default function Page({ params: { locale } }: { params: { locale: string 
       <JsonLd data={generateBreadcrumbSchema([
         { name: 'Home', url: BASE_URL },
         { name: 'Coaching', url: `${BASE_URL}/coaching` },
-        { name: 'NATA Coaching Chennai', url: `${BASE_URL}/coaching/nata-coaching-chennai` },
+        { name: 'NATA Coaching Chennai', url: `${BASE_URL}/coaching/nata-coaching/nata-coaching-centers-in-chennai` },
         { name: `NATA Coaching ${neighborhood.name}` },
       ])} />
       <JsonLd data={generateFAQSchema(faqs)} />

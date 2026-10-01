@@ -16,6 +16,7 @@ import {
   ORG_SLOGAN,
   ORG_BEST_KNOWN_FOR,
 } from './constants';
+import { getCourseSchemaOffers } from '../fees';
 
 // ─── Organization Schema ────────────────────────────────────────────────────
 
@@ -81,6 +82,8 @@ export function generateOrganizationSchema(aggregateRating?: AggregateRatingJson
       'B.Arch Admission Counselling',
       'Architecture College Selection',
     ],
+    // Online coaching serves the whole country and the Gulf. Cities are not listed
+    // here: only the real centre pages (/contact/{slug}) claim a local presence.
     areaServed: [
       { '@type': 'Country', name: 'India' },
       { '@type': 'Country', name: 'United Arab Emirates' },
@@ -89,28 +92,8 @@ export function generateOrganizationSchema(aggregateRating?: AggregateRatingJson
       { '@type': 'Country', name: 'Saudi Arabia' },
       { '@type': 'Country', name: 'Kuwait' },
       { '@type': 'Country', name: 'Bahrain' },
-      { '@type': 'State', name: 'Tamil Nadu' },
-      { '@type': 'State', name: 'Karnataka' },
-      { '@type': 'State', name: 'Kerala' },
-      { '@type': 'State', name: 'Andhra Pradesh' },
-      { '@type': 'State', name: 'Telangana' },
-      { '@type': 'City', name: 'Chennai' },
-      { '@type': 'City', name: 'Bangalore' },
-      { '@type': 'City', name: 'Coimbatore' },
-      { '@type': 'City', name: 'Hyderabad' },
-      { '@type': 'City', name: 'Mumbai' },
-      { '@type': 'City', name: 'Delhi' },
-      { '@type': 'City', name: 'Dubai' },
     ],
     ...(aggregateRating ? { aggregateRating } : {}),
-    numberOfEmployees: {
-      '@type': 'QuantitativeValue',
-      value: 50,
-    },
-    award: [
-      'Highest NATA Success Rate (99.9%) among coaching institutes in India',
-      '10,000+ students trained across 150+ cities since 2009',
-    ],
     additionalProperty: [
       {
         '@type': 'PropertyValue',
@@ -119,25 +102,8 @@ export function generateOrganizationSchema(aggregateRating?: AggregateRatingJson
       },
       {
         '@type': 'PropertyValue',
-        name: 'Presence',
-        value: '150+ cities across India and 6 Gulf countries (online + offline hybrid)',
-      },
-      {
-        '@type': 'PropertyValue',
-        name: 'Unique Feature',
-        value: 'Only NATA coaching institute with a free AI-powered study app featuring cutoff calculator, college predictor for 5000+ colleges, and exam center locator',
-      },
-      {
-        '@type': 'PropertyValue',
         name: 'Teaching Mode',
-        value: 'Online and Offline hybrid coaching with max 25 students per batch',
-      },
-    ],
-    alumni: [
-      {
-        '@type': 'Person',
-        name: 'Students admitted to',
-        description: 'SPA Delhi, SPA Bhopal, CEPT Ahmedabad, NIT Trichy, NIT Calicut, BMS College, RV College, Manipal University, VIT, and 100+ top architecture colleges',
+        value: 'Live online classes across India and the Gulf; classroom batches in Tamil Nadu and Bangalore',
       },
     ],
     owns: {
@@ -148,29 +114,12 @@ export function generateOrganizationSchema(aggregateRating?: AggregateRatingJson
       operatingSystem: 'Web (PWA) - Android, iOS, Windows, macOS',
       offers: { '@type': 'Offer', price: '0', priceCurrency: 'INR' },
     },
+    // Prices come from lib/fees.ts, the single fee source, so schema never drifts
+    // from the fees shown on the page.
     hasOfferCatalog: {
       '@type': 'OfferCatalog',
       name: 'NATA & Architecture Entrance Coaching Programs',
-      itemListElement: [
-        {
-          '@type': 'Course',
-          name: 'NATA 1-Year Program',
-          description: 'Comprehensive 12-month NATA preparation with daily drawing practice, 100+ mock tests, and IIT/NIT alumni faculty. Starting ₹25,000.',
-          offers: { '@type': 'Offer', price: '25000', priceCurrency: 'INR' },
-        },
-        {
-          '@type': 'Course',
-          name: 'NATA Crash Course (3 Months)',
-          description: 'Intensive 3-month NATA preparation. Starting ₹15,000.',
-          offers: { '@type': 'Offer', price: '15000', priceCurrency: 'INR' },
-        },
-        {
-          '@type': 'Course',
-          name: 'JEE Paper 2 Coaching',
-          description: 'JEE Paper 2 (B.Arch) preparation for IITs and NITs. Starting ₹25,000.',
-          offers: { '@type': 'Offer', price: '25000', priceCurrency: 'INR' },
-        },
-      ],
+      itemListElement: getCourseSchemaOffers(),
     },
   };
 }
@@ -314,6 +263,73 @@ export function generateLocalBusinessSchema(location: {
     parentOrganization: {
       '@id': `${BASE_URL}/#organization`,
     },
+  };
+}
+
+// ─── Location Course Schema (city and state coaching pages) ─────────────────
+
+/**
+ * A city or state coaching page is a Course offered to that place, not a local
+ * business: only the real centre pages (/contact/{slug}) are LocalBusiness. A
+ * blended instance points at the centre when one is near enough to attend.
+ */
+export function generateLocationCourseSchema(input: {
+  name: string;
+  description: string;
+  url: string;
+  area: { type: 'City' | 'State' | 'Country' | 'Place'; name: string; containedIn?: { type: 'State' | 'Country'; name: string } };
+  classroom?: { name: string; url: string } | null;
+  exam: 'NATA' | 'JEE Paper 2';
+}) {
+  const fees = getCourseSchemaOffers()
+    .map((c) => Number(c.offers.price))
+    .filter((n) => Number.isFinite(n));
+  const areaServed = {
+    '@type': input.area.type,
+    name: input.area.name,
+    ...(input.area.containedIn && {
+      containedInPlace: { '@type': input.area.containedIn.type, name: input.area.containedIn.name },
+    }),
+  };
+  const instances: Array<Record<string, unknown>> = [
+    { '@type': 'CourseInstance', courseMode: 'online', courseWorkload: 'P12M' },
+  ];
+  if (input.classroom) {
+    instances.push({
+      '@type': 'CourseInstance',
+      courseMode: 'blended',
+      courseWorkload: 'P12M',
+      location: { '@type': 'Place', '@id': `${input.classroom.url}#localbusiness`, name: input.classroom.name, url: input.classroom.url },
+    });
+  }
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Course',
+    '@id': `${input.url}#course`,
+    name: input.name,
+    description: input.description,
+    url: input.url,
+    inLanguage: 'en',
+    educationalLevel: '12th Pass',
+    teaches:
+      input.exam === 'NATA'
+        ? ['Drawing and Composition', 'Mathematics', 'General Aptitude', 'Architecture Awareness']
+        : ['Mathematics', 'Aptitude', 'Drawing'],
+    provider: { '@id': `${BASE_URL}/#organization`, '@type': 'EducationalOrganization', name: ORG_NAME, url: BASE_URL },
+    areaServed,
+    hasCourseInstance: instances,
+    ...(fees.length && {
+      offers: {
+        '@type': 'AggregateOffer',
+        priceCurrency: 'INR',
+        lowPrice: String(Math.min(...fees)),
+        highPrice: String(Math.max(...fees)),
+        offerCount: String(fees.length),
+        availability: 'https://schema.org/InStock',
+        url: `${BASE_URL}/fees`,
+        category: 'Paid',
+      },
+    }),
   };
 }
 
@@ -640,7 +656,7 @@ export function generateTNHubOrganizationSchema(districts: string[], aggregateRa
     alternateName: ORG_ALTERNATE_NAME,
     url: BASE_URL,
     logo: ORG_LOGO,
-    description: 'Premier NATA coaching center in Tamil Nadu offering online and offline classes across all 38 districts. Expert IIT/NIT alumni faculty with 99.9% success rate.',
+    description: 'NATA coaching in Tamil Nadu since 2009: classroom batches in Chennai, Tambaram, Kanchipuram, Coimbatore, Tiruppur, Trichy, Madurai and Pudukkottai, and live online classes for every district.',
     foundingDate: ORG_FOUNDED,
     address: {
       '@type': 'PostalAddress',
@@ -860,12 +876,11 @@ export function generateOnlineCourseSchema() {
       name: ORG_NAME,
       url: BASE_URL,
     },
-    url: `${BASE_URL}/best-nata-coaching-online`,
+    url: `${BASE_URL}/nata-online-coaching`,
     courseMode: 'online',
     educationalLevel: 'Undergraduate Entrance',
     about: ['NATA Exam Preparation', 'Architecture Entrance Exam', 'Drawing Test', 'JEE Paper 2'],
     teaches: ['Architectural Drawing', 'Design Aptitude', 'Mathematics for Architecture', 'General Aptitude'],
-    totalHistoricalEnrollment: '10000',
     numberOfCredits: 0,
     hasCourseInstance: [
       {
@@ -960,7 +975,7 @@ export function generateFounderPersonSchema() {
     },
     award: [
       'Mentored AIR 1 in JEE B.Arch 2024',
-      'Founded Neram Classes (2009), 10,000+ students trained',
+      'Founded Neram Classes (2009)',
     ],
   };
 }

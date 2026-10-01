@@ -117,9 +117,11 @@ test.describe.serial('Answer Pad API: the question loop', () => {
     expect(await json(intruder)).toMatchObject({ code: 'NOT_SESSION_TEACHER' });
   });
 
-  test("locks each student's first answer", async () => {
+  test('lets a student change their answer while the question is open', async () => {
     expect(await json(await pad.submit(RIGHT, q1, ' b '))).toMatchObject({ status: 'accepted', answer: 'B', rawAnswer: 'b' });
-    expect(await json(await pad.submit(RIGHT, q1, 'C'))).toMatchObject({ status: 'duplicate', answer: 'B' });
+    expect(await json(await pad.submit(RIGHT, q1, 'C'))).toMatchObject({ status: 'changed', answer: 'C' });
+    expect(await json(await pad.submit(RIGHT, q1, 'B'))).toMatchObject({ status: 'changed', answer: 'B' });
+    expect(await json(await pad.submit(RIGHT, q1, 'B'))).toMatchObject({ status: 'unchanged', answer: 'B' });
     expect(await json(await pad.submit(WRONG, q1, 'A'))).toMatchObject({ status: 'accepted', answer: 'A' });
 
     const beyondOptions = await pad.submit(LATE, q1, 'F');
@@ -128,15 +130,16 @@ test.describe.serial('Answer Pad API: the question loop', () => {
     expect(await json(await pad.submit(LATE, q1, '   '))).toMatchObject({ code: 'INVALID_INPUT', field: 'answer' });
   });
 
-  test('shows the teacher a count while OPEN, never names or answers', async () => {
+  test('shows the session teacher who answered what while OPEN, and never a student', async () => {
     const snap = await json(await pad.snapshot(TEACHER, sessionId));
     expect(snap.prompt).toMatchObject({ id: q1, state: 'open', answered_count: 2, correct_keys: null });
     expect(snap.groups).toEqual([]);
     expect(snap.counts.answered + snap.counts.silent + snap.counts.absent).toBe(snap.counts.enrolled);
 
     const details = await pad.participation(TEACHER, q1);
-    expect(details.status()).toBe(409);
-    expect(await json(details)).toMatchObject({ code: 'PROMPT_OPEN' });
+    expect(details.status()).toBe(200);
+    const rows = (await json(details)).rows as Array<{ student_id: string; answer: string | null }>;
+    expect(rows.find((row) => row.student_id === ids[RIGHT])).toMatchObject({ answer: 'B' });
 
     const mineText = await (await pad.snapshot(RIGHT, sessionId)).text();
     expect(JSON.parse(mineText)).toMatchObject({
@@ -153,14 +156,17 @@ test.describe.serial('Answer Pad API: the question loop', () => {
     }
   });
 
-  test('stops answers at CLOSE, while a locked answer can still be fetched again', async () => {
+  test('stops answers and changes at CLOSE, while a retry of the answer given still succeeds', async () => {
     expect(await json(await pad.close(TEACHER, q1))).toMatchObject({ promptId: q1, state: 'closed', changed: true });
     expect(await json(await pad.close(TEACHER, q1))).toMatchObject({ changed: false });
 
     const late = await pad.submit(LATE, q1, 'D');
     expect(late.status()).toBe(409);
     expect(await json(late)).toMatchObject({ code: 'PROMPT_NOT_OPEN', state: 'closed' });
-    expect(await json(await pad.submit(RIGHT, q1, 'B'))).toMatchObject({ status: 'duplicate', answer: 'B' });
+    expect(await json(await pad.submit(RIGHT, q1, 'B'))).toMatchObject({ status: 'unchanged', answer: 'B' });
+    const change = await pad.submit(RIGHT, q1, 'C');
+    expect(change.status()).toBe(409);
+    expect(await json(change)).toMatchObject({ code: 'PROMPT_NOT_OPEN', answer: 'B' });
 
     const snap = await json(await pad.snapshot(TEACHER, sessionId));
     expect(snap.groups).toEqual([
@@ -191,7 +197,7 @@ test.describe.serial('Answer Pad API: the question loop', () => {
     expect(snap.prompt).toMatchObject({ state: 'open', correct_keys: null, ungraded: false, answered_count: 2 });
 
     expect(await json(await pad.submit(LATE, q1, 'd'))).toMatchObject({ status: 'accepted', answer: 'D' });
-    expect(await json(await pad.submit(WRONG, q1, 'B'))).toMatchObject({ status: 'duplicate', answer: 'A' });
+    expect(await json(await pad.submit(WRONG, q1, 'A'))).toMatchObject({ status: 'unchanged', answer: 'A' });
     expect(await json(await pad.close(TEACHER, q1))).toMatchObject({ state: 'closed' });
 
     const noKey = await pad.reveal(TEACHER, q1);

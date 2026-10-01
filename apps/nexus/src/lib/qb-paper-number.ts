@@ -135,11 +135,21 @@ export function sortForPaper<T extends Pick<NexusQBQuestionListItem, 'sources' |
  * Used in the exam and bank scopes, where a row has no paper number of its own
  * and the year is the most useful thing to know about it.
  */
+/**
+ * " S1" for a sitting. Sessions are stored both as "1" and as "Session 1", and
+ * prefixing the stored text with "S" printed "SSession 1" on the latter.
+ */
+export function shortSession(session: string | null | undefined): string {
+  if (!session) return '';
+  const n = session.trim().match(/^(?:session\s*)?(\d+)$/i);
+  return n ? ` S${n[1]}` : ` ${session.trim()}`;
+}
+
 export function sourceLabel(item: Pick<NexusQBQuestionListItem, 'sources'>): string | null {
   const source = item.sources?.[0];
   if (!source) return null;
   const exam = source.exam_type === 'JEE_PAPER_2' ? 'JEE' : 'NATA';
-  const session = source.session ? ` S${source.session}` : '';
+  const session = shortSession(source.session);
   const number = source.question_number != null ? ` Q${source.question_number}` : '';
   return `${exam} ${source.year}${session}${number}`;
 }

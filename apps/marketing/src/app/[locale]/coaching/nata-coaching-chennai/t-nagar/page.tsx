@@ -36,7 +36,7 @@ const faqs = [
   },
   {
     question: 'Which is the closest NATA coaching to T. Nagar?',
-    answer: 'Neram Classes at Ashok Nagar is the closest professional NATA coaching to T. Nagar at just 3 km (10 min). IIT/NIT alumni faculty, max 25 per batch, 99.9% success rate, free AI study app. Students from Pondy Bazaar, West Mambalam, and K.K. Nagar also attend.',
+    answer: 'Neram Classes at Ashok Nagar is the closest professional NATA coaching to T. Nagar at just 3 km (10 min). Classroom and live online batches, drawing feedback and a free NATA study app. Students from Pondy Bazaar, West Mambalam, and K.K. Nagar also attend.',
   },
   {
     question: 'What is the fee for NATA coaching near T. Nagar?',
@@ -52,7 +52,7 @@ export default function Page({ params: { locale } }: { params: { locale: string 
       <JsonLd data={generateBreadcrumbSchema([
         { name: 'Home', url: BASE_URL },
         { name: 'Coaching', url: `${BASE_URL}/coaching` },
-        { name: 'NATA Coaching Chennai', url: `${BASE_URL}/coaching/nata-coaching-chennai` },
+        { name: 'NATA Coaching Chennai', url: `${BASE_URL}/coaching/nata-coaching/nata-coaching-centers-in-chennai` },
         { name: `NATA Coaching ${neighborhood.name}` },
       ])} />
       <JsonLd data={generateFAQSchema(faqs)} />

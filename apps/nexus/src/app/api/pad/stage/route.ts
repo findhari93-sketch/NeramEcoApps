@@ -2,8 +2,9 @@ import { NextRequest } from 'next/server';
 import { resolvePadCaller } from '@/lib/pad/caller';
 import type { TeacherSnapshot } from '@/lib/pad/client/types';
 import { PadRefusal, callPad, padErrorResponse, padJson } from '@/lib/pad/rpc';
-import { liveSessionForMeeting, loadSessionMeta, padDb, rosterIds } from '@/lib/pad/sessions';
-import { stageView } from '@/lib/pad/stage';
+import type { RoundResults } from '@/lib/pad/round-results';
+import { liveSessionForMeeting, loadSessionMeta, padDb, publishedSessionForMeeting, rosterIds } from '@/lib/pad/sessions';
+import { stageResultsView, stageView } from '@/lib/pad/stage';
 import { stageAllowed, stageViews } from '@/lib/pad/stage-cache';
 
 export const dynamic = 'force-dynamic';
@@ -16,7 +17,10 @@ export const dynamic = 'force-dynamic';
  * (lib/pad/stage.ts). The session teacher and students enrolled in its
  * classroom may read it, the same people who may read its snapshots.
  *
- * 200 { stage: StageView | null }   null while no session is live in the meeting
+ * Between rounds, once the last round's results are published, it shows those
+ * results instead: the top five by name and the class average.
+ *
+ * 200 { stage: StageView | null }   null while nothing is live or published in the meeting
  */
 export async function GET(request: NextRequest) {
   try {
@@ -24,7 +28,8 @@ export async function GET(request: NextRequest) {
     const meetingId = request.nextUrl.searchParams.get('meetingId') ?? '';
     if (!meetingId || meetingId.length > 512) throw new PadRefusal('INVALID_INPUT', { field: 'meetingId' });
 
-    const sessionId = await liveSessionForMeeting(meetingId);
+    const liveId = await liveSessionForMeeting(meetingId);
+    const sessionId = liveId ?? (await publishedSessionForMeeting(meetingId));
     const meta = sessionId ? await loadSessionMeta(sessionId) : null;
     if (!sessionId || !meta) return padJson({ stage: null });
 
@@ -38,6 +43,21 @@ export async function GET(request: NextRequest) {
         await callPad(supabase, 'pad_student_snapshot', { p_actor: caller.user.id, p_session: sessionId, p_touch: false });
         stageAllowed.set(key, true);
       }
+    }
+
+    if (!liveId) {
+      const key = `results:${sessionId}`;
+      let results = stageViews.get(key);
+      if (!results) {
+        const read = (await callPad(supabase, 'pad_session_results', {
+          p_actor: meta.teacher_id,
+          p_session: sessionId,
+          p_roster: await rosterIds(meta.classroom_id, meta.batch_id),
+        })) as unknown as RoundResults;
+        results = stageResultsView(read, new Date().toISOString());
+        stageViews.set(key, results);
+      }
+      return padJson({ stage: results });
     }
 
     let view = stageViews.get(sessionId);

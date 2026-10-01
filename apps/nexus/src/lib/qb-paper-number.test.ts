@@ -142,5 +142,8 @@ describe('sourceLabel', () => {
     expect(sourceLabel(item('a', { sources: [src({ session: '2', question_number: 18 })] }))).toBe('JEE 2014 S2 Q18');
     expect(sourceLabel(item('a', { sources: [src({ exam_type: 'NATA', year: 2023 })] }))).toBe('NATA 2023');
     expect(sourceLabel(item('a'))).toBeNull();
+    // Stored as "Session 2" too: once printed "JEE 2014 SSession 2 Q3".
+    expect(sourceLabel(item('a', { sources: [src({ session: 'Session 2', question_number: 3 })] }))).toBe('JEE 2014 S2 Q3');
+    expect(sourceLabel(item('a', { sources: [src({ session: 'January' })] }))).toBe('JEE 2014 January');
   });
 });

@@ -23,10 +23,11 @@ import {
   WAITING_AUTO_CLOSE_DAYS,
   CONFIRM_AUTO_CLOSE_DAYS,
 } from '@neram/database/queries/nexus';
-import { notifyUser, plainToHtmlWithLink } from '@/lib/nudge-delivery';
+import { escapeHtml, notifyUser, plainToHtml, plainToHtmlWithLink } from '@/lib/nudge-delivery';
+import { createAdminNotification } from '@neram/database/queries';
 import { resolveStaffRole } from '@/lib/staff-capabilities';
 import { shareBaseUrl } from '@/lib/class-share-links';
-import { studentIssuePath, studentIssueUrl, teacherIssuePath } from '@/lib/issue-link';
+import { studentIssuePath, studentIssueUrl, teacherIssuePath, teacherIssueUrl } from '@/lib/issue-link';
 import {
   canMove,
   canStudentReopen,
@@ -36,7 +37,12 @@ import {
   statusMeta,
   type IssueMove,
 } from '@/lib/issue-status';
-import type { FoundationIssueStatus, NotificationEventType } from '@neram/database/types';
+import type {
+  FoundationIssueLogEntry,
+  FoundationIssueReopenSnapshot,
+  FoundationIssueStatus,
+  NotificationEventType,
+} from '@neram/database/types';
 
 interface Caller {
   id: string;
@@ -71,6 +77,79 @@ async function verifyStaff(request: NextRequest): Promise<Caller> {
   const user = await verifyAnyUser(request);
   if (resolveStaffRole(user) === null) throw new Error('Not authorized');
   return user;
+}
+
+/**
+ * The technical snapshot a student's device sends with "Still happening". Shape
+ * checked and capped here, because it is written straight into the ticket.
+ * Null when the body carries nothing usable, e.g. an older client.
+ */
+function reopenSnapshotFrom(body: Record<string, unknown>): FoundationIssueReopenSnapshot | null {
+  const logs = Array.isArray(body.console_logs)
+    ? (body.console_logs as FoundationIssueLogEntry[]).filter((l) => l && typeof l.message === 'string').slice(0, 50)
+    : [];
+  const device = body.device_info && typeof body.device_info === 'object' && !Array.isArray(body.device_info)
+    ? (body.device_info as Record<string, unknown>)
+    : null;
+  const shots = Array.isArray(body.screenshot_urls)
+    ? (body.screenshot_urls as unknown[]).filter((u): u is string => typeof u === 'string' && u.length > 0 && u.length < 500).slice(0, 5)
+    : [];
+  const page = typeof body.page_url === 'string' ? body.page_url.slice(0, 500) : null;
+  if (!device && logs.length === 0 && shots.length === 0 && !page) return null;
+  return {
+    at: new Date().toISOString(),
+    page_url: page,
+    device_info: device,
+    console_logs: logs.length ? logs : null,
+    screenshot_urls: shots.length ? shots : null,
+  };
+}
+
+/**
+ * A token that can post a Teams chat as the person holding it, or null. Nexus's
+ * own test, impersonation and parent tokens cannot post to Teams, and a chat
+ * from an impersonating teacher's session would carry the wrong name.
+ */
+function chatCapable(token: string | null | undefined): string | null {
+  const t = (token || '').replace(/^Bearer\s+/i, '').trim();
+  if (!t || /^(test_|imp_|par_)/.test(t)) return null;
+  return t;
+}
+
+/**
+ * The chat body for a ticket conversation: the words, then which ticket it is
+ * about and a link. Written as the sender speaking, because it arrives in their
+ * own 1:1 chat with the other person.
+ */
+function ticketChatHtml(text: string, ticket: string, title: string, url: string): string {
+  return (
+    plainToHtml(text) +
+    `<p><em>Ticket ${escapeHtml(ticket)}: ${escapeHtml(title)}</em><br/>` +
+    `<a href="${escapeHtml(url)}">Open the ticket</a></p>`
+  );
+}
+
+/**
+ * Who hears about a student's move on a ticket: its owner, else whoever
+ * resolved it, else the last staff member who wrote on it. Before this, a reply
+ * on a ticket nobody had formally taken went to nobody at all (NXS-0126: three
+ * replies over four days, none of them seen).
+ */
+async function staffToTell(
+  issueId: string,
+  issue: { student_id: string; assigned_to: string | null; resolved_by: string | null },
+): Promise<string | null> {
+  if (issue.assigned_to) return issue.assigned_to;
+  if (issue.resolved_by) return issue.resolved_by;
+  const { data } = await getSupabaseAdminClient()
+    .from('nexus_foundation_issue_activity')
+    .select('actor_id')
+    .eq('issue_id', issueId)
+    .neq('actor_id', issue.student_id)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return (data as { actor_id?: string } | null)?.actor_id || null;
 }
 
 /** Staff-only columns, stripped before a student's copy of the ticket leaves the server. */
@@ -140,7 +219,9 @@ export async function GET(
  * action: 'comment'      -> { comment: string, internal?: boolean }   staff OR the reporter
  * action: 'recheck'      -> { note?: string }                         staff only
  * action: 'confirm'      -> {}                                        the reporter
- * action: 'reopen'       -> { reason: string }                        the reporter (7 days after close) or staff
+ * action: 'reopen'       -> { reason, device_info?, console_logs?, page_url?, screenshot_urls? }
+ *                                                                     the reporter (7 days after close) or staff;
+ *                                                                     the reporter's device snapshot is kept for staff
  *
  * A move the lifecycle does not allow from the ticket's current status answers
  * 409. The rules live in lib/issue-status.ts, shared with both screens.
@@ -176,7 +257,17 @@ export async function PATCH(
       .single();
 
     const ticket = issueData?.ticket_number || issueId;
+    const title = issueData?.title || 'your ticket';
     const base = shareBaseUrl(request.nextUrl.origin);
+
+    // A ticket is a conversation between two people (founder, 2026-09-30), so
+    // each side's messages go as a 1:1 chat from their own Teams when their
+    // token can post one. Staff send the chat-scoped teacher token as their
+    // Authorization; a student's page adds a silent chat token in its own header.
+    const staffChat = isStaff ? chatCapable(request.headers.get('Authorization')) : null;
+    const studentChat = !isStaff ? chatCapable(request.headers.get('X-Teams-Chat-Token')) : null;
+    const personalTo = (token: string | null, text: string | undefined, url: string) =>
+      token && text ? { personal: { delegatedToken: token, html: ticketChatHtml(text, ticket, title, url) } } : {};
 
     /**
      * 409 when the lifecycle does not allow this move from where the ticket is
@@ -197,18 +288,45 @@ export async function PATCH(
      * Neram Assistant chat carrying this staff member's name, the bell, and a
      * link straight back to the ticket, because a reply in Teams never reaches it.
      */
-    const tellStudent = async (event_type: NotificationEventType, title: string, plain: string) => {
+    const tellStudent = async (
+      event_type: NotificationEventType,
+      subject: string,
+      plain: string,
+      /** What this staff member says in their own 1:1 chat, first person. */
+      chatText?: string,
+    ) => {
       if (!issueData) return;
       await notifyUser({
         user_id: issueData.student_id,
         event_type,
-        title,
+        title: subject,
         message: plain,
         metadata: { issue_id: issueId, ticket_number: ticket, href: studentIssuePath(ticket) },
       }, {
         teacher: { authHeader: request.headers.get('Authorization'), userId: caller.id },
         html: plainToHtmlWithLink(plain, studentIssueUrl(base, ticket), 'Open the ticket'),
+        ...personalTo(staffChat, chatText, studentIssueUrl(base, ticket)),
       }).catch(console.error);
+    };
+
+    /**
+     * Tell staff about something the student did on their ticket: the bell and a
+     * Teams alert always, and a 1:1 chat from the student's own Teams when their
+     * page could get a chat token. Nobody on the ticket yet: the admin inbox, so
+     * the reply is never addressed to nobody.
+     */
+    const tellStaff = async (event_type: NotificationEventType, subject: string, plain: string, chatText: string) => {
+      if (!issueData) return;
+      const to = await staffToTell(issueId, issueData).catch(() => null);
+      const metadata = { issue_id: issueId, ticket_number: ticket, href: teacherIssuePath(ticket) };
+      if (!to) {
+        await createAdminNotification({ event_type, title: subject, message: plain, metadata }).catch(console.error);
+        return;
+      }
+      await notifyUser(
+        { user_id: to, event_type, title: subject, message: plain, metadata },
+        { audience: 'staff', ...personalTo(studentChat, chatText, teacherIssueUrl(base, ticket)) },
+      ).catch(console.error);
     };
 
     let issue;
@@ -223,6 +341,7 @@ export async function PATCH(
           `${actorName} is working on ${ticket}`,
           `Hi {firstName}, ${actorName} has picked up your ticket ${ticket} and is working on it.\n\n` +
             `You will hear back on the ticket. If you have anything to add, reply there, not in this chat.`,
+          `Hi {firstName}, I have picked up your ticket and I am working on it now. I will message you here when it is sorted.`,
         );
         break;
       }
@@ -241,6 +360,7 @@ export async function PATCH(
           `Hi {firstName}, ${actorName} needs a little more from you on ticket ${ticket}.\n\n` +
             `"${message}"\n\n` +
             `Please reply on the ticket so we can carry on. If there is no reply in ${WAITING_AUTO_CLOSE_DAYS} days, the ticket closes on its own.`,
+          `Hi {firstName}, about your ticket: ${message}\n\nYou can reply here or on the ticket.`,
         );
         break;
       }
@@ -268,6 +388,7 @@ export async function PATCH(
           `Hi {firstName}, ${actorName} has closed your ticket ${ticket} (${OUTCOME_LABEL[code]}).\n\n` +
             `"${note}"\n\n` +
             `If it is still a problem, you can reopen it from the ticket for the next ${STUDENT_REOPEN_DAYS} days.`,
+          `${note}\n\nI have closed your ticket (${OUTCOME_LABEL[code]}). If it is still a problem, reopen it from the ticket in the next ${STUDENT_REOPEN_DAYS} days.`,
         );
         break;
       }
@@ -342,6 +463,10 @@ export async function PATCH(
         // Notify the student
         if (issueData) {
           const outcome = body.resolution_code ? OUTCOME_LABEL[body.resolution_code as keyof typeof OUTCOME_LABEL] : 'fixed';
+          const chatText =
+            `${note}\n\nPlease try it once more, then open the ticket and tap "Yes, it is fixed" or "Still happening". ` +
+            `If it still goes wrong, "Still happening" sends me what your device saw. ` +
+            `The ticket closes on its own in ${CONFIRM_AUTO_CLOSE_DAYS} days if I do not hear back.`;
           const plain =
             `Hi {firstName}, ${actorName} has marked your ticket ${ticket} as ${outcome.toLowerCase()}.\n\n` +
             `"${note}"\n\n` +
@@ -363,6 +488,7 @@ export async function PATCH(
           }, {
             teacher: { authHeader: request.headers.get('Authorization'), userId: caller.id },
             html: plainToHtmlWithLink(plain, studentIssueUrl(base, ticket), 'Open the ticket'),
+            ...personalTo(staffChat, chatText, studentIssueUrl(base, ticket)),
           }).catch(console.error);
         }
         break;
@@ -423,24 +549,21 @@ export async function PATCH(
           }, {
             teacher: { authHeader: request.headers.get('Authorization'), userId: caller.id },
             html: plainToHtmlWithLink(plain, studentIssueUrl(base, ticket), 'Open the ticket'),
+            // The reply itself, from this staff member's own Teams: a
+            // conversation, so it reads as one.
+            ...personalTo(staffChat, text, studentIssueUrl(base, ticket)),
           }).catch(console.error);
         }
 
         if (!isStaff) {
-          // Student to staff. There is no delegated Graph token on a student's
-          // request, so this is the bell and the activity feed. Addressed to the
-          // person holding the ticket rather than broadcast: an unaddressed
-          // reply is one nobody owns.
-          const to = issueData.assigned_to || issueData.resolved_by;
-          if (to) {
-            await notifyUser({
-              user_id: to,
-              event_type: 'foundation_issue_comment',
-              title: `${actorName} replied on ${ticket}`,
-              message: `${actorName} replied on ${ticket}: "${text}"`,
-              metadata: { issue_id: issueId, ticket_number: ticket, href: teacherIssuePath(ticket) },
-            }, { audience: 'staff' }).catch(console.error);
-          }
+          // Student to staff: addressed to whoever is on the ticket, and as a
+          // chat from the student's own Teams when their page could get a token.
+          await tellStaff(
+            'foundation_issue_comment',
+            `${actorName} replied on ${ticket}`,
+            `${actorName} replied on ${ticket}: "${text}"`,
+            text,
+          );
         }
 
         // Shape kept deliberately: this case has always answered with the row
@@ -480,6 +603,11 @@ export async function PATCH(
         }, {
           teacher: { authHeader: request.headers.get('Authorization'), userId: caller.id },
           html: plainToHtmlWithLink(plain, studentIssueUrl(base, ticket), 'Open the ticket'),
+          ...personalTo(
+            staffChat,
+            `Hi {firstName}, ${note || 'could you check this once more and tell me whether it is fixed?'}`,
+            studentIssueUrl(base, ticket),
+          ),
         }).catch(console.error);
 
         return NextResponse.json({ activity });
@@ -496,13 +624,12 @@ export async function PATCH(
         issue = await confirmFoundationIssue(issueId, caller.id);
         await cleanupIssueScreenshots(issueId).catch(console.error);
 
-        await notifyUser({
-          user_id: issueData.resolved_by || issueData.student_id,
-          event_type: 'foundation_issue_closed',
-          title: 'Issue Confirmed Resolved',
-          message: `${actorName} confirmed ${ticket} "${issueData.title}" is resolved.`,
-          metadata: { issue_id: issueId, ticket_number: ticket, href: teacherIssuePath(ticket) },
-        }, { audience: 'staff' }).catch(console.error);
+        await tellStaff(
+          'foundation_issue_closed',
+          'Issue Confirmed Resolved',
+          `${actorName} confirmed ${ticket} "${issueData.title}" is resolved.`,
+          'It is working now, thank you. I have confirmed it on the ticket.',
+        );
         break;
       }
 
@@ -527,9 +654,10 @@ export async function PATCH(
           );
         }
 
-        issue = await reopenFoundationIssue(issueId, caller.id, body.reason.trim());
+        // Only the reporter's own device has anything to say about the bug.
+        const snapshot = isStaff ? null : reopenSnapshotFrom(body);
+        issue = await reopenFoundationIssue(issueId, caller.id, body.reason.trim(), undefined, snapshot ?? undefined);
 
-        const notifyUserId = issueData.assigned_to || issueData.resolved_by;
         if (isStaff) {
           await tellStudent(
             'foundation_issue_reopened',
@@ -537,15 +665,20 @@ export async function PATCH(
             `Hi {firstName}, ${actorName} has reopened your ticket ${ticket}.\n\n` +
               `"${body.reason.trim()}"\n\n` +
               `You will hear back on the ticket.`,
+            `Hi {firstName}, I have reopened your ticket: ${body.reason.trim()}`,
           );
-        } else if (notifyUserId) {
-          await notifyUser({
-            user_id: notifyUserId,
-            event_type: 'foundation_issue_reopened',
-            title: 'Issue Reopened',
-            message: `${actorName} reopened ${ticket}: "${body.reason.trim()}"`,
-            metadata: { issue_id: issueId, ticket_number: ticket, reason: body.reason.trim(), href: teacherIssuePath(ticket) },
-          }, { audience: 'staff' }).catch(console.error);
+        } else {
+          const errors = snapshot?.console_logs?.length || 0;
+          await tellStaff(
+            'foundation_issue_reopened',
+            'Issue Reopened',
+            `${actorName} reopened ${ticket}: "${body.reason.trim()}"` +
+              (errors
+                ? ` Their device sent ${errors} recent error${errors > 1 ? 's' : ''}, see Technical details.`
+                : snapshot ? ' Fresh device details are on the ticket.' : ''),
+            `It is still happening: ${body.reason.trim()}` +
+              (errors ? `\n\nMy device sent ${errors} recent error${errors > 1 ? 's' : ''} with this, under Technical details on the ticket.` : ''),
+          );
         }
         break;
       }

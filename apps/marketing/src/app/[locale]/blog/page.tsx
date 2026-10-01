@@ -14,6 +14,7 @@ import Link from 'next/link';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
+import RETIRED_CITY_GUIDES from '@/data/geo/retired-city-guides.json';
 
 
 export async function generateMetadata({
@@ -192,8 +193,10 @@ const categories = ['All', 'Preparation', 'Drawing', 'City Guide', 'Career', 'Ne
 export default function BlogPage({ params: { locale } }: PageProps) {
   setRequestLocale(locale);
 
-  const featuredPosts = blogPosts.filter((post) => post.featured);
-  const recentPosts = blogPosts.filter((post) => !post.featured);
+  // City guides were folded into the city coaching pages (they 301 there).
+  const livePosts = blogPosts.filter((post) => !(post.slug in RETIRED_CITY_GUIDES));
+  const featuredPosts = livePosts.filter((post) => post.featured);
+  const recentPosts = livePosts.filter((post) => !post.featured);
   const baseUrl = 'https://neramclasses.com';
 
   return (

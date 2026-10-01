@@ -10,7 +10,7 @@ import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank';
 import type { NexusQBQuestionListItem } from '@neram/database';
 import { QB_DIFFICULTY_COLORS } from '@neram/database';
 import MathText from '@/components/common/MathText';
-import { STATUS_SPEECH, statusOf } from './practice-logic';
+import { STATUS_SPEECH, showsDifficulty, statusOf } from './practice-logic';
 
 const DIFFICULTY: Record<string, string> = { EASY: 'Easy', MEDIUM: 'Medium', HARD: 'Hard' };
 
@@ -83,8 +83,9 @@ function QuestionRow({
         ? { bg: theme.palette.error.main, fg: theme.palette.error.contrastText, border: theme.palette.error.main }
         : { bg: 'transparent', fg: theme.palette.text.primary, border: theme.palette.divider };
 
+  const withDifficulty = showsDifficulty(question);
   const caption: string[] = [];
-  if (DIFFICULTY[question.difficulty]) caption.push(DIFFICULTY[question.difficulty]);
+  if (withDifficulty && DIFFICULTY[question.difficulty]) caption.push(DIFFICULTY[question.difficulty]);
   if (topic) caption.push(topic);
   if (question.question_format === 'DRAWING_PROMPT') caption.push('Drawing');
   if (source) caption.push(source);
@@ -194,14 +195,20 @@ function QuestionRow({
           component="span"
           sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 0.75, rowGap: 0.25, mt: 0.5 }}
         >
-          <Box
-            component="span"
-            aria-hidden
-            sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: QB_DIFFICULTY_COLORS[question.difficulty] ?? 'divider', flexShrink: 0 }}
-          />
-          <Typography variant="caption" component="span" sx={{ color: 'text.secondary', fontWeight: 500 }}>
-            {caption.join(' · ')}
-          </Typography>
+          {/* No difficulty on aptitude, so no dot either (showsDifficulty) */}
+          {withDifficulty && (
+            <Box
+              component="span"
+              aria-hidden
+              data-testid="difficulty-dot"
+              sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: QB_DIFFICULTY_COLORS[question.difficulty] ?? 'divider', flexShrink: 0 }}
+            />
+          )}
+          {caption.length > 0 && (
+            <Typography variant="caption" component="span" sx={{ color: 'text.secondary', fontWeight: 500 }}>
+              {caption.join(' · ')}
+            </Typography>
+          )}
           {/* The list ships a flag, never the link: the video opens only after an answer. */}
           {question.has_solution_video && (
             <Box

@@ -116,8 +116,8 @@ function buildCenterFAQs(center: OfflineCenter) {
       answer: `Absolutely! Our ${city} center welcomes students from ${nearbyMention} and surrounding areas. Many of our current students commute from nearby towns. We also offer online classes for those who can't travel daily.`,
     },
     {
-      question: `What is the success rate of Neram Classes?`,
-      answer: `Neram Classes has a 99.9% success rate in NATA and JEE Paper 2 exams. Our students consistently secure top ranks, with many getting admitted to prestigious architecture colleges like SPA Delhi, SPA Bhopal, NIT Trichy, and IIT Kharagpur.`,
+      question: `How long has Neram Classes been teaching NATA?`,
+      answer: `Neram Classes has taught NATA and JEE Paper 2 since 2009. Students prepare for B.Arch colleges across India, including the NITs, the SPAs and state government colleges, and get help with counselling after the exam.`,
     },
     {
       question: `Do you offer online NATA coaching from ${city}?`,

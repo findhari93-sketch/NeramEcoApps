@@ -38,6 +38,7 @@ import {
   type FollowupState,
 } from '@/lib/class-followup';
 import { loadClassWork, studentWork, summariseWork, type WorkAudience } from '@/lib/class-work';
+import { NO_PAD_ACTIVITY, loadClassPadActivity } from '@/lib/pad/class-activity';
 import { reminderStateOf, type HomeworkPlanRow } from '@/lib/homework-reminders';
 import { loadClassPlans } from '@/lib/homework-reminder-store';
 import { loadRecentAttendance, type RecentAttendance } from '@/lib/recent-attendance';
@@ -129,6 +130,10 @@ export async function GET(request: NextRequest) {
       .single();
     throwIfReadFailed(clsError, 'the class');
     if (!cls) return NextResponse.json({ error: 'Class not found in this classroom' }, { status: 404 });
+
+    // Answer Pad activity, read alongside everything else. Secondary: a failed
+    // read shows no pad numbers rather than failing the attendance panel.
+    const padActivityRead = loadClassPadActivity(supabase, classId).catch(() => NO_PAD_ACTIVITY);
 
     // Dormant students are excluded, so the attendance rate on this panel counts
     // only the students who are actually expected in the room.
@@ -272,6 +277,7 @@ export async function GET(request: NextRequest) {
       ? await loadClassPlans(supabase, classId).catch(() => [] as HomeworkPlanRow[])
       : [];
     const planByStudent = new Map(reminderPlans.map((p) => [p.student_id, p]));
+    const padActivity = await padActivityRead;
 
     /** The one resolved item for this student and this class, or null. */
     const catchupFor = (studentId: string, abs: any) => {
@@ -409,6 +415,8 @@ export async function GET(request: NextRequest) {
         recent: recent.get(r.user_id) ?? null,
         work: classWork.assignments.length ? studentWork(r.user_id, classWork.assignments, classWork.subs) : null,
         homeworkReminder: planByStudent.has(r.user_id) ? reminderStateOf(planByStudent.get(r.user_id)!) : null,
+        // How much they answered in the Answer Pad, when the class ran it.
+        pad: padActivity.byStudent.get(r.user_id) ?? null,
       };
       const followup: FollowupState = followupState({
         attended,
@@ -552,6 +560,8 @@ export async function GET(request: NextRequest) {
         ).length,
       },
       work,
+      // The Answer Pad in one line: rounds run, who opened it, who answered.
+      pad: padActivity.rounds > 0 ? { rounds: padActivity.rounds, joined: padActivity.joined, answered: padActivity.answered } : null,
       buckets,
       reasonTally: tallyReasons(optOuts || []),
       students,

@@ -311,3 +311,44 @@ describe('sendNudge', () => {
     expect(results[0].reasons?.teams).toBe('Teams alerts are not set up on this server');
   });
 });
+
+describe('personal chat (support tickets only)', () => {
+  it("lands in the sender's own 1:1 chat first, and the Assistant is not asked", async () => {
+    state.users = [student('s1', 'Humaira safrin')];
+    const { results } = await sendNudge({
+      ...BASE,
+      studentIds: ['s1'],
+      respectDormancy: false,
+      teacher: { authHeader: 'Bearer real', userId: 'teacher-1' },
+      personal: { delegatedToken: 'real', html: '<p>Hi {firstName}, can you check now?</p>' },
+    });
+    expect(state.chatCalls).toEqual(['oid-s1']);
+    expect(state.assistantCalls).toHaveLength(0);
+    expect(state.activityCalls).toHaveLength(0);
+    expect(results[0]).toMatchObject({ chat: true, chatSender: 'person', channel: 'chat+inapp' });
+    expect(state.inserted.some((r) => Array.isArray(r) && r[0]?.bot === false && r[0]?.chat === true)).toBe(true);
+  });
+
+  it('falls through to the Assistant, then the Teams alert, when the personal chat fails', async () => {
+    state.users = [student('s1', 'Humaira safrin')];
+    state.chat = () => ({ ok: false, status: 403, reason: '403 Forbidden' });
+    state.assistantOn = false;
+    const { results } = await sendNudge({
+      ...BASE,
+      studentIds: ['s1'],
+      respectDormancy: false,
+      teacher: { authHeader: 'Bearer real', userId: 'teacher-1' },
+      personal: { delegatedToken: 'real', html: '<p>x</p>' },
+    });
+    expect(results[0].chat).toBe(false);
+    expect(results[0].teams).toBe(true);
+    expect(results[0].reasons?.chat).toContain('Personal chat did not send (403 Forbidden)');
+    expect(results[0].reasons?.chat).toContain('Neram Assistant is switched off');
+  });
+
+  it('is skipped entirely for a bell-only send', async () => {
+    state.users = [student('s1', 'Humaira safrin')];
+    await sendNudge({ ...BASE, studentIds: ['s1'], respectDormancy: false, bellOnly: true, personal: { delegatedToken: 'real', html: '<p>x</p>' } });
+    expect(state.chatCalls).toHaveLength(0);
+  });
+});

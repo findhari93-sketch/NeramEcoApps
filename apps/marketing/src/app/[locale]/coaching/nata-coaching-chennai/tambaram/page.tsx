@@ -40,7 +40,7 @@ const faqs = [
   },
   {
     question: 'What is the best NATA coaching in Tambaram, Chennai?',
-    answer: "Neram Classes operates both a Tambaram sub-center and the main Ashok Nagar center, giving Tambaram students the best access to NATA coaching. IIT/NIT alumni faculty, max 25 per batch, 99.9% success rate, free AI study app.",
+    answer: "Neram Classes operates both a Tambaram sub-center and the main Ashok Nagar center, giving Tambaram students the best access to NATA coaching. Classroom and live online batches, drawing feedback and a free NATA study app.",
   },
 ];
 
@@ -52,7 +52,7 @@ export default function Page({ params: { locale } }: { params: { locale: string 
       <JsonLd data={generateBreadcrumbSchema([
         { name: 'Home', url: BASE_URL },
         { name: 'Coaching', url: `${BASE_URL}/coaching` },
-        { name: 'NATA Coaching Chennai', url: `${BASE_URL}/coaching/nata-coaching-chennai` },
+        { name: 'NATA Coaching Chennai', url: `${BASE_URL}/coaching/nata-coaching/nata-coaching-centers-in-chennai` },
         { name: `NATA Coaching ${neighborhood.name}` },
       ])} />
       <JsonLd data={generateFAQSchema(faqs)} />

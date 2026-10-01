@@ -15,18 +15,19 @@ export const maxDuration = 60;
 /**
  * POST /api/pad/prompts/:id/nudge  (session teacher, prompt OPEN)
  *
- * One press for everyone on the class list who has neither answered nor said
- * why not. pad_nudge marks them and splits them by whether their pad is open:
+ * One press for every student who JOINED this round (opened the pad) and has
+ * neither answered nor said why not. A student on the class list who never
+ * opened the pad is not chased from inside the class (founder, 2026-09-30).
+ * pad_nudge marks them and splits them by whether their pad is open:
  *   - pad open: a polite banner on their pad, on its next refresh;
- *   - pad closed: a Teams chat from the teacher (their connected Teams login;
- *     the pad's own sign-in token cannot post chats), with a link to the pad,
- *     and the Nexus bell. A student absent from class gets it too, and it reads
- *     as an invitation to join.
+ *   - pad closed (joined earlier, closed it since): a Teams chat from Neram
+ *     Assistant with the teacher's name on it, a link to the pad, and the
+ *     Nexus bell.
  * Once a minute per question at most, held by the database so every server
  * instance agrees (429 RATE_LIMITED { retry_after_seconds }).
  *
- * 200 { inPad, chat, chatDelivered }: counts only. Names never reach the
- * console while the question is open.
+ * 200 { inPad, chat, chatDelivered }. The console already lists who is
+ * waiting by name, from the teacher snapshot.
  */
 export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
   try {

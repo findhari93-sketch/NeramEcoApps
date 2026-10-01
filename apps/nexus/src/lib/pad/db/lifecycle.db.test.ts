@@ -484,7 +484,7 @@ describe('CLOSE, REOPEN, SET KEY, REVEAL', () => {
     expect(await prompt(promptId)).toMatchObject({ ungraded: false, correct_keys: ['B'] });
   });
 
-  it('REOPEN clears any grading decision but keeps locked answers', async () => {
+  it('REOPEN clears any grading decision and keeps the answers given', async () => {
     const s = await liveSession(2);
     const promptId = await openPrompt(s);
     expect((await t.submit(s.students[0], promptId, 'A')).status).toBe('accepted');
@@ -495,8 +495,10 @@ describe('CLOSE, REOPEN, SET KEY, REVEAL', () => {
     expect(await prompt(promptId)).toMatchObject({ state: 'open', correct_keys: null, ungraded: false, closed_at: null });
     expect(await t.reopen(s.teacherId, promptId)).toMatchObject({ ok: true, changed: false });
 
-    // The student who answered stays locked; the other can answer now.
-    expect(await t.submit(s.students[0], promptId, 'B')).toMatchObject({ ok: true, status: 'duplicate', answer: 'A' });
+    // The answer given stays, and while the question is open again it can change; the other student can answer now.
+    const [kept] = await t.rows<{ answer: string }>(`select norm_answer as answer from pad_responses where prompt_id = $1 and student_id = $2`, [promptId, s.students[0]]);
+    expect(kept.answer).toBe('A');
+    expect(await t.submit(s.students[0], promptId, 'B')).toMatchObject({ ok: true, status: 'changed', answer: 'B' });
     expect(await t.submit(s.students[1], promptId, 'B')).toMatchObject({ ok: true, status: 'accepted', answer: 'B' });
 
     await t.close(s.teacherId, promptId);
@@ -570,16 +572,32 @@ describe('CLOSE, REOPEN, SET KEY, REVEAL', () => {
     expect(correct).toBe(2);
   });
 
-  it('makes REVEALED terminal', async () => {
-    const s = await liveSession();
+  it('makes REVEALED terminal for the question, while its answer can still be corrected and regraded', async () => {
+    const s = await liveSession(2);
     const promptId = await openPrompt(s);
+    await t.submit(s.students[0], promptId, 'A');
+    await t.submit(s.students[1], promptId, 'B');
     await t.close(s.teacherId, promptId);
     await t.setKey(s.teacherId, promptId, ['A']);
     const revealed = await t.reveal(s.teacherId, promptId);
     expect(await t.reveal(s.teacherId, promptId)).toMatchObject({ ok: true, changed: false, version: revealed.version });
     expect(await t.close(s.teacherId, promptId)).toEqual({ ok: false, code: 'INVALID_TRANSITION', state: 'revealed' });
     expect(await t.reopen(s.teacherId, promptId)).toEqual({ ok: false, code: 'INVALID_TRANSITION', state: 'revealed' });
-    expect(await t.setKey(s.teacherId, promptId, ['B'])).toEqual({ ok: false, code: 'INVALID_TRANSITION', state: 'revealed' });
+
+    const graded = async () =>
+      Object.fromEntries(
+        (await t.rows<{ student_id: string; is_correct: boolean | null }>(
+          `select student_id, is_correct from pad_responses where prompt_id = $1`,
+          [promptId],
+        )).map((r) => [r.student_id, r.is_correct]),
+      );
+    expect(await graded()).toEqual({ [s.students[0]]: true, [s.students[1]]: false });
+
+    expect(await t.setKey(s.teacherId, promptId, ['B'])).toMatchObject({ ok: true, changed: true, state: 'revealed' });
+    expect(await graded()).toEqual({ [s.students[0]]: false, [s.students[1]]: true });
+
+    expect(await t.setKey(s.teacherId, promptId, null, true)).toMatchObject({ ok: true, changed: true, state: 'revealed' });
+    expect(await graded()).toEqual({ [s.students[0]]: null, [s.students[1]]: null });
   });
 
   it('increments version on every change a client renders', async () => {
@@ -661,11 +679,29 @@ describe('database guards, even for a caller holding the service key', () => {
 
     await t.submit(s.students[0], promptId, 'A');
     await expect(t.rows(`update pad_responses set is_correct = true where prompt_id = $1`, [promptId])).rejects.toThrow(
-      /responses are immutable/,
+      /responses change only through pad_submit/,
     );
     await expect(t.rows(`update pad_responses set norm_answer = 'B' where prompt_id = $1`, [promptId])).rejects.toThrow(
-      /responses are immutable/,
+      /responses change only through pad_submit/,
     );
+  });
+
+  it('refuses a submit-flagged update that grades, or that moves an answer to another student', async () => {
+    const s = await liveSession(2);
+    const promptId = await openPrompt(s);
+    await t.submit(s.students[0], promptId, 'A');
+    await expect(
+      t.db.transaction(async (tx) => {
+        await tx.query(`select set_config('pad.transition', 'submit', true)`);
+        await tx.query(`update pad_responses set is_correct = true where prompt_id = $1`, [promptId]);
+      }),
+    ).rejects.toThrow(/is_correct is written only/);
+    await expect(
+      t.db.transaction(async (tx) => {
+        await tx.query(`select set_config('pad.transition', 'submit', true)`);
+        await tx.query(`update pad_responses set student_id = $2 where prompt_id = $1`, [promptId, s.students[1]]);
+      }),
+    ).rejects.toThrow(/never moves/);
   });
 
   it('refuses a response change even inside a reveal-flagged transaction when it is not is_correct', async () => {
@@ -677,7 +713,7 @@ describe('database guards, even for a caller holding the service key', () => {
         await tx.query(`select set_config('pad.transition', 'reveal', true)`);
         await tx.query(`update pad_responses set raw_answer = 'B' where prompt_id = $1`, [promptId]);
       }),
-    ).rejects.toThrow(/responses are immutable/);
+    ).rejects.toThrow(/responses change only through pad_submit/);
   });
 
   it('enforces one open prompt per session at the index level', async () => {

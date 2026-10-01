@@ -13,7 +13,7 @@
  * failed send: onSubmit throws, and the sheet stays open with the text in it.
  */
 
-import React, { useEffect, useId, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { Alert, Box, Button, Chip, CircularProgress, TextField, Typography, alpha } from '@neram/ui';
 import CheckIcon from '@mui/icons-material/Check';
 import ResponsiveSheet from '@/components/study-materials/recordings/ResponsiveSheet';
@@ -23,6 +23,13 @@ import {
   STUDENT_REOPEN_DAYS,
   WAITING_DAYS,
 } from '@/lib/issue-status';
+import {
+  defaultNote,
+  mayReplaceNote,
+  quickReplies,
+  readLastNote,
+  saveLastNote,
+} from '@/lib/issue-reply-templates';
 import type { FoundationIssueResolutionCode } from '@neram/database/types';
 
 export type IssueStepMode = 'resolve' | 'close' | 'ask';
@@ -56,16 +63,40 @@ export default function IssueStepSheet({ open, mode, studentFirstName, onClose, 
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const groupLabelId = useId();
+  // What we last put in the box ourselves, so picking another outcome swaps the
+  // template but never throws away words the teacher typed.
+  const autoFill = useRef('');
+
+  const fillFor = (next: FoundationIssueResolutionCode | null) => {
+    if (mode === 'ask') return '';
+    return defaultNote(mode, next, readLastNote(mode, next));
+  };
 
   // A fresh sheet every time it opens. Resolve suggests "Fixed", the common
-  // case; Close suggests nothing, because closing without asking is a choice.
+  // case, with its note already written; Close suggests nothing, because
+  // closing without asking is a choice.
   useEffect(() => {
     if (!open) return;
-    setCode(mode === 'resolve' ? 'fixed' : null);
-    setNote('');
+    const initial: FoundationIssueResolutionCode | null = mode === 'resolve' ? 'fixed' : null;
+    const text = fillFor(initial);
+    autoFill.current = text;
+    setCode(initial);
+    setNote(text);
     setError(null);
     setSending(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, mode]);
+
+  const pickOutcome = (next: FoundationIssueResolutionCode) => {
+    setCode(next);
+    if (mayReplaceNote(note, autoFill.current)) {
+      const text = fillFor(next);
+      autoFill.current = text;
+      setNote(text);
+    }
+  };
+
+  const replies = mode === 'ask' ? [] : quickReplies(mode, code, readLastNote(mode, code));
 
   const needsOutcome = mode !== 'ask';
   const canSubmit = note.trim().length > 0 && (!needsOutcome || code !== null) && !sending;
@@ -77,7 +108,7 @@ export default function IssueStepSheet({ open, mode, studentFirstName, onClose, 
       ? `${name} will be asked to confirm it works. If there is no answer, the ticket closes on its own in ${CONFIRM_DAYS} days.`
       : mode === 'close'
         ? `${name} will not be asked to confirm. They can still reopen it for ${STUDENT_REOPEN_DAYS} days.`
-        : `${name} gets this as a Teams message and a Nexus alert, and the ticket waits for their reply. If there is none, it closes on its own in ${WAITING_DAYS} days.`;
+        : `${name} gets this in your Teams chat with them and as a Nexus alert, and the ticket waits for their reply. If there is none, it closes on its own in ${WAITING_DAYS} days.`;
 
   const submit = async () => {
     if (!canSubmit) return;
@@ -85,6 +116,7 @@ export default function IssueStepSheet({ open, mode, studentFirstName, onClose, 
     setError(null);
     try {
       await onSubmit({ code: needsOutcome ? code : null, note: note.trim() });
+      if (mode !== 'ask') saveLastNote(mode, code, note);
     } catch {
       setError('That did not go through. Your text is still here, so try again.');
       setSending(false);
@@ -130,7 +162,7 @@ export default function IssueStepSheet({ open, mode, studentFirstName, onClose, 
                   aria-checked={selected}
                   label={o.label}
                   clickable
-                  onClick={() => setCode(o.code)}
+                  onClick={() => pickOutcome(o.code)}
                   icon={selected ? <CheckIcon /> : undefined}
                   variant="outlined"
                   // Styled explicitly: the theme's filled chip is a pale grey that
@@ -187,6 +219,41 @@ export default function IssueStepSheet({ open, mode, studentFirstName, onClose, 
         // 16px, or iOS Safari zooms the page on focus.
         inputProps={{ style: { fontSize: 16 } }}
       />
+
+      {replies.length > 0 && (
+        <Box sx={{ mt: 0.5, mb: 1 }}>
+          <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, display: 'block', mb: 0.75 }}>
+            Quick replies
+          </Typography>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            {replies.map((r) => {
+              const inUse = note === r.text;
+              return (
+                <Chip
+                  key={r.text}
+                  label={r.mine ? `Your last note: ${r.text}` : r.text}
+                  clickable
+                  variant="outlined"
+                  aria-pressed={inUse}
+                  onClick={() => {
+                    autoFill.current = r.text;
+                    setNote(r.text);
+                  }}
+                  sx={{
+                    height: 'auto',
+                    minHeight: 44,
+                    maxWidth: '100%',
+                    justifyContent: 'flex-start',
+                    borderColor: inUse ? 'primary.main' : 'divider',
+                    bgcolor: (t) => (inUse ? alpha(t.palette.primary.main, 0.06) : 'transparent'),
+                    '& .MuiChip-label': { whiteSpace: 'normal', py: 0.75, lineHeight: 1.4, textAlign: 'left' },
+                  }}
+                />
+              );
+            })}
+          </Box>
+        </Box>
+      )}
 
       <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1, lineHeight: 1.5 }}>
         {consequence}

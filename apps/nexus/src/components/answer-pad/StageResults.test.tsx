@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PadHost } from '@/lib/pad/client/pad-host';
 import type { StageView } from '@/lib/pad/stage';
@@ -50,6 +50,26 @@ const OPEN: NonNullable<StageView['prompt']> = {
   reveal: null,
 };
 const NO_DASHES = /[–—]|--/;
+
+const RESULTS: StageView = {
+  server_time: '2026-09-11T10:30:00Z',
+  session: { id: 's1', status: 'ended', classroom_name: 'NATA Evening Batch', hint_topic: '' },
+  prompt: null,
+  results: {
+    round_no: 2,
+    top: [
+      { name: 'Asha', rank: 1, correct: 15, counted: 18 },
+      { name: 'Bala', rank: 2, correct: 14, counted: 18 },
+      { name: 'Chitra', rank: 2, correct: 14, counted: 17 },
+      { name: 'Dev', rank: 4, correct: 12, counted: 18 },
+      { name: 'Ezhil', rank: 5, correct: 11, counted: 18 },
+      { name: 'Sixth', rank: 6, correct: 10, counted: 18 },
+    ],
+    average_score: 61,
+    took_part: 22,
+    questions: 18,
+  },
+};
 
 beforeEach(() => {
   mocks.padFetch.mockReset();
@@ -117,6 +137,33 @@ describe('StageResults', () => {
     expect(screen.queryByRole('group', { name: /Correct/ })).toBeNull();
   });
 
+  it('between rounds shows the published top five by name, the class average and who took part, and nobody else', async () => {
+    mocks.padFetch.mockResolvedValue({ stage: RESULTS });
+    render(<StageResults host={host()} />);
+
+    expect(await screen.findByRole('heading', { name: 'Round 2 results' })).toBeTruthy();
+    expect(screen.getByText('NATA Evening Batch')).toBeTruthy();
+    const top = screen.getByRole('list', { name: 'Top five' });
+    const rows = within(top).getAllByRole('listitem');
+    expect(rows).toHaveLength(5);
+    expect(rows[0].getAttribute('aria-label')).toBe('Rank 1: Asha, 15 of 18 correct');
+    // Ties share a rank.
+    expect(rows[1].getAttribute('aria-label')).toBe('Rank 2: Bala, 14 of 18 correct');
+    expect(rows[2].getAttribute('aria-label')).toBe('Rank 2: Chitra, 14 of 17 correct');
+    expect(screen.queryByText('Sixth')).toBeNull();
+    expect(screen.getByRole('group', { name: 'Class average: 61%' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Took part: 22' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Questions: 18' })).toBeTruthy();
+    expect(document.body.textContent).not.toMatch(NO_DASHES);
+  });
+
+  it('says so gently when nobody made the top five', async () => {
+    mocks.padFetch.mockResolvedValue({ stage: { ...RESULTS, results: { ...RESULTS.results!, top: [], average_score: null } } });
+    render(<StageResults host={host()} />);
+    expect(await screen.findByText('No top five this round. The next round is a fresh start.')).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Class average: Not graded' })).toBeTruthy();
+  });
+
   it('explains itself outside a meeting and fetches nothing', async () => {
     render(<StageResults host={host(null)} />);
     expect(screen.getByText('Share this from a class meeting')).toBeTruthy();
@@ -130,5 +177,6 @@ describe('stageAnnouncement', () => {
     expect(stageAnnouncement(stage(null))).toBe('Waiting for the first question.');
     expect(stageAnnouncement(stage(OPEN))).toBe('Question 3 is open.');
     expect(stageAnnouncement(stage({ ...OPEN, state: 'closed' }))).toBe('Question 3 closed.');
+    expect(stageAnnouncement(RESULTS)).toBe('Round 2 results are up.');
   });
 });

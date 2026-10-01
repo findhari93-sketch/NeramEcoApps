@@ -23,6 +23,7 @@ import type {
   FoundationIssuePriority,
   FoundationIssueCategory,
   FoundationIssueResolutionCode,
+  FoundationIssueReopenSnapshot,
   NexusFoundationTranscript,
   TranscriptEntry,
   NexusFoundationWatchSessionUpsert,
@@ -1027,32 +1028,62 @@ export async function confirmFoundationIssue(
  *
  * Works from awaiting_confirmation and from closed; the route decides who may
  * reopen what (the student only for a few days after closing).
+ *
+ * A student's reopen carries a fresh technical snapshot (device, page, the
+ * errors their browser caught since), because "still happening" after a fix is
+ * exactly when the original report's logs are out of date. It is kept on
+ * `context.reopens`, newest last and capped, which is already staff-only, and
+ * any new screenshots join the ticket's own gallery.
  */
 export async function reopenFoundationIssue(
   issueId: string,
   actorId: string,
   reason: string,
-  client?: TypedSupabaseClient
+  client?: TypedSupabaseClient,
+  snapshot?: FoundationIssueReopenSnapshot
 ): Promise<NexusFoundationIssue> {
   const supabase = client || getSupabaseAdminClient();
   const current = await readIssueState(supabase, issueId);
   const nextStatus: FoundationIssueStatus = current?.assigned_to ? 'in_progress' : 'open';
-  const { data, error } = await supabase
-    .from('nexus_foundation_issues')
-    .update({
-      status: nextStatus,
-      resolved_by: null,
-      resolved_at: null,
-      resolution_note: null,
-      // Cleared only when there is one to clear, so a database without the
-      // lifecycle migration never sees the column named.
-      ...(current?.resolution_code ? { resolution_code: null } : {}),
-      auto_close_at: null,
-      updated_at: new Date().toISOString(),
-    } as never)
-    .eq('id', issueId)
-    .select()
-    .single();
+
+  const withSnapshot: Record<string, unknown> = {};
+  if (snapshot) {
+    const context = (current?.context && typeof current.context === 'object' ? current.context : {}) as Record<string, unknown>;
+    const previous = Array.isArray(context.reopens) ? (context.reopens as FoundationIssueReopenSnapshot[]) : [];
+    const entry: FoundationIssueReopenSnapshot = { ...snapshot, reason, at: snapshot.at || new Date().toISOString() };
+    withSnapshot.context = { ...context, reopens: [...previous, entry].slice(-MAX_REOPEN_SNAPSHOTS) };
+    if (snapshot.screenshot_urls?.length) {
+      withSnapshot.screenshot_urls = [...(current?.screenshot_urls || []), ...snapshot.screenshot_urls];
+    }
+  }
+  const reopenWith = (extra: Record<string, unknown>) =>
+    supabase
+      .from('nexus_foundation_issues')
+      .update({
+        status: nextStatus,
+        resolved_by: null,
+        resolved_at: null,
+        resolution_note: null,
+        // Cleared only when there is one to clear, so a database without the
+        // lifecycle migration never sees the column named.
+        ...(current?.resolution_code ? { resolution_code: null } : {}),
+        ...extra,
+        auto_close_at: null,
+        updated_at: new Date().toISOString(),
+      } as never)
+      .eq('id', issueId)
+      .select()
+      .single();
+
+  let { data, error } = await reopenWith(withSnapshot);
+  // A database without the `context` column (staging drifted from prod) must
+  // still reopen: the student saying "still happening" matters more than the
+  // snapshot riding along with it. Any new screenshots are kept.
+  if (error && 'context' in withSnapshot && isMissingColumn(error)) {
+    console.error('reopen snapshot not kept, context column missing:', error.message);
+    const { context: _dropped, ...rest } = withSnapshot;
+    ({ data, error } = await reopenWith(rest));
+  }
   if (error) throw error;
 
   await supabase.from('nexus_foundation_issue_activity').insert({
@@ -1068,6 +1099,14 @@ export async function reopenFoundationIssue(
 
   return data as unknown as NexusFoundationIssue;
 }
+
+/** PostgREST's "no such column" (schema cache) or Postgres's undefined_column. */
+function isMissingColumn(error: { code?: string; message?: string }): boolean {
+  return error.code === 'PGRST204' || error.code === '42703' || /column .* does not exist|Could not find the .* column/i.test(error.message || '');
+}
+
+/** Reopen snapshots kept per ticket; older ones drop off the front. */
+const MAX_REOPEN_SNAPSHOTS = 5;
 
 /** How long each student-turn status waits before the cron closes it. */
 export const CONFIRM_AUTO_CLOSE_DAYS = 3;
@@ -1085,7 +1124,13 @@ function daysFromNow(days: number): string {
 async function readIssueState(
   supabase: TypedSupabaseClient,
   issueId: string
-): Promise<{ status: FoundationIssueStatus; assigned_to: string | null; resolution_code?: string | null } | null> {
+): Promise<{
+  status: FoundationIssueStatus;
+  assigned_to: string | null;
+  resolution_code?: string | null;
+  context?: Record<string, unknown> | null;
+  screenshot_urls?: string[] | null;
+} | null> {
   const { data } = await supabase
     .from('nexus_foundation_issues')
     .select('*')

@@ -78,7 +78,7 @@ describe('ImageUploadField paste button', () => {
     expect(upload).not.toHaveBeenCalled();
   });
 
-  it('offers the other two paths when clipboard permission is denied', async () => {
+  it('when the clipboard is blocked, focuses the dropzone and says to press Ctrl + V, not that it failed', async () => {
     stubClipboard(async () => {
       throw new DOMException('Read permission denied.', 'NotAllowedError');
     });
@@ -88,11 +88,26 @@ describe('ImageUploadField paste button', () => {
     (await screen.findByRole('button', { name: /paste/i })).click();
 
     await waitFor(() =>
-      expect(
-        screen.getByText('Clipboard access was blocked. Drop the image here, or choose a file.'),
-      ).toBeTruthy(),
+      expect(screen.getByRole('status').textContent).toBe('Press Ctrl + V now to paste your picture. Or drop it here, or choose a file.'),
     );
+    expect(screen.queryByRole('alert')).toBeNull();
     expect(upload).not.toHaveBeenCalled();
+  });
+
+  it("tries the host's own clipboard first, for a page inside Teams", async () => {
+    stubClipboard(async () => {
+      throw new DOMException('Read permission denied.', 'NotAllowedError');
+    });
+    const upload = vi.fn(async () => ({ url: 'https://cdn.test/host.png' }));
+    const onChange = vi.fn();
+    const readClipboard = vi.fn(async () => new Blob([new Uint8Array(10)], { type: PNG }));
+
+    render(<ImageUploadField value={null} onChange={onChange} upload={upload} readClipboard={readClipboard} />);
+    (await screen.findByRole('button', { name: /paste/i })).click();
+
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith('https://cdn.test/host.png'));
+    expect(readClipboard).toHaveBeenCalledTimes(1);
+    expect((upload.mock.calls[0] as unknown as [File])[0].type).toBe(PNG);
   });
 
   it('rejects a pasted image over the size limit before uploading it', async () => {

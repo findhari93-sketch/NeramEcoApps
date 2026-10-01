@@ -3,6 +3,8 @@
 // types. Regenerate with pnpm supabase:gen:types after 20260801091000.
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import { fetchAllRows } from '../../utils/paged-rows';
+import type { QBQuestionStudyView } from '../../types';
+import { getQBStudyPreviews } from './qb-study';
 
 const PROPOSALS = 'nexus_qb_category_proposals';
 
@@ -28,6 +30,8 @@ export interface NexusQBCategoryProposal {
 export interface QBProposalWithQuestion extends NexusQBCategoryProposal {
   question_text: string | null;
   question_image_url: string | null;
+  /** The AI's "What to study" for the question, when the classifier wrote one. */
+  study?: QBQuestionStudyView | null;
 }
 
 /**
@@ -60,16 +64,22 @@ export async function getQBCategoryProposals(
 
   const { data: questions, error: qError } = await supabase
     .from('nexus_qb_questions')
-    .select('id, question_text, question_image_url')
+    .select('id, question_text, question_image_url, categories')
     .in('id', [...new Set(rows.map((r) => r.question_id))]);
   if (qError) throw qError;
 
   const byId = new Map((questions || []).map((q: any) => [q.id, q]));
+  // Optional: before migration 20261025090100 the study table does not exist.
+  const studies = await getQBStudyPreviews(
+    (questions || []).map((q: any) => ({ id: q.id, categories: q.categories })),
+    supabase,
+  ).catch(() => new Map<string, QBQuestionStudyView>());
   return {
     proposals: rows.map((r) => ({
       ...r,
       question_text: byId.get(r.question_id)?.question_text ?? null,
       question_image_url: byId.get(r.question_id)?.question_image_url ?? null,
+      study: studies.get(r.question_id) ?? null,
     })),
     total: count || 0,
   };

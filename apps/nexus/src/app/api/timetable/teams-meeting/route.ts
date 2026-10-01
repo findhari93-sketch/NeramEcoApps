@@ -10,6 +10,7 @@ import {
 } from '@/lib/class-attendees';
 import { resolveClassAttendees } from '@/lib/class-calendar';
 import { addPadWithinBudget } from '@/lib/pad/auto-add';
+import { applyMeetingOptions, findOnlineMeetingId, type AllowedPresenters } from '@/lib/meeting-options';
 
 /**
  * POST /api/timetable/teams-meeting
@@ -248,18 +249,6 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Enable auto-record on the linked online meeting (best-effort, non-blocking).
-      // The group calendar event does not take recordAutomatically directly, so we
-      // resolve the online meeting by its join URL and PATCH the flag.
-      if (joinUrl) {
-        try {
-          await enableAutoRecord(token, joinUrl);
-          extras.autoRecord = true;
-        } catch (err) {
-          console.error('Auto-record enable failed (non-blocking):', err);
-        }
-      }
-
       // Post to Teams channel (best-effort, non-blocking). Worth doing on the
       // fallback path too so the standalone link still appears in the channel.
       // Keep the channel + message IDs so cancelling the class can later remove
@@ -293,6 +282,28 @@ export async function POST(request: NextRequest) {
       joinUrl = meeting.joinWebUrl;
     }
 
+    // Auto-record and "who can present", on the online meeting behind the link
+    // (best-effort, non-blocking). A group calendar event cannot carry either,
+    // and a standalone meeting may have been created with the minimal body, so
+    // this runs for every scope. Without it a channel class lets every student
+    // present, and one press of Share replaces the teacher's screen share.
+    let onlineMeetingId: string | null = null;
+    if (joinUrl) {
+      try {
+        onlineMeetingId = await findOnlineMeetingId(token, { kind: 'me' }, joinUrl);
+        if (onlineMeetingId) {
+          const applied = await applyMeetingOptions(token, { kind: 'me' }, onlineMeetingId, {
+            recordAutomatically: true,
+            allowedPresenters: ((scheduledClass.allowed_presenters as string) || 'organizer') as AllowedPresenters,
+          });
+          extras.autoRecord = applied.record;
+          extras.presentersLocked = applied.presenters;
+        }
+      } catch (err) {
+        console.error('Meeting options failed (non-blocking):', err);
+      }
+    }
+
     // Post the meeting to the class Teams group chat (best-effort, non-blocking).
     // Works for any scope as long as we have a join URL and the classroom has a
     // linked group chat. The teacher's delegated token must carry ChatMessage.Send.
@@ -323,6 +334,7 @@ export async function POST(request: NextRequest) {
       teams_organizer_event_id: organizerEventId || null,
       teams_meeting_degraded: degraded,
     };
+    if (onlineMeetingId) meetingUpdate.online_meeting_id = onlineMeetingId;
     if (extras.teams_channel_id) meetingUpdate.teams_channel_id = extras.teams_channel_id;
     if (extras.teams_channel_message_id) meetingUpdate.teams_channel_message_id = extras.teams_channel_message_id;
     if (extras.teams_group_chat_message_id) meetingUpdate.teams_group_chat_message_id = extras.teams_group_chat_message_id;
@@ -386,7 +398,7 @@ async function createStandaloneMeeting(
   // First try the full body: auto-record + lobby/presenter options. Some tenant
   // meeting policies reject these extras with a 4xx, so on a client error we
   // retry with just the essentials rather than hard-failing (auto-record is then
-  // re-applied best-effort by enableAutoRecord after the meeting exists).
+  // re-applied best-effort by applyMeetingOptions after the meeting exists).
   let res = await post({
     subject: scheduledClass.title,
     startDateTime,
@@ -449,34 +461,6 @@ async function createMeetingWithInvites(
     invitedCount: invite.invited,
     skipped: invite.skipped,
   };
-}
-
-/**
- * Best-effort: turn on auto-recording for the online meeting behind a join URL.
- * Resolves the meeting via the organizer's /me/onlineMeetings (delegated token)
- * then PATCHes recordAutomatically. Only effective if the organizer's Teams
- * meeting policy permits auto-recording; throws are caught by the caller.
- */
-async function enableAutoRecord(token: string, joinUrl: string): Promise<void> {
-  const filter = `JoinWebUrl eq '${joinUrl.replace(/'/g, "''")}'`;
-  const lookupRes = await fetch(
-    `https://graph.microsoft.com/v1.0/me/onlineMeetings?$filter=${encodeURIComponent(filter)}`,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
-  if (!lookupRes.ok) return;
-
-  const lookup = await lookupRes.json();
-  const meetingId = lookup.value?.[0]?.id as string | undefined;
-  if (!meetingId) return;
-
-  await fetch(`https://graph.microsoft.com/v1.0/me/onlineMeetings/${meetingId}`, {
-    method: 'PATCH',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ recordAutomatically: true }),
-  });
 }
 
 /**

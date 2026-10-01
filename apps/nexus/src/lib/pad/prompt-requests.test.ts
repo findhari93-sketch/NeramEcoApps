@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   parseAskRequest,
   parseDetailsRequest,
+  parseExcuseRequest,
   parseKeyRequest,
   parseLabelRequest,
   parsePictureRequest,
@@ -17,14 +18,14 @@ describe('parseAskRequest', () => {
   it('defaults to a four-option multiple choice question', () => {
     expect(parseAskRequest({ sessionId: SESSION })).toEqual({
       ok: true,
-      value: { sessionId: SESSION, answerType: 'mcq', optionCount: 4, label: null, text: null, imageUrl: null, optionTexts: null },
+      value: { sessionId: SESSION, answerType: 'mcq', optionCount: 4, label: null, text: null, imageUrl: null, optionTexts: null, closePromptId: null },
     });
   });
 
   it("carries the teacher's reference and the question text, left for the database to tidy", () => {
     expect(parseAskRequest({ sessionId: SESSION, label: ' 38 ', text: 'Which statement is correct?' })).toEqual({
       ok: true,
-      value: { sessionId: SESSION, answerType: 'mcq', optionCount: 4, label: ' 38 ', text: 'Which statement is correct?', imageUrl: null, optionTexts: null },
+      value: { sessionId: SESSION, answerType: 'mcq', optionCount: 4, label: ' 38 ', text: 'Which statement is correct?', imageUrl: null, optionTexts: null, closePromptId: null },
     });
     expect(parseAskRequest({ sessionId: SESSION, label: null, text: null })).toMatchObject({ ok: true, value: { label: null, text: null } });
   });
@@ -32,12 +33,12 @@ describe('parseAskRequest', () => {
   it('reads every answer type, keeping the option count for mcq only', () => {
     expect(parseAskRequest({ sessionId: SESSION.toUpperCase(), answerType: 'mcq', optionCount: 6 })).toEqual({
       ok: true,
-      value: { sessionId: SESSION, answerType: 'mcq', optionCount: 6, label: null, text: null, imageUrl: null, optionTexts: null },
+      value: { sessionId: SESSION, answerType: 'mcq', optionCount: 6, label: null, text: null, imageUrl: null, optionTexts: null, closePromptId: null },
     });
     for (const answerType of ['numeric', 'text', 'yesno']) {
       expect(parseAskRequest({ sessionId: SESSION, answerType, optionCount: 5 })).toEqual({
         ok: true,
-        value: { sessionId: SESSION, answerType, optionCount: null, label: null, text: null, imageUrl: null, optionTexts: null },
+        value: { sessionId: SESSION, answerType, optionCount: null, label: null, text: null, imageUrl: null, optionTexts: null, closePromptId: null },
       });
     }
   });
@@ -178,5 +179,29 @@ describe('parseSubmitRequest', () => {
     [{ promptId: PROMPT, answer: 'x'.repeat(201) }, 'answer'],
   ])('refuses %j, naming %s', (body, field) => {
     expect(parseSubmitRequest(body)).toEqual({ ok: false, field });
+  });
+});
+
+describe('parseAskRequest closePromptId', () => {
+  it('takes the open question to close first, and refuses anything that is not an id', () => {
+    const open = '22222222-2222-4222-8222-222222222222';
+    const parsed = parseAskRequest({ sessionId: SESSION, closePromptId: open.toUpperCase() });
+    expect(parsed).toMatchObject({ ok: true, value: { closePromptId: open } });
+    expect(parseAskRequest({ sessionId: SESSION, closePromptId: 'p1' })).toEqual({ ok: false, field: 'closePromptId' });
+  });
+});
+
+describe('parseExcuseRequest', () => {
+  const student = '33333333-3333-4333-8333-333333333333';
+  it('names students or a reason, accepting by default', () => {
+    expect(parseExcuseRequest({ studentIds: [student] })).toEqual({ ok: true, value: { studentIds: [student], reason: null, approve: true } });
+    expect(parseExcuseRequest({ reason: 'cant_see', approve: false })).toEqual({ ok: true, value: { studentIds: null, reason: 'cant_see', approve: false } });
+    expect(parseExcuseRequest({ studentIds: [student], approve: null })).toMatchObject({ ok: true, value: { approve: null } });
+  });
+  it('refuses nobody, a bad id, an unknown reason or a strange decision', () => {
+    expect(parseExcuseRequest({})).toEqual({ ok: false, field: 'studentIds' });
+    expect(parseExcuseRequest({ studentIds: ['x'] })).toEqual({ ok: false, field: 'studentIds' });
+    expect(parseExcuseRequest({ reason: 'bored' })).toEqual({ ok: false, field: 'reason' });
+    expect(parseExcuseRequest({ studentIds: [student], approve: 'yes' })).toEqual({ ok: false, field: 'approve' });
   });
 });

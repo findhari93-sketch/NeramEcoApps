@@ -8,7 +8,11 @@
  * clipboard separately, see screenshot-clipboard.ts.
  */
 
-import type { NexusFoundationIssueWithDetails } from '@neram/database/types';
+import type {
+  FoundationIssueLogEntry,
+  FoundationIssueReopenSnapshot,
+  NexusFoundationIssueWithDetails,
+} from '@neram/database/types';
 
 const CATEGORY_LABELS: Record<string, string> = {
   bug: 'Bug',
@@ -42,6 +46,18 @@ export function screenshotPublicUrls(issue: Pick<NexusFoundationIssueWithDetails
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
   return (issue.screenshot_urls || []).map(
     (path) => `${base}/storage/v1/object/public/issue-screenshots/${path}`,
+  );
+}
+
+/**
+ * The device snapshots sent with each "Still happening", oldest first. Read
+ * defensively: `context` is free-form jsonb and older tickets have none.
+ */
+export function reopenSnapshotsOf(issue: Pick<NexusFoundationIssueWithDetails, 'context'>): FoundationIssueReopenSnapshot[] {
+  const list = (issue.context as Record<string, unknown> | null)?.reopens;
+  if (!Array.isArray(list)) return [];
+  return list.filter(
+    (r): r is FoundationIssueReopenSnapshot => !!r && typeof r === 'object' && typeof (r as { at?: unknown }).at === 'string',
   );
 }
 
@@ -89,6 +105,26 @@ function deviceLine(deviceInfo: Record<string, unknown> | null): string | null {
     deviceInfo.is_pwa ? 'PWA' : null,
   ].filter(Boolean);
   return bits.length > 0 ? bits.join(' · ') : null;
+}
+
+function pushLogs(lines: string[], heading: string, logs: FoundationIssueLogEntry[]): void {
+  if (logs.length === 0) return;
+  lines.push('');
+  lines.push(heading);
+  for (const log of logs) {
+    const message = scrubSecrets(log.message);
+    // The captured fetch messages already open with "HTTP 400 /url", so only
+    // add the status when the message does not carry it.
+    const status = log.status && !message.startsWith(`HTTP ${log.status}`) ? ` [HTTP ${log.status}]` : '';
+    lines.push(`- [${log.level}]${status} ${message}`);
+    if (log.stack) {
+      lines.push('  ```');
+      for (const stackLine of scrubSecrets(log.stack).split('\n')) {
+        lines.push(`  ${stackLine}`);
+      }
+      lines.push('  ```');
+    }
+  }
 }
 
 function formatReportedAt(iso: string): string {
@@ -144,23 +180,20 @@ export function buildIssueMarkdown(issue: NexusFoundationIssueWithDetails): stri
   lines.push(`**Reported:** ${formatReportedAt(issue.created_at)} IST by ${issue.student_name}`);
 
   const logs = issue.console_logs || [];
-  if (logs.length > 0) {
+  pushLogs(lines, `### Console (${logs.length})`, logs);
+
+  // Newest reopen first: after a fix, what the student's device saw on their
+  // "still happening" is the evidence that matters.
+  for (const r of reopenSnapshotsOf(issue).slice().reverse()) {
     lines.push('');
-    lines.push(`### Console (${logs.length})`);
-    for (const log of logs) {
-      const message = scrubSecrets(log.message);
-      // The captured fetch messages already open with "HTTP 400 /url", so only
-      // add the status when the message does not carry it.
-      const status = log.status && !message.startsWith(`HTTP ${log.status}`) ? ` [HTTP ${log.status}]` : '';
-      lines.push(`- [${log.level}]${status} ${message}`);
-      if (log.stack) {
-        lines.push('  ```');
-        for (const stackLine of scrubSecrets(log.stack).split('\n')) {
-          lines.push(`  ${stackLine}`);
-        }
-        lines.push('  ```');
-      }
-    }
+    lines.push(`## Reopened ${formatReportedAt(r.at)} IST`);
+    if (r.reason?.trim()) lines.push(`**Student says:** ${scrubSecrets(r.reason.trim())}`);
+    if (r.page_url) lines.push(`**Sent from:** ${r.page_url}`);
+    const reopenDevice = deviceLine(r.device_info ?? null);
+    if (reopenDevice) lines.push(`**Device:** ${reopenDevice}`);
+    const rLogs = r.console_logs || [];
+    if (rLogs.length === 0) lines.push('No errors were caught on the device before the reopen.');
+    pushLogs(lines, `### Console at reopen (${rLogs.length})`, rLogs);
   }
 
   const shots = issue.screenshot_urls?.length || 0;

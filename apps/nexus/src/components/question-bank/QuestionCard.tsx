@@ -4,6 +4,7 @@ import { Box, Paper, Typography, alpha, useTheme } from '@neram/ui';
 import type { NexusQBQuestionListItem } from '@neram/database';
 import SourceBadges from './SourceBadges';
 import DifficultyChip from './DifficultyChip';
+import { showsDifficulty } from './practice/practice-logic';
 import CategoryChips from './CategoryChips';
 import AttemptIndicator from './AttemptIndicator';
 import MathText from '@/components/common/MathText';
@@ -87,7 +88,7 @@ export default function QuestionCard({ question, mode, onClick }: QuestionCardPr
               flexWrap: 'wrap',
             }}
           >
-            <DifficultyChip difficulty={question.difficulty} size="small" />
+            {showsDifficulty(question) && <DifficultyChip difficulty={question.difficulty} size="small" />}
             <CategoryChips
               categories={(question.categories || []).slice(0, 2)}
               size="small"

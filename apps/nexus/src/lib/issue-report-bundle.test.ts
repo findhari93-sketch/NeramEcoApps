@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { NexusFoundationIssueWithDetails } from '@neram/database/types';
-import { buildIssueMarkdown, guessSourceFile, scrubSecrets } from './issue-report-bundle';
+import { buildIssueMarkdown, guessSourceFile, reopenSnapshotsOf, scrubSecrets } from './issue-report-bundle';
 
 /** NXS-0112, the real ticket this feature was built for. */
 const ticket = (overrides: Partial<NexusFoundationIssueWithDetails> = {}): NexusFoundationIssueWithDetails =>
@@ -147,6 +147,45 @@ describe('buildIssueMarkdown', () => {
     expect(md).not.toContain('abc123secret');
     expect(md).not.toContain('eyJhbGciOiJIUzI1NiJ9.payload.sig');
     expect(md).toContain('[redacted]');
+  });
+});
+
+describe('reopen snapshots', () => {
+  const reopened = ticket({
+    context: {
+      reopens: [
+        { at: '2026-09-29T10:00:00.000Z', reason: 'First time back', console_logs: [] },
+        {
+          at: '2026-09-30T10:00:00.000Z',
+          reason: 'Video still stuck, token Bearer eyJhbGciOiJIUzI1NiJ9.payload.sig',
+          page_url: '/student/issues',
+          device_info: { device_type: 'mobile', browser: 'Chrome' },
+          console_logs: [
+            { level: 'error', message: 'HTTP 500 /api/catchup/stream', stack: null, url: '/api/catchup/stream', status: 500, at: '2026-09-30T09:59:00.000Z' },
+          ],
+        },
+        { junk: true },
+      ],
+    },
+  } as Partial<NexusFoundationIssueWithDetails>);
+
+  it('reads only well-formed snapshots and tolerates tickets without any', () => {
+    expect(reopenSnapshotsOf(reopened)).toHaveLength(2);
+    expect(reopenSnapshotsOf(ticket({ context: null } as Partial<NexusFoundationIssueWithDetails>))).toEqual([]);
+    expect(reopenSnapshotsOf(ticket({ context: { facts: {} } } as Partial<NexusFoundationIssueWithDetails>))).toEqual([]);
+  });
+
+  it('puts the newest reopen, with its console, into the copied report', () => {
+    const md = buildIssueMarkdown(reopened);
+    const newest = md.indexOf('## Reopened 30 Sept');
+    const older = md.indexOf('## Reopened 29 Sept');
+    expect(newest).toBeGreaterThan(-1);
+    expect(older).toBeGreaterThan(newest);
+    expect(md).toContain('### Console at reopen (1)');
+    expect(md).toContain('HTTP 500 /api/catchup/stream');
+    expect(md).toContain('**Sent from:** /student/issues');
+    expect(md).toContain('No errors were caught on the device before the reopen.');
+    expect(md).not.toContain('eyJhbGciOiJIUzI1NiJ9.payload.sig');
   });
 });
 

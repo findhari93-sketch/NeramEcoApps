@@ -9,10 +9,15 @@
  *     nobody is swayed by what others picked;
  *   - never the words students typed for a short text question, which could
  *     be anything, a name included. Numbers are safe to show.
+ *
+ * The one exception to "no names" is a round's published results: the top five
+ * by name and correct count (founder, 2026-09-30). Never anyone below them, and
+ * never a percentage that would let the room work out a low score.
  */
 
 import { mcqLetters } from './client/teacher-view';
 import type { AnswerType, PromptState, TeacherSnapshot } from './client/types';
+import type { RoundResults } from './round-results';
 
 /** How many typed number answers the chart shows before summing the rest. */
 export const STAGE_TOP_ANSWERS = 6;
@@ -27,8 +32,18 @@ export interface StageReveal {
   incorrect: number;
 }
 
+export interface StageResults {
+  round_no: number | null;
+  top: Array<{ name: string | null; rank: number; correct: number; counted: number }>;
+  average_score: number | null;
+  took_part: number;
+  questions: number;
+}
+
 export interface StageView {
   server_time: string;
+  /** Set only between rounds, once the last round's results are published. */
+  results?: StageResults | null;
   session: { id: string; status: 'live' | 'ended'; classroom_name: string | null; hint_topic: string };
   prompt: {
     id: string;
@@ -94,4 +109,26 @@ export function stageView(snapshot: TeacherSnapshot): StageView {
     reveal,
   };
   return view;
+}
+
+
+/** The meeting screen between rounds: the published top five, and the class as a whole. */
+export function stageResultsView(results: RoundResults, serverTime: string): StageView {
+  return {
+    server_time: serverTime,
+    session: {
+      id: results.session.id,
+      status: results.session.status,
+      classroom_name: results.session.classroom_name,
+      hint_topic: '',
+    },
+    prompt: null,
+    results: {
+      round_no: results.session.round_no,
+      top: results.top.map((row) => ({ name: row.name, rank: row.rank, correct: row.correct, counted: row.counted })),
+      average_score: results.class.average_score ?? null,
+      took_part: results.class.took_part,
+      questions: results.class.questions,
+    },
+  };
 }

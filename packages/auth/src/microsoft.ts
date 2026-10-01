@@ -121,6 +121,21 @@ export const loginScopes = {
     'openid', 'profile', 'email', 'User.Read',
     'Files.Read.All',
   ],
+  /**
+   * A 1:1 Teams chat from the signed-in person, for a STUDENT replying on a
+   * support ticket (founder, 2026-09-30: a ticket is a personal conversation, so
+   * the student's reply lands in the teacher's Teams chat, not only on a page
+   * the teacher may never open). Teachers already hold these in nexusTeacher.
+   *
+   * Its own list for the same reason as nexusFileSearch, and acquired SILENTLY
+   * only: a student whose tenant has not consented gets null, and the reply
+   * still reaches staff as a Teams alert and the bell.
+   */
+  nexusChat: [
+    'openid', 'profile', 'email', 'User.Read',
+    'Chat.ReadWrite',
+    'ChatMessage.Send',
+  ],
 };
 
 // ============================================

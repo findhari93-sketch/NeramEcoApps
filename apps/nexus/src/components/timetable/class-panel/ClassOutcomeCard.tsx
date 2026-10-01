@@ -291,6 +291,13 @@ export default function ClassOutcomeCard({ classId, classroomId, getToken, onOpe
         <Typography variant="caption" color="text.secondary">
           {f ? `${f.saidComing} were expected after RSVPs and leave` : null}
         </Typography>
+        {insights.pad && insights.pad.joined > 0 && (
+          <Typography variant="body2" sx={{ mt: 0.5 }} data-testid="outcome-pad">
+            {`Answer Pad: ${insights.pad.answered} of ${insights.pad.joined} who opened it answered${
+              insights.pad.rounds > 1 ? ` (${insights.pad.rounds} rounds)` : ''
+            }`}
+          </Typography>
+        )}
       </Box>
 
       {counted > 0 && <RosterBar segments={segments} total={counted} />}

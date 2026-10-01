@@ -18,6 +18,7 @@ import StudentStageAvatar from '@/components/students/StudentStageAvatar';
 import { HOMEWORK_REMIND_EVERY_DAYS, shortIstDate } from '@/lib/homework-reminders';
 import { knownStageKey } from '@/lib/student-stage';
 import { rankByTimeInRoom } from '@/lib/attendance-quality';
+import { padChipLabel } from '@/lib/pad/class-activity';
 import type { AttendanceTabProps, StudentInsight } from './types';
 import InsightsLoadError from './InsightsLoadError';
 import StudentListToolbar, { PausedFootnote } from '@/components/students/list/StudentListToolbar';
@@ -291,6 +292,10 @@ function AttendedRow({
           {student.rsvp === 'not_attending' && (
             <Chip size="small" color="info" variant="outlined" label="Came anyway" />
           )}
+          {student.pad && student.pad.questions > 0 && (
+            <Chip size="small" variant="outlined" label={padChipLabel(student.pad)} data-testid="pad-chip" />
+          )}
+          {student.pad?.notActive && <Chip size="small" color="warning" variant="outlined" label="Quiet in the pad" />}
           <WorkChip student={student} />
           {student.homeworkReminder?.active && homeworkMissing(student) && (
             <Chip
@@ -412,6 +417,9 @@ export default function AttendedTab({
         <Stat value={s.lateCount} label="joined late" tone={s.lateCount ? 'warn' : 'default'} />
         <Stat value={s.leftEarlyCount} label="left early" tone={s.leftEarlyCount ? 'warn' : 'default'} />
         <Stat value={s.barelyAttendedCount} label="barely there" tone={s.barelyAttendedCount ? 'bad' : 'default'} />
+        {insights.pad && insights.pad.joined > 0 && (
+          <Stat value={`${insights.pad.answered} of ${insights.pad.joined}`} label="answered in the pad" />
+        )}
       </Typography>
 
       {everyone.length === 0 ? (

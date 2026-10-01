@@ -160,11 +160,11 @@ test.describe('Answer Pad UI: a class in the Teams side panel', () => {
       await expectNoSeriousAccessibilityIssues(silent.page, 'a waiting pad');
     });
 
-    await test.step("ASK opens the paper's Q.38 everywhere, one tap locks an answer, the console shows a count only", async () => {
+    await test.step("ASK opens the paper's Q.38 everywhere, one tap gives an answer, the console counts who joined", async () => {
       // The paper on the shared screen says Q.38, so every pad must say it too.
       await console_.getByLabel('Question no.', { exact: true }).fill('38');
       await console_.getByRole('button', { name: 'Ask Q.38', exact: true }).click();
-      await expect(console_.getByText('Q.38 is open', { exact: true })).toBeVisible({ timeout: 20_000 });
+      await expect(console_.getByText('Q.38 open', { exact: true })).toBeVisible({ timeout: 20_000 });
 
       for (const student of students) {
         await expect(student.getByRole('heading', { name: 'Q.38', exact: true })).toBeVisible({ timeout: 20_000 });
@@ -176,23 +176,25 @@ test.describe('Answer Pad UI: a class in the Teams side panel', () => {
       await answerB.click();
       await wrong.page.getByRole('button', { name: 'Answer A', exact: true }).click();
 
-      await expect(right.page.getByText('Answer locked: B', { exact: true })).toBeVisible({ timeout: 20_000 });
-      await expect(wrong.page.getByText('Answer locked: A', { exact: true })).toBeVisible({ timeout: 20_000 });
-      await expect(console_.getByLabel(`2 of ${enrolled} answered`, { exact: true })).toBeVisible({ timeout: 20_000 });
+      await expect(right.page.getByText('Your answer: B', { exact: true })).toBeVisible({ timeout: 20_000 });
+      await expect(wrong.page.getByText('Your answer: A', { exact: true })).toBeVisible({ timeout: 20_000 });
+      // Out of the students who joined this round, never the whole class list.
+      await expect(console_.getByLabel(/^2 of \d+ answered$/)).toBeVisible({ timeout: 20_000 });
       await expect(console_.getByRole('button', { name: 'Show names' })).toHaveCount(0);
     });
 
     // Nudge is left out on purpose: it would send real Teams chats to every other
     // student in the staging classroom. Its rules are covered in PGlite and the
     // route and console tests.
-    await test.step("the silent student says why they can't answer; the console counts it without a name", async () => {
+    await test.step("the silent student says why they can't answer; the teacher sees it by name to accept", async () => {
       await silent.page.getByRole('button', { name: "I can't answer", exact: true }).click();
       await silent.page.getByRole('button', { name: "I don't know", exact: true }).click();
       await silent.page.getByRole('button', { name: 'Send to my teacher', exact: true }).click();
       await expect(silent.page.getByText("You told your teacher: I don't know. You can still answer above.", { exact: true })).toBeVisible({
         timeout: 20_000,
       });
-      await expect(console_.getByText("1 can't answer: 1 don't know", { exact: true })).toBeVisible({ timeout: 20_000 });
+      await expect(console_.getByText("I don't know", { exact: true })).toBeVisible({ timeout: 20_000 });
+      await expect(console_.getByRole('button', { name: /^Accept .+'s reason$/ })).toBeVisible();
       await expectNoSidewaysScroll(silent.page, 'the pad with a reason given');
     });
 
@@ -216,16 +218,16 @@ test.describe('Answer Pad UI: a class in the Teams side panel', () => {
     });
 
     await test.step('the four groups add up to the class list, and names come on request', async () => {
-      const groups = console_.getByRole('group', { name: /^(Correct|Incorrect|Present but silent|Absent): \d+$/ });
+      const groups = console_.getByRole('group', { name: /^(Correct|Incorrect|No answer|Not in the pad): \d+$/ });
       await expect(groups).toHaveCount(4);
       const labels = await groups.evaluateAll((elements) => elements.map((element) => element.getAttribute('aria-label') ?? ''));
       const counts = Object.fromEntries(labels.map((label) => [label.split(': ')[0], Number(label.split(': ')[1])]));
 
-      expect(counts).toMatchObject({ Correct: 1, Incorrect: 1, 'Present but silent': 1 });
-      expect(counts.Correct + counts.Incorrect + counts['Present but silent'] + counts.Absent).toBe(enrolled);
+      expect(counts).toMatchObject({ Correct: 1, Incorrect: 1, 'No answer': 1 });
+      expect(counts.Correct + counts.Incorrect + counts['No answer'] + counts['Not in the pad']).toBe(enrolled);
 
       await console_.getByRole('button', { name: 'Show names', exact: true }).click();
-      await expect(console_.getByText('Present but silent (1)', { exact: true })).toBeVisible({ timeout: 20_000 });
+      await expect(console_.getByText('No answer (1)', { exact: true })).toBeVisible({ timeout: 20_000 });
       await expect(console_.getByText("Said: I don't know", { exact: true })).toBeVisible();
       await expectNoSeriousAccessibilityIssues(console_, 'the revealed console');
     });
@@ -237,36 +239,33 @@ test.describe('Answer Pad UI: a class in the Teams side panel', () => {
       await expect(right.page.getByText('Correct', { exact: true })).toBeVisible({ timeout: 90_000 });
     });
 
-    await test.step('the next Ask offers Q.39, and an answer tapped with the network off locks once it is back', async () => {
+    await test.step('the next Ask offers Q.39, and an answer tapped with the network off is saved once it is back', async () => {
       await console_.getByRole('button', { name: 'Ask Q.39', exact: true }).click();
       await expect(wrong.page.getByRole('heading', { name: 'Q.39', exact: true })).toBeVisible({ timeout: 20_000 });
 
       await wrong.page.context().setOffline(true);
       await wrong.page.getByRole('button', { name: 'Answer C', exact: true }).click();
-      await expect(wrong.page.getByText('Still trying to lock your answer', { exact: true })).toBeVisible({ timeout: 10_000 });
+      await expect(wrong.page.getByText('No connection, still trying', { exact: true })).toBeVisible({ timeout: 10_000 });
 
       await wrong.page.context().setOffline(false);
-      await expect(wrong.page.getByText('Answer locked: C', { exact: true })).toBeVisible({ timeout: 45_000 });
-      await expect(console_.getByLabel(`1 of ${enrolled} answered`, { exact: true })).toBeVisible({ timeout: 20_000 });
+      await expect(wrong.page.getByText('Your answer: C', { exact: true })).toBeVisible({ timeout: 45_000 });
+      await expect(console_.getByLabel(/^1 of \d+ answered$/)).toBeVisible({ timeout: 20_000 });
     });
 
-    await test.step('ending with a question still open asks first, then ends every pad', async () => {
-      await console_.getByRole('button', { name: 'End class', exact: true }).click();
-      await console_.getByRole('button', { name: 'End', exact: true }).click();
+    await test.step('ending the round with a question still open asks first, then shows the round results', async () => {
+      await console_.getByRole('button', { name: 'End round', exact: true }).click();
+      await console_.getByRole('button', { name: 'End round', exact: true }).last().click();
       await expect(
-        console_.getByText('Q.39 has no answer yet. You can set it later from the class report, and scores update then.', { exact: true }),
+        console_.getByText("Q.39 has no answer yet. It won't count until you set it from the report, and scores update then.", { exact: true }),
       ).toBeVisible({ timeout: 20_000 });
 
       await console_.getByRole('button', { name: 'End anyway', exact: true }).click();
-      await expect(console_.getByText('Class ended after 2 questions.', { exact: true })).toBeVisible({ timeout: 20_000 });
-      await expect(console_.getByText('1 question is waiting for an answer. Set it from the class report.', { exact: true })).toBeVisible();
+      await expect(console_.getByRole('heading', { name: /^Round \d+ results$/ })).toBeVisible({ timeout: 20_000 });
+      await expect(console_.getByText(/^1 question has no answer yet/)).toBeVisible();
 
       for (const student of students) {
-        await expect(student.getByText('This class has ended', { exact: true })).toBeVisible({ timeout: 20_000 });
+        await expect(student.getByText('Results coming soon', { exact: true })).toBeVisible({ timeout: 20_000 });
       }
-      // Q.39 has no answer yet, so only Q.38 is graded (until it is set from the report).
-      await expect(right.page.getByText('You got 1 of 1 graded questions.', { exact: true })).toBeVisible();
-      await expect(silent.page.getByText('You got 0 of 1 graded questions.', { exact: true })).toBeVisible();
     });
 
     await test.step('no screen logged an unexpected error', async () => {

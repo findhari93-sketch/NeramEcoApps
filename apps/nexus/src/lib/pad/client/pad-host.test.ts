@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { browserHost, cachedTokenGetter, consolePopOut, frameFromTeams, readTestHost, stageSharing, themeFromTeams, tokenExpiresAt } from './pad-host';
+import { browserHost, cachedTokenGetter, consolePopOut, frameFromTeams, readTestHost, stageSharing, teamsClipboardReader, themeFromTeams, tokenExpiresAt } from './pad-host';
 
 /** A JWT-shaped string, base64url over UTF-8 as Entra issues them (names are not always ASCII). */
 function jwt(claims: Record<string, unknown>): string {
@@ -200,5 +200,22 @@ describe('consolePopOut', () => {
     expect(consolePopOut(fakeTeams().teams, { ...desktop, app: { ...desktop.app, host: { clientType: 'web' } } }, 'https://x.test')).toBeUndefined();
     expect(consolePopOut(fakeTeams().teams, { ...desktop, app: { host: { clientType: 'desktop' } } }, 'https://x.test')).toBeUndefined();
     expect(consolePopOut(fakeTeams(false).teams, desktop, 'https://x.test')).toBeUndefined();
+  });
+});
+
+describe('teamsClipboardReader', () => {
+  const png = new Blob([new Uint8Array(4)], { type: 'image/png' });
+
+  it('is absent when this Teams client has no clipboard capability', () => {
+    expect(teamsClipboardReader({})).toBeUndefined();
+    expect(teamsClipboardReader({ clipboard: { isSupported: () => false, read: async () => png } })).toBeUndefined();
+    expect(teamsClipboardReader({ clipboard: { isSupported: () => { throw new Error('not initialised'); }, read: async () => png } })).toBeUndefined();
+  });
+
+  it('hands back an image, and null for text or a refusal', async () => {
+    expect(await teamsClipboardReader({ clipboard: { isSupported: () => true, read: async () => png } })!()).toBe(png);
+    const text = new Blob(['hi'], { type: 'text/plain' });
+    expect(await teamsClipboardReader({ clipboard: { isSupported: () => true, read: async () => text } })!()).toBeNull();
+    expect(await teamsClipboardReader({ clipboard: { isSupported: () => true, read: async () => { throw new Error('denied'); } } })!()).toBeNull();
   });
 });

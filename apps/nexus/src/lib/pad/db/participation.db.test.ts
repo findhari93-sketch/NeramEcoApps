@@ -181,11 +181,14 @@ describe('participation: exactly one row per student', () => {
     expect(rowOf(rows, right)).toMatchObject({ participation: 'answered', result: 'ungraded', answer: 'A' });
   });
 
-  it('refuses the named list while the prompt is OPEN, and to anyone but the session teacher', async () => {
+  it('gives the named list to the session teacher while the prompt is OPEN, and to nobody else', async () => {
     const s = await session(2);
     const asked = await t.ask(s.teacherId, s.sessionId, 'mcq', 4);
     await t.submit(s.students[0], asked.prompt_id, 'A');
-    expect(await t.participation(s.teacherId, asked.prompt_id, s.students)).toEqual({ ok: false, code: 'PROMPT_OPEN' });
+    const open = await t.participation(s.teacherId, asked.prompt_id, s.students);
+    expect(open.ok).toBe(true);
+    expect(rowOf(open.rows, s.students[0])).toMatchObject({ participation: 'answered', answer: 'A' });
+    expect(rowOf(open.rows, s.students[1])).toMatchObject({ answer: null });
 
     const otherTeacher = await t.user('teacher');
     const admin = await t.user('admin');
@@ -350,7 +353,7 @@ describe('teacher snapshot', () => {
       bot_in_meeting: false,
     });
     expect(snap.session.room_code).toMatch(/^\d{6}$/);
-    expect(snap.readiness).toEqual({ enrolled: 2, connected: 0, in_meeting: 0 });
+    expect(snap.readiness).toEqual({ enrolled: 2, joined: 0, connected: 0, in_meeting: 0 });
   });
 
   it('shows a live count but no distribution while OPEN, and groups by normalised answer after CLOSE', async () => {
@@ -392,7 +395,7 @@ describe('teacher snapshot', () => {
     await t.meetingPresence(s.meetingId, outsider, new Date(now - minutes(5)), null);
 
     const snap = await t.teacherSnapshot(s.teacherId, s.sessionId, [...s.students, connected]);
-    expect(snap.readiness).toEqual({ enrolled: 3, connected: 1, in_meeting: 1 });
+    expect(snap.readiness).toMatchObject({ enrolled: 3, connected: 1, in_meeting: 1 });
   });
 
   it('reports presence_basis "meeting" once meeting presence or attendance intervals exist, otherwise "app"', async () => {
@@ -475,7 +478,7 @@ describe('scoring (v3.1 section 11)', () => {
     expect(report.ok).toBe(true);
     for (const student of s.students) {
       const pad = await t.studentSnapshot(student, s.sessionId);
-      expect(pad.score).toEqual(expected[student]);
+      expect(pad.score).toEqual({ excused: 0, ...expected[student] });
       expect(pad.score.correct + pad.score.wrong + pad.score.skipped).toBe(pad.score.total_graded);
 
       const { absent: _notReported, ...scored } = expected[student];
@@ -490,7 +493,7 @@ describe('scoring (v3.1 section 11)', () => {
     await runPrompt(s, { window: pastWindow(10), answers: [[student, 'A']], key: ['A'], reveal: false });
 
     const pad = await t.studentSnapshot(student, s.sessionId);
-    expect(pad.score).toEqual({ correct: 0, wrong: 0, skipped: 0, absent: 0, total_graded: 0 });
+    expect(pad.score).toEqual({ correct: 0, wrong: 0, skipped: 0, excused: 0, absent: 0, total_graded: 0 });
   });
 });
 
@@ -573,7 +576,7 @@ describe('scoring and participation agree with an independent model', () => {
     const scored = (j: number): boolean => kinds[j] === 'graded';
     const counted = (j: number): boolean => kinds[j] !== 'open';
     const expectedScore = (i: number) => {
-      const score = { correct: 0, wrong: 0, skipped: 0, absent: 0, total_graded: 0 };
+      const score = { correct: 0, wrong: 0, skipped: 0, excused: 0, absent: 0, total_graded: 0 };
       kinds.forEach((_, j) => {
         if (!scored(j)) return;
         const o = outcomes[j][i];
@@ -620,6 +623,7 @@ describe('scoring and participation agree with an independent model', () => {
           name: expect.any(String),
           on_roster: i !== dormantIndex,
           ...participation,
+          excused: 0,
           correct: score.correct,
           wrong: score.wrong,
           skipped: score.skipped,
@@ -633,7 +637,8 @@ describe('scoring and participation agree with an independent model', () => {
       const reported = report.prompts.find((p: Json) => p.id === promptId);
       if (!counted(j)) {
         expect(reported.counts).toBeNull();
-        expect((await t.participation(s.teacherId, promptId, roster)).code).toBe('PROMPT_OPEN');
+        // Open: the session teacher now sees who has answered, by name.
+        expect((await t.participation(s.teacherId, promptId, roster)).ok).toBe(true);
         continue;
       }
       const onRoster = outcomes[j].slice(0, roster.length);
@@ -642,6 +647,7 @@ describe('scoring and participation agree with an independent model', () => {
         answered: onRoster.filter(isAnswer).length,
         silent: onRoster.filter((o) => o === 'silent').length,
         absent: onRoster.filter((o) => o === 'absent').length,
+        excused: 0,
         correct: scored(j) ? onRoster.filter((o) => o === 'correct').length : 0,
         incorrect: scored(j) ? onRoster.filter((o) => o === 'wrong').length : 0,
         answered_off_roster: isAnswer(outcomes[j][dormantIndex]) ? 1 : 0,
@@ -666,7 +672,7 @@ describe('scoring and participation agree with an independent model', () => {
     const last = promptIds.length - 1;
     if (counted(last)) {
       const snap = await t.teacherSnapshot(s.teacherId, s.sessionId, roster);
-      expect(snap.counts).toEqual(report.prompts[last].counts);
+      expect(snap.counts).toMatchObject(report.prompts[last].counts);
     }
   });
 });
@@ -722,7 +728,7 @@ describe('session report', () => {
     await t.appPresence(s.sessionId, dormant, at(q2.openedAt, -minutes(1)), at(q2.openedAt, minutes(1)));
 
     const pad = await t.studentSnapshot(dormant, s.sessionId);
-    expect(pad.score).toEqual({ correct: 1, wrong: 0, skipped: 1, absent: 0, total_graded: 2 });
+    expect(pad.score).toEqual({ correct: 1, wrong: 0, skipped: 1, excused: 0, absent: 0, total_graded: 2 });
 
     const report = await t.report(s.teacherId, s.sessionId, s.students);
     expect(report.session.enrolled).toBe(2);

@@ -39,6 +39,25 @@ describe('QuestionRow', () => {
     expect(row.textContent).toContain('Medium · Sets & Relations');
   });
 
+  it('prints no difficulty on an aptitude question', () => {
+    render(
+      <QuestionRow
+        {...base}
+        topic="Orthographic Projection"
+        question={question({ section: 'aptitude', categories: ['aptitude', 'orthographic_projection'] })}
+      />,
+    );
+    const row = screen.getByRole('button');
+    expect(row.textContent).not.toContain('Medium');
+    expect(row.textContent).toContain('Orthographic Projection');
+    expect(screen.queryByTestId('difficulty-dot')).toBeNull();
+  });
+
+  it('keeps the difficulty dot on a maths question', () => {
+    render(<QuestionRow {...base} question={question({ section: 'math_mcq' })} />);
+    expect(screen.getByTestId('difficulty-dot')).not.toBeNull();
+  });
+
   it('marks a question that has a video solution', () => {
     render(<QuestionRow {...base} question={question({ has_solution_video: true })} />);
     expect(screen.getByLabelText('Has a video solution, unlocks after you answer')).not.toBeNull();

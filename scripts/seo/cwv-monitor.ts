@@ -15,13 +15,10 @@ const PSI_API_KEY = process.env.PAGESPEED_API_KEY;
 // Pages to monitor
 const PAGES_TO_MONITOR = [
   { name: 'Home', url: 'https://neramclasses.com' },
-  { name: 'Courses', url: 'https://neramclasses.com/en/courses' },
-  { name: 'NATA Course', url: 'https://neramclasses.com/en/courses/nata' },
-  { name: 'Coaching', url: 'https://neramclasses.com/en/coaching' },
-  { name: 'Apply', url: 'https://neramclasses.com/en/apply' },
-  { name: 'Tools Landing', url: 'https://app.neramclasses.com/tools' },
-  { name: 'Cutoff Calculator', url: 'https://app.neramclasses.com/tools/cutoff-calculator' },
-  { name: 'College Predictor', url: 'https://app.neramclasses.com/tools/college-predictor' },
+  { name: 'Online NATA coaching', url: 'https://neramclasses.com/nata-online-coaching' },
+  { name: 'City page (Chennai)', url: 'https://neramclasses.com/coaching/nata-coaching/nata-coaching-centers-in-chennai' },
+  { name: 'State page (Tamil Nadu)', url: 'https://neramclasses.com/coaching/nata-coaching-in-tamil-nadu' },
+  { name: 'All-India directory', url: 'https://neramclasses.com/coaching/nata-coaching' },
 ];
 
 interface CWVResult {

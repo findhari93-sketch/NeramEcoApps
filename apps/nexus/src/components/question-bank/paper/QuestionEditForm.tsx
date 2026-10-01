@@ -49,6 +49,7 @@ import type { ImageState } from '@/lib/bulk-upload-schema';
 import ImageUploadZone from '../ImageUploadZone';
 import DrawingQuestionPanel from '../DrawingQuestionPanel';
 import TagCategoryDialog from '../TagCategoryDialog';
+import StudyEditor from './StudyEditor';
 import DeleteQuestionDialog from '../DeleteQuestionDialog';
 import SolutionVideoField from '../SolutionVideoField';
 import DrawingPartsEditor, {
@@ -940,6 +941,17 @@ export default function QuestionEditForm({
             setTagDialogOpen(false);
           }}
         />
+
+        {/* What to study: the chapter, the chapters it also uses, and where to
+            learn each concept. Saves on its own and goes live at once. */}
+        {!isDrawing && (
+          <StudyEditor
+            questionId={question.id}
+            isMath={form.categories.includes('mathematics')}
+            getToken={getToken}
+            onCategoriesChange={(categories) => setForm((prev) => ({ ...prev, categories }))}
+          />
+        )}
 
         {/* Section 2: Classification (collapsible). Not on a drawing: nobody
             sets its difficulty, and its exam relevance is settled by the paper

@@ -205,6 +205,14 @@ interface NexusAuthState {
    * page for a permission nothing on screen actually requires.
    */
   getFileSearchToken: () => Promise<string | null>;
+  /**
+   * A token that can send a 1:1 Teams chat as the signed-in person, or null.
+   * Silent only. Used when a student replies on their ticket, so the reply lands
+   * in the teacher's Teams. Always null while viewing as a student or as a
+   * parent: the Microsoft session underneath belongs to somebody else, and a
+   * chat from it would put their name on the student's words.
+   */
+  getChatTokenSilent: () => Promise<string | null>;
 
   // "View as Student" (impersonation)
   /** Active impersonation, if a teacher/admin is currently viewing as a student. */
@@ -549,6 +557,15 @@ export function useNexusAuth(): NexusAuthState {
   const getFileSearchToken = useCallback(async () => {
     return getAccessTokenSilent(loginScopes.nexusFileSearch);
   }, []);
+
+  const getChatTokenSilent = useCallback(async () => {
+    if (impersonationToken || parentToken) return null;
+    try {
+      return await getAccessTokenSilent(loginScopes.nexusChat);
+    } catch {
+      return null;
+    }
+  }, [impersonationToken, parentToken]);
 
   // E2E test auth bypass: if nexus_test_token exists in localStorage,
   // read cached auth data directly from localStorage (no API call needed).
@@ -1092,6 +1109,7 @@ export function useNexusAuth(): NexusAuthState {
     renewSession,
     getTeacherToken,
     getFileSearchToken,
+    getChatTokenSilent,
     impersonation: {
       active: !!impersonationToken,
       student: impersonationToken ? impersonationState!.student : null,

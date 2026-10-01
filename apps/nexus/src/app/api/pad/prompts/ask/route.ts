@@ -10,7 +10,8 @@ import { hintSession, padDb } from '@/lib/pad/sessions';
  * POST /api/pad/prompts/ask  (session teacher)
  *
  * Body: { sessionId, answerType?: 'mcq' | 'numeric' | 'text' | 'yesno', optionCount?: 2..6,
- *         label?: string, text?: string, imageUrl?: string, optionTexts?: Array<string | null> }
+ *         label?: string, text?: string, imageUrl?: string, optionTexts?: Array<string | null>,
+ *         closePromptId?: uuid }
  *
  * Opens a new prompt: an answer slot for the question the teacher is speaking
  * or showing, with the teacher's optional reference ("38", so every screen says
@@ -19,6 +20,10 @@ import { hintSession, padDb } from '@/lib/pad/sessions';
  * tap, a retry) answers with the prompt already open and { changed: false }. An
  * earlier prompt that is CLOSED without a key does not block the next ASK: its
  * answer is decided later, during the class or from the class report.
+ *
+ * With closePromptId, the question open now is closed first, in the same
+ * database call ("Close Q.31 and ask Q.32"). A double tap is safe: the second
+ * call finds the NEW question open, which is not the one named, and returns it.
  *
  * A new prompt also sends "Q.38 is open" into the meeting for students
  * without the pad open, when the bot is in the meeting. That is best effort and
@@ -31,7 +36,7 @@ export async function POST(request: NextRequest) {
 
     const parsed = parseAskRequest(await request.json().catch(() => null));
     if (!parsed.ok) throw new PadRefusal('INVALID_INPUT', { field: parsed.field });
-    const { sessionId, answerType, optionCount, label, text, imageUrl, optionTexts } = parsed.value;
+    const { sessionId, answerType, optionCount, label, text, imageUrl, optionTexts, closePromptId } = parsed.value;
 
     const asked = await callPad<{
       changed: boolean;
@@ -40,6 +45,7 @@ export async function POST(request: NextRequest) {
       version: number;
       sequence: number;
       label: string | null;
+      closed_prompt_id?: string | null;
     }>(padDb(), 'pad_ask', {
       p_actor: caller.user.id,
       p_session: sessionId,
@@ -49,6 +55,7 @@ export async function POST(request: NextRequest) {
       p_text: text,
       p_image_url: imageUrl,
       p_option_texts: optionTexts,
+      p_close_prompt: closePromptId,
     });
     if (asked.changed) {
       await hintSession(sessionId, 'everyone');
@@ -61,6 +68,7 @@ export async function POST(request: NextRequest) {
       state: asked.state,
       version: asked.version,
       changed: asked.changed,
+      closedPromptId: asked.closed_prompt_id ?? null,
     });
   } catch (err) {
     return padErrorResponse(err, 'ask');

@@ -2,6 +2,7 @@
 
 import { Box, Chip } from '@neram/ui';
 import type { NexusQBQuestionSource } from '@neram/database';
+import { shortSession } from '@/lib/qb-paper-number';
 
 interface SourceBadgesProps {
   sources: NexusQBQuestionSource[];
@@ -9,7 +10,7 @@ interface SourceBadgesProps {
 
 function formatSource(source: NexusQBQuestionSource): string {
   const examLabel = source.exam_type === 'JEE_PAPER_2' ? 'JEE' : 'NATA';
-  const session = source.session ? ` S${source.session}` : '';
+  const session = shortSession(source.session);
   return `${examLabel} ${source.year}${session}`;
 }
 

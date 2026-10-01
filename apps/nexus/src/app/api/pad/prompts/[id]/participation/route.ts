@@ -9,18 +9,24 @@ export const dynamic = 'force-dynamic';
 interface ParticipationRow {
   student_id: string;
   on_roster: boolean;
-  participation: 'answered' | 'silent' | 'absent';
+  participation: 'answered' | 'excused' | 'silent' | 'absent';
   result: 'correct' | 'incorrect' | 'ungraded' | null;
   answer: string | null;
   joined_mid_prompt: boolean;
+  skip_reason: string | null;
+  skip_note: string | null;
+  skip_approval: 'approved' | 'rejected' | null;
+  nudged: boolean;
 }
 
 /**
- * GET /api/pad/prompts/:id/participation  (session teacher, prompt not OPEN)
+ * GET /api/pad/prompts/:id/participation  (session teacher, any state)
  *
- * "View details": one row per roster student (answered, present but silent,
- * absent) plus anyone who answered off the roster, with names. Refused with 409
- * PROMPT_OPEN while students are still answering: count only, no names.
+ * Who answered what: one row per roster student (answered, excused, present but
+ * silent, absent) plus anyone who answered off the roster, with names, each
+ * answer, and any reason given. Also while the question is open: the names are
+ * for the teacher's own screen (founder, 2026-09-30). Students and the meeting
+ * screen never get them.
  */
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {

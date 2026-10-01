@@ -19,6 +19,8 @@ const ISSUE_ID = '11111111-1111-4111-8111-111111111111';
 const mocks = vi.hoisted(() => ({
   verifyMsToken: vi.fn(),
   notifyUser: vi.fn(),
+  createAdminNotification: vi.fn((..._a: unknown[]) => Promise.resolve({})),
+  lastStaffActor: null as { actor_id: string } | null,
   addIssueComment: vi.fn(),
   getIssueActivityLog: vi.fn(),
   getFoundationIssueById: vi.fn(),
@@ -42,6 +44,12 @@ vi.mock('@/lib/nudge-delivery', () => ({
   notifyUser: (...a: unknown[]) => mocks.notifyUser(...a),
   plainToHtmlWithLink: (text: string, url: string, label: string) =>
     `<p>${text}</p><p><a href="${url}">${label}</a></p>`,
+  plainToHtml: (text: string) => `<p>${text}</p>`,
+  escapeHtml: (text: string) => text,
+}));
+
+vi.mock('@neram/database/queries', () => ({
+  createAdminNotification: (...a: unknown[]) => mocks.createAdminNotification(...a),
 }));
 
 vi.mock('@/lib/class-share-links', () => ({
@@ -55,7 +63,12 @@ vi.mock('@neram/database', () => ({
       const self = () => c;
       c.select = self;
       c.eq = self;
+      c.neq = self;
+      c.order = self;
+      c.limit = self;
       c.update = self;
+      // The last staff member to write on the ticket (staffToTell).
+      c.maybeSingle = () => Promise.resolve({ data: mocks.lastStaffActor, error: null });
       c.single = () =>
         Promise.resolve({
           data: table === 'users' ? mocks.userRow : mocks.issueRow,
@@ -444,7 +457,43 @@ describe('PATCH reopen', () => {
     mocks.issueRow = { ...ISSUE, status: 'closed', updated_at: daysAgo(2) };
     const res = await PATCH(patchReq({ action: 'reopen', reason: 'Back again' }), ctx);
     expect(res.status).toBe(200);
-    expect(mocks.reopenFoundationIssue).toHaveBeenCalledWith(ISSUE_ID, 's1', 'Back again');
+    expect(mocks.reopenFoundationIssue).toHaveBeenCalledWith(ISSUE_ID, 's1', 'Back again', undefined, undefined);
+  });
+
+  it("keeps the student's device snapshot and tells the owner errors came with it", async () => {
+    mocks.userRow = { ...STUDENT };
+    mocks.issueRow = { ...ISSUE, status: 'awaiting_confirmation', updated_at: daysAgo(0) };
+    const res = await PATCH(
+      patchReq({
+        action: 'reopen',
+        reason: 'Video still stuck',
+        page_url: '/student/issues',
+        device_info: { browser: 'Chrome' },
+        console_logs: [
+          { level: 'error', message: 'HTTP 500 /api/catchup', at: '2026-09-30T10:00:00.000Z' },
+          { level: 'error', message: 'Uncaught TypeError', at: '2026-09-30T10:00:01.000Z' },
+          { nonsense: true },
+        ],
+        screenshot_urls: ['s1/shot.png', 42],
+      }),
+      ctx,
+    );
+    expect(res.status).toBe(200);
+    const snapshot = mocks.reopenFoundationIssue.mock.calls[0][4];
+    expect(snapshot.page_url).toBe('/student/issues');
+    expect(snapshot.device_info).toEqual({ browser: 'Chrome' });
+    // Malformed entries are dropped before they reach the ticket.
+    expect(snapshot.console_logs).toHaveLength(2);
+    expect(snapshot.screenshot_urls).toEqual(['s1/shot.png']);
+
+    const toOwner = mocks.notifyUser.mock.calls.find((c) => (c[0] as { user_id: string }).user_id === 't1');
+    expect(toOwner![0].message).toContain('2 recent errors');
+  });
+
+  it('ignores a device snapshot sent by staff', async () => {
+    mocks.issueRow = { ...ISSUE, status: 'closed', updated_at: daysAgo(1) };
+    await PATCH(patchReq({ action: 'reopen', reason: 'x', device_info: { browser: 'Edge' } }), ctx);
+    expect(mocks.reopenFoundationIssue.mock.calls[0][4]).toBeUndefined();
   });
 
   it('sends the student to a new ticket once the window has passed', async () => {
@@ -497,5 +546,67 @@ describe('PATCH assign', () => {
     mocks.issueRow = { ...ISSUE, status: 'closed' };
     const res = await PATCH(patchReq({ action: 'assign', assigned_to: 't2' }), ctx);
     expect(res.status).toBe(409);
+  });
+});
+
+describe('ticket messages as a personal Teams chat', () => {
+  const patchWith = (body: unknown, headers: Record<string, string>) =>
+    new NextRequest(`http://localhost/api/foundation/issues/${ISSUE_ID}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify(body),
+    });
+
+  it("sends a staff reply from the teacher's own Teams, with the ticket link", async () => {
+    mocks.issueRow = { ...ISSUE, status: 'in_progress' };
+    await PATCH(patchWith({ action: 'comment', comment: 'Hi ma, can you check now?' }, { Authorization: 'Bearer real-teacher-token' }), ctx);
+    const [, opts] = toStudent()!;
+    expect(opts.personal.delegatedToken).toBe('real-teacher-token');
+    expect(opts.personal.html).toContain('Hi ma, can you check now?');
+    expect(opts.personal.html).toContain('/student/issues?issue=');
+  });
+
+  it('never sends a personal chat with a test or impersonation token', async () => {
+    mocks.issueRow = { ...ISSUE, status: 'in_progress' };
+    await PATCH(patchWith({ action: 'comment', comment: 'x' }, { Authorization: 'Bearer imp_abc' }), ctx);
+    const [, opts] = toStudent()!;
+    expect(opts.personal).toBeUndefined();
+  });
+
+  it("sends a student's reply from the student's own Teams to the ticket owner", async () => {
+    mocks.userRow = { ...STUDENT };
+    mocks.issueRow = { ...ISSUE, status: 'in_progress', assigned_to: 't1' };
+    await PATCH(
+      patchWith({ action: 'comment', comment: 'In the notification page sir' }, { Authorization: 'Bearer s', 'X-Teams-Chat-Token': 'student-chat-token' }),
+      ctx,
+    );
+    const call = mocks.notifyUser.mock.calls.find((c) => (c[0] as { user_id: string }).user_id === 't1');
+    expect(call).toBeTruthy();
+    expect(call![1].audience).toBe('staff');
+    expect(call![1].personal.delegatedToken).toBe('student-chat-token');
+    expect(call![1].personal.html).toContain('In the notification page sir');
+    expect(call![1].personal.html).toContain('/teacher/issues?issue=');
+  });
+
+  it('reaches the last staff member on the thread when nobody owns the ticket (NXS-0126)', async () => {
+    mocks.userRow = { ...STUDENT };
+    mocks.issueRow = { ...ISSUE, status: 'open', assigned_to: null, resolved_by: null };
+    mocks.lastStaffActor = { actor_id: 't9' };
+    await PATCH(patchWith({ action: 'comment', comment: 'Sir, have u checked my issue?' }, { Authorization: 'Bearer s' }), ctx);
+    const call = mocks.notifyUser.mock.calls.find((c) => (c[0] as { user_id: string }).user_id === 't9');
+    expect(call).toBeTruthy();
+    // No chat token from this device: still the bell and a Teams alert, no personal chat.
+    expect(call![1].personal).toBeUndefined();
+    mocks.lastStaffActor = null;
+  });
+
+  it('falls back to the admin inbox when no staff member has touched the ticket', async () => {
+    mocks.userRow = { ...STUDENT };
+    mocks.issueRow = { ...ISSUE, status: 'open', assigned_to: null, resolved_by: null };
+    mocks.lastStaffActor = null;
+    await PATCH(patchWith({ action: 'comment', comment: 'Anyone?' }, { Authorization: 'Bearer s' }), ctx);
+    expect(mocks.createAdminNotification).toHaveBeenCalledWith(
+      expect.objectContaining({ event_type: 'foundation_issue_comment' }),
+    );
   });
 });

@@ -55,7 +55,7 @@ export async function generateMetadata({
       template: '%s | Neram Classes',
     },
     description:
-      "India's top-rated NATA and JEE Paper 2 coaching institute. Expert IIT/NIT alumni faculty, comprehensive study materials, 99.9% success rate. Online and offline classes across Tamil Nadu, India & Gulf countries.",
+      "NATA, JEE Main Paper 2, AAT and PGETA coaching since 2009. Live online classes across India and the Gulf, classroom batches in Tamil Nadu and Bangalore, drawing feedback and mock tests.",
     keywords:
       'NATA coaching, JEE Paper 2 coaching, architecture entrance exam, NATA preparation, best NATA coaching India, online NATA classes, NATA coaching Tamil Nadu, architecture entrance coaching',
     icons: {

@@ -59,6 +59,13 @@ export interface ImageUploadFieldProps {
   /** Also listen for paste on the whole document (single-field dialogs only). */
   enableGlobalPaste?: boolean;
   /**
+   * A host's own way to read an image off the clipboard, tried before the
+   * browser's. For a page inside another app's frame, such as a Microsoft Teams
+   * tab, where the browser refuses `navigator.clipboard.read()` outright.
+   * Resolve null when there is no image.
+   */
+  readClipboard?: () => Promise<Blob | null>;
+  /**
    * Make the filled preview open full screen when clicked.
    *
    * Off by default because most callers show a thumbnail of something the user
@@ -94,6 +101,7 @@ export function ImageUploadField({
   accept = 'image/*',
   camera = false,
   enableGlobalPaste = false,
+  readClipboard,
   previewable = false,
   dense = false,
   disabled = false,
@@ -101,8 +109,14 @@ export function ImageUploadField({
   required = false,
 }: ImageUploadFieldProps): JSX.Element {
   const inputRef = useRef<HTMLInputElement>(null);
+  const dropzoneRef = useRef<HTMLDivElement>(null);
   const [uploading, setUploading] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  /**
+   * Shown when the Paste button cannot read the clipboard. Not an error: the
+   * dropzone now has focus, so Ctrl/⌘+V works, and it says so.
+   */
+  const [pasteHint, setPasteHint] = useState<string | null>(null);
   const [viewerOpen, setViewerOpen] = useState(false);
   // Reading the clipboard is its own wait: most browsers raise a permission
   // prompt before a single byte arrives, and iOS shows a "Paste" popup.
@@ -118,9 +132,9 @@ export function ImageUploadField({
   const [canReadClipboard, setCanReadClipboard] = useState(false);
   useEffect(() => {
     setCanReadClipboard(
-      typeof navigator !== 'undefined' && typeof navigator.clipboard?.read === 'function',
+      !!readClipboard || (typeof navigator !== 'undefined' && typeof navigator.clipboard?.read === 'function'),
     );
-  }, []);
+  }, [readClipboard]);
 
   // Only surface the Camera button where it can actually open a camera (touch
   // devices). On desktop `capture` is ignored and it would just re-open the file
@@ -164,6 +178,7 @@ export function ImageUploadField({
         return;
       }
       setLocalError(null);
+      setPasteHint(null);
       setUploading(true);
       try {
         const { url } = await upload(file);
@@ -212,7 +227,18 @@ export function ImageUploadField({
   const handleClipboardPaste = useCallback(async () => {
     if (disabled || uploading || readingClipboard) return;
     setReadingClipboard(true);
+    setPasteHint(null);
     try {
+      if (readClipboard) {
+        const blob = await readClipboard().catch(() => null);
+        if (blob && blob.type.startsWith('image/')) {
+          const ext = blob.type.split('/')[1]?.split('+')[0] || 'png';
+          setLocalError(null);
+          await processFile(new File([blob], `pasted-image.${ext}`, { type: blob.type }));
+          return;
+        }
+      }
+      if (typeof navigator.clipboard?.read !== 'function') throw new Error('no clipboard read');
       const items = await navigator.clipboard.read();
       for (const item of items) {
         const type = item.types.find((t) => t.startsWith('image/'));
@@ -225,12 +251,16 @@ export function ImageUploadField({
       }
       setLocalError('Nothing to paste. Copy an image first.');
     } catch {
-      // Denied permission, an insecure origin, or a clipboard we may not read.
-      setLocalError('Clipboard access was blocked. Drop the image here, or choose a file.');
+      // Denied permission, an insecure origin, or a frame (Teams) that never
+      // allows it. Ctrl/⌘+V still works once the page has focus, so give the
+      // dropzone focus and say that, rather than reporting a failure.
+      setLocalError(null);
+      dropzoneRef.current?.focus();
+      setPasteHint('Press Ctrl + V now to paste your picture. Or drop it here, or choose a file.');
     } finally {
       setReadingClipboard(false);
     }
-  }, [disabled, uploading, readingClipboard, processFile]);
+  }, [disabled, uploading, readingClipboard, processFile, readClipboard]);
 
   const openPicker = (withCamera = false) => {
     if (disabled || uploading || !inputRef.current) return;
@@ -263,6 +293,7 @@ export function ImageUploadField({
 
       {!value ? (
         <Paper
+          ref={dropzoneRef}
           variant="outlined"
           tabIndex={0}
           onClick={() => openPicker(false)}
@@ -482,6 +513,12 @@ export function ImageUploadField({
           name={label}
           alt={`${imageName} full size`}
         />
+      )}
+
+      {pasteHint && !(error || localError) && (
+        <Alert severity="info" role="status" sx={{ mt: 1, py: 0.25 }}>
+          {pasteHint}
+        </Alert>
       )}
 
       {(error || localError) && (
