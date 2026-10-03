@@ -28,6 +28,10 @@ export default function AssistantSheet() {
   const titleId = useId();
   // The Paper is the panel itself: announce it as a modal dialog named by its heading.
   const dialogProps = { role: 'dialog', 'aria-modal': true, 'aria-labelledby': titleId } as const;
+  // The theme gives Drawer paper `transition: all`, which animates `visibility` too: a kept-mounted
+  // sheet stays hidden for 300ms after opening, the focus trap cannot focus it, and focus is never
+  // handed back to the launcher. Animate only the slide; visibility then flips at once.
+  const paperTransition = { transitionProperty: 'transform' } as const;
 
   if (!a.enabled) return null;
 
@@ -53,7 +57,7 @@ export default function AssistantSheet() {
 
   if (desktop) {
     return (
-      <Drawer anchor="right" open={a.open} onClose={a.closePanel} transitionDuration={reduce ? 0 : undefined} PaperProps={{ ...dialogProps, sx: { width: SHEET_WIDTH, maxWidth: '100vw' } }}>
+      <Drawer anchor="right" open={a.open} onClose={a.closePanel} transitionDuration={reduce ? 0 : undefined} PaperProps={{ ...dialogProps, sx: { ...paperTransition, width: SHEET_WIDTH, maxWidth: '100vw' } }}>
         {body}
       </Drawer>
     );
@@ -71,6 +75,7 @@ export default function AssistantSheet() {
       PaperProps={{
         ...dialogProps,
         sx: {
+          ...paperTransition,
           borderTopLeftRadius: 16, borderTopRightRadius: 16, height: '85vh', overscrollBehavior: 'contain',
           // dvh follows the phone keyboard and the browser bars where supported.
           '@supports (height: 100dvh)': { height: '85dvh' },
