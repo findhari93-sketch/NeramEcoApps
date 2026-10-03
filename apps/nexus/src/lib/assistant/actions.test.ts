@@ -4,6 +4,7 @@ import { fakeDb } from './testing/fake-db';
 import { TOOLS, registerTools } from './registry';
 import type { ActionToolDef, AssistantCaller, ToolContext } from './types';
 import { ACTION_TTL_MS, cancelAction, confirmAction, proposeAction } from './actions';
+import { setReminder } from './tools/actions/set-reminder';
 
 const executed: unknown[] = [];
 const reminderTool: ActionToolDef<{ due_on: string; text: string }> = {
@@ -122,23 +123,73 @@ describe('confirmAction', () => {
     expect(out).toMatchObject({ ok: true, threadId: 't-9' });
   });
 
-  it('marks failed when the tool throws, and says nothing changed', async () => {
+  it('marks failed when the tool throws, and never claims nothing changed (a write may have landed)', async () => {
     const db = fakeDb({});
     const p = await pending(db);
     vi.spyOn(reminderTool, 'execute').mockRejectedValueOnce(new Error('db down'));
     const out = await confirmAction(ctxFor(db), { id: p.id, token: p.confirmToken });
-    expect(out).toMatchObject({ ok: false, status: 500 });
+    expect(out).toEqual({ ok: false, status: 500, error: 'Something went wrong while doing that. Check the page before trying again.' });
+    expect(db.rows('nexus_assistant_actions')[0].status).toBe('failed');
+  });
+
+  it('re-checks with the tool before executing: a reminder for today confirmed after midnight IST is refused (item 8)', async () => {
+    TOOLS.length = 0;
+    registerTools([setReminder as unknown as ActionToolDef]);
+    const db = fakeDb({});
+    const execute = vi.spyOn(setReminder, 'execute');
+    // 23:55 IST on 3 Oct: the card is for "today".
+    const before = new Date('2026-10-03T18:25:00Z');
+    const p = await proposeAction(ctxFor(db, student, before), { kind: 'set_reminder', args: { due_on: '2026-10-03', text: 'finish the sheet' }, summary: 's', fields: [] });
+    // 00:01 IST on 4 Oct, still inside the ten minutes.
+    const after = new Date('2026-10-03T18:31:00Z');
+    const out = await confirmAction(ctxFor(db, student, after), { id: p.id, token: p.confirmToken });
+    expect(out).toEqual({ ok: false, status: 400, error: 'That day has already passed. Which day should I remind you?' });
+    expect(execute).not.toHaveBeenCalled();
+    expect(db.rows('nexus_assistant_reminders')).toHaveLength(0);
+    expect(db.rows('nexus_assistant_actions')[0]).toMatchObject({ status: 'failed', result: { error: 'That day has already passed. Which day should I remind you?' } });
+    execute.mockRestore();
+  });
+
+  it('refuses an action whose feature was switched off after the card was made (Ruling 25)', async () => {
+    const sketchTool = { ...reminderTool, name: 'add_sketch', feature: 'sketchbook' as const };
+    TOOLS.length = 0;
+    registerTools([sketchTool as unknown as ActionToolDef]);
+    const db = fakeDb({});
+    const p = await proposeAction(ctxFor(db), { kind: 'add_sketch', args: {}, summary: 's', fields: [] });
+    const off = { ...ctxFor(db), features: { sketchbook: false, attendance: true } };
+    expect(await confirmAction(off, { id: p.id, token: p.confirmToken })).toMatchObject({ ok: false, status: 400 });
+    expect(executed).toHaveLength(0);
     expect(db.rows('nexus_assistant_actions')[0].status).toBe('failed');
   });
 });
 
 describe('cancelAction', () => {
-  it('cancels a pending action of the owner only', async () => {
+  it('cancels a pending action of the owner only, and invites asking again', async () => {
     const db = fakeDb({});
     const p = await proposeAction(ctxFor(db), { kind: 'set_reminder', args: {}, summary: 's', fields: [] });
     expect(await cancelAction(ctxFor(db, { ...student, id: 'u2' }), { id: p.id })).toMatchObject({ ok: false, status: 403 });
-    expect(await cancelAction(ctxFor(db), { id: p.id })).toMatchObject({ ok: true });
+    expect(await cancelAction(ctxFor(db), { id: p.id })).toMatchObject({ ok: true, reply: 'Okay, cancelled. Nothing was changed. Ask me again whenever you want it set up differently.' });
     expect(db.rows('nexus_assistant_actions')[0].status).toBe('cancelled');
+  });
+
+  it('cancels with a conditional update: of two racing cancels, one wins and the other gets 409 (item 9)', async () => {
+    const db = fakeDb({});
+    const p = await proposeAction(ctxFor(db), { kind: 'set_reminder', args: {}, summary: 's', fields: [] });
+    const [a, b] = await Promise.all([cancelAction(ctxFor(db), { id: p.id }), cancelAction(ctxFor(db), { id: p.id })]);
+    expect([a, b].filter((o) => o.ok)).toHaveLength(1);
+    expect([a, b].find((o) => !o.ok)).toEqual({ ok: false, status: 409, error: 'That action was already handled.' });
+  });
+
+  it('a cancel that loses to a confirm gets 409 and leaves the action executed', async () => {
+    const db = fakeDb({});
+    const p = await proposeAction(ctxFor(db), { kind: 'set_reminder', args: {}, summary: 's', fields: [] });
+    const [confirmed, cancelled] = await Promise.all([
+      confirmAction(ctxFor(db), { id: p.id, token: p.confirmToken }),
+      cancelAction(ctxFor(db), { id: p.id }),
+    ]);
+    expect(confirmed).toMatchObject({ ok: true });
+    expect(cancelled).toMatchObject({ ok: false, status: 409 });
+    expect(db.rows('nexus_assistant_actions')[0].status).toBe('executed');
   });
 
   it('refuses to cancel while impersonating and leaves the action pending', async () => {

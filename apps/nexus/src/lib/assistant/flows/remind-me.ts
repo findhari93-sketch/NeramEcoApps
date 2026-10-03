@@ -1,15 +1,19 @@
 /** "Remind me on Friday to finish the catch-up." Pure. */
 import { parseSingleDate } from '@/lib/assistant/dates';
-import { addDaysYmd, dayOfWeek, relativeDay } from '@/lib/assistant/format';
+import { relativeDay } from '@/lib/assistant/format';
 import { chip, type FlowDeps, type FlowInput, type FlowOutcome, type FlowState } from './types';
 
 function state(deps: FlowDeps, step: string, data: Record<string, unknown>, prev?: FlowState): FlowState {
   return { flow: 'remind-me', step, data, startedAt: prev?.startedAt ?? deps.now.toISOString() };
 }
 
-function whenChips(today: string) {
-  const toMonday = ((1 - dayOfWeek(today) + 7) % 7) || 7;
-  return [chip('Tomorrow'), chip('Day after tomorrow'), chip('Next Monday', addDaysYmd(today, toMonday))];
+/**
+ * Each chip sends its own words, so the chat shows what was tapped. parseSingleDate
+ * reads "Next Monday" as the coming Monday (a week away on a Monday), the same
+ * day the chip means.
+ */
+function whenChips() {
+  return [chip('Tomorrow'), chip('Day after tomorrow'), chip('Next Monday')];
 }
 
 /** Split "remind me ..." into a day and a task, either order. */
@@ -65,7 +69,7 @@ export function start(input: FlowInput, deps: FlowDeps): FlowOutcome {
   if (due_on && task) return proposal(due_on, task, deps.today);
   if (!due_on) {
     const reply = pastDay ? 'That day has already passed. Which day should I remind you?' : 'Which day should I remind you?';
-    return { state: state(deps, 'when', { text: task }, undefined), reply, suggestions: whenChips(deps.today) };
+    return { state: state(deps, 'when', { text: task }, undefined), reply, suggestions: whenChips() };
   }
   return { state: state(deps, 'what', { due_on }), reply: 'What should I remind you about?', suggestions: [] };
 }
@@ -74,8 +78,8 @@ export function step(prev: FlowState, input: FlowInput, deps: FlowDeps): FlowOut
   const text = input.text.trim();
   if (prev.step === 'when') {
     const day = parseSingleDate(text, deps.today);
-    if (!day) return { state: prev, reply: 'I did not catch the day. Try "tomorrow", "Friday" or "8 Oct".', suggestions: whenChips(deps.today) };
-    if (day < deps.today) return { state: prev, reply: 'That day has already passed. Which day should I remind you?', suggestions: whenChips(deps.today) };
+    if (!day) return { state: prev, reply: 'I did not catch the day. Try "tomorrow", "Friday" or "8 Oct".', suggestions: whenChips() };
+    if (day < deps.today) return { state: prev, reply: 'That day has already passed. Which day should I remind you?', suggestions: whenChips() };
     if (prev.data.text) return proposal(day, String(prev.data.text), deps.today);
     return { state: state(deps, 'what', { due_on: day }, prev), reply: 'What should I remind you about?', suggestions: [] };
   }

@@ -39,4 +39,16 @@ describe('remind-me flow', () => {
     expect(out.state?.step).toBe('when');
     expect(out.reply).toMatch(/already passed/);
   });
+
+  it('the Next Monday chip sends words, not an ISO date, and those words parse to the Monday on the chip (item 15)', () => {
+    const ask = start({ text: 'remind me to finish the catch-up' }, deps);
+    const chip = ask.suggestions.find((c) => c.label === 'Next Monday')!;
+    expect(chip.send).toBe('Next Monday');
+    // 3 Oct 2026 is a Saturday: the coming Monday is the 5th.
+    expect(step(ask.state!, { text: chip.send }, deps).propose?.args).toEqual({ due_on: '2026-10-05', text: 'finish the catch-up' });
+    // On a Monday, "Next Monday" is a week away, never today.
+    const monday = { ...deps, today: '2026-10-05' };
+    const onMonday = start({ text: 'remind me to finish the catch-up' }, monday);
+    expect(step(onMonday.state!, { text: 'Next Monday' }, monday).propose?.args).toEqual({ due_on: '2026-10-12', text: 'finish the catch-up' });
+  });
 });

@@ -244,7 +244,20 @@ export async function updateAction(
  * True when this caller won the claim; false when another request got there first.
  */
 export async function claimPendingAction(supabase: any, id: string): Promise<boolean> {
-  const { data, error } = await supabase.from(ACTIONS).update({ status: 'executing' }).eq('id', id).eq('status', 'pending').select('id');
+  return movePending(supabase, id, 'executing');
+}
+
+/**
+ * Move one action from pending to cancelled, only if it is still pending.
+ * False when a confirm (or another cancel) got there first.
+ */
+export async function cancelPendingAction(supabase: any, id: string): Promise<boolean> {
+  return movePending(supabase, id, 'cancelled');
+}
+
+/** A conditional update: the row must still be pending, and must come back. */
+async function movePending(supabase: any, id: string, status: 'executing' | 'cancelled'): Promise<boolean> {
+  const { data, error } = await supabase.from(ACTIONS).update({ status }).eq('id', id).eq('status', 'pending').select('id');
   throwIf(error);
   return Array.isArray(data) && data.length > 0;
 }

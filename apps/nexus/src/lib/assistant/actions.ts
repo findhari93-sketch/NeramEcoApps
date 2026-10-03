@@ -2,11 +2,13 @@
  * Propose, confirm, execute. The assistant never writes directly: a tool or a
  * flow proposes an action with every field visible, the person confirms, and
  * only then does the tool's `execute` run, re-checked here against the owner,
- * the token, the clock and impersonation.
+ * the token, the clock, impersonation, the feature flags and the tool's own
+ * `run` (the world may have moved since the card was made).
  */
 import { randomUUID } from 'crypto';
+import { describeError } from '@/lib/api-errors';
 import { findActionTool } from './registry';
-import { claimPendingAction, createAction, getAction, updateAction } from './store';
+import { cancelPendingAction, claimPendingAction, createAction, getAction, updateAction } from './store';
 import type { ActionProposal, ToolContext, ToolLink } from './types';
 
 export const ACTION_TTL_MS = 10 * 60_000;
@@ -53,8 +55,22 @@ export async function confirmAction(ctx: ToolContext, input: { id: string; token
   if (!(await claimPendingAction(ctx.supabase, row.id))) {
     return { ok: false, status: 409, error: 'That action was already handled.' };
   }
+  const execCtx: ToolContext = { ...ctx, threadId: row.thread_id ?? ctx.threadId };
   try {
-    const result = await tool.execute({ ...ctx, threadId: row.thread_id ?? ctx.threadId }, row.args);
+    // Confirm re-checks (spec). A feature switched off since the card was made,
+    // a day that passed midnight IST, a class that was moved: refused here, and
+    // nothing is written.
+    if (tool.feature && !ctx.features[tool.feature]) {
+      await updateAction(ctx.supabase, row.id, { status: 'failed', result: { error: 'feature off' } });
+      return { ok: false, status: 400, error: 'That is not available right now.' };
+    }
+    const check = await tool.run(execCtx, row.args);
+    if (!check.ok) {
+      const error = check.error || 'That can no longer be done. Ask me again.';
+      await updateAction(ctx.supabase, row.id, { status: 'failed', result: { error } });
+      return { ok: false, status: 400, error };
+    }
+    const result = await tool.execute(execCtx, row.args);
     if (!result.ok) {
       await updateAction(ctx.supabase, row.id, { status: 'failed', result: { error: result.error ?? 'failed' } });
       return { ok: false, status: 400, error: result.error || 'That did not work.' };
@@ -66,9 +82,11 @@ export async function confirmAction(ctx: ToolContext, input: { id: string; token
     });
     return { ok: true, reply: result.reply || 'Done.', links: result.links || [], threadId: row.thread_id };
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'failed';
-    await updateAction(ctx.supabase, row.id, { status: 'failed', result: { error: message } });
-    return { ok: false, status: 500, error: 'Something went wrong while doing that. Nothing was changed.' };
+    const message = describeError(err);
+    console.error(`[assistant action] ${row.kind} failed:`, message);
+    await updateAction(ctx.supabase, row.id, { status: 'failed', result: { error: message } }).catch(() => undefined);
+    // Never "nothing was changed": the write may have landed before the throw.
+    return { ok: false, status: 500, error: 'Something went wrong while doing that. Check the page before trying again.' };
   }
 }
 
@@ -78,6 +96,8 @@ export async function cancelAction(ctx: ToolContext, input: { id: string }): Pro
   if (row.user_id !== ctx.caller.id) return { ok: false, status: 403, error: 'That is not your action.' };
   if (ctx.caller.impersonating) return { ok: false, status: 403, error: 'Viewing as a student is read only.' };
   if (row.status !== 'pending') return { ok: false, status: 409, error: 'That action was already handled.' };
-  await updateAction(ctx.supabase, row.id, { status: 'cancelled' });
-  return { ok: true, reply: 'Okay, cancelled. Nothing was changed.', links: [], threadId: row.thread_id };
+  // Conditional, like the claim: a confirm that got there first wins, and this cancel says so.
+  if (!(await cancelPendingAction(ctx.supabase, row.id))) return { ok: false, status: 409, error: 'That action was already handled.' };
+  // No Edit on the card in M1 (Ruling 23): asking again is how a student changes it.
+  return { ok: true, reply: 'Okay, cancelled. Nothing was changed. Ask me again whenever you want it set up differently.', links: [], threadId: row.thread_id };
 }
