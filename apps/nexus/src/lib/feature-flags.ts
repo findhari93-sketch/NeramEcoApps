@@ -62,6 +62,11 @@ export const FEATURES: FeatureDef[] = [
    * gets piloted on one classroom before the cohort.
    */
   { id: 'student.attendance', label: 'Attendance', surface: 'student', group: 'Live Class', paths: ['/student/attendance'], defaultEnabled: false },
+  // Behaviour switch and a surface at once: the Neram Assistant launcher, the
+  // dashboard brief card and every /api/assistant route. OFF until the founder
+  // has walked the three guided flows on a phone. The pilot allowlist in
+  // nexus_settings (assistant_pilot_user_ids) narrows it further.
+  { id: 'student.assistant-chat', label: 'Neram Assistant (chat, brief card, guided actions)', surface: 'student', group: 'Home', paths: [], defaultEnabled: false },
   /**
    * Not a page (`paths: []`). A drawing assignment opens as a workspace: the
    * drawing fixed on one side, the teacher's voice note, notes and scores
