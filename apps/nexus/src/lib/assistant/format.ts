@@ -16,7 +16,7 @@ export function todayIst(now: Date = new Date()): string {
 
 /** "HH:MM" in IST right now, for "has this class already ended today". */
 export function nowHHMMIst(now: Date = new Date()): string {
-  return new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }).format(now);
+  return new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(now);
 }
 
 /** "18:00" or "18:00:00" to "6:00 pm". Anything else is returned untouched. */
