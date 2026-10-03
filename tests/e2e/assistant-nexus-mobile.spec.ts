@@ -141,7 +141,19 @@ function activeLabel(page: Page) {
   });
 }
 
-const SKIP_REASON ='Nexus dev server, student test login or student dashboard unavailable';
+/**
+ * Escape only reaches the panel when focus is inside it (MUI's Modal listens on
+ * its own root), so wait for that first. Otherwise a keypress that lands while
+ * focus is briefly on the body is lost, and the test fails on timing rather than
+ * on the focus-return behaviour it is here to prove.
+ */
+async function focusInsideSheet(page: Page) {
+  await expect
+    .poll(() => page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]'))), { message: 'focus moves into the open panel' })
+    .toBe(true);
+}
+
+const SKIP_REASON = 'Nexus dev server, student test login or student dashboard unavailable';
 
 test.describe('Neram Assistant', () => {
   test.describe.configure({ mode: 'default', timeout: 120_000 });
@@ -199,6 +211,7 @@ test.describe('Neram Assistant', () => {
       const sheet = page.getByRole('dialog', { name: 'Neram Assistant' });
       await expect(sheet).toBeVisible();
       await expect(launcher).toBeHidden();
+      await focusInsideSheet(page);
       await page.keyboard.press('Escape');
       await expect(sheet).toBeHidden();
       await expect(launcher).toBeVisible();
@@ -269,6 +282,7 @@ test.describe('Neram Assistant', () => {
       await assertNoHorizontalOverflow(page);
 
       // Escape closes the sheet and hands focus back to the button that opened it.
+      await focusInsideSheet(page);
       await page.keyboard.press('Escape');
       await expect(sheet).toBeHidden();
       await expect(launcher).toBeVisible();
@@ -325,6 +339,7 @@ test.describe('Neram Assistant', () => {
       await expect(drawer.getByRole('button', { name: /I can.t attend a class/ })).toBeVisible();
       await assertNoHorizontalOverflow(page);
 
+      await focusInsideSheet(page);
       await page.keyboard.press('Escape');
       await expect(drawer).toBeHidden();
       await expect(topBarIcon).toBeFocused();
