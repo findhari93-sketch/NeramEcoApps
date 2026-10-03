@@ -12,6 +12,7 @@ import { loadStudentRhythm } from '@/lib/sketchbook-payload';
 import { rhythmLine } from '@/lib/sketchbook-rhythm';
 import { istNow, loadDeclinedClassIds, loadUpcomingClasses } from '@/lib/upcoming-classes';
 import type { BriefFacts } from './brief';
+import { todayIst } from './format';
 import { listRemindersDue } from './store';
 
 async function quiet<T>(label: string, p: Promise<T>, fallback: T): Promise<T> {
@@ -21,6 +22,11 @@ async function quiet<T>(label: string, p: Promise<T>, fallback: T): Promise<T> {
     console.error(`[assistant brief] ${label} failed:`, err instanceof Error ? err.message : err);
     return fallback;
   }
+}
+
+/** IST calendar date (YYYY-MM-DD) of a UTC timestamp; a due time after midnight IST is the next day in UTC terms. */
+export function istDateOf(iso: string): string {
+  return todayIst(new Date(iso));
 }
 
 export async function loadBriefFacts(supabaseIn: any, userId: string, now: Date = new Date()): Promise<BriefFacts> {
@@ -85,7 +91,7 @@ export async function loadBriefFacts(supabaseIn: any, userId: string, now: Date 
     assignments: {
       pending: pending.length,
       nextTitle: nextAssignment?.title ?? null,
-      nextDueOn: nextAssignment?.due_at ? String(nextAssignment.due_at).slice(0, 10) : null,
+      nextDueOn: nextAssignment?.due_at ? istDateOf(String(nextAssignment.due_at)) : null,
     },
     catchup,
     reviewsBack: (reviewed as { count?: number | null })?.count ?? 0,
