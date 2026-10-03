@@ -886,10 +886,10 @@ export function allowedTools(tools: ToolDef[], caller: AssistantCaller, mode: Mo
   const audience = audienceOf(caller);
   return tools.filter((t) => {
     if (t.audience !== 'both' && t.audience !== audience) return false;
-    if (mode === 'exam') return t.mode === 'exam';
-    if (t.mode === 'exam') return false;
+    // Impersonation runs BEFORE the mode filter, in every mode (Ruling 6).
     if (caller.impersonating && t.kind === 'action') return false;
-    return true;
+    if (mode === 'exam') return t.mode === 'exam';
+    return t.mode !== 'exam';
   });
 }
 
