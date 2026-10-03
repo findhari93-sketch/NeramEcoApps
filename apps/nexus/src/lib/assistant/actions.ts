@@ -6,13 +6,13 @@
  */
 import { randomUUID } from 'crypto';
 import { findActionTool } from './registry';
-import { createAction, getAction, updateAction } from './store';
+import { claimPendingAction, createAction, getAction, updateAction } from './store';
 import type { ActionProposal, ToolContext, ToolLink } from './types';
 
 export const ACTION_TTL_MS = 10 * 60_000;
 
 export type ConfirmOutcome =
-  | { ok: true; reply: string; links: ToolLink[] }
+  | { ok: true; reply: string; links: ToolLink[]; threadId: string | null }
   | { ok: false; status: number; error: string };
 
 export async function proposeAction(
@@ -48,9 +48,13 @@ export async function confirmAction(ctx: ToolContext, input: { id: string; token
   const tool = findActionTool(row.kind);
   if (!tool) return { ok: false, status: 500, error: 'I no longer know how to do that.' };
 
-  await updateAction(ctx.supabase, row.id, { status: 'executing' });
+  // Conditional claim: only one confirm moves pending to executing, so a double
+  // tap cannot run the same action twice.
+  if (!(await claimPendingAction(ctx.supabase, row.id))) {
+    return { ok: false, status: 409, error: 'That action was already handled.' };
+  }
   try {
-    const result = await tool.execute(ctx, row.args);
+    const result = await tool.execute({ ...ctx, threadId: row.thread_id ?? ctx.threadId }, row.args);
     if (!result.ok) {
       await updateAction(ctx.supabase, row.id, { status: 'failed', result: { error: result.error ?? 'failed' } });
       return { ok: false, status: 400, error: result.error || 'That did not work.' };
@@ -60,7 +64,7 @@ export async function confirmAction(ctx: ToolContext, input: { id: string; token
       result: { ok: true, reply: result.reply ?? null, data: (result.data as Record<string, unknown>) ?? null },
       executed_at: ctx.now.toISOString(),
     });
-    return { ok: true, reply: result.reply || 'Done.', links: result.links || [] };
+    return { ok: true, reply: result.reply || 'Done.', links: result.links || [], threadId: row.thread_id };
   } catch (err) {
     const message = err instanceof Error ? err.message : 'failed';
     await updateAction(ctx.supabase, row.id, { status: 'failed', result: { error: message } });
@@ -74,5 +78,5 @@ export async function cancelAction(ctx: ToolContext, input: { id: string }): Pro
   if (row.user_id !== ctx.caller.id) return { ok: false, status: 403, error: 'That is not your action.' };
   if (row.status !== 'pending') return { ok: false, status: 409, error: 'That action was already handled.' };
   await updateAction(ctx.supabase, row.id, { status: 'cancelled' });
-  return { ok: true, reply: 'Okay, cancelled. Nothing was changed.', links: [] };
+  return { ok: true, reply: 'Okay, cancelled. Nothing was changed.', links: [], threadId: row.thread_id };
 }

@@ -204,6 +204,16 @@ export async function updateAction(
   throwIf(error);
 }
 
+/**
+ * Move one action from pending to executing, only if it is still pending.
+ * True when this caller won the claim; false when another request got there first.
+ */
+export async function claimPendingAction(supabase: any, id: string): Promise<boolean> {
+  const { data, error } = await supabase.from(ACTIONS).update({ status: 'executing' }).eq('id', id).eq('status', 'pending').select('id');
+  throwIf(error);
+  return Array.isArray(data) && data.length > 0;
+}
+
 export async function createReminder(
   supabase: any,
   input: { userId: string; threadId: string | null; dueOn: string; text: string; kind: string },

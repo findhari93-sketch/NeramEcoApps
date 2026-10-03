@@ -95,6 +95,33 @@ describe('confirmAction', () => {
     expect(executed).toHaveLength(0);
   });
 
+  it('executes once when two confirms race, and the loser gets 409', async () => {
+    const db = fakeDb({});
+    const p = await pending(db);
+    const [a, b] = await Promise.all([
+      confirmAction(ctxFor(db), { id: p.id, token: p.confirmToken }),
+      confirmAction(ctxFor(db), { id: p.id, token: p.confirmToken }),
+    ]);
+    expect(executed).toHaveLength(1);
+    const outcomes = [a, b];
+    expect(outcomes.filter((o) => o.ok)).toHaveLength(1);
+    expect(outcomes.find((o) => !o.ok)).toMatchObject({ ok: false, status: 409, error: 'That action was already handled.' });
+    expect(db.rows('nexus_assistant_actions')[0].status).toBe('executed');
+  });
+
+  it('passes the action thread into execute and returns it', async () => {
+    const db = fakeDb({});
+    const seen: Array<string | null> = [];
+    vi.spyOn(reminderTool, 'execute').mockImplementationOnce(async (ctx) => {
+      seen.push(ctx.threadId);
+      return { ok: true, reply: 'Done.' };
+    });
+    const p = await proposeAction({ ...ctxFor(db), threadId: 't-9' }, { kind: 'set_reminder', args: {}, summary: 's', fields: [] });
+    const out = await confirmAction(ctxFor(db), { id: p.id, token: p.confirmToken });
+    expect(seen).toEqual(['t-9']);
+    expect(out).toMatchObject({ ok: true, threadId: 't-9' });
+  });
+
   it('marks failed when the tool throws, and says nothing changed', async () => {
     const db = fakeDb({});
     const p = await pending(db);
