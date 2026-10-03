@@ -42,6 +42,13 @@ describe('routeIntent', () => {
     expect(routeIntent('anything', { path: '/student/question-bank/nata/questions' })).toEqual({ kind: 'llm', mode: 'exam' });
   });
 
+  it('treats curly apostrophes from phone keyboards like straight ones', () => {
+    expect(routeIntent('I can’t attend tomorrow', page)).toEqual({ kind: 'flow', flow: 'cannot-attend' });
+    expect(routeIntent('I won’t be able to join today', page)).toEqual({ kind: 'flow', flow: 'cannot-attend' });
+    expect(routeIntent('what’s due', page)).toEqual({ kind: 'tool', tool: 'my_assignments' });
+    expect(routeIntent('what’s up today', page)).toEqual({ kind: 'tool', tool: 'my_brief' });
+  });
+
   it('prefers a flow over a tool when both words appear', () => {
     expect(routeIntent("I can't attend the class, what's the catch up", page)).toEqual({ kind: 'flow', flow: 'cannot-attend' });
   });

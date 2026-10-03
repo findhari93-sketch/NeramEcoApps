@@ -33,13 +33,18 @@ const TOOLS: Array<[string, RegExp]> = [
 
 const EXAM_WORDS = /\b(chapter|jee|nata|maths?|mathematics|formula|question|weightage|ncert|syllabus|aptitude|past papers?)\b/i;
 
+/** Phone keyboards type curly apostrophes (U+2018, U+2019); the patterns use a straight one. */
+function normalise(text: string): string {
+  return text.replace(/[‘’]/g, "'");
+}
+
 export function detectMode(text: string, page: PageContext | null | undefined): Mode {
   if (page?.path?.startsWith('/student/question-bank')) return 'exam';
-  return EXAM_WORDS.test(text) ? 'exam' : 'general';
+  return EXAM_WORDS.test(normalise(text)) ? 'exam' : 'general';
 }
 
 export function routeIntent(text: string, page: PageContext | null | undefined): Route {
-  const t = text.trim();
+  const t = normalise(text).trim();
   if (CANCEL.test(t)) return { kind: 'cancel' };
   for (const [flow, re] of FLOWS) if (re.test(t)) return { kind: 'flow', flow };
   for (const [tool, re] of TOOLS) if (re.test(t)) return { kind: 'tool', tool };
