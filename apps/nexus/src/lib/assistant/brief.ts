@@ -20,7 +20,7 @@ export interface BriefFacts {
   /** rhythmLine() from lib/sketchbook-rhythm, or null when the sketchbook is off. */
   sketchbookLine: string | null;
   exam: { shortLabel: string; headline: string; detail: string } | null;
-  /** Texts of reminders due today or earlier. */
+  /** Texts of reminders due today, and only today (Ruling 24). */
   remindersToday: string[];
 }
 

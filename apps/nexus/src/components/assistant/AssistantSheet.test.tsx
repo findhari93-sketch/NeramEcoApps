@@ -2,7 +2,10 @@ import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import AssistantSheet from './AssistantSheet';
 
-vi.mock('@/hooks/useNexusAuth', () => ({ useNexusAuthContext: () => ({ getToken: async () => 'tok' }) }));
+let sketchbookOn = true;
+vi.mock('@/hooks/useNexusAuth', () => ({
+  useNexusAuthContext: () => ({ getToken: async () => 'tok', isFeatureEnabled: (id: string) => (id === 'student.sketchbook' ? sketchbookOn : true) }),
+}));
 
 const ctx = {
   enabled: true, open: true, openPanel: vi.fn(), closePanel: vi.fn(),
@@ -21,5 +24,17 @@ describe('AssistantSheet', () => {
     const heading = screen.getByRole('heading', { name: 'Neram Assistant' });
     expect(dialog.getAttribute('aria-labelledby')).toBe(heading.id);
     expect(dialog.hasAttribute('aria-label')).toBe(false);
+  });
+
+  it('hides the sketch quick action and the attach button while the sketchbook is off (Ruling 25)', () => {
+    sketchbookOn = false;
+    try {
+      render(<AssistantSheet />);
+      expect(screen.queryByRole('button', { name: /Add a sketch/ })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Attach a photo' })).toBeNull();
+      expect(screen.queryByRole('button', { name: /Remind me/ })).not.toBeNull();
+    } finally {
+      sketchbookOn = true;
+    }
   });
 });

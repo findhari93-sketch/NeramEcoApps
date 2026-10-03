@@ -9,6 +9,7 @@ export const mySketchbook: ToolDef = {
   parameters: EMPTY_SCHEMA,
   audience: 'student',
   kind: 'read',
+  feature: 'sketchbook',
   async run(ctx) {
     const { rhythm } = await loadStudentRhythm(ctx.caller.id, ctx.now);
     return { ok: true, reply: rhythmLine(rhythm), data: rhythm, links: [{ label: 'Sketchbook', url: '/student/sketchbook' }] };

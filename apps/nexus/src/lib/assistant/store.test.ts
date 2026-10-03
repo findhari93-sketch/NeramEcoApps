@@ -73,7 +73,7 @@ describe('actions and reminders', () => {
     expect(await getAction(db, a.id)).toMatchObject({ status: 'executed', result: { ok: true } });
   });
 
-  it('lists queued reminders due today or earlier, oldest first', async () => {
+  it('lists only the queued reminders due today (Ruling 24: M1 has no sent marker, so an older one would repeat forever)', async () => {
     const db = fakeDb({
       nexus_assistant_reminders: [
         { id: 'r1', user_id: 'u1', due_on: '2026-10-03', text: 'a', status: 'queued' },
@@ -84,7 +84,7 @@ describe('actions and reminders', () => {
       ],
     });
     const due = await listRemindersDue(db, 'u1', '2026-10-03');
-    expect(due.map((r) => r.id)).toEqual(['r2', 'r1']);
+    expect(due.map((r) => r.id)).toEqual(['r1']);
     const made = await createReminder(db, { userId: 'u1', threadId: null, dueOn: '2026-10-05', text: 'f', kind: 'free' });
     expect(made.status).toBe('queued');
   });

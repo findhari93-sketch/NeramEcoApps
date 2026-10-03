@@ -14,10 +14,10 @@ import * as remindMe from './flows/remind-me';
 import * as uploadSketch from './flows/upload-sketch';
 import { isStale, type FlowDeps, type FlowOutcome, type FlowState, type Proposal } from './flows/types';
 import { defaultSuggestions } from './page-suggestions';
-import { findActionTool, findTool, toolsFor } from './registry-all';
+import { findActionTool, findTool, isActionTool, toolsFor } from './registry-all';
 import { routeIntent, type FlowName } from './router';
 import { appendMessage, createThread, findReplyToExternalId, findThreadByExternalId, getThread, touchThread, type ThreadRow } from './store';
-import type { AssistantCaller, Attachment, Channel, Envelope, Mode, PageContext, ToolContext, ToolLink } from './types';
+import type { AssistantCaller, AssistantFeatures, Attachment, Channel, Envelope, Mode, PageContext, ToolContext, ToolLink } from './types';
 
 export const MAX_TEXT = 2000;
 
@@ -25,6 +25,11 @@ const FLOWS: Record<FlowName, { start: typeof cannotAttend.start; step: typeof c
   'cannot-attend': cannotAttend,
   'remind-me': remindMe,
   'upload-sketch': uploadSketch,
+};
+
+/** The student feature a flow leads into. A flow whose feature is off is never started or continued (Ruling 25). */
+const FLOW_FEATURE: Partial<Record<FlowName, keyof AssistantFeatures>> = {
+  'upload-sketch': 'sketchbook',
 };
 
 export interface TurnInput {
@@ -42,10 +47,13 @@ export interface TurnInput {
   pageContext?: PageContext | null;
   baseUrl: string;
   now?: Date;
+  /** From the gate (assertAssistantAccess): the student features the assistant may open. */
+  features: AssistantFeatures;
 }
 
 const READ_ONLY = 'Viewing as a student is read only, so I cannot do that from here. Everything else still works.';
 const NOT_YET = 'I cannot answer free questions yet. Here is what I can do right now.';
+const NOT_AVAILABLE = 'That is not available yet. Here is what I can do right now.';
 
 async function resolveThread(input: TurnInput): Promise<ThreadRow> {
   if (input.threadId) {
@@ -80,9 +88,16 @@ export async function runAssistantTurn(input: TurnInput): Promise<Envelope> {
   const now = input.now ?? new Date();
   const text = input.text.trim().slice(0, MAX_TEXT);
   const page = input.pageContext ?? null;
+  const features = input.features;
+  const chips = () => defaultSuggestions(page, features);
+  const flowOn = (flow: FlowName) => {
+    const need = FLOW_FEATURE[flow];
+    return !need || features[need];
+  };
+  const notAvailable = (): FlowOutcome => ({ state: null, reply: NOT_AVAILABLE, suggestions: chips() });
 
   if (!text && !input.attachment) {
-    return { reply: 'Say what you need, or tap one of these.', suggestions: defaultSuggestions(page), links: [], action: null, mode: 'general', threadId: input.threadId || '' };
+    return { reply: 'Say what you need, or tap one of these.', suggestions: chips(), links: [], action: null, mode: 'general', threadId: input.threadId || '' };
   }
 
   const thread = await resolveThread(input);
@@ -97,7 +112,7 @@ export async function runAssistantTurn(input: TurnInput): Promise<Envelope> {
   const classroom = await getStudentPrimaryClassroom(input.caller.id, input.supabase).catch(() => null);
   const ctx: ToolContext = {
     caller: input.caller, channel: input.channel, mode: 'general', supabase: input.supabase,
-    classroomId: classroom?.id ?? null, threadId: thread.id, now, baseUrl: input.baseUrl,
+    classroomId: classroom?.id ?? null, threadId: thread.id, now, baseUrl: input.baseUrl, features,
   };
 
   const route = routeIntent(text, page);
@@ -107,30 +122,38 @@ export async function runAssistantTurn(input: TurnInput): Promise<Envelope> {
 
   const activeFlow = thread.flow_state as FlowState | null;
   const live = activeFlow && !isStale(activeFlow, now) ? activeFlow : null;
+  const flowInput = { text, attachment: input.attachment ?? null };
 
   if (route.kind === 'cancel') {
-    outcome = { state: null, reply: 'Okay, cancelled. Nothing was changed.', suggestions: defaultSuggestions(page) };
+    outcome = { state: null, reply: 'Okay, cancelled. Nothing was changed.', suggestions: chips() };
   } else if (live) {
-    outcome = FLOWS[live.flow].step(live, { text, attachment: input.attachment ?? null }, await flowDeps(ctx));
+    // A flow left open when its feature went off ends here, before it asks or proposes anything.
+    outcome = flowOn(live.flow) ? FLOWS[live.flow].step(live, flowInput, await flowDeps(ctx)) : notAvailable();
   } else if (route.kind === 'flow') {
-    outcome = FLOWS[route.flow].start({ text, attachment: input.attachment ?? null }, await flowDeps(ctx));
+    outcome = flowOn(route.flow) ? FLOWS[route.flow].start(flowInput, await flowDeps(ctx)) : notAvailable();
+  } else if (input.attachment && route.kind === 'llm') {
+    // A photo with no flow running is a sketch to file: start that flow with
+    // it, at the caption step, rather than ignoring the photo.
+    outcome = flowOn('upload-sketch') ? uploadSketch.start(flowInput, await flowDeps(ctx)) : notAvailable();
   } else if (route.kind === 'tool') {
     const tool = findTool(route.tool);
-    const allowed = toolsFor(input.caller, 'general').some((t) => t.name === route.tool);
-    if (!tool || !allowed) {
-      outcome = { state: null, reply: NOT_YET, suggestions: defaultSuggestions(page) };
+    const allowed = toolsFor(input.caller, 'general', features).some((t) => t.name === route.tool);
+    if (!tool) {
+      outcome = { state: null, reply: NOT_YET, suggestions: chips() };
+    } else if (!allowed) {
+      outcome = notAvailable();
     } else {
       const result = await tool.run(ctx, {});
       outcome = {
         state: null,
         reply: result.ok ? result.reply || 'Done.' : result.error || 'That did not work.',
-        suggestions: result.suggest ?? defaultSuggestions(page),
+        suggestions: result.suggest ?? chips(),
       };
       links = result.links ?? [];
     }
   } else {
     mode = route.mode;
-    outcome = { state: null, reply: NOT_YET, suggestions: defaultSuggestions(page) };
+    outcome = { state: null, reply: NOT_YET, suggestions: chips() };
   }
 
   let action: Envelope['action'] = null;
@@ -139,13 +162,19 @@ export async function runAssistantTurn(input: TurnInput): Promise<Envelope> {
       outcome = { ...outcome, reply: READ_ONLY, propose: undefined, state: null };
     } else {
       // Ruling 11: every proposal is checked by the action tool's own run, the
-      // same path the model will use in M2. A refusal is the reply; nothing is proposed.
-      const tool = findActionTool(outcome.propose.kind);
-      const checked = tool ? await tool.run(ctx, outcome.propose.args) : { ok: false, error: 'I no longer know how to do that.' };
-      if (!checked.ok) {
-        outcome = { state: null, reply: checked.error || 'That did not work.', suggestions: defaultSuggestions(page) };
+      // same path the model will use in M2. A refusal is the reply; nothing is
+      // proposed. Only a tool this caller may use right now counts (Ruling 25).
+      const kind = outcome.propose.kind;
+      const tool = toolsFor(input.caller, 'general', features).find((t) => t.name === kind);
+      if (!isActionTool(tool)) {
+        outcome = findActionTool(kind) ? notAvailable() : { state: null, reply: 'I no longer know how to do that.', suggestions: chips() };
       } else {
-        action = await proposeAction(ctx, checked.data as Proposal);
+        const checked = await tool.run(ctx, outcome.propose.args);
+        if (!checked.ok) {
+          outcome = { state: null, reply: checked.error || 'That did not work.', suggestions: chips() };
+        } else {
+          action = await proposeAction(ctx, checked.data as Proposal);
+        }
       }
     }
   }

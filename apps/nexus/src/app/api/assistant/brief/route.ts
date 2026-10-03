@@ -8,6 +8,8 @@ import { buildBrief } from '@/lib/assistant/brief';
 import { istHour, loadBriefFacts } from '@/lib/assistant/brief-load';
 
 export const dynamic = 'force-dynamic';
+// GET-only: Next 14 would otherwise write the uncached Graph /me fetch in ms-verify to the Data Cache (billed as ISR writes).
+export const fetchCache = 'force-no-store';
 
 /**
  * GET /api/assistant/brief   (student)
@@ -23,10 +25,10 @@ export async function GET(request: NextRequest) {
     await verifyMsToken(auth);
     const caller = await getRequestUser(auth);
     const supabase = getSupabaseAdminClient() as any;
-    await assertAssistantAccess(supabase, caller);
+    const features = await assertAssistantAccess(supabase, caller);
 
     const now = new Date();
-    const facts = await loadBriefFacts(supabase, caller.id, now);
+    const facts = await loadBriefFacts(supabase, caller.id, now, features);
     return NextResponse.json({ brief: buildBrief(facts, istHour(now)) }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (err) {
     return errorResponse(err, 'Could not build your brief');

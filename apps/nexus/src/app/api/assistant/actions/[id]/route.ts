@@ -11,9 +11,9 @@ export const dynamic = 'force-dynamic';
 const NO_STORE = { 'Cache-Control': 'no-store' };
 
 async function contextFor(request: NextRequest): Promise<ToolContext> {
-  const { caller, supabase } = await resolveAssistantCaller(request.headers.get('Authorization'));
+  const { caller, supabase, features } = await resolveAssistantCaller(request.headers.get('Authorization'));
   const classroom = await getStudentPrimaryClassroom(caller.id, supabase).catch(() => null);
-  return { caller, channel: 'nexus', mode: 'general', supabase, classroomId: classroom?.id ?? null, threadId: null, now: new Date(), baseUrl: baseUrlOf(request) };
+  return { caller, channel: 'nexus', mode: 'general', supabase, classroomId: classroom?.id ?? null, threadId: null, now: new Date(), baseUrl: baseUrlOf(request), features };
 }
 
 async function respond(ctx: ToolContext, outcome: Awaited<ReturnType<typeof confirmAction>>) {

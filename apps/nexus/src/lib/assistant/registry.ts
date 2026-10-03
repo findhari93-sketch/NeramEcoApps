@@ -1,4 +1,4 @@
-import type { ActionToolDef, AssistantCaller, Mode, ToolDef } from './types';
+import type { ActionToolDef, AssistantCaller, AssistantFeatures, Mode, ToolDef } from './types';
 import { allowedTools } from './policy';
 
 /**
@@ -28,8 +28,8 @@ export function findActionTool(kind: string): ActionToolDef | undefined {
   return isActionTool(def) ? def : undefined;
 }
 
-export function toolsFor(caller: AssistantCaller, mode: Mode): ToolDef[] {
-  return allowedTools(TOOLS, caller, mode);
+export function toolsFor(caller: AssistantCaller, mode: Mode, features: AssistantFeatures): ToolDef[] {
+  return allowedTools(TOOLS, caller, mode, features);
 }
 
 /** Gemini `functionDeclarations` shape, used from M2. Harmless here. */

@@ -17,6 +17,7 @@ const ctx = (): ToolContext => ({
   caller, channel: 'nexus', mode: 'general',
   supabase: { from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: classRow }) }) }) }) },
   classroomId: 'c1', threadId: 't1', now: new Date('2026-10-03T04:30:00Z'), baseUrl: 'https://nexus.test',
+  features: { sketchbook: true, attendance: true },
 });
 
 beforeEach(() => Object.values(mocks).forEach((m) => m.mockReset()));
@@ -27,6 +28,11 @@ describe('action tools', () => {
       expect(findActionTool(n)).toMatchObject({ audience: 'student', kind: 'action' });
     }
     expect(TOOLS.filter((t) => t.kind === 'action')).toHaveLength(4);
+  });
+
+  it('add_sketch is the one action that leads into a switchable feature (Ruling 25)', () => {
+    expect(findActionTool('add_sketch')!.feature).toBe('sketchbook');
+    for (const n of ['decline_class', 'declare_away_window', 'set_reminder']) expect(findActionTool(n)!.feature).toBeUndefined();
   });
 
   it('decline_class proposes with the class named, then writes through writeRsvp', async () => {
@@ -74,7 +80,9 @@ describe('action tools', () => {
     mocks.createReminder.mockResolvedValue({ id: 'r1' });
     const done = await tool.execute(ctx(), { due_on: '2026-10-04', text: 'finish the catch-up' });
     expect(mocks.createReminder).toHaveBeenCalledWith(expect.anything(), { userId: 's1', threadId: 't1', dueOn: '2026-10-04', text: 'finish the catch-up', kind: 'free' });
-    expect(done.reply).toBe('Done. I will remind you tomorrow: finish the catch-up. It will also be in your brief that morning.');
+    // M1 sends nothing (Ruling 24): the reply promises the brief card only, never a message.
+    expect(done.reply).toBe('Done. I will put this on your brief card tomorrow: finish the catch-up.');
+    expect(done.reply).not.toMatch(/remind you|message/i);
   });
 
   it('add_sketch proposes with the caption and files the sketch', async () => {

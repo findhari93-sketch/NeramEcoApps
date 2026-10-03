@@ -55,6 +55,15 @@ export interface ToolResult {
   action?: ActionProposal;
 }
 
+/**
+ * Student features the assistant opens doors to, read with the gate (Ruling 25).
+ * With one off, the tools, flows, chips and brief lines that lead into it are dropped.
+ */
+export interface AssistantFeatures {
+  sketchbook: boolean;
+  attendance: boolean;
+}
+
 export interface ToolContext {
   caller: AssistantCaller;
   channel: Channel;
@@ -66,6 +75,7 @@ export interface ToolContext {
   threadId: string | null;
   now: Date;
   baseUrl: string;
+  features: AssistantFeatures;
 }
 
 export interface JsonSchema {
@@ -82,6 +92,8 @@ export interface ToolDef<A = Record<string, unknown>> {
   kind: ToolKind;
   /** Exam-knowledge tools set 'exam'. Absent means general. */
   mode?: Mode;
+  /** The student feature this tool leads into. Dropped while that feature is off (Ruling 25). */
+  feature?: keyof AssistantFeatures;
   run(ctx: ToolContext, args: A): Promise<ToolResult>;
 }
 

@@ -41,6 +41,7 @@ vi.mock('@neram/auth', () => ({ getUserProfile: vi.fn(async () => null) }));
 vi.mock('@/lib/parent-auth', () => ({ listParentChildren: vi.fn(async () => []), getChildClassrooms: vi.fn(async () => new Map()) }));
 vi.mock('@/lib/not-started-server', () => ({ recordNexusEntry: vi.fn(async () => {}) }));
 
+import { getNexusSetting } from '@neram/database';
 import { GET } from './route';
 
 const request = (extra: Record<string, string> = {}) =>
@@ -143,5 +144,38 @@ describe('GET /api/auth/me device time zone (NXS-0129)', () => {
     signIn();
     await GET(request());
     expect(zoneWrites()).toEqual([]);
+  });
+});
+
+describe('GET /api/auth/me assistant pilot (Ruling 22)', () => {
+  const signIn = () => {
+    verifyMsToken.mockResolvedValueOnce({ oid: 'o1', email: student.email, name: student.name });
+    results['users.row'] = { data: student, error: null };
+    results['nexus_enrollments.list'] = { data: [{ role: 'student', classroom }], error: null };
+  };
+  const settings = (pilot: unknown) =>
+    vi.mocked(getNexusSetting).mockImplementation(async (key: string) => {
+      if (key === 'feature_flags') return { value: { 'student.assistant-chat': true } } as never;
+      if (key === 'assistant_pilot_user_ids') return { value: pilot } as never;
+      return null as never;
+    });
+  const assistantFlag = async () => ((await (await GET(request())).json()).featureFlags['student.assistant-chat']);
+
+  it('reads false for a student outside a non-empty pilot list', async () => {
+    settings(['someone-else']);
+    signIn();
+    expect(await assistantFlag()).toBe(false);
+  });
+
+  it('reads true for a listed student', async () => {
+    settings(['u1']);
+    signIn();
+    expect(await assistantFlag()).toBe(true);
+  });
+
+  it('reads true for everyone when the list is empty', async () => {
+    settings([]);
+    signIn();
+    expect(await assistantFlag()).toBe(true);
   });
 });

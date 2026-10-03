@@ -14,6 +14,7 @@ export const addSketch: ActionToolDef<AddSketchArgs> = {
   },
   audience: 'student',
   kind: 'action',
+  feature: 'sketchbook',
   async run(_ctx, args) {
     if (!/^https:\/\//.test(String(args.original_image_url || ''))) return { ok: false, error: 'I need the photo first. Tap the camera button to attach it.' };
     const caption = typeof args.caption === 'string' ? args.caption.trim().slice(0, CAPTION_MAX) : '';

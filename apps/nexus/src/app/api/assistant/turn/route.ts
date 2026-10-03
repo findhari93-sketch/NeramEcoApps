@@ -30,7 +30,7 @@ function readPage(raw: unknown): PageContext | null {
  */
 export async function POST(request: NextRequest) {
   try {
-    const { caller, supabase } = await resolveAssistantCaller(request.headers.get('Authorization'));
+    const { caller, supabase, features } = await resolveAssistantCaller(request.headers.get('Authorization'));
     const body = await request.json().catch(() => ({}));
     const text = typeof body?.text === 'string' ? body.text : '';
     const attachment = readAttachment(body?.attachment);
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
     const envelope = await runAssistantTurn({
       supabase, caller, channel: 'nexus',
       threadId: typeof body?.threadId === 'string' ? body.threadId : null,
-      text, attachment, pageContext: readPage(body?.pageContext), baseUrl: baseUrlOf(request),
+      text, attachment, pageContext: readPage(body?.pageContext), baseUrl: baseUrlOf(request), features,
     });
     return NextResponse.json(envelope, { headers: NO_STORE });
   } catch (err) {

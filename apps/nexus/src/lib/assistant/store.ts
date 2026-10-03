@@ -256,15 +256,20 @@ export async function createReminder(
   return data as ReminderRow;
 }
 
-/** Queued reminders due on or before `today` (YYYY-MM-DD), oldest first. */
+/**
+ * Queued reminders due on `today` (YYYY-MM-DD), and only today (Ruling 24).
+ * M1 sends nothing and has no sent marker, so "on or before today" would put
+ * the same reminder on every brief forever. A missed day is not carried
+ * forward until the M3 cron marks reminders sent.
+ */
 export async function listRemindersDue(supabase: any, userId: string, today: string): Promise<ReminderRow[]> {
   const { data, error } = await supabase
     .from(REMINDERS)
     .select('*')
     .eq('user_id', userId)
     .eq('status', 'queued')
-    .lte('due_on', today)
-    .order('due_on', { ascending: true });
+    .eq('due_on', today)
+    .order('created_at', { ascending: true });
   throwIf(error);
   return (data || []) as ReminderRow[];
 }

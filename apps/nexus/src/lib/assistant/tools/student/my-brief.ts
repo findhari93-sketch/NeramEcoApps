@@ -15,7 +15,7 @@ export const myBrief: ToolDef = {
   audience: 'student',
   kind: 'read',
   async run(ctx) {
-    const facts = await loadBriefFacts(ctx.supabase, ctx.caller.id, ctx.now);
+    const facts = await loadBriefFacts(ctx.supabase, ctx.caller.id, ctx.now, ctx.features);
     const brief = buildBrief(facts, istHour(ctx.now));
     if (!brief.hasContent) return { ok: true, reply: `${brief.greeting}. Nothing is waiting on you right now.`, data: brief };
     const links: ToolLink[] = [];

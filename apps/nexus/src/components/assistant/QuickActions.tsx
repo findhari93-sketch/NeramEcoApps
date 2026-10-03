@@ -9,13 +9,16 @@ import TodayOutlinedIcon from '@mui/icons-material/TodayOutlined';
 
 export interface QuickAction { label: string; hint: string; icon: React.ReactNode; onPick: () => void }
 
-/** The empty-panel menu. Rows, not tiles: five of them read as a list on a phone. */
-export default function QuickActions({ onSend, onReport }: { onSend: (text: string) => void; onReport: () => void }) {
+/**
+ * The empty-panel menu. Rows, not tiles: five of them read as a list on a phone.
+ * `sketchbook` is the student.sketchbook flag: with it off, Add a sketch is not offered (Ruling 25).
+ */
+export default function QuickActions({ onSend, onReport, sketchbook }: { onSend: (text: string) => void; onReport: () => void; sketchbook: boolean }) {
   const items: QuickAction[] = [
     { label: "What's on today?", hint: 'Your classes, work due and reminders', icon: <TodayOutlinedIcon />, onPick: () => onSend("What's on today?") },
     { label: "I can't attend a class", hint: 'Tell your teacher, one class or several days', icon: <EventBusyOutlinedIcon />, onPick: () => onSend("I can't attend a class") },
-    { label: 'Remind me', hint: 'A reminder on the day you choose', icon: <NotificationsNoneOutlinedIcon />, onPick: () => onSend('Remind me') },
-    { label: 'Add a sketch', hint: 'Snap it and it goes in your sketchbook', icon: <BrushOutlinedIcon />, onPick: () => onSend('Add a sketch') },
+    { label: 'Remind me', hint: 'It shows on your brief card that day', icon: <NotificationsNoneOutlinedIcon />, onPick: () => onSend('Remind me') },
+    ...(sketchbook ? [{ label: 'Add a sketch', hint: 'Snap it and it goes in your sketchbook', icon: <BrushOutlinedIcon />, onPick: () => onSend('Add a sketch') }] : []),
     { label: 'Report a problem', hint: 'Something on this page is not right', icon: <BugReportOutlinedIcon />, onPick: onReport },
   ];
   return (

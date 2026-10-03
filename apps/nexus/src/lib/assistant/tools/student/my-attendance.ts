@@ -8,6 +8,7 @@ export const myAttendance: ToolDef = {
   parameters: EMPTY_SCHEMA,
   audience: 'student',
   kind: 'read',
+  feature: 'attendance',
   async run(ctx) {
     const gate = needsClassroom(ctx);
     if (gate) return gate;

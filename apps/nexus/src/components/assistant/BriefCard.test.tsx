@@ -7,7 +7,8 @@ let swrArgs: unknown[] = [];
 vi.mock('@/lib/nexus-swr', () => ({ useAuthSWR: (...args: unknown[]) => { swrArgs = args; return swr; } }));
 vi.mock('@/hooks/useNexusAuth', () => ({ useNexusAuthContext: () => ({ tokenReady: true, isFeatureEnabled: () => true }) }));
 const assistant = { enabled: true, openPanel: vi.fn() };
-vi.mock('./AssistantProvider', () => ({ useAssistantOptional: () => assistant }));
+let provider: typeof assistant | null = assistant;
+vi.mock('./AssistantProvider', () => ({ useAssistantOptional: () => provider }));
 vi.mock('next/link', () => ({ default: ({ href, children, ...rest }: any) => <a href={href} {...rest}>{children}</a> }));
 
 beforeEach(() => {
@@ -15,6 +16,8 @@ beforeEach(() => {
   swr.error = undefined;
   swr.isLoading = false;
   assistant.openPanel.mockReset();
+  assistant.enabled = true;
+  provider = assistant;
 });
 
 describe('BriefCard', () => {
@@ -54,5 +57,20 @@ describe('BriefCard', () => {
     const err = (status: number) => Object.assign(new Error('x'), { status });
     expect([401, 403, 404].map((s) => retry(err(s)))).toEqual([false, false, false]);
     expect(retry(err(500))).toBe(true);
+  });
+
+  it('gates on the provider, not only the flag: no fetch and no card when the assistant is off for this student (Ruling 22)', () => {
+    assistant.enabled = false;
+    swr.isLoading = true;
+    expect(render(<BriefCard />).container.innerHTML).toBe('');
+    expect(swrArgs[0]).toBeNull();
+    provider = null;
+    expect(render(<BriefCard />).container.innerHTML).toBe('');
+    expect(swrArgs[0]).toBeNull();
+  });
+  it('does not refetch on every focus', () => {
+    swr.isLoading = true;
+    render(<BriefCard />);
+    expect((swrArgs[1] as { revalidateOnFocus?: boolean }).revalidateOnFocus).toBe(false);
   });
 });

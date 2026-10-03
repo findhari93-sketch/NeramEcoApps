@@ -90,6 +90,9 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const pageContext = useMemo<PageContext>(() => ({ path: pathname }), [pathname]);
+  // /api/auth/me folds the pilot allowlist into the flag (Ruling 22), so a student
+  // outside a non-empty pilot reads it as off here, exactly as the server gate refuses them.
+  // The brief card, the launcher and the top-bar icon all gate on this one value.
   const enabled = isStudent && tokenReady && !parentSession.active && !isTeamsPadPath(pathname) && isFeatureEnabled(ASSISTANT_FLAG) && !refused;
 
   // A link in a reply (or any other navigation) closes the panel, so the new

@@ -7,7 +7,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ActionCard from './ActionCard';
 import { useAssistant } from './AssistantProvider';
-import { uploadImage } from './client';
+import { SKETCHBOOK_FLAG, uploadImage } from './client';
 import Composer from './Composer';
 import { focusRing } from './focusRing';
 import MessageBubble from './MessageBubble';
@@ -19,7 +19,9 @@ export const SHEET_WIDTH = 420;
 
 export default function AssistantSheet() {
   const a = useAssistant();
-  const { getToken } = useNexusAuthContext();
+  const { getToken, isFeatureEnabled } = useNexusAuthContext();
+  // Ruling 25: no door into a feature the app has switched off.
+  const sketchbook = isFeatureEnabled(SKETCHBOOK_FLAG);
   const theme = useTheme();
   // md is where the bottom nav goes away, so the side drawer takes over there.
   const desktop = useMediaQuery(theme.breakpoints.up('md'));
@@ -50,14 +52,14 @@ export default function AssistantSheet() {
         // quick action cannot be tapped into the middle of an earlier flow.
         <Box sx={{ flex: 1, minHeight: 0, py: 1 }}><MessageBubble message={{ id: 'history', role: 'assistant', text: '', pending: true }} label="Loading your chat" /></Box>
       ) : a.messages.length === 0 ? (
-        <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}><QuickActions onSend={(t) => void a.send(t)} onReport={() => void a.reportProblem()} /></Box>
+        <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}><QuickActions onSend={(t) => void a.send(t)} onReport={() => void a.reportProblem()} sketchbook={sketchbook} /></Box>
       ) : (
         <MessageList messages={a.messages} />
       )}
       {a.pendingAction && <ActionCard action={a.pendingAction} busy={a.busy} onConfirm={() => void a.confirm()} onEdit={onEdit} onCancel={() => void a.cancel()} />}
       {a.error && <Typography role="alert" variant="body2" color="error" sx={{ px: 2, py: 1 }}>{a.error}</Typography>}
       <SuggestionChips items={a.messages.length ? a.suggestions : []} onPick={(s) => void a.send(s)} disabled={a.busy} />
-      <Composer onSend={a.send} busy={a.busy} wantsAttachment={a.wantsAttachment} draft={a.draft} onDraftConsumed={onDraftConsumed} upload={uploadImage} getToken={getToken} />
+      <Composer onSend={a.send} busy={a.busy} wantsAttachment={a.wantsAttachment} draft={a.draft} onDraftConsumed={onDraftConsumed} upload={uploadImage} getToken={getToken} allowAttachment={sketchbook} />
     </Box>
   );
 

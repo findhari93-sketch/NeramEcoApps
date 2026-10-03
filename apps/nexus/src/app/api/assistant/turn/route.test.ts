@@ -13,7 +13,7 @@ const caller = { id: 'u1', name: 'Priya', user_type: 'student', staff_role: null
 const req = (body: unknown) => new NextRequest('http://localhost/api/assistant/turn', { method: 'POST', headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 beforeEach(() => {
-  mocks.resolveAssistantCaller.mockReset().mockResolvedValue({ caller, supabase: {} });
+  mocks.resolveAssistantCaller.mockReset().mockResolvedValue({ caller, supabase: {}, features: { sketchbook: false, attendance: true } });
   mocks.runAssistantTurn.mockReset().mockResolvedValue({ reply: 'hi', suggestions: [], links: [], action: null, mode: 'general', threadId: 't1' });
 });
 
@@ -23,7 +23,7 @@ describe('POST /api/assistant/turn', () => {
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ reply: 'hi', threadId: 't1' });
     expect(res.headers.get('Cache-Control')).toBe('no-store');
-    expect(mocks.runAssistantTurn).toHaveBeenCalledWith(expect.objectContaining({ caller, channel: 'nexus', text: 'brief', threadId: 't1', pageContext: { path: '/student/dashboard' }, baseUrl: 'https://nexus.test' }));
+    expect(mocks.runAssistantTurn).toHaveBeenCalledWith(expect.objectContaining({ caller, channel: 'nexus', text: 'brief', threadId: 't1', pageContext: { path: '/student/dashboard' }, baseUrl: 'https://nexus.test', features: { sketchbook: false, attendance: true } }));
   });
 
   it('rejects a body with no text and no attachment, and a text over the cap', async () => {

@@ -4,17 +4,18 @@ import Link from 'next/link';
 import { Box, Button, Paper, Skeleton, Typography, alpha, useMediaQuery, useTheme } from '@neram/ui';
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthSWR, type NexusFetchError } from '@/lib/nexus-swr';
 import type { Brief } from '@/lib/assistant/brief';
 import { useAssistantOptional } from './AssistantProvider';
-import { ASSISTANT_FLAG, BRIEF_KEY } from './client';
+import { BRIEF_KEY } from './client';
 import { focusRing } from './focusRing';
 import { stableHover } from './stableHover';
 
 /** 401, 403 and 404 are answers (signed out, not in the pilot, flag off), not blips: retrying them only bills more calls. */
 const SWR_OPTIONS = {
   shouldRetryOnError: (err: Error) => ![401, 403, 404].includes((err as NexusFetchError).status),
+  // The brief changes by the hour, not by the tab switch; a confirmed action revalidates it directly.
+  revalidateOnFocus: false,
 };
 
 /**
@@ -24,9 +25,10 @@ const SWR_OPTIONS = {
  */
 export default function BriefCard() {
   const theme = useTheme();
-  const { tokenReady, isFeatureEnabled } = useNexusAuthContext();
   const assistant = useAssistantOptional();
-  const on = tokenReady && isFeatureEnabled(ASSISTANT_FLAG);
+  // The provider's `enabled` is the one gate (Ruling 22): student, signed in, the flag
+  // on for this account (pilot folded into the flags), not refused. Outside it, no card.
+  const on = Boolean(assistant?.enabled);
   const reduce = useMediaQuery('(prefers-reduced-motion: reduce)');
   const { data, error, isLoading } = useAuthSWR<{ brief: Brief }>(on ? BRIEF_KEY : null, SWR_OPTIONS);
 

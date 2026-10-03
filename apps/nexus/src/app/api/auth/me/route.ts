@@ -4,6 +4,7 @@ import { describeError, errorResponse } from '@/lib/api-errors';
 import { getSupabaseAdminClient, reconcileMsIdentity, getNexusSetting, getCurrentBatch } from '@neram/database';
 import { getUserProfile } from '@neram/auth';
 import { FEATURE_FLAGS_KEY, resolveFlags, type FlagMap } from '@/lib/feature-flags';
+import { PILOT_KEY, withAssistantPilot } from '@/lib/assistant/access';
 import {
   capabilityMap,
   resolveStaffRole,
@@ -281,9 +282,11 @@ export async function GET(request: NextRequest) {
       // Both settings are fetched together so the timetable's evening window costs
       // no extra round trip on top of the flags read. Neither may break auth, so
       // each falls back to its own default independently.
+      // The assistant's pilot allowlist rides the same round trip (Ruling 22).
       Promise.allSettled([
         getNexusSetting(FEATURE_FLAGS_KEY),
         getNexusSetting(TIMETABLE_WINDOW_KEY),
+        getNexusSetting(PILOT_KEY),
       ]),
 
       timeZoneWrite,
@@ -364,10 +367,17 @@ export async function GET(request: NextRequest) {
     // One cheap read on an already-dynamic route. Never let a settings error
     // break auth — fall back to registry defaults.
     // Read above, alongside the enrolments, rather than after them.
-    const [flagsResult, windowResult] = settingsResults;
+    const [flagsResult, windowResult, pilotResult] = settingsResults;
 
-    const featureFlags: FlagMap = resolveFlags(
-      flagsResult.status === 'fulfilled' ? ((flagsResult.value?.value as FlagMap) || {}) : {},
+    // The assistant's pilot allowlist is folded in per user (Ruling 22): a student
+    // outside a non-empty list reads student.assistant-chat as off, exactly as
+    // the /api/assistant gate would refuse them, so no launcher or brief card
+    // appears only to answer 403.
+    const featureFlags: FlagMap = withAssistantPilot(
+      resolveFlags(flagsResult.status === 'fulfilled' ? ((flagsResult.value?.value as FlagMap) || {}) : {}),
+      user.id,
+      pilotResult.status === 'fulfilled' ? pilotResult.value?.value : null,
+      { readFailed: pilotResult.status === 'rejected' },
     );
 
     const timetableWindow: TimetableWindow =

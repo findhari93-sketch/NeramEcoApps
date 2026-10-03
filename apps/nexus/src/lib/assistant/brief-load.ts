@@ -12,6 +12,7 @@ import { loadStudentRhythm } from '@/lib/sketchbook-payload';
 import { rhythmLine } from '@/lib/sketchbook-rhythm';
 import { istNow, loadDeclinedClassIds, loadUpcomingClasses } from '@/lib/upcoming-classes';
 import type { BriefFacts } from './brief';
+import type { AssistantFeatures } from './types';
 import { todayIst } from './format';
 import { listRemindersDue } from './store';
 
@@ -29,7 +30,8 @@ export function istDateOf(iso: string): string {
   return todayIst(new Date(iso));
 }
 
-export async function loadBriefFacts(supabaseIn: any, userId: string, now: Date = new Date()): Promise<BriefFacts> {
+/** `features` is the gate's: a switched-off sketchbook is never read and has no line (Ruling 25). */
+export async function loadBriefFacts(supabaseIn: any, userId: string, now: Date, features: AssistantFeatures): Promise<BriefFacts> {
   const supabase = supabaseIn || (getSupabaseAdminClient() as any);
   const { today, nowHHMM } = istNow(now);
 
@@ -53,7 +55,7 @@ export async function loadBriefFacts(supabaseIn: any, userId: string, now: Date 
     quiet('assignments', listAssignmentsForStudent(userId, classroom.id, supabase), []),
     quiet('catchup', getCatchupBacklog(userId, classroom.id, supabase), null),
     quiet('reviews', supabase.from('drawing_submissions').select('id', { count: 'exact', head: true }).eq('student_id', userId).eq('status', 'reviewed').gte('reviewed_at', weekAgo), { count: 0 }),
-    quiet('sketchbook', loadStudentRhythm(userId, now), null),
+    features.sketchbook ? quiet('sketchbook', loadStudentRhythm(userId, now), null) : Promise.resolve(null),
     quiet('exam', resolveExamCountdown(supabase, { classroomId: classroom.id, studentId: userId }), null),
     quiet('reminders', listRemindersDue(supabase, userId, today), []),
   ]);

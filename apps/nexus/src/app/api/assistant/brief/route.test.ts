@@ -18,6 +18,7 @@ vi.mock('@neram/database', async (importOriginal) => ({
   getSupabaseAdminClient: () => ({}),
 }));
 
+import * as route from './route';
 import { GET } from './route';
 import { ApiError } from '@/lib/api-errors';
 
@@ -26,7 +27,7 @@ const req = () => new NextRequest('http://localhost/api/assistant/brief', { head
 beforeEach(() => {
   mocks.verifyMsToken.mockReset().mockResolvedValue({ oid: 'oid-1' });
   mocks.getRequestUser.mockReset().mockResolvedValue({ id: 'u1', user_type: 'student', name: 'Priya S', staff_role: null, can_teach: null });
-  mocks.assertAssistantAccess.mockReset().mockResolvedValue(undefined);
+  mocks.assertAssistantAccess.mockReset().mockResolvedValue({ sketchbook: false, attendance: true });
   mocks.loadBriefFacts.mockReset().mockResolvedValue({
     firstName: 'Priya', today: '2026-10-03', classroomName: 'JEE', nextClass: null,
     assignments: { pending: 1, nextTitle: 'Sheet', nextDueOn: null }, catchup: null, reviewsBack: 0, sketchbookLine: null, exam: null, remindersToday: [],
@@ -40,7 +41,8 @@ describe('GET /api/assistant/brief', () => {
     const body = await res.json();
     expect(body.brief.greeting).toBe('Good morning, Priya');
     expect(body.brief.sections[0].id).toBe('assignments');
-    expect(mocks.loadBriefFacts).toHaveBeenCalledWith(expect.anything(), 'u1', expect.any(Date));
+    // The gate's features reach the loader, so a hidden sketchbook has no line (Ruling 25).
+    expect(mocks.loadBriefFacts).toHaveBeenCalledWith(expect.anything(), 'u1', expect.any(Date), { sketchbook: false, attendance: true });
     expect(res.headers.get('Cache-Control')).toBe('no-store');
   });
 
@@ -54,5 +56,9 @@ describe('GET /api/assistant/brief', () => {
   it('answers 401 when the token is bad', async () => {
     mocks.verifyMsToken.mockRejectedValueOnce(new Error('Invalid Microsoft token'));
     expect((await GET(req())).status).toBe(401);
+  });
+
+  it('keeps the uncached Graph /me fetch out of the Data Cache (GET-only route)', () => {
+    expect(route.fetchCache).toBe('force-no-store');
   });
 });

@@ -11,7 +11,7 @@ import type { Attachment, GetToken } from './client';
 const MAX_BYTES = 12 * 1024 * 1024;
 const MAX_CHARS = 2000;
 
-export default function Composer({ onSend, busy, wantsAttachment, draft, onDraftConsumed, upload, getToken }: {
+export default function Composer({ onSend, busy, wantsAttachment, draft, onDraftConsumed, upload, getToken, allowAttachment = true }: {
   onSend: (text: string, attachment: Attachment | null) => Promise<void>;
   busy: boolean;
   wantsAttachment: boolean;
@@ -21,6 +21,8 @@ export default function Composer({ onSend, busy, wantsAttachment, draft, onDraft
   /** Injected so tests need no network. Defaults to uploadImage in the sheet. */
   upload: (getToken: GetToken, file: File) => Promise<Attachment>;
   getToken?: GetToken;
+  /** False while the sketchbook is off: a photo has nowhere to go, so there is no attach button (Ruling 25). */
+  allowAttachment?: boolean;
 }) {
   const [text, setText] = useState('');
   const [attachment, setAttachment] = useState<Attachment | null>(null);
@@ -93,20 +95,24 @@ export default function Composer({ onSend, busy, wantsAttachment, draft, onDraft
       <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: 0.5 }}>
         {/* No `capture`: phones then offer both the camera and the gallery, and a
             student often already has a photo of the sketch. */}
-        <input ref={fileRef} data-testid="assistant-file-input" type="file" accept="image/*" onChange={(e) => void pick(e.target.files?.[0])} style={{ display: 'none' }} />
-        <IconButton
-          aria-label="Attach a photo"
-          color={wantsAttachment ? 'primary' : 'default'}
-          onClick={() => fileRef.current?.click()}
-          disabled={busy || uploading}
-          data-size="48"
-          sx={{ width: 48, height: 48, minHeight: 48, flexShrink: 0 }}
-        >
-          {/* The one spinner in the panel, on a short wait; under reduced motion a still hourglass. */}
-          {uploading
-            ? (reduce ? <HourglassTopRoundedIcon aria-label="Uploading photo" /> : <CircularProgress size={22} aria-label="Uploading photo" />)
-            : <CameraAltOutlinedIcon />}
-        </IconButton>
+        {allowAttachment && (
+          <>
+            <input ref={fileRef} data-testid="assistant-file-input" type="file" accept="image/*" onChange={(e) => void pick(e.target.files?.[0])} style={{ display: 'none' }} />
+            <IconButton
+              aria-label="Attach a photo"
+              color={wantsAttachment ? 'primary' : 'default'}
+              onClick={() => fileRef.current?.click()}
+              disabled={busy || uploading}
+              data-size="48"
+              sx={{ width: 48, height: 48, minHeight: 48, flexShrink: 0 }}
+            >
+              {/* The one spinner in the panel, on a short wait; under reduced motion a still hourglass. */}
+              {uploading
+                ? (reduce ? <HourglassTopRoundedIcon aria-label="Uploading photo" /> : <CircularProgress size={22} aria-label="Uploading photo" />)
+                : <CameraAltOutlinedIcon />}
+            </IconButton>
+          </>
+        )}
         <TextField
           inputRef={boxRef}
           multiline

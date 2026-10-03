@@ -37,8 +37,11 @@ const CLASSES = {
   nexus_scheduled_classes: upcoming.map(({ id, title, classroom_id, scheduled_date, start_time, end_time }) => ({ id, title, classroom_id, scheduled_date, start_time, end_time })),
 };
 
+const ON = { sketchbook: true, attendance: true };
+const PHOTO = { original_image_url: 'https://cdn.test/s.jpg', thumbnail_url: 'https://cdn.test/s-thumb.jpg' };
+
 function turn(db: ReturnType<typeof fakeDb>, text: string, extra: Record<string, unknown> = {}) {
-  return runAssistantTurn({ supabase: db, caller: student, channel: 'nexus', text, baseUrl: 'https://nexus.test', now: new Date('2026-10-03T04:30:00Z'), ...extra });
+  return runAssistantTurn({ supabase: db, caller: student, channel: 'nexus', text, baseUrl: 'https://nexus.test', now: new Date('2026-10-03T04:30:00Z'), features: ON, ...extra });
 }
 
 beforeEach(() => {
@@ -112,9 +115,9 @@ describe('runAssistantTurn', () => {
   it('refuses to propose while impersonating but still answers reads', async () => {
     const db = fakeDb({});
     const viewer = { ...student, impersonating: true };
-    const read = await runAssistantTurn({ supabase: db, caller: viewer, channel: 'nexus', text: 'my schedule', baseUrl: 'https://nexus.test' });
+    const read = await runAssistantTurn({ supabase: db, caller: viewer, channel: 'nexus', text: 'my schedule', baseUrl: 'https://nexus.test', features: ON });
     expect(read.reply).toMatch(/^Your next classes:/);
-    const out = await runAssistantTurn({ supabase: db, caller: viewer, channel: 'nexus', text: 'remind me tomorrow to practise', baseUrl: 'https://nexus.test' });
+    const out = await runAssistantTurn({ supabase: db, caller: viewer, channel: 'nexus', text: 'remind me tomorrow to practise', baseUrl: 'https://nexus.test', features: ON });
     expect(out.action).toBeNull();
     expect(out.reply).toMatch(/read only/);
     expect(db.rows('nexus_assistant_actions')).toHaveLength(0);
@@ -153,5 +156,62 @@ describe('runAssistantTurn', () => {
     const env = await turn(db, '   ');
     expect(env.reply).toMatch(/Say what you need/);
     expect(db.rows('nexus_assistant_messages')).toHaveLength(0);
+  });
+
+  describe('student features the app has switched off (Ruling 25)', () => {
+    const sketchOff = { sketchbook: false, attendance: true };
+    const attendanceOff = { sketchbook: true, attendance: false };
+
+    it('does not start the upload-sketch flow while the sketchbook is off', async () => {
+      const db = fakeDb({});
+      const out = await turn(db, 'Add a sketch', { features: sketchOff });
+      expect(out.reply).toMatch(/^That is not available yet\./);
+      expect(out.wantsAttachment).toBeUndefined();
+      expect(db.rows('nexus_assistant_threads')[0].flow_state).toBeNull();
+      expect(out.suggestions.map((c) => c.label)).not.toContain('Add a sketch');
+    });
+
+    it('does not run my_sketchbook while the sketchbook is off', async () => {
+      const out = await turn(fakeDb({}), 'how is my sketchbook', { features: sketchOff });
+      expect(out.reply).toMatch(/^That is not available yet\./);
+      expect(out.links).toEqual([]);
+    });
+
+    it('does not run my_attendance, or link to it, while attendance is off', async () => {
+      const out = await turn(fakeDb({}), 'my attendance', { features: attendanceOff });
+      expect(out.reply).toMatch(/^That is not available yet\./);
+      expect(out.links.map((l) => l.url)).not.toContain('/student/attendance');
+    });
+
+    it('proposes nothing from a sketch flow left open when the sketchbook went off', async () => {
+      const db = fakeDb({});
+      const first = await turn(db, 'Add a sketch');
+      expect(first.wantsAttachment).toBe(true);
+      const second = await turn(db, '', { threadId: first.threadId, attachment: PHOTO, features: sketchOff });
+      expect(second.reply).toMatch(/^That is not available yet\./);
+      expect(second.action).toBeNull();
+      expect(db.rows('nexus_assistant_threads')[0].flow_state).toBeNull();
+    });
+
+    it('drops the sketch chips from the fallback reply', async () => {
+      const out = await turn(fakeDb({}), 'why is the sky blue', { features: sketchOff });
+      expect(out.suggestions.map((c) => c.label)).not.toContain('Add a sketch');
+    });
+  });
+
+  describe('a photo sent with no flow running (item 12)', () => {
+    it('starts the upload-sketch flow with that photo, at the caption step', async () => {
+      const db = fakeDb({});
+      const out = await turn(db, '', { attachment: PHOTO });
+      expect(out.reply).toMatch(/Add a caption\?/);
+      expect(db.rows('nexus_assistant_threads')[0].flow_state).toMatchObject({ flow: 'upload-sketch', step: 'caption', data: PHOTO });
+      const done = await turn(db, 'No caption', { threadId: out.threadId });
+      expect(done.action).toMatchObject({ kind: 'add_sketch' });
+    });
+
+    it('says it is not available while the sketchbook is off', async () => {
+      const out = await turn(fakeDb({}), '', { attachment: PHOTO, features: { sketchbook: false, attendance: true } });
+      expect(out.reply).toMatch(/^That is not available yet\./);
+    });
   });
 });

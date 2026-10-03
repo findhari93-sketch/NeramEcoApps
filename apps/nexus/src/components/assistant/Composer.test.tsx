@@ -103,4 +103,11 @@ describe('Composer', () => {
       expect(getComputedStyle(b).minHeight === '48px' || b.getAttribute('data-size') === '48').toBe(true);
     }
   });
+
+  it('has no attach button while the sketchbook is off, since a photo has nowhere to go (Ruling 25)', () => {
+    setup({ allowAttachment: false });
+    expect(screen.queryByRole('button', { name: 'Attach a photo' })).toBeNull();
+    expect(screen.queryByTestId('assistant-file-input')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Send' })).not.toBeNull();
+  });
 });

@@ -5,7 +5,7 @@ import QuickActions from './QuickActions';
 
 function sent(): string[] {
   const onSend = vi.fn();
-  render(<QuickActions onSend={onSend} onReport={vi.fn()} />);
+  render(<QuickActions onSend={onSend} onReport={vi.fn()} sketchbook />);
   for (const name of [/What.s on today/, /I can.t attend a class/, /Remind me/, /Add a sketch/]) {
     fireEvent.click(screen.getByRole('button', { name }));
   }
@@ -29,9 +29,15 @@ describe('QuickActions', () => {
   it('Report a problem opens the report form and sends nothing', () => {
     const onSend = vi.fn();
     const onReport = vi.fn();
-    render(<QuickActions onSend={onSend} onReport={onReport} />);
+    render(<QuickActions onSend={onSend} onReport={onReport} sketchbook />);
     fireEvent.click(screen.getByRole('button', { name: /Report a problem/ }));
     expect(onReport).toHaveBeenCalledTimes(1);
     expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it('has no Add a sketch row while the sketchbook is off (Ruling 25)', () => {
+    render(<QuickActions onSend={vi.fn()} onReport={vi.fn()} sketchbook={false} />);
+    expect(screen.queryByRole('button', { name: /Add a sketch/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Remind me/ })).not.toBeNull();
   });
 });
