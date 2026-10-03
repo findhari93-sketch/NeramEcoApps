@@ -53,6 +53,7 @@ import {
   QB_EXAM_LABELS,
   examFromSlug,
   examRelevanceFor,
+  qbExamPath,
   rememberQBExam,
 } from '@/lib/qb-exam-routes';
 import StatsRow from '@/components/question-bank/StatsRow';
@@ -255,6 +256,29 @@ function ExamHome({ exam }: { exam: QBExamType }) {
             </Typography>
             <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
               Draw it, upload a photo, and your teacher marks it
+            </Typography>
+          </Box>
+        </Button>
+
+        {/* Chapter weightage. Spans both columns at sm so the pair above stays a pair. */}
+        <Button
+          variant="outlined"
+          size="large"
+          fullWidth
+          startIcon={<InsightsOutlinedIcon />}
+          onClick={() => router.push(`${qbExamPath('student', exam)}/weightage`)}
+          sx={{
+            ...ENTRY_BUTTON_SX,
+            gridColumn: { sm: '1 / -1' },
+            '&:hover': { borderColor: 'primary.main', bgcolor: alpha(theme.palette.primary.main, 0.04) },
+          }}
+        >
+          <Box sx={{ textAlign: 'left', minWidth: 0 }}>
+            <Typography variant="body2" fontWeight={700} sx={{ lineHeight: 1.2 }}>
+              Chapter weightage
+            </Typography>
+            <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>
+              Which chapters come up most, year by year, and where to start
             </Typography>
           </Box>
         </Button>
