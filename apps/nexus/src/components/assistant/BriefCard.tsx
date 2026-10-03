@@ -1,14 +1,20 @@
 'use client';
 
 import Link from 'next/link';
-import { Box, Button, Paper, Skeleton, Typography, alpha, useTheme } from '@neram/ui';
+import { Box, Button, Paper, Skeleton, Typography, alpha, useMediaQuery, useTheme } from '@neram/ui';
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import { useAuthSWR } from '@/lib/nexus-swr';
+import { useAuthSWR, type NexusFetchError } from '@/lib/nexus-swr';
 import type { Brief } from '@/lib/assistant/brief';
 import { useAssistantOptional } from './AssistantProvider';
-import { ASSISTANT_FLAG } from './client';
+import { ASSISTANT_FLAG, BRIEF_KEY } from './client';
+import { focusRing } from './focusRing';
+
+/** 401, 403 and 404 are answers (signed out, not in the pilot, flag off), not blips: retrying them only bills more calls. */
+const SWR_OPTIONS = {
+  shouldRetryOnError: (err: Error) => ![401, 403, 404].includes((err as NexusFetchError).status),
+};
 
 /**
  * "Your day", at the top of the student dashboard. Deterministic: the server
@@ -20,13 +26,18 @@ export default function BriefCard() {
   const { tokenReady, isFeatureEnabled } = useNexusAuthContext();
   const assistant = useAssistantOptional();
   const on = tokenReady && isFeatureEnabled(ASSISTANT_FLAG);
-  const { data, error, isLoading } = useAuthSWR<{ brief: Brief }>(on ? '/api/assistant/brief' : null);
+  const reduce = useMediaQuery('(prefers-reduced-motion: reduce)');
+  const { data, error, isLoading } = useAuthSWR<{ brief: Brief }>(on ? BRIEF_KEY : null, SWR_OPTIONS);
 
   if (!on || error) return null;
   if (isLoading || !data) {
     return (
       <Paper data-testid="brief-skeleton" aria-hidden="true" elevation={0} sx={{ p: 2, mb: 2, borderRadius: 3, border: `1px solid ${theme.palette.divider}` }}>
-        <Skeleton width="40%" height={28} /><Skeleton width="90%" /><Skeleton width="70%" /><Skeleton width="60%" />
+        {/* Still under reduced motion: the pulse is decoration, the shape says loading. */}
+        <Skeleton animation={reduce ? false : 'pulse'} width="40%" height={28} />
+        <Skeleton animation={reduce ? false : 'pulse'} width="90%" />
+        <Skeleton animation={reduce ? false : 'pulse'} width="70%" />
+        <Skeleton animation={reduce ? false : 'pulse'} width="60%" />
       </Paper>
     );
   }
@@ -34,7 +45,7 @@ export default function BriefCard() {
   if (!brief.hasContent) return null;
 
   return (
-    <Paper elevation={0} component="section" aria-labelledby="brief-title" sx={{ p: 2, mb: 2, borderRadius: 3, border: `1px solid ${theme.palette.divider}`, bgcolor: alpha(theme.palette.primary.main, 0.03) }}>
+    <Paper elevation={0} component="section" aria-labelledby="brief-title" sx={{ p: 2, mb: 2, borderRadius: 3, border: `1px solid ${theme.palette.divider}`, bgcolor: alpha(theme.palette.primary.main, 0.03), '& .Mui-focusVisible': focusRing(theme.palette.primary.main) }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
         <AutoAwesomeOutlinedIcon fontSize="small" color="primary" />
         <Typography id="brief-title" variant="subtitle1" sx={{ fontWeight: 700 }}>{brief.greeting}</Typography>

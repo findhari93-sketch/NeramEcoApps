@@ -71,6 +71,30 @@ describe('Composer', () => {
     expect(box.style.fontSize).toBe('16px');
   });
 
+  it('Edit seeds an empty box but never overwrites what the student typed', () => {
+    const { rerender } = render(<Composer onSend={vi.fn(async () => undefined)} busy={false} wantsAttachment={false} draft="" onDraftConsumed={() => {}} upload={upload} />);
+    const box = screen.getByRole('textbox', { name: 'Message Neram Assistant' }) as HTMLTextAreaElement;
+    fireEvent.change(box, { target: { value: 'make it Friday' } });
+    rerender(<Composer onSend={vi.fn(async () => undefined)} busy={false} wantsAttachment={false} draft="Change: " onDraftConsumed={() => {}} upload={upload} />);
+    expect(box.value).toBe('make it Friday');
+    fireEvent.change(box, { target: { value: '' } });
+    rerender(<Composer onSend={vi.fn(async () => undefined)} busy={false} wantsAttachment={false} draft="" onDraftConsumed={() => {}} upload={upload} />);
+    rerender(<Composer onSend={vi.fn(async () => undefined)} busy={false} wantsAttachment={false} draft="Change: " onDraftConsumed={() => {}} upload={upload} />);
+    expect(box.value).toBe('Change: ');
+  });
+
+  it('empties the picker after a refused file, so picking the same file again still fires', async () => {
+    setup();
+    const input = screen.getByTestId('assistant-file-input') as HTMLInputElement;
+    // jsdom keeps a file input's value empty, so record the reset instead.
+    const cleared: string[] = [];
+    Object.defineProperty(input, 'value', { configurable: true, get: () => 'C:/fakepath/notes.pdf', set: (v: string) => { cleared.push(v); } });
+    const file = new File(['x'], 'notes.pdf', { type: 'application/pdf' });
+    fireEvent.change(input, { target: { files: [file] } });
+    expect(await screen.findByText(/Only photos can be attached/)).not.toBeNull();
+    expect(cleared).toContain('');
+  });
+
   it('send and attach buttons are at least 48px', () => {
     setup();
     for (const name of ['Send', 'Attach a photo']) {

@@ -2,12 +2,13 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { usePathname } from 'next/navigation';
+import { useSWRConfig } from 'swr';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { captureScreenshot } from '@/lib/capture-screenshot';
 import { isTeamsPadPath } from '@/lib/pad/embedded';
 import ReportIssueDialog from '@/components/issues/ReportIssueDialog';
 import {
-  ASSISTANT_FLAG, AssistantHttpError, cancelActionRequest, confirmActionRequest, newThread, postTurn,
+  ASSISTANT_FLAG, AssistantHttpError, BRIEF_KEY, cancelActionRequest, confirmActionRequest, loadThread, newThread, postTurn,
   type ActionProposal, type Attachment, type Envelope, type PageContext, type Suggestion,
 } from './client';
 
@@ -27,6 +28,8 @@ export interface AssistantContextValue {
   openPanel: (intent?: string) => void;
   closePanel: () => void;
   messages: AssistantMessage[];
+  /** True while a kept thread's messages load after a reload; the sheet shows a skeleton. */
+  loadingHistory: boolean;
   busy: boolean;
   error: string | null;
   suggestions: Suggestion[];
@@ -52,9 +55,11 @@ const nextId = () => `m${Date.now()}-${++seq}`;
 export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const { isStudent, isFeatureEnabled, getToken, tokenReady, parentSession } = useNexusAuthContext();
   const pathname = usePathname() || '/';
+  const { mutate } = useSWRConfig();
 
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<AssistantMessage[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -70,6 +75,11 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const newChatRef = useRef(false);
   /** Bumped by newChat: a reply from an older generation is dropped. */
   const genRef = useRef(0);
+  /** The kept thread is loaded once per page session, on the first open. */
+  const historyTriedRef = useRef(false);
+  /** Set by the first send: a history that lands after it must not replace the live turn. */
+  const sentRef = useRef(false);
+  const reportingRef = useRef(false);
 
   useEffect(() => {
     try {
@@ -81,6 +91,57 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
 
   const pageContext = useMemo<PageContext>(() => ({ path: pathname }), [pathname]);
   const enabled = isStudent && tokenReady && !parentSession.active && !isTeamsPadPath(pathname) && isFeatureEnabled(ASSISTANT_FLAG) && !refused;
+
+  // A link in a reply (or any other navigation) closes the panel, so the new
+  // page is not left hidden under it.
+  const lastPathRef = useRef(pathname);
+  useEffect(() => {
+    if (lastPathRef.current === pathname) return;
+    lastPathRef.current = pathname;
+    setOpen(false);
+  }, [pathname]);
+
+  const forgetThread = useCallback(() => {
+    threadRef.current = null;
+    try {
+      window.sessionStorage.removeItem(THREAD_KEY);
+    } catch {
+      /* private mode */
+    }
+  }, []);
+
+  /**
+   * After a reload the thread id survives in sessionStorage and the server may
+   * still be mid-flow on it, so show where the chat was rather than the menu: a
+   * quick action tapped on an empty panel would otherwise land in that flow. A
+   * thread that cannot be loaded is forgotten and the next message starts fresh.
+   * Never touches the feature gate (Ruling 14). The action card is not restored:
+   * its token may have expired, and the flow asks again.
+   */
+  useEffect(() => {
+    if (!open || !enabled || historyTriedRef.current) return;
+    historyTriedRef.current = true;
+    const id = threadRef.current;
+    if (!id) return;
+    const gen = genRef.current;
+    setLoadingHistory(true);
+    loadThread(getToken, id)
+      .then((rows) => {
+        if (gen !== genRef.current || threadRef.current !== id || sentRef.current) return;
+        setMessages((prev) => (prev.length ? prev : rows.map((m) => ({
+          id: m.id, role: m.role, text: m.role === 'user' && m.text === '(photo)' ? 'Photo attached' : m.text, envelope: m.envelope,
+        }))));
+        const last = rows[rows.length - 1];
+        if (last?.role === 'assistant' && last.envelope) {
+          setSuggestions(last.envelope.suggestions || []);
+          setWantsAttachment(Boolean(last.envelope.wantsAttachment));
+        }
+      })
+      .catch(() => {
+        if (threadRef.current === id) forgetThread();
+      })
+      .finally(() => setLoadingHistory(false));
+  }, [open, enabled, getToken, forgetThread]);
 
   const applyEnvelope = useCallback((env: Envelope, userText: string | null) => {
     threadRef.current = env.threadId;
@@ -128,6 +189,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     if ((!trimmed && !attachment) || busyRef.current) return;
     const gen = genRef.current;
     busyRef.current = true;
+    sentRef.current = true;
+    setLoadingHistory(false);
     setError(null);
     setBusy(true);
     setPendingAction(null);
@@ -156,6 +219,9 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
       if (gen !== genRef.current) return;
       setPendingAction(null);
       setMessages((prev) => [...prev, { id: nextId(), role: 'assistant', text: out.reply, envelope: { reply: out.reply, suggestions: [], links: out.links, action: null, mode: 'general', threadId: out.threadId || threadRef.current || '' } }]);
+      // A declined class or a new reminder changes the day: refetch the brief card
+      // under what is on screen (one argument, so it never blanks to a skeleton).
+      void mutate(BRIEF_KEY);
     } catch (err) {
       if (gen !== genRef.current) return;
       if (!actionGone(err)) setError(err instanceof Error ? err.message : 'Something went wrong. Try again.');
@@ -165,7 +231,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
         setBusy(false);
       }
     }
-  }, [actionGone, getToken, pendingAction]);
+  }, [actionGone, getToken, mutate, pendingAction]);
 
   const cancel = useCallback(async () => {
     if (!pendingAction) return;
@@ -176,7 +242,9 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
       const out = await cancelActionRequest(getToken, id);
       if (gen === genRef.current) setMessages((prev) => [...prev, { id: nextId(), role: 'assistant', text: out.reply }]);
     } catch (err) {
-      if (gen === genRef.current) actionGone(err);
+      // A stale action explains itself; anything else (offline, a 500) must not
+      // leave the student believing the cancel went through.
+      if (gen === genRef.current && !actionGone(err)) setError('Could not cancel just now. It was not done, and it expires on its own in a few minutes.');
     }
   }, [actionGone, getToken, pendingAction]);
 
@@ -186,6 +254,11 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     // Abandon any turn in flight: its reply must not land in the new chat.
     const gen = ++genRef.current;
     busyRef.current = false;
+    // Drop the old thread at once: a message sent before the new id arrives, or
+    // after newThread fails, starts a fresh thread instead of feeding the old flow.
+    forgetThread();
+    sentRef.current = true;
+    setLoadingHistory(false);
     setBusy(false);
     setMessages([]);
     setSuggestions([]);
@@ -194,7 +267,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     try {
       const id = await newThread(getToken, pageContext);
-      if (gen !== genRef.current) return;
+      // A send that already started its own thread keeps it.
+      if (gen !== genRef.current || threadRef.current) return;
       threadRef.current = id;
       try {
         window.sessionStorage.setItem(THREAD_KEY, id);
@@ -206,7 +280,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     } finally {
       newChatRef.current = false;
     }
-  }, [fail, getToken, pageContext]);
+  }, [fail, forgetThread, getToken, pageContext]);
 
   const openPanel = useCallback((intent?: string) => {
     setOpen(true);
@@ -217,28 +291,38 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
 
   /** Close first, then shoot, so the sheet is not in the picture. */
   const reportProblem = useCallback(async () => {
-    setOpen(false);
-    await new Promise((r) => setTimeout(r, 350));
-    const shot = await captureScreenshot();
-    setAutoShot(shot);
-    setReportOpen(true);
+    // A double tap during the close would shoot twice and open the form twice.
+    if (reportingRef.current) return;
+    reportingRef.current = true;
+    try {
+      setOpen(false);
+      await new Promise((r) => setTimeout(r, 350));
+      const shot = await captureScreenshot();
+      setAutoShot(shot);
+      setReportOpen(true);
+    } finally {
+      reportingRef.current = false;
+    }
   }, []);
 
   const value = useMemo<AssistantContextValue>(() => ({
-    enabled, open, openPanel, closePanel, messages, busy, error, suggestions, wantsAttachment, pendingAction,
+    enabled, open, openPanel, closePanel, messages, loadingHistory, busy, error, suggestions, wantsAttachment, pendingAction,
     draft, setDraft, send, confirm, cancel, newChat, reportProblem, pageContext,
-  }), [enabled, open, openPanel, closePanel, messages, busy, error, suggestions, wantsAttachment, pendingAction, draft, send, confirm, cancel, newChat, reportProblem, pageContext]);
+  }), [enabled, open, openPanel, closePanel, messages, loadingHistory, busy, error, suggestions, wantsAttachment, pendingAction, draft, send, confirm, cancel, newChat, reportProblem, pageContext]);
 
   return (
     <Ctx.Provider value={value}>
       {children}
-      <ReportIssueDialog
-        open={reportOpen}
-        onClose={() => { setReportOpen(false); setAutoShot(null); }}
-        getToken={getToken}
-        pageUrl={pathname}
-        initialScreenshotFile={autoShot}
-      />
+      {/* With the assistant off, the old Report a problem button brings its own form. */}
+      {(enabled || reportOpen) && (
+        <ReportIssueDialog
+          open={reportOpen}
+          onClose={() => { setReportOpen(false); setAutoShot(null); }}
+          getToken={getToken}
+          pageUrl={pathname}
+          initialScreenshotFile={autoShot}
+        />
+      )}
     </Ctx.Provider>
   );
 }

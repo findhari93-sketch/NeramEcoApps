@@ -6,6 +6,9 @@ const postTurn = vi.fn();
 const confirmActionRequest = vi.fn();
 const cancelActionRequest = vi.fn();
 const newThread = vi.fn();
+const loadThread = vi.fn();
+const swrMutate = vi.fn();
+let pathname = '/student/dashboard';
 
 vi.mock('./client', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./client')>();
@@ -15,7 +18,13 @@ vi.mock('./client', async (importOriginal) => {
     confirmActionRequest: (...a: unknown[]) => confirmActionRequest(...a),
     cancelActionRequest: (...a: unknown[]) => cancelActionRequest(...a),
     newThread: (...a: unknown[]) => newThread(...a),
+    loadThread: (...a: unknown[]) => loadThread(...a),
   };
+});
+
+vi.mock('swr', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('swr')>();
+  return { ...actual, useSWRConfig: () => ({ mutate: swrMutate }) };
 });
 
 vi.mock('@/hooks/useNexusAuth', () => ({
@@ -28,8 +37,9 @@ vi.mock('@/hooks/useNexusAuth', () => ({
   }),
 }));
 
-vi.mock('next/navigation', () => ({ usePathname: () => '/student/dashboard' }));
-vi.mock('@/lib/capture-screenshot', () => ({ captureScreenshot: vi.fn(async () => null) }));
+vi.mock('next/navigation', () => ({ usePathname: () => pathname }));
+const captureScreenshot = vi.fn(async () => null);
+vi.mock('@/lib/capture-screenshot', () => ({ captureScreenshot: () => captureScreenshot() }));
 vi.mock('@/components/issues/ReportIssueDialog', () => ({ default: () => null }));
 
 import { AssistantHttpError } from './client';
@@ -42,7 +52,7 @@ function Probe() {
 }
 
 function mount() {
-  render(
+  return render(
     <AssistantProvider>
       <Probe />
     </AssistantProvider>,
@@ -59,6 +69,11 @@ beforeEach(() => {
   confirmActionRequest.mockReset();
   cancelActionRequest.mockReset();
   newThread.mockReset();
+  loadThread.mockReset();
+  loadThread.mockResolvedValue([]);
+  swrMutate.mockReset();
+  captureScreenshot.mockClear();
+  pathname = '/student/dashboard';
 });
 afterEach(() => cleanup());
 
@@ -105,5 +120,107 @@ describe('AssistantProvider', () => {
     expect(ctx.messages).toHaveLength(0);
     expect(sessionStorage.getItem('nexus-assistant-thread')).toBe('new-thread');
     expect(ctx.busy).toBe(false);
+  });
+
+  it('after newChat, a message sent before the new thread id arrives starts a fresh thread, and keeps it', async () => {
+    sessionStorage.setItem('nexus-assistant-thread', 'old-thread');
+    let releaseThread: (id: string) => void = () => {};
+    newThread.mockReturnValue(new Promise<string>((r) => { releaseThread = r; }));
+    postTurn.mockResolvedValue(env({ threadId: 'fresh' }));
+    mount();
+    let starting: Promise<void> = Promise.resolve();
+    await act(async () => { starting = ctx.newChat(); });
+    await act(async () => { await ctx.send('Remind me'); });
+    expect(postTurn.mock.calls[0][1]).toMatchObject({ threadId: null, text: 'Remind me' });
+    await act(async () => { releaseThread('unused'); await starting; });
+    expect(sessionStorage.getItem('nexus-assistant-thread')).toBe('fresh');
+  });
+
+  it('after a failed newChat, the next message does not go to the old thread', async () => {
+    sessionStorage.setItem('nexus-assistant-thread', 'old-thread');
+    newThread.mockRejectedValue(new Error('offline'));
+    postTurn.mockResolvedValue(env({ threadId: 'fresh' }));
+    mount();
+    await act(async () => { await ctx.newChat(); });
+    await act(async () => { await ctx.send('hello'); });
+    expect(postTurn.mock.calls[0][1]).toMatchObject({ threadId: null });
+  });
+
+  it('a cancel that fails on the network says so', async () => {
+    postTurn.mockResolvedValue(env({ action: { id: 'a1', confirmToken: 'ct' } as unknown as Envelope['action'] }));
+    cancelActionRequest.mockRejectedValue(new TypeError('Failed to fetch'));
+    mount();
+    await act(async () => { await ctx.send('hello'); });
+    await act(async () => { await ctx.cancel(); });
+    expect(ctx.error).toMatch(/Could not cancel/);
+  });
+
+  it('a confirmed action revalidates the brief card', async () => {
+    postTurn.mockResolvedValue(env({ action: { id: 'a1', confirmToken: 'ct' } as unknown as Envelope['action'] }));
+    confirmActionRequest.mockResolvedValue({ ok: true, reply: 'Done.', links: [], threadId: 't1' });
+    mount();
+    await act(async () => { await ctx.send('hello'); });
+    await act(async () => { await ctx.confirm(); });
+    expect(swrMutate).toHaveBeenCalledWith('/api/assistant/brief');
+  });
+
+  it('on the first open after a reload, the kept thread is shown instead of the menu', async () => {
+    sessionStorage.setItem('nexus-assistant-thread', 'kept');
+    loadThread.mockResolvedValue([
+      { id: 'u1', role: 'user', text: 'Remind me', envelope: null },
+      { id: 'a1', role: 'assistant', text: 'When should I remind you?', envelope: env({ reply: 'When should I remind you?', suggestions: [{ label: 'Tomorrow', send: 'Tomorrow' }], threadId: 'kept' }) },
+    ]);
+    mount();
+    expect(loadThread).not.toHaveBeenCalled();
+    await act(async () => { ctx.openPanel(); });
+    await act(async () => { await Promise.resolve(); });
+    expect(loadThread.mock.calls[0][1]).toBe('kept');
+    expect(ctx.messages.map((m) => m.text)).toEqual(['Remind me', 'When should I remind you?']);
+    expect(ctx.suggestions).toEqual([{ label: 'Tomorrow', send: 'Tomorrow' }]);
+    expect(ctx.loadingHistory).toBe(false);
+    // Once per page session.
+    await act(async () => { ctx.closePanel(); });
+    await act(async () => { ctx.openPanel(); });
+    expect(loadThread).toHaveBeenCalledTimes(1);
+  });
+
+  it('a kept thread that cannot be loaded is forgotten, and the assistant stays on', async () => {
+    sessionStorage.setItem('nexus-assistant-thread', 'gone');
+    loadThread.mockRejectedValue(new AssistantHttpError('Not found', 404));
+    postTurn.mockResolvedValue(env({ threadId: 'fresh' }));
+    mount();
+    await act(async () => { ctx.openPanel(); });
+    await act(async () => { await Promise.resolve(); });
+    expect(ctx.enabled).toBe(true);
+    expect(sessionStorage.getItem('nexus-assistant-thread')).toBeNull();
+    await act(async () => { await ctx.send('hello'); });
+    expect(postTurn.mock.calls[0][1]).toMatchObject({ threadId: null });
+  });
+
+  it('navigating to another page closes the panel', async () => {
+    const view = mount();
+    await act(async () => { ctx.openPanel(); });
+    expect(ctx.open).toBe(true);
+    pathname = '/student/timetable';
+    view.rerender(
+      <AssistantProvider>
+        <Probe />
+      </AssistantProvider>,
+    );
+    expect(ctx.open).toBe(false);
+  });
+
+  it('a double tap on Report a problem captures one screenshot', async () => {
+    vi.useFakeTimers();
+    try {
+      mount();
+      let a: Promise<void> = Promise.resolve();
+      let b: Promise<void> = Promise.resolve();
+      act(() => { a = ctx.reportProblem(); b = ctx.reportProblem(); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(400); await a; await b; });
+      expect(captureScreenshot).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

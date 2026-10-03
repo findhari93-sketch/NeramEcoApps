@@ -4,8 +4,11 @@ import { useEffect, useState } from 'react';
 import { Box, Button, Paper, Typography } from '@neram/ui';
 import type { ActionProposal } from './client';
 
+/** Minutes until expiry. An unreadable time counts as expired, so Confirm is never live on a card that says Expired. */
 function minutesLeft(expiresAt: string): number {
-  return Math.max(0, Math.ceil((Date.parse(expiresAt) - Date.now()) / 60_000));
+  const at = Date.parse(expiresAt);
+  if (!Number.isFinite(at)) return 0;
+  return Math.max(0, Math.ceil((at - Date.now()) / 60_000));
 }
 
 /** The one place a write is approved. Every field visible, three equal-weight buttons. */

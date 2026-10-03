@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Box, CircularProgress, IconButton, TextField, Typography } from '@neram/ui';
+import { Box, CircularProgress, IconButton, TextField, Typography, useMediaQuery } from '@neram/ui';
 import CameraAltOutlinedIcon from '@mui/icons-material/CameraAltOutlined';
 import CloseIcon from '@mui/icons-material/Close';
+import HourglassTopRoundedIcon from '@mui/icons-material/HourglassTopRounded';
 import SendRoundedIcon from '@mui/icons-material/SendRounded';
 import type { Attachment, GetToken } from './client';
 
@@ -27,23 +28,32 @@ export default function Composer({ onSend, busy, wantsAttachment, draft, onDraft
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const boxRef = useRef<HTMLTextAreaElement>(null);
+  const reduce = useMediaQuery('(prefers-reduced-motion: reduce)');
 
   useEffect(() => {
     if (!draft) return;
-    setText(draft);
+    // Edit only seeds an empty box: words the student already typed are kept.
+    setText((prev) => (prev.trim() ? prev : draft));
     onDraftConsumed();
     boxRef.current?.focus();
   }, [draft, onDraftConsumed]);
+
+  /** Empty the picker, so choosing the same file again (after a refusal or a remove) still fires change. */
+  const resetPicker = () => {
+    if (fileRef.current) fileRef.current.value = '';
+  };
 
   const pick = async (file: File | undefined) => {
     if (!file) return;
     setError(null);
     if (!file.type.startsWith('image/')) {
       setError('Only photos can be attached here.');
+      resetPicker();
       return;
     }
     if (file.size > MAX_BYTES) {
       setError('That photo is too big. Choose one smaller than 12 MB.');
+      resetPicker();
       return;
     }
     setUploading(true);
@@ -53,7 +63,7 @@ export default function Composer({ onSend, busy, wantsAttachment, draft, onDraft
       setError(err instanceof Error ? err.message : 'Upload failed. Try again.');
     } finally {
       setUploading(false);
-      if (fileRef.current) fileRef.current.value = '';
+      resetPicker();
     }
   };
 
@@ -92,7 +102,10 @@ export default function Composer({ onSend, busy, wantsAttachment, draft, onDraft
           data-size="48"
           sx={{ width: 48, height: 48, minHeight: 48, flexShrink: 0 }}
         >
-          {uploading ? <CircularProgress size={22} aria-label="Uploading photo" /> : <CameraAltOutlinedIcon />}
+          {/* The one spinner in the panel, on a short wait; under reduced motion a still hourglass. */}
+          {uploading
+            ? (reduce ? <HourglassTopRoundedIcon aria-label="Uploading photo" /> : <CircularProgress size={22} aria-label="Uploading photo" />)
+            : <CameraAltOutlinedIcon />}
         </IconButton>
         <TextField
           inputRef={boxRef}

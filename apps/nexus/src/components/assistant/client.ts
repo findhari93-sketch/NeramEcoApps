@@ -11,6 +11,9 @@ export { ASSISTANT_FLAG } from '@/lib/assistant/flag';
 
 export type GetToken = () => Promise<string | null>;
 
+/** The brief card's SWR key, also revalidated after a confirmed action changes the day. */
+export const BRIEF_KEY = '/api/assistant/brief';
+
 export class AssistantHttpError extends Error {
   status: number;
   constructor(message: string, status: number) {
@@ -53,6 +56,14 @@ export function cancelActionRequest(getToken: GetToken, id: string): Promise<Act
 export async function newThread(getToken: GetToken, pageContext: PageContext | null): Promise<string> {
   const out = await authed<{ threadId: string }>(getToken, '/api/assistant/threads', { method: 'POST', body: JSON.stringify({ pageContext }) });
   return out.threadId;
+}
+
+export interface HistoryMessage { id: string; role: 'user' | 'assistant'; text: string; envelope: Envelope | null }
+
+/** The kept thread's latest messages, oldest first, so a reload shows where the chat was. */
+export async function loadThread(getToken: GetToken, id: string): Promise<HistoryMessage[]> {
+  const out = await authed<{ messages: HistoryMessage[] }>(getToken, `/api/assistant/threads/${encodeURIComponent(id)}`);
+  return (out.messages || []).filter((m) => m.role === 'user' || m.role === 'assistant');
 }
 
 /** Same path the sketchbook uses: downscale, upload, thumbnail, upload. */

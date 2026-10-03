@@ -9,6 +9,8 @@ import ActionCard from './ActionCard';
 import { useAssistant } from './AssistantProvider';
 import { uploadImage } from './client';
 import Composer from './Composer';
+import { focusRing } from './focusRing';
+import MessageBubble from './MessageBubble';
 import MessageList from './MessageList';
 import QuickActions from './QuickActions';
 import SuggestionChips from './SuggestionChips';
@@ -37,13 +39,17 @@ export default function AssistantSheet() {
 
   const body = (
     // flex: 1 (not height: 100%) so the sheet's drag handle above it is not pushed off screen.
-    <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%', '& .Mui-focusVisible': focusRing(theme.palette.primary.main) }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
         <Typography id={titleId} variant="h6" component="h2" sx={{ flex: 1, fontWeight: 700 }}>Neram Assistant</Typography>
         <IconButton aria-label="New chat" onClick={() => void a.newChat()} sx={{ width: 48, height: 48 }}><AddCommentOutlinedIcon /></IconButton>
         <IconButton aria-label="Close" onClick={a.closePanel} sx={{ width: 48, height: 48 }}><CloseIcon /></IconButton>
       </Box>
-      {a.messages.length === 0 ? (
+      {a.messages.length === 0 && a.loadingHistory ? (
+        // A kept chat is loading after a reload: a skeleton, not the menu, so a
+        // quick action cannot be tapped into the middle of an earlier flow.
+        <Box sx={{ flex: 1, minHeight: 0, py: 1 }}><MessageBubble message={{ id: 'history', role: 'assistant', text: '', pending: true }} label="Loading your chat" /></Box>
+      ) : a.messages.length === 0 ? (
         <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}><QuickActions onSend={(t) => void a.send(t)} onReport={() => void a.reportProblem()} /></Box>
       ) : (
         <MessageList messages={a.messages} />

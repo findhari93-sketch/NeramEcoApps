@@ -1,10 +1,11 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { Fab, Tooltip, Zoom, useMediaQuery } from '@neram/ui';
+import { Fab, Tooltip, Zoom, useMediaQuery, useTheme } from '@neram/ui';
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import { BOTTOM_NAV_HEIGHT } from '@/lib/shell-chrome';
 import { useAssistantOptional } from './AssistantProvider';
+import { focusRing } from './focusRing';
 
 /**
  * The ONE floating button on student pages. It replaced the fixed "Report a
@@ -21,6 +22,7 @@ export default function AssistantLauncher() {
   const assistant = useAssistantOptional();
   const pathname = usePathname() || '';
   const reduce = useMediaQuery('(prefers-reduced-motion: reduce)');
+  const theme = useTheme();
   if (!assistant || !assistant.enabled) return null;
   if (pathname.startsWith('/student/sketchbook')) return null;
   const open = assistant.open;
@@ -44,6 +46,8 @@ export default function AssistantLauncher() {
             minWidth: 56,
             minHeight: 56,
             zIndex: (t) => t.zIndex.speedDial,
+            // Focus lands back here when the panel closes; make it visible.
+            '&.Mui-focusVisible': focusRing(theme.palette.primary.dark),
           }}
         >
           <AutoAwesomeOutlinedIcon />
