@@ -37,6 +37,10 @@ describe('parseDateRange', () => {
   it('reads "X to Y"', () => {
     expect(parseDateRange('8 Oct to 12 Oct', today)).toEqual({ from: '2026-10-08', to: '2026-10-12' });
     expect(parseDateRange('from tomorrow till friday', today)).toEqual({ from: '2026-10-04', to: '2026-10-09' });
+    expect(parseDateRange('today to tomorrow', today)).toEqual({ from: '2026-10-03', to: '2026-10-04' });
+    expect(parseDateRange('tomorrow to day after tomorrow', today)).toEqual({ from: '2026-10-04', to: '2026-10-05' });
+    expect(parseDateRange('monday to friday', today)).toEqual({ from: '2026-10-05', to: '2026-10-09' });
+    expect(parseDateRange('tomorrow till day after', today)).toEqual({ from: '2026-10-04', to: '2026-10-05' });
   });
   it('keeps a leave already under way in this year', () => {
     expect(parseDateRange('12 Oct to 2 Oct', today)).toBeNull();
