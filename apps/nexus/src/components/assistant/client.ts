@@ -7,7 +7,7 @@ import type { ActionProposal, Attachment, Envelope, PageContext, Suggestion, Too
 import { compressImage } from '@/utils/imageCompression';
 
 export type { ActionProposal, Attachment, Envelope, PageContext, Suggestion, ToolLink };
-export { ASSISTANT_FLAG } from '@/lib/assistant/access';
+export { ASSISTANT_FLAG } from '@/lib/assistant/flag';
 
 export type GetToken = () => Promise<string | null>;
 
