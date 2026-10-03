@@ -111,7 +111,8 @@ export default function Composer({ onSend, busy, wantsAttachment, draft, onDraft
           }}
           placeholder={wantsAttachment ? 'Attach a photo, or type' : 'Ask or tell me what to do'}
           inputProps={{ 'aria-label': 'Message Neram Assistant', style: { fontSize: 16, lineHeight: 1.5 } }}
-          sx={{ minWidth: 0 }}
+          // 48px like the buttons beside it (size small alone is about 41px).
+          sx={{ minWidth: 0, '& .MuiInputBase-root': { minHeight: 48 } }}
         />
         <IconButton
           aria-label="Send"

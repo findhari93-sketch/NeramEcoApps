@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import Composer from './Composer';
 
 const upload = vi.fn(async () => ({ original_image_url: 'https://cdn.test/a.jpg', thumbnail_url: null }));
@@ -9,6 +9,8 @@ function setup(props: Partial<React.ComponentProps<typeof Composer>> = {}) {
   render(<Composer onSend={onSend} busy={false} wantsAttachment={false} draft="" onDraftConsumed={() => {}} upload={upload} {...props} />);
   return { onSend };
 }
+
+beforeEach(() => upload.mockClear());
 
 describe('Composer', () => {
   it('sends on Enter and keeps Shift+Enter as a newline', async () => {
@@ -59,6 +61,14 @@ describe('Composer', () => {
     expect(await screen.findByAltText('Attached sketch')).not.toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
     await waitFor(() => expect(onSend).toHaveBeenCalledWith('', { original_image_url: 'https://cdn.test/a.jpg', thumbnail_url: null }));
+  });
+
+  it('the message box is at least 48px tall with 16px text', () => {
+    setup();
+    const box = screen.getByRole('textbox', { name: 'Message Neram Assistant' });
+    const root = box.closest('.MuiInputBase-root') as HTMLElement;
+    expect(getComputedStyle(root).minHeight).toBe('48px');
+    expect(box.style.fontSize).toBe('16px');
   });
 
   it('send and attach buttons are at least 48px', () => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback } from 'react';
+import { useCallback, useId } from 'react';
 import { Box, Drawer, IconButton, SwipeableDrawer, Typography, alpha, useMediaQuery, useTheme } from '@neram/ui';
 import AddCommentOutlinedIcon from '@mui/icons-material/AddCommentOutlined';
 import CloseIcon from '@mui/icons-material/Close';
@@ -25,6 +25,9 @@ export default function AssistantSheet() {
   const { setDraft } = a;
   const onEdit = useCallback(() => setDraft('Change: '), [setDraft]);
   const onDraftConsumed = useCallback(() => setDraft(''), [setDraft]);
+  const titleId = useId();
+  // The Paper is the panel itself: announce it as a modal dialog named by its heading.
+  const dialogProps = { role: 'dialog', 'aria-modal': true, 'aria-labelledby': titleId } as const;
 
   if (!a.enabled) return null;
 
@@ -32,7 +35,7 @@ export default function AssistantSheet() {
     // flex: 1 (not height: 100%) so the sheet's drag handle above it is not pushed off screen.
     <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
-        <Typography variant="h6" component="h2" sx={{ flex: 1, fontWeight: 700 }}>Neram Assistant</Typography>
+        <Typography id={titleId} variant="h6" component="h2" sx={{ flex: 1, fontWeight: 700 }}>Neram Assistant</Typography>
         <IconButton aria-label="New chat" onClick={() => void a.newChat()} sx={{ width: 48, height: 48 }}><AddCommentOutlinedIcon /></IconButton>
         <IconButton aria-label="Close" onClick={a.closePanel} sx={{ width: 48, height: 48 }}><CloseIcon /></IconButton>
       </Box>
@@ -50,7 +53,7 @@ export default function AssistantSheet() {
 
   if (desktop) {
     return (
-      <Drawer anchor="right" open={a.open} onClose={a.closePanel} transitionDuration={reduce ? 0 : undefined} PaperProps={{ sx: { width: SHEET_WIDTH, maxWidth: '100vw' }, 'aria-label': 'Neram Assistant' } as never}>
+      <Drawer anchor="right" open={a.open} onClose={a.closePanel} transitionDuration={reduce ? 0 : undefined} PaperProps={{ ...dialogProps, sx: { width: SHEET_WIDTH, maxWidth: '100vw' } }}>
         {body}
       </Drawer>
     );
@@ -66,13 +69,13 @@ export default function AssistantSheet() {
       transitionDuration={reduce ? 0 : undefined}
       slotProps={{ backdrop: { sx: { bgcolor: alpha(theme.palette.common.black, 0.3) } } }}
       PaperProps={{
+        ...dialogProps,
         sx: {
           borderTopLeftRadius: 16, borderTopRightRadius: 16, height: '85vh', overscrollBehavior: 'contain',
           // dvh follows the phone keyboard and the browser bars where supported.
           '@supports (height: 100dvh)': { height: '85dvh' },
         },
-        'aria-label': 'Neram Assistant',
-      } as never}
+      }}
     >
       <Box aria-hidden sx={{ display: 'flex', justifyContent: 'center', pt: 1.5, flexShrink: 0 }}>
         <Box sx={{ width: 32, height: 4, borderRadius: 2, bgcolor: alpha(theme.palette.text.secondary, 0.3) }} />
