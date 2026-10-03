@@ -65,6 +65,11 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const [reportOpen, setReportOpen] = useState(false);
   const [autoShot, setAutoShot] = useState<File | null>(null);
   const threadRef = useRef<string | null>(null);
+  /** Set synchronously so two taps in one tick cannot both pass the guard. */
+  const busyRef = useRef(false);
+  const newChatRef = useRef(false);
+  /** Bumped by newChat: a reply from an older generation is dropped. */
+  const genRef = useRef(0);
 
   useEffect(() => {
     try {
@@ -94,6 +99,12 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     setPendingAction(env.action);
   }, []);
 
+  /**
+   * Only the turn route and the threads route speak for the feature gate: a 404
+   * (flag off) or 403 (not a student, not in the pilot) there hides the assistant
+   * for the session. The action routes answer 403/404/409/410 for a stale or
+   * foreign action, which says nothing about the feature, so they never come here.
+   */
   const fail = useCallback((err: unknown) => {
     setMessages((prev) => prev.filter((m) => !m.pending));
     if (err instanceof AssistantHttpError && (err.status === 403 || err.status === 404)) {
@@ -104,62 +115,96 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     setError(err instanceof Error ? err.message : 'Something went wrong. Try again.');
   }, []);
 
+  /** A confirm or cancel the server refused as stale: drop the card, say why, keep the assistant on. */
+  const actionGone = useCallback((err: unknown): boolean => {
+    if (!(err instanceof AssistantHttpError) || ![403, 404, 409, 410].includes(err.status)) return false;
+    setPendingAction(null);
+    setMessages((prev) => [...prev, { id: nextId(), role: 'assistant', text: err.message || 'That action has expired. Ask me again.' }]);
+    return true;
+  }, []);
+
   const send = useCallback(async (text: string, attachment: Attachment | null = null) => {
     const trimmed = text.trim();
-    if ((!trimmed && !attachment) || busy) return;
+    if ((!trimmed && !attachment) || busyRef.current) return;
+    const gen = genRef.current;
+    busyRef.current = true;
     setError(null);
     setBusy(true);
     setPendingAction(null);
     setMessages((prev) => [...prev, { id: nextId(), role: 'user', text: trimmed || 'Photo attached' }, { id: nextId(), role: 'assistant', text: '', pending: true }]);
     try {
       const env = await postTurn(getToken, { threadId: threadRef.current, text: trimmed, attachment, pageContext });
-      applyEnvelope(env, null);
+      if (gen === genRef.current) applyEnvelope(env, null);
     } catch (err) {
-      fail(err);
+      if (gen === genRef.current) fail(err);
     } finally {
-      setBusy(false);
+      if (gen === genRef.current) {
+        busyRef.current = false;
+        setBusy(false);
+      }
     }
-  }, [applyEnvelope, busy, fail, getToken, pageContext]);
+  }, [applyEnvelope, fail, getToken, pageContext]);
 
   const confirm = useCallback(async () => {
-    if (!pendingAction || busy) return;
+    if (!pendingAction || busyRef.current) return;
+    const gen = genRef.current;
+    busyRef.current = true;
     setBusy(true);
     setError(null);
     try {
       const out = await confirmActionRequest(getToken, pendingAction.id, pendingAction.confirmToken);
+      if (gen !== genRef.current) return;
       setPendingAction(null);
       setMessages((prev) => [...prev, { id: nextId(), role: 'assistant', text: out.reply, envelope: { reply: out.reply, suggestions: [], links: out.links, action: null, mode: 'general', threadId: out.threadId || threadRef.current || '' } }]);
     } catch (err) {
-      if (err instanceof AssistantHttpError && [409, 410].includes(err.status)) setPendingAction(null);
-      fail(err);
+      if (gen !== genRef.current) return;
+      if (!actionGone(err)) setError(err instanceof Error ? err.message : 'Something went wrong. Try again.');
     } finally {
-      setBusy(false);
+      if (gen === genRef.current) {
+        busyRef.current = false;
+        setBusy(false);
+      }
     }
-  }, [busy, fail, getToken, pendingAction]);
+  }, [actionGone, getToken, pendingAction]);
 
   const cancel = useCallback(async () => {
     if (!pendingAction) return;
     const id = pendingAction.id;
+    const gen = genRef.current;
     setPendingAction(null);
     try {
       const out = await cancelActionRequest(getToken, id);
-      setMessages((prev) => [...prev, { id: nextId(), role: 'assistant', text: out.reply }]);
-    } catch {
-      /* already gone is fine */
+      if (gen === genRef.current) setMessages((prev) => [...prev, { id: nextId(), role: 'assistant', text: out.reply }]);
+    } catch (err) {
+      if (gen === genRef.current) actionGone(err);
     }
-  }, [getToken, pendingAction]);
+  }, [actionGone, getToken, pendingAction]);
 
   const newChat = useCallback(async () => {
+    if (newChatRef.current) return;
+    newChatRef.current = true;
+    // Abandon any turn in flight: its reply must not land in the new chat.
+    const gen = ++genRef.current;
+    busyRef.current = false;
+    setBusy(false);
     setMessages([]);
     setSuggestions([]);
     setPendingAction(null);
     setWantsAttachment(false);
     setError(null);
     try {
-      threadRef.current = await newThread(getToken, pageContext);
-      window.sessionStorage.setItem(THREAD_KEY, threadRef.current);
+      const id = await newThread(getToken, pageContext);
+      if (gen !== genRef.current) return;
+      threadRef.current = id;
+      try {
+        window.sessionStorage.setItem(THREAD_KEY, id);
+      } catch {
+        /* private mode */
+      }
     } catch (err) {
-      fail(err);
+      if (gen === genRef.current) fail(err);
+    } finally {
+      newChatRef.current = false;
     }
   }, [fail, getToken, pageContext]);
 
