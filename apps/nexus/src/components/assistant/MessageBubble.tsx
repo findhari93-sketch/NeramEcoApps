@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { Box, Button, Paper, Skeleton, Typography, alpha, useMediaQuery, useTheme } from '@neram/ui';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import type { AssistantMessage } from './AssistantProvider';
+import { stableHover } from './stableHover';
 
 export default function MessageBubble({ message, label = 'Neram Assistant is thinking' }: { message: AssistantMessage; label?: string }) {
   const theme = useTheme();
@@ -35,7 +36,7 @@ export default function MessageBubble({ message, label = 'Neram Assistant is thi
         {links.length > 0 && (
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1.5 }}>
             {links.map((l) => (
-              <Button key={l.url} component={Link} href={l.url} variant="outlined" size="medium" endIcon={<ArrowForwardRoundedIcon />} sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700 }}>
+              <Button key={l.url} component={Link} href={l.url} variant="outlined" size="medium" endIcon={<ArrowForwardRoundedIcon />} sx={{ ...stableHover, minHeight: 48, textTransform: 'none', fontWeight: 700 }}>
                 {l.label}
               </Button>
             ))}

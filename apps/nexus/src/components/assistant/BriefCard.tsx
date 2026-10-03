@@ -10,6 +10,7 @@ import type { Brief } from '@/lib/assistant/brief';
 import { useAssistantOptional } from './AssistantProvider';
 import { ASSISTANT_FLAG, BRIEF_KEY } from './client';
 import { focusRing } from './focusRing';
+import { stableHover } from './stableHover';
 
 /** 401, 403 and 404 are answers (signed out, not in the pilot, flag off), not blips: retrying them only bills more calls. */
 const SWR_OPTIONS = {
@@ -54,7 +55,7 @@ export default function BriefCard() {
         {brief.sections.map((s) => (
           <Box component="li" key={s.id}>
             {s.link ? (
-              <Button component={Link} href={s.link} endIcon={<ChevronRightIcon />} sx={{ justifyContent: 'space-between', width: '100%', minHeight: 48, textTransform: 'none', textAlign: 'left', color: 'text.primary', px: 1 }}>
+              <Button component={Link} href={s.link} endIcon={<ChevronRightIcon />} sx={{ ...stableHover, justifyContent: 'space-between', width: '100%', minHeight: 48, textTransform: 'none', textAlign: 'left', color: 'text.primary', px: 1 }}>
                 <Typography variant="body1" sx={{ lineHeight: 1.5 }}>{s.text}</Typography>
               </Button>
             ) : (
@@ -65,8 +66,8 @@ export default function BriefCard() {
       </Box>
       {assistant?.enabled && (
         <Box sx={{ display: 'flex', gap: 1, mt: 1.5 }}>
-          <Button variant="contained" onClick={() => assistant.openPanel()} sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700 }}>Ask</Button>
-          <Button variant="outlined" onClick={() => assistant.openPanel("I can't attend a class")} sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700 }}>Can&apos;t attend</Button>
+          <Button variant="contained" onClick={() => assistant.openPanel()} sx={{ ...stableHover, minHeight: 48, textTransform: 'none', fontWeight: 700 }}>Ask</Button>
+          <Button variant="outlined" onClick={() => assistant.openPanel("I can't attend a class")} sx={{ ...stableHover, minHeight: 48, textTransform: 'none', fontWeight: 700 }}>Can&apos;t attend</Button>
         </Box>
       )}
     </Paper>

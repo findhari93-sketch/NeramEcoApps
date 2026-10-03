@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Box, Button, Paper, Typography } from '@neram/ui';
 import type { ActionProposal } from './client';
+import { stableHover } from './stableHover';
 
 /** Minutes until expiry. An unreadable time counts as expired, so Confirm is never live on a card that says Expired. */
 function minutesLeft(expiresAt: string): number {
@@ -36,9 +37,9 @@ export default function ActionCard({ action, busy, onConfirm, onEdit, onCancel }
         {left > 0 ? `Expires in ${left} min` : 'Expired. Ask me again and I will set it up fresh.'}
       </Typography>
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-        <Button variant="contained" onClick={onConfirm} disabled={busy || left === 0} sx={{ minHeight: 48, flex: 1, textTransform: 'none', fontWeight: 700 }}>Confirm</Button>
-        <Button variant="text" onClick={onEdit} disabled={busy} sx={{ minHeight: 48, textTransform: 'none' }}>Edit</Button>
-        <Button variant="outlined" onClick={onCancel} disabled={busy} sx={{ minHeight: 48, textTransform: 'none' }}>Cancel</Button>
+        <Button variant="contained" onClick={onConfirm} disabled={busy || left === 0} sx={{ ...stableHover, minHeight: 48, flex: 1, textTransform: 'none', fontWeight: 700 }}>Confirm</Button>
+        <Button variant="text" onClick={onEdit} disabled={busy} sx={{ ...stableHover, minHeight: 48, textTransform: 'none' }}>Edit</Button>
+        <Button variant="outlined" onClick={onCancel} disabled={busy} sx={{ ...stableHover, minHeight: 48, textTransform: 'none' }}>Cancel</Button>
       </Box>
     </Paper>
   );
