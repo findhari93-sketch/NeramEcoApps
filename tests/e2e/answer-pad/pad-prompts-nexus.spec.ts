@@ -205,7 +205,7 @@ test.describe.serial('Answer Pad API: the question loop', () => {
     expect(await json(noKey)).toMatchObject({ code: 'KEY_REQUIRED' });
   });
 
-  test('grades everyone at REVEAL, in one step, for good', async () => {
+  test('grades everyone at REVEAL in one step; a corrected key regrades', async () => {
     expect(await json(await pad.key(TEACHER, q1, { keys: ['B'] }))).toMatchObject({ changed: true });
     expect(await json(await pad.label(TEACHER, q1, 'Warm-up'))).toMatchObject({ promptId: q1 });
     expect(await json(await pad.reveal(TEACHER, q1))).toMatchObject({ state: 'revealed', changed: true });
@@ -217,10 +217,17 @@ test.describe.serial('Answer Pad API: the question loop', () => {
     });
     expect(await json(await pad.snapshot(WRONG, sessionId))).toMatchObject({ my_response: { answer: 'A', is_correct: false } });
 
-    for (const res of [await pad.reopen(TEACHER, q1), await pad.key(TEACHER, q1, { keys: ['A'] })]) {
-      expect(res.status()).toBe(409);
-      expect(await json(res)).toMatchObject({ code: 'INVALID_TRANSITION', state: 'revealed' });
-    }
+    const reopen = await pad.reopen(TEACHER, q1);
+    expect(reopen.status()).toBe(409);
+    expect(await json(reopen)).toMatchObject({ code: 'INVALID_TRANSITION', state: 'revealed' });
+
+    // A wrong key can be corrected after Reveal, and everyone is regraded
+    // (migration 20261024090000_answer_pad_rounds_results). Put back to B for the tests after this.
+    expect(await json(await pad.key(TEACHER, q1, { keys: ['A'] }))).toMatchObject({ changed: true });
+    expect(await json(await pad.snapshot(WRONG, sessionId))).toMatchObject({ my_response: { answer: 'A', is_correct: true } });
+    expect(await json(await pad.key(TEACHER, q1, { keys: ['B'] }))).toMatchObject({ changed: true });
+    expect(await json(await pad.snapshot(RIGHT, sessionId))).toMatchObject({ my_response: { answer: 'B', is_correct: true } });
+    expect(await json(await pad.snapshot(WRONG, sessionId))).toMatchObject({ my_response: { answer: 'A', is_correct: false } });
   });
 
   test('names every student once in the details after REVEAL', async () => {
@@ -266,7 +273,7 @@ test.describe.serial('Answer Pad API: the question loop', () => {
     const mine = await json(await pad.snapshot(RIGHT, sessionId));
     expect(mine).toMatchObject({ prompt: { id: q2, ungraded: true, correct_keys: null }, my_response: { answer: '1000.5', is_correct: null } });
     // Only Q1 is graded; the poll moves no score.
-    expect(mine.score).toEqual({ correct: 1, wrong: 0, skipped: 0, absent: 0, total_graded: 1 });
+    expect(mine.score).toEqual({ correct: 1, wrong: 0, skipped: 0, excused: 0, absent: 0, total_graded: 1 });
     expect((await json(await pad.snapshot(WRONG, sessionId))).score).toMatchObject({ correct: 0, wrong: 1, total_graded: 1 });
   });
 

@@ -1,12 +1,21 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
-import { createAdminClient } from '@neram/database';
+import { createAdminClientISR } from '@neram/database';
 import type { StudentResult, StudentResultExamType } from '@neram/database';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { BASE_URL, ORG_NAME } from '@/lib/seo/constants';
 import StudentDetailContent from '@/components/achievements/StudentDetailContent';
+
+// Public result pages change rarely. ISR daily, generated on first request: the
+// empty list registers the route for on-demand ISR without adding build files.
+// The read used the no-store admin client before, so every view was a full render.
+export const revalidate = 86400;
+
+export function generateStaticParams() {
+  return [];
+}
 
 interface PageProps {
   params: { locale: string; slug: string };
@@ -20,7 +29,7 @@ const EXAM_TYPE_LABELS: Record<StudentResultExamType, string> = {
 };
 
 async function getStudentResult(slug: string): Promise<StudentResult | null> {
-  const supabase = createAdminClient();
+  const supabase = createAdminClientISR(86400);
   const { data, error } = await (supabase
     .from('student_results' as any) as any)
     .select('*')

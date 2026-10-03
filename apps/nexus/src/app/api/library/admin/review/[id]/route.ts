@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
+import { invalidateLibraryCache } from '@/lib/library-cache';
 import { getSupabaseAdminClient } from '@neram/database';
 import { updateVideoReview } from '@neram/database/queries/nexus';
 
@@ -42,6 +43,7 @@ export async function PATCH(
     };
 
     const video = await updateVideoReview(videoId, update);
+    invalidateLibraryCache();
 
     return NextResponse.json({ data: video });
   } catch (err) {

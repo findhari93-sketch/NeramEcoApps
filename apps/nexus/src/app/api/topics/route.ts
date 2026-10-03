@@ -55,7 +55,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ topics });
+    // Reference data (classroom topics plus published module item titles) that
+    // changes a few times a term. The class dialogs ask for it on every open, so
+    // let the browser reuse it for five minutes. private: never a shared cache.
+    return NextResponse.json({ topics }, { headers: { 'Cache-Control': 'private, max-age=300' } });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load topics';
     console.error('Topics GET error:', message);

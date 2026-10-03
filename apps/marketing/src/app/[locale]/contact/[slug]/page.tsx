@@ -26,10 +26,14 @@ import {
 } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import CenterDetailPageContent from '@/components/CenterDetailPageContent';
-import { getCenterBySeoSlug, getAllCenterSeoSlugs } from '@neram/database/queries';
+import { getCachedCenter, getCachedCenterSlugs } from '@/lib/centers-data';
 import type { OfflineCenter } from '@neram/database';
 
-export const revalidate = 3600;
+// ISR daily. Reads go through lib/centers-data.ts (ISR client + unstable_cache);
+// the old no-store reads made this page render on every request. Slugs come
+// from the database, so new centres stay lazy (dynamicParams stays true), but an
+// unknown slug 404s from the cached slug list without a database read.
+export const revalidate = 86400;
 
 const baseUrl = 'https://neramclasses.com';
 
@@ -39,7 +43,7 @@ const baseUrl = 'https://neramclasses.com';
 // creates duplicate content and wastes crawl budget.
 export async function generateStaticParams() {
   try {
-    const slugs = await getAllCenterSeoSlugs();
+    const slugs = await getCachedCenterSlugs();
     return slugs.map((slug) => ({ locale: 'en', slug }));
   } catch {
     return [];
@@ -55,7 +59,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   let center: OfflineCenter | null = null;
   try {
-    center = await getCenterBySeoSlug(slug);
+    center = await getCachedCenter(slug);
   } catch {
     // Fall back to generic metadata
   }
@@ -175,7 +179,7 @@ export default async function CenterDetailPage({
 
   let center: OfflineCenter | null = null;
   try {
-    center = await getCenterBySeoSlug(slug);
+    center = await getCachedCenter(slug);
   } catch {
     // handled below
   }

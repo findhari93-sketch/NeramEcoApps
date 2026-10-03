@@ -381,6 +381,39 @@ export interface OnboardingAnalytics {
 }
 
 /**
+ * Shape the onboarding_analytics RPC payload exactly like the JS tally did:
+ * pending and in_progress are reported together as pending, and completion rate
+ * is completed over every session in the window.
+ */
+export function mapOnboardingAnalyticsRpc(raw: any): OnboardingAnalytics {
+  const n = (v: unknown) => {
+    const x = Number(v);
+    return Number.isFinite(x) ? x : 0;
+  };
+  const r = raw && typeof raw === 'object' ? raw : {};
+  const total = n(r.total);
+  const completed = n(r.completed);
+  const distribution: Record<string, Record<string, number>> = {};
+  if (r.distribution && typeof r.distribution === 'object') {
+    for (const [questionId, answers] of Object.entries(r.distribution as Record<string, unknown>)) {
+      distribution[questionId] = {};
+      if (answers && typeof answers === 'object') {
+        for (const [answer, count] of Object.entries(answers as Record<string, unknown>)) {
+          distribution[questionId][answer] = n(count);
+        }
+      }
+    }
+  }
+  return {
+    total_completed: completed,
+    total_skipped: n(r.skipped),
+    total_pending: n(r.pending) + n(r.in_progress),
+    completion_rate: total > 0 ? completed / total : 0,
+    response_distribution: distribution,
+  };
+}
+
+/**
  * Get onboarding analytics (admin)
  */
 export async function getOnboardingAnalytics(
@@ -389,6 +422,18 @@ export async function getOnboardingAnalytics(
 ): Promise<OnboardingAnalytics> {
   const supabase = client || getSupabaseAdminClient();
   const { startDate, endDate } = options;
+
+  // One SQL call (onboarding_analytics, migration 20261026090000). The JS path
+  // below read every session and response in one unpaged select each, so it
+  // stopped at PostgREST's 1,000-row ceiling: production had 1,150 sessions and
+  // 3,762 responses when this moved, so the old numbers were undercounts. Kept as
+  // a fallback for an environment that does not have the function yet.
+  const rpc = await (supabase as any).rpc('onboarding_analytics', {
+    p_start: startDate || null,
+    p_end: endDate || null,
+  });
+  if (!rpc.error && rpc.data) return mapOnboardingAnalyticsRpc(rpc.data);
+  console.warn('[onboarding] onboarding_analytics RPC unavailable, using table reads:', rpc.error?.message);
 
   // Get session status counts
   let sessionQuery = supabase

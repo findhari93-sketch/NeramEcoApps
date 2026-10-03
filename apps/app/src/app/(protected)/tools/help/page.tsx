@@ -1,152 +1,238 @@
 'use client';
 
-import { Box, Typography, Grid, Card, CardContent, CardActions, Button } from '@neram/ui';
 import Link from 'next/link';
+import { Box, Typography, Button } from '@neram/ui';
+import { alpha, type Theme } from '@mui/material/styles';
+import type { SvgIconComponent } from '@mui/icons-material';
+import HowToRegOutlinedIcon from '@mui/icons-material/HowToRegOutlined';
+import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
+import MailOutlineRoundedIcon from '@mui/icons-material/MailOutlineRounded';
+import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
+import ScheduleOutlinedIcon from '@mui/icons-material/ScheduleOutlined';
+import ConfirmationNumberOutlinedIcon from '@mui/icons-material/ConfirmationNumberOutlined';
+import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import TawkToChat from '@/components/TawkToChat';
+import ToolTile, { trackTint } from '@/components/tools-hub/ToolTile';
+import { TOOL_CATALOG } from '@/lib/navigation-data';
 
-const faqTopics = [
-  {
-    title: 'Cutoff Calculator',
-    description:
-      'Learn how to calculate your expected NATA cutoff score using section-wise marks and category-based analysis.',
-    href: '/tools/cutoff-calculator',
-    icon: '🔢',
-  },
-  {
-    title: 'College Predictor',
-    description:
-      'Find out how to predict colleges based on your NATA score, category, and preferred state.',
-    href: '/tools/college-predictor',
-    icon: '🏫',
-  },
-  {
-    title: 'Exam Centers',
-    description:
-      'Locate NATA exam centers near you with distance information and directions.',
-    href: '/tools/exam-centers',
-    icon: '📍',
-  },
-  {
-    title: 'Course Enrollment',
-    description:
-      'Get help with applying to Neram Classes, payment options, scholarships, and course details.',
-    href: 'https://neramclasses.com/apply',
-    icon: '📝',
-  },
-];
+/** The tools students ask about most. Each tile opens the tool itself. */
+const HELP_TOOL_IDS = ['nata-cutoff-calculator', 'counseling-college-predictor', 'nata-exam-centers'];
+
+const SUPPORT_EMAIL = 'info@neramclasses.com';
+const SUPPORT_PHONE_DISPLAY = '+91 91761 37043';
+const SUPPORT_PHONE_TEL = '+919176137043';
+
+function ContactRow({
+  Icon,
+  label,
+  value,
+  href,
+}: {
+  Icon: SvgIconComponent;
+  label: string;
+  value: string;
+  href?: string;
+}) {
+  const content = (
+    <>
+      <Box
+        aria-hidden="true"
+        sx={(theme: Theme) => ({
+          width: 44,
+          height: 44,
+          flexShrink: 0,
+          borderRadius: 2.5,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: 'primary.main',
+          bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === 'light' ? 0.1 : 0.16),
+        })}
+      >
+        <Icon sx={{ fontSize: 22 }} />
+      </Box>
+      <Box sx={{ minWidth: 0 }}>
+        <Typography sx={{ fontSize: '0.8125rem', fontWeight: 600, color: 'text.secondary' }}>{label}</Typography>
+        <Typography sx={{ fontSize: '1rem', fontWeight: 700, color: href ? 'primary.main' : 'text.primary', overflowWrap: 'anywhere' }}>
+          {value}
+        </Typography>
+      </Box>
+    </>
+  );
+
+  const rowSx = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 1.5,
+    minHeight: 64,
+    p: 1.5,
+    borderRadius: 3,
+    border: '1px solid',
+    borderColor: 'divider',
+    bgcolor: 'background.paper',
+    textDecoration: 'none',
+  };
+
+  if (!href) return <Box sx={rowSx}>{content}</Box>;
+
+  return (
+    <Box
+      component="a"
+      href={href}
+      sx={{
+        ...rowSx,
+        transition: 'border-color 0.2s ease',
+        '&:hover': { borderColor: 'primary.main' },
+        '&:active': { bgcolor: 'action.hover' },
+      }}
+    >
+      {content}
+    </Box>
+  );
+}
 
 export default function HelpPage() {
+  const tools = HELP_TOOL_IDS.map((id) => TOOL_CATALOG.find((t) => t.id === id)).filter(
+    (t): t is (typeof TOOL_CATALOG)[number] => !!t,
+  );
+
   return (
-    <Box>
-      {/* Tawk.to Live Chat Widget */}
+    <Box sx={{ maxWidth: 960, mx: 'auto' }}>
+      {/* Tawk.to live chat widget */}
       <TawkToChat />
 
-      {/* Hero Section */}
-      <Box sx={{ textAlign: 'center', mb: { xs: 4, md: 6 } }}>
-        <Typography
-          variant="h3"
-          component="h1"
-          gutterBottom
-          sx={{ fontWeight: 700, fontSize: { xs: '1.75rem', md: '2.5rem' } }}
-        >
-          Help & Support
+      <Box component="header" sx={{ mb: { xs: 3, md: 4 } }}>
+        <Typography variant="h1" sx={{ fontSize: { xs: '1.5rem', md: '1.875rem' }, mb: 0.75 }}>
+          Help and Support
         </Typography>
-        <Typography
-          variant="h6"
-          color="text.secondary"
-          sx={{ maxWidth: 600, mx: 'auto', fontSize: { xs: '1rem', md: '1.25rem' } }}
-        >
-          Need assistance? Chat with us live or browse the topics below for quick answers.
+        <Typography sx={{ color: 'text.secondary', fontSize: { xs: '0.9375rem', md: '1rem' }, lineHeight: 1.55, maxWidth: 640 }}>
+          Chat with us using the chat button, raise a ticket, or call us. Most questions are answered the same day.
         </Typography>
       </Box>
 
-      {/* FAQ Topics Grid */}
-      <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>
-        Quick Help Topics
-      </Typography>
-      <Grid container spacing={3}>
-        {faqTopics.map((topic) => (
-          <Grid item xs={12} sm={6} md={3} key={topic.href}>
-            <Card
-              sx={{
-                height: '100%',
-                display: 'flex',
-                flexDirection: 'column',
-                transition: 'transform 0.2s, box-shadow 0.2s',
-                '&:hover': {
-                  transform: 'translateY(-4px)',
-                  boxShadow: 4,
-                },
-              }}
-            >
-              <CardContent sx={{ flexGrow: 1 }}>
-                <Box sx={{ fontSize: '2rem', mb: 1.5 }}>{topic.icon}</Box>
-                <Typography variant="h6" gutterBottom fontWeight={600}>
-                  {topic.title}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {topic.description}
-                </Typography>
-              </CardContent>
-              <CardActions sx={{ p: 2, pt: 0 }}>
-                <Button
-                  component={Link}
-                  href={topic.href}
-                  variant="outlined"
-                  fullWidth
-                  size="small"
-                >
-                  Learn More
-                </Button>
-              </CardActions>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
-
-      {/* Contact Info Fallback */}
+      {/* Ticket */}
       <Box
-        sx={{
-          mt: { xs: 4, md: 6 },
-          p: { xs: 3, md: 4 },
-          bgcolor: 'grey.50',
-          borderRadius: 1,
-          textAlign: 'center',
-        }}
+        component="section"
+        aria-labelledby="ticket-heading"
+        sx={(theme: Theme) => ({
+          display: 'flex',
+          flexDirection: { xs: 'column', sm: 'row' },
+          alignItems: { sm: 'center' },
+          gap: 2,
+          p: { xs: 2, sm: 2.5 },
+          mb: { xs: 4, md: 5 },
+          borderRadius: 3.5,
+          border: '1px solid',
+          borderColor: alpha(theme.palette.primary.main, 0.3),
+          bgcolor: alpha(theme.palette.primary.main, theme.palette.mode === 'light' ? 0.06 : 0.12),
+        })}
       >
-        <Typography variant="h5" gutterBottom fontWeight={600}>
-          Other Ways to Reach Us
+        <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start', flex: 1, minWidth: 0 }}>
+          <ConfirmationNumberOutlinedIcon aria-hidden="true" sx={{ color: 'primary.main', fontSize: 28, mt: 0.25 }} />
+          <Box>
+            <Typography id="ticket-heading" component="h2" sx={{ fontSize: '1.0625rem', fontWeight: 700 }}>
+              Need a hand with something specific?
+            </Typography>
+            <Typography sx={{ color: 'text.secondary', fontSize: '0.9375rem', mt: 0.25 }}>
+              Raise a support ticket and track our reply in the app.
+            </Typography>
+          </Box>
+        </Box>
+        <Button
+          component={Link}
+          href="/support"
+          variant="contained"
+          endIcon={<ArrowForwardRoundedIcon />}
+          sx={{ minHeight: 48, flexShrink: 0 }}
+        >
+          Raise a ticket
+        </Button>
+      </Box>
+
+      {/* Tools people ask about */}
+      <Box component="section" aria-labelledby="topics-heading" sx={{ mb: { xs: 4, md: 5 } }}>
+        <Typography id="topics-heading" component="h2" sx={{ fontSize: { xs: '1.125rem', md: '1.25rem' }, fontWeight: 700 }}>
+          Questions about a tool?
         </Typography>
-        <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
-          Prefer email or phone? We&apos;re happy to help through any channel.
+        <Typography sx={{ color: 'text.secondary', fontSize: '0.9375rem', mt: 0.25, mb: 1.75 }}>
+          Each tool explains its inputs on the page. Open the one you need, or ask us in the chat.
         </Typography>
         <Box
+          component="ul"
           sx={{
-            display: 'flex',
-            flexDirection: { xs: 'column', sm: 'row' },
-            justifyContent: 'center',
-            gap: { xs: 2, sm: 4 },
-            mt: 2,
+            listStyle: 'none',
+            m: 0,
+            p: 0,
+            display: 'grid',
+            gap: 1.5,
+            gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))' },
           }}
         >
-          <Box>
-            <Typography variant="subtitle2" color="primary" fontWeight={600}>
-              Email
-            </Typography>
-            <Typography variant="body2">info@neramclasses.com</Typography>
-          </Box>
-          <Box>
-            <Typography variant="subtitle2" color="primary" fontWeight={600}>
-              Phone
-            </Typography>
-            <Typography variant="body2">+91-9176137043</Typography>
-          </Box>
-          <Box>
-            <Typography variant="subtitle2" color="primary" fontWeight={600}>
-              Hours
-            </Typography>
-            <Typography variant="body2">Mon-Sat, 9 AM - 6 PM</Typography>
-          </Box>
+          {tools.map((tool) => (
+            <li key={tool.id}>
+              <ToolTile tool={tool} />
+            </li>
+          ))}
+          <li>
+            <Box
+              component="a"
+              href="https://neramclasses.com/apply"
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={(theme: Theme) => ({
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 1.75,
+                height: '100%',
+                p: 2,
+                borderRadius: 3.5,
+                border: '1px solid',
+                borderColor: 'divider',
+                bgcolor: 'background.paper',
+                textDecoration: 'none',
+                transition: 'border-color 0.2s ease',
+                '&:hover': { borderColor: 'primary.main' },
+                '&:active': { bgcolor: 'action.hover' },
+                // The gold tint, at a contrast that holds in both modes
+                '& .enrol-icon': { color: trackTint(theme, 'jee').fg, bgcolor: trackTint(theme, 'jee').bg },
+              })}
+            >
+              <Box
+                aria-hidden="true"
+                className="enrol-icon"
+                sx={{ width: 44, height: 44, flexShrink: 0, borderRadius: 2.5, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              >
+                <HowToRegOutlinedIcon sx={{ fontSize: 24 }} />
+              </Box>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
+                <Typography component="h3" sx={{ fontSize: '1rem', fontWeight: 700, lineHeight: 1.3, color: 'text.primary', mb: 0.25 }}>
+                  Join Neram Classes
+                </Typography>
+                <Typography sx={{ fontSize: '0.875rem', lineHeight: 1.5, color: 'text.secondary' }}>
+                  Apply for coaching, see fees, payment options and scholarships.
+                </Typography>
+                <Typography component="span" sx={{ display: 'inline-block', mt: 0.75, fontSize: '0.75rem', fontWeight: 600, color: 'text.secondary' }}>
+                  Opens neramclasses.com
+                </Typography>
+              </Box>
+              <OpenInNewRoundedIcon aria-hidden="true" sx={{ color: 'text.secondary', alignSelf: 'center', flexShrink: 0, fontSize: 20 }} />
+            </Box>
+          </li>
+        </Box>
+      </Box>
+
+      {/* Contact */}
+      <Box component="section" aria-labelledby="contact-heading">
+        <Typography id="contact-heading" component="h2" sx={{ fontSize: { xs: '1.125rem', md: '1.25rem' }, fontWeight: 700 }}>
+          Other ways to reach us
+        </Typography>
+        <Typography sx={{ color: 'text.secondary', fontSize: '0.9375rem', mt: 0.25, mb: 1.75 }}>
+          Prefer email or a call? Tap to contact us directly.
+        </Typography>
+        <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', md: 'repeat(3, minmax(0, 1fr))' } }}>
+          <ContactRow Icon={MailOutlineRoundedIcon} label="Email" value={SUPPORT_EMAIL} href={`mailto:${SUPPORT_EMAIL}`} />
+          <ContactRow Icon={PhoneOutlinedIcon} label="Phone" value={SUPPORT_PHONE_DISPLAY} href={`tel:${SUPPORT_PHONE_TEL}`} />
+          <ContactRow Icon={ScheduleOutlinedIcon} label="Hours" value="Mon to Sat, 9 AM to 6 PM" />
         </Box>
       </Box>
     </Box>

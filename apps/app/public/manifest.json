@@ -51,7 +51,7 @@
     {
       "name": "College Predictor",
       "short_name": "Colleges",
-      "url": "/tools/nata/college-predictor",
+      "url": "/tools/counseling/college-predictor",
       "icons": [{ "src": "/icons/icon-192x192.png", "sizes": "192x192" }]
     },
     {

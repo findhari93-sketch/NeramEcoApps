@@ -114,7 +114,7 @@ async function readPhoto(doFetch: typeof fetch, url: string): Promise<PhotoRead>
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await doFetch(url, { signal: controller.signal });
+    const res = await doFetch(url, { cache: 'no-store', signal: controller.signal });
     if (!res.ok) return { ok: false, reason: `The photo could not be downloaded (${res.status}).` };
 
     const bytes = new Uint8Array(await res.arrayBuffer());

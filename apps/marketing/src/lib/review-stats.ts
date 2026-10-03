@@ -2,7 +2,7 @@
  * The one place the marketing site reads its public rating.
  *
  * The rating comes from public_review_stats() over published testimonials, cached
- * for an hour. It is returned only when at least MIN_RATINGS_FOR_AGGREGATE
+ * for a day and purged on admin review saves (tags in lib/cache-tags.ts). It is returned only when at least MIN_RATINGS_FOR_AGGREGATE
  * published reviews carry a rating; otherwise callers get null and must omit
  * AggregateRating. Never hardcode a rating anywhere else on the site.
  */
@@ -10,6 +10,7 @@
 import { unstable_cache } from 'next/cache';
 import { createAdminClientISR, getPublicReviewStats } from '@neram/database';
 import type { AggregateRatingJsonLd } from '@/lib/seo/schemas';
+import { CACHE_TAGS } from '@/lib/cache-tags';
 import {
   aggregateRatingFromSummary,
   summarizeStats,
@@ -18,7 +19,7 @@ import {
   type ReviewSummary,
 } from '@/lib/reviews/rules';
 
-export const REVIEW_STATS_REVALIDATE = 3600;
+export const REVIEW_STATS_REVALIDATE = 86400;
 
 const readStats = unstable_cache(
   async (): Promise<ReviewStatsRow[]> => {
@@ -36,7 +37,7 @@ const readStats = unstable_cache(
     }
   },
   ['marketing-public-review-stats-v1'],
-  { revalidate: REVIEW_STATS_REVALIDATE, tags: ['public-review-stats'] },
+  { revalidate: REVIEW_STATS_REVALIDATE, tags: [CACHE_TAGS.reviewStats, CACHE_TAGS.reviews] },
 );
 
 /** Review and rating counts for a page scope, or null when unavailable. */

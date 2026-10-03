@@ -142,7 +142,7 @@ async function graphGetAllPages<T>(
     guard++;
     // Both annotations are load-bearing: without them TS sees `next` inferred
     // from `data`, which is inferred from `res`, which reads `next`, and bails.
-    const res: Response = await fetch(next, { headers: { Authorization: `Bearer ${token}` } });
+    const res: Response = await fetch(next, { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } });
     if (!res.ok) {
       const body = await res.text().catch(() => '');
       return { error: { status: res.status, body } };

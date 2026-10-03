@@ -164,6 +164,7 @@ async function fetchTranscriptContent(url: string, tokens: Array<string | null |
     if (!token) continue;
     try {
       const res = await fetch(target, {
+        cache: 'no-store',
         headers: { Authorization: `Bearer ${token}`, Accept: 'text/vtt' },
       });
       if (res.ok) return await res.text();
@@ -476,7 +477,7 @@ export async function resolveTranscript(input: ResolveTranscriptInput): Promise<
         try {
           const listRes = await fetch(
             `https://graph.microsoft.com/v1.0/${attempt.base}/transcripts`,
-            { headers: { Authorization: `Bearer ${attempt.token}` } },
+            { cache: 'no-store', headers: { Authorization: `Bearer ${attempt.token}` } },
           );
           if (listRes.ok) {
             const list = await listRes.json();

@@ -1,93 +1,76 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
+import Fab from '@mui/material/Fab';
+import CircularProgress from '@mui/material/CircularProgress';
+import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
+import { hideTawk, openTawkChat } from '@/lib/tawk';
 
-declare global {
-  interface Window {
-    Tawk_API?: Record<string, unknown> & {
-      showWidget?: () => void;
-      hideWidget?: () => void;
-      onLoad?: () => void;
-    };
-    Tawk_LoadStart?: Date;
-  }
-}
+type LauncherState = 'idle' | 'loading' | 'open' | 'error';
 
-export default function TawkToChat({ hideByDefault = false }: { hideByDefault?: boolean }) {
-  const loaded = useRef(false);
+/**
+ * Live chat launcher for the contact and centre pages.
+ *
+ * A small button renders first; the Tawk.to embed (script, iframe and socket)
+ * downloads only when the visitor taps it, so phones on slow networks no
+ * longer pay for it on every visit. Once Tawk is open, its own bubble takes
+ * over and this button steps aside.
+ */
+export default function TawkToChat() {
+  const [state, setState] = useState<LauncherState>('idle');
 
-  useEffect(() => {
-    const propertyId = process.env.NEXT_PUBLIC_TAWK_PROPERTY_ID?.trim();
-    const widgetId = process.env.NEXT_PUBLIC_TAWK_WIDGET_ID?.trim();
+  // Leaving the page hides the Tawk bubble (the script cannot be unloaded).
+  useEffect(() => () => hideTawk(), []);
 
-    if (!propertyId || !widgetId) {
-      console.warn(
-        'Tawk.to: Missing NEXT_PUBLIC_TAWK_PROPERTY_ID or NEXT_PUBLIC_TAWK_WIDGET_ID'
-      );
-      return;
-    }
+  if (state === 'open') return null;
 
-    // If Tawk was already loaded (e.g. client-side nav back to this page),
-    // show or hide bubble based on hideByDefault prop
-    if (window.Tawk_API && typeof window.Tawk_API.showWidget === 'function') {
-      if (hideByDefault && typeof window.Tawk_API.hideWidget === "function") {
-        window.Tawk_API.hideWidget();
-      } else {
-        window.Tawk_API.showWidget();
-      }
-      loaded.current = true;
-      return () => {
-        // Hide widget when leaving the page (don't destroy it)
-        if (window.Tawk_API && typeof window.Tawk_API.hideWidget === 'function') {
-          window.Tawk_API.hideWidget();
-        }
-      };
-    }
+  const loading = state === 'loading';
+  const label = state === 'error' ? 'Try live chat again' : 'Live chat';
 
-    // First load — inject the Tawk.to script
-    window.Tawk_API = window.Tawk_API || {};
-    window.Tawk_LoadStart = new Date();
+  const handleClick = async () => {
+    if (loading) return;
+    setState('loading');
+    const ok = await openTawkChat();
+    setState(ok ? 'open' : 'error');
+  };
 
-    // On load: show or hide bubble based on hideByDefault prop
-    window.Tawk_API.onLoad = function () {
-      if (hideByDefault) {
-        if (window.Tawk_API && typeof window.Tawk_API.hideWidget === "function") {
-          window.Tawk_API.hideWidget();
-        }
-      } else {
-        if (window.Tawk_API && typeof window.Tawk_API.showWidget === "function") {
-          window.Tawk_API.showWidget();
-        }
-      }
-    };
-
-    const existingScript = document.getElementById('tawk-to-script');
-    if (existingScript) {
-      // Script tag exists but Tawk_API.showWidget isn't ready yet — wait for it
-      loaded.current = true;
-      return () => {
-        if (window.Tawk_API && typeof window.Tawk_API.hideWidget === 'function') {
-          window.Tawk_API.hideWidget();
-        }
-      };
-    }
-
-    const script = document.createElement('script');
-    script.id = 'tawk-to-script';
-    script.async = true;
-    script.src = `https://embed.tawk.to/${propertyId}/${widgetId}`;
-    script.charset = 'UTF-8';
-    script.setAttribute('crossorigin', '*');
-    document.head.appendChild(script);
-    loaded.current = true;
-
-    return () => {
-      // On unmount: hide widget, don't remove script (Tawk doesn't support clean re-init)
-      if (window.Tawk_API && typeof window.Tawk_API.hideWidget === 'function') {
-        window.Tawk_API.hideWidget();
-      }
-    };
-  }, [hideByDefault]);
-
-  return null;
+  return (
+    <Fab
+      variant="extended"
+      color="primary"
+      onClick={handleClick}
+      aria-busy={loading}
+      data-testid="tawk-launcher"
+      sx={{
+        position: 'fixed',
+        right: { xs: 16, sm: 20 },
+        bottom: { xs: 16, sm: 20 },
+        zIndex: 1200,
+        minHeight: 48,
+        px: 2,
+        gap: 1,
+        textTransform: 'none',
+        fontSize: 16,
+        fontWeight: 600,
+        '&.Mui-focusVisible': { outline: '3px solid', outlineColor: 'primary.dark', outlineOffset: 3 },
+      }}
+    >
+      {loading ? (
+        <CircularProgress
+          size={20}
+          thickness={5}
+          sx={{
+            color: 'inherit',
+            '@media (prefers-reduced-motion: reduce)': {
+              animation: 'none',
+              '& .MuiCircularProgress-circle': { animation: 'none', strokeDasharray: '40px, 200px' },
+            },
+          }}
+        />
+      ) : (
+        <ChatBubbleOutlineIcon sx={{ fontSize: 22 }} aria-hidden />
+      )}
+      {loading ? 'Connecting to live chat' : label}
+    </Fab>
+  );
 }

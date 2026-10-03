@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 interface PresenceEntry {
@@ -10,57 +10,82 @@ interface PresenceEntry {
 
 const POLL_INTERVAL = 60_000; // 60 seconds
 
+/**
+ * Teams presence for a list of people, refreshed every minute while the page is
+ * visible.
+ *
+ * Starts only once `tokenReady` is true, rather than calling getToken() on
+ * mount: getToken() waits out the MSAL boot, which serialised this request
+ * behind the page's own first load (PERF-0054). A hidden tab does not poll at
+ * all; coming back to it refreshes immediately, so the dots are never stale
+ * when someone is actually looking.
+ */
 export function usePresence(msOids: (string | null | undefined)[]) {
-  const { getToken } = useNexusAuthContext();
+  const { getToken, tokenReady } = useNexusAuthContext();
   const [presenceMap, setPresenceMap] = useState<Record<string, PresenceEntry>>({});
   const [loading, setLoading] = useState(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Filter out null/undefined OIDs
-  const validOids = msOids.filter((id): id is string => !!id);
+  // Latest getToken without making it an effect dependency: its identity can
+  // change on a silent refresh, and that must not restart the poll.
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
 
-  const fetchPresence = useCallback(async () => {
-    if (validOids.length === 0) return;
-
-    try {
-      const token = await getToken();
-      if (!token) return;
-
-      const res = await fetch('/api/graph/presence', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ ids: validOids }),
-      });
-
-      if (!res.ok) return;
-
-      const data = await res.json();
-      const map: Record<string, PresenceEntry> = {};
-      for (const p of data.presences || []) {
-        map[p.id] = { availability: p.availability, activity: p.activity };
-      }
-      setPresenceMap(map);
-    } catch {
-      // Silently fail — presence is non-critical
-    }
-  }, [validOids.join(','), getToken]);
+  // Filter out null/undefined OIDs. The joined key is what the effect depends on.
+  const key = msOids.filter((id): id is string => !!id).join(',');
 
   useEffect(() => {
-    if (validOids.length === 0) return;
+    if (!tokenReady || !key) return;
+    const ids = key.split(',');
+    let cancelled = false;
+
+    const fetchPresence = async () => {
+      try {
+        const token = await getTokenRef.current();
+        if (!token || cancelled) return;
+
+        const res = await fetch('/api/graph/presence', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ ids }),
+        });
+
+        if (!res.ok || cancelled) return;
+
+        const data = await res.json();
+        const map: Record<string, PresenceEntry> = {};
+        for (const p of data.presences || []) {
+          map[p.id] = { availability: p.availability, activity: p.activity };
+        }
+        if (!cancelled) setPresenceMap(map);
+      } catch {
+        // Silently fail, presence is non-critical
+      }
+    };
 
     setLoading(true);
-    fetchPresence().finally(() => setLoading(false));
+    fetchPresence().finally(() => {
+      if (!cancelled) setLoading(false);
+    });
 
-    // Poll every 60 seconds
-    intervalRef.current = setInterval(fetchPresence, POLL_INTERVAL);
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'hidden') return;
+      void fetchPresence();
+    }, POLL_INTERVAL);
+
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') void fetchPresence();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      cancelled = true;
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [fetchPresence]);
+  }, [tokenReady, key]);
 
   return { presenceMap, loading };
 }

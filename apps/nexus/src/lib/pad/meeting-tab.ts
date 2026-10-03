@@ -135,6 +135,7 @@ export async function ensureAnswerPadInMeeting(input: MeetingTabInput, deps: Mee
   const send = async (method: 'GET' | 'POST', suffix: string, body?: unknown): Promise<Sent> => {
     try {
       const response = await fetchImpl(`${GRAPH}/chats/${chatId}${suffix}`, {
+        cache: 'no-store',
         method,
         headers: { Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json' } : {}) },
         body: body ? JSON.stringify(body) : undefined,

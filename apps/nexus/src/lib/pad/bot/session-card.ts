@@ -100,6 +100,7 @@ export async function postToConversation(
   const base = target.serviceUrl.endsWith('/') ? target.serviceUrl : `${target.serviceUrl}/`;
   try {
     const response = await (deps.fetchImpl ?? fetch)(`${base}v3/conversations/${encodeURIComponent(target.conversationId)}/activities`, {
+      cache: 'no-store',
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(activity),

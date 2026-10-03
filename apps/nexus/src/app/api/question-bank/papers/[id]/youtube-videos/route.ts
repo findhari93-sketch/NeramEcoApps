@@ -98,7 +98,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       url.searchParams.set('playlistId', playlistId);
       if (pageToken) url.searchParams.set('pageToken', pageToken);
 
-      const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(url.toString(), { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } });
       if (res.status === 403) {
         const body = await res.json().catch(() => ({}));
         const reasons: string[] = (body?.error?.errors ?? []).map((e: { reason?: string }) => e?.reason ?? '');

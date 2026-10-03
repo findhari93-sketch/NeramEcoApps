@@ -77,7 +77,7 @@ async function loadApprovedPhotoBytes(
 ): Promise<{ buffer: Buffer; contentType: string; url: string } | null> {
   if (!user.avatar_url) return null;
 
-  const res = await fetch(user.avatar_url).catch(() => null);
+  const res = await fetch(user.avatar_url, { cache: 'no-store' }).catch(() => null);
   if (!res || !res.ok) return null;
 
   const contentType = normaliseImageType(res.headers.get('content-type'));

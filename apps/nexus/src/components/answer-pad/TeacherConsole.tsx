@@ -46,6 +46,7 @@ import ErrorOutlineRounded from '@mui/icons-material/ErrorOutlineRounded';
 import ExpandMoreRounded from '@mui/icons-material/ExpandMoreRounded';
 import HelpOutlineRounded from '@mui/icons-material/HelpOutlineRounded';
 import HowToVoteRounded from '@mui/icons-material/HowToVoteRounded';
+import MoreTimeRounded from '@mui/icons-material/MoreTimeRounded';
 import MoreVertRounded from '@mui/icons-material/MoreVertRounded';
 import NotificationsActiveRounded from '@mui/icons-material/NotificationsActiveRounded';
 import OpenInNewRounded from '@mui/icons-material/OpenInNewRounded';
@@ -60,10 +61,11 @@ import VolumeOffRounded from '@mui/icons-material/VolumeOffRounded';
 import GroupsRounded from '@mui/icons-material/GroupsRounded';
 import HowToRegRounded from '@mui/icons-material/HowToRegRounded';
 import PostAddRounded from '@mui/icons-material/PostAddRounded';
-import { SKIP_REASON_LABELS, answerTypeLabel, displayKeys, nextLabel, promptTitle } from '@/lib/pad/client/format';
+import { SKIP_REASON_LABELS, answerTypeLabel, displayKeys, nextLabel, promptTitle, qbPreview } from '@/lib/pad/client/format';
 import { PadClientError, padFetch, padUpload } from '@/lib/pad/client/pad-fetch';
 import type { PadHost } from '@/lib/pad/client/pad-host';
 import type { RealtimeState } from '@/lib/pad/client/poll-policy';
+import { clockLabel, secondsLeft, useServerNow } from '@/lib/pad/client/server-clock';
 import {
   consoleAnnouncement,
   deriveConsoleView,
@@ -83,6 +85,7 @@ import AnswerKeyPicker, { AnswerBars } from './AnswerKeyPicker';
 import { HideNamesButton, useHideNames } from './HideNames';
 import LiveAnnouncement from './LiveAnnouncement';
 import OptionNames from './OptionNames';
+import PadCountdown from './PadCountdown';
 import PresenterBanner from './PresenterBanner';
 import RoundResults from './RoundResults';
 import WaitingList from './WaitingList';
@@ -156,6 +159,31 @@ function useSecondsLeft(untilMs: number | null): number {
     return () => clearInterval(timer);
   }, [untilMs]);
   return untilMs ? Math.max(0, Math.ceil((untilMs - now) / 1_000)) : 0;
+}
+
+/** What one press of +15s adds to a timed question. */
+const ADD_SECONDS = 15;
+
+/** The question's own text, or a question bank question's text as one plain line (no KaTeX in the console). */
+function questionLine(prompt: Pick<TeacherPrompt, 'question_text' | 'qb'>): string | null {
+  return prompt.question_text ?? (qbPreview(prompt.qb?.text) || null);
+}
+
+/** "+15s": more time for a timed question. */
+function AddTimeButton({ onClick, busy, disabled }: { onClick: () => void; busy: boolean; disabled: boolean }) {
+  return (
+    <Button
+      variant="outlined"
+      size="small"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label="Add 15 seconds"
+      startIcon={busy ? <CircularProgress size={16} color="inherit" aria-hidden /> : <MoreTimeRounded />}
+      sx={{ minHeight: 48, minWidth: 72, fontWeight: 800, fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}
+    >
+      +15s
+    </Button>
+  );
 }
 
 /** Nudging waits a minute between presses, as the database does. */
@@ -502,6 +530,8 @@ function LiveConsole({ host, sessionId, onRound }: { host: PadHost; sessionId: s
     });
 
   const setKeys = (promptId: string, keys: string[]) => act('key', () => post(`/api/pad/prompts/${promptId}/key`, { keys }));
+  /** +15s on a timed question; on the newest question whose time was up, it reopens it with 15 seconds. */
+  const addTime = (promptId: string) => act('timer', () => post(`/api/pad/prompts/${promptId}/timer`, { addSeconds: ADD_SECONDS }));
   const setPoll = (promptId: string) => act('key', () => post(`/api/pad/prompts/${promptId}/key`, { ungraded: true }));
   const reveal = (promptId: string) => act('reveal', () => post(`/api/pad/prompts/${promptId}/reveal`));
 
@@ -722,6 +752,8 @@ function LiveConsole({ host, sessionId, onRound }: { host: PadHost; sessionId: s
               busy={busy === 'close'}
               disabled={busy !== null}
               onClose={() => act('close', () => post(`/api/pad/prompts/${view.prompt.id}/close`))}
+              onAddTime={() => addTime(view.prompt.id)}
+              addingTime={busy === 'timer'}
               onDetails={(label, text) => saveDetails(view.prompt.id, label, text)}
               uploadPicture={uploadPicture}
               readClipboard={host.readClipboard}
@@ -792,7 +824,9 @@ function LiveConsole({ host, sessionId, onRound }: { host: PadHost; sessionId: s
                 prompt={view.prompt}
                 groups={snapshot.groups}
                 refreshKey={snapshot.server_time}
+                serverTime={snapshot.server_time}
                 busy={busy}
+                onAddTime={() => addTime(view.prompt.id)}
                 onReopen={() => act('reopen', () => post(`/api/pad/prompts/${view.prompt.id}/reopen`))}
                 onDetails={(label, text) => saveDetails(view.prompt.id, label, text)}
                 onKeys={(keys) => setKeys(view.prompt.id, keys)}
@@ -856,6 +890,7 @@ function LiveConsole({ host, sessionId, onRound }: { host: PadHost; sessionId: s
                 <LaterKeyPanel
                   host={host}
                   entry={historyPrompt}
+                  suggestedKeys={historyPrompt.suggested_keys ?? (snapshot.prompt?.id === historyPrompt.id ? (snapshot.prompt.suggested_keys ?? null) : null)}
                   busy={busy}
                   onKeys={(keys) => setKeys(historyPrompt.id, keys)}
                   onPoll={() => setPoll(historyPrompt.id)}
@@ -1154,13 +1189,14 @@ function QuestionHeading({
   onDetails,
   action,
 }: {
-  prompt: Pick<TeacherPrompt, 'sequence' | 'label' | 'question_text'>;
+  prompt: Pick<TeacherPrompt, 'sequence' | 'label' | 'question_text' | 'qb'>;
   suffix: string;
   busy: boolean;
   onDetails: (label: string | null, text: string | null) => void;
   action?: ReactNode;
 }) {
   const [editing, setEditing] = useState(false);
+  const line = questionLine(prompt);
   return (
     <Stack spacing={1}>
       <Stack direction="row" alignItems="center" spacing={0.5}>
@@ -1175,9 +1211,9 @@ function QuestionHeading({
       {editing ? (
         <DetailsEditor prompt={prompt} busy={busy} onSave={onDetails} onDone={() => setEditing(false)} />
       ) : (
-        prompt.question_text && (
+        line && (
           <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-            {prompt.question_text}
+            {line}
           </Typography>
         )
       )}
@@ -1195,6 +1231,8 @@ function OpenPanel({
   busy,
   disabled,
   onClose,
+  onAddTime,
+  addingTime,
   onDetails,
   uploadPicture,
   readClipboard,
@@ -1214,6 +1252,9 @@ function OpenPanel({
   busy: boolean;
   disabled: boolean;
   onClose: () => void;
+  /** +15s on a timed question. */
+  onAddTime: () => void;
+  addingTime: boolean;
   onDetails: (label: string | null, text: string | null) => void;
   uploadPicture: (file: File) => Promise<{ url: string }>;
   readClipboard?: () => Promise<Blob | null>;
@@ -1228,7 +1269,12 @@ function OpenPanel({
   const [editing, setEditing] = useState(false);
   const [showPeople, setShowPeople] = useState(false);
   const [hidden, setHidden] = useHideNames();
-  const elapsed = useElapsed(prompt.opened_at, serverTime);
+  // One clock for both: how long it has been open, and the time left on a timed question.
+  // At 0 the console does not close it; the presenter and the server do. Close stays here.
+  const serverNow = useServerNow(serverTime, { tickMs: 500 });
+  const elapsed = elapsedLabel(prompt.opened_at, serverNow);
+  const timeLeft = secondsLeft(prompt.closes_at, serverNow);
+  const line = questionLine(prompt);
   const joined = people?.joined.length ?? null;
   const notJoined = people?.not_joined ?? [];
   const share = total > 0 ? Math.min(100, Math.round((answered / total) * 100)) : 0;
@@ -1247,11 +1293,17 @@ function OpenPanel({
       {editing ? (
         <DetailsEditor prompt={prompt} busy={disabled} onSave={onDetails} onDone={() => setEditing(false)} />
       ) : (
-        prompt.question_text && (
+        line && (
           <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', textAlign: 'center' }}>
-            {prompt.question_text}
+            {line}
           </Typography>
         )
+      )}
+      {timeLeft !== null && (
+        <Stack direction="row" alignItems="center" justifyContent="center" spacing={1} useFlexGap flexWrap="wrap">
+          <PadCountdown seconds={timeLeft} />
+          <AddTimeButton onClick={onAddTime} busy={addingTime} disabled={disabled} />
+        </Stack>
       )}
 
       <Box sx={{ width: '100%', textAlign: 'center' }}>
@@ -1377,17 +1429,12 @@ function OpenPanel({
   );
 }
 
-/** "1:05": how long the question has been open, on the server's clock. */
-function useElapsed(openedAt: string, serverTime: string): string {
-  const [now, setNow] = useState(() => Date.now());
-  // The server's clock at this snapshot, less the device's: a fast or slow laptop clock never shows a wrong time.
-  const [offset] = useState(() => Date.parse(serverTime) - Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1_000);
-    return () => clearInterval(timer);
-  }, []);
-  const seconds = Math.max(0, Math.floor((now + offset - Date.parse(openedAt)) / 1_000));
-  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+/**
+ * "1:05": how long the question has been open, read against the server's clock
+ * (useServerNow), so a fast or slow laptop clock never shows a wrong time.
+ */
+function elapsedLabel(openedAt: string, serverNow: number): string {
+  return clockLabel(Math.max(0, (serverNow - Date.parse(openedAt)) / 1_000));
 }
 
 function ClosedPanel({
@@ -1395,7 +1442,9 @@ function ClosedPanel({
   prompt,
   groups,
   refreshKey,
+  serverTime,
   busy,
+  onAddTime,
   onReopen,
   onDetails,
   onKeys,
@@ -1407,7 +1456,11 @@ function ClosedPanel({
   prompt: TeacherPrompt;
   groups: Array<{ value: string; count: number }>;
   refreshKey: string;
+  /** The snapshot's server_time: whether the question's time ran out. */
+  serverTime: string;
   busy: string | null;
+  /** +15s: reopens the newest question whose time was up, with 15 seconds. */
+  onAddTime: () => void;
   onReopen: () => void;
   onDetails: (label: string | null, text: string | null) => void;
   onKeys: (keys: string[]) => void;
@@ -1415,6 +1468,8 @@ function ClosedPanel({
   onReveal: () => void;
   onDecideLater: () => void;
 }) {
+  // The console shows the newest question here, so a time-up one can take more time.
+  const timeUp = Boolean(prompt.closes_at) && Date.parse(prompt.closes_at as string) <= Date.parse(serverTime);
   return (
     <Stack spacing={2}>
       <QuestionHeading
@@ -1428,6 +1483,16 @@ function ClosedPanel({
           </Button>
         }
       />
+
+      {timeUp && (
+        <Stack direction="row" alignItems="center" spacing={1} useFlexGap flexWrap="wrap">
+          <PadCountdown seconds={0} />
+          <Typography variant="body2" color="text.secondary" sx={{ flex: 1, minWidth: 120 }}>
+            Need more time? Students can answer again.
+          </Typography>
+          <AddTimeButton onClick={onAddTime} busy={busy === 'timer'} disabled={busy !== null} />
+        </Stack>
+      )}
 
       <OptionNames host={host} prompt={prompt} groups={groups} refreshKey={refreshKey} />
 
@@ -1451,6 +1516,7 @@ function ClosedPanel({
 function LaterKeyPanel({
   host,
   entry,
+  suggestedKeys,
   busy,
   onKeys,
   onPoll,
@@ -1458,6 +1524,8 @@ function LaterKeyPanel({
 }: {
   host: PadHost;
   entry: HistoryEntry;
+  /** The question bank's answer for this question, from its history row. */
+  suggestedKeys: string[] | null;
   busy: string | null;
   onKeys: (keys: string[]) => void;
   onPoll: () => void;
@@ -1484,7 +1552,14 @@ function LaterKeyPanel({
   return (
     <Stack spacing={2}>
       <AnswerBars prompt={entry} groups={groups} />
-      <AnswerKeyPicker prompt={entry} groups={groups} busy={busy} onKeys={onKeys} onPoll={onPoll} onReveal={onReveal} />
+      <AnswerKeyPicker
+        prompt={{ ...entry, suggested_keys: suggestedKeys }}
+        groups={groups}
+        busy={busy}
+        onKeys={onKeys}
+        onPoll={onPoll}
+        onReveal={onReveal}
+      />
     </Stack>
   );
 }

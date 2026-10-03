@@ -10,6 +10,12 @@ export default createMiddleware({
 
   // Only prefix non-default locales (en has no prefix, ta/hi/kn/ml do)
   localePrefix: 'as-needed',
+
+  // No `Link: rel=alternate` response header. It listed all 5 locale copies of
+  // every URL, sending crawlers to copies that 301 or are noindexed. hreflang
+  // comes from page metadata instead (buildAlternates in lib/seo/metadata.ts),
+  // which only lists the locales a page is actually indexable in.
+  alternateLinks: false,
 });
 
 export const config = {

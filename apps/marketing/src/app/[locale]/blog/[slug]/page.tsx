@@ -1025,6 +1025,11 @@ A: This is a common situation for Tiruppur students, and we understand the famil
   ),
 };
 
+// Every post is prebuilt below, so any other slug is a 404 served from the
+// static not-found page: no render, no ISR write for junk URLs. Retired city
+// guides never reach this route (next.config.js 301s them first).
+export const dynamicParams = false;
+
 // Generate static params for blog posts
 export function generateStaticParams() {
   const params: { locale: string; slug: string }[] = [];

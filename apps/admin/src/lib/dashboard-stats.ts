@@ -16,7 +16,13 @@
 
 // Structural type: enough of the Supabase query builder for these reads.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-type Db = { from: (table: string) => any };
+type Db = {
+  from: (table: string) => any;
+  // Loose on purpose: the generated client types `fn` as a union of known names,
+  // and dashboard_stats is newer than the generated types.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  rpc?: (...args: any[]) => any;
+};
 
 export interface DashboardSummary {
   activeStudents: number;
@@ -42,7 +48,34 @@ function check<T>(result: { data?: T; count?: number | null; error?: { message: 
   return result;
 }
 
+/**
+ * One SQL call (dashboard_stats, migration 20261026090000) when the database has
+ * it. The old path summed payment amounts in JS from an unpaged select, which
+ * stops at PostgREST's 1,000-row ceiling; the function sums in SQL. Falls back to
+ * the per-table reads if the function is not deployed in this environment yet.
+ */
 export async function loadDashboardSummary(db: Db, now: Date = new Date()): Promise<DashboardSummary> {
+  if (typeof db.rpc === 'function') {
+    const { data, error } = await db.rpc('dashboard_stats', {
+      p_week_ago: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString(),
+      p_month_start: istMonthStart(now).toISOString(),
+    });
+    if (!error && data && typeof data === 'object') {
+      return {
+        activeStudents: Number(data.active_students) || 0,
+        newLeads7d: Number(data.new_leads_7d) || 0,
+        applicationsToReview: Number(data.applications_to_review) || 0,
+        collectedThisMonth: Number(data.collected_this_month) || 0,
+        paymentsPending: Number(data.payments_pending) || 0,
+        generatedAt: now.toISOString(),
+      };
+    }
+    console.warn('[dashboard-stats] dashboard_stats RPC unavailable, using table reads:', error?.message);
+  }
+  return loadDashboardSummaryFromTables(db, now);
+}
+
+async function loadDashboardSummaryFromTables(db: Db, now: Date): Promise<DashboardSummary> {
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000).toISOString();
   const monthStart = istMonthStart(now).toISOString();
 

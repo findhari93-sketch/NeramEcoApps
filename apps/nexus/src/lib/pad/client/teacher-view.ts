@@ -36,7 +36,7 @@ export function deriveConsoleView(snapshot: TeacherSnapshot | null): ConsoleView
     };
   }
   if (prompt.state === 'closed') {
-    return { kind: 'closed', prompt, decided: prompt.ungraded || (prompt.correct_keys?.length ?? 0) > 0 };
+    return { kind: 'closed', prompt, decided: prompt.ungraded || (effectiveKeys(prompt)?.length ?? 0) > 0 };
   }
   return { kind: 'revealed', prompt };
 }
@@ -106,6 +106,19 @@ export function reminderMessage(result: ReminderResult): string {
   const reached = result.sent + result.partial;
   if (reached === 0) return 'The reminder could not be sent. Try again in a moment.';
   return `Reminder sent to ${reached} ${reached === 1 ? 'student' : 'students'}.`;
+}
+
+/**
+ * The key a question would be graded with: the teacher's, or else the question
+ * bank's answer (Present to class), which Reveal uses when no key was chosen.
+ * Null for a poll or a question with neither.
+ */
+export function effectiveKeys(
+  prompt: Pick<TeacherPrompt, 'correct_keys' | 'ungraded'> & { suggested_keys?: string[] | null },
+): string[] | null {
+  if (prompt.ungraded) return null;
+  if (prompt.correct_keys?.length) return prompt.correct_keys;
+  return prompt.suggested_keys?.length ? prompt.suggested_keys : null;
 }
 
 export function mcqLetters(optionCount: number | null | undefined): string[] {

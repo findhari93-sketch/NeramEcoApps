@@ -1,6 +1,6 @@
 import { MetadataRoute } from 'next';
 import { locales } from '@/i18n';
-import { getAllCenterSeoSlugs } from '@neram/database/queries';
+import { getCachedCenterSlugs } from '@/lib/centers-data';
 import { getAllCollegeSlugs, getActiveStates, getNIRFRankedCollegeSlugs } from '@/lib/college-hub/queries';
 import { ROUTED_HUB_SLUGS } from '@/data/counselling-2026';
 import { coursesData } from '@/data/courses';
@@ -8,6 +8,7 @@ import { getReviewSummary } from '@/lib/review-stats';
 import { loadLearnerStories } from '@/lib/reviews/data';
 import { MIN_ITEMS_FOR_INDEX, REVIEW_EXAMS, reviewsPath, shouldIndexReviewsPage } from '@/lib/reviews/rules';
 import RETIRED_CITY_GUIDES from '@/data/geo/retired-city-guides.json';
+import APP_TOOL_REDIRECTS from '@/data/app-tool-redirects.json';
 
 /**
  * Core sitemap: every page except the coaching location pages, which have
@@ -194,7 +195,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Pages with i18n: true → include all locale variants with hreflang alternates.
   // Pages without i18n (default) → English only, saves crawl budget.
   // This prevents "Duplicate, Google chose different canonical" for hardcoded English pages.
+  // Tool landings that now 301 to the app (src/data/app-tool-redirects.json) leave the sitemap.
+  const movedToApp = new Set(APP_TOOL_REDIRECTS.enabled.map((slug) => `/tools/${slug}`));
   for (const page of staticPages) {
+    if (movedToApp.has(page.path)) continue;
     const isHomepage = page.path === '';
     const isHighPriority = page.path.includes('coaching') || page.path.includes('nata') || page.path.includes('jee');
     const pageLocales = page.i18n ? locales : (['en'] as const);
@@ -268,7 +272,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // ─── Center detail pages: English only (no /en/ prefix) ───
   try {
-    const centerSlugs = await getAllCenterSeoSlugs();
+    const centerSlugs = await getCachedCenterSlugs();
     for (const centerSlug of centerSlugs) {
       entries.push({
         url: `${baseUrl}/contact/${centerSlug}`,

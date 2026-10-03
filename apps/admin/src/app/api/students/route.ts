@@ -2,7 +2,16 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdminClient, listStudentsByYear, getCurrentBatch, getUsersWithActiveNexusAccess, currentAcademicYear, assessApplication, listLiveDetailRequests, detailRequestProgress } from '@neram/database';
+import { getSupabaseAdminClient, listStudentsByYear, getCurrentBatch, getUsersWithActiveNexusAccess, currentAcademicYear, assessApplication, listLiveDetailRequests, detailRequestProgress, fetchAllRows } from '@neram/database';
+import { applyStudentHubQuery, parseStudentHubQuery, yearOptionsOf } from '@/lib/student-hub-query';
+
+// PostgREST puts .in() values in the URL; past ~300 uuids the request fails.
+const ID_CHUNK = 200;
+function chunks<T>(list: T[], size = ID_CHUNK): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+  return out;
+}
 
 // A "classroom" account is the class-provided identity: @neramclasses.com or any
 // Microsoft tenant address (*.onmicrosoft.com, which also covers the misspelled
@@ -45,9 +54,14 @@ function classifyDomain(email: string | null | undefined): EmailDomainStatus {
 
 // GET /api/students - List enrolled students for the academic-year working hub.
 // Population is users-based (so profile-less actives and past-year graduates appear),
-// with fees left-joined from student_profiles. Per-column filtering / global search
-// happen client-side in the grid, so this route only takes the year/status scope.
-// Stats are scoped to the returned set.
+// with fees left-joined from student_profiles.
+//
+// Paging, sorting, per-column filters, search and the banner flags run here (see
+// lib/student-hub-query.ts), so the grid downloads one page of 50 instead of the
+// whole cohort. Query: page, pageSize, sorting (JSON [{id,desc}]), filters (JSON
+// [{id,value}]), q, pastBatch=1, personalOnly=1, noForm=1, all=1. Without page /
+// pageSize every row is returned, as before. Stats and yearOptions always describe
+// the whole year scope, so the banners and tiles do not move as the grid filters.
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -87,26 +101,38 @@ export async function GET(request: NextRequest) {
     const userIds = hub.map((s) => s.id);
     const leadByUser: Record<string, any> = {};
     if (userIds.length) {
-      const { data: leads } = await supabase
-        .from('lead_profiles')
-        .select(
-          'user_id, interest_course, application_number, final_fee, full_payment_discount, discount_amount, source, status, form_step_completed, first_name, father_name, date_of_birth, applicant_category, academic_data, target_exam_year, city, state, created_at'
+      // Chunked ids (URL length) and every page of each chunk (1,000-row cap).
+      const parts = await Promise.all(
+        chunks(userIds).map((ids) =>
+          fetchAllRows(() =>
+            supabase
+              .from('lead_profiles')
+              .select(
+                'user_id, interest_course, application_number, final_fee, full_payment_discount, discount_amount, source, status, form_step_completed, first_name, father_name, date_of_birth, applicant_category, academic_data, target_exam_year, city, state, created_at'
+              )
+              .in('user_id', ids)
+              // Two bugs fixed here at once. Without the deleted_at filter a soft-deleted
+              // application still counted as the student's form. Without the ordering, a
+              // student with several rows got whichever one PostgREST happened to return
+              // last, so the same student could read differently on two page loads.
+              .is('deleted_at', null)
+              .order('created_at', { ascending: false })
+              .order('id', { ascending: true })
+          )
         )
-        .in('user_id', userIds)
-        // Two bugs fixed here at once. Without the deleted_at filter a soft-deleted
-        // application still counted as the student's form. Without the ordering, a
-        // student with several rows got whichever one PostgREST happened to return
-        // last, so the same student could read differently on two page loads.
-        .is('deleted_at', null)
-        .order('created_at', { ascending: false });
-      // Newest first, so the first row seen for a user is the one that counts.
-      for (const l of leads || []) if (!leadByUser[l.user_id]) leadByUser[l.user_id] = l;
+      );
+      // Newest first within each user (a user's rows all sit in one chunk), so the
+      // first row seen for a user is the one that counts.
+      for (const l of parts.flat()) if (!leadByUser[l.user_id]) leadByUser[l.user_id] = l;
     }
 
     // Which of these students currently hold LIVE Nexus access (active enrollment
     // in an active classroom). Used to flag non-graduated past-batch students who
     // lost their enrollment (e.g. during the single-classroom consolidation).
-    const accessIds = await getUsersWithActiveNexusAccess(userIds, supabase);
+    const accessIds = new Set<string>();
+    for (const part of await Promise.all(chunks(userIds).map((ids) => getUsersWithActiveNexusAccess(ids, supabase)))) {
+      for (const id of part) accessIds.add(id);
+    }
 
     // Who has already been sent a link asking them to fill the form in, so staff do
     // not chase the same student twice. One query for the whole cohort. A failure
@@ -116,7 +142,8 @@ export async function GET(request: NextRequest) {
     let detailRequests: Record<string, any> = {};
     if (userIds.length) {
       try {
-        detailRequests = await listLiveDetailRequests(userIds, supabase);
+        const parts = await Promise.all(chunks(userIds).map((ids) => listLiveDetailRequests(ids, supabase)));
+        detailRequests = Object.assign({}, ...parts);
       } catch (e: any) {
         console.warn('[students] could not read detail requests:', e?.message);
       }
@@ -230,7 +257,23 @@ export async function GET(request: NextRequest) {
       ).length,
     };
 
-    return NextResponse.json({ students, total: students.length, stats });
+    const query = parseStudentHubQuery(searchParams);
+    const page = applyStudentHubQuery(students, query);
+
+    return NextResponse.json(
+      {
+        students: page.rows,
+        // Rows matching the grid's filters (the grid's rowCount). scopeTotal is the
+        // whole year scope, which is what stats describe.
+        total: page.total,
+        scopeTotal: students.length,
+        page: query.pageIndex,
+        pageSize: query.pageSize,
+        yearOptions: yearOptionsOf(students),
+        stats,
+      },
+      { headers: { 'Cache-Control': 'no-store' } }
+    );
   } catch (error: any) {
     console.error('Error fetching students:', error);
     return NextResponse.json(

@@ -3,6 +3,7 @@ import { setRequestLocale } from 'next-intl/server';
 import { Box, Container, Paper } from '@neram/ui';
 import TermsContent from '../../../components/legal/TermsContent';
 import { buildAlternates } from '@/lib/seo/metadata';
+import ClientIntl from '@/components/i18n/ClientIntl';
 
 
 export async function generateMetadata({
@@ -28,7 +29,7 @@ export default function TermsPage({ params: { locale } }: PageProps) {
     <Box sx={{ py: { xs: 4, md: 8 }, bgcolor: 'background.default', minHeight: '80vh' }}>
       <Container maxWidth="md">
         <Paper sx={{ p: { xs: 3, md: 6 } }}>
-          <TermsContent />
+          <ClientIntl locale={locale} namespaces={['terms']}><TermsContent /></ClientIntl>
         </Paper>
       </Container>
     </Box>

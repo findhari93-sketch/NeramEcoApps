@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { nextLabel, promptTitle, skipSummary } from './format';
+import { nextLabel, promptTitle, qbPreview, skipSummary } from './format';
 
 describe('promptTitle', () => {
   it('names a question as the paper does when the teacher gave its number', () => {
@@ -51,5 +51,25 @@ describe('skipSummary', () => {
   it('says nothing when nobody gave a reason', () => {
     expect(skipSummary({ total: 0, by_reason: {} })).toBe('');
     expect(skipSummary(null)).toBe('');
+  });
+});
+
+describe('qbPreview', () => {
+  it('drops the math delimiters and extra spaces, so the console needs no KaTeX', () => {
+    expect(qbPreview('Find  $x^2$ when\n$x = 3$')).toBe('Find x^2 when x = 3');
+    expect(qbPreview('Costs \\$5')).toBe('Costs $5');
+  });
+
+  it('cuts a long question at a word, with an ellipsis', () => {
+    const long = 'word '.repeat(60);
+    const shown = qbPreview(long, 40);
+    expect(shown.endsWith('…')).toBe(true);
+    expect(shown.length).toBeLessThanOrEqual(41);
+    expect(shown).not.toMatch(/ …$/);
+  });
+
+  it('is empty without text', () => {
+    expect(qbPreview(null)).toBe('');
+    expect(qbPreview('   ')).toBe('');
   });
 });

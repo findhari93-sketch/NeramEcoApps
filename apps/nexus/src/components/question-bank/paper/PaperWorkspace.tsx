@@ -108,6 +108,8 @@ export interface PaperWorkspaceProps {
   openQuestionId?: string | null;
   /** Whether this person may connect YouTube in Settings, for the not-connected message. */
   canConnectYouTube?: boolean;
+  /** Told which question is open, so Present to class can start there. */
+  onActiveChange?: (questionId: string | null) => void;
 }
 
 /** Is the user typing? Then j and k are letters, not navigation. */
@@ -130,9 +132,12 @@ export default function PaperWorkspace({
   questions, paperId, tagCounts = {}, tagsByQuestion, paper, sources,
   mode, onModeChange, needsFilter, onNeedsFilterChange, sectionFilter, onSectionFilterChange,
   getToken, onSaved, onChangeSections, onOptimisticPatch, getChatToken, openQuestionId,
-  canConnectYouTube = false,
+  canConnectYouTube = false, onActiveChange,
 }: PaperWorkspaceProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
+  useEffect(() => {
+    onActiveChange?.(activeId);
+  }, [activeId, onActiveChange]);
 
   // A link to one question (?q=). Opened once, when that question has arrived,
   // and scrolled to so the list shows where it sits.

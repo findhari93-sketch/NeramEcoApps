@@ -46,28 +46,31 @@ export default function QuestionCard({ question }: QuestionCardProps) {
       component={Link}
       href={`/tools/nata/question-bank/${question.id}`}
       sx={{
+        display: 'block',
         textDecoration: 'none',
-        transition: 'box-shadow 0.2s',
-        '&:hover': { boxShadow: 3 },
-        borderLeft: question.is_admin_post ? '3px solid' : 'none',
-        borderColor: question.is_admin_post ? 'warning.main' : 'transparent',
+        transition: 'border-color 0.2s',
+        '&:hover': { borderColor: 'primary.main' },
+        '&:focus-visible': { outline: '3px solid var(--focus-ring-color)', outlineOffset: 2 },
+        borderLeft: question.is_admin_post ? '3px solid' : undefined,
+        borderLeftColor: question.is_admin_post ? 'warning.main' : undefined,
       }}
+      variant="outlined"
     >
       <CardContent sx={{ pb: '12px !important' }}>
         {/* Author row */}
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
+        <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
           <Avatar
             src={question.author?.avatar_url || undefined}
-            alt={question.author?.name || 'User'}
-            sx={{ width: 28, height: 28, fontSize: '0.8rem' }}
+            alt=""
+            sx={{ width: 28, height: 28, fontSize: '0.8125rem' }}
           >
             {(question.author?.name || 'U')[0]}
           </Avatar>
-          <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
+          <Typography variant="body2" color="text.secondary">
             {question.author?.name || 'Anonymous'}
           </Typography>
           <AdminBadge isAdminPost={question.is_admin_post} authorUserType={question.author?.user_type} />
-          <Typography variant="body2" color="text.disabled" sx={{ fontSize: '0.75rem' }}>
+          <Typography variant="caption" color="text.secondary">
             {timeAgo(question.created_at)}
             {wasEdited(question.created_at, question.updated_at) && (
               <> · Updated {timeAgo(question.updated_at)}</>
@@ -76,7 +79,7 @@ export default function QuestionCard({ question }: QuestionCardProps) {
         </Stack>
 
         {/* Title */}
-        <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 0.5, lineHeight: 1.3 }}>
+        <Typography variant="subtitle1" component="h2" sx={{ fontWeight: 600, mb: 0.5, lineHeight: 1.3, overflowWrap: 'anywhere' }}>
           {question.title}
         </Typography>
 
@@ -102,21 +105,21 @@ export default function QuestionCard({ question }: QuestionCardProps) {
             size="small"
             color="primary"
             variant="outlined"
-            sx={{ height: 22, fontSize: '0.7rem' }}
+            sx={{ height: 24, fontSize: '0.75rem' }}
           />
           {question.exam_month && question.exam_year ? (
             <Chip
               label={`${MONTH_NAMES[question.exam_month - 1]} ${question.exam_year}`}
               size="small"
               variant="outlined"
-              sx={{ height: 22, fontSize: '0.7rem' }}
+              sx={{ height: 24, fontSize: '0.75rem' }}
             />
           ) : question.exam_year ? (
             <Chip
               label={`NATA ${question.exam_year}`}
               size="small"
               variant="outlined"
-              sx={{ height: 22, fontSize: '0.7rem' }}
+              sx={{ height: 24, fontSize: '0.75rem' }}
             />
           ) : null}
           {question.exam_session && (
@@ -124,7 +127,7 @@ export default function QuestionCard({ question }: QuestionCardProps) {
               label={question.exam_session}
               size="small"
               variant="outlined"
-              sx={{ height: 22, fontSize: '0.7rem' }}
+              sx={{ height: 24, fontSize: '0.75rem' }}
             />
           )}
           {question.confidence_level && question.confidence_level !== 3 && (
@@ -148,7 +151,7 @@ export default function QuestionCard({ question }: QuestionCardProps) {
               size="small"
               variant="outlined"
               color="info"
-              sx={{ height: 20, fontSize: '0.7rem' }}
+              sx={{ height: 24, fontSize: '0.75rem' }}
             />
           )}
         </Stack>

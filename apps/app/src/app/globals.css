@@ -24,12 +24,8 @@ a {
   text-decoration: none;
 }
 
-/* Mobile-first optimizations */
-@media (max-width: 600px) {
-  html {
-    font-size: 14px;
-  }
-}
+/* Keep the 16px root on phones. A smaller root shrinks every rem in the MUI
+   theme (body2 rendered near 11px), which is below the readable minimum. */
 
 /* Prevent zoom on input focus on iOS */
 @media (max-width: 600px) {
@@ -49,8 +45,58 @@ body {
 }
 
 /* Focus visible for accessibility */
+/* Screen-reader only text. 1px, never MUI's width: 1 (which means 100%). */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+/* Keyboard users can jump past the navigation */
+.skip-link {
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 2000;
+  padding: 10px 16px;
+  border-radius: 10px;
+  background: #060d1f;
+  color: #ffffff;
+  font-weight: 600;
+  transform: translateY(-160%);
+  transition: transform 0.15s ease;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+/* Public tool pages: when this device was signed in last time (see
+   lib/auth-hint.ts), hide what only signed-out visitors need and show a
+   skeleton in place of the demo until the session is restored. Crawlers never
+   carry the hint, so they always get the full public page. */
+.auth-hint-skeleton {
+  display: none;
+}
+html[data-auth-hint='1'] .public-only {
+  visibility: hidden;
+}
+html[data-auth-hint='1'] .public-demo-region {
+  display: none;
+}
+html[data-auth-hint='1'] .auth-hint-skeleton {
+  display: block;
+}
+
 :focus-visible {
-  outline: 2px solid #e8a020;
+  /* Set per mode by the MUI theme: blue on light (5:1), gold on dark */
+  outline: 2px solid var(--focus-ring-color, #0d6ecd);
   outline-offset: 2px;
 }
 

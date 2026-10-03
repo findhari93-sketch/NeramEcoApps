@@ -76,6 +76,7 @@ export async function GET(
       const timeoutId = setTimeout(() => controller.abort(), 30_000);
       try {
         const res: Response = await fetch(nextLink, {
+          cache: 'no-store',
           headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
         });

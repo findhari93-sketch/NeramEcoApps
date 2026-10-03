@@ -24,7 +24,7 @@ async function resolveLinkedPdfUrl(sharingUrl: string): Promise<string | null> {
   // Don't use $select — it strips @microsoft.graph.downloadUrl from the response
   const res = await fetch(
     `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem`,
-    { headers: { Authorization: `Bearer ${token}` } }
+    { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }
   );
 
   if (res.ok) {
@@ -49,6 +49,7 @@ async function fetchLinkedPdfContent(sharingUrl: string): Promise<Response | nul
   const res = await fetch(
     `https://graph.microsoft.com/v1.0/shares/${encoded}/driveItem/content`,
     {
+      cache: 'no-store',
       headers: { Authorization: `Bearer ${token}` },
       redirect: 'follow',
     }
@@ -131,7 +132,7 @@ export async function GET(
     }
 
     if (downloadUrl) {
-      const pdfRes = await fetch(downloadUrl, { redirect: 'follow' });
+      const pdfRes = await fetch(downloadUrl, { cache: 'no-store', redirect: 'follow' });
       if (pdfRes.ok && pdfRes.body) {
         return streamPdf(pdfRes, 'inline');
       }

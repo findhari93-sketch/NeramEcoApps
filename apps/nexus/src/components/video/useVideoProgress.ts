@@ -22,8 +22,12 @@ import { createWatchAccumulator } from '@/lib/watch-progress';
  * after a failed class test could never succeed.
  *
  * Flush cadence is a compromise between losing progress and spending Vercel
- * function invocations. Every 10 seconds of playback is roughly 9 writes for a
- * 90 minute class, which is nothing, and caps the worst-case loss at 10 seconds.
+ * function invocations. Every 30 seconds of playback is roughly 180 writes for
+ * a 90 minute class instead of 540 at the old 10 second cadence. The worst-case
+ * loss is not 30 seconds in practice, because the moments a student actually
+ * stops are flushed immediately: any video pausing or ending in the page
+ * (caught in the capture phase, since media events do not bubble), the tab
+ * hiding, and the page going away.
  *
  * The unload flush uses fetch with keepalive rather than navigator.sendBeacon.
  * sendBeacon cannot set headers, which is why the progress route also accepts
@@ -43,7 +47,7 @@ import { createWatchAccumulator } from '@/lib/watch-progress';
  * instead of awaiting a new one.
  */
 
-const FLUSH_INTERVAL_MS = 10_000;
+export const FLUSH_INTERVAL_MS = 30_000;
 
 export interface UseVideoProgressOptions {
   /** Where to POST. Null keeps the hook idle, e.g. before the id is known. */
@@ -143,7 +147,7 @@ export function useVideoProgress({
       if (useKeepalive) {
         // No await here on purpose. A page tearing down mid-lookup would mean
         // fetch() never gets called at all, which is worse than reusing a
-        // token that is at most ~10 seconds old, harmless given a Microsoft
+        // token that is at most ~30 seconds old, harmless given a Microsoft
         // access token lives 60-90+ minutes.
         const authToken = lastTokenRef.current;
         if (authToken) send(url, authToken, true, payload);
@@ -195,6 +199,21 @@ export function useVideoProgress({
   useEffect(() => {
     const id = setInterval(() => flush(false), FLUSH_INTERVAL_MS);
     return () => clearInterval(id);
+  }, [flush]);
+
+  // Save the moment playback stops. Media events do not bubble, but they do
+  // pass through the capture phase, so one document listener sees every video
+  // in the page without each caller wiring onPause/onEnded through.
+  useEffect(() => {
+    const onStop = (event: Event) => {
+      if (event.target instanceof HTMLMediaElement) flush(false);
+    };
+    document.addEventListener('pause', onStop, true);
+    document.addEventListener('ended', onStop, true);
+    return () => {
+      document.removeEventListener('pause', onStop, true);
+      document.removeEventListener('ended', onStop, true);
+    };
   }, [flush]);
 
   // Save on the way out. visibilitychange covers tab switch, minimise, phone

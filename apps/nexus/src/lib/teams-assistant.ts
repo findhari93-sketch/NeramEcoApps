@@ -101,7 +101,7 @@ async function timedFetch(fetchImpl: typeof fetch, url: string, init: RequestIni
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
   try {
-    return await fetchImpl(url, { ...init, signal: controller.signal });
+    return await fetchImpl(url, { cache: 'no-store', ...init, signal: controller.signal });
   } finally {
     clearTimeout(timer);
   }

@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { PUBLIC_CACHE_HEADERS } from '@/app/api/_lib/public-cache';
 import { createServerClient, getPublishedJobBySlug } from '@neram/database';
 
 /**
@@ -33,7 +34,7 @@ export async function GET(
       );
     }
 
-    return NextResponse.json({ success: true, data: job });
+    return NextResponse.json({ success: true, data: job }, { headers: PUBLIC_CACHE_HEADERS });
   } catch (error) {
     console.error('Error fetching job posting:', error);
     return NextResponse.json(

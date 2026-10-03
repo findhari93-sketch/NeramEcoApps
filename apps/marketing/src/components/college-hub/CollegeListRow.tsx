@@ -4,10 +4,10 @@ import { Box, Stack, Typography } from '@mui/material';
 import Image from 'next/image';
 import Link from 'next/link';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import type { CollegeListItem } from '@/lib/college-hub/types';
+import type { ListingCollege } from '@/lib/college-hub/listing-filter';
 
 interface CollegeListRowProps {
-  college: CollegeListItem;
+  college: ListingCollege;
   rank: number;
 }
 

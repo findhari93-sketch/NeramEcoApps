@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Builds apps/marketing/src/data/geo/cities.generated.ts, the city registry behind
+ * Builds packages/geo/src/cities.generated.ts, the city registry behind
  * the "NATA coaching in {city}" pages. Run by hand; the output is committed.
  *
  *   1. Download GeoNames (CC BY 4.0, https://www.geonames.org) into a folder:
@@ -18,7 +18,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const OUT = path.join(ROOT, 'apps/marketing/src/data/geo/cities.generated.ts');
+const OUT = path.join(ROOT, 'packages/geo/src/cities.generated.ts');
 const LEGACY = path.join(ROOT, 'packages/database/src/data/locations.ts');
 
 const BIG_CITY_POP = 250_000;

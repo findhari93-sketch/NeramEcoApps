@@ -3,6 +3,7 @@ import { setRequestLocale } from 'next-intl/server';
 import { Box, Container, Paper } from '@neram/ui';
 import RefundPolicyContent from '../../../components/legal/RefundPolicyContent';
 import { buildAlternates } from '@/lib/seo/metadata';
+import ClientIntl from '@/components/i18n/ClientIntl';
 
 
 export async function generateMetadata({
@@ -28,7 +29,7 @@ export default function RefundPolicyPage({ params: { locale } }: PageProps) {
     <Box sx={{ py: { xs: 4, md: 8 }, bgcolor: 'background.default', minHeight: '80vh' }}>
       <Container maxWidth="md">
         <Paper sx={{ p: { xs: 3, md: 6 } }}>
-          <RefundPolicyContent />
+          <ClientIntl locale={locale} namespaces={['refundPolicy']}><RefundPolicyContent /></ClientIntl>
         </Paper>
       </Container>
     </Box>

@@ -79,7 +79,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const downloadUrl = file.link_url
       ? await getSharePointStreamUrl(file.link_url)
       : await getSharePointDownloadUrl(String(file.sharepoint_item_id));
-    const upstream = await fetch(downloadUrl, { redirect: 'follow' });
+    const upstream = await fetch(downloadUrl, { cache: 'no-store', redirect: 'follow' });
     if (!upstream.ok) {
       return NextResponse.json({ error: 'Could not read the PDF from SharePoint' }, { status: 502 });
     }

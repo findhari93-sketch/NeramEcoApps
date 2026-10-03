@@ -5,13 +5,14 @@ import { noticeForAsk } from '@/lib/pad/notify-session';
 import { parseAskRequest } from '@/lib/pad/prompt-requests';
 import { PadRefusal, callPad, padErrorResponse, padJson } from '@/lib/pad/rpc';
 import { hintSession, padDb } from '@/lib/pad/sessions';
+import { bankAskSpec } from '@/lib/qb-present/bank-ask';
 
 /**
  * POST /api/pad/prompts/ask  (session teacher)
  *
  * Body: { sessionId, answerType?: 'mcq' | 'numeric' | 'text' | 'yesno', optionCount?: 2..6,
  *         label?: string, text?: string, imageUrl?: string, optionTexts?: Array<string | null>,
- *         closePromptId?: uuid }
+ *         closePromptId?: uuid, qbQuestionId?: uuid, timeLimitSec?: 5..3600 }
  *
  * Opens a new prompt: an answer slot for the question the teacher is speaking
  * or showing, with the teacher's optional reference ("38", so every screen says
@@ -28,6 +29,12 @@ import { hintSession, padDb } from '@/lib/pad/sessions';
  * A new prompt also sends "Q.38 is open" into the meeting for students
  * without the pad open, when the bot is in the meeting. That is best effort and
  * waits at most a few seconds, so it can never fail or stall the ASK.
+ *
+ * From Present to class, qbQuestionId names the question bank question on the
+ * shared screen. The answer buttons and the bank's key (saved as the suggested
+ * answer Reveal grades with) are read from the bank here, unless the teacher
+ * chose other buttons (answerType in the body). timeLimitSec starts a timer:
+ * answers stop when it runs out, and the question then waits for Reveal.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -36,7 +43,15 @@ export async function POST(request: NextRequest) {
 
     const parsed = parseAskRequest(await request.json().catch(() => null));
     if (!parsed.ok) throw new PadRefusal('INVALID_INPUT', { field: parsed.field });
-    const { sessionId, answerType, optionCount, label, text, imageUrl, optionTexts, closePromptId } = parsed.value;
+    const { sessionId, label, text, imageUrl, optionTexts, closePromptId, qbQuestionId, timeLimitSec } = parsed.value;
+    let { answerType, optionCount } = parsed.value;
+    let suggestedKeys: string[] | null = null;
+    if (qbQuestionId) {
+      const spec = await bankAskSpec(qbQuestionId, parsed.value.answerTypeChosen ? { answerType, optionCount } : null);
+      answerType = spec.answerType;
+      optionCount = spec.optionCount;
+      suggestedKeys = spec.suggestedKeys;
+    }
 
     const asked = await callPad<{
       changed: boolean;
@@ -45,6 +60,7 @@ export async function POST(request: NextRequest) {
       version: number;
       sequence: number;
       label: string | null;
+      closes_at?: string | null;
       closed_prompt_id?: string | null;
     }>(padDb(), 'pad_ask', {
       p_actor: caller.user.id,
@@ -56,6 +72,9 @@ export async function POST(request: NextRequest) {
       p_image_url: imageUrl,
       p_option_texts: optionTexts,
       p_close_prompt: closePromptId,
+      p_qb_question: qbQuestionId,
+      p_time_limit: timeLimitSec,
+      p_suggested_keys: suggestedKeys,
     });
     if (asked.changed) {
       await hintSession(sessionId, 'everyone');
@@ -68,6 +87,7 @@ export async function POST(request: NextRequest) {
       state: asked.state,
       version: asked.version,
       changed: asked.changed,
+      closesAt: asked.closes_at ?? null,
       closedPromptId: asked.closed_prompt_id ?? null,
     });
   } catch (err) {

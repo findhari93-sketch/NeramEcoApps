@@ -130,6 +130,7 @@ export async function GET(request: NextRequest) {
     scheduleUrl.searchParams.set('week_offset', weekOffset);
 
     const scheduleRes = await fetch(scheduleUrl.toString(), {
+      cache: 'no-store',
       headers: { Authorization: request.headers.get('Authorization') || '' },
     });
 

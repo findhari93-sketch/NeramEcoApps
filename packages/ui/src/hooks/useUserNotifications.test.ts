@@ -44,10 +44,55 @@ describe('useUserNotifications polling', () => {
     expect(signals).toHaveLength(1);
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.advanceTimersByTimeAsync(120_000);
     });
 
     expect(signals[0]?.aborted).toBe(true);
+    expect(signals).toHaveLength(2);
+  });
+
+  it('polls every two minutes by default, not every minute', async () => {
+    const apiBaseUrl = `https://app-${++seq}.example.com`;
+    renderHook(() => useUserNotifications({ apiBaseUrl, getIdToken: async () => 'token' }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(signals).toHaveLength(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(signals).toHaveLength(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(signals).toHaveLength(2);
+  });
+
+  it('catches up on window focus once the count is stale, but not on every focus', async () => {
+    const apiBaseUrl = `https://app-${++seq}.example.com`;
+    renderHook(() => useUserNotifications({ apiBaseUrl, getIdToken: async () => 'token' }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(signals).toHaveLength(1);
+
+    // Focus right after a poll: the number is fresh, no request.
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(signals).toHaveLength(1);
+
+    // Let the hung first request time out, then wait until the count is stale.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(45_000);
+    });
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      await vi.advanceTimersByTimeAsync(0);
+    });
     expect(signals).toHaveLength(2);
   });
 });

@@ -124,7 +124,7 @@ async function attempt(
   }
 
   try {
-    const res = await fetch(spec.url, { headers: { Authorization: `Bearer ${spec.token}` } });
+    const res = await fetch(spec.url, { cache: 'no-store', headers: { Authorization: `Bearer ${spec.token}` } });
     const text = (await res.text().catch(() => '')).slice(0, BODY_LIMIT);
     let meetingId: string | null = null;
     let reportCount: number | null = null;

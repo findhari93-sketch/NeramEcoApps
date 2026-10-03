@@ -96,7 +96,7 @@ export function __resetBotConnectorKeys(): void {
 }
 
 async function fetchKeySet(): Promise<KeySet> {
-  const response = await fetch(BOT_CONNECTOR_KEYS_URL);
+  const response = await fetch(BOT_CONNECTOR_KEYS_URL, { cache: 'no-store' });
   if (!response.ok) throw new BotAuthError(`Connector keys unavailable: ${response.status}`, 401);
 
   const body = asRecord(await response.json());

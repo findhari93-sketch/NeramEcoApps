@@ -1,6 +1,7 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { usePathname } from 'next/navigation';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 /** Map of nav path suffixes to badge counts */
@@ -45,7 +46,14 @@ const PATH_TO_BADGE_KEY: Record<string, string> = {
   '/student/catch-up': 'catchup',
 };
 
-const POLL_INTERVAL = 60_000; // 60 seconds
+/**
+ * Two minutes. Was one; the catch-ups below (tab shown again, window focus,
+ * moving to another page) are what keep the badge current for someone who is
+ * actually using Nexus, so the timer only has to cover a page left open.
+ */
+const POLL_INTERVAL = 120_000;
+/** Focus and navigation only fetch when the counts on screen are at least this old. */
+const STALE_AFTER = 30_000;
 /**
  * A badge request that has not answered in this long is abandoned. Behind Cloudflare
  * a stalled request otherwise hangs until the 100s cut-off (a 524), longer than the
@@ -63,9 +71,13 @@ export default function NavBadgeProvider({ children }: { children: React.ReactNo
   const inFlightRef = useRef(0);
   /** Numbers each request, so an older answer landing late cannot overwrite a newer one. */
   const latestRequestRef = useRef(0);
+  /** When the last request started (ms epoch), so focus and navigation can skip a fresh count. */
+  const lastFetchAtRef = useRef(0);
+  const pathname = usePathname();
 
   const fetchBadges = useCallback(async () => {
     const requestId = ++latestRequestRef.current;
+    lastFetchAtRef.current = Date.now();
     inFlightRef.current += 1;
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
@@ -159,6 +171,32 @@ export default function NavBadgeProvider({ children }: { children: React.ReactNo
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [user, pollBadges]);
+
+  // Catch up when someone comes back to the window or moves to another page, but
+  // only if the counts are stale: clicking through three pages in ten seconds
+  // should not cost three requests.
+  const pollIfStale = useCallback(() => {
+    if (document.visibilityState === 'hidden') return;
+    if (Date.now() - lastFetchAtRef.current < STALE_AFTER) return;
+    pollBadges();
+  }, [pollBadges]);
+
+  useEffect(() => {
+    if (!user) return;
+    window.addEventListener('focus', pollIfStale);
+    return () => window.removeEventListener('focus', pollIfStale);
+  }, [user, pollIfStale]);
+
+  const firstPathRef = useRef(true);
+  useEffect(() => {
+    // The mount effect above already fetched for the first page.
+    if (firstPathRef.current) {
+      firstPathRef.current = false;
+      return;
+    }
+    if (user) pollIfStale();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
 
   const getBadgeCount = useCallback(
     (path: string): number => {

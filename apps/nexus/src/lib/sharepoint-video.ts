@@ -58,7 +58,7 @@ export function clearLibraryFolderCache(): void {
 }
 
 async function webUrlAt(url: string, token: string): Promise<string | null> {
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  const res = await fetch(url, { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } });
   if (!res.ok) return null;
   const body = await res.json().catch(() => null);
   return typeof body?.webUrl === 'string' && body.webUrl ? body.webUrl : null;
@@ -365,7 +365,7 @@ export async function resolveVideoItem(input: VideoItemRef): Promise<ResolvedVid
   let res: Response;
   try {
     const token = await getAppOnlyToken();
-    res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    res = await fetch(url, { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } });
   } catch {
     throw new VideoItemError('GRAPH_UNAVAILABLE');
   }
@@ -528,7 +528,7 @@ export async function getDriveItemThumbnailUrl(
     const token = await getAppOnlyToken();
     const res = await fetch(
       `${GRAPH}/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(itemId)}/thumbnails/0/${size}`,
-      { headers: { Authorization: `Bearer ${token}` } },
+      { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } },
     );
     if (!res.ok) return null;
     const body = await res.json().catch(() => null);

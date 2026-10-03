@@ -21,6 +21,9 @@ const auth = {
 };
 vi.mock('@/hooks/useNexusAuth', () => ({ useNexusAuthContext: () => auth }));
 
+let pathname = '/teacher/dashboard';
+vi.mock('next/navigation', () => ({ usePathname: () => pathname }));
+
 import NavBadgeProvider, { useNavBadges } from './NavBadgeProvider';
 
 let ctx: ReturnType<typeof useNavBadges>;
@@ -83,7 +86,7 @@ describe('NavBadgeProvider polling', () => {
   it('gives up on a hung request so the next poll can run', async () => {
     await mount();
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.advanceTimersByTimeAsync(120_000);
     });
     expect(pending[0].signal?.aborted).toBe(true);
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -106,5 +109,83 @@ describe('NavBadgeProvider polling', () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(ctx.getBadgeCount('/teacher/photo-review')).toBe(2);
+  });
+  it('polls every two minutes, not every minute', async () => {
+    await mount();
+    await act(async () => {
+      pending[0].resolve({});
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('refreshes on a route change once the counts are stale, not on every click', async () => {
+    pathname = '/teacher/dashboard';
+    const view = render(
+      <NavBadgeProvider>
+        <Probe />
+      </NavBadgeProvider>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      pending[0].resolve({});
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // A quick navigation right after a fetch: counts are fresh, no request.
+    pathname = '/teacher/students';
+    view.rerender(
+      <NavBadgeProvider>
+        <Probe />
+      </NavBadgeProvider>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(31_000);
+    });
+    pathname = '/teacher/issues';
+    view.rerender(
+      <NavBadgeProvider>
+        <Probe />
+      </NavBadgeProvider>,
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    pathname = '/teacher/dashboard';
+  });
+
+  it('refreshes on window focus once the counts are stale', async () => {
+    await mount();
+    await act(async () => {
+      pending[0].resolve({});
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(31_000);
+    });
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

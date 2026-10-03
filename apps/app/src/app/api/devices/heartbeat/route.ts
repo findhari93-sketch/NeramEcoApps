@@ -4,12 +4,15 @@ export const dynamic = 'force-dynamic';
  * POST /api/devices/heartbeat
  *
  * Record active/idle time for a device session.
- * Called every 60s by the active time tracker + on page close via sendBeacon.
+ * Called every 5 minutes by the active time tracker, plus a flush of the
+ * remaining seconds on hide and pagehide (sendBeacon or keepalive fetch).
+ * The seconds come from the browser, so they are clamped (lib/heartbeat-seconds).
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyIdToken } from '@/lib/firebase-admin';
 import { getSupabaseAdminClient, recordDeviceHeartbeat } from '@neram/database';
+import { sanitizeHeartbeatSeconds } from '@/lib/heartbeat-seconds';
 
 export async function POST(req: NextRequest) {
   try {
@@ -37,8 +40,8 @@ export async function POST(req: NextRequest) {
       supabase,
       deviceId,
       user.id,
-      activeSeconds || 0,
-      idleSeconds || 0,
+      sanitizeHeartbeatSeconds(activeSeconds),
+      sanitizeHeartbeatSeconds(idleSeconds),
       sessionId || null,
       location || null
     );

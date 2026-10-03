@@ -120,3 +120,30 @@ export function applySkillLevels(facts: Record<string, StudentFact>, rows: reado
     fact.overallLevel = overallLevel({ drawing: fact.drawingLevel });
   }
 }
+
+/**
+ * The wire form of the lookup: each fact with every field that is still at its
+ * default left out. StudentStageFactsProvider already reads a missing field as
+ * that default (null, false, English), and on a roster where most students are
+ * unpaused English speakers with no level yet that is most of the payload.
+ * Every student keeps an entry, even an empty one, so the optimistic level patch
+ * in student-level-client.ts still finds the row it spreads into.
+ */
+export function compactStudentFacts(
+  facts: Record<string, StudentFact>,
+): Record<string, Partial<StudentFact>> {
+  const out: Record<string, Partial<StudentFact>> = {};
+  for (const [id, f] of Object.entries(facts)) {
+    const c: Partial<StudentFact> = {};
+    if (f.stage !== null) c.stage = f.stage;
+    if (f.dormant) c.dormant = true;
+    if (f.photo !== null) c.photo = f.photo;
+    if (f.name !== null) c.name = f.name;
+    if (f.language !== 'english') c.language = f.language;
+    if (f.limitedEnglish) c.limitedEnglish = true;
+    if (f.drawingLevel !== null) c.drawingLevel = f.drawingLevel;
+    if (f.overallLevel !== null) c.overallLevel = f.overallLevel;
+    out[id] = c;
+  }
+  return out;
+}

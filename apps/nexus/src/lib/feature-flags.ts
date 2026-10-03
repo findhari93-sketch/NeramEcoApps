@@ -334,6 +334,16 @@ export const FEATURES: FeatureDef[] = [
    */
   { id: 'staff.answer-pad', label: 'Answer Pad (live answers in Teams)', surface: 'staff', group: 'Teaching', paths: ['/teacher/answer-pad'], defaultEnabled: false },
 
+  /**
+   * Present to class: a question bank paper on the shared screen, as students
+   * see it, driving the Answer Pad from one button (Start, Close, Reveal, Next).
+   *
+   * Defaults ON like other staff tools: on its own it only shows questions, and
+   * every live answer still goes through the /api/pad routes, which keep
+   * checking staff.answer-pad. /api/question-bank/present re-checks this one.
+   */
+  { id: 'staff.qb-present', label: 'Present to class (question bank)', surface: 'staff', group: 'Teaching', paths: ['/pad/present'], defaultEnabled: true },
+
   // ── Parent ────────────────────────────────────────────────────────────────
   // Not a page: `paths: []` can never match in featureForPath, so this is a pure
   // on/off switch with no route-gating side effect.

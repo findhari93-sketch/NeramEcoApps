@@ -1,50 +1,31 @@
 'use client';
 
-import { useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
-import {
-  Box,
-  Drawer,
-  List,
-  ListItem,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
-  Typography,
-  Avatar,
-  Tooltip,
-  IconButton,
-  Tabs,
-  Tab,
-  Chip,
-  Divider,
-} from '@neram/ui';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import LogoutIcon from '@mui/icons-material/Logout';
+import { useEffect, useState } from 'react';
+import { usePathname } from 'next/navigation';
+import Link from 'next/link';
+import { Box, Typography, Tooltip, IconButton, Chip, Divider } from '@neram/ui';
+import { alpha } from '@mui/material/styles';
+import type { SvgIconComponent } from '@mui/icons-material';
+import KeyboardDoubleArrowLeftRoundedIcon from '@mui/icons-material/KeyboardDoubleArrowLeftRounded';
+import KeyboardDoubleArrowRightRoundedIcon from '@mui/icons-material/KeyboardDoubleArrowRightRounded';
+import LogoutRoundedIcon from '@mui/icons-material/LogoutRounded';
 import DarkModeOutlinedIcon from '@mui/icons-material/DarkModeOutlined';
 import LightModeOutlinedIcon from '@mui/icons-material/LightModeOutlined';
-import ArchitectureIcon from '@mui/icons-material/Architecture';
-import EngineeringIcon from '@mui/icons-material/Engineering';
-import GavelIcon from '@mui/icons-material/Gavel';
-import { neramTokens } from '@neram/ui';
 import { useThemeMode } from '@neram/ui';
 import { useSidebar } from '@/contexts/SidebarContext';
 import UserNotificationBell from '@/components/UserNotificationBell';
-import Image from 'next/image';
-import Link from 'next/link';
+import AvatarWithRing from '@/components/AvatarWithRing';
+import BrandMark from './BrandMark';
 import {
-  NATA_TOOLS,
-  JEE_TOOLS,
-  COUNSELING_TOOLS,
-  SIDEBAR_BOTTOM_NAV,
-  type ToolNavItem,
-  type GeneralNavItem,
+  PRIMARY_NAV,
+  ACCOUNT_NAV,
+  TOOL_TRACKS,
+  toolsForTrack,
+  trackFromPath,
+  isNavActive,
+  type ToolTrack,
 } from '@/lib/navigation-data';
 import type { AccountTier } from '@neram/database';
-import AvatarWithRing from '@/components/AvatarWithRing';
-
-const TRANSITION = 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)';
 
 interface AppSidebarProps {
   userName: string;
@@ -66,94 +47,20 @@ export default function AppSidebar({
   accountTier,
 }: AppSidebarProps) {
   const pathname = usePathname();
-  const router = useRouter();
   const { collapsed: contextCollapsed, toggleSidebar } = useSidebar();
   const collapsed = forceExpanded ? false : contextCollapsed;
   const { mode, toggleMode } = useThemeMode();
-  const [examTab, setExamTab] = useState(() => {
-    if (pathname.startsWith('/tools/counseling')) return 2;
-    if (pathname.startsWith('/tools/jee')) return 1;
-    return 0;
-  });
 
-  const isActive = (href: string) =>
-    pathname === href || (href !== '/dashboard' && pathname.startsWith(href + '/'));
+  // Follow the route: opening a Counseling tool from anywhere shows the
+  // Counseling list. The student can still browse another track by hand.
+  const routeTrack = trackFromPath(pathname);
+  const [track, setTrack] = useState<ToolTrack>(routeTrack ?? 'nata');
+  useEffect(() => {
+    if (routeTrack) setTrack(routeTrack);
+  }, [routeTrack]);
 
-  const tools = examTab === 0 ? NATA_TOOLS : examTab === 1 ? JEE_TOOLS : COUNSELING_TOOLS;
-
-  const renderNavItem = (item: ToolNavItem | GeneralNavItem, indent = false) => {
-    const active = isActive(item.href);
-    const comingSoon = 'comingSoon' in item && item.comingSoon;
-
-    const button = (
-      <ListItemButton
-        component={comingSoon ? 'div' : Link}
-        href={comingSoon ? undefined : item.href}
-        onClick={comingSoon ? undefined : onItemClick}
-        sx={{
-          borderRadius: 1,
-          justifyContent: collapsed ? 'center' : 'flex-start',
-          px: collapsed ? 0.75 : indent ? 1.5 : 1,
-          py: 0.5,
-          minHeight: 36,
-          cursor: comingSoon ? 'default' : 'pointer',
-          transition: TRANSITION,
-          borderLeft: active ? '3px solid' : '3px solid transparent',
-          borderColor: active ? 'primary.main' : 'transparent',
-          bgcolor: active ? 'action.selected' : 'transparent',
-          opacity: comingSoon ? 0.5 : 1,
-          '&:hover': {
-            bgcolor: comingSoon ? 'transparent' : active ? 'action.selected' : 'action.hover',
-          },
-          '&.Mui-selected': {
-            bgcolor: 'action.selected',
-          },
-        }}
-      >
-        <ListItemIcon
-          sx={{
-            minWidth: collapsed ? 'auto' : 28,
-            justifyContent: 'center',
-            color: active ? 'primary.main' : 'text.secondary',
-          }}
-        >
-          {item.icon}
-        </ListItemIcon>
-        {!collapsed && (
-          <>
-            <ListItemText
-              primary={item.title}
-              primaryTypographyProps={{
-                fontSize: 13,
-                fontWeight: active ? 600 : 400,
-                color: active ? 'text.primary' : comingSoon ? 'text.disabled' : 'text.primary',
-                noWrap: true,
-              }}
-            />
-            {comingSoon && (
-              <Chip
-                label="Soon"
-                size="small"
-                sx={{ height: 18, fontSize: '0.6rem', ml: 0.5 }}
-              />
-            )}
-          </>
-        )}
-      </ListItemButton>
-    );
-
-    return (
-      <ListItem key={item.href} disablePadding sx={{ display: 'block' }}>
-        {collapsed ? (
-          <Tooltip title={item.title} placement="right" arrow>
-            {button}
-          </Tooltip>
-        ) : (
-          button
-        )}
-      </ListItem>
-    );
-  };
+  const tools = toolsForTrack(track);
+  const displayName = userName || 'Student';
 
   return (
     <Box
@@ -167,272 +74,364 @@ export default function AppSidebar({
         overflow: 'hidden',
       }}
     >
-      {/* Header — logo + bell + collapse chevron */}
+      {/* Brand */}
       <Box
         sx={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: collapsed ? 'center' : 'space-between',
-          px: collapsed ? 0.5 : 1.5,
-          py: 1,
-          minHeight: 40,
-          transition: TRANSITION,
+          gap: 1,
+          px: collapsed ? 1 : 2,
+          minHeight: 64,
         }}
       >
-        {!collapsed ? (
-          <>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-              <Image
-                src="/aiArchitect_logo.svg"
-                alt="aiArchitek logo"
-                width={28}
-                height={28}
-                style={{ borderRadius: '50%', flexShrink: 0 }}
-              />
-              <Box>
-                <Typography
-                  component={Link}
-                  href="/dashboard"
-                  sx={{
-                    fontFamily: 'var(--font-dm-sans), "DM Sans", sans-serif',
-                    fontSize: '1.1rem',
-                    fontWeight: 700,
-                    color: 'text.primary',
-                    textDecoration: 'none',
-                    lineHeight: 1,
-                  }}
-                >
-                  ai
-                  <Box component="span" sx={{ color: neramTokens.gold[500] }}>
-                    Architek
-                  </Box>
-                </Typography>
-                <Typography
-                  sx={{
-                    fontSize: '0.55rem',
-                    color: 'text.secondary',
-                    lineHeight: 1.2,
-                    mt: 0.25,
-                    letterSpacing: '0.02em',
-                  }}
-                >
-                  From Cutoffs to Colleges
-                </Typography>
-              </Box>
-            </Box>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
-              {phoneVerified && <UserNotificationBell />}
-              {!forceExpanded && (
-                <IconButton onClick={toggleSidebar} size="small" sx={{ width: 22, height: 22 }}>
-                  <ChevronLeftIcon sx={{ fontSize: 14 }} />
-                </IconButton>
-              )}
-            </Box>
-          </>
-        ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5 }}>
-            <Image
-              src="/aiArchitect_logo.svg"
-              alt="aiArchitek logo"
-              width={28}
-              height={28}
-              onClick={toggleSidebar}
-              style={{ borderRadius: '50%', cursor: 'pointer' }}
+        <Box
+          component={Link}
+          href="/dashboard"
+          onClick={onItemClick}
+          aria-label="aiArchitek home"
+          sx={{ display: 'flex', alignItems: 'center', minHeight: 44, borderRadius: 2, minWidth: 0 }}
+        >
+          <BrandMark tagline={!collapsed} iconOnly={collapsed} />
+        </Box>
+        {!collapsed && phoneVerified && !forceExpanded && <UserNotificationBell />}
+      </Box>
+
+      <Divider />
+
+      <Box
+        component="nav"
+        aria-label="App"
+        sx={{
+          flex: 1,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          px: collapsed ? 1 : 1.5,
+          py: 1.5,
+          scrollbarWidth: 'thin',
+        }}
+      >
+        <NavList>
+          {PRIMARY_NAV.map((item) => (
+            <NavRow
+              key={item.href}
+              href={item.href}
+              label={item.title}
+              Icon={item.Icon}
+              active={isNavActive(pathname, item.href)}
+              collapsed={collapsed}
+              onClick={onItemClick}
             />
+          ))}
+        </NavList>
+
+        {/* Exam track */}
+        <Box sx={{ mt: 2.5, mb: 1 }}>
+          {!collapsed && <SectionLabel id="sidebar-track-label">Tools for</SectionLabel>}
+          <Box
+            role="group"
+            aria-labelledby={collapsed ? undefined : 'sidebar-track-label'}
+            aria-label={collapsed ? 'Tools for' : undefined}
+            sx={{
+              display: 'flex',
+              flexDirection: collapsed ? 'column' : 'row',
+              gap: 0.5,
+              p: 0.5,
+              borderRadius: 2.5,
+              bgcolor: (theme) => alpha(theme.palette.text.primary, theme.palette.mode === 'light' ? 0.05 : 0.08),
+            }}
+          >
+            {TOOL_TRACKS.map(({ id, label, shortLabel, Icon }) => {
+              const selected = track === id;
+              const button = (
+                <Box
+                  key={id}
+                  component="button"
+                  type="button"
+                  aria-pressed={selected}
+                  aria-label={collapsed ? label : undefined}
+                  onClick={() => setTrack(id)}
+                  sx={{
+                    // Size to the label so "Counseling" never spills out of its pill
+                    flex: collapsed ? 1 : '1 1 auto',
+                    minHeight: collapsed ? 44 : 36,
+                    minWidth: 0,
+                    px: 1,
+                    border: 0,
+                    borderRadius: 2,
+                    cursor: 'pointer',
+                    font: 'inherit',
+                    fontSize: '0.8125rem',
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: selected ? 'text.primary' : 'text.secondary',
+                    bgcolor: selected ? 'background.paper' : 'transparent',
+                    boxShadow: selected ? '0 1px 2px rgba(6,13,31,0.12), 0 0 0 1px rgba(6,13,31,0.04)' : 'none',
+                    transition: 'background-color 0.15s ease, color 0.15s ease',
+                    '&:hover': { color: 'text.primary' },
+                  }}
+                >
+                  {collapsed ? <Icon sx={{ fontSize: 20 }} /> : shortLabel}
+                </Box>
+              );
+              return collapsed ? (
+                <Tooltip key={id} title={label} placement="right" arrow>
+                  {button}
+                </Tooltip>
+              ) : (
+                button
+              );
+            })}
+          </Box>
+        </Box>
+
+        <NavList>
+          {tools.map((tool) => (
+            <NavRow
+              key={tool.href}
+              href={tool.href}
+              label={tool.shortTitle ?? tool.title}
+              Icon={tool.Icon}
+              active={isNavActive(pathname, tool.href)}
+              collapsed={collapsed}
+              comingSoon={tool.comingSoon}
+              onClick={onItemClick}
+            />
+          ))}
+        </NavList>
+
+        <Divider sx={{ my: 2 }} />
+
+        {!collapsed && <SectionLabel>Your account</SectionLabel>}
+        <NavList>
+          {ACCOUNT_NAV.map((item) => (
+            <NavRow
+              key={item.href}
+              href={item.href}
+              label={item.title}
+              Icon={item.Icon}
+              active={isNavActive(pathname, item.href)}
+              collapsed={collapsed}
+              onClick={onItemClick}
+            />
+          ))}
+        </NavList>
+      </Box>
+
+      {/* Footer: theme, user, collapse */}
+      <Box sx={{ borderTop: '1px solid', borderColor: 'divider', px: collapsed ? 1 : 1.5, py: 1 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: collapsed ? 'column' : 'row',
+            alignItems: 'center',
+            gap: 0.5,
+          }}
+        >
+          {collapsed ? (
+            <Tooltip title={`Signed in as ${displayName}`} placement="right" arrow>
+              <Box sx={{ display: 'flex', py: 0.5 }}>
+                <AvatarWithRing src={userAvatar} name={displayName} size={32} tier={accountTier} sx={{ fontSize: 13 }} />
+              </Box>
+            </Tooltip>
+          ) : (
+            <Box
+              component={Link}
+              href="/profile"
+              onClick={onItemClick}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.25,
+                flex: 1,
+                minWidth: 0,
+                minHeight: 44,
+                px: 0.75,
+                borderRadius: 2,
+                '&:hover': { bgcolor: 'action.hover' },
+              }}
+            >
+              <AvatarWithRing src={userAvatar} name={displayName} size={32} tier={accountTier} sx={{ fontSize: 13 }} />
+              <Typography noWrap sx={{ fontSize: '0.875rem', fontWeight: 600, minWidth: 0 }}>
+                {displayName}
+              </Typography>
+            </Box>
+          )}
+          <FooterIconButton
+            label={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            onClick={toggleMode}
+            collapsed={collapsed}
+          >
+            {mode === 'dark' ? <LightModeOutlinedIcon fontSize="small" /> : <DarkModeOutlinedIcon fontSize="small" />}
+          </FooterIconButton>
+          <FooterIconButton label="Sign out" onClick={onSignOut} collapsed={collapsed}>
+            <LogoutRoundedIcon fontSize="small" />
+          </FooterIconButton>
+        </Box>
+        {!forceExpanded && (
+          <Box
+            component="button"
+            type="button"
+            onClick={toggleSidebar}
+            aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            aria-expanded={!collapsed}
+            sx={{
+              mt: 0.5,
+              width: '100%',
+              minHeight: 40,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: collapsed ? 'center' : 'flex-start',
+              gap: 1,
+              px: collapsed ? 0 : 1,
+              border: 0,
+              borderRadius: 2,
+              bgcolor: 'transparent',
+              color: 'text.secondary',
+              font: 'inherit',
+              fontSize: '0.8125rem',
+              fontWeight: 500,
+              cursor: 'pointer',
+              '&:hover': { bgcolor: 'action.hover', color: 'text.primary' },
+            }}
+          >
+            {collapsed ? (
+              <KeyboardDoubleArrowRightRoundedIcon fontSize="small" />
+            ) : (
+              <>
+                <KeyboardDoubleArrowLeftRoundedIcon fontSize="small" />
+                Collapse
+              </>
+            )}
           </Box>
         )}
       </Box>
-
-      <Divider />
-
-      {/* Exam/Counseling Tabs — icon-only when collapsed */}
-      <Tabs
-        value={examTab}
-        onChange={(_e, v) => setExamTab(v)}
-        variant="fullWidth"
-        orientation={collapsed ? 'vertical' : 'horizontal'}
-        sx={{
-          minHeight: collapsed ? 'auto' : 36,
-          borderBottom: collapsed ? 'none' : '1px solid',
-          borderColor: 'divider',
-          transition: TRANSITION,
-          '& .MuiTab-root': {
-            minHeight: collapsed ? 32 : 36,
-            minWidth: 0,
-            py: collapsed ? 0.25 : 0,
-            px: collapsed ? 0.5 : 1,
-          },
-          '& .MuiTabs-indicator': {
-            height: collapsed ? 0 : 2,
-            width: collapsed ? 2 : 'auto',
-            left: collapsed ? 0 : 'auto',
-          },
-        }}
-      >
-        <Tab
-          icon={<ArchitectureIcon sx={{ fontSize: collapsed ? 18 : 16, mb: collapsed ? 0 : '-2px' }} />}
-          label={collapsed ? undefined : 'NATA'}
-          iconPosition="top"
-          sx={{
-            fontSize: '0.6rem',
-            fontWeight: 600,
-            '& .MuiTab-iconWrapper': { mb: 0 },
-            bgcolor: collapsed && examTab === 0 ? 'action.selected' : 'transparent',
-            borderRadius: collapsed ? 1 : 0,
-          }}
-        />
-        <Tab
-          icon={<EngineeringIcon sx={{ fontSize: collapsed ? 18 : 16, mb: collapsed ? 0 : '-2px' }} />}
-          label={collapsed ? undefined : 'JEE'}
-          iconPosition="top"
-          sx={{
-            fontSize: '0.6rem',
-            fontWeight: 600,
-            '& .MuiTab-iconWrapper': { mb: 0 },
-            bgcolor: collapsed && examTab === 1 ? 'action.selected' : 'transparent',
-            borderRadius: collapsed ? 1 : 0,
-          }}
-        />
-        <Tab
-          icon={<GavelIcon sx={{ fontSize: collapsed ? 18 : 16, mb: collapsed ? 0 : '-2px' }} />}
-          label={collapsed ? undefined : 'Counsel'}
-          iconPosition="top"
-          sx={{
-            fontSize: '0.6rem',
-            fontWeight: 600,
-            '& .MuiTab-iconWrapper': { mb: 0 },
-            bgcolor: collapsed && examTab === 2 ? 'action.selected' : 'transparent',
-            borderRadius: collapsed ? 1 : 0,
-          }}
-        />
-      </Tabs>
-      {collapsed && <Divider />}
-
-      {/* Tool Navigation */}
-      <List sx={{
-        px: collapsed ? 0.25 : 0.5,
-        py: 0.5,
-        flexGrow: 1,
-        overflowY: 'auto',
-        overflowX: 'hidden',
-        // Apple-style thin scrollbar — visible only on hover (desktop)
-        scrollbarWidth: 'thin',
-        scrollbarColor: 'transparent transparent',
-        '&:hover': {
-          scrollbarColor: (theme) =>
-            theme.palette.mode === 'dark'
-              ? 'rgba(255,255,255,0.2) transparent'
-              : 'rgba(0,0,0,0.2) transparent',
-        },
-        '&::-webkit-scrollbar': {
-          width: 6,
-        },
-        '&::-webkit-scrollbar-track': {
-          background: 'transparent',
-        },
-        '&::-webkit-scrollbar-thumb': {
-          background: 'transparent',
-          borderRadius: 3,
-        },
-        '&:hover::-webkit-scrollbar-thumb': {
-          background: (theme) =>
-            theme.palette.mode === 'dark'
-              ? 'rgba(255,255,255,0.2)'
-              : 'rgba(0,0,0,0.2)',
-        },
-        '&:hover::-webkit-scrollbar-thumb:hover': {
-          background: (theme) =>
-            theme.palette.mode === 'dark'
-              ? 'rgba(255,255,255,0.35)'
-              : 'rgba(0,0,0,0.35)',
-        },
-        // Mobile: hide scrollbar, keep native touch scroll
-        '@media (max-width: 600px)': {
-          '&::-webkit-scrollbar': { display: 'none' },
-          scrollbarWidth: 'none',
-        },
-      }}>
-        {tools.map((item) => renderNavItem(item, true))}
-      </List>
-
-      <Divider />
-
-      {/* Bottom General Nav */}
-      <List sx={{ px: collapsed ? 0.25 : 0.5, py: 0.25 }}>
-        {SIDEBAR_BOTTOM_NAV.map((item) => renderNavItem(item))}
-      </List>
-
-      <Divider />
-
-      {/* Theme Toggle */}
-      <Box
-        sx={{
-          display: 'flex',
-          justifyContent: collapsed ? 'center' : 'flex-start',
-          px: collapsed ? 0.5 : 1.5,
-          py: 0.5,
-          transition: TRANSITION,
-        }}
-      >
-        <Tooltip title={mode === 'dark' ? 'Light mode' : 'Dark mode'} placement="right" arrow>
-          <IconButton onClick={toggleMode} size="small" sx={{ width: 28, height: 28, color: 'text.secondary' }}>
-            {mode === 'dark' ? (
-              <LightModeOutlinedIcon sx={{ fontSize: 16 }} />
-            ) : (
-              <DarkModeOutlinedIcon sx={{ fontSize: 16 }} />
-            )}
-          </IconButton>
-        </Tooltip>
-      </Box>
-
-      {/* User Row — compact */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: collapsed ? 'center' : 'space-between',
-          px: collapsed ? 0.5 : 1.5,
-          py: 0.75,
-          borderTop: '1px solid',
-          borderColor: 'divider',
-          minHeight: 36,
-          transition: TRANSITION,
-        }}
-      >
-        {!collapsed ? (
-          <>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, minWidth: 0, flex: 1 }}>
-              <AvatarWithRing
-                src={userAvatar}
-                name={userName}
-                size={24}
-                tier={accountTier}
-                sx={{ fontSize: 11 }}
-              />
-              <Typography variant="caption" fontWeight={500} noWrap sx={{ flex: 1, minWidth: 0 }}>
-                {userName || 'Student'}
-              </Typography>
-            </Box>
-            <Tooltip title="Sign out" placement="top" arrow>
-              <IconButton onClick={onSignOut} size="small" sx={{ width: 22, height: 22, color: 'text.secondary' }}>
-                <LogoutIcon sx={{ fontSize: 14 }} />
-              </IconButton>
-            </Tooltip>
-          </>
-        ) : (
-          <Tooltip title={`${userName || 'Student'} — Sign out`} placement="right" arrow>
-            <IconButton onClick={onSignOut} size="small" sx={{ width: 28, height: 28 }}>
-              <AvatarWithRing
-                src={userAvatar}
-                name={userName}
-                size={24}
-                tier={accountTier}
-                sx={{ fontSize: 11 }}
-              />
-            </IconButton>
-          </Tooltip>
-        )}
-      </Box>
     </Box>
+  );
+}
+
+function NavList({ children }: { children: React.ReactNode }) {
+  return (
+    <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+      {children}
+    </Box>
+  );
+}
+
+function SectionLabel({ children, id }: { children: React.ReactNode; id?: string }) {
+  return (
+    <Typography
+      id={id}
+      component="p"
+      sx={{
+        fontSize: '0.75rem',
+        fontWeight: 700,
+        letterSpacing: '0.06em',
+        textTransform: 'uppercase',
+        color: 'text.secondary',
+        px: 1,
+        mb: 0.75,
+      }}
+    >
+      {children}
+    </Typography>
+  );
+}
+
+interface NavRowProps {
+  href: string;
+  label: string;
+  Icon: SvgIconComponent;
+  active: boolean;
+  collapsed: boolean;
+  comingSoon?: boolean;
+  onClick?: () => void;
+}
+
+function NavRow({ href, label, Icon, active, collapsed, comingSoon, onClick }: NavRowProps) {
+  const content = (
+    <>
+      <Icon sx={{ fontSize: 20, flexShrink: 0, color: active ? 'primary.main' : 'inherit' }} />
+      {!collapsed && (
+        <Box component="span" sx={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {label}
+        </Box>
+      )}
+      {!collapsed && comingSoon && (
+        <Chip label="Soon" size="small" sx={{ height: 20, fontSize: '0.6875rem', '& .MuiChip-label': { px: 0.75 } }} />
+      )}
+    </>
+  );
+
+  const rowSx = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: collapsed ? 'center' : 'flex-start',
+    gap: 1.25,
+    minHeight: 42,
+    px: collapsed ? 0 : 1.25,
+    borderRadius: 2,
+    fontSize: '0.875rem',
+    fontWeight: active ? 600 : 500,
+    color: comingSoon ? 'text.disabled' : active ? 'text.primary' : 'text.secondary',
+    bgcolor: active ? 'action.selected' : 'transparent',
+    position: 'relative' as const,
+    transition: 'background-color 0.15s ease, color 0.15s ease',
+    ...(comingSoon
+      ? { cursor: 'default' }
+      : { '&:hover': { bgcolor: active ? 'action.selected' : 'action.hover', color: 'text.primary' } }),
+  };
+
+  const row = comingSoon ? (
+    <Box sx={rowSx} aria-disabled="true">
+      {content}
+      {collapsed && <span className="visually-hidden">{label} (coming soon)</span>}
+    </Box>
+  ) : (
+    <Box
+      component={Link}
+      href={href}
+      onClick={onClick}
+      aria-current={active ? 'page' : undefined}
+      aria-label={collapsed ? label : undefined}
+      sx={rowSx}
+    >
+      {content}
+    </Box>
+  );
+
+  return (
+    <li>
+      {collapsed ? (
+        <Tooltip title={comingSoon ? `${label} (coming soon)` : label} placement="right" arrow>
+          {row}
+        </Tooltip>
+      ) : (
+        row
+      )}
+    </li>
+  );
+}
+
+function FooterIconButton({
+  label,
+  onClick,
+  collapsed,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  collapsed: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip title={label} placement={collapsed ? 'right' : 'top'} arrow>
+      <IconButton onClick={onClick} aria-label={label} sx={{ width: 40, height: 40, color: 'text.secondary' }}>
+        {children}
+      </IconButton>
+    </Tooltip>
   );
 }

@@ -3,6 +3,7 @@ import { setRequestLocale } from 'next-intl/server';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import ApplyCallbackContent from '@/components/ApplyCallbackContent';
+import ClientIntl from '@/components/i18n/ClientIntl';
 
 const baseUrl = 'https://neramclasses.com';
 
@@ -42,7 +43,7 @@ export default function CallbackPage({
           { name: 'Callback', url: `${baseUrl}/apply/callback` },
         ])}
       />
-      <ApplyCallbackContent />
+      <ClientIntl locale={locale} namespaces={['callback']}><ApplyCallbackContent /></ClientIntl>
     </>
   );
 }

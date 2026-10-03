@@ -109,7 +109,7 @@ describe('verifyTeamsSsoToken: valid tokens', () => {
       email: 'student@neramclasses.com',
       name: 'A Student',
     });
-    expect(fetchSpy).toHaveBeenCalledWith(`https://login.microsoftonline.com/${TENANT_ID}/discovery/v2.0/keys`);
+    expect(fetchSpy).toHaveBeenCalledWith(`https://login.microsoftonline.com/${TENANT_ID}/discovery/v2.0/keys`, { cache: 'no-store' });
   });
 
   it('accepts a v1 token from Teams web addressed to the api:// resource', async () => {

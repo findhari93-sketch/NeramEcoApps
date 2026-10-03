@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
       safeSearch: 'strict',
     });
 
-    const res = await fetch(`https://www.googleapis.com/youtube/v3/search?${params}`);
+    const res = await fetch(`https://www.googleapis.com/youtube/v3/search?${params}`, { cache: 'no-store' });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       console.error('YouTube API error:', err);

@@ -1,10 +1,12 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { PUBLIC_CACHE_HEADERS } from '@/app/api/_lib/public-cache';
 import { createAdminClient } from '@neram/database';
 import { getStudentResultBySlug } from '@neram/database/queries';
 
-const cacheHeaders = { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' };
+// Vercel-CDN-Cache-Control is needed: next.config.js puts CDN-Cache-Control: no-store on /api/*.
+const cacheHeaders = PUBLIC_CACHE_HEADERS;
 
 /**
  * GET /api/student-results/[slug]

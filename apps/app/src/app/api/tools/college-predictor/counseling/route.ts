@@ -14,6 +14,7 @@ import {
   getSupabaseBrowserClient,
 } from '@neram/database';
 import { verifyIdToken } from '@/lib/firebase-admin';
+import { withoutSimilarStudents } from '@/lib/public-candidate';
 
 async function verifyUser(request: NextRequest): Promise<{ uid: string } | null> {
   const authHeader = request.headers.get('authorization');
@@ -168,7 +169,7 @@ export async function POST(request: NextRequest) {
           allotmentPredictions: [],
           keamPredictions: keamPreds,
           keamPhase,
-          rankPrediction,
+          rankPrediction: withoutSimilarStudents(rankPrediction),
           system: { id: system.id, code: system.code, name: system.name },
           year: targetYear,
           executionTime,
@@ -253,7 +254,8 @@ export async function POST(request: NextRequest) {
         predictions: seatAwarePredictions ? [] : predictions,
         allotmentPredictions: seatAwarePredictions ? [] : allotmentPredictions,
         // Common
-        rankPrediction,
+        // Similar students hold other candidates' details and this screen never shows them
+        rankPrediction: withoutSimilarStudents(rankPrediction),
         system: { id: system.id, code: system.code, name: system.name },
         year: targetYear,
         executionTime,

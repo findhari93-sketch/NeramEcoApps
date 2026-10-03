@@ -57,7 +57,7 @@ export async function GET(
     }
 
     // Fetch the PDF binary server-side and stream it to the client
-    const pdfRes = await fetch(downloadUrl, { redirect: 'follow' });
+    const pdfRes = await fetch(downloadUrl, { cache: 'no-store', redirect: 'follow' });
 
     if (!pdfRes.ok) {
       console.error('SharePoint PDF fetch failed:', pdfRes.status, await pdfRes.text().catch(() => ''));

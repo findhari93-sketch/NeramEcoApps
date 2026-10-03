@@ -105,6 +105,7 @@ async function postBatch(
     let response: Response;
     try {
       response = await fetchImpl(url, {
+        cache: 'no-store',
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

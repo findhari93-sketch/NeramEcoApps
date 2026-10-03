@@ -4,6 +4,7 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import CoursesPageContent from '@/components/CoursesPageContent';
+import ClientIntl from '@/components/i18n/ClientIntl';
 
 
 const baseUrl = 'https://neramclasses.com';
@@ -45,7 +46,7 @@ export default function CoursesPage({
           { name: 'Courses', url: `${baseUrl}/courses` },
         ])}
       />
-      <CoursesPageContent />
+      <ClientIntl locale={locale} namespaces={['courses']}><CoursesPageContent /></ClientIntl>
     </>
   );
 }

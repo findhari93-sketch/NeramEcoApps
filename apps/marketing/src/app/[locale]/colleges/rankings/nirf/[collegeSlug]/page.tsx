@@ -29,6 +29,13 @@ import Breadcrumbs from '@/components/seo/Breadcrumbs';
 // First request to /colleges/rankings/nirf/<slug> renders + caches for 24h.
 export const revalidate = 86400;
 
+// An empty list registers the route for on-demand ISR. Without it Next 14 renders
+// every request dynamically, and the revalidate above never takes effect. It adds
+// no build files, so the 15k file cap is safe.
+export function generateStaticParams() {
+  return [];
+}
+
 interface PageProps {
   params: { locale: string; collegeSlug: string };
 }

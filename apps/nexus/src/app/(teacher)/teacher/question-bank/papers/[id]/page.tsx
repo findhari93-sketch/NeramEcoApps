@@ -35,6 +35,8 @@ import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
+import CastForEducationOutlinedIcon from '@mui/icons-material/CastForEducationOutlined';
+import { isFeatureEnabled } from '@/lib/feature-flags';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { QB_EXAM_TYPE_LABELS, qbSectionLabel } from '@neram/database';
 import { QB_EXAM_LABELS, isQBExamType, qbExamPath, rememberQBExam } from '@/lib/qb-exam-routes';
@@ -72,7 +74,7 @@ export default function PaperDetailPage() {
   const router = useRouter();
   const params = useParams();
   const paperId = params.id as string;
-  const { getToken, getTeacherToken, can } = useNexusAuthContext();
+  const { getToken, getTeacherToken, can, featureFlags } = useNexusAuthContext();
 
   const [paper, setPaper] = useState<NexusQBOriginalPaper | null>(null);
   // Back returns to this paper's own exam page, and the sidebar highlights it.
@@ -119,6 +121,8 @@ export default function PaperDetailPage() {
    * a half-typed edit and any images waiting to be pasted.
    */
   const [focus, setFocus] = useState(false);
+  /** The question open in the workspace: Present to class starts there. */
+  const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   // Edit/Images mode and both filters live here rather than inside
   // PaperWorkspace so the header can still drive the list, which is what the
   // unsectioned warning below does: it is the one thing up here that sets a
@@ -589,6 +593,23 @@ export default function PaperDetailPage() {
                   {activating ? 'Activating...' : `Activate ${completeCount}`}
                 </Button>
               )}
+              {/* Present to class: the paper on the shared screen, as students
+                  see it, driving the Answer Pad. Starts at the open question. */}
+              {tab === 0 && isFeatureEnabled('staff.qb-present', featureFlags) && (
+                <Tooltip title="Show this paper to the class, one question at a time, with the Answer Pad" arrow>
+                  <Button
+                    variant="outlined"
+                    size="small"
+                    startIcon={<CastForEducationOutlinedIcon />}
+                    href={`/pad/present?paper=${encodeURIComponent(paperId)}${
+                      activeQuestionId ? `&q=${encodeURIComponent(activeQuestionId)}` : ''
+                    }&back=${encodeURIComponent(`/teacher/question-bank/papers/${paperId}`)}`}
+                    sx={{ minHeight: 44, textTransform: 'none', whiteSpace: 'nowrap' }}
+                  >
+                    Present
+                  </Button>
+                </Tooltip>
+              )}
               {/* Focus mode. Only offered on Questions, since Student access
                   has no second pane to give the room to. */}
               {tab === 0 && (
@@ -845,6 +866,7 @@ export default function PaperDetailPage() {
           getChatToken={getTeacherToken}
           openQuestionId={linkedQuestionId}
           canConnectYouTube={can('system.settings')}
+          onActiveChange={setActiveQuestionId}
         />
         </Box>
       )}

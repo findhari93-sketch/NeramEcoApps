@@ -1,8 +1,9 @@
 import type { Metadata } from 'next';
 import ReviewsPageView, { buildReviewsMetadata } from '@/components/reviews/ReviewsPageView';
 
-// ISR: published reviews change rarely; an hour keeps them fresh without per-request renders.
-export const revalidate = 3600;
+// ISR: published reviews change rarely. Daily, plus an instant purge of the
+// "reviews" cache tag from admin saves (/api/revalidate).
+export const revalidate = 86400;
 
 interface PageProps {
   params: { locale: string };

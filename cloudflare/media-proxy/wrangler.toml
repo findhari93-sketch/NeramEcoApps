@@ -1,0 +1,49 @@
+# Nexus media proxy: streams class-recording bytes from SharePoint so they do
+# not pass through a Vercel function. Kept separate from supabase-proxy so a bug
+# here can never affect the database path.
+#
+# SETUP (per environment, at deploy time; values are never committed):
+#
+#   Secrets
+#     npx wrangler secret put VIDEO_TOKEN_SECRET --env production
+#       = the Nexus production VIDEO_STREAM_SECRET (or IMPERSONATION_JWT_SECRET
+#         if VIDEO_STREAM_SECRET is not set there). Must match exactly, or every
+#         video request answers 401.
+#     npx wrangler secret put MEDIA_PROXY_SECRET --env production
+#       = a new random string (e.g. `openssl rand -base64 48`), also set as
+#         MEDIA_PROXY_SECRET on the Nexus Vercel project (production).
+#     Repeat both with --env staging using the staging/preview Nexus values.
+#
+#   Nexus (Vercel, project neram-nexus-new)
+#     MEDIA_PROXY_ORIGIN = https://media.neramclasses.com          (production)
+#     MEDIA_PROXY_ORIGIN = https://media-staging.neramclasses.com  (preview)
+#     MEDIA_PROXY_SECRET = same value as the Worker secret above
+#     Rollback: remove MEDIA_PROXY_ORIGIN; players fall back to /api/media/recording.
+#
+#   DNS (Cloudflare zone neramclasses.com)
+#     None by hand. The routes below are Worker custom domains, so the first
+#     deploy creates the media and media-staging records and their certificates.
+#
+#   Deploy: npm run deploy:staging / npm run deploy:production (from this folder).
+#   Local:  npx wrangler dev --env staging, then run Nexus with
+#           MEDIA_PROXY_ORIGIN=http://localhost:8787 and put
+#           EXTRA_ALLOWED_ORIGINS=http://localhost:3012 in .dev.vars.
+
+name = "neram-media-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-09-23"
+account_id = "2ded5f54d55033ec99a15cf99bccc972"
+
+[env.production]
+name = "neram-media-proxy-prod"
+vars = { NEXUS_ORIGIN = "https://nexus.neramclasses.com" }
+routes = [
+  { pattern = "media.neramclasses.com", custom_domain = true }
+]
+
+[env.staging]
+name = "neram-media-proxy-staging"
+vars = { NEXUS_ORIGIN = "https://staging-nexus.neramclasses.com" }
+routes = [
+  { pattern = "media-staging.neramclasses.com", custom_domain = true }
+]

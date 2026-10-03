@@ -3,9 +3,16 @@ import { notFound } from 'next/navigation';
 import ReviewsPageView, { buildReviewsMetadata } from '@/components/reviews/ReviewsPageView';
 import { parsePageSegment } from '@/lib/reviews/rules';
 
-// Lazy ISR: no generateStaticParams, so page N is rendered on its first request
-// and cached for an hour. Page 1 lives at the section root, not /page/1.
-export const revalidate = 3600;
+// Lazy ISR: an empty generateStaticParams, so page N is rendered on its first request
+// and cached for a day (admin saves purge the "reviews" tag). Page 1 lives at the section root, not /page/1.
+export const revalidate = 86400;
+
+// An empty list registers the route for on-demand ISR. Without it Next 14 renders
+// every request dynamically, and the revalidate above never takes effect. It adds
+// no build files, so the 15k file cap is safe.
+export function generateStaticParams() {
+  return [];
+}
 
 interface PageProps {
   params: { locale: string; page: string };

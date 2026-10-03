@@ -1,50 +1,49 @@
 'use client';
 
-import { AppBar, Toolbar, Typography, IconButton, Box, MenuIcon } from '@neram/ui';
-import { neramTokens } from '@neram/ui';
+import { AppBar, Toolbar, IconButton, Box } from '@neram/ui';
+import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
 import Link from 'next/link';
 import UserNotificationBell from '@/components/UserNotificationBell';
+import BrandMark from './BrandMark';
+
+export const TOP_BAR_HEIGHT = 56;
 
 interface AppTopBarProps {
   onMenuToggle: () => void;
   phoneVerified: boolean;
 }
 
+/** Phone and small tablet only. Laptop uses the sidebar header instead. */
 export default function AppTopBar({ onMenuToggle, phoneVerified }: AppTopBarProps) {
   return (
     <AppBar
       position="fixed"
-      elevation={0}
       sx={{
-        display: { xs: 'block', sm: 'none' },
+        display: { xs: 'block', md: 'none' },
         bgcolor: 'background.paper',
         color: 'text.primary',
         borderBottom: '1px solid',
         borderColor: 'divider',
+        pt: 'env(safe-area-inset-top, 0px)',
       }}
     >
-      <Toolbar sx={{ minHeight: 48, px: 1.5 }}>
-        <IconButton color="inherit" edge="start" onClick={onMenuToggle} sx={{ mr: 1 }}>
-          <MenuIcon />
+      <Toolbar disableGutters sx={{ minHeight: `${TOP_BAR_HEIGHT}px !important`, px: 1, gap: 0.5 }}>
+        <IconButton
+          color="inherit"
+          onClick={onMenuToggle}
+          aria-label="Open menu"
+          sx={{ width: 44, height: 44 }}
+        >
+          <MenuRoundedIcon />
         </IconButton>
-        <Typography
+        <Box
           component={Link}
           href="/dashboard"
-          sx={{
-            fontFamily: 'var(--font-dm-sans), "DM Sans", sans-serif',
-            fontSize: '1.15rem',
-            fontWeight: 700,
-            color: 'text.primary',
-            textDecoration: 'none',
-            mr: 'auto',
-            lineHeight: 1,
-          }}
+          aria-label="aiArchitek home"
+          sx={{ display: 'flex', alignItems: 'center', minHeight: 44, mr: 'auto', borderRadius: 2, px: 0.5 }}
         >
-          ai
-          <Box component="span" sx={{ color: neramTokens.gold[500] }}>
-            Architek
-          </Box>
-        </Typography>
+          <BrandMark size="sm" />
+        </Box>
         {phoneVerified && <UserNotificationBell />}
       </Toolbar>
     </AppBar>

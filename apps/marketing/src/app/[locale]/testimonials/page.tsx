@@ -7,9 +7,11 @@ import { buildAlternates } from '@/lib/seo/metadata';
 import TestimonialsPageContent from '@/components/TestimonialsPageContent';
 import { getAggregateRating, getReviewSummary } from '@/lib/review-stats';
 import { hasEnoughRatings } from '@/lib/reviews/rules';
+import ClientIntl from '@/components/i18n/ClientIntl';
 
-// ISR: the rating below comes from published reviews (cached for an hour).
-export const revalidate = 3600;
+// ISR: the rating below comes from published reviews (cached for a day; admin
+// review edits purge it at once through /api/revalidate).
+export const revalidate = 86400;
 
 const baseUrl = 'https://neramclasses.com';
 
@@ -68,7 +70,7 @@ export default async function TestimonialsPage({
         ]}
       />
       <Suspense>
-        <TestimonialsPageContent averageRating={hasEnoughRatings(summary) ? summary.average : null} />
+        <ClientIntl locale={locale} namespaces={['testimonials']}><TestimonialsPageContent averageRating={hasEnoughRatings(summary) ? summary.average : null} /></ClientIntl>
       </Suspense>
     </>
   );

@@ -8,9 +8,14 @@ import {
 import { buildAlternates } from '@/lib/seo/metadata';
 import CourseDetailContent from '@/components/CourseDetailContent';
 import { coursesData } from '@/data/courses';
+import ClientIntl from '@/components/i18n/ClientIntl';
 
 
 const baseUrl = 'https://neramclasses.com';
+
+// The course list is fixed in code (data/courses), so any other slug is a 404
+// from the static not-found page: no render, no ISR write for junk URLs.
+export const dynamicParams = false;
 
 // Generate static params for all known course slugs
 export function generateStaticParams() {
@@ -85,7 +90,7 @@ export default function CourseDetailPage({
   return (
     <>
       {jsonLdData.length > 0 && <JsonLd data={jsonLdData} />}
-      <CourseDetailContent slug={slug} locale={locale} />
+      <ClientIntl locale={locale} namespaces={['courseDetail']}><CourseDetailContent slug={slug} locale={locale} /></ClientIntl>
     </>
   );
 }

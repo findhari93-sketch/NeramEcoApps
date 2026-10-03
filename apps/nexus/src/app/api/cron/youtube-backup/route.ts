@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
     }
     try {
       const source = await resolveRecordingSource(cls.recording_url);
-      const res = await fetch(source.downloadUrl, { headers: { Range: 'bytes=0-1023' } });
+      const res = await fetch(source.downloadUrl, { cache: 'no-store', headers: { Range: 'bytes=0-1023' } });
       const read = (await res.arrayBuffer()).byteLength;
       return NextResponse.json({
         size: source.size,

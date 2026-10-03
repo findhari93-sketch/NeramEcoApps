@@ -55,6 +55,7 @@ async function graphReason(res: Response): Promise<string> {
 async function postWithRetry(url: string, token: string, payload: unknown): Promise<Response> {
   const send = () =>
     fetch(url, {
+      cache: 'no-store',
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -105,7 +106,7 @@ async function teacherAccountId(token: string): Promise<string | null> {
   }
   if (!id) {
     try {
-      const res = await fetch(`${GRAPH}/me?$select=id`, { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${GRAPH}/me?$select=id`, { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) {
         const me = await res.json().catch(() => null);
         if (typeof me?.id === 'string' && GUID.test(me.id)) id = me.id;
