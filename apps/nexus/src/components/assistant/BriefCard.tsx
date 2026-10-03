@@ -1,0 +1,63 @@
+'use client';
+
+import Link from 'next/link';
+import { Box, Button, Paper, Skeleton, Typography, alpha, useTheme } from '@neram/ui';
+import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { useAuthSWR } from '@/lib/nexus-swr';
+import type { Brief } from '@/lib/assistant/brief';
+import { useAssistantOptional } from './AssistantProvider';
+import { ASSISTANT_FLAG } from './client';
+
+/**
+ * "Your day", at the top of the student dashboard. Deterministic: the server
+ * builds it from the same loaders as the pages it links to, so nothing here
+ * can disagree with the page behind the link. Nothing to say means no card.
+ */
+export default function BriefCard() {
+  const theme = useTheme();
+  const { tokenReady, isFeatureEnabled } = useNexusAuthContext();
+  const assistant = useAssistantOptional();
+  const on = tokenReady && isFeatureEnabled(ASSISTANT_FLAG);
+  const { data, error, isLoading } = useAuthSWR<{ brief: Brief }>(on ? '/api/assistant/brief' : null);
+
+  if (!on || error) return null;
+  if (isLoading || !data) {
+    return (
+      <Paper data-testid="brief-skeleton" aria-hidden="true" elevation={0} sx={{ p: 2, mb: 2, borderRadius: 3, border: `1px solid ${theme.palette.divider}` }}>
+        <Skeleton width="40%" height={28} /><Skeleton width="90%" /><Skeleton width="70%" /><Skeleton width="60%" />
+      </Paper>
+    );
+  }
+  const { brief } = data;
+  if (!brief.hasContent) return null;
+
+  return (
+    <Paper elevation={0} component="section" aria-labelledby="brief-title" sx={{ p: 2, mb: 2, borderRadius: 3, border: `1px solid ${theme.palette.divider}`, bgcolor: alpha(theme.palette.primary.main, 0.03) }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+        <AutoAwesomeOutlinedIcon fontSize="small" color="primary" />
+        <Typography id="brief-title" variant="subtitle1" sx={{ fontWeight: 700 }}>{brief.greeting}</Typography>
+      </Box>
+      <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+        {brief.sections.map((s) => (
+          <Box component="li" key={s.id}>
+            {s.link ? (
+              <Button component={Link} href={s.link} endIcon={<ChevronRightIcon />} sx={{ justifyContent: 'space-between', width: '100%', minHeight: 48, textTransform: 'none', textAlign: 'left', color: 'text.primary', px: 1 }}>
+                <Typography variant="body1" sx={{ lineHeight: 1.5 }}>{s.text}</Typography>
+              </Button>
+            ) : (
+              <Typography variant="body1" sx={{ px: 1, py: 1.5, lineHeight: 1.5 }}>{s.text}</Typography>
+            )}
+          </Box>
+        ))}
+      </Box>
+      {assistant?.enabled && (
+        <Box sx={{ display: 'flex', gap: 1, mt: 1.5 }}>
+          <Button variant="contained" onClick={() => assistant.openPanel()} sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700 }}>Ask</Button>
+          <Button variant="outlined" onClick={() => assistant.openPanel("I can't attend a class")} sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700 }}>Can&apos;t attend</Button>
+        </Box>
+      )}
+    </Paper>
+  );
+}

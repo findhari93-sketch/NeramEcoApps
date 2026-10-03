@@ -41,6 +41,7 @@ import { useSidebarContext } from '@/components/SidebarProvider';
 import { usePanelContext } from '@/components/PanelProvider';
 import { useStudentZoneContext } from '@/components/StudentZoneProvider';
 import { IMPERSONATION_BANNER_HEIGHT } from '@/components/ImpersonationBanner';
+import AssistantTopBarButton from '@/components/assistant/AssistantTopBarButton';
 import { getRoleDashboard, hasProfilePages } from '@/lib/role-home';
 
 /* Role → color mapping for the ring & badge */
@@ -401,6 +402,7 @@ export default function TopBar() {
           is no parent notification feed to show yet, so the honest fix is to not
           render the control rather than to widen the route's gate.
         */}
+        {nexusRole === 'student' && <AssistantTopBarButton />}
         {nexusRole !== 'parent' && <NotificationBell />}
 
         {/* ── Unified Profile Button ── */}

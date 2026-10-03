@@ -15,7 +15,8 @@ import DeviceRegistrationProvider from '@/components/DeviceRegistrationProvider'
 import WelcomeOrientation from '@/components/WelcomeOrientation';
 import StudentZoneProvider, { useStudentZoneContext } from '@/components/StudentZoneProvider';
 import FeatureGate from '@/components/FeatureGate';
-import ReportIssueFab from '@/components/ReportIssueFab';
+import { AssistantProvider } from '@/components/assistant/AssistantProvider';
+import StudentHelpFab from '@/components/assistant/StudentHelpFab';
 import { installErrorCapture } from '@/lib/error-buffer';
 import { studentSidebarExams } from '@/lib/qb-exam-routes';
 
@@ -85,7 +86,7 @@ function StudentShell({ children }: { children: React.ReactNode }) {
         </Box>
         <BottomNav items={currentBottomNavItems} overflowGroups={currentOverflowGroups} />
       </Box>
-      <ReportIssueFab />
+      <StudentHelpFab />
     </Box>
   );
 }
@@ -102,7 +103,9 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
     <RoleGuard allowedRoles={['student']}>
       <NavBadgeProvider>
         <StudentZoneProvider qbExams={qbExams}>
-          <StudentShell>{children}</StudentShell>
+          <AssistantProvider>
+            <StudentShell>{children}</StudentShell>
+          </AssistantProvider>
         </StudentZoneProvider>
       </NavBadgeProvider>
     </RoleGuard>
