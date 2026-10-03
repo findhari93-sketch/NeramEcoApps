@@ -6,6 +6,7 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
 import PlaylistAddIcon from '@mui/icons-material/PlaylistAdd';
 import KeyboardIcon from '@mui/icons-material/KeyboardOutlined';
+import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import type { PracticeScope } from '@/lib/qb-paper-number';
 import LangToggle from './LangToggle';
 
@@ -29,6 +30,8 @@ interface PracticeHeaderProps {
   selecting: boolean;
   onCreateTest: () => void;
   onHelp?: () => void;
+  /** The exam's chapter weightage page, or null when the list is not scoped to one exam. */
+  weightageHref?: string | null;
 }
 
 /**
@@ -57,6 +60,7 @@ export default function PracticeHeader({
   selecting,
   onCreateTest,
   onHelp,
+  weightageHref,
 }: PracticeHeaderProps) {
   const desktop = variant === 'desktop';
   const pct = progress.total ? Math.round((progress.answered / progress.total) * 100) : 0;
@@ -124,6 +128,26 @@ export default function PracticeHeader({
     </Button>
   );
 
+  // A quiet text link: it is a side trip, so it never competes with Continue or Create test.
+  const weightageLink = weightageHref && !selecting && (
+    <Button
+      component={NextLink}
+      href={weightageHref}
+      variant="text"
+      startIcon={<InsightsOutlinedIcon />}
+      sx={{
+        minHeight: 44,
+        textTransform: 'none',
+        fontWeight: 700,
+        whiteSpace: 'nowrap',
+        flexShrink: 0,
+        ...(desktop ? null : { ml: -1, px: 1 }),
+      }}
+    >
+      Chapter weightage
+    </Button>
+  );
+
   if (desktop) {
     return (
       <Box
@@ -141,6 +165,7 @@ export default function PracticeHeader({
           {progressBar}
         </Box>
         <Box sx={{ flex: 1 }} />
+        {weightageLink}
         {continueButton}
         {showLang && <LangToggle lang={lang} onChange={onLangChange} />}
         {onHelp && (
@@ -168,6 +193,7 @@ export default function PracticeHeader({
         {summary}
         {progressBar}
       </Box>
+      {weightageLink && <Box sx={{ display: 'flex', mt: -0.5 }}>{weightageLink}</Box>}
       {(continueButton || testButton) && (
         <Box sx={{ display: 'flex', gap: 1 }}>
           {continueButton}

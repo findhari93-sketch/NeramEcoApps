@@ -316,6 +316,13 @@ export default function QuestionListPage() {
     return 'Question bank';
   })();
   const backHref = backParam ?? (isQBExamType(exam) ? qbExamPath('student', exam) : '/student/question-bank');
+  // Not offered when the list itself came from the weightage page: Back already goes there.
+  // The weightage page's Back returns here, to the same filters and open question.
+  const selfPath = `/student/question-bank/questions${searchParams.toString() ? `?${searchParams.toString()}` : ''}`;
+  const weightageHref =
+    isQBExamType(exam) && !backParam?.includes('/weightage')
+      ? `${qbExamPath('student', exam)}/weightage?${new URLSearchParams({ back: selfPath }).toString()}`
+      : null;
   const backLabel = backParam?.includes('/papers/')
     ? 'Back to the paper'
     : isQBExamType(exam)
@@ -585,6 +592,7 @@ export default function QuestionListPage() {
       selecting={selection.active}
       onCreateTest={startSelection}
       onHelp={isTwoPane ? () => setHelpOpen(true) : undefined}
+      weightageHref={weightageHref}
     />
   );
 
