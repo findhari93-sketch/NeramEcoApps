@@ -14,6 +14,12 @@ export interface FakeDbOptions {
 
 let seq = 0;
 const newId = () => `00000000-0000-4000-8000-${String(++seq).padStart(12, '0')}`;
+/** Strictly increasing timestamps, so ordering by created_at matches insert order as it does in Postgres. */
+let clock = 0;
+const stamp = () => {
+  clock = Math.max(Date.now(), clock + 1);
+  return new Date(clock).toISOString();
+};
 
 export function fakeDb(tables: Record<string, Row[]>, opts: FakeDbOptions = {}) {
   const data: Record<string, Row[]> = {};
@@ -50,7 +56,7 @@ export function fakeDb(tables: Record<string, Row[]>, opts: FakeDbOptions = {}) 
       if (op === 'insert') {
         const list = Array.isArray(payload) ? payload : [payload as Row];
         for (const r of list) {
-          const row = { id: newId(), created_at: new Date().toISOString(), ...r };
+          const row = { id: newId(), created_at: stamp(), ...r };
           if (violates(name, row)) {
             return { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } };
           }
@@ -64,7 +70,7 @@ export function fakeDb(tables: Record<string, Row[]>, opts: FakeDbOptions = {}) 
           Object.assign(existing, r);
           out = [existing];
         } else {
-          const row = { id: newId(), created_at: new Date().toISOString(), ...r };
+          const row = { id: newId(), created_at: stamp(), ...r };
           rows.push(row);
           out = [row];
         }

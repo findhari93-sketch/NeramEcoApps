@@ -16,7 +16,7 @@ import { isStale, type FlowDeps, type FlowOutcome, type FlowState, type Proposal
 import { defaultSuggestions } from './page-suggestions';
 import { findActionTool, findTool, toolsFor } from './registry-all';
 import { routeIntent, type FlowName } from './router';
-import { appendMessage, createThread, findThreadByExternalId, getThread, listMessages, touchThread, type ThreadRow } from './store';
+import { appendMessage, createThread, findReplyToExternalId, findThreadByExternalId, getThread, touchThread, type ThreadRow } from './store';
 import type { AssistantCaller, Attachment, Channel, Envelope, Mode, PageContext, ToolContext, ToolLink } from './types';
 
 export const MAX_TEXT = 2000;
@@ -87,11 +87,11 @@ export async function runAssistantTurn(input: TurnInput): Promise<Envelope> {
 
   const thread = await resolveThread(input);
   const stored = await appendMessage(input.supabase, { threadId: thread.id, role: 'user', text: text || '(photo)', externalId: input.externalId ?? null });
-  if (!stored.inserted) {
-    // Redelivery: answer with what we already said.
-    const history = await listMessages(input.supabase, thread.id, 50);
-    const last = [...history].reverse().find((m) => m.role === 'assistant' && m.envelope);
-    if (last?.envelope) return last.envelope;
+  if (!stored.inserted && input.externalId) {
+    // Redelivery: answer with the reply to this very message. If the first
+    // attempt died before replying, there is none, so do the work now.
+    const reply = await findReplyToExternalId(input.supabase, thread.id, input.externalId);
+    if (reply?.envelope) return reply.envelope;
   }
 
   const classroom = await getStudentPrimaryClassroom(input.caller.id, input.supabase).catch(() => null);

@@ -152,15 +152,44 @@ export async function appendMessage(
   return { inserted: true, row: data as MessageRow };
 }
 
+/** The most recent `limit` messages of a thread, oldest first (as a chat reads). */
 export async function listMessages(supabase: any, threadId: string, limit = 30): Promise<MessageRow[]> {
   const { data, error } = await supabase
     .from(MESSAGES)
     .select('*')
     .eq('thread_id', threadId)
-    .order('created_at', { ascending: true })
+    .order('created_at', { ascending: false })
     .limit(limit);
   throwIf(error);
-  return (data || []) as MessageRow[];
+  return ((data || []) as MessageRow[]).reverse();
+}
+
+/**
+ * The assistant reply stored for one inbound external id (a Teams activity):
+ * the first assistant message after that user message in the same thread.
+ * Null when the user message is unknown or its first attempt never replied.
+ */
+export async function findReplyToExternalId(supabase: any, threadId: string, externalId: string): Promise<MessageRow | null> {
+  const { data: asked, error } = await supabase
+    .from(MESSAGES)
+    .select('id, created_at')
+    .eq('thread_id', threadId)
+    .eq('external_id', externalId)
+    .eq('role', 'user')
+    .maybeSingle();
+  throwIf(error);
+  if (!asked) return null;
+  const { data: reply, error: replyError } = await supabase
+    .from(MESSAGES)
+    .select('*')
+    .eq('thread_id', threadId)
+    .eq('role', 'assistant')
+    .gt('created_at', asked.created_at)
+    .order('created_at', { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  throwIf(replyError);
+  return (reply as MessageRow) ?? null;
 }
 
 export async function createAction(

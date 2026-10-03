@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { fakeDb } from './testing/fake-db';
 import {
-  appendMessage, createAction, createReminder, createThread, findThreadByExternalId,
+  appendMessage, createAction, createReminder, createThread, findReplyToExternalId, findThreadByExternalId,
   getAction, listMessages, listRemindersDue, touchThread, updateAction,
 } from './store';
 
@@ -27,6 +27,27 @@ describe('threads and messages', () => {
     expect(a.inserted && b.inserted).toBe(true);
     expect(dup.inserted).toBe(false);
     expect((await listMessages(db, t.id)).map((m) => m.text)).toEqual(['hi', 'hello']);
+  });
+
+  it('lists the most recent messages, oldest first, when there are more than the limit', async () => {
+    const db = fakeDb({});
+    const t = await createThread(db, { userId: 'u1', channel: 'nexus' });
+    for (let i = 0; i < 60; i++) await appendMessage(db, { threadId: t.id, role: i % 2 ? 'assistant' : 'user', text: `m${i}` });
+    const texts = (await listMessages(db, t.id, 50)).map((m) => m.text);
+    expect(texts).toEqual(Array.from({ length: 50 }, (_, i) => `m${i + 10}`));
+  });
+
+  it('finds the reply to one external id, not an earlier turn, and null when none was stored', async () => {
+    const db = fakeDb({}, { unique: UNIQUE });
+    const t = await createThread(db, { userId: 'u1', channel: 'teams' });
+    await appendMessage(db, { threadId: t.id, role: 'user', text: 'one', externalId: 'act-1' });
+    await appendMessage(db, { threadId: t.id, role: 'assistant', text: 'reply one' });
+    await appendMessage(db, { threadId: t.id, role: 'user', text: 'two', externalId: 'act-2' });
+    expect((await findReplyToExternalId(db, t.id, 'act-1'))?.text).toBe('reply one');
+    expect(await findReplyToExternalId(db, t.id, 'act-2')).toBeNull();
+    expect(await findReplyToExternalId(db, t.id, 'act-9')).toBeNull();
+    await appendMessage(db, { threadId: t.id, role: 'assistant', text: 'reply two' });
+    expect((await findReplyToExternalId(db, t.id, 'act-2'))?.text).toBe('reply two');
   });
 
   it('stores and clears flow state', async () => {

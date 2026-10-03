@@ -76,6 +76,7 @@ export async function cancelAction(ctx: ToolContext, input: { id: string }): Pro
   const row = await getAction(ctx.supabase, input.id);
   if (!row) return { ok: false, status: 404, error: 'That action is gone.' };
   if (row.user_id !== ctx.caller.id) return { ok: false, status: 403, error: 'That is not your action.' };
+  if (ctx.caller.impersonating) return { ok: false, status: 403, error: 'Viewing as a student is read only.' };
   if (row.status !== 'pending') return { ok: false, status: 409, error: 'That action was already handled.' };
   await updateAction(ctx.supabase, row.id, { status: 'cancelled' });
   return { ok: true, reply: 'Okay, cancelled. Nothing was changed.', links: [], threadId: row.thread_id };

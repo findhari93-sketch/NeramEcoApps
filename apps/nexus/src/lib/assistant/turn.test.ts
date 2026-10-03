@@ -129,6 +129,19 @@ describe('runAssistantTurn', () => {
     expect(db.rows('nexus_assistant_messages')).toHaveLength(2);
   });
 
+  it('does the work for a redelivery whose first attempt died, instead of replaying an earlier reply', async () => {
+    const db = fakeDb({}, { unique: UNIQUE });
+    const teams = { channel: 'teams', threadExternalId: '19:conv' };
+    const earlier = await turn(db, 'why is the sky blue', { ...teams, externalId: 'act-1' });
+    expect(earlier.reply).toMatch(/free questions/);
+    mocks.loadUpcomingClasses.mockRejectedValueOnce(new Error('db down'));
+    await expect(turn(db, 'when is my next class', { ...teams, externalId: 'act-2' })).rejects.toThrow('db down');
+    const retry = await turn(db, 'when is my next class', { ...teams, externalId: 'act-2' });
+    expect(retry.reply).toMatch(/^Your next classes:/);
+    expect(mocks.loadUpcomingClasses).toHaveBeenCalledTimes(2);
+    expect(db.rows('nexus_assistant_messages').map((m) => m.role)).toEqual(['user', 'assistant', 'user', 'assistant']);
+  });
+
   it('refuses a thread that belongs to someone else by starting a fresh one', async () => {
     const db = fakeDb({ nexus_assistant_threads: [{ id: 't-other', user_id: 'u9', channel: 'nexus', flow_state: null }] });
     const env = await turn(db, 'brief', { threadId: 't-other' });

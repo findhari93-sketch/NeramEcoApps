@@ -140,4 +140,11 @@ describe('cancelAction', () => {
     expect(await cancelAction(ctxFor(db), { id: p.id })).toMatchObject({ ok: true });
     expect(db.rows('nexus_assistant_actions')[0].status).toBe('cancelled');
   });
+
+  it('refuses to cancel while impersonating and leaves the action pending', async () => {
+    const db = fakeDb({});
+    const p = await proposeAction(ctxFor(db), { kind: 'set_reminder', args: {}, summary: 's', fields: [] });
+    expect(await cancelAction(ctxFor(db, { ...student, impersonating: true }), { id: p.id })).toEqual({ ok: false, status: 403, error: 'Viewing as a student is read only.' });
+    expect(db.rows('nexus_assistant_actions')[0].status).toBe('pending');
+  });
 });
