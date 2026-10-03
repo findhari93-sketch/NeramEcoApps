@@ -5,6 +5,7 @@ import { getSupabaseAdminClient } from '@neram/database';
 import { CLASS_IMAGES_EMBED } from '@/lib/class-cover';
 import { applyClassPrepGate } from '@/lib/class-prep-server';
 import { resolveExamCountdown } from '@/lib/exam-countdown-server';
+import { loadUpcomingClasses } from '@/lib/upcoming-classes';
 
 /**
  * GET /api/dashboard/student?classroom={id}
@@ -54,7 +55,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch all data in parallel
     const [
-      upcomingClassesRaw,
+      upcomingClasses,
       ownAttendance,
       recentCompletedResult,
       checklistTotalResult,
@@ -63,18 +64,9 @@ export async function GET(request: NextRequest) {
       topicCompletedResult,
       examCountdown,
     ] = await Promise.all([
-      // Upcoming classes (over-fetch to filter today's ended classes in JS)
-      supabase
-        .from('nexus_scheduled_classes')
-        // classroom_id is selected for applyClassPrepGate, which keys the
-        // decision on that class's own enrolment role.
-        .select('id, title, classroom_id, scheduled_date, start_time, end_time, status, teams_meeting_url, topic:nexus_topics(title, category), teacher:users!nexus_scheduled_classes_teacher_id_fkey(name)')
-        .eq('classroom_id', classroomId)
-        .gte('scheduled_date', today)
-        .in('status', ['scheduled', 'live'])
-        .order('scheduled_date', { ascending: true })
-        .order('start_time', { ascending: true })
-        .limit(10),
+      // Upcoming classes, through the shared loader the assistant also uses, so
+      // the brief and the dashboard can never disagree about "next class".
+      loadUpcomingClasses(supabase, classroomId, { today, nowHHMM: nowTimeHHMM, limit: 5 }),
 
       /*
        * Attendance, through the one shared loader.
@@ -143,12 +135,6 @@ export async function GET(request: NextRequest) {
       // this number can never contradict the one on their exam screen.
       resolveExamCountdown(supabase, { classroomId, studentId: user.id }),
     ]);
-
-    // Filter out today's classes whose end_time has already passed
-    const upcomingClasses = (upcomingClassesRaw.data || []).filter((cls) => {
-      if (cls.scheduled_date > today) return true;
-      return cls.end_time > nowTimeHHMM;
-    }).slice(0, 5);
 
     // The class prep gate. This is a student-only route, so every class here is
     // seen as a student, and the dashboard hero's Join must not outlive the lock
