@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
-import { notifyRsvpToTeacher } from '@/lib/timetable-notifications';
-import { isRsvpReasonCode, reasonRequiresNote, tallyReasons } from '@/lib/rsvp-reasons';
+import { tallyReasons } from '@/lib/rsvp-reasons';
+import { writeRsvp } from '@/lib/rsvp-write';
 
 /**
  * Class RSVP, on a default-attending model.
@@ -160,98 +160,25 @@ export async function POST(request: NextRequest) {
     const msUser = await verifyMsToken(request.headers.get('Authorization'));
     const body = await request.json();
     const { class_id, classroom_id, response, reason_code, reason, wants_catchup } = body;
-
     if (!class_id || !classroom_id || !response) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    if (!['attending', 'not_attending'].includes(response)) {
-      return NextResponse.json({ error: 'Invalid response value' }, { status: 400 });
-    }
-
-    const note = typeof reason === 'string' ? reason.trim() : '';
-
-    if (response === 'not_attending') {
-      if (!isRsvpReasonCode(reason_code)) {
-        return NextResponse.json(
-          { error: 'Pick a reason so your teacher knows why you cannot make it' },
-          { status: 400 },
-        );
-      }
-      // Only "Other" needs typing. Everything else is one tap.
-      if (reasonRequiresNote(reason_code) && !note) {
-        return NextResponse.json(
-          { error: 'Tell us a little more so your teacher knows what came up' },
-          { status: 400 },
-        );
-      }
-    }
-
     const supabase = getSupabaseAdminClient() as any;
+    const { data: user } = await supabase.from('users').select('id').eq('ms_oid', msUser.oid).single();
+    if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-    const caller = await resolveCaller(supabase, msUser.oid, classroom_id);
-    if ('error' in caller) return caller.error;
-
-    const cls = await assertClassInClassroom(supabase, class_id, classroom_id);
-    if (!cls) {
-      return NextResponse.json({ error: 'Class not found in this classroom' }, { status: 404 });
-    }
-
-    // Opting back in: delete the opt-out. Absence of a row is the only
-    // representation of "attending", so there is nothing to write.
-    if (response === 'attending') {
-      const { error } = await supabase
-        .from('nexus_class_rsvp')
-        .delete()
-        .eq('scheduled_class_id', class_id)
-        .eq('student_id', caller.userId);
-
-      if (error) throw error;
-      return NextResponse.json({ rsvp: null, attending: true });
-    }
-
-    const { data, error } = await supabase
-      .from('nexus_class_rsvp')
-      .upsert(
-        {
-          scheduled_class_id: class_id,
-          student_id: caller.userId,
-          response: 'not_attending',
-          reason_code,
-          reason: note || null,
-          wants_catchup: wants_catchup !== false,
-          responded_at: new Date().toISOString(),
-        },
-        { onConflict: 'scheduled_class_id,student_id' },
-      )
-      .select('*')
-      .single();
-
-    if (error) throw error;
-
-    // Tell the teachers. Never let a notification failure lose the RSVP.
-    try {
-      const { data: userData } = await supabase
-        .from('users')
-        .select('name')
-        .eq('id', caller.userId)
-        .single();
-
-      if (userData) {
-        await notifyRsvpToTeacher(
-          classroom_id,
-          userData.name || 'A student',
-          'not_attending',
-          note || null,
-          cls.title,
-          class_id,
-        );
-      }
-    } catch {
-      /* notification is best-effort */
-    }
-
-    return NextResponse.json({ rsvp: data, attending: false });
+    const result = await writeRsvp(supabase, {
+      userId: user.id,
+      classId: class_id,
+      classroomId: classroom_id,
+      response,
+      reasonCode: reason_code,
+      note: reason,
+      wantsCatchup: wants_catchup,
+    });
+    if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    return NextResponse.json({ rsvp: result.rsvp, attending: result.attending });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to save RSVP';
     return NextResponse.json({ error: message }, { status: 500 });
