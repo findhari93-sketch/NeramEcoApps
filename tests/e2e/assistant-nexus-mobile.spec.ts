@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { APP_URLS, injectAuthForPage } from '../utils/credentials';
+import { APP_URLS, STUDENT_ACCOUNT, injectAuthForPage } from '../utils/credentials';
 import { assertNoHorizontalOverflow, assertTouchTargetSize } from '../utils/mobile-helpers';
 
 /**
@@ -103,9 +103,34 @@ async function stubAssistant(page: Page) {
 /**
  * Signs in as the STUDENT (the project's storageState is cleared below, so no
  * teacher session leaks in), stubs the assistant, opens the dashboard and waits
- * for the brief card. False means the environment, not the product.
+ * for the brief card.
+ *
+ * Only an unreachable server skips. A test-login endpoint that answers with an
+ * error, an auth injection that fails, or a dashboard without the brief card are
+ * failures: skipping on them would read green while the brief route, the card or
+ * the flag gating is broken.
  */
 async function openDashboard(page: Page) {
+  // Probe the test-login endpoint first, so "nothing is listening" (skip) can be
+  // told apart from "the server answered and refused" (fail).
+  // A Next dev server answers 404 while it compiles a cold route, so a 404 is
+  // retried the way getTestAuthToken does; a route that is really gone still
+  // 404s on the last attempt and fails below.
+  let probe: Awaited<ReturnType<typeof page.request.post>> | Error = new Error('not attempted');
+  for (let attempt = 0; attempt < 3; attempt++) {
+    probe = await page.request
+      .post(`${NEXUS}/api/auth/test-login`, { data: { email: STUDENT_ACCOUNT.email, role: 'student' }, failOnStatusCode: false, timeout: 90_000 })
+      .catch((err: Error) => err);
+    if (probe instanceof Error || probe.status() !== 404) break;
+    await page.waitForTimeout(4_000);
+  }
+  if (probe instanceof Error) {
+    const unreachable = /ECONNREFUSED|ECONNRESET|ENOTFOUND|socket hang up/i.test(probe.message);
+    test.skip(unreachable, `Nexus test-login endpoint unreachable at ${NEXUS}: ${probe.message}`);
+    throw new Error(`Student test login request failed: ${probe.message}`);
+  }
+  expect(probe.status(), `Student test login answered ${probe.status()} on a reachable server`).toBe(200);
+
   // The first-run welcome tour is a modal: while it is open MUI aria-hides the
   // rest of the app and every getByRole below finds nothing.
   await page.addInitScript(() => {
@@ -115,15 +140,13 @@ async function openDashboard(page: Page) {
       /* blocked storage is the environment's problem */
     }
   });
-  const ok = await injectAuthForPage(page, 'student');
-  if (!ok) return null;
+  expect(await injectAuthForPage(page, 'student'), 'injectAuthForPage(student) failed against a reachable server').toBe(true);
   const sent = await stubAssistant(page);
   await page.goto(`${NEXUS}/student/dashboard`, { waitUntil: 'domcontentloaded' });
-  const greeted = await expect(page.getByText('Good evening, Priya'))
-    .toBeVisible({ timeout: 90_000 })
-    .then(() => true)
-    .catch(() => false);
-  if (!greeted) return null;
+  await expect(
+    page.getByText('Good evening, Priya'),
+    'the brief card never showed the stubbed greeting: check the brief card mount, the student.assistant-chat gating and the session',
+  ).toBeVisible({ timeout: 90_000 });
   const skip = page.getByRole('button', { name: /^skip$/i });
   if (await skip.count()) {
     await skip.first().click();
@@ -152,8 +175,6 @@ async function focusInsideSheet(page: Page) {
     .poll(() => page.evaluate(() => Boolean(document.activeElement?.closest('[role="dialog"]'))), { message: 'focus moves into the open panel' })
     .toBe(true);
 }
-
-const SKIP_REASON = 'Nexus dev server, student test login or student dashboard unavailable';
 
 test.describe('Neram Assistant', () => {
   test.describe.configure({ mode: 'default', timeout: 120_000 });
@@ -187,7 +208,6 @@ test.describe('Neram Assistant', () => {
     test('one floating button, above the bottom nav, and the brief card', async ({ page }) => {
       test.skip(!serverUp, `Nexus dev server not reachable at ${NEXUS}`);
       const sent = await openDashboard(page);
-      test.skip(!sent, SKIP_REASON);
 
       // One corner button: the old Report a problem Fab is gone with the flag on.
       await expect(page.locator('[data-no-screenshot="true"]')).toHaveCount(1);
@@ -203,6 +223,7 @@ test.describe('Neram Assistant', () => {
       // The brief card links each line to the page it came from.
       await expect(page.getByRole('link', { name: /Class today at 6:00 pm/ })).toHaveAttribute('href', '/student/timetable');
       await expect(page.getByRole('link', { name: /Shading sheet is due tomorrow/ })).toHaveAttribute('href', '/student/assignments');
+      await expect(page.locator('section[aria-labelledby="brief-title"] a')).toHaveCount(2);
       await assertTouchTargetSize(page, 'section[aria-labelledby="brief-title"] a', 48);
       await assertNoHorizontalOverflow(page);
 
@@ -222,7 +243,6 @@ test.describe('Neram Assistant', () => {
     test('the guided flow runs to a confirmation card, with tappable chips, and focus returns to the launcher', async ({ page }) => {
       test.skip(!serverUp, `Nexus dev server not reachable at ${NEXUS}`);
       const sent = await openDashboard(page);
-      test.skip(!sent, SKIP_REASON);
 
       const launcher = page.getByRole('button', { name: 'Open Neram Assistant' });
       await launcher.click();
@@ -253,10 +273,11 @@ test.describe('Neram Assistant', () => {
       await box.fill('');
 
       const chips = sheet.getByTestId('assistant-chip');
-      await expect(chips).toHaveCount(2);
+      await expect(page.locator('[data-testid="assistant-chip"]')).toHaveCount(2);
       await assertTouchTargetSize(page, '[data-testid="assistant-chip"]', 48);
-      await expect(sheet.locator('button[aria-label="Send"]')).toHaveCount(1);
+      await expect(page.locator('button[aria-label="Send"]')).toHaveCount(1);
       await assertTouchTargetSize(page, 'button[aria-label="Send"]', 48);
+      await expect(page.locator('button[aria-label="Attach a photo"]')).toHaveCount(1);
       await assertTouchTargetSize(page, 'button[aria-label="Attach a photo"]', 48);
       // The file input takes images from the camera or the gallery (no capture).
       const file = sheet.getByTestId('assistant-file-input');
@@ -270,6 +291,7 @@ test.describe('Neram Assistant', () => {
       await expect(card).toBeVisible();
       await expect(card.getByText('Tell your teacher you cannot attend Perspective on Tomorrow at 6:00 pm.')).toBeVisible();
       await expect(card.getByText('Feeling unwell')).toBeVisible();
+      await expect(page.locator('[role="group"][aria-label="Confirm this action"] button')).toHaveCount(3);
       await assertTouchTargetSize(page, '[role="group"][aria-label="Confirm this action"] button', 48);
       await assertNoHorizontalOverflow(page);
 
@@ -277,8 +299,8 @@ test.describe('Neram Assistant', () => {
       await expect(sheet.getByText(/Your teacher knows you cannot attend/)).toBeVisible();
       await expect(card).toBeHidden();
       await expect(sheet.getByRole('link', { name: 'Timetable' })).toHaveAttribute('href', '/student/timetable');
-      expect(sent!.turns).toEqual(["I can't attend a class", 'Tomorrow 6:00 pm: Perspective', 'Feeling unwell']);
-      expect(sent!.confirms).toEqual([{ method: 'POST', url: expect.stringContaining('/api/assistant/actions/act-1'), body: { token: 'ct' } }]);
+      expect(sent.turns).toEqual(["I can't attend a class", 'Tomorrow 6:00 pm: Perspective', 'Feeling unwell']);
+      expect(sent.confirms).toEqual([{ method: 'POST', url: expect.stringContaining('/api/assistant/actions/act-1'), body: { token: 'ct' } }]);
       await assertNoHorizontalOverflow(page);
 
       // Escape closes the sheet and hands focus back to the button that opened it.
@@ -294,7 +316,6 @@ test.describe('Neram Assistant', () => {
     test('Report a problem still opens the report form from inside the assistant', async ({ page }) => {
       test.skip(!serverUp, `Nexus dev server not reachable at ${NEXUS}`);
       const sent = await openDashboard(page);
-      test.skip(!sent, SKIP_REASON);
 
       await page.getByRole('button', { name: 'Open Neram Assistant' }).click();
       const sheet = page.getByRole('dialog', { name: 'Neram Assistant' });
@@ -308,7 +329,7 @@ test.describe('Neram Assistant', () => {
       await expect(page.getByText('Report an Issue', { exact: true }).filter({ visible: true })).toBeVisible({ timeout: 30_000 });
       await expect(page.getByRole('button', { name: /Submit Ticket/ })).toBeVisible();
       // Nothing was sent to the assistant on the way.
-      expect(sent!.turns).toEqual([]);
+      expect(sent.turns).toEqual([]);
       await assertNoHorizontalOverflow(page);
     });
   });
@@ -319,7 +340,6 @@ test.describe('Neram Assistant', () => {
     test('the top-bar icon opens a right-hand drawer, and Escape returns focus to it', async ({ page }) => {
       test.skip(!serverUp, `Nexus dev server not reachable at ${NEXUS}`);
       const sent = await openDashboard(page);
-      test.skip(!sent, SKIP_REASON);
 
       const topBarIcon = page.locator('header').getByRole('button', { name: 'Open Neram Assistant' });
       await expect(topBarIcon).toHaveCount(1);
