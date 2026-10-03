@@ -120,7 +120,7 @@ const NO_CHAT: Record<string, string> = {
   'apps/nexus/src/app/api/cron/catchup-digest/route.ts': "audience: 'staff'. A teacher digest.",
   'apps/nexus/src/app/api/cron/sketchbook-digest/route.ts': "audience: 'staff'. A teacher digest.",
   'apps/nexus/src/lib/recap-autodraft.ts': "audience: 'staff'. A recap waiting for review.",
-  'apps/nexus/src/app/api/student/away-windows/route.ts': 'Tells STAFF that a student declared leave.',
+  'apps/nexus/src/lib/away-windows-write.ts': 'Tells STAFF that a student declared leave.',
   'apps/nexus/src/app/api/timetable/prework-escalations/route.ts': 'Sends to PARENT ids, not students.',
   'apps/nexus/src/app/api/classrooms/[id]/enrollments/route.ts':
     'Enrolled, removed, batch changed. Nobody wrote it to the student: the roster changed.',
