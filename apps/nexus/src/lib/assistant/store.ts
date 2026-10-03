@@ -3,6 +3,7 @@
  * no policy here, the callers (turn.ts, actions.ts) decide who may do what.
  * `supabase` is the untyped admin client (tables are not in the generated types).
  */
+import { describeError } from '@/lib/api-errors';
 import type { Channel, Envelope, Mode } from './types';
 
 export interface ThreadRow {
@@ -64,8 +65,13 @@ const MESSAGES = 'nexus_assistant_messages';
 const ACTIONS = 'nexus_assistant_actions';
 const REMINDERS = 'nexus_assistant_reminders';
 
+/**
+ * Throws with everything known about a PostgREST failure (message, code,
+ * details, hint), for the server log. The routes never send this text to a
+ * student: assistantErrorResponse answers a fixed sentence (Ruling 26).
+ */
 function throwIf(error: unknown): void {
-  if (error) throw Object.assign(new Error((error as { message?: string }).message || 'Database error'), { cause: error });
+  if (error) throw Object.assign(new Error(`Assistant store: ${describeError(error)}`), { cause: error });
 }
 
 export async function createThread(

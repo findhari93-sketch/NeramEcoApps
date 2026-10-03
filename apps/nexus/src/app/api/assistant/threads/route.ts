@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { errorResponse } from '@/lib/api-errors';
 import { resolveAssistantCaller } from '@/lib/assistant/caller';
+import { NO_STORE, assistantErrorResponse, readPage } from '@/lib/assistant/http';
 import { createThread } from '@/lib/assistant/store';
 
 export const dynamic = 'force-dynamic';
@@ -10,9 +10,10 @@ export async function POST(request: NextRequest) {
   try {
     const { caller, supabase } = await resolveAssistantCaller(request.headers.get('Authorization'));
     const body = await request.json().catch(() => ({}));
-    const thread = await createThread(supabase, { userId: caller.id, channel: 'nexus', pageContext: body?.pageContext ?? null });
-    return NextResponse.json({ threadId: thread.id }, { headers: { 'Cache-Control': 'no-store' } });
+    // The same validation as the turn route: a path and two ids, never the raw body.
+    const thread = await createThread(supabase, { userId: caller.id, channel: 'nexus', pageContext: readPage(body?.pageContext) as Record<string, unknown> | null });
+    return NextResponse.json({ threadId: thread.id }, { headers: NO_STORE });
   } catch (err) {
-    return errorResponse(err, 'Could not start a chat');
+    return assistantErrorResponse(err, 'threads POST');
   }
 }

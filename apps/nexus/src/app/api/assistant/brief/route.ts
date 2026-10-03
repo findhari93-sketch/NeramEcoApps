@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
-import { errorResponse } from '@/lib/api-errors';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getRequestUser } from '@/lib/study-materials';
 import { assertAssistantAccess } from '@/lib/assistant/access';
+import { NO_STORE, assistantErrorResponse } from '@/lib/assistant/http';
 import { buildBrief } from '@/lib/assistant/brief';
 import { istHour, loadBriefFacts } from '@/lib/assistant/brief-load';
 
@@ -29,8 +29,8 @@ export async function GET(request: NextRequest) {
 
     const now = new Date();
     const facts = await loadBriefFacts(supabase, caller.id, now, features);
-    return NextResponse.json({ brief: buildBrief(facts, istHour(now)) }, { headers: { 'Cache-Control': 'no-store' } });
+    return NextResponse.json({ brief: buildBrief(facts, istHour(now)) }, { headers: NO_STORE });
   } catch (err) {
-    return errorResponse(err, 'Could not build your brief');
+    return assistantErrorResponse(err, 'brief');
   }
 }

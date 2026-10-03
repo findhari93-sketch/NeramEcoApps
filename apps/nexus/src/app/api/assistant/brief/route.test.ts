@@ -61,4 +61,14 @@ describe('GET /api/assistant/brief', () => {
   it('keeps the uncached Graph /me fetch out of the Data Cache (GET-only route)', () => {
     expect(route.fetchCache).toBe('force-no-store');
   });
+
+  it('never shows a raw loader error: logs it and answers 500 with a fixed sentence (Ruling 26)', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mocks.loadBriefFacts.mockRejectedValueOnce(new Error('column users.name does not exist'));
+    const res = await GET(req());
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'Something went wrong on my side. Please try again.' });
+    expect(log).toHaveBeenCalled();
+    log.mockRestore();
+  });
 });

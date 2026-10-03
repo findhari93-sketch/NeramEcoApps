@@ -13,6 +13,7 @@ import * as cannotAttend from './flows/cannot-attend';
 import * as remindMe from './flows/remind-me';
 import * as uploadSketch from './flows/upload-sketch';
 import { isStale, type FlowDeps, type FlowOutcome, type FlowState, type Proposal } from './flows/types';
+import { isUuid } from './ids';
 import { defaultSuggestions } from './page-suggestions';
 import { findActionTool, findTool, isActionTool, toolsFor } from './registry-all';
 import { routeIntent, type FlowName } from './router';
@@ -56,7 +57,8 @@ const NOT_YET = 'I cannot answer free questions yet. Here is what I can do right
 const NOT_AVAILABLE = 'That is not available yet. Here is what I can do right now.';
 
 async function resolveThread(input: TurnInput): Promise<ThreadRow> {
-  if (input.threadId) {
+  // A malformed id would reach Postgres as a uuid cast error; treat it as absent (Ruling 26).
+  if (input.threadId && isUuid(input.threadId)) {
     const t = await getThread(input.supabase, input.threadId);
     if (t && t.user_id === input.caller.id && t.channel === input.channel) return t;
   }

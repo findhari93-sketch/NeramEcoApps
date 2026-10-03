@@ -151,6 +151,12 @@ describe('runAssistantTurn', () => {
     expect(env.threadId).not.toBe('t-other');
   });
 
+  it('never looks up a thread id that is not a uuid: it would be a cast error in Postgres (Ruling 26)', async () => {
+    const db = fakeDb({ nexus_assistant_threads: [{ id: 'kept', user_id: 's1', channel: 'nexus', flow_state: null }] });
+    const env = await turn(db, 'brief', { threadId: 'kept' });
+    expect(env.threadId).not.toBe('kept');
+  });
+
   it('answers an empty message without storing anything', async () => {
     const db = fakeDb({});
     const env = await turn(db, '   ');

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { errorResponse } from '@/lib/api-errors';
 import { baseUrlOf, resolveAssistantCaller } from '@/lib/assistant/caller';
+import { NO_STORE, assistantErrorResponse, readPage } from '@/lib/assistant/http';
+import { isUuid } from '@/lib/assistant/ids';
 import { MAX_TEXT, runAssistantTurn } from '@/lib/assistant/turn';
-import type { Attachment, PageContext } from '@/lib/assistant/types';
+import type { Attachment } from '@/lib/assistant/types';
 
 export const dynamic = 'force-dynamic';
-const NO_STORE = { 'Cache-Control': 'no-store' };
 
 function readAttachment(raw: unknown): Attachment | null | 'bad' {
   if (raw === undefined || raw === null) return null;
@@ -13,15 +13,6 @@ function readAttachment(raw: unknown): Attachment | null | 'bad' {
   if (typeof r.original_image_url !== 'string' || !/^https:\/\//.test(r.original_image_url)) return 'bad';
   const thumb = typeof r.thumbnail_url === 'string' && /^https:\/\//.test(r.thumbnail_url) ? r.thumbnail_url : null;
   return { original_image_url: r.original_image_url, thumbnail_url: thumb };
-}
-
-function readPage(raw: unknown): PageContext | null {
-  const r = raw as Record<string, unknown> | null;
-  if (!r || typeof r.path !== 'string') return null;
-  const page: PageContext = { path: r.path.slice(0, 200) };
-  if (typeof r.classroomId === 'string') page.classroomId = r.classroomId;
-  if (typeof r.classId === 'string') page.classId = r.classId;
-  return page;
 }
 
 /**
@@ -40,11 +31,12 @@ export async function POST(request: NextRequest) {
 
     const envelope = await runAssistantTurn({
       supabase, caller, channel: 'nexus',
-      threadId: typeof body?.threadId === 'string' ? body.threadId : null,
+      // A threadId that is not a uuid is treated as absent: the turn starts a fresh thread (Ruling 26).
+      threadId: isUuid(body?.threadId) ? body.threadId : null,
       text, attachment, pageContext: readPage(body?.pageContext), baseUrl: baseUrlOf(request), features,
     });
     return NextResponse.json(envelope, { headers: NO_STORE });
   } catch (err) {
-    return errorResponse(err, 'The assistant could not answer');
+    return assistantErrorResponse(err, 'turn');
   }
 }
