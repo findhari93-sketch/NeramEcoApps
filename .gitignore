@@ -108,3 +108,6 @@ _tmp/
 docs/audits/perf/**/.ledger.lock
 docs/audits/perf/**/.snapshot.json
 docs/audits/perf/**/*.tmp
+
+# Subagent-driven-development ledgers (per-plan scratch)
+.superpowers/
