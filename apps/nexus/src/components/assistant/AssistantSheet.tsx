@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useId } from 'react';
-import { Box, Drawer, IconButton, SwipeableDrawer, Typography, alpha, useMediaQuery, useTheme } from '@neram/ui';
+import { useId } from 'react';
+import { Box, Button, Drawer, IconButton, SwipeableDrawer, Typography, alpha, useMediaQuery, useTheme } from '@neram/ui';
 import AddCommentOutlinedIcon from '@mui/icons-material/AddCommentOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
@@ -10,6 +10,7 @@ import { useAssistant } from './AssistantProvider';
 import { SKETCHBOOK_FLAG, uploadImage } from './client';
 import Composer from './Composer';
 import { focusRing } from './focusRing';
+import { stableHover } from './stableHover';
 import MessageBubble from './MessageBubble';
 import MessageList from './MessageList';
 import QuickActions from './QuickActions';
@@ -26,9 +27,6 @@ export default function AssistantSheet() {
   // md is where the bottom nav goes away, so the side drawer takes over there.
   const desktop = useMediaQuery(theme.breakpoints.up('md'));
   const reduce = useMediaQuery('(prefers-reduced-motion: reduce)');
-  const { setDraft } = a;
-  const onEdit = useCallback(() => setDraft('Change: '), [setDraft]);
-  const onDraftConsumed = useCallback(() => setDraft(''), [setDraft]);
   const titleId = useId();
   // The Paper is the panel itself: announce it as a modal dialog named by its heading.
   const dialogProps = { role: 'dialog', 'aria-modal': true, 'aria-labelledby': titleId } as const;
@@ -56,10 +54,18 @@ export default function AssistantSheet() {
       ) : (
         <MessageList messages={a.messages} />
       )}
-      {a.pendingAction && <ActionCard action={a.pendingAction} busy={a.busy} onConfirm={() => void a.confirm()} onEdit={onEdit} onCancel={() => void a.cancel()} />}
-      {a.error && <Typography role="alert" variant="body2" color="error" sx={{ px: 2, py: 1 }}>{a.error}</Typography>}
+      {a.pendingAction && <ActionCard action={a.pendingAction} busy={a.busy} onConfirm={() => void a.confirm()} onCancel={() => void a.cancel()} />}
+      {a.error && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 0.5 }}>
+          <Typography role="alert" variant="body2" color="error" sx={{ flex: 1 }}>{a.error}</Typography>
+          {/* The failed message is still on screen; this sends it again, photo and all. */}
+          {a.canRetry && (
+            <Button variant="text" onClick={() => void a.retry()} disabled={a.busy} sx={{ ...stableHover, minHeight: 48, flexShrink: 0, textTransform: 'none', fontWeight: 700 }}>Try again</Button>
+          )}
+        </Box>
+      )}
       <SuggestionChips items={a.messages.length ? a.suggestions : []} onPick={(s) => void a.send(s)} disabled={a.busy} />
-      <Composer onSend={a.send} busy={a.busy} wantsAttachment={a.wantsAttachment} draft={a.draft} onDraftConsumed={onDraftConsumed} upload={uploadImage} getToken={getToken} allowAttachment={sketchbook} />
+      <Composer onSend={a.send} busy={a.busy} wantsAttachment={a.wantsAttachment} upload={uploadImage} getToken={getToken} allowAttachment={sketchbook} />
     </Box>
   );
 

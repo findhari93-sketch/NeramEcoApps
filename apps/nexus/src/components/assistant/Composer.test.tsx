@@ -6,7 +6,7 @@ const upload = vi.fn(async () => ({ original_image_url: 'https://cdn.test/a.jpg'
 
 function setup(props: Partial<React.ComponentProps<typeof Composer>> = {}) {
   const onSend = vi.fn(async () => undefined);
-  render(<Composer onSend={onSend} busy={false} wantsAttachment={false} draft="" onDraftConsumed={() => {}} upload={upload} {...props} />);
+  render(<Composer onSend={onSend} busy={false} wantsAttachment={false} upload={upload} {...props} />);
   return { onSend };
 }
 
@@ -69,18 +69,6 @@ describe('Composer', () => {
     const root = box.closest('.MuiInputBase-root') as HTMLElement;
     expect(getComputedStyle(root).minHeight).toBe('48px');
     expect(box.style.fontSize).toBe('16px');
-  });
-
-  it('Edit seeds an empty box but never overwrites what the student typed', () => {
-    const { rerender } = render(<Composer onSend={vi.fn(async () => undefined)} busy={false} wantsAttachment={false} draft="" onDraftConsumed={() => {}} upload={upload} />);
-    const box = screen.getByRole('textbox', { name: 'Message Neram Assistant' }) as HTMLTextAreaElement;
-    fireEvent.change(box, { target: { value: 'make it Friday' } });
-    rerender(<Composer onSend={vi.fn(async () => undefined)} busy={false} wantsAttachment={false} draft="Change: " onDraftConsumed={() => {}} upload={upload} />);
-    expect(box.value).toBe('make it Friday');
-    fireEvent.change(box, { target: { value: '' } });
-    rerender(<Composer onSend={vi.fn(async () => undefined)} busy={false} wantsAttachment={false} draft="" onDraftConsumed={() => {}} upload={upload} />);
-    rerender(<Composer onSend={vi.fn(async () => undefined)} busy={false} wantsAttachment={false} draft="Change: " onDraftConsumed={() => {}} upload={upload} />);
-    expect(box.value).toBe('Change: ');
   });
 
   it('empties the picker after a refused file, so picking the same file again still fires', async () => {

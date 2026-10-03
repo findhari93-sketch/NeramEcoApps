@@ -22,6 +22,13 @@ describe('postTurn', () => {
     await expect(postTurn(getToken, { threadId: null, text: 'x' })).rejects.toMatchObject({ name: 'AssistantHttpError', status: 403, message: 'not switched on for your account yet' });
   });
 
+  it('turns a network failure (fetch TypeError, no status) into a plain offline sentence', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+    await expect(postTurn(getToken, { threadId: null, text: 'x' })).rejects.toMatchObject({
+      name: 'AssistantHttpError', status: 0, message: 'You seem to be offline. Check your connection and try again.',
+    });
+  });
+
   it('fails with 401 when there is no token, without calling the server', async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal('fetch', fetchMock);

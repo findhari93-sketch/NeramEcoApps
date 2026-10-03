@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import AssistantSheet from './AssistantSheet';
 
@@ -10,7 +10,7 @@ vi.mock('@/hooks/useNexusAuth', () => ({
 const ctx = {
   enabled: true, open: true, openPanel: vi.fn(), closePanel: vi.fn(),
   messages: [], busy: false, error: null, suggestions: [], wantsAttachment: false, pendingAction: null,
-  draft: '', setDraft: vi.fn(), send: vi.fn(async () => undefined), confirm: vi.fn(async () => undefined),
+  canRetry: false, retry: vi.fn(async () => undefined), send: vi.fn(async () => undefined), confirm: vi.fn(async () => undefined),
   cancel: vi.fn(async () => undefined), newChat: vi.fn(async () => undefined), reportProblem: vi.fn(async () => undefined),
   pageContext: { path: '/student/dashboard' },
 };
@@ -35,6 +35,20 @@ describe('AssistantSheet', () => {
       expect(screen.queryByRole('button', { name: /Remind me/ })).not.toBeNull();
     } finally {
       sketchbookOn = true;
+    }
+  });
+
+  it('offers Try again under an error the student can retry, and it resends', () => {
+    // jsdom has no scrollIntoView; the message list calls it on every new message.
+    Element.prototype.scrollIntoView = vi.fn();
+    Object.assign(ctx, { error: 'You seem to be offline. Check your connection and try again.', canRetry: true, messages: [{ id: 'm1', role: 'user', text: 'hello' }] });
+    try {
+      render(<AssistantSheet />);
+      expect(screen.getByRole('alert').textContent).toBe('You seem to be offline. Check your connection and try again.');
+      fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+      expect(ctx.retry).toHaveBeenCalledTimes(1);
+    } finally {
+      Object.assign(ctx, { error: null, canRetry: false, messages: [] });
     }
   });
 });

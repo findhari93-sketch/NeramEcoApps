@@ -8,7 +8,7 @@ import { captureScreenshot } from '@/lib/capture-screenshot';
 import { isTeamsPadPath } from '@/lib/pad/embedded';
 import ReportIssueDialog from '@/components/issues/ReportIssueDialog';
 import {
-  ASSISTANT_FLAG, AssistantHttpError, BRIEF_KEY, cancelActionRequest, confirmActionRequest, loadThread, newThread, postTurn,
+  ASSISTANT_FLAG, AssistantHttpError, BRIEF_KEY, OFFLINE, cancelActionRequest, confirmActionRequest, loadThread, newThread, postTurn,
   type ActionProposal, type Attachment, type Envelope, type PageContext, type Suggestion,
 } from './client';
 
@@ -19,6 +19,8 @@ export interface AssistantMessage {
   envelope?: Envelope | null;
   /** True while the reply is in flight; the list shows a skeleton for it. */
   pending?: boolean;
+  /** A user message whose send failed. It stays on screen, marked, until Try again resends it. */
+  failed?: boolean;
 }
 
 export interface AssistantContextValue {
@@ -35,9 +37,9 @@ export interface AssistantContextValue {
   suggestions: Suggestion[];
   wantsAttachment: boolean;
   pendingAction: ActionProposal | null;
-  /** Text the composer should show, set by Edit on an action card. */
-  draft: string;
-  setDraft: (text: string) => void;
+  /** The last send failed for a reason worth retrying; `retry` sends the same text and photo again. */
+  canRetry: boolean;
+  retry: () => Promise<void>;
   send: (text: string, attachment?: Attachment | null) => Promise<void>;
   confirm: () => Promise<void>;
   cancel: () => Promise<void>;
@@ -47,6 +49,19 @@ export interface AssistantContextValue {
 }
 
 const Ctx = createContext<AssistantContextValue | null>(null);
+
+const CANCEL_FAILED = 'Could not cancel just now. The action is still waiting and expires on its own in a few minutes.';
+
+/**
+ * The sentence a student sees for a failed call (Ruling 26). The server's own
+ * sentence when it answered (it never carries raw database text); a plain
+ * offline line when the request never left the phone; never "Failed to fetch".
+ */
+function messageFor(err: unknown): string {
+  if (err instanceof AssistantHttpError) return err.message;
+  if (err instanceof TypeError) return OFFLINE;
+  return 'Something went wrong on my side. Please try again.';
+}
 const THREAD_KEY = 'nexus-assistant-thread';
 
 let seq = 0;
@@ -65,7 +80,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [wantsAttachment, setWantsAttachment] = useState(false);
   const [pendingAction, setPendingAction] = useState<ActionProposal | null>(null);
-  const [draft, setDraft] = useState('');
+  const [canRetry, setCanRetry] = useState(false);
   const [refused, setRefused] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [autoShot, setAutoShot] = useState<File | null>(null);
@@ -80,6 +95,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   /** Set by the first send: a history that lands after it must not replace the live turn. */
   const sentRef = useRef(false);
   const reportingRef = useRef(false);
+  /** The send Try again repeats: the failed bubble's id, its text and photo. */
+  const failedRef = useRef<{ id: string; text: string; attachment: Attachment | null } | null>(null);
 
   useEffect(() => {
     try {
@@ -125,7 +142,9 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     if (!open || !enabled || historyTriedRef.current) return;
     historyTriedRef.current = true;
     const id = threadRef.current;
-    if (!id) return;
+    // Opened with an intent (the brief card's Can't attend): the send already
+    // owns the thread, and a history that lands after it would be dropped anyway.
+    if (!id || sentRef.current) return;
     const gen = genRef.current;
     setLoadingHistory(true);
     loadThread(getToken, id)
@@ -141,7 +160,9 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
         }
       })
       .catch(() => {
-        if (threadRef.current === id) forgetThread();
+        // Forget it only if nothing has used it since: a send that started meanwhile
+        // may be continuing this very thread, and must keep it.
+        if (gen === genRef.current && !sentRef.current && threadRef.current === id) forgetThread();
       })
       .finally(() => setLoadingHistory(false));
   }, [open, enabled, getToken, forgetThread]);
@@ -169,19 +190,22 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
    * for the session. The action routes answer 403/404/409/410 for a stale or
    * foreign action, which says nothing about the feature, so they never come here.
    */
-  const fail = useCallback((err: unknown) => {
+  const fail = useCallback((err: unknown): boolean => {
     setMessages((prev) => prev.filter((m) => !m.pending));
     if (err instanceof AssistantHttpError && (err.status === 403 || err.status === 404)) {
       setRefused(true);
       setOpen(false);
-      return;
+      return false;
     }
-    setError(err instanceof Error ? err.message : 'Something went wrong. Try again.');
+    setError(messageFor(err));
+    return true;
   }, []);
 
   /** A confirm or cancel the server refused as stale: drop the card, say why, keep the assistant on. */
   const actionGone = useCallback((err: unknown): boolean => {
-    if (!(err instanceof AssistantHttpError) || ![403, 404, 409, 410].includes(err.status)) return false;
+    // 400: the confirm re-check refused it (a day passed, a class moved). The server's
+    // sentence says why, and the card can no longer be confirmed.
+    if (!(err instanceof AssistantHttpError) || ![400, 403, 404, 409, 410].includes(err.status)) return false;
     setPendingAction(null);
     setMessages((prev) => [...prev, { id: nextId(), role: 'assistant', text: err.message || 'That action has expired. Ask me again.' }]);
     return true;
@@ -193,16 +217,25 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     const gen = genRef.current;
     busyRef.current = true;
     sentRef.current = true;
+    failedRef.current = null;
+    setCanRetry(false);
     setLoadingHistory(false);
     setError(null);
     setBusy(true);
     setPendingAction(null);
-    setMessages((prev) => [...prev, { id: nextId(), role: 'user', text: trimmed || 'Photo attached' }, { id: nextId(), role: 'assistant', text: '', pending: true }]);
+    const userId = nextId();
+    setMessages((prev) => [...prev, { id: userId, role: 'user', text: trimmed || 'Photo attached' }, { id: nextId(), role: 'assistant', text: '', pending: true }]);
     try {
       const env = await postTurn(getToken, { threadId: threadRef.current, text: trimmed, attachment, pageContext });
       if (gen === genRef.current) applyEnvelope(env, null);
     } catch (err) {
-      if (gen === genRef.current) fail(err);
+      // The student's message is never lost: the bubble stays, marked, and Try
+      // again sends the same text and photo.
+      if (gen === genRef.current && fail(err)) {
+        failedRef.current = { id: userId, text: trimmed, attachment };
+        setMessages((prev) => prev.map((m) => (m.id === userId ? { ...m, failed: true } : m)));
+        setCanRetry(true);
+      }
     } finally {
       if (gen === genRef.current) {
         busyRef.current = false;
@@ -227,7 +260,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
       void mutate(BRIEF_KEY);
     } catch (err) {
       if (gen !== genRef.current) return;
-      if (!actionGone(err)) setError(err instanceof Error ? err.message : 'Something went wrong. Try again.');
+      if (!actionGone(err)) setError(messageFor(err));
     } finally {
       if (gen === genRef.current) {
         busyRef.current = false;
@@ -247,9 +280,17 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       // A stale action explains itself; anything else (offline, a 500) must not
       // leave the student believing the cancel went through.
-      if (gen === genRef.current && !actionGone(err)) setError('Could not cancel just now. It was not done, and it expires on its own in a few minutes.');
+      if (gen === genRef.current && !actionGone(err)) setError(CANCEL_FAILED);
     }
   }, [actionGone, getToken, pendingAction]);
+
+  const retry = useCallback(async () => {
+    const failed = failedRef.current;
+    if (!failed || busyRef.current) return;
+    // The resend puts the message back as a fresh bubble, so drop the failed one first.
+    setMessages((prev) => prev.filter((m) => m.id !== failed.id));
+    await send(failed.text, failed.attachment);
+  }, [send]);
 
   const newChat = useCallback(async () => {
     if (newChatRef.current) return;
@@ -268,6 +309,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     setPendingAction(null);
     setWantsAttachment(false);
     setError(null);
+    failedRef.current = null;
+    setCanRetry(false);
     try {
       const id = await newThread(getToken, pageContext);
       // A send that already started its own thread keeps it.
@@ -310,8 +353,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<AssistantContextValue>(() => ({
     enabled, open, openPanel, closePanel, messages, loadingHistory, busy, error, suggestions, wantsAttachment, pendingAction,
-    draft, setDraft, send, confirm, cancel, newChat, reportProblem, pageContext,
-  }), [enabled, open, openPanel, closePanel, messages, loadingHistory, busy, error, suggestions, wantsAttachment, pendingAction, draft, send, confirm, cancel, newChat, reportProblem, pageContext]);
+    canRetry, retry, send, confirm, cancel, newChat, reportProblem, pageContext,
+  }), [enabled, open, openPanel, closePanel, messages, loadingHistory, busy, error, suggestions, wantsAttachment, pendingAction, canRetry, retry, send, confirm, cancel, newChat, reportProblem, pageContext]);
 
   return (
     <Ctx.Provider value={value}>

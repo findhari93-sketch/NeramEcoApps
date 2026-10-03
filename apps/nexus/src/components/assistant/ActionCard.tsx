@@ -12,9 +12,12 @@ function minutesLeft(expiresAt: string): number {
   return Math.max(0, Math.ceil((at - Date.now()) / 60_000));
 }
 
-/** The one place a write is approved. Every field visible, three equal-weight buttons. */
-export default function ActionCard({ action, busy, onConfirm, onEdit, onCancel }: {
-  action: ActionProposal; busy: boolean; onConfirm: () => void; onEdit: () => void; onCancel: () => void;
+/**
+ * The one place a write is approved. Every field visible, Confirm and Cancel.
+ * No Edit in M1 (Ruling 23): a proposal ends its flow, so a change means asking again.
+ */
+export default function ActionCard({ action, busy, onConfirm, onCancel }: {
+  action: ActionProposal; busy: boolean; onConfirm: () => void; onCancel: () => void;
 }) {
   const [left, setLeft] = useState(() => minutesLeft(action.expiresAt));
   useEffect(() => {
@@ -38,7 +41,6 @@ export default function ActionCard({ action, busy, onConfirm, onEdit, onCancel }
       </Typography>
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
         <Button variant="contained" onClick={onConfirm} disabled={busy || left === 0} sx={{ ...stableHover, minHeight: 48, flex: 1, textTransform: 'none', fontWeight: 700 }}>Confirm</Button>
-        <Button variant="text" onClick={onEdit} disabled={busy} sx={{ ...stableHover, minHeight: 48, textTransform: 'none' }}>Edit</Button>
         <Button variant="outlined" onClick={onCancel} disabled={busy} sx={{ ...stableHover, minHeight: 48, textTransform: 'none' }}>Cancel</Button>
       </Box>
     </Paper>

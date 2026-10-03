@@ -291,7 +291,9 @@ test.describe('Neram Assistant', () => {
       await expect(card).toBeVisible();
       await expect(card.getByText('Tell your teacher you cannot attend Perspective on Tomorrow at 6:00 pm.')).toBeVisible();
       await expect(card.getByText('Feeling unwell')).toBeVisible();
-      await expect(page.locator('[role="group"][aria-label="Confirm this action"] button')).toHaveCount(3);
+      // Confirm and Cancel only: no Edit in M1 (Ruling 23).
+      await expect(page.locator('[role="group"][aria-label="Confirm this action"] button')).toHaveCount(2);
+      await expect(card.getByRole('button', { name: 'Edit' })).toHaveCount(0);
       await assertTouchTargetSize(page, '[role="group"][aria-label="Confirm this action"] button', 48);
       await assertNoHorizontalOverflow(page);
 

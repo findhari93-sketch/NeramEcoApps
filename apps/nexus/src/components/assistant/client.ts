@@ -14,6 +14,9 @@ export type GetToken = () => Promise<string | null>;
 /** The brief card's SWR key, also revalidated after a confirmed action changes the day. */
 export const BRIEF_KEY = '/api/assistant/brief';
 
+/** A fetch that never reached the server (TypeError, no status). Status 0 on AssistantHttpError. */
+export const OFFLINE = 'You seem to be offline. Check your connection and try again.';
+
 export class AssistantHttpError extends Error {
   status: number;
   constructor(message: string, status: number) {
@@ -26,11 +29,17 @@ export class AssistantHttpError extends Error {
 async function authed<T>(getToken: GetToken, url: string, init: RequestInit = {}): Promise<T> {
   const token = await getToken();
   if (!token) throw new AssistantHttpError('Your session has ended. Sign in again.', 401);
-  const res = await fetch(url, {
-    ...init,
-    cache: 'no-store',
-    headers: { Authorization: `Bearer ${token}`, ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...(init.headers || {}) },
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...init,
+      cache: 'no-store',
+      headers: { Authorization: `Bearer ${token}`, ...(init.body ? { 'Content-Type': 'application/json' } : {}), ...(init.headers || {}) },
+    });
+  } catch {
+    // No response at all: the browser's "Failed to fetch" means nothing to a student.
+    throw new AssistantHttpError(OFFLINE, 0);
+  }
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new AssistantHttpError(typeof body?.error === 'string' ? body.error : 'The assistant could not answer', res.status);
   return body as T;
@@ -74,7 +83,9 @@ export async function uploadImage(getToken: GetToken, file: File): Promise<Attac
     const form = new FormData();
     form.append('file', blob);
     form.append('bucket', 'drawing-uploads');
-    const res = await fetch('/api/drawing/upload', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form });
+    const res = await fetch('/api/drawing/upload', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form }).catch(() => {
+      throw new AssistantHttpError('Upload failed. Check your connection and try again.', 0);
+    });
     if (!res.ok) throw new AssistantHttpError(res.status === 413 ? 'That image is too large to upload. Try a smaller photo.' : 'Upload failed. Check your connection and try again.', res.status);
     return (await res.json()).url as string;
   };

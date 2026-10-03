@@ -146,13 +146,71 @@ describe('AssistantProvider', () => {
     expect(postTurn.mock.calls[0][1]).toMatchObject({ threadId: null });
   });
 
-  it('a cancel that fails on the network says so', async () => {
+  it('a cancel that fails on the network says the action is still waiting (item 16)', async () => {
     postTurn.mockResolvedValue(env({ action: { id: 'a1', confirmToken: 'ct' } as unknown as Envelope['action'] }));
     cancelActionRequest.mockRejectedValue(new TypeError('Failed to fetch'));
     mount();
     await act(async () => { await ctx.send('hello'); });
     await act(async () => { await ctx.cancel(); });
-    expect(ctx.error).toMatch(/Could not cancel/);
+    expect(ctx.error).toBe('Could not cancel just now. The action is still waiting and expires on its own in a few minutes.');
+  });
+
+  it('a confirm the server refuses as no longer valid (400) clears the card and shows its sentence (item 10)', async () => {
+    postTurn.mockResolvedValue(env({ action: { id: 'a1', confirmToken: 'ct' } as unknown as Envelope['action'] }));
+    confirmActionRequest.mockRejectedValue(new AssistantHttpError('That day has already passed. Which day should I remind you?', 400));
+    mount();
+    await act(async () => { await ctx.send('hello'); });
+    await act(async () => { await ctx.confirm(); });
+    expect(ctx.pendingAction).toBeNull();
+    expect(ctx.error).toBeNull();
+    expect(ctx.enabled).toBe(true);
+    expect(ctx.messages[ctx.messages.length - 1].text).toBe('That day has already passed. Which day should I remind you?');
+  });
+
+  it('a send that fails offline keeps the message, says so plainly, and Try again resends it once (Ruling 26)', async () => {
+    const photo = { original_image_url: 'https://cdn.test/a.jpg', thumbnail_url: null };
+    postTurn.mockRejectedValueOnce(new TypeError('Failed to fetch')).mockResolvedValueOnce(env({ reply: 'Got it.' }));
+    mount();
+    await act(async () => { await ctx.send('here it is', photo); });
+    expect(ctx.error).toBe('You seem to be offline. Check your connection and try again.');
+    expect(ctx.messages.map((m) => [m.role, m.text, Boolean(m.pending)])).toEqual([['user', 'here it is', false]]);
+    expect(ctx.canRetry).toBe(true);
+    await act(async () => { await ctx.retry(); });
+    expect(postTurn).toHaveBeenCalledTimes(2);
+    expect(postTurn.mock.calls[1][1]).toMatchObject({ text: 'here it is', attachment: photo });
+    expect(ctx.messages.map((m) => m.text)).toEqual(['here it is', 'Got it.']);
+    expect(ctx.error).toBeNull();
+    expect(ctx.canRetry).toBe(false);
+  });
+
+  it('a server fault shows the server sentence, never a raw error', async () => {
+    postTurn.mockRejectedValue(new AssistantHttpError('Something went wrong on my side. Please try again.', 500));
+    mount();
+    await act(async () => { await ctx.send('hello'); });
+    expect(ctx.error).toBe('Something went wrong on my side. Please try again.');
+    expect(ctx.enabled).toBe(true);
+  });
+
+  it('a history load that fails after a send keeps the thread the send is using (item 14)', async () => {
+    sessionStorage.setItem('nexus-assistant-thread', 'kept');
+    let failHistory: (e: unknown) => void = () => {};
+    loadThread.mockReturnValue(new Promise((_, reject) => { failHistory = reject; }));
+    postTurn.mockResolvedValue(env({ threadId: 'kept' }));
+    mount();
+    await act(async () => { ctx.openPanel(); });
+    await act(async () => { await ctx.send('hello'); });
+    await act(async () => { failHistory(new AssistantHttpError('Not found', 404)); await Promise.resolve(); });
+    expect(sessionStorage.getItem('nexus-assistant-thread')).toBe('kept');
+  });
+
+  it('opening with an intent sends it and skips the history read (item 14)', async () => {
+    sessionStorage.setItem('nexus-assistant-thread', 'kept');
+    postTurn.mockResolvedValue(env({ threadId: 'kept' }));
+    mount();
+    await act(async () => { ctx.openPanel("I can't attend a class"); });
+    await act(async () => { await Promise.resolve(); });
+    expect(postTurn).toHaveBeenCalledTimes(1);
+    expect(loadThread).not.toHaveBeenCalled();
   });
 
   it('a confirmed action revalidates the brief card', async () => {

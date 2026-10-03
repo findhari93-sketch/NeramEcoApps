@@ -23,7 +23,7 @@ export default function MessageBubble({ message, label = 'Neram Assistant is thi
   }
   const links = message.envelope?.links || [];
   return (
-    <Box sx={{ display: 'flex', justifyContent: mine ? 'flex-end' : 'flex-start', px: 2, py: 0.5 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: mine ? 'flex-end' : 'flex-start', px: 2, py: 0.5 }}>
       <Paper
         elevation={0}
         sx={{
@@ -43,6 +43,7 @@ export default function MessageBubble({ message, label = 'Neram Assistant is thi
           </Box>
         )}
       </Paper>
+      {message.failed && <Typography variant="caption" color="error" sx={{ mt: 0.5 }}>Not sent</Typography>}
     </Box>
   );
 }

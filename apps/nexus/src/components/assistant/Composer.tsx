@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Box, CircularProgress, IconButton, TextField, Typography, useMediaQuery } from '@neram/ui';
 import CameraAltOutlinedIcon from '@mui/icons-material/CameraAltOutlined';
 import CloseIcon from '@mui/icons-material/Close';
@@ -11,13 +11,10 @@ import type { Attachment, GetToken } from './client';
 const MAX_BYTES = 12 * 1024 * 1024;
 const MAX_CHARS = 2000;
 
-export default function Composer({ onSend, busy, wantsAttachment, draft, onDraftConsumed, upload, getToken, allowAttachment = true }: {
+export default function Composer({ onSend, busy, wantsAttachment, upload, getToken, allowAttachment = true }: {
   onSend: (text: string, attachment: Attachment | null) => Promise<void>;
   busy: boolean;
   wantsAttachment: boolean;
-  /** Text pushed in from outside (Edit on an action card). Consumed once. */
-  draft: string;
-  onDraftConsumed: () => void;
   /** Injected so tests need no network. Defaults to uploadImage in the sheet. */
   upload: (getToken: GetToken, file: File) => Promise<Attachment>;
   getToken?: GetToken;
@@ -31,14 +28,6 @@ export default function Composer({ onSend, busy, wantsAttachment, draft, onDraft
   const fileRef = useRef<HTMLInputElement>(null);
   const boxRef = useRef<HTMLTextAreaElement>(null);
   const reduce = useMediaQuery('(prefers-reduced-motion: reduce)');
-
-  useEffect(() => {
-    if (!draft) return;
-    // Edit only seeds an empty box: words the student already typed are kept.
-    setText((prev) => (prev.trim() ? prev : draft));
-    onDraftConsumed();
-    boxRef.current?.focus();
-  }, [draft, onDraftConsumed]);
 
   /** Empty the picker, so choosing the same file again (after a refusal or a remove) still fires change. */
   const resetPicker = () => {
