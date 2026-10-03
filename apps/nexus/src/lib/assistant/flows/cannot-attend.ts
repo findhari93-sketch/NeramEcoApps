@@ -66,10 +66,11 @@ function askReason(data: Record<string, unknown>, deps: FlowDeps, prev?: FlowSta
   return { state: state(deps, 'pick-reason', data, prev), reply: `${lead}Why can you not make it?`, suggestions: REASON_CHIPS };
 }
 
-function propose(data: Record<string, unknown>, deps: FlowDeps, reasonCode: string, note: string | null): FlowOutcome {
+function propose(data: Record<string, unknown>, deps: FlowDeps, reasonCode: string, note: string | null, prev?: FlowState): FlowOutcome {
   const reason = RSVP_REASONS.find((r) => r.code === reasonCode)!;
   if (data.classId) {
-    const c = deps.upcoming.find((x) => x.id === data.classId)!;
+    const c = deps.upcoming.find((x) => x.id === data.classId);
+    if (!c) return askClass(deps, prev, 'That class is no longer on your timetable. ');
     const when = `${cap(relativeDay(c.scheduled_date, deps.today))}, ${formatTime12(c.start_time)}`;
     return {
       state: null,
@@ -146,11 +147,11 @@ export function step(prev: FlowState, input: FlowInput, deps: FlowDeps): FlowOut
         || RSVP_REASONS.find((r) => t.includes(r.shortLabel.toLowerCase()) || t.includes(r.code));
       if (!reason) return { state: prev, reply: 'Pick one of the reasons so your teacher knows.', suggestions: REASON_CHIPS };
       if (reason.requiresNote) return { state: state(deps, 'note', { ...prev.data, reasonCode: reason.code }, prev), reply: 'Tell me a little more so your teacher knows what came up.', suggestions: [] };
-      return propose(prev.data, deps, reason.code, null);
+      return propose(prev.data, deps, reason.code, null, prev);
     }
     case 'note': {
       if (text.length < 3) return { state: prev, reply: 'A few words is enough, for example "hospital visit".', suggestions: [] };
-      return propose(prev.data, deps, String(prev.data.reasonCode), text.slice(0, 200));
+      return propose(prev.data, deps, String(prev.data.reasonCode), text.slice(0, 200), prev);
     }
     default:
       return askClass(deps);

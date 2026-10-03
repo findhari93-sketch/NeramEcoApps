@@ -79,4 +79,21 @@ describe('cannot-attend flow', () => {
     expect(out.state?.step).toBe('pick-class');
     expect(out.reply).toMatch(/Tap one of the classes/);
   });
+
+  it('re-asks when the chosen class has dropped off the list before the reason or note step', () => {
+    const gone = { ...deps, upcoming: [deps.upcoming[1]] };
+    let out = start({ text: "I can't attend tomorrow" }, deps);
+    const reasonOut = step(out.state!, { text: 'Feeling unwell' }, gone);
+    expect(reasonOut.propose).toBeUndefined();
+    expect(reasonOut.reply).toMatch(/no longer on your timetable/);
+    expect(reasonOut.state).toMatchObject({ flow: 'cannot-attend', step: 'pick-class' });
+    expect(reasonOut.state?.startedAt).toBe(out.state!.startedAt);
+
+    out = step(out.state!, { text: 'Other reason' }, deps);
+    expect(out.state?.step).toBe('note');
+    const noteOut = step(out.state!, { text: 'Cousin wedding in Madurai' }, gone);
+    expect(noteOut.propose).toBeUndefined();
+    expect(noteOut.reply).toMatch(/no longer on your timetable/);
+    expect(noteOut.state?.flow).toBe('cannot-attend');
+  });
 });
