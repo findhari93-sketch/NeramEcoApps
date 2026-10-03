@@ -5,7 +5,7 @@ import { getSupabaseAdminClient } from '@neram/database';
 import { CLASS_IMAGES_EMBED } from '@/lib/class-cover';
 import { applyClassPrepGate } from '@/lib/class-prep-server';
 import { resolveExamCountdown } from '@/lib/exam-countdown-server';
-import { loadUpcomingClasses } from '@/lib/upcoming-classes';
+import { loadUpcomingClasses, type UpcomingClass } from '@/lib/upcoming-classes';
 
 /**
  * GET /api/dashboard/student?classroom={id}
@@ -66,7 +66,12 @@ export async function GET(request: NextRequest) {
     ] = await Promise.all([
       // Upcoming classes, through the shared loader the assistant also uses, so
       // the brief and the dashboard can never disagree about "next class".
-      loadUpcomingClasses(supabase, classroomId, { today, nowHHMM: nowTimeHHMM, limit: 5 }),
+      loadUpcomingClasses(supabase, classroomId, { today, nowHHMM: nowTimeHHMM, limit: 5 }).catch((err) => {
+        // The old inline query ignored its error and showed no classes; keep that, a
+        // dashboard must not sign a student out because one query hiccupped.
+        console.error('[dashboard] upcoming classes failed:', err instanceof Error ? err.message : err);
+        return [] as UpcomingClass[];
+      }),
 
       /*
        * Attendance, through the one shared loader.
