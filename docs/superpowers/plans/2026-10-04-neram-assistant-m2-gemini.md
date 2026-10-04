@@ -63,7 +63,7 @@ AI answers are rationed by the access rule in the addendum spec:
   - `export const dynamic = 'force-dynamic'`.
   - GET-only routes also set `export const fetchCache = 'force-no-store'`.
   - Every server `fetch` passes `cache: 'no-store'`.
-  - No new routes in M2.
+  - New routes only where the addendum names them: `GET /api/assistant/ai-status`, `/api/students/[id]/ai-access` and `/api/admin/ai-usage/assistant`.
 - **Errors:** a student never sees raw database or Gemini error text (Ruling 26). Log with `describeError`; reply with a fixed sentence.
 - **Feature switches:** the assistant never opens a door the app has closed (Ruling 25). A tool whose student feature is off is not declared and not runnable.
 - **UI:**
