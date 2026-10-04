@@ -37,6 +37,7 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ParentAccessCard from '@/components/parent/ParentAccessCard';
 import ClassifyDrawer, { type ClassifyMode, type ClassifyPayload } from '@/components/students/ClassifyDrawer';
 import AwayWindowsSection from '@/components/students/profile/AwayWindowsSection';
+import AiAnswersSection from '@/components/students/profile/AiAnswersSection';
 import AddStudentSheet from '@/components/students/AddStudentSheet';
 import CreateAccountForm from '@/components/students/CreateAccountForm';
 import ResetPasswordSheet from '@/components/students/ResetPasswordSheet';
@@ -335,6 +336,7 @@ export default function StudentProfilePage() {
     { id: 'profile-sign-ins', label: 'Sign-in history' },
     { id: 'profile-attendance', label: 'Attendance' },
     { id: 'profile-away-dates', label: 'Away dates' },
+    { id: 'profile-ai-answers', label: 'AI answers' },
     { id: 'profile-work', label: 'Assignments and tests' },
     { id: 'profile-sketchbook', label: 'Sketchbook' },
     { id: 'profile-application', label: 'Application form' },
@@ -437,6 +439,8 @@ export default function StudentProfilePage() {
         getToken={getToken}
         canRecord={canRecordAway}
       />
+
+      <AiAnswersSection studentId={core.student.id} getToken={getToken} />
 
       <WorkSection
         performance={performance}
