@@ -113,6 +113,8 @@ export interface Envelope {
   links: ToolLink[];
   action: ActionProposal | null;
   mode: Mode;
+  /** True when the model wrote `reply` (the panel shows the mode chip). */
+  llm?: boolean;
   threadId: string;
   /** Set by the flows so the panel can show the attach button at the right step. */
   wantsAttachment?: boolean;

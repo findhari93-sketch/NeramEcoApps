@@ -6,6 +6,8 @@ import { MAX_TEXT, runAssistantTurn } from '@/lib/assistant/turn';
 import type { Attachment } from '@/lib/assistant/types';
 
 export const dynamic = 'force-dynamic';
+// A free question can take up to four Gemini calls.
+export const maxDuration = 30;
 
 function readAttachment(raw: unknown): Attachment | null | 'bad' {
   if (raw === undefined || raw === null) return null;

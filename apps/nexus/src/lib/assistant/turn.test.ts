@@ -1,7 +1,11 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ getStudentPrimaryClassroom: vi.fn(), loadUpcomingClasses: vi.fn(), loadDeclinedClassIds: vi.fn(), loadBriefFacts: vi.fn() }));
+const mocks = vi.hoisted(() => ({ generateGemini: vi.fn(), getStudentPrimaryClassroom: vi.fn(), loadUpcomingClasses: vi.fn(), loadDeclinedClassIds: vi.fn(), loadBriefFacts: vi.fn() }));
+vi.mock('@neram/ai', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@neram/ai')>()),
+  generateGemini: mocks.generateGemini,
+}));
 vi.mock('@neram/database/queries/nexus', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@neram/database/queries/nexus')>()),
   getStudentPrimaryClassroom: mocks.getStudentPrimaryClassroom,
@@ -65,10 +69,11 @@ describe('runAssistantTurn', () => {
     expect(db.rows('nexus_assistant_messages')[1].llm).toBe(false);
   });
 
-  it('falls back politely when the model would be needed, with the page chips', async () => {
-    const db = fakeDb({});
+  it('sends a free question to the model and keeps the page chips', async () => {
+    mocks.generateGemini.mockResolvedValueOnce({ text: 'Light scatters.', model: 'm', usage: { promptTokens: 1, outputTokens: 1, totalTokens: 2 }, costUsd: 0, keyTier: 'paid', functionCalls: [], modelParts: [], finishReason: 'STOP' });
+    const db = fakeDb({ nexus_settings: [{ key: 'feature_flags', value: { 'student.assistant-chat': true } }] });
     const env = await turn(db, 'why is the sky blue', { pageContext: { path: '/student/sketchbook' } });
-    expect(env.reply).toMatch(/I cannot answer free questions yet/);
+    expect(env).toMatchObject({ reply: 'Light scatters.', llm: true });
     expect(env.suggestions[0].label).toBe('How is my rhythm?');
   });
 
@@ -164,10 +169,11 @@ describe('runAssistantTurn', () => {
   });
 
   it('does the work for a redelivery whose first attempt died, instead of replaying an earlier reply', async () => {
-    const db = fakeDb({}, { unique: UNIQUE });
+    mocks.generateGemini.mockResolvedValueOnce({ text: 'Light scatters.', model: 'm', usage: { promptTokens: 1, outputTokens: 1, totalTokens: 2 }, costUsd: 0, keyTier: 'paid', functionCalls: [], modelParts: [], finishReason: 'STOP' });
+    const db = fakeDb({ nexus_settings: [{ key: 'feature_flags', value: { 'student.assistant-chat': true } }] }, { unique: UNIQUE });
     const teams = { channel: 'teams', threadExternalId: '19:conv' };
     const earlier = await turn(db, 'why is the sky blue', { ...teams, externalId: 'act-1' });
-    expect(earlier.reply).toMatch(/free questions/);
+    expect(earlier.reply).toBe('Light scatters.');
     mocks.loadUpcomingClasses.mockRejectedValueOnce(new Error('db down'));
     await expect(turn(db, 'when is my next class', { ...teams, externalId: 'act-2' })).rejects.toThrow('db down');
     const retry = await turn(db, 'when is my next class', { ...teams, externalId: 'act-2' });

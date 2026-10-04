@@ -3,8 +3,7 @@
  *   1. the regex router (cancel, a guided flow, a direct tool),
  *   2. a flow already in progress on the thread (unless stale),
  *   3. running the tool with no model,
- *   4. the model (M2). In M1 this stage is a polite "not yet" with chips.
- * Stages 1 to 3 never import @neram/ai.
+ *   4. the model (llm.ts), read tools only. Stages 1 to 3 never call Gemini.
  */
 import { getStudentPrimaryClassroom } from '@neram/database/queries/nexus';
 import { loadDeclinedClassIds, loadUpcomingClasses, istNow } from '@/lib/upcoming-classes';
@@ -14,6 +13,7 @@ import * as remindMe from './flows/remind-me';
 import * as uploadSketch from './flows/upload-sketch';
 import { isStale, type FlowDeps, type FlowOutcome, type FlowState, type Proposal } from './flows/types';
 import { isUuid } from './ids';
+import { runLlmStage, type LlmMeta } from './llm';
 import { defaultSuggestions } from './page-suggestions';
 import { findActionTool, findTool, isActionTool, toolsFor } from './registry-all';
 import { routeIntent, type FlowName } from './router';
@@ -127,6 +127,7 @@ export async function runAssistantTurn(input: TurnInput): Promise<Envelope> {
   let outcome: FlowOutcome;
   let links: ToolLink[] = [];
   let mode: Mode = 'general';
+  let llmMeta: LlmMeta | null = null;
 
   const activeFlow = thread.flow_state as FlowState | null;
   const live = activeFlow && !isStale(activeFlow, now) ? activeFlow : null;
@@ -161,7 +162,12 @@ export async function runAssistantTurn(input: TurnInput): Promise<Envelope> {
     }
   } else {
     mode = route.mode;
-    outcome = { state: null, reply: NOT_YET, suggestions: chips() };
+    const out = await runLlmStage({
+      ctx, mode, text, page, currentMessageId: stored.row?.id ?? null, classroomName: classroom?.name ?? null,
+    });
+    outcome = { state: null, reply: out.reply, suggestions: chips() };
+    links = out.links;
+    llmMeta = out.meta;
   }
 
   let action: Envelope['action'] = null;
@@ -195,9 +201,13 @@ export async function runAssistantTurn(input: TurnInput): Promise<Envelope> {
     links,
     action,
     mode,
+    ...(llmMeta ? { llm: true } : {}),
     threadId: thread.id,
     ...(outcome.wantsAttachment ? { wantsAttachment: true } : {}),
   };
-  await appendMessage(input.supabase, { threadId: thread.id, role: 'assistant', text: envelope.reply, envelope, mode, llm: false });
+  await appendMessage(input.supabase, { threadId: thread.id, role: 'assistant', text: envelope.reply, envelope, mode, llm: Boolean(llmMeta),
+    model: llmMeta?.model ?? null, promptTokens: llmMeta?.promptTokens ?? null, outputTokens: llmMeta?.outputTokens ?? null,
+    costUsd: llmMeta?.costUsd ?? null, toolCalls: llmMeta?.toolCalls ?? null,
+  });
   return envelope;
 }
