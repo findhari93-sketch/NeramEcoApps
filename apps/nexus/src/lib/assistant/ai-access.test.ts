@@ -21,6 +21,13 @@ import {
   buildAiStatus, clampDailyLimit, clearOverrides, decideAiAccess, loadAiAccess, readDailyLimit, setOverride, teacherAccessLine, type OverrideRow,
 } from './ai-access';
 
+const FL_ROW = { key: 'feature_flags', value: { 'student.assistant-chat': true } };
+/** A supabase whose nexus_settings reads return an error; every other table is an empty fake. */
+const failingDb = () => {
+  const chain: any = new Proxy({}, { get: (_t, k) => (k === 'then' ? (res: any) => res({ data: null, error: { message: 'down' } }) : () => chain) });
+  const rest = fakeDb({});
+  return { from: (t: string) => (t === 'nexus_settings' ? chain : rest.from(t)) } as any;
+};
 const TODAY = '2026-10-03';
 const NOW = new Date('2026-10-03T04:30:00Z');
 const item = (status: string, title = 'Perspective', date = '2026-10-01') => ({ status, class: { title, scheduled_date: date } });
@@ -80,7 +87,7 @@ describe('activeOverride, setOverride, clearOverrides (via loadAiAccess)', () =>
     mocks.getStudentPrimaryClassroom.mockReset().mockResolvedValue({ id: 'c1', name: 'Batch' });
     mocks.getCatchupBacklog.mockReset().mockResolvedValue(backlog({ missed: [item('waiting')] }));
   });
-  const settings = { nexus_settings: [{ key: 'assistant_pilot_user_ids', value: [] }] };
+  const settings = { nexus_settings: [FL_ROW, { key: 'assistant_pilot_user_ids', value: [] }] };
 
   it('ignores an override that has ended or was cleared; the newest active one wins (Review Focus 3)', async () => {
     const db = fakeDb({ ...settings, nexus_assistant_ai_overrides: [
@@ -104,8 +111,26 @@ describe('activeOverride, setOverride, clearOverrides (via loadAiAccess)', () =>
     expect(db.rows('nexus_assistant_ai_overrides').every((r) => r.cleared_at)).toBe(true);
   });
 
+  it('fails closed when the settings cannot be read', async () => {
+    expect(await loadAiAccess(failingDb(), 's1', NOW)).toMatchObject({ on: false, reason: 'not_in_pilot' });
+  });
+
+  it('does not read the backlog when an override decides or the student is outside the pilot', async () => {
+    const withOverride = fakeDb({ ...settings, nexus_assistant_ai_overrides: [ov({ mode: 'off' })] });
+    await loadAiAccess(withOverride, 's1', NOW);
+    const outside = fakeDb({ nexus_settings: [FL_ROW, { key: 'assistant_pilot_user_ids', value: ['someone-else'] }] });
+    await loadAiAccess(outside, 's1', NOW);
+    expect(mocks.getCatchupBacklog).not.toHaveBeenCalled();
+  });
+
+  it('rejects a blank reason before clearing the active override', async () => {
+    const db = fakeDb({ nexus_assistant_ai_overrides: [ov({ id: 'a', mode: 'off' })] });
+    await expect(setOverride(db, { studentId: 's1', mode: 'on', reason: '   ', endsOn: null, setBy: 't2', now: NOW })).rejects.toMatchObject({ status: 400 });
+    expect(db.rows('nexus_assistant_ai_overrides')[0].cleared_at).toBeNull();
+  });
+
   it('reads the pilot list: a student outside a non-empty list is off', async () => {
-    const db = fakeDb({ nexus_settings: [{ key: 'feature_flags', value: { 'student.assistant-chat': true } }, { key: 'assistant_pilot_user_ids', value: ['someone-else'] }] });
+    const db = fakeDb({ nexus_settings: [FL_ROW, { key: 'assistant_pilot_user_ids', value: ['someone-else'] }] });
     expect((await loadAiAccess(db, 's1', NOW)).reason).toBe('not_in_pilot');
   });
 });
@@ -117,15 +142,33 @@ describe('the allowance', () => {
     expect(clampDailyLimit(-3)).toBe(0);
     expect(clampDailyLimit(500)).toBe(50);
     expect(clampDailyLimit(7.6)).toBe(7);
+    expect(clampDailyLimit('5')).toBe(5);
+    expect(clampDailyLimit('')).toBe(10);
     expect(await readDailyLimit(fakeDb({}))).toBe(10);
     expect(await readDailyLimit(fakeDb({ nexus_settings: [{ key: 'assistant_ai_daily_limit', value: 4 }] }))).toBe(4);
+  });
+
+  it('pauses (0) when the allowance cannot be read, but a missing row means the default', async () => {
+    expect(await readDailyLimit(failingDb())).toBe(0);
+    expect(await readDailyLimit(fakeDb({}))).toBe(10);
+  });
+
+  it('says none left today when the allowance is used up', async () => {
+    mocks.getStudentPrimaryClassroom.mockResolvedValue({ id: 'c1', name: 'Batch' });
+    mocks.getCatchupBacklog.mockResolvedValue(null);
+    const db = fakeDb({
+      nexus_settings: [FL_ROW, { key: 'assistant_ai_daily_limit', value: 3 }],
+      nexus_assistant_threads: [{ id: 't1', user_id: 's1', channel: 'nexus', last_message_at: '2026-10-03T04:00:00Z' }],
+      nexus_assistant_messages: [1, 2, 3].map((i) => ({ id: `m${i}`, thread_id: 't1', role: 'assistant', llm: true, created_at: '2026-10-03T04:00:00Z' })),
+    });
+    expect(await buildAiStatus(db, 's1', NOW)).toMatchObject({ sentence: 'AI answers: on, none left today. They reset at midnight.', left_today: 0 });
   });
 
   it('buildAiStatus says how many are left today', async () => {
     mocks.getStudentPrimaryClassroom.mockResolvedValue({ id: 'c1', name: 'Batch' });
     mocks.getCatchupBacklog.mockResolvedValue(null);
     const db = fakeDb({
-      nexus_settings: [{ key: 'assistant_ai_daily_limit', value: 10 }],
+      nexus_settings: [FL_ROW, { key: 'assistant_ai_daily_limit', value: 10 }],
       nexus_assistant_threads: [{ id: 't1', user_id: 's1', channel: 'nexus', last_message_at: '2026-10-03T04:00:00Z' }],
       nexus_assistant_messages: [1, 2, 3].map((i) => ({ id: `m${i}`, thread_id: 't1', role: 'assistant', llm: true, created_at: '2026-10-03T04:00:00Z' })),
     });
@@ -135,7 +178,7 @@ describe('the allowance', () => {
   it('says paused when the allowance is 0, and none left when used up', async () => {
     mocks.getCatchupBacklog.mockResolvedValue(null);
     mocks.getStudentPrimaryClassroom.mockResolvedValue({ id: 'c1', name: 'Batch' });
-    expect((await buildAiStatus(fakeDb({ nexus_settings: [{ key: 'assistant_ai_daily_limit', value: 0 }] }), 's1', NOW)).sentence).toBe('AI answers are paused right now.');
+    expect((await buildAiStatus(fakeDb({ nexus_settings: [FL_ROW, { key: 'assistant_ai_daily_limit', value: 0 }] }), 's1', NOW)).sentence).toBe('AI answers are paused right now.');
   });
 });
 

@@ -7,6 +7,7 @@
  */
 import { getCatchupBacklog } from '@neram/database';
 import { getStudentPrimaryClassroom, type CatchupBacklog } from '@neram/database/queries/nexus';
+import { ApiError } from '@/lib/api-errors';
 import { computeCatchupPace } from '@/lib/catchup-pace';
 import { readAssistantGate } from './access';
 import { formatDay, todayIst } from './format';
@@ -42,13 +43,15 @@ export interface AiAccess {
 }
 
 export function clampDailyLimit(raw: unknown): number {
-  const n = typeof raw === 'number' ? raw : Number.NaN;
+  const n = typeof raw === 'number' ? raw : typeof raw === 'string' && raw.trim() !== '' ? Number(raw) : Number.NaN;
   if (!Number.isFinite(n)) return DEFAULT_DAILY_LIMIT;
   return Math.min(MAX_DAILY_LIMIT, Math.max(0, Math.floor(n)));
 }
 
 export async function readDailyLimit(supabase: any): Promise<number> {
-  const { data } = await supabase.from('nexus_settings').select('value').eq('key', DAILY_LIMIT_KEY).maybeSingle();
+  const { data, error } = await supabase.from('nexus_settings').select('value').eq('key', DAILY_LIMIT_KEY).maybeSingle();
+  // Fail closed: if the allowance cannot be read, pause paid answers rather than run unmetered.
+  if (error) return 0;
   return clampDailyLimit(data?.value);
 }
 
@@ -110,7 +113,7 @@ export async function loadAiAccess(supabase: any, studentId: string, now: Date):
     getStudentPrimaryClassroom(studentId, supabase).catch(() => null),
     activeOverride(supabase, studentId, today),
   ]);
-  const inPilot = gate.pilot.length === 0 || gate.pilot.includes(studentId);
+  const inPilot = gate.enabled && (gate.pilot.length === 0 || gate.pilot.includes(studentId));
   const classroomId = classroom?.id ?? null;
   // Only the catch-up rule needs the backlog; skip the read when something earlier decides.
   const needsBacklog = inPilot && classroomId && !override;
@@ -133,10 +136,12 @@ export async function setOverride(
   supabase: any,
   input: { studentId: string; mode: 'on' | 'off'; reason: string; endsOn: string | null; setBy: string; now: Date },
 ): Promise<OverrideRow> {
+  const reason = input.reason.trim();
+  if (!reason || reason.length > 200) throw new ApiError('Give a reason of up to 200 characters, so other teachers know why.', 400);
   await clearOverrides(supabase, input.studentId, input.setBy, input.now);
   const { data, error } = await supabase
     .from(OVERRIDES)
-    .insert({ student_id: input.studentId, mode: input.mode, reason: input.reason.trim().slice(0, 200), set_by: input.setBy, set_at: input.now.toISOString(), ends_on: input.endsOn, cleared_at: null, cleared_by: null })
+    .insert({ student_id: input.studentId, mode: input.mode, reason, set_by: input.setBy, set_at: input.now.toISOString(), ends_on: input.endsOn, cleared_at: null, cleared_by: null })
     .select('*')
     .single();
   if (error) throw error;
