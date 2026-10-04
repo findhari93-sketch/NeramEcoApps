@@ -15,7 +15,7 @@ export const fetchCache = 'force-no-store';
 export async function GET(request: NextRequest) {
   try {
     const { caller, supabase } = await resolveAssistantCaller(request.headers.get('Authorization'));
-    return NextResponse.json(await buildAiStatus(supabase, caller.id, new Date()), { headers: NO_STORE });
+    return NextResponse.json(await buildAiStatus(supabase, caller.id, new Date(), { impersonating: caller.impersonating }), { headers: NO_STORE });
   } catch (err) {
     return assistantErrorResponse(err, 'ai-status');
   }

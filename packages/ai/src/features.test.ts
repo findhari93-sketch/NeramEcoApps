@@ -28,7 +28,7 @@ describe('the registry', () => {
    */
   const FREE_KEY_EXCEPTIONS: Record<string, string> = {
     'nexus.assistant-exam':
-      'Exam help mode: policy.ts keeps only exam tools, llm.ts sends no name, classroom or general-mode turn, and the exam tools return question bank content only.',
+      'Exam help mode: policy.ts keeps only exam tools, llm.ts sends no name, classroom or general-mode turn, and the exam tools return question bank content only. The only per-student signal sent is whether the student has answered a question (hint_only) or has a test open, never identity or scores.',
   };
 
   it('keeps the free key away from anything carrying student data', () => {

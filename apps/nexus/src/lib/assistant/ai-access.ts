@@ -123,10 +123,22 @@ export async function loadAiAccess(supabase: any, studentId: string, now: Date):
 }
 
 export async function clearOverrides(supabase: any, studentId: string, clearedBy: string, now: Date): Promise<number> {
+  // Stamp only overrides still in force. One that ended on its own (ends_on past) keeps its history unstamped.
+  const today = todayIst(now);
+  const { data: open, error: readError } = await supabase
+    .from(OVERRIDES)
+    .select('id, ends_on')
+    .eq('student_id', studentId)
+    .is('cleared_at', null);
+  if (readError) throw readError;
+  const ids = ((open || []) as Array<{ id: string; ends_on: string | null }>)
+    .filter((r) => !r.ends_on || r.ends_on >= today)
+    .map((r) => r.id);
+  if (ids.length === 0) return 0;
   const { data, error } = await supabase
     .from(OVERRIDES)
     .update({ cleared_at: now.toISOString(), cleared_by: clearedBy })
-    .eq('student_id', studentId)
+    .in('id', ids)
     .is('cleared_at', null)
     .select('id');
   if (error) throw error;
@@ -165,8 +177,12 @@ export function teacherAccessLine(a: AiAccess): string {
 
 export interface AiStatus { on: boolean; reason: AiAccessReason; sentence: string; link: ToolLink | null; left_today: number; daily_limit: number }
 
-export async function buildAiStatus(supabase: any, studentId: string, now: Date): Promise<AiStatus> {
+export async function buildAiStatus(supabase: any, studentId: string, now: Date, opts: { impersonating?: boolean } = {}): Promise<AiStatus> {
   const [access, limit] = await Promise.all([loadAiAccess(supabase, studentId, now), readDailyLimit(supabase)]);
+  // A teacher viewing as the student never spends the student's allowance (llm.ts), so the chip says so.
+  if (opts.impersonating) {
+    return { on: false, reason: access.reason, sentence: 'Viewing as a student, AI answers are not used.', link: null, left_today: 0, daily_limit: limit };
+  }
   const used = access.on && limit > 0 ? await countLlmRepliesToday(supabase, studentId, istDayStartIso(now), limit) : 0;
   const left = Math.max(0, limit - used);
   const sentence = access.on ? onSentence(limit, left) : access.sentence;

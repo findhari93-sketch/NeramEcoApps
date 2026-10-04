@@ -53,6 +53,16 @@ describe('/api/admin/ai-usage/assistant', () => {
     expect((await PATCH(req('PATCH', { dailyLimit: 5 }))).status).toBe(403);
   });
 
+  it('GET answers the generic 500 when the allowance cannot be read, never a 0', async () => {
+    const chain: any = new Proxy({}, { get: (_t, k) => (k === 'then' ? (res: any) => res({ data: null, error: { message: 'down' } }) : () => chain) });
+    const rest = fakeDb({ users: staff, nexus_assistant_ai_overrides: [] });
+    mocks.db = { from: (t: string) => (t === 'nexus_settings' ? chain : rest.from(t)) };
+    mocks.loadAssistantMonthUsage.mockResolvedValue([]);
+    const res = await GET(req('GET'));
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ error: 'Something went wrong. Please try again.' });
+  });
+
   it('GET returns the allowance, the students with their access line, and active overrides', async () => {
     mocks.loadAssistantMonthUsage.mockResolvedValue([{ studentId: 's1', name: 'Priya', questions: 12, costUsd: 0.01 }]);
     mocks.loadAiAccess.mockResolvedValue({ on: true, reason: 'caught_up', sentence: '', link: null, missed: [], missedCount: 0, deficit: 0, override: null });

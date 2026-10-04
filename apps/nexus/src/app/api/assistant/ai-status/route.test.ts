@@ -24,7 +24,14 @@ describe('GET /api/assistant/ai-status', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('Cache-Control')).toBe('no-store');
     expect(await res.json()).toMatchObject({ on: true, left_today: 7 });
-    expect(mocks.buildAiStatus).toHaveBeenCalledWith({}, 's1', expect.any(Date));
+    expect(mocks.buildAiStatus).toHaveBeenCalledWith({}, 's1', expect.any(Date), { impersonating: undefined });
+  });
+
+  it('tells buildAiStatus when a teacher is viewing as the student', async () => {
+    mocks.resolveAssistantCaller.mockResolvedValue({ caller: { id: 's1', impersonating: true }, supabase: {}, features: {} });
+    mocks.buildAiStatus.mockResolvedValue({ on: false });
+    await GET(req());
+    expect(mocks.buildAiStatus).toHaveBeenCalledWith({}, 's1', expect.any(Date), { impersonating: true });
   });
 
   it('is 404 while the assistant is off', async () => {

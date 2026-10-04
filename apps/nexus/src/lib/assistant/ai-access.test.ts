@@ -111,6 +111,21 @@ describe('activeOverride, setOverride, clearOverrides (via loadAiAccess)', () =>
     expect(db.rows('nexus_assistant_ai_overrides').every((r) => r.cleared_at)).toBe(true);
   });
 
+  it('clearOverrides stamps only overrides still in force; one that ended on its own stays unstamped', async () => {
+    const db = fakeDb({ nexus_assistant_ai_overrides: [
+      ov({ id: 'ended', mode: 'on', ends_on: '2026-10-02' }),
+      ov({ id: 'today', mode: 'on', ends_on: TODAY }),
+      ov({ id: 'open', mode: 'off', ends_on: null }),
+      ov({ id: 'done', mode: 'off', cleared_at: '2026-10-01T00:00:00Z', cleared_by: 't0' }),
+    ] });
+    expect(await clearOverrides(db, 's1', 't3', NOW)).toBe(2);
+    const by = (id: string) => db.rows('nexus_assistant_ai_overrides').find((r) => r.id === id)!;
+    expect(by('ended').cleared_at).toBeNull();
+    expect(by('today')).toMatchObject({ cleared_by: 't3' });
+    expect(by('open')).toMatchObject({ cleared_by: 't3' });
+    expect(by('done').cleared_by).toBe('t0');
+  });
+
   it('fails closed when the settings cannot be read', async () => {
     expect(await loadAiAccess(failingDb(), 's1', NOW)).toMatchObject({ on: false, reason: 'not_in_pilot' });
   });
@@ -173,6 +188,15 @@ describe('the allowance', () => {
       nexus_assistant_messages: [1, 2, 3].map((i) => ({ id: `m${i}`, thread_id: 't1', role: 'assistant', llm: true, created_at: '2026-10-03T04:00:00Z' })),
     });
     expect(await buildAiStatus(db, 's1', NOW)).toEqual({ on: true, reason: 'caught_up', sentence: 'AI answers: on, 7 left today.', link: null, left_today: 7, daily_limit: 10 });
+  });
+
+  it('buildAiStatus while viewing as the student says so and spends nothing', async () => {
+    mocks.getStudentPrimaryClassroom.mockResolvedValue({ id: 'c1', name: 'Batch' });
+    mocks.getCatchupBacklog.mockResolvedValue(null);
+    const db = fakeDb({ nexus_settings: [FL_ROW, { key: 'assistant_ai_daily_limit', value: 10 }] });
+    expect(await buildAiStatus(db, 's1', NOW, { impersonating: true })).toEqual({
+      on: false, reason: 'caught_up', sentence: 'Viewing as a student, AI answers are not used.', link: null, left_today: 0, daily_limit: 10,
+    });
   });
 
   it('says paused when the allowance is 0, and none left when used up', async () => {

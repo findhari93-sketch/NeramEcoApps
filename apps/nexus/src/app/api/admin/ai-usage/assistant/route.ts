@@ -8,7 +8,6 @@ import {
   DAILY_LIMIT_KEY,
   clampDailyLimit,
   loadAiAccess,
-  readDailyLimit,
   teacherAccessLine,
   type OverrideRow,
 } from '@/lib/assistant/ai-access';
@@ -23,6 +22,13 @@ import { loadAssistantMonthUsage } from '@/lib/assistant/usage';
 export const dynamic = 'force-dynamic';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
+
+/** The allowance as the admin set it. A read error throws (the generic 500), never a quiet 0; a missing row is the default. */
+async function readAllowance(supabase: any): Promise<number> {
+  const { data, error } = await supabase.from('nexus_settings').select('value').eq('key', DAILY_LIMIT_KEY).maybeSingle();
+  if (error) throw error;
+  return clampDailyLimit(data?.value);
+}
 
 /** 401 when no valid token, 403 when not system.settings; otherwise the admin's users row. */
 async function authorise(request: NextRequest, supabase: any): Promise<{ id: string }> {
@@ -59,7 +65,7 @@ export async function GET(request: NextRequest) {
     const monthStart = `${todayIst(now).slice(0, 8)}01`;
     const sinceIso = new Date(`${monthStart}T00:00:00+05:30`).toISOString();
     const [dailyLimit, usage, { data: overrideRows, error: overrideError }] = await Promise.all([
-      readDailyLimit(supabase),
+      readAllowance(supabase),
       loadAssistantMonthUsage(supabase, sinceIso),
       supabase.from('nexus_assistant_ai_overrides').select('*').is('cleared_at', null).order('set_at', { ascending: false }).limit(200),
     ]);

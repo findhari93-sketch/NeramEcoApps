@@ -124,7 +124,7 @@ export default function AiAnswersSection({
           <Typography>{view.line}</Typography>
           {o && (
             <Typography variant="body2" color="text.secondary">
-              Set by {o.set_by_name || 'a teacher'} on {formatDay(o.set_at.slice(0, 10))}
+              Set by {o.set_by_name || 'a teacher'} on {formatDay(todayIst(new Date(o.set_at)))}
               {o.ends_on ? `, until ${formatDay(o.ends_on)}` : ''}: {o.reason}
             </Typography>
           )}
