@@ -138,7 +138,8 @@ export async function touchThread(
  */
 export async function appendMessage(
   supabase: any,
-  input: { threadId: string; role: 'user' | 'assistant'; text: string; externalId?: string | null; envelope?: Envelope | null; mode?: Mode | null; llm?: boolean },
+  input: { threadId: string; role: 'user' | 'assistant'; text: string; externalId?: string | null; envelope?: Envelope | null; mode?: Mode | null; llm?: boolean;
+    model?: string | null; promptTokens?: number | null; outputTokens?: number | null; costUsd?: number | null; toolCalls?: unknown[] | null },
 ): Promise<{ inserted: boolean; row: MessageRow | null }> {
   const { data, error } = await supabase
     .from(MESSAGES)
@@ -150,12 +151,44 @@ export async function appendMessage(
       envelope: input.envelope ?? null,
       mode: input.mode ?? null,
       llm: input.llm ?? false,
+      model: input.model ?? null,
+      prompt_tokens: input.promptTokens ?? null,
+      output_tokens: input.outputTokens ?? null,
+      cost_usd: input.costUsd ?? null,
+      tool_calls: input.toolCalls ?? null,
     })
     .select('*')
     .single();
   if (error && (error as { code?: string }).code === '23505') return { inserted: false, row: null };
   throwIf(error);
   return { inserted: true, row: data as MessageRow };
+}
+
+/**
+ * Model answers this student has had since `sinceIso` (IST midnight), across
+ * all their threads and channels. Only threads touched since then can hold
+ * one, which keeps the id list short. Stops counting at `cap`.
+ */
+export async function countLlmRepliesToday(supabase: any, userId: string, sinceIso: string, cap = 50): Promise<number> {
+  const { data: threads, error } = await supabase
+    .from(THREADS)
+    .select('id')
+    .eq('user_id', userId)
+    .gte('last_message_at', sinceIso)
+    .limit(50);
+  throwIf(error);
+  const ids = ((threads || []) as Array<{ id: string }>).map((t) => t.id);
+  if (ids.length === 0) return 0;
+  const { data, error: countError } = await supabase
+    .from(MESSAGES)
+    .select('id')
+    .in('thread_id', ids)
+    .eq('role', 'assistant')
+    .eq('llm', true)
+    .gte('created_at', sinceIso)
+    .limit(cap);
+  throwIf(countError);
+  return (data || []).length;
 }
 
 /** The most recent `limit` messages of a thread, oldest first (as a chat reads). */

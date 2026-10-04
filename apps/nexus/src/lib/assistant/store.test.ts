@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { fakeDb } from './testing/fake-db';
 import {
-  appendMessage, createAction, createReminder, createThread, findReplyToExternalId, findThreadByExternalId, findThreadForMessage,
+  appendMessage, countLlmRepliesToday, createAction, createReminder, createThread, findReplyToExternalId, findThreadByExternalId, findThreadForMessage,
   getAction, listMessages, listRemindersDue, touchThread, updateAction,
 } from './store';
 
@@ -98,5 +98,32 @@ describe('actions and reminders', () => {
     expect(due.map((r) => r.id)).toEqual(['r1']);
     const made = await createReminder(db, { userId: 'u1', threadId: null, dueOn: '2026-10-05', text: 'f', kind: 'free' });
     expect(made.status).toBe('queued');
+  });
+});
+
+describe('countLlmRepliesToday', () => {
+  const since = '2026-10-02T18:30:00.000Z';
+  it("counts model answers since IST midnight across the student's threads, nothing else", async () => {
+    const db = fakeDb({
+      nexus_assistant_threads: [
+        { id: 't1', user_id: 's1', channel: 'nexus', last_message_at: '2026-10-03T04:00:00Z' },
+        { id: 't2', user_id: 's1', channel: 'teams', last_message_at: '2026-10-03T03:00:00Z' },
+        { id: 't3', user_id: 'other', channel: 'nexus', last_message_at: '2026-10-03T04:00:00Z' },
+      ],
+      nexus_assistant_messages: [
+        { id: 'a', thread_id: 't1', role: 'assistant', llm: true, created_at: '2026-10-03T04:00:00Z' },
+        { id: 'b', thread_id: 't2', role: 'assistant', llm: true, created_at: '2026-10-03T03:00:00Z' },
+        { id: 'c', thread_id: 't1', role: 'assistant', llm: false, created_at: '2026-10-03T04:01:00Z' },
+        { id: 'd', thread_id: 't1', role: 'assistant', llm: true, created_at: '2026-10-02T18:29:00Z' }, // 23:59 IST yesterday
+        { id: 'e', thread_id: 't3', role: 'assistant', llm: true, created_at: '2026-10-03T04:00:00Z' },
+      ],
+    });
+    expect(await countLlmRepliesToday(db, 's1', since)).toBe(2);
+  });
+
+  it('stores model, tokens, cost and tool calls on a model answer', async () => {
+    const db = fakeDb({});
+    await appendMessage(db, { threadId: 't1', role: 'assistant', text: 'x', llm: true, mode: 'exam', model: 'gemini-2.5-flash-lite', promptTokens: 120, outputTokens: 40, costUsd: 0.00003, toolCalls: [{ name: 'qb_chapter_weightage', args: { exam: 'NATA' }, ok: true }] });
+    expect(db.rows('nexus_assistant_messages')[0]).toMatchObject({ llm: true, model: 'gemini-2.5-flash-lite', prompt_tokens: 120, output_tokens: 40, cost_usd: 0.00003, tool_calls: [{ name: 'qb_chapter_weightage' }] });
   });
 });
