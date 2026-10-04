@@ -33,6 +33,8 @@ export async function POST(request: NextRequest) {
       supabase, caller, channel: 'nexus',
       // A threadId that is not a uuid is treated as absent: the turn starts a fresh thread (Ruling 26).
       threadId: isUuid(body?.threadId) ? body.threadId : null,
+      // The panel's own id for this message: a resend with the same id is answered from the store (D7).
+      externalId: isUuid(body?.clientMessageId) ? body.clientMessageId : null,
       text, attachment, pageContext: readPage(body?.pageContext), baseUrl: baseUrlOf(request), features,
     });
     return NextResponse.json(envelope, { headers: NO_STORE });

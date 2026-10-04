@@ -183,6 +183,24 @@ describe('AssistantProvider', () => {
     expect(ctx.canRetry).toBe(false);
   });
 
+  it('resends with the same clientMessageId on Try again', async () => {
+    postTurn.mockRejectedValueOnce(new AssistantHttpError('You seem to be offline. Check your connection and try again.', 0)).mockResolvedValueOnce(env({ reply: 'Your next class is tomorrow.' }));
+    mount();
+    await act(async () => { await ctx.send('when is class'); });
+    await act(async () => { await ctx.retry(); });
+    expect(postTurn.mock.calls[0][1].clientMessageId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(postTurn.mock.calls[1][1].clientMessageId).toBe(postTurn.mock.calls[0][1].clientMessageId);
+  });
+
+  it('offers no Try again after a 400, but keeps the message marked Not sent', async () => {
+    postTurn.mockRejectedValueOnce(new AssistantHttpError('Keep it under 2000 characters.', 400));
+    mount();
+    await act(async () => { await ctx.send('hello'); });
+    expect(ctx.canRetry).toBe(false);
+    expect(ctx.error).toBe('Keep it under 2000 characters.');
+    expect(ctx.messages.find((m) => m.role === 'user')?.failed).toBe(true);
+  });
+
   it('a server fault shows the server sentence, never a raw error', async () => {
     postTurn.mockRejectedValue(new AssistantHttpError('Something went wrong on my side. Please try again.', 500));
     mount();

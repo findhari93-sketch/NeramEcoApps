@@ -123,6 +123,16 @@ describe('runAssistantTurn', () => {
     expect(db.rows('nexus_assistant_actions')).toHaveLength(0);
   });
 
+  it('answers a resend with the stored reply, even when the first reply never reached the phone', async () => {
+    const db = fakeDb({}, { unique: UNIQUE });
+    const first = await turn(db, 'when is my next class', { externalId: 'a1b2c3d4-0000-4000-8000-000000000001' });
+    // The phone never saw `first`, so it still has no thread id.
+    const again = await turn(db, 'when is my next class', { externalId: 'a1b2c3d4-0000-4000-8000-000000000001' });
+    expect(again).toEqual(first);
+    expect(db.rows('nexus_assistant_threads')).toHaveLength(1);
+    expect(db.rows('nexus_assistant_messages').filter((m) => m.role === 'user')).toHaveLength(1);
+  });
+
   it('returns the stored reply for a redelivered external id without doing the work twice', async () => {
     const db = fakeDb({}, { unique: UNIQUE });
     const a = await turn(db, 'when is my next class', { channel: 'teams', externalId: 'act-1', threadExternalId: '19:conv' });

@@ -198,6 +198,25 @@ export async function findReplyToExternalId(supabase: any, threadId: string, ext
   return (reply as MessageRow) ?? null;
 }
 
+/**
+ * The caller's thread that already holds a user message with this external id,
+ * for a resend that lost its first reply before learning the thread id.
+ */
+export async function findThreadForMessage(supabase: any, userId: string, channel: Channel, externalId: string): Promise<ThreadRow | null> {
+  const { data: hits, error } = await supabase
+    .from(MESSAGES)
+    .select('thread_id')
+    .eq('external_id', externalId)
+    .eq('role', 'user')
+    .limit(5);
+  throwIf(error);
+  for (const hit of (hits || []) as Array<{ thread_id: string }>) {
+    const t = await getThread(supabase, hit.thread_id);
+    if (t && t.user_id === userId && t.channel === channel) return t;
+  }
+  return null;
+}
+
 export async function createAction(
   supabase: any,
   input: {

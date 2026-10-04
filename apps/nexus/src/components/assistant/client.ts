@@ -45,9 +45,26 @@ async function authed<T>(getToken: GetToken, url: string, init: RequestInit = {}
   return body as T;
 }
 
+/** A v4 uuid for one outgoing message; Try again reuses it so the server answers a resend from the store. */
+export function newMessageId(): string {
+  const c = (globalThis as { crypto?: Crypto }).crypto;
+  if (c && typeof c.randomUUID === 'function') return c.randomUUID();
+  const b = Array.from({ length: 16 }, () => Math.floor(Math.random() * 256));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = b.map((x) => x.toString(16).padStart(2, '0')).join('');
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
+/** Worth a Try again: the request never got an answer, or the server faulted. A 4xx would answer the same way twice. */
+export function isRetryable(err: unknown): boolean {
+  if (err instanceof AssistantHttpError) return err.status === 0 || err.status >= 500;
+  return err instanceof TypeError;
+}
+
 export function postTurn(
   getToken: GetToken,
-  body: { threadId: string | null; text: string; attachment?: Attachment | null; pageContext?: PageContext | null },
+  body: { threadId: string | null; text: string; attachment?: Attachment | null; pageContext?: PageContext | null; clientMessageId: string },
 ): Promise<Envelope> {
   return authed<Envelope>(getToken, '/api/assistant/turn', { method: 'POST', body: JSON.stringify(body) });
 }

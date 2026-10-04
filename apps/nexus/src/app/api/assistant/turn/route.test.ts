@@ -48,6 +48,13 @@ describe('POST /api/assistant/turn', () => {
     expect(mocks.runAssistantTurn).toHaveBeenCalledWith(expect.objectContaining({ threadId: null }));
   });
 
+  it('passes a uuid clientMessageId through as the external id, and drops anything else', async () => {
+    await POST(req({ text: 'hi', clientMessageId: 'a1b2c3d4-0000-4000-8000-000000000001' }));
+    expect(mocks.runAssistantTurn).toHaveBeenLastCalledWith(expect.objectContaining({ externalId: 'a1b2c3d4-0000-4000-8000-000000000001' }));
+    await POST(req({ text: 'hi', clientMessageId: 'not-a-uuid' }));
+    expect(mocks.runAssistantTurn).toHaveBeenLastCalledWith(expect.objectContaining({ externalId: null }));
+  });
+
   it('never shows a raw database error: logs it and answers 500 with a fixed sentence (Ruling 26)', async () => {
     const log = vi.spyOn(console, 'error').mockImplementation(() => {});
     mocks.runAssistantTurn.mockRejectedValue({ message: 'invalid input syntax for type uuid', code: '22P02', details: null, hint: null });

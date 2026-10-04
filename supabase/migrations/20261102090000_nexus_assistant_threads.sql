@@ -50,6 +50,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_nam_thread_external
 CREATE INDEX IF NOT EXISTS idx_nam_thread_created
   ON nexus_assistant_messages (thread_id, created_at);
 
+-- A resend from the Nexus panel carries the client's message id but may not
+-- know its thread yet (the first reply was lost); this finds that thread.
+CREATE INDEX IF NOT EXISTS idx_nam_external
+  ON nexus_assistant_messages (external_id)
+  WHERE external_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS nexus_assistant_actions (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   thread_id uuid REFERENCES nexus_assistant_threads(id) ON DELETE SET NULL,

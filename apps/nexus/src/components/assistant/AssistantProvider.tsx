@@ -8,7 +8,7 @@ import { captureScreenshot } from '@/lib/capture-screenshot';
 import { isTeamsPadPath } from '@/lib/pad/embedded';
 import ReportIssueDialog from '@/components/issues/ReportIssueDialog';
 import {
-  ASSISTANT_FLAG, AssistantHttpError, BRIEF_KEY, OFFLINE, cancelActionRequest, confirmActionRequest, loadThread, newThread, postTurn,
+  ASSISTANT_FLAG, AssistantHttpError, BRIEF_KEY, OFFLINE, isRetryable, newMessageId, cancelActionRequest, confirmActionRequest, loadThread, newThread, postTurn,
   type ActionProposal, type Attachment, type Envelope, type PageContext, type Suggestion,
 } from './client';
 
@@ -96,7 +96,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const sentRef = useRef(false);
   const reportingRef = useRef(false);
   /** The send Try again repeats: the failed bubble's id, its text and photo. */
-  const failedRef = useRef<{ id: string; text: string; attachment: Attachment | null } | null>(null);
+  const failedRef = useRef<{ id: string; text: string; attachment: Attachment | null; clientMessageId: string } | null>(null);
 
   useEffect(() => {
     try {
@@ -211,7 +211,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     return true;
   }, []);
 
-  const send = useCallback(async (text: string, attachment: Attachment | null = null) => {
+  const send = useCallback(async (text: string, attachment: Attachment | null = null, clientMessageId: string = newMessageId()) => {
     const trimmed = text.trim();
     if ((!trimmed && !attachment) || busyRef.current) return;
     const gen = genRef.current;
@@ -226,15 +226,18 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     const userId = nextId();
     setMessages((prev) => [...prev, { id: userId, role: 'user', text: trimmed || 'Photo attached' }, { id: nextId(), role: 'assistant', text: '', pending: true }]);
     try {
-      const env = await postTurn(getToken, { threadId: threadRef.current, text: trimmed, attachment, pageContext });
+      const env = await postTurn(getToken, { threadId: threadRef.current, text: trimmed, attachment, pageContext, clientMessageId });
       if (gen === genRef.current) applyEnvelope(env, null);
     } catch (err) {
       // The student's message is never lost: the bubble stays, marked, and Try
       // again sends the same text and photo.
       if (gen === genRef.current && fail(err)) {
-        failedRef.current = { id: userId, text: trimmed, attachment };
+        // Try again only where it can help (D7): a 400 or 429 would get the same answer twice.
         setMessages((prev) => prev.map((m) => (m.id === userId ? { ...m, failed: true } : m)));
-        setCanRetry(true);
+        if (isRetryable(err)) {
+          failedRef.current = { id: userId, text: trimmed, attachment, clientMessageId };
+          setCanRetry(true);
+        }
       }
     } finally {
       if (gen === genRef.current) {
@@ -289,7 +292,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     if (!failed || busyRef.current) return;
     // The resend puts the message back as a fresh bubble, so drop the failed one first.
     setMessages((prev) => prev.filter((m) => m.id !== failed.id));
-    await send(failed.text, failed.attachment);
+    await send(failed.text, failed.attachment, failed.clientMessageId);
   }, [send]);
 
   const newChat = useCallback(async () => {
@@ -333,6 +336,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     if (intent) void send(intent);
   }, [send]);
 
+  const sendPublic = useCallback((t: string, a?: Attachment | null) => send(t, a ?? null), [send]);
+
   const closePanel = useCallback(() => setOpen(false), []);
 
   /** Close first, then shoot, so the sheet is not in the picture. */
@@ -353,8 +358,8 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<AssistantContextValue>(() => ({
     enabled, open, openPanel, closePanel, messages, loadingHistory, busy, error, suggestions, wantsAttachment, pendingAction,
-    canRetry, retry, send, confirm, cancel, newChat, reportProblem, pageContext,
-  }), [enabled, open, openPanel, closePanel, messages, loadingHistory, busy, error, suggestions, wantsAttachment, pendingAction, canRetry, retry, send, confirm, cancel, newChat, reportProblem, pageContext]);
+    canRetry, retry, send: sendPublic, confirm, cancel, newChat, reportProblem, pageContext,
+  }), [enabled, open, openPanel, closePanel, messages, loadingHistory, busy, error, suggestions, wantsAttachment, pendingAction, canRetry, retry, sendPublic, confirm, cancel, newChat, reportProblem, pageContext]);
 
   return (
     <Ctx.Provider value={value}>

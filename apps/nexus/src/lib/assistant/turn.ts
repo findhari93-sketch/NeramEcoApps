@@ -17,7 +17,7 @@ import { isUuid } from './ids';
 import { defaultSuggestions } from './page-suggestions';
 import { findActionTool, findTool, isActionTool, toolsFor } from './registry-all';
 import { routeIntent, type FlowName } from './router';
-import { appendMessage, createThread, findReplyToExternalId, findThreadByExternalId, getThread, touchThread, type ThreadRow } from './store';
+import { appendMessage, createThread, findReplyToExternalId, findThreadByExternalId, findThreadForMessage, getThread, touchThread, type ThreadRow } from './store';
 import type { AssistantCaller, AssistantFeatures, Attachment, Channel, Envelope, Mode, PageContext, ToolContext, ToolLink } from './types';
 
 export const MAX_TEXT = 2000;
@@ -64,6 +64,12 @@ async function resolveThread(input: TurnInput): Promise<ThreadRow> {
   }
   if (input.threadExternalId) {
     const t = await findThreadByExternalId(input.supabase, input.caller.id, input.channel, input.threadExternalId);
+    if (t) return t;
+  }
+  // A resend after a lost reply: the phone never learned the thread id, but
+  // the message it is resending is already stored. Answer from that thread.
+  if (input.externalId) {
+    const t = await findThreadForMessage(input.supabase, input.caller.id, input.channel, input.externalId);
     if (t) return t;
   }
   return createThread(input.supabase, {
