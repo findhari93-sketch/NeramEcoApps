@@ -28,6 +28,7 @@ export interface MessageRow {
   llm: boolean;
   envelope: Envelope | null;
   external_id: string | null;
+  reply_to: string | null;
   created_at: string;
 }
 
@@ -138,7 +139,7 @@ export async function touchThread(
  */
 export async function appendMessage(
   supabase: any,
-  input: { threadId: string; role: 'user' | 'assistant'; text: string; externalId?: string | null; envelope?: Envelope | null; mode?: Mode | null; llm?: boolean;
+  input: { threadId: string; role: 'user' | 'assistant'; text: string; externalId?: string | null; replyTo?: string | null; envelope?: Envelope | null; mode?: Mode | null; llm?: boolean;
     model?: string | null; promptTokens?: number | null; outputTokens?: number | null; costUsd?: number | null; toolCalls?: unknown[] | null },
 ): Promise<{ inserted: boolean; row: MessageRow | null }> {
   const { data, error } = await supabase
@@ -148,6 +149,7 @@ export async function appendMessage(
       role: input.role,
       text: input.text,
       external_id: input.externalId ?? null,
+      reply_to: input.replyTo ?? null,
       envelope: input.envelope ?? null,
       mode: input.mode ?? null,
       llm: input.llm ?? false,
@@ -175,7 +177,9 @@ export async function countLlmRepliesToday(supabase: any, userId: string, sinceI
     .select('id')
     .eq('user_id', userId)
     .gte('last_message_at', sinceIso)
-    .limit(50);
+    // Newest first, so a long tail of old threads can never push today's out of the window.
+    .order('last_message_at', { ascending: false })
+    .limit(200);
   throwIf(error);
   const ids = ((threads || []) as Array<{ id: string }>).map((t) => t.id);
   if (ids.length === 0) return 0;
@@ -204,11 +208,14 @@ export async function listMessages(supabase: any, threadId: string, limit = 30):
 }
 
 /**
- * The assistant reply stored for one inbound external id (a Teams activity):
- * the first assistant message after that user message in the same thread.
- * Null when the user message is unknown or its first attempt never replied.
+ * The stored user message for one inbound external id (a Teams activity) and
+ * the assistant row that answers it (the row whose reply_to is that message).
+ * `asked` is null when the message is unknown; `reply` is null when its first
+ * attempt never replied.
  */
-export async function findReplyToExternalId(supabase: any, threadId: string, externalId: string): Promise<MessageRow | null> {
+export async function findReplyToExternalId(
+  supabase: any, threadId: string, externalId: string,
+): Promise<{ asked: { id: string; created_at: string } | null; reply: MessageRow | null }> {
   const { data: asked, error } = await supabase
     .from(MESSAGES)
     .select('id, created_at')
@@ -217,18 +224,18 @@ export async function findReplyToExternalId(supabase: any, threadId: string, ext
     .eq('role', 'user')
     .maybeSingle();
   throwIf(error);
-  if (!asked) return null;
+  if (!asked) return { asked: null, reply: null };
   const { data: reply, error: replyError } = await supabase
     .from(MESSAGES)
     .select('*')
     .eq('thread_id', threadId)
     .eq('role', 'assistant')
-    .gt('created_at', asked.created_at)
+    .eq('reply_to', asked.id)
     .order('created_at', { ascending: true })
     .limit(1)
     .maybeSingle();
   throwIf(replyError);
-  return (reply as MessageRow) ?? null;
+  return { asked: asked as { id: string; created_at: string }, reply: (reply as MessageRow) ?? null };
 }
 
 /**

@@ -54,6 +54,9 @@ export interface TurnInput {
 
 const READ_ONLY = 'Viewing as a student is read only, so I cannot do that from here. Everything else still works.';
 const NOT_YET = 'I cannot answer free questions yet. Here is what I can do right now.';
+export const STILL_WORKING = 'Still working on your last message. Give it a moment, then open the chat again.';
+/** A duplicate younger than this may still be answered by the first attempt. */
+const IN_FLIGHT_MS = 35_000;
 const NOT_AVAILABLE = 'That is not available yet. Here is what I can do right now.';
 
 async function resolveThread(input: TurnInput): Promise<ThreadRow> {
@@ -110,11 +113,20 @@ export async function runAssistantTurn(input: TurnInput): Promise<Envelope> {
 
   const thread = await resolveThread(input);
   const stored = await appendMessage(input.supabase, { threadId: thread.id, role: 'user', text: text || '(photo)', externalId: input.externalId ?? null });
+  // The user message this turn answers: the fresh row, or on a redelivery the one already stored.
+  let userMessageId = stored.row?.id ?? null;
   if (!stored.inserted && input.externalId) {
     // Redelivery: answer with the reply to this very message. If the first
-    // attempt died before replying, there is none, so do the work now.
-    const reply = await findReplyToExternalId(input.supabase, thread.id, input.externalId);
-    if (reply?.envelope) return reply.envelope;
+    // attempt died before replying, there is none, so do the work now, unless
+    // the first attempt is probably still running.
+    const found = await findReplyToExternalId(input.supabase, thread.id, input.externalId);
+    if (found.reply?.envelope) return found.reply.envelope;
+    if (found.asked) {
+      userMessageId = found.asked.id;
+      if (!found.reply && Math.abs(now.getTime() - Date.parse(found.asked.created_at)) < IN_FLIGHT_MS) {
+        return { reply: STILL_WORKING, suggestions: [], links: [], action: null, mode: 'general', threadId: thread.id };
+      }
+    }
   }
 
   const classroom = await getStudentPrimaryClassroom(input.caller.id, input.supabase).catch(() => null);
@@ -163,10 +175,11 @@ export async function runAssistantTurn(input: TurnInput): Promise<Envelope> {
   } else {
     mode = route.mode;
     const out = await runLlmStage({
-      ctx, mode, text, page, currentMessageId: stored.row?.id ?? null, classroomName: classroom?.name ?? null,
+      ctx, mode, text, page, currentMessageId: userMessageId, classroomName: classroom?.name ?? null,
     });
     outcome = { state: null, reply: out.reply, suggestions: chips() };
     links = out.links;
+    mode = out.mode; // exam help falls back to general when the question bank is off
     llmMeta = out.meta;
   }
 
@@ -205,7 +218,7 @@ export async function runAssistantTurn(input: TurnInput): Promise<Envelope> {
     threadId: thread.id,
     ...(outcome.wantsAttachment ? { wantsAttachment: true } : {}),
   };
-  await appendMessage(input.supabase, { threadId: thread.id, role: 'assistant', text: envelope.reply, envelope, mode, llm: Boolean(llmMeta),
+  await appendMessage(input.supabase, { threadId: thread.id, role: 'assistant', text: envelope.reply, replyTo: userMessageId, envelope, mode, llm: Boolean(llmMeta),
     model: llmMeta?.model ?? null, promptTokens: llmMeta?.promptTokens ?? null, outputTokens: llmMeta?.outputTokens ?? null,
     costUsd: llmMeta?.costUsd ?? null, toolCalls: llmMeta?.toolCalls ?? null,
   });

@@ -182,6 +182,32 @@ describe('runAssistantTurn', () => {
     expect(db.rows('nexus_assistant_messages').map((m) => m.role)).toEqual(['user', 'assistant', 'user', 'assistant']);
   });
 
+  it('a resend while the first attempt is still young gets the fixed envelope and does no work', async () => {
+    const X = 'a1b2c3d4-0000-4000-8000-000000000002';
+    const seed = () => fakeDb({
+      nexus_assistant_threads: [{ id: 'th', user_id: 's1', channel: 'nexus', flow_state: null }],
+      nexus_assistant_messages: [{ id: 'u1', thread_id: 'th', role: 'user', text: 'when is my next class', external_id: X, created_at: '2026-10-03T04:30:00Z' }],
+    }, { unique: UNIQUE });
+    const db = seed();
+    const young = await turn(db, 'when is my next class', { externalId: X, now: new Date('2026-10-03T04:30:20Z') });
+    expect(young).toEqual({ reply: 'Still working on your last message. Give it a moment, then open the chat again.', suggestions: [], links: [], action: null, mode: 'general', threadId: 'th' });
+    expect(mocks.loadUpcomingClasses).not.toHaveBeenCalled();
+    expect(db.rows('nexus_assistant_messages')).toHaveLength(1);
+    // Older than 35 s: the first attempt is presumed dead, the work is done and replies to the stored row.
+    const old = await turn(db, 'when is my next class', { externalId: X, now: new Date('2026-10-03T04:31:00Z') });
+    expect(old.reply).toMatch(/^Your next classes:/);
+    const rows = db.rows('nexus_assistant_messages');
+    expect(rows).toHaveLength(2);
+    expect(rows[1].reply_to).toBe('u1');
+  });
+
+  it('stores reply_to on the closing assistant row', async () => {
+    const db = fakeDb({}, { unique: UNIQUE });
+    await turn(db, 'when is my next class');
+    const [u, a] = db.rows('nexus_assistant_messages');
+    expect(a.reply_to).toBe(u.id);
+  });
+
   it('refuses a thread that belongs to someone else by starting a fresh one', async () => {
     const db = fakeDb({ nexus_assistant_threads: [{ id: 't-other', user_id: 'u9', channel: 'nexus', flow_state: null }] });
     const env = await turn(db, 'brief', { threadId: 't-other' });

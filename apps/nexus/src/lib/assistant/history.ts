@@ -10,12 +10,14 @@ import type { MessageRow } from './store';
 import type { Mode } from './types';
 
 export function historyFor(mode: Mode, rows: MessageRow[], maxPairs = 6): GeminiContent[] {
+  // Each assistant row names the user message it answers (reply_to); adjacency
+  // is not trusted, because a slow turn can be overtaken by a later one.
+  const byId = new Map(rows.map((r) => [r.id, r]));
   const pairs: Array<[MessageRow, MessageRow]> = [];
-  for (let i = 0; i < rows.length - 1; i++) {
-    const u = rows[i];
-    const a = rows[i + 1];
-    if (u.role !== 'user' || a.role !== 'assistant') continue;
-    i++;
+  for (const a of rows) {
+    if (a.role !== 'assistant' || !a.reply_to) continue;
+    const u = byId.get(a.reply_to);
+    if (!u || u.role !== 'user') continue;
     if (u.text === '(photo)') continue;
     if (mode === 'exam' && !(a.mode === 'exam' && a.llm)) continue;
     pairs.push([u, a]);

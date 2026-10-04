@@ -48,17 +48,19 @@ describe('threads and messages', () => {
     expect(texts).toEqual(Array.from({ length: 50 }, (_, i) => `m${i + 10}`));
   });
 
-  it('finds the reply to one external id, not an earlier turn, and null when none was stored', async () => {
+  it('finds the reply whose reply_to is the asked row, not the next assistant row, and null when none was stored', async () => {
     const db = fakeDb({}, { unique: UNIQUE });
     const t = await createThread(db, { userId: 'u1', channel: 'teams' });
-    await appendMessage(db, { threadId: t.id, role: 'user', text: 'one', externalId: 'act-1' });
-    await appendMessage(db, { threadId: t.id, role: 'assistant', text: 'reply one' });
-    await appendMessage(db, { threadId: t.id, role: 'user', text: 'two', externalId: 'act-2' });
-    expect((await findReplyToExternalId(db, t.id, 'act-1'))?.text).toBe('reply one');
-    expect(await findReplyToExternalId(db, t.id, 'act-2')).toBeNull();
-    expect(await findReplyToExternalId(db, t.id, 'act-9')).toBeNull();
-    await appendMessage(db, { threadId: t.id, role: 'assistant', text: 'reply two' });
-    expect((await findReplyToExternalId(db, t.id, 'act-2'))?.text).toBe('reply two');
+    const u1 = await appendMessage(db, { threadId: t.id, role: 'user', text: 'one', externalId: 'act-1' });
+    const u2 = await appendMessage(db, { threadId: t.id, role: 'user', text: 'two', externalId: 'act-2' });
+    // A later reply to act-2 lands before the reply to act-1: order must not matter.
+    await appendMessage(db, { threadId: t.id, role: 'assistant', text: 'reply two', replyTo: u2.row!.id });
+    expect((await findReplyToExternalId(db, t.id, 'act-1')).reply).toBeNull();
+    expect((await findReplyToExternalId(db, t.id, 'act-1')).asked?.id).toBe(u1.row!.id);
+    await appendMessage(db, { threadId: t.id, role: 'assistant', text: 'reply one', replyTo: u1.row!.id });
+    expect((await findReplyToExternalId(db, t.id, 'act-1')).reply?.text).toBe('reply one');
+    expect((await findReplyToExternalId(db, t.id, 'act-2')).reply?.text).toBe('reply two');
+    expect(await findReplyToExternalId(db, t.id, 'act-9')).toEqual({ asked: null, reply: null });
   });
 
   it('stores and clears flow state', async () => {
@@ -119,6 +121,15 @@ describe('countLlmRepliesToday', () => {
       ],
     });
     expect(await countLlmRepliesToday(db, 's1', since)).toBe(2);
+  });
+
+  it('looks at the newest threads first, so a long tail of old ones cannot hide today', async () => {
+    const old = Array.from({ length: 200 }, (_, i) => ({ id: `old${i}`, user_id: 's1', channel: 'nexus', last_message_at: `2026-10-03T0${i % 3}:00:00Z` }));
+    const db = fakeDb({
+      nexus_assistant_threads: [...old, { id: 'fresh', user_id: 's1', channel: 'nexus', last_message_at: '2026-10-03T09:00:00Z' }],
+      nexus_assistant_messages: [{ id: 'a', thread_id: 'fresh', role: 'assistant', llm: true, created_at: '2026-10-03T09:00:00Z' }],
+    });
+    expect(await countLlmRepliesToday(db, 's1', since)).toBe(1);
   });
 
   it('stores model, tokens, cost and tool calls on a model answer', async () => {
