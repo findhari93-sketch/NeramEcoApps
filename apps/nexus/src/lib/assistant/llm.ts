@@ -23,6 +23,7 @@ export function limitReply(limit: number): string {
   if (limit <= 0) return PAUSED_REPLY;
   return `You have used today's ${limit} AI questions. They reset at midnight. The buttons below still work.`;
 }
+export const IMPERSONATING_REPLY = "Viewing as a student, I do not answer free questions, so this student's AI questions are not used. Everything else here still works.";
 export const BUSY_REPLY = 'I could not answer that just now. Try again in a minute, or use one of these.';
 
 export interface LlmMeta { model: string; promptTokens: number; outputTokens: number; costUsd: number | null; toolCalls: LoopToolCall[] }
@@ -41,6 +42,8 @@ const firstNameOf = (name: string | null) => String(name || '').trim().split(/\s
 
 export async function runLlmStage(input: LlmInput): Promise<{ reply: string; links: ToolLink[]; meta: LlmMeta | null }> {
   const { ctx, mode } = input;
+  // Impersonation may read, never act. Spending the student's paid allowance is acting.
+  if (ctx.caller.impersonating) return { reply: IMPERSONATING_REPLY, links: [], meta: null };
   // Who may spend money (addendum spec): a student who is not caught up, or
   // whose teacher switched AI answers off, gets the reason and a way back,
   // never a model call.

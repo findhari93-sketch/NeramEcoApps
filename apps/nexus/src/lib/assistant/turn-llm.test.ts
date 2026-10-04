@@ -27,7 +27,7 @@ vi.mock('@neram/database', async (importOriginal) => ({
 
 import { AiBlockedError, type GeminiResult } from '@neram/ai';
 import { fakeDb } from './testing/fake-db';
-import { BUSY_REPLY, PAUSED_REPLY, limitReply } from './llm';
+import { BUSY_REPLY, IMPERSONATING_REPLY, PAUSED_REPLY, limitReply } from './llm';
 import { registerTools, TOOLS } from './registry';
 import { runAssistantTurn } from './turn';
 import type { AssistantCaller } from './types';
@@ -93,6 +93,7 @@ describe('stage 4: free questions', () => {
     expect(call.feature).toBe('nexus.assistant-student');
     expect(call.systemInstruction).toMatch(/Priya/);
     expect(call.clientKey).toMatch(/^[0-9a-f]{32}$/);
+    expect(call.maxOutputTokens).toBe(400);
   });
 
   it('declares read tools only: no action tool ever reaches the model (D1)', async () => {
@@ -122,6 +123,7 @@ describe('stage 4: free questions', () => {
     const env = await turn(db, 'explain the integration by parts formula', { threadId: first.threadId });
     const call = mocks.generateGemini.mock.calls[0][0];
     expect(call.feature).toBe('nexus.assistant-exam');
+    expect(call.maxOutputTokens).toBe(700);
     expect(env.mode).toBe('exam');
     expect(call.systemInstruction).not.toMatch(/Priya|Sundar|Batch Alpha/);
     expect(JSON.stringify(call.contents)).not.toMatch(/Perspective|next class/);
@@ -182,5 +184,21 @@ describe('stage 4: free questions', () => {
       .mockResolvedValueOnce(answer('Perspective is tomorrow at 6 pm.'));
     const env = await turn(fakeDb({}), 'is there anything happening in class soon for me');
     expect(env.links).toEqual([{ label: 'Timetable', url: '/student/timetable' }]);
+  });
+
+  it('View as Student never spends the student allowance: no access check, no model call', async () => {
+    const db = fakeDb({});
+    const env = await turn(db, 'tell me a fun fact about architecture', { caller: { ...student, impersonating: true } });
+    expect(env.reply).toBe(IMPERSONATING_REPLY);
+    expect(env.llm).toBeFalsy();
+    expect(mocks.generateGemini).not.toHaveBeenCalled();
+    expect(mocks.loadAiAccess).not.toHaveBeenCalled();
+    expect(db.rows('nexus_assistant_messages').find((m) => m.role === 'assistant')?.llm).toBe(false);
+  });
+
+  it('on Teams the model gets at most three calls even if it keeps asking for a tool', async () => {
+    mocks.generateGemini.mockResolvedValue(answer('', { functionCalls: [{ name: 'my_schedule', args: {} }] }));
+    await turn(fakeDb({}), 'is there anything happening in class soon for me', { channel: 'teams' });
+    expect(mocks.generateGemini).toHaveBeenCalledTimes(3);
   });
 });
