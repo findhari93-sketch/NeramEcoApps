@@ -20,7 +20,7 @@ export const newStudentWelcome: ToolDef = {
     if (scope.enrolled_at) parts.push(`You joined on ${formatDay(todayIst(new Date(String(scope.enrolled_at))))}.`);
     parts.push(journey
       ? `Classes held before you joined are on your catch-up list: aim for ${journey.weekly_quota ?? 2} a week.`
-      : 'You joined at the start, so there is nothing to catch up on.');
+      : 'Nothing is waiting on your catch-up list right now.');
     parts.push('Start with your timetable, then your assignments.');
     const links = [{ label: 'Timetable', url: '/student/timetable' }];
     if (journey) links.push({ label: 'Catch-up', url: '/student/catch-up' });

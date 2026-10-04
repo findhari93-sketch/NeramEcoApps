@@ -22,10 +22,10 @@ const FLOWS: Array<[FlowName, RegExp]> = [
 ];
 
 const TOOLS: Array<[string, RegExp]> = [
-  ['my_tests', /\b(my tests?|tests? (due|to take|pending|today|tomorrow|this week)|any tests?|test (results?|scores?)|my (test )?scores?|what tests)\b/i],
+  ['my_tests', /\b(my tests?|tests? (due|to take|pending|today|tomorrow|this week)|any tests? (due|to take|pending|today|tomorrow|this week)|(my )?test (results?|scores?)|what tests)\b/i],
   ['my_reviews', /\b(reviews? (back|of my)|my reviews?|(feedback|review) (on|for) my (drawing|sketch|sheet)s?|drawing (feedback|reviews?)|did (my teacher|anyone) review)\b/i],
   ['get_inspirations', /^\s*(show me\s+)?(some\s+)?inspirations?\s*[.?!]?\s*$/i],
-  ['new_student_welcome', /\b(i'?m new|i am new|just joined|new here|how do i start|where do i start|getting started)\b/i],
+  ['new_student_welcome', /\b(i'?m new|i am new|just joined|new here)\b|^\s*(how do i start|where do i start|getting started)\s*[.?!]?\s*$/i],
   ['my_assignments', /\b(due|pending|assignments?|homework|work to submit|submit)\b/i],
   ['my_schedule', /\b(schedule|timetable|next class|my classes|class (today|tomorrow|this week)|when is (the|my) class)\b/i],
   ['exam_countdown', /\b(days (left|to go|until)|exam (date|countdown)|how long (till|until) (the )?exam|days to (nata|jee))\b/i],

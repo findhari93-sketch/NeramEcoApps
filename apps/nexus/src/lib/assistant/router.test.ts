@@ -47,6 +47,17 @@ describe('routeIntent', () => {
     expect(routeIntent(text, null)).toEqual({ kind: 'tool', tool });
   });
 
+  it('routes a bare "where do I start?" to the welcome', () => {
+    expect(routeIntent('where do I start?', null)).toEqual({ kind: 'tool', tool: 'new_student_welcome' });
+  });
+
+  it('leaves topic questions to the model instead of the welcome or tests answers', () => {
+    expect(routeIntent('How do I start with two point perspective?', null)).toEqual({ kind: 'llm', mode: 'general' });
+    expect(routeIntent('where do I start with the NATA syllabus', null)).toEqual({ kind: 'llm', mode: 'exam' });
+    expect(routeIntent('my score in maths', null).kind).not.toBe('tool');
+    expect(routeIntent('any test series for NATA', null)).toEqual({ kind: 'llm', mode: 'exam' });
+  });
+
   it('leaves an inspiration request with a topic to the model, which can pass the topic', () => {
     expect(routeIntent('inspiration for perspective drawings of a market', null)).toEqual({ kind: 'llm', mode: 'general' });
   });
