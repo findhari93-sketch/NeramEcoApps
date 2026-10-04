@@ -62,14 +62,14 @@ New module `apps/nexus/src/lib/assistant/` (the brain). Two thin surfaces consum
 
 ## Data model
 
-All in `supabase/migrations/`, sorting after `20261028090000`.
+All in `supabase/migrations/`, sorting after `20261101090000`.
 
-- `20261029090000_nexus_assistant_threads.sql`
+- `20261102090000_nexus_assistant_threads.sql`
   - `nexus_assistant_threads` (id, user_id → users, channel check nexus/teams, external_id, title, page_context jsonb, flow_state jsonb, created_at, updated_at, last_message_at). Unique `(user_id, channel, external_id)` where not null.
   - `nexus_assistant_messages` (id, thread_id, role check user/assistant, text, mode, llm boolean, tool_calls jsonb, model, prompt_tokens, output_tokens, cost_usd numeric(10,6), external_id, created_at). Unique `(thread_id, external_id)` where not null (Teams redelivery dedupe).
   - `nexus_assistant_actions` (id, thread_id, user_id, kind, args jsonb, summary, confirm_token, status check pending/executing/executed/failed/cancelled/expired, result jsonb, expires_at, created_at, executed_at).
-- `20261029090100_nexus_assistant_reminders.sql`: `nexus_assistant_reminders` (id, user_id, thread_id, due_on date, text, kind default free, status default queued, sent_at, sent_via, created_at); index `(status, due_on)`.
-- `20261029090200_notification_event_types_assistant.sql`, alone in its file: `ADD VALUE IF NOT EXISTS 'assistant_brief'` and `'assistant_reminder'`, then `NOTIFY pgrst, 'reload schema'`. `catchup_completed` already exists (`20260728090200`) and is unused, so the staff card reuses it.
+- `20261102090100_nexus_assistant_reminders.sql`: `nexus_assistant_reminders` (id, user_id, thread_id, due_on date, text, kind default free, status default queued, sent_at, sent_via, created_at); index `(status, due_on)`.
+- `20261102090200_notification_event_types_assistant.sql`, alone in its file: `ADD VALUE IF NOT EXISTS 'assistant_brief'` and `'assistant_reminder'`, then `NOTIFY pgrst, 'reload schema'`. `catchup_completed` already exists (`20260728090200`) and is unused, so the staff card reuses it.
 - RLS enabled on every new table, no policies (service role only, as `20260929090000` does).
 
 Per-call usage and cost land in `ai_usage_events` through `generateGemini`.

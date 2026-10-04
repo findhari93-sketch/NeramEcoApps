@@ -15,7 +15,7 @@
 - Never use the em dash character (U+2014), double dashes (`--`) or `&mdash;` in any user-visible text, label, reply, test fixture sentence or doc comment that renders.
 - Every message to a student or teacher goes through `sendNudge` in `apps/nexus/src/lib/nudge-delivery.ts`. M1 sends no messages at all; the reminders cron that does is M3.
 - No Gemini calls in M1. Do not import `@neram/ai` anywhere in this plan.
-- New SQL files go in `supabase/migrations/` at the repo root and must sort after `20261028090000`. RLS enabled, no policies (service role only), end with `NOTIFY pgrst, 'reload schema';`.
+- New SQL files go in `supabase/migrations/` at the repo root and must sort after `20261101090000`. RLS enabled, no policies (service role only), end with `NOTIFY pgrst, 'reload schema';`.
 - API routes are `export const dynamic = 'force-dynamic'`; every server-side `fetch` passes `cache: 'no-store'`. No new page-level data route; the brief has its own route because the dashboard route is the page's critical path.
 - Caller identity on the server: `verifyMsToken` (`apps/nexus/src/lib/ms-verify.ts`) for `impersonatorUserId`, then `getRequestUser` (`apps/nexus/src/lib/study-materials.ts:69`). Student tools never accept a student id; they use `caller.id`.
 - UI: MUI from `@neram/ui` only; icons from `@mui/icons-material`, never emoji; touch targets at least 48px; skeletons not spinners for async content; `prefers-reduced-motion` honoured; no horizontal scroll at 375, 768, 1024 and 1440.
@@ -40,8 +40,8 @@ New files, one responsibility each:
 
 | File | Responsibility |
 |---|---|
-| `supabase/migrations/20261029090000_nexus_assistant_threads.sql` | threads, messages, actions tables |
-| `supabase/migrations/20261029090100_nexus_assistant_reminders.sql` | reminders table |
+| `supabase/migrations/20261102090000_nexus_assistant_threads.sql` | threads, messages, actions tables |
+| `supabase/migrations/20261102090100_nexus_assistant_reminders.sql` | reminders table |
 | `apps/nexus/src/lib/assistant/types.ts` | shared types: caller, tool, context, envelope, flow state |
 | `apps/nexus/src/lib/assistant/access.ts` | flag + pilot allowlist gate for the server routes |
 | `apps/nexus/src/lib/assistant/registry.ts` | `TOOLS`, `toolsFor`, `findTool` |
@@ -85,8 +85,8 @@ Modified: `apps/nexus/src/lib/feature-flags.ts`, `apps/nexus/src/app/api/dashboa
 ### Task 1: Migrations
 
 **Files:**
-- Create: `supabase/migrations/20261029090000_nexus_assistant_threads.sql`
-- Create: `supabase/migrations/20261029090100_nexus_assistant_reminders.sql`
+- Create: `supabase/migrations/20261102090000_nexus_assistant_threads.sql`
+- Create: `supabase/migrations/20261102090100_nexus_assistant_reminders.sql`
 
 **Interfaces:**
 - Produces: tables `nexus_assistant_threads`, `nexus_assistant_messages`, `nexus_assistant_actions`, `nexus_assistant_reminders` read by `store.ts` (Task 5).
@@ -208,7 +208,7 @@ Expected: the two new files appear after `20261028090000_answer_pad_present_mode
 - [ ] **Step 4: Commit**
 
 ```bash
-git add supabase/migrations/20261029090000_nexus_assistant_threads.sql supabase/migrations/20261029090100_nexus_assistant_reminders.sql
+git add supabase/migrations/20261102090000_nexus_assistant_threads.sql supabase/migrations/20261102090100_nexus_assistant_reminders.sql
 git commit -m "feat(assistant): threads, messages, actions and reminders tables"
 ```
 
