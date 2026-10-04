@@ -32,7 +32,17 @@ export function toolsFor(caller: AssistantCaller, mode: Mode, features: Assistan
   return allowedTools(TOOLS, caller, mode, features);
 }
 
-/** Gemini `functionDeclarations` shape, used from M2. Harmless here. */
+/**
+ * Gemini `functionDeclarations`. A tool with no parameters is declared without
+ * the key: Gemini answers 400 to an OBJECT with no properties, and
+ * generateGemini reads a 400 as a bad API key.
+ */
 export function toGeminiDeclarations(tools: ToolDef[]): Array<{ functionDeclarations: unknown[] }> {
-  return [{ functionDeclarations: tools.map((t) => ({ name: t.name, description: t.description, parameters: t.parameters })) }];
+  return [{
+    functionDeclarations: tools.map((t) => ({
+      name: t.name,
+      description: t.description,
+      ...(Object.keys(t.parameters.properties).length ? { parameters: t.parameters } : {}),
+    })),
+  }];
 }
