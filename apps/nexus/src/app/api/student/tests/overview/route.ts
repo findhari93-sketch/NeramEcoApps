@@ -5,6 +5,8 @@ import { getSupabaseAdminClient } from '@neram/database';
 import { buildStudentTestsOverview } from '@/lib/student-tests-overview';
 
 export const dynamic = 'force-dynamic';
+// GET-only: Next 14 would otherwise write this route's server fetches to the Data Cache (billed as ISR writes).
+export const fetchCache = 'force-no-store';
 
 /**
  * GET /api/student/tests/overview?classroom=<id>
