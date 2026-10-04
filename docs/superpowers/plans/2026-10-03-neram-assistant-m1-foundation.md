@@ -40,8 +40,8 @@ New files, one responsibility each:
 
 | File | Responsibility |
 |---|---|
-| `supabase/migrations/20261102090000_nexus_assistant_threads.sql` | threads, messages, actions tables |
-| `supabase/migrations/20261102090100_nexus_assistant_reminders.sql` | reminders table |
+| `supabase/migrations/20261105090000_nexus_assistant_threads.sql` | threads, messages, actions tables |
+| `supabase/migrations/20261105090100_nexus_assistant_reminders.sql` | reminders table |
 | `apps/nexus/src/lib/assistant/types.ts` | shared types: caller, tool, context, envelope, flow state |
 | `apps/nexus/src/lib/assistant/access.ts` | flag + pilot allowlist gate for the server routes |
 | `apps/nexus/src/lib/assistant/registry.ts` | `TOOLS`, `toolsFor`, `findTool` |
@@ -85,8 +85,8 @@ Modified: `apps/nexus/src/lib/feature-flags.ts`, `apps/nexus/src/app/api/dashboa
 ### Task 1: Migrations
 
 **Files:**
-- Create: `supabase/migrations/20261102090000_nexus_assistant_threads.sql`
-- Create: `supabase/migrations/20261102090100_nexus_assistant_reminders.sql`
+- Create: `supabase/migrations/20261105090000_nexus_assistant_threads.sql`
+- Create: `supabase/migrations/20261105090100_nexus_assistant_reminders.sql`
 
 **Interfaces:**
 - Produces: tables `nexus_assistant_threads`, `nexus_assistant_messages`, `nexus_assistant_actions`, `nexus_assistant_reminders` read by `store.ts` (Task 5).
@@ -208,7 +208,7 @@ Expected: the two new files appear after `20261028090000_answer_pad_present_mode
 - [ ] **Step 4: Commit**
 
 ```bash
-git add supabase/migrations/20261102090000_nexus_assistant_threads.sql supabase/migrations/20261102090100_nexus_assistant_reminders.sql
+git add supabase/migrations/20261105090000_nexus_assistant_threads.sql supabase/migrations/20261105090100_nexus_assistant_reminders.sql
 git commit -m "feat(assistant): threads, messages, actions and reminders tables"
 ```
 

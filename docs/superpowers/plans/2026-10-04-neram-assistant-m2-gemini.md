@@ -31,7 +31,7 @@ AI answers are rationed by the access rule in the addendum spec:
 **Workspace:**
 - Worktree `C:\Users\Haribabu\Documents\AppsCopilot\2026\NeramEcosystem\.claude\worktrees\neram-assistant-m1`, branch `worktree-neram-assistant-m2`.
   - The branch was created from M1's head `552e0dce`, then origin/main (`e0fad755`) was merged in (`1b48093e`).
-  - The M1 migrations were renamed to `20261102090000` and `20261102090100` (`059e3dc5`) because main had taken their old versions.
+  - The M1 migrations were renamed to `20261105090000` and `20261105090100` (`059e3dc5`) because main had taken their old versions.
 - Run every command from the worktree root.
 - The SDD ledger goes in `.superpowers/sdd/2026-10-04-neram-assistant-m2-gemini/` (git-ignored).
 
@@ -127,7 +127,7 @@ New files:
 | `apps/nexus/src/lib/assistant/tools/exam/index.ts` | registers the exam tools |
 | `apps/nexus/src/lib/student-tests-overview.ts` | `buildStudentTestsOverview`, extracted from the overview route |
 | `apps/nexus/src/components/assistant/ModeChip.tsx` | "Exam help" / "My Nexus" label on model answers |
-| `supabase/migrations/20261102090200_nexus_assistant_ai_overrides.sql` | teacher overrides table |
+| `supabase/migrations/20261105090200_nexus_assistant_ai_overrides.sql` | teacher overrides table |
 | `apps/nexus/src/lib/assistant/ai-access.ts` | the access rule (`decideAiAccess`, `loadAiAccess`), the allowance (`readDailyLimit`), overrides (`activeOverride`, `setOverride`, `clearOverrides`), wording for students and teachers, `buildAiStatus` |
 | `apps/nexus/src/app/api/assistant/ai-status/route.ts` | GET: the student's own AI status for the panel |
 | `apps/nexus/src/components/assistant/AiStatusLine.tsx` | the status line under the panel header |
@@ -146,7 +146,7 @@ Modified files (main ones):
 - `apps/nexus/src/app/api/assistant/{turn,threads/[id]}/route.ts`
 - `apps/nexus/src/app/api/student/tests/overview/route.ts`
 - `apps/nexus/src/components/assistant/{client.ts,AssistantProvider.tsx,MessageBubble.tsx}`
-- `supabase/migrations/20261102090000_nexus_assistant_threads.sql`: one index. This is safe to edit because it is applied nowhere yet; verified on staging and prod 2026-10-04.
+- `supabase/migrations/20261105090000_nexus_assistant_threads.sql`: one index. This is safe to edit because it is applied nowhere yet; verified on staging and prod 2026-10-04.
 - `tests/e2e/assistant-nexus-mobile.spec.ts`
 - `apps/nexus/src/lib/assistant/testing/fake-db.ts` (Task 12C adds `.range`)
 - `apps/nexus/src/app/(teacher)/teacher/students/[id]/page.tsx` (one section and one nav entry)
@@ -639,7 +639,7 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ### Task 4: A resend never duplicates a turn; Try again only where trying again can help (parked minor b)
 
 **Files:**
-- Modify: `supabase/migrations/20261102090000_nexus_assistant_threads.sql` (add one index before the RLS lines)
+- Modify: `supabase/migrations/20261105090000_nexus_assistant_threads.sql` (add one index before the RLS lines)
 - Modify: `apps/nexus/src/lib/assistant/store.ts` (add `findThreadForMessage`)
 - Modify: `apps/nexus/src/lib/assistant/turn.ts` (`resolveThread`)
 - Modify: `apps/nexus/src/app/api/assistant/turn/route.ts`
@@ -727,7 +727,7 @@ Expected: FAIL. The resend makes a second thread, `clientMessageId` is ignored, 
 
 - [ ] **Step 3: Implement**
 
-Migration `20261102090000_nexus_assistant_threads.sql`, after the `idx_nam_thread_created` index:
+Migration `20261105090000_nexus_assistant_threads.sql`, after the `idx_nam_thread_created` index:
 
 ```sql
 -- A resend from the Nexus panel carries the client's message id but may not
@@ -832,7 +832,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add supabase/migrations/20261102090000_nexus_assistant_threads.sql apps/nexus/src/lib/assistant apps/nexus/src/app/api/assistant apps/nexus/src/components/assistant
+git add supabase/migrations/20261105090000_nexus_assistant_threads.sql apps/nexus/src/lib/assistant apps/nexus/src/app/api/assistant apps/nexus/src/components/assistant
 git commit -m "fix(assistant): a resend is answered from the store, and Try again only follows a lost or failed request
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
@@ -1472,7 +1472,7 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 ### Task 7A: The AI access rule, the allowance and the overrides table
 
 **Files:**
-- Create: `supabase/migrations/20261102090200_nexus_assistant_ai_overrides.sql`
+- Create: `supabase/migrations/20261105090200_nexus_assistant_ai_overrides.sql`
 - Create: `apps/nexus/src/lib/assistant/ai-access.ts`
 - Test: `apps/nexus/src/lib/assistant/ai-access.test.ts`
 
@@ -1663,7 +1663,7 @@ Expected: FAIL. Cannot find module `./ai-access`.
 
 - [ ] **Step 3: Implement**
 
-Migration `supabase/migrations/20261102090200_nexus_assistant_ai_overrides.sql`:
+Migration `supabase/migrations/20261105090200_nexus_assistant_ai_overrides.sql`:
 
 ```sql
 -- Teacher overrides for a student's AI answers in Neram Assistant. The rule
@@ -1881,7 +1881,7 @@ Expected: PASS. If the pace fixture's `started_on` does not give exactly 3 elaps
 - [ ] **Step 5: Commit**
 
 ```bash
-git add supabase/migrations/20261102090200_nexus_assistant_ai_overrides.sql apps/nexus/src/lib/assistant/ai-access.ts apps/nexus/src/lib/assistant/ai-access.test.ts
+git add supabase/migrations/20261105090200_nexus_assistant_ai_overrides.sql apps/nexus/src/lib/assistant/ai-access.ts apps/nexus/src/lib/assistant/ai-access.test.ts
 git commit -m "feat(assistant): AI answers access earned by being caught up, teacher overrides, admin-set allowance
 
 Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"

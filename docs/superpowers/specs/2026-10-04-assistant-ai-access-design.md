@@ -72,7 +72,7 @@ A `getCatchupBacklog` result of null means nothing to catch up on, which counts 
 
 ## Data
 
-- New migration `20261102090200_nexus_assistant_ai_overrides.sql`:
+- New migration `20261105090200_nexus_assistant_ai_overrides.sql`:
   - `nexus_assistant_ai_overrides`:
     - `id uuid`;
     - `student_id uuid` (references `users`, on delete cascade);

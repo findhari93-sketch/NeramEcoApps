@@ -39,6 +39,8 @@ CREATE TABLE IF NOT EXISTS nexus_assistant_messages (
   output_tokens integer,
   cost_usd numeric(10,6),
   external_id text,
+  -- An assistant row names the user message it answers, so pairing never guesses by order.
+  reply_to uuid REFERENCES nexus_assistant_messages(id) ON DELETE SET NULL,
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
