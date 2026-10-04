@@ -334,6 +334,82 @@ test.describe('Neram Assistant', () => {
       expect(sent.turns).toEqual([]);
       await assertNoHorizontalOverflow(page);
     });
+
+    test.describe('free questions (M2)', () => {
+      const SHOTS = process.env.E2E_SHOT_DIR;
+      async function shot(page: Page, name: string) {
+        if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png` });
+      }
+      async function openPanel(page: Page) {
+        await page.getByRole('button', { name: 'Open Neram Assistant' }).click();
+        const sheet = page.getByRole('dialog', { name: 'Neram Assistant' });
+        await expect(sheet).toBeVisible();
+        return sheet;
+      }
+      async function send(sheet: ReturnType<Page['getByRole']>, text: string) {
+        await sheet.getByRole('textbox', { name: 'Message Neram Assistant' }).fill(text);
+        await sheet.getByRole('button', { name: 'Send' }).click();
+      }
+
+      test('a free exam question shows the Exam help chip and its link, with no overflow at 375', async ({ page }) => {
+        test.skip(!serverUp, `Nexus dev server not reachable at ${NEXUS}`);
+        await openDashboard(page);
+        await page.route('**/api/assistant/turn**', (route) => route.fulfill({
+          status: 200, contentType: 'application/json',
+          body: JSON.stringify({ reply: 'Definite integrals are asked every year, about 2 a paper.', suggestions: [], links: [{ label: 'Chapter weightage', url: '/student/question-bank/nata/weightage' }], action: null, mode: 'exam', llm: true, threadId: '00000000-0000-4000-8000-000000000001' }),
+        }));
+        const sheet = await openPanel(page);
+        await send(sheet, 'How many integral questions come in NATA?');
+        await expect(sheet.getByText('Exam help')).toBeVisible();
+        const link = sheet.getByRole('link', { name: 'Chapter weightage' });
+        await expect(link).toBeVisible();
+        const box = await link.boundingBox();
+        expect(box!.height).toBeGreaterThanOrEqual(48);
+        await assertNoHorizontalOverflow(page);
+        await shot(page, 'exam-help-chip-375');
+      });
+
+      test('Try again after a dropped request resends the same message id', async ({ page }) => {
+        test.skip(!serverUp, `Nexus dev server not reachable at ${NEXUS}`);
+        await openDashboard(page);
+        const ids: string[] = [];
+        let n = 0;
+        await page.route('**/api/assistant/turn**', async (route) => {
+          ids.push(JSON.parse(route.request().postData() || '{}').clientMessageId);
+          if (n++ === 0) return route.abort('internetdisconnected');
+          return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ reply: 'Back online.', suggestions: [], links: [], action: null, mode: 'general', threadId: '00000000-0000-4000-8000-000000000002' }) });
+        });
+        const sheet = await openPanel(page);
+        await send(sheet, 'hello there');
+        await expect(sheet.getByRole('button', { name: 'Try again' })).toBeVisible();
+        await shot(page, 'try-again-375');
+        await sheet.getByRole('button', { name: 'Try again' }).click();
+        await expect(sheet.getByText('Back online.')).toBeVisible();
+        expect(ids).toHaveLength(2);
+        expect(ids[0]).toMatch(/^[0-9a-f-]{36}$/);
+        expect(ids[1]).toBe(ids[0]);
+      });
+
+      test('the AI status line: on with a count, off with a Catch-up button that leads to catch-up', async ({ page }) => {
+        test.skip(!serverUp, `Nexus dev server not reachable at ${NEXUS}`);
+        await openDashboard(page);
+        let status: Record<string, unknown> = { on: true, reason: 'caught_up', sentence: 'AI answers: on, 7 left today.', link: null, left_today: 7, daily_limit: 10 };
+        await page.route('**/api/assistant/ai-status**', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(status) }));
+        let sheet = await openPanel(page);
+        await expect(sheet.getByRole('status').filter({ hasText: 'AI answers: on, 7 left today.' })).toBeVisible();
+        await shot(page, 'status-on-375');
+        await page.keyboard.press('Escape');
+        await expect(sheet).toBeHidden();
+        status = { on: false, reason: 'missed_class', sentence: 'AI answers are off. Catch up on Perspective (1 Oct) to switch them back on.', link: { label: 'Catch-up', url: '/student/catch-up' }, left_today: 10, daily_limit: 10 };
+        sheet = await openPanel(page);
+        await expect(sheet.getByRole('status').filter({ hasText: 'AI answers are off' })).toBeVisible();
+        const catchUp = sheet.getByRole('link', { name: 'Catch-up' });
+        await expect(catchUp).toHaveAttribute('href', '/student/catch-up');
+        expect((await catchUp.boundingBox())!.height).toBeGreaterThanOrEqual(48);
+        await assertNoHorizontalOverflow(page);
+        await shot(page, 'status-off-375');
+      });
+    });
   });
 
   test.describe('on a desktop', () => {
