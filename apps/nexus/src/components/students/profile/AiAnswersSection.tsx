@@ -59,6 +59,7 @@ export default function AiAnswersSection({
       const data = await res.json().catch(() => ({}));
       if (res.status === 404) {
         setOff(true);
+        setView(null);
         return null;
       }
       if (!res.ok) throw new Error(data?.error || 'Something went wrong.');

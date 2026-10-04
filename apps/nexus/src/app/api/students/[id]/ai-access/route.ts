@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
-import { ApiError, errorResponse } from '@/lib/api-errors';
+import { ApiError, describeError, httpStatusForError } from '@/lib/api-errors';
 import { readAssistantGate } from '@/lib/assistant/access';
 import { clearOverrides, loadAiAccess, setOverride, teacherAccessLine } from '@/lib/assistant/ai-access';
 import { todayIst } from '@/lib/assistant/format';
+import { isUuid } from '@/lib/assistant/ids';
 import { assertStaffSeesStudent } from '@/lib/sketchbook-access';
 import { getRequestUser } from '@/lib/study-materials';
 
@@ -19,6 +20,8 @@ export const dynamic = 'force-dynamic';
  * student. A View-as-Student session resolves to the student and is refused.
  */
 async function staffFor(request: NextRequest, studentId: string) {
+  // A non-uuid can never be a real user; answer before any database call.
+  if (!isUuid(studentId)) throw new ApiError('Not found', 404);
   const caller = await getRequestUser(request.headers.get('Authorization'));
   await assertStaffSeesStudent(caller, studentId);
   const supabase = getSupabaseAdminClient() as any;
@@ -44,6 +47,24 @@ async function view(supabase: any, studentId: string) {
 }
 
 const NO_STORE = { 'Cache-Control': 'no-store' } as const;
+
+/**
+ * Fixed sentences only. errorResponse would pass a PostgrestError's raw message
+ * (table names, cast errors) to the client, so anything that is not an ApiError
+ * or an auth failure is logged and answered generically.
+ */
+function fail(err: unknown): NextResponse {
+  if (err instanceof ApiError) {
+    return NextResponse.json({ error: err.message }, { status: err.status, headers: NO_STORE });
+  }
+  const status = httpStatusForError(err);
+  if (status === 403) return NextResponse.json({ error: 'Not authorized' }, { status, headers: NO_STORE });
+  if (status === 401) {
+    return NextResponse.json({ error: 'Your session has ended. Sign in again.' }, { status, headers: NO_STORE });
+  }
+  console.error('[ai-access]', describeError(err));
+  return NextResponse.json({ error: 'Something went wrong. Please try again.' }, { status: 500, headers: NO_STORE });
+}
 const isYmd = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
 
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
@@ -51,7 +72,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const { supabase } = await staffFor(request, params.id);
     return NextResponse.json(await view(supabase, params.id), { headers: NO_STORE });
   } catch (err) {
-    return errorResponse(err);
+    return fail(err);
   }
 }
 
@@ -69,7 +90,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     await setOverride(supabase, { studentId: params.id, mode, reason, endsOn, setBy: caller.id, now: new Date() });
     return NextResponse.json(await view(supabase, params.id), { headers: NO_STORE });
   } catch (err) {
-    return errorResponse(err);
+    return fail(err);
   }
 }
 
@@ -79,6 +100,6 @@ export async function DELETE(request: NextRequest, { params }: { params: { id: s
     await clearOverrides(supabase, params.id, caller.id, new Date());
     return NextResponse.json(await view(supabase, params.id), { headers: NO_STORE });
   } catch (err) {
-    return errorResponse(err);
+    return fail(err);
   }
 }
