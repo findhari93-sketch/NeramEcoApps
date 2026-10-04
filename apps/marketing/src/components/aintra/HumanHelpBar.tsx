@@ -4,6 +4,8 @@ import { Box, Typography } from '@mui/material';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import { openTawkChat } from '@/lib/tawk';
+import { buildWhatsAppLink } from '@/lib/whatsapp';
+import { trackWhatsAppClick } from '@/lib/whatsapp-track';
 
 /**
  * Compact "talk to a human" bar shown inside the embedded Aintra chats.
@@ -14,14 +16,12 @@ import { openTawkChat } from '@/lib/tawk';
  * back to the contact page if it cannot load.
  */
 
-const WHATSAPP_NUMBER = '919176137043';
-const WHATSAPP_URL = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(
-  'Hello! I need help from Neram Classes.'
-)}`;
+const WHATSAPP = buildWhatsAppLink({ text: 'Hello! I need help from Neram Classes.' });
 
 function openWhatsApp() {
   if (typeof window !== 'undefined') {
-    window.open(WHATSAPP_URL, '_blank', 'noopener,noreferrer');
+    trackWhatsAppClick(WHATSAPP.pageCode, { placement: 'aintra_help' });
+    window.open(WHATSAPP.href, '_blank', 'noopener,noreferrer');
   }
 }
 

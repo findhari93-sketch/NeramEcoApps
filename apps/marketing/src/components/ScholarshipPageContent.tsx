@@ -24,6 +24,7 @@ import ScholarshipForm from '@/components/scholarship/ScholarshipForm';
 import ScholarshipStatus from '@/components/scholarship/ScholarshipStatus';
 import type { ScholarshipApplication } from '@neram/database';
 import { Link } from '@/i18n/routing';
+import { buildWhatsAppLink } from '@/lib/whatsapp';
 
 interface ScholarshipData {
   hasApplication: boolean;
@@ -197,7 +198,7 @@ export default function ScholarshipPageContent() {
               variant="outlined"
               size="large"
               startIcon={<PhoneOutlined />}
-              href="https://wa.me/919176137043?text=Hi%2C%20I%20have%20a%20question%20about%20the%20scholarship%20program"
+              href={buildWhatsAppLink({ text: 'Hi, I have a question about the scholarship program' }).href}
               target="_blank"
               sx={{ minHeight: 48 }}
             >

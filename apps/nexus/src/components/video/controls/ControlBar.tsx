@@ -27,6 +27,7 @@ export interface ControlBarProps {
   duration: number;
   seekCeiling: number;
   buffered: ReadonlyArray<TimeRange>;
+  watched?: ReadonlyArray<TimeRange>;
   marks?: SeekMark[];
   onSeek: (seconds: number) => void;
   onRefusedSeek: () => void;
@@ -68,6 +69,7 @@ export default function ControlBar(props: ControlBarProps) {
     duration,
     seekCeiling,
     buffered,
+    watched,
     marks,
     onSeek,
     onRefusedSeek,
@@ -125,6 +127,7 @@ export default function ControlBar(props: ControlBarProps) {
         duration={duration}
         seekCeiling={seekCeiling}
         buffered={buffered}
+        watched={watched}
         marks={marks}
         onSeek={onSeek}
         onRefused={onRefusedSeek}
@@ -225,7 +228,7 @@ export default function ControlBar(props: ControlBarProps) {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, pb: 0.5, px: 0.5 }}>
           <LockRoundedIcon sx={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }} />
           <Typography sx={{ fontSize: 11, color: 'rgba(255,255,255,0.7)' }}>
-            Skipping ahead opens as you watch and pass each checkpoint
+            Move freely up to the lock. Pass its quiz to unlock the next part.
           </Typography>
         </Box>
       )}

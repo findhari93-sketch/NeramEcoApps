@@ -316,7 +316,9 @@
     "continueApplication": "അപേക്ഷ തുടരുക",
     "trackApplication": "അപേക്ഷ ട്രാക്ക് ചെയ്യുക",
     "payAndJoin": "പേ ചെയ്ത് ചേരുക",
-    "goToApp": "ആപ്പിലേക്ക് പോകുക"
+    "goToApp": "ആപ്പിലേക്ക് പോകുക",
+    "joinNow": "ഇപ്പോൾ ചേരുക",
+    "viewFees": "ഫീസ് കാണുക"
   },
   "centers": {
     "title": "ഞങ്ങളുടെ പഠന കേന്ദ്രങ്ങൾ സന്ദർശിക്കുക",
@@ -352,9 +354,9 @@
     "close": "അടയ്ക്കുക"
   },
   "fees": {
-    "title": "Invest in Your Architecture Career",
-    "subtitle": "Transparent pricing with flexible payment options.",
-    "questionsCall": "Questions? Call us:",
+    "title": "Course fees",
+    "subtitle": "Pick a plan. Pay once and save, or pay in 2 interest-free parts.",
+    "questionsCall": "Questions about fees? Call",
     "singlePayment": "Single Payment",
     "installments": "2 Installments",
     "fullPrice": "Full Price",
@@ -365,9 +367,9 @@
     "installment2": "2nd Installment (after 3 months)",
     "total": "Total",
     "installmentDetailsComingSoon": "Installment plan details will be shared during counseling",
-    "applyNow": "Apply Now",
+    "applyNow": "Join Now",
     "recommendedCurrentYear": "Recommended for current year exam",
-    "bestValueFuture": "Best Value for future year exam",
+    "bestValueFuture": "Best value for future year exam",
     "noFeeStructures": "Fee information is currently being updated",
     "contactForFees": "Please contact us for the latest fee details.",
     "callUs": "Call Us",
@@ -402,7 +404,7 @@
     "weekendClassesDesc": "Extended 2-3 hour weekend sessions.",
     "liveInteractive": "Live & Interactive",
     "smallBatches": "Small Batches",
-    "faqTitle": "Frequently Asked Questions",
+    "faqTitle": "Common questions",
     "faqSubtitle": "Common questions about fees and classes.",
     "faq1Question": "Can I get a refund?",
     "faq1Answer": "അതെ, ഞങ്ങള്‍ക്ക് സുതാര്യമായ റീഫണ്ട് പോളിസി ഉണ്ട്. പേയ്‌മെന്റ് ചെയ്‌ത 24 മണിക്കൂറിനുള്ളില്‍ റീഫണ്ട് അഭ്യര്‍ത്ഥന നടത്തണം. വിദ്യാര്‍ത്ഥിക്കായി ഇതിനകം വാങ്ങിയ ഡിജിറ്റല്‍ പ്ലാറ്റ്‌ഫോം സബ്‌സ്‌ക്രിപ്ഷനുകളുടെയും ലേണിംഗ് ടൂള്‍ ലൈസന്‍സുകളുടെയും ചെലവ് നികത്താന്‍ 30% കുറയ്ക്കും. 24 മണിക്കൂറിന് ശേഷം റീഫണ്ട് സാധ്യമല്ല.",

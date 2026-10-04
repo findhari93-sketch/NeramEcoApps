@@ -26,6 +26,8 @@ import HeadsetMicIcon from '@mui/icons-material/HeadsetMic';
 import Image from 'next/image';
 import VoiceInputButton from './aintra/VoiceInputButton';
 import { leadAttribution } from '@/lib/attribution';
+import { buildWhatsAppLink } from '@/lib/whatsapp';
+import { trackWhatsAppClick } from '@/lib/whatsapp-track';
 
 const ASSISTANT_IMG = '/images/nata-ai-assistant2.jpg';
 
@@ -188,6 +190,9 @@ function generateSessionId() {
 }
 
 const FAB_BOTTOM = 24;
+/** Location pages have a mobile sticky CTA bar (STICKY_CTA_HEIGHT 72px + safe area); sit above it. */
+const OVER_STICKY_CTA_BOTTOM = 96;
+const STICKY_CTA_PATH = /\/coaching\/(nata-coaching|jee-paper-2-coaching)/;
 const DISMISSED_KEY = 'aintra_dismissed';
 
 export default function GeneralChatbot() {
@@ -334,10 +339,9 @@ export default function GeneralChatbot() {
 
   const handleWhatsApp = () => {
     handleCloseHumanMenu();
-    window.open(
-      'https://wa.me/919176137043?text=Hello!%20I%20need%20help%20from%20Neram%20Classes.',
-      '_blank'
-    );
+    const { href, pageCode } = buildWhatsAppLink({ text: 'Hello! I need help from Neram Classes.' });
+    trackWhatsAppClick(pageCode, { placement: 'chatbot' });
+    window.open(href, '_blank', 'noopener,noreferrer');
   };
 
   // Tawk.to is not loaded until this tap (it is ~300 KB plus an iframe), so
@@ -385,9 +389,11 @@ export default function GeneralChatbot() {
         <Box
           sx={{
             position: 'fixed',
-            bottom: achievementVisible
-              ? { xs: 60, md: FAB_BOTTOM }
-              : FAB_BOTTOM,
+            bottom: STICKY_CTA_PATH.test(pathname ?? '')
+              ? { xs: OVER_STICKY_CTA_BOTTOM, md: FAB_BOTTOM }
+              : achievementVisible
+                ? { xs: 60, md: FAB_BOTTOM }
+                : FAB_BOTTOM,
             right: 24,
             zIndex: 1300,
             transition: { xs: 'bottom 0.4s cubic-bezier(0.4, 0, 0.2, 1)', md: 'none' },

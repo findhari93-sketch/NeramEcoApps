@@ -8,6 +8,7 @@ import YouTubeSurface from './transports/YouTubeSurface';
 import ControlBar from './controls/ControlBar';
 import CenterOverlay from './controls/CenterOverlay';
 import CheckpointNotice from './controls/CheckpointNotice';
+import WatchMoreNotice from './controls/WatchMoreNotice';
 import StreamStoppedNotice from './controls/StreamStoppedNotice';
 import Nudge from './controls/Nudge';
 import TitleBar from './controls/TitleBar';
@@ -19,7 +20,7 @@ import useBuffered from './hooks/useBuffered';
 import useVolume from './hooks/useVolume';
 import useKeyboardShortcuts from './hooks/useKeyboardShortcuts';
 import useTouchGestures from './hooks/useTouchGestures';
-import { clamp } from './format';
+import { clamp, type TimeRange } from './format';
 import type { VideoGate } from '@/lib/video-gate';
 import type { TextTrackDescriptor, VideoSource, VideoSurfaceEvents, VideoTransport } from './types';
 
@@ -40,17 +41,18 @@ import type { TextTrackDescriptor, VideoSource, VideoSurfaceEvents, VideoTranspo
  *   1. Every control that can move the playhead calls `requestSeek`, which
  *      clamps to `gate.seekCeiling` before the transport ever sees it. The scrub
  *      bar additionally cannot express the gesture: its thumb sticks at the lock.
- *      With a played point that ceiling is where the student has watched to, so
- *      a jump cannot land on the checkpoint and open its quiz (NXS-0130).
+ *      That ceiling is the checkpoint, so the owed section is free to drag
+ *      through; what a drag cannot buy is the quiz (`gate.quizReady`, NXS-0130).
  *   2. Any seek arriving another way (console, OS media key, a surface we do not
  *      control) is snapped back to the checkpoint boundary on `seeked`, before
  *      the frame it jumped to is painted, and on the next tick for the YouTube
  *      path which has no `seeked`. The boundary, not the played point: that one
  *      trails the playhead by a render while it plays, and snapping to it would
  *      yank a student back mid-sentence.
- *   3. Playback pauses at the boundary and asks the caller to open the quiz.
- *      There is deliberately no "already fired" latch: a failed quiz fetch must
- *      not retire the checkpoint.
+ *   3. Playback pauses at the boundary and asks the caller to open the quiz, or,
+ *      when too little of the section was played, says so and offers the part
+ *      that was skipped. There is deliberately no "already fired" latch: a
+ *      failed quiz fetch must not retire the checkpoint.
  *   4. The rate ceiling is enforced on the element, not just in the UI, because
  *      the rate can be changed from a console without touching our buttons.
  *
@@ -94,6 +96,8 @@ const RECOVERY_PROGRESS_SECONDS = 3;
 const STALE_STREAM_MS = 9 * 60_000;
 const STALL_RECOVERY_MS = 20_000;
 const STREAM_STOPPED_MESSAGE = 'The recording stopped loading.';
+/** A move past the checkpoint. The section before it is free; past it is not. */
+const LOCKED_MESSAGE = 'Pass this checkpoint quiz to go further.';
 
 export interface NeramVideoPlayerProps {
   source: VideoSource;
@@ -106,6 +110,8 @@ export interface NeramVideoPlayerProps {
   resumeAt?: number;
   /** Checkpoint positions drawn on the scrub bar. */
   marks?: SeekMark[];
+  /** Stretches already played, drawn on the scrub bar (see usePlayedRanges). */
+  watched?: ReadonlyArray<TimeRange>;
   /**
    * A caption track, served through the same grant as the bytes. HTML5 only:
    * YouTube's captions live inside its iframe and are not enumerable.
@@ -174,6 +180,7 @@ export default function NeramVideoPlayer({
   title,
   resumeAt = 0,
   marks,
+  watched,
   captions = null,
   onTimeUpdate,
   onCheckpointReached,
@@ -292,7 +299,7 @@ export default function NeramVideoPlayer({
       const upper = Number.isFinite(ceiling) ? ceiling : duration || seconds;
       const target = clamp(seconds, 0, upper);
       if (Number.isFinite(ceiling) && seconds > ceiling + 0.5) {
-        flashRef.current('Finish this section before skipping ahead.');
+        flashRef.current(LOCKED_MESSAGE);
         cbRef.current.onBlockedSeek?.();
       }
       transport.seek(target);
@@ -383,7 +390,7 @@ export default function NeramVideoPlayer({
       if (!Number.isFinite(ceiling)) return false;
       if (time <= ceiling + SEEK_TOLERANCE_SECONDS) return false;
       transportRef.current?.seek(Math.max(0, ceiling));
-      flashRef.current('Finish this section before skipping ahead.');
+      flashRef.current(LOCKED_MESSAGE);
       cbRef.current.onBlockedSeek?.();
       return true;
     },
@@ -437,8 +444,9 @@ export default function NeramVideoPlayer({
             void document.exitFullscreen?.()?.catch(() => {});
           }
           // The synthetic tick from the silent mount-time resume-seek must not
-          // open the quiz with zero playback (NXS-0120).
-          if (!suppressCheckpoint) cbRef.current.onCheckpointReached?.();
+          // open the quiz with zero playback (NXS-0120). Nor may an arrival by
+          // drag with most of the section unwatched: WatchMoreNotice covers that.
+          if (!suppressCheckpoint && gateRef.current.quizReady) cbRef.current.onCheckpointReached?.();
         }
       },
       onSeeked: (seconds) => {
@@ -481,7 +489,9 @@ export default function NeramVideoPlayer({
       },
       // A checkpoint whose end runs past the file is never reached by the tick
       // handler, so without this the last quiz would simply never open.
-      onEnded: () => cbRef.current.onCheckpointReached?.(),
+      onEnded: () => {
+        if (gateRef.current.quizReady) cbRef.current.onCheckpointReached?.();
+      },
       onRateChange: (rate) => {
         const max = gateRef.current.maxRate;
         if (rate > max) {
@@ -738,6 +748,30 @@ export default function NeramVideoPlayer({
     gate.unlockedUntil > 0 && !playing && current >= gate.unlockedUntil && !overlayOpen;
 
   /**
+   * The ticks that complete a section can land a render before the gate hears
+   * about them, so the boundary tick may still have seen quizReady false. When
+   * it turns true while the student is sitting at the boundary, open the quiz
+   * then rather than leaving them on a notice that no longer applies.
+   */
+  const quizReadyRef = useRef(gate.quizReady);
+  useEffect(() => {
+    const was = quizReadyRef.current;
+    quizReadyRef.current = gate.quizReady;
+    if (!was && gate.quizReady && gate.unlockedUntil > 0 && current >= gate.unlockedUntil) {
+      cbRef.current.onCheckpointReached?.();
+    }
+  }, [gate.quizReady, gate.unlockedUntil, current]);
+
+  const owed = gate.owedWatch;
+  const playMissed = useCallback(() => {
+    const at = gateRef.current.owedWatch?.nextUnwatchedAt;
+    if (at === null || at === undefined) return;
+    requestSeek(at);
+    wantsPlayRef.current = true;
+    transportRef.current?.play();
+  }, [requestSeek, transportRef]);
+
+  /**
    * The quiz is a DOM child of this container while fullscreen, so its taps and
    * swipes bubble into the gesture handlers below. A swipe across the answers
    * would seek the video underneath them.
@@ -829,7 +863,15 @@ export default function NeramVideoPlayer({
 
       {nudge && <Nudge message={nudge} />}
 
-      {atCheckpoint && <CheckpointNotice />}
+      {atCheckpoint && gate.quizReady && <CheckpointNotice />}
+      {atCheckpoint && !gate.quizReady && owed && (
+        <WatchMoreNotice
+          watchedSeconds={owed.watchedSeconds}
+          requiredSeconds={owed.requiredSeconds}
+          sectionSeconds={owed.sectionEnd - owed.sectionStart}
+          onPlayMissed={owed.nextUnwatchedAt !== null ? playMissed : null}
+        />
+      )}
 
       <CenterOverlay
         playing={playing}
@@ -847,10 +889,11 @@ export default function NeramVideoPlayer({
         duration={duration}
         seekCeiling={gate.seekCeiling}
         buffered={buffered}
+        watched={watched}
         marks={marks}
         onSeek={requestSeek}
         onRefusedSeek={() => {
-          flash('Finish this section before skipping ahead.');
+          flash(LOCKED_MESSAGE);
           cbRef.current.onBlockedSeek?.();
         }}
         onScrubbingChange={chrome.setScrubbing}

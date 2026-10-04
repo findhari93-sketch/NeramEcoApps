@@ -39,7 +39,7 @@ export default async function Image() {
             textAlign: 'center',
           }}
         >
-          #1 NATA & JEE Paper 2 Coaching
+          NATA & JEE Paper 2 Coaching Since 2009
         </div>
         <div
           style={{
@@ -50,9 +50,9 @@ export default async function Image() {
             fontSize: 24,
           }}
         >
-          <span>99.9% Success Rate</span>
-          <span>5000+ Students</span>
-          <span>150+ Cities</span>
+          <span>10+ Years</span>
+          <span>1,000+ Students</span>
+          <span>AIR 1 JEE B.Arch 2024</span>
         </div>
         <div
           style={{

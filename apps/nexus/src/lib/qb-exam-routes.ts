@@ -22,11 +22,15 @@ import type { QBExamRelevance, QBExamType } from '@neram/database';
 
 export type QBSurface = 'student' | 'teacher';
 
-/** Sidebar and redirect order. JEE Paper 2 first: it is where the papers are. */
-export const QB_EXAM_ORDER: readonly QBExamType[] = ['JEE_PAPER_2', 'NATA'];
+/**
+ * Sidebar and redirect order. JEE Paper 2 first: it is where the papers are.
+ * Paper 2B (B.Planning) sits beside it, since it shares 2A's Maths and Aptitude.
+ */
+export const QB_EXAM_ORDER: readonly QBExamType[] = ['JEE_PAPER_2', 'JEE_PAPER_2B', 'NATA'];
 
 export const QB_EXAM_SLUGS: Record<QBExamType, string> = {
   JEE_PAPER_2: 'jee-paper-2',
+  JEE_PAPER_2B: 'jee-paper-2b',
   NATA: 'nata',
 };
 
@@ -37,17 +41,19 @@ export const QB_EXAM_SLUGS: Record<QBExamType, string> = {
  */
 export const QB_EXAM_LABELS: Record<QBExamType, string> = {
   JEE_PAPER_2: 'JEE Paper 2',
+  JEE_PAPER_2B: 'JEE Paper 2B (B.Planning)',
   NATA: 'NATA',
 };
 
 /** Questions carry `exam_relevance`, not `exam_type`, and spell JEE differently. */
 const EXAM_RELEVANCE: Record<QBExamType, QBExamRelevance> = {
   JEE_PAPER_2: 'JEE',
+  JEE_PAPER_2B: 'JEE',
   NATA: 'NATA',
 };
 
 export function isQBExamType(value: unknown): value is QBExamType {
-  return value === 'JEE_PAPER_2' || value === 'NATA';
+  return value === 'JEE_PAPER_2' || value === 'JEE_PAPER_2B' || value === 'NATA';
 }
 
 export function examFromSlug(slug: string | null | undefined): QBExamType | null {

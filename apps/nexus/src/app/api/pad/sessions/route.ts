@@ -6,6 +6,7 @@ import { announceForStart } from '@/lib/pad/notify-session';
 import { PadRefusal, callPad, padErrorResponse, padJson } from '@/lib/pad/rpc';
 import { decideSessionBinding, mayRunSession, parseStartSessionRequest } from '@/lib/pad/session-binding';
 import { batchBelongsToClassroom, classroomsForStaff, loadScheduledClass, padDb, teachesClassroom } from '@/lib/pad/sessions';
+import { storeRoundResults } from '@/lib/pad/store-results';
 
 /**
  * POST /api/pad/sessions  (staff, behind staff.answer-pad)
@@ -14,8 +15,8 @@ import { batchBelongsToClassroom, classroomsForStaff, loadScheduledClass, padDb,
  * session already live for it. Called when the console opens in the Teams
  * meeting side panel, with whatever TeamsJS reported about the meeting.
  *
- * Body: { meeting?: { meetingId?, chatId?, channelId? }, classroomId?, batchId?,
- *         scheduledClassId?, endExisting? }
+ * Body: { meeting?: { meetingId?, chatId?, channelId? }, meetingTitle?, classroomId?,
+ *         batchId?, scheduledClassId?, endExisting? }
  *
  * The class is found from the meeting (the scheduled class on the same chat
  * thread today, else the classroom this meeting series was bound to before),
@@ -27,6 +28,10 @@ import { batchBelongsToClassroom, classroomsForStaff, loadScheduledClass, padDb,
  *   200 { needsClassroom: true, classrooms: [{ id, name }] }
  *   409 SESSION_CONFLICT { existing }: another live session; the console offers
  *       "End <classroom> and start this class" and posts again with endExisting.
+ *
+ * A live session left over from an earlier class (over 3 hours old, or from an
+ * earlier day) is ended by the database instead of a conflict, and its results
+ * are stored here like any ended round.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -75,7 +80,7 @@ export async function POST(request: NextRequest) {
     });
     if (!allowed) throw new ApiError('You can only run the Answer Pad for classes you teach.', 403);
 
-    const started = await callPad<{ session_id: string; resumed: boolean; ended_session_id?: string | null }>(
+    const started = await callPad<{ session_id: string; resumed: boolean; ended_session_id?: string | null; ended_reason?: string | null }>(
       supabase,
       'pad_start_or_resume_session',
       {
@@ -86,8 +91,10 @@ export async function POST(request: NextRequest) {
         p_meeting_id: input.meeting?.meetingId ?? null,
         p_meeting_thread: ref?.threadId ?? null,
         p_end_existing: input.endExisting,
+        p_meeting_title: input.meetingTitle,
       },
     );
+    if (started.ended_session_id) await storeRoundResults(started.ended_session_id, caller.user.id);
 
     // A new session tells the class chat once: the room code and the two ways in
     // that work on every Teams client. A resume stays quiet, so reopening the
@@ -98,6 +105,7 @@ export async function POST(request: NextRequest) {
       sessionId: started.session_id,
       resumed: started.resumed,
       endedSessionId: started.ended_session_id ?? null,
+      endedReason: started.ended_reason ?? null,
       binding: {
         source: binding.source,
         classroomId: binding.classroomId,

@@ -4,7 +4,7 @@ import { BotAuthError, verifyBotRequest } from '@/lib/pad/bot/verify-activity';
 import { postToConversation } from '@/lib/pad/bot/session-card';
 import { ASSISTANT_REPLY, personalConversationFrom, rememberAssistantConversation } from '@/lib/teams-assistant';
 import { callPad } from '@/lib/pad/rpc';
-import { padDb } from '@/lib/pad/sessions';
+import { hintMeetingTeachers, padDb } from '@/lib/pad/sessions';
 
 export const dynamic = 'force-dynamic';
 
@@ -106,6 +106,8 @@ export async function POST(request: NextRequest) {
           p_at: action.at,
         });
       }
+      // The teacher's console counts who is here: tell it now, not on its next poll.
+      await hintMeetingTeachers(action.meetingId, { throttleMs: 1_000 });
     } else if (action.kind === 'meeting-end') {
       await callPad(supabase, 'pad_bot_meeting_end', { p_meeting_id: action.meetingId, p_at: action.at });
     }

@@ -89,6 +89,54 @@ describe('PaperWorkspace', () => {
 });
 
 /**
+ * The form remounts per question, so moving on used to drop unsaved figures
+ * and answers without a word. A dirty form now asks first.
+ */
+describe('PaperWorkspace leave guard', () => {
+  function openAndEdit() {
+    render(<PaperWorkspace {...base} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open question 1' }));
+    fireEvent.change(screen.getByLabelText('Question text'), { target: { value: 'Edited' } });
+  }
+
+  it('asks before Next leaves a question with unsaved edits, and stays on Keep editing', () => {
+    openAndEdit();
+    fireEvent.click(screen.getByRole('button', { name: 'Next question' }));
+    expect(screen.getByText('Leave Q1 without saving?')).not.toBeNull();
+    expect(screen.getByText('1 of 3')).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+    expect(screen.getByText('1 of 3')).not.toBeNull();
+    expect((screen.getByLabelText('Question text') as HTMLTextAreaElement).value).toBe('Edited');
+  });
+
+  it('moves on after Discard changes, and refetches so separately saved figures show', async () => {
+    const onSaved = vi.fn();
+    render(<PaperWorkspace {...base} onSaved={onSaved} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open question 1' }));
+    fireEvent.change(screen.getByLabelText('Question text'), { target: { value: 'Edited' } });
+    fireEvent.keyDown(window, { key: 'j' });
+    fireEvent.click(screen.getByRole('button', { name: 'Discard changes' }));
+    await waitFor(() => expect(screen.getByText('2 of 3')).not.toBeNull());
+    expect(onSaved).toHaveBeenCalled();
+  });
+
+  it('asks before closing the pane too', () => {
+    openAndEdit();
+    fireEvent.click(screen.getByRole('button', { name: 'Close question' }));
+    expect(screen.getByText('Leave Q1 without saving?')).not.toBeNull();
+    expect(screen.getByText('1 of 3')).not.toBeNull();
+  });
+
+  it('does not ask when nothing changed', () => {
+    render(<PaperWorkspace {...base} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Open question 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next question' }));
+    expect(screen.queryByText(/without saving/)).toBeNull();
+    expect(screen.getByText('2 of 3')).not.toBeNull();
+  });
+});
+
+/**
  * setNeedsImageOne/bulkSetNeedsImage used to await fetch() and call onSaved()
  * unconditionally without checking res.ok, so a rejected write (auth,
  * validation, a dropped connection) refetched the same unchanged row and

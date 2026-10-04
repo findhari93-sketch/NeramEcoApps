@@ -11,6 +11,8 @@ import GoogleAdsTag from '@/components/GoogleAdsTag';
 import AttributionCapture from '@/components/AttributionCapture';
 import PageViewBeacon from '@/components/PageViewBeacon';
 import EnvBadge from '@/components/EnvBadge';
+import { JsonLd } from '@/components/seo/JsonLd';
+import { generateOrganizationSchema } from '@/lib/seo/schemas';
 import { LAYOUT_CLIENT_MESSAGES, pickMessages } from '@/lib/i18n/client-messages';
 import '@/styles/globals.css';
 
@@ -162,6 +164,8 @@ export default async function RootLayout({
           }}
         />
         <GoogleAdsTag />
+        {/* One Organization node on every page; page and centre schemas point at its @id. */}
+        <JsonLd data={generateOrganizationSchema()} />
         <AttributionCapture />
         <PageViewBeacon />
         <NextIntlClientProvider messages={messages}>

@@ -9,6 +9,8 @@
  * - The API refuses callers without a token and a bad exam, and answers staff
  *   with the counts shape the page reads.
  * - The exam page has a door to it, and Back returns there.
+ * - The practice list's header has a door too (laptop and phone), and the
+ *   weightage page's Back returns to that list, filters intact.
  * - Laptop: the three cards render; Chart/List switch exists; a chapter opens a
  *   dialog whose Practise link filters the practice list to that chapter.
  * - Phone (375): no sideways scroll, no Chart switch, the list groups render,
@@ -125,6 +127,34 @@ test.describe('Chapter weightage page', () => {
     await expect(page).toHaveURL(/\/question-bank\/jee-paper-2(\?|$)/, { timeout: 60_000 });
     await context.close();
   });
+
+  for (const [label, viewport] of [['laptop', DESKTOP], ['phone', PHONE]] as const) {
+    test(`${label}: the practice list header links to it and Back returns to the list`, async ({ browser }) => {
+      const { context, page, ok } = await signedIn(browser, viewport);
+      test.skip(!ok, 'student test auth unavailable');
+      await mockJee(page);
+      await page.goto(`${NEXUS}/student/question-bank/questions?exam=JEE_PAPER_2&year=2019`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 150_000,
+      });
+      const door = page.getByRole('link', { name: 'Chapter weightage' });
+      const skip = page.getByRole('button', { name: /^skip$/i });
+      const deadline = Date.now() + 90_000;
+      while (Date.now() < deadline && !(await door.isVisible().catch(() => false))) {
+        if (await skip.first().isVisible().catch(() => false)) await skip.first().click().catch(() => {});
+        await page.waitForTimeout(1_000);
+      }
+      const box = await door.boundingBox();
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+      if (label === 'phone') await assertNoHorizontalOverflow(page);
+      await door.click();
+      await expect(page).toHaveURL(/\/jee-paper-2\/weightage\?.*back=/, { timeout: 60_000 });
+      await expect(page.getByRole('heading', { level: 1, name: 'Chapter weightage' })).toBeVisible({ timeout: 60_000 });
+      await page.getByRole('link', { name: 'Back to Questions' }).click();
+      await expect(page).toHaveURL(/\/student\/question-bank\/questions\?.*year=2019/, { timeout: 60_000 });
+      await context.close();
+    });
+  }
 
   test('laptop: list, trend chart and history; a chapter opens with a Practise link', async ({ browser }) => {
     const { context, page, ok } = await signedIn(browser);

@@ -17,7 +17,8 @@ import {
   alpha,
   useTheme,
 } from '@neram/ui';
-import { paperTitles } from '@neram/database';
+import { paperTitles, QB_EXAM_TYPE_LABELS, type QBExamType } from '@neram/database';
+import { isQBExamType } from '@/lib/qb-exam-routes';
 import type { PaperBlueprint, TestDraft } from '@/lib/test-wizard-draft';
 
 /**
@@ -51,9 +52,10 @@ export default function SourcePyqPanel({
 }) {
   const theme = useTheme();
   // Opens on the exam of a paper handed over from the bank, when there is one.
-  const [exam, setExam] = useState<'JEE_PAPER_2' | 'NATA'>(
-    draft.pyq.blueprint?.examType === 'NATA' ? 'NATA' : 'JEE_PAPER_2',
-  );
+  const [exam, setExam] = useState<QBExamType>(() => {
+    const handed = draft.pyq.blueprint?.examType;
+    return isQBExamType(handed) ? handed : 'JEE_PAPER_2';
+  });
   const [papers, setPapers] = useState<PaperRow[] | null>(null);
   const [loadingBlueprint, setLoadingBlueprint] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,7 +90,7 @@ export default function SourcePyqPanel({
       const json = await authFetch(`/api/question-bank/papers/${paperId}?structure=1`);
       const bp = json.data?.blueprint;
       const paper = json.data?.paper;
-      if (paper?.exam_type === 'NATA' || paper?.exam_type === 'JEE_PAPER_2') setExam(paper.exam_type);
+      if (isQBExamType(paper?.exam_type)) setExam(paper.exam_type);
       onPatch({
         paperId,
         blueprint: {
@@ -130,6 +132,7 @@ export default function SourcePyqPanel({
       <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 }, borderRadius: 2 }}>
         <Tabs value={exam} onChange={(_, v) => setExam(v)} sx={{ mb: 2, minHeight: 48 }}>
           <Tab value="JEE_PAPER_2" label="JEE Paper 2" sx={{ textTransform: 'none', minHeight: 48 }} />
+          <Tab value="JEE_PAPER_2B" label="JEE Paper 2B" sx={{ textTransform: 'none', minHeight: 48 }} />
           <Tab value="NATA" label="NATA" sx={{ textTransform: 'none', minHeight: 48 }} />
         </Tabs>
 
@@ -147,7 +150,7 @@ export default function SourcePyqPanel({
           </Box>
         ) : papers.length === 0 ? (
           <Typography variant="body2" color="text.secondary">
-            No {exam === 'NATA' ? 'NATA' : 'JEE Paper 2'} papers have been uploaded yet.
+            No {QB_EXAM_TYPE_LABELS[exam]} papers have been uploaded yet.
           </Typography>
         ) : (
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(3, 1fr)' }, gap: 1.5 }}>
@@ -210,7 +213,7 @@ export default function SourcePyqPanel({
         ) : (
           <>
             <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-              {blueprint.examType === 'NATA' ? 'NATA' : 'JEE Paper 2'} · {blueprint.year}
+              {QB_EXAM_TYPE_LABELS[blueprint.examType as QBExamType] ?? blueprint.examType} · {blueprint.year}
             </Typography>
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
               Verified paper

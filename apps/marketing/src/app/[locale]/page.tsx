@@ -5,6 +5,7 @@ import { generateOrganizationSchema, generateWebSiteSchema, generateBreadcrumbSc
 import HomePageContent from '@/components/HomePageContent';
 import { getCachedAskSeniorsEvent, getCachedAskSeniorsColleges } from '@/lib/ask-seniors-data';
 import ClientIntl from '@/components/i18n/ClientIntl';
+import { COURSE_FEES, ORG_FACTS, PROOF_POINTS } from '@/lib/seo/facts';
 
 // ISR daily. The only data here is the #AskSeniors block (tagged 'ask-seniors',
 // purged on admin event edits). It used to be hourly, which rebuilt the home
@@ -12,6 +13,66 @@ import ClientIntl from '@/components/i18n/ClientIntl';
 export const revalidate = 86400;
 
 const baseUrl = 'https://neramclasses.com';
+
+const LINK = { color: '#e8a020', textDecoration: 'underline' } as const;
+const H2 = { fontFamily: 'var(--font-poppins), Poppins, sans-serif', fontSize: '2rem', fontWeight: 700, color: '#e8a020', marginBottom: '24px', lineHeight: 1.3 } as const;
+const H3 = { fontFamily: 'var(--font-poppins), Poppins, sans-serif', fontSize: '1.5rem', fontWeight: 600, color: '#e8a020', marginBottom: '16px', marginTop: '40px', lineHeight: 1.3 } as const;
+const P = { fontSize: '1.05rem', lineHeight: 1.8, color: 'rgba(255,255,255,0.85)', marginBottom: '20px', maxWidth: '800px' } as const;
+const CARD = { color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' } as const;
+
+const crash = COURSE_FEES.find((c) => c.slug === 'crash-course')!;
+const oneYear = COURSE_FEES.find((c) => c.slug === '1-year-program')!;
+const twoYear = COURSE_FEES.find((c) => c.slug === '2-year-program')!;
+const FEES_LINE =
+  `The ${crash.name} (${crash.duration.toLowerCase()}) is ₹${crash.priceDisplay}. ` +
+  `The ${oneYear.name} is ₹${oneYear.priceDisplay}, or ₹${oneYear.singlePaymentDisplay} if paid at once. ` +
+  `The ${twoYear.name} is ₹${twoYear.priceDisplay}, or ₹${twoYear.singlePaymentDisplay} if paid at once.`;
+
+/** Classroom cities, each linked to its one city page. */
+const CLASSROOM_CITIES: Array<[label: string, slug: string]> = [
+  ['Chennai (Ashok Nagar)', 'chennai'],
+  ['Tambaram', 'tambaram'],
+  ['Kanchipuram', 'kanchipuram'],
+  ['Coimbatore', 'coimbatore'],
+  ['Tiruppur', 'tiruppur'],
+  ['Trichy', 'trichy'],
+  ['Madurai', 'madurai'],
+  ['Pudukkottai', 'pudukkottai'],
+  ['Bangalore (Electronic City)', 'bangalore'],
+];
+const cityHref = (slug: string) => `/coaching/nata-coaching/nata-coaching-centers-in-${slug}`;
+
+/** One list feeds both the FAQPage JSON-LD and the visible FAQ, so they never drift. */
+const HOME_FAQS = [
+  {
+    question: 'What is Neram Classes?',
+    answer: `Neram Classes coaches students for NATA, JEE Main Paper 2 (B.Arch), AAT and PGETA. It was founded in 2009 by ${ORG_FACTS.founder} (${ORG_FACTS.founderCredential}). In ${PROOF_POINTS.years} Neram has taught ${PROOF_POINTS.students}, and a Neram student secured ${PROOF_POINTS.topResult}.`,
+  },
+  {
+    question: 'Where are Neram Classes classrooms?',
+    answer: 'Neram has classrooms in Chennai (Ashok Nagar and Tambaram), Kanchipuram, Coimbatore, Tiruppur, Trichy, Madurai and Pudukkottai in Tamil Nadu, and in Electronic City, Bangalore. Students in every other city join live online classes.',
+  },
+  {
+    question: 'Can I prepare for NATA through online classes?',
+    answer: 'Yes. Online students attend the same live classes as classroom students, send their drawings for feedback, and take the same mock tests. Students join from across India and the Gulf.',
+  },
+  {
+    question: 'How much does NATA coaching cost at Neram Classes?',
+    answer: `${FEES_LINE} Scholarships and instalment options are available. See the fees page for details.`,
+  },
+  {
+    question: 'Which exams does Neram Classes prepare students for?',
+    answer: 'NATA, JEE Main Paper 2A (B.Arch) and 2B (B.Planning), AAT for the IIT B.Arch programmes, and PGETA for M.Arch. Neram covers architecture entrance exams only.',
+  },
+  {
+    question: 'What free tools does Neram offer?',
+    answer: 'The free Neram app at app.neramclasses.com has a NATA cutoff calculator, a B.Arch college predictor, an exam centre finder and a question bank preview. You can try each tool before signing in.',
+  },
+  {
+    question: 'What is the difference between the free app and Nexus?',
+    answer: 'The free app is open to everyone. Nexus is the learning platform for enrolled Neram students, built with Microsoft Education. It holds the full question bank with past papers, drawing reviews by tutors, recorded classes, the class timetable and a dashboard for parents.',
+  },
+];
 
 export async function generateMetadata({
   params: { locale },
@@ -21,11 +82,10 @@ export async function generateMetadata({
   return {
     // The layout's '%s | Neram Classes' template does not apply to the page in the
     // layout's own segment, so the home title carries the brand itself.
-    title: { absolute: 'Best NATA Coaching in India Since 2009 | 150+ Cities | Neram Classes' },
-    description:
-      "India's #1 NATA coaching center since 2009. 150+ coaching centers across India. IIT/NIT/SPA alumni faculty, 99.9% success rate, 10,000+ students. Free AI-powered study app with cutoff calculator & college predictor. Online + offline hybrid classes.",
+    title: { absolute: 'NATA Coaching: Online and Classroom Since 2009 | Neram Classes' },
+    description: `NATA and JEE Paper 2 coaching since 2009: ${PROOF_POINTS.line}. Live online classes across India and the Gulf, classrooms in Tamil Nadu and Bangalore.`,
     keywords:
-      'best NATA coaching in India, NATA coaching center, NATA coaching centre near me, top NATA coaching institute, NATA preparation 2026, NATA coaching online, NATA online class, best NATA coaching Chennai, NATA coaching center in Chennai, NATA coaching center in Bangalore, JEE Paper 2 coaching, architecture entrance exam coaching, NATA drawing classes, NATA coaching Tamil Nadu, NATA coaching near me, online NATA classes India, NATA coaching 150 cities, AI NATA preparation app',
+      'NATA coaching, NATA coaching online, NATA coaching centre, NATA classes, NATA drawing classes, JEE Paper 2 coaching, B.Arch entrance coaching, NATA coaching Chennai, NATA coaching Bangalore, NATA coaching Tamil Nadu, NATA 2026 preparation',
     alternates: {
       canonical: locale === 'en' ? baseUrl : `${baseUrl}/${locale}`,
       languages: {
@@ -38,9 +98,8 @@ export async function generateMetadata({
       },
     },
     openGraph: {
-      title: "Neram Classes: India's #1 NATA Coaching Since 2009 | 150+ Cities",
-      description:
-        "India's top-rated NATA coaching since 2009. 10,000+ students, 150+ cities, 99.9% success rate. Free AI study app. IIT/NIT alumni faculty.",
+      title: 'Neram Classes: NATA Coaching Online and in Classrooms Since 2009',
+      description: `${PROOF_POINTS.line}. Live online NATA classes across India and the Gulf, classrooms in Tamil Nadu and Bangalore.`,
       type: 'website',
       url: locale === 'en' ? baseUrl : `${baseUrl}/${locale}`,
     },
@@ -69,186 +128,70 @@ export default async function HomePage({
           { name: 'Home', url: baseUrl },
         ])}
       />
-      <JsonLd data={generateFAQSchema([
-        {
-          question: 'What is the best NATA coaching center in India?',
-          answer: 'Neram Classes is India\'s top-rated NATA coaching center with a 99.9% success rate since 2009. With 150+ coaching centers across India and 6 Gulf countries, IIT/NIT/SPA alumni faculty, small batches of max 25 students, and a free AI-powered study app with cutoff calculator and college predictor for 5,000+ colleges, Neram is the most comprehensive NATA coaching center in the country.',
-        },
-        {
-          question: 'Does Neram Classes have NATA coaching centers near me?',
-          answer: 'Neram Classes has NATA coaching centers in 150+ cities across India including Chennai, Bangalore, Coimbatore, Madurai, Trichy, Hyderabad, Mumbai, Delhi, Kochi, Pune, and many more. We also serve students in 6 Gulf countries. Our hybrid model lets you attend online from anywhere or visit a physical center, and switch between modes anytime.',
-        },
-        {
-          question: 'How much does NATA coaching cost at Neram Classes?',
-          answer: 'NATA coaching at Neram Classes starts at ₹15,000 for the Crash Course (3 months), ₹25,000 for the 1-Year Program, and ₹30,000 for the 2-Year Foundation Program. Scholarships (up to 100% fee waiver) and EMI payment options are available. All programs include access to the free AI study app, 100+ mock tests, and daily drawing practice.',
-        },
-        {
-          question: 'Can I prepare for NATA through online classes?',
-          answer: 'Yes, Neram Classes offers live online NATA coaching with the same curriculum as offline centers. Online students get live interactive classes (not recordings), real-time drawing feedback via screen sharing, 24/7 doubt support, and a free AI study app. Our online students achieve the same 99.9% success rate. You can also switch to offline mode anytime at any of our 150+ centers.',
-        },
-        {
-          question: 'What is Neram Classes?',
-          answer: 'Neram Classes is India\'s leading NATA and JEE Paper 2 coaching institute, established in 2009. Headquartered in Bangalore with flagship centers in Chennai and Coimbatore, Neram serves 10,000+ students across 150+ cities in India and 6 Gulf countries. It is the only NATA coaching with a free AI-powered study app, and all faculty are IIT/NIT/SPA alumni.',
-        },
-        {
-          question: 'What is the best online NATA coaching in India?',
-          answer: 'Neram Classes is the best online NATA coaching in India. Our online program features live interactive classes (not pre-recorded), daily supervised drawing practice via video, small batches of max 25 students, 100+ mock tests, and the only free AI study app in the industry. Online students achieve the same 99.9% success rate as offline students. Classes available in 5 languages: English, Tamil, Hindi, Kannada, and Malayalam.',
-        },
-        {
-          question: 'How many students has Neram Classes trained?',
-          answer: 'Neram Classes has trained over 10,000 students since 2009. Our students have gained admission to top architecture colleges including SPA Delhi, SPA Bhopal, CEPT Ahmedabad, NIT Trichy, NIT Calicut, Anna University Chennai, IIT Roorkee, and 100+ other CoA-approved institutions. We maintain a 99.9% success rate with 70%+ students scoring above 120/200 in NATA.',
-        },
-        {
-          question: 'Which states does Neram Classes cover for NATA coaching?',
-          answer: 'Neram Classes provides NATA coaching across all major Indian states including Tamil Nadu, Karnataka, Kerala, Andhra Pradesh, Telangana, Maharashtra, Delhi, Uttar Pradesh, Rajasthan, Gujarat, West Bengal, Punjab, Haryana, Bihar, Odisha, Jharkhand, Madhya Pradesh, Chhattisgarh, Uttarakhand, and Assam. We also serve students in UAE, Qatar, Oman, Saudi Arabia, Kuwait, and Bahrain.',
-        },
-        {
-          question: 'What is the difference between the free app and Nexus premium?',
-          answer: 'Neram offers two platforms. The free app (aiArchitek at app.neramclasses.com) gives everyone access to the NATA cutoff calculator, college predictor for 5,000+ colleges, exam center locator, and a question bank preview, with no login required. Nexus (nexus.neramclasses.com) is India\'s first NATA-exclusive learning platform, designed by architects and available only to enrolled Neram students. Nexus includes the complete question bank with papers from 2005 to 2026 individually written in English and regional languages, drawing evaluation by expert tutors, structured course plans with foundation chapters, a full video library with recorded classes, live class timetable, leaderboard, self-learning modules, mini-modules, an AI-powered study assistant, and a parent monitoring dashboard. Nexus is the only app in India with this depth of NATA-specific resources for self-learning, supported by Microsoft. Enroll at Neram Classes to unlock Nexus.',
-        },
-      ])} />
+      <JsonLd data={generateFAQSchema(HOME_FAQS)} />
       <ClientIntl locale={locale} namespaces={['home', 'youtube']}><HomePageContent askSeniorsEvent={askSeniorsEvent} askSeniorsColleges={askSeniorsColleges} /></ClientIntl>
 
-      {/* SEO Content — server-rendered for full crawler visibility */}
+      {/* SEO Content: server-rendered for full crawler visibility */}
       <section style={{ backgroundColor: '#060d1f', color: '#ffffff', padding: '64px 0' }}>
         <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 24px' }}>
 
-          <h2 style={{ fontFamily: 'var(--font-poppins), Poppins, sans-serif', fontSize: '2rem', fontWeight: 700, color: '#e8a020', marginBottom: '24px', lineHeight: 1.3 }}>
-            India&apos;s #1 NATA Coaching Institute Since 2009: Neram Classes
-          </h2>
-          <p style={{ fontSize: '1.05rem', lineHeight: 1.8, color: 'rgba(255,255,255,0.85)', marginBottom: '20px', maxWidth: '800px' }}>
-            Neram Classes is India&apos;s top-rated coaching institute for the National Aptitude Test in Architecture (NATA) and JEE Paper 2. Established in 2009 and formally registered in 2016, we have over 17 years of experience in architecture entrance exam preparation. With more than 10,000 students trained across 150+ cities in India and 6 Gulf countries, Neram Classes has the largest reach of any NATA coaching institute in the country. Our 99.9% success rate is backed by verifiable results, with students consistently scoring 130+ and securing admission to SPA Delhi, SPA Bhopal, CEPT Ahmedabad, NIT Trichy, NIT Calicut, and 100+ top architecture colleges.
+          <h2 style={H2}>NATA Coaching Since 2009: Neram Classes</h2>
+          <p style={P}>
+            Neram Classes prepares students for NATA (the National Aptitude Test in Architecture), JEE Main Paper 2, AAT and PGETA. It was founded in 2009 by {ORG_FACTS.founder} ({ORG_FACTS.founderCredential}). In {PROOF_POINTS.years} Neram has taught {PROOF_POINTS.students}, and a Neram student secured {PROOF_POINTS.topResult}.
           </p>
-          <p style={{ fontSize: '1.05rem', lineHeight: 1.8, color: 'rgba(255,255,255,0.85)', marginBottom: '20px', maxWidth: '800px' }}>
-            What makes Neram the best NATA coaching in India is our faculty and technology combination. Every instructor is an IIT, NIT, or SPA alumnus, a practising architect with real-world experience in sustainable design, urban planning, and computational architecture. Our NATA coaching covers the complete 2026 syllabus, including mathematics, general aptitude, and drawing, with dedicated modules for each section, personalised feedback on sketching portfolios, timed mock tests that mirror the actual exam interface, and one-on-one doubt-clearing sessions every week. With small batch sizes of max 25 students, every student receives individual attention.
-          </p>
-          <p style={{ fontSize: '1.05rem', lineHeight: 1.8, color: 'rgba(255,255,255,0.85)', marginBottom: '40px', maxWidth: '800px' }}>
-            Whether you are in Chennai, Bangalore, Coimbatore, Delhi, Mumbai, Hyderabad, Dubai, or any of our 150+ covered cities, Neram Classes provides structured NATA preparation through our hybrid online-offline model. Our study material is updated for the 2026 exam pattern, including the new 3D Composition section and PCM-based aptitude questions.
+          <p style={P}>
+            Classes cover the full NATA syllabus: mathematics, general aptitude and drawing. Drawing gets the most time, because every sketch a student submits comes back with a tutor&apos;s feedback. Students take timed mock tests in the same format as the exam, and get help with B.Arch counselling after the results.
           </p>
 
-          <h3 style={{ fontFamily: 'var(--font-poppins), Poppins, sans-serif', fontSize: '1.5rem', fontWeight: 600, color: '#e8a020', marginBottom: '16px', lineHeight: 1.3 }}>
-            NATA Online Coaching: Live classes for aspirants in 150+ cities
-          </h3>
-          <p style={{ fontSize: '1.05rem', lineHeight: 1.8, color: 'rgba(255,255,255,0.85)', marginBottom: '20px', maxWidth: '800px' }}>
-            Our flagship <a href="/nata-online-coaching" style={{ color: '#e8a020', textDecoration: 'underline', fontWeight: 600 }}>NATA online coaching</a> program runs live interactive classes for architecture aspirants from across India and the Gulf. Faculty are NIT, IIT, and SPA alumni. Each batch is capped at 25 students for personalised drawing critique, with 100+ full-length mock tests and recorded lectures for unlimited revision. Programs start at ₹15,000 (3-month crash course) and scale up to a 2-year foundation track that covers NATA and JEE Paper 2 together. Compare us against <a href="/nata-online-coaching/comparison" style={{ color: '#e8a020', textDecoration: 'underline' }}>BRDS and SILICA</a> on a single page, or study the <a href="/nata-cutoff-trends-2015-2025" style={{ color: '#e8a020', textDecoration: 'underline' }}>10-year NATA cutoff trend</a> before you set your 2026 target.
+          <h3 style={H3}>Live online classes and classrooms</h3>
+          <p style={P}>
+            Students anywhere in India or the Gulf join the <a href="/nata-online-coaching" style={{ ...LINK, fontWeight: 600 }}>live online NATA classes</a>. Students near a Neram classroom can attend in person:{' '}
+            {CLASSROOM_CITIES.map(([label, slug], i) => (
+              <span key={slug}>
+                <a href={cityHref(slug)} style={LINK}>{label}</a>
+                {i < CLASSROOM_CITIES.length - 1 ? ', ' : '.'}
+              </span>
+            ))}
           </p>
-          <p style={{ fontSize: '1.05rem', lineHeight: 1.8, color: 'rgba(255,255,255,0.85)', marginBottom: '20px', maxWidth: '800px' }}>
-            City-specific NATA online coaching pages are live for Tamil Nadu (<a href="/coaching/nata-coaching/nata-coaching-centers-in-chennai" style={{ color: '#e8a020', textDecoration: 'underline' }}>Chennai</a>, <a href="/coaching/nata-coaching/nata-coaching-centers-in-coimbatore" style={{ color: '#e8a020', textDecoration: 'underline' }}>Coimbatore</a>, <a href="/coaching/nata-coaching/nata-coaching-centers-in-madurai" style={{ color: '#e8a020', textDecoration: 'underline' }}>Madurai</a>, <a href="/coaching/nata-coaching/nata-coaching-centers-in-trichy" style={{ color: '#e8a020', textDecoration: 'underline' }}>Trichy</a>, <a href="/coaching/nata-coaching/nata-coaching-centers-in-salem" style={{ color: '#e8a020', textDecoration: 'underline' }}>Salem</a>, <a href="/coaching/nata-coaching/nata-coaching-centers-in-vellore" style={{ color: '#e8a020', textDecoration: 'underline' }}>Vellore</a>) and pan-India metros (<a href="/coaching/nata-coaching/nata-coaching-centers-in-bangalore" style={{ color: '#e8a020', textDecoration: 'underline' }}>Bangalore</a>, <a href="/coaching/nata-coaching/nata-coaching-centers-in-hyderabad" style={{ color: '#e8a020', textDecoration: 'underline' }}>Hyderabad</a>, <a href="/coaching/nata-coaching/nata-coaching-centers-in-mumbai" style={{ color: '#e8a020', textDecoration: 'underline' }}>Mumbai</a>, <a href="/coaching/nata-coaching/nata-coaching-centers-in-delhi" style={{ color: '#e8a020', textDecoration: 'underline' }}>Delhi NCR</a>, <a href="/coaching/nata-coaching/nata-coaching-centers-in-pune" style={{ color: '#e8a020', textDecoration: 'underline' }}>Pune</a>, <a href="/coaching/nata-coaching/nata-coaching-centers-in-kolkata" style={{ color: '#e8a020', textDecoration: 'underline' }}>Kolkata</a>, <a href="/coaching/nata-coaching/nata-coaching-centers-in-kochi" style={{ color: '#e8a020', textDecoration: 'underline' }}>Kochi</a>, <a href="/coaching/nata-coaching/nata-coaching-centers-in-ahmedabad" style={{ color: '#e8a020', textDecoration: 'underline' }}>Ahmedabad</a>). Each page lists local NATA exam centres, target architecture colleges, and served sub-areas.
-          </p>
-
-          <h3 style={{ fontFamily: 'var(--font-poppins), Poppins, sans-serif', fontSize: '1.5rem', fontWeight: 600, color: '#e8a020', marginBottom: '16px', lineHeight: 1.3 }}>
-            Only NATA Coaching with a Free AI-Powered Study App
-          </h3>
-          <p style={{ fontSize: '1.05rem', lineHeight: 1.8, color: 'rgba(255,255,255,0.85)', marginBottom: '20px', maxWidth: '800px' }}>
-            Neram Classes is the only NATA coaching institute in India that provides a free AI-powered study app (app.neramclasses.com) to all students. Our app features a NATA Cutoff Calculator that analyses historical admission data from 5,000+ architecture colleges, a College Predictor that recommends colleges matching your score, location, and budget, and an Exam Center Locator with directions. No other coaching institute offers these tools, and they are completely free, with no login required.
-          </p>
-          <p style={{ fontSize: '1.05rem', lineHeight: 1.8, color: 'rgba(255,255,255,0.85)', marginBottom: '40px', maxWidth: '800px' }}>
-            Our AI study assistant, available 24/7, answers doubts on NATA mathematics, aptitude reasoning, and architectural concepts. It adapts to your learning pace and identifies weak areas, recommending targeted practice sets. These AI-powered tools, combined with expert human mentorship from IIT/NIT alumni, make Neram the most technologically advanced NATA coaching available anywhere.
+          <p style={P}>
+            {FEES_LINE} See <a href="/fees" style={LINK}>all fees</a>, compare us with <a href="/nata-online-coaching/comparison" style={LINK}>other institutes</a>, or study the <a href="/nata-cutoff-trends-2015-2025" style={LINK}>10-year NATA cutoff trend</a> before you set your target.
           </p>
 
-          <h3 style={{ fontFamily: 'var(--font-poppins), Poppins, sans-serif', fontSize: '1.5rem', fontWeight: 600, color: '#e8a020', marginBottom: '16px', lineHeight: 1.3 }}>
-            150+ Cities: India&apos;s Largest NATA Coaching Network
-          </h3>
-          <p style={{ fontSize: '1.05rem', lineHeight: 1.8, color: 'rgba(255,255,255,0.85)', marginBottom: '20px', maxWidth: '800px' }}>
-            Neram Classes operates the largest NATA coaching network in India with presence across 150+ cities. Our flagship centres in Chennai, Bangalore, and Coimbatore provide in-person instruction. For students across India and the Gulf countries (Dubai, Doha, Muscat, Riyadh, Kuwait), our live online classes deliver the same curriculum through interactive sessions with real-time drawing demonstrations. Students in Tamil Nadu, Karnataka, Kerala, Andhra Pradesh, Telangana, Maharashtra, Delhi-NCR, and 6 Gulf countries all have access to our hybrid coaching model.
-          </p>
-          <p style={{ fontSize: '1.05rem', lineHeight: 1.8, color: 'rgba(255,255,255,0.85)', marginBottom: '20px', maxWidth: '800px' }}>
-            Every enrolled student gets access to our progressive web app, a question bank with 2,000+ practice problems, 100+ full-length mock tests, and weekly live doubt sessions. Our hybrid model means you can switch between online and offline modes at any time. Neram&apos;s coaching is available in 5 languages (English, Tamil, Hindi, Kannada, and Malayalam), making it accessible to students across India.
+          <h3 style={H3}>Free NATA tools</h3>
+          <p style={P}>
+            The free Neram app at <a href="https://app.neramclasses.com" style={LINK}>app.neramclasses.com</a> has a NATA cutoff calculator, a B.Arch college predictor, an exam centre finder and a question bank preview. Read more about the tools and the classroom AI features on the <a href="/aiarchitek" style={LINK}>aiArchitek page</a>.
           </p>
 
-          <h3 style={{ fontFamily: 'var(--font-poppins), Poppins, sans-serif', fontSize: '1.5rem', fontWeight: 600, color: '#e8a020', marginBottom: '16px', lineHeight: 1.3 }}>
-            Why Students Choose Neram Over Other NATA Coaching Institutes
-          </h3>
-          <p style={{ fontSize: '1.05rem', lineHeight: 1.8, color: 'rgba(255,255,255,0.85)', marginBottom: '0', maxWidth: '800px' }}>
-            Most NATA coaching institutes are limited to a single city or region. Neram Classes operates across 150+ cities with a hybrid model. Most institutes rely on pre-recorded videos or large batch sizes of 50-100+ students, while Neram limits batches to 25 students with live interactive classes. No other NATA coaching offers a free AI-powered study app with college prediction for 5,000+ colleges. Our fee structure (starting ₹15,000 for crash course, ₹25,000 for 1-year program) is competitive while offering significantly more value, including free tools, multi-language support, and 24/7 doubt resolution. With 17+ years of experience, 10,000+ students trained, and a 99.9% success rate, Neram Classes is the clear choice for NATA 2026 preparation.
-          </p>
-
-          <h3 style={{ fontFamily: 'var(--font-poppins), Poppins, sans-serif', fontSize: '1.5rem', fontWeight: 600, color: '#e8a020', marginBottom: '16px', marginTop: '40px', lineHeight: 1.3 }}>
-            Our Flagship Centers
-          </h3>
-          <p style={{ fontSize: '1.05rem', lineHeight: 1.8, color: 'rgba(255,255,255,0.85)', marginBottom: '0', maxWidth: '800px' }}>
-            Visit our flagship <a href="/coaching/nata-coaching/nata-coaching-centers-in-chennai" style={{ color: '#e8a020', textDecoration: 'underline' }}>NATA coaching center in Chennai</a> (Ashok Nagar, since 2009), our headquarters in Bangalore (Electronic City), and centers in Coimbatore. Our <a href="/coaching/nata-coaching/nata-coaching-centers-in-chennai" style={{ color: '#e8a020', textDecoration: 'underline' }}>Chennai neighborhood pages</a> cover Anna Nagar, Adyar, Tambaram, T. Nagar, Velachery, and more. Compare us with other institutes on our <a href="/nata-online-coaching" style={{ color: '#e8a020', textDecoration: 'underline' }}>Best NATA Coaching in India</a> page.
-          </p>
-
-          <h3 style={{ fontFamily: 'var(--font-poppins), Poppins, sans-serif', fontSize: '1.5rem', fontWeight: 600, color: '#e8a020', marginBottom: '16px', marginTop: '40px', lineHeight: 1.3 }}>
-            NATA Coaching Centers Across India
-          </h3>
-          <p style={{ fontSize: '1.05rem', lineHeight: 1.8, color: 'rgba(255,255,255,0.85)', marginBottom: '20px', maxWidth: '800px' }}>
-            Find a NATA coaching center near you. Neram Classes operates in 150+ cities with both online and offline coaching options. Browse our <a href="/coaching/nata-coaching" style={{ color: '#e8a020', textDecoration: 'underline' }}>NATA coaching center guide</a> to compare and choose the right center for your needs.
+          <h3 style={H3}>NATA coaching near you</h3>
+          <p style={P}>
+            Each city page lists the nearest NATA test centres, the architecture colleges nearby and how classes work from that city. Browse the <a href="/coaching/nata-coaching" style={LINK}>all-India list of states and cities</a>.
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px', marginBottom: '20px' }}>
-            <a href="/coaching/nata-coaching/nata-coaching-centers-in-chennai" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA coaching center in Chennai →</a>
-            <a href="/coaching/nata-coaching/nata-coaching-centers-in-bangalore" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA coaching center in Bangalore →</a>
-            <a href="/coaching/nata-coaching/nata-coaching-centers-in-coimbatore" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA coaching center in Coimbatore →</a>
-            <a href="/coaching/nata-coaching/nata-coaching-centers-in-madurai" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA coaching center in Madurai →</a>
-            <a href="/coaching/nata-coaching/nata-coaching-centers-in-trichy" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA coaching center in Trichy →</a>
-            <a href="/coaching/nata-coaching/nata-coaching-centers-in-hyderabad" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA coaching center in Hyderabad →</a>
-            <a href="/coaching/nata-coaching/nata-coaching-centers-in-mumbai" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA coaching center in Mumbai →</a>
-            <a href="/coaching/nata-coaching/nata-coaching-centers-in-delhi" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA coaching center in Delhi →</a>
-            <a href="/coaching/nata-coaching/nata-coaching-centers-in-kochi" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA coaching center in Kochi →</a>
-            <a href="/nata-online-coaching" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA online coaching: All 150+ cities →</a>
+            {CLASSROOM_CITIES.map(([label, slug]) => (
+              <a key={slug} href={cityHref(slug)} style={CARD}>NATA coaching in {label.replace(/ \(.*\)$/, '')} →</a>
+            ))}
+            <a href="/nata-online-coaching" style={{ ...CARD, fontWeight: 600 }}>NATA online coaching →</a>
           </div>
 
-          <h3 style={{ fontFamily: 'var(--font-poppins), Poppins, sans-serif', fontSize: '1.5rem', fontWeight: 600, color: '#e8a020', marginBottom: '16px', marginTop: '40px', lineHeight: 1.3 }}>
-            NATA Coaching by State
-          </h3>
-          <p style={{ fontSize: '1.05rem', lineHeight: 1.8, color: 'rgba(255,255,255,0.85)', marginBottom: '20px', maxWidth: '800px' }}>
-            Neram Classes offers NATA coaching across all major Indian states. Browse state-wise coaching guides for detailed information about architecture colleges, exam centers, and coaching options in your state.
-          </p>
+          <h3 style={H3}>NATA Coaching by State</h3>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '12px', marginBottom: '20px' }}>
-            <a href="/coaching/nata-coaching-in-tamil-nadu" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA Coaching in Tamil Nadu →</a>
-            <a href="/coaching/nata-coaching-in-karnataka" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA Coaching in Karnataka →</a>
-            <a href="/coaching/nata-coaching-in-kerala" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA Coaching in Kerala →</a>
-            <a href="/coaching/nata-coaching-in-maharashtra" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA Coaching in Maharashtra →</a>
-            <a href="/coaching/nata-coaching-in-delhi" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA Coaching in Delhi →</a>
-            <a href="/coaching/nata-coaching-in-andhra-pradesh" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA Coaching in Andhra Pradesh →</a>
-            <a href="/coaching/nata-coaching-in-telangana" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA Coaching in Telangana →</a>
-            <a href="/coaching/nata-coaching-in-rajasthan" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA Coaching in Rajasthan →</a>
-            <a href="/coaching/nata-coaching-in-gujarat" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA Coaching in Gujarat →</a>
-            <a href="/coaching/nata-coaching-in-west-bengal" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' }}>NATA Coaching in West Bengal →</a>
-            <a href="/nata-online-coaching" style={{ color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem', fontWeight: 600 }}>NATA Online Coaching: Live classes from anywhere in India →</a>
+            {[
+              ['tamil-nadu', 'Tamil Nadu'], ['karnataka', 'Karnataka'], ['kerala', 'Kerala'], ['maharashtra', 'Maharashtra'],
+              ['delhi', 'Delhi'], ['andhra-pradesh', 'Andhra Pradesh'], ['telangana', 'Telangana'], ['rajasthan', 'Rajasthan'],
+              ['gujarat', 'Gujarat'], ['west-bengal', 'West Bengal'],
+            ].map(([slug, name]) => (
+              <a key={slug} href={`/coaching/nata-coaching-in-${slug}`} style={CARD}>NATA Coaching in {name} →</a>
+            ))}
           </div>
 
-          <h3 style={{ fontFamily: 'var(--font-poppins), Poppins, sans-serif', fontSize: '1.5rem', fontWeight: 600, color: '#e8a020', marginBottom: '16px', marginTop: '40px', lineHeight: 1.3 }}>
-            Frequently Asked Questions
-          </h3>
+          <h3 style={H3}>Frequently Asked Questions</h3>
           <div style={{ maxWidth: '800px' }}>
-            <div style={{ marginBottom: '24px' }}>
-              <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#fff', marginBottom: '8px' }}>What is the best NATA coaching center in India?</h4>
-              <p style={{ fontSize: '0.95rem', lineHeight: 1.7, color: 'rgba(255,255,255,0.8)', margin: 0 }}>Neram Classes is India&apos;s top-rated NATA coaching center with a 99.9% success rate since 2009. With 150+ coaching centers across India and 6 Gulf countries, IIT/NIT/SPA alumni faculty, small batches of max 25 students, and a free AI-powered study app, Neram is the most comprehensive NATA coaching center in the country.</p>
-            </div>
-            <div style={{ marginBottom: '24px' }}>
-              <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#fff', marginBottom: '8px' }}>Does Neram Classes have NATA coaching centers near me?</h4>
-              <p style={{ fontSize: '0.95rem', lineHeight: 1.7, color: 'rgba(255,255,255,0.8)', margin: 0 }}>Neram Classes has NATA coaching centers in 150+ cities including Chennai, Bangalore, Coimbatore, Madurai, Trichy, Hyderabad, Mumbai, Delhi, Kochi, and Pune. We also serve students in 6 Gulf countries. Our hybrid model lets you attend online from anywhere or visit a physical center.</p>
-            </div>
-            <div style={{ marginBottom: '24px' }}>
-              <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#fff', marginBottom: '8px' }}>How much does NATA coaching cost?</h4>
-              <p style={{ fontSize: '0.95rem', lineHeight: 1.7, color: 'rgba(255,255,255,0.8)', margin: 0 }}>NATA coaching at Neram starts at ₹15,000 for the Crash Course (3 months), ₹25,000 for the 1-Year Program, and ₹30,000 for the 2-Year Foundation Program. Scholarships up to 100% and EMI options are available.</p>
-            </div>
-            <div style={{ marginBottom: '24px' }}>
-              <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#fff', marginBottom: '8px' }}>Can I prepare for NATA through online classes?</h4>
-              <p style={{ fontSize: '0.95rem', lineHeight: 1.7, color: 'rgba(255,255,255,0.8)', margin: 0 }}>Yes, Neram offers live online NATA coaching with the same curriculum as offline centers, including live interactive classes, real-time drawing feedback, 24/7 doubt support, and a free AI study app. Online students achieve the same 99.9% success rate.</p>
-            </div>
-            <div style={{ marginBottom: '24px' }}>
-              <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#fff', marginBottom: '8px' }}>What is the best online NATA coaching in India?</h4>
-              <p style={{ fontSize: '0.95rem', lineHeight: 1.7, color: 'rgba(255,255,255,0.8)', margin: 0 }}>Neram Classes is the best online NATA coaching in India with a 99.9% success rate. Our online program features live classes by IIT/NIT alumni, daily drawing practice, small batches of 25 students, 100+ mock tests, and the only free AI study app in the industry. Available in 5 languages across 150+ cities.</p>
-            </div>
-            <div style={{ marginBottom: '24px' }}>
-              <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#fff', marginBottom: '8px' }}>How many students has Neram Classes trained?</h4>
-              <p style={{ fontSize: '0.95rem', lineHeight: 1.7, color: 'rgba(255,255,255,0.8)', margin: 0 }}>Neram Classes has trained over 10,000 students since 2009 with a 99.9% success rate. Students have secured admission to SPA Delhi, CEPT Ahmedabad, NIT Trichy, NIT Calicut, Anna University, IIT Roorkee and 100+ other top architecture colleges.</p>
-            </div>
-            <div style={{ marginBottom: '24px' }}>
-              <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#fff', marginBottom: '8px' }}>Which states does Neram Classes cover for NATA coaching?</h4>
-              <p style={{ fontSize: '0.95rem', lineHeight: 1.7, color: 'rgba(255,255,255,0.8)', margin: 0 }}>Neram Classes provides NATA coaching across Tamil Nadu, Karnataka, Kerala, Andhra Pradesh, Telangana, Maharashtra, Delhi, Uttar Pradesh, Rajasthan, Gujarat, West Bengal, Punjab, Haryana, Bihar, Odisha, and 10+ more states. We also serve UAE, Qatar, Oman, Saudi Arabia, Kuwait, and Bahrain.</p>
-            </div>
-            <div style={{ marginBottom: '24px' }}>
-              <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#fff', marginBottom: '8px' }}>What digital tools does Neram Classes offer for NATA preparation?</h4>
-              <p style={{ fontSize: '0.95rem', lineHeight: 1.7, color: 'rgba(255,255,255,0.8)', margin: 0 }}>Neram is the only NATA coaching with a free AI-powered study app (aiArchitek). Features include: NATA cutoff calculator with data from 5,000+ colleges, college predictor, exam center locator, question bank with 2,000+ problems, and 100+ mock tests. All tools are free with no login required.</p>
-            </div>
-            <div style={{ marginBottom: '0' }}>
-              <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#fff', marginBottom: '8px' }}>What is the difference between the free app and Nexus premium?</h4>
-              <p style={{ fontSize: '0.95rem', lineHeight: 1.7, color: 'rgba(255,255,255,0.8)', margin: 0 }}>Neram offers two platforms. The free app (aiArchitek at <a href="https://app.neramclasses.com" style={{ color: '#e8a020', textDecoration: 'underline' }}>app.neramclasses.com</a>) gives everyone access to the NATA cutoff calculator, college predictor for 5,000+ colleges, exam center locator, and a question bank preview, with no login required. <a href="https://nexus.neramclasses.com" style={{ color: '#e8a020', textDecoration: 'underline' }}>Nexus</a> is India&apos;s first NATA-exclusive learning platform, designed by architects and available only to enrolled Neram students. Nexus includes the complete question bank with papers from 2005 to 2026 individually written in English and regional languages, drawing evaluation by expert tutors, structured course plans with foundation chapters, a full video library with recorded classes, live class timetable, leaderboard, self-learning modules, mini-modules, an AI-powered study assistant, and a parent monitoring dashboard. Nexus is the only app in India with this depth of NATA-specific resources for self-learning, supported by Microsoft. <a href="/apply" style={{ color: '#e8a020', textDecoration: 'underline' }}>Enroll at Neram Classes</a> to unlock Nexus.</p>
-            </div>
+            {HOME_FAQS.map((f, i) => (
+              <div key={f.question} style={{ marginBottom: i === HOME_FAQS.length - 1 ? 0 : '24px' }}>
+                <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#fff', marginBottom: '8px' }}>{f.question}</h4>
+                <p style={{ fontSize: '0.95rem', lineHeight: 1.7, color: 'rgba(255,255,255,0.8)', margin: 0 }}>{f.answer}</p>
+              </div>
+            ))}
           </div>
 
         </div>

@@ -376,12 +376,25 @@ export class PadTestDb {
   start(
     actor: string | null,
     classroomId: string,
-    opts: { scheduledClassId?: string; batchId?: string; meetingId?: string; meetingThread?: string; endExisting?: boolean } = {},
+    opts: { scheduledClassId?: string; batchId?: string; meetingId?: string; meetingThread?: string; endExisting?: boolean; meetingTitle?: string } = {},
   ): Promise<Json> {
     return this.fn(
-      `select pad_start_or_resume_session($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text, $6::text, $7::boolean) as r`,
-      [actor, classroomId, opts.scheduledClassId ?? null, opts.batchId ?? null, opts.meetingId ?? null, opts.meetingThread ?? null, opts.endExisting ?? false],
+      `select pad_start_or_resume_session($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text, $6::text, $7::boolean, $8::text) as r`,
+      [
+        actor,
+        classroomId,
+        opts.scheduledClassId ?? null,
+        opts.batchId ?? null,
+        opts.meetingId ?? null,
+        opts.meetingThread ?? null,
+        opts.endExisting ?? false,
+        opts.meetingTitle ?? null,
+      ],
     );
+  }
+
+  rename(actor: string | null, sessionId: string, title: string | null): Promise<Json> {
+    return this.fn(`select pad_rename_session($1::uuid, $2::uuid, $3::text) as r`, [actor, sessionId, title]);
   }
 
   recallMeeting(actor: string | null, thread: string | null): Promise<Json> {

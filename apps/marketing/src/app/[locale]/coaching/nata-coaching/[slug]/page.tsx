@@ -2,9 +2,11 @@ import type { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
 import { notFound, permanentRedirect } from 'next/navigation';
 import { CityCoachingPage } from '@/components/coaching-location/CityCoachingPage';
+import { loadLocalReviews } from '@/lib/reviews/data';
+import { getCityVideos } from '@/lib/seo/location-videos';
 import { EXAMS } from '@/lib/seo/exam-config';
 import { loadGeoDatasets } from '@/lib/seo/location-data';
-import { cityFactsFor, cityMetadata, citySegment, lookupCity, nearbyCities, prebuiltCitySlugs } from '@/lib/seo/location-pages';
+import { cityFactsFor, cityMetadata, citySegment, lookupCity, nearbyCities, prebuiltCitySlugs, travelFromCities } from '@/lib/seo/location-pages';
 
 /**
  * /coaching/nata-coaching/nata-coaching-centers-in-{city}: one page per city in
@@ -39,12 +41,19 @@ export default async function NataCityPage({ params }: PageProps) {
 
   const ds = await loadGeoDatasets();
   const { facts } = cityFactsFor('nata', found.place, ds);
+  const videos = (await getCityVideos()).filter((v) => v.citySlug === found.place.slug);
+  const reviews = await loadLocalReviews(
+    [found.place.name, ...('altNames' in found.place ? found.place.altNames ?? [] : [])],
+    facts.state?.name ?? null,
+    params.locale,
+  );
   const sibling =
     found.place.kind === 'india'
       ? { label: `JEE Paper 2 coaching in ${found.place.name}`, href: EXAMS['jee-paper-2'].cityPath(found.place.slug), hint: 'B.Arch through JEE Main' }
       : null;
 
   return (
-    <CityCoachingPage facts={facts} locale={params.locale} nearby={nearbyCities('nata', found.place, ds)} siblingExam={sibling} />
+    <CityCoachingPage facts={facts} locale={params.locale} nearby={nearbyCities('nata', found.place, ds)} siblingExam={sibling} reviews={reviews} videos={videos}
+      travelFrom={facts.mode === 'classroom' ? travelFromCities('nata', found.place, ds) : []} />
   );
 }

@@ -43,6 +43,7 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import MathText from '@/components/common/MathText';
+import MathAnswerField from '@/components/common/MathAnswerField';
 import { parseAssignmentBrief } from '@/lib/assignment-brief';
 
 export type ComposerFormat = 'MCQ' | 'NUMERICAL' | 'SUBJECTIVE';
@@ -552,15 +553,13 @@ export default function QuestionComposer({
 
                 {q.format === 'NUMERICAL' && (
                   <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 1.5 }}>
-                    <TextField
+                    <MathAnswerField
                       label="Correct answer"
                       value={q.correct_answer}
-                      onChange={(e) => update(q.uid, { correct_answer: e.target.value })}
-                      size="small"
-                      fullWidth
+                      onChange={(next) => update(q.uid, { correct_answer: next })}
                       disabled={disabled}
-                      inputProps={{ inputMode: 'decimal' }}
-                      placeholder="14"
+                      placeholder="14, 3/4 or 2√3"
+                      sx={{ width: '100%' }}
                     />
                     <TextField
                       label="Tolerance"

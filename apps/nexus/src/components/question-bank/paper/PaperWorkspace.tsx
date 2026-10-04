@@ -1,7 +1,16 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Box, Snackbar } from '@neram/ui';
+import {
+  Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Snackbar,
+  Typography,
+} from '@neram/ui';
 import type {
   NexusQBQuestion,
   NexusQBQuestionSource,
@@ -110,6 +119,8 @@ export interface PaperWorkspaceProps {
   canConnectYouTube?: boolean;
   /** Told which question is open, so Present to class can start there. */
   onActiveChange?: (questionId: string | null) => void;
+  /** Move ticked Planning questions to this sitting's JEE Paper 2B. A JEE Paper 2 paper only. */
+  onMoveToPaper2B?: (questionIds: string[]) => Promise<void>;
 }
 
 /** Is the user typing? Then j and k are letters, not navigation. */
@@ -132,12 +143,38 @@ export default function PaperWorkspace({
   questions, paperId, tagCounts = {}, tagsByQuestion, paper, sources,
   mode, onModeChange, needsFilter, onNeedsFilterChange, sectionFilter, onSectionFilterChange,
   getToken, onSaved, onChangeSections, onOptimisticPatch, getChatToken, openQuestionId,
-  canConnectYouTube = false, onActiveChange,
+  canConnectYouTube = false, onActiveChange, onMoveToPaper2B,
 }: PaperWorkspaceProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   useEffect(() => {
     onActiveChange?.(activeId);
   }, [activeId, onActiveChange]);
+
+  /**
+   * The leave guard. The form remounts per question (key={question.id}), so
+   * moving on used to drop pasted figures and an unset answer without a word.
+   * A ref, not state, for the check itself: step() and the key handler read it
+   * from closures that would otherwise hold a stale copy.
+   */
+  const formDirtyRef = useRef(false);
+  const handleDirtyChange = useCallback((dirty: boolean) => {
+    formDirtyRef.current = dirty;
+  }, []);
+  const [leaveAction, setLeaveAction] = useState<(() => void) | null>(null);
+  const requestLeave = useCallback((action: () => void) => {
+    if (formDirtyRef.current) setLeaveAction(() => action);
+    else action();
+  }, []);
+  const discardAndLeave = () => {
+    const action = leaveAction;
+    setLeaveAction(null);
+    formDirtyRef.current = false;
+    action?.();
+    // A figure saved on its own (Save Figure A) skips the list's refetch so
+    // the rest of the form survives. Leaving without the full Save is the
+    // last chance to bring the list's figure counts up to date.
+    onSaved();
+  };
 
   // A link to one question (?q=). Opened once, when that question has arrived,
   // and scrolled to so the list shows where it sits.
@@ -290,15 +327,26 @@ export default function PaperWorkspace({
 
   const step = useCallback(
     (delta: number) => {
-      setActiveId((current) => {
-        const i = questions.findIndex((q) => q.id === current);
-        if (i < 0) return current;
-        const next = i + delta;
-        if (next < 0 || next >= questions.length) return current;
-        return questions[next].id;
-      });
+      requestLeave(() =>
+        setActiveId((current) => {
+          const i = questions.findIndex((q) => q.id === current);
+          if (i < 0) return current;
+          const next = i + delta;
+          if (next < 0 || next >= questions.length) return current;
+          return questions[next].id;
+        }),
+      );
     },
-    [questions],
+    [questions, requestLeave],
+  );
+
+  const closePane = useCallback(() => requestLeave(() => setActiveId(null)), [requestLeave]);
+  const openQuestion = useCallback(
+    (questionId: string) => {
+      if (questionId === activeId) return;
+      requestLeave(() => setActiveId(questionId));
+    },
+    [activeId, requestLeave],
   );
 
   useEffect(() => {
@@ -306,11 +354,11 @@ export default function PaperWorkspace({
       if (isTypingTarget(e.target)) return;
       if (e.key === 'j') { e.preventDefault(); step(1); }
       if (e.key === 'k') { e.preventDefault(); step(-1); }
-      if (e.key === 'Escape') setActiveId(null);
+      if (e.key === 'Escape') closePane();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [step]);
+  }, [step, closePane]);
 
   const changeOne = useCallback(
     (questionId: string, section: QBQuestionSection) => onChangeSections([questionId], section),
@@ -559,8 +607,10 @@ export default function PaperWorkspace({
           questions={questions}
           tagCounts={tagCounts}
           activeQuestionId={activeId}
-          onActivate={setActiveId}
+          onActivate={openQuestion}
           onChangeSections={onChangeSections}
+          examType={paper?.exam_type ?? null}
+          onMoveToPaper2B={onMoveToPaper2B}
           mode={mode}
           onModeChange={onModeChange}
           needsFilter={needsFilter}
@@ -603,7 +653,8 @@ export default function PaperWorkspace({
             onUnlinkChoiceGroup={activeQuestion ? () => unlinkChoiceGroup(activeQuestion.id) : undefined}
             getToken={getToken}
             onSaved={onSaved}
-            onClose={() => setActiveId(null)}
+            onClose={closePane}
+            onDirtyChange={handleDirtyChange}
             onPrevious={() => step(-1)}
             onNext={() => step(1)}
             onChangeSection={changeOne}
@@ -657,6 +708,35 @@ export default function PaperWorkspace({
           }}
         />
       )}
+      <Dialog
+        open={leaveAction !== null}
+        onClose={() => setLeaveAction(null)}
+        aria-labelledby="qb-leave-title"
+        maxWidth="xs"
+        fullWidth
+      >
+        <DialogTitle id="qb-leave-title">
+          Leave Q{activeQuestion?.display_order ?? ''} without saving?
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary">
+            This question has changes that are not saved. Figures you already saved one by one stay saved.
+          </Typography>
+        </DialogContent>
+        <DialogActions sx={{ p: 2, gap: 1, flexWrap: 'wrap' }}>
+          <Button onClick={discardAndLeave} color="error" sx={{ textTransform: 'none', minHeight: 44 }}>
+            Discard changes
+          </Button>
+          <Button
+            onClick={() => setLeaveAction(null)}
+            variant="contained"
+            autoFocus
+            sx={{ textTransform: 'none', minHeight: 44 }}
+          >
+            Keep editing
+          </Button>
+        </DialogActions>
+      </Dialog>
       {imageToast && (
         <Snackbar
           open

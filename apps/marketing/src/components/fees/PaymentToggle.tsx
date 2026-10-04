@@ -36,6 +36,7 @@ export default function PaymentToggle({ value, onChange, t }: PaymentToggleProps
             borderRadius: '6px !important',
             px: { xs: 2, sm: 3 },
             py: 1,
+            minHeight: 44,
             textTransform: 'none',
             fontWeight: 600,
             fontSize: { xs: '0.8rem', sm: '0.9rem' },

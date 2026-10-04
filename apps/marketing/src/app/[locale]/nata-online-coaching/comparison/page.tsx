@@ -34,7 +34,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const title = 'Neram vs BRDS vs SILICA: Best NATA Online Coaching 2026 Compared';
   const description =
-    'Honest comparison of the top 3 NATA online coaching institutes in India: Neram Classes, BRDS, and SILICA. Compare fees, batch size, faculty, mock tests, locations, and success rates side by side.';
+    'Side-by-side comparison of three NATA online coaching institutes in India: Neram Classes, BRDS and SILICA. Compare fees, batch size, faculty, mock tests, locations and published results.';
   return {
     title,
     description,
@@ -77,16 +77,16 @@ interface Institute {
 const institutes: Institute[] = [
   {
     name: 'Neram Classes',
-    founded: '2009 (16+ years)',
-    presence: '150+ cities, online + offline hybrid, 6 Gulf countries',
-    batchSize: 'Max 25 students per batch',
-    faculty: 'NIT, IIT, SPA alumni',
-    feeRange: 'Rs. 15,000 to Rs. 30,000 (3-month to 2-year)',
-    mockTests: '100+ mock tests with detailed analysis',
+    founded: '2009 (10+ years)',
+    presence: 'Live online across India and the Gulf; classrooms in Tamil Nadu and Bangalore (Electronic City)',
+    batchSize: 'Small batches',
+    faculty: 'Founded by Pushparaj Manoharan (B.Arch, NIT Trichy)',
+    feeRange: 'Rs. 15,000 to Rs. 35,000 (3-month to 2-year), lower if paid at once',
+    mockTests: '100+ in the 1-Year program, 50+ in the Crash Course',
     drawingFocus: 'Daily 2-hour supervised drawing sessions with live critique',
-    freeApp: 'Yes, free AI study app with cutoff calculator, college predictor for 5,000+ colleges, exam centre locator',
+    freeApp: 'Yes, free app at app.neramclasses.com: cutoff calculator, B.Arch college predictor, exam centre finder, question bank preview',
     freeDemo: 'Yes, free live demo class',
-    publicResults: '99.9% success rate, 10,000+ students trained, 500+ admissions to top colleges in last 3 years',
+    publicResults: 'AIR 1 in JEE B.Arch 2024; 1,000+ students taught since 2009',
     languages: '5 languages: English, Tamil, Hindi, Kannada, Malayalam',
     hybridSwitch: 'Yes, switch between online and offline anytime at no extra cost',
   },
@@ -132,7 +132,7 @@ const comparisonRows: Array<{ label: string; key: keyof Institute; note?: string
   { label: 'Drawing Practice', key: 'drawingFocus' },
   { label: 'Free Study App', key: 'freeApp' },
   { label: 'Free Demo Class', key: 'freeDemo' },
-  { label: 'Public Results (NATA 2025)', key: 'publicResults' },
+  { label: 'Published Results', key: 'publicResults' },
   { label: 'Language Coverage', key: 'languages' },
   { label: 'Online + Offline Switch', key: 'hybridSwitch' },
 ];
@@ -141,17 +141,17 @@ const switchReasons = [
   {
     title: 'Transparent fees from the start',
     body:
-      'Neram Classes publishes course fees (Rs. 15,000 to Rs. 30,000) directly on the website. Competitor institutes typically require a form submission and counsellor call before sharing fees, which delays decision-making for parents.',
+      'Neram Classes publishes course fees (Rs. 15,000 to Rs. 35,000) directly on the website. Competitor institutes typically require a form submission and counsellor call before sharing fees, which delays decision-making for parents.',
   },
   {
     title: 'Smaller batch sizes by design',
     body:
-      'A max of 25 students per batch is a hard cap at Neram Classes. This gives every student personalised feedback on drawing submissions and direct faculty access, something that is hard to maintain at scale.',
+      'Neram Classes keeps batches small on purpose. That leaves time for personal feedback on every drawing submission and direct access to faculty.',
   },
   {
-    title: 'Free AI-powered study tools',
+    title: 'Free study tools',
     body:
-      'The free Neram AI study app includes a NATA cutoff calculator, a college predictor for 5,000+ colleges, an exam centre locator, and a question bank. No other major NATA institute offers a dedicated study app at this depth.',
+      'The free Neram app at app.neramclasses.com includes a NATA cutoff calculator, a B.Arch college predictor, an exam centre finder and a question bank preview. Anyone can use it before deciding on coaching.',
   },
   {
     title: '5-language coaching',
@@ -174,22 +174,22 @@ export default function NataCoachingComparisonPage({ params: { locale } }: { par
     {
       question: 'Which is the best NATA online coaching in India for 2026?',
       answer:
-        'There is no single answer that fits every student. Neram Classes, BRDS, and SILICA all have published track records. Neram differentiates on transparent fees, max 25-student batches, a free AI study app, and 5-language coaching. BRDS leads on per-year selection counts. SILICA leads on multi-exam coverage. Decide based on which of these factors matters most to you.',
+        'There is no single answer that fits every student. Neram Classes, BRDS, and SILICA all have published track records. Neram differentiates on published fees, small batches, a free study app and 5-language coaching. BRDS leads on per-year selection counts. SILICA leads on multi-exam coverage. Decide based on which of these factors matters most to you.',
     },
     {
       question: 'How do NATA online coaching fees compare?',
       answer:
-        'Neram Classes publishes fees from Rs. 15,000 (3-month crash) to Rs. 30,000 (2-year program) directly on the website. BRDS and SILICA do not publicly publish their NATA online coaching fees as of the last public check; students must submit a form or call to get a quote.',
+        'Neram Classes publishes fees from Rs. 15,000 (3-month crash) to Rs. 35,000 (2-year program, or Rs. 30,000 if paid at once) directly on the website. BRDS and SILICA do not publicly publish their NATA online coaching fees as of the last public check; students must submit a form or call to get a quote.',
     },
     {
       question: 'Which institute has the smallest batch size?',
       answer:
-        'Neram Classes caps batches at 25 students. BRDS and SILICA do not publicly state batch size limits, so verify this directly with each institute before enrolling.',
+        'Neram Classes keeps batches small. BRDS and SILICA do not publicly state batch size limits, so ask each institute directly before enrolling.',
     },
     {
       question: 'Which institute offers free study tools?',
       answer:
-        'Neram Classes is the only major NATA institute with a free AI-powered study app (aiArchitek) covering cutoff calculator, college predictor for 5,000+ colleges, exam centre locator, and a question bank. BRDS and SILICA do not publicly offer a comparable free app.',
+        'Neram Classes runs a free app at app.neramclasses.com with a cutoff calculator, a B.Arch college predictor, an exam centre finder and a question bank preview. BRDS and SILICA do not list a comparable free app on their public websites.',
     },
     {
       question: 'Can I get NATA online coaching in Tamil or Hindi?',
@@ -197,12 +197,12 @@ export default function NataCoachingComparisonPage({ params: { locale } }: { par
         'Neram Classes offers NATA coaching in 5 languages: English, Tamil, Hindi, Kannada, and Malayalam. BRDS and SILICA primarily teach in English based on their public websites.',
     },
     {
-      question: 'How does success rate compare across institutes?',
+      question: 'How do published results compare across institutes?',
       answer:
-        'Neram publishes a 99.9% success rate (students clearing NATA cutoff) and 10,000+ total students trained since 2009. BRDS publishes 895 NATA 2025 selections (with year-over-year trend on their site). SILICA publishes 734 NATA 2025 selections and 200+ students scoring above 100. Success metrics are measured differently, so compare like-for-like before relying on any single number.',
+        'Neram publishes AIR 1 in JEE B.Arch 2024 and 1,000+ students taught since 2009. BRDS publishes 895 NATA 2025 selections (with year-over-year trend on their site). SILICA publishes 734 NATA 2025 selections and 200+ students scoring above 100. Success metrics are measured differently, so compare like-for-like before relying on any single number.',
     },
     {
-      question: 'Should I pick the largest institute or a smaller, more focused one?',
+      question: 'Should I pick a big multi-centre institute or a smaller, more focused one?',
       answer:
         'Larger institutes (BRDS, SILICA) have more physical centres and brand depth. Smaller-batch, hybrid institutes (Neram Classes) offer more personalised attention and faster decision support. Match the choice to your learning style: if you need close mentoring and drawing critique, smaller batches matter more.',
     },
@@ -252,8 +252,8 @@ export default function NataCoachingComparisonPage({ params: { locale } }: { par
               Neram vs BRDS vs SILICA: NATA online coaching compared
             </Typography>
             <Typography variant="h5" sx={{ opacity: 0.92, lineHeight: 1.6, maxWidth: 820 }}>
-              An honest, factual side-by-side comparison of the three most-searched NATA online coaching
-              institutes in India. Based on each institute&rsquo;s own public claims.
+              A factual side-by-side comparison of three well-known NATA online coaching institutes in India.
+              Based on each institute&rsquo;s own public claims.
             </Typography>
           </Container>
         </Box>

@@ -5,7 +5,7 @@ import { StateCoachingPage } from '@/components/coaching-location/StateCoachingP
 import { STATES, citiesInState, getState } from '@/data/geo';
 import { EXAMS, type ExamKey } from '@/lib/seo/exam-config';
 import { loadGeoDatasets } from '@/lib/seo/location-data';
-import { cityFactsFor, stateFactsFor, stateMetadata } from '@/lib/seo/location-pages';
+import { cityFactsFor, isMergedCity, stateFactsFor, stateMetadata } from '@/lib/seo/location-pages';
 import { parseCoachingStateSegment, stateCoachingSegment } from '@/lib/seo/state-coaching-slug';
 
 /**
@@ -51,7 +51,7 @@ export default async function StateCoachingRoute({ params }: PageProps) {
   const ds = await loadGeoDatasets();
   const { facts } = stateFactsFor(r.exam, r.state, ds);
   const exam = EXAMS[r.exam];
-  const cities = citiesInState(r.state.slug).map((c) => {
+  const cities = citiesInState(r.state.slug).filter((c) => !isMergedCity(c.slug)).map((c) => {
     const place = { kind: 'india' as const, ...c };
     const { gate } = cityFactsFor(r.exam, place, ds);
     return { label: c.name, href: exam.cityPath(c.slug), hint: c.district && c.district !== c.name ? `${c.district} district` : undefined, indexed: gate.index };

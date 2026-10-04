@@ -74,7 +74,7 @@ const STATIC_INDEX: SearchEntry[] = [
   {
     path: '/about',
     title: 'About Neram Classes',
-    description: 'Learn about our mission, faculty, and 99.9% success rate in NATA coaching.',
+    description: 'Our story, founder and team, and how Neram has coached NATA students since 2009.',
     keywords: ['about', 'mission', 'faculty', 'team', 'history'],
     category: 'page',
   },
@@ -216,7 +216,7 @@ const STATIC_INDEX: SearchEntry[] = [
   {
     path: '/nata-online-coaching',
     title: 'NATA Online Coaching',
-    description: 'NATA online coaching with live classes by NIT/IIT alumni faculty, 99.9% success rate since 2009.',
+    description: 'Live online NATA coaching since 2009, with drawing feedback and mock tests.',
     keywords: ['nata online coaching', 'nata online classes', 'nata coaching online', 'online nata preparation', 'nata online coaching india', 'nata online coaching fees', 'nata coaching online with mock test', 'best nata online coaching'],
     category: 'coaching',
   },
@@ -361,9 +361,9 @@ const STATIC_INDEX: SearchEntry[] = [
     category: 'coaching',
   },
   {
-    path: '/coaching/nata-coaching-chennai/tambaram',
-    title: 'NATA Coaching: Tambaram, Chennai',
-    description: 'Neram Classes Tambaram branch. Offline NATA coaching near Tambaram station.',
+    path: '/coaching/nata-coaching/nata-coaching-centers-in-tambaram',
+    title: 'NATA Coaching in Tambaram',
+    description: 'Neram Classes Tambaram classroom at Thiruneermalai, plus live online classes.',
     keywords: ['tambaram', 'chennai', 'offline', 'branch'],
     category: 'coaching',
   },
@@ -581,6 +581,13 @@ const STATIC_INDEX: SearchEntry[] = [
     title: 'Exam Centers Finder',
     description: 'Find NATA exam centers near you across 80+ cities in India.',
     keywords: ['exam centers', 'find', 'near me', 'location'],
+    category: 'tool',
+  },
+  {
+    path: '/aiarchitek',
+    title: 'aiArchitek: AI-Powered NATA Preparation',
+    description: 'Free NATA tools, college prediction, question practice and AI-assisted learning from Neram Classes.',
+    keywords: ['aiarchitek', 'ai architek', 'ai nata', 'nata app', 'ai tutor', 'nata tools'],
     category: 'tool',
   },
   {

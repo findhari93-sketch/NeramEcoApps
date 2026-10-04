@@ -36,6 +36,7 @@ import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import CastForEducationOutlinedIcon from '@mui/icons-material/CastForEducationOutlined';
+import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import { isFeatureEnabled } from '@/lib/feature-flags';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { QB_EXAM_TYPE_LABELS, qbSectionLabel } from '@neram/database';
@@ -111,6 +112,9 @@ export default function PaperDetailPage() {
   const [redoSectionsOpen, setRedoSectionsOpen] = useState(false);
   const [actionsMenuAnchor, setActionsMenuAnchor] = useState<HTMLElement | null>(null);
   const [deactivateConfirmOpen, setDeactivateConfirmOpen] = useState(false);
+  const [copyingFrom2A, setCopyingFrom2A] = useState(false);
+  /** After a move to Paper 2B, the snackbar offers to open that paper. */
+  const [openPaperHref, setOpenPaperHref] = useState<string | null>(null);
   /**
    * Focus mode: the workspace goes edge to edge over the sidebar and top bar.
    *
@@ -272,6 +276,75 @@ export default function PaperDetailPage() {
     } catch (err) {
       console.error('Failed to change sections:', err);
       setMessage('Could not change the section');
+    }
+  };
+
+  /**
+   * JEE Paper 2B: bring in the Maths and Aptitude its Paper 2A sitting shares.
+   * Safe to press twice; the server skips any section already here.
+   */
+  const handleCopyFrom2A = async () => {
+    setCopyingFrom2A(true);
+    setMessage('');
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(`/api/question-bank/papers/${paperId}/copy-from-2a`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMessage(`Error: ${json.error || 'Could not copy from JEE Paper 2'}`);
+        return;
+      }
+      const copied = json.data?.copied ?? 0;
+      setMessage(
+        copied > 0
+          ? `Copied ${copied} Maths and Aptitude questions from JEE Paper 2.`
+          : 'Maths and Aptitude are already on this paper.',
+      );
+      await fetchData(true);
+    } catch (err) {
+      console.error('Failed to copy from Paper 2A:', err);
+      setMessage('Error: Could not copy from JEE Paper 2');
+    } finally {
+      setCopyingFrom2A(false);
+    }
+  };
+
+  /**
+   * Planning questions uploaded into this B.Arch paper go to the B.Planning
+   * paper of the same sitting, which is created and filled if needed.
+   */
+  const handleMoveToPaper2B = async (questionIds: string[]) => {
+    if (questionIds.length === 0) return;
+    setMessage('');
+    setOpenPaperHref(null);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch(`/api/question-bank/papers/${paperId}/move-to-2b`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question_ids: questionIds }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMessage(`Error: ${json.error || 'Could not move the questions'}`);
+        return;
+      }
+      const { moved = 0, copied = 0, paper_id: targetId } = json.data || {};
+      setMessage(
+        `Moved ${moved} question${moved === 1 ? '' : 's'} to JEE Paper 2B.${
+          copied > 0 ? ` ${copied} Maths and Aptitude questions copied there too.` : ''
+        }`,
+      );
+      if (targetId) setOpenPaperHref(`/teacher/question-bank/papers/${targetId}`);
+      await fetchData(true);
+    } catch (err) {
+      console.error('Failed to move to Paper 2B:', err);
+      setMessage('Error: Could not move the questions');
     }
   };
 
@@ -499,6 +572,15 @@ export default function PaperDetailPage() {
   // read twice. This one stays because nothing below states it, see the chip.
   const unsectionedCount = questions.filter((q) => !q.section).length;
 
+  // A B.Planning paper with no Maths or Aptitude yet: offer the copy from 2A.
+  const isPaper2B = paper.exam_type === 'JEE_PAPER_2B';
+  const missingShared2B =
+    isPaper2B &&
+    !questions.some((q) => q.section === 'math_mcq' || q.section === 'math_numerical' || q.section === 'aptitude');
+  const sittingLabel = `${paper.year}${paper.session ? ` ${paper.session}` : ''}${
+    paper.shift ? ` (${paper.shift === 'forenoon' ? 'FN' : 'AN'})` : ''
+  }`;
+
   return (
     <Box sx={{ px: { xs: 2, md: 3 }, pt: { xs: 1.5, md: 2 } }}>
       {/*
@@ -707,6 +789,21 @@ export default function PaperDetailPage() {
             />
           </MenuItem>
           <Divider />
+          {isPaper2B && (
+            <MenuItem
+              onClick={() => { setActionsMenuAnchor(null); handleCopyFrom2A(); }}
+              disabled={copyingFrom2A}
+              sx={{ minHeight: 44 }}
+            >
+              <ListItemIcon><ContentCopyOutlinedIcon fontSize="small" color="primary" /></ListItemIcon>
+              <ListItemText
+                primary={copyingFrom2A ? 'Copying...' : 'Copy Maths and Aptitude from JEE Paper 2'}
+                secondary="Skips any section this paper already has"
+                secondaryTypographyProps={{ variant: 'caption' }}
+              />
+            </MenuItem>
+          )}
+          {isPaper2B && <Divider />}
           {/* The round trip, first because it is the superset of the three
               narrow uploads below: answer key, video links and Hindi are each
               one column of the same document. */}
@@ -815,6 +912,28 @@ export default function PaperDetailPage() {
         </Menu>
       </Box>
 
+      {missingShared2B && (
+        <Alert
+          severity="info"
+          sx={{ mt: 1, flexShrink: 0, alignItems: 'center' }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              onClick={handleCopyFrom2A}
+              disabled={copyingFrom2A}
+              startIcon={<ContentCopyOutlinedIcon fontSize="small" />}
+              sx={{ minHeight: 44, textTransform: 'none', whiteSpace: 'nowrap' }}
+            >
+              {copyingFrom2A ? 'Copying...' : 'Copy them'}
+            </Button>
+          }
+        >
+          Maths and Aptitude are the same questions as JEE Paper 2 {sittingLabel}. Copy them here so
+          this is a full B.Planning paper. Later edits on JEE Paper 2 will not carry over.
+        </Alert>
+      )}
+
       {/* Tabs. Bulk Images used to be its own tab with its own scrolling list
           of every question; it is an Edit/Images mode switch inside Questions
           now (see PaperQuestionList), so it no longer needs a tab of its own.
@@ -867,6 +986,7 @@ export default function PaperDetailPage() {
           openQuestionId={linkedQuestionId}
           canConnectYouTube={can('system.settings')}
           onActiveChange={setActiveQuestionId}
+          onMoveToPaper2B={paper.exam_type === 'JEE_PAPER_2' ? handleMoveToPaper2B : undefined}
         />
         </Box>
       )}
@@ -1001,12 +1121,19 @@ export default function PaperDetailPage() {
           cost the panes 64px for the rest of the session. */}
       <Snackbar
         open={!!message}
-        autoHideDuration={4000}
-        onClose={() => setMessage('')}
+        autoHideDuration={openPaperHref ? 10000 : 4000}
+        onClose={() => { setMessage(''); setOpenPaperHref(null); }}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
         <Alert
-          onClose={() => setMessage('')}
+          onClose={() => { setMessage(''); setOpenPaperHref(null); }}
+          action={
+            openPaperHref ? (
+              <Button color="inherit" size="small" onClick={() => router.push(openPaperHref)} sx={{ minHeight: 44 }}>
+                Open
+              </Button>
+            ) : undefined
+          }
           severity={message.startsWith('Error') ? 'error' : 'success'}
           variant="filled"
           sx={{ width: '100%' }}

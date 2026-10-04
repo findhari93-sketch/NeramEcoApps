@@ -14,6 +14,7 @@ import {
 import { useTheme, alpha } from '@neram/ui';
 import SchoolIcon from '@mui/icons-material/School';
 import EngineeringIcon from '@mui/icons-material/Engineering';
+import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -32,6 +33,7 @@ interface ExamSidebarProps {
 const EXAM_ICONS: Record<string, React.ReactNode> = {
   NATA: <SchoolIcon fontSize="small" />,
   JEE_PAPER_2: <EngineeringIcon fontSize="small" />,
+  JEE_PAPER_2B: <MapOutlinedIcon fontSize="small" />,
 };
 
 function capitalizeSession(session: string): string {

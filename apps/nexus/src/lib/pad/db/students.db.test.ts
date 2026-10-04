@@ -163,10 +163,11 @@ describe('SUBMIT', () => {
 describe('joining', () => {
   it('binds an enrolled student to the live session by room code', async () => {
     const s = await liveSession(1);
-    expect(await t.joinByCode(s.students[0], s.roomCode)).toEqual({ ok: true, session_id: s.sessionId });
+    expect(await t.joinByCode(s.students[0], s.roomCode)).toEqual({ ok: true, session_id: s.sessionId, first_touch: true });
     expect(await t.joinByCode(s.students[0], `${s.roomCode.slice(0, 3)} ${s.roomCode.slice(3)}`)).toEqual({
       ok: true,
       session_id: s.sessionId,
+      first_touch: false,
     });
   });
 
@@ -204,14 +205,18 @@ describe('joining', () => {
     const fresh = await t.user('student');
     await t.enroll(fresh, s.classroomId);
     expect(await t.joinByCode(fresh, s.roomCode, 'ip-hash-1')).toEqual({ ok: false, code: 'RATE_LIMITED' });
-    expect(await t.joinByCode(fresh, s.roomCode, 'ip-hash-2')).toEqual({ ok: true, session_id: s.sessionId });
+    expect(await t.joinByCode(fresh, s.roomCode, 'ip-hash-2')).toEqual({ ok: true, session_id: s.sessionId, first_touch: true });
   });
 
   it('finds the live session for a Teams meeting, or tells the student to wait', async () => {
     const fixture = await t.classWithStudents(1);
     expect(await t.joinByMeeting(fixture.students[0], 'meeting-join')).toEqual({ ok: true, session_id: null });
     const started = await t.start(fixture.teacherId, fixture.classroomId, { meetingId: 'meeting-join' });
-    expect(await t.joinByMeeting(fixture.students[0], 'meeting-join')).toEqual({ ok: true, session_id: started.session_id });
+    expect(await t.joinByMeeting(fixture.students[0], 'meeting-join')).toEqual({ ok: true, session_id: started.session_id, first_touch: true });
+    // Back again a moment later, or after the pad was closed: not the first time, so no hint.
+    expect(await t.joinByMeeting(fixture.students[0], 'meeting-join')).toEqual({ ok: true, session_id: started.session_id, first_touch: false });
+    await t.rows(`update pad_app_presence set last_seen_at = now() - interval '5 minutes', joined_at = now() - interval '6 minutes' where student_id = $1`, [fixture.students[0]]);
+    expect(await t.joinByMeeting(fixture.students[0], 'meeting-join')).toEqual({ ok: true, session_id: started.session_id, first_touch: false });
     const outsider = await t.user('student');
     expect(await t.joinByMeeting(outsider, 'meeting-join')).toEqual({ ok: false, code: 'NOT_ENROLLED' });
   });

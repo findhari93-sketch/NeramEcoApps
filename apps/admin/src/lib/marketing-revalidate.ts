@@ -19,6 +19,8 @@ export const MARKETING_CACHE_TAGS = {
   reviewStats: 'public-review-stats',
   learnerOutcomes: 'learner-outcomes',
   askSeniors: 'ask-seniors',
+  /** Offline centres: the classroom city pages and their photos (Admin > Centres). */
+  centers: 'centers',
 } as const;
 
 export type MarketingCacheTag = (typeof MARKETING_CACHE_TAGS)[keyof typeof MARKETING_CACHE_TAGS];

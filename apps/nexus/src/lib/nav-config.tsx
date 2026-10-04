@@ -55,6 +55,7 @@ import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
 import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import ArchitectureOutlinedIcon from '@mui/icons-material/ArchitectureOutlined';
+import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
 import { QB_EXAM_LABELS, QB_EXAM_ORDER, qbExamPath, qbHomePath, type QBSurface } from '@/lib/qb-exam-routes';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
@@ -103,6 +104,7 @@ export const QB_NAV_GROUP = 'Question Bank';
 
 const QB_EXAM_ICONS = {
   JEE_PAPER_2: <LibraryBooksOutlinedIcon />,
+  JEE_PAPER_2B: <MapOutlinedIcon />,
   NATA: <ArchitectureOutlinedIcon />,
 } as const;
 

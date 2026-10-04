@@ -76,6 +76,8 @@ export interface PaperQuestionDetailProps {
   /** Students' open reports on this question. Shown above the form in every mode. */
   reportGroups?: QBReportGroup[];
   onResolveReport?: (group: QBReportGroup, outcome: QBReportOutcome, note: string) => Promise<boolean>;
+  /** Whether the open form holds unsaved edits, for the workspace's leave guard. */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 /**
@@ -88,7 +90,7 @@ export interface PaperQuestionDetailProps {
 export default function PaperQuestionDetail({
   question, position, paper, sources, tagIds, choiceGroupSiblings, onUnlinkChoiceGroup,
   getToken, onSaved, onClose, onPrevious, onNext, onChangeSection, onSetActive,
-  mode = 'edit', imagesPane, reportGroups, onResolveReport,
+  mode = 'edit', imagesPane, reportGroups, onResolveReport, onDirtyChange,
 }: PaperQuestionDetailProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -236,6 +238,7 @@ export default function PaperQuestionDetail({
             onSaved={onSaved}
             onCancel={onClose}
             onChangeSection={onChangeSection}
+            onDirtyChange={onDirtyChange}
           />
         )}
       </Box>

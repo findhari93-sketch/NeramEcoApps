@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeGate, type GateCheckpoint } from './video-gate';
+import { computeGate, QUIZ_WATCH_RATIO, type GateCheckpoint } from './video-gate';
 
 /**
  * The rules a student's playback is bound by, tested without a DOM.
@@ -139,49 +139,60 @@ describe('computeGate: a banked position can never raise the ceiling', () => {
   });
 });
 
-describe('computeGate: a played ceiling stops a skip reaching the quiz (NXS-0130)', () => {
+describe('computeGate: the owed section is free, its quiz waits on watching (NXS-0130)', () => {
   /**
    * A student watched 11 seconds, tapped the bar, and was dropped exactly on
-   * checkpoint 1, because the owed section used to be scrubbable end to end and
-   * a press past the lock landed on the boundary. The heartbeat stores positions
-   * monotonically, so every later visit resumed on the checkpoint and the quiz
-   * opened before a frame played. The played ceiling is what stops that.
+   * checkpoint 1, and the quiz opened over a black frame. The first fix held
+   * forward seeks at the played point, which left a first-time viewer with a
+   * bar that would not move at all. Now the section is theirs to drag through,
+   * and what a drag cannot buy is the quiz: it opens once most of the section
+   * has really been played.
    */
-  function played(checkpoints: GateCheckpoint[], playedUntilSeconds: number | undefined) {
+  function withPlayed(checkpoints: GateCheckpoint[], playedRanges: Array<[number, number]> | undefined) {
     return computeGate({
       checkpoints,
       duration: DURATION,
       furthestSeconds: 0,
-      playedUntilSeconds,
+      playedRanges,
       mode: 'gated',
     });
   }
 
-  it('lets a forward seek go only as far as the student has played', () => {
-    const gate = played(cps([false, false, false]), 11);
-    expect(gate.seekCeiling).toBe(11);
-    // The checkpoint itself has not moved: playback still pauses there.
+  it('lets a student drag anywhere up to the checkpoint they owe', () => {
+    const gate = withPlayed(cps([false, false, false]), [[0, 11]]);
+    expect(gate.seekCeiling).toBe(900);
     expect(gate.unlockedUntil).toBe(900);
   });
 
-  it('never holds a student behind the start of the section they owe', () => {
-    const gate = played(cps([true, false, false]), 100);
+  it('holds the quiz until most of the section has been played', () => {
+    const gate = withPlayed(cps([false, false, false]), [[0, 11]]);
+    expect(gate.quizReady).toBe(false);
+    expect(gate.owedWatch).toMatchObject({ sectionStart: 0, sectionEnd: 900, watchedSeconds: 11 });
+    expect(gate.owedWatch!.requiredSeconds).toBeCloseTo(900 * QUIZ_WATCH_RATIO);
+    expect(gate.owedWatch!.nextUnwatchedAt).toBe(11);
+  });
+
+  it('opens the quiz once enough of the section is covered, in pieces or not', () => {
+    expect(withPlayed(cps([false, false, false]), [[0, 900]]).quizReady).toBe(true);
+    // Two stretches with a skipped middle, still over 80%.
+    expect(withPlayed(cps([false, false, false]), [[0, 400], [500, 900]]).quizReady).toBe(true);
+    // Watching only the last bit after a drag is not enough.
+    expect(withPlayed(cps([false, false, false]), [[700, 900]]).quizReady).toBe(false);
+  });
+
+  it('counts only the owed section, not passed ones before it', () => {
+    // Section 1 fully watched, section 2 barely: the quiz for 2 waits.
+    const gate = withPlayed(cps([true, false, false]), [[0, 1000]]);
+    expect(gate.owedWatch).toMatchObject({ sectionStart: 900, sectionEnd: 1800, watchedSeconds: 100 });
+    expect(gate.quizReady).toBe(false);
+    expect(gate.owedWatch!.nextUnwatchedAt).toBe(1000);
+  });
+
+  it('keeps the old quiz-on-arrival for a caller that does not track played ranges', () => {
+    const gate = withPlayed(cps([false, false, false]), undefined);
+    expect(gate.quizReady).toBe(true);
+    expect(gate.owedWatch).toBeNull();
     expect(gate.seekCeiling).toBe(900);
-    expect(gate.unlockedUntil).toBe(1800);
-  });
-
-  it('grows with what has been played, up to the checkpoint', () => {
-    expect(played(cps([true, false, false]), 1200).seekCeiling).toBe(1200);
-    expect(played(cps([false, false, false]), 2600).seekCeiling).toBe(900);
-  });
-
-  it('keeps the old ceiling for a caller that does not pass a played point', () => {
-    expect(played(cps([false, false, false]), undefined).seekCeiling).toBe(900);
-  });
-
-  it('treats a nonsense played point as nothing played', () => {
-    expect(played(cps([true, false, false]), Number.NaN).seekCeiling).toBe(900);
-    expect(played(cps([false, false, false]), -40).seekCeiling).toBe(0);
   });
 
   it('takes the section start from time order, not array order', () => {
@@ -190,25 +201,27 @@ describe('computeGate: a played ceiling stops a skip reaching the quiz (NXS-0130
       { id: 'a', endSeconds: 900, passed: true },
       { id: 'b', endSeconds: 1800, passed: true },
     ];
-    expect(played(scrambled, 50).seekCeiling).toBe(1800);
+    const gate = withPlayed(scrambled, []);
+    expect(gate.owedWatch!.sectionStart).toBe(1800);
   });
 
-  it('lets a student skip a stretch that was never made a checkpoint', () => {
+  it('does not ask anyone to watch a stretch that was never made a checkpoint', () => {
     // A 13 minute pre-class wait with no teaching in it: the generator drops it
     // (or a teacher removes it), so the first checkpoint starts at 13:06.
     const firstStartsLate: GateCheckpoint[] = [
       { id: 'a', startSeconds: 786, endSeconds: 1643, passed: false },
       { id: 'b', startSeconds: 1643, endSeconds: 2443, passed: false },
     ];
-    expect(played(firstStartsLate, 0).seekCeiling).toBe(786);
-    expect(played(firstStartsLate, 900).seekCeiling).toBe(900);
+    const gate = withPlayed(firstStartsLate, [[786, 1643]]);
+    expect(gate.owedWatch!.sectionStart).toBe(786);
+    expect(gate.quizReady).toBe(true);
   });
 
-  it('ignores a start that makes no sense rather than opening the section', () => {
+  it('ignores a start that makes no sense rather than shrinking the section', () => {
     const odd: GateCheckpoint[] = [{ id: 'a', startSeconds: 5000, endSeconds: 900, passed: false }];
-    expect(played(odd, 10).seekCeiling).toBe(10);
+    expect(withPlayed(odd, []).owedWatch!.sectionStart).toBe(0);
     const nan: GateCheckpoint[] = [{ id: 'a', startSeconds: Number.NaN, endSeconds: 900, passed: false }];
-    expect(played(nan, 10).seekCeiling).toBe(10);
+    expect(withPlayed(nan, []).owedWatch!.sectionStart).toBe(0);
   });
 
   it('does not bind a revision watch or a fully passed one', () => {
@@ -216,11 +229,12 @@ describe('computeGate: a played ceiling stops a skip reaching the quiz (NXS-0130
       checkpoints: cps([false, false, false]),
       duration: DURATION,
       furthestSeconds: 0,
-      playedUntilSeconds: 10,
+      playedRanges: [[0, 10]],
       mode: 'revision',
     });
     expect(revision.seekCeiling).toBe(DURATION);
-    expect(played(cps([true, true, true]), 10).seekCeiling).toBe(DURATION);
+    expect(revision.quizReady).toBe(true);
+    expect(withPlayed(cps([true, true, true]), [[0, 10]]).seekCeiling).toBe(DURATION);
   });
 });
 

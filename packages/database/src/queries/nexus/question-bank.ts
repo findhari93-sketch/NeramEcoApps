@@ -1,12 +1,13 @@
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import { expandQBCategorySlugs } from './qb-tags';
+import { parseMathAnswer, mathAnswersMatch } from './math-answer';
 import {
   searchQBQuestionIds,
   intersectIdFilters,
   orderByIds,
   type QBSearchMeta,
 } from './qb-search';
-import { QB_SECTION_ORDER } from '../../types';
+import { QB_SECTION_ORDER, qbExamRelevance } from '../../types';
 import { fetchAllRows as fetchAllRowsPaged } from '../../utils/paged-rows';
 import type {
   QBQuestionSection,
@@ -56,6 +57,7 @@ import type {
 const QB_EXAM_LABELS: Record<string, string> = {
   NATA: 'NATA',
   JEE_PAPER_2: 'JEE Paper 2',
+  JEE_PAPER_2B: 'JEE Paper 2B (B.Planning)',
 };
 
 /**
@@ -1067,13 +1069,10 @@ export function checkQBAnswer(
     case 'MCQ':
       return studentAnswer.trim().toLowerCase() === correctAnswer.trim().toLowerCase();
 
-    case 'NUMERICAL': {
-      const studentVal = parseFloat(studentAnswer);
-      const correctVal = parseFloat(correctAnswer);
-      if (isNaN(studentVal) || isNaN(correctVal)) return false;
-      const tol = tolerance ?? 0;
-      return Math.abs(studentVal - correctVal) <= tol;
-    }
+    case 'NUMERICAL':
+      // The same rule as a graded test. parseFloat used to read '1/2' as 1 and
+      // '2:3' as 2, so practice and tests disagreed about the same answer.
+      return gradeQBAnswerStrict('NUMERICAL', studentAnswer, correctAnswer, tolerance) === true;
 
     case 'DRAWING_PROMPT':
     case 'IMAGE_BASED':
@@ -1185,33 +1184,26 @@ export function gradeQBAnswerStrict(
   const student = studentAnswer.trim();
   const correct = correctAnswer.trim();
 
-  // Numeric comparison ONLY when both sides are numbers end to end.
+  // Numeric comparison ONLY when both sides read as a number or a formula end
+  // to end (see math-answer.ts), so '0.5' matches '1/2' and '3.46' matches '2√3'.
   //
   // parseFloat stops at the first character it cannot use, so it reads '2:3' as 2
   // and '5cm' as 5. The bank genuinely contains NUMERICAL questions whose answer
   // is a ratio ('2:3' is a real row), and a leading-prefix parse would mark a
   // student who answered '2' correct for '2:3' while an exact '2:3' also passed,
-  // so the error would never show up in a spot check.
-  //
-  // When either side is not fully numeric, fall back to comparing the text. That
-  // is stricter than the old parseFloat path and never looser.
-  if (isFullyNumeric(student) && isFullyNumeric(correct)) {
-    const tol = Math.abs(Number(tolerance) || 0);
+  // so the error would never show up in a spot check. The formula reader refuses
+  // ':' and units outright, so those still land in the text comparison below.
+  const studentValue = parseMathAnswer(student);
+  const correctValue = parseMathAnswer(correct);
+  if (studentValue && correctValue) {
     // '3.0' matches '3', which the strict === this replaces got wrong. tolerance
     // null means exact numeric equality, not exact string equality.
-    return Math.abs(Number(student) - Number(correct)) <= tol;
+    return mathAnswersMatch(studentValue, correctValue, tolerance);
   }
 
   // Whitespace collapsed and case ignored, so '2 : 3' matches '2:3'. Tolerance is
   // meaningless here and is deliberately not applied.
   return normaliseFreeText(student) === normaliseFreeText(correct);
-}
-
-/** True when the WHOLE string is a finite number, not merely starts with one. */
-function isFullyNumeric(value: string): boolean {
-  if (value === '') return false;
-  const n = Number(value);
-  return Number.isFinite(n);
 }
 
 function normaliseFreeText(value: string): string {
@@ -1825,7 +1817,7 @@ export async function bulkCreateDraftQuestions(
       explanation_detailed: q.explanation_detailed || null,
       solution_video_url: q.solution_video_url || null,
       difficulty: 'MEDIUM' as QBDifficulty,
-      exam_relevance: (examType === 'JEE_PAPER_2' ? 'JEE' : 'NATA') as QBExamRelevance,
+      exam_relevance: qbExamRelevance(examType),
       categories: q.categories,
       original_paper_id: paperId,
       origin: originForParsedQuestion(q.question_format),

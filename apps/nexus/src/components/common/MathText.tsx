@@ -142,7 +142,7 @@ function parseSegments(input: string): Segment[] {
   }));
 }
 
-function renderMath(latex: string, displayMode: boolean): string {
+export function renderMath(latex: string, displayMode: boolean): string {
   try {
     return katex.renderToString(latex, {
       throwOnError: false,

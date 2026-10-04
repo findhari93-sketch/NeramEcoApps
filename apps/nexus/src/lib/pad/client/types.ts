@@ -149,6 +149,8 @@ export interface WaitingStudent {
 export interface PersonRef {
   student_id: string;
   name: string | null;
+  /** Where we know they are here from: the pad, the Teams meeting, or both. Joined list only. */
+  source?: 'pad' | 'meeting' | 'both';
 }
 
 export interface HistoryEntry {
@@ -180,6 +182,8 @@ export interface TeacherSnapshot {
     teacher_topic: string;
     classroom_id: string;
     classroom_name: string | null;
+    /** The teacher's name for the class, else the timetable class, the Teams meeting's title, the classroom. */
+    title?: string | null;
     scheduled_class_id: string | null;
     batch_id: string | null;
     meeting_id: string | null;
@@ -190,8 +194,12 @@ export interface TeacherSnapshot {
     round_no?: number | null;
     results_published_at?: string | null;
   };
-  readiness: { enrolled: number; joined?: number; connected: number; in_meeting: number };
-  /** Who opened the pad this round, and who on the class list has not. Teacher only. */
+  /**
+   * joined: here this round (in the Teams meeting or opened the pad; it never drops).
+   * opened: of those, who opened the pad. connected: pad open now. in_meeting: in the meeting now.
+   */
+  readiness: { enrolled: number; joined?: number; opened?: number; connected: number; in_meeting: number };
+  /** Who is here this round, and who on the class list is not. Teacher only. */
   people?: { joined: PersonRef[]; not_joined: PersonRef[] };
   /** Who joined and has not answered the newest question (open or closed), with any reason. Teacher only. */
   waiting?: WaitingStudent[];

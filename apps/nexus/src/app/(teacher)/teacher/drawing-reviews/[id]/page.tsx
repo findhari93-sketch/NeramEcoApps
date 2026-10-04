@@ -394,7 +394,11 @@ export default function DrawingReviewDetailPage() {
           action: reviewAction,
         }),
       });
-      if (!res.ok) throw new Error('Failed to save review');
+      if (!res.ok) {
+        // Say why. A bare "Failed to save review" left the teacher nothing to act on.
+        const data = await res.json().catch(() => ({}) as any);
+        throw new Error(data?.error ? `Review not sent: ${data.error}` : `Review not sent (error ${res.status}). Try again.`);
+      }
 
       const result = await res.json().catch(() => ({}) as any);
 
@@ -1054,6 +1058,7 @@ export default function DrawingReviewDetailPage() {
               <TeacherSketchActions
                 key={submission.id}
                 compact
+                hideComment
                 sketchId={submission.id}
                 reaction={(['heart', 'fire', 'wow'] as const).includes(workspaceData.reaction as never) ? (workspaceData.reaction as 'heart' | 'fire' | 'wow') : null}
                 featured={featured}

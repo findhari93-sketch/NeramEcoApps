@@ -204,3 +204,49 @@ const readLearnerOutcomes = unstable_cache(
   ['marketing-learner-outcomes-v1'],
   { revalidate: REVIEWS_REVALIDATE, tags: [CACHE_TAGS.learnerOutcomes] },
 );
+
+/**
+ * Published, moderated reviews for a city page. Read once (cached daily) and
+ * filtered in memory: there are only a few hundred rows at most. When the city
+ * has fewer than two, the page shows the state's reviews and says so.
+ */
+const readLocalReviews = unstable_cache(
+  async (): Promise<RawReview[]> => {
+    const { data, error } = await (client().from('testimonials' as never) as any)
+      .select('id, student_name, consent_display_name, student_photo, content, rating, exam_type, year, city, state, college_admitted, course_name, is_featured, created_at')
+      .eq('publication_status', 'published')
+      .not('moderated_at', 'is', null)
+      .order('is_featured', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(500);
+    if (error) throw error;
+    return ((data as Array<RawReview & { consent_display_name?: string | null }>) || []).map((r) => ({
+      ...r,
+      display_name: r.consent_display_name ?? null,
+    }));
+  },
+  ['marketing-local-reviews-v1'],
+  { revalidate: REVIEWS_REVALIDATE, tags: [CACHE_TAGS.reviews] },
+);
+
+const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
+
+export async function loadLocalReviews(
+  cityNames: string[],
+  stateName: string | null,
+  locale: string,
+  limit = 4,
+): Promise<{ scope: 'city' | 'state'; reviews: PublicReview[] }> {
+  try {
+    const rows = await readLocalReviews();
+    const names = new Set(cityNames.map(norm).filter(Boolean));
+    const city = rows.filter((r) => names.has(norm(r.city)));
+    if (city.length >= 2 || !stateName) {
+      return { scope: 'city', reviews: city.slice(0, limit).map((r) => toPublicReview(r, locale)) };
+    }
+    const state = rows.filter((r) => norm((r as RawReview & { state?: string | null }).state) === norm(stateName));
+    return { scope: 'state', reviews: state.slice(0, limit).map((r) => toPublicReview(r, locale)) };
+  } catch {
+    return { scope: 'city', reviews: [] };
+  }
+}

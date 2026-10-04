@@ -151,6 +151,8 @@ test.describe('Answer Pad UI: a class in the Teams side panel', () => {
       for (const student of students) {
         await expect(student.getByText("You're connected", { exact: true })).toBeVisible({ timeout: 120_000 });
       }
+      // The header counts who is here; the ready card says out of how many on the class list.
+      await expect(console_.getByRole('button', { name: '3 here. Class details', exact: true })).toBeVisible({ timeout: 30_000 });
       const readiness = console_.getByText(/^3 of \d+$/);
       await expect(readiness).toBeVisible({ timeout: 30_000 });
       enrolled = Number((await readiness.textContent())?.split(' of ')[1]);
@@ -162,7 +164,7 @@ test.describe('Answer Pad UI: a class in the Teams side panel', () => {
 
     await test.step("ASK opens the paper's Q.38 everywhere, one tap gives an answer, the console counts who joined", async () => {
       // The paper on the shared screen says Q.38, so every pad must say it too.
-      await console_.getByLabel('Question no.', { exact: true }).fill('38');
+      await console_.getByLabel('Question number, as printed on the paper', { exact: true }).fill('38');
       await console_.getByRole('button', { name: 'Ask Q.38', exact: true }).click();
       await expect(console_.getByText('Q.38 open', { exact: true })).toBeVisible({ timeout: 20_000 });
 
@@ -253,8 +255,10 @@ test.describe('Answer Pad UI: a class in the Teams side panel', () => {
     });
 
     await test.step('ending the round with a question still open asks first, then shows the round results', async () => {
+      // End round is in the menu now, never beside it, and still asks first.
+      await console_.getByRole('button', { name: 'Console menu', exact: true }).click();
+      await console_.getByRole('menuitem', { name: /^End round/ }).click();
       await console_.getByRole('button', { name: 'End round', exact: true }).click();
-      await console_.getByRole('button', { name: 'End round', exact: true }).last().click();
       await expect(
         console_.getByText("Q.39 has no answer yet. It won't count until you set it from the report, and scores update then.", { exact: true }),
       ).toBeVisible({ timeout: 20_000 });

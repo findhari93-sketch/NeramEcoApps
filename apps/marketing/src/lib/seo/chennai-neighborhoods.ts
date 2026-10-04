@@ -1,5 +1,5 @@
 import { BASE_URL, ORG_NAME } from '@/lib/seo/constants';
-import { generateLocationCourseSchema } from '@/lib/seo/schemas';
+import { centreSchemaId, generateLocationCourseSchema } from '@/lib/seo/schemas';
 
 export interface ChennaiNeighborhood {
   slug: string;
@@ -49,20 +49,6 @@ export const chennaiNeighborhoods: ChennaiNeighborhood[] = [
     metaTitle: 'Best NATA Coaching in Adyar, Chennai 2026 | Neram Classes',
     metaDescription: 'NATA coaching for Adyar, Chennai students. Near IIT Madras campus. Classroom and live online batches, free NATA study app. Online + offline hybrid classes. Max 25 per batch.',
     metaKeywords: 'NATA coaching Adyar, NATA classes Adyar Chennai, best NATA coaching near Adyar, architecture coaching Adyar, NATA preparation Adyar Chennai',
-  },
-  {
-    slug: 'tambaram',
-    name: 'Tambaram',
-    displayName: 'Tambaram',
-    distanceFromCenter: '22 km from Ashok Nagar center (also sub-center in Tambaram)',
-    transportInfo: 'Tambaram suburban railway station to Mambalam (15 min by train), then 10 min auto to Ashok Nagar. Bus route 170 direct. OR attend at our Tambaram sub-center (Thiruneermalai, Jain Alpine Meadows).',
-    landmarks: ['Tambaram Railway Station', 'Madras Christian College (MCC)', 'Mudichur Lake', 'Chromepet Industrial Area'],
-    nearbySchools: ['St. Thomas Matriculation School', 'Velammal Matriculation School Tambaram', 'Sri Sankara Vidyashramam', 'Jain Public School Tambaram'],
-    description: 'Tambaram, located in South Chennai, is a rapidly developing educational hub. Home to Madras Christian College (one of Asia\'s oldest colleges), Tambaram offers students a blend of colonial and modern architecture to study. The area\'s suburban railway connectivity makes it a convenient base for students from Chengalpattu, Kanchipuram, and South Chennai. Neram has a dedicated sub-center in Tambaram (Thiruneermalai, Jain Alpine Meadows) specifically to serve students in this region.',
-    whyStudentsChoose: 'Tambaram students have two options: attend at our Tambaram sub-center (Thiruneermalai) for convenience, or take the suburban train to Mambalam and walk to our Ashok Nagar main center. Students from Chengalpattu, Mahabalipuram, and East Coast Road also attend at Tambaram. Our online option is popular with Tambaram students during exam season.',
-    metaTitle: 'Best NATA Coaching in Tambaram, Chennai 2026 | Neram Classes',
-    metaDescription: 'NATA coaching in Tambaram, Chennai. Dedicated sub-center at Thiruneermalai + main center at Ashok Nagar. Classroom and live online batches. Online + offline classes. Serving Chengalpattu, Kanchipuram students too.',
-    metaKeywords: 'NATA coaching Tambaram, NATA classes Tambaram Chennai, best NATA coaching near Tambaram, architecture coaching Tambaram, NATA coaching Chengalpattu, NATA coaching East Tambaram',
   },
   {
     slug: 'ashok-nagar',
@@ -118,13 +104,13 @@ export function getNeighborhoodBySlug(slug: string): ChennaiNeighborhood | undef
  * at the Ashok Nagar address: six "businesses" for one centre.
  */
 export function generateChennaiNeighborhoodSchema(neighborhood: ChennaiNeighborhood) {
-  const centre = neighborhood.slug === 'tambaram' ? 'nata-coaching-center-in-tambaram' : 'nata-coaching-center-in-chennai';
+  const chennaiPage = `${BASE_URL}/coaching/nata-coaching/nata-coaching-centers-in-chennai`;
   return generateLocationCourseSchema({
     name: `NATA Coaching for ${neighborhood.name}, Chennai`,
-    description: `NATA coaching for students in ${neighborhood.name}, Chennai: classroom batches at the Neram Classes ${neighborhood.slug === 'tambaram' ? 'Tambaram' : 'Ashok Nagar'} centre and live online classes.`,
+    description: `NATA coaching for students in ${neighborhood.name}, Chennai: classroom batches at the Neram Classes Ashok Nagar centre and live online classes.`,
     url: `${BASE_URL}/coaching/nata-coaching-chennai/${neighborhood.slug}`,
     exam: 'NATA',
     area: { type: 'Place', name: `${neighborhood.name}, Chennai`, containedIn: { type: 'State', name: 'Tamil Nadu' } },
-    classroom: { name: `${ORG_NAME} Chennai`, url: `${BASE_URL}/contact/${centre}` },
+    classroom: { name: `${ORG_NAME} Chennai`, url: `${chennaiPage}#visit`, id: centreSchemaId(chennaiPage, 'chennai') },
   });
 }

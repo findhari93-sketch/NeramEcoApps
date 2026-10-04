@@ -2,19 +2,15 @@
 
 import { Fab } from '@neram/ui';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
+import { buildWhatsAppLink } from '@/lib/whatsapp';
+import { trackWhatsAppClick } from '@/lib/whatsapp-track';
 
-const WHATSAPP_PHONE = '+919176137043';
-const DEFAULT_MESSAGE =
-  "Hello! I'm contacting you from neramclasses.com. I would like to know more about NATA coaching.";
 
-export default function WhatsAppChatBubble() {
+export default function WhatsAppChatBubble({ centreCity, centreSlug }: { centreCity?: string; centreSlug?: string } = {}) {
   const handleClick = () => {
-    const encodedMessage = encodeURIComponent(DEFAULT_MESSAGE);
-    window.open(
-      `https://wa.me/${WHATSAPP_PHONE}?text=${encodedMessage}`,
-      '_blank',
-      'noopener,noreferrer'
-    );
+    const { href, pageCode } = buildWhatsAppLink({ city: centreCity ?? null, citySlug: centreSlug ?? null });
+    trackWhatsAppClick(pageCode, { location_slug: centreSlug ?? null, placement: 'chat_bubble' });
+    window.open(href, '_blank', 'noopener,noreferrer');
   };
 
   return (

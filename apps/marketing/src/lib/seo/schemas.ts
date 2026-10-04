@@ -17,6 +17,7 @@ import {
   ORG_BEST_KNOWN_FOR,
 } from './constants';
 import { getCourseSchemaOffers } from '../fees';
+import type { ClassroomCentre } from './facts';
 
 // ─── Organization Schema ────────────────────────────────────────────────────
 
@@ -229,48 +230,68 @@ export function generateFAQSchema(faqs: Array<{ question: string; answer: string
   };
 }
 
-// ─── LocalBusiness Schema (for city pages) ──────────────────────────────────
+// ─── Centre schema (one per real classroom, on its city page) ───────────────
 
-export function generateLocalBusinessSchema(location: {
-  city: string;
-  cityDisplay: string;
-  state: string;
-  stateDisplay: string;
-  slug: string;
-  phone?: string;
-}) {
+const DAY_NAMES: Record<string, string> = {
+  mon: 'Monday', tue: 'Tuesday', wed: 'Wednesday', thu: 'Thursday', fri: 'Friday', sat: 'Saturday', sun: 'Sunday',
+  monday: 'Monday', tuesday: 'Tuesday', wednesday: 'Wednesday', thursday: 'Thursday', friday: 'Friday', saturday: 'Saturday', sunday: 'Sunday',
+};
+
+/** The JSON-LD @id of a centre: its city page plus a stable fragment. */
+export const centreSchemaId = (pageUrl: string, centreSlug: string) => `${pageUrl}#centre-${centreSlug}`;
+
+/**
+ * A real Neram classroom. Emitted only on the centre's own city page and only
+ * when the row has a street address and pincode. Never carries AggregateRating:
+ * self-serving review markup for our own business is not allowed.
+ */
+export function generateCentreSchema(centre: ClassroomCentre, pageUrl: string, opts: { areaServed?: string[] } = {}) {
+  const photos = centre.photos ?? [];
+  const served = Array.from(new Set([centre.city, ...(centre.nearbyCities ?? []), ...(opts.areaServed ?? [])]));
+  const hours = Object.entries(centre.hours ?? {})
+    .filter(([day, h]) => DAY_NAMES[day.toLowerCase()] && h)
+    .map(([day, h]) => ({
+      '@type': 'OpeningHoursSpecification',
+      dayOfWeek: DAY_NAMES[day.toLowerCase()],
+      opens: h!.open,
+      closes: h!.close,
+    }));
   return {
     '@context': 'https://schema.org',
-    '@type': 'LocalBusiness',
-    '@id': `${BASE_URL}/coaching/nata-coaching/nata-coaching-centers-in-${location.slug}`,
-    name: `${ORG_NAME} ${location.cityDisplay}`,
-    image: ORG_LOGO,
-    url: `${BASE_URL}/coaching/nata-coaching/nata-coaching-centers-in-${location.slug}`,
-    telephone: location.phone || ORG_PHONE,
+    '@type': ['EducationalOrganization', 'LocalBusiness'],
+    '@id': centreSchemaId(pageUrl, centre.slug),
+    name: `${ORG_NAME} ${centre.areaLabel}`,
+    url: pageUrl,
+    // Real centre photos (Admin > Centres), hero first. Never stock images.
+    image: photos.length ? photos.map((p) => p.url) : ORG_LOGO,
+    ...(photos.length && {
+      photo: photos.map((p) => ({ '@type': 'ImageObject', contentUrl: p.url, caption: p.alt, ...(p.width && p.height && { width: p.width, height: p.height }) })),
+    }),
+    ...(centre.establishedYear && { foundingDate: String(centre.establishedYear) }),
+    ...(centre.landmark && { description: `${ORG_NAME} ${centre.areaLabel}, ${centre.landmark}.` }),
+    telephone: centre.phone || ORG_PHONE,
     address: {
       '@type': 'PostalAddress',
-      addressLocality: location.cityDisplay,
-      addressRegion: location.stateDisplay,
+      streetAddress: centre.address,
+      addressLocality: centre.city,
+      addressRegion: centre.state,
+      postalCode: centre.pincode,
       addressCountry: 'IN',
     },
-    openingHoursSpecification: {
-      '@type': 'OpeningHoursSpecification',
-      dayOfWeek: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
-      opens: '09:00',
-      closes: '18:00',
-    },
-    priceRange: '₹₹',
-    parentOrganization: {
-      '@id': `${BASE_URL}/#organization`,
-    },
+    geo: { '@type': 'GeoCoordinates', latitude: centre.lat, longitude: centre.lng },
+    hasMap: centre.gbpUrl || centre.mapsUrl,
+    ...(hours.length && { openingHoursSpecification: hours }),
+    ...(centre.gbpUrl && { sameAs: [centre.gbpUrl] }),
+    ...(served.length > 1 && { areaServed: served.map((name) => ({ '@type': 'City', name })) }),
+    parentOrganization: { '@id': `${BASE_URL}/#organization` },
   };
 }
 
 // ─── Location Course Schema (city and state coaching pages) ─────────────────
 
 /**
- * A city or state coaching page is a Course offered to that place, not a local
- * business: only the real centre pages (/contact/{slug}) are LocalBusiness. A
+ * A city or state coaching page is a Course offered to that place. Only a
+ * centre's own city page also carries the centre (generateCentreSchema). A
  * blended instance points at the centre when one is near enough to attend.
  */
 export function generateLocationCourseSchema(input: {
@@ -278,7 +299,8 @@ export function generateLocationCourseSchema(input: {
   description: string;
   url: string;
   area: { type: 'City' | 'State' | 'Country' | 'Place'; name: string; containedIn?: { type: 'State' | 'Country'; name: string } };
-  classroom?: { name: string; url: string } | null;
+  /** The classroom students can attend; `id` is its centre schema @id when it has one. */
+  classroom?: { name: string; url: string; id?: string | null } | null;
   exam: 'NATA' | 'JEE Paper 2';
 }) {
   const fees = getCourseSchemaOffers()
@@ -299,7 +321,9 @@ export function generateLocationCourseSchema(input: {
       '@type': 'CourseInstance',
       courseMode: 'blended',
       courseWorkload: 'P12M',
-      location: { '@type': 'Place', '@id': `${input.classroom.url}#localbusiness`, name: input.classroom.name, url: input.classroom.url },
+      location: input.classroom.id
+        ? { '@id': input.classroom.id }
+        : { '@type': 'Place', name: input.classroom.name, url: input.classroom.url },
     });
   }
   return {
@@ -409,16 +433,7 @@ export function generateCenterLocalBusinessSchema(center: {
     };
   }
 
-  // Aggregate rating
-  if (center.rating && center.review_count && center.review_count > 0) {
-    schema.aggregateRating = {
-      '@type': 'AggregateRating',
-      ratingValue: String(center.rating),
-      reviewCount: String(center.review_count),
-      bestRating: '5',
-      worstRating: '1',
-    };
-  }
+  // No aggregateRating: self-serving review markup for our own centres is not allowed.
 
   // Area served (nearby cities)
   if (center.nearby_cities && center.nearby_cities.length > 0) {
@@ -540,6 +555,44 @@ export function generateWebApplicationSchema(tool: {
       name: ORG_NAME,
       url: BASE_URL,
     },
+  };
+}
+
+// ─── aiArchitek (the tools app as its own product entity) ───────────────────
+
+/**
+ * The aiArchitek app as a WebApplication published by the Organization. Only
+ * what the /aiarchitek page shows: no ratings, no user counts, no superlatives.
+ */
+export function generateAiArchitekAppSchema(featureList: string[]) {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'WebApplication',
+    '@id': `${BASE_URL}/aiarchitek#app`,
+    name: 'aiArchitek',
+    alternateName: 'aiArchitek by Neram Classes',
+    description:
+      'Free NATA and B.Arch preparation tools from Neram Classes: cutoff calculator, college predictor, exam centre finder, question bank, eligibility checker and more, with AI-assisted learning.',
+    url: `${APP_URL}/tools`,
+    applicationCategory: 'EducationalApplication',
+    applicationSubCategory: 'Exam Preparation',
+    operatingSystem: 'Any (web browser, installable on Android and iOS)',
+    browserRequirements: 'Requires JavaScript',
+    isAccessibleForFree: true,
+    inLanguage: 'en',
+    featureList,
+    offers: {
+      '@type': 'Offer',
+      price: '0',
+      priceCurrency: 'INR',
+    },
+    publisher: { '@id': `${BASE_URL}/#organization` },
+    audience: {
+      '@type': 'EducationalAudience',
+      educationalRole: 'student',
+      audienceType: 'NATA and JEE Paper 2 (B.Arch) aspirants',
+    },
+    mainEntityOfPage: `${BASE_URL}/aiarchitek`,
   };
 }
 
@@ -870,7 +923,7 @@ export function generateOnlineCourseSchema() {
     '@context': 'https://schema.org',
     '@type': 'Course',
     name: 'Online NATA Coaching 2026 - Live Classes',
-    description: 'Best online NATA coaching in India with live interactive classes by IIT/NIT alumni faculty. Daily drawing practice, 100+ mock tests, small batches of 25 students.',
+    description: 'Live online NATA coaching from Neram Classes, running since 2009. Live interactive classes, drawing feedback on every sketch, and mock tests in the exam format.',
     provider: {
       '@type': 'EducationalOrganization',
       name: ORG_NAME,
@@ -889,7 +942,7 @@ export function generateOnlineCourseSchema() {
         courseWorkload: 'PT6H', // 6 hours per day
         instructor: {
           '@type': 'Person',
-          name: 'IIT/NIT Alumni Faculty',
+          name: 'Pushparaj Manoharan',
         },
       },
     ],

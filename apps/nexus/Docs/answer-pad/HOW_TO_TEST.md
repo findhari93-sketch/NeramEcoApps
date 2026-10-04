@@ -212,7 +212,7 @@ preview rather than filing a defect.
 
 ### 3.6 Show results on the meeting screen
 
-After revealing a question, open **More options** (the three dots next to the class name) and select **Show results
+After revealing a question, open the **console menu** (the three dots next to the class name) and select **Show results
 on the meeting screen**. Everyone's meeting screen shows the class totals and the answer breakdown, never names
 (TC-PAD-090). It replaces the teacher's screen share, which is why it is not a big button. **Stop** on the console,
 or Teams' own stop button, ends it. From package 1.3.0 Teams' own Share button under the side panel is hidden for
@@ -220,9 +220,11 @@ everyone, so students cannot put their pad on the meeting screen.
 
 ### 3.7 Picture, reasons and nudge
 
-- **Picture:** Win + Shift + S, snip the question, click into the pad and press Ctrl + V. It goes under "Picture
-  (optional)" before asking, or "Add a picture" while a question is open. Pictures are shrunk in the browser and
-  stored in the `uploads` bucket under `pad/<session id>/` (TC-PAD-092).
+- **Picture:** Win + Shift + S, snip the question, click the paste box in the Ask bar at the bottom of the console
+  (it says "Click here, then press Ctrl + V" while the pad does not have focus) and press Ctrl + V. Ctrl + V works
+  anywhere in the pad, in every state. While a question is open the picture goes to the next question, and the
+  message "Picture added to Q.33" offers "Use for Q.32" to put it on the open one instead. Pictures are shrunk in
+  the browser and stored in the `uploads` bucket under `pad/<session id>/` (TC-PAD-092).
 - **I can't answer:** students pick a reason under the answer buttons. The console shows counts by reason while the
   question is open, and names only after it closes (TC-PAD-093).
 - **Nudge:** one press per minute per question. Pads that are open show a banner; students whose pad is closed get a

@@ -20,10 +20,18 @@ import { BASE_URL } from '@/lib/seo/constants';
 import { COURSE_FEES } from '@/lib/fees';
 import { EXAMS } from '@/lib/seo/exam-config';
 import type { CityFacts } from '@/lib/seo/location-facts';
-import { cityAnswer, cityFaqs, cityTitle, hubNames, inr } from '@/lib/seo/location-copy';
-import { generateBreadcrumbSchema, generateFAQSchema, generateLocationCourseSchema } from '@/lib/seo/schemas';
+import { cityAnswer, cityFaqs, cityH1, hubNames, inr } from '@/lib/seo/location-copy';
+import { centreSchemaId, generateBreadcrumbSchema, generateCentreSchema, generateFAQSchema, generateLocationCourseSchema } from '@/lib/seo/schemas';
+import { hasFullAddress } from '@/lib/seo/facts';
 import { appToolLinks, stateToolLinks } from '@/lib/seo/app-tool-links';
-import { Breadcrumbs, FactTable, FaqList, LinkGrid, Section, StickyCta, STICKY_CTA_HEIGHT, type Crumb, type LinkItem } from './parts';
+import { CentreVisit } from './CentreVisit';
+import { CentreAbout, CentreHeroPhoto, heroPhotoOf, type TravelFrom } from './CentreAbout';
+import { fullAddressLine } from '@/lib/seo/centre-page';
+import { ClassVideo } from './ClassVideo';
+import { cityVideoSchema, type CityVideo } from '@/lib/seo/location-videos';
+import type { PublicReview } from '@/lib/reviews/json-ld';
+import { WhatsAppLinkButton } from '@/components/WhatsAppLinkButton';
+import { Breadcrumbs, FactTable, FaqList, LinkGrid, Section, StickyCta, STICKY_CTA_HEIGHT, UpdatedLine, type Crumb, type LinkItem } from './parts';
 
 export interface CityCoachingPageProps {
   facts: CityFacts;
@@ -32,6 +40,12 @@ export interface CityCoachingPageProps {
   nearby: LinkItem[];
   /** The other exam's page for the same city, when it exists. */
   siblingExam?: LinkItem | null;
+  /** Published, moderated reviews: from this city, or the state when the city has fewer than two. */
+  reviews?: { scope: 'city' | 'state'; reviews: PublicReview[] };
+  /** Class clips and reviews tagged with this city. */
+  videos?: CityVideo[];
+  /** Classroom cities: nearby towns with no classroom of their own. */
+  travelFrom?: TravelFrom[];
 }
 
 const MODE_LABEL: Record<CityFacts['mode'], string> = {
@@ -40,12 +54,19 @@ const MODE_LABEL: Record<CityFacts['mode'], string> = {
   online: 'Live online',
 };
 
-export function CityCoachingPage({ facts, locale, nearby, siblingExam }: CityCoachingPageProps) {
+/** "Madurai · NATA 2025 · Anna University" from whatever the review has. */
+const reviewMeta = (r: PublicReview) =>
+  [r.city, r.examType && r.year ? `${r.examType.replace(/_/g, ' ')} ${r.year}` : null, r.collegeAdmitted].filter(Boolean).join(' · ');
+
+export function CityCoachingPage({ facts, locale, nearby, siblingExam, reviews, videos = [], travelFrom = [] }: CityCoachingPageProps) {
   const exam = EXAMS[facts.exam];
   const place = facts.place;
   const path = exam.cityPath(place.slug);
   const url = `${BASE_URL}${path}`;
-  const h1 = `${exam.name} Coaching in ${place.name}`;
+  const h1 = cityH1(facts);
+  const isCentrePage = facts.mode === 'classroom' && facts.centres.length > 0;
+  const hero = isCentrePage ? heroPhotoOf(facts.centres) : null;
+  const addressLine = isCentrePage && facts.centres.length === 1 ? fullAddressLine(facts.centres[0]) : null;
   const answer = cityAnswer(facts);
   const faqs = cityFaqs(facts);
   const hubs = hubNames(facts.counsellingHubs);
@@ -112,7 +133,25 @@ export function CityCoachingPage({ facts, locale, nearby, siblingExam }: CityCoa
     { label: 'Fees', value: <Link href="/fees">From {inr(Math.min(...COURSE_FEES.map((c) => c.price)))}</Link> },
   ];
 
+  // The centre belongs to its NATA city page; JEE pages point at that @id.
+  const centreId = (c: NonNullable<CityFacts['classroom']>['centre']) =>
+    hasFullAddress(c) ? centreSchemaId(`${BASE_URL}${EXAMS.nata.cityPath(c.citySlug)}`, c.slug) : null;
   const schema = [
+    ...(facts.exam === 'nata'
+      ? facts.centres.filter(hasFullAddress).map((c) => generateCentreSchema(c, url, { areaServed: travelFrom.map((t) => t.label) }))
+      : []),
+    ...(hero
+      ? [
+          {
+            '@context': 'https://schema.org',
+            '@type': 'WebPage',
+            '@id': `${url}#webpage`,
+            url,
+            name: h1,
+            primaryImageOfPage: { '@type': 'ImageObject', contentUrl: hero.url, caption: hero.alt },
+          },
+        ]
+      : []),
     generateLocationCourseSchema({
       name: h1,
       description: answer.join(' '),
@@ -123,8 +162,11 @@ export function CityCoachingPage({ facts, locale, nearby, siblingExam }: CityCoa
         name: place.name,
         containedIn: { type: place.kind === 'india' ? 'State' : 'Country', name: facts.regionName },
       },
-      classroom: facts.classroom ? { name: facts.classroom.centre.name, url: `${BASE_URL}${facts.classroom.url}` } : null,
+      classroom: facts.classroom
+        ? { name: facts.classroom.centre.name, url: `${BASE_URL}${facts.classroom.url}`, id: centreId(facts.classroom.centre) }
+        : null,
     }),
+    ...videos.map(cityVideoSchema),
     generateFAQSchema(faqs),
     generateBreadcrumbSchema(crumbs.map((c) => ({ name: c.name, url: c.href ? `${BASE_URL}${c.href}` : url }))),
   ];
@@ -147,44 +189,133 @@ export function CityCoachingPage({ facts, locale, nearby, siblingExam }: CityCoa
       <Box component="header" sx={{ pt: { xs: 2, md: 4 }, pb: { xs: 4, md: 6 }, bgcolor: 'grey.50' }}>
         <Container maxWidth="md">
           <Breadcrumbs items={crumbs} />
-          <Typography
-            variant="h1"
-            sx={{ fontSize: { xs: '1.75rem', sm: '2.125rem', md: '2.5rem' }, fontWeight: 800, lineHeight: 1.2, mb: 2 }}
+          {/*
+            One photo element placed by grid areas: under the address on a
+            phone, beside the text from md up. (Two copies would preload twice.)
+          */}
+          <Box
+            sx={{
+              display: 'grid',
+              columnGap: 4,
+              gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: hero ? 'minmax(0, 1.15fr) minmax(0, 1fr)' : 'minmax(0, 1fr)' },
+              gridTemplateAreas: { xs: '"head" "photo" "body"', md: hero ? '"head photo" "body photo"' : '"head" "body"' },
+              alignItems: 'start',
+            }}
           >
-            {h1}
-          </Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-            <Chip
-              icon={facts.mode === 'classroom' ? <SchoolOutlinedIcon aria-hidden /> : <LaptopOutlinedIcon aria-hidden />}
-              label={MODE_LABEL[facts.mode]}
-              color="primary"
-              variant="outlined"
-            />
-            {facts.regionName && <Chip icon={<PlaceOutlinedIcon aria-hidden />} label={facts.regionName} variant="outlined" />}
-          </Box>
-          <Box id="answer" sx={{ '& p': { fontSize: '1.0625rem', lineHeight: 1.65, color: 'text.primary', mb: 1.5 } }}>
-            {answer.map((s) => (
-              <Typography key={s} component="p">
-                {s}
+            <Box sx={{ gridArea: 'head', minWidth: 0 }}>
+              <Typography
+                variant="h1"
+                sx={{ fontSize: { xs: '1.75rem', sm: '2.125rem', md: '2.5rem' }, fontWeight: 800, lineHeight: 1.2, mb: addressLine ? 1 : 2 }}
+              >
+                {h1}
               </Typography>
-            ))}
-          </Box>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 2 }}>
-            <Button variant="contained" component={Link} href="/demo-class" sx={{ minHeight: 48, fontWeight: 600, flex: { xs: '1 1 100%', sm: '0 0 auto' } }}>
-              Book a free demo class
-            </Button>
-            {facts.classroom && (
-              <Button variant="outlined" component={Link} href={facts.classroom.url} sx={{ minHeight: 48, fontWeight: 600, flex: { xs: '1 1 100%', sm: '0 0 auto' } }}>
-                {facts.mode === 'classroom' ? 'Visit the classroom' : `Nearest classroom: ${facts.classroom.centre.areaLabel}`}
-              </Button>
+              {addressLine && (
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', mb: 2 }}>
+                  <PlaceOutlinedIcon aria-hidden fontSize="small" sx={{ color: 'primary.main', mt: '3px' }} />
+                  <Typography component="p" sx={{ lineHeight: 1.55 }}>
+                    <Box component="a" href="#visit" sx={{ color: 'text.primary', fontWeight: 600 }}>
+                      {addressLine}
+                    </Box>
+                    {facts.centres[0].landmark && (
+                      <Box component="span" sx={{ display: 'block', color: 'text.secondary' }}>
+                        {facts.centres[0].landmark}
+                      </Box>
+                    )}
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+
+            {hero && (
+              <Box sx={{ gridArea: 'photo', mb: { xs: 2, md: 0 }, pt: { md: 1 } }}>
+                <CentreHeroPhoto photo={hero} />
+              </Box>
             )}
+
+            <Box sx={{ gridArea: 'body', minWidth: 0 }}>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+                <Chip
+                  icon={facts.mode === 'classroom' ? <SchoolOutlinedIcon aria-hidden /> : <LaptopOutlinedIcon aria-hidden />}
+                  label={MODE_LABEL[facts.mode]}
+                  color="primary"
+                  variant="outlined"
+                />
+                {facts.regionName && <Chip icon={<PlaceOutlinedIcon aria-hidden />} label={facts.regionName} variant="outlined" />}
+              </Box>
+              <Box id="answer" sx={{ '& p': { fontSize: '1.0625rem', lineHeight: 1.65, color: 'text.primary', mb: 1.5 } }}>
+                {answer.map((s) => (
+                  <Typography key={s} component="p">
+                    {s}
+                  </Typography>
+                ))}
+              </Box>
+              <UpdatedLine
+                iso={facts.lastModified}
+                sources={[
+                  ...(facts.testCities[0] ? [`NATA ${facts.testCities[0].year} test city list`] : []),
+                  ...(facts.colleges.length ? ['the Neram college hub'] : []),
+                  ...(facts.classroom ? ['Neram classroom records'] : []),
+                ]}
+              />
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 2 }}>
+                <Button variant="contained" component={Link} href="/demo-class" sx={{ minHeight: 48, fontWeight: 600, flex: { xs: '1 1 100%', sm: '0 0 auto' } }}>
+                  Book a free demo class
+                </Button>
+                <WhatsAppLinkButton city={place.name} citySlug={place.slug} variant="outlined" sx={{ display: { xs: 'none', md: 'inline-flex' } }} />
+                {facts.classroom && (
+                  <Button variant="outlined" component={Link} href={facts.classroom.url} sx={{ minHeight: 48, fontWeight: 600, flex: { xs: '1 1 100%', sm: '0 0 auto' } }}>
+                    {facts.mode === 'classroom' ? 'Visit the classroom' : `Nearest classroom: ${facts.classroom.centre.areaLabel}`}
+                  </Button>
+                )}
+              </Box>
+            </Box>
           </Box>
         </Container>
       </Box>
 
+      {isCentrePage && <CentreAbout placeName={place.name} centres={facts.centres} travelFrom={travelFrom} heroShown={!!hero} />}
+
       <Section id="facts" title={`${exam.name} preparation in ${place.name} at a glance`}>
         <FactTable caption={`Key facts for ${place.name} students`} rows={factRows} />
       </Section>
+
+      {videos.length > 0 && (
+        <Section id="videos" title={`Watch a Neram class from ${place.name}`}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+            {videos.slice(0, 4).map((v) => (
+              <ClassVideo key={v.youtubeId} youtubeId={v.youtubeId} title={v.title} />
+            ))}
+          </Box>
+        </Section>
+      )}
+
+      <CentreVisit placeName={place.name} centres={facts.centres} siblings={facts.siblingCentres} />
+
+      {reviews && reviews.reviews.length > 0 && (
+        <Section id="students" title={reviews.scope === 'city' ? `Students from ${place.name}` : `Students from ${facts.regionName}`}>
+          <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0, display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5 }}>
+            {reviews.reviews.map((r) => (
+              <Box component="li" key={r.id} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'background.paper' }}>
+                <Typography component="blockquote" sx={{ m: 0, lineHeight: 1.6 }}>
+                  {r.body}
+                </Typography>
+                <Typography sx={{ mt: 1, fontWeight: 600, fontSize: '0.9375rem' }}>
+                  {r.displayName}
+                  {reviewMeta(r) && (
+                    <Typography component="span" sx={{ fontWeight: 400, color: 'text.secondary' }}>
+                      {' · '}
+                      {reviewMeta(r)}
+                    </Typography>
+                  )}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+          <Button component={Link} href="/reviews" sx={{ mt: 2, minHeight: 48 }}>
+            Read more student reviews
+          </Button>
+        </Section>
+      )}
 
       {content && (content.intro || content.localContext || content.highlights.length > 0) && (
         <Section id="local" title={`Studying for architecture in ${place.name}`} muted>
@@ -312,7 +443,7 @@ export function CityCoachingPage({ facts, locale, nearby, siblingExam }: CityCoa
         <LinkGrid items={related} />
       </Section>
 
-      <StickyCta />
+      <StickyCta whatsapp={{ city: place.name, citySlug: place.slug }} />
     </Box>
   );
 }

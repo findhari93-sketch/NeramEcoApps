@@ -1,7 +1,8 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@neram/database';
+import { createAdminClient, notifyAdmin } from '@neram/database';
+import { saveLeadTouch } from '@/lib/lead-touch';
 import { createVisitBooking, getCenterById } from '@neram/database/queries';
 import { getAuth } from 'firebase-admin/auth';
 import { getApps, initializeApp, cert } from 'firebase-admin/app';
@@ -195,8 +196,24 @@ export async function POST(request: NextRequest): Promise<NextResponse<VisitResp
       purpose: body.purpose,
     });
 
-    // TODO: Send confirmation email/SMS to visitor
-    // TODO: Send notification to center admin
+    const utm = (k: string) => (typeof body[k] === 'string' && body[k].trim() ? String(body[k]).trim().slice(0, 100) : null);
+    await saveLeadTouch(supabase, 'center_visit_bookings', (booking as { id?: string } | null)?.id, body, {
+      utm_source: utm('utm_source'),
+      utm_medium: utm('utm_medium'),
+      utm_campaign: utm('utm_campaign'),
+    });
+
+    // Tell the team so someone calls to confirm. There is no WhatsApp API yet,
+    // so the visitor hears back by phone (the form says so).
+    try {
+      const esc = (v: unknown) => String(v ?? '').replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+      await notifyAdmin(
+        `Centre visit booked: ${esc(center.name)}`,
+        `${esc(body.visitor_name)} (${esc(cleanPhone)}) booked a visit on ${esc(body.visit_date)}, ${esc(body.visit_time_slot)}.`,
+      );
+    } catch (err) {
+      console.error('Visit notification failed:', err);
+    }
 
     return NextResponse.json(
       { success: true, data: booking },

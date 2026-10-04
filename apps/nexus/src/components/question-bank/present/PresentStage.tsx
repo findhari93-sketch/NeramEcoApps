@@ -20,6 +20,7 @@ import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import ZoomInRoundedIcon from '@mui/icons-material/ZoomInRounded';
 import { qbSectionLabel } from '@neram/database';
 import MathText from '@/components/common/MathText';
+import MathAnswer from '@/components/common/MathAnswer';
 import { promptTitle } from '@/lib/pad/client/format';
 import type { DeckItem } from '@/lib/qb-present/deck';
 import TimerRing from './TimerRing';
@@ -199,7 +200,9 @@ export default function PresentStage({ title, item, position, view, secondsLeft,
           {answerValue && (
             <Stack direction="row" spacing={1} alignItems="center" sx={{ color: 'success.dark', fontWeight: 800 }}>
               <CheckCircleRoundedIcon sx={{ fontSize: '1.2em' }} />
-              <span>Answer: {answerValue}</span>
+              <span>
+                Answer: <MathAnswer value={answerValue} />
+              </span>
             </Stack>
           )}
 

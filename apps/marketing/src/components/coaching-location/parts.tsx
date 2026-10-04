@@ -1,6 +1,6 @@
 /**
  * Building blocks shared by the city, state and directory coaching pages.
- * Server components only: the pages ship no client JS except the lead form.
+ * Server components; the only client JS is the lead form, the visit form and the WhatsApp button.
  * Mobile first: 48px touch targets, 8px gaps, 16px body text, no fixed widths.
  */
 import type { ReactNode } from 'react';
@@ -9,6 +9,7 @@ import { Box, Container, Typography, Button } from '@neram/ui';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import type { Faq } from '@/lib/seo/location-copy';
+import { WhatsAppLinkButton } from '@/components/WhatsAppLinkButton';
 
 export function Section({
   id,
@@ -238,7 +239,16 @@ export function LinkGrid({ items }: { items: LinkItem[] }) {
 /** Height of the mobile sticky bar; pages pad their bottom by this so nothing hides behind it. */
 export const STICKY_CTA_HEIGHT = 72;
 
-export function StickyCta({ demoHref = '/demo-class', applyHref = '/apply' }: { demoHref?: string; applyHref?: string }) {
+export function StickyCta({
+  demoHref = '/demo-class',
+  applyHref = '/apply',
+  whatsapp,
+}: {
+  demoHref?: string;
+  applyHref?: string;
+  /** On location pages: WhatsApp (city and page code pre-filled) replaces Apply. */
+  whatsapp?: { city?: string | null; citySlug?: string | null };
+}) {
   return (
     <Box
       sx={{
@@ -260,9 +270,25 @@ export function StickyCta({ demoHref = '/demo-class', applyHref = '/apply' }: { 
       <Button variant="outlined" component={Link} href={demoHref} sx={{ flex: 1, minHeight: 48, fontWeight: 600 }}>
         Free demo class
       </Button>
-      <Button variant="contained" component={Link} href={applyHref} sx={{ flex: 1, minHeight: 48, fontWeight: 600 }}>
-        Apply now
-      </Button>
+      {whatsapp ? (
+        <WhatsAppLinkButton city={whatsapp.city} citySlug={whatsapp.citySlug} label="WhatsApp" sx={{ flex: 1 }} />
+      ) : (
+        <Button variant="contained" component={Link} href={applyHref} sx={{ flex: 1, minHeight: 48, fontWeight: 600 }}>
+          Apply now
+        </Button>
+      )}
     </Box>
+  );
+}
+
+/** "Last updated 3 October 2026. Sources: ..." Shown under the answer on location pages. */
+export function UpdatedLine({ iso, sources }: { iso: string; sources: string[] }) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const label = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' });
+  return (
+    <Typography sx={{ mt: 1, fontSize: '0.875rem', color: 'text.secondary' }}>
+      Last updated <time dateTime={d.toISOString().slice(0, 10)}>{label}</time>.{sources.length ? ` Sources: ${sources.join(', ')}.` : ''}
+    </Typography>
   );
 }

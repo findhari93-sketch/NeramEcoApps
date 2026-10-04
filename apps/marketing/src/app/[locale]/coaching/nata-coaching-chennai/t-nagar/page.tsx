@@ -17,7 +17,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: neighborhood.metaTitle,
+    title: { absolute: neighborhood.metaTitle },
     description: neighborhood.metaDescription,
     keywords: neighborhood.metaKeywords,
     alternates: buildAlternates(locale, `/coaching/nata-coaching-chennai/${SLUG}`),

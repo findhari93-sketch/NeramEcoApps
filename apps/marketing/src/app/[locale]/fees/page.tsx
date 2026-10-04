@@ -12,7 +12,7 @@ const baseUrl = 'https://neramclasses.com';
 export async function generateMetadata({ params: { locale } }: { params: { locale: string } }): Promise<Metadata> {
   return {
     title: 'NATA Coaching Fees & Course Pricing',
-    description: 'Transparent fee structure for NATA and JEE Paper 2 coaching. Affordable plans starting from Rs 15,000. EMI options, scholarships, and early bird discounts available.',
+    description: 'Transparent fees for NATA and JEE Paper 2 coaching. Pay once and save, or pay in 2 interest-free instalments.',
     keywords: 'NATA coaching fees, NATA coaching cost, architecture coaching price, affordable NATA coaching, NATA coaching EMI',
     alternates: buildAlternates(locale, '/fees'),
   };

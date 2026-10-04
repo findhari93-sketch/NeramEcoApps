@@ -11,7 +11,7 @@ import {
   MenuItem,
   Alert,
 } from '@neram/ui';
-import { getStoredAttribution } from '@/lib/attribution';
+import { getStoredAttribution, touchAttribution } from '@/lib/attribution';
 
 interface NataAssistanceFormProps {
   locale: string;
@@ -75,6 +75,7 @@ export function NataAssistanceForm({ locale, defaultDistrict, source }: NataAssi
           utm_campaign: attribution.utm_campaign,
           gclid: attribution.gclid,
           wbraid: attribution.wbraid,
+          ...touchAttribution(),
         }),
       });
       const data = await res.json();

@@ -46,6 +46,7 @@ import type { ImageState } from '@/lib/bulk-upload-schema';
 import ImageUploadZone from './ImageUploadZone';
 import DrawingQuestionPanel from './DrawingQuestionPanel';
 import MathText from '@/components/common/MathText';
+import MathAnswerField from '@/components/common/MathAnswerField';
 import { defaultOptions, normalizeOptionIds, withOptionAdded } from '@/lib/qb-option-ids';
 import OptionAddBar from './OptionAddBar';
 
@@ -563,20 +564,20 @@ export default function InlineQuestionEditor({
 
           {/* NUMERICAL answer */}
           {form.question_format === 'NUMERICAL' && (
-            <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
-              <TextField
-                label="Correct Answer"
+            <Box sx={{ display: 'flex', gap: 1, mt: 2, alignItems: 'flex-start' }}>
+              <MathAnswerField
                 value={form.correct_answer}
-                onChange={(e) => updateField('correct_answer', e.target.value)}
-                size="small"
-                sx={{ flex: 1 }}
+                onChange={(next) => updateField('correct_answer', next)}
+                sx={{ flex: 1, minWidth: 0 }}
               />
               <TextField
                 label="Tolerance (±)"
                 value={form.answer_tolerance}
                 onChange={(e) => updateField('answer_tolerance', e.target.value)}
                 size="small"
-                sx={{ width: 120 }}
+                inputProps={{ inputMode: 'decimal' }}
+                helperText="Blank = exact"
+                sx={{ width: 120, flexShrink: 0 }}
               />
             </Box>
           )}

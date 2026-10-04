@@ -15,7 +15,7 @@ import {
 } from '@mui/material';
 import CloseIcon from '@mui/icons-material/Close';
 import HeadsetMicIcon from '@mui/icons-material/HeadsetMic';
-import { leadAttribution } from '@/lib/attribution';
+import { leadAttribution, touchAttribution } from '@/lib/attribution';
 import { trackTaxonomyEvent } from '@/lib/funnel-tracker';
 
 export interface CallbackDrawerProps {
@@ -115,6 +115,7 @@ export default function CallbackDrawer({
           query_type: queryType,
           notes: fullNotes,
           ...leadAttribution(),
+          ...touchAttribution(),
         }),
       });
       const data = await res.json();

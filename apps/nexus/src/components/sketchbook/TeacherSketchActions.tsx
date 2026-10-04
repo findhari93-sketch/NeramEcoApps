@@ -35,6 +35,11 @@ interface TeacherSketchActionsProps {
   /** Compact: the comment box starts collapsed behind a "Comment" toggle (used inside the flip card). */
   compact?: boolean;
   /**
+   * No comment box at all. The review screen has its own written feedback and
+   * voice note, so a second place to type a line to the student was redundant.
+   */
+  hideComment?: boolean;
+  /**
    * Hand the reaction to the parent instead of sending it here. Flip through
    * uses this to answer the tap at once and hold the send for Undo; without it
    * the reaction is sent and awaited in place (the review screen).
@@ -100,7 +105,7 @@ export function DockTool({ icon, label, onClick, href, disabled, emphasis, color
 }
 
 export default function TeacherSketchActions({
-  sketchId, reaction, featured, studentName, onChanged, compact = false, onReact, onComment, dock,
+  sketchId, reaction, featured, studentName, onChanged, compact = false, hideComment = false, onReact, onComment, dock,
 }: TeacherSketchActionsProps) {
   // Reactions become a Teams chat from this teacher, so they carry the chat-scoped
   // token (the standing rule for anything a teacher presses Send on).
@@ -209,7 +214,7 @@ export default function TeacherSketchActions({
     <Box sx={{ mb: 2 }}>
       {reactionRow}
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', mt: 0.5 }}>
-        {compact && (
+        {compact && !hideComment && (
           <Button variant="text" disabled={busy !== null} onClick={() => setCommentOpen((o) => !o)}
             aria-expanded={commentOpen} sx={{ minHeight: 48 }}>
             Comment
@@ -228,7 +233,7 @@ export default function TeacherSketchActions({
       </Box>
       {sent && <Typography variant="caption" color="success.main" sx={{ display: 'block', mt: 0.5 }}>Sent {REACTION_LABEL[sent]}</Typography>}
       {live && <Chip size="small" icon={<StarOutlinedIcon />} color="warning" label={`Featured in ${live.classroom_name}`} sx={{ mt: 1 }} />}
-      {(!compact || commentOpen) && commentBox}
+      {!hideComment && (!compact || commentOpen) && commentBox}
       {errorLine}
       {featureSheet}
     </Box>

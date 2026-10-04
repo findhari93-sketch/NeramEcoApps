@@ -40,6 +40,8 @@ import CampaignIcon from '@mui/icons-material/Campaign';
 import FormatQuoteIcon from '@mui/icons-material/FormatQuote';
 import GraphicEqIcon from '@mui/icons-material/GraphicEq';
 import RateReviewIcon from '@mui/icons-material/RateReview';
+import StorefrontOutlinedIcon from '@mui/icons-material/StorefrontOutlined';
+import InsightsIcon from '@mui/icons-material/Insights';
 import PersonSearchIcon from '@mui/icons-material/PersonSearch';
 import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
@@ -123,6 +125,7 @@ const menuGroups: MenuGroup[] = [
       { text: 'Lifecycle', icon: AutorenewIcon, path: '/lifecycle', hasBadge: 'lifecycle' },
       { text: 'Exam Batches', icon: CalendarMonthIcon, path: '/exam-batches' },
       { text: 'Leads', icon: PersonSearchIcon, path: '/leads', hasBadge: 'leads' },
+      { text: 'Leads by channel', icon: InsightsIcon, path: '/leads/channels' },
       { text: 'Students', icon: SchoolIcon, path: '/students', hasBadge: 'students' },
       { text: 'Student Devices', icon: DevicesIcon, path: '/devices' },
       { text: 'Direct Enroll', icon: PersonAddAlt1Icon, path: '/direct-enrollment' },
@@ -176,6 +179,7 @@ const menuGroups: MenuGroup[] = [
     label: 'Marketing',
     items: [
       { text: 'Marketing Content', icon: CampaignIcon, path: '/marketing-content' },
+      { text: 'Centres', icon: StorefrontOutlinedIcon, path: '/centres' },
       { text: 'Testimonials', icon: FormatQuoteIcon, path: '/testimonials' },
       { text: 'Social Proofs', icon: GraphicEqIcon, path: '/social-proofs' },
       { text: 'Careers', icon: WorkIcon, path: '/careers', hasBadge: 'careers' },

@@ -59,6 +59,33 @@ describe('lookupCity', () => {
     expect(lookupCity('nata', 'chennai')).toEqual({ kind: 'not-found' });
     expect(lookupCity('jee-paper-2', 'jee-paper-2-coaching-in-dubai')).toEqual({ kind: 'not-found' });
   });
+
+  it('heals doubled old URL shapes instead of 404ing them', () => {
+    expect(lookupCity('nata', 'nata-coaching-centers-in-in-chennai')).toEqual({
+      kind: 'redirect',
+      to: '/coaching/nata-coaching/nata-coaching-centers-in-chennai',
+    });
+    expect(lookupCity('nata', 'nata-coaching-centers-in-center-in-tamil-nadu')).toEqual({
+      kind: 'redirect',
+      to: '/coaching/nata-coaching-in-tamil-nadu',
+    });
+    expect(lookupCity('nata', 'nata-coaching-centers-in-kerala')).toEqual({
+      kind: 'redirect',
+      to: '/coaching/nata-coaching-in-kerala',
+    });
+    expect(lookupCity('nata', 'nata-coaching-centers-in-in-atlantis')).toEqual({ kind: 'not-found' });
+  });
+
+  it('merges duplicate GeoNames places into one page', () => {
+    expect(lookupCity('nata', 'nata-coaching-centers-in-bengaluru-rural')).toEqual({
+      kind: 'redirect',
+      to: '/coaching/nata-coaching/nata-coaching-centers-in-bangalore',
+    });
+    expect(lookupCity('jee-paper-2', 'jee-paper-2-coaching-in-gadag-betageri')).toEqual({
+      kind: 'redirect',
+      to: '/coaching/jee-paper-2-coaching/jee-paper-2-coaching-in-gadag',
+    });
+  });
 });
 
 describe('llms.txt', () => {

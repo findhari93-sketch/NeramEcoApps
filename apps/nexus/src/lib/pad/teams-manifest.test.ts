@@ -17,9 +17,9 @@ const manifest = JSON.parse(readFileSync(path.join(NEXUS, 'teams-app/manifest.js
 const APP_ID = 'aa039c70-50d2-4c91-bd0e-5675df5e50ff';
 
 describe('Teams app manifest', () => {
-  it('is the existing Neram Assistant app, version 1.3.1, with its Home tab', () => {
+  it('is the existing Neram Assistant app, version 1.4.0, with its Home tab', () => {
     expect(manifest.id).toBe('df4f6b2d-ea18-46d1-8934-f508ac248e6c');
-    expect(manifest.version).toBe('1.3.1');
+    expect(manifest.version).toBe('1.4.0');
     expect(Number(manifest.manifestVersion)).toBeGreaterThanOrEqual(1.21);
     expect(manifest.$schema).toContain(`/v${manifest.manifestVersion}/`);
     // entityId unchanged, so an existing install upgrades in place.
@@ -131,13 +131,15 @@ describe('Teams app manifest', () => {
     expect(manifest.bots[0].isNotificationOnly).toBe(false);
   });
 
-  it('asks only for the meeting permissions it uses: participants and notifications for the bot, and sharing results to the meeting screen', () => {
+  it('asks only for the meeting permissions it uses: participants and notifications for the bot, sharing results to the meeting screen, and the meeting title', () => {
     expect(manifest.authorization.permissions.resourceSpecific).toEqual([
       { name: 'OnlineMeetingParticipant.Read.Chat', type: 'Application' },
       { name: 'OnlineMeetingNotification.Send.Chat', type: 'Application' },
       { name: 'ChannelMeetingParticipant.Read.Group', type: 'Application' },
       { name: 'ChannelMeetingNotification.Send.Group', type: 'Application' },
       { name: 'MeetingStage.Write.Chat', type: 'Delegated' },
+      // getMeetingDetails: the console's title for a meeting that is not on the timetable.
+      { name: 'OnlineMeeting.ReadBasic.Chat', type: 'Delegated' },
     ]);
     expect(existsSync(path.join(NEXUS, 'src/app/(pad)/pad/stage/page.tsx'))).toBe(true);
     expect(isTeamsPadPath('/pad/stage')).toBe(true);

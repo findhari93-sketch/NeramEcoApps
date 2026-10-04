@@ -20,7 +20,7 @@ import type { StateFacts } from '@/lib/seo/location-facts';
 import { classroomPlaces, hubNames, inr, stateAnswer, stateFaqs } from '@/lib/seo/location-copy';
 import { generateBreadcrumbSchema, generateFAQSchema, generateLocationCourseSchema } from '@/lib/seo/schemas';
 import { stateToolLinks } from '@/lib/seo/app-tool-links';
-import { Breadcrumbs, FactTable, FaqList, LinkGrid, Section, StickyCta, STICKY_CTA_HEIGHT, type Crumb, type LinkItem } from './parts';
+import { Breadcrumbs, FactTable, FaqList, LinkGrid, Section, StickyCta, STICKY_CTA_HEIGHT, UpdatedLine, type Crumb, type LinkItem } from './parts';
 
 export interface StateCoachingPageProps {
   facts: StateFacts;
@@ -115,6 +115,13 @@ export function StateCoachingPage({ facts, locale, cities, siblingExam }: StateC
               </Typography>
             ))}
           </Box>
+          <UpdatedLine
+            iso={facts.lastModified}
+            sources={[
+              ...(facts.testCities[0] ? [`NATA ${facts.testCities[0].year} test city list`] : []),
+              ...(facts.collegeCount ? ['the Neram college hub'] : []),
+            ]}
+          />
           <Button variant="contained" component={Link} href="/demo-class" sx={{ mt: 1, minHeight: 48, fontWeight: 600, width: { xs: '100%', sm: 'auto' } }}>
             Book a free demo class
           </Button>
@@ -250,7 +257,7 @@ export function StateCoachingPage({ facts, locale, cities, siblingExam }: StateC
         />
       </Section>
 
-      <StickyCta />
+      <StickyCta whatsapp={{ city: facts.state.name, citySlug: facts.state.slug }} />
     </Box>
   );
 }

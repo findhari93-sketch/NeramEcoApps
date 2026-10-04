@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { getCity, getState } from '@/data/geo';
-import { FIXTURE_DATASETS, examRow } from './__fixtures__/geo-datasets';
+import { FIXTURE_DATASETS, centreRow, examRow } from './__fixtures__/geo-datasets';
+import { dropSharedProfiles } from './facts';
 import { computeCityFacts, computeStateFacts, parseExamCentre, type GeoDatasets } from './location-facts';
 import { evaluateCityGate, evaluateStateGate, GATE } from './location-gate';
 
@@ -26,7 +27,7 @@ describe('computeCityFacts', () => {
   it('Chennai: classroom mode, a test city in the city, local colleges first', () => {
     const f = computeCityFacts('nata', city('chennai'), ds);
     expect(f.mode).toBe('classroom');
-    expect(f.classroom?.url).toBe('/contact/nata-coaching-center-in-chennai');
+    expect(f.classroom?.url).toBe('/coaching/nata-coaching/nata-coaching-centers-in-chennai#visit');
     expect(f.testCities[0]).toMatchObject({ label: 'Chennai', inThisCity: true, km: 0 });
     expect(f.colleges[0]).toMatchObject({ slug: 'anna', match: 'city', url: '/colleges/tamil-nadu/anna' });
     expect(f.counsellingHubs).toEqual(['tnea-barch']);
@@ -61,6 +62,12 @@ describe('computeCityFacts', () => {
     expect(computeCityFacts('jee-paper-2', city('patna'), ds).localCollegeCount).toBe(1);
   });
 
+  it('claims a classroom only on the centre own city page, never by distance', () => {
+    // Bengaluru Rural sits 0 km from Bangalore and within 15 km of the HQ but has no centre of its own.
+    expect(computeCityFacts('nata', city('bengaluru-rural'), ds).mode).toBe('online-near-classroom');
+    expect(computeCityFacts('nata', city('bangalore'), ds).mode).toBe('classroom');
+  });
+
   it('Gulf cities use international test cities and have no classroom', () => {
     const f = computeCityFacts('nata', city('dubai'), ds);
     expect(f.testCities[0].label).toBe('Dubai');
@@ -81,12 +88,27 @@ describe('evaluateCityGate', () => {
     expect(g.index).toBe(false);
   });
 
-  it('local content plus a weak fact is enough', () => {
+  it('reviewed local content plus a weak fact is enough', () => {
     const words = Array.from({ length: GATE.MIN_CONTENT_WORDS }, () => 'word').join(' ');
-    const f = computeCityFacts('nata', city('kota'), ds, { localContext: words, highlights: [], updatedAt: '2026-10-01' });
+    const f = computeCityFacts('nata', city('kota'), ds, { localContext: words, highlights: [], reviewed: true, updatedAt: '2026-10-01' });
     const g = evaluateCityGate(f);
     expect(g.reasons).toEqual(expect.arrayContaining(['local-content', 'state-counselling']));
     expect(g.index).toBe(true);
+  });
+
+  it('unreviewed AI-drafted content alone never indexes a page', () => {
+    const words = Array.from({ length: GATE.MIN_CONTENT_WORDS }, () => 'word').join(' ');
+    const f = computeCityFacts('nata', city('kota'), ds, { localContext: words, highlights: [], updatedAt: '2026-10-01' });
+    const g = evaluateCityGate(f);
+    expect(g.reasons).toContain('local-content-unreviewed');
+    expect(g.index).toBe(false);
+  });
+
+  it('indexes JEE Paper 2 city pages only for cities with a classroom', () => {
+    expect(evaluateCityGate(computeCityFacts('jee-paper-2', city('chennai'), ds)).index).toBe(true);
+    const patna = evaluateCityGate(computeCityFacts('jee-paper-2', city('patna'), ds));
+    expect(patna.index).toBe(false);
+    expect(patna.reasons).toContain('jee-city-without-classroom');
   });
 });
 
@@ -106,5 +128,16 @@ describe('state facts and gate', () => {
 
   it('a UT with no B.Arch facts and no content is not indexed', () => {
     expect(evaluateStateGate(computeStateFacts('nata', getState('lakshadweep')!, ds)).index).toBe(false);
+  });
+});
+
+describe('dropSharedProfiles', () => {
+  it('drops a Google profile link that two centres share', () => {
+    const out = dropSharedProfiles([
+      centreRow({ slug: 'a', gbpUrl: 'https://share.google/x' }),
+      centreRow({ slug: 'b', gbpUrl: 'https://share.google/x' }),
+      centreRow({ slug: 'c', gbpUrl: 'https://share.google/y' }),
+    ]);
+    expect(out.map((c) => c.gbpUrl)).toEqual([null, null, 'https://share.google/y']);
   });
 });

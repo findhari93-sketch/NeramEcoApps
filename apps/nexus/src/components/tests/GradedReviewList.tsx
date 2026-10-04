@@ -16,6 +16,7 @@ import { Box, Button, Typography, Paper, Chip, alpha, useTheme } from '@neram/ui
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import type { NexusSolutionVideo } from '@neram/database';
 import MathText from '@/components/common/MathText';
+import MathAnswer from '@/components/common/MathAnswer';
 import ExplanationPanel from '@/components/tests/ExplanationPanel';
 import SolutionVideoPlayer from '@/components/question-bank/SolutionVideoPlayer';
 import OptionBody, { type TestOption } from '@/components/tests/OptionBody';
@@ -186,8 +187,16 @@ function ReviewCards({ review, getToken, classroomId, allowReport = false, testI
               </Box>
             ) : (
               <Typography variant="body2" sx={{ mb: 1 }}>
-                Answer: <strong>{r.correct_answer || '-'}</strong>
-                {r.selected ? ` · you wrote ${r.selected}` : ' · you left this blank'}
+                {/* Typeset, so a key of 2√(3) reads as a root and not as keypad characters. */}
+                Answer: <strong>{r.correct_answer ? <MathAnswer value={r.correct_answer} /> : '-'}</strong>
+                {r.selected ? (
+                  <>
+                    {' · you wrote '}
+                    <MathAnswer value={r.selected} />
+                  </>
+                ) : (
+                  ' · you left this blank'
+                )}
               </Typography>
             )}
 

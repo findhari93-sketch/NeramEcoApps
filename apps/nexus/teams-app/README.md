@@ -112,8 +112,11 @@ In the Azure portal, App registrations, `aa039c70-50d2-4c91-bd0e-5675df5e50ff`,
 
 ### B. The meeting bot (optional, recommended)
 
-The Answer Pad works without the bot. The bot adds meeting presence (who is in the
-meeting, so "present but silent" is exact) and the "Question N is open" notification.
+The Answer Pad works without the bot. The bot adds meeting presence and the "Question N
+is open" notification. From v4 (2026-10) the console's **here** count, each question's
+"of N", the not-attempted count and the round rank all count everyone in the meeting as
+well as everyone who opened the pad. Without the bot they count only who opened the pad,
+and the console's Class details say "Meeting list off".
 
 1. Create an **Azure Bot** (pricing tier F0). Type of app: **Single Tenant**, using
    the existing app registration `aa039c70-50d2-4c91-bd0e-5675df5e50ff`.
@@ -137,6 +140,7 @@ The resource-specific permissions in the manifest are exactly what the app uses:
 | `ChannelMeetingParticipant.Read.Group` | The same, for channel meetings |
 | `ChannelMeetingNotification.Send.Group` | The same, for channel meetings |
 | `MeetingStage.Write.Chat` (delegated) | The teacher's **Share results** button, which puts the class totals on the meeting screen |
+| `OnlineMeeting.ReadBasic.Chat` (delegated) | The meeting's title at the top of the teacher's console, for a meeting that is not on the Nexus timetable (from version 1.4.0) |
 
 ### C. Publish version 1.1.0
 

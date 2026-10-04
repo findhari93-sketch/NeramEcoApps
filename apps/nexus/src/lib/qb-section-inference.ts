@@ -158,8 +158,12 @@ function findMathBoundary(signals: Array<-1 | 0 | 1>): number | null {
  * the answer is settled first and removed from the scan, so a trailing pair of
  * drawing prompts cannot drag the maths/aptitude boundary around.
  */
+/** A JEE aptitude part is 50 questions in every layout this bank has seen. */
+const JEE_APTITUDE_LENGTH = 50;
+
 export function inferPaperSections(
   questions: QBSectionInferenceInput[],
+  opts: { examType?: string | null } = {},
 ): QBSectionInferenceResult[] {
   const ordered = [...questions].sort((a, b) => {
     const an = a.question_number ?? Number.MAX_SAFE_INTEGER;
@@ -192,7 +196,17 @@ export function inferPaperSections(
       result.set(q.id, null);
       return;
     }
-    result.set(q.id, i < boundary ? 'math_mcq' : 'aptitude');
+    if (i < boundary) {
+      result.set(q.id, 'math_mcq');
+      return;
+    }
+    // JEE Paper 2B has three MCQ parts: Maths, Aptitude, then Planning where
+    // 2A has its drawings. Without this the Planning block reads as aptitude.
+    const intoAptitude = i - boundary;
+    result.set(
+      q.id,
+      opts.examType === 'JEE_PAPER_2B' && intoAptitude >= JEE_APTITUDE_LENGTH ? 'planning' : 'aptitude',
+    );
   });
 
   return ordered.map((q) => ({ id: q.id, section: result.get(q.id) ?? null }));

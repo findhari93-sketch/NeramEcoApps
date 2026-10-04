@@ -40,7 +40,7 @@ import type {
   QBQuestionStatus,
   QBShift,
 } from '../../types';
-import { QB_SECTION_ORDER } from '../../types';
+import { QB_SECTION_ORDER, qbExamRelevance } from '../../types';
 import {
   getOrCreateOriginalPaper,
   getQuestionsByPaper,
@@ -437,7 +437,7 @@ export async function applyPaperJSON(
   }
 
   // --- 5. Per question ------------------------------------------------------
-  const examRelevance: QBExamRelevance = paper.exam_type === 'JEE_PAPER_2' ? 'JEE' : 'NATA';
+  const examRelevance: QBExamRelevance = qbExamRelevance(paper.exam_type);
   const inserts: Array<{ row: Record<string, unknown>; number: number; tagSlugs?: string[] }> = [];
   const tagWrites: Array<{ questionId: string; tagIds: string[] }> = [];
   let updated = 0;

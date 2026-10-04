@@ -43,6 +43,7 @@ export const PAD_RSC_PERMISSIONS = [
   { name: 'ChannelMeetingParticipant.Read.Group', type: 'Application' },
   { name: 'ChannelMeetingNotification.Send.Group', type: 'Application' },
   { name: 'MeetingStage.Write.Chat', type: 'Delegated' },
+  { name: 'OnlineMeeting.ReadBasic.Chat', type: 'Delegated' },
 ] as const;
 
 export type MeetingTabOutcome =

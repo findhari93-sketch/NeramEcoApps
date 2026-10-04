@@ -42,7 +42,7 @@ describe('QuestionEditForm', () => {
     render(<QuestionEditForm question={question} getToken={getToken} onSaved={onSaved} onCancel={() => {}} />);
 
     fireEvent.change(screen.getByLabelText('Question text'), { target: { value: 'If $c = 5$ then' } });
-    fireEvent.click(screen.getByRole('button', { name: /Save/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     const [url, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
@@ -53,14 +53,14 @@ describe('QuestionEditForm', () => {
 
   it('keeps Save disabled until something changes, so a stray click cannot rewrite a question', () => {
     render(<QuestionEditForm question={question} getToken={getToken} onSaved={() => {}} onCancel={() => {}} />);
-    expect(screen.getByRole('button', { name: /Save/ })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveProperty('disabled', true);
   });
 
   it('sends the chosen option id as the correct answer', async () => {
     const onSaved = vi.fn();
     render(<QuestionEditForm question={question} getToken={getToken} onSaved={onSaved} onCancel={() => {}} />);
     fireEvent.click(screen.getByRole('radio', { name: /Mark option B correct/i }));
-    fireEvent.click(screen.getByRole('button', { name: /Save/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(JSON.parse(init.body).correct_answer).toBe('b');
@@ -156,7 +156,7 @@ describe('QuestionEditForm section control', () => {
     fireEvent.click(within(screen.getByRole('listbox')).getByText('Aptitude'));
     await waitFor(() => expect(onChangeSection).toHaveBeenCalledWith('q1', 'aptitude'));
     // and it did not join the form's dirty state
-    expect(screen.getByRole('button', { name: /Save/ })).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: 'Save' })).toHaveProperty('disabled', true);
   });
 
   it('hides the section control when the caller does not offer one', () => {
@@ -237,7 +237,7 @@ describe('QuestionEditForm on a drawing', () => {
     );
 
     fireEvent.change(screen.getByLabelText('Question text'), { target: { value: 'Draw a bus stand at noon.' } });
-    fireEvent.click(screen.getByRole('button', { name: /Save/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
@@ -256,7 +256,7 @@ describe('QuestionEditForm on a drawing', () => {
     render(<QuestionEditForm question={question} getToken={getToken} onSaved={onSaved} onCancel={() => {}} />);
 
     fireEvent.change(screen.getByLabelText('Question text'), { target: { value: 'If $c = 9$ then' } });
-    fireEvent.click(screen.getByRole('button', { name: /Save/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];

@@ -41,6 +41,7 @@ import {
 } from '@mui/icons-material';
 import type { OfflineCenter } from '@neram/database';
 import Link from 'next/link';
+import { photoUrl } from '@/lib/seo/centre-photos';
 
 // Facility icons mapping
 const facilityIcons: Record<string, React.ReactElement> = {
@@ -380,10 +381,10 @@ export default function CentersPageContent() {
                   }}
                 >
                   {/* Center Image / Placeholder */}
-                  {center.photos && center.photos.length > 0 ? (
+                  {center.photos && center.photos.length > 0 && photoUrl(center.photos[0]) ? (
                     <Box
                       component="img"
-                      src={center.photos[0]}
+                      src={photoUrl(center.photos[0])!}
                       alt={center.name}
                       sx={{
                         height: 180,

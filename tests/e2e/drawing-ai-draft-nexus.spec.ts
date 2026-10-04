@@ -26,6 +26,7 @@ import { test, expect, type APIRequestContext, type Page } from '@playwright/tes
 import { readFileSync } from 'node:fs';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 import { getTestAuthToken, injectAuthForPage, APP_URLS } from '../utils/credentials';
+import { showScores } from '../utils/drawing-review';
 
 const FIXTURE_IMAGE = 'apps/nexus/public/icons/icon-512x512.png';
 const DRAFT_COMMENT = 'E2E draft: the blocks converge well; the stair treads drift left.';
@@ -70,7 +71,7 @@ test.describe('Drawing AI draft', () => {
     const ok = await injectAuthForPage(page, 'teacher');
     test.skip(!ok, 'Teacher auth injection failed');
     await page.goto(`${APP_URLS.nexus}/teacher/drawing-reviews/${submissionId}?assignment=${assignmentId}`, { waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('heading', { name: 'Scores', exact: true })).toBeVisible({ timeout: 90_000 });
+    await showScores(page);
   };
 
   test('setup: a submission with a seeded draft', async ({ request }) => {
@@ -146,7 +147,7 @@ test.describe('Drawing AI draft', () => {
     await expect(page.getByTestId('ai-suggested')).toHaveCount(2);
     await expect(page.getByTestId('ai-suggested').first()).toContainText('Draft says 3, unsure. Your call.');
 
-    await expect(page.getByRole('textbox', { name: 'Feedback to student' })).toHaveValue(DRAFT_COMMENT);
+    await expect(page.getByRole('textbox', { name: 'Written feedback to student' })).toHaveValue(DRAFT_COMMENT);
     await expect(page.getByTestId('feedback-from-draft')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Approve', exact: true })).toBeVisible();
 

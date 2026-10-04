@@ -44,6 +44,8 @@ export interface SeekBarProps {
   /** Infinity means unbounded. The only limit this component knows about. */
   seekCeiling: number;
   buffered: ReadonlyArray<TimeRange>;
+  /** Stretches already played. Drawn so a student can see what they skipped. */
+  watched?: ReadonlyArray<TimeRange>;
   marks?: SeekMark[];
   /** Only ever called with an already-clamped value. */
   onSeek: (seconds: number) => void;
@@ -61,6 +63,7 @@ export default function SeekBar({
   duration,
   seekCeiling,
   buffered,
+  watched = [],
   marks = [],
   onSeek,
   onRefused,
@@ -221,6 +224,28 @@ export default function SeekBar({
     [buffered, pct],
   );
 
+  const watchedBars = useMemo(
+    () =>
+      watched.map(([start, end], i) => (
+        <Box
+          key={`w-${start}-${end}-${i}`}
+          data-testid="seek-watched-range"
+          sx={{
+            position: 'absolute',
+            top: 0,
+            bottom: 0,
+            left: `${pct(start)}%`,
+            width: `${Math.max(0, pct(end) - pct(start))}%`,
+            // The played colour, faded: "seen" without competing with the
+            // solid bar that shows where the playhead is.
+            bgcolor: 'rgba(66,165,245,0.55)',
+            borderRadius: 999,
+          }}
+        />
+      )),
+    [watched, pct],
+  );
+
   const hoveringLocked = hover !== null && lockedAt !== null && hover.t > lockedAt;
   // Kept on the bar near either end. Centred on the pointer, a label over the
   // last few percent of the track hung half off the screen on a phone.
@@ -260,7 +285,7 @@ export default function SeekBar({
         >
           {hoveringLocked && <LockRoundedIcon sx={{ fontSize: 12 }} />}
           <Typography sx={{ fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-            {hoveringLocked ? 'Not watched yet' : formatClock(hover.t)}
+            {hoveringLocked ? 'Pass the quiz to unlock' : formatClock(hover.t)}
           </Typography>
         </Box>
       )}
@@ -280,7 +305,7 @@ export default function SeekBar({
         aria-valuenow={Math.round(displayed)}
         aria-valuetext={
           lockedAt !== null
-            ? `${formatSpoken(displayed)} of ${formatSpoken(duration)}. Locked after ${formatSpoken(lockedAt)} until you watch that far and pass the checkpoint.`
+            ? `${formatSpoken(displayed)} of ${formatSpoken(duration)}. Locked after ${formatSpoken(lockedAt)} until you pass the checkpoint quiz.`
             : `${formatSpoken(displayed)} of ${formatSpoken(duration)}`
         }
         aria-disabled={disabled || undefined}
@@ -320,6 +345,7 @@ export default function SeekBar({
           }}
         >
           {bufferedBars}
+          {watchedBars}
 
           {lockedAt !== null && (
             <Box

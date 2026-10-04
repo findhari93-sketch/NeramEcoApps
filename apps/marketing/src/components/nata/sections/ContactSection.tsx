@@ -17,6 +17,7 @@ import {
   m3Secondary,
   m3Neutral,
 } from '@neram/ui';
+import { buildWhatsAppLink } from '@/lib/whatsapp';
 
 const WHATSAPP_GREEN = '#25d366';
 
@@ -43,7 +44,7 @@ const contactCards: ContactCardData[] = [
     buttonVariant: 'contained',
     buttonColor: WHATSAPP_GREEN,
     buttonTextColor: '#fff',
-    href: 'https://wa.me/919176137043?text=Hi%2C%20I%20need%20help%20with%20NATA%202026',
+    href: buildWhatsAppLink({ text: 'Hi, I need help with NATA 2026' }).href,
   },
   {
     icon: <PhoneIcon sx={{ fontSize: 28, color: m3Primary[40] }} />,

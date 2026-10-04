@@ -40,6 +40,7 @@ const footerLinks = {
     { label: 'Previous Year Papers', href: '/previous-year-papers' },
     { label: 'Cutoff Calculator', href: '/tools/cutoff-calculator' },
     { label: 'Free NATA App', href: '/nata-app' },
+    { label: 'aiArchitek AI Platform', href: '/aiarchitek' },
     { label: 'Nexus LMS (Students)', href: 'https://nexus.neramclasses.com' },
     { label: 'NATA Online Coaching', href: '/nata-online-coaching' },
     { label: 'Blog', href: '/blog' },
@@ -127,7 +128,7 @@ export default function Footer() {
               Neram Classes
             </Typography>
             <Typography variant="body2" sx={{ mb: 2, opacity: 0.9 }}>
-              India&apos;s leading NATA & JEE Paper 2 coaching institute. Expert IIT/NIT alumni faculty, 99.9% success rate.
+              NATA & JEE Paper 2 coaching since 2009. Live online classes across India and the Gulf, classrooms in Tamil Nadu and Bangalore.
             </Typography>
             <Typography variant="body2" sx={{ opacity: 0.9 }}>
               Bangalore, Karnataka, India

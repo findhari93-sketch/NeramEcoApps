@@ -1,48 +1,72 @@
 'use client';
 
+import { Fragment } from 'react';
 import { useTranslations } from 'next-intl';
-import { Box, Container, Typography, Grid, Card, CardContent, Avatar, Chip } from '@neram/ui';
+import { Box, Container, Typography, Grid, Card, CardContent, Avatar, Chip, IconButton } from '@neram/ui';
+import LinkedInIcon from '@mui/icons-material/LinkedIn';
 
 // Team members (could be moved to CMS/database later)
-// NOTE: institute / role / bio for some members are pending real details from the founders.
-// Cards degrade gracefully (initials avatar, no chip) until those fields are filled in.
-const teamMembers = [
+// Cards degrade gracefully: empty fields are hidden and an empty image shows the initials avatar.
+// Only set `image` once the file exists in public/images/team, otherwise every visit requests a 404.
+// `honorific` is shown before the name but kept out of the initials.
+const teamMembers: Array<{
+  honorific?: string;
+  name: string;
+  role: string;
+  institute: string;
+  bio: string;
+  image: string;
+  linkedin?: string;
+}> = [
   {
     name: 'TamilSelvan',
-    role: 'Strategy',
-    institute: '',
+    role: 'Chief Information Officer (CIO)',
+    institute: 'MBA, Alagappa University',
+    bio: 'Student Guidance | Academic Coordination | Operations',
+    image: '',
+    linkedin: 'https://www.linkedin.com/in/tamil-selvan-b7395b177/',
+  },
+  {
+    honorific: 'Ar.',
+    name: 'Haribabu Manoharan',
+    role: 'Student Advisor & Ex-Chief Technology Officer (CTO)',
+    institute: 'NIT Trichy',
     bio: '',
-    image: '/images/team/tamilselvan.jpg',
+    image: '/images/team/haribabu-manoharan.jpg',
+    linkedin: 'https://www.linkedin.com/in/findhari/',
   },
   {
     name: 'Sudharshini Arjun',
-    role: '', // TODO: confirm role with founder
-    institute: '',
-    bio: '',
-    image: '/images/team/sudharshini-arjun.jpg',
+    role: 'Architectural Mentor',
+    institute: 'University of Oxford, UK',
+    bio: 'RIBA Part 2 Architectural Assistant | Senior Architect at KOID India',
+    image: '',
+    linkedin: 'https://www.linkedin.com/in/sudharshini-rajan-47a0566b/',
   },
   {
+    honorific: 'Ar.',
     name: 'Sivaram',
-    role: '', // TODO: confirm role with founder
-    institute: '',
-    bio: '',
+    role: 'Architecture Faculty & Mentor',
+    institute: 'B.Arch, Anna University',
+    bio: 'NATA & JEE Paper 2 | Architectural Aptitude | Drawing & Design',
     image: '/images/team/sivaram.jpg',
   },
   {
+    honorific: 'Ms.',
     name: 'Shanthi Manoharan',
-    role: '', // TODO: confirm role with founder
+    role: 'Administration & Student Support Coordinator',
     institute: '',
-    bio: '',
-    image: '/images/team/shanthi-manoharan.jpg',
+    bio: 'Student Guidance | Parent Communication | Academic Administration',
+    image: '',
   },
 ];
 
 // Statistics
-const stats = [
-  { key: 'yearsOfExcellence', value: '15+' },
-  { key: 'studentsEnrolled', value: '10,000+' },
-  { key: 'successRate', value: '99.9%' },
-  { key: 'expertFaculty', value: '50+' },
+// Founder-confirmed proof points only (lib/seo/facts.ts PROOF_POINTS).
+const stats: Array<{ key: string; value: string; label?: string }> = [
+  { key: 'yearsOfExcellence', value: '10+' },
+  { key: 'studentsEnrolled', value: '1,000+' },
+  { key: 'airOne', value: 'AIR 1', label: 'JEE B.Arch 2024' },
 ];
 
 // Story paragraphs (rendered in order)
@@ -170,7 +194,7 @@ export default function AboutPageContent() {
           </Typography>
           <Grid container spacing={4}>
             {stats.map((stat, index) => (
-              <Grid item xs={6} md={3} key={index}>
+              <Grid item xs={6} md={4} key={index}>
                 <Box sx={{ textAlign: 'center' }}>
                   <Typography
                     variant="h2"
@@ -180,7 +204,7 @@ export default function AboutPageContent() {
                     {stat.value}
                   </Typography>
                   <Typography variant="h6" color="text.secondary">
-                    {t(`impact.${stat.key}`)}
+                    {stat.label ?? t(`impact.${stat.key}`)}
                   </Typography>
                 </Box>
               </Grid>
@@ -210,7 +234,7 @@ export default function AboutPageContent() {
           </Typography>
           <Grid container spacing={4} justifyContent="center">
             {teamMembers.map((member, index) => (
-              <Grid item xs={12} sm={6} md={3} key={index}>
+              <Grid item xs={12} sm={6} md={4} key={index}>
                 <Card
                   sx={{
                     height: '100%',
@@ -227,10 +251,10 @@ export default function AboutPageContent() {
                     },
                   }}
                 >
-                  <CardContent sx={{ p: 3 }}>
+                  <CardContent sx={{ p: 3, height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <Avatar
                       src={member.image || undefined}
-                      alt={member.name}
+                      alt={[member.honorific, member.name].filter(Boolean).join(' ')}
                       sx={{
                         width: 112,
                         height: 112,
@@ -248,7 +272,7 @@ export default function AboutPageContent() {
                       {getInitials(member.name)}
                     </Avatar>
                     <Typography variant="h6" gutterBottom>
-                      {member.name}
+                      {[member.honorific, member.name].filter(Boolean).join(' ')}
                     </Typography>
                     {member.role && (
                       <Typography
@@ -275,8 +299,38 @@ export default function AboutPageContent() {
                     )}
                     {member.bio && (
                       <Typography variant="body2" color="text.secondary">
-                        {member.bio}
+                        {/* Keep each "|" on the same line as the item before it so a wrap never starts with one */}
+                        {member.bio.split(' | ').map((item, i, items) => (
+                          <Fragment key={item}>
+                            <Box component="span" sx={{ whiteSpace: 'nowrap' }}>
+                              {item}
+                              {i < items.length - 1 ? ' |' : ''}
+                            </Box>
+                            {i < items.length - 1 ? ' ' : ''}
+                          </Fragment>
+                        ))}
                       </Typography>
+                    )}
+                    {member.linkedin && (
+                      // mt: auto pins the link to the card bottom so icons line up across a row
+                      <Box sx={{ mt: 'auto', pt: 1.5 }}>
+                        <IconButton
+                          component="a"
+                          href={member.linkedin}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`${[member.honorific, member.name].filter(Boolean).join(' ')} on LinkedIn (opens in a new tab)`}
+                          sx={{
+                            width: 48,
+                            height: 48,
+                            color: '#0A66C2',
+                            '&:hover': { bgcolor: 'rgba(10, 102, 194, 0.08)' },
+                            '&:focus-visible': { outline: '2px solid #0A66C2', outlineOffset: 2 },
+                          }}
+                        >
+                          <LinkedInIcon sx={{ fontSize: 28 }} />
+                        </IconButton>
+                      </Box>
                     )}
                   </CardContent>
                 </Card>

@@ -30,6 +30,7 @@ import {
   qbSectionLabel,
 } from '@neram/database';
 import MathText from '@/components/common/MathText';
+import MathAnswerPreview from '@/components/common/MathAnswerPreview';
 import AnswerKeyUpload from './AnswerKeyUpload';
 // The image-need rules used to live here, which meant a grid component owned a
 // judgement four other screens depended on and three of them re-implemented.
@@ -604,14 +605,18 @@ export default function AnswerKeyGrid({ questions, onSave, saving, onChangeSecti
                         fullWidth
                       />
                     ) : (
-                      <TextField
-                        size="small"
-                        value={currentAnswer}
-                        onChange={(e) => handleChange(qNum, e.target.value)}
-                        placeholder="Enter answer"
-                        fullWidth
-                        sx={{ '& .MuiInputBase-input': { py: 0.75, fontSize: '0.875rem' } }}
-                      />
+                      <>
+                        <TextField
+                          size="small"
+                          value={currentAnswer}
+                          onChange={(e) => handleChange(qNum, e.target.value)}
+                          placeholder="e.g. 12 or 3/4"
+                          fullWidth
+                          inputProps={{ inputMode: 'decimal', spellCheck: false }}
+                          sx={{ '& .MuiInputBase-input': { py: 0.75, fontSize: '0.875rem' } }}
+                        />
+                        <MathAnswerPreview value={currentAnswer} audience="teacher" compact />
+                      </>
                     )}
                   </Paper>
                 );
@@ -744,13 +749,17 @@ export default function AnswerKeyGrid({ questions, onSave, saving, onChangeSecti
                               onChange={(next) => handleChange(qNum, next)}
                             />
                           ) : (
-                            <TextField
-                              size="small"
-                              value={currentAnswer}
-                              onChange={(e) => handleChange(qNum, e.target.value)}
-                              placeholder="Enter answer"
-                              sx={{ '& .MuiInputBase-input': { py: 0.5, fontSize: '0.875rem' } }}
-                            />
+                            <>
+                              <TextField
+                                size="small"
+                                value={currentAnswer}
+                                onChange={(e) => handleChange(qNum, e.target.value)}
+                                placeholder="e.g. 12 or 3/4"
+                                inputProps={{ inputMode: 'decimal', spellCheck: false }}
+                                sx={{ '& .MuiInputBase-input': { py: 0.5, fontSize: '0.875rem' } }}
+                              />
+                              <MathAnswerPreview value={currentAnswer} audience="teacher" compact />
+                            </>
                           )}
                         </td>
                         <td>

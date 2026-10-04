@@ -7,6 +7,7 @@
 import { getBySlug } from '@/data/counselling-2026';
 import { COURSE_FEES } from '@/lib/fees';
 import { EXAMS } from './exam-config';
+import { streetOnly } from './centre-page';
 import type { CityFacts, StateFacts, TestCityFact } from './location-facts';
 
 export const inr = (n: number) => `₹${n.toLocaleString('en-IN')}`;
@@ -42,11 +43,32 @@ function testCityPhrase(t: TestCityFact, cityName: string): string {
 
 // ─── City ──────────────────────────────────────────────────────────────────
 
+/** "Vasanth Nagar" from "Vasanth Nagar, Madurai"; null when the label is just the city. */
+export function centreLocality(f: CityFacts): string | null {
+  const label = f.classroom?.centre.areaLabel ?? '';
+  const [first, ...rest] = label.split(',').map((s) => s.trim());
+  return rest.length && first && first.toLowerCase() !== f.place.name.toLowerCase() ? first : null;
+}
+
+/**
+ * A classroom city answers "{exam} coaching centre in {city}", the search a
+ * student makes when they want a place to walk into. Other cities are online.
+ */
 export function cityTitle(f: CityFacts): string {
   const exam = EXAMS[f.exam].name;
   const name = f.place.name;
-  if (f.mode === 'classroom') return `${exam} Coaching in ${name}: Classroom and Online`;
+  if (f.mode === 'classroom') {
+    const area = f.centres.length > 1 ? null : centreLocality(f);
+    const withArea = area && `${exam} Coaching Centre in ${name}: ${area} Classroom`;
+    // Google shows about 60 characters; past that the locality would be cut off.
+    return withArea && withArea.length <= 60 ? withArea : `${exam} Coaching Centre in ${name}: Classroom and Online`;
+  }
   return `${exam} Coaching in ${name}: Live Online Classes`;
+}
+
+export function cityH1(f: CityFacts): string {
+  const exam = EXAMS[f.exam].name;
+  return f.mode === 'classroom' ? `${exam} Coaching Centre in ${f.place.name}` : `${exam} Coaching in ${f.place.name}`;
 }
 
 export function cityDescription(f: CityFacts): string {
@@ -59,6 +81,13 @@ export function cityDescription(f: CityFacts): string {
   const test = f.testCities[0];
   const testBit = test ? (test.inThisCity ? ` ${name} is a NATA test city.` : ` Nearest NATA test city: ${test.label}.`) : '';
   const fee = CRASH ? ` Fees from ${inr(CRASH.price)}.` : '';
+  // A centre page leads with where the classroom is: that is what the searcher wants.
+  const own = f.mode === 'classroom' && f.centres.length === 1 ? f.centres[0] : null;
+  const street = own ? streetOnly(own.address, own.city) : null;
+  if (own && street) {
+    const near = own.landmark ? ` (${own.landmark})` : '';
+    return `${exam} coaching centre at ${street}, ${own.city}${near}. Classroom batches and live online classes, mock tests and B.Arch counselling help.${fee}`.slice(0, 300);
+  }
   return `${exam} coaching for ${name} students: ${mode}, mock tests and B.Arch counselling help.${testBit}${fee}`.slice(0, 300);
 }
 

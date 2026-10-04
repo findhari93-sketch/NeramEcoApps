@@ -1,4 +1,4 @@
-import type { QBQuestionFormat } from '@neram/database';
+import type { QBQuestionFormat, QBQuestionSection } from '@neram/database';
 
 // ============================================
 // Upload method tabs
@@ -63,7 +63,7 @@ export interface ReviewQuestion {
   /** NTA question ID from answer sheet */
   nta_question_id: string;
   /** Section key: math_mcq, math_numerical, aptitude, drawing */
-  section: 'math_mcq' | 'math_numerical' | 'aptitude' | 'drawing';
+  section: QBQuestionSection;
   /** Category tags */
   categories: string[];
   /** Correct answer — filled later from answer key */
@@ -397,6 +397,9 @@ export function inferSectionKey(name: string): ReviewQuestion['section'] {
   if (lower.includes('math') && (lower.includes('mcq') || lower.includes('objective'))) return 'math_mcq';
   if (lower.includes('math') && (lower.includes('num') || lower.includes('integer'))) return 'math_numerical';
   if (lower.includes('math')) return 'math_mcq';
+  // Before aptitude: JEE Paper 2B's third part is "Planning", and it used to
+  // fall through to aptitude with everything else.
+  if (lower.includes('plan')) return 'planning';
   if (lower.includes('apt') || lower.includes('general')) return 'aptitude';
   if (lower.includes('draw')) return 'drawing';
   return 'aptitude';
@@ -411,6 +414,8 @@ export function inferCategories(sectionKey: ReviewQuestion['section']): string[]
       return ['aptitude'];
     case 'drawing':
       return ['drawing'];
+    case 'planning':
+      return ['planning'];
   }
 }
 

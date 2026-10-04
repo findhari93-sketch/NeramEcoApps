@@ -148,7 +148,7 @@ export function shortSession(session: string | null | undefined): string {
 export function sourceLabel(item: Pick<NexusQBQuestionListItem, 'sources'>): string | null {
   const source = item.sources?.[0];
   if (!source) return null;
-  const exam = source.exam_type === 'JEE_PAPER_2' ? 'JEE' : 'NATA';
+  const exam = source.exam_type === 'NATA' ? 'NATA' : source.exam_type === 'JEE_PAPER_2B' ? 'JEE P2B' : 'JEE';
   const session = shortSession(source.session);
   const number = source.question_number != null ? ` Q${source.question_number}` : '';
   return `${exam} ${source.year}${session}${number}`;

@@ -32,6 +32,7 @@ import {
 } from '@/lib/seo/schemas';
 import { buildAlternates, buildOgImage } from '@/lib/seo/metadata';
 import { APP_URL, BASE_URL } from '@/lib/seo/constants';
+import { COURSE_FEES, PROOF_POINTS } from '@/lib/seo/facts';
 import NataOnlineCoachingTamil from '@/components/nata-coaching/localized/NataOnlineCoachingTamil';
 import NataOnlineCoachingHindi from '@/components/nata-coaching/localized/NataOnlineCoachingHindi';
 
@@ -41,14 +42,14 @@ export const revalidate = 86400;
 // Tamil and Hindi serve native script through dedicated localized components further below.
 const localizedMeta: Record<string, { title: string; description: string }> = {
   ta: {
-    title: 'NATA ஆன்லைன் கோச்சிங் 2026 | நேரடி வகுப்புகள், NIT/IIT ஆசிரியர்கள்',
+    title: 'NATA ஆன்லைன் கோச்சிங் 2026 | நேரடி வகுப்புகள், மாதிரி தேர்வுகள்',
     description:
-      'இந்தியாவின் மிகவும் நம்பகமான NATA ஆன்லைன் கோச்சிங்: NIT/IIT முன்னாள் மாணவர்களின் நேரடி வகுப்புகள், 2009 முதல் 10,000+ ரேங்க் ஸ்கோரர்கள், தினசரி வரைபடப் பயிற்சி, 100+ மாதிரி தேர்வுகள், இலவச டெமோ. கட்டணம் ரூ. 15,000 முதல்.',
+      '2009 முதல் NATA பயிற்சி. 1,000+ மாணவர்கள், JEE B.Arch 2024 இல் AIR 1. இந்தியா முழுவதும் வளைகுடா நாடுகளிலும் நேரடி ஆன்லைன் வகுப்புகள், தினசரி வரைபடப் பயிற்சி, இலவச டெமோ. கட்டணம் ரூ. 15,000 முதல்.',
   },
   hi: {
-    title: 'NATA ऑनलाइन कोचिंग 2026 | लाइव कक्षाएँ, NIT/IIT शिक्षक',
+    title: 'NATA ऑनलाइन कोचिंग 2026 | लाइव कक्षाएँ, मॉक टेस्ट',
     description:
-      'भारत की सबसे विश्वसनीय NATA ऑनलाइन कोचिंग: NIT/IIT पूर्व छात्र शिक्षकों की लाइव कक्षाएँ, 2009 से 10,000+ रैंक स्कोरर, दैनिक ड्रॉइंग अभ्यास, 100+ मॉक टेस्ट, मुफ्त डेमो। शुल्क रु. 15,000 से।',
+      '2009 से NATA की तैयारी। 1,000+ छात्र, JEE B.Arch 2024 में AIR 1। पूरे भारत और खाड़ी देशों के लिए लाइव ऑनलाइन कक्षाएँ, रोज़ ड्रॉइंग अभ्यास, मुफ्त डेमो। शुल्क रु. 15,000 से।',
   },
 };
 
@@ -60,10 +61,11 @@ export async function generateMetadata({
   const localized = localizedMeta[locale];
   const title =
     localized?.title ??
-    'NATA Online Coaching 2026 | #1 Live Classes, Mock Tests, Drawing | Neram Classes';
+    // The [locale] layout template appends " | Neram Classes".
+    'NATA Online Coaching 2026 | Live Classes, Mock Tests, Drawing';
   const description =
     localized?.description ??
-    "India's most trusted NATA online coaching: live classes by NIT/IIT alumni, 10,000+ rank scorers since 2009, daily drawing practice, 100+ mock tests, free demo. Fees from ₹15,000.";
+    `NATA online coaching since 2009: ${PROOF_POINTS.students}, ${PROOF_POINTS.topResult}. Live classes across India and the Gulf, daily drawing practice, 100+ mock tests in the 1-Year program, free demo. Fees from ₹15,000.`;
 
   return {
     title,
@@ -78,7 +80,7 @@ export async function generateMetadata({
       url: `${BASE_URL}/nata-online-coaching`,
       images: [
         {
-          url: buildOgImage('NATA Online Coaching 2026', '99.9% Success Rate | Since 2009 | 150+ Cities', 'coaching'),
+          url: buildOgImage('NATA Online Coaching 2026', `Since 2009 | ${PROOF_POINTS.students} | ${PROOF_POINTS.topResult}`, 'coaching'),
           width: 1200,
           height: 630,
           alt: 'NATA Online Coaching 2026, Neram Classes',
@@ -107,24 +109,24 @@ const features = [
     desc: '2+ hours of supervised drawing practice every day with personalised critique from experienced faculty.',
   },
   {
-    title: 'Small Batches (Max 25)',
-    desc: 'Each batch is limited to 25 students so every learner gets individual attention and mentoring.',
+    title: 'Small Batches',
+    desc: 'Batches are kept small so every learner gets individual attention and mentoring.',
   },
   {
-    title: 'NIT/IIT Alumni Faculty',
-    desc: 'Learn from NIT, IIT, and SPA alumni with 10+ years of teaching experience in architecture entrance exams.',
+    title: 'Teaching Since 2009',
+    desc: 'Founded in 2009 by Pushparaj Manoharan (B.Arch, NIT Trichy). 10+ years of coaching for architecture entrance exams.',
   },
   {
     title: '100+ Mock Tests',
-    desc: 'Full-length NATA mock tests with detailed performance analysis, section-wise scoring, and improvement tips.',
+    desc: 'The 1-Year program includes 100+ full-length NATA mock tests with section-wise scoring and improvement tips.',
   },
   {
-    title: '24/7 Doubt Support',
-    desc: 'Dedicated WhatsApp doubt-clearing groups with faculty available round the clock for quick resolution.',
+    title: 'WhatsApp Doubt Support',
+    desc: 'Dedicated WhatsApp doubt-clearing groups where faculty answer your questions between classes.',
   },
 ];
 
-const featureIcons = ['LIVE', 'DRAW', '25', 'NIT', '100+', '24/7'];
+const featureIcons = ['LIVE', 'DRAW', 'SMALL', '2009', '100+', 'HELP'];
 
 const courses = [
   {
@@ -153,7 +155,7 @@ const courses = [
       '100+ full-length mock tests',
       'Personal mentor assigned',
       'Recorded lectures for revision',
-      '24/7 WhatsApp doubt support',
+      'WhatsApp doubt support',
       'College admission guidance',
     ],
   },
@@ -176,14 +178,14 @@ const courses = [
 
 const comparisonPoints = [
   {
-    feature: 'Success Rate',
-    neram: '99.9%, same as our offline batches',
-    traditional: 'Varies widely by location',
+    feature: 'Faculty',
+    neram: 'Same faculty as our classroom batches',
+    traditional: 'Depends on the local centre',
   },
   {
     feature: 'Batch Size',
-    neram: 'Max 25 students per batch',
-    traditional: '40 to 60 students per batch',
+    neram: 'Small batches with individual attention',
+    traditional: 'Often large batches',
   },
   {
     feature: 'Class Timing',
@@ -197,7 +199,7 @@ const comparisonPoints = [
   },
   {
     feature: 'Faculty Access',
-    neram: '24/7 WhatsApp doubt support with faculty',
+    neram: 'WhatsApp doubt support with faculty between classes',
     traditional: 'Limited to class hours only',
   },
   {
@@ -224,16 +226,16 @@ const topColleges = [
 
 const appTools = [
   {
-    title: 'NATA Mock Tests',
-    desc: 'Take unlimited full-length NATA mock tests with timer, auto-evaluation, and score analysis.',
+    title: 'Cutoff Calculator',
+    desc: 'Work out your NATA score and see where it stands against past cutoffs.',
   },
   {
-    title: 'Drawing Practice Sheets',
-    desc: 'Download and practice from 500+ drawing prompts curated by architecture professors.',
+    title: 'B.Arch College Predictor',
+    desc: 'See which B.Arch colleges match your expected score and category.',
   },
   {
-    title: 'Aptitude Trainer',
-    desc: 'Sharpen logical reasoning, spatial ability, and general knowledge with daily quizzes.',
+    title: 'Question Bank Preview',
+    desc: 'Try past NATA and JEE B.Arch questions before you join. The exam centre finder is in the app too.',
   },
 ];
 
@@ -243,31 +245,31 @@ const upcomingBatches = [
     name: 'NATA Crash Course (Weekend)',
     startDate: 'Sat, 7 Jun 2026',
     timing: '9:00 AM to 12:00 PM IST',
-    seats: '6 of 25 seats left',
-    seatsCritical: true,
+    seats: 'Seats open',
+    seatsCritical: false,
   },
   {
     name: '1-Year NATA Program (Evening)',
     startDate: 'Mon, 16 Jun 2026',
     timing: '6:30 PM to 9:00 PM IST',
-    seats: '12 of 25 seats left',
+    seats: 'Seats open',
     seatsCritical: false,
   },
   {
     name: '2-Year NATA Foundation (Morning)',
     startDate: 'Mon, 23 Jun 2026',
     timing: '7:00 AM to 9:30 AM IST',
-    seats: '18 of 25 seats left',
+    seats: 'Seats open',
     seatsCritical: false,
   },
 ];
 
 const trustPoints = [
-  'Since 2009 (16+ years of NATA expertise)',
-  '10,000+ architects trained',
-  '99.9% success rate',
-  'Faculty from NIT, IIT, SPA',
-  '5 languages: English, Tamil, Hindi, Kannada, Malayalam',
+  `Since 2009 (${PROOF_POINTS.years})`,
+  PROOF_POINTS.students,
+  PROOF_POINTS.topResult,
+  'Founded by an NIT Trichy architect',
+  'Live online across India and the Gulf',
 ];
 
 export default function NataOnlineCoachingPage({ params: { locale } }: PageProps) {
@@ -287,14 +289,14 @@ export default function NataOnlineCoachingPage({ params: { locale } }: PageProps
 
   const faqs = [
     {
-      question: 'Which is the best NATA online coaching in India?',
+      question: 'How do I choose a NATA online coaching institute?',
       answer:
-        "Neram Classes is widely regarded as the best NATA online coaching in India. With a 99.9% success rate, NIT/IIT/SPA alumni faculty, small batches of 25 students, daily drawing practice, and 100+ mock tests, Neram offers the most comprehensive NATA online coaching program. Students from 150+ cities across India and 6 Gulf countries have secured admissions to SPA Delhi, NITs, CEPT, and other top architecture colleges through our online program.",
+        `Look for live classes (not only recordings), regular drawing feedback, enough mock tests and a clear track record. Neram Classes has coached architecture aspirants since 2009: ${PROOF_POINTS.students} and ${PROOF_POINTS.topResult}. Classes run live online for students across India and the Gulf, with small batches, daily drawing practice and 100+ mock tests in the 1-Year program. Book a free demo class to judge the teaching for yourself.`,
     },
     {
       question: 'Can I prepare for NATA completely online?',
       answer:
-        "Yes, you can prepare for NATA completely online. The Neram Classes NATA online coaching program covers the full syllabus, Mathematics, General Aptitude, and Drawing, through live interactive sessions. Our online students achieve the same 99.9% success rate as offline students, with dedicated drawing practice sessions conducted via live video.",
+        'Yes, you can prepare for NATA completely online. The Neram Classes NATA online coaching program covers the full syllabus (Mathematics, General Aptitude and Drawing) through live interactive sessions. Online students are taught by the same faculty as our classroom batches, with drawing practice sessions held over live video.',
     },
     {
       question: 'What is the fee for NATA online coaching?',
@@ -309,17 +311,17 @@ export default function NataOnlineCoachingPage({ params: { locale } }: PageProps
     {
       question: 'What is the batch size for NATA online coaching?',
       answer:
-        'Each online batch at Neram Classes is limited to a maximum of 25 students. This small batch size ensures individual attention, personalised feedback on drawing submissions, and direct access to faculty for doubt clearing.',
+        'Online batches at Neram Classes are kept small. That keeps room for individual attention, personal feedback on drawing submissions and direct access to faculty for doubt clearing.',
     },
     {
       question: 'Is NATA online coaching as effective as offline classroom coaching?',
       answer:
-        'Our NATA online coaching delivers the same 99.9% success rate as our offline batches. The online format adds flexible timings, recorded lectures for revision, and access to top faculty regardless of your city. The same faculty teach both online and offline batches at Neram Classes.',
+        'The same faculty teach both online and classroom batches at Neram Classes, with the same syllabus, drawing feedback and mock tests. The online format adds flexible timings, recorded lectures for revision, and access to the same teachers wherever you live.',
     },
     {
       question: 'How is the drawing test taught online?',
       answer:
-        'Drawing is taught through live video sessions where faculty demonstrate techniques in real time. Students draw along and show their work via camera for instant feedback. Each submission is reviewed with detailed annotations. Students also get 500+ practice sheets and daily 2-hour supervised drawing sessions. Our online drawing methodology has been refined since 2009.',
+        'Drawing is taught through live video sessions where faculty demonstrate techniques in real time. Students draw along and show their work via camera for instant feedback. Each submission is reviewed with detailed annotations. Students also get practice sheets and daily supervised drawing sessions. We have taught drawing for NATA since 2009.',
     },
     {
       question: 'Is there a free demo class available?',
@@ -329,12 +331,12 @@ export default function NataOnlineCoachingPage({ params: { locale } }: PageProps
     {
       question: 'Can I join NATA online coaching from any city in India?',
       answer:
-        'Yes, Neram Classes NATA online coaching is available to students from any city in India and from 6 Gulf countries (UAE, Qatar, Oman, Saudi Arabia, Kuwait, Bahrain). All you need is a stable internet connection and a device to attend live classes. We currently support students from 150+ cities.',
+        'Yes, Neram Classes NATA online coaching is open to students in any city in India and in the Gulf (UAE, Qatar, Oman, Saudi Arabia, Kuwait, Bahrain). All you need is a stable internet connection and a device to attend live classes.',
     },
     {
       question: 'What digital tools does Neram provide for online students?',
       answer:
-        'Neram Classes is the only NATA coaching institute with a free AI-powered study app (aiArchitek). The app includes a NATA cutoff calculator, college predictor for 5,000+ colleges, exam center finder, question bank, and mock tests. These tools give online students a significant preparation advantage.',
+        'Neram Classes runs a free study app at app.neramclasses.com. It includes a NATA cutoff calculator, a B.Arch college predictor, an exam centre finder and a question bank preview. Anyone can use it, enrolled or not.',
     },
     {
       question: 'How is the NATA exam pattern in 2026?',
@@ -364,12 +366,12 @@ export default function NataOnlineCoachingPage({ params: { locale } }: PageProps
     {
       question: 'Is NATA online coaching available in Tamil and Hindi?',
       answer:
-        'Yes, Neram Classes is the only NATA institute that offers coaching in 5 languages: English, Tamil, Hindi, Kannada, and Malayalam. You can choose your preferred language batch during enrolment. Drawing and aptitude content is language-neutral, conceptual explanations are delivered in your chosen language.',
+        'Yes, Neram Classes offers coaching in English, Tamil, Hindi, Kannada and Malayalam. You can choose your preferred language batch during enrolment. Drawing and aptitude content is language-neutral, conceptual explanations are delivered in your chosen language.',
     },
     {
       question: 'Which architecture colleges have Neram online students secured admission to?',
       answer:
-        'Our online students have secured admissions to SPA Delhi, SPA Bhopal, CEPT Ahmedabad, NIT Trichy, NIT Calicut, IIT Roorkee (B.Arch), IIT Kharagpur (B.Arch), JJ College of Architecture Mumbai, Anna University Chennai, JNAFAU Hyderabad, BMS Bangalore, and 100+ other top architecture colleges across India.',
+        `Our online students have secured admissions to SPA Delhi, SPA Bhopal, CEPT Ahmedabad, NIT Trichy, NIT Calicut, IIT Roorkee (B.Arch), IIT Kharagpur (B.Arch), JJ College of Architecture Mumbai, Anna University Chennai, JNAFAU Hyderabad, BMS Bangalore and other architecture colleges across India. Our best recent result is ${PROOF_POINTS.topResult}.`,
     },
     {
       question: 'When do new NATA online coaching batches start?',
@@ -410,7 +412,7 @@ export default function NataOnlineCoachingPage({ params: { locale } }: PageProps
           ...generateCourseSchema({
             name: 'NATA Online Coaching 2026, Live Classes by NIT/IIT Faculty',
             description:
-              'Best NATA online coaching in India by NIT/IIT alumni faculty. Live interactive classes, daily drawing practice, small batches of 25, 100+ mock tests, 99.9% success rate. Available across India and 6 Gulf countries.',
+              `NATA online coaching by Neram Classes, teaching since 2009 (${PROOF_POINTS.students}, ${PROOF_POINTS.topResult}). Live interactive classes, daily drawing practice, small batches and 100+ mock tests in the 1-Year program. Available across India and the Gulf.`,
             url: pageUrl,
             modes: ['online'],
             price: 15000,
@@ -454,8 +456,8 @@ export default function NataOnlineCoachingPage({ params: { locale } }: PageProps
                   NATA Online Coaching 2026
                 </Typography>
                 <Typography variant="h5" sx={{ mb: 4, opacity: 0.9, lineHeight: 1.6 }}>
-                  Live classes for architecture aspirants. Taught by NIT, IIT, and SPA alumni faculty.
-                  99.9% success rate, small batches of max 25 students, daily drawing practice.
+                  Live classes for architecture aspirants since 2009. {PROOF_POINTS.students} taught and{' '}
+                  {PROOF_POINTS.topResult}. Small batches and daily drawing practice.
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                   <Button
@@ -486,11 +488,11 @@ export default function NataOnlineCoachingPage({ params: { locale } }: PageProps
                     </Typography>
                     {[
                       { label: 'Mode', value: '100% Live Online' },
-                      { label: 'Batch Size', value: 'Max 25 Students' },
+                      { label: 'Batch Size', value: 'Small Batches' },
                       { label: 'Duration', value: '3 to 24 Months' },
                       { label: 'Drawing Practice', value: '2+ Hours Daily' },
-                      { label: 'Mock Tests', value: '100+ Full-Length' },
-                      { label: 'Success Rate', value: '99.9%' },
+                      { label: 'Mock Tests', value: '100+ (1-Year Program)' },
+                      { label: 'Top Result', value: 'AIR 1, JEE B.Arch 2024' },
                     ].map((detail, idx) => (
                       <Box
                         key={idx}
@@ -565,8 +567,8 @@ export default function NataOnlineCoachingPage({ params: { locale } }: PageProps
               Architecture (NATA), delivered over video by experienced architecture faculty. A complete
               program covers Mathematics, General Aptitude, and the Drawing test, includes weekly mock tests,
               and provides one-on-one feedback on drawing submissions. At Neram Classes, NATA online coaching
-              is taught by NIT, IIT, and SPA alumni in small batches of 25 students, with a 99.9% success
-              rate since 2009.
+              runs in small live batches. We have taught since 2009: {PROOF_POINTS.students} and{' '}
+              {PROOF_POINTS.topResult}.
             </Typography>
           </Container>
         </Box>
@@ -589,7 +591,7 @@ export default function NataOnlineCoachingPage({ params: { locale } }: PageProps
               color="text.secondary"
               sx={{ mb: 6, maxWidth: 700, mx: 'auto' }}
             >
-              Live batches start every month. Seats are limited to 25 students each for individual attention.
+              Live batches start every month. Seats are limited so each student gets individual attention.
             </Typography>
 
             <Grid container spacing={3}>
@@ -667,7 +669,7 @@ export default function NataOnlineCoachingPage({ params: { locale } }: PageProps
               color="text.secondary"
               sx={{ mb: 6, maxWidth: 700, mx: 'auto' }}
             >
-              Six reasons why thousands of students choose Neram for NATA online preparation
+              Six reasons students choose Neram for NATA online preparation
             </Typography>
 
             <Grid container spacing={4}>
@@ -765,7 +767,10 @@ export default function NataOnlineCoachingPage({ params: { locale } }: PageProps
                         </Typography>
                       </Box>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                        Duration: {course.duration} (EMI available)
+                        Duration: {course.duration}.
+                        {COURSE_FEES[index]?.singlePaymentDisplay
+                          ? ` Paid at once. Rs. ${COURSE_FEES[index].priceDisplay} in instalments.`
+                          : ''}
                       </Typography>
 
                       <List dense>
@@ -926,14 +931,14 @@ export default function NataOnlineCoachingPage({ params: { locale } }: PageProps
               color="text.secondary"
               sx={{ mb: 6 }}
             >
-              Our online students consistently achieve outstanding NATA results
+              What Neram has delivered since 2009
             </Typography>
 
             <Grid container spacing={4} sx={{ mb: 6 }}>
               {[
-                { stat: '99.9%', label: 'Success Rate', sub: 'Students clearing NATA cutoff' },
-                { stat: '70%+', label: 'Score Above 120', sub: 'Out of 200 total marks' },
-                { stat: '500+', label: 'Top College Admissions', sub: 'In the last 3 years' },
+                { stat: 'AIR 1', label: 'JEE B.Arch 2024', sub: 'Our top result' },
+                { stat: '1,000+', label: 'Students Taught', sub: 'Online and in classrooms' },
+                { stat: '10+', label: 'Years', sub: 'Coaching since 2009' },
               ].map((item) => (
                 <Grid item xs={12} sm={4} key={item.label}>
                   <Card
@@ -1231,7 +1236,7 @@ export default function NataOnlineCoachingPage({ params: { locale } }: PageProps
                 {
                   title: 'Neram vs BRDS vs SILICA Comparison',
                   href: '/nata-online-coaching/comparison',
-                  desc: 'Honest side-by-side comparison of the top 3 NATA online coaching institutes in India.',
+                  desc: 'Side-by-side comparison of three NATA online coaching institutes on fees, format and support.',
                 },
                 {
                   title: 'NATA Cutoff Trends 2015 to 2025',
@@ -1261,7 +1266,7 @@ export default function NataOnlineCoachingPage({ params: { locale } }: PageProps
                 {
                   title: 'Free College Predictor',
                   href: '/tools/college-predictor',
-                  desc: 'Find the best architecture college for your NATA score from 5,000+ colleges.',
+                  desc: 'Find B.Arch colleges that match your NATA score and category.',
                 },
                 {
                   title: 'NATA Coaching in Tamil Nadu',
@@ -1333,8 +1338,8 @@ export default function NataOnlineCoachingPage({ params: { locale } }: PageProps
               Start your NATA online coaching journey today
             </Typography>
             <Typography variant="h6" sx={{ mb: 4, opacity: 0.9, lineHeight: 1.6 }}>
-              Join India&rsquo;s highest-rated NATA online coaching. Seats are limited to 25 students per batch.
-              Reserve your spot now.
+              Live NATA classes since 2009, with small batches and daily drawing feedback. Book a free demo
+              or reserve your seat now.
             </Typography>
             <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
               <Button

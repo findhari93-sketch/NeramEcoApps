@@ -32,7 +32,7 @@ export async function generateMetadata({
   return {
     title: 'Best Free NATA Exam Preparation App 2026',
     description:
-      'Download the best free NATA preparation app by Neram Classes. Cutoff calculator, college predictor for 5000+ colleges, exam center locator, and study tools. Used by 5000+ students across India.',
+      'Free NATA preparation app by Neram Classes: a cutoff calculator, a B.Arch college predictor, an exam centre locator and study tools. Install it on any phone from the browser.',
     keywords:
       'best NATA app, NATA preparation app, free NATA study app, best app for NATA exam, NATA exam app 2026, NATA cutoff calculator app, NATA college predictor app, free NATA tools',
     alternates: buildAlternates(locale, '/nata-app'),
@@ -46,18 +46,18 @@ interface PageProps {
 const freeTools = [
   {
     title: 'NATA Cutoff Calculator',
-    desc: 'Calculate your expected cutoff score based on your NATA marks, category, and preferred colleges. Updated with 2026 cutoff data from 5000+ architecture colleges across India.',
-    link: `${APP_URL}/tools/cutoff-calculator`,
+    desc: 'Calculate your expected cutoff score based on your NATA marks, category, and preferred colleges. Built on published counselling cutoffs for B.Arch colleges.',
+    link: `${APP_URL}/tools/nata/cutoff-calculator`,
   },
   {
     title: 'College Predictor',
-    desc: 'Predict which architecture colleges you can get into based on your NATA score. Database covers 5000+ colleges including government, private, and deemed universities.',
-    link: `${APP_URL}/tools/college-predictor`,
+    desc: 'Predict which architecture colleges you can get into based on your NATA score. Covers COA-approved government, private and deemed colleges.',
+    link: `${APP_URL}/tools/counseling/college-predictor`,
   },
   {
     title: 'Exam Center Locator',
     desc: 'Find the nearest NATA exam center to your location. View center details, past exam patterns, and plan your exam day with our interactive locator tool.',
-    link: `${APP_URL}/tools/exam-centers`,
+    link: `${APP_URL}/tools/nata/exam-centers`,
   },
 ];
 
@@ -78,9 +78,9 @@ const appFeatures = [
     desc: 'Install the app on your phone like a native app. Works offline, fast loading, and no app store download required.',
   },
   {
-    icon: '5000+',
-    title: '5000+ College Database',
-    desc: 'The most comprehensive database of architecture colleges in India. Government, private, deemed - all with cutoff data and seat matrix.',
+    icon: 'COA',
+    title: 'B.Arch College Database',
+    desc: 'COA-approved architecture colleges in India: government, private and deemed, with cutoff data where counselling publishes it.',
   },
   {
     icon: 'PRO',
@@ -119,7 +119,7 @@ const howItWorks = [
 
 const comparisonFeatures = [
   { feature: 'NATA-specific cutoff calculator', neram: true, generic: false, youtube: false },
-  { feature: 'College predictor (5000+ colleges)', neram: true, generic: false, youtube: false },
+  { feature: 'B.Arch college predictor', neram: true, generic: false, youtube: false },
   { feature: 'Exam center locator', neram: true, generic: false, youtube: false },
   { feature: 'Works offline (PWA)', neram: true, generic: false, youtube: false },
   { feature: 'Free to use', neram: true, generic: false, youtube: true },
@@ -140,7 +140,7 @@ export default function NataAppPage({ params: { locale } }: PageProps) {
     {
       question: 'What is the best free app for NATA preparation?',
       answer:
-        'The Neram Classes NATA App (app.neramclasses.com) is the best free app for NATA preparation. It offers a cutoff calculator, college predictor covering 5000+ colleges, exam center locator, and study resources. The app is used by 5000+ students across India and is completely free to use.',
+        'The Neram Classes NATA App (app.neramclasses.com) is the best free app for NATA preparation. It offers a cutoff calculator, a B.Arch college predictor, an exam centre locator and study resources, and it is free to use.',
     },
     {
       question: 'Does Neram Classes have a NATA mobile app?',
@@ -155,7 +155,7 @@ export default function NataAppPage({ params: { locale } }: PageProps) {
     {
       question: 'What free NATA tools does the Neram app offer?',
       answer:
-        'The Neram NATA App offers three major free tools: (1) NATA Cutoff Calculator - calculate expected cutoffs based on your marks and category, (2) College Predictor - find which colleges you can get into from 5000+ options, and (3) Exam Center Locator - find the nearest NATA exam center with complete details.',
+        'The Neram NATA App offers three major free tools: (1) NATA Cutoff Calculator - calculate expected cutoffs based on your marks and category, (2) College Predictor - find which B.Arch colleges match your score, and (3) Exam Center Locator - find the nearest NATA exam center with complete details.',
     },
     {
       question: 'Is the Neram NATA app available offline?',
@@ -205,8 +205,8 @@ export default function NataAppPage({ params: { locale } }: PageProps) {
                   Best Free App for NATA Exam Preparation 2026
                 </Typography>
                 <Typography variant="h5" sx={{ mb: 4, opacity: 0.9, fontSize: { xs: '1.1rem', md: '1.5rem' } }}>
-                  Cutoff calculator, college predictor for 5000+ colleges, and exam center locator
-                  - all free. Used by 5000+ NATA aspirants. Installable as a PWA on any device.
+                  Cutoff calculator, B.Arch college predictor and exam centre locator, all free.
+                  Install it on any device from the browser.
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
                   <Button
@@ -239,8 +239,7 @@ export default function NataAppPage({ params: { locale } }: PageProps) {
                     </Typography>
                     {[
                       { label: 'Price', value: 'Completely Free' },
-                      { label: 'Colleges Covered', value: '5000+' },
-                      { label: 'Active Students', value: '5000+' },
+                      { label: 'Colleges Covered', value: 'COA-approved B.Arch' },
                       { label: 'Platform', value: 'Web PWA (Any Device)' },
                       { label: 'Offline Support', value: 'Yes' },
                     ].map((detail, idx) => (
@@ -281,7 +280,7 @@ export default function NataAppPage({ params: { locale } }: PageProps) {
               Free NATA Preparation Tools
             </Typography>
             <Typography variant="h6" align="center" color="text.secondary" sx={{ mb: 6 }}>
-              Three powerful tools built specifically for NATA aspirants - all completely free
+              Three powerful tools built specifically for NATA aspirants, all completely free
             </Typography>
 
             <Grid container spacing={4}>
@@ -324,6 +323,13 @@ export default function NataAppPage({ params: { locale } }: PageProps) {
                 </Grid>
               ))}
             </Grid>
+            <Typography align="center" color="text.secondary" sx={{ mt: 4 }}>
+              See every tool and AI feature in{' '}
+              <Box component={Link} href="/aiarchitek" sx={{ color: 'primary.main', fontWeight: 600, textUnderlineOffset: '3px' }}>
+                aiArchitek, the Neram NATA platform
+              </Box>
+              .
+            </Typography>
           </Container>
         </Box>
 

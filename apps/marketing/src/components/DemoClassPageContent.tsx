@@ -32,7 +32,8 @@ import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { LoginModal } from '@neram/ui';
 import { useFirebaseAuth } from '@neram/auth';
-import { getStoredAttribution } from '@/lib/attribution';
+import { getStoredAttribution, touchAttribution } from '@/lib/attribution';
+import { ClassVideo } from '@/components/coaching-location/ClassVideo';
 import { trackTaxonomyEvent } from '@/lib/funnel-tracker';
 
 // Slide transition for bottom sheet on mobile
@@ -91,6 +92,9 @@ export default function DemoClassPageContent() {
     currentClass: '',
     interestCourse: '',
     city: '',
+    parentName: '',
+    parentPhone: '',
+    language: 'en',
   });
 
   // Phone verification
@@ -284,6 +288,10 @@ export default function DemoClassPageContent() {
           utmMedium: attribution.utm_medium,
           utmCampaign: attribution.utm_campaign,
           referralCode: attribution.referral_code,
+          parentName: formData.parentName,
+          parentPhone: formData.parentPhone,
+          language: formData.language,
+          ...touchAttribution(),
         }),
       });
 
@@ -445,30 +453,7 @@ export default function DemoClassPageContent() {
                 <Typography variant="h6" gutterBottom>
                   Watch a Sample Class
                 </Typography>
-                <Box
-                  sx={{
-                    position: 'relative',
-                    paddingBottom: '56.25%',
-                    height: 0,
-                    overflow: 'hidden',
-                    borderRadius: 2,
-                  }}
-                >
-                  <iframe
-                    src={`https://www.youtube.com/embed/${getYoutubeEmbedId(youtubeVideoUrl)}`}
-                    title="Sample Class"
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      height: '100%',
-                      border: 0,
-                    }}
-                  />
-                </Box>
+                <ClassVideo youtubeId={getYoutubeEmbedId(youtubeVideoUrl)!} title="Sample class" />
               </Box>
             )}
 
@@ -664,6 +649,34 @@ export default function DemoClassPageContent() {
               onChange={(e) => handleFormChange('email', e.target.value)}
               inputProps={{ style: { fontSize: 16 } }}
             />
+
+            {/* Family demo: parents usually decide, so we ask for them too (optional). */}
+            <TextField
+              fullWidth
+              label="Parent's name (optional)"
+              value={formData.parentName}
+              onChange={(e) => handleFormChange('parentName', e.target.value)}
+              autoComplete="off"
+              inputProps={{ style: { fontSize: 16 } }}
+            />
+            <TextField
+              fullWidth
+              label="Parent's mobile (optional)"
+              value={formData.parentPhone}
+              onChange={(e) => handleFormChange('parentPhone', e.target.value.replace(/\D/g, '').slice(0, 10))}
+              InputProps={{ startAdornment: <Typography sx={{ mr: 1, color: 'text.secondary' }}>+91</Typography> }}
+              inputProps={{ inputMode: 'numeric', style: { fontSize: 16 } }}
+            />
+            <FormControl fullWidth>
+              <InputLabel>Class language</InputLabel>
+              <Select value={formData.language} label="Class language" onChange={(e) => handleFormChange('language', e.target.value)}>
+                <MenuItem value="en">English</MenuItem>
+                <MenuItem value="ta">Tamil</MenuItem>
+                <MenuItem value="kn">Kannada</MenuItem>
+                <MenuItem value="hi">Hindi</MenuItem>
+                <MenuItem value="ml">Malayalam</MenuItem>
+              </Select>
+            </FormControl>
 
             <Grid container spacing={2}>
               <Grid item xs={6}>

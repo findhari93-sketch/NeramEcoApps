@@ -398,7 +398,9 @@
     "continueApplication": "விண்ணப்பத்தை தொடரவும்",
     "trackApplication": "விண்ணப்பத்தை கண்காணிக்கவும்",
     "payAndJoin": "பணம் செலுத்தி இணையுங்கள்",
-    "goToApp": "ஆப்-க்கு செல்"
+    "goToApp": "ஆப்-க்கு செல்",
+    "joinNow": "இப்போதே சேருங்கள்",
+    "viewFees": "கட்டணம் பார்க்க"
   },
   "centers": {
     "title": "எங்கள் கற்றல் மையங்களை பாருங்கள்",
@@ -434,9 +436,9 @@
     "close": "மூடு"
   },
   "fees": {
-    "title": "Invest in Your Architecture Career",
-    "subtitle": "Transparent pricing with flexible payment options. Join the coaching institute that has been placing students in top architecture colleges for over 15 years.",
-    "questionsCall": "Questions? Call us:",
+    "title": "Course fees",
+    "subtitle": "Pick a plan. Pay once and save, or pay in 2 interest-free parts.",
+    "questionsCall": "Questions about fees? Call",
     "singlePayment": "Single Payment",
     "installments": "2 Installments",
     "fullPrice": "Full Price",
@@ -447,9 +449,9 @@
     "installment2": "2nd Installment (after 3 months)",
     "total": "Total",
     "installmentDetailsComingSoon": "Installment plan details will be shared during counseling",
-    "applyNow": "Apply Now",
+    "applyNow": "Join Now",
     "recommendedCurrentYear": "Recommended for current year exam",
-    "bestValueFuture": "Best Value for future year exam",
+    "bestValueFuture": "Best value for future year exam",
     "noFeeStructures": "Fee information is currently being updated",
     "contactForFees": "Please contact us for the latest fee details.",
     "callUs": "Call Us",
@@ -484,7 +486,7 @@
     "weekendClassesDesc": "Extended 2-3 hour sessions on Saturdays/Sundays. Focus on mock tests, portfolio review, and intensive practice.",
     "liveInteractive": "Live & Interactive",
     "smallBatches": "Small Batches",
-    "faqTitle": "Frequently Asked Questions",
+    "faqTitle": "Common questions",
     "faqSubtitle": "Common questions from parents and students about our fees and classes.",
     "faq1Question": "Can I get a refund if my child decides not to continue?",
     "faq1Answer": "ஆம், எங்களிடம் வெளிப்படையான பணத்திரும்பக் கொள்கை உள்ளது. பணம் செலுத்திய 24 மணி நேரத்திற்குள் பணத்திரும்ப கோரிக்கை செய்ய வேண்டும். மாணவருக்காக ஏற்கனவே வாங்கப்பட்ட டிஜிட்டல் பிளாட்ஃபார்ம் சந்தாக்கள் மற்றும் கற்றல் கருவி உரிமங்களை ஈடுகட்ட 30% கழிக்கப்படும். 24 மணி நேரத்திற்குப் பிறகு, பிளாட்ஃபார்ம் சந்தாக்கள் மற்றும் கருவி அணுகல் உள்ளிட்ட உங்கள் குழந்தையின் டிஜிட்டல் கற்றல் சூழலை அமைப்பதில் நாங்கள் உடனடியாக முதலீடு செய்வதால் பணத்திரும்ப சாத்தியமில்லை.",

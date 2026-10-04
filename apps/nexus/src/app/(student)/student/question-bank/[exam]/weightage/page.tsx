@@ -13,7 +13,8 @@
  * minute. Sections with too short a history (drawing) get a plain card instead
  * of charts, and switch over by themselves once the bank has enough years.
  *
- * Journey: entered from the exam's Question Bank page; Back returns there.
+ * Journey: entered from the exam's Question Bank page or the practice list's
+ * header. Back returns to whichever it was (the practice list passes ?back=).
  * "Practise" opens the practice list filtered to that chapter, whose Back comes
  * here with the same section selected (?section= is in the URL for that).
  */
@@ -35,6 +36,7 @@ import PageHeader from '@/components/PageHeader';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthSWR } from '@/lib/nexus-swr';
 import { QB_EXAM_LABELS, examFromSlug, qbExamPath } from '@/lib/qb-exam-routes';
+import { safeBackPath } from '@/lib/safe-back-path';
 import {
   SECTION_LABELS,
   availableSections,
@@ -53,9 +55,18 @@ import ChapterSheet from '@/components/question-bank/weightage/ChapterSheet';
 import { unitColorMap } from '@/components/question-bank/weightage/weightage-colors';
 import type { QBExamType } from '@neram/database';
 
-const SHORT_LABELS: Record<WeightageSection, string> = { math: 'Maths', aptitude: 'Aptitude', drawing: 'Drawing' };
+const SHORT_LABELS: Record<WeightageSection, string> = {
+  math: 'Maths',
+  aptitude: 'Aptitude',
+  drawing: 'Drawing',
+  planning: 'Planning',
+};
 /** Practice-list `section` values; maths spans two (MCQ and numerical), so it is left to the chapter filter. */
-const PRACTICE_SECTION: Partial<Record<WeightageSection, string>> = { aptitude: 'aptitude', drawing: 'drawing' };
+const PRACTICE_SECTION: Partial<Record<WeightageSection, string>> = {
+  aptitude: 'aptitude',
+  drawing: 'drawing',
+  planning: 'planning',
+};
 
 export default function ChapterWeightagePage() {
   const params = useParams<{ exam: string }>();
@@ -76,7 +87,9 @@ function Weightage({ exam }: { exam: QBExamType }) {
   const { activeClassroom, loading: authLoading } = useNexusAuthContext();
   const classroomId = activeClassroom?.id ?? null;
   const examLabel = QB_EXAM_LABELS[exam];
-  const backHref = qbExamPath('student', exam);
+  const examHome = qbExamPath('student', exam);
+  const backParam = safeBackPath(searchParams.get('back'));
+  const backHref = backParam ?? examHome;
 
   const key =
     !authLoading && classroomId
@@ -103,7 +116,15 @@ function Weightage({ exam }: { exam: QBExamType }) {
   );
   const colorFor = useMemo(() => (all ? unitColorMap(all, theme) : () => theme.palette.primary.main), [all, theme]);
 
-  const selfHref = current ? `${pathname}?section=${current}` : pathname;
+  // Keep ?back= on the way round, so practise then Back then Back still ends where the student started.
+  const selfQuery = (s: WeightageSection | null) => {
+    const q = new URLSearchParams();
+    if (s) q.set('section', s);
+    if (backParam) q.set('back', backParam);
+    const str = q.toString();
+    return str ? `${pathname}?${str}` : pathname;
+  };
+  const selfHref = selfQuery(current);
   const practiceHref = (c: ChapterStat) =>
     `/student/question-bank/questions?${new URLSearchParams({ exam, cat: c.slug, back: selfHref }).toString()}`;
   const practiceAllHref = () => {
@@ -116,7 +137,7 @@ function Weightage({ exam }: { exam: QBExamType }) {
 
   const selectSection = (s: WeightageSection) => {
     setOpenSlug(null);
-    router.replace(`${pathname}?section=${s}`, { scroll: false });
+    router.replace(selfQuery(s), { scroll: false });
   };
 
   const openChapter = openSlug && all ? all.chapters.find((c) => c.slug === openSlug) ?? null : null;
@@ -129,7 +150,10 @@ function Weightage({ exam }: { exam: QBExamType }) {
         title="Chapter weightage"
         subtitle={`Which chapters ${examLabel} past papers ask most`}
         backHref={backHref}
-        breadcrumbs={[{ label: `${examLabel} Question Bank`, href: backHref }]}
+        breadcrumbs={[
+          { label: `${examLabel} Question Bank`, href: examHome },
+          ...(backParam ? [{ label: 'Questions', href: backParam }] : []),
+        ]}
       />
 
       {sections.length > 1 && current && (

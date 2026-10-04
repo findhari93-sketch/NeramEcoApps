@@ -116,7 +116,14 @@ export function listDeck(questions: DeckSourceQuestion[], order: string[]): Deck
 
 /** The name on the presenter's top strip: "JEE 2025 Paper 2", "NATA 2025 S1". */
 export function paperTitle(paper: { exam_type: string; year: number; session?: string | null; shift?: string | null }): string {
-  const exam = paper.exam_type === 'JEE_PAPER_2' ? 'JEE Paper 2' : paper.exam_type === 'NATA' ? 'NATA' : paper.exam_type;
+  const exam =
+    paper.exam_type === 'JEE_PAPER_2'
+      ? 'JEE Paper 2'
+      : paper.exam_type === 'JEE_PAPER_2B'
+        ? 'JEE Paper 2B'
+        : paper.exam_type === 'NATA'
+          ? 'NATA'
+          : paper.exam_type;
   const session = paper.session ? ` ${paper.session.trim().match(/^\d+$/) ? `S${paper.session.trim()}` : paper.session.trim()}` : '';
   const shift = paper.shift ? ` (${paper.shift === 'forenoon' ? 'forenoon' : paper.shift === 'afternoon' ? 'afternoon' : paper.shift})` : '';
   return `${exam} ${paper.year}${session}${shift}`;

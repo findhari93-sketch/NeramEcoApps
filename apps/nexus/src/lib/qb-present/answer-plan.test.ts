@@ -91,6 +91,18 @@ describe('answerPlan: values, pictures and drawings', () => {
     });
   });
 
+  it('asks a number with no key when the answer is a formula the pad cannot match', () => {
+    // The pad grades by exact text in SQL, so a key of 2√3 or \frac{1}{2} has
+    // nothing to compare against. It must fall back to "teacher reveals", not throw.
+    for (const formula of ['2√3', '\\frac{1}{2}', 'π/2']) {
+      expect(answerPlan({ question_format: 'NUMERICAL', options: null, correct_answer: formula })).toEqual({
+        type: 'numeric',
+        keys: null,
+        keyFrom: null,
+      });
+    }
+  });
+
   it('treats a picture question with options as multiple choice, without as a value', () => {
     expect(answerPlan({ question_format: 'IMAGE_BASED', options: four(), correct_answer: 'a' })).toMatchObject({ type: 'mcq', keys: ['A'] });
     expect(answerPlan({ question_format: 'IMAGE_BASED', options: null, correct_answer: '7' })).toMatchObject({ type: 'numeric', keys: ['7'] });

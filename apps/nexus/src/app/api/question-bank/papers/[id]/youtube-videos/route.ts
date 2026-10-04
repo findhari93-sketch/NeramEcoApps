@@ -6,6 +6,7 @@ import {
   parseSolutionTitle,
   readSampleTitle,
   readTitleForSample,
+  titleExamMatches,
   type FoundVideo,
 } from '@/lib/youtube-solution-titles';
 import { describeError } from '@/lib/api-errors';
@@ -125,7 +126,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         const fitsSample = sampleKey ? readTitleForSample(title, sampleKey, paper) : null;
         const parsed = fitsSample ?? parseSolutionTitle(title);
         if (!parsed) continue;
-        if (!fitsSample && (parsed.exam !== paper.exam_type || parsed.year !== paper.year)) continue;
+        if (!fitsSample && (!titleExamMatches(parsed.exam, paper.exam_type) || parsed.year !== paper.year)) continue;
         videos.push({ videoId, title, publishedAt: item?.snippet?.publishedAt ?? '', parsed });
       }
       pageToken = json.nextPageToken ?? null;

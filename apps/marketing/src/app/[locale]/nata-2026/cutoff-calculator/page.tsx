@@ -29,7 +29,7 @@ export async function generateMetadata({
   return {
     title: 'NATA 2026 Cutoff Calculator: Check Your College Eligibility',
     description:
-      'Use the free NATA 2026 cutoff calculator to check which architecture colleges you can get into based on your expected score, category, and state. Database covers 5000+ colleges.',
+      'Use the free NATA 2026 cutoff calculator to check which architecture colleges you can get into based on your expected score, category, and state. It uses published counselling cutoffs for B.Arch colleges.',
     keywords:
       'NATA 2026 cutoff, NATA cutoff calculator, NATA college cutoff, NATA passing marks, NATA minimum score for college, B.Arch cutoff',
     alternates: buildAlternates(locale, '/nata-2026/cutoff-calculator'),
@@ -54,7 +54,7 @@ const faqs = [
   {
     question: 'How accurate is the NATA cutoff calculator?',
     answer:
-      'Our cutoff calculator uses data from previous years (2019-2025) and covers 5000+ architecture colleges across India. While past data is a strong predictor, actual cutoffs may vary. Use the predictions as a guide, not a guarantee.',
+      'Our cutoff calculator uses data from previous years (2019-2025) and covers B.Arch colleges where counselling publishes cutoffs. While past data is a strong predictor, actual cutoffs may vary. Use the predictions as a guide, not a guarantee.',
   },
   {
     question: 'Can I get into a good college with 100 marks in NATA?',
@@ -82,7 +82,7 @@ export default function CutoffCalculatorPage({ params: { locale } }: PageProps) 
               NATA 2026 Cutoff Calculator
             </Typography>
             <Typography variant="h5" sx={{ mb: 2, opacity: 0.9, fontSize: { xs: '1.1rem', md: '1.5rem' } }}>
-              Enter your expected NATA 2026 score to see which architecture colleges you can get into. Our free cutoff calculator covers 5000+ colleges across India with data from 2019-2025.
+              Enter your expected NATA 2026 score to see which architecture colleges you can get into. Our free cutoff calculator uses published cutoffs from 2019 to 2025.
             </Typography>
             <LastUpdatedBadge date="March 13, 2026" />
           </Container>
@@ -128,7 +128,7 @@ export default function CutoffCalculatorPage({ params: { locale } }: PageProps) 
               Use the Free Cutoff Calculator
             </Typography>
             <Typography variant="body1" color="text.secondary" sx={{ mb: 4, maxWidth: 600, mx: 'auto', lineHeight: 1.8 }}>
-              Enter your NATA score, category, and preferred state to get a personalized list of colleges you can apply to. Data from 5000+ colleges across India.
+              Enter your NATA score, category, and preferred state to get a personalized list of colleges you can apply to. Data from published counselling cutoffs.
             </Typography>
             <Button
               variant="contained"

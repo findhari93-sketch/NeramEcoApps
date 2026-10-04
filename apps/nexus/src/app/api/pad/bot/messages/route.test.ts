@@ -11,14 +11,14 @@ import { POST } from './route';
  * and ask for a retry (500) when a write fails.
  */
 
-const mocks = vi.hoisted(() => ({ verify: vi.fn(), rpc: vi.fn() }));
+const mocks = vi.hoisted(() => ({ verify: vi.fn(), rpc: vi.fn(), hint: vi.fn() }));
 
 vi.mock('@/lib/pad/bot/verify-activity', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/pad/bot/verify-activity')>()),
   verifyBotRequest: mocks.verify,
 }));
 
-vi.mock('@/lib/pad/sessions', () => ({ padDb: () => ({ rpc: mocks.rpc }) }));
+vi.mock('@/lib/pad/sessions', () => ({ padDb: () => ({ rpc: mocks.rpc }), hintMeetingTeachers: mocks.hint }));
 
 const MEETING = 'MCMxOTptZWV0aW5nX05qRXhOalV3';
 
@@ -46,6 +46,7 @@ function joinEvent(tenant = 'tenant-1') {
 beforeEach(() => {
   vi.stubEnv('AZ_TENANT_ID', 'tenant-1');
   vi.spyOn(console, 'error').mockImplementation(() => undefined);
+  mocks.hint.mockReset().mockResolvedValue(undefined);
   mocks.verify.mockReset().mockResolvedValue({ appId: 'bot', serviceUrl: 'https://smba.trafficmanager.net/in/', channelId: 'msteams' });
   mocks.rpc.mockReset().mockImplementation(async (fn: string) =>
     fn === 'pad_bot_upsert_conversation' ? { data: null, error: null } : { data: { ok: true }, error: null },
@@ -99,6 +100,9 @@ describe('POST /api/pad/bot/messages', () => {
         { p_meeting_id: MEETING, p_aad_object_id: 'bbbb-2', p_teams_user_id: '29:bala', p_event: 'join', p_at: '2026-09-10T14:34:07.478Z' },
       ],
     ]);
+    // Once per event, after every participant is recorded, so the console counts them at once.
+    expect(mocks.hint).toHaveBeenCalledTimes(1);
+    expect(mocks.hint).toHaveBeenCalledWith(MEETING, { throttleMs: 1_000 });
   });
 
   it('closes open presence when the meeting ends', async () => {

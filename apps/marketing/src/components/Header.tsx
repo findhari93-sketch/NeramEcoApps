@@ -104,7 +104,7 @@ function getCtaConfig(status: AppStatusSummary, t: ReturnType<typeof useTranslat
       };
     default:
       return {
-        label: t('header.applyNow'),
+        label: t('header.joinNow'),
         href: '/apply' as const,
         variant: 'contained' as const,
         sx: {
@@ -202,6 +202,7 @@ const NAV_GROUPS: NavGroup[] = [
           { label: 'Important Dates', href: '/nata-2026/important-dates' },
           { label: 'Syllabus', href: '/nata-2026/syllabus' },
           { label: 'Free Tools & Mocks', href: '/tools' },
+          { label: 'aiArchitek: AI Tools', href: '/aiarchitek' },
         ],
       },
       {
@@ -320,6 +321,8 @@ export default function Header() {
   const { goToApp } = useGoToApp();
   const ctaConfig = getCtaConfig(appStatus, t);
   const isEnrolled = appStatus === 'enrolled' || appStatus === 'partial_payment';
+  // Students check the fee before they apply, so it sits right under the CTA.
+  const showFeesLink = !isEnrolled && !isApplyPage && pathname !== '/fees';
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpenState] = useState(false);
@@ -699,24 +702,56 @@ export default function Header() {
                 {t('header.needHelp')}
               </Button>
             ) : ctaConfig.href ? (
-              <Button
-                component={Link}
-                href={ctaConfig.href}
-                variant={ctaConfig.variant}
-                color={appStatus ? undefined : 'secondary'}
-                size="small"
+              <Box
                 sx={{
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  fontSize: { xs: '0.75rem', md: '0.875rem' },
-                  px: { xs: 1.5, md: 2.5 },
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
                   mr: 1,
-                  textTransform: 'none',
-                  ...ctaConfig.sx,
                 }}
               >
-                {ctaConfig.label}
-              </Button>
+                <Button
+                  component={Link}
+                  href={ctaConfig.href}
+                  variant={ctaConfig.variant}
+                  color={appStatus ? undefined : 'secondary'}
+                  size="small"
+                  sx={{
+                    borderRadius: '6px',
+                    fontWeight: 600,
+                    fontSize: { xs: '0.75rem', md: '0.875rem' },
+                    px: { xs: 1.5, md: 2.5 },
+                    textTransform: 'none',
+                    whiteSpace: 'nowrap',
+                    ...ctaConfig.sx,
+                  }}
+                >
+                  {ctaConfig.label}
+                </Button>
+                {/* Button (48) + this line (~14) stays inside the 64px toolbar */}
+                {showFeesLink && (
+                  <Box
+                    component={Link}
+                    href="/fees"
+                    sx={{
+                      display: { xs: 'none', md: 'block' },
+                      px: 0.5,
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      lineHeight: 1.2,
+                      whiteSpace: 'nowrap',
+                      color: 'text.secondary',
+                      textDecoration: 'underline',
+                      textUnderlineOffset: '2px',
+                      borderRadius: '4px',
+                      '&:hover': { color: 'primary.main' },
+                      '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+                    }}
+                  >
+                    {t('header.viewFees')}
+                  </Box>
+                )}
+              </Box>
             ) : (
               <Button
                 onClick={goToApp}
@@ -1122,6 +1157,24 @@ export default function Header() {
                   }}
                 >
                   {ctaConfig.label}
+                </Button>
+              )}
+              {showFeesLink && (
+                <Button
+                  component={Link}
+                  href="/fees"
+                  variant="outlined"
+                  fullWidth
+                  onClick={toggleMobileMenu}
+                  sx={{
+                    mt: 1,
+                    minHeight: 48,
+                    borderRadius: '6px',
+                    fontWeight: 600,
+                    textTransform: 'none',
+                  }}
+                >
+                  {t('header.viewFees')}
                 </Button>
               )}
             </Box>

@@ -14,10 +14,27 @@ export interface CityContent {
   highlights: string[];
   /** Neighbourhoods or nearby towns the page serves. */
   servedAreas?: string[];
+  /**
+   * True once staff have checked every fact (agents/seo-aeo/location-content-review.md).
+   * Only reviewed content counts as a strong fact in the index gate.
+   */
+  reviewed?: boolean;
   updatedAt: string;
 }
 
 export const CITY_CONTENT: Record<string, CityContent> = {
+    // Moved from the retired /coaching/nata-coaching-chennai/tambaram area guide (2026-10-03).
+    "tambaram": {
+      "localContext": "Tambaram, in south Chennai, grew around its suburban railway station and is home to Madras Christian College, one of the oldest colleges in Asia. The old college buildings on its wooded campus and the new housing along GST Road give students a lot to sketch, from brick arches to apartment blocks.",
+      "intro": "The Neram Tambaram classroom is at Jain Alpine Meadows, Thiruneermalai. Students from Chromepet, Chengalpattu and the East Coast Road attend there, and the same classes run live online on days you cannot travel. The main Chennai classroom in Ashok Nagar is a short suburban train ride away, via Mambalam.",
+      "highlights": [
+        "Classroom at Jain Alpine Meadows, Thiruneermalai, Tambaram",
+        "Tambaram suburban station links to Mambalam for the Ashok Nagar classroom",
+        "Madras Christian College campus nearby for building and perspective sketches"
+      ],
+      "servedAreas": ["Chromepet", "Chengalpattu", "Mahabalipuram", "East Coast Road"],
+      "updatedAt": "2026-10-03"
+    },
     "agartala": {
       "localContext": "Agartala, the capital of Tripura, grew around the royal seat of the Manikya rulers, and its centrepiece is Ujjayanta Palace, built in the early twentieth century with domes, arches and formal gardens and now home to the Tripura State Museum. The Kunjaban Palace is another former royal residence in the city. A drive south leads to Neermahal, a water palace in Rudrasagar Lake that blends Hindu and Mughal elements, and to the Tripura Sundari Temple at Udaipur, built in a Bengal temple style. Bamboo and cane are part of everyday building and craft in the region, and traditional houses were often raised on bamboo platforms.",
       "intro": "Palaces, lakes and bamboo craft give Agartala students plenty to draw while preparing for NATA or JEE Paper 2. B.Arch programmes are available in the northeast and across India. Live online classes with drawing feedback let you prepare from home, using Ujjayanta Palace and Neermahal for perspective and detail studies.",

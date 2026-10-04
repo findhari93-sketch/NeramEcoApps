@@ -9,13 +9,13 @@
  */
 
 import { useEffect, useState } from 'react';
-import { Box, Chip, Stack, Tooltip, Typography, alpha, useTheme } from '@neram/ui';
+import { Box, Button, Chip, Stack, Tooltip, Typography, alpha, useTheme } from '@neram/ui';
 import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded';
 import StudentAvatar from '@/components/students/StudentAvatar';
 import { displayAnswer } from '@/lib/pad/client/format';
 import { padFetch } from '@/lib/pad/client/pad-fetch';
 import type { PadHost } from '@/lib/pad/client/pad-host';
-import { namesByAnswer, namesPreview, unansweredNames } from '@/lib/pad/client/teacher-view';
+import { foldAnswers, namesByAnswer, namesPreview, stacksAnswerLabels, unansweredNames } from '@/lib/pad/client/teacher-view';
 import type { AnswerType, ParticipationRow, PromptState } from '@/lib/pad/client/types';
 import { HideNamesButton, useHideNames } from './HideNames';
 
@@ -56,6 +56,7 @@ export default function OptionNames({
   const [failed, setFailed] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [hidden, setHidden] = useHideNames();
+  const [showAll, setShowAll] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -100,10 +101,49 @@ export default function OptionNames({
     );
   }
 
+  // A typed sentence gets its own line above the bar; a letter sits beside it.
+  const stacked = stacksAnswerLabels(bars.map((bar) => bar.label));
+  const { shown, folded } = foldAnswers(prompt.answer_type, bars);
+  const visible = showAll ? bars : shown;
+
+  const track = (bar: BarRow) => (
+    <Box sx={{ flex: 1, minWidth: 24, height: 12, borderRadius: 6, bgcolor: alpha(theme.palette.text.primary, 0.08) }} aria-hidden>
+      <Box sx={{ width: `${(bar.count / max) * 100}%`, height: '100%', borderRadius: 6, bgcolor: colour(bar.tone) }} />
+    </Box>
+  );
+  const count = (bar: BarRow) => (
+    <Typography component="span" sx={{ minWidth: 28, textAlign: 'right', fontVariantNumeric: 'tabular-nums', flexShrink: 0 }}>
+      {bar.count}
+    </Typography>
+  );
+
   const renderRow = (bar: BarRow, drawBar: boolean) => {
     const isOpen = expanded === bar.key;
     const tip = hidden ? 'Names are hidden' : rows ? namesPreview(bar.names) : 'Loading names';
     const spoken = `${bar.label}: ${bar.count}${bar.tone === 'right' ? ', correct answer' : ''}`;
+    const label = (
+      <Stack direction="row" spacing={0.5} alignItems="flex-start" sx={{ minWidth: 0, ...(stacked || !drawBar ? { flex: drawBar ? 'none' : 1 } : { width: 48, flexShrink: 0 }) }}>
+        {bar.tone === 'right' && <CheckCircleRounded fontSize="small" sx={{ color: colour('right'), mt: '2px' }} aria-hidden />}
+        <Typography
+          component="span"
+          sx={{
+            fontWeight: 700,
+            minWidth: 0,
+            overflowWrap: 'anywhere',
+            // Two lines at most until the row is opened; then the whole answer.
+            ...(!isOpen && {
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+            }),
+          }}
+          color={bar.tone === 'muted' ? 'text.secondary' : 'text.primary'}
+        >
+          {bar.label}
+        </Typography>
+      </Stack>
+    );
     return (
       <Box component="li" key={bar.key} sx={{ listStyle: 'none' }}>
         <Tooltip title={bar.count > 0 ? tip : ''} placement="top" enterDelay={300} disableTouchListener>
@@ -118,9 +158,11 @@ export default function OptionNames({
               width: '100%',
               minHeight: 44,
               display: 'flex',
-              alignItems: 'center',
-              gap: 1,
+              flexDirection: stacked && drawBar ? 'column' : 'row',
+              alignItems: stacked && drawBar ? 'stretch' : 'center',
+              gap: stacked && drawBar ? 0.5 : 1,
               px: 0.5,
+              py: stacked && drawBar ? 0.75 : 0,
               border: 0,
               borderRadius: 1.5,
               background: 'none',
@@ -132,22 +174,21 @@ export default function OptionNames({
               '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 1 },
             }}
           >
-            <Stack direction="row" spacing={0.5} alignItems="center" sx={{ width: drawBar ? 64 : 'auto', flexShrink: 0, minWidth: 0 }}>
-              {bar.tone === 'right' && <CheckCircleRounded fontSize="small" sx={{ color: colour('right') }} aria-hidden />}
-              <Typography component="span" sx={{ fontWeight: 700, overflowWrap: 'anywhere' }} color={bar.tone === 'muted' ? 'text.secondary' : 'text.primary'}>
-                {bar.label}
-              </Typography>
-            </Stack>
-            {drawBar ? (
-              <Box sx={{ flex: 1, height: 12, borderRadius: 6, bgcolor: alpha(theme.palette.text.primary, 0.08) }} aria-hidden>
-                <Box sx={{ width: `${(bar.count / max) * 100}%`, height: '100%', borderRadius: 6, bgcolor: colour(bar.tone) }} />
-              </Box>
+            {stacked && drawBar ? (
+              <>
+                {label}
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ width: '100%' }}>
+                  {track(bar)}
+                  {count(bar)}
+                </Stack>
+              </>
             ) : (
-              <Box sx={{ flex: 1 }} />
+              <>
+                {label}
+                {drawBar ? track(bar) : null}
+                {count(bar)}
+              </>
             )}
-            <Typography component="span" sx={{ width: 32, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-              {bar.count}
-            </Typography>
           </Box>
         </Tooltip>
         {isOpen && (
@@ -185,14 +226,19 @@ export default function OptionNames({
     <Stack spacing={0.25}>
       <Stack direction="row" alignItems="center" justifyContent="space-between">
         <Typography variant="caption" color="text.secondary">
-          {hidden ? 'Answers' : 'Answers. Tap a bar to see who.'}
+          {hidden ? 'Answers' : 'Answers. Tap one to see who.'}
         </Typography>
         <HideNamesButton hidden={hidden} onChange={setHidden} />
       </Stack>
       <Box component="ul" aria-label="Answers given" sx={{ m: 0, p: 0 }}>
-        {bars.map((bar) => renderRow(bar, true))}
+        {visible.map((bar) => renderRow(bar, true))}
         {extra.map((bar) => renderRow(bar, false))}
       </Box>
+      {folded.length > 0 && (
+        <Button size="small" onClick={() => setShowAll(!showAll)} aria-expanded={showAll} sx={{ alignSelf: 'flex-start', minHeight: 44 }}>
+          {showAll ? 'Show the top answers only' : `${folded.length} other ${folded.length === 1 ? 'answer' : 'answers'}`}
+        </Button>
+      )}
     </Stack>
   );
 }

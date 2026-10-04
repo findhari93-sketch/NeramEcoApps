@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { browserHost, cachedTokenGetter, consolePopOut, frameFromTeams, readTestHost, stageSharing, teamsClipboardReader, themeFromTeams, tokenExpiresAt } from './pad-host';
+import { browserHost, cachedTokenGetter, consolePopOut, frameFromTeams, readTestHost, stageSharing, meetingTitleReader, teamsClipboardReader, themeFromTeams, tokenExpiresAt } from './pad-host';
 
 /** A JWT-shaped string, base64url over UTF-8 as Entra issues them (names are not always ASCII). */
 function jwt(claims: Record<string, unknown>): string {
@@ -217,5 +217,35 @@ describe('teamsClipboardReader', () => {
     const text = new Blob(['hi'], { type: 'text/plain' });
     expect(await teamsClipboardReader({ clipboard: { isSupported: () => true, read: async () => text } })!()).toBeNull();
     expect(await teamsClipboardReader({ clipboard: { isSupported: () => true, read: async () => { throw new Error('denied'); } } })!()).toBeNull();
+  });
+});
+
+describe('meetingTitleReader', () => {
+  type Reply = (error: unknown, details: { details?: { title?: string } } | null) => void;
+
+  it("reads the meeting's subject once and keeps it", async () => {
+    let calls = 0;
+    const read = meetingTitleReader({ meeting: { getMeetingDetails: (reply: Reply) => { calls += 1; reply(null, { details: { title: ' JEE preparation ' } }); } } });
+    expect(await read()).toBe('JEE preparation');
+    expect(await read()).toBe('JEE preparation');
+    expect(calls).toBe(1);
+  });
+
+  it('is null when Teams refuses, has no title, or cannot ask', async () => {
+    expect(await meetingTitleReader({ meeting: { getMeetingDetails: (reply: Reply) => reply({ errorCode: 1000 }, null) } })()).toBeNull();
+    expect(await meetingTitleReader({ meeting: { getMeetingDetails: (reply: Reply) => reply(null, { details: {} }) } })()).toBeNull();
+    expect(await meetingTitleReader({})()).toBeNull();
+    expect(await meetingTitleReader({ meeting: { getMeetingDetails: () => { throw new Error('not initialised'); } } })()).toBeNull();
+  });
+
+  it('gives up after a short wait instead of holding up the class', async () => {
+    vi.useFakeTimers();
+    try {
+      const pending = meetingTitleReader({ meeting: { getMeetingDetails: () => undefined } })();
+      await vi.advanceTimersByTimeAsync(3_000);
+      expect(await pending).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

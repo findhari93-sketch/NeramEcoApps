@@ -62,6 +62,9 @@ export type MarksSource = 'scheme' | 'paper' | 'mixed';
  */
 const SCHEME: Record<string, { objective: [number, number]; drawing: [number, number] }> = {
   JEE_PAPER_2: { objective: [4, 1], drawing: [50, 0] },
+  // B.Planning: the same +4/-1 on every section (Planning included). It has no
+  // drawing; the entry is only there to satisfy the shape.
+  JEE_PAPER_2B: { objective: [4, 1], drawing: [50, 0] },
   NATA: { objective: [3, 0], drawing: [50, 0] },
 };
 

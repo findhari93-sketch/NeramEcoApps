@@ -58,11 +58,9 @@ export default function FeeCard({
         borderWidth: isHighlighted ? 2 : 1,
         borderRadius: 1,
         overflow: 'visible',
-        transition: 'transform 0.2s, box-shadow 0.2s',
-        '&:hover': {
-          transform: 'translateY(-4px)',
-          boxShadow: 8,
-        },
+        transition: 'box-shadow 0.2s',
+        '&:hover': { boxShadow: 8 },
+        '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
       }}
     >
       {/* Badge */}
@@ -110,7 +108,7 @@ export default function FeeCard({
                 variant="body1"
                 sx={{
                   textDecoration: 'line-through',
-                  color: 'text.disabled',
+                  color: 'text.secondary',
                   fontSize: '0.95rem',
                 }}
               >

@@ -1,6 +1,5 @@
 import { MetadataRoute } from 'next';
 import { locales } from '@/i18n';
-import { getCachedCenterSlugs } from '@/lib/centers-data';
 import { getAllCollegeSlugs, getActiveStates, getNIRFRankedCollegeSlugs } from '@/lib/college-hub/queries';
 import { ROUTED_HUB_SLUGS } from '@/data/counselling-2026';
 import { coursesData } from '@/data/courses';
@@ -39,6 +38,8 @@ const staticPages: Array<{ path: string; lastModified: string; i18n?: boolean }>
   { path: '/demo-class', lastModified: '2026-03-05', i18n: true },
   { path: '/centers', lastModified: '2026-02-25', i18n: true },
   { path: '/testimonials', lastModified: '2026-09-24' },
+  // aiArchitek product hub: English only (ENGLISH_ONLY_SECTIONS).
+  { path: '/aiarchitek', lastModified: '2026-10-03' },
   { path: '/achievements', lastModified: '2026-09-24' },
   // College Hub: English only. next.config.js sends noindex on /(ta|hi|kn|ml)/colleges/*,
   // so listing those variants only fed Google URLs it was told not to index.
@@ -270,20 +271,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     });
   }
 
-  // ─── Center detail pages: English only (no /en/ prefix) ───
-  try {
-    const centerSlugs = await getCachedCenterSlugs();
-    for (const centerSlug of centerSlugs) {
-      entries.push({
-        url: `${baseUrl}/contact/${centerSlug}`,
-        lastModified: new Date('2026-02-25'),
-        changeFrequency: 'monthly',
-        priority: 0.8,
-      });
-    }
-  } catch (err) {
-    console.error('Failed to fetch center slugs for sitemap:', err);
-  }
+  // Centre detail pages (/contact/{slug}) 301 to their city page, which the
+  // coaching-locations sitemap lists.
 
   // ─── College Hub: state pages (all locales) ───────────────────────────────
   try {

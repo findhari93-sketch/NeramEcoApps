@@ -53,6 +53,11 @@ export interface PadHost {
    * Ctrl + V into the focused field is the fallback that always works.
    */
   readClipboard?: () => Promise<Blob | null>;
+  /**
+   * The Teams meeting's subject ("JEE preparation"), for a meeting that is not
+   * on the Nexus timetable. Resolves null when Teams will not say.
+   */
+  meetingTitle?: () => Promise<string | null>;
 }
 
 export interface InjectedTestHost {
@@ -260,6 +265,38 @@ export function teamsClipboardReader(teams: {
   };
 }
 
+const MEETING_TITLE_TIMEOUT_MS = 2_500;
+
+/**
+ * The meeting's subject from TeamsJS getMeetingDetails, asked once and kept.
+ * Needs the OnlineMeeting.ReadBasic.Chat permission in the manifest; without it,
+ * or in a client that never answers, it is null after a short wait, so starting
+ * the class is never held up for a title.
+ */
+export function meetingTitleReader(teams: {
+  meeting?: { getMeetingDetails?(callback: (error: unknown, details: { details?: { title?: string } } | null) => void): void };
+}): () => Promise<string | null> {
+  let asked: Promise<string | null> | null = null;
+  return () => {
+    asked ??= new Promise<string | null>((resolve) => {
+      const timer = setTimeout(() => resolve(null), MEETING_TITLE_TIMEOUT_MS);
+      try {
+        const read = teams.meeting?.getMeetingDetails;
+        if (!read) throw new Error('not supported');
+        read((error, response) => {
+          clearTimeout(timer);
+          const title = !error && typeof response?.details?.title === 'string' ? response.details.title.trim() : '';
+          resolve(title || null);
+        });
+      } catch {
+        clearTimeout(timer);
+        resolve(null);
+      }
+    });
+    return asked;
+  };
+}
+
 /**
  * Connect to Teams, or resolve null when the page is not running inside it.
  * TeamsJS is loaded on demand so the browser pages never download it.
@@ -307,6 +344,7 @@ export async function connectTeamsHost(): Promise<PadHost | null> {
     stage: frame === 'sidePanel' && context.meeting?.id ? stageSharing(teams) : undefined,
     popOut: frame === 'sidePanel' ? consolePopOut(teams, context, window.location.origin) : undefined,
     readClipboard: teamsClipboardReader(teams),
+    meetingTitle: context.meeting?.id ? meetingTitleReader(teams as Parameters<typeof meetingTitleReader>[0]) : undefined,
     getToken: cachedTokenGetter(() => teams.authentication.getAuthToken()),
     onResume: (handler) => {
       resumeHandlers.add(handler);

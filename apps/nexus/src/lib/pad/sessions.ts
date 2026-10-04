@@ -199,6 +199,22 @@ export async function hintSession(sessionId: string, audience: HintAudience, opt
   await broadcastHint(topics, options);
 }
 
+/**
+ * Someone joined or left a Teams meeting (the bot's participant events): the
+ * console of each live session in that meeting refetches, so its "here" count
+ * moves at once. Best effort, like every hint.
+ */
+export async function hintMeetingTeachers(meetingId: string, options: { throttleMs?: number } = {}): Promise<void> {
+  try {
+    const { data, error } = await padDb().from('pad_sessions').select('teacher_topic').eq('meeting_id', meetingId).eq('status', 'live');
+    if (error) throw error;
+    const topics = ((data ?? []) as Array<{ teacher_topic: string }>).map((row) => row.teacher_topic);
+    if (topics.length) await broadcastHint(topics, options);
+  } catch (err) {
+    console.error('[pad] could not hint the consoles in a meeting', err instanceof Error ? err.message : err);
+  }
+}
+
 export async function hintPrompt(promptId: string, audience: HintAudience, options: { throttleMs?: number } = {}): Promise<void> {
   const sessionId = await loadPromptSessionId(promptId).catch(() => null);
   if (sessionId) await hintSession(sessionId, audience, options);

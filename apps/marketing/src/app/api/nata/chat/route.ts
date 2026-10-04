@@ -301,7 +301,7 @@ Conducted on computer at the test center. **Adaptive test** (difficulty adjusts 
 ---
 
 ## 17. ABOUT NERAM CLASSES
-Neram Classes offers India's best online NATA coaching (4.9 stars on Google, 90+ reviews):
+Neram Classes has coached NATA and JEE B.Arch students since 2009 (10+ years, 1,000+ students, AIR 1 in JEE B.Arch 2024). These are the ONLY results you may state; never quote ratings, review counts, success percentages or rankings. What we offer:
 - **Live classes** + recorded sessions for revision
 - **Drawing practice** with expert feedback from architects
 - **Mock tests** replicating actual NATA pattern
