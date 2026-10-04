@@ -352,6 +352,17 @@ describe('the request shapes each app needs', () => {
     expect(result.functionCalls).toEqual([{ name: 'getCourses', args: {} }]);
   });
 
+  it('returns the model parts verbatim, thought signature included, so a tool loop can replay them', async () => {
+    const parts = [{ functionCall: { name: 'my_schedule', args: {} }, thoughtSignature: 'sig-abc' }];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ candidates: [{ content: { parts } }], usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 } }), { status: 200 })),
+    );
+    const result = await generateGemini({ feature: 'marketing.site-chat', parts: [{ text: 'hi' }] });
+    expect(result.modelParts).toEqual(parts);
+    expect(result.functionCalls).toEqual([{ name: 'my_schedule', args: {} }]);
+  });
+
   it('passes responseSchema through, which the admin review needs', async () => {
     const f = vi.fn(async () => ok('{}'));
     vi.stubGlobal('fetch', f);

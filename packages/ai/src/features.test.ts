@@ -21,10 +21,31 @@ describe('the registry', () => {
     }
   });
 
+  /**
+   * Nexus features that may use the free key, each with the reason it is safe.
+   * Free tier inputs are used by Google to improve their products, so a feature
+   * belongs here only when no student data can reach its prompt.
+   */
+  const FREE_KEY_EXCEPTIONS: Record<string, string> = {
+    'nexus.assistant-exam':
+      'Exam help mode: policy.ts keeps only exam tools, llm.ts sends no name, classroom or general-mode turn, and the exam tools return question bank content only.',
+  };
+
   it('keeps the free key away from anything carrying student data', () => {
     // Free tier inputs are used by Google to improve their products.
     for (const f of AI_FEATURES) {
-      if (f.app === 'nexus') expect(f.allowFreeKey).toBe(false);
+      if (f.app === 'nexus' && !FREE_KEY_EXCEPTIONS[f.id]) expect(f.allowFreeKey).toBe(false);
+    }
+  });
+
+  it('lets each listed exception use the free key, and nothing else', () => {
+    for (const id of Object.keys(FREE_KEY_EXCEPTIONS)) expect(featureById(id)?.allowFreeKey).toBe(true);
+    expect(featureById('nexus.assistant-student')?.allowFreeKey).toBe(false);
+  });
+
+  it('caps the assistant per student per hour, in calls', () => {
+    for (const id of ['nexus.assistant-student', 'nexus.assistant-exam']) {
+      expect(featureById(id)).toMatchObject({ app: 'nexus', trigger: 'student', tier: 'cheap', defaultMode: 'auto', supportsManual: false, dailyCallCap: 600, perClientHourlyCap: 40 });
     }
   });
 });

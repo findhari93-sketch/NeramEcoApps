@@ -38,6 +38,10 @@ export interface GeminiPart {
   inline_data?: { mime_type: string; data: string };
   functionCall?: { name: string; args: unknown };
   functionResponse?: { name: string; response: unknown };
+  /** Set by Gemini 3 models on a function call; must be sent back unchanged with that call. */
+  thoughtSignature?: string;
+  /** A thinking summary part (only when thoughts are requested). */
+  thought?: boolean;
 }
 
 export interface GeminiContent {
@@ -84,6 +88,12 @@ export interface GeminiResult {
   keyTier: 'paid' | 'free';
   /** Function calls the model asked for, empty when it answered with text. */
   functionCalls: Array<{ name: string; args: unknown }>;
+  /**
+   * The candidate's parts exactly as returned. A tool loop appends these as the
+   * model turn: Gemini 3 models reject a replayed function call that has lost
+   * its thoughtSignature, with a 400 this file would otherwise read as a bad key.
+   */
+  modelParts: GeminiPart[];
   /**
    * Gemini's own reason for stopping: 'STOP', 'MAX_TOKENS', 'SAFETY' and so on.
    *
@@ -246,6 +256,7 @@ export async function generateGemini(opts: GenerateOptions): Promise<GeminiResul
         costUsd,
         keyTier: attempt.keyTier,
         functionCalls,
+        modelParts: parts,
         finishReason: candidate?.finishReason || 'UNKNOWN',
       };
     }

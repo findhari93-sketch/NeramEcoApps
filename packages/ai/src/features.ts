@@ -354,6 +354,49 @@ export const AI_FEATURES = [
     dailyCallCap: 200,
   },
 
+  // ── Nexus: Neram Assistant (student chat) ────────────────────────────────
+  /**
+   * A free question to the assistant about the student's own Nexus data
+   * (classes, assignments, tests, catch-up, reviews). The model calls read
+   * tools in apps/nexus/src/lib/assistant; one answer is at most four calls,
+   * which is why the hourly cap is in calls (40), not questions. The deterministic
+   * paths (brief, chips, guided flows) never reach here. Student data, so never
+   * the free key.
+   */
+  {
+    id: 'nexus.assistant-student',
+    label: 'Assistant: questions about my Nexus',
+    app: 'nexus',
+    group: 'Student tools',
+    trigger: 'student',
+    tier: 'cheap',
+    defaultMode: 'auto',
+    supportsManual: false,
+    allowFreeKey: false,
+    dailyCallCap: 600,
+    perClientHourlyCap: 40,
+  },
+  /**
+   * Exam help mode of the same assistant: chapters, weightage, past questions,
+   * NCERT readings. The one Nexus feature allowed the free key, because nothing
+   * about the student can reach the prompt: apps/nexus/src/lib/assistant/policy.ts
+   * keeps only exam tools in this mode and llm.ts sends no name, classroom or
+   * general-mode turn. features.test.ts lists it as the only exception.
+   */
+  {
+    id: 'nexus.assistant-exam',
+    label: 'Assistant: exam help',
+    app: 'nexus',
+    group: 'Student tools',
+    trigger: 'student',
+    tier: 'cheap',
+    defaultMode: 'auto',
+    supportsManual: false,
+    allowFreeKey: true,
+    dailyCallCap: 600,
+    perClientHourlyCap: 40,
+  },
+
   // ── Nexus: student profile photos ────────────────────────────────────────
   /**
    * Looks at a new profile photo and reports whether it shows one person's
