@@ -103,6 +103,17 @@ describe('qb_search_questions', () => {
   });
 });
 
+describe('qb_search_questions duplicates', () => {
+  it('lists a repeated source once', async () => {
+    mocks.searchQBQuestionIds.mockResolvedValue({ ids: [Q], total: 1, match_kind: 'text', did_you_mean: null, matched_terms: [] });
+    const out = await tool('qb_search_questions').run(ctx({
+      nexus_qb_questions: [{ id: Q, question_text: 'x', section: 'math_mcq', is_active: true, status: 'active' }],
+      nexus_qb_question_sources: [{ question_id: Q, exam_type: 'NATA', year: 2024 }, { question_id: Q, exam_type: 'NATA', year: 2024 }],
+    }), { query: 'x' });
+    expect((out.data as any)[0].asked_in).toEqual(['NATA 2024']);
+  });
+});
+
 describe('qb_explain_answer (D3, Review Focus 2)', () => {
   const question = { id: Q, question_text: 'Evaluate the integral of x from 0 to 1.', options: [{ id: 'a', text: '1/2', is_correct: true }, { id: 'b', text: '1', is_correct: false }], correct_answer: 'a', explanation_brief: 'x^2/2 from 0 to 1.', explanation_detailed: null, is_active: true, status: 'active' };
 
@@ -121,6 +132,39 @@ describe('qb_explain_answer (D3, Review Focus 2)', () => {
     const out = await tool('qb_explain_answer').run(ctx({ nexus_qb_questions: [question], nexus_qb_student_attempts: [{ student_id: 's1', question_id: Q }], nexus_test_attempts: [{ id: 'x', student_id: 's1', status: 'in_progress' }] }), { question_id: Q });
     expect(out.reply).toBe('Finish the test you have open first. I can explain questions after you submit it.');
     expect(out.data).toEqual({ refused: 'test_in_progress' });
+  });
+
+  const failing = (table: string, tables: Record<string, any[]>): ToolContext => {
+    const real = fakeDb(tables);
+    const supabase = { from: (n: string) => (n === table ? { select: () => { const q: any = { eq: () => q, limit: () => q, maybeSingle: () => q, then: (r: any) => r({ data: null, error: { message: 'down' } }) }; return q; } } : real.from(n)) };
+    return { ...ctx(), supabase } as ToolContext;
+  };
+
+  it('fails closed when the open-test read errors', async () => {
+    const out = await tool('qb_explain_answer').run(failing('nexus_test_attempts', { nexus_qb_questions: [question], nexus_qb_student_attempts: [{ student_id: 's1', question_id: Q }] }), { question_id: Q });
+    expect(out.data).toEqual({ refused: 'test_in_progress' });
+    expect(JSON.stringify(out)).not.toMatch(/is_correct|correct_answer|x\^2\/2/);
+  });
+
+  it('treats a failed attempts read as not answered', async () => {
+    const out = await tool('qb_explain_answer').run(failing('nexus_qb_student_attempts', { nexus_qb_questions: [question] }), { question_id: Q });
+    expect(out.data).toMatchObject({ hint_only: true });
+    expect(JSON.stringify(out)).not.toMatch(/is_correct|correct_answer|x\^2\/2/);
+  });
+
+  it('fails when the question read errors', async () => {
+    const out = await tool('qb_explain_answer').run(failing('nexus_qb_questions', {}), { question_id: Q });
+    expect(out).toMatchObject({ ok: false, error: 'I could not find that question.' });
+  });
+
+  it("ignores another student's bank attempt", async () => {
+    const out = await tool('qb_explain_answer').run(ctx({ nexus_qb_questions: [question], nexus_qb_student_attempts: [{ student_id: 's2', question_id: Q }] }), { question_id: Q });
+    expect(out.data).toMatchObject({ hint_only: true });
+  });
+
+  it("ignores another student's open test", async () => {
+    const out = await tool('qb_explain_answer').run(ctx({ nexus_qb_questions: [question], nexus_qb_student_attempts: [{ student_id: 's1', question_id: Q }], nexus_test_attempts: [{ id: 'y', student_id: 's2', status: 'in_progress' }] }), { question_id: Q });
+    expect(out.data).toMatchObject({ correct_answer: 'a' });
   });
 
   it('refuses a malformed or unknown id plainly', async () => {

@@ -24,9 +24,13 @@ export const qbSearchQuestions: ToolDef = {
       question_id: q.id,
       text: String(q.question_text || '').slice(0, 300),
       section: q.section,
-      asked_in: ((sources || []) as Array<{ question_id: string; exam_type: keyof typeof EXAM_LABEL; year: number }>)
-        .filter((s) => s.question_id === q.id)
-        .map((s) => `${s.exam_type === 'NATA' ? 'NATA' : EXAM_LABEL[s.exam_type] ?? s.exam_type} ${s.year}`),
+      asked_in: [
+        ...new Set(
+          ((sources || []) as Array<{ question_id: string; exam_type: keyof typeof EXAM_LABEL; year: number }>)
+            .filter((s) => s.question_id === q.id)
+            .map((s) => `${EXAM_LABEL[s.exam_type] ?? s.exam_type} ${s.year}`),
+        ),
+      ],
     }));
     return { ok: true, data, links: ordered.slice(0, 3).map((q, i) => ({ label: `Question ${i + 1}`, url: questionUrl(q.id) })) };
   },
