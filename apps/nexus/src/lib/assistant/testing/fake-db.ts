@@ -1,7 +1,7 @@
 /**
  * Enough of the supabase-js query builder to test the assistant's store and
  * writers without a database: from, select, insert, upsert, update, delete,
- * eq, neq, in, is, lte, gte, lt, gt, or (ignored), order, limit, maybeSingle,
+ * eq, neq, in, is, lte, gte, lt, gt, or (ignored), order, limit, range, maybeSingle,
  * single, and awaiting the chain. `unique` emulates a unique index with error
  * code 23505.
  */
@@ -47,6 +47,7 @@ export function fakeDb(tables: Record<string, Row[]>, opts: FakeDbOptions = {}) 
     let upsertKeys: string[] = [];
     let orderBy: { col: string; asc: boolean } | null = null;
     let take: number | null = null;
+    let skip = 0;
     let single: 'maybe' | 'one' | null = null;
 
     const run = (): { data: any; error: any } => {
@@ -87,7 +88,7 @@ export function fakeDb(tables: Record<string, Row[]>, opts: FakeDbOptions = {}) 
         const { col, asc } = orderBy;
         out = [...out].sort((a, b) => (a[col] < b[col] ? -1 : a[col] > b[col] ? 1 : 0) * (asc ? 1 : -1));
       }
-      if (take !== null) out = out.slice(0, take);
+      if (take !== null) out = out.slice(skip, skip + take);
       if (single === 'one') {
         if (out.length !== 1) return { data: null, error: { code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned' } };
         return { data: out[0], error: null };
@@ -113,6 +114,7 @@ export function fakeDb(tables: Record<string, Row[]>, opts: FakeDbOptions = {}) 
       or: () => api,
       order: (c: string, o?: { ascending?: boolean }) => { orderBy = { col: c, asc: o?.ascending !== false }; return api; },
       limit: (n: number) => { take = n; return api; },
+      range: (a: number, b: number) => { skip = a; take = b - a + 1; return api; },
       maybeSingle: () => { single = 'maybe'; return api; },
       single: () => { single = 'one'; return api; },
       then: (res: (v: any) => unknown, rej?: (e: unknown) => unknown) => Promise.resolve(run()).then(res, rej),

@@ -26,6 +26,7 @@ import AdminPanelSettingsOutlinedIcon from '@mui/icons-material/AdminPanelSettin
 import { useRouter } from 'next/navigation';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthSWR } from '@/lib/nexus-swr';
+import AssistantUsageSection from '@/components/ai-usage/AssistantUsageSection';
 /**
  * Imported from the deep path, not the package barrel.
  *
@@ -619,6 +620,7 @@ export default function AiUsagePage() {
           </Button>
         </Paper>
       )}
+      <AssistantUsageSection rate={rate} getToken={getToken} />
     </Box>
   );
 }
