@@ -15,7 +15,18 @@
 - `@neram/ai` (`generateGemini`, feature registry, budget guard).
 - Vitest from the repo root; Playwright project `nexus-mobile`.
 
-**Spec:** `docs/superpowers/specs/2026-10-03-neram-assistant-design.md` (Phase 2, plus the M2 rows of the M1 plan's spec-coverage table). M1 plan for house style: `docs/superpowers/plans/2026-10-03-neram-assistant-m1-foundation.md`.
+AI answers are rationed by the access rule in the addendum spec:
+- A student has them while their catch-up is clear, or while a teacher's override says so.
+- The daily allowance is set by an admin.
+- The panel shows the student their status.
+- Teachers override per student; admins see usage and cost.
+
+**Spec:**
+- `docs/superpowers/specs/2026-10-03-neram-assistant-design.md` (Phase 2, plus the M2 rows of the M1 plan's spec-coverage table).
+- **Addendum, which wins where they differ:** `docs/superpowers/specs/2026-10-04-assistant-ai-access-design.md` (who gets AI answers).
+- M1 plan, for house style: `docs/superpowers/plans/2026-10-03-neram-assistant-m1-foundation.md`.
+
+**Task order:** 1, 2, 3, 4, 5, 6, 7, 7A, 8, 9, 10, 11, 12, 12A, 12B, 12C, 13. The lettered tasks came from the addendum. They are inserted, not appended, so the numbered tasks keep their references.
 
 **Workspace:**
 - Worktree `C:\Users\Haribabu\Documents\AppsCopilot\2026\NeramEcosystem\.claude\worktrees\neram-assistant-m1`, branch `worktree-neram-assistant-m2`.
@@ -30,8 +41,17 @@
 - **One door to Gemini:** every Gemini call goes through `@neram/ai` (`generateGemini`). No direct `fetch` to Google; the ESLint rule in `apps/nexus/.eslintrc.json` fails the build otherwise.
 - **The free key:** `GEMINI_API_KEY_FREE` may be used only by `nexus.assistant-exam`. No student name, classroom, schedule, score or general-mode turn may enter an exam-mode request.
 - **Model tools:** the model is given read tools only (`kind: 'read'`). No action tool is ever declared to Gemini.
+- **Access (addendum spec):** no model call happens unless `loadAiAccess` says on. The rule, in order:
+  - pilot list;
+  - classroom;
+  - an active teacher override (newest wins);
+  - any missed-after-joining catch-up item with status `waiting` or `active`;
+  - late-joiner pace `behind`;
+  - otherwise on.
+
+  Statuses `pending_teacher`, `blocked`, `excused` and `done` never count. A student is never notified of a switch; it shows only in the assistant.
 - **Cost settings:**
-  - Daily cap of 20 model answers per student per IST day, counted from `nexus_assistant_messages` (`role='assistant'`, `llm=true`).
+  - A daily allowance per student per IST day, read from `nexus_settings.assistant_ai_daily_limit`: default 10, clamped 0 to 50, and 0 pauses AI answers for everyone. It is counted from `nexus_assistant_messages` (`role='assistant'`, `llm=true`).
   - `perClientHourlyCap` 40 Gemini calls per student (one answer is at most 4 calls).
   - `dailyCallCap` 600 per feature.
   - The `$25` monthly cap in `ai_controls` stays.
@@ -71,6 +91,9 @@ These are the controller's calls. Each one is a line in the ledger with its cost
 | D5 | `GeminiResult.modelParts` returns the model's raw parts so the loop replays them verbatim. The cheap cascade falls back to `gemini-3.1-flash-lite`, and Gemini 3 rejects a replayed function call without its `thoughtSignature`; `generateGemini` reads that 400 as a bad key. | Without it, a fallback turn with a tool call fails as "API key invalid". |
 | D6 | `perClientHourlyCap` is 40 calls, not the spec's 20, because the budget counts calls and one answer can be 4 calls. | About 10 to 20 answers an hour per student before the hourly sentence appears. |
 | D7 | Turn retries carry a client message id (a uuid) that becomes the user message's `external_id`, so a resend after a lost response returns the stored reply instead of a second model answer. | One indexed lookup per turn. |
+| D8 | The panel fetches the AI status once each time it opens, and counts the allowance down locally after each model answer, instead of fetching after every turn. | The count can be off by one after a reload, until the panel is next opened. That is one function call per open, not per message. |
+| D9 | The teacher's "AI answers" section always renders on the student page and asks the server. A 404 (assistant flag off) shows a short note. This is because the per-user flag payload reads the assistant as off for any staff member outside the pilot list (Ruling 22), so the client cannot decide this. | A teacher sees an "assistant is off" note while it is off, instead of no section at all. |
+| D10 | Overrides are rows, never edited or deleted. Setting a new one clears the active one first (`cleared_at`, `cleared_by`), and Clear stamps the same two columns. | A few rows per student; the full history is kept for the admin list. |
 
 ## Review Focus
 
@@ -78,7 +101,7 @@ The five inputs or failures most likely to hurt a student that no feature test e
 
 1. **Exam-mode leak.** A student asks a general question ("when is my next class"), then an exam question in the same thread. The exam request must carry no name, no classroom and none of the general turn's text. (Task 8, `turn-llm.test.ts`.)
 2. **The answer before trying.** A student asks the assistant to solve a bank question they have not answered, or asks during an open test. They must get a hint or a refusal, never the key. (Task 9, `exam-tools.test.ts`.)
-3. **The model calls a tool it was not given.** For example `decline_class`, or `my_sketchbook` with the sketchbook off. It must get "No such tool" and nothing is proposed or written. (Task 8.)
+3. **A miss the student cannot fix yet.** A class whose catch-up is not ready (no recap yet, or no recording) or was excused must never switch AI answers off. A teacher override past its end date, or cleared, must stop applying, and the newest active one wins. (Task 7A, `ai-access.test.ts`.) The model calling a tool it was not given stays pinned in Task 8.
 4. **Gemini is down, rate-limited, or paused by an admin mid-turn.** The student gets one plain sentence and the chips. The thread still has an assistant message, and the route answers 200, not 500. (Task 8.)
 5. **The reply is lost on a flaky phone connection.** Try again must not produce a second model answer or a second stored user message. A 400 must not offer Try again at all. (Task 4.)
 
@@ -104,6 +127,15 @@ New files:
 | `apps/nexus/src/lib/assistant/tools/exam/index.ts` | registers the exam tools |
 | `apps/nexus/src/lib/student-tests-overview.ts` | `buildStudentTestsOverview`, extracted from the overview route |
 | `apps/nexus/src/components/assistant/ModeChip.tsx` | "Exam help" / "My Nexus" label on model answers |
+| `supabase/migrations/20261102090200_nexus_assistant_ai_overrides.sql` | teacher overrides table |
+| `apps/nexus/src/lib/assistant/ai-access.ts` | the access rule (`decideAiAccess`, `loadAiAccess`), the allowance (`readDailyLimit`), overrides (`activeOverride`, `setOverride`, `clearOverrides`), wording for students and teachers, `buildAiStatus` |
+| `apps/nexus/src/app/api/assistant/ai-status/route.ts` | GET: the student's own AI status for the panel |
+| `apps/nexus/src/components/assistant/AiStatusLine.tsx` | the status line under the panel header |
+| `apps/nexus/src/app/api/students/[id]/ai-access/route.ts` | GET status and override, POST set an override, DELETE clear (staff) |
+| `apps/nexus/src/components/students/profile/AiAnswersSection.tsx` | the "AI answers" section on the teacher's student page |
+| `apps/nexus/src/lib/assistant/usage.ts` | `loadAssistantMonthUsage`: questions and cost per student this month |
+| `apps/nexus/src/app/api/admin/ai-usage/assistant/route.ts` | GET the usage, allowance and overrides; PATCH the allowance (admins) |
+| `apps/nexus/src/components/ai-usage/AssistantUsageSection.tsx` | the Assistant section on `/teacher/admin/ai-usage` |
 
 Modified files (main ones):
 - `packages/ai/src/{features.ts,features.test.ts,gemini.ts,gemini.test.ts}`
@@ -116,6 +148,9 @@ Modified files (main ones):
 - `apps/nexus/src/components/assistant/{client.ts,AssistantProvider.tsx,MessageBubble.tsx}`
 - `supabase/migrations/20261102090000_nexus_assistant_threads.sql`: one index. This is safe to edit because it is applied nowhere yet; verified on staging and prod 2026-10-04.
 - `tests/e2e/assistant-nexus-mobile.spec.ts`
+- `apps/nexus/src/lib/assistant/testing/fake-db.ts` (Task 12C adds `.range`)
+- `apps/nexus/src/app/(teacher)/teacher/students/[id]/page.tsx` (one section and one nav entry)
+- `apps/nexus/src/app/(teacher)/teacher/admin/ai-usage/page.tsx` (one section at the end)
 
 ---
 
@@ -1434,6 +1469,426 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 
 ---
 
+### Task 7A: The AI access rule, the allowance and the overrides table
+
+**Files:**
+- Create: `supabase/migrations/20261102090200_nexus_assistant_ai_overrides.sql`
+- Create: `apps/nexus/src/lib/assistant/ai-access.ts`
+- Test: `apps/nexus/src/lib/assistant/ai-access.test.ts`
+
+**Interfaces:**
+- Consumes:
+  - `getCatchupBacklog`, `getStudentPrimaryClassroom` (`@neram/database`, `@neram/database/queries/nexus`)
+  - `type CatchupBacklog`
+  - `computeCatchupPace` (`@/lib/catchup-pace`)
+  - `readAssistantGate` (`./access`)
+  - `formatDay`, `todayIst` (`./format`)
+  - `countLlmRepliesToday` (Task 7), `istDayStartIso` (Task 7)
+- Produces:
+  - `DAILY_LIMIT_KEY = 'assistant_ai_daily_limit'`, `DEFAULT_DAILY_LIMIT = 10`, `MAX_DAILY_LIMIT = 50`
+  - `clampDailyLimit(raw: unknown): number`
+  - `readDailyLimit(supabase): Promise<number>`
+  - `type AiAccessReason = 'not_in_pilot' | 'no_classroom' | 'teacher_off' | 'teacher_on' | 'missed_class' | 'behind_pace' | 'caught_up'`
+  - `interface OverrideRow { id: string; student_id: string; mode: 'on' | 'off'; reason: string; set_by: string | null; set_at: string; ends_on: string | null; cleared_at: string | null; cleared_by: string | null }`
+  - `interface AiAccess { on: boolean; reason: AiAccessReason; sentence: string; link: ToolLink | null; missed: Array<{ title: string; day: string }>; missedCount: number; deficit: number; override: OverrideRow | null }`
+  - `decideAiAccess(input: { inPilot: boolean; classroomId: string | null; override: OverrideRow | null; backlog: CatchupBacklog | null; today: string }): AiAccess` (pure)
+  - `activeOverride(supabase, studentId: string, today: string): Promise<OverrideRow | null>`
+  - `loadAiAccess(supabase, studentId: string, now: Date): Promise<AiAccess>`
+  - `setOverride(supabase, input: { studentId: string; mode: 'on' | 'off'; reason: string; endsOn: string | null; setBy: string; now: Date }): Promise<OverrideRow>`
+  - `clearOverrides(supabase, studentId: string, clearedBy: string, now: Date): Promise<number>`
+  - `teacherAccessLine(access: AiAccess): string`
+  - `interface AiStatus { on: boolean; reason: AiAccessReason; sentence: string; link: ToolLink | null; left_today: number; daily_limit: number }`
+  - `buildAiStatus(supabase, studentId: string, now: Date): Promise<AiStatus>`
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// @vitest-environment node
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const mocks = vi.hoisted(() => ({ getCatchupBacklog: vi.fn(), getStudentPrimaryClassroom: vi.fn() }));
+vi.mock('@neram/database', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@neram/database')>()),
+  getCatchupBacklog: mocks.getCatchupBacklog,
+  getSupabaseAdminClient: () => ({}),
+}));
+vi.mock('@neram/database/queries/nexus', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@neram/database/queries/nexus')>()),
+  getStudentPrimaryClassroom: mocks.getStudentPrimaryClassroom,
+}));
+vi.mock('@/lib/upcoming-classes', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/upcoming-classes')>()),
+  istNow: () => ({ today: '2026-10-03', nowHHMM: '10:00' }),
+}));
+
+import { fakeDb } from './testing/fake-db';
+import {
+  buildAiStatus, clampDailyLimit, clearOverrides, decideAiAccess, loadAiAccess, readDailyLimit, setOverride, teacherAccessLine, type OverrideRow,
+} from './ai-access';
+
+const TODAY = '2026-10-03';
+const NOW = new Date('2026-10-03T04:30:00Z');
+const item = (status: string, title = 'Perspective', date = '2026-10-01') => ({ status, class: { title, scheduled_date: date } });
+const backlog = (over: Record<string, unknown> = {}) => ({ journey: null, items: [], missed: [], backlog: [], totals: { total: 0, completed: 0, blocked: 0, pendingTeacher: 0 }, ...over }) as any;
+const ov = (over: Partial<OverrideRow> = {}): OverrideRow => ({ id: 'o1', student_id: 's1', mode: 'off', reason: 'Misuse', set_by: 't1', set_at: '2026-10-02T10:00:00Z', ends_on: null, cleared_at: null, cleared_by: null, ...over });
+const decide = (over: Partial<Parameters<typeof decideAiAccess>[0]> = {}) => decideAiAccess({ inPilot: true, classroomId: 'c1', override: null, backlog: null, today: TODAY, ...over });
+
+describe('decideAiAccess', () => {
+  it('is on when there is nothing to catch up on', () => {
+    expect(decide()).toMatchObject({ on: true, reason: 'caught_up', link: null });
+  });
+
+  it('is off outside the pilot and without a classroom', () => {
+    expect(decide({ inPilot: false })).toMatchObject({ on: false, reason: 'not_in_pilot' });
+    expect(decide({ classroomId: null })).toMatchObject({ on: false, reason: 'no_classroom' });
+  });
+
+  it('switches off for a missed class whose catch-up is ready, naming it', () => {
+    const a = decide({ backlog: backlog({ missed: [item('waiting')] }) });
+    expect(a).toMatchObject({ on: false, reason: 'missed_class', missedCount: 1, link: { label: 'Catch-up', url: '/student/catch-up' } });
+    expect(a.sentence).toBe('AI answers are off. Catch up on Perspective (1 Oct) to switch them back on.');
+    expect(decide({ backlog: backlog({ missed: [item('active')] }) }).on).toBe(false);
+  });
+
+  it('names the first of several, with the count', () => {
+    const a = decide({ backlog: backlog({ missed: [item('waiting', 'Perspective', '2026-09-29'), item('waiting', 'Shading', '2026-10-01'), item('done', 'Old')] }) });
+    expect(a.sentence).toBe('AI answers are off. Catch up on 2 classes, starting with Perspective (29 Sep), to switch them back on.');
+  });
+
+  it('never counts a catch-up that is not ready, excused, blocked or done (Review Focus 3)', () => {
+    for (const s of ['pending_teacher', 'blocked', 'excused', 'done']) {
+      expect(decide({ backlog: backlog({ missed: [item(s)] }) })).toMatchObject({ on: true, reason: 'caught_up' });
+    }
+  });
+
+  it('switches off a late joiner who is behind pace, on when on track', () => {
+    // Started 3 full weeks ago at 2 a week: 6 expected, 4 done.
+    const behind = backlog({ journey: { started_on: '2026-09-12', weekly_quota: 2 }, backlog: [item('waiting')], totals: { total: 20, completed: 4, blocked: 0, pendingTeacher: 0 } });
+    expect(decide({ backlog: behind })).toMatchObject({ on: false, reason: 'behind_pace', deficit: 2 });
+    expect(decide({ backlog: behind }).sentence).toBe('AI answers are off. You are 2 classes behind on your earlier classes. Clear them this week to switch AI answers back on.');
+    const onTrack = { ...behind, totals: { ...behind.totals, completed: 6 } };
+    expect(decide({ backlog: onTrack })).toMatchObject({ on: true, reason: 'caught_up' });
+  });
+
+  it('lets a teacher override either way, and the override beats the catch-up rule', () => {
+    const owing = backlog({ missed: [item('waiting')] });
+    expect(decide({ backlog: owing, override: ov({ mode: 'on', reason: 'Was ill' }) })).toMatchObject({ on: true, reason: 'teacher_on' });
+    const off = decide({ override: ov({ mode: 'off' }) });
+    expect(off).toMatchObject({ on: false, reason: 'teacher_off' });
+    expect(off.sentence).toBe('AI answers are off for your account. Ask your teacher if you think this is a mistake.');
+    expect(off.sentence).not.toMatch(/Misuse/);
+  });
+});
+
+describe('activeOverride, setOverride, clearOverrides (via loadAiAccess)', () => {
+  beforeEach(() => {
+    mocks.getStudentPrimaryClassroom.mockReset().mockResolvedValue({ id: 'c1', name: 'Batch' });
+    mocks.getCatchupBacklog.mockReset().mockResolvedValue(backlog({ missed: [item('waiting')] }));
+  });
+  const settings = { nexus_settings: [{ key: 'assistant_pilot_user_ids', value: [] }] };
+
+  it('ignores an override that has ended or was cleared; the newest active one wins (Review Focus 3)', async () => {
+    const db = fakeDb({ ...settings, nexus_assistant_ai_overrides: [
+      ov({ id: 'old', mode: 'on', set_at: '2026-09-01T00:00:00Z', ends_on: '2026-10-02' }),
+      ov({ id: 'gone', mode: 'on', set_at: '2026-10-01T00:00:00Z', cleared_at: '2026-10-02T00:00:00Z' }),
+    ] });
+    expect((await loadAiAccess(db, 's1', NOW)).reason).toBe('missed_class');
+    const db2 = fakeDb({ ...settings, nexus_assistant_ai_overrides: [
+      ov({ id: 'a', mode: 'off', set_at: '2026-09-30T00:00:00Z' }),
+      ov({ id: 'b', mode: 'on', set_at: '2026-10-02T00:00:00Z', ends_on: TODAY }),
+    ] });
+    expect((await loadAiAccess(db2, 's1', NOW)).reason).toBe('teacher_on');
+  });
+
+  it('setOverride clears the active one first and keeps history (D10); clearOverrides stamps who and when', async () => {
+    const db = fakeDb({ nexus_assistant_ai_overrides: [ov({ id: 'a', mode: 'off' })] });
+    const row = await setOverride(db, { studentId: 's1', mode: 'on', reason: '  Was ill  ', endsOn: '2026-10-20', setBy: 't2', now: NOW });
+    expect(row).toMatchObject({ mode: 'on', reason: 'Was ill', set_by: 't2', ends_on: '2026-10-20', cleared_at: null });
+    expect(db.rows('nexus_assistant_ai_overrides').find((r) => r.id === 'a')).toMatchObject({ cleared_by: 't2' });
+    expect(await clearOverrides(db, 's1', 't3', NOW)).toBe(1);
+    expect(db.rows('nexus_assistant_ai_overrides').every((r) => r.cleared_at)).toBe(true);
+  });
+
+  it('reads the pilot list: a student outside a non-empty list is off', async () => {
+    const db = fakeDb({ nexus_settings: [{ key: 'feature_flags', value: { 'student.assistant-chat': true } }, { key: 'assistant_pilot_user_ids', value: ['someone-else'] }] });
+    expect((await loadAiAccess(db, 's1', NOW)).reason).toBe('not_in_pilot');
+  });
+});
+
+describe('the allowance', () => {
+  it('clamps to 0..50 and defaults to 10', async () => {
+    expect(clampDailyLimit(undefined)).toBe(10);
+    expect(clampDailyLimit('lots')).toBe(10);
+    expect(clampDailyLimit(-3)).toBe(0);
+    expect(clampDailyLimit(500)).toBe(50);
+    expect(clampDailyLimit(7.6)).toBe(7);
+    expect(await readDailyLimit(fakeDb({}))).toBe(10);
+    expect(await readDailyLimit(fakeDb({ nexus_settings: [{ key: 'assistant_ai_daily_limit', value: 4 }] }))).toBe(4);
+  });
+
+  it('buildAiStatus says how many are left today', async () => {
+    mocks.getStudentPrimaryClassroom.mockResolvedValue({ id: 'c1', name: 'Batch' });
+    mocks.getCatchupBacklog.mockResolvedValue(null);
+    const db = fakeDb({
+      nexus_settings: [{ key: 'assistant_ai_daily_limit', value: 10 }],
+      nexus_assistant_threads: [{ id: 't1', user_id: 's1', channel: 'nexus', last_message_at: '2026-10-03T04:00:00Z' }],
+      nexus_assistant_messages: [1, 2, 3].map((i) => ({ id: `m${i}`, thread_id: 't1', role: 'assistant', llm: true, created_at: '2026-10-03T04:00:00Z' })),
+    });
+    expect(await buildAiStatus(db, 's1', NOW)).toEqual({ on: true, reason: 'caught_up', sentence: 'AI answers: on, 7 left today.', link: null, left_today: 7, daily_limit: 10 });
+  });
+
+  it('says paused when the allowance is 0, and none left when used up', async () => {
+    mocks.getCatchupBacklog.mockResolvedValue(null);
+    mocks.getStudentPrimaryClassroom.mockResolvedValue({ id: 'c1', name: 'Batch' });
+    expect((await buildAiStatus(fakeDb({ nexus_settings: [{ key: 'assistant_ai_daily_limit', value: 0 }] }), 's1', NOW)).sentence).toBe('AI answers are paused right now.');
+  });
+});
+
+describe('teacherAccessLine', () => {
+  it('words each reason for the teacher, including the override reason and end date', () => {
+    expect(teacherAccessLine(decide())).toBe('On: all caught up.');
+    expect(teacherAccessLine(decide({ backlog: backlog({ missed: [item('waiting')] }) }))).toBe('Off: 1 missed class to catch up, starting with Perspective (1 Oct).');
+    expect(teacherAccessLine(decide({ override: ov({ mode: 'on', reason: 'Was ill', ends_on: '2026-10-20' }) }))).toBe('On: set by a teacher until 20 Oct (Was ill).');
+    expect(teacherAccessLine(decide({ override: ov({ mode: 'off', reason: 'Misuse' }) }))).toBe('Off: set by a teacher (Misuse).');
+  });
+});
+```
+
+Before Step 3, open `apps/nexus/src/lib/assistant/access.test.ts` and check the exact `nexus_settings` key the flags live under (`FEATURE_FLAGS_KEY`). Use it in the pilot test's fixture instead of the literal `'feature_flags'` if it differs.
+
+- [ ] **Step 2: Run it to verify it fails**
+
+Run: `pnpm vitest run apps/nexus/src/lib/assistant/ai-access.test.ts`
+Expected: FAIL. Cannot find module `./ai-access`.
+
+- [ ] **Step 3: Implement**
+
+Migration `supabase/migrations/20261102090200_nexus_assistant_ai_overrides.sql`:
+
+```sql
+-- Teacher overrides for a student's AI answers in Neram Assistant. The rule
+-- itself (on while caught up) is computed live in
+-- apps/nexus/src/lib/assistant/ai-access.ts; a row here beats it. Rows are
+-- never edited or deleted: a new override clears the active one, and Clear
+-- stamps cleared_at, so the admin page keeps the history.
+CREATE TABLE IF NOT EXISTS nexus_assistant_ai_overrides (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  student_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  mode text NOT NULL CHECK (mode IN ('on', 'off')),
+  reason text NOT NULL CHECK (char_length(reason) BETWEEN 1 AND 200),
+  set_by uuid REFERENCES users(id) ON DELETE SET NULL,
+  set_at timestamptz NOT NULL DEFAULT now(),
+  ends_on date,
+  cleared_at timestamptz,
+  cleared_by uuid REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_naao_student_set
+  ON nexus_assistant_ai_overrides (student_id, set_at DESC);
+
+ALTER TABLE nexus_assistant_ai_overrides ENABLE ROW LEVEL SECURITY;
+
+NOTIFY pgrst, 'reload schema';
+```
+
+`ai-access.ts`:
+
+```ts
+/**
+ * Who gets AI answers (docs/superpowers/specs/2026-10-04-assistant-ai-access-design.md).
+ * Live from catch-up, no stored state: a student has them while no missed
+ * class has a ready catch-up left undone and, for classes held before they
+ * joined, they are not behind their pace. A teacher's override beats that.
+ * Only the model costs money; everything else in the assistant ignores this.
+ */
+import { getCatchupBacklog } from '@neram/database';
+import { getStudentPrimaryClassroom, type CatchupBacklog } from '@neram/database/queries/nexus';
+import { computeCatchupPace } from '@/lib/catchup-pace';
+import { readAssistantGate } from './access';
+import { formatDay, todayIst } from './format';
+import { istDayStartIso } from './history';
+import { countLlmRepliesToday } from './store';
+import type { ToolLink } from './types';
+
+export const DAILY_LIMIT_KEY = 'assistant_ai_daily_limit';
+export const DEFAULT_DAILY_LIMIT = 10;
+export const MAX_DAILY_LIMIT = 50;
+const OVERRIDES = 'nexus_assistant_ai_overrides';
+const CATCHUP_LINK: ToolLink = { label: 'Catch-up', url: '/student/catch-up' };
+/** Item statuses that mean "ready to do and not done". Not ready, excused, blocked and done never count. */
+const OWED = new Set(['waiting', 'active']);
+
+export type AiAccessReason = 'not_in_pilot' | 'no_classroom' | 'teacher_off' | 'teacher_on' | 'missed_class' | 'behind_pace' | 'caught_up';
+
+export interface OverrideRow {
+  id: string; student_id: string; mode: 'on' | 'off'; reason: string; set_by: string | null;
+  set_at: string; ends_on: string | null; cleared_at: string | null; cleared_by: string | null;
+}
+
+export interface AiAccess {
+  on: boolean;
+  reason: AiAccessReason;
+  /** What the student reads. Never carries the teacher's private reason. */
+  sentence: string;
+  link: ToolLink | null;
+  missed: Array<{ title: string; day: string }>;
+  missedCount: number;
+  deficit: number;
+  override: OverrideRow | null;
+}
+
+export function clampDailyLimit(raw: unknown): number {
+  const n = typeof raw === 'number' ? raw : Number.NaN;
+  if (!Number.isFinite(n)) return DEFAULT_DAILY_LIMIT;
+  return Math.min(MAX_DAILY_LIMIT, Math.max(0, Math.floor(n)));
+}
+
+export async function readDailyLimit(supabase: any): Promise<number> {
+  const { data } = await supabase.from('nexus_settings').select('value').eq('key', DAILY_LIMIT_KEY).maybeSingle();
+  return clampDailyLimit(data?.value);
+}
+
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+
+export function decideAiAccess(input: {
+  inPilot: boolean; classroomId: string | null; override: OverrideRow | null; backlog: CatchupBacklog | null; today: string;
+}): AiAccess {
+  const base: AiAccess = { on: false, reason: 'caught_up', sentence: '', link: null, missed: [], missedCount: 0, deficit: 0, override: input.override };
+  if (!input.inPilot) return { ...base, reason: 'not_in_pilot', sentence: 'AI answers are not switched on for this account yet.' };
+  if (!input.classroomId) return { ...base, reason: 'no_classroom', sentence: 'AI answers switch on once you are in a classroom.' };
+  if (input.override?.mode === 'off') {
+    return { ...base, reason: 'teacher_off', sentence: 'AI answers are off for your account. Ask your teacher if you think this is a mistake.' };
+  }
+  if (input.override?.mode === 'on') return { ...base, on: true, reason: 'teacher_on', sentence: 'AI answers: on.' };
+
+  const b = input.backlog;
+  const owed = (b?.missed || []).filter((i: any) => OWED.has(i.status));
+  if (owed.length > 0) {
+    const missed = owed.slice(0, 3).map((i: any) => ({ title: i.class?.title || 'a class', day: formatDay(i.class?.scheduled_date) }));
+    const first = `${missed[0].title} (${missed[0].day})`;
+    const sentence = owed.length === 1
+      ? `AI answers are off. Catch up on ${first} to switch them back on.`
+      : `AI answers are off. Catch up on ${owed.length} classes, starting with ${first}, to switch them back on.`;
+    return { ...base, reason: 'missed_class', sentence, link: CATCHUP_LINK, missed, missedCount: owed.length };
+  }
+
+  if (b?.journey && b.totals && b.totals.total > 0) {
+    const quota = b.journey.weekly_quota ?? 2;
+    const pace = computeCatchupPace({ started_on: b.journey.started_on, weekly_quota: quota, total_items: b.totals.total, completed_items: b.totals.completed }, input.today);
+    if (pace.state === 'behind') {
+      const n = pace.deficit;
+      return {
+        ...base, reason: 'behind_pace', link: CATCHUP_LINK, deficit: n,
+        sentence: `AI answers are off. You are ${plural(n, 'class', 'classes')} behind on your earlier classes. Clear ${n === 1 ? 'it' : 'them'} this week to switch AI answers back on.`,
+      };
+    }
+  }
+  return { ...base, on: true, reason: 'caught_up', sentence: 'AI answers: on.' };
+}
+
+/** The newest override that is not cleared and has not ended (ends_on is inclusive). */
+export async function activeOverride(supabase: any, studentId: string, today: string): Promise<OverrideRow | null> {
+  const { data, error } = await supabase
+    .from(OVERRIDES)
+    .select('*')
+    .eq('student_id', studentId)
+    .is('cleared_at', null)
+    .order('set_at', { ascending: false })
+    .limit(10);
+  if (error) throw error;
+  return ((data || []) as OverrideRow[]).find((r) => !r.ends_on || r.ends_on >= today) ?? null;
+}
+
+export async function loadAiAccess(supabase: any, studentId: string, now: Date): Promise<AiAccess> {
+  const today = todayIst(now);
+  const [gate, classroom, override] = await Promise.all([
+    readAssistantGate(supabase),
+    getStudentPrimaryClassroom(studentId, supabase).catch(() => null),
+    activeOverride(supabase, studentId, today),
+  ]);
+  const inPilot = gate.pilot.length === 0 || gate.pilot.includes(studentId);
+  const classroomId = classroom?.id ?? null;
+  // Only the catch-up rule needs the backlog; skip the read when something earlier decides.
+  const needsBacklog = inPilot && classroomId && !override;
+  const backlog = needsBacklog ? await getCatchupBacklog(studentId, classroomId, supabase) : null;
+  return decideAiAccess({ inPilot, classroomId, override, backlog, today });
+}
+
+export async function clearOverrides(supabase: any, studentId: string, clearedBy: string, now: Date): Promise<number> {
+  const { data, error } = await supabase
+    .from(OVERRIDES)
+    .update({ cleared_at: now.toISOString(), cleared_by: clearedBy })
+    .eq('student_id', studentId)
+    .is('cleared_at', null)
+    .select('id');
+  if (error) throw error;
+  return (data || []).length;
+}
+
+export async function setOverride(
+  supabase: any,
+  input: { studentId: string; mode: 'on' | 'off'; reason: string; endsOn: string | null; setBy: string; now: Date },
+): Promise<OverrideRow> {
+  await clearOverrides(supabase, input.studentId, input.setBy, input.now);
+  const { data, error } = await supabase
+    .from(OVERRIDES)
+    .insert({ student_id: input.studentId, mode: input.mode, reason: input.reason.trim().slice(0, 200), set_by: input.setBy, set_at: input.now.toISOString(), ends_on: input.endsOn, cleared_at: null, cleared_by: null })
+    .select('*')
+    .single();
+  if (error) throw error;
+  return data as OverrideRow;
+}
+
+/** The same decision in a teacher's words: the reason they need to act on. */
+export function teacherAccessLine(a: AiAccess): string {
+  const until = a.override?.ends_on ? ` until ${formatDay(a.override.ends_on)}` : '';
+  switch (a.reason) {
+    case 'caught_up': return 'On: all caught up.';
+    case 'teacher_on': return `On: set by a teacher${until} (${a.override?.reason}).`;
+    case 'teacher_off': return `Off: set by a teacher${until} (${a.override?.reason}).`;
+    case 'missed_class': return `Off: ${plural(a.missedCount, 'missed class', 'missed classes')} to catch up, starting with ${a.missed[0].title} (${a.missed[0].day}).`;
+    case 'behind_pace': return `Off: ${plural(a.deficit, 'class', 'classes')} behind on classes held before they joined.`;
+    case 'no_classroom': return 'Off: not in a classroom.';
+    case 'not_in_pilot': return 'Off: not in the pilot list.';
+  }
+}
+
+export interface AiStatus { on: boolean; reason: AiAccessReason; sentence: string; link: ToolLink | null; left_today: number; daily_limit: number }
+
+export async function buildAiStatus(supabase: any, studentId: string, now: Date): Promise<AiStatus> {
+  const [access, limit] = await Promise.all([loadAiAccess(supabase, studentId, now), readDailyLimit(supabase)]);
+  const used = access.on && limit > 0 ? await countLlmRepliesToday(supabase, studentId, istDayStartIso(now), limit) : 0;
+  const left = Math.max(0, limit - used);
+  let sentence = access.sentence;
+  if (access.on) {
+    sentence = limit === 0 ? 'AI answers are paused right now.'
+      : left === 0 ? 'AI answers: on, none left today. They reset at midnight.'
+      : `AI answers: on, ${left} left today.`;
+  }
+  return { on: access.on && limit > 0, reason: access.reason, sentence, link: access.link, left_today: left, daily_limit: limit };
+}
+```
+
+Notes:
+- Check that `CatchupBacklog` is exported from `@neram/database/queries/nexus`. It is declared `export interface` in `catchup-journey.ts`, which the barrel re-exports. If the import fails, use `Awaited<ReturnType<typeof getCatchupBacklog>>`.
+- If `todayIst` lives only in `./format` as the M1 file shows, keep that import.
+
+- [ ] **Step 4: Run it to verify it passes**
+
+Run: `pnpm vitest run apps/nexus/src/lib/assistant/ai-access.test.ts`
+Expected: PASS. If the pace fixture's `started_on` does not give exactly 3 elapsed weeks on 2026-10-03, adjust it so `computeCatchupPace` yields a deficit of 2 (6 expected, 4 done). `computeCatchupPace` uses whole weeks.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add supabase/migrations/20261102090200_nexus_assistant_ai_overrides.sql apps/nexus/src/lib/assistant/ai-access.ts apps/nexus/src/lib/assistant/ai-access.test.ts
+git commit -m "feat(assistant): AI answers access earned by being caught up, teacher overrides, admin-set allowance
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
 ### Task 8: Stage 4: `llm.ts` wired into the turn
 
 **Files:**
@@ -1451,9 +1906,10 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
   - `countLlmRepliesToday`, `listMessages` and `appendMessage` with model fields (Task 7)
   - `SYSTEM_GENERAL`, `SYSTEM_EXAM`, `contextBlock`, `cleanReply` (Task 5)
   - `toolsFor`, `bindStudentSelf`
+  - `loadAiAccess`, `readDailyLimit` (Task 7A)
 - Produces:
-  - `DAILY_LLM_CAP = 20`
-  - `CAP_REPLY`, `PAUSED_REPLY`, `BUSY_REPLY`
+  - `limitReply(limit: number): string`
+  - `PAUSED_REPLY`, `BUSY_REPLY`
   - `LlmMeta`
   - `runLlmStage(input: LlmInput): Promise<{ reply: string; links: ToolLink[]; meta: LlmMeta | null }>`
   - `Envelope.llm` is `true` when the model wrote the reply
@@ -1466,7 +1922,11 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ generateGemini: vi.fn(), getStudentPrimaryClassroom: vi.fn(), loadUpcomingClasses: vi.fn(), loadDeclinedClassIds: vi.fn() }));
+const mocks = vi.hoisted(() => ({ generateGemini: vi.fn(), getStudentPrimaryClassroom: vi.fn(), loadUpcomingClasses: vi.fn(), loadDeclinedClassIds: vi.fn(), loadAiAccess: vi.fn() }));
+vi.mock('@/lib/assistant/ai-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/assistant/ai-access')>()),
+  loadAiAccess: mocks.loadAiAccess,
+}));
 vi.mock('@neram/ai', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@neram/ai')>()),
   generateGemini: mocks.generateGemini,
@@ -1488,7 +1948,7 @@ vi.mock('@neram/database', async (importOriginal) => ({
 
 import { AiBlockedError, type GeminiResult } from '@neram/ai';
 import { fakeDb } from './testing/fake-db';
-import { BUSY_REPLY, CAP_REPLY, DAILY_LLM_CAP, PAUSED_REPLY } from './llm';
+import { BUSY_REPLY, PAUSED_REPLY, limitReply } from './llm';
 import { registerTools, TOOLS } from './registry';
 import { runAssistantTurn } from './turn';
 import type { AssistantCaller } from './types';
@@ -1518,9 +1978,31 @@ beforeEach(() => {
   mocks.getStudentPrimaryClassroom.mockReset().mockResolvedValue({ id: 'c1', name: 'Batch Alpha 2027', sketchbook_weekly_goal: 3, batch_id: null });
   mocks.loadUpcomingClasses.mockReset().mockResolvedValue(upcoming);
   mocks.loadDeclinedClassIds.mockReset().mockResolvedValue(new Set());
+  mocks.loadAiAccess.mockReset().mockResolvedValue({ on: true, reason: 'caught_up', sentence: 'AI answers: on.', link: null, missed: [], missedCount: 0, deficit: 0, override: null });
 });
 
 describe('stage 4: free questions', () => {
+  it('with AI answers off, replies with the reason and the Catch-up link, and never calls the model', async () => {
+    mocks.loadAiAccess.mockResolvedValueOnce({
+      on: false, reason: 'missed_class', sentence: 'AI answers are off. Catch up on Perspective (1 Oct) to switch them back on.',
+      link: { label: 'Catch-up', url: '/student/catch-up' }, missed: [{ title: 'Perspective', day: '1 Oct' }], missedCount: 1, deficit: 0, override: null,
+    });
+    const db = fakeDb({});
+    const env = await turn(db, 'tell me a fun fact about architecture');
+    expect(env.reply).toBe('AI answers are off. Catch up on Perspective (1 Oct) to switch them back on.');
+    expect(env.links).toEqual([{ label: 'Catch-up', url: '/student/catch-up' }]);
+    expect(env.llm).toBeFalsy();
+    expect(mocks.generateGemini).not.toHaveBeenCalled();
+    expect(db.rows('nexus_assistant_messages').find((m) => m.role === 'assistant')?.llm).toBe(false);
+  });
+
+  it('the deterministic paths ignore AI access entirely', async () => {
+    mocks.loadAiAccess.mockResolvedValue({ on: false, reason: 'teacher_off', sentence: 'off', link: null, missed: [], missedCount: 0, deficit: 0, override: null });
+    const env = await turn(fakeDb({}), 'when is my next class');
+    expect(env.reply).toMatch(/^Your next classes:/);
+    expect(mocks.loadAiAccess).not.toHaveBeenCalled();
+  });
+
   it('answers with the model, stores usage on the reply, marks the envelope llm', async () => {
     mocks.generateGemini.mockResolvedValueOnce(answer('Rest well before the exam and revise **formulas**.'));
     const db = fakeDb({}, { unique: UNIQUE });
@@ -1569,13 +2051,21 @@ describe('stage 4: free questions', () => {
     expect(names).not.toContain('my_schedule');
   });
 
-  it('stops at the daily cap without calling the model', async () => {
+  it('stops at the admin-set daily allowance without calling the model (default 10)', async () => {
     const thread = { id: 't9', user_id: 's1', channel: 'nexus', last_message_at: '2026-10-03T03:00:00Z', flow_state: null, page_context: null };
-    const replies = Array.from({ length: DAILY_LLM_CAP }, (_, i) => ({ id: `r${i}`, thread_id: 't9', role: 'assistant', llm: true, text: 'x', created_at: '2026-10-03T03:00:00Z' }));
+    const replies = Array.from({ length: 10 }, (_, i) => ({ id: `r${i}`, thread_id: 't9', role: 'assistant', llm: true, text: 'x', created_at: '2026-10-03T03:00:00Z' }));
     const db = fakeDb({ nexus_assistant_threads: [thread], nexus_assistant_messages: replies });
     const env = await turn(db, 'tell me a fun fact about architecture');
-    expect(env.reply).toBe(CAP_REPLY);
+    expect(env.reply).toBe(limitReply(10));
+    expect(limitReply(10)).toBe("You have used today's 10 AI questions. They reset at midnight. The buttons below still work.");
     expect(env.llm).toBeFalsy();
+    expect(mocks.generateGemini).not.toHaveBeenCalled();
+  });
+
+  it('an allowance of 0 pauses AI answers for everyone', async () => {
+    const db = fakeDb({ nexus_settings: [{ key: 'assistant_ai_daily_limit', value: 0 }] });
+    expect((await turn(db, 'tell me a fun fact about architecture')).reply).toBe(limitReply(0));
+    expect(limitReply(0)).toBe(PAUSED_REPLY);
     expect(mocks.generateGemini).not.toHaveBeenCalled();
   });
 
@@ -1586,7 +2076,7 @@ describe('stage 4: free questions', () => {
       .mockRejectedValueOnce(blocked('client_cap', 'You have asked a lot of questions in the last hour. Please try again shortly.'))
       .mockRejectedValueOnce(new Error('Gemini API 429: rate limit reached on all models'));
     const db = fakeDb({});
-    expect((await turn(db, 'tell me about famous architects one')).reply).toBe(PAUSED_REPLY);
+    expect((await turn(db, 'tell me about famous architects one')).reply).toBe(PAUSED_REPLY); // admin set the feature to Off at /teacher/admin/ai-usage
     expect((await turn(db, 'tell me about famous architects two')).reply).toBe('You have asked a lot of questions in the last hour. Please try again shortly.');
     const env = await turn(db, 'tell me about famous architects three');
     expect(env.reply).toBe(BUSY_REPLY);
@@ -1661,6 +2151,7 @@ Expected: FAIL. `./llm` is missing, and stage 4 still answers "I cannot answer f
  */
 import { AiBlockedError, hashClientKey, type GeminiContent } from '@neram/ai';
 import { describeError } from '@/lib/api-errors';
+import { loadAiAccess, readDailyLimit } from './ai-access';
 import { historyFor, istDayStartIso } from './history';
 import { runModelLoop, type LoopToolCall } from './loop';
 import { bindStudentSelf } from './policy';
@@ -1669,9 +2160,13 @@ import { toolsFor } from './registry-all';
 import { countLlmRepliesToday, listMessages } from './store';
 import type { Mode, PageContext, ToolContext, ToolLink, ToolResult } from './types';
 
-export const DAILY_LLM_CAP = 20;
-export const CAP_REPLY = "You have used today's 20 free questions. They reset at midnight. The buttons below still work.";
-export const PAUSED_REPLY = 'Free questions are paused right now. The buttons below still work.';
+export const PAUSED_REPLY = 'AI answers are paused right now. The buttons below still work.';
+
+/** What a student reads at the allowance. An allowance of 0 is an admin pause, said as such. */
+export function limitReply(limit: number): string {
+  if (limit <= 0) return PAUSED_REPLY;
+  return `You have used today's ${limit} AI questions. They reset at midnight. The buttons below still work.`;
+}
 export const BUSY_REPLY = 'I could not answer that just now. Try again in a minute, or use one of these.';
 
 export interface LlmMeta { model: string; promptTokens: number; outputTokens: number; costUsd: number | null; toolCalls: LoopToolCall[] }
@@ -1690,8 +2185,14 @@ const firstNameOf = (name: string | null) => String(name || '').trim().split(/\s
 
 export async function runLlmStage(input: LlmInput): Promise<{ reply: string; links: ToolLink[]; meta: LlmMeta | null }> {
   const { ctx, mode } = input;
-  const used = await countLlmRepliesToday(ctx.supabase, ctx.caller.id, istDayStartIso(ctx.now));
-  if (used >= DAILY_LLM_CAP) return { reply: CAP_REPLY, links: [], meta: null };
+  // Who may spend money (addendum spec): a student who is not caught up, or
+  // whose teacher switched AI answers off, gets the reason and a way back,
+  // never a model call.
+  const access = await loadAiAccess(ctx.supabase, ctx.caller.id, ctx.now);
+  if (!access.on) return { reply: access.sentence, links: access.link ? [access.link] : [], meta: null };
+  const limit = await readDailyLimit(ctx.supabase);
+  const used = limit > 0 ? await countLlmRepliesToday(ctx.supabase, ctx.caller.id, istDayStartIso(ctx.now), limit) : 0;
+  if (limit <= 0 || used >= limit) return { reply: limitReply(limit), links: [], meta: null };
 
   const rows = ctx.threadId ? await listMessages(ctx.supabase, ctx.threadId, 30) : [];
   const contents: GeminiContent[] = [
@@ -2309,7 +2810,7 @@ describe('M2 student tools', () => {
       { id: 'd2', kind: 'Sketch', words: 'reviewed', reviewedOn: '2026-10-01' },
     ] });
     const out = await tool('my_reviews').run(ctx(), {});
-    expect(out.reply).toBe('2 drawings reviewed in the last two weeks:\n1. Homework, reviewed, 4 stars (Thu 2 Oct).\n2. Sketch, reviewed (Wed 1 Oct).');
+    expect(out.reply).toBe('2 drawings reviewed in the last two weeks:\n1. Homework, reviewed, 4 stars (2 Oct).\n2. Sketch, reviewed (1 Oct).');
     expect(out.links).toEqual([{ label: 'Homework review', url: '/student/sketchbook/d1' }, { label: 'Sketch review', url: '/student/sketchbook/d2' }]);
     expect(tool('my_reviews').feature).toBe('sketchbook');
   });
@@ -2327,13 +2828,13 @@ describe('M2 student tools', () => {
     mocks.getStudentPrimaryClassroom.mockResolvedValue({ id: 'c1', name: 'NATA 2027 Evening' });
     mocks.getCatchupJourney.mockResolvedValue({ started_on: '2026-06-01', weekly_quota: 3 });
     const out = await tool('new_student_welcome').run(ctx(), {});
-    expect(out.reply).toBe('Welcome to NATA 2027 Evening. You joined on Mon 1 Jun. Classes held before you joined are on your catch-up list: aim for 3 a week. Start with your timetable, then your assignments.');
+    expect(out.reply).toBe('Welcome to NATA 2027 Evening. You joined on 1 Jun. Classes held before you joined are on your catch-up list: aim for 3 a week. Start with your timetable, then your assignments.');
     expect(out.links?.map((l) => l.url)).toEqual(['/student/timetable', '/student/catch-up', '/student/assignments']);
   });
 });
 ```
 
-The `ctx()` helper's supabase answers `studentScope` with `enrolled_at: '2026-06-01'` (it does today). `formatDay` produces `Mon 1 Jun` for `2026-06-01`; check `format.test.ts` and use the exact format it pins.
+The `ctx()` helper's supabase answers `studentScope` with `enrolled_at: '2026-06-01'` (it does today). `formatDay` (re-exported by `lib/assistant/format.ts` from `lib/away-windows.ts`) gives `1 Jun` for `2026-06-01`: day and short month, no weekday.
 
 `router.test.ts`:
 
@@ -2788,6 +3289,683 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 
 ---
 
+### Task 12A: The student sees their AI status in the panel
+
+**Files:**
+- Create: `apps/nexus/src/lib/assistant/ai-status-words.ts` (client-safe wording, shared with the server)
+- Modify: `apps/nexus/src/lib/assistant/ai-access.ts` (`buildAiStatus` uses `onSentence`)
+- Create: `apps/nexus/src/app/api/assistant/ai-status/route.ts`
+- Create: `apps/nexus/src/components/assistant/AiStatusLine.tsx`
+- Modify: `apps/nexus/src/components/assistant/client.ts` (`getAiStatus`), `AssistantProvider.tsx` (`aiStatus`), `AssistantSheet.tsx` (render the line)
+- Test: `app/api/assistant/ai-status/route.test.ts`, `components/assistant/AiStatusLine.test.tsx`, `components/assistant/AssistantProvider.test.tsx`
+
+**Interfaces:**
+- Consumes: `buildAiStatus`, `AiStatus` (Task 7A); `Envelope.llm` (Task 8).
+- Produces:
+  - `onSentence(limit: number, left: number): string`
+  - `GET /api/assistant/ai-status` returning `AiStatus`
+  - `getAiStatus(getToken): Promise<AiStatus>`
+  - `AssistantContextValue.aiStatus: AiStatus | null`
+  - `AiStatusLine({ status }: { status: AiStatus | null })`
+
+- [ ] **Step 1: Run ui-ux-pro-max**
+
+Invoke the `ui-ux-pro-max` skill for the status line. It is a one-line, full-width strip under the panel header.
+- **On:** a sparkle icon plus "AI answers: on, 7 left today."
+- **Off:** a muted background, the reason sentence (which can wrap to two lines at 375), and an outlined Catch-up button at 48px.
+- Use `role="status"`, 4.5:1 contrast, and no layout jump when it loads. Before it loads, render nothing rather than a skeleton: the line is secondary and must not push the chat down after paint.
+- Keep the `@neram/ui` theme. Put the skill's points in the task report.
+
+- [ ] **Step 2: Write the failing tests**
+
+`app/api/assistant/ai-status/route.test.ts` (copy the mocking pattern of `app/api/assistant/threads/route.test.ts`):
+
+```ts
+  it('returns the caller\'s own status, never cached', async () => {
+    mocks.resolveAssistantCaller.mockResolvedValue({ caller: { id: 's1' }, supabase: {}, features: {} });
+    mocks.buildAiStatus.mockResolvedValue({ on: true, reason: 'caught_up', sentence: 'AI answers: on, 7 left today.', link: null, left_today: 7, daily_limit: 10 });
+    const res = await GET(req());
+    expect(res.status).toBe(200);
+    expect(res.headers.get('Cache-Control')).toBe('no-store');
+    expect(await res.json()).toMatchObject({ on: true, left_today: 7 });
+    expect(mocks.buildAiStatus).toHaveBeenCalledWith({}, 's1', expect.any(Date));
+  });
+
+  it('is 404 while the assistant is off', async () => {
+    mocks.resolveAssistantCaller.mockRejectedValue(new ApiError('Not found', 404));
+    expect((await GET(req())).status).toBe(404);
+  });
+```
+
+`components/assistant/AiStatusLine.test.tsx`:
+
+```tsx
+import { describe, expect, it } from 'vitest';
+import { render, screen } from '@testing-library/react';
+import AiStatusLine from './AiStatusLine';
+
+describe('AiStatusLine', () => {
+  it('renders nothing before the status loads', () => {
+    const { container } = render(<AiStatusLine status={null} />);
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('shows the count when on, with no button', () => {
+    render(<AiStatusLine status={{ on: true, reason: 'caught_up', sentence: 'AI answers: on, 7 left today.', link: null, left_today: 7, daily_limit: 10 }} />);
+    expect(screen.getByRole('status').textContent).toContain('AI answers: on, 7 left today.');
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  it('shows the reason and a Catch-up button when off', () => {
+    render(<AiStatusLine status={{ on: false, reason: 'missed_class', sentence: 'AI answers are off. Catch up on Perspective (1 Oct) to switch them back on.', link: { label: 'Catch-up', url: '/student/catch-up' }, left_today: 10, daily_limit: 10 }} />);
+    expect(screen.getByRole('link', { name: 'Catch-up' }).getAttribute('href')).toBe('/student/catch-up');
+  });
+});
+```
+
+(Wrap in the theme provider `BriefCard.test.tsx` uses if MUI needs one.)
+
+`AssistantProvider.test.tsx`, following the file's existing mock of `./client`:
+
+```ts
+  it('loads the AI status once per open, and counts it down after a model answer (D8)', async () => {
+    mocks.getAiStatus.mockResolvedValue({ on: true, reason: 'caught_up', sentence: 'AI answers: on, 7 left today.', link: null, left_today: 7, daily_limit: 10 });
+    mocks.postTurn.mockResolvedValueOnce({ ...envelope('An answer.'), llm: true });
+    // openPanel(), wait for the status
+    expect(mocks.getAiStatus).toHaveBeenCalledTimes(1);
+    // send('a free question')
+    expect(result.current.aiStatus).toMatchObject({ left_today: 6, sentence: 'AI answers: on, 6 left today.' });
+    // closePanel(), openPanel()
+    expect(mocks.getAiStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it('hides the line when the status cannot be loaded', async () => {
+    mocks.getAiStatus.mockRejectedValue(new AssistantHttpError('Something went wrong on my side. Please try again.', 500));
+    // openPanel()
+    expect(result.current.aiStatus).toBeNull();
+    expect(result.current.error).toBeNull();
+  });
+```
+
+- [ ] **Step 3: Run them to verify they fail**
+
+Run: `pnpm vitest run apps/nexus/src/app/api/assistant/ai-status apps/nexus/src/components/assistant`
+Expected: FAIL. The route, the component and `getAiStatus` do not exist.
+
+- [ ] **Step 4: Implement**
+
+`lib/assistant/ai-status-words.ts`:
+
+```ts
+/** The "on" status line. Pure and import-free, so the panel and the server word it the same way. */
+export function onSentence(limit: number, left: number): string {
+  if (limit <= 0) return 'AI answers are paused right now.';
+  if (left <= 0) return 'AI answers: on, none left today. They reset at midnight.';
+  return `AI answers: on, ${left} left today.`;
+}
+```
+
+In `ai-access.ts` `buildAiStatus`, replace the inline `sentence` branching with `const sentence = access.on ? onSentence(limit, left) : access.sentence;`. The Task 7A tests stay green.
+
+`app/api/assistant/ai-status/route.ts`:
+
+```ts
+import { NextRequest, NextResponse } from 'next/server';
+import { buildAiStatus } from '@/lib/assistant/ai-access';
+import { resolveAssistantCaller } from '@/lib/assistant/caller';
+import { NO_STORE, assistantErrorResponse } from '@/lib/assistant/http';
+
+export const dynamic = 'force-dynamic';
+// GET-only: Next 14 would otherwise write the uncached Graph /me fetch in ms-verify to the Data Cache.
+export const fetchCache = 'force-no-store';
+
+/**
+ * GET /api/assistant/ai-status   (student)
+ * Whether this student has AI answers right now, why, and how many are left
+ * today. Called when the panel opens, never on page load (D8).
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const { caller, supabase } = await resolveAssistantCaller(request.headers.get('Authorization'));
+    return NextResponse.json(await buildAiStatus(supabase, caller.id, new Date()), { headers: NO_STORE });
+  } catch (err) {
+    return assistantErrorResponse(err, 'ai-status');
+  }
+}
+```
+
+`client.ts`:
+
+```ts
+export type { AiStatus } from '@/lib/assistant/ai-access';
+
+export function getAiStatus(getToken: GetToken): Promise<import('@/lib/assistant/ai-access').AiStatus> {
+  return authed(getToken, '/api/assistant/ai-status');
+}
+```
+
+Use `import type` only. `ai-access.ts` imports server code, so a value import would pull it into the browser bundle.
+
+`AiStatusLine.tsx`:
+
+```tsx
+'use client';
+
+import Link from 'next/link';
+import { Box, Button, Typography } from '@neram/ui';
+import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
+import type { AiStatus } from './client';
+import { stableHover } from './stableHover';
+
+/** Whether this student has AI answers, why not, and the way back. Nothing until it loads. */
+export default function AiStatusLine({ status }: { status: AiStatus | null }) {
+  if (!status) return null;
+  return (
+    <Box
+      role="status"
+      sx={{
+        display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 0.75, flexShrink: 0,
+        borderBottom: 1, borderColor: 'divider', bgcolor: status.on ? 'transparent' : 'action.hover',
+      }}
+    >
+      <AutoAwesomeOutlinedIcon aria-hidden sx={{ fontSize: 18, flexShrink: 0, color: status.on ? 'primary.main' : 'text.secondary' }} />
+      <Typography variant="body2" sx={{ flex: 1, minWidth: 0, lineHeight: 1.4 }}>{status.sentence}</Typography>
+      {status.link && (
+        <Button component={Link} href={status.link.url} variant="outlined" size="small" sx={{ ...stableHover, minHeight: 48, flexShrink: 0, textTransform: 'none', fontWeight: 700 }}>
+          {status.link.label}
+        </Button>
+      )}
+    </Box>
+  );
+}
+```
+
+`AssistantProvider.tsx`:
+- Add state `const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);`.
+- Add an effect keyed on `open && enabled`. When it becomes true, call `getAiStatus(getToken)` guarded by `genRef`. Set the result, or `null` on any error. Do not touch `error` or `refused`: this is a secondary read, and a failure hides the line.
+- In `applyEnvelope`, after setting messages:
+
+```ts
+    if (env.llm) {
+      setAiStatus((s) => (s && s.on ? { ...s, left_today: Math.max(0, s.left_today - 1), sentence: onSentence(s.daily_limit, Math.max(0, s.left_today - 1)) } : s));
+    }
+```
+
+- Add `aiStatus` to the context value and to its type (`aiStatus: AiStatus | null`).
+
+`AssistantSheet.tsx`: render `<AiStatusLine status={a.aiStatus} />` right after the header row `Box`, before the messages or quick actions.
+
+- [ ] **Step 5: Run the tests, then the ui-ux-pro-max review**
+
+Run: `pnpm vitest run apps/nexus/src/app/api/assistant apps/nexus/src/components/assistant apps/nexus/src/lib/assistant`
+Expected: PASS.
+
+Review the panel with the line in both states at 375 and 1280, on the 3032 dev server with `/api/assistant/ai-status` stubbed in the browser. Fix what is inside `components/assistant/`.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add apps/nexus/src/lib/assistant apps/nexus/src/app/api/assistant/ai-status apps/nexus/src/components/assistant
+git commit -m "feat(assistant): status line shows whether AI answers are on, how many are left, or how to get them back
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
+### Task 12B: Teachers see and override a student's AI answers
+
+**Files:**
+- Create: `apps/nexus/src/app/api/students/[id]/ai-access/route.ts`
+- Create: `apps/nexus/src/components/students/profile/AiAnswersSection.tsx`
+- Modify: `apps/nexus/src/app/(teacher)/teacher/students/[id]/page.tsx` (the section after `<AwayWindowsSection ... />`, and a `navItems` entry `{ id: 'profile-ai-answers', label: 'AI answers' }` after `'profile-away-dates'`)
+- Test: `app/api/students/[id]/ai-access/route.test.ts`, `components/students/profile/AiAnswersSection.test.tsx`
+
+**Interfaces:**
+- Consumes:
+  - `loadAiAccess`, `setOverride`, `clearOverrides`, `teacherAccessLine`, `OverrideRow` (Task 7A)
+  - `readAssistantGate` (`@/lib/assistant/access`)
+  - `getRequestUser` (`@/lib/study-materials`), `assertStaffSeesStudent` (`@/lib/sketchbook-access`)
+  - `ApiError`, `errorResponse` (`@/lib/api-errors`)
+  - `ProfileSection`, `EmptyNote` (`components/students/profile`)
+- Produces:
+  - `GET|POST|DELETE /api/students/[id]/ai-access`, each returning `TeacherAiView = { on: boolean; line: string; override: { mode: 'on' | 'off'; reason: string; ends_on: string | null; set_at: string; set_by_name: string | null } | null }`
+  - `AiAnswersSection({ studentId, getToken })`
+
+- [ ] **Step 1: Run ui-ux-pro-max**
+
+Invoke the skill for one profile section in the existing `ProfileSection` style (collapsible on phones, open on desktop). It holds:
+- the status line;
+- the active override with who, why and until;
+- two buttons, "Always on" and "Always off". Each opens an inline form with a reason field (required, 200 characters, counter shown) and an optional end date, then Save and Cancel;
+- "Clear override" while one is active.
+
+Everything tappable is 48px. Follow the rhythm of `AwayWindowsSection.tsx`, its sibling on the page.
+
+- [ ] **Step 2: Write the failing tests**
+
+`route.test.ts`: mock `@/lib/study-materials` (`getRequestUser`), `@/lib/sketchbook-access` (`assertStaffSeesStudent`), `@/lib/assistant/access` (`readAssistantGate`), `@/lib/assistant/ai-access` (`loadAiAccess`, `setOverride`, `clearOverrides`; keep `teacherAccessLine` real via `importOriginal`) and `@neram/database` (`getSupabaseAdminClient` returning `fakeDb({ users: [{ id: 'stu', user_type: 'student', name: 'Priya' }, { id: 't1', user_type: 'teacher', name: 'Ms Rao' }] })`).
+
+```ts
+const STU = 'stu';
+const on = { on: true, reason: 'caught_up', sentence: 'AI answers: on.', link: null, missed: [], missedCount: 0, deficit: 0, override: null };
+
+it('GET answers the teacher line for a student this teacher sees', async () => {
+  mocks.loadAiAccess.mockResolvedValue(on);
+  const res = await GET(req('GET'), { params: { id: STU } });
+  expect(await res.json()).toEqual({ on: true, line: 'On: all caught up.', override: null });
+  expect(mocks.assertStaffSeesStudent).toHaveBeenCalledWith(expect.objectContaining({ id: 't1' }), STU);
+});
+
+it('is 404 while the assistant is off, and for a non-student id', async () => {
+  mocks.readAssistantGate.mockResolvedValueOnce({ enabled: false, pilot: [], features: {} });
+  expect((await GET(req('GET'), { params: { id: STU } })).status).toBe(404);
+  expect((await GET(req('GET'), { params: { id: 't1' } })).status).toBe(404);
+});
+
+it('refuses a teacher who does not teach the student, and a student', async () => {
+  mocks.assertStaffSeesStudent.mockRejectedValueOnce(new ApiError('You do not teach this student.', 403));
+  expect((await GET(req('GET'), { params: { id: STU } })).status).toBe(403);
+});
+
+it('POST needs on or off, a reason of 1 to 200 characters, and an end date that is not in the past', async () => {
+  for (const body of [{ mode: 'maybe', reason: 'x' }, { mode: 'on', reason: '   ' }, { mode: 'on', reason: 'x'.repeat(201) }, { mode: 'on', reason: 'ok', ends_on: '2020-01-01' }, { mode: 'on', reason: 'ok', ends_on: 'soon' }]) {
+    expect((await POST(req('POST', body), { params: { id: STU } })).status).toBe(400);
+  }
+  expect(mocks.setOverride).not.toHaveBeenCalled();
+});
+
+it('POST sets the override as this teacher and answers the new view', async () => {
+  mocks.setOverride.mockResolvedValue({});
+  mocks.loadAiAccess.mockResolvedValue({ ...on, reason: 'teacher_on', override: { id: 'o', student_id: STU, mode: 'on', reason: 'Was ill', set_by: 't1', set_at: '2026-10-03T05:00:00Z', ends_on: null, cleared_at: null, cleared_by: null } });
+  const res = await POST(req('POST', { mode: 'on', reason: 'Was ill' }), { params: { id: STU } });
+  expect(mocks.setOverride).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ studentId: STU, mode: 'on', reason: 'Was ill', endsOn: null, setBy: 't1' }));
+  expect(await res.json()).toMatchObject({ line: 'On: set by a teacher (Was ill).', override: { set_by_name: 'Ms Rao' } });
+});
+
+it('DELETE clears as this teacher', async () => {
+  mocks.loadAiAccess.mockResolvedValue(on);
+  await DELETE(req('DELETE'), { params: { id: STU } });
+  expect(mocks.clearOverrides).toHaveBeenCalledWith(expect.anything(), STU, 't1', expect.any(Date));
+});
+```
+
+(`req(method, body?)` builds a `NextRequest` with an `Authorization: Bearer x` header. `beforeEach` resets the mocks:
+- `getRequestUser` resolves `{ id: 't1', user_type: 'teacher', staff_role: 'teacher', can_teach: true }`;
+- `readAssistantGate` resolves `{ enabled: true, pilot: [], features: {} }`;
+- `assertStaffSeesStudent` resolves.)
+
+`AiAnswersSection.test.tsx`: stub `global.fetch`.
+- GET returns `{ on: false, line: 'Off: 1 missed class to catch up, starting with Perspective (1 Oct).', override: null }`. Render and fire the first-open; expect the line.
+- Click "Always on". Expect a reason field. Save with an empty reason is disabled. Type "Was ill" and Save; expect a POST with body `{ mode: 'on', reason: 'Was ill', ends_on: null }`.
+- A 404 shows "Neram Assistant is switched off, so there is nothing to manage here."
+
+- [ ] **Step 3: Run them to verify they fail**
+
+Run: `pnpm vitest run "apps/nexus/src/app/api/students/[id]/ai-access" apps/nexus/src/components/students/profile/AiAnswersSection.test.tsx`
+Expected: FAIL. The modules do not exist.
+
+- [ ] **Step 4: Implement**
+
+`app/api/students/[id]/ai-access/route.ts`:
+
+```ts
+import { NextRequest, NextResponse } from 'next/server';
+import { getSupabaseAdminClient } from '@neram/database';
+import { ApiError, errorResponse } from '@/lib/api-errors';
+import { readAssistantGate } from '@/lib/assistant/access';
+import { clearOverrides, loadAiAccess, setOverride, teacherAccessLine } from '@/lib/assistant/ai-access';
+import { todayIst } from '@/lib/assistant/format';
+import { assertStaffSeesStudent } from '@/lib/sketchbook-access';
+import { getRequestUser } from '@/lib/study-materials';
+
+export const dynamic = 'force-dynamic';
+
+/**
+ * GET    /api/students/[id]/ai-access   (staff) the student's AI answers status in teacher words
+ * POST   body { mode: 'on'|'off', reason, ends_on? }   set an override (clears the active one, D10)
+ * DELETE clear the active override
+ *
+ * Any staff member who teaches the student (assertStaffSeesStudent; admins see
+ * everyone). 404 while the assistant flag is off, and for an id that is not a
+ * student. A View-as-Student session resolves to the student and is refused.
+ */
+async function staffFor(request: NextRequest, studentId: string) {
+  const caller = await getRequestUser(request.headers.get('Authorization'));
+  await assertStaffSeesStudent(caller, studentId);
+  const supabase = getSupabaseAdminClient() as any;
+  if (!(await readAssistantGate(supabase)).enabled) throw new ApiError('Not found', 404);
+  const { data: student } = await supabase.from('users').select('id, user_type').eq('id', studentId).maybeSingle();
+  if (!student || student.user_type !== 'student') throw new ApiError('Not found', 404);
+  return { caller, supabase };
+}
+
+async function view(supabase: any, studentId: string) {
+  const access = await loadAiAccess(supabase, studentId, new Date());
+  const o = access.override;
+  let setByName: string | null = null;
+  if (o?.set_by) {
+    const { data } = await supabase.from('users').select('name').eq('id', o.set_by).maybeSingle();
+    setByName = data?.name ?? null;
+  }
+  return {
+    on: access.on,
+    line: teacherAccessLine(access),
+    override: o ? { mode: o.mode, reason: o.reason, ends_on: o.ends_on, set_at: o.set_at, set_by_name: setByName } : null,
+  };
+}
+
+const NO_STORE = { 'Cache-Control': 'no-store' } as const;
+const isYmd = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+
+export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const { supabase } = await staffFor(request, params.id);
+    return NextResponse.json(await view(supabase, params.id), { headers: NO_STORE });
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+
+export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const { caller, supabase } = await staffFor(request, params.id);
+    const body = await request.json().catch(() => ({}));
+    const mode = body?.mode;
+    const reason = typeof body?.reason === 'string' ? body.reason.trim() : '';
+    const endsOn = body?.ends_on ?? null;
+    if (mode !== 'on' && mode !== 'off') throw new ApiError('Choose Always on or Always off.', 400);
+    if (!reason) throw new ApiError('Give a reason, so other teachers know why.', 400);
+    if (reason.length > 200) throw new ApiError('Keep the reason under 200 characters.', 400);
+    if (endsOn !== null && (!isYmd(endsOn) || endsOn < todayIst(new Date()))) throw new ApiError('The end date must be today or later.', 400);
+    await setOverride(supabase, { studentId: params.id, mode, reason, endsOn, setBy: caller.id, now: new Date() });
+    return NextResponse.json(await view(supabase, params.id), { headers: NO_STORE });
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const { caller, supabase } = await staffFor(request, params.id);
+    await clearOverrides(supabase, params.id, caller.id, new Date());
+    return NextResponse.json(await view(supabase, params.id), { headers: NO_STORE });
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+```
+
+(Check `errorResponse`'s signature in `lib/api-errors.ts:130`, `(err, fallback?)`. It maps `ApiError` to its status and anything else through `httpStatusForError`.)
+
+`AiAnswersSection.tsx`:
+- Follow `AwayWindowsSection.tsx`'s structure: `ProfileSection` with `id="profile-ai-answers"` and `title="AI answers"`, loading lazily with `onFirstOpen`, a skeleton while loading, and `EmptyNote` for the 404 sentence.
+- Show `view.line` as body text.
+- When `view.override` is set, show a caption: "Set by {set_by_name || 'a teacher'} on {formatDay(set_at.slice(0, 10))}{ends_on ? `, until ${formatDay(ends_on)}` : ''}: {reason}".
+- Buttons, each `minHeight: 48`:
+  - "Always on" and "Always off": each opens the inline form. The reason is a `TextField` with `inputProps={{ maxLength: 200 }}` and a `helperText` counter. The end date is `TextField type="date"`, optional, with `inputProps={{ min: today }}`. Save is disabled until the reason is non-empty.
+  - "Clear override", shown only while one is active.
+- Every mutation re-renders from the route's returned view.
+- Server errors show in an `Alert` with the route's sentence.
+
+Use `formatDay` from `@/lib/assistant/format` and `todayIst` for `today`.
+
+Page `app/(teacher)/teacher/students/[id]/page.tsx`:
+- Import `AiAnswersSection`.
+- Render `<AiAnswersSection studentId={core.student.id} getToken={getToken} />` right after `<AwayWindowsSection ... />`.
+- Add `{ id: 'profile-ai-answers', label: 'AI answers' }` to `navItems` after `profile-away-dates`.
+
+- [ ] **Step 5: Run the tests, type-check, then the ui-ux-pro-max review**
+
+Run: `pnpm vitest run "apps/nexus/src/app/api/students/[id]/ai-access" apps/nexus/src/components/students/profile`
+Expected: PASS.
+
+Run: `pnpm --filter @neram/nexus type-check`
+Expected: exit 0.
+
+Review the section at 375 and 1280 on the 3032 dev server, logged in as staff, with the route stubbed. Fix what is inside the new component.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add "apps/nexus/src/app/api/students/[id]/ai-access" apps/nexus/src/components/students/profile/AiAnswersSection.tsx apps/nexus/src/components/students/profile/AiAnswersSection.test.tsx "apps/nexus/src/app/(teacher)/teacher/students/[id]/page.tsx"
+git commit -m "feat(assistant): teachers see why a student has or lacks AI answers and can override with a reason
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
+### Task 12C: Admins see assistant usage and cost, and set the allowance
+
+**Files:**
+- Modify: `apps/nexus/src/lib/assistant/testing/fake-db.ts` (add `.range(from, to)`)
+- Create: `apps/nexus/src/lib/assistant/usage.ts`
+- Create: `apps/nexus/src/app/api/admin/ai-usage/assistant/route.ts`
+- Create: `apps/nexus/src/components/ai-usage/AssistantUsageSection.tsx`
+- Modify: `apps/nexus/src/app/(teacher)/teacher/admin/ai-usage/page.tsx` (render the section last, inside the page's outer `Box`, before its closing tag at the end of `AiUsagePage`)
+- Test: `lib/assistant/usage.test.ts`, `app/api/admin/ai-usage/assistant/route.test.ts`
+
+**Interfaces:**
+- Consumes:
+  - `loadAiAccess`, `teacherAccessLine`, `readDailyLimit`, `clampDailyLimit`, `DAILY_LIMIT_KEY`, `activeOverride`, `OverrideRow` (Task 7A)
+  - `upsertNexusSetting` (`@neram/database`)
+  - `canUser` (`@/lib/staff-capabilities`)
+  - `verifyMsToken`
+- Produces:
+  - `loadAssistantMonthUsage(supabase, sinceIso: string): Promise<Array<{ studentId: string; name: string | null; questions: number; costUsd: number }>>`, sorted by cost, then questions, descending
+  - `GET /api/admin/ai-usage/assistant` returning `{ dailyLimit: number; students: Array<{ studentId; name; questions; costUsd; access: string }>; overrides: Array<{ studentId; studentName; mode; reason; setByName; setAt; endsOn }> }`
+  - `PATCH` body `{ dailyLimit }` returning `{ dailyLimit }`
+
+- [ ] **Step 1: Write the failing tests**
+
+`fake-db.ts`: add `range` to the chain (`let skip = 0;`), set by `range: (a: number, b: number) => { skip = a; take = b - a + 1; return api; }`. In `run`, slice `out = out.slice(skip, skip + take)` where it now applies `take`.
+
+`usage.test.ts`:
+
+```ts
+// @vitest-environment node
+import { describe, expect, it } from 'vitest';
+import { fakeDb } from './testing/fake-db';
+import { loadAssistantMonthUsage } from './usage';
+
+describe('loadAssistantMonthUsage', () => {
+  it('sums model answers and cost per student since the month start, across threads, past 1000 rows', async () => {
+    const msgs = [
+      ...Array.from({ length: 1200 }, (_, i) => ({ id: `a${i}`, thread_id: 't1', role: 'assistant', llm: true, cost_usd: 0.001, created_at: '2026-10-02T00:00:00Z' })),
+      { id: 'b', thread_id: 't2', role: 'assistant', llm: true, cost_usd: 0.002, created_at: '2026-10-02T00:00:00Z' },
+      { id: 'c', thread_id: 't3', role: 'assistant', llm: true, cost_usd: 0.004, created_at: '2026-10-02T00:00:00Z' },
+      { id: 'd', thread_id: 't3', role: 'assistant', llm: false, cost_usd: null, created_at: '2026-10-02T00:00:00Z' },
+      { id: 'e', thread_id: 't3', role: 'assistant', llm: true, cost_usd: 0.5, created_at: '2026-09-30T00:00:00Z' },
+    ];
+    const db = fakeDb({
+      nexus_assistant_messages: msgs,
+      nexus_assistant_threads: [{ id: 't1', user_id: 's1' }, { id: 't2', user_id: 's1' }, { id: 't3', user_id: 's2' }],
+      users: [{ id: 's1', name: 'Priya' }, { id: 's2', name: 'Arun' }],
+    });
+    const out = await loadAssistantMonthUsage(db, '2026-10-01T00:00:00Z');
+    expect(out).toEqual([
+      { studentId: 's1', name: 'Priya', questions: 1201, costUsd: expect.closeTo(1.202, 5) },
+      { studentId: 's2', name: 'Arun', questions: 1, costUsd: expect.closeTo(0.004, 5) },
+    ]);
+  });
+});
+```
+
+`route.test.ts`: mock `verifyMsToken`, `@neram/database` (`getSupabaseAdminClient` returns a `fakeDb` with `users` holding an admin `{ id: 'a1', ms_oid: 'oid', user_type: 'admin', staff_role: 'admin', can_teach: true }` and a teacher, plus `upsertNexusSetting` as a mock) and `@/lib/assistant/usage`.
+
+```ts
+it('401 with no token, 403 for a teacher without system.settings', async () => {
+  mocks.verifyMsToken.mockRejectedValueOnce(new Error('no token'));
+  expect((await GET(req('GET'))).status).toBe(401);
+  mocks.verifyMsToken.mockResolvedValueOnce({ oid: 'teacher-oid' }); // fixture: { id: 't1', ms_oid: 'teacher-oid', user_type: 'teacher', staff_role: 'teacher', can_teach: true }
+  expect((await GET(req('GET'))).status).toBe(403);
+  mocks.verifyMsToken.mockResolvedValueOnce({ oid: 'teacher-oid' });
+  expect((await PATCH(req('PATCH', { dailyLimit: 5 }))).status).toBe(403);
+});
+
+it('GET returns the allowance, the students with their access line, and active overrides', async () => {
+  mocks.loadAssistantMonthUsage.mockResolvedValue([{ studentId: 's1', name: 'Priya', questions: 12, costUsd: 0.01 }]);
+  mocks.loadAiAccess.mockResolvedValue({ on: true, reason: 'caught_up', sentence: '', link: null, missed: [], missedCount: 0, deficit: 0, override: null });
+  const body = await (await GET(req('GET'))).json();
+  expect(body).toMatchObject({ dailyLimit: 10, students: [{ studentId: 's1', questions: 12, access: 'On: all caught up.' }] });
+});
+
+it('PATCH clamps and stores the allowance', async () => {
+  const res = await PATCH(req('PATCH', { dailyLimit: 99 }));
+  expect(await res.json()).toEqual({ dailyLimit: 50 });
+  expect(mocks.upsertNexusSetting).toHaveBeenCalledWith('assistant_ai_daily_limit', 50, 'a1');
+});
+```
+
+(Copy the ai-usage route's own test file for the auth fixtures if one exists; otherwise build the `NextRequest` with an `Authorization` header and mock `verifyMsToken` to return `{ oid: 'oid' }`.)
+
+- [ ] **Step 2: Run them to verify they fail**
+
+Run: `pnpm vitest run apps/nexus/src/lib/assistant/usage.test.ts apps/nexus/src/app/api/admin/ai-usage/assistant`
+Expected: FAIL. The modules do not exist.
+
+- [ ] **Step 3: Implement**
+
+`lib/assistant/usage.ts`:
+
+```ts
+/**
+ * Model answers and their cost per student since `sinceIso`, for the admin
+ * Assistant section. Paged in 1000s (PostgREST caps a read at 1000 rows) and
+ * joined to threads and users in chunks, so a long .in() list never forms.
+ */
+const PAGE = 1000;
+const CHUNK = 100;
+
+export async function loadAssistantMonthUsage(supabase: any, sinceIso: string): Promise<Array<{ studentId: string; name: string | null; questions: number; costUsd: number }>> {
+  const byThread = new Map<string, { questions: number; costUsd: number }>();
+  for (let from = 0; ; from += PAGE) {
+    const { data, error } = await supabase
+      .from('nexus_assistant_messages')
+      .select('thread_id, cost_usd')
+      .eq('role', 'assistant')
+      .eq('llm', true)
+      .gte('created_at', sinceIso)
+      .order('created_at', { ascending: true })
+      .range(from, from + PAGE - 1);
+    if (error) throw error;
+    for (const m of (data || []) as Array<{ thread_id: string; cost_usd: number | null }>) {
+      const t = byThread.get(m.thread_id) ?? { questions: 0, costUsd: 0 };
+      t.questions += 1;
+      t.costUsd += Number(m.cost_usd) || 0;
+      byThread.set(m.thread_id, t);
+    }
+    if (!data || data.length < PAGE) break;
+  }
+
+  const threadIds = [...byThread.keys()];
+  const owner = new Map<string, string>();
+  for (let i = 0; i < threadIds.length; i += CHUNK) {
+    const { data, error } = await supabase.from('nexus_assistant_threads').select('id, user_id').in('id', threadIds.slice(i, i + CHUNK));
+    if (error) throw error;
+    for (const t of (data || []) as Array<{ id: string; user_id: string }>) owner.set(t.id, t.user_id);
+  }
+
+  const byStudent = new Map<string, { questions: number; costUsd: number }>();
+  for (const [threadId, u] of byThread) {
+    const sid = owner.get(threadId);
+    if (!sid) continue;
+    const s = byStudent.get(sid) ?? { questions: 0, costUsd: 0 };
+    s.questions += u.questions;
+    s.costUsd += u.costUsd;
+    byStudent.set(sid, s);
+  }
+
+  const ids = [...byStudent.keys()];
+  const names = new Map<string, string | null>();
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    const { data, error } = await supabase.from('users').select('id, name').in('id', ids.slice(i, i + CHUNK));
+    if (error) throw error;
+    for (const u of (data || []) as Array<{ id: string; name: string | null }>) names.set(u.id, u.name);
+  }
+
+  return ids
+    .map((studentId) => ({ studentId, name: names.get(studentId) ?? null, ...byStudent.get(studentId)! }))
+    .sort((a, b) => b.costUsd - a.costUsd || b.questions - a.questions);
+}
+```
+
+`app/api/admin/ai-usage/assistant/route.ts`:
+- `dynamic = 'force-dynamic'`.
+- Authenticate exactly as `app/api/admin/ai-usage/route.ts` does: `verifyMsToken`, giving 401 when it throws; the users row by `ms_oid`; `canUser(user, 'system.settings')`, giving 403 otherwise.
+
+GET:
+
+```ts
+    const supabase = getSupabaseAdminClient() as any;
+    const now = new Date();
+    const monthStart = `${todayIst(now).slice(0, 8)}01`;
+    const sinceIso = new Date(`${monthStart}T00:00:00+05:30`).toISOString();
+    const [dailyLimit, usage, { data: overrideRows }] = await Promise.all([
+      readDailyLimit(supabase),
+      loadAssistantMonthUsage(supabase, sinceIso),
+      supabase.from('nexus_assistant_ai_overrides').select('*').is('cleared_at', null).order('set_at', { ascending: false }).limit(200),
+    ]);
+    // Access in teacher words for the top 50 by cost, five at a time: each is a catch-up read.
+    const top = usage.slice(0, 50);
+    const access: string[] = [];
+    for (let i = 0; i < top.length; i += 5) {
+      const lines = await Promise.all(top.slice(i, i + 5).map((s) => loadAiAccess(supabase, s.studentId, now).then(teacherAccessLine).catch(() => 'Could not check.')));
+      access.push(...lines);
+    }
+    const today = todayIst(now);
+    const live = ((overrideRows || []) as OverrideRow[]).filter((o) => !o.ends_on || o.ends_on >= today);
+    const peopleIds = [...new Set(live.flatMap((o) => [o.student_id, o.set_by].filter(Boolean) as string[]))];
+    const { data: people } = peopleIds.length ? await supabase.from('users').select('id, name').in('id', peopleIds.slice(0, 200)) : { data: [] };
+    const nameOf = (id: string | null) => (people || []).find((p: { id: string }) => p.id === id)?.name ?? null;
+    return NextResponse.json({
+      dailyLimit,
+      students: top.map((s, i) => ({ ...s, access: access[i] })),
+      overrides: live.map((o) => ({ studentId: o.student_id, studentName: nameOf(o.student_id), mode: o.mode, reason: o.reason, setByName: nameOf(o.set_by), setAt: o.set_at, endsOn: o.ends_on })),
+    }, { headers: { 'Cache-Control': 'no-store' } });
+```
+
+PATCH:
+
+```ts
+    const body = await request.json().catch(() => ({}));
+    const dailyLimit = clampDailyLimit(typeof body?.dailyLimit === 'number' ? body.dailyLimit : Number.NaN);
+    await upsertNexusSetting(DAILY_LIMIT_KEY, dailyLimit, user.id);
+    return NextResponse.json({ dailyLimit }, { headers: { 'Cache-Control': 'no-store' } });
+```
+
+A non-number PATCH clamps to the default of 10. Reject it instead: `if (typeof body?.dailyLimit !== 'number') return NextResponse.json({ error: 'dailyLimit must be a number from 0 to 50.' }, { status: 400 })`. Add that case to the test.
+
+`components/ai-usage/AssistantUsageSection.tsx`:
+- Props `{ rate: number; getToken }`. Read with `useAuthSWR('/api/admin/ai-usage/assistant')`.
+- A `Paper` titled "Neram Assistant" containing:
+  - (a) "AI questions per student per day": a number `TextField` (0 to 50, `minHeight: 48`) with a Save button that PATCHes and then `mutate`s. Helper text: "0 pauses AI answers for every student. The free assistant features keep working."
+  - (b) "This month": a list of students with name, the access line, "N questions" and cost in `₹` via the page's `inr(costUsd, rate)` (pass a formatter prop, or copy the two helpers). Empty state: "No student has used AI answers this month."
+  - (c) "Teacher overrides": student, Always on or Always off, reason, who, until. Empty state: "No overrides."
+- Mobile-first: stacked rows, no tables, as the page's feature rows are.
+
+Page: render `<AssistantUsageSection rate={rate} getToken={getToken} />` as the last child of the page's outer `Box`.
+
+- [ ] **Step 4: Run tests and type-check, then the ui-ux-pro-max review of the section at 375 and 1280**
+
+Run: `pnpm vitest run apps/nexus/src/lib/assistant apps/nexus/src/app/api/admin/ai-usage`
+Expected: PASS.
+
+Run: `pnpm --filter @neram/nexus type-check`
+Expected: exit 0.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/nexus/src/lib/assistant/testing/fake-db.ts apps/nexus/src/lib/assistant/usage.ts apps/nexus/src/lib/assistant/usage.test.ts apps/nexus/src/app/api/admin/ai-usage/assistant "apps/nexus/src/app/(teacher)/teacher/admin/ai-usage/page.tsx" apps/nexus/src/components/ai-usage
+git commit -m "feat(assistant): admin section with AI questions and cost per student, the allowance, and overrides
+
+Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
+```
+
+---
+
 ### Task 13: E2E on the free-question path, and the whole-branch check
 
 **Files:**
@@ -2830,6 +4008,20 @@ test('Try again after a dropped request resends the same message id', async ({ p
   expect(ids[0]).toMatch(/^[0-9a-f-]{36}$/);
   expect(ids[1]).toBe(ids[0]);
 });
+
+test('the AI status line: on with a count, off with a Catch-up button that leads to catch-up', async ({ page }) => {
+  let status = { on: true, reason: 'caught_up', sentence: 'AI answers: on, 7 left today.', link: null as null | { label: string; url: string }, left_today: 7, daily_limit: 10 };
+  await page.route('**/api/assistant/ai-status', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(status) }));
+  // open the panel
+  await expect(page.getByRole('status').filter({ hasText: 'AI answers: on, 7 left today.' })).toBeVisible();
+  // close, switch the stub off, reopen
+  status = { on: false, reason: 'missed_class', sentence: 'AI answers are off. Catch up on Perspective (1 Oct) to switch them back on.', link: { label: 'Catch-up', url: '/student/catch-up' }, left_today: 10, daily_limit: 10 };
+  // close and open the panel again
+  const catchUp = page.getByRole('link', { name: 'Catch-up' });
+  await expect(catchUp).toHaveAttribute('href', '/student/catch-up');
+  expect((await catchUp.boundingBox())!.height).toBeGreaterThanOrEqual(48);
+  await assertNoHorizontalOverflow(page);
+});
 ```
 
 - [ ] **Step 2: Run the E2E**
@@ -2867,7 +4059,12 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 2. **At `/teacher/admin/ai-usage`:**
    - Confirm the two new rows, "Assistant: questions about my Nexus" and "Assistant: exam help", are present and on Auto.
    - Switching either to Off pauses free questions. The guided flows and the brief keep working.
-3. **Pilot:** set `nexus_settings.assistant_pilot_user_ids` before flipping `student.assistant-chat`, as in M1's checklist.
+3. **Pilot:** set `nexus_settings.assistant_pilot_user_ids` to the Hari heera test student's `users.id` before flipping `student.assistant-chat`, as in M1's checklist.
+4. **Test the access rule on that account:**
+   - Leave a missed class's catch-up undone once its recap is published. The panel says AI answers are off and names the class.
+   - Finish it. The next time the panel opens, they are back on.
+   - On `/teacher/students/<id>`, set Always on with a reason. The panel says on regardless. Then clear it.
+5. **At `/teacher/admin/ai-usage`:** set the allowance (10 to start) and watch the Neram Assistant section for questions and cost per student.
 4. **Phone checks added by M2:**
    - Ask "which chapters matter most for NATA" from a question bank page. Expect an "Exam help" label and a Chapter weightage button.
    - Ask "what tests do I have". Expect the tests list.
@@ -2881,7 +4078,7 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 |---|---|
 | `prompt.ts` with a static prefix and dynamic context last | Task 5 |
 | `loop.ts` modelled on the marketing loop: text/plain, model turn then function responses, parallel tools, last call without tools, max 4, 6 KB payloads, 400 and 700 output tokens | Task 6, Task 8 |
-| Stage 4 of `turn.ts`, mode detection and chip, 20-turn daily cap, `AiBlockedError` handled | Task 8 (D4: an envelope, not a 409), Task 12 |
+| Stage 4 of `turn.ts`, mode detection and chip, the daily cap (now the admin-set allowance, addendum), `AiBlockedError` handled | Task 8 (D4: an envelope, not a 409), Task 12 |
 | `nexus.assistant-student`, `nexus.assistant-exam`, free key only in exam mode, the `features.test.ts` exception list | Task 1 |
 | `clientKey = hashClientKey('assistant', userId)` | Task 8 |
 | Exam mode refuses every general tool | M1 `policy.ts`, re-asserted in Task 8 and Task 9 |
@@ -2890,6 +4087,13 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 | `get_inspirations`, `new_student_welcome` | Task 10 |
 | Exam tools: `qb_chapter_weightage`, `qb_search_questions`, `qb_explain_answer`, `ncert_study_refs`, `what_to_study`; the chapter-to-slug mapping verified (weightage chapter slugs are `nexus_qb_tag_ncert.tag_slug` for maths) | Task 9 |
 | Parked minors a, b, c from M1's Ruling 27 | Tasks 3, 4, 2 |
+| Addendum: the access rule (pilot, classroom, override, ready missed classes, late-joiner pace) | Task 7A |
+| Addendum: checked before every model call; a free question while off gets the reason and no model call | Task 8 |
+| Addendum: the allowance (default 10, 0 to 50, 0 pauses), shown as "N left today" | Tasks 7A, 8, 12A, 12C |
+| Addendum: the status line in the panel, fetched on open only | Task 12A |
+| Addendum: teacher overrides with a reason and an optional end date, history kept | Tasks 7A, 12B |
+| Addendum: the admin section (allowance, usage and cost per student, overrides) | Task 12C |
+| Addendum: no notifications on a switch | Nothing sends; Task 12A only renders |
 | Teams chat, crons, staff card, manifest, staff tools | M3, out of scope |
 
 **Placeholder scan:**
@@ -2911,7 +4115,10 @@ Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"
 4. Task 8, "a paused feature, an hourly limit and a Gemini failure".
 5. Task 4 (unit and provider) and Task 13 (E2E).
 
+**Day format:** `formatDay` gives "1 Oct", with no weekday. The addendum's examples say "Thu 2 Oct"; the shipped sentences say "(2 Oct)", matching the rest of the assistant.
+
 **Known simplifications, deliberate:**
+- The admin section computes the access line for the top 50 students by cost only, because each check is a catch-up read.
 - `my_reviews` names a drawing by its source label ("Homework", "Sketch"), not its brief title, to avoid joins whose table names the plan cannot pin.
 - A stale `in_progress` test attempt blocks `qb_explain_answer`'s key until the test page settles it.
 - The resend lookup (`findThreadForMessage`) cannot catch a resend that arrives while the first attempt is still running. The first attempt's reply then lands second; this is rare and costs one extra model answer.
