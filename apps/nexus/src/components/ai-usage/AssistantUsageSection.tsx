@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Alert, Box, Button, Chip, CircularProgress, Divider, Paper, Skeleton, Stack, TextField, Typography } from '@neram/ui';
 import { useAuthSWR } from '@/lib/nexus-swr';
+import StudentAvatar from '@/components/students/StudentAvatar';
 
 /**
  * Neram Assistant block of the AI usage page: the daily allowance of AI
@@ -111,9 +112,12 @@ export default function AssistantUsageSection({ rate, getToken }: { rate: number
         <Stack divider={<Divider flexItem />} sx={{ mt: 1 }} component="ul" style={{ listStyle: 'none', margin: 0, padding: 0 }}>
           {(data?.students ?? []).map((s) => (
             <Box component="li" key={s.studentId} sx={{ py: 1.25, display: 'flex', gap: 2, justifyContent: 'space-between', alignItems: 'flex-start', minHeight: 48 }}>
-              <Box sx={{ minWidth: 0 }}>
-                <Typography variant="body2" sx={{ fontWeight: 600, overflowWrap: 'anywhere' }}>{s.name || 'Unnamed student'}</Typography>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', overflowWrap: 'anywhere' }}>{s.access}</Typography>
+              <Box sx={{ minWidth: 0, display: 'flex', gap: 1.5, alignItems: 'center' }}>
+                <StudentAvatar userId={s.studentId} name={s.name} size={32} />
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, overflowWrap: 'anywhere' }}>{s.name || 'Unnamed student'}</Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', overflowWrap: 'anywhere' }}>{s.access}</Typography>
+                </Box>
               </Box>
               <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
                 <Typography variant="body2" sx={{ fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>{inr(s.costUsd, rate)}</Typography>
@@ -134,6 +138,7 @@ export default function AssistantUsageSection({ rate, getToken }: { rate: number
           {(data?.overrides ?? []).map((o) => (
             <Box component="li" key={`${o.studentId}-${o.setAt}`} sx={{ py: 1.25, minHeight: 48 }}>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}>
+                <StudentAvatar userId={o.studentId} name={o.studentName} size={32} />
                 <Typography variant="body2" sx={{ fontWeight: 600, overflowWrap: 'anywhere' }}>{o.studentName || 'Unnamed student'}</Typography>
                 <Chip size="small" label={o.mode === 'on' ? 'Always on' : 'Always off'} color={o.mode === 'on' ? 'success' : 'default'} variant="outlined" />
               </Stack>

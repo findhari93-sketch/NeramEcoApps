@@ -63,6 +63,6 @@ describe('buildBrief', () => {
 
   it('never contains an em dash', () => {
     const b = buildBrief({ ...base, assignments: { pending: 3, nextTitle: 'A', nextDueOn: '2026-10-04' }, reviewsBack: 1 }, 9);
-    for (const s of b.sections) expect(s.text).not.toMatch(/—|--/);
+    for (const s of b.sections) expect(s.text).not.toMatch(/\u2014|--/);
   });
 });

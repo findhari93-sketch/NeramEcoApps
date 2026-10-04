@@ -101,7 +101,7 @@ export async function uploadImage(getToken: GetToken, file: File): Promise<Attac
     const form = new FormData();
     form.append('file', blob);
     form.append('bucket', 'drawing-uploads');
-    const res = await fetch('/api/drawing/upload', { method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form }).catch(() => {
+    const res = await fetch('/api/drawing/upload', { method: 'POST', cache: 'no-store', headers: { Authorization: `Bearer ${token}` }, body: form }).catch(() => {
       throw new AssistantHttpError('Upload failed. Check your connection and try again.', 0);
     });
     if (!res.ok) throw new AssistantHttpError(res.status === 413 ? 'That image is too large to upload. Try a smaller photo.' : 'Upload failed. Check your connection and try again.', res.status);
