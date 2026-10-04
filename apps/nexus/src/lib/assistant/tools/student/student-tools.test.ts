@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   getCatchupJourney: vi.fn(),
   getStudentPrimaryClassroom: vi.fn(),
   loadReviewsBack: vi.fn(),
+  buildStudentTestsOverview: vi.fn(),
 }));
 
 vi.mock('@/lib/assistant/brief-load', async (importOriginal) => ({
@@ -27,6 +28,7 @@ vi.mock('@neram/database/queries/nexus', async (importOriginal) => ({
   getCatchupJourney: mocks.getCatchupJourney,
   getStudentPrimaryClassroom: mocks.getStudentPrimaryClassroom,
 }));
+vi.mock('@/lib/student-tests-overview', () => ({ buildStudentTestsOverview: mocks.buildStudentTestsOverview }));
 vi.mock('@/lib/assistant/reviews-back', () => ({ loadReviewsBack: mocks.loadReviewsBack }));
 vi.mock('@/lib/upcoming-classes', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/upcoming-classes')>()),
@@ -71,6 +73,27 @@ beforeEach(() => {
 });
 
 describe('student read tools', () => {
+  it('my_tests lists tests to take with their own sentence, then recent scores', async () => {
+    mocks.buildStudentTestsOverview.mockResolvedValue({
+      due: [
+        { title: 'Calculus chapter test', status: 'open', due_at: '2026-10-05T18:29:00Z', card: { reason: 'Open until Sunday night.' } },
+        { title: 'Perspective quiz', status: 'upcoming', due_at: null, card: { reason: 'Opens tomorrow at 6 pm.' } },
+        { title: 'Old one', status: 'done', card: { reason: 'Done.' } },
+      ],
+      recent: [{ test_title: 'Algebra test', percentage: 72.4 }, { test_title: 'Mock 1', percentage: null }],
+    });
+    const out = await tool('my_tests').run(ctx(), {});
+    expect(mocks.buildStudentTestsOverview).toHaveBeenCalledWith(expect.anything(), { studentId: 's1', classroomId: 'c1', isStaff: false, now: expect.any(Date) });
+    expect(out.reply).toBe('You have 2 tests to take:\n1. Calculus chapter test: Open until Sunday night.\n2. Perspective quiz: Opens tomorrow at 6 pm.\nRecent score: Algebra test 72%.');
+    expect(out.links).toEqual([{ label: 'Tests', url: '/student/tests' }]);
+    expect(tool('my_tests').feature).toBe('tests');
+  });
+
+  it('my_tests says so when nothing is waiting', async () => {
+    mocks.buildStudentTestsOverview.mockResolvedValue({ due: [], recent: [] });
+    expect((await tool('my_tests').run(ctx(), {})).reply).toBe('No tests are waiting for you right now.');
+  });
+
   it('are all registered for students only, as reads', () => {
     const names = ['my_brief', 'my_schedule', 'my_assignments', 'my_catchup', 'my_attendance', 'my_sketchbook', 'exam_countdown'];
     for (const n of names) expect(tool(n)).toMatchObject({ audience: 'student', kind: 'read' });
