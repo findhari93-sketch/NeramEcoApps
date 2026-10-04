@@ -18,6 +18,8 @@ import SuggestionChips from './SuggestionChips';
 
 export const SHEET_WIDTH = 420;
 
+import AiStatusLine from './AiStatusLine';
+
 export default function AssistantSheet() {
   const a = useAssistant();
   const { getToken, isFeatureEnabled } = useNexusAuthContext();
@@ -45,6 +47,7 @@ export default function AssistantSheet() {
         <IconButton aria-label="New chat" onClick={() => void a.newChat()} sx={{ width: 48, height: 48 }}><AddCommentOutlinedIcon /></IconButton>
         <IconButton aria-label="Close" onClick={a.closePanel} sx={{ width: 48, height: 48 }}><CloseIcon /></IconButton>
       </Box>
+      <AiStatusLine status={a.aiStatus} />
       {a.messages.length === 0 && a.loadingHistory ? (
         // A kept chat is loading after a reload: a skeleton, not the menu, so a
         // quick action cannot be tapped into the middle of an earlier flow.

@@ -8,9 +8,10 @@ import { captureScreenshot } from '@/lib/capture-screenshot';
 import { isTeamsPadPath } from '@/lib/pad/embedded';
 import ReportIssueDialog from '@/components/issues/ReportIssueDialog';
 import {
-  ASSISTANT_FLAG, AssistantHttpError, BRIEF_KEY, OFFLINE, isRetryable, newMessageId, cancelActionRequest, confirmActionRequest, loadThread, newThread, postTurn,
-  type ActionProposal, type Attachment, type Envelope, type PageContext, type Suggestion,
+  ASSISTANT_FLAG, AssistantHttpError, BRIEF_KEY, OFFLINE, isRetryable, newMessageId, cancelActionRequest, confirmActionRequest, getAiStatus, loadThread, newThread, postTurn,
+  type ActionProposal, type AiStatus, type Attachment, type Envelope, type PageContext, type Suggestion,
 } from './client';
+import { onSentence } from '@/lib/assistant/ai-status-words';
 
 export interface AssistantMessage {
   id: string;
@@ -37,6 +38,8 @@ export interface AssistantContextValue {
   suggestions: Suggestion[];
   wantsAttachment: boolean;
   pendingAction: ActionProposal | null;
+  /** Whether AI answers are on, why not, and how many are left today. Null until it loads or if it cannot. */
+  aiStatus: AiStatus | null;
   /** The last send failed for a reason worth retrying; `retry` sends the same text and photo again. */
   canRetry: boolean;
   retry: () => Promise<void>;
@@ -82,6 +85,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const [pendingAction, setPendingAction] = useState<ActionProposal | null>(null);
   const [canRetry, setCanRetry] = useState(false);
   const [refused, setRefused] = useState(false);
+  const [aiStatus, setAiStatus] = useState<AiStatus | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
   const [autoShot, setAutoShot] = useState<File | null>(null);
   const threadRef = useRef<string | null>(null);
@@ -90,6 +94,9 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   const newChatRef = useRef(false);
   /** Bumped by newChat: a reply from an older generation is dropped. */
   const genRef = useRef(0);
+  // Latest getToken, so a new function identity never refetches the status mid-open (D8).
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
   /** The kept thread is loaded once per page session, on the first open. */
   const historyTriedRef = useRef(false);
   /** Set by the first send: a history that lands after it must not replace the live turn. */
@@ -167,6 +174,17 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
       .finally(() => setLoadingHistory(false));
   }, [open, enabled, getToken, forgetThread]);
 
+  // D8: read once per panel open. A failure only hides the line; it is a secondary read.
+  useEffect(() => {
+    if (!open || !enabled) return;
+    const gen = genRef.current;
+    let alive = true;
+    getAiStatus(getTokenRef.current)
+      .then((st) => { if (alive && gen === genRef.current) setAiStatus(st); })
+      .catch(() => { if (alive && gen === genRef.current) setAiStatus(null); });
+    return () => { alive = false; };
+  }, [open, enabled]);
+
   const applyEnvelope = useCallback((env: Envelope, userText: string | null) => {
     threadRef.current = env.threadId;
     try {
@@ -179,6 +197,9 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
       const user = userText ? [{ id: nextId(), role: 'user' as const, text: userText }] : [];
       return [...withoutPending, ...user, { id: nextId(), role: 'assistant' as const, text: env.reply, envelope: env }];
     });
+    if (env.llm) {
+      setAiStatus((s) => (s && s.on ? { ...s, left_today: Math.max(0, s.left_today - 1), sentence: onSentence(s.daily_limit, Math.max(0, s.left_today - 1)) } : s));
+    }
     setSuggestions(env.suggestions);
     setWantsAttachment(Boolean(env.wantsAttachment));
     setPendingAction(env.action);
@@ -357,9 +378,9 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo<AssistantContextValue>(() => ({
-    enabled, open, openPanel, closePanel, messages, loadingHistory, busy, error, suggestions, wantsAttachment, pendingAction,
+    enabled, open, openPanel, closePanel, messages, loadingHistory, busy, error, suggestions, wantsAttachment, pendingAction, aiStatus,
     canRetry, retry, send: sendPublic, confirm, cancel, newChat, reportProblem, pageContext,
-  }), [enabled, open, openPanel, closePanel, messages, loadingHistory, busy, error, suggestions, wantsAttachment, pendingAction, canRetry, retry, sendPublic, confirm, cancel, newChat, reportProblem, pageContext]);
+  }), [enabled, open, openPanel, closePanel, messages, loadingHistory, busy, error, suggestions, wantsAttachment, pendingAction, aiStatus, canRetry, retry, sendPublic, confirm, cancel, newChat, reportProblem, pageContext]);
 
   return (
     <Ctx.Provider value={value}>

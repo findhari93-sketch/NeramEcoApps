@@ -12,6 +12,7 @@ import { computeCatchupPace } from '@/lib/catchup-pace';
 import { readAssistantGate } from './access';
 import { formatDay, todayIst } from './format';
 import { istDayStartIso } from './history';
+import { onSentence } from './ai-status-words';
 import { countLlmRepliesToday } from './store';
 import type { ToolLink } from './types';
 
@@ -168,11 +169,6 @@ export async function buildAiStatus(supabase: any, studentId: string, now: Date)
   const [access, limit] = await Promise.all([loadAiAccess(supabase, studentId, now), readDailyLimit(supabase)]);
   const used = access.on && limit > 0 ? await countLlmRepliesToday(supabase, studentId, istDayStartIso(now), limit) : 0;
   const left = Math.max(0, limit - used);
-  let sentence = access.sentence;
-  if (access.on) {
-    sentence = limit === 0 ? 'AI answers are paused right now.'
-      : left === 0 ? 'AI answers: on, none left today. They reset at midnight.'
-      : `AI answers: on, ${left} left today.`;
-  }
+  const sentence = access.on ? onSentence(limit, left) : access.sentence;
   return { on: access.on && limit > 0, reason: access.reason, sentence, link: access.link, left_today: left, daily_limit: limit };
 }

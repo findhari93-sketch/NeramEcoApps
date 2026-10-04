@@ -7,6 +7,7 @@ const confirmActionRequest = vi.fn();
 const cancelActionRequest = vi.fn();
 const newThread = vi.fn();
 const loadThread = vi.fn();
+const getAiStatus = vi.fn();
 const swrMutate = vi.fn();
 let pathname = '/student/dashboard';
 
@@ -19,6 +20,7 @@ vi.mock('./client', async (importOriginal) => {
     cancelActionRequest: (...a: unknown[]) => cancelActionRequest(...a),
     newThread: (...a: unknown[]) => newThread(...a),
     loadThread: (...a: unknown[]) => loadThread(...a),
+    getAiStatus: (...a: unknown[]) => getAiStatus(...a),
   };
 });
 
@@ -71,6 +73,8 @@ beforeEach(() => {
   newThread.mockReset();
   loadThread.mockReset();
   loadThread.mockResolvedValue([]);
+  getAiStatus.mockReset();
+  getAiStatus.mockResolvedValue({ on: true, reason: 'caught_up', sentence: 'AI answers: on, 7 left today.', link: null, left_today: 7, daily_limit: 10 });
   swrMutate.mockReset();
   captureScreenshot.mockClear();
   pathname = '/student/dashboard';
@@ -78,6 +82,27 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('AssistantProvider', () => {
+
+  it('loads the AI status once per open, and counts it down after a model answer (D8)', async () => {
+    postTurn.mockResolvedValueOnce({ ...env({ reply: 'An answer.' }), llm: true });
+    mount();
+    await act(async () => { ctx.openPanel(); });
+    expect(getAiStatus).toHaveBeenCalledTimes(1);
+    expect(ctx.aiStatus).toMatchObject({ left_today: 7 });
+    await act(async () => { await ctx.send('a free question'); });
+    expect(ctx.aiStatus).toMatchObject({ left_today: 6, sentence: 'AI answers: on, 6 left today.' });
+    await act(async () => { ctx.closePanel(); });
+    await act(async () => { ctx.openPanel(); });
+    expect(getAiStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it('hides the line when the status cannot be loaded', async () => {
+    getAiStatus.mockRejectedValue(new AssistantHttpError('Something went wrong on my side. Please try again.', 500));
+    mount();
+    await act(async () => { ctx.openPanel(); });
+    expect(ctx.aiStatus).toBeNull();
+    expect(ctx.error).toBeNull();
+  });
   it('a stale confirm (410) keeps the assistant enabled and shows the message', async () => {
     postTurn.mockResolvedValue(env({ action: { id: 'a1', confirmToken: 'ct' } as unknown as Envelope['action'] }));
     confirmActionRequest.mockRejectedValue(new AssistantHttpError('That action has expired. Ask me again.', 410));

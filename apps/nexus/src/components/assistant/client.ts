@@ -6,6 +6,7 @@
 import type { ActionProposal, Attachment, Envelope, PageContext, Suggestion, ToolLink } from '@/lib/assistant/types';
 import { compressImage } from '@/utils/imageCompression';
 
+export type { AiStatus } from '@/lib/assistant/ai-access';
 export type { ActionProposal, Attachment, Envelope, PageContext, Suggestion, ToolLink };
 export { ASSISTANT_FLAG, ATTENDANCE_FLAG, SKETCHBOOK_FLAG } from '@/lib/assistant/flag';
 
@@ -120,4 +121,8 @@ export async function uploadImage(getToken: GetToken, file: File): Promise<Attac
     thumbnail_url = null;
   }
   return { original_image_url, thumbnail_url };
+}
+
+export function getAiStatus(getToken: GetToken): Promise<import('@/lib/assistant/ai-access').AiStatus> {
+  return authed(getToken, '/api/assistant/ai-status');
 }
