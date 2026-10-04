@@ -10,6 +10,8 @@ vi.mock('@/lib/assistant/store', async (importOriginal) => ({ ...(await importOr
 import { TOOLS, findActionTool } from '@/lib/assistant/registry';
 import '@/lib/assistant/tools/actions';
 import type { AssistantCaller, ToolContext } from '@/lib/assistant/types';
+import { fakeDb, type Row } from '@/lib/assistant/testing/fake-db';
+import { declineClass } from '@/lib/assistant/tools/actions/decline-class';
 
 const caller: AssistantCaller = { id: 's1', name: 'Priya S', user_type: 'student', staff_role: null, can_teach: null, impersonating: false };
 const classRow = { id: 'k1', title: 'Perspective', scheduled_date: '2026-10-07', start_time: '18:00', end_time: '19:30', classroom_id: 'c1' };
@@ -19,6 +21,8 @@ const ctx = (): ToolContext => ({
   classroomId: 'c1', threadId: 't1', now: new Date('2026-10-03T04:30:00Z'), baseUrl: 'https://nexus.test',
   features: { sketchbook: true, attendance: true, tests: true, questionBank: true, inspiration: true },
 });
+
+const ctxWith = (tables: Record<string, Row[]>): ToolContext => ({ ...ctx(), supabase: fakeDb(tables) as any });
 
 beforeEach(() => Object.values(mocks).forEach((m) => m.mockReset()));
 
@@ -95,5 +99,31 @@ describe('action tools', () => {
     expect(mocks.addSketchForStudent).toHaveBeenCalledWith({ id: 's1', user_type: 'student' }, args);
     expect(done.reply).toBe('Added to your sketchbook. 2 of 3 days this week.');
     expect(done.links?.[0].url).toBe('/student/sketchbook');
+  });
+});
+
+describe('decline_class re-check (parked minor a)', () => {
+  const row = { id: 'k1', title: 'Perspective', classroom_id: 'c1', scheduled_date: '2026-10-04', start_time: '18:00:00', end_time: '19:30:00', status: 'scheduled' };
+
+  it('remembers the date and time it showed, so confirm can compare', async () => {
+    const out = await declineClass.run(ctxWith({ nexus_scheduled_classes: [row] }), { class_id: 'k1', reason_code: 'unwell' });
+    expect((out.data as any).args).toMatchObject({ class_id: 'k1', expect_date: '2026-10-04', expect_start: '18:00:00' });
+  });
+
+  it('refuses at confirm when the class moved after the card was shown', async () => {
+    const moved = { ...row, scheduled_date: '2026-10-05', start_time: '17:00:00' };
+    const out = await declineClass.run(ctxWith({ nexus_scheduled_classes: [moved] }), { class_id: 'k1', reason_code: 'unwell', expect_date: '2026-10-04', expect_start: '18:00:00' });
+    expect(out.ok).toBe(false);
+    expect(out.error).toMatch(/has moved to/);
+  });
+
+  it('refuses a cancelled class', async () => {
+    const out = await declineClass.run(ctxWith({ nexus_scheduled_classes: [{ ...row, status: 'cancelled' }] }), { class_id: 'k1', reason_code: 'unwell' });
+    expect(out).toMatchObject({ ok: false, error: expect.stringMatching(/cancelled/) });
+  });
+
+  it('refuses a class from another classroom without naming it', async () => {
+    const out = await declineClass.run(ctxWith({ nexus_scheduled_classes: [{ ...row, classroom_id: 'other' }] }), { class_id: 'k1', reason_code: 'unwell' });
+    expect(out).toEqual({ ok: false, error: 'I could not find that class.' });
   });
 });

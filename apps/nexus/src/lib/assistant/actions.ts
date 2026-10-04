@@ -57,9 +57,11 @@ export async function confirmAction(ctx: ToolContext, input: { id: string; token
   }
   const execCtx: ToolContext = { ...ctx, threadId: row.thread_id ?? ctx.threadId };
   try {
-    // Confirm re-checks (spec). A feature switched off since the card was made,
-    // a day that passed midnight IST, a class that was moved: refused here, and
-    // nothing is written.
+    // Re-run the tool's own checks before writing: the world may have moved since
+    // the card was made. decline_class compares the class's date and start time
+    // with the ones on the card and refuses a cancelled class; a reminder or an
+    // away window re-checks its dates against today. A refusal marks the action
+    // failed and its sentence goes back to the student.
     if (tool.feature && !ctx.features[tool.feature]) {
       await updateAction(ctx.supabase, row.id, { status: 'failed', result: { error: 'feature off' } });
       return { ok: false, status: 400, error: 'That is not available right now.' };
