@@ -10,6 +10,10 @@ const mocks = vi.hoisted(() => ({
   loadOwnAttendance: vi.fn(),
   loadStudentRhythm: vi.fn(),
   resolveExamCountdown: vi.fn(),
+  searchInspiration: vi.fn(),
+  getCatchupJourney: vi.fn(),
+  getStudentPrimaryClassroom: vi.fn(),
+  loadReviewsBack: vi.fn(),
 }));
 
 vi.mock('@/lib/assistant/brief-load', async (importOriginal) => ({
@@ -17,6 +21,13 @@ vi.mock('@/lib/assistant/brief-load', async (importOriginal) => ({
   loadBriefFacts: mocks.loadBriefFacts,
   istHour: () => 10,
 }));
+vi.mock('@neram/database/queries/nexus', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@neram/database/queries/nexus')>()),
+  searchInspiration: mocks.searchInspiration,
+  getCatchupJourney: mocks.getCatchupJourney,
+  getStudentPrimaryClassroom: mocks.getStudentPrimaryClassroom,
+}));
+vi.mock('@/lib/assistant/reviews-back', () => ({ loadReviewsBack: mocks.loadReviewsBack }));
 vi.mock('@/lib/upcoming-classes', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/upcoming-classes')>()),
   loadUpcomingClasses: mocks.loadUpcomingClasses,
@@ -167,5 +178,35 @@ describe('student read tools', () => {
     expect(out.reply).toMatch(/to go/);
     mocks.resolveExamCountdown.mockResolvedValue(null);
     expect((await tool('exam_countdown').run(ctx(), {})).reply).toBe('No exam date is set for your class yet. Your teacher will add it.');
+  });
+});
+
+describe('M2 student tools', () => {
+  it('my_reviews lists reviews back with links to each drawing', async () => {
+    mocks.loadReviewsBack.mockResolvedValue({ count: 2, items: [
+      { id: 'd1', kind: 'Homework', words: 'reviewed, 4 stars', reviewedOn: '2026-10-02' },
+      { id: 'd2', kind: 'Sketch', words: 'reviewed', reviewedOn: '2026-10-01' },
+    ] });
+    const out = await tool('my_reviews').run(ctx(), {});
+    expect(out.reply).toBe('2 drawings reviewed in the last two weeks:\n1. Homework, reviewed, 4 stars (2 Oct).\n2. Sketch, reviewed (1 Oct).');
+    expect(out.links).toEqual([{ label: 'Homework review', url: '/student/sketchbook/d1' }, { label: 'Sketch review', url: '/student/sketchbook/d2' }]);
+    expect(tool('my_reviews').feature).toBe('sketchbook');
+  });
+
+  it('get_inspirations shows the gallery cards as students see them, never raw rows', async () => {
+    mocks.searchInspiration.mockResolvedValue({ rows: [{ id: 'i1', source_kind: 'submission_original', title_override: 'Market street', type_slugs: [], author_name: 'Harshitaa T', author_id: 'u9', score_pct: 92, is_featured: true, author_opted_out: false, image_url: 'https://img.test/i1.jpg', thumbnail_url: null, brief: null, save_count: 0, is_saved: false }], total: 1, matchKind: 'text' });
+    const out = await tool('get_inspirations').run(ctx(), { query: 'street perspective' });
+    expect(mocks.searchInspiration.mock.calls[0][0]).toMatchObject({ query: 'street perspective', scope: 'visible', limit: 5 });
+    expect(JSON.stringify(out.data)).not.toMatch(/score_pct|author_id|92/);
+    expect(out.links?.[0]).toEqual({ label: 'Market street', url: '/student/inspiration/i1' });
+    expect(tool('get_inspirations').feature).toBe('inspiration');
+  });
+
+  it('new_student_welcome greets with the classroom, join date and catch-up plan', async () => {
+    mocks.getStudentPrimaryClassroom.mockResolvedValue({ id: 'c1', name: 'NATA 2027 Evening' });
+    mocks.getCatchupJourney.mockResolvedValue({ started_on: '2026-06-01', weekly_quota: 3 });
+    const out = await tool('new_student_welcome').run(ctx(), {});
+    expect(out.reply).toBe('Welcome to NATA 2027 Evening. You joined on 1 Jun. Classes held before you joined are on your catch-up list: aim for 3 a week. Start with your timetable, then your assignments.');
+    expect(out.links?.map((l) => l.url)).toEqual(['/student/timetable', '/student/catch-up', '/student/assignments']);
   });
 });

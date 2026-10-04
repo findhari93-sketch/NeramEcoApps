@@ -14,6 +14,7 @@ import { istNow, loadDeclinedClassIds, loadUpcomingClasses } from '@/lib/upcomin
 import type { BriefFacts } from './brief';
 import type { AssistantFeatures } from './types';
 import { todayIst } from './format';
+import { loadReviewsBack } from './reviews-back';
 import { listRemindersDue } from './store';
 
 async function quiet<T>(label: string, p: Promise<T>, fallback: T): Promise<T> {
@@ -54,7 +55,7 @@ export async function loadBriefFacts(supabaseIn: any, userId: string, now: Date,
     quiet('upcoming', loadUpcomingClasses(supabase, classroom.id, { today, nowHHMM, limit: 3 }), []),
     quiet('assignments', listAssignmentsForStudent(userId, classroom.id, supabase), []),
     quiet('catchup', getCatchupBacklog(userId, classroom.id, supabase), null),
-    quiet('reviews', supabase.from('drawing_submissions').select('id', { count: 'exact', head: true }).eq('student_id', userId).eq('status', 'reviewed').gte('reviewed_at', weekAgo), { count: 0 }),
+    features.sketchbook ? quiet('reviews', loadReviewsBack(supabase, userId, weekAgo), { count: 0, items: [] }) : Promise.resolve({ count: 0, items: [] }),
     features.sketchbook ? quiet('sketchbook', loadStudentRhythm(userId, now), null) : Promise.resolve(null),
     quiet('exam', resolveExamCountdown(supabase, { classroomId: classroom.id, studentId: userId }), null),
     quiet('reminders', listRemindersDue(supabase, userId, today), []),
@@ -96,7 +97,7 @@ export async function loadBriefFacts(supabaseIn: any, userId: string, now: Date,
       nextDueOn: nextAssignment?.due_at ? istDateOf(String(nextAssignment.due_at)) : null,
     },
     catchup,
-    reviewsBack: (reviewed as { count?: number | null })?.count ?? 0,
+    reviewsBack: reviewed.count,
     sketchbookLine: rhythm ? rhythmLine(rhythm.rhythm) : null,
     exam: examView && examView.visible ? { shortLabel: examView.short_label, headline: examView.headline, detail: examView.detail } : null,
     remindersToday: reminders.map((r) => r.text),

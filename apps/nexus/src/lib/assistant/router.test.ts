@@ -36,6 +36,21 @@ describe('routeIntent', () => {
     expect(routeIntent(text, page)).toEqual({ kind: 'tool', tool });
   });
 
+  it.each([
+    ['what tests do I have', 'my_tests'],
+    ['any tests due this week?', 'my_tests'],
+    ['are my reviews back', 'my_reviews'],
+    ['feedback on my drawing', 'my_reviews'],
+    ['show me some inspiration', 'get_inspirations'],
+    ["I'm new here", 'new_student_welcome'],
+  ])('routes %s to %s', (text, tool) => {
+    expect(routeIntent(text, null)).toEqual({ kind: 'tool', tool });
+  });
+
+  it('leaves an inspiration request with a topic to the model, which can pass the topic', () => {
+    expect(routeIntent('inspiration for perspective drawings of a market', null)).toEqual({ kind: 'llm', mode: 'general' });
+  });
+
   it('sends anything else to the model in the detected mode', () => {
     expect(routeIntent('why do we draw two point perspective', page)).toEqual({ kind: 'llm', mode: 'general' });
     expect(routeIntent('which chapter has most weightage in maths', page)).toEqual({ kind: 'llm', mode: 'exam' });

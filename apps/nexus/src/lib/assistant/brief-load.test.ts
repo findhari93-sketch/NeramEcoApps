@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   loadUpcomingClasses: vi.fn(),
   loadStudentRhythm: vi.fn(),
   resolveExamCountdown: vi.fn(),
+  loadReviewsBack: vi.fn(),
 }));
 vi.mock('@neram/database', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@neram/database')>()),
@@ -30,6 +31,8 @@ vi.mock('@/lib/exam-countdown-server', async (importOriginal) => ({
   resolveExamCountdown: mocks.resolveExamCountdown,
 }));
 
+vi.mock('@/lib/assistant/reviews-back', () => ({ loadReviewsBack: mocks.loadReviewsBack }));
+
 import { fakeDb } from './testing/fake-db';
 import { istDateOf, loadBriefFacts } from './brief-load';
 
@@ -52,6 +55,7 @@ beforeEach(() => {
   mocks.loadUpcomingClasses.mockReset().mockResolvedValue([]);
   mocks.loadStudentRhythm.mockReset().mockResolvedValue(RHYTHM);
   mocks.resolveExamCountdown.mockReset().mockResolvedValue(null);
+  mocks.loadReviewsBack.mockReset().mockResolvedValue({ count: 2, items: [] });
 });
 
 describe('istDateOf', () => {
@@ -79,5 +83,16 @@ describe('loadBriefFacts', () => {
     const facts = await loadBriefFacts(db(), 's1', NOW, { sketchbook: false, attendance: true, tests: true, questionBank: true, inspiration: true });
     expect(facts.sketchbookLine).toBeNull();
     expect(mocks.loadStudentRhythm).not.toHaveBeenCalled();
+  });
+
+  it('counts reviews back through the shared loader, only while the sketchbook is on', async () => {
+    const database = db();
+    const on = await loadBriefFacts(database, 's1', NOW, { sketchbook: true, attendance: true, tests: true, questionBank: true, inspiration: true });
+    expect(on.reviewsBack).toBe(2);
+    expect(mocks.loadReviewsBack).toHaveBeenCalledWith(database, 's1', new Date(NOW.getTime() - 7 * 86_400_000).toISOString());
+    mocks.loadReviewsBack.mockClear();
+    const off = await loadBriefFacts(db(), 's1', NOW, { sketchbook: false, attendance: true, tests: true, questionBank: true, inspiration: true });
+    expect(off.reviewsBack).toBe(0);
+    expect(mocks.loadReviewsBack).not.toHaveBeenCalled();
   });
 });
