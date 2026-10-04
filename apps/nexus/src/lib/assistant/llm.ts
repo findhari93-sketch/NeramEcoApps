@@ -26,6 +26,9 @@ export function limitReply(limit: number): string {
 export const IMPERSONATING_REPLY = "Viewing as a student, I do not answer free questions, so this student's AI questions are not used. Everything else here still works.";
 export const BUSY_REPLY = 'I could not answer that just now. Try again in a minute, or use one of these.';
 
+/** The model loop starts no new call after this long (a round of tools must not run the request out). */
+const LOOP_BUDGET_MS = 25_000;
+
 export interface LlmMeta { model: string; promptTokens: number; outputTokens: number; costUsd: number | null; toolCalls: LoopToolCall[] }
 
 export interface LlmInput {
@@ -40,20 +43,31 @@ export interface LlmInput {
 
 const firstNameOf = (name: string | null) => String(name || '').trim().split(/\s+/)[0] || null;
 
-export async function runLlmStage(input: LlmInput): Promise<{ reply: string; links: ToolLink[]; meta: LlmMeta | null }> {
-  const { ctx, mode } = input;
+export async function runLlmStage(input: LlmInput): Promise<{ reply: string; links: ToolLink[]; meta: LlmMeta | null; mode: Mode }> {
+  const { ctx } = input;
+  // Exam help needs the question bank; with it off the turn is a plain general one (no exam feature, prompt or tools).
+  const mode: Mode = input.mode === 'exam' && !ctx.features.questionBank ? 'general' : input.mode;
   // Impersonation may read, never act. Spending the student's paid allowance is acting.
-  if (ctx.caller.impersonating) return { reply: IMPERSONATING_REPLY, links: [], meta: null };
+  if (ctx.caller.impersonating) return { reply: IMPERSONATING_REPLY, links: [], meta: null, mode };
   // Who may spend money (addendum spec): a student who is not caught up, or
   // whose teacher switched AI answers off, gets the reason and a way back,
   // never a model call.
-  const access = await loadAiAccess(ctx.supabase, ctx.caller.id, ctx.now);
-  if (!access.on) return { reply: access.sentence, links: access.link ? [access.link] : [], meta: null };
-  const limit = await readDailyLimit(ctx.supabase);
-  const used = limit > 0 ? await countLlmRepliesToday(ctx.supabase, ctx.caller.id, istDayStartIso(ctx.now), limit) : 0;
-  if (limit <= 0 || used >= limit) return { reply: limitReply(limit), links: [], meta: null };
-
-  const rows = ctx.threadId ? await listMessages(ctx.supabase, ctx.threadId, 30) : [];
+  let access: Awaited<ReturnType<typeof loadAiAccess>>;
+  let limit: number;
+  let used: number;
+  let rows: Awaited<ReturnType<typeof listMessages>>;
+  try {
+    access = await loadAiAccess(ctx.supabase, ctx.caller.id, ctx.now);
+    if (!access.on) return { reply: access.sentence, links: access.link ? [access.link] : [], meta: null, mode };
+    limit = await readDailyLimit(ctx.supabase);
+    used = limit > 0 ? await countLlmRepliesToday(ctx.supabase, ctx.caller.id, istDayStartIso(ctx.now), limit) : 0;
+    if (limit <= 0 || used >= limit) return { reply: limitReply(limit), links: [], meta: null, mode };
+    rows = ctx.threadId ? await listMessages(ctx.supabase, ctx.threadId, 30) : [];
+  } catch (err) {
+    // D4: a failed read is a sentence, never a 500.
+    console.error('[assistant llm]', describeError(err));
+    return { reply: BUSY_REPLY, links: [], meta: null, mode };
+  }
   const contents: GeminiContent[] = [
     ...historyFor(mode, rows.filter((r) => r.id !== input.currentMessageId)),
     { role: 'user', parts: [{ text: input.text }] },
@@ -83,17 +97,19 @@ export async function runLlmStage(input: LlmInput): Promise<{ reply: string; lin
       actorId: ctx.caller.id,
       clientKey: hashClientKey('assistant', ctx.caller.id),
       runTool,
+      deadlineMs: Date.now() + LOOP_BUDGET_MS,
     });
     const reply = cleanReply(out.text, out.finishReason);
-    if (!reply) return { reply: BUSY_REPLY, links: [], meta: null };
+    if (!reply) return { reply: BUSY_REPLY, links: [], meta: null, mode };
     return {
       reply,
       links: out.links.slice(0, 3),
+      mode,
       meta: { model: out.model, promptTokens: out.usage.promptTokens, outputTokens: out.usage.outputTokens, costUsd: out.costUsd, toolCalls: out.toolCalls },
     };
   } catch (err) {
-    if (err instanceof AiBlockedError) return { reply: err.reason === 'client_cap' ? err.message : PAUSED_REPLY, links: [], meta: null };
+    if (err instanceof AiBlockedError) return { reply: err.reason === 'client_cap' ? err.message : PAUSED_REPLY, links: [], meta: null, mode };
     console.error('[assistant llm]', describeError(err));
-    return { reply: BUSY_REPLY, links: [], meta: null };
+    return { reply: BUSY_REPLY, links: [], meta: null, mode };
   }
 }

@@ -132,6 +132,31 @@ describe('stage 4: free questions', () => {
     expect(names).not.toContain('my_schedule');
   });
 
+  it('a failed read before the model answers BUSY_REPLY, stores the reply and does not throw (D4)', async () => {
+    mocks.loadAiAccess.mockRejectedValueOnce(new Error('db down'));
+    const db = fakeDb({});
+    const env = await turn(db, 'tell me a fun fact about architecture');
+    expect(env.reply).toBe(BUSY_REPLY);
+    expect(mocks.generateGemini).not.toHaveBeenCalled();
+    expect(db.rows('nexus_assistant_messages').filter((m) => m.role === 'assistant')).toHaveLength(1);
+  });
+
+  it('exam text with the question bank off runs as a general turn on the student feature', async () => {
+    mocks.generateGemini.mockResolvedValueOnce(answer('Integration by parts: integral of u dv = uv minus integral of v du.'));
+    const db = fakeDb({});
+    const env = await turn(db, 'explain the integration by parts formula', { features: { ...ON, questionBank: false } });
+    expect(mocks.generateGemini.mock.calls[0][0].feature).toBe('nexus.assistant-student');
+    expect(env.mode).toBe('general');
+  });
+
+  it('stores reply_to on the model answer, naming the user message it answers', async () => {
+    mocks.generateGemini.mockResolvedValueOnce(answer('Fine.'));
+    const db = fakeDb({});
+    await turn(db, 'tell me a fun fact about architecture');
+    const [u, a] = db.rows('nexus_assistant_messages');
+    expect(a.reply_to).toBe(u.id);
+  });
+
   it('stops at the admin-set daily allowance without calling the model (default 10)', async () => {
     const thread = { id: 't9', user_id: 's1', channel: 'nexus', last_message_at: '2026-10-03T03:00:00Z', flow_state: null, page_context: null };
     const replies = Array.from({ length: 10 }, (_, i) => ({ id: `r${i}`, thread_id: 't9', role: 'assistant', llm: true, text: 'x', created_at: '2026-10-03T03:00:00Z' }));

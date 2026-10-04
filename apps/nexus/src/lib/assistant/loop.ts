@@ -23,6 +23,10 @@ export interface LoopInput {
   maxOutputTokens: number;
   actorId: string;
   clientKey: string | null;
+  /** Absolute epoch ms. Checked before every model call after the first; past it, the loop stops. */
+  deadlineMs?: number;
+  /** The clock the deadline is read against. Defaults to Date.now. */
+  now?: () => number;
   runTool(name: string, args: Record<string, unknown>): Promise<ToolResult>;
 }
 
@@ -58,7 +62,14 @@ export async function runModelLoop(
   const toolCalls: LoopToolCall[] = [];
   const links: ToolLink[] = [];
 
+  const clock = input.now ?? Date.now;
+  let lastText = '';
+
   for (let i = 0; i < input.maxIterations; i++) {
+    // Out of time: stop with whatever words we have. llm.ts turns an empty reply into the busy sentence.
+    if (i > 0 && input.deadlineMs !== undefined && clock() >= input.deadlineMs) {
+      return { text: lastText, finishReason: 'DEADLINE', model: '', usage, costUsd, toolCalls, links };
+    }
     const last = i === input.maxIterations - 1;
     const res = await generate({
       feature: input.feature,
@@ -73,6 +84,7 @@ export async function runModelLoop(
     });
     usage.promptTokens += res.usage.promptTokens;
     usage.outputTokens += res.usage.outputTokens;
+    lastText = res.text || lastText;
     costUsd = costUsd === null || res.costUsd === null ? null : costUsd + res.costUsd;
 
     if (res.functionCalls.length === 0 || last) {

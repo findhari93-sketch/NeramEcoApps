@@ -49,6 +49,23 @@ describe('runModelLoop', () => {
     expect(out.costUsd).toBeCloseTo(0.00004);
   });
 
+  it('stops before the next model call once the deadline has passed, with the busy-able empty text', async () => {
+    let t = 1000;
+    const generate = vi.fn(async (_o: unknown) => { t += 20_000; return res({ functionCalls: [{ name: 'my_schedule', args: {} }] }); });
+    const { input, runTool } = base(generate);
+    const out = await runModelLoop({ ...input, deadlineMs: 1000 + 25_000, now: () => t }, generate);
+    expect(generate).toHaveBeenCalledTimes(2); // 21s then 41s: the third call is refused
+    expect(runTool).toHaveBeenCalledTimes(2);
+    expect(out).toMatchObject({ text: '', finishReason: 'DEADLINE' });
+  });
+
+  it('never stops the first call on the deadline', async () => {
+    const generate = vi.fn(async (_o: unknown) => res({ text: 'Hello.' }));
+    const { input } = base(generate);
+    const out = await runModelLoop({ ...input, deadlineMs: 0, now: () => 10 }, generate);
+    expect(out.text).toBe('Hello.');
+  });
+
   it('runs several calls of one round in parallel and answers them in one user turn', async () => {
     const generate = vi.fn()
       .mockResolvedValueOnce(res({ functionCalls: [{ name: 'my_schedule', args: {} }, { name: 'my_schedule', args: { x: 1 } }] }))
