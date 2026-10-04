@@ -16,6 +16,7 @@ export async function loadAssistantMonthUsage(supabase: any, sinceIso: string): 
       .eq('llm', true)
       .gte('created_at', sinceIso)
       .order('created_at', { ascending: true })
+      .order('id', { ascending: true }) // unique tiebreaker: equal created_at rows must not repeat or skip across pages
       .range(from, from + PAGE - 1);
     if (error) throw error;
     for (const m of (data || []) as Array<{ thread_id: string; cost_usd: number | null }>) {

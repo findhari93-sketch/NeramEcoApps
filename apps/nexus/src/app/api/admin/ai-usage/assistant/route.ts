@@ -58,11 +58,12 @@ export async function GET(request: NextRequest) {
     const now = new Date();
     const monthStart = `${todayIst(now).slice(0, 8)}01`;
     const sinceIso = new Date(`${monthStart}T00:00:00+05:30`).toISOString();
-    const [dailyLimit, usage, { data: overrideRows }] = await Promise.all([
+    const [dailyLimit, usage, { data: overrideRows, error: overrideError }] = await Promise.all([
       readDailyLimit(supabase),
       loadAssistantMonthUsage(supabase, sinceIso),
       supabase.from('nexus_assistant_ai_overrides').select('*').is('cleared_at', null).order('set_at', { ascending: false }).limit(200),
     ]);
+    if (overrideError) throw overrideError;
     // Access in teacher words for the top 50 by cost, five at a time: each is a catch-up read.
     const top = usage.slice(0, 50);
     const access: string[] = [];

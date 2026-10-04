@@ -100,6 +100,7 @@ export default function AssistantUsageSection({ rate, getToken }: { rate: number
       <Divider sx={{ my: 2.5 }} />
 
       <Typography variant="subtitle2" component="h3" sx={{ fontWeight: 700 }}>This month</Typography>
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>Top 50 students by cost this month.</Typography>
       {isLoading && !data ? (
         <Stack spacing={1} sx={{ mt: 1 }}>
           {[0, 1, 2].map((i) => <Skeleton key={i} variant="rounded" height={64} />)}

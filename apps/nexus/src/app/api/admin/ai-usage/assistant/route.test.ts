@@ -101,4 +101,21 @@ describe('/api/admin/ai-usage/assistant', () => {
     expect(spy).toHaveBeenCalledWith('[ai-usage assistant]', expect.stringContaining('42P01'));
     spy.mockRestore();
   });
+
+  it('an overrides read error is a 500 that hides the database message', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mocks.loadAssistantMonthUsage.mockResolvedValue([]);
+    const real = mocks.db.from;
+    mocks.db.from = (name: string) => {
+      if (name !== 'nexus_assistant_ai_overrides') return real(name);
+      const b: any = { select: () => b, is: () => b, order: () => b, limit: () => b, then: (res: any) => Promise.resolve({ data: null, error: { message: 'permission denied for table secret_overrides', code: '42501' } }).then(res) };
+      return b;
+    };
+    const res = await GET(req('GET'));
+    expect(res.status).toBe(500);
+    const text = await res.text();
+    expect(text).not.toContain('secret_overrides');
+    expect(spy).toHaveBeenCalledWith('[ai-usage assistant]', expect.stringContaining('42501'));
+    spy.mockRestore();
+  });
 });
