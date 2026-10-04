@@ -133,6 +133,27 @@ describe('runAssistantTurn', () => {
     expect(db.rows('nexus_assistant_messages').filter((m) => m.role === 'user')).toHaveLength(1);
   });
 
+  it('a resend id that matches only another student or channel message starts a fresh thread and returns neither reply', async () => {
+    const X = 'a1b2c3d4-0000-4000-8000-000000000001';
+    const db = fakeDb({
+      nexus_assistant_threads: [
+        { id: 'tb', user_id: 'other', channel: 'nexus', flow_state: null },
+        { id: 'ta', user_id: 's1', channel: 'teams', flow_state: null },
+      ],
+      nexus_assistant_messages: [
+        { id: 'm1', thread_id: 'tb', role: 'user', text: 'x', external_id: X, created_at: '2026-10-03T01:00:00Z' },
+        { id: 'm2', thread_id: 'tb', role: 'assistant', text: 'B reply', envelope: { reply: 'B reply' }, created_at: '2026-10-03T01:00:01Z' },
+        { id: 'm3', thread_id: 'ta', role: 'user', text: 'x', external_id: X, created_at: '2026-10-03T01:00:00Z' },
+        { id: 'm4', thread_id: 'ta', role: 'assistant', text: 'Teams reply', envelope: { reply: 'Teams reply' }, created_at: '2026-10-03T01:00:01Z' },
+      ],
+    }, { unique: UNIQUE });
+    const out = await turn(db, 'when is my next class', { externalId: X });
+    expect(out.reply).not.toMatch(/B reply|Teams reply/);
+    expect(out.threadId).not.toBe('tb');
+    expect(out.threadId).not.toBe('ta');
+    expect(db.rows('nexus_assistant_threads')).toHaveLength(3);
+  });
+
   it('returns the stored reply for a redelivered external id without doing the work twice', async () => {
     const db = fakeDb({}, { unique: UNIQUE });
     const a = await turn(db, 'when is my next class', { channel: 'teams', externalId: 'act-1', threadExternalId: '19:conv' });

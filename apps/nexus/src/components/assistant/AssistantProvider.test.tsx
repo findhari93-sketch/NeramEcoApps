@@ -192,6 +192,14 @@ describe('AssistantProvider', () => {
     expect(postTurn.mock.calls[1][1].clientMessageId).toBe(postTurn.mock.calls[0][1].clientMessageId);
   });
 
+  it('two separate sends carry different clientMessageIds', async () => {
+    postTurn.mockResolvedValue(env());
+    mount();
+    await act(async () => { await ctx.send('one'); });
+    await act(async () => { await ctx.send('two'); });
+    expect(postTurn.mock.calls[1][1].clientMessageId).not.toBe(postTurn.mock.calls[0][1].clientMessageId);
+  });
+
   it('offers no Try again after a 400, but keeps the message marked Not sent', async () => {
     postTurn.mockRejectedValueOnce(new AssistantHttpError('Keep it under 2000 characters.', 400));
     mount();

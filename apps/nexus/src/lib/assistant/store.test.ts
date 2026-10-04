@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { fakeDb } from './testing/fake-db';
 import {
-  appendMessage, createAction, createReminder, createThread, findReplyToExternalId, findThreadByExternalId,
+  appendMessage, createAction, createReminder, createThread, findReplyToExternalId, findThreadByExternalId, findThreadForMessage,
   getAction, listMessages, listRemindersDue, touchThread, updateAction,
 } from './store';
 
@@ -16,6 +16,17 @@ describe('threads and messages', () => {
     expect(await findThreadByExternalId(db, 'u1', 'teams', '19:abc')).toMatchObject({ id: t.id });
     expect(await findThreadByExternalId(db, 'u2', 'teams', '19:abc')).toBeNull();
     expect(await findThreadByExternalId(db, 'u1', 'teams', null)).toBeNull();
+  });
+
+  it('findThreadForMessage never returns another student thread or another channel thread', async () => {
+    const X = 'a1b2c3d4-0000-4000-8000-000000000001';
+    const db = fakeDb({}, { unique: UNIQUE });
+    const other = await createThread(db, { userId: 'B', channel: 'nexus' });
+    const teams = await createThread(db, { userId: 'A', channel: 'teams' });
+    await appendMessage(db, { threadId: other.id, role: 'user', text: 'hi', externalId: X });
+    await appendMessage(db, { threadId: teams.id, role: 'user', text: 'hi', externalId: X });
+    expect(await findThreadForMessage(db, 'A', 'nexus', X)).toBeNull();
+    expect(await findThreadForMessage(db, 'A', 'teams', X)).toMatchObject({ id: teams.id });
   });
 
   it('appends messages in order and refuses a repeated external id', async () => {
