@@ -82,7 +82,7 @@ export async function resolveGenerateSource(input: {
     const downloadUrl = file.link_url
       ? await getSharePointStreamUrl(file.link_url)
       : await getSharePointDownloadUrl(String(file.sharepoint_item_id));
-    const upstream = await fetch(downloadUrl, { redirect: 'follow' });
+    const upstream = await fetch(downloadUrl, { cache: 'no-store', redirect: 'follow' });
     if (!upstream.ok) throw new GenerateSourceError('Could not read the PDF from SharePoint', 502);
 
     const bytes = await upstream.arrayBuffer();

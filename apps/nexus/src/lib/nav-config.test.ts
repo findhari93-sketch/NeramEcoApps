@@ -217,11 +217,11 @@ describe('nav-config: folders', () => {
     },
   );
 
-  it('lists JEE Paper 2 before NATA', () => {
+  it('lists JEE Paper 2, then Paper 2B (B.Planning), then NATA', () => {
     const study = ZONES.find((z) => z.id === 'study')!;
     const folder = study.navGroups.flatMap((g) => g.items).find((i) => i.children)!;
     expect(folder.label).toBe('Question Bank');
-    expect(folder.children!.map((c) => c.label)).toEqual(['JEE Paper 2', 'NATA']);
+    expect(folder.children!.map((c) => c.label)).toEqual(['JEE Paper 2', 'JEE Paper 2B (B.Planning)', 'NATA']);
   });
 
   it('filterNavTree drops a folder whose every link is filtered out, and keeps the rest', () => {

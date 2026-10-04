@@ -124,7 +124,7 @@ async function download(url: string): Promise<Buffer | { reason: string }> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const res = await fetch(url, { signal: controller.signal });
+    const res = await fetch(url, { cache: 'no-store', signal: controller.signal });
     if (!res.ok) return { reason: `The photo could not be downloaded (${res.status}).` };
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.byteLength === 0) return { reason: 'The photo file is empty.' };

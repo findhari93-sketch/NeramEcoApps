@@ -6,6 +6,34 @@ const withNextIntl = createNextIntlPlugin('./src/i18n.ts');
 // Retired "best NATA coaching in {city}" blog guides -> their city page slug.
 const RETIRED_CITY_GUIDES = require('./src/data/geo/retired-city-guides.json');
 
+// Tool landings that now 301 to app.neramclasses.com (only slugs in `enabled`).
+const APP_TOOL_REDIRECTS = require('./src/data/app-tool-redirects.json');
+
+// State slugs from @neram/geo (a TS file, so read as text) for the legacy
+// /nata-coaching-in-{state} URLs, which must land on the state hub, not a city page.
+const STATE_SLUGS = [
+  ...require('fs')
+    .readFileSync(require('path').join(__dirname, '../../packages/geo/src/states.ts'), 'utf8')
+    .matchAll(/slug: '([a-z-]+)'/g),
+].map((m) => m[1]);
+const STATE_RE = STATE_SLUGS.join('|');
+
+// Each classroom has one page: its city page. The old /contact/{seo_slug} centre
+// pages competed with it for "NATA coaching in {city}" ("Best NATA Coaching
+// Center in X") and now 301 to its visit section.
+const CENTRE_PAGE_REDIRECTS = require('./src/data/centre-pages.json');
+const centrePageRedirects = Object.entries(CENTRE_PAGE_REDIRECTS).flatMap(([seo, city]) => [
+  { source: `/contact/${seo}`, destination: `/coaching/nata-coaching/nata-coaching-centers-in-${city}`, permanent: true },
+  { source: `/:locale(ta|hi|kn|ml)/contact/${seo}`, destination: `/coaching/nata-coaching/nata-coaching-centers-in-${city}`, permanent: true },
+]);
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.neramclasses.com';
+const appToolRedirects = APP_TOOL_REDIRECTS.enabled
+  .filter((slug) => APP_TOOL_REDIRECTS.map[slug])
+  .flatMap((slug) => [
+    { source: `/tools/${slug}`, destination: `${APP_URL}${APP_TOOL_REDIRECTS.map[slug]}`, permanent: true },
+    { source: `/:locale(ta|hi|kn|ml)/tools/${slug}`, destination: `${APP_URL}${APP_TOOL_REDIRECTS.map[slug]}`, permanent: true },
+  ]);
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -14,10 +42,16 @@ const nextConfig = {
     // Supabase generated types are out of sync with actual DB schema
     ignoreBuildErrors: true,
   },
-  transpilePackages: ['@neram/ai', '@neram/ui', '@neram/database', '@neram/i18n', '@neram/auth'],
+  transpilePackages: ['@neram/ai', '@neram/ui', '@neram/database', '@neram/i18n', '@neram/auth', '@neram/geo'],
   images: {
     minimumCacheTTL: 2592000, // 30 days — Supabase storage images are immutable
     remotePatterns: [
+      // YouTube thumbnails for the click-to-load class videos.
+      {
+        protocol: 'https',
+        hostname: 'i.ytimg.com',
+        pathname: '/vi/**',
+      },
       {
         protocol: 'https',
         hostname: 'db.neramclasses.com',
@@ -107,14 +141,14 @@ const nextConfig = {
       // These pages have no real translations — Google sees them as duplicates of the
       // English version and reports "Duplicate, Google chose different canonical".
       {
-        source: '/(ta|hi|kn|ml)/(nata-2026|blog|tools|colleges|nata-syllabus|nata-preparation-guide|nata-important-questions|jee-paper-2-preparation|best-books-nata-jee|how-to-score-150-in-nata|previous-year-papers|nata-app|best-nata-coaching-online|nata-cutoff-trends-2015-2025|nata-coaching)/:path*',
+        source: '/(ta|hi|kn|ml)/(nata-2026|blog|tools|colleges|nata-syllabus|nata-preparation-guide|nata-important-questions|jee-paper-2-preparation|best-books-nata-jee|how-to-score-150-in-nata|previous-year-papers|nata-app|best-nata-coaching-online|nata-cutoff-trends-2015-2025|nata-coaching|aiarchitek)/:path*',
         headers: [
           { key: 'X-Robots-Tag', value: 'noindex, follow' },
         ],
       },
       // Also catch the root-level (non-nested) versions of these paths
       {
-        source: '/(ta|hi|kn|ml)/(nata-2026|blog|colleges|nata-syllabus|nata-preparation-guide|nata-important-questions|jee-paper-2-preparation|best-books-nata-jee|how-to-score-150-in-nata|previous-year-papers|nata-app|best-nata-coaching-online|nata-cutoff-trends-2015-2025|nata-coaching)',
+        source: '/(ta|hi|kn|ml)/(nata-2026|blog|colleges|nata-syllabus|nata-preparation-guide|nata-important-questions|jee-paper-2-preparation|best-books-nata-jee|how-to-score-150-in-nata|previous-year-papers|nata-app|best-nata-coaching-online|nata-cutoff-trends-2015-2025|nata-coaching|aiarchitek)',
         headers: [
           { key: 'X-Robots-Tag', value: 'noindex, follow' },
         ],
@@ -157,6 +191,8 @@ const nextConfig = {
         destination: 'https://neramclasses.com/:path*',
         permanent: true,
       },
+
+      ...appToolRedirects,
 
       // /en/* → /* redirect (English is default locale, no prefix needed)
       { source: '/en', destination: '/', permanent: true },
@@ -244,6 +280,11 @@ const nextConfig = {
         { source: `/blog/${guide}-online`, destination: `/coaching/nata-coaching/nata-coaching-centers-in-${city}`, permanent: true },
         { source: `/:locale(ta|hi|kn|ml)/blog/${guide}`, destination: `/coaching/nata-coaching/nata-coaching-centers-in-${city}`, permanent: true },
       ]),
+      ...centrePageRedirects,
+      // Tambaram has its own classroom and city page; the Chennai "area guide" for it competed with that page.
+      { source: '/:locale(ta|hi|kn|ml)?/coaching/nata-coaching-chennai/tambaram', destination: '/coaching/nata-coaching/nata-coaching-centers-in-tambaram', permanent: true },
+      // The other Chennai area guides are English only, like every location page.
+      { source: '/:locale(ta|hi|kn|ml)/coaching/nata-coaching-chennai/:area', destination: '/coaching/nata-coaching-chennai/:area', permanent: true },
       { source: '/coaching/best-nata-coaching-chennai', destination: '/coaching/nata-coaching/nata-coaching-centers-in-chennai', permanent: true },
       { source: '/coaching/nata-coaching-chennai', destination: '/coaching/nata-coaching/nata-coaching-centers-in-chennai', permanent: true },
       { source: '/coaching/nata-coaching-center-in-tamil-nadu', destination: '/coaching/nata-coaching-in-tamil-nadu', permanent: true },
@@ -271,9 +312,11 @@ const nextConfig = {
       { source: '/nata-coaching-dubai', destination: '/coaching/nata-coaching/nata-coaching-centers-in-dubai', permanent: true },
       { source: '/nata-coaching-kochi', destination: '/coaching/nata-coaching/nata-coaching-centers-in-kochi', permanent: true },
 
-      // The old "centers in {city}" format must be matched before the catch-all below,
-      // which would otherwise turn it into .../nata-coaching-centers-in-centers-in-{city} (404).
-      { source: '/nata-coaching-centers-in-:city', destination: '/coaching/nata-coaching/nata-coaching-centers-in-:city', permanent: true },
+      // Old "in {place}", "center in {place}" and "centers in {place}" shapes must be
+      // matched before the catch-all below, which would otherwise turn them into
+      // .../nata-coaching-centers-in-in-chennai or ...-centers-in-centers-in-... (404).
+      { source: `/:locale(ta|hi|kn|ml)?/nata-coaching-:w(in|centers?-in|centres?-in)-:state(${STATE_RE})`, destination: '/coaching/nata-coaching-in-:state', permanent: true },
+      { source: '/:locale(ta|hi|kn|ml)?/nata-coaching-:w(in|centers?-in|centres?-in)-:city', destination: '/coaching/nata-coaching/nata-coaching-centers-in-:city', permanent: true },
 
       // Catch-all for old location format
       { source: '/nata-coaching-:city', destination:'/coaching/nata-coaching/nata-coaching-centers-in-:city', permanent: true },

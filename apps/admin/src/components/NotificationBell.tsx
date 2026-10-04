@@ -18,6 +18,7 @@ import {
 } from '@neram/ui';
 import NotificationsIcon from '@mui/icons-material/Notifications';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
+import { useAdminBadges } from '@/contexts/AdminBadgesContext';
 
 interface AdminNotification {
   id: string;
@@ -133,28 +134,21 @@ export default function NotificationBell() {
   const router = useRouter();
   const [anchorEl, setAnchorEl] = useState<HTMLButtonElement | null>(null);
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const popoverOpenRef = useRef(false);
 
-  const fetchUnreadCount = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/notifications?isRead=false&limit=1&offset=0&_t=${Date.now()}`, {
-        cache: 'no-store',
-      });
-      if (!res.ok) {
-        setUnreadCount(0);
-        return;
-      }
-      const data = await res.json();
-      setUnreadCount(data.count || 0);
-    } catch (error) {
-      console.error('Error fetching unread count:', error);
-      setUnreadCount(0);
-    }
-  }, []);
+  // The unread count comes from the shared badge poller (AdminBadgesProvider), so
+  // the two bells (sidebar + mobile top bar) and the sidebar badges cost one
+  // request every two minutes between them instead of one each a minute.
+  const { counts, refresh: refreshBadges, patch: patchBadges } = useAdminBadges();
+  const unreadCount = counts.notifications_unread;
+  const setUnreadCount = useCallback(
+    (n: number) => patchBadges({ notifications_unread: n }),
+    [patchBadges],
+  );
+  const fetchUnreadCount = useCallback(() => refreshBadges(true), [refreshBadges]);
 
   const fetchNotifications = useCallback(async (loadMore = false) => {
     try {
@@ -184,11 +178,9 @@ export default function NotificationBell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notifications.length]);
 
-  // Polling: always fetch unread count, also refresh list if popover is open.
-  // Suspended while the tab is hidden, since a staff dashboard left open in a
-  // background tab was billing two invocations a minute indefinitely.
+  // While the popover is open, refresh the visible list once a minute (the unread
+  // count itself comes from the shared poller). Suspended while the tab is hidden.
   const poll = useCallback(() => {
-    fetchUnreadCount();
     if (popoverOpenRef.current) {
       // Refresh the list silently (don't reset pagination — just refresh the current visible set)
       fetch(`/api/notifications?limit=${PAGE_SIZE}&offset=0&_t=${Date.now()}`, { cache: 'no-store' })
@@ -210,9 +202,9 @@ export default function NotificationBell() {
         })
         .catch(() => {});
     }
-  }, [fetchUnreadCount]);
+  }, []);
 
-  useVisibilityPolling(poll, 60000);
+  useVisibilityPolling(poll, 60000, { enabled: Boolean(anchorEl), immediate: false });
 
   const handleOpen = (event: React.MouseEvent<HTMLButtonElement>) => {
     setAnchorEl(event.currentTarget);

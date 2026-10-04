@@ -20,7 +20,7 @@ interface CtaBannerProps {
 // ============================================
 
 const socialProofItems = [
-  { value: '10,000+', label: 'Students', tint: m3Tertiary[80] },
+  { value: '1,000+', label: 'Students', tint: m3Tertiary[80] },
   { value: '50+', label: 'Colleges', tint: m3Secondary[70] },
   { value: '7+', label: 'Free Tools', tint: m3Primary[70] },
 ];

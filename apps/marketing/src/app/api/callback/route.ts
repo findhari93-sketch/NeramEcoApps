@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, notifyNewCallback } from '@neram/database';
+import { saveLeadTouch } from '@/lib/lead-touch';
 import {
   createCallbackRequest,
   getCallbackRequestsByUserId,
@@ -182,6 +183,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<CallbackR
     };
 
     const callback = await createCallbackRequest(supabase, callbackData);
+    await saveLeadTouch(supabase, 'callback_requests', (callback as { id?: string } | null)?.id, body);
 
     // Notify admin via Telegram, email, and in-app bell
     try {

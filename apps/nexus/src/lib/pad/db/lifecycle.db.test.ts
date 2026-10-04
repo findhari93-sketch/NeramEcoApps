@@ -206,10 +206,27 @@ describe('sessions', () => {
     expect(old.status).toBe('ended');
   });
 
-  it('does not silently resume a session older than 6 hours', async () => {
+  it('ends a session left over from an earlier class instead of resuming it', async () => {
     const s = await liveSession(1);
     await t.ageSession(s.sessionId, 7);
-    expect(await t.start(s.teacherId, s.classroomId)).toMatchObject({ ok: false, code: 'SESSION_CONFLICT' });
+    const fresh = await t.start(s.teacherId, s.classroomId);
+    expect(fresh).toMatchObject({ ok: true, resumed: false, ended_session_id: s.sessionId, ended_reason: 'stale' });
+    const [old] = await t.rows<{ status: string }>(`select status from pad_sessions where id = $1`, [s.sessionId]);
+    expect(old.status).toBe('ended');
+  });
+
+  it('ends a stale session from another meeting with no conflict screen', async () => {
+    const s = await liveSession(1, { meetingId: 'meeting-morning' });
+    await t.ageSession(s.sessionId, 4);
+    const otherClassroom = await t.classroom('Evening class');
+    const fresh = await t.start(s.teacherId, otherClassroom, { meetingId: 'meeting-evening' });
+    expect(fresh).toMatchObject({ ok: true, resumed: false, ended_session_id: s.sessionId, ended_reason: 'stale' });
+  });
+
+  it('still asks before ending a recent session from another meeting', async () => {
+    const s = await liveSession(1, { meetingId: 'meeting-a' });
+    const conflict = await t.start(s.teacherId, s.classroomId, { meetingId: 'meeting-b' });
+    expect(conflict).toMatchObject({ ok: false, code: 'SESSION_CONFLICT', existing: { session_id: s.sessionId } });
   });
 
   it('keeps room codes unique among live sessions only', async () => {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
+import { invalidateLibraryCache } from '@/lib/library-cache';
 import { getSupabaseAdminClient } from '@neram/database';
 import {
   getCollectionWithVideos,
@@ -81,6 +82,7 @@ export async function PATCH(
     const body = await request.json();
 
     const collection = await updateCollection(id, body);
+    invalidateLibraryCache();
 
     return NextResponse.json({ data: collection });
   } catch (err) {
@@ -120,6 +122,7 @@ export async function DELETE(
     const { id } = await params;
 
     await deleteCollection(id);
+    invalidateLibraryCache();
 
     return NextResponse.json({ success: true });
   } catch (err) {

@@ -71,6 +71,13 @@ describe('TeacherSketchActions', () => {
     expect(screen.queryByText(/Featured in/)).toBeFalsy();
   });
 
+  it('on the review screen (hideComment) offers no Comment at all, since written feedback lives there', () => {
+    render(<TeacherSketchActions sketchId="a" reaction={null} featured={[]} onChanged={vi.fn()} compact hideComment />);
+    expect(screen.queryByRole('button', { name: 'Comment' })).toBeFalsy();
+    expect(screen.queryByLabelText('Comment')).toBeFalsy();
+    expect(screen.getByRole('button', { name: 'Feature' })).toBeTruthy();
+  });
+
   it('in compact mode hides the comment field until Comment is clicked, and reacting sends the trimmed comment', async () => {
     render(<TeacherSketchActions sketchId="a" reaction={null} featured={[]} studentName="Anuvika Stalin Prem" onChanged={vi.fn()} compact />);
     expect(screen.queryByLabelText('Comment')).toBeFalsy();

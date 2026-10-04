@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
+import { saveLeadTouch } from '@/lib/lead-touch';
 import {
   getSupabaseAdminClient,
   notifyDemoRegistration,
@@ -113,6 +114,13 @@ export async function POST(request: Request) {
       },
       supabase
     );
+
+    const parentPhone = typeof body.parentPhone === 'string' ? body.parentPhone.replace(/\D/g, '').slice(-10) : '';
+    await saveLeadTouch(supabase, 'demo_class_registrations', registration.id, body, {
+      parent_name: typeof body.parentName === 'string' && body.parentName.trim() ? body.parentName.trim().slice(0, 100) : null,
+      parent_phone: /^[6-9]\d{9}$/.test(parentPhone) ? parentPhone : null,
+      preferred_language: typeof body.language === 'string' && /^(en|ta|kn|hi|ml|te)$/.test(body.language) ? body.language : null,
+    });
 
     // Dispatch notifications
     try {

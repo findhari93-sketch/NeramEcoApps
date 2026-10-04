@@ -14,7 +14,7 @@ import { buildOutcomesItemListJsonLd, type PublicOutcome } from '@/lib/reviews/j
 import { MIN_ITEMS_FOR_INDEX, examLabel, localePath } from '@/lib/reviews/rules';
 
 // ISR: outcomes are published by staff a few times a year.
-export const revalidate = 3600;
+export const revalidate = 86400;
 
 interface PageProps {
   params: { locale: string };

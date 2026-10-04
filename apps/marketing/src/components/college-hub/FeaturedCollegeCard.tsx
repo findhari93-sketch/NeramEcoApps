@@ -8,10 +8,10 @@ import PhoneIcon from '@mui/icons-material/Phone';
 import DescriptionIcon from '@mui/icons-material/Description';
 import SaveCollegeButton from './SaveCollegeButton';
 import CompareButton from './CompareButton';
-import type { CollegeListItem } from '@/lib/college-hub/types';
+import type { ListingCollege } from '@/lib/college-hub/listing-filter';
 
 interface FeaturedCollegeCardProps {
-  college: CollegeListItem;
+  college: ListingCollege;
   rank?: number;
   /** "landscape" = full-width listing card (default). "portrait" = vertical card for carousels. */
   variant?: 'landscape' | 'portrait';
@@ -220,7 +220,7 @@ function PortraitCard({
   href,
   isPremium,
 }: {
-  college: CollegeListItem;
+  college: ListingCollege;
   href: string;
   isPremium: boolean;
 }) {

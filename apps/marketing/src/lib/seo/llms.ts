@@ -6,8 +6,9 @@
  */
 import { STATES } from '@/data/geo';
 import { COURSE_FEES } from '@/lib/fees';
+import { APP_URL } from './constants';
 import { EXAMS } from './exam-config';
-import { ORG_FACTS, ORG_PROFILE, type ClassroomCentre } from './facts';
+import { ORG_FACTS, ORG_PROFILE, hasFullAddress, type ClassroomCentre } from './facts';
 import { cityAnswer, hubNames, inr, stateAnswer } from './location-copy';
 import type { GeoDatasets } from './location-facts';
 import { allCityGates, allStateGates } from './location-pages';
@@ -42,7 +43,10 @@ function centres(list: ClassroomCentre[]): string[] {
   if (!list.length) return [];
   return [
     '## Classroom centres',
-    ...list.map((c) => `- ${c.name}: ${c.areaLabel}, ${c.state}${c.pincode ? ` ${c.pincode}` : ''}. ${U(`/contact/${c.seoSlug}`)}`),
+    ...list.map(
+      (c) =>
+        `- ${c.name}: ${hasFullAddress(c) ? `${c.address}, ` : ''}${c.areaLabel}, ${c.state}${c.pincode ? ` ${c.pincode}` : ''}. ${U(EXAMS.nata.cityPath(c.citySlug))}`,
+    ),
     '',
   ];
 }
@@ -61,9 +65,13 @@ function mainPages(): string[] {
     `- Apply: ${U('/apply')}`,
     '',
     '## Free tools',
-    `- NATA cutoff calculator: ${U('/tools/cutoff-calculator')}`,
-    `- B.Arch college predictor: ${U('/tools/college-predictor')}`,
-    `- NATA exam centre finder: ${U('/tools/exam-centers')}`,
+    `- aiArchitek, the Neram AI-powered NATA platform (what each tool and AI feature does): ${U('/aiarchitek')}`,
+    // The tools live on the app, which has a demo and state and city pages for each.
+    `- NATA cutoff calculator: ${APP_URL}/tools/nata/cutoff-calculator`,
+    `- B.Arch college predictor: ${APP_URL}/tools/counseling/college-predictor`,
+    `- NATA exam centre finder (every state and city): ${APP_URL}/tools/nata/exam-centers`,
+    `- COA approved college checker: ${APP_URL}/tools/counseling/coa-checker`,
+    `- All free tools, with a list of what each one answers: ${APP_URL}/llms.txt`,
     `- B.Arch college hub (fees, cutoffs, counselling): ${U('/colleges')}`,
     `- B.Arch counselling guides by state: ${U('/counseling')}`,
     '',

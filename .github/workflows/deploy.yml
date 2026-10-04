@@ -15,7 +15,7 @@ on:
         options:
           - staging
           - production
-      # A push touching packages/ sets the `shared` filter and redeploys all
+      # A push touching a shared package sets the `shared` filter and redeploys all
       # four apps, which is right for a genuinely shared change but wasteful
       # when only one app needs the new code. Pick that one app here.
       apps:
@@ -67,14 +67,23 @@ jobs:
           filters: |
             marketing:
               - 'apps/marketing/**'
+              - 'packages/geo/**'
             app:
               - 'apps/app/**'
+              - 'packages/geo/**'
             nexus:
               - 'apps/nexus/**'
             admin:
               - 'apps/admin/**'
+            # Packages every app uses. packages/geo is listed under marketing and
+            # app instead (only they import it). Add any new package here unless
+            # it is used by some apps only.
             shared:
-              - 'packages/**'
+              - 'packages/ai/**'
+              - 'packages/auth/**'
+              - 'packages/database/**'
+              - 'packages/i18n/**'
+              - 'packages/ui/**'
               - 'package.json'
               - 'pnpm-lock.yaml'
               - 'turbo.json'
@@ -101,7 +110,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -154,7 +163,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -226,7 +235,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -307,7 +316,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -388,7 +397,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -469,7 +478,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies

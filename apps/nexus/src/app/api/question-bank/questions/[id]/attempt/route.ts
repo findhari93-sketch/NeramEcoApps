@@ -25,6 +25,11 @@ export async function POST(
     if (selected_answer === undefined || selected_answer === null) {
       return NextResponse.json({ error: 'selected_answer is required' }, { status: 400 });
     }
+    // A typed numerical answer arrives here as well as an option id now, so
+    // bound what a client can store.
+    if (typeof selected_answer !== 'string' || selected_answer.length > 200) {
+      return NextResponse.json({ error: 'selected_answer must be a short string' }, { status: 400 });
+    }
 
     // Submit the attempt (the function checks correctness internally)
     const { attempt, isCorrect } = await submitQBAttempt(

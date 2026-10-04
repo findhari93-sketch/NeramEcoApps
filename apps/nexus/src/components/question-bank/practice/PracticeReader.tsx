@@ -208,8 +208,11 @@ function ReaderQuestion(props: PracticeReaderProps & { detail: NexusQBQuestionDe
     prior: priorAnswer(detail.id),
   });
 
+  // A numerical question is answered by typing, so it needs no options. It was
+  // left out here, which made every numerical question read-only in practice.
   const answerable =
-    detail.question_format !== 'DRAWING_PROMPT' && !!detail.options && detail.options.length > 0;
+    detail.question_format === 'NUMERICAL' ||
+    (detail.question_format !== 'DRAWING_PROMPT' && !!detail.options && detail.options.length > 0);
 
   // The keyboard reaches the options and the primary action through here.
   const latest = useRef({ answer, answerable, props });
@@ -230,7 +233,15 @@ function ReaderQuestion(props: PracticeReaderProps & { detail: NexusQBQuestionDe
   }, [answerHandle, detail]);
 
   return (
-    <ReaderShell {...props} footer={<ActionBar {...props} state="ready" answer={answer} answerable={answerable} />}>
+    <ReaderShell {...props} footer={
+        <ActionBar
+          {...props}
+          state="ready"
+          answer={answer}
+          answerable={answerable}
+          typed={detail.question_format === 'NUMERICAL' && !(detail.options && detail.options.length > 0)}
+        />
+      }>
       <QuestionDetail
         question={detail}
         onSubmit={(value) => onSubmit(detail.id, value)}
@@ -311,10 +322,12 @@ interface ActionBarProps extends PracticeReaderProps {
   state: 'loading' | 'ready';
   answer?: ReturnType<typeof useQuestionAnswer>;
   answerable?: boolean;
+  /** The answer is typed, not picked, so the empty prompt says so. */
+  typed?: boolean;
 }
 
 function ActionBar(props: ActionBarProps) {
-  const { state, answer, answerable, hasPrev, hasNext, onPrev, onNext, onClose, variant } = props;
+  const { state, answer, answerable, typed, hasPrev, hasNext, onPrev, onNext, onClose, variant } = props;
   const submitted = !!answer?.submitted;
 
   let primary: ReactNode;
@@ -333,7 +346,7 @@ function ActionBar(props: ActionBarProps) {
         onClick={() => void answer?.submit()}
         sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700, fontSize: '1rem' }}
       >
-        {answer?.submitting ? 'Checking...' : answer?.selected ? 'Check answer' : 'Choose an answer'}
+        {answer?.submitting ? 'Checking...' : answer?.selected ? 'Check answer' : typed ? 'Type your answer' : 'Choose an answer'}
       </Button>
     );
   } else if (hasNext) {

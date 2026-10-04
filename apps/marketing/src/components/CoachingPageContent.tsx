@@ -94,10 +94,10 @@ const coachingPrograms = [
 ];
 
 const stats = [
-  { value: '10,000+', label: 'Students Trained' },
-  { value: '99.9%', label: 'Success Rate' },
-  { value: '500+', label: 'Top Rank Holders' },
-  { value: '15+', label: 'Years Experience' },
+  { value: '1,000+', label: 'Students Taught' },
+  { value: 'AIR 1', label: 'JEE B.Arch 2024' },
+  { value: '10', label: 'Classrooms' },
+  { value: '10+', label: 'Years Teaching' },
 ];
 
 export default function CoachingPageContent() {

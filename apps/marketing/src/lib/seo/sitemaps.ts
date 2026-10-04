@@ -3,7 +3,7 @@
  * the index format and the "what changed recently" selection are unit-tested.
  */
 
-export const CHILD_SITEMAPS = ['/sitemaps/core/sitemap.xml', '/sitemaps/coaching-locations/sitemap.xml'];
+export const CHILD_SITEMAPS = ['/sitemaps/core/sitemap.xml', '/sitemaps/coaching-locations/sitemap.xml', '/sitemaps/videos/sitemap.xml', '/sitemaps/centre-images/sitemap.xml'];
 
 export function buildSitemapIndex(baseUrl: string, lastmod: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -53,4 +53,30 @@ export function selectRecent(entries: SitemapEntry[], sinceDays: number, now: Da
       return Number.isNaN(t) || t >= cutoff;
     })
     .map((e) => e.loc);
+}
+
+const xmlEsc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/**
+ * Image sitemap for the classroom pages: each centre page with its real photos
+ * (Google allows up to 1,000 images per page). Pages without photos are left
+ * out. Next 14's sitemap.ts has no image field, hence a hand-built XML.
+ */
+export function buildImageSitemap(pages: Array<{ loc: string; images: string[] }>): string {
+  const urls = pages
+    .filter((p) => p.images.length > 0)
+    .map(
+      (p) => `  <url>
+    <loc>${xmlEsc(p.loc)}</loc>
+${p.images
+  .slice(0, 1000)
+  .map((src) => `    <image:image><image:loc>${xmlEsc(src)}</image:loc></image:image>`)
+  .join('\n')}
+  </url>`,
+    );
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">
+${urls.join('\n')}
+</urlset>
+`;
 }

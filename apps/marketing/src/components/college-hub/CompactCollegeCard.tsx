@@ -4,10 +4,10 @@ import { Box, Card, Chip, Stack, Typography, Button } from '@mui/material';
 import Image from 'next/image';
 import Link from 'next/link';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import type { CollegeListItem } from '@/lib/college-hub/types';
+import type { ListingCollege } from '@/lib/college-hub/listing-filter';
 
 interface CompactCollegeCardProps {
-  college: CollegeListItem;
+  college: ListingCollege;
   rank: number;
 }
 

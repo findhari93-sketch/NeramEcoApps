@@ -19,7 +19,12 @@ export interface UseUserNotificationsOptions {
   apiBaseUrl: string;
   /** Function to get current Firebase ID token */
   getIdToken: () => Promise<string | null>;
-  /** Polling interval in ms. Default: 60000 */
+  /**
+   * Polling interval in ms. Default: 120000 (two minutes). The bell also
+   * refreshes when the tab becomes visible again and on window focus once the
+   * count is older than 30 seconds, so a longer interval does not leave a stale
+   * number in front of someone who is looking.
+   */
   pollInterval?: number;
   /** Whether polling is enabled. Default: true */
   enabled?: boolean;
@@ -62,7 +67,14 @@ interface Poller {
   count: number;
   /** Stops a slow network from stacking overlapping requests. */
   inFlight: boolean;
+  /** When the last request started (ms epoch), for the focus catch-up. */
+  lastPolledAt: number;
 }
+
+/** Shared default for every app's bell. Was 60s; halved the request volume. */
+export const DEFAULT_NOTIFICATION_POLL_MS = 120_000;
+/** A focus only triggers a fetch when the shown count is at least this old. */
+const FOCUS_STALE_MS = 30_000;
 
 const pollers = new Map<string, Poller>();
 let visibilityBound = false;
@@ -83,6 +95,7 @@ async function pollOnce(key: string) {
   const poller = pollers.get(key);
   if (!poller || poller.inFlight) return;
   poller.inFlight = true;
+  poller.lastPolledAt = Date.now();
   const controller = new AbortController();
   const deadline = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
@@ -133,6 +146,20 @@ function handleVisibility() {
   });
 }
 
+/**
+ * Window focus (switching back from another app or window without the tab
+ * ever being hidden, common on desktop) catches up too, but only when the
+ * count is stale, so clicking in and out of devtools or a dialog does not
+ * fire a request each time.
+ */
+function handleFocus() {
+  if (document.visibilityState === 'hidden') return;
+  const now = Date.now();
+  pollers.forEach((poller, key) => {
+    if (now - poller.lastPolledAt >= FOCUS_STALE_MS) pollOnce(key);
+  });
+}
+
 function subscribe(
   key: string,
   getToken: () => Promise<string | null>,
@@ -150,6 +177,7 @@ function subscribe(
       timer: null,
       count: 0,
       inFlight: false,
+      lastPolledAt: 0,
     };
     pollers.set(key, poller);
   }
@@ -162,6 +190,7 @@ function subscribe(
 
   if (!visibilityBound && typeof document !== 'undefined') {
     document.addEventListener('visibilitychange', handleVisibility);
+    if (typeof window !== 'undefined') window.addEventListener('focus', handleFocus);
     visibilityBound = true;
   }
 
@@ -200,7 +229,7 @@ function setSharedCount(key: string, updater: (prev: number) => number): boolean
 export function useUserNotifications(
   options: UseUserNotificationsOptions
 ): UseUserNotificationsReturn {
-  const { apiBaseUrl, getIdToken, pollInterval = 60000, enabled = true } = options;
+  const { apiBaseUrl, getIdToken, pollInterval = DEFAULT_NOTIFICATION_POLL_MS, enabled = true } = options;
   const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<UserNotificationItem[]>([]);
   const [loading, setLoading] = useState(false);

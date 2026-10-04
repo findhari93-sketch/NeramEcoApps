@@ -120,9 +120,9 @@ export function parseNTAAnswerSheet(
     q.categories = categories;
   }
 
-  if (examType === 'JEE_PAPER_2' && !isKnownJEEPaper2Layout(total)) {
+  if (layoutsFor(examType) && !isKnownJEEPaper2Layout(total, examType)) {
     warnings.push(
-      `This paper has ${total} questions, which does not match a JEE Paper 2 layout we know. ` +
+      `This paper has ${total} questions, which does not match a ${examType === 'JEE_PAPER_2B' ? 'JEE Paper 2B' : 'JEE Paper 2'} layout we know. ` +
         `Maths and aptitude questions have all been put in Aptitude. Open the paper and use ` +
         `"Work out the sections" to fix them, or set them yourself.`,
     );
@@ -157,6 +157,7 @@ const SECTION_CATEGORY: Record<QBQuestionSection, string> = {
   math_numerical: 'mathematics',
   aptitude: 'aptitude',
   drawing: 'drawing',
+  planning: 'planning',
 };
 
 /**
@@ -178,9 +179,31 @@ const JEE_PAPER_2_LAYOUTS: Record<number, { mathEnd: number; aptitudeEnd: number
   77: { mathEnd: 25, aptitudeEnd: 75 },
 };
 
+/**
+ * JEE Paper 2B (B.Planning) layouts. The Maths and Aptitude blocks are the same
+ * questions as Paper 2A in that session; the 25 Planning MCQs come after them,
+ * where 2A has its drawings. Everything after `aptitudeEnd` is planning.
+ */
+const JEE_PAPER_2B_LAYOUTS: Record<number, { mathEnd: number; aptitudeEnd: number }> = {
+  // 2021-2023: maths 30 (20 MCQ + 10 numerical), aptitude 50, planning 25.
+  105: { mathEnd: 30, aptitudeEnd: 80 },
+  // 2019-2020 and 2024 onwards: maths 25 (20 MCQ + 5 numerical), aptitude 50, planning 25.
+  100: { mathEnd: 25, aptitudeEnd: 75 },
+};
+
+function layoutsFor(examType: QBExamType) {
+  if (examType === 'JEE_PAPER_2') return JEE_PAPER_2_LAYOUTS;
+  if (examType === 'JEE_PAPER_2B') return JEE_PAPER_2B_LAYOUTS;
+  return null;
+}
+
 /** Do we recognise a paper of this length, or are we about to guess blindly? */
-export function isKnownJEEPaper2Layout(totalQuestions: number): boolean {
-  return totalQuestions in JEE_PAPER_2_LAYOUTS;
+export function isKnownJEEPaper2Layout(
+  totalQuestions: number,
+  examType: QBExamType = 'JEE_PAPER_2',
+): boolean {
+  const layouts = layoutsFor(examType);
+  return layouts !== null && totalQuestions in layouts;
 }
 
 /**
@@ -229,12 +252,13 @@ function guessSection(
   if (format === 'NUMERICAL') return 'math_numerical';
 
   // 2. Position, only against a layout this paper's length matches.
-  const layout = examType === 'JEE_PAPER_2' && totalQuestions
-    ? JEE_PAPER_2_LAYOUTS[totalQuestions]
-    : undefined;
+  const layouts = layoutsFor(examType);
+  const layout = layouts && totalQuestions ? layouts[totalQuestions] : undefined;
   if (layout) {
     if (questionNumber <= layout.mathEnd) return 'math_mcq';
     if (questionNumber <= layout.aptitudeEnd) return 'aptitude';
+    // Paper 2B: the block after aptitude is Planning, and it is all MCQ.
+    if (examType === 'JEE_PAPER_2B') return 'planning';
     // Past the aptitude block, but this is an MCQ, so it cannot be drawing.
     // The paper is numbered differently from what we assumed; aptitude is the
     // section it is most likely to belong to and the one that marks it +4/-1.

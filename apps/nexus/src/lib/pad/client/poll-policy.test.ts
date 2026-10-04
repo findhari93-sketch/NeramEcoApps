@@ -11,13 +11,13 @@ describe('nextPollDelay', () => {
   });
 
   it('keeps a student within a few seconds of the teacher without Realtime', () => {
-    expect(nextPollDelay(base)).toBe(3_000);
+    expect(nextPollDelay(base)).toBe(5_000);
   });
 
   it('polls the live counter fastest while students are answering, and relaxes otherwise', () => {
     expect(nextPollDelay({ ...base, role: 'teacher', promptState: 'open' })).toBe(2_000);
     for (const promptState of ['closed', 'revealed', null] as const) {
-      expect(nextPollDelay({ ...base, role: 'teacher', promptState })).toBe(5_000);
+      expect(nextPollDelay({ ...base, role: 'teacher', promptState })).toBe(10_000);
     }
   });
 
@@ -27,20 +27,22 @@ describe('nextPollDelay', () => {
   });
 
   it('treats a connection still being made as unavailable', () => {
-    expect(nextPollDelay({ ...base, realtime: 'connecting' })).toBe(3_000);
+    expect(nextPollDelay({ ...base, realtime: 'connecting' })).toBe(5_000);
   });
 
-  it('barely polls a hidden panel', () => {
-    expect(nextPollDelay({ ...base, hidden: true, role: 'teacher', promptState: 'open' })).toBe(60_000);
+  it('does not poll a hidden panel at all (the screen refetches when it becomes visible)', () => {
+    expect(nextPollDelay({ ...base, hidden: true })).toBeNull();
+    expect(nextPollDelay({ ...base, hidden: true, role: 'teacher', promptState: 'open' })).toBeNull();
+    expect(nextPollDelay({ ...base, hidden: true, realtime: 'subscribed' })).toBeNull();
+    expect(nextPollDelay({ ...base, hidden: true, failures: 3 })).toBeNull();
   });
 
   it('backs off after failures, doubling up to thirty seconds', () => {
-    expect(nextPollDelay({ ...base, failures: 1 })).toBe(6_000);
-    expect(nextPollDelay({ ...base, failures: 2 })).toBe(12_000);
-    expect(nextPollDelay({ ...base, failures: 3 })).toBe(24_000);
-    expect(nextPollDelay({ ...base, failures: 4 })).toBe(30_000);
+    expect(nextPollDelay({ ...base, failures: 1 })).toBe(10_000);
+    expect(nextPollDelay({ ...base, failures: 2 })).toBe(20_000);
+    expect(nextPollDelay({ ...base, failures: 3 })).toBe(30_000);
     expect(nextPollDelay({ ...base, failures: 50 })).toBe(30_000);
     // Never faster than the healthy cadence for a slow screen.
-    expect(nextPollDelay({ ...base, hidden: true, failures: 3 })).toBe(60_000);
+    expect(nextPollDelay({ ...base, realtime: 'subscribed', failures: 3 })).toBe(30_000);
   });
 });

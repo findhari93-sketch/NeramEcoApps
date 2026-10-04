@@ -6,6 +6,8 @@
 export interface StateContent {
   description: string;
   highlights: string[];
+  /** True once staff have checked every fact (agents/seo-aeo/location-content-review.md). */
+  reviewed?: boolean;
   updatedAt: string;
 }
 

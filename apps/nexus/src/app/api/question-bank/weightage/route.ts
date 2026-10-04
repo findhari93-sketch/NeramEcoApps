@@ -5,7 +5,7 @@ import { getCachedQBWeightage } from '@/lib/qb-weightage-cache';
 import { describeError } from '@/lib/api-errors';
 
 // Inline rather than from lib/qb-exam-routes, which pulls in a client hook.
-const EXAMS: readonly QBExamType[] = ['JEE_PAPER_2', 'NATA'];
+const EXAMS: readonly QBExamType[] = ['JEE_PAPER_2', 'JEE_PAPER_2B', 'NATA'];
 const isExam = (v: string | null): v is QBExamType => !!v && (EXAMS as readonly string[]).includes(v);
 
 /**
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
     const exam = params.get('exam');
     if (!isExam(exam)) {
-      return NextResponse.json({ error: 'exam must be JEE_PAPER_2 or NATA' }, { status: 400 });
+      return NextResponse.json({ error: `exam must be one of ${EXAMS.join(', ')}` }, { status: 400 });
     }
 
     const data = await getCachedQBWeightage(exam);

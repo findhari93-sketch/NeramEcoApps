@@ -133,6 +133,7 @@ export async function POST(request: NextRequest) {
 
       try {
         const res = await fetch(patchUrl, {
+          cache: 'no-store',
           method: 'PATCH',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({ attendees }),

@@ -2,6 +2,9 @@
   "name": "@neram/marketing",
   "version": "0.1.1",
   "private": true,
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "node ../../scripts/ensure-search-index.mjs && next dev -p 3010",
     "build": "pnpm dlx tsx ../../scripts/generate-search-index.ts && next build",
@@ -18,6 +21,7 @@
     "@neram/ai": "workspace:*",
     "@neram/auth": "workspace:*",
     "@neram/database": "workspace:*",
+    "@neram/geo": "workspace:*",
     "@neram/i18n": "workspace:*",
     "@neram/ui": "workspace:*",
     "@tailwindcss/postcss": "^4.2.1",

@@ -26,7 +26,7 @@ import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 import LocalOfferOutlinedIcon from '@mui/icons-material/LocalOfferOutlined';
 import QBSearchStatus, { type QBMatchKind } from '@/components/question-bank/QBSearchStatus';
 import TagPicker from '@/components/question-bank/TagPicker';
-import { paperTitles } from '@neram/database';
+import { isJeeExam, paperTitles } from '@neram/database';
 import type { NexusQBQuestionListItem } from '@neram/database';
 
 const PAGE_SIZE = 20;
@@ -208,8 +208,9 @@ export default function QuestionPickerList({
   }, [paper]);
 
   const examPapers = useMemo(() => {
-    const want = exam === 'JEE' ? 'JEE_PAPER_2' : exam === 'NATA' ? 'NATA' : null;
-    return (papers || []).filter((p) => !want || p.exam_type === want);
+    // 'JEE' covers both JEE papers: B.Arch (2A) and B.Planning (2B).
+    if (!exam) return papers || [];
+    return (papers || []).filter((p) => (exam === 'JEE' ? isJeeExam(p.exam_type) : p.exam_type === exam));
   }, [papers, exam]);
 
   const buildQuery = useCallback(
@@ -375,7 +376,7 @@ export default function QuestionPickerList({
         >
           <ToggleButton value="">All</ToggleButton>
           <ToggleButton value="NATA">NATA</ToggleButton>
-          <ToggleButton value="JEE">JEE Paper 2</ToggleButton>
+          <ToggleButton value="JEE">JEE</ToggleButton>
         </ToggleButtonGroup>
       </Box>
       <TextField

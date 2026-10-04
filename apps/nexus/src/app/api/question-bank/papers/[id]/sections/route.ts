@@ -131,7 +131,7 @@ export async function POST(
 
     const result = await reclassifyPaperSections(
       params.id,
-      (questions) => inferPaperSections(questions),
+      (questions) => inferPaperSections(questions, { examType: paper.exam_type }),
       { onlyUnset },
     );
 

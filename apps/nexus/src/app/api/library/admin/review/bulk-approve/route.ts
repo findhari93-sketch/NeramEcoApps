@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
+import { invalidateLibraryCache } from '@/lib/library-cache';
 import { getSupabaseAdminClient } from '@neram/database';
 import { bulkApproveVideos } from '@neram/database/queries/nexus';
 
@@ -39,6 +40,7 @@ export async function POST(request: NextRequest) {
     }
 
     const approved = await bulkApproveVideos(video_ids, user.id);
+    invalidateLibraryCache();
 
     return NextResponse.json({ data: approved, count: approved.length });
   } catch (err) {

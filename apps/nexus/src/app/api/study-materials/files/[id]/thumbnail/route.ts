@@ -54,7 +54,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       return new NextResponse(null, { status: 204, headers: { 'Cache-Control': 'private, max-age=300' } });
     }
 
-    const upstream = await fetch(thumbUrl, { redirect: 'follow' });
+    const upstream = await fetch(thumbUrl, { cache: 'no-store', redirect: 'follow' });
     if (!upstream.ok) {
       return new NextResponse(null, { status: 204, headers: { 'Cache-Control': 'private, max-age=300' } });
     }

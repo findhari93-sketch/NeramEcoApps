@@ -70,6 +70,16 @@ function shiftOf(title: string): ParsedSolutionTitle['shift'] {
   return null;
 }
 
+/**
+ * Whether a title's exam belongs to this paper. A title only ever says "JEE",
+ * and Paper 2B (B.Planning) shares its Maths and Aptitude questions with 2A, so
+ * a JEE video belongs to either JEE paper of that sitting.
+ */
+export function titleExamMatches(parsed: ParsedSolutionTitle['exam'], paperExamType: string): boolean {
+  if (parsed === 'NATA') return paperExamType === 'NATA';
+  return paperExamType === 'JEE_PAPER_2' || paperExamType === 'JEE_PAPER_2B';
+}
+
 /** The question a solution-video title names, or null for any other video. */
 export function parseSolutionTitle(title: string): ParsedSolutionTitle | null {
   if (!title || !SOLUTION.test(title)) return null;
@@ -401,7 +411,7 @@ export function matchPaperVideos(
       continue;
     }
     const p = v.parsed;
-    if (p.exam !== paper.exam_type || p.year !== paper.year) continue;
+    if (!titleExamMatches(p.exam, paper.exam_type) || p.year !== paper.year) continue;
     if (severalPapers) {
       if (p.session != null && paperSession != null && p.session !== paperSession) continue;
       if (p.shift != null && paper.shift && p.shift !== paper.shift) continue;

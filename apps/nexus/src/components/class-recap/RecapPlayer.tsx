@@ -6,6 +6,7 @@ import NeramVideoPlayer from '@/components/video/NeramVideoPlayer';
 import { computeGate, type VideoGateMode } from '@/lib/video-gate';
 import type { VideoTransport } from '@/components/video/types';
 import { renewFromEmbed } from '@/components/video/renew-from-embed';
+import usePlayedRanges from '@/components/video/usePlayedRanges';
 import { useAuthFetch } from '@/components/curriculum/shared';
 
 /**
@@ -95,11 +96,14 @@ export default function RecapPlayer({
   const [resumeAt, setResumeAt] = useState(0);
   const [duration, setDuration] = useState(0);
   /**
-   * How far the student has really played: the server's credited point, then
-   * raised by this session's ticks. It only grows through playback, because a
-   * control cannot seek past it (see playedUntilSeconds on computeGate).
+   * What the student has really played: the server's credited point, then this
+   * session's playback. The checkpoint quiz waits on it (see playedRanges on
+   * computeGate); a drag through the section adds nothing to it.
    */
-  const [furthest, setFurthest] = useState(0);
+  const played = usePlayedRanges();
+  const { seed: seedPlayed, record: recordPlayed } = played;
+  /** The server's credited point, kept to cap the resume point while gated. */
+  const [playedUntil, setPlayedUntil] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -134,11 +138,11 @@ export default function RecapPlayer({
           passed: s.passed,
         })),
         duration,
-        furthestSeconds: furthest,
-        playedUntilSeconds: furthest,
+        furthestSeconds: 0,
+        playedRanges: played.ranges,
         mode,
       }),
-    [sections, duration, furthest, mode],
+    [sections, duration, played.ranges, mode],
   );
   /**
    * Checkpoint positions for the scrub bar.
@@ -221,14 +225,15 @@ export default function RecapPlayer({
       setResumeAt((prev) => (prev > 0 ? prev : Number(data.resume_at) || 0));
       // Not resume_at: that rises with any seek. A response without the field
       // falls back to it, which is the old behaviour rather than a lockout.
-      const played = Number(data.played_until ?? data.resume_at) || 0;
-      setFurthest((prev) => (played > prev ? played : prev));
+      const credited = Number(data.played_until ?? data.resume_at) || 0;
+      seedPlayed(credited);
+      setPlayedUntil((prev) => (credited > prev ? credited : prev));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load recording');
     } finally {
       setLoading(false);
     }
-  }, [recapId, authFetch]);
+  }, [recapId, authFetch, seedPlayed]);
 
   useEffect(() => {
     fetchStreamUrl();
@@ -263,10 +268,18 @@ export default function RecapPlayer({
     };
   }, [streamUrl, youtubeId]);
 
-  const handleTick = useCallback((seconds: number, dur: number) => {
-    setFurthest((f) => (seconds > f ? seconds : f));
-    onTimeUpdateRef.current?.(seconds, dur);
-  }, []);
+  const handleTick = useCallback(
+    (seconds: number, dur: number) => {
+      recordPlayed(seconds);
+      onTimeUpdateRef.current?.(seconds, dur);
+    },
+    [recordPlayed],
+  );
+
+  // Resume where they had watched to, not where a drag last left the stored
+  // position: that is often the checkpoint itself, and resuming there greets
+  // the student with "watch a bit more" before a frame plays.
+  const resumeFrom = mode === 'gated' ? Math.min(resumeAt, playedUntil) : resumeAt;
 
   /**
    * The video stopped at the end of the checkpoint the student owes.
@@ -308,7 +321,8 @@ export default function RecapPlayer({
         watermark={watermark}
         title={title}
         marks={marks}
-        resumeAt={resumeAt}
+        watched={played.ranges}
+        resumeAt={resumeFrom}
         onTimeUpdate={handleTick}
         onCheckpointReached={handleBoundary}
         onLoadedMetadata={setDuration}
@@ -342,8 +356,9 @@ export default function RecapPlayer({
       watermark={watermark}
       title={title}
       marks={marks}
+      watched={played.ranges}
       captions={captions}
-      resumeAt={resumeAt}
+      resumeAt={resumeFrom}
       onTimeUpdate={handleTick}
       onCheckpointReached={handleBoundary}
       onLoadedMetadata={setDuration}

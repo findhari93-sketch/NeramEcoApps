@@ -2,15 +2,20 @@
 
 import { useState } from 'react';
 import {
-  Box, Typography, Stack, Button, Card, CardContent,
+  Box, Typography, Stack, Button, Card, CardContent, CardActionArea,
   TextField, MenuItem, CircularProgress, Alert,
 } from '@neram/ui';
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
+import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import type { NataExamStatus } from '@neram/database';
+import { writeQbOnboarding } from './qb-onboarding-storage';
 
 const CURRENT_YEAR = new Date().getFullYear();
 const EXAM_YEARS = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR + i - 1);
 
 interface ExamProfileOnboardingProps {
+  /** Firebase uid, so the cached answer belongs to this account only */
+  userId: string;
   getAuthToken: () => Promise<string | null>;
   onComplete: () => void;
   onBlocked: () => void; // "not interested" → redirect away
@@ -24,6 +29,7 @@ interface AttemptEntry {
 }
 
 export default function ExamProfileOnboarding({
+  userId,
   getAuthToken,
   onComplete,
   onBlocked,
@@ -83,7 +89,7 @@ export default function ExamProfileOnboarding({
     try {
       const token = await getAuthToken();
       if (!token) {
-        setError('Please sign in first');
+        setError('Your session has ended. Please sign in again.');
         return;
       }
 
@@ -113,14 +119,12 @@ export default function ExamProfileOnboarding({
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || 'Failed to save');
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || 'Could not save your answer. Please try again.');
         return;
       }
 
-      // Cache in localStorage
-      localStorage.setItem('qb_onboarding_done', 'true');
-      localStorage.setItem('qb_nata_status', status);
+      writeQbOnboarding(userId, status);
 
       if (status === 'not_interested') {
         onBlocked();
@@ -128,7 +132,7 @@ export default function ExamProfileOnboarding({
         setStep('motivation');
       }
     } catch {
-      setError('Something went wrong');
+      setError('Something went wrong. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -137,35 +141,39 @@ export default function ExamProfileOnboarding({
   // Step 1: Status selection
   if (step === 'status') {
     return (
-      <Box sx={{ maxWidth: 500, mx: 'auto', py: 4, px: 2 }}>
-        <Typography variant="h5" fontWeight={700} textAlign="center" sx={{ mb: 1 }}>
+      <Box sx={{ maxWidth: 500, mx: 'auto', py: { xs: 1, md: 3 } }}>
+        <Typography variant="h5" component="h2" fontWeight={700} textAlign="center" sx={{ mb: 1 }}>
           Welcome to the Question Bank
         </Typography>
-        <Typography variant="body2" color="text.secondary" textAlign="center" sx={{ mb: 4 }}>
+        <Typography variant="body2" color="text.secondary" textAlign="center" sx={{ mb: 3 }}>
           Before you start, tell us about your NATA journey so we can personalize your experience.
         </Typography>
 
-        <Stack spacing={1.5}>
+        <Stack spacing={1.5} role="list" aria-label="Your NATA status">
           <StatusOption
             label="I have attempted NATA"
             description="You've taken at least one NATA exam"
             onClick={() => handleStatusSelect('attempted')}
+            disabled={submitting}
           />
           <StatusOption
             label="Applied & waiting for exam"
             description="You've registered and are waiting for your exam date"
             onClick={() => handleStatusSelect('applied_waiting')}
+            disabled={submitting}
           />
           <StatusOption
             label="Planning to apply"
             description="You haven't applied yet but plan to"
             onClick={() => handleStatusSelect('planning_to_apply')}
+            disabled={submitting}
           />
           <StatusOption
             label="None of these"
             description="I'm not planning to take NATA"
             onClick={() => handleStatusSelect('not_interested')}
             muted
+            disabled={submitting}
           />
         </Stack>
 
@@ -177,8 +185,8 @@ export default function ExamProfileOnboarding({
   // Step 2a: Attempted details
   if (step === 'attempted_details') {
     return (
-      <Box sx={{ maxWidth: 500, mx: 'auto', py: 4, px: 2 }}>
-        <Typography variant="h5" fontWeight={700} sx={{ mb: 1 }}>
+      <Box sx={{ maxWidth: 500, mx: 'auto', py: { xs: 1, md: 3 } }}>
+        <Typography variant="h5" component="h2" fontWeight={700} sx={{ mb: 1 }}>
           Your NATA Attempts
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
@@ -194,7 +202,7 @@ export default function ExamProfileOnboarding({
                     Attempt {i + 1}
                   </Typography>
                   {attempts.length > 1 && (
-                    <Button size="small" color="error" onClick={() => removeAttempt(i)}>
+                    <Button color="error" onClick={() => removeAttempt(i)} sx={{ minHeight: 44 }} aria-label={`Remove attempt ${i + 1}`}>
                       Remove
                     </Button>
                   )}
@@ -203,7 +211,6 @@ export default function ExamProfileOnboarding({
                   <TextField
                     select
                     label="Year"
-                    size="small"
                     value={attempt.examYear}
                     onChange={(e) => updateAttempt(i, 'examYear', Number(e.target.value))}
                     sx={{ minWidth: 100 }}
@@ -214,8 +221,7 @@ export default function ExamProfileOnboarding({
                   </TextField>
                   <TextField
                     label="Session (optional)"
-                    placeholder="e.g., Session 1"
-                    size="small"
+                    placeholder="For example, Session 1"
                     value={attempt.sessionLabel}
                     onChange={(e) => updateAttempt(i, 'sessionLabel', e.target.value)}
                     fullWidth
@@ -226,14 +232,14 @@ export default function ExamProfileOnboarding({
           ))}
         </Stack>
 
-        <Button size="small" onClick={addAttempt} sx={{ mt: 1 }}>
-          + Add another attempt
+        <Button onClick={addAttempt} startIcon={<AddRoundedIcon />} sx={{ mt: 1, minHeight: 44 }}>
+          Add another attempt
         </Button>
 
         {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
 
         <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
-          <Button variant="outlined" onClick={() => setStep('status')}>Back</Button>
+          <Button variant="outlined" onClick={() => setStep('status')} sx={{ minHeight: 44 }}>Back</Button>
           <Button
             variant="contained"
             onClick={() => submitProfile()}
@@ -250,8 +256,8 @@ export default function ExamProfileOnboarding({
   // Step 2b: Waiting details
   if (step === 'waiting_details') {
     return (
-      <Box sx={{ maxWidth: 500, mx: 'auto', py: 4, px: 2 }}>
-        <Typography variant="h5" fontWeight={700} sx={{ mb: 1 }}>
+      <Box sx={{ maxWidth: 500, mx: 'auto', py: { xs: 1, md: 3 } }}>
+        <Typography variant="h5" component="h2" fontWeight={700} sx={{ mb: 1 }}>
           When is your exam?
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
@@ -271,7 +277,7 @@ export default function ExamProfileOnboarding({
         {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
 
         <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
-          <Button variant="outlined" onClick={() => setStep('status')}>Back</Button>
+          <Button variant="outlined" onClick={() => setStep('status')} sx={{ minHeight: 44 }}>Back</Button>
           <Button
             variant="contained"
             onClick={() => submitProfile()}
@@ -288,8 +294,8 @@ export default function ExamProfileOnboarding({
   // Step 2c: Planning details
   if (step === 'planning_details') {
     return (
-      <Box sx={{ maxWidth: 500, mx: 'auto', py: 4, px: 2 }}>
-        <Typography variant="h5" fontWeight={700} sx={{ mb: 1 }}>
+      <Box sx={{ maxWidth: 500, mx: 'auto', py: { xs: 1, md: 3 } }}>
+        <Typography variant="h5" component="h2" fontWeight={700} sx={{ mb: 1 }}>
           Which year are you planning for?
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
@@ -312,7 +318,7 @@ export default function ExamProfileOnboarding({
         {error && <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>}
 
         <Stack direction="row" spacing={2} sx={{ mt: 3 }}>
-          <Button variant="outlined" onClick={() => setStep('status')}>Back</Button>
+          <Button variant="outlined" onClick={() => setStep('status')} sx={{ minHeight: 44 }}>Back</Button>
           <Button
             variant="contained"
             onClick={() => submitProfile()}
@@ -329,8 +335,8 @@ export default function ExamProfileOnboarding({
   // Step 3: Motivation
   if (step === 'motivation') {
     return (
-      <Box sx={{ maxWidth: 500, mx: 'auto', py: 4, px: 2, textAlign: 'center' }}>
-        <Typography variant="h4" fontWeight={700} sx={{ mb: 2 }}>
+      <Box sx={{ maxWidth: 500, mx: 'auto', py: { xs: 1, md: 3 }, textAlign: 'center' }}>
+        <Typography variant="h4" component="h2" fontWeight={700} sx={{ mb: 2 }}>
           You&apos;re all set!
         </Typography>
         <Typography variant="body1" color="text.secondary" sx={{ mb: 1, lineHeight: 1.7 }}>
@@ -360,35 +366,37 @@ function StatusOption({
   description,
   onClick,
   muted,
+  disabled,
 }: {
   label: string;
   description: string;
   onClick: () => void;
   muted?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <Card
-      onClick={onClick}
+      variant="outlined"
+      role="listitem"
       sx={{
-        cursor: 'pointer',
-        transition: 'box-shadow 0.2s, border-color 0.2s',
-        border: '1px solid',
+        transition: 'border-color 0.2s',
         borderColor: 'divider',
-        '&:hover': {
-          boxShadow: 2,
-          borderColor: muted ? 'divider' : 'primary.main',
-        },
-        opacity: muted ? 0.7 : 1,
+        '&:hover': { borderColor: muted ? 'text.secondary' : 'primary.main' },
       }}
     >
-      <CardContent sx={{ py: '12px !important' }}>
-        <Typography variant="body1" fontWeight={600}>
-          {label}
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          {description}
-        </Typography>
-      </CardContent>
+      <CardActionArea onClick={onClick} disabled={disabled} sx={{ minHeight: 64 }}>
+        <CardContent sx={{ py: '12px !important', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Box sx={{ flex: 1, minWidth: 0 }}>
+            <Typography variant="body1" fontWeight={600} color={muted ? 'text.secondary' : 'text.primary'}>
+              {label}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {description}
+            </Typography>
+          </Box>
+          <ChevronRightRoundedIcon sx={{ color: 'text.secondary' }} aria-hidden="true" />
+        </CardContent>
+      </CardActionArea>
     </Card>
   );
 }

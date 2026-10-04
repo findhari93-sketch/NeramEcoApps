@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import type { ExamPhase, ExamTimeSlot, UserExamSessionPreference, UserReward } from '@neram/database';
 import {
@@ -18,6 +18,8 @@ export interface UseExamPlannerReturn {
   selectedPhase: ExamPhase | null;
   selectedSessions: Set<string>;
   loading: boolean;
+  /** Set when the saved plan could not be loaded; editing stays blocked until a retry succeeds */
+  loadError: string | null;
   saving: boolean;
   hasUnsavedChanges: boolean;
   showRewardBanner: boolean;
@@ -28,6 +30,8 @@ export interface UseExamPlannerReturn {
   save: () => Promise<void>;
   clearSelections: () => Promise<void>;
   dismissRewardBanner: () => void;
+  retryLoad: () => void;
+  clearError: () => void;
 
   // Constraints
   maxSelections: number;
@@ -37,34 +41,53 @@ export interface UseExamPlannerReturn {
 }
 
 export function useExamPlanner(): UseExamPlannerReturn {
-  const { user } = useFirebaseAuth();
+  const { user, loading: authLoading } = useFirebaseAuth();
+  const userId = user?.id ?? null;
   const [preferences, setPreferences] = useState<UserExamSessionPreference[]>([]);
   const [rewardEarned, setRewardEarned] = useState(false);
   const [selectedPhase, setSelectedPhase] = useState<ExamPhase | null>(null);
   const [selectedSessions, setSelectedSessions] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
   const [showRewardBanner, setShowRewardBanner] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedPhase, setSavedPhase] = useState<ExamPhase | null>(null);
   const [initialKeys, setInitialKeys] = useState<Set<string>>(new Set());
+  const loadSeqRef = useRef(0);
 
-  const fetchData = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
-    try {
-      const auth = getFirebaseAuth();
-      const currentUser = auth.currentUser;
-      if (!currentUser) return;
+  useEffect(() => {
+    if (authLoading) return;
+    const seq = ++loadSeqRef.current;
+    const controller = new AbortController();
+    const isCurrent = () => seq === loadSeqRef.current && !controller.signal.aborted;
 
-      const idToken = await currentUser.getIdToken();
-      const res = await fetch('/api/exam-planner', {
-        headers: { Authorization: `Bearer ${idToken}` },
-      });
+    (async () => {
+      setLoading(true);
+      setLoadError(null);
+      try {
+        const currentUser = getFirebaseAuth().currentUser;
+        if (!userId || !currentUser) {
+          throw new Error('Your session has ended. Please sign in again to load your plan.');
+        }
 
-      if (res.ok) {
+        const idToken = await currentUser.getIdToken();
+        const res = await fetch('/api/exam-planner', {
+          headers: { Authorization: `Bearer ${idToken}` },
+          signal: controller.signal,
+        });
+        if (!res.ok) {
+          throw new Error(
+            res.status === 401
+              ? 'Your session has ended. Please refresh the page to load your plan.'
+              : 'Could not load your saved plan.'
+          );
+        }
+
         const data = await res.json();
-        const prefs = data.preferences || [];
+        if (!isCurrent()) return;
+        const prefs: UserExamSessionPreference[] = data.preferences || [];
         setPreferences(prefs);
         setRewardEarned(!!data.reward);
 
@@ -72,21 +95,33 @@ export function useExamPlanner(): UseExamPlannerReturn {
           const phase = prefs[0].phase as ExamPhase;
           setSavedPhase(phase);
           setSelectedPhase(phase);
-          const keys = new Set<string>(prefs.map((p: UserExamSessionPreference) => getSessionKey(p.exam_date, p.time_slot as ExamTimeSlot)));
+          const keys = new Set<string>(prefs.map((p) => getSessionKey(p.exam_date, p.time_slot as ExamTimeSlot)));
           setSelectedSessions(keys);
           setInitialKeys(keys);
+        } else {
+          setSavedPhase(null);
+          setInitialKeys(new Set());
         }
+      } catch (err) {
+        if (!isCurrent()) return;
+        const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
+        setLoadError(
+          offline
+            ? 'You seem to be offline. Check your connection and try again.'
+            : err instanceof Error && err.name !== 'TypeError'
+              ? err.message
+              : 'Could not load your saved plan.'
+        );
+      } finally {
+        if (isCurrent()) setLoading(false);
       }
-    } catch {
-      // Silent fail
-    } finally {
-      setLoading(false);
-    }
-  }, [user]);
+    })();
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    return () => controller.abort();
+  }, [authLoading, userId, loadAttempt]);
+
+  const retryLoad = useCallback(() => setLoadAttempt((n) => n + 1), []);
+  const clearError = useCallback(() => setError(null), []);
 
   const maxSelections = selectedPhase === 'phase_2' ? 1 : 2;
   const canSelectMore = selectedSessions.size < maxSelections;
@@ -128,7 +163,7 @@ export function useExamPlanner(): UseExamPlannerReturn {
   };
 
   const save = async () => {
-    if (!user || !selectedPhase || selectedSessions.size === 0) return;
+    if (!user || loadError || !selectedPhase || selectedSessions.size === 0) return;
     setSaving(true);
     setError(null);
 
@@ -164,8 +199,8 @@ export function useExamPlanner(): UseExamPlannerReturn {
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to save');
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Could not save your plan. Please try again.');
       }
 
       const data = await res.json();
@@ -185,7 +220,7 @@ export function useExamPlanner(): UseExamPlannerReturn {
   };
 
   const clearSelections = async () => {
-    if (!user) return;
+    if (!user || loadError) return;
     setSaving(true);
     setError(null);
 
@@ -201,8 +236,8 @@ export function useExamPlanner(): UseExamPlannerReturn {
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to clear');
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Could not clear your plan. Please try again.');
       }
 
       setPreferences([]);
@@ -225,6 +260,7 @@ export function useExamPlanner(): UseExamPlannerReturn {
     selectedPhase,
     selectedSessions,
     loading,
+    loadError,
     saving,
     hasUnsavedChanges,
     showRewardBanner,
@@ -233,6 +269,8 @@ export function useExamPlanner(): UseExamPlannerReturn {
     save,
     clearSelections,
     dismissRewardBanner,
+    retryLoad,
+    clearError,
     maxSelections,
     canSelectMore,
     savedPhase,

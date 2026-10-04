@@ -35,6 +35,8 @@ import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import WarningAmberOutlinedIcon from '@mui/icons-material/WarningAmberOutlined';
 import SellOutlinedIcon from '@mui/icons-material/SellOutlined';
 import DeleteForeverIcon from '@mui/icons-material/DeleteForever';
+import CastForEducationOutlinedIcon from '@mui/icons-material/CastForEducationOutlined';
+import { isFeatureEnabled } from '@/lib/feature-flags';
 import DeleteQuestionDialog from '@/components/question-bank/DeleteQuestionDialog';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import type {
@@ -60,7 +62,7 @@ function QuestionsListContent() {
   const searchParams = useSearchParams();
   const theme = useTheme();
   const fullScreenDialog = useMediaQuery(theme.breakpoints.down('sm'));
-  const { getToken } = useNexusAuthContext();
+  const { getToken, featureFlags } = useNexusAuthContext();
 
   const [questions, setQuestions] = useState<NexusQBQuestionListItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -425,6 +427,14 @@ function QuestionsListContent() {
   /** Exactly one selected, so the detailed preflight dialog is worth showing. */
   const singleSelectedId = selectedIds.size === 1 ? Array.from(selectedIds)[0] : null;
 
+  /**
+   * Present to class for the selected questions, or else the list on screen,
+   * in list order. At most 100 travel in the address.
+   */
+  const canPresent = isFeatureEnabled('staff.qb-present', featureFlags);
+  const presentHref = (ids: string[]) =>
+    `/pad/present?ids=${ids.slice(0, 100).join(',')}&back=${encodeURIComponent('/teacher/question-bank/questions')}`;
+
   return (
     <Box sx={{ px: { xs: 2, md: 3 }, py: 2 }}>
       {/* Header */}
@@ -454,6 +464,17 @@ function QuestionsListContent() {
               <ToggleButton value="en">EN</ToggleButton>
               <ToggleButton value="hi">हि</ToggleButton>
             </ToggleButtonGroup>
+            {canPresent && questions.length > 0 && !someSelected && (
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<CastForEducationOutlinedIcon />}
+                href={presentHref(questions.map((q) => q.id))}
+                sx={{ textTransform: 'none', minHeight: 44, whiteSpace: 'nowrap' }}
+              >
+                Present
+              </Button>
+            )}
             <Button
               variant="contained"
               size="small"
@@ -563,6 +584,17 @@ function QuestionsListContent() {
               sx={{ textTransform: 'none', minHeight: 44 }}
             >
               Deactivate
+            </Button>
+          )}
+          {canPresent && (
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<CastForEducationOutlinedIcon sx={{ fontSize: 16 }} />}
+              href={presentHref(questions.filter((q) => selectedIds.has(q.id)).map((q) => q.id))}
+              sx={{ textTransform: 'none', minHeight: 44 }}
+            >
+              Present to class
             </Button>
           )}
           <Button

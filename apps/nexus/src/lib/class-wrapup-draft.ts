@@ -71,7 +71,7 @@ export async function loadClassImages(
   const out: ClassImageInput[] = [];
   for (const row of rows) {
     try {
-      const res = await fetch(row.url);
+      const res = await fetch(row.url, { cache: 'no-store' });
       if (!res.ok) continue;
       const buf = Buffer.from(await res.arrayBuffer());
       const ct = res.headers.get('content-type') || 'image/jpeg';

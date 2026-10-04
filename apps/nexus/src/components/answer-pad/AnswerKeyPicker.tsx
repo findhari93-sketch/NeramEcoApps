@@ -15,17 +15,24 @@ import { Box, Button, CircularProgress, Stack, TextField, ToggleButton, Typograp
 import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded';
 import HowToVoteRounded from '@mui/icons-material/HowToVoteRounded';
 import VisibilityRounded from '@mui/icons-material/VisibilityRounded';
-import { displayAnswer } from '@/lib/pad/client/format';
-import { keyChoices, toggleKey } from '@/lib/pad/client/teacher-view';
+import { displayAnswer, displayKeys } from '@/lib/pad/client/format';
+import { effectiveKeys, foldAnswers, keyChoices, stacksAnswerLabels, toggleKey } from '@/lib/pad/client/teacher-view';
 import type { TeacherPrompt } from '@/lib/pad/client/types';
 
-export type KeyPickerPrompt = Pick<TeacherPrompt, 'answer_type' | 'option_count' | 'correct_keys' | 'ungraded'>;
+export type KeyPickerPrompt = Pick<TeacherPrompt, 'answer_type' | 'option_count' | 'correct_keys' | 'ungraded'> &
+  Partial<Pick<TeacherPrompt, 'suggested_keys'>>;
 export type AnswerGroups = ReadonlyArray<{ value: string; count: number }>;
 
-/** A key, or Poll / Don't grade: either lets the question be revealed. */
-export function hasDecision(prompt: Pick<KeyPickerPrompt, 'correct_keys' | 'ungraded'>): boolean {
-  return prompt.ungraded || (prompt.correct_keys?.length ?? 0) > 0;
+/**
+ * A key, the question bank's answer, or Poll / Don't grade: any of them lets the
+ * question be revealed (Reveal grades with the bank's answer when no key was chosen).
+ */
+export function hasDecision(prompt: Pick<KeyPickerPrompt, 'correct_keys' | 'ungraded' | 'suggested_keys'>): boolean {
+  return prompt.ungraded || (effectiveKeys(prompt)?.length ?? 0) > 0;
 }
+
+/** At most two lines of a long typed answer; the whole of it is in the names list. */
+const CLAMP_TWO_LINES = { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as const;
 
 export function AnswerBars({ prompt, groups }: { prompt: KeyPickerPrompt; groups: AnswerGroups }) {
   const theme = useTheme();
@@ -43,17 +50,38 @@ export function AnswerBars({ prompt, groups }: { prompt: KeyPickerPrompt; groups
     );
   }
 
+  const stacked = stacksAnswerLabels(rows.map((row) => displayAnswer(prompt.answer_type, row.value)));
+  const bar = (count: number) => (
+    <Box sx={{ flex: 1, minWidth: 24, height: 12, borderRadius: 6, bgcolor: alpha(theme.palette.text.primary, 0.08) }} aria-hidden>
+      <Box sx={{ width: `${(count / max) * 100}%`, height: '100%', borderRadius: 6, bgcolor: theme.palette.primary.main }} />
+    </Box>
+  );
+
   return (
     <Stack spacing={0.75} role="list" aria-label="Answers given">
-      {rows.map((row) => (
-        <Stack key={row.value} direction="row" spacing={1} alignItems="center" role="listitem">
-          <Typography sx={{ width: 56, flexShrink: 0, fontWeight: 700, overflowWrap: 'anywhere' }}>{displayAnswer(prompt.answer_type, row.value)}</Typography>
-          <Box sx={{ flex: 1, height: 12, borderRadius: 6, bgcolor: alpha(theme.palette.text.primary, 0.08) }} aria-hidden>
-            <Box sx={{ width: `${(row.count / max) * 100}%`, height: '100%', borderRadius: 6, bgcolor: theme.palette.primary.main }} />
-          </Box>
-          <Typography sx={{ width: 32, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.count}</Typography>
-        </Stack>
-      ))}
+      {rows.map((row) => {
+        const label = (
+          <Typography sx={{ fontWeight: 700, minWidth: 0, overflowWrap: 'anywhere', ...(stacked ? CLAMP_TWO_LINES : { width: 48, flexShrink: 0 }) }}>
+            {displayAnswer(prompt.answer_type, row.value)}
+          </Typography>
+        );
+        const count = <Typography sx={{ minWidth: 28, flexShrink: 0, textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{row.count}</Typography>;
+        return stacked ? (
+          <Stack key={row.value} spacing={0.5} role="listitem">
+            {label}
+            <Stack direction="row" spacing={1} alignItems="center">
+              {bar(row.count)}
+              {count}
+            </Stack>
+          </Stack>
+        ) : (
+          <Stack key={row.value} direction="row" spacing={1} alignItems="center" role="listitem">
+            {label}
+            {bar(row.count)}
+            {count}
+          </Stack>
+        );
+      })}
     </Stack>
   );
 }
@@ -79,15 +107,23 @@ export default function AnswerKeyPicker({
 }) {
   const labelId = useId();
   const [extraKey, setExtraKey] = useState('');
-  const choices = keyChoices(prompt, groups);
+  const keys = effectiveKeys(prompt);
+  // No key chosen yet, and the question bank has one: it shows as chosen, so Reveal is one tap.
+  const fromBank = !prompt.ungraded && !prompt.correct_keys?.length && (keys?.length ?? 0) > 0;
+  const choices = keyChoices({ ...prompt, correct_keys: keys }, groups);
   const typed = prompt.answer_type === 'numeric' || prompt.answer_type === 'text';
   const decided = hasDecision(prompt);
+  // Many different typed answers: the top ones, and any already marked correct, until the teacher asks for all.
+  const [allChoices, setAllChoices] = useState(false);
+  const { shown } = foldAnswers(prompt.answer_type, choices);
+  const visibleChoices = allChoices ? choices : choices.filter((choice) => choice.selected || shown.includes(choice));
+  const hiddenChoices = choices.length - visibleChoices.length;
 
   const addKey = (event: FormEvent) => {
     event.preventDefault();
     const value = extraKey.trim();
     if (!value) return;
-    const next = toggleKey(prompt.ungraded ? null : prompt.correct_keys, value);
+    const next = toggleKey(prompt.ungraded ? null : keys, value);
     if (next) onKeys(next);
     setExtraKey('');
   };
@@ -98,10 +134,16 @@ export default function AnswerKeyPicker({
         <Typography variant="body2" fontWeight={700} id={labelId}>
           Correct answer
         </Typography>
-        <Box role="group" aria-labelledby={labelId} sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(88px, 1fr))', gap: 1 }}>
-          {choices.map((choice) => {
+        {/* Letters in a grid; typed answers one to a row, so a sentence is never a column one word wide. */}
+        <Box
+          role="group"
+          aria-labelledby={labelId}
+          sx={{ display: 'grid', gridTemplateColumns: typed ? 'minmax(0, 1fr)' : 'repeat(auto-fill, minmax(88px, 1fr))', gap: 1 }}
+        >
+          {visibleChoices.map((choice) => {
             // Tapping the only key does nothing: a graded question always keeps an answer.
-            const next = toggleKey(prompt.ungraded ? null : prompt.correct_keys, choice.value);
+            // Over the bank's answer, a tap chooses that one key (and confirms the bank's, tapped).
+            const next = fromBank ? [choice.value] : toggleKey(prompt.ungraded ? null : prompt.correct_keys, choice.value);
             return (
               <ToggleButton
                 key={choice.value}
@@ -110,14 +152,41 @@ export default function AnswerKeyPicker({
                 disabled={busy !== null}
                 onChange={() => next && onKeys(next)}
                 aria-label={`${displayAnswer(prompt.answer_type, choice.value)}, ${choice.count} answered${choice.selected ? ', marked correct' : ''}`}
-                sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700, overflowWrap: 'anywhere' }}
+                sx={{
+                  minHeight: 48,
+                  textTransform: 'none',
+                  fontWeight: 700,
+                  overflowWrap: 'anywhere',
+                  ...(typed && { justifyContent: 'flex-start', textAlign: 'left', gap: 1 }),
+                }}
               >
-                {choice.selected && <CheckCircleRounded fontSize="small" sx={{ mr: 0.5 }} aria-hidden />}
-                {`${displayAnswer(prompt.answer_type, choice.value)} (${choice.count})`}
+                {choice.selected && <CheckCircleRounded fontSize="small" sx={{ mr: typed ? 0 : 0.5, flexShrink: 0 }} aria-hidden />}
+                {typed ? (
+                  <>
+                    <Box component="span" sx={{ flex: 1, minWidth: 0, ...CLAMP_TWO_LINES }}>
+                      {displayAnswer(prompt.answer_type, choice.value)}
+                    </Box>
+                    <Box component="span" sx={{ flexShrink: 0, fontVariantNumeric: 'tabular-nums', color: 'text.secondary' }}>
+                      {choice.count}
+                    </Box>
+                  </>
+                ) : (
+                  `${displayAnswer(prompt.answer_type, choice.value)} (${choice.count})`
+                )}
               </ToggleButton>
             );
           })}
         </Box>
+        {(hiddenChoices > 0 || allChoices) && choices.length > shown.length && (
+          <Button size="small" onClick={() => setAllChoices(!allChoices)} aria-expanded={allChoices} sx={{ alignSelf: 'flex-start', minHeight: 44 }}>
+            {allChoices ? 'Show the top answers only' : `${hiddenChoices} other ${hiddenChoices === 1 ? 'answer' : 'answers'}`}
+          </Button>
+        )}
+        {fromBank && (
+          <Typography variant="caption" color="text.secondary">
+            {`From the question bank: ${displayKeys(prompt.answer_type, keys)}`}
+          </Typography>
+        )}
 
         {typed && (
           <Stack component="form" direction="row" spacing={1} onSubmit={addKey}>

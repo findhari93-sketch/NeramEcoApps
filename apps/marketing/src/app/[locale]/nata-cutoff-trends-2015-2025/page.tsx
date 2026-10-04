@@ -159,7 +159,7 @@ const faqs = [
   {
     question: 'How do I check the live cutoff for a specific college?',
     answer:
-      'Use the Neram Classes free Cutoff Calculator. Enter your NATA score, expected category, and preferred state, and the calculator returns your admission probability for 5,000+ colleges including SPA Delhi, NIT Trichy, CEPT, Anna University, and major state institutes.',
+      'Use the Neram Classes free Cutoff Calculator. Enter your NATA score, expected category, and preferred state, and the calculator returns your admission chances at B.Arch colleges such as SPA Delhi, NIT Trichy, CEPT, Anna University, and major state institutes.',
   },
   {
     question: 'Will the NATA 2026 cutoff increase compared to 2025?',
@@ -507,7 +507,7 @@ export default function NataCutoffTrendsPage({ params: { locale } }: { params: {
               Use the live NATA cutoff calculator for your exact score
             </Typography>
             <Typography variant="h6" sx={{ mb: 4, opacity: 0.9, lineHeight: 1.6 }}>
-              Free tool. Enter your expected NATA score and get admission probability for 5,000+ colleges.
+              Free tool. Enter your expected NATA score and see your admission chances at B.Arch colleges.
             </Typography>
             <Stack direction="row" spacing={2} justifyContent="center" flexWrap="wrap" useFlexGap>
               <Button

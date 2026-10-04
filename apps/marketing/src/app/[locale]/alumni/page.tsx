@@ -5,9 +5,11 @@ import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import AlumniPageContent from '@/components/AlumniPageContent';
 import { loadAlumniStories } from '@/lib/reviews/data';
 import { localePath } from '@/lib/reviews/rules';
+import ClientIntl from '@/components/i18n/ClientIntl';
 
-// ISR: the stories are published reviews, re-read hourly.
-export const revalidate = 3600;
+// ISR: the stories are published reviews, re-read daily (admin edits purge the
+// "reviews" cache tag through /api/revalidate).
+export const revalidate = 86400;
 
 
 const baseUrl = 'https://neramclasses.com';
@@ -32,7 +34,7 @@ export default async function AlumniPage({ params: { locale } }: { params: { loc
         { name: 'Home', url: baseUrl },
         { name: 'Alumni', url: `${baseUrl}/alumni` },
       ])} />
-      <AlumniPageContent stories={stories} reviewsHref={localePath(locale, '/reviews')} />
+      <ClientIntl locale={locale} namespaces={['alumniStories', 'reviews']}><AlumniPageContent stories={stories} reviewsHref={localePath(locale, '/reviews')} /></ClientIntl>
     </>
   );
 }

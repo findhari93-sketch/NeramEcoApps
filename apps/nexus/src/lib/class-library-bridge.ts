@@ -18,6 +18,7 @@
  */
 
 import { extractYouTubeId } from './youtube';
+import { invalidateLibraryCache } from './library-cache-tag';
 
 interface TagLite {
   label: string;
@@ -192,6 +193,7 @@ export async function syncClassToLibrary(
     if (meta?.thumbnail_url) patch.youtube_thumbnail_hq_url = meta.thumbnail_url;
 
     await supabase.from('library_videos').update(patch).eq('id', existing.id);
+    invalidateLibraryCache();
     if (cls.library_video_id !== existing.id) {
       await supabase
         .from('nexus_scheduled_classes')
@@ -228,6 +230,7 @@ export async function syncClassToLibrary(
     .select('id')
     .single();
   if (error) throw error;
+  invalidateLibraryCache();
 
   await supabase
     .from('nexus_scheduled_classes')

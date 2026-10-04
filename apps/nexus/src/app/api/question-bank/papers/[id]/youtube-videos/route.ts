@@ -6,6 +6,7 @@ import {
   parseSolutionTitle,
   readSampleTitle,
   readTitleForSample,
+  titleExamMatches,
   type FoundVideo,
 } from '@/lib/youtube-solution-titles';
 import { describeError } from '@/lib/api-errors';
@@ -98,7 +99,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
       url.searchParams.set('playlistId', playlistId);
       if (pageToken) url.searchParams.set('pageToken', pageToken);
 
-      const res = await fetch(url.toString(), { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(url.toString(), { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } });
       if (res.status === 403) {
         const body = await res.json().catch(() => ({}));
         const reasons: string[] = (body?.error?.errors ?? []).map((e: { reason?: string }) => e?.reason ?? '');
@@ -125,7 +126,7 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         const fitsSample = sampleKey ? readTitleForSample(title, sampleKey, paper) : null;
         const parsed = fitsSample ?? parseSolutionTitle(title);
         if (!parsed) continue;
-        if (!fitsSample && (parsed.exam !== paper.exam_type || parsed.year !== paper.year)) continue;
+        if (!fitsSample && (!titleExamMatches(parsed.exam, paper.exam_type) || parsed.year !== paper.year)) continue;
         videos.push({ videoId, title, publishedAt: item?.snippet?.publishedAt ?? '', parsed });
       }
       pageToken = json.nextPageToken ?? null;

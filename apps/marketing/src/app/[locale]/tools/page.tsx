@@ -64,8 +64,8 @@ const TRUST_POINTS = [
     desc: 'Refreshed after every counselling round and exam cycle',
   },
   {
-    label: '10,000+ Students',
-    desc: 'Trusted by architecture aspirants across 28 states',
+    label: 'Free to try',
+    desc: 'Every tool works before you sign in',
   },
 ];
 
@@ -143,7 +143,18 @@ export default function ToolsHubPage({
             }}
           >
             Everything you need for your architecture entrance journey, from score calculation to
-            college selection. Used by 10,000+ students across India.
+            college selection.
+          </Typography>
+          <Typography sx={{ fontSize: { xs: '1rem', md: '1.1rem' }, opacity: 0.95, lineHeight: 1.7, mt: 1.5, maxWidth: 680 }}>
+            These tools are part of{' '}
+            <Box
+              component={Link}
+              href="/aiarchitek"
+              sx={{ color: '#FFFFFF', fontWeight: 700, textUnderlineOffset: '3px', '&:focus-visible': { outline: '2px solid #FFFFFF', outlineOffset: 2 } }}
+            >
+              aiArchitek
+            </Box>
+            , our AI-powered NATA preparation platform.
           </Typography>
         </Container>
       </Box>

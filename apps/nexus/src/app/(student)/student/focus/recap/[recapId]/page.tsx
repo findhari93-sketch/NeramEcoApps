@@ -24,6 +24,7 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import NeramVideoPlayer from '@/components/video/NeramVideoPlayer';
 import { renewFromEmbed } from '@/components/video/renew-from-embed';
+import usePlayedRanges from '@/components/video/usePlayedRanges';
 import { computeGate, type VideoGateMode } from '@/lib/video-gate';
 import { focusChannelName } from '@/components/class-recap/openFocusWindow';
 import { useWatchHeartbeat } from '@/components/class-recap/useWatchHeartbeat';
@@ -74,7 +75,9 @@ export default function FocusRecapPage() {
    */
   const [quizError, setQuizError] = useState<string | null>(null);
   const [loadingQuiz, setLoadingQuiz] = useState(false);
-  const [furthest, setFurthest] = useState(0);
+  /** What was really played, which is what the checkpoint quiz waits on. */
+  const played = usePlayedRanges();
+  const { seed: seedPlayed, record: recordPlayed } = played;
   /**
    * Where the quiz is drawn: the player's container while it is fullscreen by
    * either route, null otherwise. Null means the ordinary viewport drawer.
@@ -108,15 +111,18 @@ export default function FocusRecapPage() {
         setSrc(embedRes.src || embedRes.streamUrl);
       }
       setWatermark(embedRes.watermark || { name: 'Neram student', code: 'NX-000000' });
-      setResumeAt(Number(embedRes.resume_at) || 0);
       // Seeded from what was watched, not from resume_at, which rises with any
       // seek. Seeding from it is what let a stray tap park a student on
-      // checkpoint 1 for good (NXS-0130).
-      setFurthest(Number(embedRes.played_until ?? embedRes.resume_at) || 0);
+      // checkpoint 1 for good (NXS-0130). Resume goes no further than that
+      // either, or the student lands on the checkpoint and is told to watch more.
+      const resume = Number(embedRes.resume_at) || 0;
+      const playedUntil = Number(embedRes.played_until ?? embedRes.resume_at) || 0;
+      seedPlayed(playedUntil);
+      setResumeAt(recapRes.watch_mode === 'revision' ? resume : Math.min(resume, playedUntil));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not open this recording');
     }
-  }, [authFetch, recapId]);
+  }, [authFetch, recapId, seedPlayed]);
 
   useEffect(() => {
     if (!authLoading && recapId) load();
@@ -152,11 +158,11 @@ export default function FocusRecapPage() {
           passed: s.passed,
         })),
         duration,
-        furthestSeconds: furthest,
-        playedUntilSeconds: furthest,
+        furthestSeconds: 0,
+        playedRanges: played.ranges,
         mode: watchMode,
       }),
-    [sections, duration, furthest, watchMode],
+    [sections, duration, played.ranges, watchMode],
   );
 
   const passedCount = sections.filter((s) => s.passed).length;
@@ -269,9 +275,9 @@ export default function FocusRecapPage() {
   const handleTick = useCallback(
     (seconds: number, dur: number) => {
       onTick(seconds, dur);
-      setFurthest((f) => (seconds > f ? seconds : f));
+      recordPlayed(seconds);
     },
-    [onTick],
+    [onTick, recordPlayed],
   );
 
   /**
@@ -408,6 +414,7 @@ export default function FocusRecapPage() {
             watermark={watermark}
             title={title}
             marks={marks}
+            watched={played.ranges}
             resumeAt={resumeAt}
             onTimeUpdate={handleTick}
             onCheckpointReached={openQuiz}

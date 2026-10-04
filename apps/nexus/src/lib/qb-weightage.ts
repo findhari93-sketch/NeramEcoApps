@@ -24,7 +24,7 @@
  * chapter gets (relative to the top chapter) and 40% how regularly it is asked.
  */
 
-export type WeightageSection = 'math' | 'aptitude' | 'drawing';
+export type WeightageSection = 'math' | 'aptitude' | 'drawing' | 'planning';
 export type WeightageWindow = 'all' | 'recent';
 export type ChapterTrend = 'rising' | 'falling' | 'stopped' | 'new' | 'steady';
 
@@ -103,6 +103,7 @@ export const SECTION_LABELS: Record<WeightageSection, string> = {
   math: 'Mathematics',
   aptitude: 'Aptitude',
   drawing: 'Drawing',
+  planning: 'Planning',
 };
 
 const avg = (xs: number[]) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0);
@@ -118,7 +119,7 @@ function median(xs: number[]): number {
 export function availableSections(payload: QBWeightagePayload | null | undefined): WeightageSection[] {
   if (!payload) return [];
   const present = new Set(payload.totals.filter((t) => t.questions > 0).map((t) => t.section));
-  return (['math', 'aptitude', 'drawing'] as const).filter((s) => present.has(s));
+  return (['math', 'aptitude', 'planning', 'drawing'] as const).filter((s) => present.has(s));
 }
 
 /** Year columns for one section: real years, with runs of missing years folded into one gap. */

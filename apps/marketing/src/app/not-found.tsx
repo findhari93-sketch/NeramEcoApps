@@ -8,11 +8,16 @@ export const metadata: Metadata = {
 };
 
 // The root layout is a pass-through (html and body live in [locale]/layout.tsx),
-// so this page, used only for paths outside [locale], must render its own.
+// so this page renders its own. It is the 404 for every URL that matches no
+// route (including unknown /blog and /courses slugs, which set dynamicParams =
+// false): a light static page with no site chrome and no translation bundle,
+// served without rendering or caching a page per junk URL.
 export default function NotFound() {
   return (
     <html lang="en">
       <body style={{ margin: 0 }}>
+        {/* Visible keyboard focus; this page has no MUI theme or global CSS. */}
+        <style>{`a:focus-visible{outline:3px solid #e8a020;outline-offset:3px}`}</style>
     <div
       style={{
         minHeight: '100vh',
@@ -71,6 +76,9 @@ export default function NotFound() {
               key={link.href}
               href={link.href}
               style={{
+                display: 'block',
+                boxSizing: 'border-box',
+                minHeight: '48px',
                 padding: '13px 20px',
                 fontSize: '16px',
                 fontWeight: 500,
@@ -89,7 +97,10 @@ export default function NotFound() {
           href="/"
           style={{
             padding: '12px 32px',
-            fontSize: '15px',
+            minHeight: '48px',
+            boxSizing: 'border-box',
+            lineHeight: '24px',
+            fontSize: '16px',
             fontWeight: 600,
             border: 'none',
             borderRadius: '8px',

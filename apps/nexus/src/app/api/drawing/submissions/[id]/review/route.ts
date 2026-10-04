@@ -20,7 +20,7 @@ import { pickNextPending } from '@/lib/review-next';
 import { evalTables } from '@/lib/drawing-eval/db';
 import { heldSubmissionIds, holdReview, releaseModeFor } from '@/lib/drawing-hold';
 import { syncRegionMarks } from '@/lib/drawing-region-sync';
-import { canRedo, reviewKindOf, wasReviewedBefore } from '@/lib/drawing-source';
+import { canRedo, carriesGrade, reviewKindOf, wasReviewedBefore } from '@/lib/drawing-source';
 import { buildPracticeReviewMessage, shouldNotifyPractice } from '@/lib/practice-review-message';
 
 // One student, but a Teams chat post (chat create, card, maybe a plain retry)
@@ -101,8 +101,13 @@ export async function PATCH(
       );
     }
     const reaction = parseReaction(rawReaction);
+    // A sketch carries no grade, and the database refuses one. The review page
+    // still scores a sketch on the rubric and sends the stars, which failed
+    // every save of a sketch, so the grade is dropped here, the one writer.
+    const graded = carriesGrade(sub);
+    const tutorRating: number | null = graded ? tutor_rating || null : null;
     const tutorMarks =
-      tutor_marks !== null && tutor_marks !== undefined && tutor_marks !== '' && Number.isFinite(Number(tutor_marks))
+      graded && tutor_marks !== null && tutor_marks !== undefined && tutor_marks !== '' && Number.isFinite(Number(tutor_marks))
         ? Number(tutor_marks)
         : null;
 
@@ -123,7 +128,7 @@ export async function PATCH(
       await supabase
         .from('drawing_submissions' as any)
         .update({
-          tutor_rating: tutor_rating || null,
+          tutor_rating: tutorRating,
           tutor_marks: tutorMarks,
           tutor_feedback: tutor_feedback || null,
           reviewed_image_url: reviewed_image_url || null,
@@ -159,7 +164,7 @@ export async function PATCH(
         userId: user.id,
         intent: reviewAction === 'redo' ? 'redo' : 'complete',
         fields: {
-          tutor_rating: tutor_rating || null,
+          tutor_rating: tutorRating,
           tutor_marks: tutorMarks,
           tutor_feedback: tutor_feedback || null,
           reviewed_image_url: reviewed_image_url || null,
@@ -198,7 +203,7 @@ export async function PATCH(
     }
 
     const submission = await saveDrawingReviewWithAction(id, {
-      tutor_rating: tutor_rating || null,
+      tutor_rating: tutorRating,
       tutor_marks: tutorMarks,
       tutor_feedback: tutor_feedback || null,
       reviewed_image_url: reviewed_image_url || null,
@@ -266,7 +271,7 @@ export async function PATCH(
             source_id: `review_${submission.id}`,
             activity_type: 'drawing_reviewed',
             activity_title: 'Drawing reviewed and completed by tutor',
-            metadata: { submission_id: submission.id, rating: tutor_rating, marks: tutorMarks },
+            metadata: { submission_id: submission.id, rating: tutorRating, marks: tutorMarks },
           }).catch(() => {});
         }
       } catch {
@@ -316,7 +321,7 @@ export async function PATCH(
             reviewAction === 'complete'
               ? gradeLabel({
                   evaluationType: assignment.evaluation_type,
-                  rating: tutor_rating || null,
+                  rating: tutorRating,
                   marks: tutorMarks,
                   maxMarks: assignment.max_marks,
                 })
@@ -374,7 +379,7 @@ export async function PATCH(
         previouslyReviewed: wasAlreadyReviewed,
         previousStatus: sub?.status ?? '',
         previousRating: sub?.tutor_rating ?? null,
-        rating: tutor_rating || null,
+        rating: tutorRating,
         previousFeedback: sub?.tutor_feedback ?? null,
         feedback: tutor_feedback || null,
       })
@@ -385,7 +390,7 @@ export async function PATCH(
           action: reviewAction,
           teacherName: (user as any).name ?? null,
           sourceType: sub?.source_type ?? null,
-          rating: tutor_rating || null,
+          rating: tutorRating,
         });
         const { results } = await sendNudge({
           teacher: { authHeader, userId: user.id },

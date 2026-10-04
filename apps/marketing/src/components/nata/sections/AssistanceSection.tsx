@@ -57,7 +57,7 @@ function TrustIndicator() {
           fontSize: { xs: '0.8rem', md: '0.875rem' },
         }}
       >
-        Helped 10,000+ students
+        Helped 1,000+ students
       </Typography>
     </Box>
   );

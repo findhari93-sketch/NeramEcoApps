@@ -214,3 +214,28 @@ describe('contentSignal', () => {
     expect(signal).toBe(-1);
   });
 });
+
+describe('inferPaperSections on a JEE Paper 2B (B.Planning) paper', () => {
+  // The 2006 maths and aptitude blocks, then 25 Planning MCQs where 2A has its
+  // drawings. Same shape as a real 2B paper: three MCQ parts in a row.
+  const planning: Array<[number, string, string]> = Array.from({ length: 25 }, (_, i) => [
+    91 + i,
+    'MCQ',
+    `Which of the following is the primary objective of a master plan for urban settlement ${i + 1}?`,
+  ]);
+  const paper2B = [...PAPER_2006.filter(([n]) => n <= 90), ...planning];
+
+  it('puts the block after the 50 aptitude questions into Planning', () => {
+    const results = inferPaperSections(toInput(paper2B), { examType: 'JEE_PAPER_2B' });
+    expect(sectionOf(results, 40)).toBe('math_mcq');
+    expect(sectionOf(results, 41)).toBe('aptitude');
+    expect(sectionOf(results, 90)).toBe('aptitude');
+    expect(sectionOf(results, 91)).toBe('planning');
+    expect(sectionOf(results, 115)).toBe('planning');
+  });
+
+  it('keeps calling that block aptitude on a paper that is not 2B', () => {
+    const results = inferPaperSections(toInput(paper2B), { examType: 'JEE_PAPER_2' });
+    expect(sectionOf(results, 91)).toBe('aptitude');
+  });
+});

@@ -392,7 +392,7 @@ async function promotePublicVideos(
   const ids = pending.map((r) => r.youtube_video_id).join(',');
   const res = await fetchImpl(
     `https://www.googleapis.com/youtube/v3/videos?part=status&id=${encodeURIComponent(ids)}`,
-    { headers: { Authorization: `Bearer ${accessToken}` } },
+    { cache: 'no-store', headers: { Authorization: `Bearer ${accessToken}` } },
   );
   if (!res.ok) return 0;
 

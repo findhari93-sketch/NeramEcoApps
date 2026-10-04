@@ -158,6 +158,7 @@ export class SenderTokenError extends Error {
 
 async function postToken(cfg: SenderAppConfig, body: Record<string, string>, fetchImpl: typeof fetch): Promise<SenderTokens> {
   const res = await fetchImpl(`https://login.microsoftonline.com/${cfg.tenantId}/oauth2/v2.0/token`, {
+    cache: 'no-store',
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ client_id: cfg.clientId, client_secret: cfg.clientSecret, ...body }),
@@ -197,6 +198,7 @@ export async function fetchSenderIdentity(
   fetchImpl: typeof fetch = fetch,
 ): Promise<{ oid: string; name: string | null; upn: string | null } | null> {
   const res = await fetchImpl('https://graph.microsoft.com/v1.0/me?$select=id,displayName,userPrincipalName', {
+    cache: 'no-store',
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) return null;

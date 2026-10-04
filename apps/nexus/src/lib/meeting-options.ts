@@ -38,6 +38,7 @@ export async function findOnlineMeetingId(
 ): Promise<string | null> {
   const filter = `JoinWebUrl eq '${joinUrl.replace(/'/g, "''")}'`;
   const res = await fetchImpl(`${base(owner)}?$filter=${encodeURIComponent(filter)}&$select=id`, {
+    cache: 'no-store',
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) return null;
@@ -53,6 +54,7 @@ export async function readAllowedPresenters(
   fetchImpl: FetchLike = fetch,
 ): Promise<{ status: number; allowedPresenters: AllowedPresenters | null }> {
   const res = await fetchImpl(`${base(owner)}/${encodeURIComponent(meetingId)}?$select=allowedPresenters`, {
+    cache: 'no-store',
     headers: { Authorization: `Bearer ${token}` },
   });
   if (!res.ok) return { status: res.status, allowedPresenters: null };
@@ -62,6 +64,7 @@ export async function readAllowedPresenters(
 
 async function patch(token: string, owner: MeetingOwner, meetingId: string, body: Record<string, unknown>, fetchImpl: FetchLike) {
   return fetchImpl(`${base(owner)}/${encodeURIComponent(meetingId)}`, {
+    cache: 'no-store',
     method: 'PATCH',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

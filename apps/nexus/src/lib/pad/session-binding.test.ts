@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest';
 import type { ScheduledClassCandidate } from './meeting-binding';
-import { decideSessionBinding, isUuid, mayRunSession, parseStartSessionRequest, type BoundSession } from './session-binding';
+import { cleanMeetingTitle, decideSessionBinding, isUuid, mayRunSession, parseStartSessionRequest, type BoundSession } from './session-binding';
 
 const ROOM = '11111111-1111-4111-8111-111111111111';
 const OTHER_ROOM = '22222222-2222-4222-8222-222222222222';
@@ -36,7 +36,7 @@ describe('isUuid', () => {
 
 describe('parseStartSessionRequest', () => {
   it('reads an empty or missing body as "start from the meeting alone"', () => {
-    const empty = { ok: true, value: { meeting: null, classroomId: null, batchId: null, scheduledClassId: null, endExisting: false } };
+    const empty = { ok: true, value: { meeting: null, classroomId: null, batchId: null, scheduledClassId: null, endExisting: false, meetingTitle: null } };
     expect(parseStartSessionRequest({})).toEqual(empty);
     expect(parseStartSessionRequest(null)).toEqual(empty);
     expect(parseStartSessionRequest('text')).toEqual(empty);
@@ -50,6 +50,7 @@ describe('parseStartSessionRequest', () => {
         batchId: BATCH,
         scheduledClassId: CLASS,
         endExisting: true,
+        meetingTitle: '  JEE   preparation ',
       }),
     ).toEqual({
       ok: true,
@@ -59,8 +60,15 @@ describe('parseStartSessionRequest', () => {
         batchId: BATCH,
         scheduledClassId: CLASS,
         endExisting: true,
+        meetingTitle: 'JEE preparation',
       },
     });
+  });
+
+  it('keeps a meeting title to one line of at most 200 characters, and ignores anything else', () => {
+    expect(cleanMeetingTitle('a\n b')).toBe('a b');
+    expect(cleanMeetingTitle('x'.repeat(250))).toHaveLength(200);
+    for (const value of [42, null, undefined, '   ', {}]) expect(cleanMeetingTitle(value)).toBeNull();
   });
 
   it.each([

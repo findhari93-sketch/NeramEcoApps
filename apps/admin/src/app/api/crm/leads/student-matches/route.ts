@@ -6,37 +6,19 @@ import { getSupabaseAdminClient } from '@neram/database';
 /**
  * GET /api/crm/leads/student-matches
  * Returns leads whose email matches a student's email.
+ *
+ * The match runs in SQL (admin_lead_student_email_matches, migration
+ * 20261026090000). It used to load every student email into the function and send
+ * them all back in one `.in()` URL, which grows with the student count and fails
+ * past a few hundred addresses. The SQL match also ignores case and spaces.
  */
 export async function GET() {
   try {
     const supabase = getSupabaseAdminClient();
-
-    // Get all student emails
-    const { data: students, error: sErr } = await supabase
-      .from('users')
-      .select('email')
-      .eq('user_type', 'student')
-      .not('email', 'is', null);
-
-    if (sErr) throw sErr;
-
-    const studentEmails = (students || []).map((s) => s.email).filter(Boolean);
-
-    if (studentEmails.length === 0) {
-      return NextResponse.json({ matchingUserIds: [] });
-    }
-
-    // Find leads with matching emails
-    const { data: matchingLeads, error: lErr } = await supabase
-      .from('users')
-      .select('id, email')
-      .eq('user_type', 'lead')
-      .in('email', studentEmails);
-
-    if (lErr) throw lErr;
-
+    const { data, error } = await (supabase as any).rpc('admin_lead_student_email_matches');
+    if (error) throw error;
     return NextResponse.json({
-      matchingUserIds: (matchingLeads || []).map((l) => l.id),
+      matchingUserIds: ((data || []) as Array<{ user_id: string }>).map((r) => r.user_id),
     });
   } catch (error: any) {
     console.error('Student matches error:', error);

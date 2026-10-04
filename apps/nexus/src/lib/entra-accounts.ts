@@ -31,6 +31,7 @@ async function graph(path: string, init: RequestInit = {}, timeoutMs = 20_000): 
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     return await fetch(`${GRAPH}${path}`, {
+      cache: 'no-store',
       ...init,
       headers: {
         Authorization: `Bearer ${token}`,

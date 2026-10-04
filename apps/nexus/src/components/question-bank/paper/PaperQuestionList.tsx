@@ -42,6 +42,7 @@ import {
   QB_REPORT_TARGET_LABELS,
   QB_SECTION_ORDER,
   qbSectionLabel,
+  qbSectionsForExam,
   QB_SECTIONS,
   needsAnswerKey,
   solutionVideosOf,
@@ -185,6 +186,14 @@ export interface PaperQuestionListProps {
   reports?: Record<string, QBReportGroup[]>;
   /** Close a video report from its row, once the reported link has been replaced. */
   onTellVideoFixed?: (questionId: string, group: QBReportGroup) => void;
+  /** The paper's exam, so "Move to section" offers only the sections it has. */
+  examType?: string | null;
+  /**
+   * Move the ticked questions to the JEE Paper 2B (B.Planning) paper of this
+   * sitting. Offered on a JEE Paper 2 paper only, for Planning questions that
+   * were uploaded into it.
+   */
+  onMoveToPaper2B?: (questionIds: string[]) => Promise<void>;
 }
 
 /** Is the user typing? Then Ctrl+A should select their text, not every row. */
@@ -226,6 +235,8 @@ export default function PaperQuestionList({
   videos,
   reports,
   onTellVideoFixed,
+  examType = null,
+  onMoveToPaper2B,
 }: PaperQuestionListProps) {
   const theme = useTheme();
   /** Videos mode's props when that mode is on, else null: a truthy check TypeScript can narrow on. */
@@ -236,6 +247,7 @@ export default function PaperQuestionList({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkSection, setBulkSection] = useState<QBQuestionSection | ''>('');
   const [applyingSection, setApplyingSection] = useState(false);
+  const [movingTo2B, setMovingTo2B] = useState(false);
   const [applyingNeedsImage, setApplyingNeedsImage] = useState<'needed' | 'not-needed' | null>(null);
   const [settingActive, setSettingActive] = useState<'activate' | 'deactivate' | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -316,6 +328,17 @@ export default function PaperQuestionList({
       setBulkSection('');
     } finally {
       setApplyingSection(false);
+    }
+  };
+
+  const applyMoveTo2B = async () => {
+    if (!onMoveToPaper2B || selected.size === 0) return;
+    setMovingTo2B(true);
+    try {
+      await onMoveToPaper2B(Array.from(selected));
+      clearSelection();
+    } finally {
+      setMovingTo2B(false);
     }
   };
 
@@ -941,7 +964,7 @@ export default function PaperQuestionList({
                     sx={{ minWidth: 180, minHeight: 44 }}
                   >
                     <MenuItem value="" disabled><em>Move to section...</em></MenuItem>
-                    {QB_SECTIONS.map((s) => (
+                    {qbSectionsForExam(examType).map((s) => (
                       <MenuItem key={s} value={s} sx={{ minHeight: 44 }}>{qbSectionLabel(s)}</MenuItem>
                     ))}
                   </Select>
@@ -1035,6 +1058,19 @@ export default function PaperQuestionList({
                 >
                   <ListItemText>No figure needed</ListItemText>
                 </MenuItem>
+                {onMoveToPaper2B && (
+                  <MenuItem
+                    onClick={() => { setMoreAnchor(null); applyMoveTo2B(); }}
+                    disabled={movingTo2B}
+                    sx={{ minHeight: 44 }}
+                  >
+                    <ListItemText
+                      primary={movingTo2B ? 'Moving...' : 'Move to JEE Paper 2B (Planning)'}
+                      secondary="For Planning questions uploaded into this B.Arch paper"
+                      secondaryTypographyProps={{ variant: 'caption' }}
+                    />
+                  </MenuItem>
+                )}
                 {/* "Link as either/or" lived here, linking whole questions. The
                     papers put the OR inside one question number, so either/or
                     is now a question's parts (DrawingPartsEditor). */}

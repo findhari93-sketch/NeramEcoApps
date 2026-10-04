@@ -9,6 +9,18 @@ export type AnswerType = 'mcq' | 'numeric' | 'text' | 'yesno';
 /** The teacher's decision on a reason: approved excuses the student from the question. */
 export type SkipApproval = 'approved' | 'rejected';
 
+/**
+ * A question bank question as students may see it (pad_qb_view): never its
+ * answer. solution is filled for the teacher once the question is revealed.
+ */
+export interface QBQuestionView {
+  format: string;
+  text: string | null;
+  image_url: string | null;
+  options: Array<{ text: string | null; image_url: string | null }>;
+  solution: { explanation: string | null; image_url: string | null } | null;
+}
+
 export interface StudentScore {
   correct: number;
   wrong: number;
@@ -38,6 +50,11 @@ export interface StudentPrompt {
   ungraded: boolean | null;
   /** Null until REVEAL. */
   correct_keys: string[] | null;
+  /** When answers stop, on the server's clock (read against server_time); null for no timer. */
+  closes_at?: string | null;
+  time_limit_s?: number | null;
+  /** The question bank question asked from Present to class; null otherwise. */
+  qb?: QBQuestionView | null;
 }
 
 export interface StudentSnapshot {
@@ -70,6 +87,8 @@ export interface StudentSnapshot {
   /** When the teacher last nudged this student on the open question. Null once they answered or said why. */
   nudged_at: string | null;
   score: StudentScore;
+  /** This read closed a question whose time was up. */
+  auto_closed?: boolean;
 }
 
 export interface TeacherPrompt {
@@ -91,6 +110,13 @@ export interface TeacherPrompt {
   answered_count: number;
   /** When the teacher last pressed Nudge on this question. */
   last_nudged_at: string | null;
+  /** When answers stop, on the server's clock; null for no timer. */
+  closes_at?: string | null;
+  time_limit_s?: number | null;
+  /** Asked from Present to class: the question bank question, its answer from the bank, and its content. */
+  qb_question_id?: string | null;
+  suggested_keys?: string[] | null;
+  qb?: QBQuestionView | null;
 }
 
 export interface PromptCounts {
@@ -123,6 +149,8 @@ export interface WaitingStudent {
 export interface PersonRef {
   student_id: string;
   name: string | null;
+  /** Where we know they are here from: the pad, the Teams meeting, or both. Joined list only. */
+  source?: 'pad' | 'meeting' | 'both';
 }
 
 export interface HistoryEntry {
@@ -137,6 +165,9 @@ export interface HistoryEntry {
   opened_at: string;
   answered: number;
   correct: number;
+  qb_question_id?: string | null;
+  /** The question bank's answer for a question asked from Present to class. Teacher only. */
+  suggested_keys?: string[] | null;
 }
 
 export interface TeacherSnapshot {
@@ -151,6 +182,8 @@ export interface TeacherSnapshot {
     teacher_topic: string;
     classroom_id: string;
     classroom_name: string | null;
+    /** The teacher's name for the class, else the timetable class, the Teams meeting's title, the classroom. */
+    title?: string | null;
     scheduled_class_id: string | null;
     batch_id: string | null;
     meeting_id: string | null;
@@ -161,8 +194,12 @@ export interface TeacherSnapshot {
     round_no?: number | null;
     results_published_at?: string | null;
   };
-  readiness: { enrolled: number; joined?: number; connected: number; in_meeting: number };
-  /** Who opened the pad this round, and who on the class list has not. Teacher only. */
+  /**
+   * joined: here this round (in the Teams meeting or opened the pad; it never drops).
+   * opened: of those, who opened the pad. connected: pad open now. in_meeting: in the meeting now.
+   */
+  readiness: { enrolled: number; joined?: number; opened?: number; connected: number; in_meeting: number };
+  /** Who is here this round, and who on the class list is not. Teacher only. */
   people?: { joined: PersonRef[]; not_joined: PersonRef[] };
   /** Who joined and has not answered the newest question (open or closed), with any reason. Teacher only. */
   waiting?: WaitingStudent[];
@@ -172,6 +209,8 @@ export interface TeacherSnapshot {
   /** Reasons given on the current question, counted; `approved` of them excused by the teacher. Names are in `waiting`. */
   skips: { total: number; by_reason: Partial<Record<SkipReason, number>>; approved?: number };
   history: HistoryEntry[];
+  /** This read closed a question whose time was up. */
+  auto_closed?: boolean;
 }
 
 export interface ParticipationRow {

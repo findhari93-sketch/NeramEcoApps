@@ -141,7 +141,7 @@ export function __resetTeamsSsoKeys(): void {
 }
 
 async function fetchKeySet(tenantId: string): Promise<KeySet> {
-  const response = await fetch(`https://login.microsoftonline.com/${encodeURIComponent(tenantId)}/discovery/v2.0/keys`);
+  const response = await fetch(`https://login.microsoftonline.com/${encodeURIComponent(tenantId)}/discovery/v2.0/keys`, { cache: 'no-store' });
   if (!response.ok) throw new TeamsSsoUnavailableError(`Signing keys unavailable: ${response.status}`);
 
   const body = asRecord(await response.json());

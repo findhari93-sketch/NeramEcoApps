@@ -35,7 +35,7 @@ async function fetchTranscriptFromSharePoint(
   const shareId = encodeSharingUrl(sharepointUrl);
   const driveItemRes = await fetch(
     `https://graph.microsoft.com/v1.0/shares/${shareId}/driveItem`,
-    { headers }
+    { cache: 'no-store', headers }
   );
 
   if (!driveItemRes.ok) {
@@ -59,7 +59,7 @@ async function fetchTranscriptFromSharePoint(
       ? `https://graph.microsoft.com/beta/sites/${siteId}/drives/${driveId}/items/${itemId}/media/transcripts`
       : `https://graph.microsoft.com/beta/drives/${driveId}/items/${itemId}/media/transcripts`;
 
-    const transcriptsRes = await fetch(transcriptsUrl, { headers });
+    const transcriptsRes = await fetch(transcriptsUrl, { cache: 'no-store', headers });
 
     if (transcriptsRes.ok) {
       const transcriptsData = await transcriptsRes.json();
@@ -71,7 +71,7 @@ async function fetchTranscriptFromSharePoint(
           ? `https://graph.microsoft.com/beta/sites/${siteId}/drives/${driveId}/items/${itemId}/media/transcripts/${transcriptId}/content`
           : `https://graph.microsoft.com/beta/drives/${driveId}/items/${itemId}/media/transcripts/${transcriptId}/content`;
 
-        const contentRes = await fetch(contentUrl, { headers });
+        const contentRes = await fetch(contentUrl, { cache: 'no-store', headers });
         if (contentRes.ok) {
           return await contentRes.text();
         }
@@ -85,7 +85,7 @@ async function fetchTranscriptFromSharePoint(
     const parentId = parentReference?.id;
     if (parentId) {
       const childrenUrl = `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${parentId}/children`;
-      const childrenRes = await fetch(childrenUrl, { headers });
+      const childrenRes = await fetch(childrenUrl, { cache: 'no-store', headers });
 
       if (childrenRes.ok) {
         const childrenData = await childrenRes.json();
@@ -98,7 +98,7 @@ async function fetchTranscriptFromSharePoint(
             vttFile['@microsoft.graph.downloadUrl'] ||
             `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${vttFile.id}/content`;
 
-          const vttRes = await fetch(downloadUrl, { headers });
+          const vttRes = await fetch(downloadUrl, { cache: 'no-store', headers });
           if (vttRes.ok) {
             return await vttRes.text();
           }

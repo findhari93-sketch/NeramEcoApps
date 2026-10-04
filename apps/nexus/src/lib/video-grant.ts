@@ -91,11 +91,25 @@ export async function grantVideoAccess(input: GrantVideoAccessInput): Promise<Vi
   }
 
   return {
-    src: `/api/media/recording?vt=${encodeURIComponent(token)}`,
+    src: buildStreamSrc(token),
     expiresAt,
     sessionId: sid,
     sizeBytes: media.size,
   };
+}
+
+/**
+ * Where the player fetches bytes from.
+ *
+ * With MEDIA_PROXY_ORIGIN set (e.g. https://media.neramclasses.com) the bytes
+ * come from the Cloudflare media Worker, so they never cross Vercel's network
+ * (Fast Origin Transfer). Without it, the existing Vercel route serves them.
+ * Rollback is unsetting the env var. Same grant either way.
+ */
+export function buildStreamSrc(token: string, origin = process.env.MEDIA_PROXY_ORIGIN): string {
+  const vt = encodeURIComponent(token);
+  const base = (origin || '').trim().replace(/\/+$/, '');
+  return base ? `${base}/recording?vt=${vt}` : `/api/media/recording?vt=${vt}`;
 }
 
 /** Seconds a minted grant stays valid, for clients that want to pre-renew. */

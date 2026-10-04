@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { submitNataAssistanceRequest } from '@neram/database';
+import { createAdminClient, submitNataAssistanceRequest } from '@neram/database';
+import { saveLeadTouch } from '@/lib/lead-touch';
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,6 +36,8 @@ export async function POST(request: NextRequest) {
       gclid: typeof body.gclid === 'string' ? body.gclid : undefined,
       wbraid: typeof body.wbraid === 'string' ? body.wbraid : undefined,
     });
+
+    await saveLeadTouch(createAdminClient(), 'nata_assistance_requests', result.id, body);
 
     return NextResponse.json({ success: true, id: result.id }, { status: 201 });
   } catch (error) {

@@ -108,7 +108,7 @@ export default function TeamsPadApp({ variant = 'panel' }: { variant?: 'panel' |
   }, [identify, poppedOut]);
 
   return (
-    <PadShell theme={theme} dense={popup} wide={onStage}>
+    <PadShell theme={theme} dense={popup} wide={onStage} roomy={state.kind === 'ready' && state.role === 'staff' && !onStage && !popup}>
       {state.kind === 'connecting' && <Opening />}
 
       {state.kind === 'outside-teams' && (

@@ -11,13 +11,14 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 type NexusStatus = 'not_started' | 'in_progress' | 'submitted' | 'approved' | 'rejected';
 
 const NEXUS_URL = process.env.NEXT_PUBLIC_NEXUS_URL || 'https://nexus.neramclasses.com';
+const POLL_INTERVAL_MS = 60_000;
 
 const STATUS_DISPLAY: Record<NexusStatus, { label: string; color: string; icon: React.ElementType }> = {
   not_started: { label: 'Not started', color: 'text.secondary', icon: HourglassEmptyIcon },
   in_progress: { label: 'In progress', color: 'info.main', icon: CircularProgress },
-  submitted: { label: 'Submitted — waiting for review', color: 'warning.main', icon: HourglassEmptyIcon },
+  submitted: { label: 'Submitted, waiting for review', color: 'warning.main', icon: HourglassEmptyIcon },
   approved: { label: 'Approved', color: 'success.main', icon: CheckCircleIcon },
-  rejected: { label: 'Rejected — please fix issues in Nexus', color: 'error.main', icon: ErrorOutlineIcon },
+  rejected: { label: 'Rejected. Please fix the issues in Nexus', color: 'error.main', icon: ErrorOutlineIcon },
 };
 
 interface NexusStatusPollerProps {
@@ -64,10 +65,29 @@ export default function NexusStatusPoller({
     if (!isActive || status === 'approved') return;
 
     setPolling(true);
-    intervalRef.current = setInterval(pollStatus, 10_000);
+    // Approval takes minutes to days, so once a minute is plenty. Hidden tabs do
+    // not poll; coming back (usually from the Nexus tab) checks at once.
+    const start = () => {
+      if (!intervalRef.current) intervalRef.current = setInterval(pollStatus, POLL_INTERVAL_MS);
+    };
+    const stop = () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        stop();
+      } else {
+        void pollStatus();
+        start();
+      }
+    };
+    if (document.visibilityState !== 'hidden') start();
+    document.addEventListener('visibilitychange', onVisibilityChange);
 
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      stop();
       setPolling(false);
     };
   }, [isActive, status, pollStatus]);

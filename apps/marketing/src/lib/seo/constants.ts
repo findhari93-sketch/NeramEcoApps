@@ -47,10 +47,10 @@ export const DEFAULT_OG_IMAGE = {
 export const APP_NAME = 'Neram - Free NATA Exam Preparation App';
 export const APP_SHORT_NAME = 'Neram NATA App';
 export const APP_DESCRIPTION =
-  'Free NATA preparation app with cutoff calculator, college predictor for 5000+ colleges, and exam center finder. Used by 5000+ students across India.';
+  'Free NATA preparation app with a cutoff calculator, a B.Arch college predictor and an exam centre finder.';
 export const APP_FEATURES = [
   'NATA Cutoff Calculator',
-  'College Predictor (5000+ colleges)',
+  'B.Arch College Predictor',
   'Exam Center Locator',
   'Previous Year Papers',
   'Study Materials & E-books',

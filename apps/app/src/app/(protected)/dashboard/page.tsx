@@ -46,7 +46,7 @@ export default function DashboardPage() {
           )}
         </Box>
         <Typography variant="body2" sx={{ color: 'text.secondary', fontSize: '0.8rem', mt: 0.5 }}>
-          From Cutoffs to Colleges — Your Architecture Exam Companion
+          From cutoffs to colleges, your architecture exam companion
         </Typography>
       </Box>
 
@@ -64,7 +64,7 @@ export default function DashboardPage() {
           </Typography>
           <Button
             component={Link}
-            href="/tools/nata/exam-centers"
+            href="/tools/all"
             size="small"
             endIcon={<ArrowForwardIcon sx={{ fontSize: '0.8rem !important' }} />}
             sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.75rem' }}

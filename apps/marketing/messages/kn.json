@@ -316,7 +316,9 @@
     "continueApplication": "ಅರ್ಜಿ ಮುಂದುವರಿಸಿ",
     "trackApplication": "ಅರ್ಜಿ ಟ್ರ್ಯಾಕ್ ಮಾಡಿ",
     "payAndJoin": "ಪಾವತಿಸಿ ಮತ್ತು ಸೇರಿ",
-    "goToApp": "ಆ್ಯಪ್‌ಗೆ ಹೋಗಿ"
+    "goToApp": "ಆ್ಯಪ್‌ಗೆ ಹೋಗಿ",
+    "joinNow": "ಈಗಲೇ ಸೇರಿ",
+    "viewFees": "ಶುಲ್ಕ ನೋಡಿ"
   },
   "centers": {
     "title": "ನಮ್ಮ ಕಲಿಕಾ ಕೇಂದ್ರಗಳನ್ನು ಭೇಟಿ ಮಾಡಿ",
@@ -352,9 +354,9 @@
     "close": "ಮುಚ್ಚಿ"
   },
   "fees": {
-    "title": "Invest in Your Architecture Career",
-    "subtitle": "Transparent pricing with flexible payment options.",
-    "questionsCall": "Questions? Call us:",
+    "title": "Course fees",
+    "subtitle": "Pick a plan. Pay once and save, or pay in 2 interest-free parts.",
+    "questionsCall": "Questions about fees? Call",
     "singlePayment": "Single Payment",
     "installments": "2 Installments",
     "fullPrice": "Full Price",
@@ -365,9 +367,9 @@
     "installment2": "2nd Installment (after 3 months)",
     "total": "Total",
     "installmentDetailsComingSoon": "Installment plan details will be shared during counseling",
-    "applyNow": "Apply Now",
+    "applyNow": "Join Now",
     "recommendedCurrentYear": "Recommended for current year exam",
-    "bestValueFuture": "Best Value for future year exam",
+    "bestValueFuture": "Best value for future year exam",
     "noFeeStructures": "Fee information is currently being updated",
     "contactForFees": "Please contact us for the latest fee details.",
     "callUs": "Call Us",
@@ -402,7 +404,7 @@
     "weekendClassesDesc": "Extended 2-3 hour weekend sessions.",
     "liveInteractive": "Live & Interactive",
     "smallBatches": "Small Batches",
-    "faqTitle": "Frequently Asked Questions",
+    "faqTitle": "Common questions",
     "faqSubtitle": "Common questions about fees and classes.",
     "faq1Question": "Can I get a refund?",
     "faq1Answer": "ಹೌದು, ನಮ್ಮಲ್ಲಿ ಪಾರದರ್ಶಕ ಮರುಪಾವತಿ ನೀತಿ ಇದೆ. ಪಾವತಿಯ 24 ಗಂಟೆಗಳ ಒಳಗೆ ಮರುಪಾವತಿ ವಿನಂತಿ ಮಾಡಬೇಕು. ವಿದ್ಯಾರ್ಥಿಗಾಗಿ ಈಗಾಗಲೇ ಖರೀದಿಸಿದ ಡಿಜಿಟಲ್ ಪ್ಲಾಟ್‌ಫಾರ್ಮ್ ಚಂದಾ ಮತ್ತು ಕಲಿಕಾ ಸಾಧನ ಪರವಾನಗಿಗಳ ವೆಚ್ಚವನ್ನು ಭರಿಸಲು 30% ಕಡಿತ ಮಾಡಲಾಗುತ್ತದೆ. 24 ಗಂಟೆಗಳ ನಂತರ ಯಾವುದೇ ಮರುಪಾವತಿ ಸಾಧ್ಯವಿಲ್ಲ.",

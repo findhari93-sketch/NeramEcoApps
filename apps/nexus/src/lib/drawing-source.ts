@@ -71,6 +71,15 @@ export function opensForGrading(row: ReviewFacts, hasNewerAttempt: boolean): boo
   return !['reviewed', 'completed'].includes(row.status);
 }
 
+/**
+ * A sketch is corrected, never marked: CHECK drawing_submissions_sketch_ungraded
+ * refuses a sketchbook row with a tutor_rating or tutor_marks. Every other
+ * drawing may carry a grade.
+ */
+export function carriesGrade(row: DrawingSourceFacts): boolean {
+  return row.source_type !== 'sketchbook';
+}
+
 /** Redo asks the student to draw it again. A sketch and a test paper have no redo round. */
 export function canRedo(row: DrawingSourceFacts): boolean {
   return row.source_type !== 'sketchbook' && reviewKindOf(row) !== 'test';

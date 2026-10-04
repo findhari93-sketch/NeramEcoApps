@@ -4,7 +4,10 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   MaterialReactTable,
   type MRT_ColumnDef,
+  type MRT_ColumnFiltersState,
+  type MRT_PaginationState,
   type MRT_RowSelectionState,
+  type MRT_SortingState,
   useMaterialReactTable,
 } from 'material-react-table';
 import {
@@ -26,6 +29,13 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
 import CurrencyRupeeIcon from '@mui/icons-material/CurrencyRupee';
 import CopyablePhone from '@/components/CopyablePhone';
+import SearchOffIcon from '@mui/icons-material/SearchOff';
+import {
+  APPLICATION_STATE_LABEL,
+  ASKED_LABEL,
+  JOIN_METHOD_LABEL,
+  stateOf as sharedStateOf,
+} from '@/lib/student-hub-query';
 
 export interface StudentRow {
   id: string;
@@ -80,25 +90,12 @@ export interface StudentRow {
   detail_request_expires_at?: string | null;
 }
 
-const APPLICATION_STATE_LABEL = {
-  complete: 'Complete',
-  partial: 'Partly filled',
-  missing: 'Not started',
-} as const;
-
 const APPLICATION_STATE_STYLE = {
   complete: { bg: 'rgba(22,163,74,0.10)', fg: '#15803D' },
   partial: { bg: 'rgba(217,119,6,0.12)', fg: '#B45309' },
   // Grey, not red. A record nobody has filled in yet is a job to do, not a failure,
   // and colouring 28 rows red makes the screen look broken.
   missing: { bg: 'rgba(100,116,139,0.14)', fg: '#475569' },
-} as const;
-
-const ASKED_LABEL = {
-  not_asked: 'Not asked',
-  asked: 'Link sent',
-  opened: 'Opened',
-  answered: 'Answered',
 } as const;
 
 const ASKED_STYLE = {
@@ -118,14 +115,29 @@ const ASKED_STYLE = {
  * not silently read as "Not started".
  */
 function stateOf(row: StudentRow): 'complete' | 'partial' | 'missing' {
-  if (row.application_state) return row.application_state;
-  if (row.application_complete) return 'complete';
-  return row.application_missing === 'no_application' ? 'missing' : 'partial';
+  return sharedStateOf(row);
 }
 
 interface StudentHubTableProps {
+  /** One page of rows; the server pages, sorts and filters (see /api/students). */
   students: StudentRow[];
   loading?: boolean;
+  /** A later page / filter load: keep the rows on screen and show the progress bar. */
+  refetching?: boolean;
+  /** Rows matching the current filters across all pages. */
+  rowCount: number;
+  pagination: MRT_PaginationState;
+  onPaginationChange: (p: MRT_PaginationState) => void;
+  sorting: MRT_SortingState;
+  onSortingChange: (s: MRT_SortingState) => void;
+  columnFilters: MRT_ColumnFiltersState;
+  onColumnFiltersChange: (f: MRT_ColumnFiltersState) => void;
+  globalFilter: string;
+  onGlobalFilterChange: (q: string) => void;
+  /** Cohort years for the Year filter, from the whole batch (not just this page). */
+  yearOptions: string[];
+  hasActiveFilters?: boolean;
+  onClearFilters?: () => void;
   /** Bumping this clears the row selection (e.g. after a bulk action reloads data). */
   selectionResetKey?: number;
   /** Current cohort code (e.g. '2026-27'); a future-coded year chip is accented. */
@@ -225,14 +237,28 @@ function formatDate(dateStr: string | null): string {
 /**
  * The /students working-hub grid. AG-Grid-style per-column filtering via
  * material-react-table's subheader filter row: free-text columns get a text box,
- * enumerated columns a dropdown, money a numeric range. Filtering / sorting /
- * paging are client-side because the page loads the whole year cohort at once;
- * the year selector on the page is the only server-side scope. Bulk actions live
- * in the selection banner; row click opens the detail drawer.
+ * enumerated columns a dropdown, money a numeric range. Filtering, sorting,
+ * search and paging run on the server (manual mode): the grid holds one page of
+ * 50 and sends its state up; lib/student-hub-query.ts applies it. Bulk actions
+ * live in the selection banner (select all = this page); row click opens the
+ * detail drawer.
  */
 export default function StudentHubTable({
   students,
   loading = false,
+  refetching = false,
+  rowCount,
+  pagination,
+  onPaginationChange,
+  sorting,
+  onSortingChange,
+  columnFilters,
+  onColumnFiltersChange,
+  globalFilter,
+  onGlobalFilterChange,
+  yearOptions: yearOptionList,
+  hasActiveFilters = false,
+  onClearFilters,
   selectionResetKey = 0,
   currentBatchCode,
   onRowClick,
@@ -252,12 +278,14 @@ export default function StudentHubTable({
     setRowSelection({});
   }, [selectionResetKey]);
 
-  // Year filter options from the cohorts actually present.
-  const yearOptions = useMemo(() => {
-    const set = new Set<string>();
-    for (const s of students) if (s.academic_year) set.add(s.academic_year);
-    return [...set].sort((a, b) => b.localeCompare(a)).map((y) => ({ value: y, text: y }));
-  }, [students]);
+  // A selection belongs to the page it was made on: the server sends a new page
+  // when the page, sort or filters change, so clear it then too.
+  useEffect(() => {
+    setRowSelection({});
+  }, [pagination.pageIndex, pagination.pageSize, sorting, columnFilters, globalFilter]);
+
+  // Year filter options from the whole cohort (sent by the server), not just this page.
+  const yearOptions = useMemo(() => yearOptionList.map((y) => ({ value: y, text: y })), [yearOptionList]);
 
   const columns = useMemo<MRT_ColumnDef<StudentRow>[]>(
     () => [
@@ -466,7 +494,7 @@ export default function StudentHubTable({
         size: 130,
         // The LABEL, not the object: this value is what the select filter and
         // the CSV export compare against.
-        accessorFn: (row) => (JOIN_METHOD[row.source || ''] ?? JOIN_METHOD.__default).label,
+        accessorFn: (row) => JOIN_METHOD_LABEL[row.source || ''] ?? JOIN_METHOD_LABEL.__default,
         filterVariant: 'select',
         filterSelectOptions: JOIN_METHOD_OPTIONS,
         Cell: ({ row }) => {
@@ -697,8 +725,28 @@ export default function StudentHubTable({
     columns,
     data: students,
     getRowId: (row) => row.id,
-    state: { rowSelection, isLoading: loading, showProgressBars: loading },
+    rowCount,
+    state: {
+      rowSelection,
+      pagination,
+      sorting,
+      columnFilters,
+      globalFilter,
+      isLoading: loading,
+      showProgressBars: loading || refetching,
+    },
     onRowSelectionChange: setRowSelection,
+    manualPagination: true,
+    manualSorting: true,
+    manualFiltering: true,
+    onPaginationChange: (updater) =>
+      onPaginationChange(typeof updater === 'function' ? updater(pagination) : updater),
+    onSortingChange: (updater) => onSortingChange(typeof updater === 'function' ? updater(sorting) : updater),
+    onColumnFiltersChange: (updater) =>
+      onColumnFiltersChange(typeof updater === 'function' ? updater(columnFilters) : updater),
+    onGlobalFilterChange: (value) => onGlobalFilterChange(typeof value === 'string' ? value : ''),
+    // One sort at a time: the server sorts on the first entry anyway.
+    enableMultiSort: false,
 
     enableGlobalFilter: true,
     enableColumnFilters: true,
@@ -717,8 +765,28 @@ export default function StudentHubTable({
     initialState: {
       density: 'compact',
       columnVisibility: { personal_email: false },
-      pagination: { pageIndex: 0, pageSize: 25 },
+      showGlobalFilter: true,
     },
+    renderEmptyRowsFallback: () => (
+      <Box
+        role="status"
+        sx={{ py: 6, px: 2, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, textAlign: 'center' }}
+      >
+        <SearchOffIcon sx={{ fontSize: 32, color: 'text.secondary' }} aria-hidden />
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+          {hasActiveFilters ? 'No students match these filters' : 'No students in this batch yet'}
+        </Typography>
+        {hasActiveFilters && onClearFilters ? (
+          <Button size="small" variant="outlined" onClick={onClearFilters} sx={{ textTransform: 'none', minHeight: 44 }}>
+            Clear filters
+          </Button>
+        ) : (
+          <Typography variant="caption" color="text.secondary">
+            Switch the exam batch from the profile menu to see another cohort.
+          </Typography>
+        )}
+      </Box>
+    ),
 
     renderRowActions: ({ row }) => (
       <Box sx={{ display: 'flex', gap: 0.25 }}>

@@ -133,7 +133,9 @@ export function useStageView(host: PadHost): StageState {
           failures: failures.current,
         })
       : IDLE_POLL_MS;
-    if (delay === null) return;
+    // A hidden screen does not poll; the visibilitychange listener above
+    // refetches the moment it is shown again, which restarts this timer.
+    if (delay === null || hidden) return;
     const timer = setTimeout(() => void refresh(), delay);
     return () => clearTimeout(timer);
   }, [meetingId, stage, realtime, tick, refresh]);

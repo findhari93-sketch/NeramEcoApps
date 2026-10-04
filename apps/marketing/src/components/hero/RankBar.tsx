@@ -8,8 +8,8 @@ interface RankItem {
 }
 
 const rankItems: RankItem[] = [
-  { value: 'AIR 1&2', label: 'JEE b.arch · 2024 & 25' },
-  { value: 'AIR 1&2', label: 'NATA · 2024&25' },
+  { value: 'AIR 1', label: 'JEE B.Arch · 2024' },
+  { value: '1,000+', label: 'Students' },
   { value: '189', label: 'NATA Score' },
   { value: '10+', label: 'Years' },
 ];

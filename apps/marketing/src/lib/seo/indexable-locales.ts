@@ -24,6 +24,7 @@ export const ENGLISH_ONLY_SECTIONS = [
   'best-nata-coaching-online',
   'nata-cutoff-trends-2015-2025',
   'nata-coaching',
+  'aiarchitek',
 ] as const;
 
 /**

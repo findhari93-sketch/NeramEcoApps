@@ -77,7 +77,7 @@ export async function resolveRecordingSourceByIds(driveId: string, itemId: strin
   const itemUrl = `${GRAPH}/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(itemId)}`;
   const headers = { Authorization: `Bearer ${token}` };
 
-  const res = await fetch(itemUrl, { headers });
+  const res = await fetch(itemUrl, { cache: 'no-store', headers });
   if (!res.ok) throw new Error(`RECORDING_ITEM_${res.status}`);
   const item = await res.json();
 
@@ -86,7 +86,7 @@ export async function resolveRecordingSourceByIds(driveId: string, itemId: strin
 
   let downloadUrl: string | null = item['@microsoft.graph.downloadUrl'] || null;
   if (!downloadUrl) {
-    const content = await fetch(`${itemUrl}/content`, { headers, redirect: 'manual' });
+    const content = await fetch(`${itemUrl}/content`, { cache: 'no-store', headers, redirect: 'manual' });
     downloadUrl = content.status === 302 ? content.headers.get('Location') : null;
   }
   if (!downloadUrl) throw new Error('Could not resolve SharePoint item to a streaming URL');
@@ -118,7 +118,7 @@ export async function fetchSlice(
   while (filled < length) {
     const from = start + filled;
     const to = start + length - 1;
-    const res = await fetchImpl(downloadUrl, { headers: { Range: `bytes=${from}-${to}` } });
+    const res = await fetchImpl(downloadUrl, { cache: 'no-store', headers: { Range: `bytes=${from}-${to}` } });
 
     if (res.status === 200) throw new Error('RANGE_NOT_SUPPORTED');
     if (res.status !== 206) throw new Error(`RANGE_FETCH_${res.status}`);

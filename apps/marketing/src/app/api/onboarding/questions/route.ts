@@ -6,12 +6,13 @@ export const dynamic = 'force-dynamic';
  */
 
 import { NextResponse } from 'next/server';
+import { PUBLIC_CACHE_HEADERS } from '@/app/api/_lib/public-cache';
 import { getActiveOnboardingQuestions } from '@neram/database';
 
 export async function GET() {
   try {
     const questions = await getActiveOnboardingQuestions();
-    return NextResponse.json({ questions });
+    return NextResponse.json({ questions }, { headers: PUBLIC_CACHE_HEADERS });
   } catch (error) {
     console.error('Error fetching onboarding questions:', error);
     return NextResponse.json(

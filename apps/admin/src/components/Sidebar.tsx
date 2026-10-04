@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   Box,
@@ -19,7 +19,6 @@ import {
   Menu,
   MenuItem,
   Divider,
-  useVisibilityPolling,
 } from '@neram/ui';
 import { useBatches } from '@/contexts/BatchContext';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -41,6 +40,8 @@ import CampaignIcon from '@mui/icons-material/Campaign';
 import FormatQuoteIcon from '@mui/icons-material/FormatQuote';
 import GraphicEqIcon from '@mui/icons-material/GraphicEq';
 import RateReviewIcon from '@mui/icons-material/RateReview';
+import StorefrontOutlinedIcon from '@mui/icons-material/StorefrontOutlined';
+import InsightsIcon from '@mui/icons-material/Insights';
 import PersonSearchIcon from '@mui/icons-material/PersonSearch';
 import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
@@ -77,6 +78,7 @@ import AutorenewIcon from '@mui/icons-material/Autorenew';
 import { useMicrosoftAuth } from '@neram/auth';
 import NotificationBell from './NotificationBell';
 import { useSidebar } from '@/contexts/SidebarContext';
+import { useAdminBadges } from '@/contexts/AdminBadgesContext';
 
 const TRANSITION = 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)';
 const MOBILE_DRAWER_WIDTH = 280;
@@ -102,8 +104,6 @@ interface MenuItem {
   hasBadge?: true | BadgeKey;
 }
 
-type BadgeCounts = Record<BadgeKey, number>;
-
 interface MenuGroup {
   label: string;
   items: MenuItem[];
@@ -125,6 +125,7 @@ const menuGroups: MenuGroup[] = [
       { text: 'Lifecycle', icon: AutorenewIcon, path: '/lifecycle', hasBadge: 'lifecycle' },
       { text: 'Exam Batches', icon: CalendarMonthIcon, path: '/exam-batches' },
       { text: 'Leads', icon: PersonSearchIcon, path: '/leads', hasBadge: 'leads' },
+      { text: 'Leads by channel', icon: InsightsIcon, path: '/leads/channels' },
       { text: 'Students', icon: SchoolIcon, path: '/students', hasBadge: 'students' },
       { text: 'Student Devices', icon: DevicesIcon, path: '/devices' },
       { text: 'Direct Enroll', icon: PersonAddAlt1Icon, path: '/direct-enrollment' },
@@ -178,6 +179,7 @@ const menuGroups: MenuGroup[] = [
     label: 'Marketing',
     items: [
       { text: 'Marketing Content', icon: CampaignIcon, path: '/marketing-content' },
+      { text: 'Centres', icon: StorefrontOutlinedIcon, path: '/centres' },
       { text: 'Testimonials', icon: FormatQuoteIcon, path: '/testimonials' },
       { text: 'Social Proofs', icon: GraphicEqIcon, path: '/social-proofs' },
       { text: 'Careers', icon: WorkIcon, path: '/careers', hasBadge: 'careers' },
@@ -216,69 +218,9 @@ export default function Sidebar() {
   // Global exam-batch switch lives in this profile menu; every user-list follows it.
   const { current: currentBatch, batches, selectedBatch, setSelectedBatch } = useBatches();
   const [profileAnchor, setProfileAnchor] = useState<null | HTMLElement>(null);
-  const [messageUnreadCount, setMessageUnreadCount] = useState(0);
-  const [careersNewCount, setCareersNewCount] = useState(0);
-  const [badgeCounts, setBadgeCounts] = useState<BadgeCounts>({
-    careers: 0,
-    leads: 0,
-    students: 0,
-    demo_classes: 0,
-    support_tickets: 0,
-    app_feedback: 0,
-    qa_moderation: 0,
-    payments: 0,
-    chat_history: 0,
-    duplicates: 0,
-    follow_ups: 0,
-    lifecycle: 0,
-  });
-
-  const fetchMessageUnreadCount = useCallback(async () => {
-    try {
-      const res = await fetch('/api/messages/unread-count');
-      if (res.ok) {
-        const data = await res.json();
-        setMessageUnreadCount(data.count || 0);
-      }
-    } catch {
-      // Silently fail for badge count
-    }
-  }, []);
-
-  const fetchCareersNewCount = useCallback(async () => {
-    try {
-      const res = await fetch('/api/careers/applications/count');
-      if (res.ok) {
-        const data = await res.json();
-        setCareersNewCount(data.count || 0);
-      }
-    } catch {
-      // Silently fail for badge count
-    }
-  }, []);
-
-  const fetchBadgeCounts = useCallback(async () => {
-    try {
-      const res = await fetch('/api/admin-badges');
-      if (res.ok) {
-        const data = await res.json();
-        setBadgeCounts((prev) => ({ ...prev, ...data }));
-      }
-    } catch {
-      // Silently fail — keep previous counts
-    }
-  }, []);
-
-  // Three counts on one guarded interval. These were three separate unguarded
-  // setIntervals, so every open staff tab cost three invocations a minute for as
-  // long as it existed, including tabs nobody was looking at.
-  const refreshCounts = useCallback(() => {
-    fetchMessageUnreadCount();
-    fetchCareersNewCount();
-    fetchBadgeCounts();
-  }, [fetchMessageUnreadCount, fetchCareersNewCount, fetchBadgeCounts]);
-
-  useVisibilityPolling(refreshCounts, 60000);
+  // One shared poller (AdminBadgesProvider) feeds every badge here and the bell.
+  const { counts: badgeCounts } = useAdminBadges();
+  const messageUnreadCount = badgeCounts.messages_unread;
 
   const handleLogout = async () => {
     await signOut();
@@ -292,11 +234,8 @@ export default function Sidebar() {
     if (item.hasBadge === true && messageUnreadCount > 0) {
       return <Badge badgeContent={messageUnreadCount} color="error" max={99}>{iconEl}</Badge>;
     }
-    if (item.hasBadge === 'careers' && careersNewCount > 0) {
-      return <Badge badgeContent={careersNewCount} color="error" max={99}>{iconEl}</Badge>;
-    }
-    if (typeof item.hasBadge === 'string' && item.hasBadge in badgeCounts) {
-      const count = badgeCounts[item.hasBadge as BadgeKey];
+    if (typeof item.hasBadge === 'string') {
+      const count = badgeCounts[item.hasBadge as BadgeKey] ?? 0;
       if (count > 0) {
         return <Badge badgeContent={count} color="error" max={99}>{iconEl}</Badge>;
       }

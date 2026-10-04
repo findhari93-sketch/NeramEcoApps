@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildSitemapIndex, CHILD_SITEMAPS, parseSitemap, selectRecent } from './sitemaps';
+import { buildImageSitemap, buildSitemapIndex, CHILD_SITEMAPS, parseSitemap, selectRecent } from './sitemaps';
 
 describe('sitemap index', () => {
   it('lists every child sitemap and parses back as an index', () => {
@@ -39,5 +39,18 @@ describe('selectRecent', () => {
       now,
     );
     expect(urls).toEqual(['new', 'undated']);
+  });
+});
+
+describe('buildImageSitemap', () => {
+  it('lists each centre page with its photos and skips pages without any', () => {
+    const xml = buildImageSitemap([
+      { loc: 'https://neramclasses.com/coaching/nata-coaching/nata-coaching-centers-in-madurai', images: ['https://db.neramclasses.com/a.webp?x=1&y=2'] },
+      { loc: 'https://neramclasses.com/coaching/nata-coaching/nata-coaching-centers-in-trichy', images: [] },
+    ]);
+    expect(xml).toContain('xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"');
+    expect(xml).toContain('<image:loc>https://db.neramclasses.com/a.webp?x=1&amp;y=2</image:loc>');
+    expect(xml).not.toContain('trichy');
+    expect(parseSitemap(xml).entries.map((e) => e.loc)).toEqual(['https://neramclasses.com/coaching/nata-coaching/nata-coaching-centers-in-madurai']);
   });
 });

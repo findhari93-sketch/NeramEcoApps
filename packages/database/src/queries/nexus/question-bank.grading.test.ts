@@ -88,6 +88,40 @@ describe('a NUMERICAL answer that is not actually a number', () => {
   });
 });
 
+describe('a NUMERICAL answer written as a formula', () => {
+  it('matches a fraction key by value, not by spelling', () => {
+    expect(gradeQBAnswerStrict('NUMERICAL', '0.5', '1/2', null)).toBe(true);
+    expect(gradeQBAnswerStrict('NUMERICAL', '4/6', '2/3', null)).toBe(true);
+    expect(gradeQBAnswerStrict('NUMERICAL', '\\frac{1}{2}', '1/2', null)).toBe(true);
+    expect(gradeQBAnswerStrict('NUMERICAL', '0.6', '2/3', null)).toBe(false);
+  });
+
+  it('accepts a decimal correct to two places for a root key with no tolerance', () => {
+    expect(gradeQBAnswerStrict('NUMERICAL', '3.46', '2√3', null)).toBe(true);
+    expect(gradeQBAnswerStrict('NUMERICAL', '2√3', '2√3', null)).toBe(true);
+    expect(gradeQBAnswerStrict('NUMERICAL', 'sqrt(12)', '2√3', null)).toBe(true);
+    expect(gradeQBAnswerStrict('NUMERICAL', '3.4', '2√3', null)).toBe(false);
+  });
+
+  it('treats a blank tolerance saved as 0 the same as no tolerance', () => {
+    expect(gradeQBAnswerStrict('NUMERICAL', '3.46', '2√3', 0)).toBe(true);
+  });
+
+  it('applies a set tolerance to formula answers too', () => {
+    expect(gradeQBAnswerStrict('NUMERICAL', '3.5', '2√3', 0.05)).toBe(true);
+    expect(gradeQBAnswerStrict('NUMERICAL', '3.6', '2√3', 0.05)).toBe(false);
+  });
+
+  it('gives practice the same verdict as a test', () => {
+    // checkQBAnswer used parseFloat, which read '1/2' as 1.
+    expect(checkQBAnswer('NUMERICAL', '1', '1/2')).toBe(false);
+    expect(checkQBAnswer('NUMERICAL', '0.5', '1/2')).toBe(true);
+    expect(checkQBAnswer('NUMERICAL', '2', '2:3')).toBe(false);
+    expect(checkQBAnswer('NUMERICAL', '2:3', '2:3')).toBe(true);
+    expect(checkQBAnswer('NUMERICAL', '3.14', '3.1416', 0.01)).toBe(true);
+  });
+});
+
 describe('self-assessed formats are never silently marked correct', () => {
   it('returns null, never true, for a drawing prompt', () => {
     // The trap this whole function exists to avoid. checkQBAnswer returns TRUE

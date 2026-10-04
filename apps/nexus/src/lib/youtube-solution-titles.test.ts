@@ -5,6 +5,7 @@ import {
   readSampleTitle,
   readTitleForSample,
   titleKey,
+  titleExamMatches,
   type FoundVideo,
   type FindRow,
 } from './youtube-solution-titles';
@@ -379,5 +380,15 @@ describe('a sample title typed by the teacher', () => {
     }));
     const result = matchPaperVideos(videos, rows, paper, { paperCountThatYear: 3, sampleKey: key });
     expect(result.counts).toMatchObject({ new: 80, skipped: 0 });
+  });
+});
+
+describe('titleExamMatches', () => {
+  it('lets a JEE title belong to either JEE paper, since 2B shares 2A questions', () => {
+    expect(titleExamMatches('JEE_PAPER_2', 'JEE_PAPER_2')).toBe(true);
+    expect(titleExamMatches('JEE_PAPER_2', 'JEE_PAPER_2B')).toBe(true);
+    expect(titleExamMatches('JEE_PAPER_2', 'NATA')).toBe(false);
+    expect(titleExamMatches('NATA', 'JEE_PAPER_2B')).toBe(false);
+    expect(titleExamMatches('NATA', 'NATA')).toBe(true);
   });
 });

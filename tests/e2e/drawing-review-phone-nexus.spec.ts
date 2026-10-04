@@ -17,6 +17,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { getTestAuthToken, injectAuthForPage, APP_URLS } from '../utils/credentials';
+import { showScores } from '../utils/drawing-review';
 
 const FIXTURE_IMAGE = 'apps/nexus/public/icons/icon-512x512.png';
 
@@ -56,7 +57,7 @@ test.describe('Drawing review on a phone', () => {
     const ok = await injectAuthForPage(page, 'teacher');
     test.skip(!ok, 'Teacher auth injection failed');
     await page.goto(`${APP_URLS.nexus}/teacher/drawing-reviews/${submissionId}?assignment=${assignmentId}`, { waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('heading', { name: 'Scores', exact: true })).toBeVisible({ timeout: 90_000 });
+    await showScores(page);
   };
 
   const status = async (page: Page) => {

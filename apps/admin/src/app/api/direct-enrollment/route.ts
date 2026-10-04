@@ -7,7 +7,6 @@ import {
   getSupabaseAdminClient,
   createDirectEnrollmentLink,
   listDirectEnrollmentLinks,
-  expireOldDirectEnrollmentLinks,
 } from '@neram/database';
 import type { DirectEnrollmentLinkStatus, CourseType, LearningMode } from '@neram/database';
 
@@ -22,9 +21,9 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseAdminClient();
 
-    // Auto-expire old links
-    await expireOldDirectEnrollmentLinks(supabase);
-
+    // A GET no longer writes. Expired links are marked by the daily
+    // /api/cron/identity-sweep run; until then a link past expires_at is shown as
+    // expired here (and the enrol page refuses it on expires_at regardless).
     const { data, total } = await listDirectEnrollmentLinks(
       {
         status: status || undefined,
@@ -35,9 +34,16 @@ export async function GET(request: NextRequest) {
       supabase
     );
 
+    const now = Date.now();
+    const rows = (data || []).map((link: any) =>
+      link?.status === 'active' && link?.expires_at && new Date(link.expires_at).getTime() < now
+        ? { ...link, status: 'expired' }
+        : link
+    );
+
     return NextResponse.json({
       success: true,
-      data,
+      data: rows,
       pagination: {
         page,
         limit,

@@ -5,11 +5,14 @@ import {
   Box, Typography, TextField, Button, Stack, Card, CardContent,
   MenuItem, Alert, CircularProgress, Slider,
 } from '@neram/ui';
-import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
+import { getFirebaseAuth } from '@neram/auth';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import type { NataQuestionCategory } from '@neram/database';
 import ImageUpload from '@/components/question-bank/ImageUpload';
+import ToolPageHeader from '@/components/tools-hub/ToolPageHeader';
+
+const LIST_HREF = '/tools/nata/question-bank';
 
 const CATEGORIES: { value: NataQuestionCategory; label: string }[] = [
   { value: 'mathematics', label: 'Mathematics' },
@@ -32,7 +35,7 @@ const CONFIDENCE_MARKS = [
 ];
 
 export default function NewQuestionPage() {
-  const { user } = useFirebaseAuth();
+  // The (protected) layout guarantees a signed-in user; the token is read at submit time
   const router = useRouter();
 
   const [title, setTitle] = useState('');
@@ -54,36 +57,20 @@ export default function NewQuestionPage() {
     }
   };
 
-  if (!user) {
-    return (
-      <Box sx={{ textAlign: 'center', py: 8, maxWidth: 500, mx: 'auto' }}>
-        <Typography variant="h5" gutterBottom>
-          Sign in required
-        </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-          You need to be signed in to post a question.
-        </Typography>
-        <Button component={Link} href="/login" variant="contained">
-          Sign In
-        </Button>
-      </Box>
-    );
-  }
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
     if (!title.trim()) {
-      setError('Title is required');
+      setError('Please add a title.');
       return;
     }
     if (!body.trim()) {
-      setError('Question details are required');
+      setError('Please add the question details.');
       return;
     }
     if (body.trim().length < 20) {
-      setError('Please provide more details (at least 20 characters)');
+      setError('Please add more details (at least 20 characters).');
       return;
     }
 
@@ -92,7 +79,7 @@ export default function NewQuestionPage() {
       const auth = getFirebaseAuth();
       const token = await auth.currentUser?.getIdToken();
       if (!token) {
-        setError('Authentication failed. Please sign in again.');
+        setError('Your session has ended. Please sign in again.');
         return;
       }
 
@@ -114,14 +101,15 @@ export default function NewQuestionPage() {
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || 'Failed to submit question');
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || 'Could not submit your question. Your text is still here, please try again.');
         return;
       }
 
-      router.push('/tools/nata/question-bank?posted=true');
+      // Replace, so Back from the list does not reopen a submitted form
+      router.replace(`${LIST_HREF}?posted=true`);
     } catch {
-      setError('Something went wrong. Please try again.');
+      setError('Something went wrong. Your text is still here, please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -131,21 +119,15 @@ export default function NewQuestionPage() {
 
   return (
     <Box sx={{ maxWidth: 700, mx: 'auto' }}>
-      {/* Back link */}
-      <Button component={Link} href="/tools/nata/question-bank" size="small" sx={{ mb: 2 }}>
-        &larr; Back to Question Bank
-      </Button>
-
-      <Typography variant="h5" fontWeight={700} sx={{ mb: 1 }}>
-        Post a Question
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Share a question you remember from your NATA exam to help other students prepare.
-      </Typography>
+      <ToolPageHeader
+        toolId="nata-question-bank"
+        title="Post a question"
+        description="Share a question you remember from your NATA exam to help other students prepare."
+      />
 
       {/* Moderation notice */}
       <Alert severity="info" sx={{ mb: 3 }}>
-        Your question will be reviewed by moderators before it&apos;s published. This usually takes less than 24 hours.
+        Moderators review every question before it is published. This usually takes less than 24 hours.
       </Alert>
 
       <Card>
@@ -154,8 +136,8 @@ export default function NewQuestionPage() {
             <Stack spacing={2.5}>
               {/* Title */}
               <TextField
-                label="Question Title"
-                placeholder="e.g., NATA 2026 Session 1 - Geometry question about..."
+                label="Question title"
+                placeholder="For example, NATA 2026 Session 1: geometry question about"
                 fullWidth
                 required
                 value={title}
@@ -166,8 +148,8 @@ export default function NewQuestionPage() {
 
               {/* Body */}
               <TextField
-                label="Question Details"
-                placeholder="Describe the question as you remember it. Include any specific details, options, or diagrams mentioned..."
+                label="Question details"
+                placeholder="Describe the question as you remember it. Include any details, options or diagrams mentioned."
                 fullWidth
                 required
                 multiline
@@ -197,7 +179,7 @@ export default function NewQuestionPage() {
 
                 <TextField
                   select
-                  label="Exam Year"
+                  label="Exam year"
                   fullWidth
                   value={examYear}
                   onChange={(e) => setExamYear(Number(e.target.value))}
@@ -212,8 +194,8 @@ export default function NewQuestionPage() {
 
               {/* Session */}
               <TextField
-                label="Exam Session / Slot (optional)"
-                placeholder="e.g., Session 1, Slot 2, Morning, etc."
+                label="Exam session or slot (optional)"
+                placeholder="For example, Session 1, Slot 2 or Morning"
                 fullWidth
                 value={examSession}
                 onChange={(e) => setExamSession(e.target.value)}
@@ -222,11 +204,11 @@ export default function NewQuestionPage() {
 
               {/* Confidence Level */}
               <Box>
-                <Typography variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
+                <Typography id="qb-confidence-label" variant="body2" fontWeight={600} sx={{ mb: 0.5 }}>
                   How confident are you about this question?
                 </Typography>
                 <Typography variant="caption" color="text.secondary" sx={{ mb: 1.5, display: 'block' }}>
-                  It&apos;s okay if you don&apos;t remember exactly — mark your confidence level so others know.
+                  It&apos;s okay if you don&apos;t remember exactly. Mark your confidence level so others know.
                 </Typography>
                 <Box sx={{ px: 1 }}>
                   <Slider
@@ -237,7 +219,9 @@ export default function NewQuestionPage() {
                     step={1}
                     marks={CONFIDENCE_MARKS.map(m => ({ value: m.value, label: '' }))}
                     valueLabelDisplay="off"
-                    sx={{ mb: 0.5 }}
+                    aria-labelledby="qb-confidence-label"
+                    getAriaValueText={(v) => CONFIDENCE_MARKS.find((m) => m.value === v)?.label ?? String(v)}
+                    sx={{ mb: 0.5, py: 2 }}
                   />
                   <Typography
                     variant="body2"
@@ -261,15 +245,16 @@ export default function NewQuestionPage() {
               />
 
               {/* Error */}
-              {error && <Alert severity="error">{error}</Alert>}
+              {error && <Alert severity="error" role="alert">{error}</Alert>}
 
               {/* Submit */}
-              <Stack direction="row" spacing={2} justifyContent="flex-end">
+              <Stack direction="row" spacing={1.5} justifyContent="flex-end">
                 <Button
                   component={Link}
-                  href="/tools/nata/question-bank"
+                  href={LIST_HREF}
                   variant="outlined"
                   disabled={submitting}
+                  sx={{ minHeight: 44, flex: { xs: 1, sm: '0 0 auto' } }}
                 >
                   Cancel
                 </Button>
@@ -277,13 +262,10 @@ export default function NewQuestionPage() {
                   type="submit"
                   variant="contained"
                   disabled={submitting}
-                  sx={{ minWidth: 140, minHeight: 44 }}
+                  startIcon={submitting ? <CircularProgress size={18} color="inherit" /> : undefined}
+                  sx={{ minWidth: 140, minHeight: 44, flex: { xs: 1, sm: '0 0 auto' } }}
                 >
-                  {submitting ? (
-                    <CircularProgress size={20} color="inherit" />
-                  ) : (
-                    'Submit for Review'
-                  )}
+                  {submitting ? 'Submitting' : 'Submit for review'}
                 </Button>
               </Stack>
             </Stack>

@@ -4,6 +4,7 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import ApplyPageContent from '@/components/ApplyPageContent';
+import ClientIntl from '@/components/i18n/ClientIntl';
 
 const baseUrl = 'https://neramclasses.com';
 
@@ -44,7 +45,7 @@ export default function ApplyPage({
           { name: 'Apply', url: `${baseUrl}/apply` },
         ])}
       />
-      <ApplyPageContent />
+      <ClientIntl locale={locale} namespaces={['apply', 'terms', 'refundPolicy']}><ApplyPageContent /></ClientIntl>
     </>
   );
 }

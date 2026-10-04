@@ -12,7 +12,12 @@ import {
   getUserByFirebaseUid,
   getSupabaseAdminClient,
   getQuestionById,
+  getUserExamProfile,
+  getUserQBStats,
+  computeAccessInfo,
 } from '@neram/database';
+
+const PREVIEW_CHARS = 160;
 
 // ---------------------------------------------------------------------------
 // Auth helper
@@ -60,6 +65,26 @@ export async function GET(
         { error: 'Question not found' },
         { status: 404 },
       );
+    }
+
+    // The "contribute to unlock" blur used to be CSS only: the full body was
+    // in this response for anyone. Only students with full access (or the
+    // author) get the body and images; everyone else gets a short preview.
+    let full = !!userId && question.user_id === userId;
+    if (!full && userId) {
+      const [profile, stats] = await Promise.all([getUserExamProfile(userId, adminClient), getUserQBStats(userId, adminClient)]);
+      full = computeAccessInfo(profile, stats).accessLevel === 'full';
+    }
+    if (!full) {
+      const body = String(question.body ?? '');
+      return NextResponse.json({
+        data: {
+          ...question,
+          body: body.length > PREVIEW_CHARS ? `${body.slice(0, PREVIEW_CHARS).trimEnd()}...` : body,
+          image_urls: [],
+          locked: true,
+        },
+      });
     }
 
     return NextResponse.json({ data: question });

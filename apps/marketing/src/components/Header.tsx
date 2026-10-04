@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
 import {
   AppBar,
@@ -37,7 +38,11 @@ import { locales, localeLabels, type Locale } from '@/i18n';
 import { useTranslations } from 'next-intl';
 import AuthButton from './AuthButton';
 import UserNotificationBell from './UserNotificationBell';
-import SearchDialog from './SearchDialog';
+// Search (dialog + Fuse + the ~70 KB generated index) is its own chunk, fetched
+// on the first open (or on hover/focus of the search button) instead of being
+// shipped with the header on every page.
+const loadSearchDialog = () => import('./SearchDialog');
+const SearchDialog = dynamic(loadSearchDialog, { ssr: false });
 import { useApplicationStatus, type AppStatusSummary } from '@/hooks/useApplicationStatus';
 import { useGoToApp } from '@/hooks/useGoToApp';
 
@@ -99,7 +104,7 @@ function getCtaConfig(status: AppStatusSummary, t: ReturnType<typeof useTranslat
       };
     default:
       return {
-        label: t('header.applyNow'),
+        label: t('header.joinNow'),
         href: '/apply' as const,
         variant: 'contained' as const,
         sx: {
@@ -197,6 +202,7 @@ const NAV_GROUPS: NavGroup[] = [
           { label: 'Important Dates', href: '/nata-2026/important-dates' },
           { label: 'Syllabus', href: '/nata-2026/syllabus' },
           { label: 'Free Tools & Mocks', href: '/tools' },
+          { label: 'aiArchitek: AI Tools', href: '/aiarchitek' },
         ],
       },
       {
@@ -315,9 +321,21 @@ export default function Header() {
   const { goToApp } = useGoToApp();
   const ctaConfig = getCtaConfig(appStatus, t);
   const isEnrolled = appStatus === 'enrolled' || appStatus === 'partial_payment';
+  // Students check the fee before they apply, so it sits right under the CTA.
+  const showFeesLink = !isEnrolled && !isApplyPage && pathname !== '/fees';
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchOpen, setSearchOpenState] = useState(false);
+  // Mount the dialog only after the first open; it stays mounted afterwards so
+  // its close transition and recent searches keep working.
+  const [searchMounted, setSearchMounted] = useState(false);
+  const setSearchOpen = (next: boolean) => {
+    if (next) setSearchMounted(true);
+    setSearchOpenState(next);
+  };
+  const preloadSearch = () => {
+    void loadSearchDialog();
+  };
 
   // Desktop: which group's popover is open
   const [openMenu, setOpenMenu] = useState<{ key: string; anchorEl: HTMLElement } | null>(null);
@@ -566,6 +584,8 @@ export default function Header() {
             {/* ── Desktop Search ── */}
             <Box
               onClick={() => setSearchOpen(true)}
+              onPointerEnter={preloadSearch}
+              onFocus={preloadSearch}
               role="button"
               tabIndex={0}
               onKeyDown={(e) => e.key === 'Enter' && setSearchOpen(true)}
@@ -622,6 +642,7 @@ export default function Header() {
             <IconButton
               color="inherit"
               onClick={() => setSearchOpen(true)}
+              onPointerDown={preloadSearch}
               aria-label="Search"
               sx={{
                 display: { xs: 'flex', md: 'none' },
@@ -681,24 +702,56 @@ export default function Header() {
                 {t('header.needHelp')}
               </Button>
             ) : ctaConfig.href ? (
-              <Button
-                component={Link}
-                href={ctaConfig.href}
-                variant={ctaConfig.variant}
-                color={appStatus ? undefined : 'secondary'}
-                size="small"
+              <Box
                 sx={{
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  fontSize: { xs: '0.75rem', md: '0.875rem' },
-                  px: { xs: 1.5, md: 2.5 },
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
                   mr: 1,
-                  textTransform: 'none',
-                  ...ctaConfig.sx,
                 }}
               >
-                {ctaConfig.label}
-              </Button>
+                <Button
+                  component={Link}
+                  href={ctaConfig.href}
+                  variant={ctaConfig.variant}
+                  color={appStatus ? undefined : 'secondary'}
+                  size="small"
+                  sx={{
+                    borderRadius: '6px',
+                    fontWeight: 600,
+                    fontSize: { xs: '0.75rem', md: '0.875rem' },
+                    px: { xs: 1.5, md: 2.5 },
+                    textTransform: 'none',
+                    whiteSpace: 'nowrap',
+                    ...ctaConfig.sx,
+                  }}
+                >
+                  {ctaConfig.label}
+                </Button>
+                {/* Button (48) + this line (~14) stays inside the 64px toolbar */}
+                {showFeesLink && (
+                  <Box
+                    component={Link}
+                    href="/fees"
+                    sx={{
+                      display: { xs: 'none', md: 'block' },
+                      px: 0.5,
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      lineHeight: 1.2,
+                      whiteSpace: 'nowrap',
+                      color: 'text.secondary',
+                      textDecoration: 'underline',
+                      textUnderlineOffset: '2px',
+                      borderRadius: '4px',
+                      '&:hover': { color: 'primary.main' },
+                      '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+                    }}
+                  >
+                    {t('header.viewFees')}
+                  </Box>
+                )}
+              </Box>
             ) : (
               <Button
                 onClick={goToApp}
@@ -1106,6 +1159,24 @@ export default function Header() {
                   {ctaConfig.label}
                 </Button>
               )}
+              {showFeesLink && (
+                <Button
+                  component={Link}
+                  href="/fees"
+                  variant="outlined"
+                  fullWidth
+                  onClick={toggleMobileMenu}
+                  sx={{
+                    mt: 1,
+                    minHeight: 48,
+                    borderRadius: '6px',
+                    fontWeight: 600,
+                    textTransform: 'none',
+                  }}
+                >
+                  {t('header.viewFees')}
+                </Button>
+              )}
             </Box>
           )}
           <Divider />
@@ -1159,7 +1230,7 @@ export default function Header() {
       </AppBar>
 
       {/* Spacer */}
-      <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />
+      {searchMounted && <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />}
       <Toolbar
         disableGutters
         sx={{ minHeight: { xs: 56, md: 64 }, mt: 'var(--broadcast-banner-height, 0px)' }}

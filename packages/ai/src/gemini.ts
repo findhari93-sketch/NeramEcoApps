@@ -200,6 +200,7 @@ export async function generateGemini(opts: GenerateOptions): Promise<GeminiResul
 
     const url = `${GEMINI_BASE_URL}/${attempt.model}:generateContent?key=${attempt.apiKey}`;
     const res = await fetch(url, {
+      cache: 'no-store',
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),

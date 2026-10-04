@@ -27,13 +27,6 @@ export function generateSoftwareApplicationSchema() {
       priceCurrency: 'INR',
       availability: 'https://schema.org/InStock',
     },
-    aggregateRating: {
-      '@type': 'AggregateRating',
-      ratingValue: '4.8',
-      ratingCount: '2500',
-      bestRating: '5',
-      worstRating: '1',
-    },
     featureList: APP_FEATURES,
     softwareVersion: '2.0',
     datePublished: '2024-01-01',

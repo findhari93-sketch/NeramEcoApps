@@ -17,7 +17,7 @@ import {
 import { LoginModal } from '@neram/ui';
 import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import { useTranslations } from 'next-intl';
-import { leadAttribution } from '@/lib/attribution';
+import { leadAttribution, touchAttribution } from '@/lib/attribution';
 import PhoneIcon from '@mui/icons-material/Phone';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import VerifiedIcon from '@mui/icons-material/Verified';
@@ -159,6 +159,7 @@ export default function ApplyCallbackContent() {
           preferred_slot: preferredSlot || undefined,
           notes: notes.trim() || undefined,
           ...leadAttribution(),
+          ...touchAttribution(),
         }),
       });
 

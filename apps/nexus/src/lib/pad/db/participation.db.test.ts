@@ -325,11 +325,11 @@ describe('participation: joined mid-prompt', () => {
   it('marks a late joiner who answers in real time, and not the student already waiting before ASK', async () => {
     const s = await session(2);
     const [waiting, late] = s.students;
-    expect(await t.joinByMeeting(waiting, s.meetingId)).toEqual({ ok: true, session_id: s.sessionId });
+    expect(await t.joinByMeeting(waiting, s.meetingId)).toEqual({ ok: true, session_id: s.sessionId, first_touch: true });
     await tick();
     const asked = await t.ask(s.teacherId, s.sessionId, 'yesno', null);
     await tick();
-    expect(await t.joinByMeeting(late, s.meetingId)).toEqual({ ok: true, session_id: s.sessionId });
+    expect(await t.joinByMeeting(late, s.meetingId)).toEqual({ ok: true, session_id: s.sessionId, first_touch: true });
     await t.submit(late, asked.prompt_id, 'Y');
     await t.close(s.teacherId, asked.prompt_id);
 
@@ -353,7 +353,8 @@ describe('teacher snapshot', () => {
       bot_in_meeting: false,
     });
     expect(snap.session.room_code).toMatch(/^\d{6}$/);
-    expect(snap.readiness).toEqual({ enrolled: 2, joined: 0, connected: 0, in_meeting: 0 });
+    expect(snap.readiness).toEqual({ enrolled: 2, joined: 0, opened: 0, connected: 0, in_meeting: 0 });
+    expect(snap.session.title).toBe('Test class');
   });
 
   it('shows a live count but no distribution while OPEN, and groups by normalised answer after CLOSE', async () => {

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { signInWithCustomToken } from '@neram/auth';
 import { ssoReturnUrl } from '@/lib/sso-return-url';
 
@@ -19,12 +19,16 @@ interface UseSSOTokenResult {
 }
 
 export function useSSOToken(): UseSSOTokenResult {
-  const searchParams = useSearchParams();
+  // Read the query in the effect, not with useSearchParams: that hook makes a
+  // statically rendered page fall back to its Suspense boundary on the server,
+  // which would leave the public tool pages empty for crawlers.
+  const pathname = usePathname();
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const attemptedRef = useRef(false);
 
   useEffect(() => {
+    const searchParams = new URLSearchParams(window.location.search);
     const authToken = searchParams.get('authToken');
     const ssoParam = searchParams.get('sso');
 
@@ -63,7 +67,7 @@ export function useSSOToken(): UseSSOTokenResult {
           setProcessing(false);
         });
     }
-  }, [searchParams, error]);
+  }, [pathname, error]);
 
   const clearError = useCallback(() => {
     setError(null);

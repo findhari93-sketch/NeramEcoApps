@@ -40,6 +40,7 @@ export async function verifyMsToken(authHeader: string | null): Promise<MsUserIn
   }
 
   const response = await fetch('https://graph.microsoft.com/v1.0/me', {
+    cache: 'no-store',
     headers: { Authorization: `Bearer ${token}` },
   });
 

@@ -28,6 +28,7 @@ export async function getAppOnlyToken(): Promise<string> {
   const res = await fetch(
     `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
     {
+      cache: 'no-store',
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -73,6 +74,7 @@ export async function addMemberToTeam(
     const res = await fetch(
       `https://graph.microsoft.com/v1.0/teams/${teamId}/members`,
       {
+        cache: 'no-store',
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -227,6 +229,7 @@ async function graphFetch(path: string, init: RequestInit = {}, timeoutMs = 15_0
   try {
     const token = await getAppOnlyToken();
     return await fetch(`https://graph.microsoft.com/v1.0${path}`, {
+      cache: 'no-store',
       ...init,
       headers: {
         Authorization: `Bearer ${token}`,
@@ -696,6 +699,7 @@ export async function addMemberToGroupChat(
     const res = await fetch(
       `https://graph.microsoft.com/v1.0/chats/${chatId}/members`,
       {
+        cache: 'no-store',
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,

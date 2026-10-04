@@ -6,7 +6,7 @@ import { Box, Typography, Paper, Divider, Alert, Chip } from '@neram/ui';
 import { setAuthRedirectUrl } from '@neram/auth';
 import AuthButtons from '@/components/AuthButtons';
 import Link from 'next/link';
-import { isTrustedRedirect } from '@/lib/safe-redirect';
+import { resolvePostAuthTarget } from '@/lib/safe-redirect';
 
 // Storage key for YouTube subscribe intent
 const YOUTUBE_SUBSCRIBE_KEY = 'neram_youtube_subscribe_intent';
@@ -24,9 +24,15 @@ export default function LoginPage() {
     const redirectUrl = searchParams.get('redirect');
     if (!redirectUrl) return;
 
-    // A sign-in token is attached to this URL after login, so only our own
-    // hosts are kept. Anything else is dropped and login ends on the dashboard.
-    if (!isTrustedRedirect(redirectUrl, [MARKETING_URL, window.location.origin])) return;
+    // A path inside this app (a public tool page) comes back here without a
+    // token. Another of our hosts gets a sign-in token after login, so only
+    // trusted hosts are kept. Anything else ends on the dashboard.
+    const target = resolvePostAuthTarget(redirectUrl, window.location.origin, [MARKETING_URL]);
+    if (target.kind === 'dashboard') return;
+    if (target.kind === 'path') {
+      setAuthRedirectUrl(target.path);
+      return;
+    }
 
     // If this is a YouTube subscribe flow, store the intent
     if (isYouTubeSubscribe) {

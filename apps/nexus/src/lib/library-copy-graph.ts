@@ -40,6 +40,7 @@ async function graph(url: string, init: RequestInit = {}): Promise<Response> {
   try {
     const token = await getAppOnlyToken();
     return await fetch(url, {
+      cache: 'no-store',
       ...init,
       headers: {
         ...(init.body ? { 'Content-Type': 'application/json' } : {}),
@@ -195,7 +196,7 @@ export async function readLibraryCopy(monitor: string, destDriveId: string): Pro
 
   let res: Response;
   try {
-    res = await fetch(monitor, { redirect: 'manual' });
+    res = await fetch(monitor, { cache: 'no-store', redirect: 'manual' });
   } catch {
     return { state: 'copying', percent: null };
   }

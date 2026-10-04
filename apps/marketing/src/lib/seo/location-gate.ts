@@ -22,6 +22,8 @@ export const GATE = {
   MIN_CONTENT_WORDS: 120,
   /** This many exam-relevant colleges in the state is a weak fact. */
   MIN_STATE_COLLEGES: 3,
+  /** Real photos of the page's own classroom (Admin > Centres): a fact no other page has. */
+  MIN_CENTRE_PHOTOS: 4,
   STRONG: 2,
   WEAK: 1,
   MIN_SCORE: 3,
@@ -56,12 +58,24 @@ export function evaluateCityGate(facts: CityFacts): GateResult {
 
   if (facts.classroom && facts.classroom.km <= GATE.CLASSROOM_KM) add(GATE.STRONG, 'classroom-near');
 
-  if (facts.contentWords >= GATE.MIN_CONTENT_WORDS) add(GATE.STRONG, 'local-content');
+  // AI-drafted content counts in full only after staff check its facts; until
+  // then it is unique text but not a reason on its own to index the page.
+  if (facts.contentWords >= GATE.MIN_CONTENT_WORDS) {
+    if (facts.content?.reviewed) add(GATE.STRONG, 'local-content');
+    else add(GATE.WEAK, 'local-content-unreviewed');
+  }
+
+  if (facts.centres.reduce((n, c) => n + (c.photos?.length ?? 0), 0) >= GATE.MIN_CENTRE_PHOTOS) add(GATE.STRONG, 'centre-photos');
 
   // The state's own B.Arch counselling route is shown on the page and differs by state.
   if (facts.counsellingHubs.length > 0) add(GATE.WEAK, 'state-counselling');
 
   if (FORCE_NOINDEX.has(facts.place.slug)) return { index: false, score, reasons: [...reasons, 'force-noindex'] };
+  // A JEE Paper 2 city page shares its facts with the NATA page for the same
+  // city, so only a city with its own classroom gets one in the index.
+  if (facts.exam === 'jee-paper-2' && facts.centres.length === 0) {
+    return { index: false, score, reasons: [...reasons, 'jee-city-without-classroom'] };
+  }
   return { index: score >= GATE.MIN_SCORE && strong >= 1, score, reasons };
 }
 
@@ -75,6 +89,6 @@ export function evaluateStateGate(facts: StateFacts): GateResult {
   if (facts.testCities.length > 0) reasons.push('nata-test-city-in-state');
   if (facts.counsellingHubs.length > 0) reasons.push('state-counselling');
   if (facts.classrooms.length > 0) reasons.push('classroom-in-state');
-  if (countWords(facts.content) >= GATE.MIN_CONTENT_WORDS) reasons.push('local-content');
+  if (countWords(facts.content) >= GATE.MIN_CONTENT_WORDS && facts.content?.reviewed) reasons.push('local-content');
   return { index: reasons.length > 0, score: reasons.length, reasons };
 }

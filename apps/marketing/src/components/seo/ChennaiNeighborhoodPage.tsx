@@ -29,8 +29,9 @@ export default function ChennaiNeighborhoodPage({ neighborhood }: Props) {
             component="p"
             sx={{ fontSize: { xs: '1rem', md: '1.15rem' }, color: 'rgba(255,255,255,0.8)', maxWidth: 650, lineHeight: 1.6, mb: 3 }}
           >
-            {neighborhood.distanceFromCenter}. IIT/NIT/SPA alumni faculty, 99.9% success rate,
-            free AI study app. Online + offline hybrid classes. Max 25 students per batch.
+            {neighborhood.distanceFromCenter}. Coaching NATA and JEE B.Arch since 2009, with 1,000+
+            students and AIR 1 in JEE B.Arch 2024. Classroom batches in Chennai, live online classes,
+            and a free NATA study app.
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
             <Button
@@ -113,11 +114,11 @@ export default function ChennaiNeighborhoodPage({ neighborhood }: Props) {
           </Typography>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2.5 }}>
             {[
-              { title: 'Free AI Study App', desc: 'Only institute with free NATA cutoff calculator, college predictor (5000+ colleges), and exam center locator.' },
-              { title: 'Hybrid: Online + Offline', desc: `Study online from ${neighborhood.name} or attend at our Ashok Nagar center. Switch anytime.` },
-              { title: 'Max 25 Per Batch', desc: 'Individual drawing feedback and personal mentoring. Not 50-100+ students like other institutes.' },
-              { title: '99.9% Success Rate', desc: 'Highest success rate. Students scoring 130+ and admitted to SPA Delhi, NIT Trichy, CEPT Ahmedabad.' },
-              { title: 'IIT/NIT/SPA Faculty', desc: 'Every instructor is an IIT, NIT, or SPA alumnus: practising architects, not freelancers.' },
+              { title: 'Free NATA Study App', desc: 'Cutoff calculator, B.Arch college predictor, exam centre finder and question bank preview at app.neramclasses.com.' },
+              { title: 'Classroom + Online', desc: `Study online from ${neighborhood.name} or attend classes at our Ashok Nagar or Tambaram centre.` },
+              { title: 'Individual Drawing Feedback', desc: 'Faculty review your drawings one by one and mentor you through your preparation.' },
+              { title: 'AIR 1 in JEE B.Arch 2024', desc: 'One of our students secured All India Rank 1 in JEE B.Arch 2024. 1,000+ students coached since 2009.' },
+              { title: 'Founded by an Architect', desc: 'Neram Classes was founded in 2009 by Pushparaj Manoharan, a B.Arch graduate of NIT Trichy.' },
               { title: 'Daily Drawing (2+ hrs)', desc: 'Drawing is 80/200 marks in NATA. We provide 2+ hours of supervised drawing practice daily.' },
             ].map((item, i) => (
               <Card key={i} elevation={0} sx={{ border: '1px solid #e0e0e0' }}>
@@ -136,10 +137,10 @@ export default function ChennaiNeighborhoodPage({ neighborhood }: Props) {
         <Container maxWidth="lg">
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }, gap: 3, textAlign: 'center' }}>
             {[
-              { value: '17+', label: 'Years (Since 2009)' },
-              { value: '99.9%', label: 'Success Rate' },
-              { value: 'Max 25', label: 'Per Batch' },
-              { value: '4.9/5', label: 'Student Rating' },
+              { value: 'AIR 1', label: 'JEE B.Arch 2024' },
+              { value: '1,000+', label: 'Students' },
+              { value: '10+', label: 'Years' },
+              { value: 'Since 2009', label: 'Founded' },
             ].map((stat, i) => (
               <Box key={i}>
                 <Typography sx={{ fontSize: { xs: '1.5rem', md: '2rem' }, fontWeight: 800, color: '#e8a020' }}>{stat.value}</Typography>
@@ -159,7 +160,7 @@ export default function ChennaiNeighborhoodPage({ neighborhood }: Props) {
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2.5 }}>
             {[
               { name: 'NATA Crash Course', duration: '3 Months', fee: '₹15,000', features: ['Quick revision', '30+ mock tests', 'Drawing practice', 'Online + offline'] },
-              { name: 'NATA 1-Year Program', duration: '12 Months', fee: '₹25,000', features: ['Complete syllabus', '100+ mock tests', 'Daily drawing (2+ hrs)', 'Personal mentoring', 'Free AI study app'] },
+              { name: 'NATA 1-Year Program', duration: '12 Months', fee: '₹25,000', features: ['Complete syllabus', '100+ mock tests', 'Daily drawing (2+ hrs)', 'Personal mentoring', 'Free NATA study app'] },
               { name: 'NATA 2-Year Program', duration: '24 Months', fee: '₹30,000', features: ['Foundation + Advanced', '1-on-1 mentoring', 'NATA + JEE Paper 2', 'Scholarship eligible'] },
             ].map((course, i) => (
               <Card key={i} elevation={0} sx={{ border: '1px solid #e0e0e0' }}>
@@ -187,7 +188,7 @@ export default function ChennaiNeighborhoodPage({ neighborhood }: Props) {
             NATA Coaching Across Chennai
           </Typography>
           <Typography sx={{ color: '#555', mb: 3 }}>
-            Neram Classes serves students from all Chennai neighborhoods through our Ashok Nagar center and online classes.
+            Neram Classes serves students from all Chennai neighborhoods through our Ashok Nagar and Tambaram centres and live online classes.
           </Typography>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
             {otherNeighborhoods.map((n) => (

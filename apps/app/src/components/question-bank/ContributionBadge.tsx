@@ -27,8 +27,8 @@ export default function ContributionBadge({ score, size = 'small' }: Contributio
       color={level.color}
       variant="outlined"
       sx={{
-        height: size === 'small' ? 20 : 24,
-        fontSize: size === 'small' ? '0.65rem' : '0.75rem',
+        height: size === 'small' ? 24 : 28,
+        fontSize: size === 'small' ? '0.75rem' : '0.8125rem',
         fontWeight: 600,
       }}
     />

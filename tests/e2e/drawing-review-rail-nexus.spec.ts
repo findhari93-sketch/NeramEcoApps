@@ -55,7 +55,8 @@ test.describe('Drawing review rail', () => {
     await page.goto(`${APP_URLS.nexus}/teacher/drawing-reviews/${submissionId}?assignment=${assignmentId}`, {
       waitUntil: 'domcontentloaded',
     });
-    await expect(page.getByRole('heading', { name: 'Scores', exact: true })).toBeVisible({ timeout: 90_000 });
+    // Scores are optional: an unscored drawing opens with the rubric folded.
+    await expect(page.getByRole('button', { name: 'Add scores (optional)' })).toBeVisible({ timeout: 90_000 });
   };
 
   test('setup: a submission to review', async ({ request }) => {
@@ -99,7 +100,9 @@ test.describe('Drawing review rail', () => {
     test.skip(!submissionId, 'Setup did not complete');
     await openReview(page);
 
-    const score = await page.getByRole('heading', { name: 'Scores', exact: true }).boundingBox();
+    // Folded until asked for, and thumb-sized.
+    const score = await page.getByRole('button', { name: 'Add scores (optional)' }).boundingBox();
+    expect(score!.height).toBeGreaterThanOrEqual(44);
     const images = await page.getByText('Review Images', { exact: true }).boundingBox();
     expect(score && images, 'both the score and the image section render').toBeTruthy();
     expect(score!.y).toBeLessThan(images!.y);
@@ -108,16 +111,21 @@ test.describe('Drawing review rail', () => {
     await expect(page.getByText('Tap to paste or upload').first()).toBeHidden();
   });
 
-  test('the voice note sits under the written feedback', async ({ page }) => {
+  test('the voice note comes first, and written feedback stays folded until asked for', async ({ page }) => {
     test.skip(!submissionId, 'Setup did not complete');
     await openReview(page);
 
-    const sayIt = await page.getByRole('heading', { name: 'Feedback to student', exact: true }).boundingBox();
-    const feedback = await page.getByRole('textbox', { name: 'Feedback to student' }).boundingBox();
+    // Teachers review mostly by voice and Sketch and talk; text is optional.
+    const addFeedback = page.getByRole('button', { name: 'Add written feedback (optional)' });
+    await expect(page.getByRole('textbox', { name: 'Written feedback to student' })).toHaveCount(0);
     const record = await page.getByRole('button', { name: 'Record', exact: true }).boundingBox();
-    expect(sayIt && feedback && record).toBeTruthy();
-    expect(sayIt!.y).toBeLessThan(feedback!.y);
-    expect(feedback!.y).toBeLessThan(record!.y);
+    const toggle = await addFeedback.boundingBox();
+    expect(record && toggle).toBeTruthy();
+    expect(record!.y).toBeLessThan(toggle!.y);
+    expect(toggle!.height).toBeGreaterThanOrEqual(44);
+
+    await addFeedback.click();
+    await expect(page.getByRole('textbox', { name: 'Written feedback to student' })).toBeFocused();
   });
 
   test('tags are one line that opens in place, and there is no comment thread', async ({ page }) => {
@@ -156,7 +164,7 @@ test.describe('Drawing review rail', () => {
       // Scroll the rail to the bottom: the header and the action bar stay put.
       const complete = page.getByRole('button', { name: 'Complete', exact: true });
       const barBefore = await complete.boundingBox();
-      await page.getByRole('heading', { name: 'Feedback to student', exact: true }).hover();
+      await page.getByRole('button', { name: 'Add written feedback (optional)' }).hover();
       await page.mouse.wheel(0, 4000);
       await page.waitForTimeout(300);
       const barAfter = await complete.boundingBox();
@@ -177,7 +185,8 @@ test.describe('Drawing review rail', () => {
     test.skip(!submissionId, 'Setup did not complete');
     await openReview(page);
 
-    const box = page.getByRole('textbox', { name: 'Feedback to student' });
+    await page.getByRole('button', { name: 'Add written feedback (optional)' }).click();
+    const box = page.getByRole('textbox', { name: 'Written feedback to student' });
     await box.click();
     await page.keyboard.type('first line');
     await page.keyboard.press('Enter');
@@ -203,7 +212,7 @@ test.describe('Drawing review rail', () => {
     const box = await tags.boundingBox();
     expect(box!.height).toBeGreaterThanOrEqual(44);
 
-    await page.getByRole('heading', { name: 'Feedback to student', exact: true }).scrollIntoViewIfNeeded();
+    await page.getByRole('button', { name: 'Add written feedback (optional)' }).scrollIntoViewIfNeeded();
     await page.screenshot({ path: testInfo.outputPath('rail-375-feedback.png') });
 
     for (const name of ['Record', 'Sketch and talk']) {

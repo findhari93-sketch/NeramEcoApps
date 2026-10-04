@@ -41,6 +41,7 @@ export async function subscribeToChannel(
 
     // Create new subscription
     const response = await fetch(`${YOUTUBE_API_BASE}/subscriptions?part=snippet`, {
+      cache: 'no-store',
       method: 'POST',
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -110,6 +111,7 @@ export async function checkSubscription(
     const response = await fetch(
       `${YOUTUBE_API_BASE}/subscriptions?part=snippet&mine=true&forChannelId=${channelId}`,
       {
+        cache: 'no-store',
         headers: {
           Authorization: `Bearer ${accessToken}`,
         },
@@ -186,6 +188,7 @@ export async function exchangeCodeForToken(
 } | null> {
   try {
     const response = await fetch('https://oauth2.googleapis.com/token', {
+      cache: 'no-store',
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -222,6 +225,7 @@ export async function getGoogleUserInfo(accessToken: string): Promise<{
 } | null> {
   try {
     const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      cache: 'no-store',
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },

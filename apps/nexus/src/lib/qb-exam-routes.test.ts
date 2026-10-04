@@ -115,3 +115,18 @@ describe('the remembered exam', () => {
     expect(readRememberedQBExam()).toBeNull();
   });
 });
+
+describe('JEE Paper 2B (B.Planning)', () => {
+  it('has its own address that round-trips', () => {
+    expect(qbExamPath('student', 'JEE_PAPER_2B')).toBe('/student/question-bank/jee-paper-2b');
+    expect(examFromSlug('jee-paper-2b')).toBe('JEE_PAPER_2B');
+    expect(examFromPathname('/teacher/question-bank/jee-paper-2b')).toBe('JEE_PAPER_2B');
+    // The 2A slug is a prefix of the 2B one; it must not swallow it.
+    expect(examFromPathname('/teacher/question-bank/jee-paper-2')).toBe('JEE_PAPER_2');
+  });
+
+  it('sits right after Paper 2A in the sidebar and counts as JEE', () => {
+    expect(QB_EXAM_ORDER.indexOf('JEE_PAPER_2B')).toBe(QB_EXAM_ORDER.indexOf('JEE_PAPER_2') + 1);
+    expect(examRelevanceFor('JEE_PAPER_2B')).toBe('JEE');
+  });
+});

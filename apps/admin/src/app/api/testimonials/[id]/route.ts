@@ -2,6 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
+import { revalidateMarketing, TESTIMONIAL_TAGS } from '@/lib/marketing-revalidate';
 import {
   getSupabaseAdminClient,
   getTestimonialById,
@@ -107,6 +108,8 @@ export async function PATCH(
       );
     }
 
+    // Purge the marketing review pages (bounded wait, never fails the save).
+    await revalidateMarketing(TESTIMONIAL_TAGS, { adminOrigin: request.nextUrl.origin });
     return NextResponse.json({ data });
   } catch (error: unknown) {
     const errObj = error as Record<string, unknown> | null;
@@ -138,6 +141,8 @@ export async function DELETE(
       );
     }
 
+    // Purge the marketing review pages (bounded wait, never fails the save).
+    await revalidateMarketing(TESTIMONIAL_TAGS, { adminOrigin: request.nextUrl.origin });
     return NextResponse.json({ success: true });
   } catch (error: unknown) {
     const errObj = error as Record<string, unknown> | null;

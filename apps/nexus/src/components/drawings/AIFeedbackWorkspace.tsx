@@ -10,6 +10,8 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 import CloseIcon from '@mui/icons-material/Close';
 import LayersOutlinedIcon from '@mui/icons-material/LayersOutlined';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
+import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
+import TuneOutlinedIcon from '@mui/icons-material/TuneOutlined';
 import SketchOverCanvas from './SketchOverCanvas';
 import ResourceLinkSearch from './ResourceLinkSearch';
 import type { DrawingSubmission, TutorResource, GalleryReactionType } from '@neram/database/types';
@@ -20,6 +22,7 @@ import RubricScorePanel from './review/RubricScorePanel';
 import { feedbackPrefill, type AiDraft } from '@/lib/drawing-ai-draft';
 import type { AutoDraftState } from '@/hooks/useAutoDraft';
 import ReactionPicker from '@/components/assignments/ReactionPicker';
+import { carriesGrade } from '@/lib/drawing-source';
 
 export interface WorkspaceData {
   overlayAnnotations: null; // kept for backwards compat, no longer used for zone chips
@@ -84,6 +87,14 @@ export default function AIFeedbackWorkspace({
 }: AIFeedbackWorkspaceProps) {
   const drafting = draftState?.phase === 'drafting';
   const isMarks = evaluationType === 'marks';
+  // A sketch is corrected by voice, Sketch and talk and a reaction, never
+  // scored, so it shows no rubric and no marks (the database refuses a grade).
+  const graded = carriesGrade(submission as any);
+  // The rubric is optional too: most reviews are a voice note. Folded, it is
+  // not mounted, so it reports nothing and the saved rating stands untouched.
+  // A drawing that already has scores opens with them showing.
+  const hasScores = (submission.tutor_rating ?? 0) > 0;
+  const [scoresOpen, setScoresOpen] = useState(hasScores);
   // Workspace state
   const [overlayImageUrl, setOverlayImageUrl] = useState<string | null>(submission.reviewed_image_url);
   const [correctedImageUrl, setCorrectedImageUrl] = useState<string | null>((submission as any).corrected_image_url || null);
@@ -92,6 +103,10 @@ export default function AIFeedbackWorkspace({
   // written nothing, and only once per draft, so it can never overwrite words.
   const draftPrefilled = useRef<string | null>(null);
   const [feedbackFromDraft, setFeedbackFromDraft] = useState(false);
+  // Written feedback is optional: most reviews are a voice note or Sketch and
+  // talk. The box stays folded until it is wanted, and opens on its own when
+  // there are already words in it (saved earlier, or drafted by Gemini).
+  const [feedbackOpen, setFeedbackOpen] = useState(() => !!submission.tutor_feedback);
   const [resources, setResources] = useState<TutorResource[]>(submission.tutor_resources || []);
   const [rating, setRating] = useState(submission.tutor_rating || 0);
   const [marks, setMarks] = useState(
@@ -142,6 +157,7 @@ export default function AIFeedbackWorkspace({
     if (!text) return;
     setTutorFeedback(text);
     setFeedbackFromDraft(true);
+    setFeedbackOpen(true);
     notify({ tutorFeedback: text });
   }, [readOnly, aiDraft, tutorFeedback, notify]);
 
@@ -413,7 +429,7 @@ export default function AIFeedbackWorkspace({
           <Box>
             {readOnly ? (
               <Box>
-                {isMarks
+                {!graded ? null : isMarks
                   ? marks.trim() !== '' && (
                       <Box sx={{ mb: 1.5 }}>
                         <Typography variant="body2" fontWeight={700} color="text.secondary">
@@ -421,7 +437,7 @@ export default function AIFeedbackWorkspace({
                         </Typography>
                       </Box>
                     )
-                  : (
+                  : hasScores && (
                       <Box sx={{ mb: 1.5 }}>
                         <RubricScorePanel submissionId={submission.id} getToken={getToken} readOnly />
                       </Box>
@@ -466,6 +482,7 @@ export default function AIFeedbackWorkspace({
                   queue, the gallery, the roster and the student page are
                   unchanged.
                 */}
+                {graded && (
                 <Box sx={{ mb: 2 }}>
                   {isMarks ? (
                     <>
@@ -486,6 +503,19 @@ export default function AIFeedbackWorkspace({
                         <Typography color="text.secondary">out of {maxMarks}</Typography>
                       </Box>
                     </>
+                  ) : !scoresOpen ? (
+                    <Button
+                      variant="text"
+                      startIcon={<TuneOutlinedIcon />}
+                      onClick={() => setScoresOpen(true)}
+                      aria-expanded={false}
+                      sx={{
+                        minHeight: 48, px: 1, textTransform: 'none', fontWeight: 600,
+                        '&.Mui-focusVisible': { outline: 2, outlineColor: 'primary.main', outlineOffset: 2 },
+                      }}
+                    >
+                      {aiDraft ? "Review Gemini's scores (optional)" : 'Add scores (optional)'}
+                    </Button>
                   ) : (
                     <RubricScorePanel
                       submissionId={submission.id}
@@ -499,43 +529,65 @@ export default function AIFeedbackWorkspace({
                     />
                   )}
                 </Box>
-
-                <StageLabel label="Feedback to student" />
-                {feedbackFromDraft && (
-                  <Typography variant="caption" color="primary.dark" data-testid="feedback-from-draft" sx={{ display: 'block', mb: 0.5 }}>
-                    Drafted by Gemini. Read it through before you send.
-                  </Typography>
                 )}
-                {/* Written feedback */}
-                <TextField
-                  placeholder={
-                    drafting && !tutorFeedback
-                      ? 'Gemini is writing a draft...'
-                      : 'What should they keep, fix and try next?'
-                  }
-                  inputProps={{ 'aria-label': 'Feedback to student' }}
-                  multiline
-                  minRows={4}
-                  maxRows={12}
-                  fullWidth
-                  value={tutorFeedback}
-                  onChange={(e) => {
-                    setTutorFeedback(e.target.value);
-                    notify({ tutorFeedback: e.target.value });
-                  }}
-                  sx={{
-                    mb: 2,
-                    '& textarea': {
-                      scrollbarWidth: 'thin',
-                      scrollbarColor: 'rgba(0,0,0,0.15) transparent',
-                      '&::-webkit-scrollbar': { width: 3 },
-                      '&::-webkit-scrollbar-track': { background: 'transparent' },
-                      '&::-webkit-scrollbar-thumb': { background: 'rgba(0,0,0,0.15)', borderRadius: 2 },
-                    },
-                  }}
-                />
 
                 {voiceSlot && <Box sx={{ mb: 2 }}>{voiceSlot}</Box>}
+
+                {feedbackOpen ? (
+                  <>
+                    <StageLabel label="Written feedback (optional)" />
+                    {feedbackFromDraft && (
+                      <Typography variant="caption" color="primary.dark" data-testid="feedback-from-draft" sx={{ display: 'block', mb: 0.5 }}>
+                        Drafted by Gemini. Read it through before you send.
+                      </Typography>
+                    )}
+                    <TextField
+                      id={`feedback-${submission.id}`}
+                      placeholder={
+                        drafting && !tutorFeedback
+                          ? 'Gemini is writing a draft...'
+                          : 'What should they keep, fix and try next?'
+                      }
+                      inputProps={{ 'aria-label': 'Written feedback to student' }}
+                      // Only when the teacher opened it; a box that arrives
+                      // already filled must not pull the page to itself.
+                      autoFocus={!tutorFeedback}
+                      multiline
+                      minRows={4}
+                      maxRows={12}
+                      fullWidth
+                      value={tutorFeedback}
+                      onChange={(e) => {
+                        setTutorFeedback(e.target.value);
+                        notify({ tutorFeedback: e.target.value });
+                      }}
+                      sx={{
+                        mb: 2,
+                        '& textarea': {
+                          scrollbarWidth: 'thin',
+                          scrollbarColor: 'rgba(0,0,0,0.15) transparent',
+                          '&::-webkit-scrollbar': { width: 3 },
+                          '&::-webkit-scrollbar-track': { background: 'transparent' },
+                          '&::-webkit-scrollbar-thumb': { background: 'rgba(0,0,0,0.15)', borderRadius: 2 },
+                        },
+                      }}
+                    />
+                  </>
+                ) : (
+                  <Button
+                    variant="text"
+                    startIcon={<EditNoteOutlinedIcon />}
+                    onClick={() => setFeedbackOpen(true)}
+                    aria-expanded={false}
+                    aria-controls={`feedback-${submission.id}`}
+                    sx={{
+                      minHeight: 48, mb: 1.5, px: 1, textTransform: 'none', fontWeight: 600,
+                      '&.Mui-focusVisible': { outline: 2, outlineColor: 'primary.main', outlineOffset: 2 },
+                    }}
+                  >
+                    Add written feedback (optional)
+                  </Button>
+                )}
 
                 {/* Resources */}
                 <ResourceLinkSearch

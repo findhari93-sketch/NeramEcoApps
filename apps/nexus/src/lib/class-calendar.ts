@@ -147,6 +147,7 @@ export async function createCalendarEventForJoinUrl(
   };
 
   const res = await fetch('https://graph.microsoft.com/v1.0/me/events', {
+    cache: 'no-store',
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,

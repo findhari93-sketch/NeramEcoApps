@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
 
     // Resolve the share link to a temporary, pre-authenticated download URL.
     const downloadUrl = await getSharePointStreamUrl(url);
-    const fileRes = await fetch(downloadUrl);
+    const fileRes = await fetch(downloadUrl, { cache: 'no-store' });
     if (!fileRes.ok) {
       return NextResponse.json({ error: 'Could not fetch the shared file.' }, { status: 502 });
     }

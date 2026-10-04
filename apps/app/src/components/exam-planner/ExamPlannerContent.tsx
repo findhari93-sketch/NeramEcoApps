@@ -16,6 +16,8 @@ import {
   DialogContent,
   DialogActions,
 } from '@neram/ui';
+import ButtonBase from '@mui/material/ButtonBase';
+import { alpha } from '@mui/material/styles';
 import LockIcon from '@mui/icons-material/Lock';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
@@ -23,8 +25,11 @@ import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import WbSunnyIcon from '@mui/icons-material/WbSunny';
 import NightsStayIcon from '@mui/icons-material/NightsStay';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import EventBusyIcon from '@mui/icons-material/EventBusy';
 import type { ExamPhase, ExamTimeSlot, PlannerSession } from '@neram/database';
 import { useExamPlanner } from '@/hooks/useExamPlanner';
+import ToolPageHeader from '@/components/tools-hub/ToolPageHeader';
 import {
   PHASE_1_SESSIONS,
   PHASE_2_SESSIONS,
@@ -33,85 +38,87 @@ import {
   groupSessionsByMonth,
 } from './nata-2026-schedule';
 
-// --- Phase Toggle ---
+// Phase toggle
 
 function PhaseToggle({
   selectedPhase,
   savedPhase,
+  phase1Over,
+  phase2Over,
   onSelect,
 }: {
   selectedPhase: ExamPhase | null;
   savedPhase: ExamPhase | null;
+  phase1Over: boolean;
+  phase2Over: boolean;
   onSelect: (phase: ExamPhase) => void;
 }) {
-  const phases: { phase: ExamPhase; label: string; subtitle: string; dateRange: string }[] = [
-    {
-      phase: 'phase_1',
-      label: 'Phase 1',
-      subtitle: 'Pick up to 2 sessions',
-      dateRange: 'Apr 4 – Jun 13',
-    },
-    {
-      phase: 'phase_2',
-      label: 'Phase 2',
-      subtitle: 'Pick 1 session',
-      dateRange: 'Aug 7 – 8',
-    },
+  const phases: { phase: ExamPhase; label: string; subtitle: string; dateRange: string; over: boolean }[] = [
+    { phase: 'phase_1', label: 'Phase 1', subtitle: 'Pick up to 2 sessions', dateRange: 'Apr 4 to Jun 13', over: phase1Over },
+    { phase: 'phase_2', label: 'Phase 2', subtitle: 'Pick 1 session', dateRange: 'Aug 7 and 8', over: phase2Over },
   ];
 
   return (
-    <Box sx={{ display: 'flex', gap: 1.5, mb: 3 }}>
+    <Box role="group" aria-label="Exam phase" sx={{ display: 'flex', gap: 1.5, mb: 3 }}>
       {phases.map((p) => {
         const isSelected = selectedPhase === p.phase;
         const isLocked = savedPhase !== null && savedPhase !== p.phase;
+        const isUnavailable = isLocked || (p.over && !isSelected);
 
         return (
-          <Paper
+          <ButtonBase
             key={p.phase}
-            onClick={() => !isLocked && onSelect(p.phase)}
-            sx={{
+            onClick={() => onSelect(p.phase)}
+            disabled={isUnavailable}
+            aria-pressed={isSelected}
+            sx={(theme) => ({
               flex: 1,
+              minWidth: 0,
+              minHeight: 88,
               p: 2,
-              cursor: isLocked ? 'not-allowed' : 'pointer',
+              display: 'block',
+              textAlign: 'left',
+              borderRadius: 3,
               border: '2px solid',
-              borderColor: isSelected ? 'primary.main' : isLocked ? 'action.disabled' : 'divider',
-              bgcolor: isSelected ? 'primary.50' : isLocked ? 'action.disabledBackground' : 'background.paper',
-              opacity: isLocked ? 0.6 : 1,
-              transition: 'all 0.2s',
-              '&:active': !isLocked ? { transform: 'scale(0.97)' } : {},
+              borderColor: isSelected ? 'primary.main' : 'divider',
+              bgcolor: isSelected
+                ? alpha(theme.palette.primary.main, theme.palette.mode === 'light' ? 0.08 : 0.16)
+                : isUnavailable
+                  ? 'action.disabledBackground'
+                  : 'background.paper',
               position: 'relative',
-              overflow: 'hidden',
-            }}
-            elevation={isSelected ? 2 : 0}
+              transition: 'border-color 0.2s, background-color 0.2s',
+              '&:hover': isUnavailable ? {} : { borderColor: 'primary.main' },
+              '&.Mui-disabled': { opacity: 0.75 },
+            })}
           >
             {isLocked && (
               <LockIcon
-                sx={{
-                  position: 'absolute',
-                  top: 8,
-                  right: 8,
-                  fontSize: '1rem',
-                  color: 'text.disabled',
-                }}
+                aria-hidden="true"
+                sx={{ position: 'absolute', top: 10, right: 10, fontSize: '1.125rem', color: 'text.secondary' }}
               />
             )}
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: isSelected ? 'primary.main' : 'text.primary' }}>
+            <Typography
+              component="span"
+              variant="subtitle1"
+              sx={{ display: 'block', fontWeight: 700, color: isSelected ? 'primary.main' : 'text.primary' }}
+            >
               {p.label}
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+            <Typography component="span" variant="body2" color="text.secondary" sx={{ display: 'block' }}>
               {p.dateRange}
             </Typography>
-            <Typography variant="caption" color={isSelected ? 'primary.main' : 'text.secondary'}>
-              {isLocked ? 'Locked' : p.subtitle}
+            <Typography component="span" variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.25 }}>
+              {isLocked ? 'Locked: clear your plan to switch' : p.over ? 'Sessions over' : p.subtitle}
             </Typography>
-          </Paper>
+          </ButtonBase>
         );
       })}
     </Box>
   );
 }
 
-// --- Session Card ---
+// Session card
 
 function SessionCard({
   session,
@@ -129,70 +136,79 @@ function SessionCard({
   const d = new Date(session.date + 'T00:00:00');
   const dateLabel = d.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
   const isMorning = session.timeSlot === 'morning';
+  const slotLabel = isMorning ? 'Morning' : 'Afternoon';
+  const statusLabel = isPast ? ', session over' : isDisabled ? ', limit reached' : '';
 
   return (
-    <Paper
-      onClick={() => !isPast && !isDisabled && onToggle()}
-      sx={{
+    <ButtonBase
+      onClick={onToggle}
+      disabled={isPast || isDisabled}
+      aria-pressed={isSelected}
+      aria-label={`${dateLabel} ${session.day}, ${slotLabel}, ${session.timeLabel}${statusLabel}`}
+      sx={(theme) => ({
+        width: '100%',
         display: 'flex',
         alignItems: 'center',
+        justifyContent: 'flex-start',
+        textAlign: 'left',
         gap: 1.5,
         p: 1.5,
-        cursor: isPast || isDisabled ? 'default' : 'pointer',
+        minHeight: 64,
+        borderRadius: 3,
         border: '2px solid',
         borderColor: isSelected ? 'primary.main' : 'divider',
         bgcolor: isSelected
-          ? 'primary.50'
+          ? alpha(theme.palette.primary.main, theme.palette.mode === 'light' ? 0.08 : 0.16)
           : isPast
-          ? 'action.disabledBackground'
-          : 'background.paper',
-        opacity: isPast ? 0.5 : isDisabled ? 0.6 : 1,
-        transition: 'all 0.15s',
-        '&:active': !isPast && !isDisabled ? { transform: 'scale(0.98)' } : {},
-        minHeight: 56,
-      }}
-      elevation={0}
+            ? 'action.disabledBackground'
+            : 'background.paper',
+        transition: 'border-color 0.15s, background-color 0.15s',
+        '&:hover': isPast || isDisabled ? {} : { borderColor: 'primary.main' },
+        '&.Mui-disabled': { opacity: isPast ? 0.7 : 0.8 },
+      })}
     >
       {/* Date column */}
-      <Box sx={{ minWidth: 64, textAlign: 'center' }}>
-        <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.2 }}>
+      <Box sx={{ minWidth: 64, textAlign: 'center' }} aria-hidden="true">
+        <Typography component="span" variant="body2" sx={{ display: 'block', fontWeight: 600, lineHeight: 1.2 }}>
           {dateLabel}
         </Typography>
-        <Typography variant="caption" color="text.secondary">
+        <Typography component="span" variant="caption" color="text.secondary">
           {session.day}
         </Typography>
       </Box>
 
       {/* Time slot */}
-      <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+      <Box sx={{ flex: 1, display: 'flex', alignItems: 'center', gap: 1 }} aria-hidden="true">
         {isMorning ? (
-          <WbSunnyIcon sx={{ fontSize: '1rem', color: 'warning.main' }} />
+          <WbSunnyIcon sx={{ fontSize: '1.125rem', color: 'warning.main' }} />
         ) : (
-          <NightsStayIcon sx={{ fontSize: '1rem', color: 'info.main' }} />
+          <NightsStayIcon sx={{ fontSize: '1.125rem', color: 'info.main' }} />
         )}
         <Box>
-          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-            {isMorning ? 'Morning' : 'Afternoon'}
+          <Typography component="span" variant="body2" sx={{ display: 'block', fontWeight: 500 }}>
+            {slotLabel}
           </Typography>
-          <Typography variant="caption" color="text.secondary">
+          <Typography component="span" variant="caption" color="text.secondary">
             {session.timeLabel}
           </Typography>
         </Box>
       </Box>
 
       {/* Status */}
-      {isPast ? (
-        <Chip label="Past" size="small" variant="outlined" sx={{ fontSize: '0.7rem', height: 24 }} />
-      ) : isSelected ? (
-        <CheckCircleIcon sx={{ color: 'primary.main', fontSize: '1.4rem' }} />
-      ) : isDisabled ? (
-        <Chip label="Full" size="small" variant="outlined" sx={{ fontSize: '0.7rem', height: 24, color: 'text.disabled' }} />
-      ) : null}
-    </Paper>
+      <Box aria-hidden="true" sx={{ display: 'flex' }}>
+        {isPast ? (
+          <Chip label="Over" size="small" variant="outlined" sx={{ fontSize: '0.75rem', height: 26 }} />
+        ) : isSelected ? (
+          <CheckCircleIcon sx={{ color: 'primary.main', fontSize: '1.5rem' }} />
+        ) : isDisabled ? (
+          <Chip label="Limit reached" size="small" variant="outlined" sx={{ fontSize: '0.75rem', height: 26 }} />
+        ) : null}
+      </Box>
+    </ButtonBase>
   );
 }
 
-// --- Session Grid ---
+// Session grid
 
 function SessionGrid({
   sessions,
@@ -208,19 +224,10 @@ function SessionGrid({
   const grouped = groupSessionsByMonth(sessions);
 
   return (
-    <Box sx={{ mb: 10 }}>
+    <Box sx={{ mb: 4 }}>
       {Array.from(grouped.entries()).map(([month, monthSessions]) => (
-        <Box key={month} sx={{ mb: 3 }}>
-          <Typography
-            variant="overline"
-            sx={{
-              display: 'block',
-              mb: 1,
-              fontWeight: 600,
-              letterSpacing: '0.08em',
-              color: 'text.secondary',
-            }}
-          >
+        <Box key={month} component="section" aria-label={month} sx={{ mb: 3 }}>
+          <Typography variant="overline" component="h2" sx={{ display: 'block', mb: 1, color: 'text.secondary' }}>
             {month}
           </Typography>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -248,7 +255,7 @@ function SessionGrid({
   );
 }
 
-// --- Selection Summary (sticky bottom) ---
+// Selection summary (fixed bottom bar)
 
 function SelectionSummary({
   selectedCount,
@@ -276,12 +283,12 @@ function SelectionSummary({
       <Paper
         sx={{
           position: 'fixed',
-          bottom: 0,
-          left: 0,
+          // Above the phone tab bar and beside the laptop sidebar (set by AppShell)
+          bottom: 'var(--app-bottom-inset, 0px)',
+          left: 'var(--app-left-inset, 0px)',
           right: 0,
-          zIndex: 1100,
+          zIndex: 1050,
           p: 2,
-          pb: 'calc(env(safe-area-inset-bottom, 0px) + 16px)',
           borderTop: '1px solid',
           borderColor: 'divider',
           display: 'flex',
@@ -290,25 +297,25 @@ function SelectionSummary({
         }}
         elevation={8}
       >
-        <Box sx={{ flex: 1 }}>
+        <Box sx={{ flex: 1, minWidth: 0 }} aria-live="polite">
           <Typography variant="body2" sx={{ fontWeight: 600 }}>
             {selectedCount} of {maxSelections} selected
           </Typography>
-          {!hasUnsavedChanges && savedPhase && (
-            <Typography variant="caption" color="success.main">
-              Saved
+          {savedPhase && (
+            <Typography variant="caption" color={hasUnsavedChanges ? 'text.secondary' : 'success.main'}>
+              {hasUnsavedChanges ? 'Unsaved changes' : 'Saved'}
             </Typography>
           )}
         </Box>
 
         {savedPhase && (
           <Button
-            size="small"
             color="error"
             variant="outlined"
             onClick={() => setShowClearDialog(true)}
             startIcon={<DeleteOutlineIcon />}
-            sx={{ minWidth: 'auto', fontSize: '0.78rem' }}
+            disabled={saving}
+            sx={{ minWidth: 'auto', minHeight: 44 }}
           >
             Clear
           </Button>
@@ -316,12 +323,12 @@ function SelectionSummary({
 
         <Button
           variant="contained"
-          size="small"
           disabled={!hasUnsavedChanges || selectedCount === 0 || saving}
           onClick={onSave}
-          startIcon={saving ? <CircularProgress size={14} /> : <CheckCircleIcon />}
+          startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <CheckCircleIcon />}
+          sx={{ minHeight: 44, whiteSpace: 'nowrap' }}
         >
-          {saving ? 'Saving...' : 'Save My Plan'}
+          {saving ? 'Saving' : 'Save my plan'}
         </Button>
       </Paper>
 
@@ -329,19 +336,22 @@ function SelectionSummary({
         <DialogTitle>Clear selections?</DialogTitle>
         <DialogContent>
           <Typography variant="body2">
-            This will remove all your saved exam session preferences. You can re-select later.
+            This removes all your saved exam session preferences. You can pick sessions again later.
           </Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setShowClearDialog(false)}>Cancel</Button>
+          <Button onClick={() => setShowClearDialog(false)} sx={{ minHeight: 44 }}>
+            Cancel
+          </Button>
           <Button
             color="error"
+            sx={{ minHeight: 44 }}
             onClick={() => {
               setShowClearDialog(false);
               onClear();
             }}
           >
-            Clear All
+            Clear all
           </Button>
         </DialogActions>
       </Dialog>
@@ -349,15 +359,9 @@ function SelectionSummary({
   );
 }
 
-// --- Reward Banner ---
+// Reward banner
 
-function PlannerRewardBanner({
-  show,
-  onDismiss,
-}: {
-  show: boolean;
-  onDismiss: () => void;
-}) {
+function PlannerRewardBanner({ show, onDismiss }: { show: boolean; onDismiss: () => void }) {
   return (
     <Snackbar
       open={show}
@@ -365,124 +369,163 @@ function PlannerRewardBanner({
       onClose={onDismiss}
       anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
     >
-      <Alert
-        severity="success"
-        icon={<EmojiEventsIcon />}
-        onClose={onDismiss}
-        sx={{ width: '100%' }}
-      >
+      <Alert severity="success" icon={<EmojiEventsIcon />} onClose={onDismiss} sx={{ width: '100%' }}>
         <Typography variant="body2" sx={{ fontWeight: 600 }}>
-          +5 Neram Points earned!
+          You earned 5 Neram Points
         </Typography>
-        <Typography variant="caption">
-          Thanks for planning your NATA sessions
-        </Typography>
+        <Typography variant="caption">Thanks for planning your NATA sessions.</Typography>
       </Alert>
     </Snackbar>
   );
 }
 
-// --- Main Content ---
+// Main content
+
+function PlannerSkeleton() {
+  return (
+    <Box aria-hidden="true">
+      <Skeleton variant="rounded" height={64} sx={{ mb: 3 }} />
+      <Box sx={{ display: 'flex', gap: 1.5, mb: 3 }}>
+        <Skeleton variant="rounded" sx={{ flex: 1, height: 88 }} />
+        <Skeleton variant="rounded" sx={{ flex: 1, height: 88 }} />
+      </Box>
+      {[1, 2, 3, 4].map((i) => (
+        <Skeleton key={i} variant="rounded" height={64} sx={{ mb: 1 }} />
+      ))}
+    </Box>
+  );
+}
 
 export default function ExamPlannerContent() {
   const planner = useExamPlanner();
 
+  const phase1Over = PHASE_1_SESSIONS.every((s) => isSessionPast(s.date));
+  const phase2Over = PHASE_2_SESSIONS.every((s) => isSessionPast(s.date));
+  const allOver = phase1Over && phase2Over;
+  const activeSessions = planner.selectedPhase === 'phase_2' ? PHASE_2_SESSIONS : PHASE_1_SESSIONS;
+  const sortedPrefs = [...planner.preferences].sort((a, b) => a.exam_date.localeCompare(b.exam_date));
+
+  let body: React.ReactNode;
+
   if (planner.loading) {
-    return (
-      <Box sx={{ p: { xs: 2, md: 3 } }}>
-        <Skeleton variant="text" width={200} height={32} sx={{ mb: 2 }} />
-        <Box sx={{ display: 'flex', gap: 1.5, mb: 3 }}>
-          <Skeleton variant="rounded" sx={{ flex: 1, height: 80 }} />
-          <Skeleton variant="rounded" sx={{ flex: 1, height: 80 }} />
+    body = <PlannerSkeleton />;
+  } else if (planner.loadError) {
+    body = (
+      <Alert
+        severity="error"
+        role="alert"
+        action={
+          <Button color="inherit" onClick={planner.retryLoad} startIcon={<RefreshIcon />} sx={{ minHeight: 44 }}>
+            Retry
+          </Button>
+        }
+      >
+        {planner.loadError} Your saved plan has not been changed.
+      </Alert>
+    );
+  } else if (allOver) {
+    body = (
+      <Paper sx={{ p: { xs: 2.5, md: 3 } }}>
+        <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+          <EventBusyIcon sx={{ color: 'text.secondary', fontSize: 28, mt: 0.25 }} aria-hidden="true" />
+          <Box>
+            <Typography variant="h6" component="h2" gutterBottom>
+              NATA 2026 sessions are over
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              2027 dates are not announced yet. When the Council of Architecture publishes the NATA 2027
+              schedule, you can plan your sessions here.
+            </Typography>
+          </Box>
         </Box>
-        {[1, 2, 3, 4].map((i) => (
-          <Skeleton key={i} variant="rounded" height={56} sx={{ mb: 1 }} />
-        ))}
-      </Box>
+        {sortedPrefs.length > 0 && (
+          <Box sx={{ mt: 2.5 }}>
+            <Typography variant="subtitle2" component="h3" gutterBottom>
+              Your NATA 2026 plan
+            </Typography>
+            <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+              {sortedPrefs.map((p) => (
+                <Typography component="li" variant="body2" key={`${p.exam_date}_${p.time_slot}`}>
+                  {p.session_label}
+                </Typography>
+              ))}
+            </Box>
+          </Box>
+        )}
+      </Paper>
+    );
+  } else {
+    body = (
+      <>
+        <Alert severity="info" sx={{ mb: 3 }}>
+          <strong>Rules:</strong> up to 2 attempts in Phase 1 <strong>or</strong> 1 attempt in Phase 2. The
+          phases are mutually exclusive, so you can only pick from one phase.
+        </Alert>
+
+        {planner.error && (
+          <Alert severity="error" role="alert" sx={{ mb: 2 }} onClose={planner.clearError}>
+            {planner.error}
+          </Alert>
+        )}
+
+        <PhaseToggle
+          selectedPhase={planner.selectedPhase}
+          savedPhase={planner.savedPhase}
+          phase1Over={phase1Over}
+          phase2Over={phase2Over}
+          onSelect={planner.selectPhase}
+        />
+
+        {planner.selectedPhase ? (
+          <SessionGrid
+            sessions={activeSessions}
+            selectedSessions={planner.selectedSessions}
+            canSelectMore={planner.canSelectMore}
+            onToggle={planner.toggleSession}
+          />
+        ) : (
+          <Paper sx={{ p: 3, textAlign: 'center' }}>
+            <CalendarTodayIcon sx={{ fontSize: 44, color: 'text.secondary', mb: 1 }} aria-hidden="true" />
+            <Typography variant="body2" color="text.secondary">
+              Choose a phase above to see its exam sessions.
+            </Typography>
+          </Paper>
+        )}
+
+        <SelectionSummary
+          selectedCount={planner.selectedSessions.size}
+          maxSelections={planner.maxSelections}
+          hasUnsavedChanges={planner.hasUnsavedChanges}
+          saving={planner.saving}
+          savedPhase={planner.savedPhase}
+          onSave={planner.save}
+          onClear={planner.clearSelections}
+        />
+      </>
     );
   }
 
-  const activeSessions = planner.selectedPhase === 'phase_2' ? PHASE_2_SESSIONS : PHASE_1_SESSIONS;
-
   return (
-    <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 600, mx: 'auto' }}>
-      {/* Header */}
-      <Box sx={{ mb: 3 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-          <CalendarTodayIcon sx={{ color: 'primary.main', fontSize: '1.2rem' }} />
-          <Typography variant="h6" sx={{ fontWeight: 700 }}>
-            Exam Planner
-          </Typography>
-        </Box>
-        <Typography variant="body2" color="text.secondary">
-          Select your preferred NATA 2026 exam dates and sessions. Plan your attempts wisely!
-        </Typography>
-
-        {planner.rewardEarned && !planner.showRewardBanner && (
-          <Chip
-            icon={<EmojiEventsIcon />}
-            label="+5 Points Earned"
-            size="small"
-            color="success"
-            variant="outlined"
-            sx={{ mt: 1 }}
-          />
-        )}
-      </Box>
-
-      {/* Rules */}
-      <Alert severity="info" sx={{ mb: 3, '& .MuiAlert-message': { fontSize: '0.8rem' } }}>
-        <strong>Rules:</strong> Maximum 2 attempts in Phase 1 <strong>OR</strong> 1 attempt in Phase 2.
-        Phases are mutually exclusive — you can only select from one phase.
-      </Alert>
-
-      {/* Error */}
-      {planner.error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => {}}>
-          {planner.error}
-        </Alert>
-      )}
-
-      {/* Phase Toggle */}
-      <PhaseToggle
-        selectedPhase={planner.selectedPhase}
-        savedPhase={planner.savedPhase}
-        onSelect={planner.selectPhase}
+    // Bottom space keeps the last sessions clear of the fixed selection bar
+    <Box sx={{ pb: 14, maxWidth: 720, mx: 'auto' }}>
+      <ToolPageHeader
+        toolId="nata-exam-planner"
+        description="Pick your preferred NATA 2026 exam dates and sessions, then save your plan."
+        meta={
+          planner.rewardEarned && !planner.showRewardBanner ? (
+            <Chip
+              icon={<EmojiEventsIcon />}
+              label="5 points earned"
+              size="small"
+              color="success"
+              variant="outlined"
+              sx={{ height: 26, fontSize: '0.75rem' }}
+            />
+          ) : undefined
+        }
       />
-
-      {/* Session Grid */}
-      {planner.selectedPhase ? (
-        <SessionGrid
-          sessions={activeSessions}
-          selectedSessions={planner.selectedSessions}
-          canSelectMore={planner.canSelectMore}
-          onToggle={planner.toggleSession}
-        />
-      ) : (
-        <Paper sx={{ p: 3, textAlign: 'center' }}>
-          <CalendarTodayIcon sx={{ fontSize: 48, color: 'action.disabled', mb: 1 }} />
-          <Typography variant="body2" color="text.secondary">
-            Select a phase above to view exam sessions
-          </Typography>
-        </Paper>
-      )}
-
-      {/* Sticky Bottom Summary */}
-      <SelectionSummary
-        selectedCount={planner.selectedSessions.size}
-        maxSelections={planner.maxSelections}
-        hasUnsavedChanges={planner.hasUnsavedChanges}
-        saving={planner.saving}
-        savedPhase={planner.savedPhase}
-        onSave={planner.save}
-        onClear={planner.clearSelections}
-      />
-
-      {/* Reward Banner */}
-      <PlannerRewardBanner
-        show={planner.showRewardBanner}
-        onDismiss={planner.dismissRewardBanner}
-      />
+      {body}
+      <PlannerRewardBanner show={planner.showRewardBanner} onDismiss={planner.dismissRewardBanner} />
     </Box>
   );
 }

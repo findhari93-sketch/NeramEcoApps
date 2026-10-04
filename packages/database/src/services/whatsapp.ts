@@ -165,6 +165,7 @@ export async function sendWhatsAppTemplate(
     const response = await fetch(
       `${WHATSAPP_API_BASE}/${phoneNumberId}/messages`,
       {
+        cache: 'no-store',
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -215,6 +216,7 @@ export async function sendWhatsAppTextMessage(
     const response = await fetch(
       `${WHATSAPP_API_BASE}/${phoneNumberId}/messages`,
       {
+        cache: 'no-store',
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

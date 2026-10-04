@@ -97,7 +97,7 @@ const CATEGORY_GROUPS: { key: string; label: string; categories: QBCategory[]; e
     key: 'broad',
     label: 'General',
     categories: ['mathematics', 'aptitude', 'drawing'],
-    exams: ['ALL', 'JEE_PAPER_2', 'NATA'],
+    exams: ['ALL', 'JEE_PAPER_2', 'JEE_PAPER_2B', 'NATA'],
   },
   {
     key: 'nata',
@@ -109,7 +109,13 @@ const CATEGORY_GROUPS: { key: string; label: string; categories: QBCategory[]; e
     key: 'jee_aptitude',
     label: 'Aptitude Topics',
     categories: ['spatial_visualization', 'orthographic_projection', 'pattern_recognition', 'analogy', 'counting_figures', 'odd_one_out', 'surface_counting', 'mirror_image', 'embedded_figure', 'architecture_gk', 'building_science', 'building_materials', 'building_services', 'design_fundamentals', 'geography_gk', 'environment_gk'],
-    exams: ['JEE_PAPER_2'],
+    exams: ['JEE_PAPER_2', 'JEE_PAPER_2B'],
+  },
+  {
+    key: 'jee_planning',
+    label: 'Planning',
+    categories: ['planning'],
+    exams: ['JEE_PAPER_2B'],
   },
   // The former `jee_math` group lived here as 25 flat slugs. It is now the
   // nexus_qb_tags hierarchy, rendered by <CategoryTree> below.
@@ -131,6 +137,7 @@ const MATH_ROOT_SLUGS = [
 const EXAM_TYPE_OPTIONS: { value: QBExamType | 'ALL'; label: string }[] = [
   { value: 'ALL', label: 'All' },
   { value: 'JEE_PAPER_2', label: QB_EXAM_TYPE_LABELS.JEE_PAPER_2 },
+  { value: 'JEE_PAPER_2B', label: QB_EXAM_TYPE_LABELS.JEE_PAPER_2B },
   { value: 'NATA', label: QB_EXAM_TYPE_LABELS.NATA },
 ];
 

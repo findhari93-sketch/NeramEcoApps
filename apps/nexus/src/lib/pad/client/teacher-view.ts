@@ -4,7 +4,7 @@
  */
 
 import { promptTitle } from './format';
-import type { HistoryEntry, ParticipationRow, PromptCounts, TeacherPrompt, TeacherSnapshot, WaitingStudent } from './types';
+import type { AnswerType, HistoryEntry, ParticipationRow, PromptCounts, TeacherPrompt, TeacherSnapshot, WaitingStudent } from './types';
 
 export type ConsoleView =
   | { kind: 'loading' }
@@ -36,7 +36,7 @@ export function deriveConsoleView(snapshot: TeacherSnapshot | null): ConsoleView
     };
   }
   if (prompt.state === 'closed') {
-    return { kind: 'closed', prompt, decided: prompt.ungraded || (prompt.correct_keys?.length ?? 0) > 0 };
+    return { kind: 'closed', prompt, decided: prompt.ungraded || (effectiveKeys(prompt)?.length ?? 0) > 0 };
   }
   return { kind: 'revealed', prompt };
 }
@@ -106,6 +106,19 @@ export function reminderMessage(result: ReminderResult): string {
   const reached = result.sent + result.partial;
   if (reached === 0) return 'The reminder could not be sent. Try again in a moment.';
   return `Reminder sent to ${reached} ${reached === 1 ? 'student' : 'students'}.`;
+}
+
+/**
+ * The key a question would be graded with: the teacher's, or else the question
+ * bank's answer (Present to class), which Reveal uses when no key was chosen.
+ * Null for a poll or a question with neither.
+ */
+export function effectiveKeys(
+  prompt: Pick<TeacherPrompt, 'correct_keys' | 'ungraded'> & { suggested_keys?: string[] | null },
+): string[] | null {
+  if (prompt.ungraded) return null;
+  if (prompt.correct_keys?.length) return prompt.correct_keys;
+  return prompt.suggested_keys?.length ? prompt.suggested_keys : null;
 }
 
 export function mcqLetters(optionCount: number | null | undefined): string[] {
@@ -273,4 +286,66 @@ export function groupParticipation(rows: readonly ParticipationRow[], ungraded: 
     else groups.incorrect.push(row);
   }
   return groups;
+}
+
+/** Typed answers beyond this many bars fold under "N other answers". */
+export const TOP_ANSWERS = 6;
+
+/**
+ * A letter or a short number sits beside its bar. Anything longer (a typed
+ * sentence) goes on its own line above the bar, so a narrow side panel never
+ * squeezes it into a column one word wide.
+ */
+export function stacksAnswerLabels(labels: readonly string[]): boolean {
+  return labels.some((label) => label.length > 3);
+}
+
+/** The bars shown at first, and the rest. Multiple choice and yes or no never fold. */
+export function foldAnswers<T>(answerType: AnswerType, rows: readonly T[], limit = TOP_ANSWERS): { shown: T[]; folded: T[] } {
+  if (answerType === 'mcq' || answerType === 'yesno' || rows.length <= limit + 1) return { shown: [...rows], folded: [] };
+  return { shown: rows.slice(0, limit), folded: rows.slice(limit) };
+}
+
+/** The class's name at the top of the console. */
+export function consoleTitle(session: Pick<TeacherSnapshot['session'], 'title' | 'classroom_name'>): string {
+  return session.title?.trim() || session.classroom_name?.trim() || 'Answer Pad';
+}
+
+export interface HereSummary {
+  /** In the Teams meeting or opened the pad, this round. */
+  here: number;
+  /** Of them, who opened the pad. Null from a server that does not say. */
+  opened: number | null;
+  connected: number;
+  enrolled: number;
+  /** Whether the meeting's own list of who is in it is counting (the bot is in the meeting). */
+  meetingList: boolean;
+}
+
+export function hereSummary(snapshot: Pick<TeacherSnapshot, 'readiness' | 'session'>): HereSummary {
+  const { readiness, session } = snapshot;
+  return {
+    here: readiness.joined ?? readiness.connected,
+    opened: readiness.opened ?? null,
+    connected: readiness.connected,
+    enrolled: readiness.enrolled,
+    meetingList: session.bot_in_meeting || session.presence_basis === 'meeting',
+  };
+}
+
+/** The header's caption: the round, then where it is. */
+export function consoleStatus(roundNo: number | null | undefined, view: ConsoleView): string {
+  const round = roundTitle(roundNo);
+  switch (view.kind) {
+    case 'open':
+      return `${round} · ${promptTitle(view.prompt)} open`;
+    case 'closed':
+      return `${round} · ${promptTitle(view.prompt)} closed`;
+    case 'revealed':
+      return `${round} · ${promptTitle(view.prompt)} revealed`;
+    case 'ended':
+      return `${round} ended`;
+    default:
+      return round;
+  }
 }

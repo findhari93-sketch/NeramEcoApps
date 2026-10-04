@@ -4,8 +4,9 @@
  * Watching a Foundation chapter in one language.
  *
  * The student picked Tamil or English on the chapter itself; this page is one
- * track. It uses the shared player in gated mode, so the scrub track stops at
- * the checkpoint they owe and the quiz opens when playback reaches it.
+ * track. It uses the shared player in gated mode: the section they owe is free
+ * to drag through, the scrub track stops at its checkpoint, and the quiz opens
+ * there once most of the section has really been played.
  *
  * Clearing the last checkpoint here satisfies the video half of the chapter in
  * EITHER language: a student who finishes Tamil is not asked to watch English
@@ -25,6 +26,7 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import NeramVideoPlayer from '@/components/video/NeramVideoPlayer';
 import useVideoProgress from '@/components/video/useVideoProgress';
+import usePlayedRanges from '@/components/video/usePlayedRanges';
 import { renewFromEmbed } from '@/components/video/renew-from-embed';
 import { computeGate } from '@/lib/video-gate';
 import QuizModal from '@/components/foundation/QuizModal';
@@ -85,7 +87,9 @@ export default function StudyTrackWatchPage() {
   const [watermark, setWatermark] = useState<{ name: string; code: string } | null>(null);
   const [resumeAt, setResumeAt] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [furthest, setFurthest] = useState(0);
+  /** What was really played, which is what the checkpoint quiz waits on. */
+  const played = usePlayedRanges();
+  const { seed: seedPlayed, record: recordPlayed } = played;
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -121,11 +125,15 @@ export default function StudyTrackWatchPage() {
       const embedUrl = `/api/student/study-videos/tracks/${trackId}/video-embed`;
       const embed = await authFetch(embedUrl);
       setWatermark(embed.watermark || null);
-      setResumeAt(Number(embed.resume_at) || 0);
       // What was really watched, not resume_at, which rises with any seek
       // (NXS-0130). Missing, it falls back to the old behaviour.
-      const played = Number(embed.played_until ?? embed.resume_at) || 0;
-      setFurthest((prev) => (played > prev ? played : prev));
+      const resume = Number(embed.resume_at) || 0;
+      const playedUntil = Number(embed.played_until ?? embed.resume_at) || 0;
+      seedPlayed(playedUntil);
+      // Resume where they had watched to, not where a drag last left the
+      // stored position: that is often the checkpoint itself, and resuming
+      // there greets the student with "watch a bit more" before a frame plays.
+      setResumeAt(data.mode === 'gated' ? Math.min(resume, playedUntil) : resume);
       setSource(
         embed.mode === 'youtube'
           ? { kind: 'youtube', youtubeId: embed.youtube_id }
@@ -142,7 +150,7 @@ export default function StudyTrackWatchPage() {
     } finally {
       setLoading(false);
     }
-  }, [authFetch, trackId]);
+  }, [authFetch, trackId, seedPlayed]);
 
   useEffect(() => {
     if (!authLoading && trackId) load();
@@ -162,11 +170,11 @@ export default function StudyTrackWatchPage() {
           passed: s.passed,
         })),
         duration,
-        furthestSeconds: furthest,
-        playedUntilSeconds: furthest,
+        furthestSeconds: 0,
+        playedRanges: played.ranges,
         mode,
       }),
-    [sections, duration, furthest, mode],
+    [sections, duration, played.ranges, mode],
   );
 
   /** Checkpoint positions drawn on the scrub bar. */
@@ -187,10 +195,10 @@ export default function StudyTrackWatchPage() {
 
   const handleTick = useCallback(
     (seconds: number, dur: number) => {
-      setFurthest((f) => (seconds > f ? seconds : f));
+      recordPlayed(seconds);
       onTick(seconds, dur);
     },
-    [onTick],
+    [onTick, recordPlayed],
   );
 
   const closeQuiz = useCallback(() => {
@@ -379,6 +387,7 @@ export default function StudyTrackWatchPage() {
           watermark={watermark}
           title={title}
           marks={marks}
+          watched={played.ranges}
           resumeAt={resumeAt}
           onTimeUpdate={handleTick}
           onBlockedSeek={onBlockedSeek}

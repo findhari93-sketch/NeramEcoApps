@@ -69,6 +69,7 @@ export async function GET() {
       const timeoutId = setTimeout(() => controller.abort(), PAGE_TIMEOUT_MS);
       try {
         const res = await fetch(nextLink, {
+          cache: 'no-store',
           headers: { Authorization: `Bearer ${token}` },
           signal: controller.signal,
         });

@@ -398,7 +398,9 @@
     "continueApplication": "Continue Application",
     "trackApplication": "Track Application",
     "payAndJoin": "Pay & Join Now",
-    "goToApp": "Go to App"
+    "goToApp": "Go to App",
+    "joinNow": "Join Now",
+    "viewFees": "View fees"
   },
   "centers": {
     "title": "Visit Our Learning Centers",
@@ -434,9 +436,9 @@
     "close": "Close"
   },
   "fees": {
-    "title": "Invest in Your Architecture Career",
-    "subtitle": "Transparent pricing with flexible payment options. Join the coaching institute that has been placing students in top architecture colleges for over 15 years.",
-    "questionsCall": "Questions? Call us:",
+    "title": "Course fees",
+    "subtitle": "Pick a plan. Pay once and save, or pay in 2 interest-free parts.",
+    "questionsCall": "Questions about fees? Call",
     "singlePayment": "Single Payment",
     "installments": "2 Installments",
     "fullPrice": "Full Price",
@@ -447,9 +449,9 @@
     "installment2": "2nd Installment (after 3 months)",
     "total": "Total",
     "installmentDetailsComingSoon": "Installment plan details will be shared during counseling",
-    "applyNow": "Apply Now",
+    "applyNow": "Join Now",
     "recommendedCurrentYear": "Recommended for current year exam",
-    "bestValueFuture": "Best Value for future year exam",
+    "bestValueFuture": "Best value for future year exam",
     "noFeeStructures": "Fee information is currently being updated",
     "contactForFees": "Please contact us for the latest fee details.",
     "callUs": "Call Us",
@@ -484,7 +486,7 @@
     "weekendClassesDesc": "Extended 2-3 hour sessions on Saturdays/Sundays. Focus on mock tests, portfolio review, and intensive practice.",
     "liveInteractive": "Live & Interactive",
     "smallBatches": "Small Batches",
-    "faqTitle": "Frequently Asked Questions",
+    "faqTitle": "Common questions",
     "faqSubtitle": "Common questions from parents and students about our fees and classes.",
     "faq1Question": "Can I get a refund if my child decides not to continue?",
     "faq1Answer": "Yes, we have a transparent refund policy. Refund requests must be made within 24 hours of payment. You will receive a 70% refund (30% is deducted to cover digital platform subscriptions and learning tool licenses already purchased for the student). After 24 hours, no refund is possible as we immediately invest in setting up your child's digital learning environment including platform subscriptions and tool access.",

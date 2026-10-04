@@ -116,26 +116,26 @@ export default function Hero() {
             >
               <Box>
                 <Typography variant="h3" sx={{ fontWeight: 700, mb: 0.5 }}>
-                  15+
+                  10+
                 </Typography>
                 <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                  Years of Excellence
+                  Years of Teaching
                 </Typography>
               </Box>
               <Box>
                 <Typography variant="h3" sx={{ fontWeight: 700, mb: 0.5 }}>
-                  10,000+
+                  1,000+
                 </Typography>
                 <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                  Students Enrolled
+                  Students Taught
                 </Typography>
               </Box>
               <Box>
                 <Typography variant="h3" sx={{ fontWeight: 700, mb: 0.5 }}>
-                  99.9%
+                  AIR 1
                 </Typography>
                 <Typography variant="body1" sx={{ opacity: 0.9 }}>
-                  Success Rate
+                  JEE B.Arch 2024
                 </Typography>
               </Box>
             </Box>

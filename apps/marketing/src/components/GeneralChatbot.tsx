@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { usePathname } from 'next/navigation';
 import { useFirebaseAuth } from '@neram/auth';
-import TawkToChat from './TawkToChat';
+import { openTawkChat } from '@/lib/tawk';
 import {
   Box,
   Typography,
@@ -26,6 +26,8 @@ import HeadsetMicIcon from '@mui/icons-material/HeadsetMic';
 import Image from 'next/image';
 import VoiceInputButton from './aintra/VoiceInputButton';
 import { leadAttribution } from '@/lib/attribution';
+import { buildWhatsAppLink } from '@/lib/whatsapp';
+import { trackWhatsAppClick } from '@/lib/whatsapp-track';
 
 const ASSISTANT_IMG = '/images/nata-ai-assistant2.jpg';
 
@@ -188,6 +190,9 @@ function generateSessionId() {
 }
 
 const FAB_BOTTOM = 24;
+/** Location pages have a mobile sticky CTA bar (STICKY_CTA_HEIGHT 72px + safe area); sit above it. */
+const OVER_STICKY_CTA_BOTTOM = 96;
+const STICKY_CTA_PATH = /\/coaching\/(nata-coaching|jee-paper-2-coaching)/;
 const DISMISSED_KEY = 'aintra_dismissed';
 
 export default function GeneralChatbot() {
@@ -334,20 +339,25 @@ export default function GeneralChatbot() {
 
   const handleWhatsApp = () => {
     handleCloseHumanMenu();
-    window.open(
-      'https://wa.me/919176137043?text=Hello!%20I%20need%20help%20from%20Neram%20Classes.',
-      '_blank'
-    );
+    const { href, pageCode } = buildWhatsAppLink({ text: 'Hello! I need help from Neram Classes.' });
+    trackWhatsAppClick(pageCode, { placement: 'chatbot' });
+    window.open(href, '_blank', 'noopener,noreferrer');
   };
 
-  const handleTawkTo = () => {
+  // Tawk.to is not loaded until this tap (it is ~300 KB plus an iframe), so
+  // the first tap shows "Connecting" while the embed downloads.
+  const [liveChatLoading, setLiveChatLoading] = useState(false);
+  const handleTawkTo = async () => {
     handleCloseHumanMenu();
-    if (typeof window !== 'undefined' && (window as any).Tawk_API) {
-      (window as any).Tawk_API.maximize();
+    if (liveChatLoading) return;
+    setLiveChatLoading(true);
+    const opened = await openTawkChat({ hideOnMinimize: true });
+    setLiveChatLoading(false);
+    if (opened) {
       setOpen(false);
     } else {
-      // Fallback: go to contact page
-      window.open('/en/contact', '_blank');
+      // Fallback: the contact page (after an await a new tab would be popup-blocked).
+      window.location.assign('/contact');
     }
   };
 
@@ -368,21 +378,22 @@ export default function GeneralChatbot() {
     setDismissed(true);
   };
 
-  // On /contact page, show nothing — TawkToChat is loaded by ContactPageContent there
+  // On /contact page, show nothing: ContactPageContent has its own live chat launcher there
   if (pathname?.includes('/contact') || pathname?.includes('/enroll')) return null;
 
   return (
     <>
-      {/* Initialize Tawk.to hidden — bubble only shows when user clicks Live Chat */}
-      <TawkToChat hideByDefault />
+      {/* Tawk.to loads on the first Live Chat tap (lib/tawk.ts), never on mount. */}
       {/* FAB button */}
       {!open && !dismissed && (
         <Box
           sx={{
             position: 'fixed',
-            bottom: achievementVisible
-              ? { xs: 60, md: FAB_BOTTOM }
-              : FAB_BOTTOM,
+            bottom: STICKY_CTA_PATH.test(pathname ?? '')
+              ? { xs: OVER_STICKY_CTA_BOTTOM, md: FAB_BOTTOM }
+              : achievementVisible
+                ? { xs: 60, md: FAB_BOTTOM }
+                : FAB_BOTTOM,
             right: 24,
             zIndex: 1300,
             transition: { xs: 'bottom 0.4s cubic-bezier(0.4, 0, 0.2, 1)', md: 'none' },
@@ -744,8 +755,14 @@ export default function GeneralChatbot() {
             Need human help?
           </Typography>
           <Box
+            component="button"
+            type="button"
             onClick={handleWhatsApp}
             sx={{
+              border: 0,
+              bgcolor: 'transparent',
+              font: 'inherit',
+              '&:focus-visible': { outline: '2px solid #1976d2', outlineOffset: 2 },
               display: 'inline-flex',
               alignItems: 'center',
               gap: '4px',
@@ -753,7 +770,7 @@ export default function GeneralChatbot() {
               px: 1,
               py: 0.5,
               borderRadius: 1,
-              minHeight: 28,
+              minHeight: 44, // touch target (was 28)
               '&:hover': { bgcolor: '#e0e0e0' },
             }}
           >
@@ -763,8 +780,15 @@ export default function GeneralChatbot() {
             </Typography>
           </Box>
           <Box
+            component="button"
+            type="button"
             onClick={handleTawkTo}
+            aria-busy={liveChatLoading}
             sx={{
+              border: 0,
+              bgcolor: 'transparent',
+              font: 'inherit',
+              '&:focus-visible': { outline: '2px solid #1976d2', outlineOffset: 2 },
               display: 'inline-flex',
               alignItems: 'center',
               gap: '4px',
@@ -772,13 +796,13 @@ export default function GeneralChatbot() {
               px: 1,
               py: 0.5,
               borderRadius: 1,
-              minHeight: 28,
+              minHeight: 44, // touch target (was 28)
               '&:hover': { bgcolor: '#e0e0e0' },
             }}
           >
             <SupportAgentIcon sx={{ fontSize: 15, color: '#1976d2', display: 'block' }} />
             <Typography component="span" sx={{ fontSize: '0.7rem', fontWeight: 600, color: '#1976d2', lineHeight: 1 }}>
-              Live Chat
+              {liveChatLoading ? 'Connecting' : 'Live Chat'}
             </Typography>
           </Box>
         </Box>

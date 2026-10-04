@@ -219,7 +219,7 @@ async function lookupByJoinUrl(
   try {
     const res = await fetch(
       `https://graph.microsoft.com/v1.0/${base}?$filter=${encodeURIComponent(filter)}&$select=id`,
-      { headers: { Authorization: `Bearer ${token}` } },
+      { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } },
     );
     if (!res.ok) {
       const body = await res.text().catch(() => '');

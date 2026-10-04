@@ -9,6 +9,7 @@ import {
   parsePictureRequest,
   parseSkipRequest,
   parseSubmitRequest,
+  parseTimerRequest,
 } from './prompt-requests';
 
 const SESSION = '11111111-1111-4111-8111-111111111111';
@@ -18,14 +19,14 @@ describe('parseAskRequest', () => {
   it('defaults to a four-option multiple choice question', () => {
     expect(parseAskRequest({ sessionId: SESSION })).toEqual({
       ok: true,
-      value: { sessionId: SESSION, answerType: 'mcq', optionCount: 4, label: null, text: null, imageUrl: null, optionTexts: null, closePromptId: null },
+      value: { sessionId: SESSION, answerType: 'mcq', optionCount: 4, label: null, text: null, imageUrl: null, optionTexts: null, closePromptId: null, qbQuestionId: null, answerTypeChosen: false, timeLimitSec: null },
     });
   });
 
   it("carries the teacher's reference and the question text, left for the database to tidy", () => {
     expect(parseAskRequest({ sessionId: SESSION, label: ' 38 ', text: 'Which statement is correct?' })).toEqual({
       ok: true,
-      value: { sessionId: SESSION, answerType: 'mcq', optionCount: 4, label: ' 38 ', text: 'Which statement is correct?', imageUrl: null, optionTexts: null, closePromptId: null },
+      value: { sessionId: SESSION, answerType: 'mcq', optionCount: 4, label: ' 38 ', text: 'Which statement is correct?', imageUrl: null, optionTexts: null, closePromptId: null, qbQuestionId: null, answerTypeChosen: false, timeLimitSec: null },
     });
     expect(parseAskRequest({ sessionId: SESSION, label: null, text: null })).toMatchObject({ ok: true, value: { label: null, text: null } });
   });
@@ -33,12 +34,12 @@ describe('parseAskRequest', () => {
   it('reads every answer type, keeping the option count for mcq only', () => {
     expect(parseAskRequest({ sessionId: SESSION.toUpperCase(), answerType: 'mcq', optionCount: 6 })).toEqual({
       ok: true,
-      value: { sessionId: SESSION, answerType: 'mcq', optionCount: 6, label: null, text: null, imageUrl: null, optionTexts: null, closePromptId: null },
+      value: { sessionId: SESSION, answerType: 'mcq', optionCount: 6, label: null, text: null, imageUrl: null, optionTexts: null, closePromptId: null, qbQuestionId: null, answerTypeChosen: true, timeLimitSec: null },
     });
     for (const answerType of ['numeric', 'text', 'yesno']) {
       expect(parseAskRequest({ sessionId: SESSION, answerType, optionCount: 5 })).toEqual({
         ok: true,
-        value: { sessionId: SESSION, answerType, optionCount: null, label: null, text: null, imageUrl: null, optionTexts: null, closePromptId: null },
+        value: { sessionId: SESSION, answerType, optionCount: null, label: null, text: null, imageUrl: null, optionTexts: null, closePromptId: null, qbQuestionId: null, answerTypeChosen: true, timeLimitSec: null },
       });
     }
   });
@@ -56,6 +57,11 @@ describe('parseAskRequest', () => {
     [{ sessionId: SESSION, label: 'x'.repeat(201) }, 'label'],
     [{ sessionId: SESSION, text: ['Which?'] }, 'text'],
     [{ sessionId: SESSION, text: 'x'.repeat(2001) }, 'text'],
+    [{ sessionId: SESSION, qbQuestionId: 'q-38' }, 'qbQuestionId'],
+    [{ sessionId: SESSION, timeLimitSec: 4 }, 'timeLimitSec'],
+    [{ sessionId: SESSION, timeLimitSec: 3601 }, 'timeLimitSec'],
+    [{ sessionId: SESSION, timeLimitSec: 30.5 }, 'timeLimitSec'],
+    [{ sessionId: SESSION, timeLimitSec: '60' }, 'timeLimitSec'],
   ])('refuses %j, naming %s', (body, field) => {
     expect(parseAskRequest(body)).toEqual({ ok: false, field });
   });
@@ -203,5 +209,31 @@ describe('parseExcuseRequest', () => {
     expect(parseExcuseRequest({ studentIds: ['x'] })).toEqual({ ok: false, field: 'studentIds' });
     expect(parseExcuseRequest({ reason: 'bored' })).toEqual({ ok: false, field: 'reason' });
     expect(parseExcuseRequest({ studentIds: [student], approve: 'yes' })).toEqual({ ok: false, field: 'approve' });
+  });
+});
+
+describe('parseAskRequest: present to class', () => {
+  const QB = '33333333-3333-4333-8333-333333333333';
+
+  it('carries the bank question and the time limit, and whether the teacher chose the buttons', () => {
+    expect(parseAskRequest({ sessionId: SESSION, qbQuestionId: QB.toUpperCase(), timeLimitSec: 60, label: '38' })).toMatchObject({
+      ok: true,
+      value: { qbQuestionId: QB, timeLimitSec: 60, answerTypeChosen: false, answerType: 'mcq', optionCount: 4 },
+    });
+    expect(parseAskRequest({ sessionId: SESSION, qbQuestionId: QB, answerType: 'yesno' })).toMatchObject({
+      ok: true,
+      value: { answerTypeChosen: true, answerType: 'yesno' },
+    });
+  });
+});
+
+describe('parseTimerRequest', () => {
+  it('reads seconds to add, or stop', () => {
+    expect(parseTimerRequest({ addSeconds: 15 })).toEqual({ ok: true, value: { clear: false, addSeconds: 15 } });
+    expect(parseTimerRequest({ clear: true })).toEqual({ ok: true, value: { clear: true, addSeconds: null } });
+  });
+
+  it.each([[{}], [{ addSeconds: 0 }], [{ addSeconds: 601 }], [{ addSeconds: 1.5 }], [{ clear: 'yes' }]])('refuses %j', (body) => {
+    expect(parseTimerRequest(body)).toEqual({ ok: false, field: 'addSeconds' });
   });
 });

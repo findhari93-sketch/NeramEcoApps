@@ -183,7 +183,7 @@ export default async function NataCoachingDirectory({ params }: PageProps) {
           ]}
         />
       </Section>
-      <StickyCta />
+      <StickyCta whatsapp={{}} />
     </Box>
   );
 }

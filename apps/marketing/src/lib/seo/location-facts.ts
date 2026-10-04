@@ -9,7 +9,7 @@
  *    one coordinate for both, so it is used only when it names this city, never
  *    for a distance.
  *  - Distances are straight-line and rounded (roundKm).
- *  - "Classroom" is claimed only within CLASSROOM_MODE_KM of a real centre.
+ *  - "Classroom" is claimed only on a centre's own city page (centre.citySlug).
  */
 import { cityForName, getState, placeKey, stateSlugForName } from '@/data/geo';
 import type { CityPlace, GeoState } from '@/data/geo';
@@ -22,7 +22,13 @@ import { EXAMS, acceptsAat, type ExamKey } from './exam-config';
 /** Bump when the page template changes in a way search engines should re-read. */
 export const TEMPLATE_UPDATED_AT = '2026-10-01';
 
-export const CLASSROOM_MODE_KM = 15;
+/** A second centre this close shows on the page as "also in {area}". */
+export const SIBLING_CENTRE_KM = 30;
+
+/** The centre section on its city page, the one page per classroom. */
+export function centrePageUrl(centre: ClassroomCentre): string {
+  return `${EXAMS.nata.cityPath(centre.citySlug)}#visit`;
+}
 export const NEAR_CLASSROOM_KM = 150;
 const MAX_TEST_CITIES = 3;
 const MAX_CITY_COLLEGES = 8;
@@ -110,6 +116,10 @@ export interface CityFacts {
   stateCollegeCount: number;
   classroom: ClassroomFact | null;
   mode: TeachingMode;
+  /** Centres whose own page this is (two in Pudukkottai). Empty off-centre. */
+  centres: ClassroomCentre[];
+  /** Other centres within SIBLING_CENTRE_KM, e.g. Tambaram on the Chennai page. */
+  siblingCentres: ClassroomFact[];
   counsellingHubs: string[];
   content: CityContent | null;
   contentWords: number;
@@ -272,17 +282,32 @@ export function computeCityFacts(
     usedColleges.push(...picked.map(({ c }) => c));
   }
 
+  // "Classroom" belongs to the centre's own city page only. Distance alone once
+  // made "Bengaluru Rural" read "Classroom and Online" with no centre there.
   let classroom: ClassroomFact | null = null;
+  let ownCentre = false;
+  let own: ClassroomCentre[] = [];
+  let siblingCentres: ClassroomFact[] = [];
   if (place.kind === 'india') {
-    for (const centre of ds.centres) {
+    own = ds.centres.filter((c) => c.citySlug === place.slug);
+    if (own.length) {
+      siblingCentres = ds.centres
+        .filter((c) => c.citySlug !== place.slug)
+        .map((centre) => ({ centre, km: haversineKm(place, centre), url: centrePageUrl(centre) }))
+        .filter((f) => f.km <= SIBLING_CENTRE_KM)
+        .sort((a, b) => a.km - b.km)
+        .map((f) => ({ ...f, km: roundKm(f.km) }));
+    }
+    for (const centre of own.length ? own : ds.centres) {
       const km = haversineKm(place, centre);
-      if (!classroom || km < classroom.km) classroom = { centre, km, url: `/contact/${centre.seoSlug}` };
+      if (!classroom || km < classroom.km) classroom = { centre, km, url: centrePageUrl(centre) };
     }
     if (classroom) classroom = { ...classroom, km: roundKm(classroom.km) };
+    ownCentre = own.length > 0;
   }
   const mode: TeachingMode = !classroom
     ? 'online'
-    : classroom.km <= CLASSROOM_MODE_KM
+    : ownCentre
       ? 'classroom'
       : classroom.km <= NEAR_CLASSROOM_KM
         ? 'online-near-classroom'
@@ -299,6 +324,8 @@ export function computeCityFacts(
     stateCollegeCount,
     classroom: mode === 'online' ? null : classroom,
     mode,
+    centres: own,
+    siblingCentres,
     counsellingHubs: state?.counsellingHubs ?? [],
     content,
     contentWords: countWords(content),
@@ -334,7 +361,7 @@ export function computeStateFacts(
   const stateName = placeKey(state.name);
   const classrooms = ds.centres
     .filter((c) => placeKey(c.state) === stateName)
-    .map((centre) => ({ centre, km: 0, url: `/contact/${centre.seoSlug}` }));
+    .map((centre) => ({ centre, km: 0, url: centrePageUrl(centre) }));
 
   return {
     exam: examKey,

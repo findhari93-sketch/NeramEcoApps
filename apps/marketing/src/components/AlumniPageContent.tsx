@@ -14,10 +14,10 @@ import { ReviewCard } from '@/components/reviews/ReviewParts';
 import type { PublicReview } from '@/lib/reviews/json-ld';
 
 const stats = [
-  { value: '500+', label: 'Top 100 Ranks' },
-  { value: '2000+', label: 'Selections in Top Colleges' },
-  { value: '99.9%', label: 'Success Rate' },
-  { value: '50+', label: 'IIT/NIT Selections' },
+  { value: '1,000+', label: 'Students Taught' },
+  { value: 'AIR 1', label: 'JEE B.Arch 2024' },
+  { value: '10+', label: 'Years' },
+  { value: '189', label: 'Top NATA Score' },
 ];
 
 const topColleges = [

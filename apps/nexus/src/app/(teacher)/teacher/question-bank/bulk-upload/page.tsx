@@ -39,14 +39,14 @@ import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import PageHeader from '@/components/PageHeader';
 import { isQBExamType } from '@/lib/qb-exam-routes';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
-import type { QBExamType } from '@neram/database';
+import { QB_EXAM_TYPE_LABELS, type QBExamType } from '@neram/database';
 import type { ReviewQuestion, UploadMethod } from '@/lib/bulk-upload-schema';
 import { uploadBase64Images } from '@/lib/upload-base64-images';
 import PasteTextTab from '@/components/question-bank/bulk-upload/PasteTextTab';
 import UploadPDFTab from '@/components/question-bank/bulk-upload/UploadPDFTab';
 import UploadJSONTab from '@/components/question-bank/bulk-upload/UploadJSONTab';
 import ReviewPanel from '@/components/question-bank/bulk-upload/ReviewPanel';
-import { JEE_SESSIONS, NATA_SESSIONS } from '@/lib/qb-paper-identity';
+import { sessionOptionsFor } from '@/lib/qb-paper-identity';
 
 const steps = ['Paper Info', 'Upload Data', 'Review & Import', 'Done'];
 const currentYear = new Date().getFullYear();
@@ -79,6 +79,9 @@ export default function BulkUploadPage() {
   const [session, setSession] = useState('');
   const [hasShifts, setHasShifts] = useState(false);
   const [shift, setShift] = useState<QBShift | null>(null);
+  // Paper 2B shares Maths and Aptitude with the Paper 2A of its sitting, so by
+  // default only the Planning questions need uploading.
+  const [copyShared, setCopyShared] = useState(true);
 
   // Step 2: Upload method
   const [uploadMethod, setUploadMethod] = useState<UploadMethod>('json');
@@ -273,6 +276,22 @@ export default function BulkUploadPage() {
         return;
       }
 
+      // B.Planning: bring in the shared Maths and Aptitude. A failure here is
+      // reported, not fatal: the paper page offers the same copy again.
+      let copiedNote = '';
+      if (examType === 'JEE_PAPER_2B' && copyShared && json.isNew !== false) {
+        const copyRes = await fetch(`/api/question-bank/papers/${json.data.id}/copy-from-2a`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const copyJson = await copyRes.json().catch(() => ({}));
+        copiedNote = copyRes.ok
+          ? copyJson.data?.copied
+            ? ` ${copyJson.data.copied} Maths and Aptitude questions copied from JEE Paper 2.`
+            : ''
+          : ` Maths and Aptitude were not copied: ${copyJson.error || 'try again from the paper page'}.`;
+      }
+
       setImportResult({
         paperId: json.data.id,
         count: json.data.questions_parsed || reviewQuestions.length,
@@ -281,7 +300,7 @@ export default function BulkUploadPage() {
           (q) => q.question_format === 'DRAWING_PROMPT' || q.question_format === 'IMAGE_BASED',
         ).length,
         isNew: json.isNew,
-        message: json.message,
+        message: `${json.message}${copiedNote}`,
       });
       setActiveStep(3);
     } catch (err) {
@@ -341,9 +360,27 @@ export default function BulkUploadPage() {
                 label="Exam Type"
               >
                 <MenuItem value="JEE_PAPER_2">JEE Paper 2 (B.Arch)</MenuItem>
+                <MenuItem value="JEE_PAPER_2B">JEE Paper 2B (B.Planning)</MenuItem>
                 <MenuItem value="NATA">NATA</MenuItem>
               </Select>
             </FormControl>
+
+            {examType === 'JEE_PAPER_2B' && (
+              <FormControlLabel
+                control={
+                  <Switch checked={copyShared} onChange={(e) => setCopyShared(e.target.checked)} />
+                }
+                label={
+                  <Box>
+                    <Typography variant="body2">Also copy Maths and Aptitude from JEE Paper 2</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      They are the same questions in the same sitting, so you only need to upload the Planning part.
+                    </Typography>
+                  </Box>
+                }
+                sx={{ alignItems: 'flex-start', ml: 0, gap: 1, '& .MuiSwitch-root': { mt: -0.5 } }}
+              />
+            )}
 
             {/* Year (Autocomplete) + Session (Toggle Buttons) — same row on tablet+ */}
             <Box
@@ -402,7 +439,7 @@ export default function BulkUploadPage() {
                     },
                   }}
                 >
-                  {(examType === 'JEE_PAPER_2' ? JEE_SESSIONS : NATA_SESSIONS).map((s) => (
+                  {sessionOptionsFor(examType).map((s) => (
                     <ToggleButton key={s.value} value={s.value}>
                       <Box sx={{ textAlign: 'center' }}>
                         <Typography variant="body2" fontWeight={600} sx={{ lineHeight: 1.2 }}>
@@ -498,7 +535,7 @@ export default function BulkUploadPage() {
           {/* Paper info chips */}
           <Box sx={{ px: 2.5, pt: 2, pb: 1, display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
             <Chip
-              label={examType === 'JEE_PAPER_2' ? 'JEE Paper 2' : 'NATA'}
+              label={QB_EXAM_TYPE_LABELS[examType]}
               size="small"
               color="primary"
             />

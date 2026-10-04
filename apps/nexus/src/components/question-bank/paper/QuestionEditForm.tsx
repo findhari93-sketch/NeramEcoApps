@@ -28,6 +28,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import AddIcon from '@mui/icons-material/Add';
 import SaveIcon from '@mui/icons-material/Save';
 import CloseIcon from '@mui/icons-material/Close';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import type {
   NexusQBOriginalPaper,
   NexusQBQuestion,
@@ -42,7 +43,7 @@ import type { QBQuestionSection } from '@neram/database';
 import {
   QB_CATEGORY_LABELS,
   QB_EXAM_TYPE_LABELS,
-  QB_SECTIONS,
+  qbSectionsForExam,
   qbSectionLabel,
 } from '@neram/database';
 import type { ImageState } from '@/lib/bulk-upload-schema';
@@ -62,6 +63,7 @@ import DrawingPartsEditor, {
   type DrawingPartsForm,
 } from './DrawingPartsEditor';
 import MathField from '@/components/common/MathField';
+import MathAnswerField from '@/components/common/MathAnswerField';
 // The keyword guess has one home, in lib/qb-image-needs.ts. A second copy
 // here would drift the moment either changed.
 import { questionNeedsImage } from '@/lib/qb-image-needs';
@@ -118,6 +120,23 @@ export interface QuestionEditFormProps {
    * Save rewrite a section a teacher only opened the menu on.
    */
   onChangeSection?: (questionId: string, section: QBQuestionSection) => Promise<void>;
+  /**
+   * Told whenever the form gains or loses unsaved edits, so the pane can ask
+   * before moving to another question rather than dropping pasted figures.
+   */
+  onDirtyChange?: (dirty: boolean) => void;
+}
+
+/**
+ * The figure each option holds in the database, by its stored id. The baseline
+ * a per-figure Save compares against, and the only ids that save can reach:
+ * the images route merges by the ids already on the row, so an option added in
+ * this form (or renamed by normalizeOptionIds) waits for the full Save.
+ */
+function savedOptionFigures(question: NexusQBQuestion): Record<string, string | null> {
+  const map: Record<string, string | null> = {};
+  for (const opt of question.options ?? []) map[opt.id] = opt.image_url ?? null;
+  return map;
 }
 
 interface FormData {
@@ -218,9 +237,13 @@ function buildSubmitPayload(form: FormData) {
     options: form.question_format === 'MCQ'
       ? form.options.map((opt) => {
           const img = form.option_images[opt.id];
+          // A key on the map is the form's word on this option, including
+          // "removed" (undefined). Falling back to the loaded image_url there
+          // re-sent the old figure, so a removal could never be saved.
+          const fromForm = opt.id in form.option_images;
           return {
             ...opt,
-            image_url: img?.uploaded ? img.url : opt.image_url || undefined,
+            image_url: fromForm ? (img?.uploaded ? img.url : undefined) : opt.image_url || undefined,
           };
         })
       : null,
@@ -274,9 +297,11 @@ function buildSubmitPayload(form: FormData) {
  * point of the extraction, since an accordion inside a pane that is already a
  * disclosure is one disclosure too many.
  *
- * There is exactly one Save, in the header. The editor this came from also
- * repeated Save and Cancel in a sticky footer, which meant two controls doing
- * the same thing on a form short enough to see whole.
+ * Save sits in the header and again in the sticky footer while there are
+ * unsaved edits: on a question with four option figures the header is
+ * scrolled well out of view by the time the last one is pasted. Each option
+ * figure also has its own Save, so a teacher can bank Figure A before pasting
+ * Figure B, then save the whole question at the end.
  */
 export default function QuestionEditForm({
   question,
@@ -289,6 +314,7 @@ export default function QuestionEditForm({
   onSaved,
   onCancel,
   onChangeSection,
+  onDirtyChange,
 }: QuestionEditFormProps) {
   const theme = useTheme();
   const [form, setForm] = useState<FormData>(() => getInitialFormData(question, sources, paper, tagIds));
@@ -301,6 +327,10 @@ export default function QuestionEditForm({
   const [sectionSaving, setSectionSaving] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [savedFigures, setSavedFigures] = useState(() => savedOptionFigures(question));
+  const [figureSaving, setFigureSaving] = useState<Record<string, boolean>>({});
+  const [figureJustSaved, setFigureJustSaved] = useState<Record<string, boolean>>({});
+  const [figureError, setFigureError] = useState<Record<string, string>>({});
   /**
    * Hindi is empty on almost every paper, so it costs a field per option and one
    * for the stem to show it by default. Seeded from the question so a paper that
@@ -321,9 +351,18 @@ export default function QuestionEditForm({
     setForm(getInitialFormData(question, sources, paper, tagIds));
     setDirty(false);
     setOptionImagesEnabled(question.options?.some((o) => !!o.image_url) ?? false);
+    setSavedFigures(savedOptionFigures(question));
+    setFigureJustSaved({});
+    setFigureError({});
     setShowHindi(Boolean(question.question_text_hi) || (question.options ?? []).some((o) => o.text_hi));
     setShowImageZone(Boolean(question.question_image_url) || questionNeedsImage(question));
   }, [question, sources, paper, tagIds]);
+
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+  // Unmounting (another question, or Images mode) takes the edits with it.
+  useEffect(() => () => onDirtyChange?.(false), [onDirtyChange]);
 
   const updateField = useCallback(
     <K extends keyof FormData>(key: K, value: FormData[K]) => {
@@ -354,8 +393,70 @@ export default function QuestionEditForm({
       ...prev,
       option_images: { ...prev.option_images, [optId]: img },
     }));
+    setFigureJustSaved((prev) => ({ ...prev, [optId]: false }));
+    setFigureError((prev) => withoutKey(prev, optId));
     setDirty(true);
   }, []);
+
+  /**
+   * Save option figures on their own, through the lightweight images route.
+   * Deliberately not followed by onSaved(): that refetch re-seeds the whole
+   * form and would wipe the answer or text the teacher has not saved yet. The
+   * form stays dirty, so the question's own Save is still there at the end.
+   *
+   * Several ids go in ONE request, never one each: the route reads the options
+   * column, merges and writes it back, so two requests in flight together would
+   * each write over the other's figure.
+   */
+  const handleSaveFigures = async (optIds: string[]) => {
+    if (optIds.length === 0) return;
+    const urls: Record<string, string | null> = {};
+    for (const id of optIds) urls[id] = imageUrlOf(form.option_images[id]);
+    const mark = <T,>(value: T) => (prev: Record<string, T>) => {
+      const next = { ...prev };
+      for (const id of optIds) next[id] = value;
+      return next;
+    };
+    setFigureSaving(mark(true));
+    setFigureError((prev) => optIds.reduce((acc, id) => withoutKey(acc, id), prev));
+    try {
+      const token = await getToken();
+      if (!token) throw new Error('Auth failed');
+      const res = await fetch(`/api/question-bank/questions/${question.id}/images`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ option_images: urls }),
+      });
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}));
+        throw new Error(json.error || 'Could not save this figure');
+      }
+      setSavedFigures((prev) => ({ ...prev, ...urls }));
+      setFigureJustSaved(mark(true));
+    } catch (err) {
+      setFigureError(mark(err instanceof Error ? err.message : 'Could not save this figure'));
+    } finally {
+      setFigureSaving(mark(false));
+    }
+  };
+
+  /**
+   * Figures that differ from the row and can be saved on their own, in option
+   * order. What Ctrl+S saves first, ahead of the question itself.
+   */
+  const pendingFigureIds = form.question_format === 'MCQ' && optionImagesEnabled
+    ? form.options
+        .map((o) => o.id)
+        .filter(
+          (id) =>
+            id in savedFigures &&
+            !figureSaving[id] &&
+            imageUrlOf(form.option_images[id]) !== (savedFigures[id] ?? null),
+        )
+    : [];
+  const pendingFigureLetters = pendingFigureIds.map((id) =>
+    optionLetter(form.options.findIndex((o) => o.id === id)),
+  );
 
   const addOption = useCallback((text?: string, textHi?: string) => {
     setForm((prev) => {
@@ -515,19 +616,27 @@ export default function QuestionEditForm({
     .filter(Boolean)
     .join(', ');
 
+  // Closing unmounts this form, so there is nothing to reset here. Resetting
+  // first threw the edits away even when the pane then asked "discard unsaved
+  // changes?" and the teacher chose to keep editing.
   const handleCancel = () => {
-    setForm(getInitialFormData(question, sources, paper));
-    setDirty(false);
-    setOptionImagesEnabled(question.options?.some((o) => !!o.image_url) ?? false);
     onCancel();
   };
 
-  // Keyboard shortcuts
+  // Keyboard shortcuts. Re-subscribed every render on purpose: handleSave
+  // closes over `form`, and with only [dirty, saving] as deps Ctrl+S kept the
+  // form as it was at the first edit, so a second pasted figure was not saved.
+  //
+  // Ctrl+S follows the paste-then-save rhythm: a figure waiting for its own
+  // Save is saved first (paste A, Ctrl+S, paste B, Ctrl+S), and once none is
+  // waiting the next Ctrl+S saves the whole question.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
-        if (dirty && !saving) handleSave();
+        if (saving) return;
+        if (pendingFigureIds.length > 0) void handleSaveFigures(pendingFigureIds);
+        else if (dirty) handleSave();
       }
       if (e.key === 'Escape') {
         handleCancel();
@@ -535,7 +644,7 @@ export default function QuestionEditForm({
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [dirty, saving]);
+  });
 
   return (
     <Paper variant="outlined" sx={{ border: 'none', overflow: 'visible' }}>
@@ -594,7 +703,15 @@ export default function QuestionEditForm({
             }}
           >
             <MenuItem value="" disabled><em>Unsectioned</em></MenuItem>
-            {QB_SECTIONS.map((s) => (
+            {/* Only the sections this paper's exam has: Planning on a B.Planning
+                paper, Drawing on a B.Arch one. A question already sitting in a
+                section outside that list keeps it visible so it can be moved. */}
+            {[
+              ...qbSectionsForExam(paper?.exam_type),
+              ...(question.section && !qbSectionsForExam(paper?.exam_type).includes(question.section)
+                ? [question.section]
+                : []),
+            ].map((s) => (
               <MenuItem key={s} value={s} sx={{ minHeight: 44 }}>{qbSectionLabel(s)}</MenuItem>
             ))}
           </Select>
@@ -839,6 +956,15 @@ export default function QuestionEditForm({
                           getToken={getToken}
                           subfolder="options"
                         />
+                        <FigureSaveRow
+                          letter={optionLetter(idx)}
+                          savable={opt.id in savedFigures}
+                          pending={imageUrlOf(form.option_images[opt.id]) !== (savedFigures[opt.id] ?? null)}
+                          saving={!!figureSaving[opt.id]}
+                          justSaved={!!figureJustSaved[opt.id]}
+                          error={figureError[opt.id]}
+                          onSave={() => handleSaveFigures([opt.id])}
+                        />
                       </Box>
                     )}
                   </Box>
@@ -861,20 +987,20 @@ export default function QuestionEditForm({
 
           {/* NUMERICAL answer */}
           {form.question_format === 'NUMERICAL' && (
-            <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
-              <TextField
-                label="Correct Answer"
+            <Box sx={{ display: 'flex', gap: 1, mt: 2, alignItems: 'flex-start' }}>
+              <MathAnswerField
                 value={form.correct_answer}
-                onChange={(e) => updateField('correct_answer', e.target.value)}
-                size="small"
-                sx={{ flex: 1 }}
+                onChange={(next) => updateField('correct_answer', next)}
+                sx={{ flex: 1, minWidth: 0 }}
               />
               <TextField
                 label="Tolerance (±)"
                 value={form.answer_tolerance}
                 onChange={(e) => updateField('answer_tolerance', e.target.value)}
                 size="small"
-                sx={{ width: 120 }}
+                inputProps={{ inputMode: 'decimal' }}
+                helperText="Blank = exact"
+                sx={{ width: 120, flexShrink: 0 }}
               />
             </Box>
           )}
@@ -1150,29 +1276,116 @@ export default function QuestionEditForm({
       </Box>
 
       {/*
-        The unsaved hint, without a second Save and Cancel. The editor this came
-        from repeated both here, so a dirty form showed two of each: the pane is
-        short enough that the header pair is always reachable.
+        The question's own Save, pinned where the teacher is working: with four
+        option figures the header Save is a long scroll away by the time the
+        last one goes in. An opaque base under the tint so the form does not
+        show through as it scrolls past.
       */}
       {dirty && (
         <Box
           sx={{
             position: 'sticky',
             bottom: 0,
+            zIndex: 1,
             display: 'flex',
             gap: 1,
             alignItems: 'center',
             p: 1.5,
-            bgcolor: alpha(theme.palette.warning.main, 0.06),
+            bgcolor: 'background.paper',
+            backgroundImage: `linear-gradient(${alpha(theme.palette.warning.main, 0.08)}, ${alpha(theme.palette.warning.main, 0.08)})`,
             borderTop: 1,
             borderColor: 'divider',
           }}
         >
-          <Typography variant="caption" color="text.secondary">
-            Unsaved changes (Ctrl+S to save)
+          <Typography variant="caption" color="text.secondary" sx={{ flex: 1, minWidth: 0 }}>
+            {pendingFigureLetters.length > 0
+              ? `Ctrl+S saves Figure ${pendingFigureLetters.join(', ')}`
+              : 'Unsaved changes (Ctrl+S saves the question)'}
           </Typography>
+          <Button
+            variant="contained"
+            startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}
+            onClick={handleSave}
+            disabled={saving}
+            sx={{ textTransform: 'none', minHeight: 44, flexShrink: 0 }}
+          >
+            {saving ? 'Saving...' : 'Save question'}
+          </Button>
         </Box>
       )}
     </Paper>
+  );
+}
+
+function imageUrlOf(img: ImageState | undefined): string | null {
+  return img?.uploaded ? img.url : null;
+}
+
+function withoutKey<T>(map: Record<string, T>, key: string): Record<string, T> {
+  if (!(key in map)) return map;
+  const next = { ...map };
+  delete next[key];
+  return next;
+}
+
+/**
+ * The per-figure Save under an option's dropzone: a button while the figure in
+ * the form differs from the one on the row, a saved line once it matches.
+ * Status is an icon plus words, never colour alone, and announced politely.
+ */
+function FigureSaveRow({
+  letter,
+  savable,
+  pending,
+  saving,
+  justSaved,
+  error,
+  onSave,
+}: {
+  letter: string;
+  savable: boolean;
+  pending: boolean;
+  saving: boolean;
+  justSaved: boolean;
+  error?: string;
+  onSave: () => void;
+}) {
+  if (!savable) {
+    return pending ? (
+      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+        New option: this figure is saved with the question
+      </Typography>
+    ) : null;
+  }
+  return (
+    <Box aria-live="polite" sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, mt: 0.5 }}>
+      {pending && (
+        <Button
+          size="small"
+          variant="contained"
+          onClick={onSave}
+          disabled={saving}
+          title="Ctrl+S"
+          aria-keyshortcuts="Control+S Meta+S"
+          startIcon={saving ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />}
+          sx={{ textTransform: 'none', minHeight: 44 }}
+        >
+          {saving ? 'Saving...' : `Save Figure ${letter}`}
+        </Button>
+      )}
+      {!pending && justSaved && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minHeight: 44 }}>
+          <CheckCircleIcon fontSize="small" color="success" />
+          <Typography variant="caption" color="text.secondary">
+            Figure {letter} saved
+          </Typography>
+        </Box>
+      )}
+      {error && (
+        <Typography variant="caption" color="error" role="alert">
+          {error}
+        </Typography>
+      )}
+    </Box>
   );
 }

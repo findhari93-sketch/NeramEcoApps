@@ -39,6 +39,7 @@ export async function addMemberToTeam(teamId: string, msOid: string): Promise<vo
   const token = await getAppOnlyToken();
 
   const res = await fetch(`https://graph.microsoft.com/v1.0/teams/${teamId}/members`, {
+    cache: 'no-store',
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -68,6 +69,7 @@ export async function removeMemberFromTeam(teamId: string, membershipId: string)
   const res = await fetch(
     `https://graph.microsoft.com/v1.0/teams/${teamId}/members/${membershipId}`,
     {
+      cache: 'no-store',
       method: 'DELETE',
       headers: { Authorization: `Bearer ${token}` },
     }
@@ -89,6 +91,7 @@ export async function getTeamMembers(teamId: string): Promise<TeamMember[]> {
 
   while (url) {
     const res: Response = await fetch(url, {
+      cache: 'no-store',
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -210,6 +213,7 @@ export async function createTeamForClassroom(
 
   // Create team via Graph API
   const res = await fetch('https://graph.microsoft.com/v1.0/teams', {
+    cache: 'no-store',
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -303,7 +307,7 @@ export async function createChannelForClassroom(
   const findChannelByName = async (displayName: string): Promise<{ id: string } | null> => {
     const res = await fetch(
       `https://graph.microsoft.com/v1.0/teams/${teamId}/channels?$filter=displayName eq '${displayName.replace(/'/g, "''")}'`,
-      { headers: { Authorization: `Bearer ${token}` } }
+      { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }
     );
     if (!res.ok) return null;
     const data = await res.json();
@@ -313,6 +317,7 @@ export async function createChannelForClassroom(
   let channelId: string;
 
   const res = await fetch(`https://graph.microsoft.com/v1.0/teams/${teamId}/channels`, {
+    cache: 'no-store',
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -369,6 +374,7 @@ async function pollTeamCreation(token: string, operationUrl: string): Promise<st
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
     const res = await fetch(operationUrl, {
+      cache: 'no-store',
       headers: { Authorization: `Bearer ${token}` },
     });
 

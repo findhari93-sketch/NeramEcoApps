@@ -24,6 +24,7 @@ import {
 import { ApiError, httpStatusForError, messageOf, throwIfReadFailed } from '@/lib/api-errors';
 import { classStartIso } from '@/lib/prework';
 import { CLASS_IMAGES_EMBED } from '@/lib/class-cover';
+import { SCHEDULED_CLASS_LIST_COLUMNS, selectWithColumnFallback } from '@/lib/scheduled-class-columns';
 
 const CLASS_SELECT = `*, topic:nexus_topics(id, title, category), course_topic:nexus_course_topics(id, title), teacher:users!nexus_scheduled_classes_teacher_id_fkey(id, name, avatar_url), batch:nexus_batches!nexus_scheduled_classes_batch_id_fkey(id, name)`;
 
@@ -40,6 +41,14 @@ const CLASS_SELECT = `*, topic:nexus_topics(id, title, category), course_topic:n
  * here" and the list itself is fetched only when a class is actually opened.
  */
 const CLASS_SELECT_WITH_IMAGES = `${CLASS_SELECT}, ${CLASS_IMAGES_EMBED}, class_resources:nexus_class_resources(count)`;
+
+/**
+ * The same read with an explicit column list instead of `*`, dropping the Teams
+ * and sync bookkeeping no client reads (see lib/scheduled-class-columns.ts).
+ * CLASS_SELECT_WITH_IMAGES stays as the fallback for a database that is missing
+ * one of the listed columns.
+ */
+const CLASS_LIST_SELECT_WITH_IMAGES = CLASS_SELECT_WITH_IMAGES.replace(/^\*,/, `${SCHEDULED_CLASS_LIST_COLUMNS},`);
 
 /**
  * GET /api/timetable?classroom={id}&start={date}&end={date}
@@ -128,48 +137,56 @@ export async function GET(request: NextRequest) {
     // full (teacher) view.
     const effectiveRole = enrollment?.role || 'teacher';
 
-    let query = supabase
-      .from('nexus_scheduled_classes')
-      .select(CLASS_SELECT_WITH_IMAGES)
-      .eq('classroom_id', classroomId)
-      .gte('scheduled_date', start)
-      .lte('scheduled_date', end)
-      .order('scheduled_date', { ascending: true })
-      .order('start_time', { ascending: true });
+    const buildQuery = (columns: string) => {
+      let query = supabase
+        .from('nexus_scheduled_classes')
+        .select(columns)
+        .eq('classroom_id', classroomId)
+        .gte('scheduled_date', start)
+        .lte('scheduled_date', end)
+        .order('scheduled_date', { ascending: true })
+        .order('start_time', { ascending: true });
 
-    // For students: filter by their batch (show classroom-wide + their batch),
-    // and hide anything the teacher has not published yet. Staff see drafts so
-    // they can plan the week before releasing it.
-    if (effectiveRole === 'student') {
-      query = query.eq('publish_state', 'published');
-      if (enrollment?.batch_id) {
-        // Show classes where batch_id is null (classroom-wide) OR matches student's batch
-        query = query.or(`batch_id.is.null,batch_id.eq.${enrollment.batch_id}`);
+      // For students: filter by their batch (show classroom-wide + their batch),
+      // and hide anything the teacher has not published yet. Staff see drafts so
+      // they can plan the week before releasing it.
+      if (effectiveRole === 'student') {
+        query = query.eq('publish_state', 'published');
+        if (enrollment?.batch_id) {
+          // Show classes where batch_id is null (classroom-wide) OR matches student's batch
+          query = query.or(`batch_id.is.null,batch_id.eq.${enrollment.batch_id}`);
+        } else {
+          // Student has no batch assigned — only show classroom-wide classes
+          query = query.is('batch_id', null);
+        }
       } else {
-        // Student has no batch assigned — only show classroom-wide classes
-        query = query.is('batch_id', null);
+        // Teachers: optionally filter by batch
+        const batchFilter = request.nextUrl.searchParams.get('batch_id');
+        if (batchFilter) {
+          query = query.eq('batch_id', batchFilter);
+        }
+        // No tutor scoping here, deliberately. This route once narrowed a
+        // non-internal teacher to `teacher_id = their own id`, which quietly hid
+        // two whole populations: classes tutored by a colleague, and the ~half of
+        // all rows that carry no teacher_id at all (everything imported by the
+        // Teams backfill and the older meeting sync). The result was a teacher
+        // opening the timetable to a completely empty month.
+        //
+        // The classroom timetable is shared context: every member of the
+        // classroom, students included, sees the same schedule. Tutor identity is
+        // shown on the class, not used to filter it. Calendar scoping, which is
+        // what staff tiers were actually introduced for, lives in the Teams
+        // meeting code, not here. See @/lib/staff-scope.
       }
-    } else {
-      // Teachers: optionally filter by batch
-      const batchFilter = request.nextUrl.searchParams.get('batch_id');
-      if (batchFilter) {
-        query = query.eq('batch_id', batchFilter);
-      }
-      // No tutor scoping here, deliberately. This route once narrowed a
-      // non-internal teacher to `teacher_id = their own id`, which quietly hid
-      // two whole populations: classes tutored by a colleague, and the ~half of
-      // all rows that carry no teacher_id at all (everything imported by the
-      // Teams backfill and the older meeting sync). The result was a teacher
-      // opening the timetable to a completely empty month.
-      //
-      // The classroom timetable is shared context: every member of the
-      // classroom, students included, sees the same schedule. Tutor identity is
-      // shown on the class, not used to filter it. Calendar scoping, which is
-      // what staff tiers were actually introduced for, lives in the Teams
-      // meeting code, not here. See @/lib/staff-scope.
-    }
+      return query;
+    };
 
-    const { data, error } = await query;
+    const { data, error } = await selectWithColumnFallback(
+      buildQuery,
+      CLASS_LIST_SELECT_WITH_IMAGES,
+      CLASS_SELECT_WITH_IMAGES,
+      'timetable',
+    );
     if (error) throw error;
 
     // The course plans covering this range decide the shape of the day: evening
@@ -919,6 +936,7 @@ async function updateTeamsEvent(
   const moveCalendarEvent = async (): Promise<{ success: boolean; error?: string }> => {
     if (!calendarEventId || calendarEventId === meetingId) return { success: true };
     const eventRes = await fetch(`https://graph.microsoft.com/v1.0/me/events/${calendarEventId}`, {
+      cache: 'no-store',
       method: 'PATCH',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -956,6 +974,7 @@ async function updateTeamsEvent(
       const res = await fetch(
         `https://graph.microsoft.com/v1.0/groups/${classroom.ms_team_id}/calendar/events/${meetingId}`,
         {
+          cache: 'no-store',
           method: 'PATCH',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -983,6 +1002,7 @@ async function updateTeamsEvent(
 
     // Channel meeting or standalone meeting: ISO instants, no timezone object.
     const res = await fetch(`https://graph.microsoft.com/v1.0/me/onlineMeetings/${meetingId}`, {
+      cache: 'no-store',
       method: 'PATCH',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({

@@ -1,7 +1,11 @@
 'use client';
 
+import { useRef } from 'react';
 import { Box, TextField, Typography, alpha, useTheme, ImageUploadField } from '@neram/ui';
 import OptionBody from './OptionBody';
+import MathKeypad from '@/components/common/MathKeypad';
+import MathAnswerPreview from '@/components/common/MathAnswerPreview';
+import { MATH_INPUT_MAX_LENGTH } from '@/lib/math-keypad';
 
 export interface AnswerInputQuestion {
   question_id: string;
@@ -55,6 +59,8 @@ export default function AnswerInput({
 }: AnswerInputProps) {
   const theme = useTheme();
   const format = String(question.question_format || 'MCQ').toUpperCase();
+  // Before any early return, as hooks must be. Only the numerical box uses it.
+  const numericRef = useRef<HTMLInputElement>(null);
 
   /**
    * A drawing answer is a photograph.
@@ -125,6 +131,7 @@ export default function AnswerInput({
           disabled={disabled}
           placeholder="Type your answer"
           autoComplete="off"
+          inputRef={numericRef}
           // type="text" with inputMode="decimal", NOT type="number".
           // type="number" strips leading zeros, silently discards input some
           // Android keyboards produce, and on iOS shows a spinner nobody wants on
@@ -136,17 +143,25 @@ export default function AnswerInput({
             // sight of the question they are answering.
             style: { fontSize: 18, fontWeight: 600, textAlign: 'center' },
             'aria-label': 'Your numerical answer',
+            'aria-describedby': `numeric-hint-${question.question_id}`,
+            maxLength: MATH_INPUT_MAX_LENGTH,
+            spellCheck: false,
           }}
           sx={{
             '& .MuiInputBase-root': { minHeight: 56, borderRadius: 2 },
           }}
         />
+        {/* A phone's decimal keyboard has no / or √, so these keys are always
+            there. What they type is plain text the grader reads as maths. */}
+        <MathKeypad inputRef={numericRef} value={value ?? ''} onChange={onChange} disabled={disabled} />
+        <MathAnswerPreview value={value ?? ''} align="center" />
         <Typography
+          id={`numeric-hint-${question.question_id}`}
           variant="caption"
           color="text.secondary"
-          sx={{ display: 'block', mt: 0.75, textAlign: 'center' }}
+          sx={{ display: 'block', textAlign: 'center' }}
         >
-          Numbers only. Decimals are fine.
+          Numbers, fractions like 3/4 and roots like 2√3 are all fine.
         </Typography>
       </Box>
     );

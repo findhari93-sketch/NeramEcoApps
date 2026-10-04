@@ -116,6 +116,17 @@ const STUB_SCHEMA = `
     attendance_intervals jsonb,
     unique (scheduled_class_id, student_id)
   );
+
+  create table nexus_qb_questions (
+    id                 uuid primary key default gen_random_uuid(),
+    question_text      text,
+    question_image_url text,
+    question_format    text not null default 'MCQ',
+    options            jsonb,
+    correct_answer     text not null default 'a',
+    explanation_brief  text not null default '',
+    solution_image_url text
+  );
 `;
 
 /** A Postgres array literal. Ids here are generated UUIDs, never user input. */
@@ -273,6 +284,61 @@ export class PadTestDb {
     });
   }
 
+  /**
+   * Move a prompt's deadline: seconds from now, negative for a time already up.
+   * Test-only, through the transition flag the guard trigger requires.
+   */
+  async moveDeadline(promptId: string, secondsFromNow: number): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx.query(`select set_config('pad.transition', 'timer', true)`);
+      await tx.query(
+        `update pad_prompts
+            set opened_at = least(opened_at, now() + make_interval(secs => $2) - interval '1 minute'),
+                closes_at = now() + make_interval(secs => $2)
+          where id = $1`,
+        [promptId, secondsFromNow],
+      );
+    });
+  }
+
+  /** A question bank question. Options as stored: ids, texts, and the answer marked. */
+  async qbQuestion(opts: {
+    format?: string;
+    text?: string | null;
+    imageUrl?: string | null;
+    options?: unknown;
+    correctAnswer?: string;
+    explanation?: string;
+    solutionImageUrl?: string | null;
+  } = {}): Promise<string> {
+    const id = randomUUID();
+    await this.db.query(
+      `insert into nexus_qb_questions (id, question_format, question_text, question_image_url, options, correct_answer,
+                                       explanation_brief, solution_image_url)
+       values ($1, $2, $3, $4, $5::jsonb, $6, $7, $8)`,
+      [
+        id,
+        opts.format ?? 'MCQ',
+        opts.text === undefined ? 'Which of these is a dome?' : opts.text,
+        opts.imageUrl ?? null,
+        JSON.stringify(
+          opts.options === undefined
+            ? [
+                { id: 'a', text: 'Arch', is_correct: false },
+                { id: 'b', text: 'Dome', is_correct: true, image_url: 'https://cdn.test/b.png' },
+                { id: 'c', text: 'Beam', is_correct: false },
+                { id: 'd', text: 'Truss', is_correct: false },
+              ]
+            : opts.options,
+        ),
+        opts.correctAnswer ?? 'b',
+        opts.explanation ?? 'A dome is a curved roof.',
+        opts.solutionImageUrl ?? null,
+      ],
+    );
+    return id;
+  }
+
   async teamsUser(userId: string, teamsUserId: string): Promise<void> {
     await this.db.query(`insert into pad_teams_users (user_id, teams_user_id) values ($1, $2)`, [userId, teamsUserId]);
   }
@@ -310,12 +376,25 @@ export class PadTestDb {
   start(
     actor: string | null,
     classroomId: string,
-    opts: { scheduledClassId?: string; batchId?: string; meetingId?: string; meetingThread?: string; endExisting?: boolean } = {},
+    opts: { scheduledClassId?: string; batchId?: string; meetingId?: string; meetingThread?: string; endExisting?: boolean; meetingTitle?: string } = {},
   ): Promise<Json> {
     return this.fn(
-      `select pad_start_or_resume_session($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text, $6::text, $7::boolean) as r`,
-      [actor, classroomId, opts.scheduledClassId ?? null, opts.batchId ?? null, opts.meetingId ?? null, opts.meetingThread ?? null, opts.endExisting ?? false],
+      `select pad_start_or_resume_session($1::uuid, $2::uuid, $3::uuid, $4::uuid, $5::text, $6::text, $7::boolean, $8::text) as r`,
+      [
+        actor,
+        classroomId,
+        opts.scheduledClassId ?? null,
+        opts.batchId ?? null,
+        opts.meetingId ?? null,
+        opts.meetingThread ?? null,
+        opts.endExisting ?? false,
+        opts.meetingTitle ?? null,
+      ],
     );
+  }
+
+  rename(actor: string | null, sessionId: string, title: string | null): Promise<Json> {
+    return this.fn(`select pad_rename_session($1::uuid, $2::uuid, $3::text) as r`, [actor, sessionId, title]);
   }
 
   recallMeeting(actor: string | null, thread: string | null): Promise<Json> {
@@ -337,9 +416,15 @@ export class PadTestDb {
       imageUrl?: string | null;
       optionTexts?: Array<string | null> | null;
       closePromptId?: string | null;
+      qbQuestionId?: string | null;
+      timeLimit?: number | null;
+      suggestedKeys?: string[] | null;
     } = {},
   ): Promise<Json> {
-    return this.fn(`select pad_ask($1::uuid, $2::uuid, $3::text, $4::int, $5::text, $6::text, $7::text, $8::text[], $9::uuid) as r`, [
+    return this.fn(
+      `select pad_ask($1::uuid, $2::uuid, $3::text, $4::int, $5::text, $6::text, $7::text, $8::text[], $9::uuid,
+                      $10::uuid, $11::int, $12::text[]) as r`,
+      [
       actor,
       sessionId,
       answerType,
@@ -349,7 +434,15 @@ export class PadTestDb {
       opts.imageUrl ?? null,
       opts.optionTexts ?? null,
       opts.closePromptId ?? null,
-    ]);
+      opts.qbQuestionId ?? null,
+      opts.timeLimit ?? null,
+      opts.suggestedKeys ?? null,
+      ],
+    );
+  }
+
+  setTimer(actor: string | null, promptId: string, add: number | null, clear = false): Promise<Json> {
+    return this.fn(`select pad_set_timer($1::uuid, $2::uuid, $3::int, $4::boolean) as r`, [actor, promptId, add, clear]);
   }
 
   excuse(

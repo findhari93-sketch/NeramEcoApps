@@ -164,3 +164,210 @@ export function captureAttributionFromUrl(): AttributionData {
 
   return next;
 }
+
+// ─── First and last touch, with the channel ──────────────────────────────────
+//
+// Separate from the campaign record above (which lead forms already send), so
+// adding this never changes an existing POST body. A "touch" is a visit that
+// arrives from outside the site or carries campaign params; moving between our
+// own pages is not a touch. The first touch is never overwritten.
+
+const TOUCH_KEY = 'neram_touches';
+
+export type Channel =
+  | 'google_business'
+  | 'google_organic'
+  | 'bing_organic'
+  | 'ai_chatgpt'
+  | 'ai_perplexity'
+  | 'ai_claude'
+  | 'ai_gemini'
+  | 'ai_copilot'
+  | 'youtube'
+  | 'google_ads'
+  | 'meta_ads'
+  | 'whatsapp'
+  | 'direct'
+  | 'referral'
+  | 'other';
+
+export interface Touch {
+  source: string | null;
+  medium: string | null;
+  campaign: string | null;
+  landing_page: string;
+  referrer: string | null;
+  channel: Channel;
+  ts: string;
+}
+
+export interface Touches {
+  first: Touch | null;
+  last: Touch | null;
+}
+
+const AI_HOSTS: Array<[RegExp, Channel]> = [
+  [/(^|\.)chatgpt\.com$|(^|\.)openai\.com$/, 'ai_chatgpt'],
+  [/(^|\.)perplexity\.ai$/, 'ai_perplexity'],
+  [/(^|\.)claude\.ai$/, 'ai_claude'],
+  [/^gemini\.google\.com$|^bard\.google\.com$/, 'ai_gemini'],
+  [/^copilot\.microsoft\.com$/, 'ai_copilot'],
+];
+
+function hostOf(url: string | null | undefined): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+/** True for our own sites, so internal navigation never counts as a touch. */
+export function isOwnHost(host: string | null): boolean {
+  return !!host && (host === 'neramclasses.com' || host.endsWith('.neramclasses.com') || host === 'localhost');
+}
+
+/**
+ * Where a visit came from. Paid click ids and utm params win over the referrer;
+ * AI assistants are matched by referrer host or by utm_source (ChatGPT adds
+ * utm_source=chatgpt.com to links it cites).
+ */
+export function classifyChannel(input: {
+  utm_source?: string | null;
+  utm_medium?: string | null;
+  gclid?: string | null;
+  wbraid?: string | null;
+  fbclid?: string | null;
+  referrer?: string | null;
+}): Channel {
+  const source = (input.utm_source ?? '').toLowerCase();
+  const medium = (input.utm_medium ?? '').toLowerCase();
+  const host = hostOf(input.referrer);
+
+  if (input.gclid || input.wbraid || (source === 'google' && /cpc|ppc|paid/.test(medium))) return 'google_ads';
+  if (input.fbclid || ((/facebook|instagram|meta|fb|ig/.test(source)) && /cpc|ppc|paid|ads?/.test(medium))) return 'meta_ads';
+
+  // The "Website" link on a Google Business Profile carries utm_medium=gbp
+  // (agents/seo-aeo/TN_CENTRE_PLAYBOOK.md): a lead from the map pack.
+  if (/^(gbp|google_business|gmb)$/.test(medium)) return 'google_business';
+
+  for (const [re, channel] of AI_HOSTS) {
+    if ((host && re.test(host)) || (source && re.test(source.replace(/^https?:\/\//, '')))) return channel;
+  }
+  if (/^(chatgpt|openai)$/.test(source)) return 'ai_chatgpt';
+  if (source === 'perplexity') return 'ai_perplexity';
+  if (source === 'claude') return 'ai_claude';
+  if (source === 'gemini') return 'ai_gemini';
+  if (source === 'copilot') return 'ai_copilot';
+
+  if (source.includes('whatsapp') || host === 'wa.me' || host?.endsWith('whatsapp.com')) return 'whatsapp';
+  if (source.includes('youtube') || host === 'youtu.be' || host?.endsWith('youtube.com')) return 'youtube';
+  if (source) return 'other';
+
+  if (!host || isOwnHost(host)) return 'direct';
+  if (/(^|\.)google\.[a-z.]+$/.test(host)) return 'google_organic';
+  if (/(^|\.)bing\.com$/.test(host)) return 'bing_organic';
+  if (/(^|\.)(facebook|instagram)\.com$|^l\.facebook\.com$/.test(host)) return 'referral';
+  return 'referral';
+}
+
+/** Pure: the next first/last pair for a page load, or null when it is not a new touch. */
+export function nextTouches(
+  prev: Touches,
+  page: { search: string; pathname: string; referrer: string | null; now: string },
+): Touches | null {
+  const params = new URLSearchParams(page.search);
+  const refHost = hostOf(page.referrer);
+  const hasCampaign = ['utm_source', 'utm_medium', 'utm_campaign', 'gclid', 'wbraid', 'fbclid'].some((k) => params.get(k));
+  const external = !!refHost && !isOwnHost(refHost);
+  // A first visit with no referrer is a direct touch; later direct loads are not new touches.
+  if (!hasCampaign && !external && prev.first) return null;
+  const touch: Touch = {
+    source: cleanValue(params.get('utm_source')) ?? (external ? refHost : null),
+    medium: cleanValue(params.get('utm_medium')) ?? (external ? 'referral' : null),
+    campaign: cleanValue(params.get('utm_campaign')),
+    landing_page: page.pathname,
+    referrer: external ? `https://${refHost}` : null,
+    channel: classifyChannel({
+      utm_source: params.get('utm_source'),
+      utm_medium: params.get('utm_medium'),
+      gclid: params.get('gclid'),
+      wbraid: params.get('wbraid'),
+      fbclid: params.get('fbclid'),
+      referrer: external ? page.referrer : null,
+    }),
+    ts: page.now,
+  };
+  return { first: prev.first ?? touch, last: touch };
+}
+
+function readTouchCookie(): Touches | null {
+  const match = document.cookie.split('; ').find((part) => part.startsWith(`${TOUCH_KEY}=`));
+  if (!match) return null;
+  try {
+    return JSON.parse(decodeURIComponent(match.slice(TOUCH_KEY.length + 1))) as Touches;
+  } catch {
+    return null;
+  }
+}
+
+export function getTouches(): Touches {
+  if (!isBrowser()) return { first: null, last: null };
+  try {
+    return readTouchCookie() ?? { first: null, last: null };
+  } catch {
+    return { first: null, last: null };
+  }
+}
+
+/** Call once per page load (AttributionCapture does). */
+export function captureTouch(): Touches {
+  if (!isBrowser()) return { first: null, last: null };
+  const prev = getTouches();
+  const next = nextTouches(prev, {
+    search: window.location.search,
+    pathname: window.location.pathname,
+    referrer: document.referrer || null,
+    now: new Date().toISOString(),
+  });
+  if (!next) return prev;
+  try {
+    const domain = attributionCookieDomain(window.location.hostname);
+    const parts = [
+      `${TOUCH_KEY}=${encodeURIComponent(JSON.stringify(next))}`,
+      'Path=/',
+      `Max-Age=${COOKIE_MAX_AGE_SECONDS}`,
+      'SameSite=Lax',
+    ];
+    if (domain) parts.push(`Domain=${domain}`);
+    if (window.location.protocol === 'https:') parts.push('Secure');
+    document.cookie = parts.join('; ');
+  } catch {
+    // Cookies blocked: attribution falls back to the campaign record
+  }
+  return next;
+}
+
+/** The channel of the latest touch, for event metadata. */
+export function currentChannel(): Channel {
+  return getTouches().last?.channel ?? 'direct';
+}
+
+/** Fields the lead APIs store with every lead (first_touch, last_touch, channel, landing_page). */
+export function touchAttribution(pageCode?: string): {
+  first_touch: Touch | null;
+  last_touch: Touch | null;
+  channel: Channel;
+  landing_page: string | null;
+  page_code: string | null;
+} {
+  const t = getTouches();
+  return {
+    first_touch: t.first,
+    last_touch: t.last,
+    channel: t.last?.channel ?? 'direct',
+    landing_page: t.first?.landing_page ?? null,
+    page_code: pageCode ?? null,
+  };
+}

@@ -26,10 +26,14 @@ import {
 } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import CenterDetailPageContent from '@/components/CenterDetailPageContent';
-import { getCenterBySeoSlug, getAllCenterSeoSlugs } from '@neram/database/queries';
+import { getCachedCenter, getCachedCenterSlugs } from '@/lib/centers-data';
 import type { OfflineCenter } from '@neram/database';
 
-export const revalidate = 3600;
+// ISR daily. Reads go through lib/centers-data.ts (ISR client + unstable_cache);
+// the old no-store reads made this page render on every request. Slugs come
+// from the database, so new centres stay lazy (dynamicParams stays true), but an
+// unknown slug 404s from the cached slug list without a database read.
+export const revalidate = 86400;
 
 const baseUrl = 'https://neramclasses.com';
 
@@ -39,7 +43,7 @@ const baseUrl = 'https://neramclasses.com';
 // creates duplicate content and wastes crawl budget.
 export async function generateStaticParams() {
   try {
-    const slugs = await getAllCenterSeoSlugs();
+    const slugs = await getCachedCenterSlugs();
     return slugs.map((slug) => ({ locale: 'en', slug }));
   } catch {
     return [];
@@ -55,7 +59,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   let center: OfflineCenter | null = null;
   try {
-    center = await getCenterBySeoSlug(slug);
+    center = await getCachedCenter(slug);
   } catch {
     // Fall back to generic metadata
   }
@@ -64,10 +68,10 @@ export async function generateMetadata({
   const nearbyCities = center?.nearby_cities || [];
   const nearbyText = nearbyCities.length > 0 ? ` Students from ${nearbyCities.slice(0, 3).join(', ')} welcome.` : '';
 
-  const title = `Best NATA Coaching Center in ${cityName} 2026`;
+  const title = `Neram Classes ${center?.name ?? cityName}: Address, Timings and Visits`;
   const description = center
-    ? `Visit Neram Classes ${center.name} at ${center.address}, ${center.city}. Expert NATA & JEE Paper 2 coaching with IIT/NIT alumni faculty. Online & offline classes.${nearbyText} Call ${center.contact_phone || '+91-9176137043'}.`
-    : `Neram Classes NATA coaching center in ${cityName}. Expert architecture entrance exam preparation with IIT/NIT alumni faculty.`;
+    ? `Visit Neram Classes ${center.name} at ${center.address}, ${center.city}. NATA & JEE Paper 2 coaching since 2009, in the classroom and online.${nearbyText} Call ${center.contact_phone || '+91-9176137043'}.`
+    : `Neram Classes NATA coaching center in ${cityName}. Architecture entrance exam coaching since 2009, in the classroom and online.`;
 
   const nearbyKeywords = nearbyCities.slice(0, 4).map((c) => `NATA coaching near ${c}`).join(', ');
 
@@ -175,7 +179,7 @@ export default async function CenterDetailPage({
 
   let center: OfflineCenter | null = null;
   try {
-    center = await getCenterBySeoSlug(slug);
+    center = await getCachedCenter(slug);
   } catch {
     // handled below
   }
@@ -249,8 +253,8 @@ export default async function CenterDetailPage({
               </Typography>
               <Typography variant="body1" paragraph>
                 Our {cityDisplay} center is equipped with modern facilities including dedicated drawing studios,
-                projectors, and a supportive learning environment. With a team of experienced faculty from IIT and NIT
-                backgrounds, we have consistently produced top rankers in NATA and JEE Paper 2 every year.
+                projectors, and a supportive learning environment. Neram has taught 1,000+ students since 2009, and a
+                Neram student secured AIR 1 in JEE B.Arch 2024.
               </Typography>
               <Typography variant="body1" paragraph>
                 Whether you are a 12th-pass student or a repeater, our structured curriculum covers all three NATA sections:

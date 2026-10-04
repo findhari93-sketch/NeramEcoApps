@@ -20,6 +20,8 @@
  * the file at all. This is what stops ordinary skipping by ordinary students.
  */
 
+import { coveredWithin, firstGapWithin, type PlayedRange } from './played-ranges';
+
 export type VideoGateMode =
   /** Checkpoints bind. The student owes the first one they have not passed. */
   | 'gated'
@@ -49,14 +51,15 @@ export interface VideoGateInput {
   /** Highest point genuinely reached this session. */
   furthestSeconds: number;
   /**
-   * How far the student has actually played, when the caller knows it: the
-   * server's credited point (see creditedPlayedUntil) raised by this session's
-   * playback. Forward seeks inside the owed section stop here, so a tap on the
-   * bar cannot land on the checkpoint and open its quiz with nothing watched
-   * (NXS-0130). Omitted, the whole owed section stays scrubbable, which is what
-   * the callers that have not opted in still get.
+   * The stretches the student has actually played, when the caller tracks them:
+   * the server's credited prefix (see creditedPlayedUntil) plus this session's
+   * playback (see usePlayedRanges). With it, the owed section is free to drag
+   * around in, but its quiz opens only once most of it has been played, so a
+   * drag straight onto the checkpoint cannot open a quiz over nothing watched
+   * (NXS-0130). Omitted, the quiz opens on arrival, which is what the callers
+   * that have not opted in still get.
    */
-  playedUntilSeconds?: number;
+  playedRanges?: ReadonlyArray<PlayedRange>;
   mode: VideoGateMode;
 }
 
@@ -64,8 +67,8 @@ export interface VideoGate {
   /** Hard ceiling on the scrub track. 0 means "not known yet", not "locked". */
   unlockedUntil: number;
   /**
-   * How far a control may move the playhead. At or below unlockedUntil: with a
-   * played point it is where the student has watched to, otherwise the boundary.
+   * How far a control may move the playhead. The boundary while a checkpoint is
+   * owed, so the whole owed section is the student's to move around in.
    */
   seekCeiling: number;
   /** The checkpoint whose quiz opens at the boundary. */
@@ -73,7 +76,31 @@ export interface VideoGate {
   currentSegmentPassed: boolean;
   maxRate: number;
   allPassed: boolean;
+  /**
+   * Whether arriving at the boundary opens the quiz. False only when the caller
+   * tracks played ranges and less than QUIZ_WATCH_RATIO of the owed section has
+   * been played. The player then explains and offers the part they missed.
+   */
+  quizReady: boolean;
+  /** Progress through the owed section, when the caller tracks played ranges. */
+  owedWatch: OwedWatch | null;
 }
+
+export interface OwedWatch {
+  sectionStart: number;
+  sectionEnd: number;
+  watchedSeconds: number;
+  requiredSeconds: number;
+  /** Where the first unplayed stretch begins. Null when nothing worth naming is missing. */
+  nextUnwatchedAt: number | null;
+}
+
+/**
+ * Most, not all, of a section. A student who rewinds, stutters on a slow
+ * connection, or skips a long pause still gets there; one who drags straight to
+ * the checkpoint does not.
+ */
+export const QUIZ_WATCH_RATIO = 0.8;
 
 /**
  * Kept just inside the file. A checkpoint whose end runs past the recording is
@@ -103,6 +130,8 @@ export const OPEN_GATE: VideoGate = {
   currentSegmentPassed: true,
   maxRate: 2,
   allPassed: true,
+  quizReady: true,
+  owedWatch: null,
 };
 
 /** A duration of NaN, Infinity or below zero means "not loaded", never "zero long". */
@@ -116,8 +145,8 @@ function isUsable(checkpoint: GateCheckpoint): boolean {
 
 export function computeGate(input: VideoGateInput): VideoGate {
   // furthestSeconds is deliberately not read: it moves with any seek, so it
-  // cannot say what was watched. playedUntilSeconds is the number that can.
-  const { checkpoints, duration, mode, playedUntilSeconds } = input;
+  // cannot say what was watched. playedRanges is what can.
+  const { checkpoints, duration, mode, playedRanges } = input;
   const dur = knownDuration(duration);
   // A checkpoint with no usable end cannot bind anything. Dropping it beats
   // gating at zero, which would lock the student out of a video entirely
@@ -131,6 +160,8 @@ export function computeGate(input: VideoGateInput): VideoGate {
     currentSegmentPassed: true,
     maxRate: rate,
     allPassed,
+    quizReady: true,
+    owedWatch: null,
   });
 
   if (mode !== 'gated') {
@@ -155,33 +186,49 @@ export function computeGate(input: VideoGateInput): VideoGate {
       ? Math.min(active.endSeconds, Math.max(1, dur - TAIL_EPSILON_SECONDS))
       : active.endSeconds;
 
-  // Two ceilings with two jobs. unlockedUntil is where playback stops and the
-  // quiz opens. seekCeiling is how far a control may jump, and a jump that
-  // reaches the boundary opens the quiz just the same, which is how a student
-  // who had watched 11 seconds was asked about thirteen minutes (NXS-0130). So
-  // when the caller knows what was played, a jump stops there instead. The
-  // floor is the start of the owed section: everything before it is passed,
-  // and that is theirs to move around in whatever this number says.
-  let seekCeiling = unlockedUntil > 0 ? unlockedUntil : Number.POSITIVE_INFINITY;
-  if (playedUntilSeconds !== undefined) {
-    let owedStart = 0;
+  // The whole owed section is the student's to move around in. What it no
+  // longer buys is the quiz: arriving at the boundary by a drag used to open it
+  // with nothing watched (NXS-0130), so when the caller tracks what was played
+  // the quiz waits until most of the section has been. The first answer to that
+  // incident held forward seeks at the played point instead, which left a
+  // first-time viewer with a bar that would not move at all.
+  const seekCeiling = unlockedUntil > 0 ? unlockedUntil : Number.POSITIVE_INFINITY;
+
+  let quizReady = true;
+  let owedWatch: OwedWatch | null = null;
+  if (playedRanges !== undefined) {
+    // The section starts where the last passed checkpoint before it ended, or
+    // later when it declares its own start: a stretch that was never made a
+    // checkpoint (a dropped pre-class wait) is nobody's to watch.
+    let sectionStart = 0;
     for (const checkpoint of usable) {
-      if (checkpoint.endSeconds < active.endSeconds && checkpoint.endSeconds > owedStart) {
-        owedStart = checkpoint.endSeconds;
+      if (checkpoint.endSeconds < active.endSeconds && checkpoint.endSeconds > sectionStart) {
+        sectionStart = checkpoint.endSeconds;
       }
     }
     const declaredStart = active.startSeconds;
     if (
       declaredStart !== undefined &&
       Number.isFinite(declaredStart) &&
-      declaredStart > owedStart &&
+      declaredStart > sectionStart &&
       declaredStart < active.endSeconds
     ) {
-      owedStart = declaredStart;
+      sectionStart = declaredStart;
     }
-    const played =
-      Number.isFinite(playedUntilSeconds) && playedUntilSeconds > 0 ? playedUntilSeconds : 0;
-    seekCeiling = Math.min(unlockedUntil, Math.max(owedStart, played));
+    const sectionEnd = unlockedUntil;
+    const length = Math.max(0, sectionEnd - sectionStart);
+    const watchedSeconds = coveredWithin(playedRanges, sectionStart, sectionEnd);
+    const requiredSeconds = length * QUIZ_WATCH_RATIO;
+    // Half a second of slack: the last tick before the boundary lands a render
+    // after the boundary check, and nobody should be one frame short.
+    quizReady = watchedSeconds + 0.5 >= requiredSeconds;
+    owedWatch = {
+      sectionStart,
+      sectionEnd,
+      watchedSeconds,
+      requiredSeconds,
+      nextUnwatchedAt: firstGapWithin(playedRanges, sectionStart, sectionEnd),
+    };
   }
 
   return {
@@ -191,5 +238,7 @@ export function computeGate(input: VideoGateInput): VideoGate {
     currentSegmentPassed: false,
     maxRate: OWED_RATE,
     allPassed: false,
+    quizReady,
+    owedWatch,
   };
 }

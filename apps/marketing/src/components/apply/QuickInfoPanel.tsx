@@ -22,6 +22,7 @@ import {
   AccessTimeOutlined,
   CurrencyRupeeOutlined,
 } from '@mui/icons-material';
+import { buildWhatsAppLink } from '@/lib/whatsapp';
 
 interface FeeStructure {
   id: string;
@@ -226,7 +227,7 @@ export default function QuickInfoPanel({ hideFeesForScholarship = false }: Quick
               <Button
                 variant="outlined"
                 color="success"
-                href="https://wa.me/919176137043?text=Hi%2C%20I%20have%20a%20question%20about%20Neram%20Classes"
+                href={buildWhatsAppLink({ text: 'Hi, I have a question about Neram Classes' }).href}
                 target="_blank"
                 fullWidth
                 sx={{ justifyContent: 'flex-start', textTransform: 'none' }}

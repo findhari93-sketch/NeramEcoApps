@@ -25,6 +25,7 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import TawkToChat from './TawkToChat';
 import WhatsAppChatBubble from './WhatsAppChatBubble';
 import type { OfflineCenter } from '@neram/database';
+import { centrePagePath } from '@/lib/seo/centre-pages';
 
 interface CenterData {
   headquarters: OfflineCenter | null;
@@ -255,7 +256,7 @@ export default function ContactPageContent() {
                       <Box sx={{ mt: 3 }}>
                         <Button
                           component={Link}
-                          href={`/${locale}/contact/${hq.seo_slug}`}
+                          href={centrePagePath(hq.seo_slug)}
                           variant="outlined"
                           size="small"
                           endIcon={<ArrowForwardIcon />}
@@ -343,7 +344,7 @@ export default function ContactPageContent() {
                       {center.seo_slug && (
                         <Button
                           component={Link}
-                          href={`/${locale}/contact/${center.seo_slug}`}
+                          href={centrePagePath(center.seo_slug)}
                           size="small"
                           endIcon={<ArrowForwardIcon />}
                           sx={{ mt: 1 }}

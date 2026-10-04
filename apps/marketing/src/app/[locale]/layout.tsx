@@ -11,30 +11,40 @@ import GoogleAdsTag from '@/components/GoogleAdsTag';
 import AttributionCapture from '@/components/AttributionCapture';
 import PageViewBeacon from '@/components/PageViewBeacon';
 import EnvBadge from '@/components/EnvBadge';
+import { JsonLd } from '@/components/seo/JsonLd';
+import { generateOrganizationSchema } from '@/lib/seo/schemas';
+import { LAYOUT_CLIENT_MESSAGES, pickMessages } from '@/lib/i18n/client-messages';
 import '@/styles/globals.css';
 
 // Font loading - reduced to 2-3 fonts for faster FCP on 3G
 // Removed: Cormorant_Garamond, DM_Sans (→ Inter), Space_Mono (→ system monospace)
+// Poppins is only reached through var(--font-poppins) (home page headings at
+// 600 and 700); the MUI theme names "Poppins" literally, which never matches the
+// next/font family, so 500 was downloaded and preloaded for nothing.
 const poppins = Poppins({
   subsets: ['latin'],
-  weight: ['500', '600', '700'],
+  weight: ['600', '700'],
   display: 'swap',
   variable: '--font-poppins',
 });
 
+// Inter is a variable font: one file covers every weight, instead of four
+// static weight files that were each preloaded on every page.
 const inter = Inter({
   subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
   display: 'swap',
   variable: '--font-inter',
 });
 
-// Only loaded when locale is Tamil — conditional application in layout below
+// Only applied when the locale is Tamil (conditional className below). Not
+// preloaded: a preload is emitted for every route of this layout, so English
+// pages were downloading Tamil font files they never use.
 const notoSansTamil = Noto_Sans_Tamil({
   subsets: ['tamil'],
   weight: ['400', '500', '600', '700'],
   display: 'swap',
   variable: '--font-noto-tamil',
+  preload: false,
 });
 
 export function generateStaticParams() {
@@ -128,9 +138,11 @@ export default async function RootLayout({
   // Enable static rendering
   setRequestLocale(locale);
 
-  // Providing all messages to the client
-  // side is the easiest way to get started
-  const messages = await getMessages();
+  // Only the namespaces the site chrome translates on the client (header, nav,
+  // apply shell). Passing the whole file put ~57 KB of JSON into every page.
+  // Pages with translated client components wrap them in <ClientIntl>.
+  // See lib/i18n/client-messages.ts (guarded by client-messages.test.ts).
+  const messages = pickMessages(await getMessages(), LAYOUT_CLIENT_MESSAGES);
 
   return (
     <html
@@ -152,6 +164,8 @@ export default async function RootLayout({
           }}
         />
         <GoogleAdsTag />
+        {/* One Organization node on every page; page and centre schemas point at its @id. */}
+        <JsonLd data={generateOrganizationSchema()} />
         <AttributionCapture />
         <PageViewBeacon />
         <NextIntlClientProvider messages={messages}>

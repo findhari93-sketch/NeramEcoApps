@@ -1,7 +1,8 @@
 'use client';
 
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Box, Typography, Stack, Divider, Grid } from '@mui/material';
+import { Box, Typography, Stack, Divider, Grid, Skeleton, Button } from '@mui/material';
 import FilterSidebar from '../FilterSidebar';
 import CollegeListingLayout from '../CollegeListingLayout';
 import FeaturedCollegeCard from '../FeaturedCollegeCard';
@@ -14,28 +15,86 @@ import ActiveFilterPills from '../ActiveFilterPills';
 import ClientPagination from '../ClientPagination';
 import ViewModeToggle from '../ViewModeToggle';
 import { parseViewMode } from '../view-mode';
-import type { CollegeListItem, CollegeFilters } from '@/lib/college-hub/types';
+import { BROWSE_PAGE_SIZE, hasListingFilters, parseListingFilters, type ListingCollege } from '@/lib/college-hub/listing-filter';
 import { FEATURED_COUNT, AD_INTERVAL_COMPACT, AD_AFTER_FEATURED } from '@/lib/college-hub/constants';
 
 interface BrowseAllSectionProps {
-  colleges: CollegeListItem[];
-  totalCount: number;
-  totalPages: number;
-  filters: CollegeFilters;
+  /** The default first page (ArchIndex order), rendered on the server. */
+  initialColleges: ListingCollege[];
+  initialCount: number;
   cityCounts?: { city: string; city_slug: string; count: number }[];
   typeCounts?: { type: string; count: number }[];
 }
 
-export default function BrowseAllSection({
-  colleges,
-  totalCount,
-  totalPages,
-  filters,
+type Params = { get(key: string): string | null };
+const NO_PARAMS: Params = { get: () => null };
+
+/**
+ * "Browse all colleges" on /colleges. The page is static (ISR); the server
+ * renders the default first page. When the URL carries filters or a page
+ * number, results come from /api/colleges/browse, which the CDN caches per
+ * query string. Reading search params happens inside Suspense so the page is
+ * not bailed out of static rendering.
+ */
+export default function BrowseAllSection(props: BrowseAllSectionProps) {
+  return (
+    <Suspense fallback={<BrowseBody {...props} params={NO_PARAMS} />}>
+      <BrowseWithParams {...props} />
+    </Suspense>
+  );
+}
+
+function BrowseWithParams(props: BrowseAllSectionProps) {
+  const params = useSearchParams();
+  return <BrowseBody {...props} params={params ?? NO_PARAMS} />;
+}
+
+type Fetched = { key: string; colleges: ListingCollege[]; count: number } | { key: string; error: true };
+
+function BrowseBody({
+  initialColleges,
+  initialCount,
   cityCounts,
   typeCounts,
-}: BrowseAllSectionProps) {
-  const searchParams = useSearchParams();
-  const view = parseViewMode(searchParams.get('view') ?? undefined);
+  params,
+}: BrowseAllSectionProps & { params: Params }) {
+  const key = params === NO_PARAMS ? '' : String(params);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const filters = useMemo(() => parseListingFilters(params, { limit: BROWSE_PAGE_SIZE }), [key]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const filtered = useMemo(() => hasListingFilters(params), [key]);
+  const queryKey = useMemo(() => {
+    if (!filtered) return '';
+    const qs = new URLSearchParams(key);
+    qs.delete('view');
+    return qs.toString();
+  }, [filtered, key]);
+
+  const [fetched, setFetched] = useState<Fetched | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    if (!queryKey) return;
+    const controller = new AbortController();
+    fetch(`/api/colleges/browse?${queryKey}`, { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
+      .then((json: { data: ListingCollege[]; count: number }) =>
+        setFetched({ key: queryKey, colleges: json.data ?? [], count: Number(json.count) || 0 }),
+      )
+      .catch((err) => {
+        if ((err as Error)?.name !== 'AbortError') setFetched({ key: queryKey, error: true });
+      });
+    return () => controller.abort();
+  }, [queryKey, attempt]);
+
+  const current = queryKey && fetched?.key === queryKey ? fetched : null;
+  const loading = Boolean(queryKey) && !current;
+  const failed = Boolean(current && 'error' in current);
+  const colleges = !queryKey ? initialColleges : current && !('error' in current) ? current.colleges : [];
+  const totalCount = !queryKey ? initialCount : current && !('error' in current) ? current.count : 0;
+  const totalPages = Math.ceil(totalCount / BROWSE_PAGE_SIZE);
+
+  const view = parseViewMode(params.get('view') ?? undefined);
   const featured = colleges.slice(0, FEATURED_COUNT);
   const compact = colleges.slice(FEATURED_COUNT);
 
@@ -43,12 +102,14 @@ export default function BrowseAllSection({
     <Box id="browse" sx={{ py: { xs: 2, sm: 4, md: 6 }, scrollMarginTop: '80px' }}>
       <CollegeListingLayout
         sidebar={
-          <FilterSidebar
-            filters={filters}
-            totalCount={totalCount}
-            cityCounts={cityCounts}
-            typeCounts={typeCounts}
-          />
+          <Suspense fallback={null}>
+            <FilterSidebar
+              filters={filters}
+              totalCount={totalCount}
+              cityCounts={cityCounts}
+              typeCounts={typeCounts}
+            />
+          </Suspense>
         }
       >
         {/* Section header */}
@@ -80,20 +141,41 @@ export default function BrowseAllSection({
 
         {/* Search bar (desktop) */}
         <Box sx={{ display: { xs: 'none', md: 'block' }, mb: 1.5 }}>
-          <CollegeSearch defaultValue={filters.search} />
+          <Suspense fallback={<Box sx={{ height: 40 }} />}>
+            <CollegeSearch defaultValue={filters.search} />
+          </Suspense>
         </Box>
 
-        <ActiveFilterPills />
+        <Suspense fallback={null}>
+          <ActiveFilterPills />
+        </Suspense>
 
         {/* Results count + view toggle */}
         <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1} sx={{ mb: 1.5, flexWrap: 'wrap' }}>
           <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
             Showing <strong>{colleges.length}</strong> of {totalCount.toLocaleString()} colleges
           </Typography>
-          <ViewModeToggle value={view} />
+          <Suspense fallback={<Box sx={{ height: 36 }} />}>
+            <ViewModeToggle value={view} />
+          </Suspense>
         </Stack>
 
-        {colleges.length === 0 ? (
+        {loading ? (
+          <Stack spacing={1.5} aria-busy="true" aria-label="Loading colleges">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} variant="rounded" height={i === 0 ? 180 : 96} />
+            ))}
+          </Stack>
+        ) : failed ? (
+          <Box sx={{ textAlign: 'center', py: 8 }} role="alert">
+            <Typography variant="h6" color="text.secondary">
+              Could not load colleges.
+            </Typography>
+            <Button variant="outlined" onClick={() => setAttempt((n) => n + 1)} sx={{ mt: 2, minHeight: 48, textTransform: 'none' }}>
+              Try again
+            </Button>
+          </Box>
+        ) : colleges.length === 0 ? (
           <Box sx={{ textAlign: 'center', py: 8 }}>
             <Typography variant="h6" color="text.secondary">
               No colleges match your filters.
@@ -154,7 +236,9 @@ export default function BrowseAllSection({
 
             {totalPages > 1 && (
               <Stack alignItems="center" sx={{ mt: 3 }}>
-                <ClientPagination totalPages={totalPages} currentPage={filters.page ?? 1} />
+                <Suspense fallback={null}>
+                  <ClientPagination totalPages={totalPages} currentPage={filters.page ?? 1} />
+                </Suspense>
               </Stack>
             )}
           </>

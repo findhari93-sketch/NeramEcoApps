@@ -30,6 +30,17 @@ export interface StartSessionRequest {
   scheduledClassId: string | null;
   /** The teacher confirmed "End X and start this class". */
   endExisting: boolean;
+  /** The Teams meeting's subject, for a meeting that is not on the timetable. Never trusted for access. */
+  meetingTitle: string | null;
+}
+
+const MAX_MEETING_TITLE = 200;
+
+/** A meeting's subject as the console reported it: one line, at most 200 characters, or nothing. */
+export function cleanMeetingTitle(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const title = value.replace(/\s+/g, ' ').trim().slice(0, MAX_MEETING_TITLE).trim();
+  return title || null;
 }
 
 export type Parsed<T> = { ok: true; value: T } | { ok: false; field: string };
@@ -69,7 +80,7 @@ export function parseStartSessionRequest(body: unknown): Parsed<StartSessionRequ
     return { ok: false, field: 'endExisting' };
   }
 
-  return { ok: true, value: { meeting, ...ids, endExisting: input.endExisting === true } };
+  return { ok: true, value: { meeting, ...ids, endExisting: input.endExisting === true, meetingTitle: cleanMeetingTitle(input.meetingTitle) } };
 }
 
 export type BindingSource = 'chosen_class' | 'chosen_classroom' | 'scheduled_class' | 'remembered';

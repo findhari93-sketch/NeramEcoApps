@@ -10,11 +10,7 @@ import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import AddIcon from '@mui/icons-material/Add';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-
-interface CollegeOption {
-  id: string;
-  name: string;
-}
+import CollegeSearchField, { type CollegeSearchOption } from '@/components/college-hub/CollegeSearchField';
 
 interface AccountRow {
   id: string;
@@ -39,7 +35,8 @@ const ROLES = [
 export default function CollegeAccountsPage() {
   const [rows, setRows] = useState<AccountRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [colleges, setColleges] = useState<CollegeOption[]>([]);
+  // The picked college (searched on the server, not preloaded).
+  const [college, setCollege] = useState<CollegeSearchOption | null>(null);
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
@@ -65,17 +62,9 @@ export default function CollegeAccountsPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const loadColleges = useCallback(() => {
-    fetch('/api/college-hub/colleges?limit=500')
-      .then((r) => r.json())
-      .then((j) => setColleges((j.data ?? []).map((c: { id: string; name: string }) => ({ id: c.id, name: c.name }))))
-      .catch(console.error);
-  }, []);
-
   useEffect(() => {
     loadAccounts();
-    loadColleges();
-  }, [loadAccounts, loadColleges]);
+  }, [loadAccounts]);
 
   const handleCreate = async () => {
     if (!form.college_id || !form.name || !form.email || !form.role) {
@@ -96,6 +85,7 @@ export default function CollegeAccountsPage() {
       setSuccessMsg(json.message);
       setOpen(false);
       setForm({ college_id: '', name: '', email: '', phone: '', designation: '', role: 'admin' });
+      setCollege(null);
       loadAccounts();
     } catch (err) {
       setErrorMsg(err instanceof Error ? err.message : 'Failed to create account.');
@@ -227,18 +217,15 @@ export default function CollegeAccountsPage() {
         <DialogContent>
           <Stack gap={2} sx={{ pt: 1 }}>
             {errorMsg && <Alert severity="error">{errorMsg}</Alert>}
-            <TextField
-              select
-              label="College *"
-              value={form.college_id}
-              onChange={(e) => setForm((f) => ({ ...f, college_id: e.target.value }))}
-              fullWidth
-              size="small"
-            >
-              {colleges.map((c) => (
-                <MenuItem key={c.id} value={c.id}>{c.name}</MenuItem>
-              ))}
-            </TextField>
+            <CollegeSearchField
+              label="College"
+              required
+              value={college}
+              onChange={(c) => {
+                setCollege(c);
+                setForm((f) => ({ ...f, college_id: c?.id ?? '' }));
+              }}
+            />
             <TextField
               label="Contact Name *"
               value={form.name}

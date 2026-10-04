@@ -81,6 +81,7 @@ async function resolveYouTubeMeta(videoId: string): Promise<{ title: string | nu
   try {
     const target = encodeURIComponent(youtubeWatchUrl(videoId));
     const res = await fetch(`https://www.youtube.com/oembed?url=${target}&format=json`, {
+      cache: 'no-store',
       signal: AbortSignal.timeout(4000),
     });
     if (!res.ok) return { title: null, thumb: null };

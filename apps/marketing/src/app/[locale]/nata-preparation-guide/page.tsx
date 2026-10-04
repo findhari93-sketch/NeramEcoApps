@@ -364,7 +364,7 @@ export default function NataPreparationGuidePage({ params: { locale } }: PagePro
         links={[
           { title: 'NATA Syllabus 2026', description: 'Complete breakdown of Mathematics, Aptitude & Drawing sections', href: '/nata-syllabus' },
           { title: 'Best Books for NATA', description: 'Top recommended books and study materials', href: '/best-books-nata-jee' },
-          { title: 'NATA Coaching', description: 'Expert coaching with proven 99.9% success rate', href: '/coaching/nata-coaching' },
+          { title: 'NATA Coaching', description: 'Live online and classroom NATA coaching since 2009', href: '/coaching/nata-coaching' },
           { title: 'Previous Year Papers', description: 'Practice with past NATA exam papers', href: '/nata-2026/previous-year-papers' },
         ]}
       />

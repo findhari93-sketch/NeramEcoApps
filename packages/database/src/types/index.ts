@@ -6688,7 +6688,12 @@ export interface NexusFoundationChapterAdmin extends NexusFoundationChapter {
 // QB Enums
 export type QBQuestionFormat = 'MCQ' | 'NUMERICAL' | 'DRAWING_PROMPT' | 'IMAGE_BASED';
 export type QBDifficulty = 'EASY' | 'MEDIUM' | 'HARD';
-export type QBExamType = 'JEE_PAPER_2' | 'NATA';
+/**
+ * The exams a past paper can belong to. JEE_PAPER_2 is Paper 2A (B.Arch) and
+ * JEE_PAPER_2B is Paper 2B (B.Planning). The two share their Maths and
+ * Aptitude questions in a session; 2B swaps Drawing for a Planning section.
+ */
+export type QBExamType = 'JEE_PAPER_2' | 'JEE_PAPER_2B' | 'NATA';
 export type QBExamRelevance = 'JEE' | 'NATA' | 'BOTH';
 export type QBAttemptMode = 'practice' | 'year_paper';
 export type QBQuestionStatus = 'draft' | 'answer_keyed' | 'complete' | 'active';
@@ -6819,7 +6824,7 @@ export interface NexusQBQuestionOption {
  * which is a topic taxonomy a question can carry several of in no guaranteed
  * order.
  */
-export type QBQuestionSection = 'math_mcq' | 'math_numerical' | 'aptitude' | 'drawing';
+export type QBQuestionSection = 'math_mcq' | 'math_numerical' | 'aptitude' | 'drawing' | 'planning';
 
 /**
  * Sort position of each section within a paper.
@@ -6832,6 +6837,9 @@ export const QB_SECTION_ORDER: Record<QBQuestionSection, number> = {
   math_numerical: 2,
   aptitude: 3,
   drawing: 4,
+  // After drawing, so the order already stored on every 2A paper stays valid.
+  // The two never share a paper: Paper 2B has Planning where 2A has Drawing.
+  planning: 5,
 };
 
 export const QB_SECTION_LABELS: Record<QBQuestionSection, string> = {
@@ -6839,10 +6847,29 @@ export const QB_SECTION_LABELS: Record<QBQuestionSection, string> = {
   math_numerical: 'Mathematics (Numerical)',
   aptitude: 'Aptitude',
   drawing: 'Drawing',
+  planning: 'Planning',
 };
 
 /** Sections in the order a paper presents them. */
-export const QB_SECTIONS: QBQuestionSection[] = ['math_mcq', 'math_numerical', 'aptitude', 'drawing'];
+export const QB_SECTIONS: QBQuestionSection[] = ['math_mcq', 'math_numerical', 'aptitude', 'drawing', 'planning'];
+
+/**
+ * The sections a paper of each exam can hold, in paper order. Section pickers
+ * use this so a B.Arch paper never offers Planning and a B.Planning paper never
+ * offers Drawing.
+ */
+export const QB_EXAM_SECTIONS: Record<QBExamType, QBQuestionSection[]> = {
+  JEE_PAPER_2: ['math_mcq', 'math_numerical', 'aptitude', 'drawing'],
+  JEE_PAPER_2B: ['math_mcq', 'math_numerical', 'aptitude', 'planning'],
+  NATA: ['math_mcq', 'math_numerical', 'aptitude', 'drawing'],
+};
+
+/** Sections for a paper's exam, or every section when the exam is unknown. */
+export function qbSectionsForExam(examType: string | null | undefined): QBQuestionSection[] {
+  return examType && examType in QB_EXAM_SECTIONS
+    ? QB_EXAM_SECTIONS[examType as QBExamType]
+    : QB_SECTIONS;
+}
 
 export function isQBQuestionSection(value: unknown): value is QBQuestionSection {
   return typeof value === 'string' && (QB_SECTIONS as string[]).includes(value);
@@ -8291,8 +8318,36 @@ export const QB_DIFFICULTY_COLORS: Record<QBDifficulty, string> = {
 
 export const QB_EXAM_TYPE_LABELS: Record<QBExamType, string> = {
   JEE_PAPER_2: 'JEE Paper 2',
+  JEE_PAPER_2B: 'JEE Paper 2B (B.Planning)',
   NATA: 'NATA',
 };
+
+/** Compact labels for badges and dense tables. */
+export const QB_EXAM_SHORT_LABELS: Record<QBExamType, string> = {
+  JEE_PAPER_2: 'JEE P2',
+  JEE_PAPER_2B: 'JEE P2B',
+  NATA: 'NATA',
+};
+
+/** Every past-paper exam, for validating input on the server. */
+export const QB_EXAM_TYPES: readonly QBExamType[] = ['JEE_PAPER_2', 'JEE_PAPER_2B', 'NATA'];
+
+export function isKnownQBExamType(value: unknown): value is QBExamType {
+  return typeof value === 'string' && (QB_EXAM_TYPES as readonly string[]).includes(value);
+}
+
+/** Both JEE papers. Use this, never `=== 'JEE_PAPER_2'`, to ask "is this JEE?". */
+export function isJeeExam(examType: string | null | undefined): boolean {
+  return examType === 'JEE_PAPER_2' || examType === 'JEE_PAPER_2B';
+}
+
+/**
+ * The exam_relevance a question from a paper of this exam carries. Both JEE
+ * papers are 'JEE': 2B's Maths and Aptitude are the very same questions as 2A's.
+ */
+export function qbExamRelevance(examType: string | null | undefined): QBExamRelevance {
+  return isJeeExam(examType) ? 'JEE' : 'NATA';
+}
 
 export const QB_QUESTION_STATUS_LABELS: Record<QBQuestionStatus, string> = {
   draft: 'Draft',

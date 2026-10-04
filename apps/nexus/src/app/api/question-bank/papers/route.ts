@@ -6,6 +6,7 @@ import {
   listOriginalPapersWithBreakdown,
   getOrCreateOriginalPaper,
   bulkCreateDraftQuestions,
+  isKnownQBExamType,
 } from '@neram/database';
 import type { QBExamType, QBShift, NTAParsedQuestion } from '@neram/database';
 
@@ -73,6 +74,10 @@ export async function POST(request: NextRequest) {
 
     if (!exam_type || !year || !parsed_questions?.length) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+    // Checked here rather than left to the DB CHECK, which answers a typo with a 500.
+    if (!isKnownQBExamType(exam_type)) {
+      return NextResponse.json({ error: `"${String(exam_type)}" is not a known exam` }, { status: 400 });
     }
 
     // Get or create paper (handles duplicate detection)

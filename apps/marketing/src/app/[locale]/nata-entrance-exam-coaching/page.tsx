@@ -31,6 +31,7 @@ import {
 } from '@/lib/seo/schemas';
 import { buildAlternates, buildOgImage } from '@/lib/seo/metadata';
 import { BASE_URL } from '@/lib/seo/constants';
+import { COURSE_FEES, PROOF_POINTS } from '@/lib/seo/facts';
 import { NataAssistanceForm } from '@/components/nata/NataAssistanceForm';
 
 export const revalidate = 86400;
@@ -41,8 +42,7 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   const title = 'NATA Entrance Exam Coaching 2026 | Live Classes, Mock Tests, Drawing';
-  const description =
-    'NATA entrance exam coaching by NIT/IIT alumni faculty. Live classes, daily drawing practice, 100+ mock tests, 99.9% success rate since 2009. Free demo class.';
+  const description = `NATA entrance exam coaching since 2009: ${PROOF_POINTS.students}, ${PROOF_POINTS.topResult}. Live classes, daily drawing practice, 100+ mock tests in the 1-Year program. Free demo class.`;
 
   return {
     title,
@@ -57,7 +57,7 @@ export async function generateMetadata({
       url: `${BASE_URL}/nata-entrance-exam-coaching`,
       images: [
         {
-          url: buildOgImage('NATA Entrance Exam Coaching 2026', 'Live Classes | NIT/IIT Faculty | Since 2009', 'nata'),
+          url: buildOgImage('NATA Entrance Exam Coaching 2026', `Since 2009 | ${PROOF_POINTS.students} | ${PROOF_POINTS.topResult}`, 'nata'),
           width: 1200,
           height: 630,
           alt: 'NATA Entrance Exam Coaching 2026, Neram Classes',
@@ -84,28 +84,28 @@ const courses = [
 
 const features = [
   {
-    title: 'NIT/IIT Alumni Faculty',
-    desc: 'Every NATA entrance exam class is taught by NIT, IIT, and SPA alumni with 10+ years of architecture entrance experience.',
+    title: 'Teaching Since 2009',
+    desc: 'Founded in 2009 by Pushparaj Manoharan (B.Arch, NIT Trichy). 10+ years of coaching for architecture entrance exams.',
   },
   {
     title: 'Daily Drawing Practice',
     desc: '2+ hours of supervised drawing every day, the section that decides most NATA entrance exam scores.',
   },
   {
-    title: 'Small Batches (Max 25)',
-    desc: 'Every batch is capped at 25 students so each NATA entrance exam aspirant gets one-on-one mentoring.',
+    title: 'Small Batches',
+    desc: 'Batches are kept small so each NATA entrance exam aspirant gets one-on-one mentoring.',
   },
   {
     title: '100+ Mock Tests',
-    desc: 'Full-length NATA entrance exam mock tests with section-wise scoring, time analysis, and improvement plan.',
+    desc: 'The 1-Year program includes 100+ full-length NATA entrance exam mock tests with section-wise scoring and an improvement plan.',
   },
   {
-    title: '99.9% Success Rate',
-    desc: 'Since 2009, 99.9% of Neram students clear the NATA entrance exam cutoff. 10,000+ architects trained.',
+    title: 'AIR 1 in JEE B.Arch 2024',
+    desc: `Our top result so far. ${PROOF_POINTS.students} have trained with Neram since 2009.`,
   },
   {
-    title: 'Free AI Study App',
-    desc: 'Cutoff calculator, college predictor for 5,000+ B.Arch colleges, exam-centre locator, and 2005-2025 question bank.',
+    title: 'Free Study App',
+    desc: 'Cutoff calculator, B.Arch college predictor, exam centre finder and a question bank preview at app.neramclasses.com.',
   },
 ];
 
@@ -180,7 +180,7 @@ export default function NataEntranceExamCoachingPage({ params: { locale } }: Pag
     {
       question: 'What is the fee for NATA entrance exam coaching at Neram Classes?',
       answer:
-        'NATA entrance exam coaching at Neram Classes starts at Rs. 15,000 for the 3-month crash course, Rs. 25,000 for the 1-year program, and Rs. 30,000 for the 2-year program. EMI options and need-based scholarships are available. All fees include study material, mock tests, recorded lectures, and the free Neram AI study app.',
+        'NATA entrance exam coaching at Neram Classes costs Rs. 15,000 for the 3-month crash course, Rs. 30,000 for the 1-year program (Rs. 25,000 if paid at once) and Rs. 35,000 for the 2-year program (Rs. 30,000 if paid at once). Need-based scholarships are available. All fees include study material, mock tests and recorded lectures. The Neram study app is free for everyone.',
     },
     {
       question: 'Is the NATA entrance exam tougher than JEE Paper 2?',
@@ -195,7 +195,7 @@ export default function NataEntranceExamCoachingPage({ params: { locale } }: Pag
     {
       question: 'Can I clear the NATA entrance exam in 3 months?',
       answer:
-        'Yes, the NATA entrance exam can be cleared in 3 months with the right preparation. Neram Classes runs a focused 3-month NATA Crash Course covering all drawing, mathematics, and aptitude sections, with 50+ full-length mock tests. Students starting from scratch with consistent 4-hour daily study have cleared the NATA entrance exam at 130+ scores using this program.',
+        'Yes, the NATA entrance exam can be cleared in 3 months with the right preparation. Neram Classes runs a focused 3-month NATA Crash Course covering all drawing, mathematics, and aptitude sections, with 50+ full-length mock tests. It works best for students who can give about 4 hours a day to steady study and drawing practice.',
     },
     {
       question: 'Are recordings available if I miss a NATA entrance exam coaching class?',
@@ -205,7 +205,7 @@ export default function NataEntranceExamCoachingPage({ params: { locale } }: Pag
     {
       question: 'Does Neram Classes provide NATA entrance exam coaching in Tamil and Hindi?',
       answer:
-        'Yes, Neram Classes is the only NATA entrance exam coaching institute that delivers classes in 5 languages: English, Tamil, Hindi, Kannada, and Malayalam. You can choose your preferred language batch during enrolment. Drawing content is language-neutral, conceptual explanations are delivered in your chosen language.',
+        'Yes, Neram Classes teaches NATA entrance exam batches in English, Tamil, Hindi, Kannada and Malayalam. You can choose your preferred language batch during enrolment. Drawing content is language-neutral, conceptual explanations are delivered in your chosen language.',
     },
     {
       question: 'How many mock tests does NATA entrance exam coaching at Neram include?',
@@ -225,7 +225,7 @@ export default function NataEntranceExamCoachingPage({ params: { locale } }: Pag
     {
       question: 'Which B.Arch colleges accept NATA entrance exam scores?',
       answer:
-        'NATA entrance exam scores are accepted by 500+ B.Arch colleges in India, including all state universities (Anna University, JNAFAU, RV Bangalore, BMS, MEASI, BSA Crescent), CEPT Ahmedabad, and private deemed universities. NITs and IITs use JEE Paper 2 instead. Use our free college predictor at /tools/college-predictor to see which colleges accept your NATA entrance exam score.',
+        'NATA entrance exam scores are accepted by COA-approved B.Arch colleges across India, including all state universities (Anna University, JNAFAU, RV Bangalore, BMS, MEASI, BSA Crescent), CEPT Ahmedabad, and private deemed universities. NITs and IITs use JEE Paper 2 instead. Use our free college predictor at /tools/college-predictor to see which colleges accept your NATA entrance exam score.',
     },
     {
       question: 'What is the difference between NATA entrance exam and AAT?',
@@ -244,9 +244,9 @@ export default function NataEntranceExamCoachingPage({ params: { locale } }: Pag
       <JsonLd data={generateOrganizationSchema()} />
       <JsonLd
         data={generateCourseSchema({
-          name: 'NATA Entrance Exam Coaching 2026, Live Classes by NIT/IIT Faculty',
+          name: 'NATA Entrance Exam Coaching 2026, Live Classes and Drawing Practice',
           description:
-            'Best NATA entrance exam coaching in India by NIT/IIT alumni faculty. Live interactive classes, daily drawing practice, 100+ mock tests, 99.9% success rate since 2009.',
+            `NATA entrance exam coaching by Neram Classes since 2009 (${PROOF_POINTS.students}, ${PROOF_POINTS.topResult}). Live interactive classes, daily drawing practice and 100+ mock tests in the 1-Year program.`,
           url: pageUrl,
           modes: ['online', 'onsite'],
           price: 15000,
@@ -287,9 +287,8 @@ export default function NataEntranceExamCoachingPage({ params: { locale } }: Pag
                   NATA Entrance Exam Coaching 2026
                 </Typography>
                 <Typography variant="h5" sx={{ mb: 4, opacity: 0.92, lineHeight: 1.6 }}>
-                  Crack the NATA entrance exam with India&rsquo;s most trusted architecture coaching, live
-                  classes by NIT, IIT, and SPA alumni, daily drawing critique, 100+ mock tests, and a 99.9%
-                  success rate since 2009.
+                  Prepare for the NATA entrance exam with live classes, daily drawing critique and mock
+                  tests. Coaching since 2009: {PROOF_POINTS.students} taught and {PROOF_POINTS.topResult}.
                 </Typography>
                 <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
                   <Button
@@ -320,11 +319,11 @@ export default function NataEntranceExamCoachingPage({ params: { locale } }: Pag
                     </Typography>
                     {[
                       { label: 'Mode', value: 'Online + Offline' },
-                      { label: 'Batch Size', value: 'Max 25 Students' },
+                      { label: 'Batch Size', value: 'Small Batches' },
                       { label: 'Duration', value: '3 to 24 Months' },
                       { label: 'Drawing Practice', value: '2+ Hours Daily' },
-                      { label: 'Mock Tests', value: '100+ Full-Length' },
-                      { label: 'Success Rate', value: '99.9%' },
+                      { label: 'Mock Tests', value: '100+ (1-Year Program)' },
+                      { label: 'Top Result', value: 'AIR 1, JEE B.Arch 2024' },
                     ].map((detail) => (
                       <Box
                         key={detail.label}
@@ -368,11 +367,11 @@ export default function NataEntranceExamCoachingPage({ params: { locale } }: Pag
               sx={{ textAlign: 'center' }}
             >
               {[
-                'Since 2009 (17+ years)',
-                '10,000+ architects trained',
-                '99.9% success rate',
-                'NIT / IIT / SPA alumni faculty',
-                '5 languages',
+                `Since 2009 (${PROOF_POINTS.years})`,
+                PROOF_POINTS.students,
+                PROOF_POINTS.topResult,
+                'Founded by an NIT Trichy architect',
+                'Online and classroom batches',
               ].map((point) => (
                 <Typography
                   key={point}
@@ -403,8 +402,8 @@ export default function NataEntranceExamCoachingPage({ params: { locale } }: Pag
               year, the NATA entrance exam tests drawing (125 marks), mathematics, and general aptitude (75 marks
               combined) in a 3-hour online paper. Architecture aspirants need 70+ marks out of 200 to qualify, and
               130+ marks to compete for top B.Arch colleges like SPA Delhi, CEPT Ahmedabad, NIT Trichy, and Anna
-              University SAP. Neram Classes has trained 10,000+ students for the NATA entrance exam since 2009,
-              with a 99.9% qualifying rate.
+              University SAP. Neram Classes has coached architecture aspirants since 2009: {PROOF_POINTS.students}{' '}
+              and {PROOF_POINTS.topResult}.
             </Typography>
           </Container>
         </Box>
@@ -502,7 +501,10 @@ export default function NataEntranceExamCoachingPage({ params: { locale } }: Pag
                         Rs. {course.priceDisplay}
                       </Typography>
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                        Duration: {course.duration} (EMI available)
+                        Duration: {course.duration}.
+                        {COURSE_FEES[index]?.singlePaymentDisplay
+                          ? ` Paid at once. Rs. ${COURSE_FEES[index].priceDisplay} in instalments.`
+                          : ''}
                       </Typography>
                       <Button
                         variant={index === 1 ? 'contained' : 'outlined'}
@@ -650,7 +652,7 @@ export default function NataEntranceExamCoachingPage({ params: { locale } }: Pag
                 {
                   title: 'NATA Online Coaching',
                   href: '/nata-online-coaching',
-                  desc: 'Live online NATA entrance exam classes across India and 6 Gulf countries.',
+                  desc: 'Live online NATA entrance exam classes across India and the Gulf.',
                 },
                 {
                   title: 'NATA 2026 Complete Guide',
@@ -675,7 +677,7 @@ export default function NataEntranceExamCoachingPage({ params: { locale } }: Pag
                 {
                   title: 'Free College Predictor',
                   href: '/tools/college-predictor',
-                  desc: 'Find B.Arch colleges that match your NATA entrance exam score from 5,000+ options.',
+                  desc: 'Find B.Arch colleges that match your NATA entrance exam score.',
                 },
                 {
                   title: 'NATA Important Questions',
@@ -734,7 +736,7 @@ export default function NataEntranceExamCoachingPage({ params: { locale } }: Pag
               Start NATA entrance exam coaching today
             </Typography>
             <Typography variant="h6" sx={{ mb: 4, opacity: 0.9, lineHeight: 1.6 }}>
-              Seats are limited to 25 students per batch. Reserve your spot before the next batch starts.
+              Batches are kept small. Reserve your spot before the next batch starts.
             </Typography>
             <Stack direction="row" spacing={2} justifyContent="center" flexWrap="wrap" useFlexGap>
               <Button

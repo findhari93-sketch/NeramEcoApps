@@ -172,3 +172,34 @@ describe('parseNTAAnswerSheet', () => {
     expect(JSON.stringify(parsed.questions[0])).not.toContain('correct_answer');
   });
 });
+
+describe('classifyQuestion on JEE Paper 2B (B.Planning)', () => {
+  it('reads the 105-question layout as maths, aptitude, then planning', () => {
+    expect(classifyQuestion(20, 'MCQ', 'JEE_PAPER_2B', 105).section).toBe('math_mcq');
+    expect(classifyQuestion(25, 'NUMERICAL', 'JEE_PAPER_2B', 105).section).toBe('math_numerical');
+    expect(classifyQuestion(31, 'MCQ', 'JEE_PAPER_2B', 105).section).toBe('aptitude');
+    expect(classifyQuestion(80, 'MCQ', 'JEE_PAPER_2B', 105).section).toBe('aptitude');
+    expect(classifyQuestion(81, 'MCQ', 'JEE_PAPER_2B', 105).section).toBe('planning');
+    expect(classifyQuestion(105, 'MCQ', 'JEE_PAPER_2B', 105).section).toBe('planning');
+  });
+
+  it('reads the 100-question layout with its shorter maths part', () => {
+    expect(classifyQuestion(25, 'MCQ', 'JEE_PAPER_2B', 100).section).toBe('math_mcq');
+    expect(classifyQuestion(76, 'MCQ', 'JEE_PAPER_2B', 100).section).toBe('planning');
+  });
+
+  it('tags planning questions with the planning topic', () => {
+    expect(classifyQuestion(90, 'MCQ', 'JEE_PAPER_2B', 105).categories).toEqual(['planning']);
+  });
+
+  it('knows its own layouts and not 2A ones', () => {
+    expect(isKnownJEEPaper2Layout(105, 'JEE_PAPER_2B')).toBe(true);
+    expect(isKnownJEEPaper2Layout(82, 'JEE_PAPER_2B')).toBe(false);
+    expect(isKnownJEEPaper2Layout(82)).toBe(true);
+  });
+
+  it('never files a planning MCQ under drawing on a 2A paper', () => {
+    // 2021 Session 1 (AN) arrived as 2A with its 25 Planning MCQs under Drawing.
+    expect(classifyQuestion(81, 'MCQ', 'JEE_PAPER_2', 82).section).not.toBe('drawing');
+  });
+});

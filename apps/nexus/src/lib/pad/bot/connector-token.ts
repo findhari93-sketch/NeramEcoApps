@@ -47,6 +47,7 @@ export function __resetConnectorToken(): void {
 
 async function requestToken(credentials: ConnectorCredentials): Promise<string> {
   const response = await fetch(`https://login.microsoftonline.com/${encodeURIComponent(credentials.tenant)}/oauth2/v2.0/token`, {
+    cache: 'no-store',
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({

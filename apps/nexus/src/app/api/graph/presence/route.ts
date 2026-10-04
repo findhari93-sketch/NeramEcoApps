@@ -39,6 +39,7 @@ export async function POST(request: NextRequest) {
     const response = await fetch(
       'https://graph.microsoft.com/v1.0/communications/getPresencesByUserId',
       {
+        cache: 'no-store',
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,

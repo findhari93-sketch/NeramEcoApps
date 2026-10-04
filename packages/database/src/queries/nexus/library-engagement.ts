@@ -1,5 +1,7 @@
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
 import { loadClassroomRoster } from './roster';
+// Card columns, never '*': a joined video must not drag its transcript along.
+import { LIBRARY_CARD_COLUMNS } from './library';
 import type {
   LibraryWatchSessionUpsert,
   LibraryStudentStreak,
@@ -407,7 +409,7 @@ export async function getMyActivity(
   // Continue watching
   const { data: continueWatching } = await supabase
     .from('library_watch_history')
-    .select('*, video:library_videos(*)')
+    .select(`*, video:library_videos(${LIBRARY_CARD_COLUMNS})`)
     .eq('student_id', studentId)
     .eq('completed', false)
     .order('last_watched_at', { ascending: false })
@@ -416,7 +418,7 @@ export async function getMyActivity(
   // Bookmarks
   const { data: bookmarks } = await supabase
     .from('library_bookmarks')
-    .select('*, video:library_videos(*)')
+    .select(`*, video:library_videos(${LIBRARY_CARD_COLUMNS})`)
     .eq('student_id', studentId)
     .order('created_at', { ascending: false })
     .limit(10);

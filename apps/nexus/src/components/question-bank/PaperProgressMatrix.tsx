@@ -31,7 +31,7 @@ import {
   useTheme,
 } from '@neram/ui';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import type { NexusQBPaperMatrix, NexusQBPaperMatrixCell } from '@neram/database';
+import { QB_EXAM_SHORT_LABELS, type NexusQBPaperMatrix, type NexusQBPaperMatrixCell, type QBExamType } from '@neram/database';
 import StudentAvatar from '@/components/students/StudentAvatar';
 import PaperFacePips from './PaperFacePips';
 
@@ -79,7 +79,7 @@ export default function PaperProgressMatrix({ matrix }: PaperProgressMatrixProps
                   {p.short_title}
                 </Typography>
                 <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.62rem' }}>
-                  {p.exam_type === 'NATA' ? 'NATA' : 'JEE P2'}
+                  {QB_EXAM_SHORT_LABELS[p.exam_type as QBExamType] ?? p.exam_type}
                 </Typography>
               </HeaderCell>
             ))}

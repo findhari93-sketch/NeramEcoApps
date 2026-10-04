@@ -40,6 +40,9 @@ import StudyRefsPanel from './StudyRefsPanel';
 import MCQOptions from './MCQOptions';
 import FigureViewer from './FigureViewer';
 import MathText from '@/components/common/MathText';
+import MathAnswer from '@/components/common/MathAnswer';
+import { BOTTOM_NAV_HEIGHT } from '@/lib/shell-chrome';
+import AnswerInput from '@/components/tests/AnswerInput';
 import { readDrawingParts } from '@/lib/drawing-parts';
 import SolutionVideoPlayer from './SolutionVideoPlayer';
 import ReportMistakeLink from './ReportMistakeLink';
@@ -214,6 +217,10 @@ function QuestionDetailBody({
     onPrev();
   }, [a, onPrev]);
 
+  /** A numerical answer typed into a box, rather than an option picked. */
+  const isTypedNumerical =
+    question.question_format === 'NUMERICAL' && !(question.options && question.options.length > 0);
+
   // Determine correct option letter for "Incorrect" badge
   const correctOptionLetter = (() => {
     if (!question.correct_answer || !question.options) return '';
@@ -367,6 +374,20 @@ function QuestionDetailBody({
         </Box>
       )}
 
+      {/* A numerical question has no options to tap, so it gets the same typed
+          box and maths keypad as a test. It used to get nothing at all, and the
+          question could only be read, never answered. */}
+      {isTypedNumerical && (
+        <Box sx={{ mb: 3, maxWidth: 480 }}>
+          <AnswerInput
+            question={{ question_id: question.id, question_format: 'NUMERICAL', options: null }}
+            value={selectedAnswer}
+            onChange={a.select}
+            disabled={submitted || submitting}
+          />
+        </Box>
+      )}
+
       {/* A save that failed says so, next to the answer it did not save. */}
       {a.error && (
         <Alert severity="error" sx={{ mb: 2, borderRadius: 2 }} role="alert">
@@ -413,7 +434,15 @@ function QuestionDetailBody({
           ) : (
             <Chip
               icon={<CancelIcon />}
-              label={`Incorrect. Answer: ${correctOptionLetter}`}
+              label={
+                isTypedNumerical ? (
+                  <>
+                    Incorrect. Answer: <MathAnswer value={question.correct_answer} />
+                  </>
+                ) : (
+                  `Incorrect. Answer: ${correctOptionLetter}`
+                )
+              }
               color="error"
               variant="filled"
               sx={{ fontWeight: 600, fontSize: '0.875rem' }}
@@ -658,7 +687,9 @@ function QuestionDetailBody({
         <Box
           sx={{
             position: inline ? 'relative' : isMobile ? 'fixed' : 'relative',
-            bottom: inline ? 'auto' : isMobile ? 0 : 'auto',
+            // Above the bottom nav, which shares this breakpoint. At 0 the nav covered
+            // the button, so a student on a phone could not submit at all.
+            bottom: inline ? 'auto' : isMobile ? BOTTOM_NAV_HEIGHT : 'auto',
             left: 0,
             right: 0,
             p: inline ? 0 : isMobile ? 2 : 0,

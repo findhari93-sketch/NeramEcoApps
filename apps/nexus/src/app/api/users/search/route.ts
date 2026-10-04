@@ -146,6 +146,7 @@ async function searchGraphDirectory(
   const url = `https://graph.microsoft.com/v1.0/users?$filter=${encodeURIComponent(filter)}&$select=${select}&$top=20`;
 
   const res = await fetch(url, {
+    cache: 'no-store',
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 

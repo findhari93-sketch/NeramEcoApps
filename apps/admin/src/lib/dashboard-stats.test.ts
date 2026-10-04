@@ -114,3 +114,60 @@ describe('loadDashboardSummary', () => {
     await expect(loadDashboardSummary(db, now)).rejects.toThrow('new leads: permission denied');
   });
 });
+
+describe('loadDashboardSummary via the dashboard_stats RPC', () => {
+  const now = new Date('2026-09-25T10:00:00Z');
+
+  it('passes the 7-day and IST month boundaries and maps the payload', async () => {
+    const calls: Array<[string, unknown]> = [];
+    const db = {
+      from: () => {
+        throw new Error('table reads must not run when the RPC answers');
+      },
+      rpc: async (fn: string, args: unknown) => {
+        calls.push([fn, args]);
+        return {
+          data: {
+            active_students: 41,
+            new_leads_7d: '12',
+            applications_to_review: 125,
+            collected_this_month: '55000.50',
+            payments_pending: 20,
+          },
+          error: null,
+        };
+      },
+    };
+    const s = await loadDashboardSummary(db, now);
+    expect(calls).toEqual([
+      ['dashboard_stats', { p_week_ago: '2026-09-18T10:00:00.000Z', p_month_start: '2026-08-31T18:30:00.000Z' }],
+    ]);
+    expect(s).toEqual({
+      activeStudents: 41,
+      newLeads7d: 12,
+      applicationsToReview: 125,
+      collectedThisMonth: 55000.5,
+      paymentsPending: 20,
+      generatedAt: now.toISOString(),
+    });
+  });
+
+  it('falls back to the per-table reads when the function is missing', async () => {
+    const { db: tables } = fakeDb({
+      nexus_classrooms: { data: [] },
+      users: { count: 3 },
+      lead_profiles: { count: 4 },
+      payments: (calls: Array<[string, unknown[]]>) =>
+        calls.some(([m, a]) => m === 'eq' && a[1] === 'paid') ? { data: [{ amount: 100 }] } : { count: 1 },
+    });
+    const db = {
+      ...tables,
+      rpc: async () => ({ data: null, error: { message: 'Could not find the function public.dashboard_stats' } }),
+    };
+    const s = await loadDashboardSummary(db, now);
+    expect(s.newLeads7d).toBe(3);
+    expect(s.applicationsToReview).toBe(4);
+    expect(s.collectedThisMonth).toBe(100);
+  });
+});
+

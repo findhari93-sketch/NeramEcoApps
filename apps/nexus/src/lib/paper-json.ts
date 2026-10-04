@@ -25,7 +25,9 @@
  */
 
 import {
+  QB_EXAM_TYPES,
   QB_SECTION_ORDER,
+  isKnownQBExamType,
   isQBQuestionSection,
   qbSectionLabel,
   type NexusQBOriginalPaper,
@@ -731,7 +733,9 @@ export function parsePaperJSON(data: unknown): ParsedPaperJSON {
   const year = num(rawPaper.year);
 
   let paper: PaperJSONPaper | null = null;
-  if (examType && year) {
+  if (examType && !isKnownQBExamType(examType)) {
+    errors.push(`"${examType}" is not an exam the bank knows. Use ${QB_EXAM_TYPES.join(', ')}.`);
+  } else if (examType && year) {
     paper = {
       id: text(rawPaper.id),
       exam_type: examType as QBExamType,

@@ -11,16 +11,17 @@ export default function CollegeHubOverviewPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Counts only: limit=1 returns one row plus the total, instead of every college.
     Promise.all([
-      fetch('/api/college-hub/colleges').then((r) => r.json()),
+      fetch('/api/college-hub/colleges?limit=1&fields=options').then((r) => r.json()),
+      fetch('/api/college-hub/colleges?limit=1&fields=options&verified=true').then((r) => r.json()),
       fetch('/api/college-hub/reviews?status=pending').then((r) => r.json()),
     ])
-      .then(([colleges, reviews]) => {
-        const all = colleges.data ?? [];
+      .then(([colleges, verified, reviews]) => {
         setStats({
-          total: all.length,
+          total: colleges.total ?? 0,
           pending_reviews: (reviews.data ?? []).length,
-          verified: all.filter((c: { verified: boolean }) => c.verified).length,
+          verified: verified.total ?? 0,
         });
       })
       .catch(console.error)

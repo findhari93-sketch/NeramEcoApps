@@ -1,6 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import type { MRT_ColumnFiltersState, MRT_PaginationState, MRT_SortingState } from 'material-react-table';
+import { STUDENT_HUB_PAGE_SIZE } from '@/lib/student-hub-query';
 import {
   Box,
   Typography,
@@ -35,6 +37,7 @@ import EventOutlinedIcon from '@mui/icons-material/EventOutlined';
 import InsightsIcon from '@mui/icons-material/Insights';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
 import StudentHubTable, { type StudentRow } from '@/components/students/StudentHubTable';
 import StudentDetailDrawer from '@/components/alumni/StudentDetailDrawer';
 import DetailLinksDialog from '@/components/students/DetailLinksDialog';
@@ -265,6 +268,18 @@ export default function StudentsPage() {
   const { supabaseUserId } = useAdminProfile();
 
   const [students, setStudents] = useState<StudentRow[]>([]);
+  // Server-side grid state (/api/students pages, sorts, filters and searches).
+  const [pagination, setPagination] = useState<MRT_PaginationState>({ pageIndex: 0, pageSize: STUDENT_HUB_PAGE_SIZE });
+  const [sorting, setSorting] = useState<MRT_SortingState>([]);
+  const [columnFilters, setColumnFilters] = useState<MRT_ColumnFiltersState>([]);
+  const [globalFilter, setGlobalFilter] = useState('');
+  const [rowCount, setRowCount] = useState(0);
+  const [yearOptions, setYearOptions] = useState<string[]>([]);
+  // First load shows the skeleton; later loads keep the current page on screen
+  // with a progress bar, so the grid does not jump while it refetches.
+  const [refetching, setRefetching] = useState(false);
+  const [loadingAsk, setLoadingAsk] = useState(false);
+  const [legacyLoading, setLegacyLoading] = useState(false);
   const [stats, setStats] = useState<Stats>({
     totalStudents: 0,
     fullyPaid: 0,
@@ -357,37 +372,91 @@ export default function StudentsPage() {
 
   const bumpReset = () => setSelectionResetKey((k) => k + 1);
 
-  // The grid does all per-column filtering / global search / paging client-side on
-  // the loaded cohort, so this fetch only takes the year scope.
-  const fetchStudents = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    // A batch switch reloads a different cohort, so never carry a stale filter over.
+  // A batch switch loads a different cohort, so never carry a stale filter or page over.
+  useEffect(() => {
     setPastBatchFilter(false);
     setPersonalOnlyFilter(false);
+    setNoFormFilter(false);
+    // Functional updates that keep the same object when nothing changes, so the
+    // first render does not refetch twice.
+    setColumnFilters((f) => (f.length ? [] : f));
+    setGlobalFilter('');
+    setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }));
+  }, [year]);
+
+  // Any filter, search or sort change goes back to the first page.
+  useEffect(() => {
+    setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }));
+  }, [columnFilters, globalFilter, sorting, pastBatchFilter, personalOnlyFilter, noFormFilter]);
+
+  const buildParams = useCallback(() => {
+    const params = new URLSearchParams();
+    params.set('year', year);
+    params.set('page', String(pagination.pageIndex));
+    params.set('pageSize', String(pagination.pageSize));
+    if (sorting.length) params.set('sorting', JSON.stringify(sorting));
+    if (columnFilters.length) params.set('filters', JSON.stringify(columnFilters));
+    if (globalFilter.trim()) params.set('q', globalFilter.trim());
+    if (pastBatchFilter) params.set('pastBatch', '1');
+    if (personalOnlyFilter) params.set('personalOnly', '1');
+    if (noFormFilter) params.set('noForm', '1');
+    return params;
+  }, [year, pagination, sorting, columnFilters, globalFilter, pastBatchFilter, personalOnlyFilter, noFormFilter]);
+
+  // One page of the cohort at a time (page size 50); the route applies the grid's
+  // sort, filters, search and banner flags.
+  const hasLoadedOnce = useRef(false);
+  const requestSeq = useRef(0);
+  const fetchStudents = useCallback(async () => {
+    const seq = ++requestSeq.current;
+    if (hasLoadedOnce.current) setRefetching(true);
+    else setLoading(true);
+    setError('');
 
     try {
-      const params = new URLSearchParams();
-      params.set('year', year);
-
-      const res = await fetch(`/api/students?${params.toString()}`, { cache: 'no-store' });
+      const res = await fetch(`/api/students?${buildParams().toString()}`, { cache: 'no-store' });
       if (!res.ok) throw new Error('Failed to fetch students');
 
       const data = await res.json();
+      // A slower, older request must not overwrite a newer one.
+      if (seq !== requestSeq.current) return;
       setStudents(data.students || []);
+      setRowCount(typeof data.total === 'number' ? data.total : (data.students || []).length);
+      setYearOptions(data.yearOptions || []);
       if (data.stats) {
         setStats(data.stats);
       }
+      hasLoadedOnce.current = true;
     } catch (err: any) {
-      setError(err.message || 'Failed to fetch students');
+      if (seq === requestSeq.current) setError(err.message || 'Failed to fetch students');
     } finally {
-      setLoading(false);
+      if (seq === requestSeq.current) {
+        setLoading(false);
+        setRefetching(false);
+      }
     }
-  }, [year]);
+  }, [buildParams]);
 
   useEffect(() => {
     fetchStudents();
   }, [fetchStudents]);
+
+  // "Get links for all": every student with no form in this batch, not just the
+  // visible page.
+  const askAllWithoutForm = useCallback(async () => {
+    setLoadingAsk(true);
+    try {
+      const params = new URLSearchParams({ year, noForm: '1', all: '1' });
+      const res = await fetch(`/api/students?${params.toString()}`, { cache: 'no-store' });
+      if (!res.ok) throw new Error('Could not load the students with no form');
+      const data = await res.json();
+      setAskRows(((data.students || []) as StudentRow[]).filter((s) => s.application_state === 'missing' && !s.is_alumni));
+    } catch (err: any) {
+      setError(err.message || 'Could not load the students with no form');
+    } finally {
+      setLoadingAsk(false);
+    }
+  }, [year]);
 
   // Lazy-load the per-year revenue rollup only when the overview is opened.
   const fetchRevenue = useCallback(async () => {
@@ -470,17 +539,6 @@ export default function StudentsPage() {
     [supabaseUserId, currentBatch, fetchStudents, fetchRevenue, view]
   );
 
-  // Rows handed to the grid: narrowed by the banner filters (composable). Past-batch
-  // = active students on an older exam batch; personal-only = Gmail rows with no
-  // Microsoft org identity (hidden from Nexus, need linking).
-  const visibleStudents = useMemo(() => {
-    let rows = students;
-    if (pastBatchFilter) rows = rows.filter((s) => s.past_batch);
-    if (personalOnlyFilter) rows = rows.filter((s) => !s.ms_oid);
-    if (noFormFilter) rows = rows.filter((s) => s.application_state === 'missing' && !s.is_alumni);
-    return rows;
-  }, [students, pastBatchFilter, personalOnlyFilter, noFormFilter]);
-
   // Bulk: move to the Software course program (leaves the architecture list).
   const moveToSoftware = useCallback(
     async (rows: StudentRow[]) => {
@@ -559,15 +617,29 @@ export default function StudentsPage() {
     fetchStudents();
   }, [fetchStudents]);
 
-  // Fetch legacy students count
-  useEffect(() => {
-    fetch('/api/students/reconcile')
-      .then((r) => r.json())
-      .then((d) => {
-        setLegacyStudents(d.students || []);
-        setLegacyCount(d.count || 0);
-      })
-      .catch(() => {});
+  // Legacy students (Nexus classroom, no onboarding pipeline). Loaded when staff
+  // ask for it rather than on every visit to this page.
+  const loadLegacy = useCallback(async () => {
+    setLegacyLoading(true);
+    try {
+      const r = await fetch('/api/students/reconcile', { cache: 'no-store' });
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.error || 'Could not check legacy students');
+      const list = d.students || [];
+      setLegacyStudents(list);
+      setLegacyCount(d.count || 0);
+      if ((d.count || 0) > 0) {
+        setReconcileResults(null);
+        setSelectedLegacy(new Set(list.map((s: any) => s.userId)));
+        setShowReconcileDialog(true);
+      } else {
+        setNotice({ type: 'info', text: 'No legacy students need onboarding set up.' });
+      }
+    } catch (err: any) {
+      setError(err.message || 'Could not check legacy students');
+    } finally {
+      setLegacyLoading(false);
+    }
   }, []);
 
   const handleReconcile = async () => {
@@ -832,6 +904,22 @@ export default function StudentsPage() {
             </Tooltip>
           )}
           {view === 'list' && (
+            <Tooltip title="Find students who have a Nexus classroom but no onboarding pipeline">
+              <span>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={legacyLoading ? <CircularProgress size={14} color="inherit" /> : <HistoryEduOutlinedIcon sx={{ fontSize: 18 }} />}
+                  onClick={loadLegacy}
+                  disabled={legacyLoading}
+                  sx={{ textTransform: 'none', fontWeight: 600, fontSize: 12 }}
+                >
+                  Legacy onboarding
+                </Button>
+              </span>
+            </Tooltip>
+          )}
+          {view === 'list' && (
             <Button
               size="small"
               variant="outlined"
@@ -1007,9 +1095,9 @@ export default function StudentsPage() {
                   color="warning"
                   size="small"
                   variant="contained"
-                  onClick={() =>
-                    setAskRows(visibleStudents.filter((s) => s.application_state === 'missing' && !s.is_alumni))
-                  }
+                  onClick={askAllWithoutForm}
+                  disabled={loadingAsk}
+                  startIcon={loadingAsk ? <CircularProgress size={14} color="inherit" /> : undefined}
                   sx={{ textTransform: 'none', fontWeight: 600 }}
                 >
                   Get links for all
@@ -1032,7 +1120,7 @@ export default function StudentsPage() {
       )}
 
       {/* Active exam-batch scope. The switch is GLOBAL (profile menu, bottom-left);
-          this chip just shows what you're viewing. Columns filter client-side. */}
+          this chip just shows what you're viewing. Columns filter on the server. */}
       <Box sx={{ display: 'flex', gap: 1.5, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
         <Chip
           label={`Exam Batch: ${year === 'current' ? (currentBatch?.code || 'current') : year === 'all' ? 'All batches' : year === 'none' ? 'No batch set' : year}`}
@@ -1068,14 +1156,35 @@ export default function StudentsPage() {
           />
         )}
         <Typography variant="caption" color="text.secondary">
-          Switch batch from the profile menu (bottom-left). Filter any column from the box under its header; click a student for full details.
+          Switch batch from the profile menu (bottom-left). Filter any column from the box under its header; click a student for full details. Select all picks the students on this page.
         </Typography>
       </Box>
 
       {/* Student grid: per-column filters, selection-bar bulk actions, row-click drawer */}
       <StudentHubTable
-        students={visibleStudents}
+        students={students}
         loading={loading}
+        refetching={refetching}
+        rowCount={rowCount}
+        pagination={pagination}
+        onPaginationChange={setPagination}
+        sorting={sorting}
+        onSortingChange={setSorting}
+        columnFilters={columnFilters}
+        onColumnFiltersChange={setColumnFilters}
+        globalFilter={globalFilter}
+        onGlobalFilterChange={setGlobalFilter}
+        yearOptions={yearOptions}
+        hasActiveFilters={
+          columnFilters.length > 0 || !!globalFilter.trim() || pastBatchFilter || personalOnlyFilter || noFormFilter
+        }
+        onClearFilters={() => {
+          setColumnFilters([]);
+          setGlobalFilter('');
+          setPastBatchFilter(false);
+          setPersonalOnlyFilter(false);
+          setNoFormFilter(false);
+        }}
         selectionResetKey={selectionResetKey}
         currentBatchCode={currentBatch?.code || currentAcademicYear()}
         onRowClick={(row) => setDrawerStudent(row)}

@@ -333,6 +333,7 @@ async function postGraphMessage(
 ): Promise<PostResult> {
   try {
     const res = await fetch(url, {
+      cache: 'no-store',
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -409,7 +410,7 @@ export async function resolveMeetingChannelId(token: string, teamId: string): Pr
     try {
       const res = await fetch(
         `https://graph.microsoft.com/v1.0/teams/${teamId}/channels?$filter=displayName eq '${name.replace(/'/g, "''")}'`,
-        { headers: { Authorization: `Bearer ${token}` } },
+        { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } },
       );
       if (!res.ok) return null;
       const data = await res.json();
@@ -499,7 +500,7 @@ export async function refreshClassAnnouncement(
     /** PATCH a posted message's body. True only on a real 2xx. */
     const tryEdit = async (url: string): Promise<boolean> => {
       try {
-        const res = await fetch(url, { method: 'PATCH', headers: authed, body: bodyPayload });
+        const res = await fetch(url, { cache: 'no-store', method: 'PATCH', headers: authed, body: bodyPayload });
         if (!res.ok) {
           const errText = await res.text().catch(() => '');
           console.error('Wrap-up card edit refused (falling back to a reply):', res.status, errText);
@@ -516,7 +517,7 @@ export async function refreshClassAnnouncement(
       try {
         const res = await fetch(
           `https://graph.microsoft.com/v1.0/teams/${teamId}/channels/${channelId}/messages/${rootId}/replies`,
-          { method: 'POST', headers: authed, body: bodyPayload },
+          { cache: 'no-store', method: 'POST', headers: authed, body: bodyPayload },
         );
         if (!res.ok) {
           const errText = await res.text().catch(() => '');
@@ -620,7 +621,7 @@ export async function removeTeamsAnnouncements(
 
   const softDelete = async (url: string, label: string) => {
     try {
-      const res = await fetch(url, { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(url, { cache: 'no-store', method: 'POST', headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) {
         const errText = await res.text().catch(() => '');
         console.error(`softDelete ${label} failed (non-blocking):`, res.status, errText);
@@ -828,7 +829,7 @@ export async function cancelTeamsEvent(
   refs: ClassMeetingRefs,
 ): Promise<{ success: boolean; error?: string }> {
   const deleteAt = async (url: string, bearer: string): Promise<number> => {
-    const res = await fetch(url, { method: 'DELETE', headers: { Authorization: `Bearer ${bearer}` } });
+    const res = await fetch(url, { cache: 'no-store', method: 'DELETE', headers: { Authorization: `Bearer ${bearer}` } });
     if (!res.ok && !isDeleteSettled(res.status)) {
       const errText = await res.text().catch(() => '');
       console.error(`Teams delete failed (${res.status}) for ${url}:`, errText);

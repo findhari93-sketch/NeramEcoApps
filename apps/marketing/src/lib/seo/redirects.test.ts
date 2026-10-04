@@ -72,6 +72,45 @@ describe('location redirects', () => {
     );
   });
 
+  it('maps old "in {place}" and "center in {place}" URLs without doubling the slug', () => {
+    const chennai = '/coaching/nata-coaching/nata-coaching-centers-in-chennai';
+    expect(resolveOnce('/nata-coaching-in-chennai')).toBe(chennai);
+    expect(resolveOnce('/nata-coaching-center-in-chennai')).toBe(chennai);
+    expect(resolveOnce('/nata-coaching-centre-in-chennai')).toBe(chennai);
+    expect(resolveOnce('/ta/nata-coaching-in-chennai')).toBe(chennai);
+    expect(resolveOnce('/nata-coaching-in-tamil-nadu')).toBe('/coaching/nata-coaching-in-tamil-nadu');
+    expect(resolveOnce('/nata-coaching-center-in-tamil-nadu')).toBe('/coaching/nata-coaching-in-tamil-nadu');
+    expect(resolveOnce('/nata-coaching-centers-in-kerala')).toBe('/coaching/nata-coaching-in-kerala');
+  });
+
+  it('never produces a doubled city slug from any legacy /nata-coaching-* shape', () => {
+    const shapes = ['in', 'center-in', 'centre-in', 'centers-in', 'centres-in'];
+    for (const place of ['chennai', 'tambaram', 'tamil-nadu', 'karnataka', 'bangalore', 'pudukkottai']) {
+      for (const w of shapes) {
+        for (const prefix of ['', '/ta', '/kn']) {
+          const p = `${prefix}/nata-coaching-${w}-${place}`;
+          const dest = resolveOnce(p);
+          expect(dest, p).not.toBeNull();
+          expect(dest!, p).not.toMatch(/centers-in-(?:in|centers?|centres?)-|centers-in-(?:tamil-nadu|karnataka)$/);
+        }
+      }
+    }
+  });
+
+  it('sends each old centre page to its one city page', () => {
+    expect(resolveOnce('/contact/nata-coaching-center-in-chennai')).toBe('/coaching/nata-coaching/nata-coaching-centers-in-chennai');
+    expect(resolveOnce('/contact/nata-coaching-center-in-pudukkottai-nata')).toBe('/coaching/nata-coaching/nata-coaching-centers-in-pudukkottai');
+    expect(resolveOnce('/ta/contact/nata-coaching-center-in-bangalore')).toBe('/coaching/nata-coaching/nata-coaching-centers-in-bangalore');
+    expect(resolveOnce('/contact')).toBeNull();
+  });
+
+  it('folds the Tambaram area guide into the Tambaram city page, and keeps area guides English only', () => {
+    const tambaram = '/coaching/nata-coaching/nata-coaching-centers-in-tambaram';
+    expect(resolveOnce('/coaching/nata-coaching-chennai/tambaram')).toBe(tambaram);
+    expect(resolveOnce('/kn/coaching/nata-coaching-chennai/tambaram')).toBe(tambaram);
+    expect(resolveOnce('/ta/coaching/nata-coaching-chennai/adyar')).toBe('/coaching/nata-coaching-chennai/adyar');
+  });
+
   it('still maps old /nata-coaching-{city} URLs', () => {
     expect(resolveOnce('/nata-coaching-jaipur')).toBe('/coaching/nata-coaching/nata-coaching-centers-in-jaipur');
   });

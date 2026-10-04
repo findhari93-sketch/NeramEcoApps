@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
+import { PUBLIC_CACHE_HEADERS } from '../../_lib/public-cache';
 
 // Support both server-only and NEXT_PUBLIC_ prefixed env vars
 const YOUTUBE_API_KEY = process.env.YOUTUBE_API_KEY || process.env.NEXT_PUBLIC_YOUTUBE_API_KEY;
@@ -22,8 +23,10 @@ interface ChannelStats {
   videos: YouTubeVideo[];
 }
 
-// Cache the response for 1 hour
-export const revalidate = 3600;
+// YouTube data is cached for a day in the Data Cache (subscriber counts move
+// slowly and the search call costs 100 quota units), and the response is
+// edge-cached so each page view does not run this function.
+const YT_REVALIDATE = 86400;
 
 export async function GET() {
   try {
@@ -35,7 +38,7 @@ export async function GET() {
     // Get channel statistics
     const channelResponse = await fetch(
       `https://www.googleapis.com/youtube/v3/channels?part=statistics,snippet&id=${YOUTUBE_CHANNEL_ID}&key=${YOUTUBE_API_KEY}`,
-      { next: { revalidate: 3600 } }
+      { next: { revalidate: YT_REVALIDATE } }
     );
 
     if (!channelResponse.ok) {
@@ -62,7 +65,7 @@ export async function GET() {
     // Get popular videos from the channel
     const videosResponse = await fetch(
       `https://www.googleapis.com/youtube/v3/search?part=snippet&channelId=${channelId}&order=viewCount&type=video&maxResults=6&key=${YOUTUBE_API_KEY}`,
-      { next: { revalidate: 3600 } }
+      { next: { revalidate: YT_REVALIDATE } }
     );
 
     let videos: YouTubeVideo[] = [];
@@ -78,7 +81,7 @@ export async function GET() {
 
         const statsResponse = await fetch(
           `https://www.googleapis.com/youtube/v3/videos?part=statistics&id=${videoIds}&key=${YOUTUBE_API_KEY}`,
-          { next: { revalidate: 3600 } }
+          { next: { revalidate: YT_REVALIDATE } }
         );
 
         const statsData = statsResponse.ok ? await statsResponse.json() : { items: [] };
@@ -132,7 +135,7 @@ export async function GET() {
       videos,
     };
 
-    return NextResponse.json(result);
+    return NextResponse.json(result, { headers: PUBLIC_CACHE_HEADERS });
   } catch (error) {
     console.error('YouTube API error:', error);
     return NextResponse.json(getMockResponse());

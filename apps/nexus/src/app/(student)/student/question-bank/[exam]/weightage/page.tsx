@@ -55,9 +55,18 @@ import ChapterSheet from '@/components/question-bank/weightage/ChapterSheet';
 import { unitColorMap } from '@/components/question-bank/weightage/weightage-colors';
 import type { QBExamType } from '@neram/database';
 
-const SHORT_LABELS: Record<WeightageSection, string> = { math: 'Maths', aptitude: 'Aptitude', drawing: 'Drawing' };
+const SHORT_LABELS: Record<WeightageSection, string> = {
+  math: 'Maths',
+  aptitude: 'Aptitude',
+  drawing: 'Drawing',
+  planning: 'Planning',
+};
 /** Practice-list `section` values; maths spans two (MCQ and numerical), so it is left to the chapter filter. */
-const PRACTICE_SECTION: Partial<Record<WeightageSection, string>> = { aptitude: 'aptitude', drawing: 'drawing' };
+const PRACTICE_SECTION: Partial<Record<WeightageSection, string>> = {
+  aptitude: 'aptitude',
+  drawing: 'drawing',
+  planning: 'planning',
+};
 
 export default function ChapterWeightagePage() {
   const params = useParams<{ exam: string }>();

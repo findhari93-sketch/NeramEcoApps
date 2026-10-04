@@ -12,6 +12,8 @@ import { ExpandMoreOutlined, HelpOutlineOutlined } from '@mui/icons-material';
 
 interface FAQProps {
   t: (key: string) => string;
+  /** Which questions to show, in order. Defaults to all of them. */
+  keys?: readonly string[];
 }
 
 const FAQ_KEYS = [
@@ -24,7 +26,7 @@ const FAQ_KEYS = [
   'faq7',
 ] as const;
 
-export default function FAQ({ t }: FAQProps) {
+export default function FAQ({ t, keys = FAQ_KEYS }: FAQProps) {
   const [expanded, setExpanded] = useState<string | false>(false);
 
   const handleChange = (panel: string) => (_: unknown, isExpanded: boolean) => {
@@ -54,7 +56,7 @@ export default function FAQ({ t }: FAQProps) {
       </Typography>
 
       <Box sx={{ maxWidth: 800, mx: 'auto' }}>
-        {FAQ_KEYS.map((key) => (
+        {keys.map((key) => (
           <Accordion
             key={key}
             expanded={expanded === key}

@@ -47,6 +47,7 @@ import ImageUploadZone from './ImageUploadZone';
 import DedupeWarning, { type DedupeCandidate } from './DedupeWarning';
 import OptionAddBar from './OptionAddBar';
 import { defaultOptions, normalizeOptionIds, withOptionAdded } from '@/lib/qb-option-ids';
+import MathAnswerField from '@/components/common/MathAnswerField';
 
 interface QuestionFormWizardProps {
   initialData?: NexusQBQuestion;
@@ -573,21 +574,20 @@ export default function QuestionFormWizard({
             )}
 
             {form.question_format === 'NUMERICAL' && (
-              <Box sx={{ display: 'flex', gap: 1.5 }}>
-                <TextField
-                  label="Correct Answer"
-                  size="small"
-                  type="number"
+              <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+                {/* Not type="number": that refused 3/4 and 2√3 outright. */}
+                <MathAnswerField
                   value={form.correct_answer}
-                  onChange={(e) => updateField('correct_answer', e.target.value)}
-                  sx={{ flex: 2 }}
+                  onChange={(next) => updateField('correct_answer', next)}
+                  sx={{ flex: 2, minWidth: 0 }}
                 />
                 <TextField
-                  label="Tolerance (+/-)"
+                  label="Tolerance (±)"
                   size="small"
-                  type="number"
                   value={form.answer_tolerance}
                   onChange={(e) => updateField('answer_tolerance', e.target.value)}
+                  inputProps={{ inputMode: 'decimal' }}
+                  helperText="Blank = exact"
                   sx={{ flex: 1 }}
                 />
               </Box>

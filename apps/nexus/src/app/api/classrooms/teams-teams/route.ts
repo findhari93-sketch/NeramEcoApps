@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
     if (teamId) {
       const chRes = await fetch(
         `https://graph.microsoft.com/v1.0/teams/${encodeURIComponent(teamId)}/channels`,
-        { headers: { Authorization: `Bearer ${token}` } }
+        { cache: 'no-store', headers: { Authorization: `Bearer ${token}` } }
       );
 
       if (!chRes.ok) {
@@ -40,6 +40,7 @@ export async function GET(request: NextRequest) {
 
     // Default: fetch the teacher's joined teams from Microsoft Graph
     const graphRes = await fetch('https://graph.microsoft.com/v1.0/me/joinedTeams', {
+      cache: 'no-store',
       headers: {
         Authorization: `Bearer ${token}`,
       },
