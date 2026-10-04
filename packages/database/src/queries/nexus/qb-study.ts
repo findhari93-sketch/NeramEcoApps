@@ -85,6 +85,9 @@ function chapterOf(slug: string, catalog: QBStudyCatalog): QBStudyChapter {
   return { slug, label, ncert };
 }
 
+/** A chapter tag's label and NCERT readings, for callers that start from a chapter slug (the assistant's what_to_study). */
+export const studyChapterFor = chapterOf;
+
 /**
  * Pure: turn a stored row (or nothing) into what the student sees.
  *
