@@ -51,7 +51,7 @@ export function contextBlock(
 /** The model's text made fit for the panel: no dashes the house style bans, no markdown it cannot render. */
 export function cleanReply(text: string, finishReason: string): string {
   let t = text
-    .replace(/\s*—\s*/g, ', ')
+    .replace(/\s*\u2014\s*/g, ', ')
     .replace(/\s+--\s+/g, ', ')
     .replace(/&mdash;/g, ', ')
     .replace(/\*\*(.+?)\*\*/g, '$1')

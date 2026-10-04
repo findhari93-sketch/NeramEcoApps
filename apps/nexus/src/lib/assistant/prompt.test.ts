@@ -8,7 +8,7 @@ const c = { now: NOW, firstName: 'Priya', classroomName: 'Batch Alpha 2027', pag
 describe('system prompts', () => {
   it('carry no em dash, double dash or emoji, which the replies must not have either', () => {
     for (const p of [SYSTEM_GENERAL, SYSTEM_EXAM]) {
-      expect(p).not.toMatch(/—|--|&mdash;/);
+      expect(p).not.toMatch(/\u2014|--|&mdash;/);
       expect(p).not.toMatch(/\p{Extended_Pictographic}/u);
     }
   });
@@ -43,7 +43,7 @@ describe('contextBlock', () => {
 
 describe('cleanReply', () => {
   it('turns dashes into commas and strips markdown bold and headings', () => {
-    expect(cleanReply('## Plan\nRead **NCERT** first — then practise -- daily', 'STOP')).toBe('Plan\nRead NCERT first, then practise, daily');
+    expect(cleanReply('## Plan\nRead **NCERT** first \u2014 then practise -- daily', 'STOP')).toBe('Plan\nRead NCERT first, then practise, daily');
   });
 
   it('says so when the answer was cut off', () => {
