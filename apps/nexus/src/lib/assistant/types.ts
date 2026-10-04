@@ -62,6 +62,10 @@ export interface ToolResult {
 export interface AssistantFeatures {
   sketchbook: boolean;
   attendance: boolean;
+  tests: boolean;
+  /** Gates every exam tool: they read the question bank. */
+  questionBank: boolean;
+  inspiration: boolean;
 }
 
 export interface ToolContext {

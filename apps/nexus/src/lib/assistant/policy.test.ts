@@ -12,7 +12,7 @@ const examRead: ToolDef = { name: 'qb_weightage', description: '', parameters: s
 const studentAction: ActionToolDef = { name: 'set_reminder', description: '', parameters: schema, audience: 'student', kind: 'action', run: ok, execute: ok };
 const examAction: ActionToolDef = { name: 'qb_bookmark', description: '', parameters: schema, audience: 'student', kind: 'action', mode: 'exam', run: ok, execute: ok };
 const ALL = [studentRead, staffRead, examRead, studentAction, examAction];
-const ON: AssistantFeatures = { sketchbook: true, attendance: true };
+const ON: AssistantFeatures = { sketchbook: true, attendance: true, tests: true, questionBank: true, inspiration: true };
 
 const student: AssistantCaller = { id: 's1', name: 'Priya', user_type: 'student', staff_role: null, can_teach: null, impersonating: false };
 const teacher: AssistantCaller = { ...student, id: 't1', user_type: 'teacher', staff_role: 'teacher' };
@@ -57,8 +57,8 @@ describe('allowedTools and the student features (Ruling 25)', () => {
   });
 
   it('drops every tool that leads into a feature the app has switched off', () => {
-    expect(allowedTools(LIST, student, 'general', { sketchbook: false, attendance: true }).map((t) => t.name)).toEqual(['my_brief', 'my_attendance']);
-    expect(allowedTools(LIST, student, 'general', { sketchbook: true, attendance: false }).map((t) => t.name)).toEqual(['my_brief', 'my_sketchbook', 'add_sketch']);
+    expect(allowedTools(LIST, student, 'general', { sketchbook: false, attendance: true, tests: true, questionBank: true, inspiration: true }).map((t) => t.name)).toEqual(['my_brief', 'my_attendance']);
+    expect(allowedTools(LIST, student, 'general', { sketchbook: true, attendance: false, tests: true, questionBank: true, inspiration: true }).map((t) => t.name)).toEqual(['my_brief', 'my_sketchbook', 'add_sketch']);
   });
 });
 

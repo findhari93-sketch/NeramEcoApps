@@ -1,10 +1,10 @@
 import { ApiError } from '@/lib/api-errors';
 import { FEATURE_FLAGS_KEY, isFeatureEnabled, resolveFlags, type FlagMap } from '@/lib/feature-flags';
 
-import { ASSISTANT_FLAG, ATTENDANCE_FLAG, PILOT_KEY, SKETCHBOOK_FLAG } from './flag';
+import { ASSISTANT_FLAG, ATTENDANCE_FLAG, INSPIRATION_FLAG, PILOT_KEY, QUESTION_BANK_FLAG, SKETCHBOOK_FLAG, TESTS_FLAG } from './flag';
 import type { AssistantFeatures } from './types';
 
-export { ASSISTANT_FLAG, ATTENDANCE_FLAG, PILOT_KEY, SKETCHBOOK_FLAG } from './flag';
+export { ASSISTANT_FLAG, ATTENDANCE_FLAG, INSPIRATION_FLAG, PILOT_KEY, QUESTION_BANK_FLAG, SKETCHBOOK_FLAG, TESTS_FLAG } from './flag';
 
 export interface AssistantGate {
   enabled: boolean;
@@ -13,7 +13,7 @@ export interface AssistantGate {
   features: AssistantFeatures;
 }
 
-const CLOSED: AssistantGate = { enabled: false, pilot: [], features: { sketchbook: false, attendance: false } };
+const CLOSED: AssistantGate = { enabled: false, pilot: [], features: { sketchbook: false, attendance: false, tests: false, questionBank: false, inspiration: false } };
 
 /** The pilot allowlist from a raw nexus_settings value: string ids only, anything else reads as empty. */
 export function parsePilot(raw: unknown): string[] {
@@ -22,7 +22,13 @@ export function parsePilot(raw: unknown): string[] {
 
 /** The assistant-facing student features in a resolved flag map. */
 export function featuresOf(flags: FlagMap): AssistantFeatures {
-  return { sketchbook: isFeatureEnabled(SKETCHBOOK_FLAG, flags), attendance: isFeatureEnabled(ATTENDANCE_FLAG, flags) };
+  return {
+    sketchbook: isFeatureEnabled(SKETCHBOOK_FLAG, flags),
+    attendance: isFeatureEnabled(ATTENDANCE_FLAG, flags),
+    tests: isFeatureEnabled(TESTS_FLAG, flags),
+    questionBank: isFeatureEnabled(QUESTION_BANK_FLAG, flags),
+    inspiration: isFeatureEnabled(INSPIRATION_FLAG, flags),
+  };
 }
 
 /**

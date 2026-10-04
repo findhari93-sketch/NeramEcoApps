@@ -50,7 +50,7 @@ const caller: AssistantCaller = { id: 's1', name: 'Priya S', user_type: 'student
 const ctx = (classroomId: string | null = 'c1'): ToolContext => ({
   caller, channel: 'nexus', mode: 'general', supabase: { from: () => ({ select: () => ({ eq: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { batch_id: 'b1', enrolled_at: '2026-06-01' } }) }) }) }) }) },
   classroomId, threadId: 't1', now: new Date('2026-10-03T04:30:00Z'), baseUrl: 'https://nexus.test',
-  features: { sketchbook: true, attendance: true },
+  features: { sketchbook: true, attendance: true, tests: true, questionBank: true, inspiration: true },
 });
 const tool = (name: string) => TOOLS.find((t) => t.name === name)!;
 
@@ -76,8 +76,8 @@ describe('student read tools', () => {
       firstName: 'Priya', today: '2026-10-03', classroomName: 'JEE', nextClass: null,
       assignments: { pending: 0, nextTitle: null, nextDueOn: null }, catchup: null, reviewsBack: 0, sketchbookLine: null, exam: null, remindersToday: [],
     });
-    await tool('my_brief').run({ ...ctx(), features: { sketchbook: false, attendance: true } }, {});
-    expect(mocks.loadBriefFacts).toHaveBeenCalledWith(expect.anything(), 's1', expect.any(Date), { sketchbook: false, attendance: true });
+    await tool('my_brief').run({ ...ctx(), features: { sketchbook: false, attendance: true, tests: true, questionBank: true, inspiration: true } }, {});
+    expect(mocks.loadBriefFacts).toHaveBeenCalledWith(expect.anything(), 's1', expect.any(Date), { sketchbook: false, attendance: true, tests: true, questionBank: true, inspiration: true });
   });
 
   it('every tool says so when the student has no classroom', async () => {

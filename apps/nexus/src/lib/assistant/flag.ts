@@ -4,3 +4,8 @@ export const PILOT_KEY = 'assistant_pilot_user_ids';
 /** Student features the assistant opens doors to; with one off, its tools, flows and chips go too (Ruling 25). */
 export const SKETCHBOOK_FLAG = 'student.sketchbook';
 export const ATTENDANCE_FLAG = 'student.attendance';
+
+/** M2: the tests page, the question bank (exam tools) and the inspiration gallery. */
+export const TESTS_FLAG = 'student.tests';
+export const QUESTION_BANK_FLAG = 'student.question-bank';
+export const INSPIRATION_FLAG = 'student.inspiration';

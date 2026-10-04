@@ -27,7 +27,7 @@ const req = () => new NextRequest('http://localhost/api/assistant/brief', { head
 beforeEach(() => {
   mocks.verifyMsToken.mockReset().mockResolvedValue({ oid: 'oid-1' });
   mocks.getRequestUser.mockReset().mockResolvedValue({ id: 'u1', user_type: 'student', name: 'Priya S', staff_role: null, can_teach: null });
-  mocks.assertAssistantAccess.mockReset().mockResolvedValue({ sketchbook: false, attendance: true });
+  mocks.assertAssistantAccess.mockReset().mockResolvedValue({ sketchbook: false, attendance: true, tests: true, questionBank: true, inspiration: true });
   mocks.loadBriefFacts.mockReset().mockResolvedValue({
     firstName: 'Priya', today: '2026-10-03', classroomName: 'JEE', nextClass: null,
     assignments: { pending: 1, nextTitle: 'Sheet', nextDueOn: null }, catchup: null, reviewsBack: 0, sketchbookLine: null, exam: null, remindersToday: [],
@@ -42,7 +42,7 @@ describe('GET /api/assistant/brief', () => {
     expect(body.brief.greeting).toBe('Good morning, Priya');
     expect(body.brief.sections[0].id).toBe('assignments');
     // The gate's features reach the loader, so a hidden sketchbook has no line (Ruling 25).
-    expect(mocks.loadBriefFacts).toHaveBeenCalledWith(expect.anything(), 'u1', expect.any(Date), { sketchbook: false, attendance: true });
+    expect(mocks.loadBriefFacts).toHaveBeenCalledWith(expect.anything(), 'u1', expect.any(Date), { sketchbook: false, attendance: true, tests: true, questionBank: true, inspiration: true });
     expect(res.headers.get('Cache-Control')).toBe('no-store');
   });
 

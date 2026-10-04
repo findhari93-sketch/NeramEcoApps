@@ -37,7 +37,7 @@ const CLASSES = {
   nexus_scheduled_classes: upcoming.map(({ id, title, classroom_id, scheduled_date, start_time, end_time }) => ({ id, title, classroom_id, scheduled_date, start_time, end_time })),
 };
 
-const ON = { sketchbook: true, attendance: true };
+const ON = { sketchbook: true, attendance: true, tests: true, questionBank: true, inspiration: true };
 const PHOTO = { original_image_url: 'https://cdn.test/s.jpg', thumbnail_url: 'https://cdn.test/s-thumb.jpg' };
 
 function turn(db: ReturnType<typeof fakeDb>, text: string, extra: Record<string, unknown> = {}) {
@@ -165,8 +165,8 @@ describe('runAssistantTurn', () => {
   });
 
   describe('student features the app has switched off (Ruling 25)', () => {
-    const sketchOff = { sketchbook: false, attendance: true };
-    const attendanceOff = { sketchbook: true, attendance: false };
+    const sketchOff = { sketchbook: false, attendance: true, tests: true, questionBank: true, inspiration: true };
+    const attendanceOff = { sketchbook: true, attendance: false, tests: true, questionBank: true, inspiration: true };
 
     it('does not start the upload-sketch flow while the sketchbook is off', async () => {
       const db = fakeDb({});
@@ -216,7 +216,7 @@ describe('runAssistantTurn', () => {
     });
 
     it('says it is not available while the sketchbook is off', async () => {
-      const out = await turn(fakeDb({}), '', { attachment: PHOTO, features: { sketchbook: false, attendance: true } });
+      const out = await turn(fakeDb({}), '', { attachment: PHOTO, features: { sketchbook: false, attendance: true, tests: true, questionBank: true, inspiration: true } });
       expect(out.reply).toMatch(/^That is not available yet\./);
     });
   });

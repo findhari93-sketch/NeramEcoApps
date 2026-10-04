@@ -17,7 +17,7 @@ const ctx = (): ToolContext => ({
   caller, channel: 'nexus', mode: 'general',
   supabase: { from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: classRow }) }) }) }) },
   classroomId: 'c1', threadId: 't1', now: new Date('2026-10-03T04:30:00Z'), baseUrl: 'https://nexus.test',
-  features: { sketchbook: true, attendance: true },
+  features: { sketchbook: true, attendance: true, tests: true, questionBank: true, inspiration: true },
 });
 
 beforeEach(() => Object.values(mocks).forEach((m) => m.mockReset()));

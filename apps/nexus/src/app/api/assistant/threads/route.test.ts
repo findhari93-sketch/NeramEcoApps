@@ -15,7 +15,7 @@ const caller = { id: 'u1', name: 'Priya', user_type: 'student', staff_role: null
 const req = (body: unknown) => new NextRequest('http://localhost/api/assistant/threads', { method: 'POST', headers: { Authorization: 'Bearer t', 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 
 beforeEach(() => {
-  mocks.resolveAssistantCaller.mockReset().mockResolvedValue({ caller, supabase: {}, features: { sketchbook: true, attendance: true } });
+  mocks.resolveAssistantCaller.mockReset().mockResolvedValue({ caller, supabase: {}, features: { sketchbook: true, attendance: true, tests: true, questionBank: true, inspiration: true } });
   mocks.createThread.mockReset().mockResolvedValue({ id: 't-new' });
 });
 

@@ -18,7 +18,7 @@ const caller = { id: 'u1', name: 'Priya', user_type: 'student', staff_role: null
 const req = () => new NextRequest(`http://localhost/api/assistant/threads/${ID}`, { headers: { Authorization: 'Bearer t' } });
 
 beforeEach(() => {
-  mocks.resolveAssistantCaller.mockReset().mockResolvedValue({ caller, supabase: {}, features: { sketchbook: true, attendance: true } });
+  mocks.resolveAssistantCaller.mockReset().mockResolvedValue({ caller, supabase: {}, features: { sketchbook: true, attendance: true, tests: true, questionBank: true, inspiration: true } });
   mocks.getThread.mockReset().mockResolvedValue({ id: ID, user_id: 'u1' });
   mocks.listMessages.mockReset().mockResolvedValue([{ id: 'm1', role: 'user', text: 'hi', envelope: null, created_at: '2026-10-03T04:30:00Z' }]);
 });
@@ -29,6 +29,18 @@ describe('GET /api/assistant/threads/[id]', () => {
     expect(res.status).toBe(200);
     expect((await res.json()).messages).toHaveLength(1);
     expect(res.headers.get('Cache-Control')).toBe('no-store');
+  });
+
+  it('re-filters stored chips under today’s switches (parked minor c)', async () => {
+    mocks.resolveAssistantCaller.mockResolvedValue({
+      caller, supabase: {}, features: { sketchbook: false, attendance: true, tests: true, questionBank: true, inspiration: true },
+    });
+    mocks.listMessages.mockResolvedValue([{
+      id: 'm2', role: 'assistant', text: 'ok', created_at: '2026-10-03T04:30:00Z',
+      envelope: { suggestions: [{ label: 'Add a sketch', send: 'Add a sketch' }, { label: "What's due?", send: "What's due?" }] },
+    }]);
+    const body = await (await GET(req(), { params: { id: ID } })).json();
+    expect(body.messages[0].envelope.suggestions.map((s: { label: string }) => s.label)).toEqual(["What's due?"]);
   });
 
   it('answers 404 for an id that is not a uuid, without touching the store (Ruling 26)', async () => {

@@ -66,17 +66,17 @@ describe('istDateOf', () => {
 
 describe('loadBriefFacts', () => {
   it('lists only the reminders due today (Ruling 24)', async () => {
-    const facts = await loadBriefFacts(db(), 's1', NOW, { sketchbook: true, attendance: true });
+    const facts = await loadBriefFacts(db(), 's1', NOW, { sketchbook: true, attendance: true, tests: true, questionBank: true, inspiration: true });
     expect(facts.remindersToday).toEqual(['bring the sketchbook']);
   });
 
   it('has a sketchbook line while the sketchbook is on', async () => {
-    const facts = await loadBriefFacts(db(), 's1', NOW, { sketchbook: true, attendance: true });
+    const facts = await loadBriefFacts(db(), 's1', NOW, { sketchbook: true, attendance: true, tests: true, questionBank: true, inspiration: true });
     expect(facts.sketchbookLine).toBe('2 of 3 days this week.');
   });
 
   it('never reads the sketchbook, and has no line, while it is off (Ruling 25)', async () => {
-    const facts = await loadBriefFacts(db(), 's1', NOW, { sketchbook: false, attendance: true });
+    const facts = await loadBriefFacts(db(), 's1', NOW, { sketchbook: false, attendance: true, tests: true, questionBank: true, inspiration: true });
     expect(facts.sketchbookLine).toBeNull();
     expect(mocks.loadStudentRhythm).not.toHaveBeenCalled();
   });

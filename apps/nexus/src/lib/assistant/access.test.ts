@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '@/lib/api-errors';
 import { resolveFlags } from '@/lib/feature-flags';
-import { assertAssistantAccess, readAssistantGate, withAssistantPilot } from './access';
+import { assertAssistantAccess, featuresOf, readAssistantGate, withAssistantPilot } from './access';
 
 function settingsDb(rows: Record<string, unknown>) {
   return {
@@ -22,21 +22,21 @@ const student = { id: 'u1', user_type: 'student' };
 describe('readAssistantGate', () => {
   it('is off with no settings rows at all', async () => {
     const gate = await readAssistantGate(settingsDb({}));
-    expect(gate).toEqual({ enabled: false, pilot: [], features: { sketchbook: false, attendance: false } });
+    expect(gate).toEqual({ enabled: false, pilot: [], features: { sketchbook: false, attendance: false, tests: false, questionBank: false, inspiration: false } });
   });
 
   it('reads the flag and the allowlist', async () => {
     const gate = await readAssistantGate(
       settingsDb({ feature_flags: { 'student.assistant-chat': true }, assistant_pilot_user_ids: ['u1', 'u2'] }),
     );
-    expect(gate).toEqual({ enabled: true, pilot: ['u1', 'u2'], features: { sketchbook: false, attendance: false } });
+    expect(gate).toEqual({ enabled: true, pilot: ['u1', 'u2'], features: { sketchbook: false, attendance: false, tests: false, questionBank: false, inspiration: false } });
   });
 
   it('reads the sketchbook and attendance flags in the same read (Ruling 25)', async () => {
     const gate = await readAssistantGate(
       settingsDb({ feature_flags: { 'student.assistant-chat': true, 'student.sketchbook': true, 'student.attendance': false } }),
     );
-    expect(gate.features).toEqual({ sketchbook: true, attendance: false });
+    expect(gate.features).toEqual({ sketchbook: true, attendance: false, tests: false, questionBank: false, inspiration: false });
   });
 
   it('ignores a malformed allowlist instead of trusting it', async () => {
@@ -64,12 +64,12 @@ describe('assertAssistantAccess', () => {
 
   it('passes a student when the flag is on and the list is empty, with the features', async () => {
     const db = settingsDb({ feature_flags: { 'student.assistant-chat': true, 'student.attendance': true } });
-    await expect(assertAssistantAccess(db, student)).resolves.toEqual({ sketchbook: false, attendance: true });
+    await expect(assertAssistantAccess(db, student)).resolves.toEqual({ sketchbook: false, attendance: true, tests: false, questionBank: false, inspiration: false });
   });
 
   it('passes a listed student', async () => {
     const db = settingsDb({ feature_flags: { 'student.assistant-chat': true }, assistant_pilot_user_ids: ['u1'] });
-    await expect(assertAssistantAccess(db, student)).resolves.toEqual({ sketchbook: false, attendance: false });
+    await expect(assertAssistantAccess(db, student)).resolves.toEqual({ sketchbook: false, attendance: false, tests: false, questionBank: false, inspiration: false });
   });
 
   it('throws ApiError, not a bare Error', async () => {
@@ -103,5 +103,17 @@ describe('withAssistantPilot (the per-user flag payload, Ruling 22)', () => {
 
   it('never turns the flag on when it is off', () => {
     expect(withAssistantPilot(resolveFlags({}), 'u1', ['u1'])['student.assistant-chat']).toBe(false);
+  });
+});
+
+describe('featuresOf (M2 switches)', () => {
+  it('reads tests, question bank and inspiration from the flag map', () => {
+    const flags = resolveFlags({ 'student.tests': true, 'student.question-bank': false, 'student.inspiration': true });
+    expect(featuresOf(flags)).toMatchObject({ tests: true, questionBank: false, inspiration: true });
+  });
+
+  it('fails closed on all five when the settings read fails', async () => {
+    const broken = { from: () => ({ select: () => ({ in: async () => ({ data: null, error: { message: 'down' } }) }) }) };
+    expect((await readAssistantGate(broken)).features).toEqual({ sketchbook: false, attendance: false, tests: false, questionBank: false, inspiration: false });
   });
 });

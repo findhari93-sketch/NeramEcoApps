@@ -27,7 +27,7 @@ const reminderTool: ActionToolDef<{ due_on: string; text: string }> = {
 const student: AssistantCaller = { id: 'u1', name: 'Priya', user_type: 'student', staff_role: null, can_teach: null, impersonating: false };
 
 function ctxFor(db: ReturnType<typeof fakeDb>, caller = student, now = new Date('2026-10-03T10:00:00Z')): ToolContext {
-  return { caller, channel: 'nexus', mode: 'general', supabase: db, classroomId: 'c1', threadId: null, now, baseUrl: 'https://nexus.test', features: { sketchbook: true, attendance: true } };
+  return { caller, channel: 'nexus', mode: 'general', supabase: db, classroomId: 'c1', threadId: null, now, baseUrl: 'https://nexus.test', features: { sketchbook: true, attendance: true, tests: true, questionBank: true, inspiration: true } };
 }
 
 beforeEach(() => {
@@ -156,7 +156,7 @@ describe('confirmAction', () => {
     registerTools([sketchTool as unknown as ActionToolDef]);
     const db = fakeDb({});
     const p = await proposeAction(ctxFor(db), { kind: 'add_sketch', args: {}, summary: 's', fields: [] });
-    const off = { ...ctxFor(db), features: { sketchbook: false, attendance: true } };
+    const off = { ...ctxFor(db), features: { sketchbook: false, attendance: true, tests: true, questionBank: true, inspiration: true } };
     expect(await confirmAction(off, { id: p.id, token: p.confirmToken })).toMatchObject({ ok: false, status: 400 });
     expect(executed).toHaveLength(0);
     expect(db.rows('nexus_assistant_actions')[0].status).toBe('failed');

@@ -25,7 +25,7 @@ const post = (body: unknown) => new NextRequest('http://localhost/api/assistant/
 const del = () => new NextRequest('http://localhost/api/assistant/actions/a1', { method: 'DELETE', headers: { Authorization: 'Bearer t' } });
 
 beforeEach(() => {
-  mocks.resolveAssistantCaller.mockReset().mockResolvedValue({ caller, supabase: {}, features: { sketchbook: true, attendance: true } });
+  mocks.resolveAssistantCaller.mockReset().mockResolvedValue({ caller, supabase: {}, features: { sketchbook: true, attendance: true, tests: true, questionBank: true, inspiration: true } });
   mocks.confirmAction.mockReset();
   mocks.cancelAction.mockReset();
   mocks.appendMessage.mockReset().mockResolvedValue({ inserted: true, row: null });
