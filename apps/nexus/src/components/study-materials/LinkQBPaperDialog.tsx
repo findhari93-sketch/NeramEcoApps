@@ -40,7 +40,7 @@ import type { NexusQBOriginalPaper } from '@neram/database';
 
 const EXAM_LABELS: Record<string, string> = {
   NATA: 'NATA',
-  JEE_PAPER_2: 'JEE Paper 2',
+  JEE_PAPER_2: 'JEE Paper 2A',
   JEE_PAPER_2B: 'JEE Paper 2B',
 };
 

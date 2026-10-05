@@ -140,7 +140,22 @@ The resource-specific permissions in the manifest are exactly what the app uses:
 | `ChannelMeetingParticipant.Read.Group` | The same, for channel meetings |
 | `ChannelMeetingNotification.Send.Group` | The same, for channel meetings |
 | `MeetingStage.Write.Chat` (delegated) | The teacher's **Share results** button, which puts the class totals on the meeting screen |
-| `OnlineMeeting.ReadBasic.Chat` (delegated) | The meeting's title at the top of the teacher's console, for a meeting that is not on the Nexus timetable (from version 1.4.0) |
+| `OnlineMeeting.ReadBasic.Chat` | The meeting's title at the top of the teacher's console, for a meeting that is not on the Nexus timetable (from version 1.4.0; an Application permission, which 1.4.0 wrongly declared as Delegated, fixed in 1.4.1) |
+
+**"Permissions needed. Ask your IT admin to add Neram Assistant"** in Teams means the
+app is in a meeting without its permissions granted. Nexus adds the app to each class
+meeting with the manifest's permissions as its consent set, and upgrades an install
+that went in without them, so this clears on its own near class time once the
+current version is uploaded. If it still shows, check the tenant's chat consent
+setting (PowerShell, as an admin):
+
+```powershell
+Connect-MgGraph -Scopes TeamworkAppSettings.ReadWrite.All,Policy.ReadWrite.Authorization,Policy.ReadWrite.PermissionGrant
+Get-MgBetaChatRscConfiguration          # ManagedByMicrosoft (default) or EnabledForAllApps is fine
+Set-MgBetaChatRscConfiguration -State EnabledForAllApps   # only if it says DisabledForAllApps
+```
+
+Entra API permissions do not cover these: they are granted per meeting, in Teams.
 
 ### C. Publish version 1.1.0
 

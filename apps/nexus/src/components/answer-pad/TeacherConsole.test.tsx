@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PadClientError } from '@/lib/pad/client/pad-fetch';
 import type { PadHost } from '@/lib/pad/client/pad-host';
+import { __resetTextScale } from '@/lib/pad/client/text-scale';
 import type { HistoryEntry, ParticipationRow, TeacherPrompt, TeacherSnapshot, WaitingStudent } from '@/lib/pad/client/types';
 import TeacherConsole from './TeacherConsole';
 
@@ -52,6 +53,11 @@ function pastePicture(): void {
 }
 
 const openMenu = () => fireEvent.click(screen.getByRole('button', { name: 'Console menu' }));
+/** The People sheet, from the class strip under the title. */
+const openPeople = async () => {
+  fireEvent.click(await screen.findByRole('button', { name: /See who$/ }));
+  return screen.findByRole('dialog', { name: 'Who is here' });
+};
 const openMore = () => fireEvent.click(screen.getByRole('button', { name: /^More: question text and option texts/ }));
 
 const host: PadHost = {
@@ -165,6 +171,7 @@ const NO_DASHES = /[–—]|--/;
 
 beforeEach(() => {
   localStorage.clear();
+  __resetTextScale();
   mocks.snapshot = null;
   mocks.padUpload.mockReset().mockResolvedValue({ url: PICTURE });
   handlers = { '/api/pad/sessions': started };
@@ -184,7 +191,7 @@ describe('TeacherConsole', () => {
 
     const ask = await screen.findByRole('button', { name: 'Ask question 1' });
     expect(bodiesFor('/api/pad/sessions')).toEqual([{ meeting: host.meeting }]);
-    expect(screen.getByRole('button', { name: '25 here. Class details' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: '30 in class, 30 expected, meeting ?, 0 with pad. See who' })).toBeTruthy();
     expect(screen.getByLabelText('Room code 4 8 2 9 1 3')).toBeTruthy();
     expect(screen.getByRole('heading', { level: 1, name: 'NATA Evening Batch' })).toBeTruthy();
 
@@ -272,16 +279,22 @@ describe('TeacherConsole', () => {
 
     // Out of the 22 who joined, not the class list of 30.
     expect(await screen.findByLabelText('12 of 22 answered')).toBeTruthy();
-    expect(screen.getByRole('heading', { name: 'Waiting on 10' })).toBeTruthy();
-    expect(screen.getByText("I can't see the question: screen froze")).toBeTruthy();
+    // The names are one tap away, not on the console.
+    expect(screen.queryByText('Dev')).toBeNull();
+    expect(screen.getByText('3 students gave a reason. Review them in See who.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'See who: 10 not answered' }));
+    const sheet = await screen.findByRole('dialog', { name: 'Who is here' });
+    expect(within(sheet).getByRole('tab', { name: 'Not answered 10', selected: true })).toBeTruthy();
+    expect(within(sheet).getByText("Said: I can't see the question, screen froze")).toBeTruthy();
+    expect(within(sheet).getByText('Dev')).toBeTruthy();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Accept all 3 reasons' }));
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Accept all 3 reasons' }));
     await waitFor(() =>
       expect(bodiesFor('/api/pad/prompts/p1/excuse')).toEqual([{ studentIds: ['id-Asha', 'id-Bala', 'id-Chitra'], approve: true }]),
     );
 
-    await waitFor(() => expect((screen.getByRole('button', { name: 'Nudge 7' }) as HTMLButtonElement).disabled).toBe(false));
-    fireEvent.click(screen.getByRole('button', { name: 'Nudge 7' }));
+    await waitFor(() => expect((within(sheet).getByRole('button', { name: 'Nudge 7' }) as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Nudge 7' }));
     expect(await screen.findByText('Nudged 4 on their pad and 3 by Teams chat.')).toBeTruthy();
     const again = await screen.findByRole('button', { name: /^Nudge again in \d+s$/ });
     expect((again as HTMLButtonElement).disabled).toBe(true);
@@ -292,13 +305,14 @@ describe('TeacherConsole', () => {
     mocks.snapshot = snap({ waiting: [waitingRow('Asha', { reason: 'need_time' }), waitingRow('Bala')] });
     handlers['/api/pad/prompts/p1/excuse'] = () => ({ changed: true, count: 1 });
     render(<TeacherConsole host={host} />);
+    const sheet = await openPeople();
 
-    fireEvent.click(await screen.findByRole('button', { name: "Turn down Asha's reason" }));
+    fireEvent.click(within(sheet).getByRole('button', { name: "Turn down Asha's reason" }));
     await waitFor(() => expect(bodiesFor('/api/pad/prompts/p1/excuse')).toEqual([{ studentIds: ['id-Asha'], approve: false }]));
 
-    fireEvent.click(screen.getAllByRole('button', { name: 'Hide names' })[0]);
-    await waitFor(() => expect(screen.queryByText('Asha')).toBeNull());
-    expect(screen.getByText('1 gave a reason, 1 has not answered. Names are hidden.')).toBeTruthy();
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Hide names' }));
+    await waitFor(() => expect(within(sheet).queryByText('Asha')).toBeNull());
+    expect(within(sheet).getByText('2 students. Names are hidden.')).toBeTruthy();
   });
 
   it('waits out the minute when another nudge went out a moment ago', async () => {
@@ -307,8 +321,9 @@ describe('TeacherConsole', () => {
       throw new PadClientError(429, 'RATE_LIMITED', 'RATE_LIMITED', { retry_after_seconds: 42 });
     };
     render(<TeacherConsole host={host} />);
+    const sheet = await openPeople();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Nudge 2' }));
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Nudge 2' }));
     expect(await screen.findByText('You nudged a moment ago.')).toBeTruthy();
     expect(await screen.findByRole('button', { name: /^Nudge again in (41|42)s$/ })).toBeTruthy();
   });
@@ -454,21 +469,32 @@ describe('TeacherConsole', () => {
     expect(mocks.padFetch.mock.calls.some(([, path]) => String(path).includes('participation'))).toBe(false);
   });
 
-  it('reminds students without the pad when the bot is in the meeting, and says how many it reached', async () => {
-    mocks.snapshot = snap({ session: { ...snap().session, bot_in_meeting: true } });
+  it('reminds students in the meeting without the pad when the bot is there, and says how many it reached', async () => {
+    mocks.snapshot = snap({
+      session: { ...snap().session, bot_in_meeting: true },
+      people: { joined: [{ student_id: 'id-Zed', name: 'Zed', source: 'meeting' }], not_joined: [] },
+      waiting: [waitingRow('Zed', { pad_open: false })],
+    });
     handlers['/api/pad/sessions/s1/resend'] = () => ({ recipients: 2, sent: 2, partial: 0, failed: 0, notConnected: 2, skipped: null });
     render(<TeacherConsole host={host} />);
+    const sheet = await openPeople();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Remind students without the pad' }));
-    expect(await screen.findByText('Reminder sent to 2 students.')).toBeTruthy();
+    expect(within(sheet).getByRole('tab', { name: 'No pad 1', selected: true })).toBeTruthy();
+    expect(within(sheet).getByText('In the meeting, pad not open')).toBeTruthy();
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Remind them to open the pad' }));
+    expect(await within(sheet).findByText('Reminder sent to 2 students.')).toBeTruthy();
     expect(bodiesFor('/api/pad/sessions/s1/resend')).toEqual([undefined]);
   });
 
   it('offers no reminder without the meeting bot', async () => {
-    mocks.snapshot = snap();
+    mocks.snapshot = snap({
+      people: { joined: [{ student_id: 'id-Zed', name: 'Zed', source: 'meeting' }], not_joined: [] },
+      waiting: [waitingRow('Zed', { pad_open: false })],
+    });
     render(<TeacherConsole host={host} />);
-    expect(await screen.findByLabelText('20 of 30 answered')).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Remind students without the pad' })).toBeNull();
+    const sheet = await openPeople();
+    expect(within(sheet).getByText('Zed')).toBeTruthy();
+    expect(within(sheet).queryByRole('button', { name: 'Remind them to open the pad' })).toBeNull();
   });
 
   it('keeps Reveal off until a key is chosen, then reveals', async () => {
@@ -628,11 +654,15 @@ describe('TeacherConsole', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Show names' }));
     expect(await screen.findByText('Asha')).toBeTruthy();
-    expect(screen.getByText('Joined mid-question')).toBeTruthy();
+    expect(screen.getByText('answered A · Joined mid-question')).toBeTruthy();
     expect(screen.getByText("Said: I can't see the question")).toBeTruthy();
     for (const heading of ['Correct (1)', 'Incorrect (1)', 'No answer (1)', 'Not in the pad (1)']) {
-      expect(screen.getByText(heading)).toBeTruthy();
+      expect(screen.getByRole('button', { name: heading })).toBeTruthy();
     }
+    // Not in the pad starts folded: the longest list, and the least useful in class.
+    expect(screen.queryByText('Dev')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Not in the pad (1)' }));
+    expect(screen.getByText('Dev')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Ask question 2' })).toBeTruthy();
     expect(document.body.textContent).not.toMatch(NO_DASHES);
   });
@@ -787,23 +817,81 @@ describe('TeacherConsole', () => {
     expect(bodiesFor('/api/pad/sessions')).toEqual([{ meeting: host.meeting, meetingTitle: 'JEE preparation' }]);
   });
 
-  it('counts everyone here: in the meeting or with the pad open, and says which list is on', async () => {
+  it('shows the class on one strip: in class, expected, in the meeting, with the pad, never counting the teacher', async () => {
     mocks.snapshot = snap({
       prompt: null,
       counts: null,
       session: { ...snap().session, bot_in_meeting: true },
-      readiness: { enrolled: 39, joined: 18, opened: 12, connected: 9, in_meeting: 15 },
-      people: { joined: [], not_joined: [{ student_id: 'id-Zara', name: 'Zara' }] },
+      readiness: { enrolled: 39, joined: 3, opened: 2, connected: 2, in_meeting: 2 },
+      people: {
+        joined: [
+          { student_id: 'id-Asha', name: 'Asha', source: 'both' },
+          { student_id: 'id-Bala', name: 'Bala', source: 'pad' },
+          { student_id: 'id-Zed', name: 'Zed', source: 'meeting' },
+        ],
+        not_joined: [
+          { student_id: 'id-Gita', name: 'Gita' },
+          { student_id: 'id-Hari', name: 'Hari' },
+        ],
+        away: [{ student_id: 'id-Gita', name: 'Gita', reason_code: 'clash', label: 'Away until 12 Oct' }],
+      },
     });
     render(<TeacherConsole host={host} />);
 
-    fireEvent.click(await screen.findByRole('button', { name: '18 here. Class details' }));
-    const sheet = await screen.findByRole('dialog', { name: 'Class details' });
-    expect(within(sheet).getByText('18 here')).toBeTruthy();
-    expect(within(sheet).getByText('12 opened the pad, 9 with it open now.')).toBeTruthy();
-    expect(within(sheet).getByText('Meeting list on: everyone in the meeting counts')).toBeTruthy();
-    expect(within(sheet).getByText('Zara')).toBeTruthy();
+    const strip = await screen.findByRole('button', { name: '39 in class, 38 expected, 2 in meeting, 2 with pad. See who' });
+    expect(screen.getByLabelText('Room code 4 8 2 9 1 3')).toBeTruthy();
+    fireEvent.click(strip);
+    const sheet = await screen.findByRole('dialog', { name: 'Who is here' });
+    expect(within(sheet).getByText('Teachers are not counted. Expected is the class list less students who told us they are away today.')).toBeTruthy();
+    expect(within(sheet).getByRole('tab', { name: 'No pad 1', selected: true })).toBeTruthy();
+    fireEvent.click(within(sheet).getByRole('tab', { name: 'Away 1' }));
+    expect(within(sheet).getByText('Away until 12 Oct')).toBeTruthy();
+    fireEvent.click(within(sheet).getByRole('tab', { name: 'Pad open 2' }));
+    expect(within(sheet).getByText('Asha')).toBeTruthy();
     expect(document.body.textContent).not.toMatch(NO_DASHES);
+  });
+
+  it('says the meeting count is unknown, never 0, when Teams is not sharing the meeting list', async () => {
+    mocks.snapshot = snap({ prompt: null, counts: null, readiness: { enrolled: 39, joined: 0, opened: 0, connected: 0, in_meeting: 0 } });
+    render(<TeacherConsole host={host} />);
+    expect(await screen.findByRole('button', { name: '39 in class, 39 expected, meeting ?, 0 with pad. See who' })).toBeTruthy();
+    openMenu();
+    fireEvent.click(screen.getByRole('menuitem', { name: /Class details/ }));
+    const details = await screen.findByRole('dialog', { name: 'Class details' });
+    expect(within(details).getByText(/Meeting list off: Teams is not sharing who is in the meeting yet/)).toBeTruthy();
+  });
+
+  it("marks a student who can't use the pad, then undoes it", async () => {
+    mocks.snapshot = snap({
+      session: { ...snap().session, bot_in_meeting: true },
+      people: { joined: [{ student_id: 'id-Zed', name: 'Zed', source: 'meeting' }], not_joined: [] },
+      waiting: [waitingRow('Zed', { pad_open: false })],
+    });
+    handlers['/api/pad/sessions/s1/cant-use-pad'] = () => ({ on: true, questions: 1 });
+    const first = render(<TeacherConsole host={host} />);
+    let sheet = await openPeople();
+
+    fireEvent.click(within(sheet).getByRole('button', { name: "Zed can't use the pad" }));
+    await waitFor(() => expect(bodiesFor('/api/pad/sessions/s1/cant-use-pad')).toEqual([{ studentId: 'id-Zed', on: true }]));
+    first.unmount();
+
+    // The next snapshot has the mark: Zed is excused, with Undo.
+    mocks.snapshot = snap({
+      session: { ...snap().session, bot_in_meeting: true },
+      people: { joined: [{ student_id: 'id-Zed', name: 'Zed', source: 'meeting' }], not_joined: [], cant_use_pad: [{ student_id: 'id-Zed', name: 'Zed' }] },
+      waiting: [waitingRow('Zed', { pad_open: false, reason: 'pad_problem', approval: 'approved' })],
+    });
+    render(<TeacherConsole host={host} />);
+    sheet = await openPeople();
+    fireEvent.click(within(sheet).getByRole('tab', { name: 'Excused 1' }));
+    expect(within(sheet).getByText("Can't use the pad")).toBeTruthy();
+    fireEvent.click(within(sheet).getByRole('button', { name: 'Undo for Zed' }));
+    await waitFor(() =>
+      expect(bodiesFor('/api/pad/sessions/s1/cant-use-pad')).toEqual([
+        { studentId: 'id-Zed', on: true },
+        { studentId: 'id-Zed', on: false },
+      ]),
+    );
   });
 
   it('changes the text size from the menu and keeps it on this device', async () => {
@@ -812,12 +900,16 @@ describe('TeacherConsole', () => {
     await screen.findByRole('button', { name: 'Ask question 1' });
 
     openMenu();
+    // A teacher starts at the smaller size, which is the smallest there is.
+    expect(screen.getByText('Default')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Smaller text' }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole('button', { name: 'Larger text' }));
-    expect(screen.getByText('Larger')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Larger text' }));
+    expect(screen.getByText('Larger still')).toBeTruthy();
     expect(localStorage.getItem('pad-text-scale')).toBe('1.15');
     fireEvent.click(screen.getByRole('button', { name: 'Smaller text' }));
     fireEvent.click(screen.getByRole('button', { name: 'Smaller text' }));
-    expect(screen.getByText('Smaller')).toBeTruthy();
+    expect(screen.getByText('Default')).toBeTruthy();
   });
 
   it('keeps the Ask bar in every state but the end of the round', async () => {

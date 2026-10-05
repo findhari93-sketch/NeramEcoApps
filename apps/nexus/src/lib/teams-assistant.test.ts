@@ -222,10 +222,12 @@ describe('personalConversationFrom', () => {
 describe('what the Assistant says back', () => {
   // A student typing "sir my mark is wrong" at a machine and getting silence is
   // worse than the personal chat this replaced.
-  it('admits it cannot read replies and names what does work', () => {
-    expect(ASSISTANT_REPLY).toContain('cannot read replies');
-    expect(ASSISTANT_REPLY).toContain('Something looks wrong');
-    expect(ASSISTANT_REPLY).toContain('teacher');
+  it('greets the student, says what it is for, admits it cannot read messages and names what does work', () => {
+    expect(ASSISTANT_REPLY).toMatch(/^Hi, I am Neram Assistant\./);
+    expect(ASSISTANT_REPLY).toContain('class reminders, results and the Answer Pad');
+    expect(ASSISTANT_REPLY).toContain('cannot read messages');
+    expect(ASSISTANT_REPLY).toContain('press "Message" on their note');
+    expect(ASSISTANT_REPLY).toContain('open Nexus and tap Help');
   });
 
   it('uses no em dash, because a student reads it', () => {

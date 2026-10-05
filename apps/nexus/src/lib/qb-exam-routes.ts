@@ -40,7 +40,7 @@ export const QB_EXAM_SLUGS: Record<QBExamType, string> = {
  * `Record<QBExamType, ...>` type fails the build if an exam is added without one.
  */
 export const QB_EXAM_LABELS: Record<QBExamType, string> = {
-  JEE_PAPER_2: 'JEE Paper 2',
+  JEE_PAPER_2: 'JEE Paper 2A (B.Arch)',
   JEE_PAPER_2B: 'JEE Paper 2B (B.Planning)',
   NATA: 'NATA',
 };

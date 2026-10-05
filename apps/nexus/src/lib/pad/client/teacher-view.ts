@@ -349,3 +349,160 @@ export function consoleStatus(roundNo: number | null | undefined, view: ConsoleV
       return round;
   }
 }
+
+// -----------------------------------------------------------------------------
+// The class at a glance: the strip under the title and the People sheet
+// -----------------------------------------------------------------------------
+
+/**
+ * Where each student on the class list is, right now.
+ *
+ * answered: answered the question on screen. waiting: here with the pad, no
+ * answer yet (or, with no question, simply "pad open"). no_pad: in the Teams
+ * meeting but has not opened the pad. excused: the teacher marked "Can't use the
+ * pad", or accepted the reason they gave. not_here: on the list, not here.
+ * away: told us in advance they are away today.
+ */
+export type FunnelGroup = 'answered' | 'waiting' | 'no_pad' | 'excused' | 'not_here' | 'away';
+
+export const FUNNEL_GROUPS: readonly FunnelGroup[] = ['answered', 'waiting', 'no_pad', 'excused', 'not_here', 'away'];
+
+export interface FunnelPerson {
+  student_id: string;
+  name: string | null;
+  group: FunnelGroup;
+  /** Waiting or excused: the reason on record, and the teacher's decision on it. */
+  reason?: WaitingStudent['reason'];
+  note?: string | null;
+  approval?: WaitingStudent['approval'];
+  /** Excused by the teacher's "Can't use the pad" mark (Undo removes the mark). */
+  marked?: boolean;
+  /** Away: "Away until 12 Oct". */
+  awayLabel?: string;
+}
+
+export interface ClassFunnel {
+  /** On the class list (never staff). */
+  enrolled: number;
+  /** On the class list, declared away today, and not here anyway. */
+  away: number;
+  /** The class list less the away: who the teacher can expect today. */
+  expected: number;
+  /** In the Teams meeting this round, or null when Teams is not sharing who is (no meeting list). */
+  inMeeting: number | null;
+  /** Opened the pad this round (not counting students marked "Can't use the pad"). */
+  withPad: number;
+  /** A question is on screen and not yet revealed: answered and waiting mean something. */
+  asking: boolean;
+  answered: number;
+  groups: Record<FunnelGroup, FunnelPerson[]>;
+  meetingList: boolean;
+}
+
+/**
+ * One reading of the snapshot for the strip and the sheet, so the numbers on
+ * the strip are always the lengths of the sheet's lists.
+ */
+export function classFunnel(snapshot: Pick<TeacherSnapshot, 'readiness' | 'session' | 'people' | 'waiting' | 'prompt'>): ClassFunnel {
+  const meetingList = hereSummary(snapshot).meetingList;
+  const people = snapshot.people;
+  const groups: Record<FunnelGroup, FunnelPerson[]> = { answered: [], waiting: [], no_pad: [], excused: [], not_here: [], away: [] };
+  const marked = new Set((people?.cant_use_pad ?? []).map((person) => person.student_id));
+  const awayById = new Map((people?.away ?? []).map((person) => [person.student_id, person]));
+  const waitingById = new Map((snapshot.waiting ?? []).map((row) => [row.student_id, row]));
+  const asking = !!snapshot.prompt && snapshot.prompt.state !== 'revealed';
+
+  // An older server sends who is waiting but no people lists: those are here, with the pad.
+  const joined = people?.joined ?? (snapshot.waiting ?? []).map((row) => ({ student_id: row.student_id, name: row.name, source: 'pad' as const }));
+  let inMeeting = 0;
+  let withPad = 0;
+  for (const person of joined) {
+    const source = person.source ?? 'pad';
+    if (source !== 'pad') inMeeting += 1;
+    const base = { student_id: person.student_id, name: person.name };
+    if (marked.has(person.student_id)) {
+      groups.excused.push({ ...base, group: 'excused', marked: true });
+      continue;
+    }
+    if (source !== 'meeting') withPad += 1;
+    const waiting = waitingById.get(person.student_id);
+    if (asking && waiting?.approval === 'approved') {
+      groups.excused.push({ ...base, group: 'excused', reason: waiting.reason, note: waiting.note, approval: waiting.approval });
+    } else if (asking && !waiting) {
+      groups.answered.push({ ...base, group: 'answered' });
+    } else if (source === 'meeting') {
+      groups.no_pad.push({ ...base, group: 'no_pad', reason: waiting?.reason ?? null, note: waiting?.note ?? null, approval: waiting?.approval ?? null });
+    } else {
+      groups.waiting.push({ ...base, group: 'waiting', reason: waiting?.reason ?? null, note: waiting?.note ?? null, approval: waiting?.approval ?? null });
+    }
+  }
+  for (const person of people?.not_joined ?? []) {
+    const base = { student_id: person.student_id, name: person.name };
+    const away = awayById.get(person.student_id);
+    if (marked.has(person.student_id)) groups.excused.push({ ...base, group: 'excused', marked: true });
+    else if (away) groups.away.push({ ...base, group: 'away', awayLabel: away.label });
+    else groups.not_here.push({ ...base, group: 'not_here' });
+  }
+
+  // Reasons waiting for a decision first, as the Waiting list always ordered them; then by name.
+  const order = (a: FunnelPerson, b: FunnelPerson) =>
+    Number(!!b.reason && !b.approval) - Number(!!a.reason && !a.approval) || byStudentName(a, b);
+  for (const group of FUNNEL_GROUPS) groups[group].sort(order);
+
+  const enrolled = snapshot.readiness.enrolled;
+  return {
+    enrolled,
+    away: groups.away.length,
+    expected: Math.max(0, enrolled - groups.away.length),
+    inMeeting: meetingList ? inMeeting : null,
+    withPad,
+    asking,
+    answered: groups.answered.length,
+    groups,
+    meetingList,
+  };
+}
+
+/** The strip's words, one item per number so a narrow panel wraps between them, never inside one. */
+export function funnelItems(funnel: ClassFunnel): string[] {
+  const items: string[] = [];
+  if (!funnel.asking) items.push(`${funnel.enrolled} in class`);
+  items.push(`${funnel.expected} expected`);
+  items.push(funnel.inMeeting === null ? 'meeting ?' : `${funnel.inMeeting} in meeting`);
+  items.push(`${funnel.withPad} with pad`);
+  if (funnel.asking) items.push(`${funnel.answered} answered`);
+  return items;
+}
+
+/**
+ * The strip's four numbers, left to right as the class narrows: the class (or,
+ * with a question on screen, who is expected), the meeting, the pad, answered.
+ * `part` names the bar segment each number matches, for its colour dot.
+ */
+export function funnelStats(funnel: ClassFunnel): Array<{ value: string; label: string; part: 'answered' | 'waiting' | 'no_pad' | null }> {
+  const stats: Array<{ value: string; label: string; part: 'answered' | 'waiting' | 'no_pad' | null }> = [];
+  if (!funnel.asking) stats.push({ value: String(funnel.enrolled), label: 'in class', part: null });
+  stats.push({ value: String(funnel.expected), label: 'expected', part: null });
+  stats.push({ value: funnel.inMeeting === null ? '?' : String(funnel.inMeeting), label: 'in meeting', part: 'no_pad' });
+  stats.push({ value: String(funnel.withPad), label: 'with pad', part: 'waiting' });
+  if (funnel.asking) stats.push({ value: String(funnel.answered), label: 'answered', part: 'answered' });
+  return stats;
+}
+
+/** The People sheet's chip for each group, worded for the moment (no question: "Pad open"). */
+export function funnelGroupLabel(group: FunnelGroup, asking: boolean): string {
+  switch (group) {
+    case 'answered':
+      return 'Answered';
+    case 'waiting':
+      return asking ? 'Not answered' : 'Pad open';
+    case 'no_pad':
+      return 'No pad';
+    case 'excused':
+      return 'Excused';
+    case 'not_here':
+      return 'Not here';
+    case 'away':
+      return 'Away';
+  }
+}

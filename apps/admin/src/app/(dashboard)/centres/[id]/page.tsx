@@ -308,7 +308,7 @@ export default function CentreEditPage() {
                   onChange={addPhoto}
                   upload={upload}
                   label="Add a photo"
-                  helperText="JPEG, PNG or WebP, at least 1000px wide. Use the original from the phone, not a WhatsApp copy."
+                  helperText="JPEG, PNG or WebP, at least 1000px wide. Use the original photo from the phone, not a screenshot or a WhatsApp copy. Black or white bars around a photo are cut off automatically."
                   maxSizeMB={15}
                   accept="image/jpeg,image/png,image/webp"
                 />

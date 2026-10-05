@@ -56,11 +56,11 @@ describe('derivePaperStats', () => {
 
   it('builds the label from exam, year, session and shift', () => {
     const stats = derivePaperStats(makePaper({ session: 'Session 1', shift: 'forenoon' }));
-    expect(stats.paperLabel).toBe('JEE Paper 2 2024 Session 1 (Forenoon)');
+    expect(stats.paperLabel).toBe('JEE Paper 2A (B.Arch) 2024 Session 1 (Forenoon)');
   });
 
   it('omits the variant parts a paper does not have', () => {
-    expect(derivePaperStats(makePaper()).paperLabel).toBe('JEE Paper 2 2024');
+    expect(derivePaperStats(makePaper()).paperLabel).toBe('JEE Paper 2A (B.Arch) 2024');
   });
 
   it('treats an empty paper as zero readiness rather than dividing by zero', () => {

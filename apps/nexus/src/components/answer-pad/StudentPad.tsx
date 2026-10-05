@@ -40,7 +40,7 @@ import LockRounded from '@mui/icons-material/LockRounded';
 import NotificationsActiveRounded from '@mui/icons-material/NotificationsActiveRounded';
 import TimerOffRounded from '@mui/icons-material/TimerOffRounded';
 import WifiOffRounded from '@mui/icons-material/WifiOffRounded';
-import { SKIP_REASON_LABELS, displayAnswer, displayKeys, promptTitle, scoreLabel } from '@/lib/pad/client/format';
+import { SKIP_REASON_LABELS, displayAnswer, displayKeys, promptTitle, reasonLabel, scoreLabel } from '@/lib/pad/client/format';
 import { PadClientError, padFetch } from '@/lib/pad/client/pad-fetch';
 import type { PadHost } from '@/lib/pad/client/pad-host';
 import { secondsLeft as secondsUntil, useServerNow } from '@/lib/pad/client/server-clock';
@@ -578,7 +578,7 @@ function CantAnswer({
 }) {
   const headingId = useId();
   const [editing, setEditing] = useState(false);
-  const [reason, setReason] = useState<SkipReason | null>(mySkip?.reason ?? null);
+  const [reason, setReason] = useState<SkipReason | null>(mySkip && mySkip.reason !== 'pad_problem' ? mySkip.reason : null);
   const [note, setNote] = useState(mySkip?.note ?? '');
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -596,8 +596,16 @@ function CantAnswer({
     }
   };
 
+  if (mySkip?.reason === 'pad_problem') {
+    return (
+      <Typography variant="body2" role="status">
+        Your teacher knows the pad is not working for you, so these questions will not count against you. If it works now, you can still answer above.
+      </Typography>
+    );
+  }
+
   if (mySkip && !editing) {
-    const said = `${SKIP_REASON_LABELS[mySkip.reason]}${mySkip.note ? `: ${mySkip.note}` : ''}`;
+    const said = `${reasonLabel(mySkip.reason)}${mySkip.note ? `: ${mySkip.note}` : ''}`;
     return (
       <Stack spacing={1}>
         <Typography variant="body2" role="status">

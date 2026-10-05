@@ -43,6 +43,8 @@ import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
 import ViewListOutlinedIcon from '@mui/icons-material/ViewListOutlined';
 import SmartDisplayOutlinedIcon from '@mui/icons-material/SmartDisplayOutlined';
 import SlideshowOutlinedIcon from '@mui/icons-material/SlideshowOutlined';
+import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthSWR } from '@/lib/nexus-swr';
 import StudyFileViewer from '@/components/study-materials/StudyFileViewer';
@@ -137,14 +139,18 @@ function StudyMaterialsBrowser() {
     };
   }, [search, token, getToken]);
 
-  // Restore the saved layout preference (shared with the teacher view).
+  // Restore the saved layout preference (shared with the teacher view). With
+  // nothing saved, a phone starts on the list: the two-column grid cuts every
+  // chapter title off at about 15 characters on a 393px screen (NXS-0131).
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(VIEW_STORAGE_KEY);
       if (saved === 'grid' || saved === 'list') setView(saved);
+      else if (window.matchMedia(theme.breakpoints.down('sm').replace(/^@media\s*/, '')).matches) setView('list');
     } catch {
       /* ignore */
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const changeView = (next: 'grid' | 'list' | null) => {
@@ -420,9 +426,9 @@ function StudyMaterialsBrowser() {
           size="small"
           onChange={(_, v) => changeView(v)}
           aria-label="View layout"
-          sx={{ '& .MuiToggleButton-root': { px: 1 } }}
+          sx={{ '& .MuiToggleButton-root': { minWidth: 44, minHeight: 44, px: 1.25 } }}
         >
-          <ToggleButton value="grid" aria-label="Grid view"><GridViewOutlinedIcon fontSize="small" /></ToggleButton>
+          <ToggleButton value="grid" aria-label="Covers view"><GridViewOutlinedIcon fontSize="small" /></ToggleButton>
           <ToggleButton value="list" aria-label="List view"><ViewListOutlinedIcon fontSize="small" /></ToggleButton>
         </ToggleButtonGroup>
       </Box>
@@ -475,17 +481,25 @@ function StudyMaterialsBrowser() {
     return (
       <Box>
         {header}
-        <Box
-          sx={{
-            display: 'grid',
-            gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(4, 1fr)' },
-            gap: 1.5,
-          }}
-        >
-          {Array.from({ length: 8 }).map((_, i) => (
-            <Skeleton key={i} variant="rounded" height={130} />
-          ))}
-        </Box>
+        {view === 'list' ? (
+          <Stack spacing={1}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} variant="rounded" height={96} />
+            ))}
+          </Stack>
+        ) : (
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)', md: 'repeat(4, 1fr)' },
+              gap: 1.5,
+            }}
+          >
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Skeleton key={i} variant="rounded" height={130} />
+            ))}
+          </Box>
+        )}
       </Box>
     );
   }
@@ -578,18 +592,101 @@ function StudyMaterialsBrowser() {
       </Stack>
     );
 
-  // ── Compact list view (folders then files, one row each) ──
+  // ── List view: one row per chapter, read like a book's contents page ──
+  //
+  // The phone layout (and the default there, see the restore effect). The grid
+  // gives each chapter half a 393px screen, so titles cut off after 15
+  // characters and a column of chips pushes the next row off screen. Here the
+  // title gets the full width and two lines, the chips collapse into one
+  // coloured status line and one grey details line, and every control is a
+  // 44px target.
   const rowSx = {
     display: 'flex',
     alignItems: 'center',
-    gap: 1.25,
-    p: 1,
+    gap: 1.5,
+    py: 1.25,
+    pl: 1.25,
+    pr: 0.5,
+    minHeight: 72,
     border: `1px solid ${theme.palette.divider}`,
     borderRadius: 2,
+    bgcolor: 'background.paper',
     cursor: 'pointer',
+    touchAction: 'manipulation',
     transition: 'background-color 150ms ease',
     '&:hover': { bgcolor: alpha(theme.palette.primary.main, 0.04) },
+    '&:focus-visible': { outline: `2px solid ${theme.palette.primary.main}`, outlineOffset: 2 },
+    '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
   } as const;
+
+  const activateOn = (fn: () => void) => (e: React.KeyboardEvent) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      fn();
+    }
+  };
+
+  /** Where the student is with a chapter, as one line instead of three chips. */
+  const statusLine = (file: NexusStudyFileDTO) => {
+    const { Icon, text, color } =
+      file.status === 'completed'
+        ? {
+            Icon: CheckCircleOutlineIcon,
+            text: file.best_score_pct != null ? `Completed · ${Math.round(file.best_score_pct)}%` : 'Completed',
+            color: 'success.main',
+          }
+        : file.status === 'studying'
+          ? { Icon: AutoStoriesOutlinedIcon, text: 'In progress', color: 'warning.dark' }
+          : { Icon: RadioButtonUncheckedIcon, text: 'Not started', color: 'text.secondary' };
+    return (
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color, mt: 0.25 }}>
+        <Icon sx={{ fontSize: '0.95rem' }} />
+        <Typography variant="caption" sx={{ fontWeight: 700, color: 'inherit', lineHeight: 1.4 }}>
+          {text}
+        </Typography>
+        {file.is_new && (
+          <Chip size="small" label="New" color="success" sx={{ height: 18, fontSize: '0.6rem', fontWeight: 700, ml: 0.5 }} />
+        )}
+      </Box>
+    );
+  };
+
+  /** What comes with a chapter: recordings, slides, comments and whether it downloads. */
+  const detailsLine = (file: NexusStudyFileDTO) => {
+    const langs = (file.video_languages || []).map((l) => l.label);
+    const parts: { key: string; icon: React.ReactNode; text: string }[] = [];
+    if (langs.length) parts.push({ key: 'video', icon: <SmartDisplayOutlinedIcon />, text: langs.join(', ') });
+    if (file.has_slides) parts.push({ key: 'slides', icon: <SlideshowOutlinedIcon />, text: 'Slides' });
+    if (file.comment_count) parts.push({ key: 'comments', icon: <ChatBubbleOutlineIcon />, text: String(file.comment_count) });
+    parts.push(
+      file.downloadable
+        ? { key: 'access', icon: <DownloadOutlinedIcon />, text: 'Download' }
+        : { key: 'access', icon: <LockOutlinedIcon />, text: 'View only' },
+    );
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          columnGap: 1.25,
+          rowGap: 0.25,
+          mt: 0.25,
+          color: 'text.secondary',
+          '& .MuiSvgIcon-root': { fontSize: '0.85rem' },
+        }}
+      >
+        {parts.map((p) => (
+          <Box key={p.key} sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.4 }}>
+            {p.icon}
+            <Typography variant="caption" sx={{ color: 'inherit', lineHeight: 1.4 }}>
+              {p.text}
+            </Typography>
+          </Box>
+        ))}
+      </Box>
+    );
+  };
 
   const listView = (
     <Stack spacing={1}>
@@ -599,19 +696,21 @@ function StudyMaterialsBrowser() {
           onClick={() => goToFolder(f.id)}
           role="button"
           tabIndex={0}
-          onKeyDown={(e) => { if (e.key === 'Enter') goToFolder(f.id); }}
-          sx={rowSx}
+          aria-label={`Open folder ${f.name}`}
+          onKeyDown={activateOn(() => goToFolder(f.id))}
+          sx={{ ...rowSx, pr: 1.25 }}
         >
-          <Box sx={{ width: 44, height: 44, borderRadius: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: alpha(theme.palette.primary.main, 0.1), flexShrink: 0 }}>
-            <FolderOutlinedIcon sx={{ color: 'primary.main' }} />
+          <Box sx={{ width: 52, height: 52, borderRadius: 1.5, display: 'flex', alignItems: 'center', justifyContent: 'center', bgcolor: alpha(theme.palette.primary.main, 0.1), flexShrink: 0 }}>
+            <FolderOutlinedIcon sx={{ color: 'primary.main', fontSize: 28 }} />
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: 700 }} noWrap>{f.name}</Typography>
+            <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', lineHeight: 1.35 }} noWrap>{f.name}</Typography>
             <Typography variant="caption" sx={{ color: 'text.secondary' }}>
               {f.item_count} {f.item_count === 1 ? 'item' : 'items'}
               {f.unread_count ? ` · ${f.unread_count} new` : ''}
             </Typography>
           </Box>
+          <ChevronRightIcon sx={{ color: 'text.secondary', flexShrink: 0 }} />
         </Box>
       ))}
 
@@ -621,45 +720,68 @@ function StudyMaterialsBrowser() {
           onClick={() => openFile(file)}
           role="button"
           tabIndex={0}
-          onKeyDown={(e) => { if (e.key === 'Enter') openFile(file); }}
+          aria-label={`Open ${file.title}`}
+          onKeyDown={activateOn(() => openFile(file))}
           sx={rowSx}
         >
-          <Box sx={{ width: 44, height: 44, flexShrink: 0, position: 'relative' }}>
-            <FileThumb kind={file.kind} src={thumbUrl(file.id)} sx={{ height: 44, mb: 0, borderRadius: 1.5 }} iconSize={22} />
+          {/* A page-shaped cover (A4 is about 1 : 1.41), so the chapter's own
+              first page reads at a glance instead of being cropped to a square. */}
+          <Box sx={{ width: 52, height: 72, flexShrink: 0, position: 'relative' }}>
+            <FileThumb
+              kind={file.kind}
+              src={thumbUrl(file.id)}
+              sx={{ height: 72, mb: 0, borderRadius: 1, border: `1px solid ${theme.palette.divider}` }}
+              iconSize={26}
+            />
             {file.is_unread && (
-              <Box sx={{ position: 'absolute', top: -2, right: -2, width: 9, height: 9, borderRadius: '50%', bgcolor: 'primary.main', border: `2px solid ${theme.palette.background.paper}` }} />
+              <Box sx={{ position: 'absolute', top: -3, right: -3, width: 10, height: 10, borderRadius: '50%', bgcolor: 'primary.main', border: `2px solid ${theme.palette.background.paper}` }} />
             )}
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="subtitle2" sx={{ fontWeight: file.is_unread ? 700 : 600 }} noWrap>{file.title}</Typography>
-            {fileStatusChips(file)}
-          </Box>
-          {/* Before the star, because watching is the thing a student came for. */}
-          {watchButton(file, { flexShrink: 0 })}
-          <Tooltip title={file.is_favorite ? 'Remove from starred' : 'Add to starred'}>
-            <IconButton
-              size="small"
-              onClick={(e) => toggleFavorite(file, e)}
-              aria-label={file.is_favorite ? 'Remove from starred' : 'Add to starred'}
-              sx={{ flexShrink: 0 }}
+            <Typography
+              sx={{
+                fontWeight: file.is_unread ? 700 : 600,
+                fontSize: '0.95rem',
+                lineHeight: 1.35,
+                display: '-webkit-box',
+                WebkitLineClamp: 2,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+                wordBreak: 'break-word',
+              }}
             >
-              {file.is_favorite
-                ? <StarIcon sx={{ fontSize: '1.05rem', color: '#f5b400' }} />
-                : <StarBorderIcon sx={{ fontSize: '1.05rem' }} />}
-            </IconButton>
-          </Tooltip>
-          {file.downloadable && (
-            <Tooltip title="Download">
+              {file.title}
+            </Typography>
+            {statusLine(file)}
+            {detailsLine(file)}
+          </Box>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+            {/* Above the star, because watching is the thing a student came for. */}
+            {watchButton(file, {})}
+            <Tooltip title={file.is_favorite ? 'Remove from starred' : 'Add to starred'}>
               <IconButton
-                size="small"
-                onClick={(e) => { e.stopPropagation(); window.open(contentUrl(file.id, true), '_blank'); }}
-                aria-label="Download"
-                sx={{ flexShrink: 0 }}
+                onClick={(e) => toggleFavorite(file, e)}
+                aria-label={file.is_favorite ? 'Remove from starred' : 'Add to starred'}
+                aria-pressed={!!file.is_favorite}
+                sx={{ width: 44, height: 44 }}
               >
-                <DownloadOutlinedIcon sx={{ fontSize: '1.05rem' }} />
+                {file.is_favorite
+                  ? <StarIcon sx={{ fontSize: '1.2rem', color: '#f5b400' }} />
+                  : <StarBorderIcon sx={{ fontSize: '1.2rem' }} />}
               </IconButton>
             </Tooltip>
-          )}
+            {file.downloadable && (
+              <Tooltip title="Download">
+                <IconButton
+                  onClick={(e) => { e.stopPropagation(); window.open(contentUrl(file.id, true), '_blank'); }}
+                  aria-label={`Download ${file.title}`}
+                  sx={{ width: 44, height: 44 }}
+                >
+                  <DownloadOutlinedIcon sx={{ fontSize: '1.2rem' }} />
+                </IconButton>
+              </Tooltip>
+            )}
+          </Box>
         </Box>
       ))}
     </Stack>

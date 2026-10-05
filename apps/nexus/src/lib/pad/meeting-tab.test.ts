@@ -6,6 +6,7 @@ import {
   PAD_RSC_PERMISSIONS,
   consentedPermissionSet,
   ensureAnswerPadInMeeting,
+  holdsAllPermissions,
   meetingChatIdFromJoinUrl,
 } from './meeting-tab';
 import { answerPadTab } from './teams-tab';
@@ -22,6 +23,10 @@ const json = (status: number, body: unknown) => () =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 const empty = (status: number) => () => new Response(null, { status });
 const ours = { value: [{ id: 'x', teamsApp: { id: CATALOG, externalId: 'df4f6b2d-ea18-46d1-8934-f508ac248e6c' } }] };
+/** Our app installed with every permission granted. */
+const oursConsented = { value: [{ ...ours.value[0], consentedPermissionSet: consentedPermissionSet() }] };
+/** Our app installed bare, as 1.4.0's installs were. */
+const oursBare = { value: [{ ...ours.value[0], id: 'aW5zdGFsbA==' }] };
 const others = { value: [{ id: 'y', teamsApp: { id: '11111111-2222-3333-4444-555555555555' } }] };
 
 /** A fake Graph keyed by "METHOD /path", which fails the test on any call it was not told about. */
@@ -38,6 +43,7 @@ const TABS = `GET /chats/${CHAT}/tabs?$expand=teamsApp`;
 const APPS = `GET /chats/${CHAT}/installedApps?$expand=teamsApp`;
 const INSTALL = `POST /chats/${CHAT}/installedApps`;
 const PIN = `POST /chats/${CHAT}/tabs`;
+const UPGRADE = `POST /chats/${CHAT}/installedApps/${encodeURIComponent('aW5zdGFsbA==')}/upgrade`;
 
 const bodyOf = (fetchImpl: ReturnType<typeof graph>, key: string) => {
   const call = fetchImpl.mock.calls.find(([url, init]) => `${init?.method ?? 'GET'} ${String(url).replace('https://graph.microsoft.com/v1.0', '')}` === key);
@@ -72,11 +78,35 @@ describe('the consent set', () => {
   });
 });
 
+describe('holdsAllPermissions', () => {
+  it('is true only when every manifest permission was granted with its type', () => {
+    expect(holdsAllPermissions(consentedPermissionSet())).toBe(true);
+    expect(holdsAllPermissions(undefined)).toBe(false);
+    expect(holdsAllPermissions({ resourceSpecificPermissions: [] })).toBe(false);
+    const wrongType = consentedPermissionSet().resourceSpecificPermissions.map((p) =>
+      p.permissionValue === 'OnlineMeeting.ReadBasic.Chat' ? { ...p, permissionType: 'Delegated' } : p,
+    );
+    expect(holdsAllPermissions({ resourceSpecificPermissions: wrongType })).toBe(false);
+  });
+});
+
 describe('ensureAnswerPadInMeeting', () => {
-  it('does nothing when the pad is already pinned, however it got there', async () => {
-    const fetchImpl = graph({ [TABS]: json(200, ours) });
+  it('does nothing when the pad is pinned and holds its permissions', async () => {
+    const fetchImpl = graph({ [TABS]: json(200, ours), [APPS]: json(200, oursConsented) });
     await expect(ensureAnswerPadInMeeting(INPUT, { token, fetchImpl })).resolves.toEqual({ outcome: 'already', chatId: CHAT });
-    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(0);
+  });
+
+  it('grants the permissions of an app that went in without them, by upgrading it with the consent set', async () => {
+    const fetchImpl = graph({ [TABS]: json(200, ours), [APPS]: json(200, oursBare), [UPGRADE]: empty(204) });
+    await expect(ensureAnswerPadInMeeting(INPUT, { token, fetchImpl })).resolves.toEqual({ outcome: 'granted', chatId: CHAT });
+    expect(bodyOf(fetchImpl, UPGRADE)).toEqual({ consentedPermissionSet: consentedPermissionSet() });
+  });
+
+  it('reports a refused upgrade with the step, and does not throw', async () => {
+    const fetchImpl = graph({ [TABS]: json(200, ours), [APPS]: json(200, oursBare), [UPGRADE]: json(403, { error: { message: 'Consent blocked' } }) });
+    const result = await ensureAnswerPadInMeeting(INPUT, { token, fetchImpl });
+    expect(result).toMatchObject({ outcome: 'permission_missing', reason: expect.stringContaining('grant the permissions: 403') });
   });
 
   it('installs the app with its consent set, then pins the same tab the configuration page saves', async () => {
@@ -104,40 +134,22 @@ describe('ensureAnswerPadInMeeting', () => {
   });
 
   it('only pins the tab when the app is installed but its tab was removed', async () => {
-    const fetchImpl = graph({ [TABS]: json(200, { value: [] }), [APPS]: json(200, ours), [PIN]: json(201, {}) });
+    const fetchImpl = graph({ [TABS]: json(200, { value: [] }), [APPS]: json(200, oursConsented), [PIN]: json(201, {}) });
     await expect(ensureAnswerPadInMeeting(INPUT, { token, fetchImpl })).resolves.toMatchObject({ outcome: 'added' });
     expect(bodyOf(fetchImpl, INSTALL)).toBeUndefined();
   });
 
-  it('retries without a consent set when Graph refuses the full one, as it does for the bot-free Neram Pad Dev', async () => {
-    const installs = [json(400, { error: { code: 'BadRequest', message: 'Permissions do not match' } }), empty(201)];
+  it('never installs without the consent set: a refused install fails, with one attempt only', async () => {
     const fetchImpl = graph({
       [TABS]: json(200, { value: [] }),
       [APPS]: json(200, { value: [] }),
-      [INSTALL]: () => installs.shift()!(),
-      [PIN]: json(201, {}),
-    });
-
-    await expect(ensureAnswerPadInMeeting(INPUT, { token, fetchImpl })).resolves.toEqual({ outcome: 'added', chatId: CHAT });
-
-    const bodies = fetchImpl.mock.calls
-      .filter(([url, init]) => init?.method === 'POST' && String(url).endsWith('/installedApps'))
-      .map(([, init]) => JSON.parse(String(init?.body)));
-    expect(bodies).toEqual([
-      { 'teamsApp@odata.bind': `https://graph.microsoft.com/v1.0/appCatalogs/teamsApps/${CATALOG}`, consentedPermissionSet: consentedPermissionSet() },
-      { 'teamsApp@odata.bind': `https://graph.microsoft.com/v1.0/appCatalogs/teamsApps/${CATALOG}` },
-    ]);
-  });
-
-  it('fails when the retry without a consent set is refused too, and tries no third time', async () => {
-    const fetchImpl = graph({
-      [TABS]: json(200, { value: [] }),
-      [APPS]: json(200, { value: [] }),
-      [INSTALL]: json(400, { error: { message: 'Consent required' } }),
+      [INSTALL]: json(400, { error: { message: 'Permissions do not match' } }),
     });
     const result = await ensureAnswerPadInMeeting(INPUT, { token, fetchImpl });
     expect(result).toMatchObject({ outcome: 'failed', reason: expect.stringContaining('install the app: 400') });
-    expect(fetchImpl.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(2);
+    const posts = fetchImpl.mock.calls.filter(([, init]) => init?.method === 'POST');
+    expect(posts).toHaveLength(1);
+    expect(JSON.parse(String(posts[0][1]?.body))).toHaveProperty('consentedPermissionSet');
   });
 
   it('carries on when an overlapping run installed the app a moment earlier', async () => {
@@ -163,7 +175,6 @@ describe('ensureAnswerPadInMeeting', () => {
     expect(result.outcome).toBe('permission_missing');
     expect(result.reason).toMatch(/^install the app: 403 .*Missing role permissions/);
     expect(result.reason).not.toContain('graph-token');
-    // Only a 400 earns the retry without a consent set.
     expect(fetchImpl.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
   });
 
@@ -173,7 +184,7 @@ describe('ensureAnswerPadInMeeting', () => {
   });
 
   it('fails a refused tab without throwing', async () => {
-    const fetchImpl = graph({ [TABS]: json(200, { value: [] }), [APPS]: json(200, ours), [PIN]: json(400, { error: { message: 'Bad tab' } }) });
+    const fetchImpl = graph({ [TABS]: json(200, { value: [] }), [APPS]: json(200, oursConsented), [PIN]: json(400, { error: { message: 'Bad tab' } }) });
     await expect(ensureAnswerPadInMeeting(INPUT, { token, fetchImpl })).resolves.toMatchObject({ outcome: 'failed', reason: expect.stringContaining('add the tab: 400') });
   });
 

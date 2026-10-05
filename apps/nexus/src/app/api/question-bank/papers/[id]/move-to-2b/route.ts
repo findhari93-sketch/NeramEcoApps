@@ -4,7 +4,7 @@ import { moveQuestionsToPaper2B, Paper2BError } from '@neram/database';
 import { describeError } from '@/lib/api-errors';
 
 /**
- * Move Planning questions that were uploaded into a JEE Paper 2 (B.Arch) paper
+ * Move Planning questions that were uploaded into a JEE Paper 2A (B.Arch) paper
  * to the JEE Paper 2B (B.Planning) paper of the same sitting. The 2B paper is
  * created when missing and given the shared Maths and Aptitude.
  *

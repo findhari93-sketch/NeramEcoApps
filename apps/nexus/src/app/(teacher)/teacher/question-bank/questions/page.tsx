@@ -45,8 +45,11 @@ import type {
   QBDeletePreflight,
 } from '@neram/database';
 import {
+  QB_EXAM_TYPE_LABELS,
   QB_QUESTION_STATUS_LABELS,
   QB_QUESTION_STATUS_COLORS,
+  isKnownQBExamType,
+  type QBExamType,
 } from '@neram/database';
 import SourceBadges from '@/components/question-bank/SourceBadges';
 import CategoryChips from '@/components/question-bank/CategoryChips';
@@ -86,6 +89,12 @@ function QuestionsListContent() {
   const [examRelevance, setExamRelevance] = useState(() => {
     const raw = searchParams?.get('exam_relevance') ?? '';
     return ['JEE', 'NATA', 'BOTH'].includes(raw) ? raw : '';
+  });
+  // One exam's papers (JEE Paper 2A and 2B share the 'JEE' relevance, so the
+  // 2B page's card needs this to open on 2B questions only).
+  const [examType, setExamType] = useState<QBExamType | ''>(() => {
+    const raw = searchParams?.get('exam_type');
+    return isKnownQBExamType(raw) ? raw : '';
   });
   const [questionStatus, setQuestionStatus] = useState('');
   const [solutionFilter, setSolutionFilter] = useState('');
@@ -147,6 +156,7 @@ function QuestionsListContent() {
         if (difficulty) params.set('difficulty', difficulty);
         if (category) params.set('categories', category);
         if (examRelevance) params.set('exam_relevance', examRelevance);
+        if (examType) params.set('exam_type', examType);
         if (questionStatus) params.set('question_status', questionStatus);
         if (solutionFilter) params.set('solution_filter', solutionFilter);
         if (origin) params.set('origin', origin);
@@ -182,14 +192,14 @@ function QuestionsListContent() {
         setLoadingMore(false);
       }
     },
-    [getToken, debouncedSearch, difficulty, category, examRelevance, questionStatus, solutionFilter, origin, questionFormat, tagIds]
+    [getToken, debouncedSearch, difficulty, category, examRelevance, examType, questionStatus, solutionFilter, origin, questionFormat, tagIds]
   );
 
   // Reset page and fetch when filters change
   useEffect(() => {
     setPage(1);
     fetchQuestions(1, false);
-  }, [debouncedSearch, difficulty, category, examRelevance, questionStatus, solutionFilter, origin, questionFormat, tagIds, fetchQuestions]);
+  }, [debouncedSearch, difficulty, category, examRelevance, examType, questionStatus, solutionFilter, origin, questionFormat, tagIds, fetchQuestions]);
 
   // Load the tag registry once (labels/colors for chips + optimistic bulk-add updates).
   useEffect(() => {
@@ -538,6 +548,18 @@ function QuestionsListContent() {
         onOriginChange={setOrigin}
         onQuestionFormatChange={setQuestionFormat}
       />
+
+      {examType && (
+        <Box sx={{ mb: 1.5 }}>
+          <Chip
+            label={`Only ${QB_EXAM_TYPE_LABELS[examType]}`}
+            onDelete={() => setExamType('')}
+            color="primary"
+            variant="outlined"
+            sx={{ minHeight: 36 }}
+          />
+        </Box>
+      )}
 
       {/* Tag filter (managed registry, OR semantics) */}
       <Box sx={{ mb: 1.5 }}>

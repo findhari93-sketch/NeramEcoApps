@@ -168,13 +168,13 @@ describe('paper views share their behaviour', () => {
     const actions = makeActions();
     render(<PaperTable rows={toRows([paper])} actions={actions} formatDate={formatDate} />);
 
-    const row = screen.getByRole('button', { name: 'Open JEE Paper 2 2024' });
+    const row = screen.getByRole('button', { name: 'Open JEE Paper 2A (B.Arch) 2024' });
     fireEvent.click(row);
     expect(actions.onOpen).toHaveBeenCalledWith('p1');
 
     // Acting on a paper must not also navigate to it.
     (actions.onOpen as ReturnType<typeof vi.fn>).mockClear();
-    fireEvent.click(within(row).getByRole('button', { name: /^Delete JEE Paper 2 2024$/ }));
+    fireEvent.click(within(row).getByRole('button', { name: /^Delete JEE Paper 2A \(B\.Arch\) 2024$/ }));
     expect(actions.onRequestDelete).toHaveBeenCalled();
     expect(actions.onOpen).not.toHaveBeenCalled();
   });
@@ -184,7 +184,7 @@ describe('paper views share their behaviour', () => {
     render(
       <PaperGridCard paper={paper} stats={stats} actions={actions} formatDate={formatDate} />,
     );
-    fireEvent.keyDown(screen.getByRole('button', { name: 'Open JEE Paper 2 2024' }), { key: 'Enter' });
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Open JEE Paper 2A (B.Arch) 2024' }), { key: 'Enter' });
     expect(actions.onOpen).toHaveBeenCalledWith('p1');
   });
 

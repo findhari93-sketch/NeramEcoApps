@@ -52,7 +52,6 @@ import HelpOutlineRounded from '@mui/icons-material/HelpOutlineRounded';
 import HowToVoteRounded from '@mui/icons-material/HowToVoteRounded';
 import MoreTimeRounded from '@mui/icons-material/MoreTimeRounded';
 import MoreVertRounded from '@mui/icons-material/MoreVertRounded';
-import NotificationsActiveRounded from '@mui/icons-material/NotificationsActiveRounded';
 import OpenInNewRounded from '@mui/icons-material/OpenInNewRounded';
 import PersonOffRounded from '@mui/icons-material/PersonOffRounded';
 import RemoveRounded from '@mui/icons-material/RemoveRounded';
@@ -66,23 +65,25 @@ import GroupsRounded from '@mui/icons-material/GroupsRounded';
 import HowToRegRounded from '@mui/icons-material/HowToRegRounded';
 import PostAddRounded from '@mui/icons-material/PostAddRounded';
 import ContentPasteRounded from '@mui/icons-material/ContentPasteRounded';
-import { SKIP_REASON_LABELS, answerTypeLabel, displayKeys, nextLabel, promptTitle, qbPreview } from '@/lib/pad/client/format';
+import StudentAvatar from '@/components/students/StudentAvatar';
+import { PAD_PROBLEM_LABEL, answerTypeLabel, displayKeys, nextLabel, promptTitle, qbPreview, reasonLabel } from '@/lib/pad/client/format';
 import { PadClientError, padFetch, padUpload } from '@/lib/pad/client/pad-fetch';
 import type { PadHost } from '@/lib/pad/client/pad-host';
-import type { RealtimeState } from '@/lib/pad/client/poll-policy';
 import { clockLabel, secondsLeft, useServerNow } from '@/lib/pad/client/server-clock';
 import {
+  classFunnel,
   consoleAnnouncement,
   consoleStatus,
   consoleTitle,
   deriveConsoleView,
-  hereSummary,
   groupParticipation,
   groupsFromParticipation,
   historyChipLabel,
   reminderMessage,
   revealSummary,
   roundTitle,
+  type ClassFunnel,
+  type FunnelGroup,
   type ReminderResult,
   type SummaryItem,
 } from '@/lib/pad/client/teacher-view';
@@ -92,15 +93,16 @@ import { compressImage } from '@/utils/imageCompression';
 import AnswerKeyPicker, { AnswerBars } from './AnswerKeyPicker';
 import AskBar from './AskBar';
 import ClassDetailsSheet, { RoomCode } from './ClassDetailsSheet';
+import ClassStrip from './ClassStrip';
 import ConsoleHeader from './ConsoleHeader';
-import { HideNamesButton, useHideNames } from './HideNames';
 import LiveAnnouncement from './LiveAnnouncement';
 import OptionNames from './OptionNames';
 import PadCountdown from './PadCountdown';
 import PresenterBanner from './PresenterBanner';
 import RoundResults from './RoundResults';
-import WaitingList from './WaitingList';
 import { usePadSnapshot } from './usePadSnapshot';
+import PadStageFactsProvider from './PadStageFactsProvider';
+import PeopleSheet from './PeopleSheet';
 
 type StartResponse =
   | { sessionId: string; resumed: boolean; endedSessionId: string | null }
@@ -293,12 +295,14 @@ export default function TeacherConsole({ host, sessionId }: { host: PadHost; ses
 
     case 'running':
       return (
-        <LiveConsole
-          key={start.sessionId}
-          host={host}
-          sessionId={start.sessionId}
-          onRound={(next) => setStart({ kind: 'running', sessionId: next })}
-        />
+        <PadStageFactsProvider host={host}>
+          <LiveConsole
+            key={start.sessionId}
+            host={host}
+            sessionId={start.sessionId}
+            onRound={(next) => setStart({ kind: 'running', sessionId: next })}
+          />
+        </PadStageFactsProvider>
       );
   }
 }
@@ -427,6 +431,8 @@ function LiveConsole({ host, sessionId, onRound }: { host: PadHost; sessionId: s
   const [reminder, setReminder] = useState<string | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  /** The People sheet: closed (null), or open on a chip (or the console's best guess). */
+  const [people, setPeople] = useState<{ group: FunnelGroup | null } | null>(null);
   /** A picture pasted for the next question while one is open: the teacher may want it on the open one. */
   const [pasted, setPasted] = useState<{ url: string; promptId: string; title: string } | null>(null);
   const share = useStageShare(host);
@@ -551,6 +557,10 @@ function LiveConsole({ host, sessionId, onRound }: { host: PadHost; sessionId: s
   const decideReasons = (promptId: string, studentIds: string[], approve: boolean | null) =>
     act('excuse', () => post(`/api/pad/prompts/${promptId}/excuse`, { studentIds, approve }));
 
+  /** "Can't use the pad" for the rest of the round, or Undo. */
+  const cantUsePad = (studentId: string, on: boolean) =>
+    act('cant-use-pad', () => post(`/api/pad/sessions/${sessionId}/cant-use-pad`, { studentId, on }));
+
   const nextRound = () =>
     act('next-round', async () => {
       const next = await padFetch<{ sessionId: string }>(host, `/api/pad/sessions/${sessionId}/next-round`, { method: 'POST', body: {} });
@@ -599,7 +609,8 @@ function LiveConsole({ host, sessionId, onRound }: { host: PadHost; sessionId: s
   }
 
   const session = snapshot.session;
-  const here = hereSummary(snapshot);
+  const funnel = classFunnel(snapshot);
+  const openPeople = (group: FunnelGroup | null = null) => setPeople({ group });
   const nextSequence = Math.max(lastEntry?.sequence ?? 0, snapshot.prompt?.sequence ?? 0) + 1;
   const nextTitle = askLabel.trim() ? promptTitle({ sequence: nextSequence, label: askLabel }) : `Q.${nextSequence}`;
   const askButton = askLabel.trim() ? `Ask ${nextTitle}` : `Ask question ${nextSequence}`;
@@ -629,7 +640,6 @@ function LiveConsole({ host, sessionId, onRound }: { host: PadHost; sessionId: s
       options={askOptions}
       onOptions={setAskOptions}
       uploadPicture={uploadPicture}
-      readClipboard={host.readClipboard}
       questionTitle={nextTitle}
       busy={busy === 'ask'}
       disabled={busy !== null}
@@ -717,7 +727,7 @@ function LiveConsole({ host, sessionId, onRound }: { host: PadHost; sessionId: s
         />
       )}
 
-      {view.kind === 'ready' && <ReadyPanel snapshot={snapshot} onDetails={() => setDetailsOpen(true)} />}
+      {view.kind === 'ready' && <ReadyPanel snapshot={snapshot} funnel={funnel} onPeople={() => openPeople()} onDetails={() => setDetailsOpen(true)} />}
 
       {view.kind === 'open' && (
         <Stack spacing={2}>
@@ -726,7 +736,8 @@ function LiveConsole({ host, sessionId, onRound }: { host: PadHost; sessionId: s
             answered={view.answered}
             total={view.enrolled}
             offRoster={view.offRoster}
-            people={snapshot.people}
+            funnel={funnel}
+            onPeople={openPeople}
             serverTime={snapshot.server_time}
             busy={busy === 'close'}
             disabled={busy !== null}
@@ -735,22 +746,6 @@ function LiveConsole({ host, sessionId, onRound }: { host: PadHost; sessionId: s
             addingTime={busy === 'timer'}
             onDetails={(label, text) => saveDetails(view.prompt.id, label, text)}
             onRemovePicture={() => setPicture(view.prompt.id, null)}
-            canRemind={snapshot.session.bot_in_meeting}
-            reminding={busy === 'remind'}
-            reminder={reminder}
-            onRemind={remind}
-          />
-          <WaitingList
-            rows={snapshot.waiting}
-            open
-            disabled={busy !== null}
-            onDecide={(ids, approve) => decideReasons(view.prompt.id, ids, approve)}
-            nudge={{
-              secondsLeft: nudgeSeconds,
-              busy: busy === 'nudge',
-              message: nudge?.promptId === view.prompt.id ? nudge.message : null,
-              onNudge: () => nudgeClass(view.prompt.id),
-            }}
           />
         </Stack>
       )}
@@ -771,9 +766,7 @@ function LiveConsole({ host, sessionId, onRound }: { host: PadHost; sessionId: s
             onPoll={() => setPoll(view.prompt.id)}
             onReveal={() => reveal(view.prompt.id)}
           />
-          {(snapshot.waiting ?? []).some((row) => row.reason) && (
-            <WaitingList rows={snapshot.waiting} open={false} disabled={busy !== null} onDecide={(ids, approve) => decideReasons(view.prompt.id, ids, approve)} nudge={null} />
-          )}
+          <ReasonsWaiting funnel={funnel} onPeople={openPeople} />
         </Stack>
       )}
 
@@ -854,7 +847,7 @@ function LiveConsole({ host, sessionId, onRound }: { host: PadHost; sessionId: s
       <ConsoleHeader
         title={consoleTitle(session)}
         status={consoleStatus(session.round_no, view)}
-        here={ended ? null : here.here}
+        strip={ended ? undefined : <ClassStrip funnel={funnel} onOpen={() => openPeople()} />}
         onRename={rename}
         renaming={busy === 'rename'}
         onClassDetails={() => setDetailsOpen(true)}
@@ -899,6 +892,33 @@ function LiveConsole({ host, sessionId, onRound }: { host: PadHost; sessionId: s
       )}
 
       <ClassDetailsSheet open={detailsOpen} onClose={() => setDetailsOpen(false)} snapshot={snapshot} host={host} realtime={realtime} />
+
+      {!ended && (
+        <PeopleSheet
+          open={people !== null}
+          onClose={() => setPeople(null)}
+          funnel={funnel}
+          startGroup={people?.group ?? null}
+          actions={{
+            onCantUsePad: (studentId, on) => void cantUsePad(studentId, on),
+            onDecide:
+              snapshot.prompt && snapshot.prompt.state !== 'revealed'
+                ? (ids, approve) => void decideReasons(snapshot.prompt!.id, ids, approve)
+                : undefined,
+            nudge:
+              view.kind === 'open'
+                ? {
+                    secondsLeft: nudgeSeconds,
+                    busy: busy === 'nudge',
+                    message: nudge?.promptId === view.prompt.id ? nudge.message : null,
+                    onNudge: () => nudgeClass(view.prompt.id),
+                  }
+                : null,
+            remind: snapshot.session.bot_in_meeting && view.kind === 'open' ? { busy: busy === 'remind', message: reminder, onRemind: remind } : null,
+            disabled: busy !== null,
+          }}
+        />
+      )}
 
       <Snackbar
         open={!!pasted && view.kind === 'open' && pasted.promptId === view.prompt.id && askImage === pasted.url}
@@ -961,21 +981,31 @@ function OneScreenHelp({ canPopOut, onPopOut, onClose }: { canPopOut: boolean; o
  * the Ask bar below is what the eye lands on. The full checks are in Class
  * details.
  */
-function ReadyPanel({ snapshot, onDetails }: { snapshot: TeacherSnapshot; onDetails: () => void }) {
-  const here = hereSummary(snapshot);
+function ReadyPanel({
+  snapshot,
+  funnel,
+  onPeople,
+  onDetails,
+}: {
+  snapshot: TeacherSnapshot;
+  funnel: ClassFunnel;
+  onPeople: () => void;
+  onDetails: () => void;
+}) {
+  const here = funnel.groups.answered.length + funnel.groups.waiting.length + funnel.groups.no_pad.length + funnel.groups.excused.length;
   return (
     <Stack spacing={1.5}>
       <Paper variant="outlined" sx={{ p: 2 }}>
         <Stack direction="row" alignItems="flex-end" spacing={1.5}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography component="p" variant="h3" fontWeight={800} sx={{ lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>
-              {here.here}
-              <Box component="span" sx={{ fontSize: '0.45em', fontWeight: 600, color: 'text.secondary' }}>
-                {` of ${here.enrolled}`}
+              {here}
+              <Box component="span" sx={{ fontSize: '0.45em', fontWeight: 600, color: 'text.secondary', ml: 0.25 }}>
+                {` of ${funnel.expected}`}
               </Box>
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              {here.meetingList ? 'here, in the meeting or with the pad open' : 'here, with the pad opened'}
+              {funnel.meetingList ? 'expected are here' : 'expected have opened the pad'}
             </Typography>
           </Box>
           <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
@@ -985,15 +1015,38 @@ function ReadyPanel({ snapshot, onDetails }: { snapshot: TeacherSnapshot; onDeta
             <RoomCode code={snapshot.session.room_code} />
           </Box>
         </Stack>
-        <Button size="small" onClick={onDetails} sx={{ mt: 1, minHeight: 44, ml: -1 }}>
-          Class details
-        </Button>
+        <Stack direction="row" spacing={0.5} sx={{ mt: 1, ml: -1 }} useFlexGap flexWrap="wrap">
+          <Button size="small" startIcon={<GroupsRounded />} onClick={onPeople} sx={{ minHeight: 44 }}>
+            See who
+          </Button>
+          <Button size="small" onClick={onDetails} sx={{ minHeight: 44 }}>
+            Class details
+          </Button>
+        </Stack>
       </Paper>
       <Stack direction="row" spacing={1} alignItems="flex-start" sx={{ color: 'text.secondary' }}>
         <ContentPasteRounded fontSize="small" sx={{ mt: '2px' }} aria-hidden />
         <Typography variant="body2">Snip the question with Win + Shift + S, click the box below, press Ctrl + V, then Ask.</Typography>
       </Stack>
     </Stack>
+  );
+}
+
+/** Reasons a student gave that wait for the teacher's decision: one line, the names in the People sheet. */
+function ReasonsWaiting({ funnel, onPeople }: { funnel: ClassFunnel; onPeople: (group: FunnelGroup) => void }) {
+  const undecided = [...funnel.groups.waiting, ...funnel.groups.no_pad].filter((person) => person.reason && !person.approval).length;
+  if (undecided === 0) return null;
+  return (
+    <Alert
+      severity="info"
+      action={
+        <Button color="inherit" size="small" onClick={() => onPeople('waiting')} sx={{ minHeight: 44 }}>
+          Review
+        </Button>
+      }
+    >
+      {undecided === 1 ? '1 student gave a reason.' : `${undecided} students gave a reason.`}
+    </Alert>
   );
 }
 /** Edits the question number and text after the ASK, both together, as the teacher last saw them. */
@@ -1082,7 +1135,8 @@ function OpenPanel({
   answered,
   total,
   offRoster,
-  people,
+  funnel,
+  onPeople,
   serverTime,
   busy,
   disabled,
@@ -1091,17 +1145,15 @@ function OpenPanel({
   addingTime,
   onDetails,
   onRemovePicture,
-  canRemind,
-  reminding,
-  reminder,
-  onRemind,
 }: {
   prompt: TeacherPrompt;
   answered: number;
   /** Students who joined this round, less anyone excused on this question. */
   total: number;
   offRoster: number;
-  people: TeacherSnapshot['people'];
+  funnel: ClassFunnel;
+  /** Opens the People sheet, on a chip. */
+  onPeople: (group?: FunnelGroup | null) => void;
   serverTime: string;
   busy: boolean;
   disabled: boolean;
@@ -1112,24 +1164,17 @@ function OpenPanel({
   onDetails: (label: string | null, text: string | null) => void;
   /** The open question's picture can be taken off; a new one comes from the Ask bar ("Use for Q.32"). */
   onRemovePicture: () => void;
-  /** Only with the bot in the meeting: it is the bot that sends the reminder. */
-  canRemind: boolean;
-  reminding: boolean;
-  reminder: string | null;
-  onRemind: () => void;
 }) {
   const theme = useTheme();
   const [editing, setEditing] = useState(false);
-  const [showPeople, setShowPeople] = useState(false);
-  const [hidden, setHidden] = useHideNames();
   // One clock for both: how long it has been open, and the time left on a timed question.
   // At 0 the console does not close it; the presenter and the server do. Close stays here.
   const serverNow = useServerNow(serverTime, { tickMs: 500 });
   const elapsed = elapsedLabel(prompt.opened_at, serverNow);
   const timeLeft = secondsLeft(prompt.closes_at, serverNow);
   const line = questionLine(prompt);
-  const joined = people?.joined.length ?? null;
-  const notJoined = people?.not_joined ?? [];
+  const notAnswered = funnel.groups.waiting.length + funnel.groups.no_pad.length;
+  const undecided = [...funnel.groups.waiting, ...funnel.groups.no_pad].filter((person) => person.reason && !person.approval).length;
   const share = total > 0 ? Math.min(100, Math.round((answered / total) * 100)) : 0;
 
   return (
@@ -1193,41 +1238,19 @@ function OpenPanel({
         </Box>
       </Box>
 
-      {joined !== null && (
-        <Box sx={{ width: '100%' }}>
-          <Button
-            variant="text"
-            size="small"
-            onClick={() => setShowPeople(!showPeople)}
-            aria-expanded={showPeople}
-            startIcon={<GroupsRounded />}
-            sx={{ minHeight: 44, width: '100%', justifyContent: 'center', textAlign: 'center' }}
-          >
-            {notJoined.length > 0 ? `${joined} here · ${notJoined.length} not here` : `${joined} here, the whole class list`}
-          </Button>
-          <Collapse in={showPeople} unmountOnExit>
-            <Paper variant="outlined" sx={{ p: 1.5 }}>
-              <Stack direction="row" alignItems="center">
-                <Typography variant="body2" fontWeight={700} sx={{ flex: 1 }}>
-                  {`Not here (${notJoined.length})`}
-                </Typography>
-                <HideNamesButton hidden={hidden} onChange={setHidden} />
-              </Stack>
-              <Typography variant="caption" color="text.secondary" component="p">
-                Not counted and not nudged. Most are not in the class today.
-              </Typography>
-              {hidden ? (
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                  Names are hidden.
-                </Typography>
-              ) : (
-                <Typography variant="body2" sx={{ mt: 0.5, overflowWrap: 'anywhere' }}>
-                  {notJoined.length === 0 ? 'Everyone on the class list is here.' : notJoined.map((person) => person.name ?? 'Unnamed student').join(', ')}
-                </Typography>
-              )}
-            </Paper>
-          </Collapse>
-        </Box>
+      <Button
+        variant="outlined"
+        fullWidth
+        onClick={() => onPeople(notAnswered > 0 ? 'waiting' : 'answered')}
+        startIcon={<GroupsRounded />}
+        sx={{ minHeight: 44, justifyContent: 'center' }}
+      >
+        {notAnswered > 0 ? `See who: ${notAnswered} not answered` : 'See who answered'}
+      </Button>
+      {undecided > 0 && (
+        <Typography variant="body2" color="text.secondary" role="status" sx={{ textAlign: 'center' }}>
+          {undecided === 1 ? '1 student gave a reason. Review it in See who.' : `${undecided} students gave a reason. Review them in See who.`}
+        </Typography>
       )}
       {offRoster > 0 && (
         <Typography variant="caption" color="text.secondary">
@@ -1246,23 +1269,6 @@ function OpenPanel({
       >
         Close answers
       </Button>
-      {canRemind && (
-        <Button
-          fullWidth
-          variant="text"
-          onClick={onRemind}
-          disabled={disabled}
-          startIcon={reminding ? <CircularProgress size={18} color="inherit" aria-hidden /> : <NotificationsActiveRounded />}
-          sx={{ minHeight: 44 }}
-        >
-          Remind students without the pad
-        </Button>
-      )}
-      {reminder && (
-        <Typography variant="body2" color="text.secondary" role="status" sx={{ textAlign: 'center' }}>
-          {reminder}
-        </Typography>
-      )}
       {prompt.image_url && (
         <Stack direction="row" spacing={1} alignItems="center" sx={{ width: '100%' }}>
           <Box
@@ -1542,37 +1548,74 @@ function ParticipationDetails({ host, promptId, ungraded, startOpen }: { host: P
       {open && failed && <Alert severity="warning">The names could not load. Try again in a moment.</Alert>}
       {open && !failed && !groups && <CircularProgress size={24} aria-label="Loading names" />}
       {open && groups && (
-        <Stack spacing={1.5}>
+        <Stack spacing={1}>
           {DETAIL_ORDER.filter(({ key }) => groups[key].length > 0).map(({ key, title }) => (
-            <Stack key={key} spacing={0.5}>
-              <Typography variant="body2" fontWeight={700}>{`${title} (${groups[key].length})`}</Typography>
-              <Stack component="ul" spacing={0.5} sx={{ listStyle: 'none', m: 0, p: 0 }}>
-                {groups[key].map((row) => (
-                  <Stack component="li" key={row.student_id} direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
-                    <Typography variant="body2" sx={{ overflowWrap: 'anywhere' }}>
-                      {row.name ?? 'Unnamed student'}
-                    </Typography>
-                    {row.answer && key !== 'correct' && (
-                      <Typography variant="caption" color="text.secondary">{`answered ${row.answer}`}</Typography>
-                    )}
-                    {row.skip_reason && (
-                      <Chip
-                        size="small"
-                        variant="outlined"
-                        color="warning"
-                        label={`Said: ${SKIP_REASON_LABELS[row.skip_reason]}${row.skip_note ? `, ${row.skip_note}` : ''}`}
-                        sx={{ maxWidth: '100%', height: 'auto', '& .MuiChip-label': { whiteSpace: 'normal', py: 0.25 } }}
-                      />
-                    )}
-                    {row.joined_mid_prompt && <Chip size="small" variant="outlined" label="Joined mid-question" />}
-                    {!row.on_roster && <Chip size="small" variant="outlined" label="Not on class list" />}
-                  </Stack>
-                ))}
-              </Stack>
-            </Stack>
+            <NameGroup key={key} title={title} rows={groups[key]} showAnswer={key !== 'correct'} startFolded={key === 'absent'} />
           ))}
         </Stack>
       )}
     </Stack>
+  );
+}
+
+/** Enough faces to scan in a 300px panel; the rest of a group is one tap away. */
+const GROUP_ROWS = 8;
+
+/**
+ * One group of a question's names ("Correct (12)"): each student's avatar with
+ * their ring, the name, and why they are in the group. Long groups fold to the
+ * first eight; "Not in the pad", usually the longest and the least useful,
+ * starts folded.
+ */
+function NameGroup({ title, rows, showAnswer, startFolded }: { title: string; rows: ParticipationRow[]; showAnswer: boolean; startFolded: boolean }) {
+  const [folded, setFolded] = useState(startFolded);
+  const [all, setAll] = useState(false);
+  const shown = folded ? [] : all ? rows : rows.slice(0, GROUP_ROWS);
+  return (
+    <Box component="section" aria-label={`${title} (${rows.length})`}>
+      <Button
+        variant="text"
+        color="inherit"
+        onClick={() => setFolded(!folded)}
+        aria-expanded={!folded}
+        endIcon={<ExpandMoreRounded sx={{ transform: folded ? 'none' : 'rotate(180deg)', transition: 'transform 150ms', '@media (prefers-reduced-motion: reduce)': { transition: 'none' } }} />}
+        sx={{ minHeight: 44, px: 0.5, fontWeight: 700, justifyContent: 'flex-start' }}
+      >
+        {`${title} (${rows.length})`}
+      </Button>
+      {shown.length > 0 && (
+        <Stack component="ul" spacing={0.25} sx={{ listStyle: 'none', m: 0, p: 0 }}>
+          {shown.map((row) => {
+            const notes = [
+              showAnswer && row.answer ? `answered ${row.answer}` : null,
+              row.skip_reason ? (row.skip_reason === 'pad_problem' ? PAD_PROBLEM_LABEL : `Said: ${reasonLabel(row.skip_reason)}${row.skip_note ? `, ${row.skip_note}` : ''}`) : null,
+              row.joined_mid_prompt ? 'Joined mid-question' : null,
+              !row.on_roster ? 'Not on class list' : null,
+            ].filter(Boolean);
+            const name = row.name ?? 'Unnamed student';
+            return (
+              <Stack component="li" key={row.student_id} direction="row" spacing={1} alignItems="center" sx={{ minHeight: 44 }}>
+                <StudentAvatar userId={row.student_id} name={name} size={28} sx={{ flexShrink: 0 }} />
+                <Box sx={{ minWidth: 0, flex: 1 }}>
+                  <Typography variant="body2" noWrap>
+                    {name}
+                  </Typography>
+                  {notes.length > 0 && (
+                    <Typography variant="caption" color="text.secondary" component="p" sx={{ overflowWrap: 'anywhere' }}>
+                      {notes.join(' · ')}
+                    </Typography>
+                  )}
+                </Box>
+              </Stack>
+            );
+          })}
+        </Stack>
+      )}
+      {!folded && rows.length > GROUP_ROWS && (
+        <Button variant="text" size="small" onClick={() => setAll(!all)} aria-expanded={all} sx={{ minHeight: 44 }}>
+          {all ? 'Show fewer' : `Show all ${rows.length}`}
+        </Button>
+      )}
+    </Box>
   );
 }

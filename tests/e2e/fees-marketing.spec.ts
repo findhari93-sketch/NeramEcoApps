@@ -21,7 +21,7 @@ const PLANS = [
     combo_extra_fee: 0,
     duration: '12 months',
     schedule_summary: null,
-    features: [],
+    features: ['Live Class, Doubt solving, Evaluation'],
     is_active: true,
     display_order: 0,
     single_payment_discount: 5000,
@@ -42,6 +42,7 @@ const PLANS = [
     features: [],
     is_active: true,
     display_order: 1,
+    // One year (₹25,000 pay once) plus ₹5,000 for the second year
     single_payment_discount: 5000,
     installment_1_amount: 17500,
     installment_2_amount: 17500,
@@ -62,22 +63,46 @@ const HYDRATE = { timeout: 60_000 };
 
 test.describe.configure({ mode: 'default', timeout: 120_000 });
 
-test.describe('Header: Join Now + View fees', () => {
-  test('desktop: new visitor sees Join Now with a View fees link', async ({ page }) => {
+test.describe('Header: Fees + Join Now', () => {
+  test('desktop: new visitor sees Fees beside Join Now on one line', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await mockFees(page, PLANS);
     await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     const banner = page.locator('header').first();
-    await expect(banner.getByRole('link', { name: 'Join Now', exact: true })).toBeVisible();
+    const joinNow = banner.getByRole('link', { name: 'Join Now', exact: true });
+    await expect(joinNow).toBeVisible();
     await expect(banner.getByRole('link', { name: 'Pay & Join Now' })).toHaveCount(0);
 
-    const feesLink = banner.getByRole('link', { name: 'View fees' });
+    const feesLink = banner.getByRole('link', { name: 'Fees', exact: true });
     await expect(feesLink).toBeVisible();
+
+    // Same row, Fees first, and the toolbar keeps its 64px height.
+    const [fees, join, bar] = await Promise.all([
+      feesLink.boundingBox(),
+      joinNow.boundingBox(),
+      banner.locator('.MuiToolbar-root').first().boundingBox(),
+    ]);
+    expect(Math.abs(fees!.y + fees!.height / 2 - (join!.y + join!.height / 2))).toBeLessThanOrEqual(2);
+    expect(fees!.x + fees!.width).toBeLessThanOrEqual(join!.x);
+    expect(bar!.height).toBeLessThanOrEqual(64);
+
     await feesLink.click();
     await expect(page).toHaveURL(/\/fees$/, HYDRATE);
     // The link hides itself on the page it points to.
-    await expect(banner.getByRole('link', { name: 'View fees' })).toHaveCount(0);
+    await expect(banner.getByRole('link', { name: 'Fees', exact: true })).toHaveCount(0);
+  });
+
+  test('1024px: Fees and Join Now fit without wrapping or overflow', async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await mockFees(page, PLANS);
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+
+    const banner = page.locator('header').first();
+    await expect(banner.getByRole('link', { name: 'Fees', exact: true })).toBeVisible();
+    const join = await banner.getByRole('link', { name: 'Join Now', exact: true }).boundingBox();
+    expect(join!.height).toBeLessThan(50);
+    await assertNoHorizontalOverflow(page);
   });
 
   test('mobile: View fees sits in the menu as a full-size button', async ({ page }) => {
@@ -86,7 +111,7 @@ test.describe('Header: Join Now + View fees', () => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     // Too small to tap in the 56px toolbar, so it is not shown there.
-    await expect(page.locator('header').first().getByRole('link', { name: 'View fees' })).toBeHidden();
+    await expect(page.locator('header').first().getByRole('link', { name: 'Fees', exact: true })).toBeHidden();
 
     // The menu button does nothing until the header hydrates, so retry the tap.
     const drawerLink = page.getByRole('link', { name: 'View fees' }).last();
@@ -128,6 +153,44 @@ test.describe('/fees page', () => {
     await expect(page.getByRole('link', { name: /Questions about fees\? Call/ })).toHaveAttribute('href', 'tel:+919176137043');
   });
 
+  test('every plan lists what is included, and Two Year reads as One Year plus ₹5,000', async ({ page }) => {
+    await mockFees(page, PLANS);
+    await page.goto('/fees', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByTestId('fee-card')).toHaveCount(2, HYDRATE);
+
+    const [oneYear, twoYear] = [page.getByTestId('fee-card').nth(0), page.getByTestId('fee-card').nth(1)];
+    for (const card of [oneYear, twoYear]) {
+      await expect(card).toContainText('Trained for 4 attempts: 2 NATA and both JEE Main sessions');
+      await expect(card).toContainText('Nexus app with question bank and AI Maths Teacher');
+      await expect(card).toContainText('Help from the application form to college admission');
+    }
+    // Staff extras from Admin still show on the plan they belong to.
+    await expect(oneYear).toContainText('Live Class, Doubt solving, Evaluation');
+
+    await expect(oneYear).not.toContainText('Everything in the One Year program');
+    await expect(twoYear).toContainText('₹30,000');
+    await expect(twoYear).toContainText('Everything in the One Year program, for 2 full years');
+    await expect(twoYear).toContainText('The second year costs only ₹5,000 more');
+    // Instalments: ₹35,000 against ₹30,000 is still ₹5,000 more.
+    await page.getByRole('button', { name: 'Installment payment' }).click();
+    await expect(twoYear).toContainText('The second year costs only ₹5,000 more');
+
+    // The full list, grouped, with the link from the card landing on it.
+    const section = page.getByRole('region', { name: 'Everything included in your fee' });
+    await expect(section.getByTestId('included-group')).toHaveCount(4);
+    for (const text of [
+      'AI Maths Teacher for NATA and JEE Paper 2 maths',
+      'Microsoft 365 student account with Teams, Word, PowerPoint and OneDrive',
+      "Neram video library of previous years' classes, like a private YouTube for your course",
+      'Counselling guidance: college choice, choice filling and admission',
+    ]) {
+      await expect(section).toContainText(text);
+    }
+    await oneYear.getByRole('link', { name: 'See everything included' }).click();
+    await expect(page).toHaveURL(/#included$/);
+    await expect(section).toBeInViewport();
+  });
+
   test('mobile: cards stack, no overflow, tap targets are large enough', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await mockFees(page, PLANS);
@@ -144,6 +207,7 @@ test.describe('/fees page', () => {
     await assertTouchTargetSize(page, '[data-testid="fee-card"] a');
     await assertTouchTargetSize(page, '.MuiToggleButton-root');
     await assertTouchTargetSize(page, 'a[href^="tel:"]');
+    await assertTouchTargetSize(page, 'a[href="#included"]');
   });
 
   test('empty state: no public plans shows the call button', async ({ page }) => {

@@ -409,11 +409,12 @@ export function personalConversationFrom(activity: Record<string, unknown>): {
  *
  * It has to say something. Moving results off a teacher's personal chat means a
  * student who types "sir my mark is wrong" is now typing at a machine, and
- * silence there is worse than the personal chat we replaced. So it admits it
- * cannot read replies and names the two things that do work.
+ * silence there is worse than the personal chat we replaced. So it greets them,
+ * says what it is for, admits it cannot read messages, and names what does work.
+ * (The first wording, "I cannot read replies", confused students: 2026-10-04.)
  */
 export const ASSISTANT_REPLY =
-  'I am Neram Assistant, and I cannot read replies. To answer a teacher, press the "Message" button on their note. To ask about a result, open it in Nexus and use "Something looks wrong".';
+  'Hi, I am Neram Assistant. I send your class reminders, results and the Answer Pad here, but I cannot read messages. To reply to your teacher, press "Message" on their note. For anything else, open Nexus and tap Help.';
 
 /**
  * Remember the conversation Teams just told us about.

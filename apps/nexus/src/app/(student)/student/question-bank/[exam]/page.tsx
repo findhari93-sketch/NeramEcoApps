@@ -52,7 +52,6 @@ import { useStoredViewMode } from '@/hooks/useStoredViewMode';
 import {
   QB_EXAM_LABELS,
   examFromSlug,
-  examRelevanceFor,
   qbExamPath,
   rememberQBExam,
 } from '@/lib/qb-exam-routes';
@@ -137,7 +136,7 @@ function ExamHome({ exam }: { exam: QBExamType }) {
 
   const { data: statsRes, isLoading: statsLoading } = useAuthSWR<
     { data?: QBProgressStats } & QBProgressStats
-  >(scoped('/api/question-bank/stats', `&exam_relevance=${examRelevanceFor(exam)}`));
+  >(scoped('/api/question-bank/stats', `&exam_type=${exam}`));
   const {
     data: papersRes,
     isLoading: papersLoading,

@@ -28,7 +28,7 @@ async function robots(page: Page): Promise<string | null> {
 test.describe('City coaching pages', () => {
   test('Chennai: the centre page, with answer first, visit section and centre schema', async ({ page }) => {
     await page.goto(city('chennai'));
-    await expect(page.getByRole('heading', { level: 1, name: 'NATA Coaching in Chennai' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'NATA Coaching Centre in Chennai' })).toBeVisible();
     const answer = page.locator('#answer');
     await expect(answer).toBeInViewport();
     await expect(answer).toContainText('classroom batches');
@@ -46,6 +46,30 @@ test.describe('City coaching pages', () => {
     expect(centreId).toBeTruthy();
     expect(blocks).toContain(`"location":{"@id":"${centreId}"}`);
     expect(await robots(page)).toContain('index');
+    await assertNoHorizontalOverflow(page);
+  });
+
+  test('Madurai: address in the hero, a titled map, nearby towns and large image previews', async ({ page }) => {
+    await page.goto(city('madurai'));
+    await expect(page.getByRole('heading', { level: 1, name: 'NATA Coaching Centre in Madurai' })).toBeVisible();
+    await expect(page).toHaveTitle(/NATA Coaching Centre in Madurai/);
+    // The hero address jumps to the visit card.
+    await expect(page.locator('a[href="#visit"]').filter({ hasText: 'Vasanth Nagar' })).toBeVisible();
+    const map = page.locator('#visit iframe[title^="Map:"]');
+    await expect(map).toHaveCount(1);
+    await expect(map).toHaveAttribute('loading', 'lazy');
+    // Towns without a centre of their own, linked to their pages.
+    const centre = page.locator('#centre');
+    await expect(centre).toContainText('Students travel here from');
+    await expect(centre.locator('a[href*="nata-coaching-centers-in-"]').first()).toBeVisible();
+    await expect(page.locator('meta[name="googlebot"]')).toHaveAttribute('content', /max-image-preview:large/);
+    await assertNoHorizontalOverflow(page);
+  });
+
+  test('Madurai at 1280px: no horizontal overflow', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await page.goto(city('madurai'));
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
     await assertNoHorizontalOverflow(page);
   });
 
@@ -114,7 +138,7 @@ test.describe('State and directory pages', () => {
     await page.goto('/coaching/jee-paper-2-coaching-in-kerala');
     await expect(page.getByRole('heading', { level: 1, name: 'JEE Paper 2 Coaching in Kerala' })).toBeVisible();
     await page.goto('/coaching/jee-paper-2-coaching/jee-paper-2-coaching-in-trichy');
-    await expect(page.getByRole('heading', { level: 1, name: 'JEE Paper 2 Coaching in Trichy' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'JEE Paper 2 Coaching Centre in Trichy' })).toBeVisible();
   });
 
   test('unknown state 404s', async ({ request }) => {

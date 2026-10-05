@@ -189,11 +189,12 @@ export interface PaperQuestionListProps {
   /** The paper's exam, so "Move to section" offers only the sections it has. */
   examType?: string | null;
   /**
-   * Move the ticked questions to the JEE Paper 2B (B.Planning) paper of this
-   * sitting. Offered on a JEE Paper 2 paper only, for Planning questions that
-   * were uploaded into it.
+   * Open "Move to another question bank" for the ticked questions, for
+   * questions uploaded into the wrong exam (B.Planning ones in a B.Arch paper,
+   * say). The page owns the dialog; moved rows drop out of the selection when
+   * the list reloads without them.
    */
-  onMoveToPaper2B?: (questionIds: string[]) => Promise<void>;
+  onMoveQuestions?: (questionIds: string[]) => void;
 }
 
 /** Is the user typing? Then Ctrl+A should select their text, not every row. */
@@ -236,7 +237,7 @@ export default function PaperQuestionList({
   reports,
   onTellVideoFixed,
   examType = null,
-  onMoveToPaper2B,
+  onMoveQuestions,
 }: PaperQuestionListProps) {
   const theme = useTheme();
   /** Videos mode's props when that mode is on, else null: a truthy check TypeScript can narrow on. */
@@ -247,7 +248,6 @@ export default function PaperQuestionList({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkSection, setBulkSection] = useState<QBQuestionSection | ''>('');
   const [applyingSection, setApplyingSection] = useState(false);
-  const [movingTo2B, setMovingTo2B] = useState(false);
   const [applyingNeedsImage, setApplyingNeedsImage] = useState<'needed' | 'not-needed' | null>(null);
   const [settingActive, setSettingActive] = useState<'activate' | 'deactivate' | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -268,6 +268,17 @@ export default function PaperQuestionList({
   // replace one with the other.
   const anchorRef = useRef<number | null>(null);
   const baseRef = useRef<Set<string>>(new Set());
+
+  // A row that left the paper (moved to another question bank, deleted
+  // elsewhere) leaves the selection too, so the bar never counts ghosts.
+  useEffect(() => {
+    setSelected((prev) => {
+      if (prev.size === 0) return prev;
+      const here = new Set(questions.map((q) => q.id));
+      const kept = Array.from(prev).filter((id) => here.has(id));
+      return kept.length === prev.size ? prev : new Set(kept);
+    });
+  }, [questions]);
 
   const toggleOne = (question: NexusQBQuestion, shiftKey: boolean) => {
     const idx = questions.findIndex((q) => q.id === question.id);
@@ -331,16 +342,6 @@ export default function PaperQuestionList({
     }
   };
 
-  const applyMoveTo2B = async () => {
-    if (!onMoveToPaper2B || selected.size === 0) return;
-    setMovingTo2B(true);
-    try {
-      await onMoveToPaper2B(Array.from(selected));
-      clearSelection();
-    } finally {
-      setMovingTo2B(false);
-    }
-  };
 
   const applyBulkNeedsImage = async (value: boolean) => {
     if (selected.size === 0) return;
@@ -1058,15 +1059,14 @@ export default function PaperQuestionList({
                 >
                   <ListItemText>No figure needed</ListItemText>
                 </MenuItem>
-                {onMoveToPaper2B && (
+                {onMoveQuestions && (
                   <MenuItem
-                    onClick={() => { setMoreAnchor(null); applyMoveTo2B(); }}
-                    disabled={movingTo2B}
+                    onClick={() => { setMoreAnchor(null); onMoveQuestions(Array.from(selected)); }}
                     sx={{ minHeight: 44 }}
                   >
                     <ListItemText
-                      primary={movingTo2B ? 'Moving...' : 'Move to JEE Paper 2B (Planning)'}
-                      secondary="For Planning questions uploaded into this B.Arch paper"
+                      primary="Move to another question bank..."
+                      secondary="For questions uploaded into the wrong exam"
                       secondaryTypographyProps={{ variant: 'caption' }}
                     />
                   </MenuItem>

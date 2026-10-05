@@ -11,7 +11,8 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { Alert, Box, Button, Chip, CircularProgress, Collapse, Paper, Skeleton, Stack, Typography, alpha, useTheme } from '@neram/ui';
+import { Alert, Box, Button, Chip, CircularProgress, Collapse, IconButton, Paper, Skeleton, Snackbar, Stack, Tooltip, Typography, alpha, useTheme } from '@neram/ui';
+import ContentCopyRounded from '@mui/icons-material/ContentCopyRounded';
 import CampaignRounded from '@mui/icons-material/CampaignRounded';
 import EmojiEventsRounded from '@mui/icons-material/EmojiEventsRounded';
 import ExpandMoreRounded from '@mui/icons-material/ExpandMoreRounded';
@@ -20,6 +21,7 @@ import PlayArrowRounded from '@mui/icons-material/PlayArrowRounded';
 import ScreenShareRounded from '@mui/icons-material/ScreenShareRounded';
 import StopScreenShareRounded from '@mui/icons-material/StopScreenShareRounded';
 import StudentAvatar from '@/components/students/StudentAvatar';
+import { copyText } from '@/lib/clipboard';
 import { PadClientError, padFetch } from '@/lib/pad/client/pad-fetch';
 import type { PadHost } from '@/lib/pad/client/pad-host';
 import { roundTitle } from '@/lib/pad/client/teacher-view';
@@ -66,6 +68,7 @@ export default function RoundResults({
   const [problem, setProblem] = useState<string | null>(null);
   const [showEveryone, setShowEveryone] = useState(false);
   const [hidden, setHidden] = useHideNames();
+  const [copied, setCopied] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -285,16 +288,55 @@ export default function RoundResults({
           {`Start ${roundTitle((session.round_no ?? 0) + 1)}`}
         </Button>
       )}
-      <Button
-        variant="text"
-        href={`/teacher/answer-pad/sessions/${session.id}`}
-        target="_blank"
-        rel="noopener noreferrer"
-        endIcon={<OpenInNewRounded />}
-        sx={{ minHeight: 44, alignSelf: 'flex-start' }}
-      >
-        Open the full report
-      </Button>
+      <ReportLinks host={host} sessionId={session.id} onCopied={setCopied} />
+      <Snackbar open={copied !== null} autoHideDuration={4_000} onClose={() => setCopied(null)} message={copied ?? ''} />
+    </Stack>
+  );
+}
+
+/**
+ * "Open the full report", inside Teams where Teams can (signed in as this
+ * teacher, never the browser's account), else the Nexus page in a new tab; and
+ * a small copy of the link, for sharing or opening elsewhere.
+ */
+function ReportLinks({ host, sessionId, onCopied }: { host: PadHost; sessionId: string; onCopied: (message: string) => void }) {
+  const path = `/teacher/answer-pad/sessions/${sessionId}`;
+  const [opening, setOpening] = useState(false);
+  const copy = async () => {
+    const ok = await copyText(`${window.location.origin}${path}`);
+    onCopied(ok ? 'Link copied' : 'The link could not be copied. Open the report and copy it from there.');
+  };
+  return (
+    <Stack direction="row" alignItems="center" spacing={0.5} sx={{ alignSelf: 'flex-start' }}>
+      {host.openReport ? (
+        <Button
+          variant="text"
+          onClick={async () => {
+            setOpening(true);
+            try {
+              await host.openReport?.(sessionId);
+            } catch {
+              window.open(path, '_blank', 'noopener,noreferrer');
+            } finally {
+              setOpening(false);
+            }
+          }}
+          disabled={opening}
+          endIcon={<OpenInNewRounded />}
+          sx={{ minHeight: 44 }}
+        >
+          Open the full report
+        </Button>
+      ) : (
+        <Button variant="text" href={path} target="_blank" rel="noopener noreferrer" endIcon={<OpenInNewRounded />} sx={{ minHeight: 44 }}>
+          Open the full report
+        </Button>
+      )}
+      <Tooltip title="Copy link">
+        <IconButton aria-label="Copy the report link" onClick={() => void copy()} sx={{ width: 44, height: 44 }}>
+          <ContentCopyRounded fontSize="small" />
+        </IconButton>
+      </Tooltip>
     </Stack>
   );
 }

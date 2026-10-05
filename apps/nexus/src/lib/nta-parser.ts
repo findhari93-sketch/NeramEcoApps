@@ -122,7 +122,7 @@ export function parseNTAAnswerSheet(
 
   if (layoutsFor(examType) && !isKnownJEEPaper2Layout(total, examType)) {
     warnings.push(
-      `This paper has ${total} questions, which does not match a ${examType === 'JEE_PAPER_2B' ? 'JEE Paper 2B' : 'JEE Paper 2'} layout we know. ` +
+      `This paper has ${total} questions, which does not match a ${examType === 'JEE_PAPER_2B' ? 'JEE Paper 2B' : 'JEE Paper 2A'} layout we know. ` +
         `Maths and aptitude questions have all been put in Aptitude. Open the paper and use ` +
         `"Work out the sections" to fix them, or set them yourself.`,
     );

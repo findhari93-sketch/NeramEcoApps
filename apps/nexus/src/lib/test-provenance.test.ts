@@ -26,7 +26,7 @@ const LABELS = {
 
 describe('examLabel', () => {
   it('expands the stored enum codes', () => {
-    expect(examLabel('JEE_PAPER_2')).toBe('JEE Paper 2');
+    expect(examLabel('JEE_PAPER_2')).toBe('JEE Paper 2A');
   });
 
   it('falls back to a de-underscored code rather than a blank', () => {
@@ -77,7 +77,7 @@ describe('meaningfulCategories', () => {
 describe('describePapers', () => {
   it('names a single paper with its year', () => {
     expect(describePapers(summary({ papers: [{ exam_type: 'JEE_PAPER_2', year: 2009, session: null, n: 50 }] })))
-      .toBe('JEE Paper 2 2009');
+      .toBe('JEE Paper 2A 2009');
   });
 
   it('includes the session when a year has more than one sitting', () => {
@@ -94,7 +94,7 @@ describe('describePapers', () => {
       session: null,
       n: 10,
     }));
-    expect(describePapers(summary({ papers }))).toBe('JEE Paper 2, 2005 to 2014');
+    expect(describePapers(summary({ papers }))).toBe('JEE Paper 2A, 2005 to 2014');
   });
 
   it('lists exams when there is more than one', () => {
@@ -107,7 +107,7 @@ describe('describePapers', () => {
           ],
         }),
       ),
-    ).toBe('JEE Paper 2, NATA');
+    ).toBe('JEE Paper 2A, NATA');
   });
 
   it('is blank when nothing is known', () => {
@@ -140,7 +140,7 @@ describe('describeTestContent', () => {
       }),
       LABELS,
     );
-    expect(line).toBe('JEE Paper 2 2009 · 50 questions · mostly Spatial visualisation and Architecture GK · medium');
+    expect(line).toBe('JEE Paper 2A 2009 · 50 questions · mostly Spatial visualisation and Architecture GK · medium');
   });
 
   // The point of the whole feature: even a summary with nothing but a count
@@ -170,7 +170,7 @@ describe('describeTestContent', () => {
 describe('isGeneratedTitle', () => {
   it.each([
     'Practice - 10 questions',
-    'JEE Paper 2 2009 Practice - 50 questions',
+    'JEE Paper 2A 2009 Practice - 50 questions',
     'Practice - 0 questions',
     'Practice - 1 questions',
     'My practice test (12)',
@@ -203,7 +203,7 @@ describe('suggestedTitle', () => {
         }),
         LABELS,
       ),
-    ).toBe('JEE Paper 2 2009, Spatial visualisation (50 Q)');
+    ).toBe('JEE Paper 2A 2009, Spatial visualisation (50 Q)');
   });
 
   it('returns null when there is nothing to build a name from', () => {

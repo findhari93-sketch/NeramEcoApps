@@ -459,6 +459,19 @@ export class PadTestDb {
     ]);
   }
 
+  cantUsePad(actor: string | null, sessionId: string, studentId: string | null, on: boolean | null): Promise<Json> {
+    return this.fn(`select pad_mark_cant_use_pad($1::uuid, $2::uuid, $3::uuid, $4::boolean) as r`, [actor, sessionId, studentId, on]);
+  }
+
+  /** Test-only: the skip reasons stored for one question. */
+  async skipRows(promptId: string): Promise<Array<{ student_id: string; reason: string; approval: string | null }>> {
+    const { rows } = await this.db.query<{ student_id: string; reason: string; approval: string | null }>(
+      `select student_id, reason, approval from pad_skip_reasons where prompt_id = $1 order by student_id`,
+      [promptId],
+    );
+    return rows;
+  }
+
   nextRound(actor: string | null, sessionId: string, confirmUnrevealed = false): Promise<Json> {
     return this.fn(`select pad_next_round($1::uuid, $2::uuid, $3::boolean) as r`, [actor, sessionId, confirmUnrevealed]);
   }

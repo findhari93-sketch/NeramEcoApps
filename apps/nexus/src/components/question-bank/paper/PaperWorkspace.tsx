@@ -119,8 +119,8 @@ export interface PaperWorkspaceProps {
   canConnectYouTube?: boolean;
   /** Told which question is open, so Present to class can start there. */
   onActiveChange?: (questionId: string | null) => void;
-  /** Move ticked Planning questions to this sitting's JEE Paper 2B. A JEE Paper 2 paper only. */
-  onMoveToPaper2B?: (questionIds: string[]) => Promise<void>;
+  /** Open "Move to another question bank" for the ticked questions. */
+  onMoveQuestions?: (questionIds: string[]) => void;
 }
 
 /** Is the user typing? Then j and k are letters, not navigation. */
@@ -143,7 +143,7 @@ export default function PaperWorkspace({
   questions, paperId, tagCounts = {}, tagsByQuestion, paper, sources,
   mode, onModeChange, needsFilter, onNeedsFilterChange, sectionFilter, onSectionFilterChange,
   getToken, onSaved, onChangeSections, onOptimisticPatch, getChatToken, openQuestionId,
-  canConnectYouTube = false, onActiveChange, onMoveToPaper2B,
+  canConnectYouTube = false, onActiveChange, onMoveQuestions,
 }: PaperWorkspaceProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   useEffect(() => {
@@ -610,7 +610,7 @@ export default function PaperWorkspace({
           onActivate={openQuestion}
           onChangeSections={onChangeSections}
           examType={paper?.exam_type ?? null}
-          onMoveToPaper2B={onMoveToPaper2B}
+          onMoveQuestions={onMoveQuestions}
           mode={mode}
           onModeChange={onModeChange}
           needsFilter={needsFilter}

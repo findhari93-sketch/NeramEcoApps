@@ -17,9 +17,9 @@ const manifest = JSON.parse(readFileSync(path.join(NEXUS, 'teams-app/manifest.js
 const APP_ID = 'aa039c70-50d2-4c91-bd0e-5675df5e50ff';
 
 describe('Teams app manifest', () => {
-  it('is the existing Neram Assistant app, version 1.4.0, with its Home tab', () => {
+  it('is the existing Neram Assistant app, version 1.4.1, with its Home tab', () => {
     expect(manifest.id).toBe('df4f6b2d-ea18-46d1-8934-f508ac248e6c');
-    expect(manifest.version).toBe('1.4.0');
+    expect(manifest.version).toBe('1.4.1');
     expect(Number(manifest.manifestVersion)).toBeGreaterThanOrEqual(1.21);
     expect(manifest.$schema).toContain(`/v${manifest.manifestVersion}/`);
     // entityId unchanged, so an existing install upgrades in place.
@@ -139,7 +139,8 @@ describe('Teams app manifest', () => {
       { name: 'ChannelMeetingNotification.Send.Group', type: 'Application' },
       { name: 'MeetingStage.Write.Chat', type: 'Delegated' },
       // getMeetingDetails: the console's title for a meeting that is not on the timetable.
-      { name: 'OnlineMeeting.ReadBasic.Chat', type: 'Delegated' },
+      // Application only: Microsoft refuses it as Delegated, and 1.4.0 shipped it that way.
+      { name: 'OnlineMeeting.ReadBasic.Chat', type: 'Application' },
     ]);
     expect(existsSync(path.join(NEXUS, 'src/app/(pad)/pad/stage/page.tsx'))).toBe(true);
     expect(isTeamsPadPath('/pad/stage')).toBe(true);

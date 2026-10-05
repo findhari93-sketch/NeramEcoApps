@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { bodyEditsIdentity, parsePaperIdentityEdit, renameErrorStatus, sessionOptionsFor } from './qb-paper-identity';
+import {
+  bodyEditsIdentity,
+  parsePaperIdentityEdit,
+  parseSectionMap,
+  renameErrorStatus,
+  sessionForExam,
+  sessionOptionsFor,
+} from './qb-paper-identity';
 
 const NOW = new Date('2026-09-24T00:00:00Z');
 const PAPER = { year: 2019, session: 'Session 1', shift: 'forenoon' };
@@ -31,8 +38,9 @@ describe('parsePaperIdentityEdit', () => {
 });
 
 describe('bodyEditsIdentity', () => {
-  it('is true only when a body touches the year, session or shift', () => {
+  it('is true only when a body touches the exam, year, session or shift', () => {
     expect(bodyEditsIdentity({ shift: 'afternoon' })).toBe(true);
+    expect(bodyEditsIdentity({ exam_type: 'JEE_PAPER_2B' })).toBe(true);
     expect(bodyEditsIdentity({ session: null })).toBe(true);
     expect(bodyEditsIdentity({ pdf_url: 'x' })).toBe(false);
   });
@@ -51,5 +59,31 @@ describe('sessionOptionsFor', () => {
   it('offers sessions for JEE and tests for NATA', () => {
     expect(sessionOptionsFor('JEE_PAPER_2').map((o) => o.value)).toEqual(['Session 1', 'Session 2']);
     expect(sessionOptionsFor('NATA').map((o) => o.value)).toEqual(['Test 1', 'Test 2', 'Test 3']);
+  });
+});
+
+describe('sessionForExam', () => {
+  it('keeps a session the new exam also has, so 2A to 2B changes nothing', () => {
+    expect(sessionForExam('Session 2', 'JEE_PAPER_2', 'JEE_PAPER_2B')).toBe('Session 2');
+  });
+  it('swaps a standard session for the one in the same place', () => {
+    expect(sessionForExam('Session 1', 'JEE_PAPER_2', 'NATA')).toBe('Test 1');
+    expect(sessionForExam('Test 3', 'NATA', 'JEE_PAPER_2B')).toBe('Session 2');
+  });
+  it('keeps an unusual session and no session as they are', () => {
+    expect(sessionForExam('april-9', 'NATA', 'JEE_PAPER_2')).toBe('april-9');
+    expect(sessionForExam(null, 'NATA', 'JEE_PAPER_2')).toBeNull();
+  });
+});
+
+describe('parseSectionMap', () => {
+  it('reads a map of known sections, and missing as none', () => {
+    expect(parseSectionMap({ drawing: 'planning' })).toEqual({ drawing: 'planning' });
+    expect(parseSectionMap(undefined)).toEqual({});
+  });
+  it('refuses anything else', () => {
+    expect(parseSectionMap({ drawing: 'sketching' })).toBeNull();
+    expect(parseSectionMap(['drawing'])).toBeNull();
+    expect(parseSectionMap('drawing')).toBeNull();
   });
 });

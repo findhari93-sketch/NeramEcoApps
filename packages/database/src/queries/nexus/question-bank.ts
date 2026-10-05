@@ -7,7 +7,7 @@ import {
   orderByIds,
   type QBSearchMeta,
 } from './qb-search';
-import { QB_SECTION_ORDER, qbExamRelevance } from '../../types';
+import { QB_EXAM_TYPE_LABELS, QB_SECTION_ORDER, qbExamRelevance } from '../../types';
 import { fetchAllRows as fetchAllRowsPaged } from '../../utils/paged-rows';
 import type {
   QBQuestionSection,
@@ -53,12 +53,6 @@ import type {
 // ============================================
 // EXAM TREE QUERIES
 // ============================================
-
-const QB_EXAM_LABELS: Record<string, string> = {
-  NATA: 'NATA',
-  JEE_PAPER_2: 'JEE Paper 2',
-  JEE_PAPER_2B: 'JEE Paper 2B (B.Planning)',
-};
 
 /**
  * Parse a composite session key (e.g., "Session 1 (Forenoon)") into session + shift.
@@ -198,7 +192,7 @@ export async function getQBExamTree(
 
     exams.push({
       exam_type: examType as QBExamType,
-      label: QB_EXAM_LABELS[examType] || examType,
+      label: QB_EXAM_TYPE_LABELS[examType as QBExamType] || examType,
       total_count: examTotal,
       years,
     });
@@ -1328,24 +1322,43 @@ export async function toggleQBStudyMark(
 // ============================================
 
 /**
+ * Which questions a stats header counts: an exam_relevance ('JEE' matches
+ * both JEE papers and BOTH), or one exam's papers by their source rows.
+ *
+ * The exam pages need the second. Counting by relevance gave the JEE Paper 2B
+ * page the whole JEE total (2,285) while it held no paper at all.
+ */
+export type QBStatsScope = QBExamRelevance | { exam_type: QBExamType };
+
+function scopeStatsQuery<Q>(query: Q, scope: QBStatsScope | undefined): Q {
+  if (!scope) return query;
+  if (typeof scope === 'string') return (query as any).in('exam_relevance', examRelevanceMatch(scope)) as Q;
+  return applyPaperSourceFilters(query, { exam_type: scope.exam_type }, 'paper_src.');
+}
+
+function statsColumns(columns: string, scope: QBStatsScope | undefined): string {
+  return scope && typeof scope !== 'string' ? withPaperSourceJoin(columns, { exam_type: scope.exam_type }) : columns;
+}
+
+/**
  * Aggregate progress stats for a student, optionally filtered by exam relevance.
  */
 export async function getStudentQBStats(
   studentId: string,
-  examRelevance?: QBExamRelevance,
+  scope?: QBStatsScope,
   client?: TypedSupabaseClient
 ): Promise<QBProgressStats> {
   const supabase = client || getSupabaseAdminClient();
 
   // Count total active questions
-  let totalQuery = supabase
-    .from('nexus_qb_questions')
-    .select('id, categories, difficulty')
-    .eq('is_active', true)
-    .eq('status' as any, 'active');
-  if (examRelevance) {
-    totalQuery = totalQuery.in('exam_relevance', examRelevanceMatch(examRelevance));
-  }
+  const totalQuery = scopeStatsQuery(
+    supabase
+      .from('nexus_qb_questions')
+      .select(statsColumns('id, categories, difficulty', scope) as 'id, categories, difficulty')
+      .eq('is_active', true)
+      .eq('status' as any, 'active'),
+    scope,
+  );
   // This used to take the total from count:'exact' while reading the rows behind
   // by_category and by_difficulty unranged, so the headline number counted 3,242
   // questions and the breakdown under it described 1,000 of them. Paging the rows
@@ -1461,17 +1474,15 @@ export async function getStudentQBStats(
  * Aggregate stats for teacher view — counts ALL questions regardless of status/is_active.
  */
 export async function getTeacherQBStats(
-  examRelevance?: QBExamRelevance,
+  scope?: QBStatsScope,
   client?: TypedSupabaseClient
 ): Promise<QBProgressStats> {
   const supabase = client || getSupabaseAdminClient();
 
-  let totalQuery = supabase
-    .from('nexus_qb_questions')
-    .select('*', { count: 'exact' });
-  if (examRelevance) {
-    totalQuery = totalQuery.in('exam_relevance', examRelevanceMatch(examRelevance));
-  }
+  const totalQuery = scopeStatsQuery(
+    supabase.from('nexus_qb_questions').select(statsColumns('*', scope) as '*', { count: 'exact' }),
+    scope,
+  );
   const { data: allQuestions, count: totalCount, error: totalError } = await totalQuery;
   if (totalError) throw totalError;
 

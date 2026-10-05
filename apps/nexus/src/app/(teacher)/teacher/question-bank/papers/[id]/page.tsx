@@ -31,6 +31,7 @@ import VisibilityOffOutlinedIcon from '@mui/icons-material/VisibilityOffOutlined
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import TranslateIcon from '@mui/icons-material/Translate';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
+import DriveFileMoveOutlinedIcon from '@mui/icons-material/DriveFileMoveOutlined';
 import CategoryOutlinedIcon from '@mui/icons-material/CategoryOutlined';
 import RestartAltIcon from '@mui/icons-material/RestartAlt';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
@@ -63,6 +64,7 @@ import UploadFileOutlinedIcon from '@mui/icons-material/UploadFileOutlined';
 import PaperStudentAccessPanel from '@/components/question-bank/PaperStudentAccessPanel';
 import PaperJSONDialog from '@/components/question-bank/PaperJSONDialog';
 import EditPaperDetailsDialog from '@/components/question-bank/paper/EditPaperDetailsDialog';
+import MoveQuestionsDialog from '@/components/question-bank/paper/MoveQuestionsDialog';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import PaperShell from '@/components/question-bank/paper/PaperShell';
 import { paperBackHref, readPaperDeepLink } from '@/lib/qb-paper-link';
@@ -295,58 +297,26 @@ export default function PaperDetailPage() {
       });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setMessage(`Error: ${json.error || 'Could not copy from JEE Paper 2'}`);
+        setMessage(`Error: ${json.error || 'Could not copy from JEE Paper 2A'}`);
         return;
       }
       const copied = json.data?.copied ?? 0;
       setMessage(
         copied > 0
-          ? `Copied ${copied} Maths and Aptitude questions from JEE Paper 2.`
+          ? `Copied ${copied} Maths and Aptitude questions from JEE Paper 2A (B.Arch).`
           : 'Maths and Aptitude are already on this paper.',
       );
       await fetchData(true);
     } catch (err) {
       console.error('Failed to copy from Paper 2A:', err);
-      setMessage('Error: Could not copy from JEE Paper 2');
+      setMessage('Error: Could not copy from JEE Paper 2A');
     } finally {
       setCopyingFrom2A(false);
     }
   };
 
-  /**
-   * Planning questions uploaded into this B.Arch paper go to the B.Planning
-   * paper of the same sitting, which is created and filled if needed.
-   */
-  const handleMoveToPaper2B = async (questionIds: string[]) => {
-    if (questionIds.length === 0) return;
-    setMessage('');
-    setOpenPaperHref(null);
-    try {
-      const token = await getToken();
-      if (!token) return;
-      const res = await fetch(`/api/question-bank/papers/${paperId}/move-to-2b`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question_ids: questionIds }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setMessage(`Error: ${json.error || 'Could not move the questions'}`);
-        return;
-      }
-      const { moved = 0, copied = 0, paper_id: targetId } = json.data || {};
-      setMessage(
-        `Moved ${moved} question${moved === 1 ? '' : 's'} to JEE Paper 2B.${
-          copied > 0 ? ` ${copied} Maths and Aptitude questions copied there too.` : ''
-        }`,
-      );
-      if (targetId) setOpenPaperHref(`/teacher/question-bank/papers/${targetId}`);
-      await fetchData(true);
-    } catch (err) {
-      console.error('Failed to move to Paper 2B:', err);
-      setMessage('Error: Could not move the questions');
-    }
-  };
+  // "Move to another question bank": the ticked questions, held while the dialog is open.
+  const [moveIds, setMoveIds] = useState<string[] | null>(null);
 
   /**
    * Work the sections out from the questions themselves.
@@ -784,7 +754,20 @@ export default function PaperDetailPage() {
             <ListItemIcon><EditOutlinedIcon fontSize="small" color="primary" /></ListItemIcon>
             <ListItemText
               primary="Edit paper details"
-              secondary="Year, session and shift (FN or AN)"
+              secondary="Question bank, year, session and shift"
+              secondaryTypographyProps={{ variant: 'caption' }}
+            />
+          </MenuItem>
+          {/* The same dialog, under the name a teacher looks for when the
+              whole paper sits in the wrong question bank. */}
+          <MenuItem
+            onClick={() => { setActionsMenuAnchor(null); setDetailsOpen(true); }}
+            sx={{ minHeight: 44 }}
+          >
+            <ListItemIcon><DriveFileMoveOutlinedIcon fontSize="small" color="primary" /></ListItemIcon>
+            <ListItemText
+              primary="Move paper to another question bank"
+              secondary="The whole paper, with everything on it"
               secondaryTypographyProps={{ variant: 'caption' }}
             />
           </MenuItem>
@@ -797,7 +780,7 @@ export default function PaperDetailPage() {
             >
               <ListItemIcon><ContentCopyOutlinedIcon fontSize="small" color="primary" /></ListItemIcon>
               <ListItemText
-                primary={copyingFrom2A ? 'Copying...' : 'Copy Maths and Aptitude from JEE Paper 2'}
+                primary={copyingFrom2A ? 'Copying...' : 'Copy Maths and Aptitude from JEE Paper 2A (B.Arch)'}
                 secondary="Skips any section this paper already has"
                 secondaryTypographyProps={{ variant: 'caption' }}
               />
@@ -929,8 +912,8 @@ export default function PaperDetailPage() {
             </Button>
           }
         >
-          Maths and Aptitude are the same questions as JEE Paper 2 {sittingLabel}. Copy them here so
-          this is a full B.Planning paper. Later edits on JEE Paper 2 will not carry over.
+          Maths and Aptitude are the same questions as JEE Paper 2A (B.Arch) {sittingLabel}. Copy them here so
+          this is a full B.Planning paper. Later edits on JEE Paper 2A will not carry over.
         </Alert>
       )}
 
@@ -986,7 +969,7 @@ export default function PaperDetailPage() {
           openQuestionId={linkedQuestionId}
           canConnectYouTube={can('system.settings')}
           onActiveChange={setActiveQuestionId}
-          onMoveToPaper2B={paper.exam_type === 'JEE_PAPER_2' ? handleMoveToPaper2B : undefined}
+          onMoveQuestions={setMoveIds}
         />
         </Box>
       )}
@@ -1092,15 +1075,46 @@ export default function PaperDetailPage() {
       />
 
       {/* The round trip's other half */}
+      {moveIds && (
+        <MoveQuestionsDialog
+          open
+          mode="push"
+          sourcePaper={paper}
+          questions={questions.filter((q) => moveIds.includes(q.id))}
+          onClose={() => setMoveIds(null)}
+          onMoved={(result, text) => {
+            setMoveIds(null);
+            setMessage(text);
+            setOpenPaperHref(`/teacher/question-bank/papers/${result.paper_id}`);
+            fetchData(true);
+          }}
+        />
+      )}
+
       <EditPaperDetailsDialog
         open={detailsOpen}
         paper={paper}
+        questions={questions}
         onClose={() => setDetailsOpen(false)}
         getToken={getToken}
-        onSaved={(saved) => {
-          setPaper((prev) => (prev ? { ...prev, year: saved.year, session: saved.session, shift: saved.shift } as typeof prev : prev));
+        onSaved={(saved, move) => {
+          setPaper((prev) =>
+            prev
+              ? ({ ...prev, exam_type: saved.exam_type, year: saved.year, session: saved.session, shift: saved.shift } as typeof prev)
+              : prev,
+          );
           fetchData(true);
-          setMessage('Paper details saved. Its questions moved with it.');
+          if (!move) {
+            setMessage('Paper details saved. Its questions moved with it.');
+            return;
+          }
+          const label = QB_EXAM_TYPE_LABELS[saved.exam_type as keyof typeof QB_EXAM_TYPE_LABELS] || saved.exam_type;
+          const left =
+            move.left_behind > 0
+              ? ` ${move.left_behind === 1 ? '1 drawing question stayed' : `${move.left_behind} drawing questions stayed`} under the old name.`
+              : '';
+          setMessage(`Paper moved to ${label}, with all its questions, answers and videos.${left}`);
+          if (move.left_paper_id) setOpenPaperHref(`/teacher/question-bank/papers/${move.left_paper_id}`);
         }}
       />
 

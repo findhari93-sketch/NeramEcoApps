@@ -96,10 +96,10 @@ describe('listDeck', () => {
 
 describe('paperTitle', () => {
   it('names the exam, year and sitting', () => {
-    expect(paperTitle({ exam_type: 'JEE_PAPER_2', year: 2025 })).toBe('JEE Paper 2 2025');
+    expect(paperTitle({ exam_type: 'JEE_PAPER_2', year: 2025 })).toBe('JEE Paper 2A 2025');
     expect(paperTitle({ exam_type: 'NATA', year: 2025, session: '1' })).toBe('NATA 2025 S1');
     expect(paperTitle({ exam_type: 'JEE_PAPER_2', year: 2024, session: 'January', shift: 'afternoon' })).toBe(
-      'JEE Paper 2 2024 January (afternoon)',
+      'JEE Paper 2A 2024 January (afternoon)',
     );
   });
 });

@@ -7,19 +7,16 @@
  * a 2B paper gets its own COPY of the shared questions, linked back to the 2A
  * original through repeat_group_id, the same link that marks any repeat.
  *
- * Two entry points:
- *   - copySharedSectionsFromPaper2A: fill a 2B paper's Maths and Aptitude.
- *   - moveQuestionsToPaper2B: Planning questions that were uploaded into the 2A
- *     paper (2021 Session 1 AN had 25 of them under Drawing) move across to the
- *     2B paper for the same sitting, which is created if it does not exist.
+ * copySharedSectionsFromPaper2A fills a 2B paper's Maths and Aptitude. Moving
+ * Planning questions that were uploaded into a 2A paper lives in
+ * qb-paper-move.ts, with every other cross-exam move.
  *
  * The copy is one-time. Fixing an answer key on 2A later does not reach 2B.
  */
 
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
-import type { NexusQBOriginalPaper, QBQuestionSection, QBShift } from '../../types';
-import { QB_SECTION_ORDER } from '../../types';
-import { getOrCreateOriginalPaper, refreshPaperStats } from './question-bank';
+import type { NexusQBOriginalPaper, QBQuestionSection } from '../../types';
+import { refreshPaperStats } from './question-bank';
 
 const PAPERS = 'nexus_qb_original_papers';
 const QUESTIONS = 'nexus_qb_questions';
@@ -122,7 +119,7 @@ export async function copySharedSectionsFromPaper2A(
   const source = await findPaperForSitting('JEE_PAPER_2', target, typed);
   if (!source) {
     throw new Paper2BError(
-      `There is no JEE Paper 2 for ${describeSitting(target)} to copy from. Upload that paper first.`,
+      `There is no JEE Paper 2A (B.Arch) for ${describeSitting(target)} to copy from. Upload that paper first.`,
       404,
     );
   }
@@ -153,7 +150,7 @@ export async function copySharedSectionsFromPaper2A(
 
   if (rows.length === 0) {
     throw new Paper2BError(
-      `JEE Paper 2 for ${describeSitting(target)} has no Maths or Aptitude questions to copy yet.`,
+      `JEE Paper 2A (B.Arch) for ${describeSitting(target)} has no Maths or Aptitude questions to copy yet.`,
       409,
     );
   }
@@ -246,98 +243,4 @@ export async function copySharedSectionsFromPaper2A(
     copied: createdRows.length,
     skipped_sections: [...skipped],
   };
-}
-
-export interface MoveTo2BResult {
-  paper_id: string;
-  created_paper: boolean;
-  moved: number;
-  /** Maths and Aptitude copied in from the 2A paper, when the 2B paper lacked them. */
-  copied: number;
-}
-
-/**
- * Move Planning questions that were uploaded into a Paper 2A paper over to the
- * Paper 2B paper of the same sitting.
- *
- * The rows themselves move (their id, attempts and reports stay with them);
- * they become section 'planning' and their source row is re-labelled 2B. The
- * 2B paper is created when missing and then given the shared Maths and
- * Aptitude, so the teacher lands on a complete paper.
- */
-export async function moveQuestionsToPaper2B(
-  sourcePaperId: string,
-  questionIds: string[],
-  callerId: string,
-  client?: TypedSupabaseClient,
-): Promise<MoveTo2BResult> {
-  const typed = client || getSupabaseAdminClient();
-  const supabase = loose(typed);
-  if (questionIds.length === 0) throw new Paper2BError('Pick at least one question to move', 400);
-
-  const source = await getPaper(sourcePaperId, typed);
-  if (source.exam_type !== 'JEE_PAPER_2') {
-    throw new Paper2BError('Only questions on a JEE Paper 2 (B.Arch) paper can move to Paper 2B', 400);
-  }
-
-  const { data: picked, error: pickedError } = await supabase
-    .from(QUESTIONS)
-    .select('id, question_format, original_paper_id')
-    .in('id', questionIds);
-  if (pickedError) throw pickedError;
-  const rows = (picked || []) as Array<{ id: string; question_format: string; original_paper_id: string | null }>;
-  if (rows.length !== questionIds.length || rows.some((r) => r.original_paper_id !== source.id)) {
-    throw new Paper2BError('Some of these questions are not on this paper', 400);
-  }
-  // Planning is all MCQ. A drawing prompt in the selection is a mis-click, and
-  // moving it would take a B.Arch drawing out of the B.Arch paper.
-  if (rows.some((r) => r.question_format === 'DRAWING_PROMPT')) {
-    throw new Paper2BError('Drawing questions stay on the B.Arch paper. Untick them and try again.', 400);
-  }
-
-  const { paper: target, isNew } = await getOrCreateOriginalPaper(
-    'JEE_PAPER_2B',
-    source.year,
-    source.session,
-    callerId,
-    source.shift as QBShift | null,
-    typed,
-  );
-
-  const { error: moveError } = await supabase
-    .from(QUESTIONS)
-    .update({
-      original_paper_id: target.id,
-      section: 'planning',
-      section_order: QB_SECTION_ORDER.planning,
-      exam_relevance: 'JEE',
-    } as never)
-    .in('id', questionIds);
-  if (moveError) throw moveError;
-
-  // The source row named this sitting under 2A; it is a 2B appearance now.
-  let sourceQuery = supabase
-    .from(SOURCES)
-    .update({ exam_type: 'JEE_PAPER_2B' } as never)
-    .in('question_id', questionIds)
-    .eq('exam_type', 'JEE_PAPER_2')
-    .eq('year', source.year);
-  sourceQuery = source.session ? sourceQuery.eq('session', source.session) : sourceQuery.is('session', null);
-  sourceQuery = source.shift ? sourceQuery.eq('shift', source.shift) : sourceQuery.is('shift', null);
-  const { error: sourceError } = await sourceQuery;
-  if (sourceError) throw sourceError;
-
-  let copied = 0;
-  try {
-    copied = (await copySharedSectionsFromPaper2A(target.id, callerId, typed)).copied;
-  } catch (err) {
-    // The move itself succeeded. A 2A paper with nothing to copy yet is not a
-    // reason to report failure; the 2B page offers the copy again.
-    if (!(err instanceof Paper2BError)) throw err;
-  }
-
-  await refreshPaperStats(source.id, typed);
-  await refreshPaperStats(target.id, typed);
-
-  return { paper_id: target.id, created_paper: isNew, moved: questionIds.length, copied };
 }

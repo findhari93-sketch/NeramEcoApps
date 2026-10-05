@@ -17,6 +17,7 @@ import type { FeeStructure } from '@neram/database';
 import FeeCard from '@/components/fees/FeeCard';
 import PaymentToggle from '@/components/fees/PaymentToggle';
 import FAQ from '@/components/fees/FAQ';
+import IncludedSection from '@/components/fees/IncludedSection';
 import { getFeePlanBadge } from '@/lib/fee-plan-badge';
 
 const PHONE_HREF = 'tel:+919176137043';
@@ -67,6 +68,12 @@ export default function FeesPageContent() {
         return null;
     }
   };
+
+  // What the student pays in the selected mode, so "only ₹X more" matches the
+  // prices on screen whether they pay once or in instalments.
+  const priceOf = (fee: FeeStructure) =>
+    paymentMode === 'single' ? fee.fee_amount - (fee.single_payment_discount || 0) : fee.fee_amount;
+  const oneYearPlan = feeStructures.find((fee) => getFeePlanBadge(fee) === 'current_year');
 
   return (
     <Box sx={{ py: { xs: 3, md: 5 } }}>
@@ -135,6 +142,7 @@ export default function FeesPageContent() {
             <Grid container spacing={3} justifyContent="center">
               {feeStructures.map((fee) => {
                 const badge = getBadge(fee);
+                const isMultiYear = getFeePlanBadge(fee) === 'future_year';
                 return (
                   <Grid item xs={12} md={6} key={fee.id} data-testid="fee-card">
                     <FeeCard
@@ -144,6 +152,10 @@ export default function FeesPageContent() {
                       badgeLabel={badge?.label}
                       badgeColor={badge?.color}
                       isHighlighted={badge?.highlighted}
+                      isMultiYear={isMultiYear}
+                      extraOverOneYear={
+                        isMultiYear && oneYearPlan ? priceOf(fee) - priceOf(oneYearPlan) : 0
+                      }
                       t={t}
                     />
                   </Grid>
@@ -156,6 +168,9 @@ export default function FeesPageContent() {
             </Typography>
           </Box>
         )}
+
+        {/* What the fee buys, shown even before the prices load */}
+        <IncludedSection t={t} />
 
         <FAQ t={t} keys={FEE_FAQ_KEYS} />
 

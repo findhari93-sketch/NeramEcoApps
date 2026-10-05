@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { PUBLIC_CACHE_HEADERS } from '../_lib/public-cache';
-import { getActiveFeeStructures } from '@neram/database';
+import { createServerClient, getActiveFeeStructures } from '@neram/database';
 
 export async function GET(req: NextRequest) {
   try {
@@ -16,11 +16,18 @@ export async function GET(req: NextRequest) {
     const programType = searchParams.get('programType') as any;
     const excludeHidden = searchParams.get('excludeHidden') === 'true';
 
-    const feeStructures = await getActiveFeeStructures({
-      courseType: courseType || undefined,
-      programType: programType || undefined,
-      excludeHidden,
-    });
+    // The server client fetches with no-store. The default browser client's plain
+    // fetch landed in the Next.js Data Cache with no expiry (this route is GET-only),
+    // so a price changed in Admin never reached /fees. The edge headers below still
+    // cache the response for a few minutes.
+    const feeStructures = await getActiveFeeStructures(
+      {
+        courseType: courseType || undefined,
+        programType: programType || undefined,
+        excludeHidden,
+      },
+      createServerClient(),
+    );
 
     return NextResponse.json({ feeStructures }, {
       headers: PUBLIC_CACHE_HEADERS,

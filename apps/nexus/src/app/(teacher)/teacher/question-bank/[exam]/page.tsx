@@ -43,6 +43,7 @@ import TableRowsOutlinedIcon from '@mui/icons-material/TableRowsOutlined';
 import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
 import TaskAltOutlinedIcon from '@mui/icons-material/TaskAltOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
+import DriveFileMoveOutlinedIcon from '@mui/icons-material/DriveFileMoveOutlined';
 import type { BulkPublishResult, QBExamType, QBProgressStats } from '@neram/database';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthSWR } from '@/lib/nexus-swr';
@@ -50,7 +51,6 @@ import { useStoredViewMode } from '@/hooks/useStoredViewMode';
 import {
   QB_EXAM_LABELS,
   examFromSlug,
-  examRelevanceFor,
   rememberQBExam,
 } from '@/lib/qb-exam-routes';
 import { paperHref } from '@/lib/qb-paper-link';
@@ -59,6 +59,7 @@ import TeacherPaperCard, { TeacherPaperCardSkeleton } from '@/components/questio
 import WorkStageCards from '@/components/question-bank/WorkStageCards';
 import TeacherQBTools from '@/components/question-bank/TeacherQBTools';
 import ReportedQuestionsBanner from '@/components/question-bank/ReportedQuestionsBanner';
+import MoveQuestionsDialog from '@/components/question-bank/paper/MoveQuestionsDialog';
 import {
   WORK_STAGE_LABELS,
   countStages,
@@ -98,6 +99,7 @@ function ExamWorkPage({ exam }: { exam: QBExamType }) {
 
   const [view, setView] = useStoredViewMode<PaperListView>(PAPER_VIEW_STORAGE_KEY, PAPER_VIEWS, 'table');
   const [publishing, setPublishing] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
   const [notice, setNotice] = useState<{ severity: 'success' | 'warning' | 'error'; text: string } | null>(null);
 
   // So the sidebar, Back links and the /question-bank redirect return here.
@@ -128,8 +130,8 @@ function ExamWorkPage({ exam }: { exam: QBExamType }) {
     error: papersError,
     mutate: refetchPapers,
   } = useAuthSWR<{ data: WorkPaper[] }>(tokenReady ? '/api/question-bank/papers?solutions=1' : null);
-  const { data: statsRes, isLoading: statsLoading } = useAuthSWR<{ data: QBProgressStats }>(
-    tokenReady ? `/api/question-bank/stats?exam_relevance=${examRelevanceFor(exam)}` : null,
+  const { data: statsRes, isLoading: statsLoading, mutate: refetchStats } = useAuthSWR<{ data: QBProgressStats }>(
+    tokenReady ? `/api/question-bank/stats?exam_type=${exam}` : null,
   );
 
   // All exams come back in one response (27 rows); this page keeps its own.
@@ -225,10 +227,21 @@ function ExamWorkPage({ exam }: { exam: QBExamType }) {
           sx={{
             display: 'flex',
             alignItems: 'center',
+            flexWrap: 'wrap',
             gap: 1,
             width: { xs: '100%', md: 'auto' },
           }}
         >
+          {/* Questions uploaded into another exam's paper by mistake (2021
+              Session 1 AN had its B.Planning questions inside the B.Arch paper). */}
+          <Button
+            variant="outlined"
+            startIcon={<DriveFileMoveOutlinedIcon />}
+            onClick={() => setMoveOpen(true)}
+            sx={{ ...ACTION_BUTTON_SX, flex: { xs: '1 1 100%', sm: 'none' }, whiteSpace: 'nowrap' }}
+          >
+            Move questions here
+          </Button>
           <Button
             variant="outlined"
             startIcon={<AddOutlinedIcon />}
@@ -383,16 +396,32 @@ function ExamWorkPage({ exam }: { exam: QBExamType }) {
         <EmptyList
           icon={<DescriptionOutlinedIcon sx={{ fontSize: 32, color: 'primary.main' }} />}
           title={`No ${examLabel} papers uploaded yet`}
-          body="Upload a paper and it appears here with what it still needs."
+          body={
+            exam === 'JEE_PAPER_2B'
+              ? 'Upload a paper and it appears here with what it still needs. Planning questions filed under JEE Paper 2A (B.Arch)? Move them here.'
+              : 'Upload a paper and it appears here with what it still needs.'
+          }
           action={
-            <Button
-              variant="contained"
-              startIcon={<UploadFileOutlinedIcon />}
-              onClick={() => router.push(bulkUploadHref)}
-              sx={ACTION_BUTTON_SX}
-            >
-              Upload a paper
-            </Button>
+            <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <Button
+                variant="contained"
+                startIcon={<UploadFileOutlinedIcon />}
+                onClick={() => router.push(bulkUploadHref)}
+                sx={ACTION_BUTTON_SX}
+              >
+                Upload a paper
+              </Button>
+              {exam === 'JEE_PAPER_2B' && (
+                <Button
+                  variant="outlined"
+                  startIcon={<DriveFileMoveOutlinedIcon />}
+                  onClick={() => setMoveOpen(true)}
+                  sx={ACTION_BUTTON_SX}
+                >
+                  Move questions here
+                </Button>
+              )}
+            </Box>
           }
         />
       ) : shown.length === 0 ? (
@@ -430,6 +459,19 @@ function ExamWorkPage({ exam }: { exam: QBExamType }) {
       )}
 
       <TeacherQBTools exam={exam} />
+
+      <MoveQuestionsDialog
+        open={moveOpen}
+        mode="pull"
+        targetExam={exam}
+        onClose={() => setMoveOpen(false)}
+        onMoved={(_result, text) => {
+          setMoveOpen(false);
+          setNotice({ severity: 'success', text });
+          refetchPapers();
+          refetchStats();
+        }}
+      />
     </Box>
   );
 }

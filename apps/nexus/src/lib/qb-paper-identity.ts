@@ -4,8 +4,11 @@
  * Read by the PATCH route and the Edit details dialog alike, so the dialog can
  * never offer a value the route refuses. Saved through the
  * nexus_qb_rename_paper function, which moves the paper and every question
- * source row carrying its key together.
+ * source row carrying its key together. A change of exam goes through
+ * nexus_qb_change_paper_exam, which also remaps sections the new exam lacks.
  */
+import { isQBQuestionSection, type QBSectionMap } from '@neram/database';
+
 export type PaperShift = 'forenoon' | 'afternoon';
 
 export interface PaperIdentityEdit {
@@ -41,13 +44,42 @@ export function sessionOptionsFor(examType: string): PaperSessionOption[] {
 }
 export const PAPER_SESSION_MAX_LENGTH = 40;
 
+/**
+ * The session to start on when a paper moves to another exam: a standard
+ * session becomes the one in the same place for the new exam (Test 1 for
+ * Session 1), and anything unusual is kept as typed.
+ */
+export function sessionForExam(session: string | null, fromExam: string, toExam: string): string | null {
+  if (!session) return null;
+  const to = sessionOptionsFor(toExam);
+  if (to.some((o) => o.value === session)) return session;
+  const index = sessionOptionsFor(fromExam).findIndex((o) => o.value === session);
+  if (index < 0) return session;
+  return to[Math.min(index, to.length - 1)].value;
+}
+
 export function paperYearMax(now: Date = new Date()): number {
   return now.getFullYear() + 1;
 }
 
-/** True when the body tries to change any of the three. */
+/** True when the body tries to change any of the three, or the exam. */
 export function bodyEditsIdentity(body: Record<string, unknown>): boolean {
-  return body.year !== undefined || body.session !== undefined || body.shift !== undefined;
+  return body.year !== undefined || body.session !== undefined || body.shift !== undefined || body.exam_type !== undefined;
+}
+
+/**
+ * The body's section_map ({"drawing": "planning"}), or null when it is not an
+ * object of known sections. Missing means no remapping.
+ */
+export function parseSectionMap(value: unknown): QBSectionMap | null {
+  if (value === undefined || value === null) return {};
+  if (typeof value !== 'object' || Array.isArray(value)) return null;
+  const out: QBSectionMap = {};
+  for (const [from, to] of Object.entries(value as Record<string, unknown>)) {
+    if (!isQBQuestionSection(from) || !isQBQuestionSection(to)) return null;
+    out[from] = to;
+  }
+  return out;
 }
 
 /**

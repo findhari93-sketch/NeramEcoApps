@@ -8317,14 +8317,14 @@ export const QB_DIFFICULTY_COLORS: Record<QBDifficulty, string> = {
 };
 
 export const QB_EXAM_TYPE_LABELS: Record<QBExamType, string> = {
-  JEE_PAPER_2: 'JEE Paper 2',
+  JEE_PAPER_2: 'JEE Paper 2A (B.Arch)',
   JEE_PAPER_2B: 'JEE Paper 2B (B.Planning)',
   NATA: 'NATA',
 };
 
 /** Compact labels for badges and dense tables. */
 export const QB_EXAM_SHORT_LABELS: Record<QBExamType, string> = {
-  JEE_PAPER_2: 'JEE P2',
+  JEE_PAPER_2: 'JEE P2A',
   JEE_PAPER_2B: 'JEE P2B',
   NATA: 'NATA',
 };

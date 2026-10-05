@@ -27,7 +27,8 @@ export function Section({
       component="section"
       id={id}
       aria-labelledby={title && id ? `${id}-title` : undefined}
-      sx={{ py: { xs: 4, md: 6 }, bgcolor: muted ? 'grey.50' : 'background.default' }}
+      // In-page links (#visit, #centre) land with the heading clear of the fixed header and announcement bar.
+      sx={{ py: { xs: 4, md: 6 }, scrollMarginTop: { xs: 96, md: 88 }, bgcolor: muted ? 'grey.50' : 'background.default' }}
     >
       <Container maxWidth="md">
         {title && (

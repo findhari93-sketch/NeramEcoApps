@@ -15,6 +15,8 @@
  *     whenever the pad does not have focus;
  *   * a paste that arrives while another action is running waits for it, never
  *     dropped;
+ *   * no "Paste" button: TeamsJS clipboard.read returns nothing in the meeting
+ *     panel (2026-10-04), so a button there only ever showed an error;
  *   * pasting text into a text field still pastes the text.
  */
 
@@ -68,7 +70,6 @@ export default function PastePicture({
   value,
   onChange,
   upload,
-  readClipboard,
   busy,
   questionTitle,
   onPasted,
@@ -77,8 +78,6 @@ export default function PastePicture({
   onChange: (url: string | null) => void;
   /** Shrinks and stores the picture for this class; rejects with a message the teacher can act on. */
   upload: (file: File) => Promise<{ url: string }>;
-  /** Teams' own clipboard, where the client has it: a Paste button then works with no Ctrl + V. */
-  readClipboard?: () => Promise<Blob | null>;
   /** Another action is running. A paste now waits for it. */
   busy: boolean;
   /** "Q.33": the question the picture is for, in what the target says. */
@@ -144,18 +143,6 @@ export default function PastePicture({
     document.addEventListener('paste', onPaste);
     return () => document.removeEventListener('paste', onPaste);
   }, [busy, uploading, take]);
-
-  const pasteFromHost = async () => {
-    if (!readClipboard) return;
-    setError(null);
-    const blob = await readClipboard().catch(() => null);
-    if (blob) {
-      await take(new File([blob], 'pasted.png', { type: blob.type || 'image/png' }), true);
-    } else {
-      target.current?.focus();
-      setError('No picture to paste here. Click this box, then press Ctrl + V.');
-    }
-  };
 
   const onDrop = (event: DragEvent) => {
     event.preventDefault();
@@ -242,20 +229,11 @@ export default function PastePicture({
             </IconButton>
           </Tooltip>
         ) : (
-          <>
-            {readClipboard && (
-              <Tooltip title="Paste from the clipboard">
-                <IconButton aria-label="Paste the picture from the clipboard" onClick={() => void pasteFromHost()} disabled={uploading} sx={{ width: 48, height: 48 }}>
-                  <ContentPasteRounded />
-                </IconButton>
-              </Tooltip>
-            )}
-            <Tooltip title="Choose a picture file">
-              <IconButton aria-label="Choose a picture file" onClick={() => fileInput.current?.click()} disabled={uploading} sx={{ width: 48, height: 48 }}>
-                <FolderOpenRounded />
-              </IconButton>
-            </Tooltip>
-          </>
+          <Tooltip title="Choose a picture file">
+            <IconButton aria-label="Choose a picture file" onClick={() => fileInput.current?.click()} disabled={uploading} sx={{ width: 48, height: 48 }}>
+              <FolderOpenRounded />
+            </IconButton>
+          </Tooltip>
         )}
         <input
           ref={fileInput}

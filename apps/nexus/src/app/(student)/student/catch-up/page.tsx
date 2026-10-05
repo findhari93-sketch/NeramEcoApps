@@ -51,7 +51,9 @@ import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import VideocamOffOutlinedIcon from '@mui/icons-material/VideocamOffOutlined';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { splitMissedClasses } from '@/lib/catchup-missed-split';
 import { useAuthSWR } from '@/lib/nexus-swr';
 import CatchupTrack, { TrackStep, TrackStepStatus } from '@/components/course-plan/CatchupTrack';
 import { RADIUS, SHADOW } from '@/components/timetable/timetable-theme';
@@ -227,6 +229,8 @@ function StudentCatchUpWorkspace() {
   const { loading: authLoading, featureFlags } = useNexusAuthContext();
 
   const [snack, setSnack] = useState<{ msg: string; sev: 'success' | 'error' } | null>(null);
+  // Closed by default: a cleared class is proof of work, not something to do.
+  const [showCleared, setShowCleared] = useState(false);
 
   /**
    * The tab lives in the URL so the recap player can send a rewatcher back to
@@ -302,6 +306,10 @@ function StudentCatchUpWorkspace() {
   }
 
   const { items, missed, pace, totals, excluded } = data;
+  // Only what is still owed goes under "Classes you missed". Finished ones used
+  // to stay there in date order, so the oldest, already cleared, sat on top and
+  // read as unfinished (NXS-0132).
+  const { open: openMissed, cleared: clearedMissed } = splitMissedClasses(missed);
   /**
    * Defensive read. A payload cached by a build that predates this key would
    * otherwise blow up the whole screen on `.length`, which is the failure the
@@ -433,7 +441,9 @@ function StudentCatchUpWorkspace() {
               <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                 {item.status === 'done'
                   ? 'All three steps cleared.'
-                  : item.reason_code
+                  : item.status === 'excused'
+                    ? 'Excused by your teacher.'
+                    : item.reason_code
                     ? `${item.reason_said || 'You told us'}: ${reasonShortLabel(item.reason_code).toLowerCase()}.`
                     : 'Tell us why, then watch it and finish the work.'}
               </Typography>
@@ -453,6 +463,8 @@ function StudentCatchUpWorkspace() {
           <Gates item={item} />
           {item.status === 'done' ? (
             <Chip size="small" color="success" label="Caught up" sx={{ fontWeight: 700 }} />
+          ) : item.status === 'excused' ? (
+            <Chip size="small" label="Excused" sx={{ fontWeight: 700 }} />
           ) : due ? (
             <Chip
               size="small"
@@ -657,7 +669,7 @@ function StudentCatchUpWorkspace() {
                 into the red section and the second heading was usually empty.
                 With one clock at a time there is at most one urgent card, and the
                 hero above already points at it. */}
-            {missed.length > 0 && (
+            {openMissed.length > 0 && (
               <>
                 <Typography
                   sx={{
@@ -672,7 +684,7 @@ function StudentCatchUpWorkspace() {
                   Classes you missed
                 </Typography>
                 <Stack spacing={1} sx={{ mb: 3 }}>
-                  {missed.map(missedCard)}
+                  {openMissed.map(missedCard)}
                 </Stack>
               </>
             )}
@@ -727,6 +739,49 @@ function StudentCatchUpWorkspace() {
                   }}
                 />
               </>
+            )}
+
+            {/* Missed classes that are finished or excused. Below everything that
+                still needs doing, and shut until asked for, so the list above is
+                only ever things to do. No animation on open, so there is no
+                motion to reduce. */}
+            {clearedMissed.length > 0 && (
+              <Box sx={{ mt: items.length > 0 ? 3 : 0 }}>
+                <Button
+                  fullWidth
+                  color="inherit"
+                  onClick={() => setShowCleared((v) => !v)}
+                  aria-expanded={showCleared}
+                  aria-controls="catchup-cleared-list"
+                  endIcon={
+                    <ExpandMoreIcon
+                      sx={{ transform: showCleared ? 'rotate(180deg)' : 'none' }}
+                    />
+                  }
+                  sx={{
+                    minHeight: 48,
+                    justifyContent: 'space-between',
+                    textTransform: 'none',
+                    fontWeight: 700,
+                    color: 'text.secondary',
+                    borderRadius: RADIUS.control,
+                    px: 1.5,
+                    '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' },
+                  }}
+                >
+                  <Stack direction="row" spacing={1} alignItems="center" component="span">
+                    <CheckCircleIcon sx={{ fontSize: 20, color: 'success.main' }} />
+                    <span>
+                      Caught up ({clearedMissed.length})
+                    </span>
+                  </Stack>
+                </Button>
+                {showCleared && (
+                  <Stack id="catchup-cleared-list" spacing={1} sx={{ mt: 1 }}>
+                    {clearedMissed.map(missedCard)}
+                  </Stack>
+                )}
+              </Box>
             )}
 
             {excluded.length > 0 && (

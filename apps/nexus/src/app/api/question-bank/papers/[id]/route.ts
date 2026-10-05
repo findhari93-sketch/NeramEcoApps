@@ -7,10 +7,13 @@ import {
   getQuestionsByPaper,
   deletePaperWithQuestions,
   getQuestionTagIdsBatch,
+  changePaperExam,
+  isKnownQBExamType,
+  Paper2BError,
 } from '@neram/database';
 import type { NexusQBOriginalPaper, NexusQBQuestionSource } from '@neram/database';
 import { buildPaperBlueprint } from '@/lib/paper-blueprint';
-import { bodyEditsIdentity, parsePaperIdentityEdit, renameErrorStatus } from '@/lib/qb-paper-identity';
+import { bodyEditsIdentity, parsePaperIdentityEdit, parseSectionMap, renameErrorStatus } from '@/lib/qb-paper-identity';
 
 
 import { describeError } from '@/lib/api-errors';
@@ -130,7 +133,7 @@ export async function PATCH(
     if (body && typeof body === 'object' && bodyEditsIdentity(body)) {
       const { data: current, error: readError } = await supabase
         .from('nexus_qb_original_papers')
-        .select('year, session, shift')
+        .select('exam_type, year, session, shift')
         .eq('id', params.id)
         .maybeSingle();
       if (readError) throw readError;
@@ -138,6 +141,26 @@ export async function PATCH(
 
       const parsed = parsePaperIdentityEdit(body, current as { year: number; session: string | null; shift: string | null });
       if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 });
+
+      // A different exam: the whole paper moves to that question bank, with
+      // its questions and everything on them, renamed in the same step.
+      if (body.exam_type !== undefined && body.exam_type !== (current as { exam_type: string }).exam_type) {
+        if (!isKnownQBExamType(body.exam_type)) {
+          return NextResponse.json({ error: 'Pick JEE Paper 2A, JEE Paper 2B or NATA' }, { status: 400 });
+        }
+        const sectionMap = parseSectionMap(body.section_map);
+        if (!sectionMap) return NextResponse.json({ error: 'Unknown section' }, { status: 400 });
+        try {
+          const moved = await changePaperExam(
+            { paperId: params.id, examType: body.exam_type, ...parsed.value, sectionMap },
+            supabase,
+          );
+          return NextResponse.json({ data: moved.paper, moved }, { status: 200 });
+        } catch (err) {
+          if (err instanceof Paper2BError) return NextResponse.json({ error: err.message }, { status: err.status });
+          throw err;
+        }
+      }
 
       const { data: renamed, error: renameError } = await (supabase as any).rpc('nexus_qb_rename_paper', {
         p_paper_id: params.id,

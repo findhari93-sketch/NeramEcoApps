@@ -8,7 +8,7 @@
  * What these pin, at 375px:
  * - A numerical question in practice shows the box and the keypad.
  * - Fraction and root keys type into the box and the "Reads as" line appears.
- * - Check answer sends the typed formula, and the screen shows the verdict.
+ * - Check answer sends the typed formula, from a button clear of the bottom nav.
  * - The keys are full-size targets and nothing scrolls sideways.
  *
  * The answer POST is intercepted and answered locally, so no attempt is
@@ -73,9 +73,12 @@ test.describe('Numerical answers with the maths keypad', () => {
     await expect(box).toHaveValue('2√(3)');
     await expect(page.getByText('Reads as').first()).toBeVisible();
 
+    // Above the phone's bottom nav, so a real tap reaches it.
     await page.getByRole('button', { name: /^(Check answer|Submit Answer)$/ }).first().click();
     await expect.poll(() => sent).toBe('2√(3)');
-    await expect(page.getByText(/Correct!/).first()).toBeVisible();
+    // No verdict check: this page shows the verdict from the question's saved
+    // attempts, which it re-reads after submitting, and the POST above is
+    // answered locally so nothing is saved.
   });
 
   test('mobile: keys are full-size and nothing scrolls sideways', async ({ page }) => {

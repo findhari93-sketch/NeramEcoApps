@@ -10,7 +10,9 @@ import {
   Divider,
 } from '@neram/ui';
 import {
+  ArrowDownwardRounded,
   CheckCircleOutlined,
+  LayersOutlined,
   StarOutlined,
   TrendingUpOutlined,
 } from '@mui/icons-material';
@@ -18,6 +20,10 @@ import Link from 'next/link';
 import type { FeeStructure } from '@neram/database';
 import { useApplicationStatus } from '@/hooks/useApplicationStatus';
 import { useGoToApp } from '@/hooks/useGoToApp';
+import { INCLUDED_SECTION_ID } from './IncludedSection';
+
+// The four things a student weighs first. The full list sits under the cards.
+const HIGHLIGHT_KEYS = ['h1', 'h2', 'h3', 'h4'] as const;
 
 interface FeeCardProps {
   fee: FeeStructure;
@@ -26,7 +32,11 @@ interface FeeCardProps {
   badgeLabel?: string;
   badgeColor?: 'success' | 'info' | 'warning';
   isHighlighted?: boolean;
-  t: (key: string) => string;
+  /** A plan longer than a year repeats the one-year plan, so it says so. */
+  isMultiYear?: boolean;
+  /** How much more this plan costs than the one-year plan, in rupees. */
+  extraOverOneYear?: number;
+  t: (key: string, values?: Record<string, string | number>) => string;
 }
 
 export default function FeeCard({
@@ -36,6 +46,8 @@ export default function FeeCard({
   badgeLabel,
   badgeColor = 'success',
   isHighlighted = false,
+  isMultiYear = false,
+  extraOverOneYear = 0,
   t,
 }: FeeCardProps) {
   const { status } = useApplicationStatus();
@@ -218,21 +230,58 @@ export default function FeeCard({
           </Typography>
         )}
 
-        {/* Features */}
-        {fee.features && fee.features.length > 0 && (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-            {fee.features.map((feature, i) => (
-              <Box key={i} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                <CheckCircleOutlined
-                  sx={{ fontSize: 18, color: 'success.main', mt: 0.2, flexShrink: 0 }}
-                />
-                <Typography variant="body2" sx={{ lineHeight: 1.5 }}>
-                  {feature}
+        {/* A longer plan is the one-year plan stretched over more years */}
+        {isMultiYear && (
+          <Box
+            sx={{
+              display: 'flex',
+              gap: 1.25,
+              p: 1.5,
+              mb: 2,
+              borderRadius: 1,
+              bgcolor: 'grey.50',
+              border: 1,
+              borderColor: 'grey.200',
+            }}
+          >
+            <LayersOutlined aria-hidden sx={{ fontSize: 22, color: 'primary.main', flexShrink: 0, mt: '1px' }} />
+            <Box>
+              <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', lineHeight: 1.4 }}>
+                {t('included.twoYearIntro')}
+              </Typography>
+              {extraOverOneYear > 0 && (
+                <Typography sx={{ fontSize: '0.9rem', fontWeight: 600, color: 'success.dark', lineHeight: 1.4, mt: 0.25 }}>
+                  {t('included.twoYearExtra', { amount: `₹${extraOverOneYear.toLocaleString('en-IN')}` })}
                 </Typography>
-              </Box>
-            ))}
+              )}
+            </Box>
           </Box>
         )}
+
+        {/* Plan extras typed in Admin, then what every plan includes */}
+        <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+          {[...(fee.features ?? []), ...HIGHLIGHT_KEYS.map((key) => t(`included.${key}`))].map((feature, i) => (
+            <Box component="li" key={i} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+              <CheckCircleOutlined
+                aria-hidden
+                sx={{ fontSize: 18, color: 'success.main', mt: '3px', flexShrink: 0 }}
+              />
+              <Typography sx={{ fontSize: '0.95rem', lineHeight: 1.5 }}>
+                {feature}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+
+        <Button
+          component="a"
+          href={`#${INCLUDED_SECTION_ID}`}
+          size="small"
+          endIcon={<ArrowDownwardRounded sx={{ fontSize: 18 }} />}
+          sx={{ mt: 1.5, ml: -1, minHeight: 44, px: 1, textTransform: 'none', fontWeight: 600 }}
+        >
+          {t('included.seeAll')}
+        </Button>
       </CardContent>
 
       {/* CTA Button */}

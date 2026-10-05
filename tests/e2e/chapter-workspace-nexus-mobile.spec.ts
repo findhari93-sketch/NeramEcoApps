@@ -152,7 +152,9 @@ test.describe('Chapter workspace (mobile)', () => {
     await page.goto(`${NEXUS}/student/study-materials`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(5000);
 
-    const cards = page.locator('.MuiCardActionArea-root');
+    // A phone opens the student page on the list (NXS-0131), whose rows are
+    // labelled "Open <title>"; the covers grid is still a CardActionArea.
+    const cards = page.locator('.MuiCardActionArea-root, [role="button"][aria-label^="Open "]');
     test.skip((await cards.count()) === 0, 'No study files visible to this student');
     await cards.first().click();
 

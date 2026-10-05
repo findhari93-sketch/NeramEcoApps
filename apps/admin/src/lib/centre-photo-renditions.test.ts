@@ -33,3 +33,27 @@ describe('makeRenditions', () => {
     await expect(makeRenditions(Buffer.from('not an image'))).rejects.toThrow();
   });
 });
+
+describe('plain borders', () => {
+  /** A 1600x1000 photo-like block with black bars added left and top, like a phone screenshot. */
+  const letterboxed = async () => {
+    const noise = Buffer.alloc(1600 * 1000 * 3);
+    for (let i = 0; i < noise.length; i++) noise[i] = 60 + ((i * 7919) % 160);
+    const photo = await sharp(noise, { raw: { width: 1600, height: 1000, channels: 3 } }).png().toBuffer();
+    return sharp({ create: { width: 2400, height: 1040, channels: 3, background: { r: 0, g: 0, b: 0 } } })
+      .composite([{ input: photo, left: 800, top: 40 }])
+      .jpeg({ quality: 90 })
+      .toBuffer();
+  };
+
+  it('trims black bars so the page shows only the photo', async () => {
+    const r = await makeRenditions(await letterboxed());
+    expect(r.width).toBe(1600);
+    expect(Math.abs(r.height - 1000)).toBeLessThanOrEqual(4);
+  });
+
+  it('explains a screenshot that is too narrow once trimmed', async () => {
+    const shot = await sharp(await letterboxed()).resize({ width: 1400 }).jpeg().toBuffer();
+    await expect(makeRenditions(shot)).rejects.toThrow(/screenshot/);
+  });
+});

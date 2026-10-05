@@ -11,7 +11,6 @@ import { useFormContext } from './FormContext';
 import type { ApplicationFormData, FormStep } from './types';
 import StepShell from './StepShell';
 import EntryChoices from './EntryChoices';
-import RecoveryFooter from './RecoveryFooter';
 import ApplicationDashboard from './ApplicationDashboard';
 import AboutYouStep from './steps/AboutYouStep';
 import YourCourseStep from './steps/YourCourseStep';
@@ -240,8 +239,6 @@ export default function ApplyFlow() {
         {activeStep === 1 && <YourCourseStep />}
         {activeStep === 2 && <ReviewStep onEditStep={(step) => setActiveStep(step as FormStep)} />}
         {activeStep === 3 && <PayAndEnrolStep />}
-
-        {activeStep < 3 && <RecoveryFooter />}
       </StepShell>
 
       <LoginModal

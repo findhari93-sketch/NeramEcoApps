@@ -4,7 +4,7 @@
  * than a zero percent before anything has been graded.
  */
 
-import type { AnswerType, SkipReason, StudentScore } from './types';
+import type { AnswerType, AnyReason, SkipReason, StudentScore } from './types';
 
 /** "I can't answer": the reasons a student picks from, as the pad and the console word them. */
 export const SKIP_REASON_LABELS: Record<SkipReason, string> = {
@@ -15,19 +15,28 @@ export const SKIP_REASON_LABELS: Record<SkipReason, string> = {
   other: 'Something else',
 };
 
+/** The teacher's own mark for a student whose pad will not work. Never a choice on the student's pad. */
+export const PAD_PROBLEM_LABEL = "Can't use the pad";
+
+/** Any reason on record, as the console words it. */
+export function reasonLabel(reason: AnyReason): string {
+  return reason === 'pad_problem' ? PAD_PROBLEM_LABEL : SKIP_REASON_LABELS[reason];
+}
+
 /** The same reasons, short, for the teacher's one-line count. */
-const SKIP_REASON_SHORT: Record<SkipReason, string> = {
+const SKIP_REASON_SHORT: Record<AnyReason, string> = {
   dont_know: "don't know",
   cant_see: "can't see it",
   need_time: 'need time',
   tech_problem: 'technical problem',
   other: 'other',
+  pad_problem: "can't use the pad",
 };
 
 /** "3 can't answer: 2 don't know, 1 can't see it". Empty when nobody said. */
-export function skipSummary(skips: { total: number; by_reason: Partial<Record<SkipReason, number>> } | null | undefined): string {
+export function skipSummary(skips: { total: number; by_reason: Partial<Record<AnyReason, number>> } | null | undefined): string {
   if (!skips || skips.total <= 0) return '';
-  const order = Object.keys(SKIP_REASON_LABELS) as SkipReason[];
+  const order = Object.keys(SKIP_REASON_SHORT) as AnyReason[];
   const parts = order
     .filter((reason) => (skips.by_reason[reason] ?? 0) > 0)
     .map((reason) => `${skips.by_reason[reason]} ${SKIP_REASON_SHORT[reason]}`);

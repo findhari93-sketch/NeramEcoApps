@@ -230,11 +230,6 @@
       "submitFailed": "We could not save your application. Go back to Review and try again.",
       "changeDetails": "Change details"
     },
-    "recovery": {
-      "title": "Not ready for coaching?",
-      "body": "Start with Neram Tools and prepare on your own.",
-      "cta": "Explore Neram Tools"
-    },
     "errors": {
       "heading": "A few things need your attention",
       "submitFailed": "We could not save your application. Try again.",
@@ -318,7 +313,8 @@
     "payAndJoin": "भुगतान करें और जुड़ें",
     "goToApp": "ऐप पर जाएं",
     "joinNow": "अभी जुड़ें",
-    "viewFees": "फीस देखें"
+    "viewFees": "फीस देखें",
+    "fees": "फीस"
   },
   "centers": {
     "title": "हमारे लर्निंग सेंटर देखें",
@@ -374,6 +370,44 @@
     "contactForFees": "Please contact us for the latest fee details.",
     "callUs": "Call Us",
     "comboNote": "* For Both NATA & JEE combo, a small additional fee applies.",
+    "included": {
+      "title": "आपकी फीस में सब कुछ शामिल है",
+      "subtitle": "एक ही फीस में क्लास, लर्निंग ऐप, और परीक्षा आवेदन से लेकर कॉलेज सीट तक हमारी मदद।",
+      "seeAll": "शामिल सभी सुविधाएं देखें",
+      "h1": "4 प्रयासों की तैयारी: 2 NATA और JEE Main के दोनों सत्र",
+      "h2": "प्रश्न बैंक और AI गणित शिक्षक के साथ Nexus ऐप",
+      "h3": "हर क्लास की वीडियो लाइब्रेरी, साथ में Microsoft 365",
+      "h4": "आवेदन फॉर्म से कॉलेज प्रवेश तक मदद",
+      "twoYearIntro": "एक साल के प्रोग्राम की हर सुविधा, पूरे 2 साल के लिए",
+      "twoYearExtra": "दूसरे साल के लिए सिर्फ {amount} अधिक",
+      "noHidden": "कोई छिपा शुल्क नहीं। ऊपर दी गई हर सुविधा दोनों प्लान में शामिल है।",
+      "groups": {
+        "training": {
+          "title": "हर प्रयास के लिए लाइव ट्रेनिंग",
+          "i1": "ड्रॉइंग, गणित और एप्टीट्यूड की लाइव ऑनलाइन क्लास",
+          "i2": "साल में 2 NATA प्रयासों और JEE Main Paper 2 के दोनों सत्रों की तैयारी",
+          "i3": "डाउट क्लियरिंग, ड्रॉइंग रिव्यू और जांचे गए मॉक टेस्ट"
+        },
+        "app": {
+          "title": "Nexus, आपका लर्निंग ऐप",
+          "i1": "टाइमटेबल, असाइनमेंट, टेस्ट और आपकी प्रगति एक ही जगह",
+          "i2": "NATA और JEE Paper 2 के पिछले वर्षों के प्रश्नों वाला प्रश्न बैंक",
+          "i3": "NATA और JEE Paper 2 गणित के लिए AI गणित शिक्षक"
+        },
+        "library": {
+          "title": "लाइब्रेरी और टूल्स",
+          "i1": "हर लाइव क्लास रिकॉर्ड होती है, कभी भी दोबारा देखें",
+          "i2": "पिछले वर्षों की क्लास की Neram वीडियो लाइब्रेरी, आपके कोर्स के अपने YouTube जैसी",
+          "i3": "Teams, Word, PowerPoint और OneDrive के साथ Microsoft 365 छात्र खाता"
+        },
+        "support": {
+          "title": "कॉलेज में दाखिले तक सहायता",
+          "i1": "परीक्षा आवेदन फॉर्म, फोटो और दस्तावेजों में मदद",
+          "i2": "परीक्षा केंद्र, हॉल टिकट और परीक्षा के दिन का मार्गदर्शन",
+          "i3": "काउंसलिंग मार्गदर्शन: कॉलेज चुनना, चॉइस फिलिंग और प्रवेश"
+        }
+      }
+    },
     "whyInvestTitle": "Why This Investment is Worth Every Rupee",
     "whyInvestSubtitle": "Here is why Neram Classes delivers exceptional value.",
     "trackRecord": "90% Top College Placements",

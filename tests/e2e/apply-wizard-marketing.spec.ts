@@ -178,8 +178,35 @@ test.describe('Apply wizard', () => {
     await expect(page.getByText('NERAM-2609-99999')).toHaveCount(0);
   });
 
-  test('the recovery link points to Tools', async ({ page }) => {
-    await page.goto(`${MARKETING_URL}/apply`);
-    await expect(page.getByRole('link', { name: /explore neram tools/i })).toHaveAttribute('href', /\/tools$/);
+  /**
+   * The form sells one thing.
+   *
+   * Every step except Pay used to end with "Not ready for coaching? Explore Neram
+   * Tools", directly under the primary button. It was built as an anti-dead-end,
+   * but it offered a free alternative to the product being sold, to a reader who
+   * had already shown intent by opening the form, and Tools earns nothing until
+   * the subscription exists. Removed on the founder's instruction, 2026-10-04.
+   *
+   * Both halves are pinned here. Dropping the link without keeping a route to a
+   * person would recreate the dead end the block was written to prevent, and the
+   * reason removing it is safe is that ApplicationShell already pins Help, with
+   * the office number behind it, in the top bar of every step.
+   */
+  test('the application form offers no exit to Tools, but always a person', async ({ page }) => {
+    // domcontentloaded, not the default 'load': against a dev server this route
+    // keeps a connection open and 'load' can outlast the 30s budget, which fails
+    // the navigation before a single assertion runs. Every expect below auto-waits,
+    // so the weaker signal costs nothing.
+    await page.goto(`${MARKETING_URL}/apply`, { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('link', { name: /neram tools/i })).toHaveCount(0);
+    await expect(page.locator('a[href$="/tools"]')).toHaveCount(0);
+
+    // Retried, because the click can land before React has hydrated the shell and
+    // a dead press leaves no menu to find. Each attempt presses Help again.
+    const help = page.getByRole('button', { name: /help/i });
+    await expect(async () => {
+      await help.click();
+      await expect(page.getByRole('menuitem', { name: /call us/i })).toBeVisible({ timeout: 2000 });
+    }).toPass({ timeout: 20000 });
   });
 });

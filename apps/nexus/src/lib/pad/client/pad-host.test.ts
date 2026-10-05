@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { browserHost, cachedTokenGetter, consolePopOut, frameFromTeams, readTestHost, stageSharing, meetingTitleReader, teamsClipboardReader, themeFromTeams, tokenExpiresAt } from './pad-host';
+import { browserHost, cachedTokenGetter, consolePopOut, frameFromTeams, readTestHost, stageSharing, meetingTitleReader, reportOpener, themeFromTeams, tokenExpiresAt } from './pad-host';
 
 /** A JWT-shaped string, base64url over UTF-8 as Entra issues them (names are not always ASCII). */
 function jwt(claims: Record<string, unknown>): string {
@@ -203,20 +203,52 @@ describe('consolePopOut', () => {
   });
 });
 
-describe('teamsClipboardReader', () => {
-  const png = new Blob([new Uint8Array(4)], { type: 'image/png' });
+describe('reportOpener', () => {
+  const APP_ID = 'df4f6b2d-ea18-46d1-8934-f508ac248e6c';
+  const SESSION = '11111111-1111-4111-8111-111111111111';
+  type Teams = Parameters<typeof reportOpener>[0];
 
-  it('is absent when this Teams client has no clipboard capability', () => {
-    expect(teamsClipboardReader({})).toBeUndefined();
-    expect(teamsClipboardReader({ clipboard: { isSupported: () => false, read: async () => png } })).toBeUndefined();
-    expect(teamsClipboardReader({ clipboard: { isSupported: () => { throw new Error('not initialised'); }, read: async () => png } })).toBeUndefined();
+  function fakeTeams({ stage = true, dialog = true }: { stage?: boolean; dialog?: boolean } = {}) {
+    const open = vi.fn(async () => undefined);
+    const dialogOpen = vi.fn();
+    const teams = {
+      stageView: { isSupported: () => stage, open, StageViewOpenMode: { popout: 'popout' } },
+      dialog: { url: { isSupported: () => dialog, open: dialogOpen } },
+      DialogDimension: { Large: 'large' },
+    };
+    return { teams: teams as unknown as Teams, open, dialogOpen };
+  }
+  const desktop = { app: { appId: { toString: () => APP_ID }, host: { clientType: 'desktop' } }, chat: { id: '19:meeting_abc@thread.v2' } };
+  const web = { ...desktop, app: { ...desktop.app, host: { clientType: 'web' } } };
+
+  it('opens the report in its own Teams window on desktop, signed in with Teams', async () => {
+    const { teams, open, dialogOpen } = fakeTeams();
+    await reportOpener(teams, desktop, 'https://nexus.neramclasses.com')!(SESSION);
+    expect(open).toHaveBeenCalledWith({
+      appId: APP_ID,
+      contentUrl: `https://nexus.neramclasses.com/pad/teams/report?session=${SESSION}`,
+      websiteUrl: `https://nexus.neramclasses.com/teacher/answer-pad/sessions/${SESSION}`,
+      title: 'Answer Pad report',
+      threadId: '19:meeting_abc@thread.v2',
+      openMode: 'popout',
+    });
+    expect(dialogOpen).not.toHaveBeenCalled();
   });
 
-  it('hands back an image, and null for text or a refusal', async () => {
-    expect(await teamsClipboardReader({ clipboard: { isSupported: () => true, read: async () => png } })!()).toBe(png);
-    const text = new Blob(['hi'], { type: 'text/plain' });
-    expect(await teamsClipboardReader({ clipboard: { isSupported: () => true, read: async () => text } })!()).toBeNull();
-    expect(await teamsClipboardReader({ clipboard: { isSupported: () => true, read: async () => { throw new Error('denied'); } } })!()).toBeNull();
+  it('opens it as a large Teams dialog on the web', async () => {
+    const { teams, open, dialogOpen } = fakeTeams();
+    await reportOpener(teams, web, 'https://nexus.neramclasses.com')!(SESSION);
+    expect(open).not.toHaveBeenCalled();
+    expect(dialogOpen).toHaveBeenCalledWith({
+      url: `https://nexus.neramclasses.com/pad/teams/report?session=${SESSION}`,
+      title: 'Answer Pad report',
+      size: { height: 'large', width: 'large' },
+    });
+  });
+
+  it('is absent where Teams has neither, so the plain link is used', () => {
+    expect(reportOpener(fakeTeams({ stage: false, dialog: false }).teams, desktop, 'https://x.test')).toBeUndefined();
+    expect(reportOpener(fakeTeams({ dialog: false }).teams, web, 'https://x.test')).toBeUndefined();
   });
 });
 

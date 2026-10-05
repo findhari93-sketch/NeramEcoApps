@@ -240,11 +240,6 @@
       "submitFailed": "We could not save your application. Go back to Review and try again.",
       "changeDetails": "Change details"
     },
-    "recovery": {
-      "title": "Not ready for coaching?",
-      "body": "Start with Neram Tools and prepare on your own.",
-      "cta": "Explore Neram Tools"
-    },
     "errors": {
       "heading": "A few things need your attention",
       "submitFailed": "We could not save your application. Try again.",
@@ -400,7 +395,8 @@
     "payAndJoin": "Pay & Join Now",
     "goToApp": "Go to App",
     "joinNow": "Join Now",
-    "viewFees": "View fees"
+    "viewFees": "View fees",
+    "fees": "Fees"
   },
   "centers": {
     "title": "Visit Our Learning Centers",
@@ -456,6 +452,44 @@
     "contactForFees": "Please contact us for the latest fee details.",
     "callUs": "Call Us",
     "comboNote": "* For Both NATA & JEE combo, a small additional fee applies as mentioned in each plan.",
+    "included": {
+      "title": "Everything included in your fee",
+      "subtitle": "One fee covers your classes, your learning app, and our help from the exam application to your college seat.",
+      "seeAll": "See everything included",
+      "h1": "Trained for 4 attempts: 2 NATA and both JEE Main sessions",
+      "h2": "Nexus app with question bank and AI Maths Teacher",
+      "h3": "Video library of every class, plus Microsoft 365",
+      "h4": "Help from the application form to college admission",
+      "twoYearIntro": "Everything in the One Year program, for 2 full years",
+      "twoYearExtra": "The second year costs only {amount} more",
+      "noHidden": "No hidden charges. Everything above comes with both plans.",
+      "groups": {
+        "training": {
+          "title": "Live training for every attempt",
+          "i1": "Live online classes in drawing, maths and aptitude",
+          "i2": "Trained for 2 NATA attempts and both JEE Main Paper 2 sessions in the year",
+          "i3": "Doubt clearing, drawing reviews and evaluated mock tests"
+        },
+        "app": {
+          "title": "Nexus, your learning app",
+          "i1": "Timetable, assignments, tests and your progress in one place",
+          "i2": "Question bank with NATA and JEE Paper 2 previous year questions",
+          "i3": "AI Maths Teacher for NATA and JEE Paper 2 maths"
+        },
+        "library": {
+          "title": "Library and tools",
+          "i1": "Every live class recorded, ready to rewatch anytime",
+          "i2": "Neram video library of previous years' classes, like a private YouTube for your course",
+          "i3": "Microsoft 365 student account with Teams, Word, PowerPoint and OneDrive"
+        },
+        "support": {
+          "title": "Admission support until you join college",
+          "i1": "Help with exam application forms, photos and documents",
+          "i2": "Exam centre, hall ticket and exam day guidance",
+          "i3": "Counselling guidance: college choice, choice filling and admission"
+        }
+      }
+    },
     "whyInvestTitle": "Why This Investment is Worth Every Rupee",
     "whyInvestSubtitle": "We understand that education is a significant investment. Here is why Neram Classes delivers exceptional value for your money.",
     "trackRecord": "90% Top College Placements",

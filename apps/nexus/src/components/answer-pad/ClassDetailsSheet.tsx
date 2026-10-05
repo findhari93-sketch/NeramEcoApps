@@ -1,10 +1,10 @@
 'use client';
 
 /**
- * Who is here, how the pad knows, and the way in for anyone without it. What
- * used to fill the console before the first question, now one tap away (the
- * "18 here" in the header, or Class details in the menu), as a sheet from the
- * bottom of the panel.
+ * How the pad knows who is here, and the way in for anyone without it: the
+ * checks and the room code, one tap away (Class details in the menu), as a sheet
+ * from the bottom of the panel. The names are in the People sheet, from the
+ * class strip.
  */
 
 import type { ReactNode } from 'react';
@@ -15,7 +15,6 @@ import type { PadHost } from '@/lib/pad/client/pad-host';
 import type { RealtimeState } from '@/lib/pad/client/poll-policy';
 import { hereSummary } from '@/lib/pad/client/teacher-view';
 import type { TeacherSnapshot } from '@/lib/pad/client/types';
-import { HideNamesButton, useHideNames } from './HideNames';
 
 function CheckRow({ ok, children }: { ok: boolean; children: ReactNode }) {
   const theme = useTheme();
@@ -56,9 +55,7 @@ export default function ClassDetailsSheet({
   host: PadHost;
   realtime: RealtimeState;
 }) {
-  const [hidden, setHidden] = useHideNames();
   const here = hereSummary(snapshot);
-  const notHere = snapshot.people?.not_joined ?? [];
   const padAddress = typeof window !== 'undefined' ? `${window.location.host}/pad` : 'nexus.neramclasses.com/pad';
 
   return (
@@ -70,26 +67,15 @@ export default function ClassDetailsSheet({
     >
       <Stack spacing={1.5} sx={{ p: 2, pb: 'calc(16px + env(safe-area-inset-bottom))' }} role="dialog" aria-label="Class details">
         <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: 'divider', alignSelf: 'center' }} aria-hidden />
-        <Box>
-          <Typography component="p" variant="h4" fontWeight={800} sx={{ fontVariantNumeric: 'tabular-nums' }}>
-            {`${here.here} here`}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {`of ${here.enrolled} on the class list. ${here.meetingList ? 'In the meeting or with the pad open.' : 'With the pad opened.'}`}
-          </Typography>
-          {here.opened !== null && here.meetingList && (
-            <Typography variant="body2" color="text.secondary">{`${here.opened} opened the pad, ${here.connected} with it open now.`}</Typography>
-          )}
-          <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 0.5 }}>
-            Each question counts the students here, not the whole class list.
-          </Typography>
-        </Box>
+        <Typography component="h2" variant="subtitle1" fontWeight={800}>
+          Class details
+        </Typography>
 
         <Stack spacing={0.75}>
           <CheckRow ok={here.meetingList}>
             {here.meetingList
               ? 'Meeting list on: everyone in the meeting counts'
-              : 'Meeting list off: counting who opened the pad. Add the Neram bot to the meeting to count everyone in it.'}
+              : 'Meeting list off: Teams is not sharing who is in the meeting yet, so only students who opened the pad count.'}
           </CheckRow>
           <CheckRow ok={host.kind !== 'browser'}>{host.kind === 'browser' ? 'Opened outside Teams' : 'Teams connected'}</CheckRow>
           <CheckRow ok={realtime === 'subscribed'}>{realtime === 'subscribed' ? 'Live updates on' : 'Updating every few seconds'}</CheckRow>
@@ -103,26 +89,6 @@ export default function ClassDetailsSheet({
           <Typography variant="body2">{`Without the pad? Open ${padAddress} and enter`}</Typography>
           <RoomCode code={snapshot.session.room_code} />
         </Box>
-
-        {notHere.length > 0 && (
-          <>
-            <Divider />
-            <Box>
-              <Stack direction="row" alignItems="center">
-                <Typography variant="body2" fontWeight={700} sx={{ flex: 1 }}>
-                  {`Not here (${notHere.length})`}
-                </Typography>
-                <HideNamesButton hidden={hidden} onChange={setHidden} />
-              </Stack>
-              <Typography variant="caption" color="text.secondary" component="p">
-                Not counted and not nudged. Most are not in the class today.
-              </Typography>
-              <Typography variant="body2" sx={{ mt: 0.5, overflowWrap: 'anywhere' }} color={hidden ? 'text.secondary' : 'text.primary'}>
-                {hidden ? 'Names are hidden.' : notHere.map((person) => person.name ?? 'Unnamed student').join(', ')}
-              </Typography>
-            </Box>
-          </>
-        )}
 
         <Button variant="outlined" onClick={onClose} sx={{ minHeight: 48 }}>
           Done

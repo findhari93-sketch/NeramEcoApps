@@ -59,11 +59,11 @@ describe('StudentZoneProvider: Question Bank', () => {
     expect(ctx.currentBottomNavItems.map((i) => i.path)).toContain(QB_PATH);
   });
 
-  it('lists JEE Paper 2 only while the published exams are still loading', () => {
+  it('lists JEE Paper 2A only while the published exams are still loading', () => {
     // NATA appearing and then vanishing when the answer lands is worse than
     // NATA arriving late.
     const ctx = zone(null);
-    expect(examLabels(ctx)).toEqual(['JEE Paper 2']);
+    expect(examLabels(ctx)).toEqual(['JEE Paper 2A (B.Arch)']);
   });
 
   it('still reports the exams as unknown while loading, so the redirect waits', () => {
@@ -71,7 +71,7 @@ describe('StudentZoneProvider: Question Bank', () => {
   });
 
   it('lists NATA once it has a published paper', () => {
-    expect(examLabels(zone(['JEE_PAPER_2', 'NATA']))).toEqual(['JEE Paper 2', 'NATA']);
+    expect(examLabels(zone(['JEE_PAPER_2', 'NATA']))).toEqual(['JEE Paper 2A (B.Arch)', 'NATA']);
   });
 
   it('hides the Question Bank everywhere when its Features flag is off', () => {

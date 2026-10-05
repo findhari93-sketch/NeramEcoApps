@@ -131,7 +131,7 @@ export default function SourcePyqPanel({
     >
       <Paper variant="outlined" sx={{ p: { xs: 2, md: 2.5 }, borderRadius: 2 }}>
         <Tabs value={exam} onChange={(_, v) => setExam(v)} sx={{ mb: 2, minHeight: 48 }}>
-          <Tab value="JEE_PAPER_2" label="JEE Paper 2" sx={{ textTransform: 'none', minHeight: 48 }} />
+          <Tab value="JEE_PAPER_2" label="JEE Paper 2A" sx={{ textTransform: 'none', minHeight: 48 }} />
           <Tab value="JEE_PAPER_2B" label="JEE Paper 2B" sx={{ textTransform: 'none', minHeight: 48 }} />
           <Tab value="NATA" label="NATA" sx={{ textTransform: 'none', minHeight: 48 }} />
         </Tabs>

@@ -67,7 +67,7 @@ export function useStudentStageFacts(): StageFactsContextValue {
   return useContext(StageFactsContext);
 }
 
-interface Payload {
+export interface StageFactsPayload {
   facts: Record<
     string,
     {
@@ -92,7 +92,7 @@ export default function StudentStageFactsProvider({ children }: { children: Reac
    * a function invocation each time a teacher alt-tabs back. An hour of
    * deduping means walking between eight screens costs one request in total.
    */
-  const { data } = useAuthSWR<Payload>(STAGE_FACTS_KEY, {
+  const { data } = useAuthSWR<StageFactsPayload>(STAGE_FACTS_KEY, {
     revalidateOnFocus: false,
     revalidateIfStale: false,
     dedupingInterval: 3_600_000,
@@ -101,6 +101,15 @@ export default function StudentStageFactsProvider({ children }: { children: Reac
     shouldRetryOnError: false,
   });
 
+  return <StageFactsDataProvider data={data}>{children}</StageFactsDataProvider>;
+}
+
+/**
+ * The lookup from a payload already fetched, for a screen that fetches it its
+ * own way: the Answer Pad in Teams signs in with the Teams token, not the
+ * Nexus session that useAuthSWR reads (PadStageFactsProvider).
+ */
+export function StageFactsDataProvider({ data, children }: { data: StageFactsPayload | undefined; children: React.ReactNode }) {
   const value = useMemo<StageFactsContextValue>(() => {
     const raw = data?.facts;
     if (!raw) return { ready: false, factsFor: () => null };

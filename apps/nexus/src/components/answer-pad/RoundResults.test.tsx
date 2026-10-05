@@ -5,7 +5,8 @@ import type { RoundResults as Results } from '@/lib/pad/round-results';
 import PresenterBanner from './PresenterBanner';
 import RoundResults from './RoundResults';
 
-const mocks = vi.hoisted(() => ({ padFetch: vi.fn() }));
+const mocks = vi.hoisted(() => ({ padFetch: vi.fn(), copyText: vi.fn() }));
+vi.mock('@/lib/clipboard', () => ({ copyText: mocks.copyText }));
 vi.mock('@/lib/pad/client/pad-fetch', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/pad/client/pad-fetch')>()),
   padFetch: mocks.padFetch,
@@ -101,6 +102,25 @@ describe('RoundResults', () => {
     expect(screen.queryByRole('button', { name: /meeting screen/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Start Round 2' }));
     expect(onNextRound).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens the full report inside Teams where it can, so it is never the browser's other account", async () => {
+    mocks.padFetch.mockResolvedValue(results());
+    const openReport = vi.fn(async () => undefined);
+    render(<RoundResults host={{ ...host, openReport }} sessionId="s1" share={share} nextRoundBusy={false} />);
+    fireEvent.click(await screen.findByRole('button', { name: 'Open the full report' }));
+    await waitFor(() => expect(openReport).toHaveBeenCalledWith('s1'));
+  });
+
+  it('links to the Nexus report outside Teams, and copies the link', async () => {
+    mocks.padFetch.mockResolvedValue(results());
+    mocks.copyText.mockReset().mockResolvedValue(true);
+    render(<RoundResults host={host} sessionId="s1" share={share} nextRoundBusy={false} />);
+    const link = await screen.findByRole('link', { name: 'Open the full report' });
+    expect(link.getAttribute('href')).toBe('/teacher/answer-pad/sessions/s1');
+    fireEvent.click(screen.getByRole('button', { name: 'Copy the report link' }));
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith(`${window.location.origin}/teacher/answer-pad/sessions/s1`));
+    expect(await screen.findByText('Link copied')).toBeTruthy();
   });
 
   it('hides names on request', async () => {

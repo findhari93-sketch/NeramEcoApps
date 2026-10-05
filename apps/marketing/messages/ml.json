@@ -230,11 +230,6 @@
       "submitFailed": "We could not save your application. Go back to Review and try again.",
       "changeDetails": "Change details"
     },
-    "recovery": {
-      "title": "Not ready for coaching?",
-      "body": "Start with Neram Tools and prepare on your own.",
-      "cta": "Explore Neram Tools"
-    },
     "errors": {
       "heading": "A few things need your attention",
       "submitFailed": "We could not save your application. Try again.",
@@ -318,7 +313,8 @@
     "payAndJoin": "പേ ചെയ്ത് ചേരുക",
     "goToApp": "ആപ്പിലേക്ക് പോകുക",
     "joinNow": "ഇപ്പോൾ ചേരുക",
-    "viewFees": "ഫീസ് കാണുക"
+    "viewFees": "ഫീസ് കാണുക",
+    "fees": "ഫീസ്"
   },
   "centers": {
     "title": "ഞങ്ങളുടെ പഠന കേന്ദ്രങ്ങൾ സന്ദർശിക്കുക",
@@ -374,6 +370,44 @@
     "contactForFees": "Please contact us for the latest fee details.",
     "callUs": "Call Us",
     "comboNote": "* For Both NATA & JEE combo, a small additional fee applies.",
+    "included": {
+      "title": "നിങ്ങളുടെ ഫീസിൽ എല്ലാം ഉൾപ്പെടുന്നു",
+      "subtitle": "ഒരൊറ്റ ഫീസിൽ ക്ലാസുകൾ, പഠന ആപ്പ്, പരീക്ഷാ അപേക്ഷ മുതൽ കോളേജ് സീറ്റ് വരെ ഞങ്ങളുടെ സഹായം.",
+      "seeAll": "ഉൾപ്പെടുന്നതെല്ലാം കാണുക",
+      "h1": "4 ശ്രമങ്ങൾക്ക് പരിശീലനം: 2 NATA, JEE Main ന്റെ രണ്ട് സെഷനുകളും",
+      "h2": "ചോദ്യ ബാങ്കും AI കണക്ക് അധ്യാപകനും ഉള്ള Nexus ആപ്പ്",
+      "h3": "എല്ലാ ക്ലാസുകളുടെയും വീഡിയോ ലൈബ്രറി, ഒപ്പം Microsoft 365",
+      "h4": "അപേക്ഷാ ഫോം മുതൽ കോളേജ് പ്രവേശനം വരെ സഹായം",
+      "twoYearIntro": "ഒരു വർഷ പ്രോഗ്രാമിലെ എല്ലാം, മുഴുവൻ 2 വർഷത്തേക്ക്",
+      "twoYearExtra": "രണ്ടാം വർഷത്തിന് {amount} മാത്രം അധികം",
+      "noHidden": "മറഞ്ഞിരിക്കുന്ന ചാർജുകളില്ല. മുകളിലുള്ളതെല്ലാം രണ്ട് പ്ലാനുകളിലും ഉൾപ്പെടുന്നു.",
+      "groups": {
+        "training": {
+          "title": "ഓരോ ശ്രമത്തിനും ലൈവ് പരിശീലനം",
+          "i1": "ഡ്രോയിംഗ്, കണക്ക്, ആപ്റ്റിറ്റ്യൂഡ് എന്നിവയിൽ ലൈവ് ഓൺലൈൻ ക്ലാസുകൾ",
+          "i2": "വർഷത്തിൽ 2 NATA ശ്രമങ്ങൾക്കും JEE Main Paper 2 ന്റെ രണ്ട് സെഷനുകൾക്കും പരിശീലനം",
+          "i3": "സംശയ നിവാരണം, ഡ്രോയിംഗ് റിവ്യൂ, വിലയിരുത്തിയ മോക്ക് ടെസ്റ്റുകൾ"
+        },
+        "app": {
+          "title": "Nexus, നിങ്ങളുടെ പഠന ആപ്പ്",
+          "i1": "ടൈംടേബിൾ, അസൈൻമെന്റുകൾ, ടെസ്റ്റുകൾ, നിങ്ങളുടെ പുരോഗതി എല്ലാം ഒരിടത്ത്",
+          "i2": "NATA, JEE Paper 2 മുൻവർഷ ചോദ്യങ്ങളുള്ള ചോദ്യ ബാങ്ക്",
+          "i3": "NATA, JEE Paper 2 കണക്കിന് AI കണക്ക് അധ്യാപകൻ"
+        },
+        "library": {
+          "title": "ലൈബ്രറിയും ടൂളുകളും",
+          "i1": "എല്ലാ ലൈവ് ക്ലാസുകളും റെക്കോർഡ് ചെയ്യുന്നു, എപ്പോൾ വേണമെങ്കിലും വീണ്ടും കാണാം",
+          "i2": "മുൻവർഷ ക്ലാസുകളുടെ Neram വീഡിയോ ലൈബ്രറി, നിങ്ങളുടെ കോഴ്സിനായുള്ള സ്വന്തം YouTube പോലെ",
+          "i3": "Teams, Word, PowerPoint, OneDrive എന്നിവയുള്ള Microsoft 365 വിദ്യാർത്ഥി അക്കൗണ്ട്"
+        },
+        "support": {
+          "title": "കോളേജിൽ ചേരുന്നതുവരെ പ്രവേശന സഹായം",
+          "i1": "പരീക്ഷാ അപേക്ഷാ ഫോം, ഫോട്ടോ, രേഖകൾ എന്നിവയിൽ സഹായം",
+          "i2": "പരീക്ഷാ കേന്ദ്രം, ഹാൾ ടിക്കറ്റ്, പരീക്ഷാ ദിന മാർഗനിർദേശം",
+          "i3": "കൗൺസലിംഗ് മാർഗനിർദേശം: കോളേജ് തിരഞ്ഞെടുപ്പ്, ചോയ്സ് ഫില്ലിംഗ്, പ്രവേശനം"
+        }
+      }
+    },
     "whyInvestTitle": "Why This Investment is Worth Every Rupee",
     "whyInvestSubtitle": "Here is why Neram Classes delivers exceptional value.",
     "trackRecord": "90% Top College Placements",

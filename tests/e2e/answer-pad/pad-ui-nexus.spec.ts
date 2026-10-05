@@ -151,8 +151,8 @@ test.describe('Answer Pad UI: a class in the Teams side panel', () => {
       for (const student of students) {
         await expect(student.getByText("You're connected", { exact: true })).toBeVisible({ timeout: 120_000 });
       }
-      // The header counts who is here; the ready card says out of how many on the class list.
-      await expect(console_.getByRole('button', { name: '3 here. Class details', exact: true })).toBeVisible({ timeout: 30_000 });
+      // The class strip under the title counts the class down to who has the pad; the ready card says how many of the expected are here.
+      await expect(console_.getByRole('button', { name: /, 3 with pad\. See who$/ })).toBeVisible({ timeout: 30_000 });
       const readiness = console_.getByText(/^3 of \d+$/);
       await expect(readiness).toBeVisible({ timeout: 30_000 });
       enrolled = Number((await readiness.textContent())?.split(' of ')[1]);
@@ -195,8 +195,14 @@ test.describe('Answer Pad UI: a class in the Teams side panel', () => {
       await expect(silent.page.getByText("You told your teacher: I don't know. You can still answer above.", { exact: true })).toBeVisible({
         timeout: 20_000,
       });
-      await expect(console_.getByText("I don't know", { exact: true })).toBeVisible({ timeout: 20_000 });
-      await expect(console_.getByRole('button', { name: /^Accept .+'s reason$/ })).toBeVisible();
+      // The console says a reason is waiting; the name is one tap away, in the People sheet.
+      await expect(console_.getByText('1 student gave a reason. Review it in See who.', { exact: true })).toBeVisible({ timeout: 20_000 });
+      await console_.getByRole('button', { name: /^See who: \d+ not answered$/ }).click();
+      const sheet = console_.getByRole('dialog', { name: 'Who is here' });
+      await expect(sheet.getByText("Said: I don't know", { exact: true })).toBeVisible({ timeout: 20_000 });
+      await expect(sheet.getByRole('button', { name: /^Accept .+'s reason$/ })).toBeVisible();
+      await expectNoSidewaysScroll(console_, 'the People sheet');
+      await sheet.getByRole('button', { name: 'Done', exact: true }).click();
       await expectNoSidewaysScroll(silent.page, 'the pad with a reason given');
     });
 
@@ -229,7 +235,7 @@ test.describe('Answer Pad UI: a class in the Teams side panel', () => {
       expect(counts.Correct + counts.Incorrect + counts['No answer'] + counts['Not in the pad']).toBe(enrolled);
 
       await console_.getByRole('button', { name: 'Show names', exact: true }).click();
-      await expect(console_.getByText('No answer (1)', { exact: true })).toBeVisible({ timeout: 20_000 });
+      await expect(console_.getByRole('button', { name: 'No answer (1)', exact: true })).toBeVisible({ timeout: 20_000 });
       await expect(console_.getByText("Said: I don't know", { exact: true })).toBeVisible();
       await expectNoSeriousAccessibilityIssues(console_, 'the revealed console');
     });

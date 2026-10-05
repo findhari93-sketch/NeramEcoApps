@@ -118,7 +118,7 @@ export function listDeck(questions: DeckSourceQuestion[], order: string[]): Deck
 export function paperTitle(paper: { exam_type: string; year: number; session?: string | null; shift?: string | null }): string {
   const exam =
     paper.exam_type === 'JEE_PAPER_2'
-      ? 'JEE Paper 2'
+      ? 'JEE Paper 2A'
       : paper.exam_type === 'JEE_PAPER_2B'
         ? 'JEE Paper 2B'
         : paper.exam_type === 'NATA'

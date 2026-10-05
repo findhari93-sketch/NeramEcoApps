@@ -11,7 +11,7 @@
 import { useEffect, type ReactNode } from 'react';
 import { Box, NeramThemeProvider, nexusDarkTheme, nexusLightTheme } from '@neram/ui';
 import type { PadTheme } from '@/lib/pad/client/pad-host';
-import { useTextScale } from '@/lib/pad/client/text-scale';
+import { STUDENT_TEXT_SCALE, TEACHER_TEXT_SCALE, useTextScale } from '@/lib/pad/client/text-scale';
 
 /** Teams' high contrast theme marks focus in yellow; the pad does the same. */
 const CONTRAST_FOCUS = '#ffff00';
@@ -21,6 +21,7 @@ export default function PadShell({
   dense = false,
   wide = false,
   roomy = false,
+  staff = false,
   children,
 }: {
   theme: PadTheme;
@@ -30,10 +31,12 @@ export default function PadShell({
   wide?: boolean;
   /** Up to a laptop's width, for the teacher's console in its own window: two columns from 900px. */
   roomy?: boolean;
+  /** A teacher's screen, which starts at the teacher's text size. */
+  staff?: boolean;
   children: ReactNode;
 }) {
   const contrast = theme === 'contrast';
-  const scale = useTextScale();
+  const scale = useTextScale(staff ? TEACHER_TEXT_SCALE : STUDENT_TEXT_SCALE);
 
   // The pad owns its frame, so its root font size is the pad's text size.
   // The meeting screen keeps its own fluid sizes for the people watching.

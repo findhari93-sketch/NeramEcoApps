@@ -1,14 +1,15 @@
 'use client';
 
 /**
- * The top of the teacher's console: the class, where the round is, and one
+ * The top of the teacher's console: the class, where the round is, the class
+ * strip (who is expected, in the meeting, with the pad, answered), and one
  * menu. Built for a 300px side panel: the title is one line (tap it to rename
  * the class), the status is one short caption, and there is exactly one button
  * beside it. End round lives in the menu, with a confirm, so it cannot be hit
  * by mistake next to the menu button.
  */
 
-import { useState, type FormEvent, type MouseEvent } from 'react';
+import { useState, type FormEvent, type MouseEvent, type ReactNode } from 'react';
 import {
   Box,
   Button,
@@ -32,7 +33,7 @@ import StopCircleRounded from '@mui/icons-material/StopCircleRounded';
 import StopScreenShareRounded from '@mui/icons-material/StopScreenShareRounded';
 import TextDecreaseRounded from '@mui/icons-material/TextDecreaseRounded';
 import TextIncreaseRounded from '@mui/icons-material/TextIncreaseRounded';
-import { TEXT_SCALES, setTextScale, stepTextScale, textScaleLabel, useTextScale } from '@/lib/pad/client/text-scale';
+import { TEACHER_TEXT_SCALE, TEXT_SCALES, setTextScale, stepTextScale, textScaleLabel, useTextScale } from '@/lib/pad/client/text-scale';
 
 /** A button that looks like the text inside it. */
 const PLAIN_BUTTON = { border: 0, background: 'none', color: 'inherit', font: 'inherit', p: 0, m: 0, cursor: 'pointer', textAlign: 'left' } as const;
@@ -41,8 +42,8 @@ export interface ConsoleHeaderProps {
   title: string;
   /** "Round 1", then the round's state ("Q.32 open"). */
   status: string;
-  /** Students here this round; tapping it opens Class details. */
-  here: number | null;
+  /** The class strip, under the status; absent once the round has ended. */
+  strip?: ReactNode;
   onRename: (title: string | null) => void;
   renaming: boolean;
   onClassDetails: () => void;
@@ -57,7 +58,7 @@ export interface ConsoleHeaderProps {
 export default function ConsoleHeader({
   title,
   status,
-  here,
+  strip,
   onRename,
   renaming,
   onClassDetails,
@@ -70,7 +71,7 @@ export default function ConsoleHeader({
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
-  const scale = useTextScale();
+  const scale = useTextScale(TEACHER_TEXT_SCALE);
   const close = () => setMenuAnchor(null);
 
   const save = (event: FormEvent) => {
@@ -143,38 +144,9 @@ export default function ConsoleHeader({
               </Typography>
               <EditRounded className="rename-hint" sx={{ fontSize: 16, opacity: 0.5, flexShrink: 0, color: 'text.secondary' }} aria-hidden />
             </Box>
-            <Stack direction="row" alignItems="center" spacing={0.75} sx={{ minWidth: 0 }}>
-              <Typography variant="caption" color="text.secondary" noWrap sx={{ minWidth: 0 }}>
-                {status}
-              </Typography>
-              {here !== null && (
-                <Box
-                  component="button"
-                  type="button"
-                  onClick={onClassDetails}
-                  aria-label={`${here} here. Class details`}
-                  sx={{
-                    ...PLAIN_BUTTON,
-                    // A small pill: it looks tappable, and stays 32px tall in a one-line header.
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    flexShrink: 0,
-                    minHeight: 32,
-                    px: 1,
-                    borderRadius: 4,
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    '&:hover': { bgcolor: 'action.hover' },
-                    '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 1 },
-                  }}
-                >
-                  <GroupsRounded sx={{ fontSize: 16, mr: 0.5, color: 'primary.main' }} aria-hidden />
-                  <Typography variant="caption" fontWeight={700} color="primary.main" sx={{ fontVariantNumeric: 'tabular-nums' }}>
-                    {`${here} here`}
-                  </Typography>
-                </Box>
-              )}
-            </Stack>
+            <Typography variant="caption" color="text.secondary" noWrap component="p" sx={{ minWidth: 0 }}>
+              {status}
+            </Typography>
           </Box>
           <IconButton
             aria-label="Console menu"
@@ -187,6 +159,7 @@ export default function ConsoleHeader({
           </IconButton>
         </Stack>
       )}
+      {!editing && strip}
 
       <Menu anchorEl={menuAnchor} open={!!menuAnchor} onClose={close} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }} transformOrigin={{ vertical: 'top', horizontal: 'right' }}>
         <MenuItem

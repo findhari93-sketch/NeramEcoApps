@@ -34,7 +34,11 @@ test.describe('Application shell', () => {
     await page.goto(`${MARKETING_URL}/ta/apply`);
     await expect(page.locator('footer a[href="/ta/terms"]')).toHaveCount(1);
     await expect(page.locator('footer a[href="/ta/refund-policy"]')).toHaveCount(1);
-    await expect(page.locator('a[href="/ta/tools"]')).toHaveCount(1);
+    // The wordmark: the shell's only link outside the legal strip. It replaces an
+    // assertion on the Tools link, which lived in the form body and was removed on
+    // 2026-10-04 so the funnel stops offering a free product to someone already
+    // filling in the form. A link in the body was never a shell link anyway.
+    await expect(page.locator('header a[href="/ta"]')).toHaveCount(1);
   });
 
   test('/pay?app= renders inside the application shell', async ({ page }) => {

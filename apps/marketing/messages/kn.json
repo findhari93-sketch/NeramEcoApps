@@ -230,11 +230,6 @@
       "submitFailed": "We could not save your application. Go back to Review and try again.",
       "changeDetails": "Change details"
     },
-    "recovery": {
-      "title": "Not ready for coaching?",
-      "body": "Start with Neram Tools and prepare on your own.",
-      "cta": "Explore Neram Tools"
-    },
     "errors": {
       "heading": "A few things need your attention",
       "submitFailed": "We could not save your application. Try again.",
@@ -318,7 +313,8 @@
     "payAndJoin": "ಪಾವತಿಸಿ ಮತ್ತು ಸೇರಿ",
     "goToApp": "ಆ್ಯಪ್‌ಗೆ ಹೋಗಿ",
     "joinNow": "ಈಗಲೇ ಸೇರಿ",
-    "viewFees": "ಶುಲ್ಕ ನೋಡಿ"
+    "viewFees": "ಶುಲ್ಕ ನೋಡಿ",
+    "fees": "ಶುಲ್ಕ"
   },
   "centers": {
     "title": "ನಮ್ಮ ಕಲಿಕಾ ಕೇಂದ್ರಗಳನ್ನು ಭೇಟಿ ಮಾಡಿ",
@@ -374,6 +370,44 @@
     "contactForFees": "Please contact us for the latest fee details.",
     "callUs": "Call Us",
     "comboNote": "* For Both NATA & JEE combo, a small additional fee applies.",
+    "included": {
+      "title": "ನಿಮ್ಮ ಶುಲ್ಕದಲ್ಲಿ ಎಲ್ಲವೂ ಸೇರಿದೆ",
+      "subtitle": "ಒಂದೇ ಶುಲ್ಕದಲ್ಲಿ ತರಗತಿಗಳು, ಕಲಿಕೆಯ ಆ್ಯಪ್, ಮತ್ತು ಪರೀಕ್ಷೆಯ ಅರ್ಜಿಯಿಂದ ಕಾಲೇಜು ಸೀಟಿನವರೆಗೆ ನಮ್ಮ ಸಹಾಯ.",
+      "seeAll": "ಸೇರಿರುವ ಎಲ್ಲವನ್ನೂ ನೋಡಿ",
+      "h1": "4 ಪ್ರಯತ್ನಗಳಿಗೆ ತರಬೇತಿ: 2 NATA ಮತ್ತು JEE Main ನ ಎರಡೂ ಸೆಷನ್‌ಗಳು",
+      "h2": "ಪ್ರಶ್ನೆ ಬ್ಯಾಂಕ್ ಮತ್ತು AI ಗಣಿತ ಶಿಕ್ಷಕರೊಂದಿಗೆ Nexus ಆ್ಯಪ್",
+      "h3": "ಪ್ರತಿ ತರಗತಿಯ ವೀಡಿಯೊ ಲೈಬ್ರರಿ, ಜೊತೆಗೆ Microsoft 365",
+      "h4": "ಅರ್ಜಿ ನಮೂನೆಯಿಂದ ಕಾಲೇಜು ಪ್ರವೇಶದವರೆಗೆ ಸಹಾಯ",
+      "twoYearIntro": "ಒಂದು ವರ್ಷದ ಕಾರ್ಯಕ್ರಮದ ಎಲ್ಲವೂ, ಪೂರ್ಣ 2 ವರ್ಷಗಳಿಗೆ",
+      "twoYearExtra": "ಎರಡನೇ ವರ್ಷಕ್ಕೆ ಕೇವಲ {amount} ಹೆಚ್ಚು",
+      "noHidden": "ಯಾವುದೇ ಗುಪ್ತ ಶುಲ್ಕವಿಲ್ಲ. ಮೇಲಿನ ಎಲ್ಲವೂ ಎರಡೂ ಯೋಜನೆಗಳಲ್ಲಿ ಸೇರಿದೆ.",
+      "groups": {
+        "training": {
+          "title": "ಪ್ರತಿ ಪ್ರಯತ್ನಕ್ಕೂ ಲೈವ್ ತರಬೇತಿ",
+          "i1": "ಚಿತ್ರಕಲೆ, ಗಣಿತ ಮತ್ತು ಆಪ್ಟಿಟ್ಯೂಡ್‌ನಲ್ಲಿ ಲೈವ್ ಆನ್‌ಲೈನ್ ತರಗತಿಗಳು",
+          "i2": "ವರ್ಷದಲ್ಲಿ 2 NATA ಪ್ರಯತ್ನಗಳು ಮತ್ತು JEE Main Paper 2 ನ ಎರಡೂ ಸೆಷನ್‌ಗಳಿಗೆ ತರಬೇತಿ",
+          "i3": "ಸಂದೇಹ ನಿವಾರಣೆ, ಚಿತ್ರ ವಿಮರ್ಶೆ ಮತ್ತು ಮೌಲ್ಯಮಾಪನ ಮಾಡಿದ ಅಣಕು ಪರೀಕ್ಷೆಗಳು"
+        },
+        "app": {
+          "title": "Nexus, ನಿಮ್ಮ ಕಲಿಕೆಯ ಆ್ಯಪ್",
+          "i1": "ವೇಳಾಪಟ್ಟಿ, ಅಸೈನ್‌ಮೆಂಟ್‌ಗಳು, ಪರೀಕ್ಷೆಗಳು ಮತ್ತು ನಿಮ್ಮ ಪ್ರಗತಿ ಒಂದೇ ಕಡೆ",
+          "i2": "NATA ಮತ್ತು JEE Paper 2 ಹಿಂದಿನ ವರ್ಷಗಳ ಪ್ರಶ್ನೆಗಳ ಪ್ರಶ್ನೆ ಬ್ಯಾಂಕ್",
+          "i3": "NATA ಮತ್ತು JEE Paper 2 ಗಣಿತಕ್ಕೆ AI ಗಣಿತ ಶಿಕ್ಷಕ"
+        },
+        "library": {
+          "title": "ಲೈಬ್ರರಿ ಮತ್ತು ಉಪಕರಣಗಳು",
+          "i1": "ಪ್ರತಿ ಲೈವ್ ತರಗತಿ ರೆಕಾರ್ಡ್ ಆಗುತ್ತದೆ, ಯಾವಾಗ ಬೇಕಾದರೂ ಮತ್ತೆ ನೋಡಿ",
+          "i2": "ಹಿಂದಿನ ವರ್ಷಗಳ ತರಗತಿಗಳ Neram ವೀಡಿಯೊ ಲೈಬ್ರರಿ, ನಿಮ್ಮ ಕೋರ್ಸ್‌ಗಾಗಿ ಖಾಸಗಿ YouTube ಹಾಗೆ",
+          "i3": "Teams, Word, PowerPoint ಮತ್ತು OneDrive ಸಹಿತ Microsoft 365 ವಿದ್ಯಾರ್ಥಿ ಖಾತೆ"
+        },
+        "support": {
+          "title": "ಕಾಲೇಜು ಸೇರುವವರೆಗೆ ಪ್ರವೇಶ ಸಹಾಯ",
+          "i1": "ಪರೀಕ್ಷೆಯ ಅರ್ಜಿ ನಮೂನೆ, ಫೋಟೋ ಮತ್ತು ದಾಖಲೆಗಳಿಗೆ ಸಹಾಯ",
+          "i2": "ಪರೀಕ್ಷಾ ಕೇಂದ್ರ, ಹಾಲ್ ಟಿಕೆಟ್ ಮತ್ತು ಪರೀಕ್ಷಾ ದಿನದ ಮಾರ್ಗದರ್ಶನ",
+          "i3": "ಕೌನ್ಸೆಲಿಂಗ್ ಮಾರ್ಗದರ್ಶನ: ಕಾಲೇಜು ಆಯ್ಕೆ, ಆಯ್ಕೆ ಭರ್ತಿ ಮತ್ತು ಪ್ರವೇಶ"
+        }
+      }
+    },
     "whyInvestTitle": "Why This Investment is Worth Every Rupee",
     "whyInvestSubtitle": "Here is why Neram Classes delivers exceptional value.",
     "trackRecord": "90% Top College Placements",

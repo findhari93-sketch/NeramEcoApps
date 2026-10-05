@@ -28,6 +28,7 @@ import {
 } from '@neram/ui';
 import HomeRoundedIcon from '@mui/icons-material/HomeRounded';
 import SearchIcon from '@mui/icons-material/Search';
+import CurrencyRupeeIcon from '@mui/icons-material/CurrencyRupee';
 import SchoolIcon from '@mui/icons-material/School';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
@@ -321,7 +322,7 @@ export default function Header() {
   const { goToApp } = useGoToApp();
   const ctaConfig = getCtaConfig(appStatus, t);
   const isEnrolled = appStatus === 'enrolled' || appStatus === 'partial_payment';
-  // Students check the fee before they apply, so it sits right under the CTA.
+  // Students check the fee before they apply, so Fees sits right beside the CTA.
   const showFeesLink = !isEnrolled && !isApplyPage && pathname !== '/fees';
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -510,7 +511,8 @@ export default function Header() {
                     sx={{
                       color: 'inherit',
                       minWidth: 0,
-                      px: 1.25,
+                      px: { md: 0.75, lg: 1.25 },
+                      whiteSpace: { md: 'normal', lg: 'nowrap' },
                       py: 1,
                       fontWeight: isActive || isOpen ? 600 : 400,
                       opacity: isActive || isOpen ? 1 : 0.85,
@@ -550,7 +552,8 @@ export default function Header() {
                 sx={{
                   color: 'inherit',
                   minWidth: 0,
-                  px: 1.25,
+                  px: { md: 0.75, lg: 1.25 },
+                  whiteSpace: { md: 'normal', lg: 'nowrap' },
                   py: 1,
                   fontWeight: pathname === '/tools' || pathname.startsWith('/tools/') ? 600 : 400,
                   opacity: pathname === '/tools' || pathname.startsWith('/tools/') ? 1 : 0.85,
@@ -581,7 +584,7 @@ export default function Header() {
               </Button>
             </Box>
 
-            {/* ── Desktop Search ── */}
+            {/* ── Desktop Search (full box from 1200px; below that the icon keeps room for Fees + Join Now) ── */}
             <Box
               onClick={() => setSearchOpen(true)}
               onPointerEnter={preloadSearch}
@@ -591,11 +594,11 @@ export default function Header() {
               onKeyDown={(e) => e.key === 'Enter' && setSearchOpen(true)}
               aria-label="Search (Ctrl+K)"
               sx={{
-                display: { xs: 'none', md: 'flex' },
+                display: { xs: 'none', lg: 'flex' },
                 alignItems: 'center',
                 gap: 1,
                 height: 36,
-                minWidth: 200,
+                minWidth: { lg: 160, xl: 200 },
                 px: 1.5,
                 mr: 1,
                 borderRadius: '8px',
@@ -638,14 +641,14 @@ export default function Header() {
             {/* Spacer for mobile */}
             <Box sx={{ flexGrow: 1, display: { xs: 'block', md: 'none' } }} />
 
-            {/* ── Mobile Search Icon ── */}
+            {/* ── Search Icon (phones, tablets and small laptops) ── */}
             <IconButton
               color="inherit"
               onClick={() => setSearchOpen(true)}
               onPointerDown={preloadSearch}
               aria-label="Search"
               sx={{
-                display: { xs: 'flex', md: 'none' },
+                display: { xs: 'flex', lg: 'none' },
                 width: 40,
                 height: 40,
                 borderRadius: '8px',
@@ -702,14 +705,36 @@ export default function Header() {
                 {t('header.needHelp')}
               </Button>
             ) : ctaConfig.href ? (
-              <Box
-                sx={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  mr: 1,
-                }}
-              >
+              <>
+                {/* Quiet secondary action beside the primary one, same line */}
+                {showFeesLink && (
+                  <Button
+                    component={Link}
+                    href="/fees"
+                    size="small"
+                    startIcon={<CurrencyRupeeIcon sx={{ fontSize: 16 }} />}
+                    sx={{
+                      display: 'none',
+                      // 900 to 999px has no room beside the nav; phones get it in the drawer
+                      '@media (min-width: 1000px)': { display: 'inline-flex' },
+                      flexShrink: 0,
+                      mr: 1,
+                      px: 1.5,
+                      minHeight: 40,
+                      borderRadius: '6px',
+                      fontWeight: 600,
+                      fontSize: '0.875rem',
+                      textTransform: 'none',
+                      whiteSpace: 'nowrap',
+                      color: 'text.primary',
+                      '& .MuiButton-startIcon': { mr: 0.5 },
+                      '&:hover': { bgcolor: 'action.hover', color: 'primary.main' },
+                      '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+                    }}
+                  >
+                    {t('header.fees')}
+                  </Button>
+                )}
                 <Button
                   component={Link}
                   href={ctaConfig.href}
@@ -721,37 +746,16 @@ export default function Header() {
                     fontWeight: 600,
                     fontSize: { xs: '0.75rem', md: '0.875rem' },
                     px: { xs: 1.5, md: 2.5 },
+                    mr: 1,
                     textTransform: 'none',
                     whiteSpace: 'nowrap',
+                    flexShrink: 0,
                     ...ctaConfig.sx,
                   }}
                 >
                   {ctaConfig.label}
                 </Button>
-                {/* Button (48) + this line (~14) stays inside the 64px toolbar */}
-                {showFeesLink && (
-                  <Box
-                    component={Link}
-                    href="/fees"
-                    sx={{
-                      display: { xs: 'none', md: 'block' },
-                      px: 0.5,
-                      fontSize: '0.75rem',
-                      fontWeight: 600,
-                      lineHeight: 1.2,
-                      whiteSpace: 'nowrap',
-                      color: 'text.secondary',
-                      textDecoration: 'underline',
-                      textUnderlineOffset: '2px',
-                      borderRadius: '4px',
-                      '&:hover': { color: 'primary.main' },
-                      '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
-                    }}
-                  >
-                    {t('header.viewFees')}
-                  </Box>
-                )}
-              </Box>
+              </>
             ) : (
               <Button
                 onClick={goToApp}
@@ -1166,6 +1170,7 @@ export default function Header() {
                   variant="outlined"
                   fullWidth
                   onClick={toggleMobileMenu}
+                  startIcon={<CurrencyRupeeIcon />}
                   sx={{
                     mt: 1,
                     minHeight: 48,

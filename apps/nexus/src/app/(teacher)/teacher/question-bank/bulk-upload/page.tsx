@@ -287,7 +287,7 @@ export default function BulkUploadPage() {
         const copyJson = await copyRes.json().catch(() => ({}));
         copiedNote = copyRes.ok
           ? copyJson.data?.copied
-            ? ` ${copyJson.data.copied} Maths and Aptitude questions copied from JEE Paper 2.`
+            ? ` ${copyJson.data.copied} Maths and Aptitude questions copied from JEE Paper 2A (B.Arch).`
             : ''
           : ` Maths and Aptitude were not copied: ${copyJson.error || 'try again from the paper page'}.`;
       }
@@ -359,7 +359,7 @@ export default function BulkUploadPage() {
                 }}
                 label="Exam Type"
               >
-                <MenuItem value="JEE_PAPER_2">JEE Paper 2 (B.Arch)</MenuItem>
+                <MenuItem value="JEE_PAPER_2">JEE Paper 2A (B.Arch)</MenuItem>
                 <MenuItem value="JEE_PAPER_2B">JEE Paper 2B (B.Planning)</MenuItem>
                 <MenuItem value="NATA">NATA</MenuItem>
               </Select>
@@ -372,7 +372,7 @@ export default function BulkUploadPage() {
                 }
                 label={
                   <Box>
-                    <Typography variant="body2">Also copy Maths and Aptitude from JEE Paper 2</Typography>
+                    <Typography variant="body2">Also copy Maths and Aptitude from JEE Paper 2A (B.Arch)</Typography>
                     <Typography variant="caption" color="text.secondary">
                       They are the same questions in the same sitting, so you only need to upload the Planning part.
                     </Typography>

@@ -14,8 +14,10 @@
  *      TeamsTab.ReadWriteSelfForChat.All, so it can install and pin itself and
  *      nothing else. The plain ReadWrite permissions cannot install an app that
  *      carries resource-specific permissions, and ours does, which is why the
- *      install sends a consent set, and that set must equal the manifest's
- *      (Neram Pad Dev, which has fewer, is installed without one).
+ *      install sends a consent set, and that set must equal the manifest's.
+ *      An install that Teams accepted without that consent (1.4.0 declared one
+ *      permission with the wrong type, so its installs went in bare) is
+ *      upgraded with the set, which grants the permissions in place.
  *   2. Timing. A scheduled meeting's chat can refuse Graph until somebody joins,
  *      so a 404 on the first read is "not ready yet", reported as such for the
  *      sweep to retry, not a failure.
@@ -43,12 +45,14 @@ export const PAD_RSC_PERMISSIONS = [
   { name: 'ChannelMeetingParticipant.Read.Group', type: 'Application' },
   { name: 'ChannelMeetingNotification.Send.Group', type: 'Application' },
   { name: 'MeetingStage.Write.Chat', type: 'Delegated' },
-  { name: 'OnlineMeeting.ReadBasic.Chat', type: 'Delegated' },
+  { name: 'OnlineMeeting.ReadBasic.Chat', type: 'Application' },
 ] as const;
 
 export type MeetingTabOutcome =
   | 'added'
   | 'already'
+  /** The pad was there, but without its permissions; they are granted now. */
+  | 'granted'
   /** No join link, or a channel meeting: the teacher adds the pad from Apps. */
   | 'not_meeting_chat'
   /** The chat does not answer yet, usually because nobody has joined. Retry later. */
@@ -94,13 +98,25 @@ export function consentedPermissionSet() {
 
 type Sent = { response: Response } | { error: string };
 
-async function listsApp(response: Response, catalogAppId: string): Promise<boolean> {
+type Listed = { id?: string; teamsApp?: { id?: string; externalId?: string }; consentedPermissionSet?: unknown };
+
+/** Our app's entry in a Graph list of tabs or installed apps, or null. */
+async function findApp(response: Response, catalogAppId: string): Promise<Listed | null> {
   const data = await response.json().catch(() => null);
-  if (!Array.isArray(data?.value)) return false;
-  return data.value.some(
-    (item: { teamsApp?: { id?: string; externalId?: string } }) =>
-      item?.teamsApp?.id === catalogAppId || item?.teamsApp?.externalId === catalogAppId,
+  if (!Array.isArray(data?.value)) return null;
+  return (
+    (data.value as Listed[]).find((item) => item?.teamsApp?.id === catalogAppId || item?.teamsApp?.externalId === catalogAppId) ?? null
   );
+}
+
+/** Whether an installation already holds every permission the manifest asks for. */
+export function holdsAllPermissions(consented: unknown): boolean {
+  const granted = (consented as { resourceSpecificPermissions?: unknown } | null | undefined)?.resourceSpecificPermissions;
+  if (!Array.isArray(granted)) return false;
+  const have = new Set(
+    granted.map((p: { permissionValue?: unknown; permissionType?: unknown }) => `${String(p?.permissionValue)}|${String(p?.permissionType).toLowerCase()}`),
+  );
+  return PAD_RSC_PERMISSIONS.every((p) => have.has(`${p.name}|${p.type.toLowerCase()}`));
 }
 
 async function refused(chatId: string, step: string, response: Response, notFound: MeetingTabOutcome): Promise<MeetingTabResult> {
@@ -152,31 +168,38 @@ export async function ensureAnswerPadInMeeting(input: MeetingTabInput, deps: Mee
   const tabs = await send('GET', '/tabs?$expand=teamsApp');
   if ('error' in tabs) return { outcome: 'failed', chatId, reason: tabs.error };
   if (!tabs.response.ok) return refused(chatId, 'list tabs', tabs.response, 'chat_not_ready');
-  if (await listsApp(tabs.response, input.catalogAppId)) return { outcome: 'already', chatId };
+  const pinned = (await findApp(tabs.response, input.catalogAppId)) !== null;
 
   const apps = await send('GET', '/installedApps?$expand=teamsApp');
   if ('error' in apps) return { outcome: 'failed', chatId, reason: apps.error };
   if (!apps.response.ok) return refused(chatId, 'list apps', apps.response, 'chat_not_ready');
+  const installed = await findApp(apps.response, input.catalogAppId);
 
-  if (!(await listsApp(apps.response, input.catalogAppId))) {
-    let install = await send('POST', '/installedApps', {
+  let granted = false;
+  if (!installed) {
+    // No retry without the consent set: an install without it puts the app in
+    // the meeting with no permissions, so the bot never hears who joins.
+    const install = await send('POST', '/installedApps', {
       'teamsApp@odata.bind': appBind,
       consentedPermissionSet: consentedPermissionSet(),
     });
-    // The consent set must equal the app's own permissions. The bot-free Neram
-    // Pad Dev package keeps only the delegated one, and Graph takes no consent
-    // set at all for an app like that, so a 400 on the full set gets one retry
-    // without it. Neram Assistant takes the first request as it is.
-    if (!('error' in install) && install.response.status === 400) {
-      install = await send('POST', '/installedApps', { 'teamsApp@odata.bind': appBind });
-    }
     if ('error' in install) return { outcome: 'failed', chatId, reason: install.error };
     // 409: somebody (or an overlapping sweep) installed it a moment ago, which is fine.
     // A 404 here means the chat answered but the app is not in the catalog.
     if (!install.response.ok && install.response.status !== 409) {
       return refused(chatId, 'install the app', install.response, 'failed');
     }
+  } else if (!holdsAllPermissions(installed.consentedPermissionSet) && installed.id && /^[A-Za-z0-9=_+/-]+$/.test(installed.id)) {
+    // Installed without (all of) its permissions: upgrading with the consent set grants them in place.
+    const upgrade = await send('POST', `/installedApps/${encodeURIComponent(installed.id)}/upgrade`, {
+      consentedPermissionSet: consentedPermissionSet(),
+    });
+    if ('error' in upgrade) return { outcome: 'failed', chatId, reason: upgrade.error };
+    if (!upgrade.response.ok) return refused(chatId, 'grant the permissions', upgrade.response, 'failed');
+    granted = true;
   }
+
+  if (pinned) return { outcome: granted ? 'granted' : 'already', chatId };
 
   const tab = answerPadTab(origin.origin);
   const pin = await send('POST', '/tabs', {

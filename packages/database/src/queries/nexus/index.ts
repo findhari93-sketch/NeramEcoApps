@@ -21,6 +21,7 @@ export * from './qb-category-proposals';
 export * from './qb-study';
 export * from './qb-papers';
 export * from './qb-paper-2b';
+export * from './qb-paper-move';
 export * from './qb-reports';
 export * from './qb-paper-io';
 export * from './test-repository';

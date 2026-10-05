@@ -12,7 +12,10 @@
  *   - the meeting screen (variant "stage", or any page Teams opens on the
  *     stage), where everyone sees the class results the teacher shared;
  *   - the teacher console in its own window (variant "console", opened by Pop
- *     out), for a teacher on one screen who shares only the question's window.
+ *     out), for a teacher on one screen who shares only the question's window;
+ *   - a round's full report (variant "report", from "Open the full report"),
+ *     signed in with Teams, so it never opens in a browser signed in as
+ *     somebody else.
  */
 
 import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
@@ -28,6 +31,7 @@ import StudentMeetingPad from './StudentMeetingPad';
  */
 const TeacherConsole = lazy(() => import('./TeacherConsole'));
 const StageResults = lazy(() => import('./StageResults'));
+const SessionReportView = lazy(() => import('./SessionReportView'));
 
 type AppState =
   | { kind: 'connecting' }
@@ -64,9 +68,10 @@ function Opening() {
   );
 }
 
-export default function TeamsPadApp({ variant = 'panel' }: { variant?: 'panel' | 'popup' | 'stage' | 'console' }) {
+export default function TeamsPadApp({ variant = 'panel' }: { variant?: 'panel' | 'popup' | 'stage' | 'console' | 'report' }) {
   const popup = variant === 'popup';
-  const poppedOut = variant === 'console';
+  const report = variant === 'report';
+  const poppedOut = variant === 'console' || report;
   const [consoleSession, setConsoleSession] = useState<string | null>(null);
   const [state, setState] = useState<AppState>({ kind: 'connecting' });
   const [theme, setTheme] = useState<PadTheme>('light');
@@ -108,7 +113,13 @@ export default function TeamsPadApp({ variant = 'panel' }: { variant?: 'panel' |
   }, [identify, poppedOut]);
 
   return (
-    <PadShell theme={theme} dense={popup} wide={onStage} roomy={state.kind === 'ready' && state.role === 'staff' && !onStage && !popup}>
+    <PadShell
+      theme={theme}
+      dense={popup}
+      roomy={state.kind === 'ready' && state.role === 'staff' && !onStage && !popup}
+      wide={onStage}
+      staff={state.kind === 'ready' && state.role === 'staff'}
+    >
       {state.kind === 'connecting' && <Opening />}
 
       {state.kind === 'outside-teams' && (
@@ -152,6 +163,14 @@ export default function TeamsPadApp({ variant = 'panel' }: { variant?: 'panel' |
           <StudentMeetingPad host={state.host} compact={popup} />
         ) : popup ? (
           <Typography>This pop-up is for students. Run the class from the Answer Pad button in the meeting.</Typography>
+        ) : report ? (
+          consoleSession ? (
+            <Suspense fallback={<Opening />}>
+              <SessionReportView sessionId={consoleSession} getToken={state.host.getToken} tokenReady />
+            </Suspense>
+          ) : (
+            <Alert severity="info">This window has lost its report. Close it and open the report again from the Answer Pad.</Alert>
+          )
         ) : poppedOut ? (
           consoleSession ? (
             <Suspense fallback={<Opening />}>

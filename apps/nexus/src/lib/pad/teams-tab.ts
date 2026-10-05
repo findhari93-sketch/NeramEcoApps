@@ -33,6 +33,15 @@ export function consolePopOutUrl(origin: string, sessionId: string): string {
   return `${origin.replace(/\/+$/, '')}/pad/teams/console?session=${encodeURIComponent(sessionId)}`;
 }
 
+/**
+ * A round's full report inside Teams (a Teams window on desktop, a dialog on
+ * the web), signed in with the pad's own Teams token. Opened from "Open the
+ * full report" so it never lands in a browser signed in as somebody else.
+ */
+export function reportUrl(origin: string, sessionId: string): string {
+  return `${origin.replace(/\/+$/, '')}/pad/teams/report?session=${encodeURIComponent(sessionId)}`;
+}
+
 export function answerPadTab(origin: string): AnswerPadTab {
   const base = origin.replace(/\/+$/, '');
   return {

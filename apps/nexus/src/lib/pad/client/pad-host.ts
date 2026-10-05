@@ -11,7 +11,7 @@
  */
 
 import type { TeamsMeetingContext } from '../session-binding';
-import { consolePopOutUrl } from '../teams-tab';
+import { consolePopOutUrl, reportUrl } from '../teams-tab';
 
 export type PadHostKind = 'teams' | 'browser' | 'test';
 export type PadTheme = 'light' | 'dark' | 'contrast';
@@ -47,12 +47,11 @@ export interface PadHost {
    */
   popOut?: (sessionId: string) => Promise<void>;
   /**
-   * Read an image off the clipboard through the host. Teams refuses the
-   * browser's navigator.clipboard.read() inside its frames, so the Paste button
-   * tries this first. Resolves null when there is no image or the host says no;
-   * Ctrl + V into the focused field is the fallback that always works.
+   * Open a round's full report inside Teams: its own window on desktop, a large
+   * dialog on the web. Absent where Teams can do neither (outside Teams, the
+   * plain link opens the Nexus page instead).
    */
-  readClipboard?: () => Promise<Blob | null>;
+  openReport?: (sessionId: string) => Promise<void>;
   /**
    * The Teams meeting's subject ("JEE preparation"), for a meeting that is not
    * on the Nexus timetable. Resolves null when Teams will not say.
@@ -241,27 +240,45 @@ export function consolePopOut(teams: TeamsJs, context: PopOutContext, origin: st
 }
 
 /**
- * TeamsJS's own clipboard read, when this Teams client offers it. Deprecated
- * upstream and not in every client, so it is only a first try.
+ * The round's report inside Teams, signed in as the teacher using it: never the
+ * default browser, which may be signed in to Nexus as someone else (founder,
+ * 2026-10-04: the report opened as the admin account).
  */
-export function teamsClipboardReader(teams: {
-  clipboard?: { isSupported(): boolean; read(): Promise<Blob> };
-}): (() => Promise<Blob | null>) | undefined {
-  const clipboard = teams.clipboard;
-  let supported = false;
+export function reportOpener(teams: TeamsJs, context: PopOutContext, origin: string): PadHost['openReport'] {
+  const appId = context.app?.appId?.toString();
+  let ownWindow = false;
+  let dialog = false;
   try {
-    supported = !!clipboard && clipboard.isSupported();
+    ownWindow = !!appId && context.app?.host?.clientType === 'desktop' && !!teams.stageView?.isSupported();
   } catch {
-    supported = false;
+    ownWindow = false;
   }
-  if (!clipboard || !supported) return undefined;
-  return async () => {
-    try {
-      const blob = await clipboard.read();
-      return blob && blob.type.startsWith('image/') ? blob : null;
-    } catch {
-      return null;
+  try {
+    dialog = !!teams.dialog?.url?.isSupported();
+  } catch {
+    dialog = false;
+  }
+  if (!ownWindow && !dialog) return undefined;
+
+  return async (sessionId) => {
+    const url = reportUrl(origin, sessionId);
+    if (ownWindow && appId) {
+      const opened = teams.stageView.open({
+        appId,
+        contentUrl: url,
+        websiteUrl: `${origin.replace(/\/+$/, '')}/teacher/answer-pad/sessions/${encodeURIComponent(sessionId)}`,
+        title: 'Answer Pad report',
+        threadId: context.chat?.id,
+        openMode: teams.stageView.StageViewOpenMode.popout,
+      });
+      await Promise.race([opened, new Promise<void>((resolve) => setTimeout(resolve, POP_OUT_SETTLE_MS))]);
+      return;
     }
+    teams.dialog.url.open({
+      url,
+      title: 'Answer Pad report',
+      size: { height: teams.DialogDimension.Large, width: teams.DialogDimension.Large },
+    });
   };
 }
 
@@ -343,7 +360,7 @@ export async function connectTeamsHost(): Promise<PadHost | null> {
     // Only the side panel can put something on the meeting screen, and only in a meeting.
     stage: frame === 'sidePanel' && context.meeting?.id ? stageSharing(teams) : undefined,
     popOut: frame === 'sidePanel' ? consolePopOut(teams, context, window.location.origin) : undefined,
-    readClipboard: teamsClipboardReader(teams),
+    openReport: reportOpener(teams, context, window.location.origin),
     meetingTitle: context.meeting?.id ? meetingTitleReader(teams as Parameters<typeof meetingTitleReader>[0]) : undefined,
     getToken: cachedTokenGetter(() => teams.authentication.getAuthToken()),
     onResume: (handler) => {

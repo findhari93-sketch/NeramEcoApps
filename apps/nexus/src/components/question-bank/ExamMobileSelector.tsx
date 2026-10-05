@@ -120,8 +120,8 @@ export default function ExamMobileSelector({
           </ToggleButton>
         )) ?? [
           <ToggleButton key="NATA" value="NATA">NATA</ToggleButton>,
-          <ToggleButton key="JEE_PAPER_2" value="JEE_PAPER_2">JEE Paper 2</ToggleButton>,
-          <ToggleButton key="JEE_PAPER_2B" value="JEE_PAPER_2B">JEE Paper 2B</ToggleButton>,
+          <ToggleButton key="JEE_PAPER_2" value="JEE_PAPER_2">JEE Paper 2A (B.Arch)</ToggleButton>,
+          <ToggleButton key="JEE_PAPER_2B" value="JEE_PAPER_2B">JEE Paper 2B (B.Planning)</ToggleButton>,
         ]}
       </ToggleButtonGroup>
 

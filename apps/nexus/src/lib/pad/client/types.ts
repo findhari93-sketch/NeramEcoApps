@@ -5,6 +5,8 @@
 
 export type PromptState = 'open' | 'closed' | 'revealed';
 export type SkipReason = 'dont_know' | 'cant_see' | 'need_time' | 'tech_problem' | 'other';
+/** Any reason on record: a student's own, or 'pad_problem', which only the teacher sets ("Can't use the pad"). */
+export type AnyReason = SkipReason | 'pad_problem';
 export type AnswerType = 'mcq' | 'numeric' | 'text' | 'yesno';
 /** The teacher's decision on a reason: approved excuses the student from the question. */
 export type SkipApproval = 'approved' | 'rejected';
@@ -83,7 +85,8 @@ export interface StudentSnapshot {
     is_correct: boolean | null;
   } | null;
   /** "I can't answer", and why, for the current question. Null once an answer is given. */
-  my_skip: { reason: SkipReason; note: string | null; approval?: SkipApproval | null } | null;
+  /** reason 'pad_problem': the teacher marked that their pad is not working. */
+  my_skip: { reason: AnyReason; note: string | null; approval?: SkipApproval | null } | null;
   /** When the teacher last nudged this student on the open question. Null once they answered or said why. */
   nudged_at: string | null;
   score: StudentScore;
@@ -138,7 +141,7 @@ export interface PromptCounts {
 export interface WaitingStudent {
   student_id: string;
   name: string | null;
-  reason: SkipReason | null;
+  reason: AnyReason | null;
   note: string | null;
   approval: SkipApproval | null;
   nudged_at: string | null;
@@ -151,6 +154,15 @@ export interface PersonRef {
   name: string | null;
   /** Where we know they are here from: the pad, the Teams meeting, or both. Joined list only. */
   source?: 'pad' | 'meeting' | 'both';
+}
+
+/** A student who declared in advance they are away on the class's day. */
+export interface AwayRef {
+  student_id: string;
+  name: string | null;
+  reason_code: string | null;
+  /** "Away until 12 Oct". */
+  label: string;
 }
 
 export interface HistoryEntry {
@@ -198,16 +210,27 @@ export interface TeacherSnapshot {
    * joined: here this round (in the Teams meeting or opened the pad; it never drops).
    * opened: of those, who opened the pad. connected: pad open now. in_meeting: in the meeting now.
    */
-  readiness: { enrolled: number; joined?: number; opened?: number; connected: number; in_meeting: number };
-  /** Who is here this round, and who on the class list is not. Teacher only. */
-  people?: { joined: PersonRef[]; not_joined: PersonRef[] };
+  readiness: {
+    enrolled: number;
+    joined?: number;
+    opened?: number;
+    connected: number;
+    in_meeting: number;
+    /** On the roster but declared away on the class's day. Absent when it could not be read. */
+    away?: number;
+  };
+  /**
+   * Who is here this round, and who on the class list is not. Teacher only.
+   * away: declared away today. cant_use_pad: the teacher marked them (excused on every question).
+   */
+  people?: { joined: PersonRef[]; not_joined: PersonRef[]; away?: AwayRef[]; cant_use_pad?: PersonRef[] };
   /** Who joined and has not answered the newest question (open or closed), with any reason. Teacher only. */
   waiting?: WaitingStudent[];
   prompt: TeacherPrompt | null;
   counts: PromptCounts | null;
   groups: Array<{ value: string; count: number }>;
   /** Reasons given on the current question, counted; `approved` of them excused by the teacher. Names are in `waiting`. */
-  skips: { total: number; by_reason: Partial<Record<SkipReason, number>>; approved?: number };
+  skips: { total: number; by_reason: Partial<Record<AnyReason, number>>; approved?: number };
   history: HistoryEntry[];
   /** This read closed a question whose time was up. */
   auto_closed?: boolean;
@@ -221,8 +244,8 @@ export interface ParticipationRow {
   result: 'correct' | 'incorrect' | 'ungraded' | null;
   answer: string | null;
   joined_mid_prompt: boolean;
-  /** Why they did not answer, when they said. */
-  skip_reason?: SkipReason | null;
+  /** Why they did not answer, when they said (or the teacher marked 'pad_problem'). */
+  skip_reason?: AnyReason | null;
   skip_note?: string | null;
   skip_approval?: SkipApproval | null;
   nudged?: boolean;

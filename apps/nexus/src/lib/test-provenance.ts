@@ -16,7 +16,7 @@ import type { NexusTestContentSummary } from '@neram/database';
 
 /** Exam codes are stored as enum-ish slugs. Only the ones that read badly. */
 const EXAM_LABEL: Record<string, string> = {
-  JEE_PAPER_2: 'JEE Paper 2',
+  JEE_PAPER_2: 'JEE Paper 2A',
   JEE_PAPER_2A: 'JEE Paper 2A',
   JEE_PAPER_2B: 'JEE Paper 2B',
 };

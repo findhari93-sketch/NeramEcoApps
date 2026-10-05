@@ -150,7 +150,7 @@ describe('parseNTAAnswerSheet', () => {
 
   it('warns rather than inventing boundaries for a length it does not know', () => {
     const parsed = parseNTAAnswerSheet(paper(40));
-    expect(parsed.warnings.some((w) => w.includes('does not match a JEE Paper 2 layout'))).toBe(
+    expect(parsed.warnings.some((w) => w.includes('does not match a JEE Paper 2A layout'))).toBe(
       true,
     );
   });

@@ -70,7 +70,6 @@ export interface AskBarProps {
   options: string[];
   onOptions: (options: string[]) => void;
   uploadPicture: (file: File) => Promise<{ url: string }>;
-  readClipboard?: () => Promise<Blob | null>;
   /** "Q.33", for the paste box. */
   questionTitle: string;
   /** The ask itself is in flight. */
@@ -102,7 +101,6 @@ export default function AskBar(props: AskBarProps) {
     options,
     onOptions,
     uploadPicture,
-    readClipboard,
     questionTitle,
     busy,
     disabled,
@@ -216,7 +214,6 @@ export default function AskBar(props: AskBarProps) {
         value={image}
         onChange={onImage}
         upload={uploadPicture}
-        readClipboard={readClipboard}
         busy={disabled}
         questionTitle={questionTitle}
         onPasted={onPasted}

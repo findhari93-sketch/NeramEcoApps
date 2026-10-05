@@ -130,11 +130,10 @@ describe('PastePicture', () => {
     expect(onChange).toHaveBeenCalledWith(null);
   });
 
-  it("uses Teams' own clipboard where the client has one", async () => {
-    const blob = new Blob([new Uint8Array(4)], { type: 'image/png' });
-    setup({ readClipboard: async () => blob });
-    fireEvent.click(screen.getByRole('button', { name: 'Paste the picture from the clipboard' }));
-    await waitFor(() => expect(upload).toHaveBeenCalledTimes(1));
+  it('has no clipboard button: in Teams the paste box itself is the way in', () => {
+    setup();
+    expect(screen.queryByRole('button', { name: 'Paste the picture from the clipboard' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Choose a picture file' })).toBeTruthy();
   });
 
   it('stops listening once it is gone', () => {

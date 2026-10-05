@@ -19,7 +19,6 @@ import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import ChevronRightOutlinedIcon from '@mui/icons-material/ChevronRightOutlined';
 import type { QBExamType } from '@neram/database';
-import { examRelevanceFor } from '@/lib/qb-exam-routes';
 
 /**
  * The rest of the section, in one place.
@@ -56,7 +55,7 @@ function hubLinks(exam: QBExamType): HubLink[] {
       key: 'questions',
       label: 'Questions',
       desc: 'Browse, filter and tag this exam\'s questions',
-      href: `/teacher/question-bank/questions?exam_relevance=${examRelevanceFor(exam)}`,
+      href: `/teacher/question-bank/questions?exam_type=${exam}`,
       icon: <QuizOutlinedIcon />,
       color: '#6366F1',
     },
