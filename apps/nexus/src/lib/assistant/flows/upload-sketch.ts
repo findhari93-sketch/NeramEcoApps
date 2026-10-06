@@ -34,7 +34,7 @@ export function start(input: FlowInput, deps: FlowDeps): FlowOutcome {
 export function step(prev: FlowState, input: FlowInput, deps: FlowDeps): FlowOutcome {
   if (prev.step === 'attach') {
     if (input.attachment) return askCaption({ ...input.attachment }, deps, prev);
-    return { state: prev, reply: 'I still need the photo. Tap the camera button to attach it.', suggestions: [], wantsAttachment: true };
+    return { state: prev, reply: 'I still need the photo. Tap the camera button to attach it.', suggestions: [], wantsAttachment: true, miss: true };
   }
   if (prev.step === 'caption') {
     const t = input.text.trim();

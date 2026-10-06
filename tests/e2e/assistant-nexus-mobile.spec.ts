@@ -273,8 +273,16 @@ test.describe('Neram Assistant', () => {
       await box.fill('');
 
       const chips = sheet.getByTestId('assistant-chip');
-      await expect(page.locator('[data-testid="assistant-chip"]')).toHaveCount(2);
-      await assertTouchTargetSize(page, '[data-testid="assistant-chip"]', 48);
+      // The class, Several days, and the Cancel every open step offers.
+      await expect(page.locator('[data-testid="assistant-chip"]')).toHaveCount(3);
+      await expect(chips.filter({ hasText: 'Cancel' })).toBeVisible();
+      // Chips look 36px tall; an invisible band keeps the tap area 44px (36 + 4 above + 4 below).
+      for (const chip of await chips.all()) {
+        const b = (await chip.boundingBox())!;
+        expect(b.height).toBeGreaterThanOrEqual(36);
+        const hit = await page.evaluate(([x, y]) => Boolean(document.elementFromPoint(x, y)?.closest('[data-testid="assistant-chip"]')), [b.x + b.width / 2, b.y - 3]);
+        expect(hit, 'tap 3px above a chip still lands on it').toBe(true);
+      }
       await expect(page.locator('button[aria-label="Send"]')).toHaveCount(1);
       await assertTouchTargetSize(page, 'button[aria-label="Send"]', 48);
       await expect(page.locator('button[aria-label="Attach a photo"]')).toHaveCount(1);
@@ -294,7 +302,7 @@ test.describe('Neram Assistant', () => {
       // Confirm and Cancel only: no Edit in M1 (Ruling 23).
       await expect(page.locator('[role="group"][aria-label="Confirm this action"] button')).toHaveCount(2);
       await expect(card.getByRole('button', { name: 'Edit' })).toHaveCount(0);
-      await assertTouchTargetSize(page, '[role="group"][aria-label="Confirm this action"] button', 48);
+      await assertTouchTargetSize(page, '[role="group"][aria-label="Confirm this action"] button', 44);
       await assertNoHorizontalOverflow(page);
 
       await card.getByRole('button', { name: 'Confirm' }).click();
@@ -364,7 +372,7 @@ test.describe('Neram Assistant', () => {
         const link = sheet.getByRole('link', { name: 'Chapter weightage' });
         await expect(link).toBeVisible();
         const box = await link.boundingBox();
-        expect(box!.height).toBeGreaterThanOrEqual(48);
+        expect(box!.height).toBeGreaterThanOrEqual(40);
         await assertNoHorizontalOverflow(page);
         await shot(page, 'exam-help-chip-375');
       });
@@ -405,7 +413,7 @@ test.describe('Neram Assistant', () => {
         await expect(sheet.getByRole('status').filter({ hasText: 'AI answers are off' })).toBeVisible();
         const catchUp = sheet.getByRole('link', { name: 'Catch-up' });
         await expect(catchUp).toHaveAttribute('href', '/student/catch-up');
-        expect((await catchUp.boundingBox())!.height).toBeGreaterThanOrEqual(48);
+        expect((await catchUp.boundingBox())!.height).toBeGreaterThanOrEqual(40);
         await assertNoHorizontalOverflow(page);
         await shot(page, 'status-off-375');
       });

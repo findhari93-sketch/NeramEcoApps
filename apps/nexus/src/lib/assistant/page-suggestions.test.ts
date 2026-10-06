@@ -16,6 +16,13 @@ describe('defaultSuggestions', () => {
     expect(new Set(sb.map((c) => c.label)).size).toBe(sb.length);
   });
 
+  it('leads with the maths tutor when a bank question is open, and not without the bank', () => {
+    const page = { path: '/student/question-bank/questions', questionId: 'a1b2c3d4-0000-4000-8000-000000000001' };
+    expect(defaultSuggestions(page, ON).slice(0, 2).map((c) => c.label)).toEqual(['Explain this question', 'Give me a hint']);
+    expect(defaultSuggestions({ path: '/student/question-bank/questions' }, ON)[0].label).toBe('Which chapters matter most?');
+    expect(defaultSuggestions(page, { ...ON, questionBank: false }).map((c) => c.label)).not.toContain('Explain this question');
+  });
+
   it('drops the sketch chips while the sketchbook is off (Ruling 25)', () => {
     const off = { sketchbook: false, attendance: true, tests: true, questionBank: true, inspiration: true };
     expect(defaultSuggestions({ path: '/student/dashboard' }, off).map((c) => c.label)).toEqual(["What's due?", 'My next class', "I can't attend a class", 'Remind me']);

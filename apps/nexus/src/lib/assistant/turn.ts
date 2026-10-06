@@ -11,14 +11,14 @@ import { proposeAction } from './actions';
 import * as cannotAttend from './flows/cannot-attend';
 import * as remindMe from './flows/remind-me';
 import * as uploadSketch from './flows/upload-sketch';
-import { isStale, type FlowDeps, type FlowOutcome, type FlowState, type Proposal } from './flows/types';
+import { chip, isStale, type FlowDeps, type FlowOutcome, type FlowState, type Proposal } from './flows/types';
 import { isUuid } from './ids';
 import { runLlmStage, type LlmMeta } from './llm';
 import { defaultSuggestions } from './page-suggestions';
 import { findActionTool, findTool, isActionTool, toolsFor } from './registry-all';
-import { routeIntent, type FlowName } from './router';
+import { routeIntent, type FlowName, type Route } from './router';
 import { appendMessage, createThread, findReplyToExternalId, findThreadByExternalId, findThreadForMessage, getThread, touchThread, type ThreadRow } from './store';
-import type { AssistantCaller, AssistantFeatures, Attachment, Channel, Envelope, Mode, PageContext, ToolContext, ToolLink } from './types';
+import type { AssistantCaller, AssistantFeatures, Attachment, Channel, Envelope, Mode, PageContext, Suggestion, ToolContext, ToolLink } from './types';
 
 export const MAX_TEXT = 2000;
 
@@ -95,6 +95,35 @@ function addDays(ymd: string, n: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+export const GAVE_UP = 'I still could not follow that, so I have stopped there. Nothing was changed. Ask me anything, or tap one of these.';
+
+/** Starts with a question word, or ends with a question mark. */
+const QUESTION = /\?\s*$|^\s*(what|when|where|why|how|which|who|whose|is|are|was|were|can|could|will|would|should|do|does|did|any|explain|tell me|show me)/i;
+
+/**
+ * A live flow's step has first go at every message, so a real answer is never
+ * stolen by a pattern it happens to match. When the step did not understand it,
+ * the message is something else: a request the router knows or a question
+ * yields to the normal route (null here), anything else asks once more with a
+ * Cancel chip, and a second miss in a row ends the flow rather than looping.
+ */
+function keepOrYield(live: FlowState, out: FlowOutcome, route: Route, text: string, chips: () => Suggestion[]): FlowOutcome | null {
+  if (!out.miss) {
+    if (!out.state) return out;
+    const { misses: _drop, ...state } = out.state;
+    return { ...out, state };
+  }
+  if (route.kind === 'tool' || route.kind === 'flow' || QUESTION.test(text)) return null;
+  const misses = (live.misses ?? 0) + 1;
+  if (misses >= 2 || !out.state) return { state: null, reply: GAVE_UP, suggestions: chips() };
+  return { ...out, state: { ...out.state, misses } };
+}
+
+/** Every open step offers a way out, so the only exit is never a typed magic word. */
+function withCancel(suggestions: Suggestion[]): Suggestion[] {
+  return suggestions.some((s) => s.send.toLowerCase() === 'cancel') ? suggestions : [...suggestions, chip('Cancel')];
+}
+
 export async function runAssistantTurn(input: TurnInput): Promise<Envelope> {
   const now = input.now ?? new Date();
   const text = input.text.trim().slice(0, MAX_TEXT);
@@ -145,11 +174,16 @@ export async function runAssistantTurn(input: TurnInput): Promise<Envelope> {
   const live = activeFlow && !isStale(activeFlow, now) ? activeFlow : null;
   const flowInput = { text, attachment: input.attachment ?? null };
 
+  let stepped: FlowOutcome | null = null;
   if (route.kind === 'cancel') {
-    outcome = { state: null, reply: 'Okay, cancelled. Nothing was changed.', suggestions: chips() };
+    stepped = { state: null, reply: 'Okay, cancelled. Nothing was changed.', suggestions: chips() };
   } else if (live) {
     // A flow left open when its feature went off ends here, before it asks or proposes anything.
-    outcome = flowOn(live.flow) ? FLOWS[live.flow].step(live, flowInput, await flowDeps(ctx)) : notAvailable();
+    stepped = flowOn(live.flow) ? keepOrYield(live, FLOWS[live.flow].step(live, flowInput, await flowDeps(ctx)), route, text, chips) : notAvailable();
+  }
+
+  if (stepped) {
+    outcome = stepped;
   } else if (route.kind === 'flow') {
     outcome = flowOn(route.flow) ? FLOWS[route.flow].start(flowInput, await flowDeps(ctx)) : notAvailable();
   } else if (input.attachment && route.kind === 'llm') {
@@ -173,7 +207,8 @@ export async function runAssistantTurn(input: TurnInput): Promise<Envelope> {
       links = result.links ?? [];
     }
   } else {
-    mode = route.mode;
+    // The router's llm kind, or a live flow's step that yielded a cancel-free route.
+    mode = route.kind === 'llm' ? route.mode : 'general';
     const out = await runLlmStage({
       ctx, mode, text, page, currentMessageId: userMessageId, classroomName: classroom?.name ?? null,
     });
@@ -182,6 +217,8 @@ export async function runAssistantTurn(input: TurnInput): Promise<Envelope> {
     mode = out.mode; // exam help falls back to general when the question bank is off
     llmMeta = out.meta;
   }
+
+  if (outcome.state) outcome = { ...outcome, suggestions: withCancel(outcome.suggestions) };
 
   let action: Envelope['action'] = null;
   if (outcome.propose) {

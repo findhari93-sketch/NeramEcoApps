@@ -16,6 +16,8 @@ export interface FlowState {
   step: string;
   data: Record<string, unknown>;
   startedAt: string;
+  /** Answers in a row the step did not understand. Set by the turn, never by a flow. */
+  misses?: number;
 }
 
 export interface FlowInput {
@@ -40,6 +42,8 @@ export interface FlowOutcome {
   suggestions: Suggestion[];
   propose?: Proposal;
   wantsAttachment?: boolean;
+  /** The step did not understand the answer and asked again. The turn may hand the message on instead. */
+  miss?: true;
 }
 
 export const chip = (label: string, send: string = label): Suggestion => ({ label, send });

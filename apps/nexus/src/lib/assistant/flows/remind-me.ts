@@ -78,7 +78,7 @@ export function step(prev: FlowState, input: FlowInput, deps: FlowDeps): FlowOut
   const text = input.text.trim();
   if (prev.step === 'when') {
     const day = parseSingleDate(text, deps.today);
-    if (!day) return { state: prev, reply: 'I did not catch the day. Try "tomorrow", "Friday" or "8 Oct".', suggestions: whenChips() };
+    if (!day) return { state: prev, reply: 'I did not catch the day. Try "tomorrow", "Friday" or "8 Oct".', suggestions: whenChips(), miss: true };
     if (day < deps.today) return { state: prev, reply: 'That day has already passed. Which day should I remind you?', suggestions: whenChips() };
     if (prev.data.text) return proposal(day, String(prev.data.text), deps.today);
     return { state: state(deps, 'what', { due_on: day }, prev), reply: 'What should I remind you about?', suggestions: [] };

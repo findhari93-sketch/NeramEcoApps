@@ -22,6 +22,8 @@ export interface PageContext {
   path: string;
   classroomId?: string | null;
   classId?: string | null;
+  /** The question-bank question open on screen (`?qid=`), so "this question" has a target. */
+  questionId?: string | null;
 }
 
 export interface ToolLink {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Box, CircularProgress, IconButton, TextField, Typography, useMediaQuery } from '@neram/ui';
 import CameraAltOutlinedIcon from '@mui/icons-material/CameraAltOutlined';
 import CloseIcon from '@mui/icons-material/Close';
@@ -11,7 +11,7 @@ import type { Attachment, GetToken } from './client';
 const MAX_BYTES = 12 * 1024 * 1024;
 const MAX_CHARS = 2000;
 
-export default function Composer({ onSend, busy, wantsAttachment, upload, getToken, allowAttachment = true }: {
+export default function Composer({ onSend, busy, wantsAttachment, upload, getToken, allowAttachment = true, focusKey = 0, focusPrompt }: {
   onSend: (text: string, attachment: Attachment | null) => Promise<void>;
   busy: boolean;
   wantsAttachment: boolean;
@@ -20,6 +20,9 @@ export default function Composer({ onSend, busy, wantsAttachment, upload, getTok
   getToken?: GetToken;
   /** False while the sketchbook is off: a photo has nowhere to go, so there is no attach button (Ruling 25). */
   allowAttachment?: boolean;
+  /** Each bump focuses the message box and swaps its placeholder for `focusPrompt`. */
+  focusKey?: number;
+  focusPrompt?: string;
 }) {
   const [text, setText] = useState('');
   const [attachment, setAttachment] = useState<Attachment | null>(null);
@@ -28,6 +31,12 @@ export default function Composer({ onSend, busy, wantsAttachment, upload, getTok
   const fileRef = useRef<HTMLInputElement>(null);
   const boxRef = useRef<HTMLTextAreaElement>(null);
   const reduce = useMediaQuery('(prefers-reduced-motion: reduce)');
+  const [prompted, setPrompted] = useState(false);
+  useEffect(() => {
+    if (!focusKey) return;
+    setPrompted(true);
+    boxRef.current?.focus();
+  }, [focusKey]);
 
   /** Empty the picker, so choosing the same file again (after a refusal or a remove) still fires change. */
   const resetPicker = () => {
@@ -72,7 +81,7 @@ export default function Composer({ onSend, busy, wantsAttachment, upload, getTok
   };
 
   return (
-    <Box sx={{ borderTop: (th) => `1px solid ${th.palette.divider}`, px: 1.5, pt: 1, pb: 'calc(12px + env(safe-area-inset-bottom, 0px))' }}>
+    <Box sx={{ borderTop: (th) => `1px solid ${th.palette.divider}`, px: 1.5, pt: 0.75, pb: 'calc(8px + env(safe-area-inset-bottom, 0px))', flexShrink: 0 }}>
       {attachment && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
           <Box component="img" src={attachment.thumbnail_url || attachment.original_image_url} alt="Attached sketch" sx={{ width: 56, height: 56, borderRadius: 1.5, objectFit: 'cover' }} />
@@ -117,7 +126,7 @@ export default function Composer({ onSend, busy, wantsAttachment, upload, getTok
               void submit();
             }
           }}
-          placeholder={wantsAttachment ? 'Attach a photo, or type' : 'Ask or tell me what to do'}
+          placeholder={wantsAttachment ? 'Attach a photo, or type' : prompted && focusPrompt ? focusPrompt : 'Ask or tell me what to do'}
           inputProps={{ 'aria-label': 'Message Neram Assistant', style: { fontSize: 16, lineHeight: 1.5 } }}
           // 48px like the buttons beside it (size small alone is about 41px).
           sx={{ minWidth: 0, '& .MuiInputBase-root': { minHeight: 48 } }}

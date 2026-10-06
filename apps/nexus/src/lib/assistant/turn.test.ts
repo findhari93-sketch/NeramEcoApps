@@ -31,7 +31,7 @@ vi.mock('@neram/database', async (importOriginal) => ({
 import { fakeDb } from './testing/fake-db';
 import { FLOW_TTL_MS } from './flows/types';
 import type { AssistantCaller } from './types';
-import { runAssistantTurn } from './turn';
+import { GAVE_UP, runAssistantTurn } from './turn';
 
 const student: AssistantCaller = { id: 's1', name: 'Priya S', user_type: 'student', staff_role: null, can_teach: null, impersonating: false };
 const UNIQUE = { nexus_assistant_messages: [['thread_id', 'external_id']] };
@@ -115,6 +115,54 @@ describe('runAssistantTurn', () => {
     const out = await turn(db, 'when is my next class', { threadId: first.threadId, now: later });
     expect(out.reply).toMatch(/^Your next classes:/);
     expect(db.rows('nexus_assistant_threads')[0].flow_state).toBeNull();
+  });
+
+  describe('a step that does not understand the message', () => {
+    const GEMINI = { text: 'A derivative is a rate of change.', model: 'm', usage: { promptTokens: 1, outputTokens: 1, totalTokens: 2 }, costUsd: 0, keyTier: 'paid', functionCalls: [], modelParts: [], finishReason: 'STOP' };
+    const CHAT_ON = { nexus_settings: [{ key: 'feature_flags', value: { 'student.assistant-chat': true } }] };
+
+    it('hands a recognised request to its answer and ends the step (prod thread ffc91177)', async () => {
+      mocks.loadUpcomingClasses.mockResolvedValue([]);
+      const db = fakeDb({});
+      const first = await turn(db, "I can't attend a class");
+      expect(db.rows('nexus_assistant_threads')[0].flow_state).toMatchObject({ step: 'pick-range' });
+      const out = await turn(db, 'any classes upcoming ?', { threadId: first.threadId });
+      expect(out.reply).not.toMatch(/did not catch/);
+      expect(db.rows('nexus_assistant_threads')[0].flow_state).toBeNull();
+    });
+
+    it('hands a question to the model and ends the step', async () => {
+      mocks.generateGemini.mockResolvedValueOnce(GEMINI);
+      mocks.loadUpcomingClasses.mockResolvedValue([]);
+      const db = fakeDb({ ...CHAT_ON });
+      const first = await turn(db, "I can't attend a class");
+      const out = await turn(db, 'what is a derivative?', { threadId: first.threadId });
+      expect(out).toMatchObject({ reply: GEMINI.text, llm: true });
+      expect(db.rows('nexus_assistant_threads')[0].flow_state).toBeNull();
+    });
+
+    it('asks once more with a Cancel chip, then stops on a second miss', async () => {
+      mocks.loadUpcomingClasses.mockResolvedValue([]);
+      const db = fakeDb({});
+      const first = await turn(db, "I can't attend a class");
+      const again = await turn(db, 'hmm', { threadId: first.threadId });
+      expect(again.reply).toMatch(/did not catch the dates/);
+      expect(again.suggestions.map((s) => s.label)).toContain('Cancel');
+      expect(db.rows('nexus_assistant_threads')[0].flow_state).toMatchObject({ step: 'pick-range', misses: 1 });
+      const out = await turn(db, 'hmm', { threadId: first.threadId });
+      expect(out.reply).toBe(GAVE_UP);
+      expect(db.rows('nexus_assistant_threads')[0].flow_state).toBeNull();
+      expect(db.rows('nexus_assistant_actions')).toHaveLength(0);
+    });
+
+    it('keeps the step when the answer is understood, even if it looks like a request', async () => {
+      const db = fakeDb({ ...CLASSES });
+      const first = await turn(db, "I can't attend");
+      const second = await turn(db, 'Tomorrow 6:00 pm: Perspective', { threadId: first.threadId });
+      expect(second.suggestions.map((s) => s.label)).toContain('Cancel');
+      expect(db.rows('nexus_assistant_threads')[0].flow_state).toMatchObject({ step: 'pick-reason' });
+      expect(db.rows('nexus_assistant_threads')[0].flow_state.misses).toBeUndefined();
+    });
   });
 
   it('refuses to propose while impersonating but still answers reads', async () => {

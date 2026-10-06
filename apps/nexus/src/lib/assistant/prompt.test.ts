@@ -39,6 +39,12 @@ describe('contextBlock', () => {
     expect(block).not.toMatch(/Priya|Batch Alpha/);
     expect(block).toMatch(/question-bank/);
   });
+
+  it('names the open question in exam mode only', () => {
+    const page = { path: '/student/question-bank/questions', questionId: 'a1b2c3d4-0000-4000-8000-000000000001~b' };
+    expect(contextBlock('exam', { ...c, page })).toMatch(/Question open on screen: a1b2c3d4-0000-4000-8000-000000000001~b\./);
+    expect(contextBlock('general', { ...c, page })).not.toMatch(/Question open on screen/);
+  });
 });
 
 describe('cleanReply', () => {

@@ -26,7 +26,7 @@ export default function ActionCard({ action, busy, onConfirm, onCancel }: {
     return () => clearInterval(t);
   }, [action.expiresAt]);
   return (
-    <Paper elevation={0} role="group" aria-label="Confirm this action" sx={{ mx: 2, my: 1, p: 2, borderRadius: 3, border: (t) => `1px solid ${t.palette.divider}` }}>
+    <Paper elevation={0} role="group" aria-label="Confirm this action" sx={{ mx: 1.5, my: 1, p: 1.5, borderRadius: 3, flexShrink: 0, border: (t) => `1px solid ${t.palette.divider}` }}>
       <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>{action.summary}</Typography>
       <Box component="dl" sx={{ m: 0, mb: 1.5, display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr)', columnGap: 2, rowGap: 0.5 }}>
         {action.fields.map((f) => (
@@ -40,8 +40,8 @@ export default function ActionCard({ action, busy, onConfirm, onCancel }: {
         {left > 0 ? `Expires in ${left} min` : 'Expired. Ask me again and I will set it up fresh.'}
       </Typography>
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-        <Button variant="contained" onClick={onConfirm} disabled={busy || left === 0} sx={{ ...stableHover, minHeight: 48, flex: 1, textTransform: 'none', fontWeight: 700 }}>Confirm</Button>
-        <Button variant="outlined" onClick={onCancel} disabled={busy} sx={{ ...stableHover, minHeight: 48, textTransform: 'none' }}>Cancel</Button>
+        <Button variant="contained" onClick={onConfirm} disabled={busy || left === 0} sx={{ ...stableHover, minHeight: 44, flex: 1, textTransform: 'none', fontWeight: 700 }}>Confirm</Button>
+        <Button variant="outlined" onClick={onCancel} disabled={busy} sx={{ ...stableHover, minHeight: 44, textTransform: 'none' }}>Cancel</Button>
       </Box>
     </Paper>
   );

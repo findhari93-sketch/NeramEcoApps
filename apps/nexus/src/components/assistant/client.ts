@@ -4,11 +4,25 @@
  * the server produced.
  */
 import type { ActionProposal, Attachment, Envelope, PageContext, Suggestion, ToolLink } from '@/lib/assistant/types';
+import { readPracticeQid } from '@/lib/qb-practice-url';
 import { compressImage } from '@/utils/imageCompression';
 
 export type { AiStatus } from '@/lib/assistant/ai-access';
 export type { ActionProposal, Attachment, Envelope, PageContext, Suggestion, ToolLink };
-export { ASSISTANT_FLAG, ATTENDANCE_FLAG, SKETCHBOOK_FLAG } from '@/lib/assistant/flag';
+export { ASSISTANT_FLAG, ATTENDANCE_FLAG, QUESTION_BANK_FLAG, SKETCHBOOK_FLAG } from '@/lib/assistant/flag';
+
+const QB_PATH = '/student/question-bank';
+
+/**
+ * The page as it is right now, read when a message goes out. The open bank
+ * question lives in `?qid=` (and `&part=`), which the practice page changes
+ * without a route change, so it is read from the address bar, not a hook.
+ */
+export function pageNow(pathname: string): PageContext {
+  if (typeof window === 'undefined' || !pathname.startsWith(QB_PATH)) return { path: pathname };
+  const qid = readPracticeQid(new URLSearchParams(window.location.search));
+  return qid ? { path: pathname, questionId: qid } : { path: pathname };
+}
 
 export type GetToken = () => Promise<string | null>;
 

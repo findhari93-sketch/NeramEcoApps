@@ -40,4 +40,31 @@ describe('QuickActions', () => {
     expect(screen.queryByRole('button', { name: /Add a sketch/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /Remind me/ })).not.toBeNull();
   });
+
+  it('with a bank question open, Explain and Hint lead and reach exam help with the open question', () => {
+    const onSend = vi.fn();
+    render(<QuickActions onSend={onSend} onReport={vi.fn()} sketchbook exam="question" />);
+    const rows = screen.getAllByRole('button').map((b) => b.textContent);
+    expect(rows[0]).toMatch(/^Explain this question/);
+    expect(rows[1]).toMatch(/^Give me a hint/);
+    fireEvent.click(screen.getByRole('button', { name: /Explain this question/ }));
+    fireEvent.click(screen.getByRole('button', { name: /Give me a hint/ }));
+    const page = { path: '/student/question-bank/questions', questionId: 'a1b2c3d4-0000-4000-8000-000000000001' };
+    for (const [text] of onSend.mock.calls) expect(routeIntent(text, page)).toEqual({ kind: 'llm', mode: 'exam' });
+  });
+
+  it('elsewhere, the maths row puts the cursor in the message box and sends nothing', () => {
+    const onSend = vi.fn();
+    const onAsk = vi.fn();
+    render(<QuickActions onSend={onSend} onReport={vi.fn()} sketchbook exam="bank" onAsk={onAsk} />);
+    fireEvent.click(screen.getByRole('button', { name: /Ask a maths or exam question/ }));
+    expect(onAsk).toHaveBeenCalledTimes(1);
+    expect(onSend).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /Explain this question/ })).toBeNull();
+  });
+
+  it('offers no maths tutor while the question bank is off', () => {
+    render(<QuickActions onSend={vi.fn()} onReport={vi.fn()} sketchbook exam={null} onAsk={vi.fn()} />);
+    expect(screen.queryByRole('button', { name: /maths|Explain this question/i })).toBeNull();
+  });
 });

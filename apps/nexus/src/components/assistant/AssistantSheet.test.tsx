@@ -51,4 +51,27 @@ describe('AssistantSheet', () => {
       Object.assign(ctx, { error: null, canRetry: false, messages: [] });
     }
   });
+
+  it('shows New chat, named in words, only once there is a chat to clear', () => {
+    Element.prototype.scrollIntoView = vi.fn();
+    const { unmount } = render(<AssistantSheet />);
+    expect(screen.queryByRole('button', { name: 'New chat' })).toBeNull();
+    unmount();
+    Object.assign(ctx, { messages: [{ id: 'm1', role: 'user', text: 'hello' }] });
+    try {
+      render(<AssistantSheet />);
+      fireEvent.click(screen.getByRole('button', { name: 'New chat' }));
+      expect(ctx.newChat).toHaveBeenCalledTimes(1);
+    } finally {
+      Object.assign(ctx, { messages: [] });
+    }
+  });
+
+  it('puts the maths tutor on the empty panel, and its row focuses the message box with a maths prompt', () => {
+    render(<AssistantSheet />);
+    fireEvent.click(screen.getByRole('button', { name: /Ask a maths or exam question/ }));
+    const box = screen.getByRole('textbox', { name: 'Message Neram Assistant' });
+    expect(document.activeElement).toBe(box);
+    expect(box.getAttribute('placeholder')).toBe('Type your maths or exam question');
+  });
 });

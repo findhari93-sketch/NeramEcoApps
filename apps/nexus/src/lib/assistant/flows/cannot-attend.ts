@@ -134,18 +134,18 @@ export function step(prev: FlowState, input: FlowInput, deps: FlowDeps): FlowOut
         return { state: state(deps, 'pick-range', {}, prev), reply: 'Which dates will you be away? For example "8 Oct to 12 Oct" or "from tomorrow for 3 days".', suggestions: [chip('Next week'), chip('For 3 days')] };
       }
       if (match) return askReason({ classId: match.id }, deps, prev);
-      return askClass(deps, prev, 'I did not catch that. Tap one of the classes, or say "several days". ');
+      return { ...askClass(deps, prev, 'I did not catch that. Tap one of the classes, or say "several days". '), miss: true };
     }
     case 'pick-range': {
       const range = parseDateRange(text, deps.today);
-      if (!range) return { state: state(deps, 'pick-range', {}, prev), reply: 'I did not catch the dates. Try "8 Oct to 12 Oct" or "from tomorrow for 3 days".', suggestions: [chip('Next week'), chip('For 3 days')] };
+      if (!range) return { state: state(deps, 'pick-range', {}, prev), reply: 'I did not catch the dates. Try "8 Oct to 12 Oct" or "from tomorrow for 3 days".', suggestions: [chip('Next week'), chip('For 3 days')], miss: true };
       return rangeAccepted(range, deps, prev);
     }
     case 'pick-reason': {
       const t = text.toLowerCase();
       const reason = RSVP_REASONS.find((r) => r.label.toLowerCase() === t || r.shortLabel.toLowerCase() === t || r.code === t)
         || RSVP_REASONS.find((r) => t.includes(r.shortLabel.toLowerCase()) || t.includes(r.code));
-      if (!reason) return { state: prev, reply: 'Pick one of the reasons so your teacher knows.', suggestions: REASON_CHIPS };
+      if (!reason) return { state: prev, reply: 'Pick one of the reasons so your teacher knows.', suggestions: REASON_CHIPS, miss: true };
       if (reason.requiresNote) return { state: state(deps, 'note', { ...prev.data, reasonCode: reason.code }, prev), reply: 'Tell me a little more so your teacher knows what came up.', suggestions: [] };
       return propose(prev.data, deps, reason.code, null, prev);
     }

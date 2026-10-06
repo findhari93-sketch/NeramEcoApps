@@ -27,6 +27,7 @@ describe('routeIntent', () => {
   it.each([
     ["what's due", 'my_assignments'], ['pending assignments', 'my_assignments'], ['homework', 'my_assignments'],
     ['my schedule', 'my_schedule'], ['when is my next class', 'my_schedule'], ['timetable', 'my_schedule'],
+    ['any classes upcoming ?', 'my_schedule'], ['upcoming classes', 'my_schedule'], ['any class tomorrow', 'my_schedule'], ['classes coming up', 'my_schedule'],
     ['brief', 'my_brief'], ['what do I have today', 'my_brief'], ['summary', 'my_brief'],
     ['my attendance', 'my_attendance'],
     ['catch up', 'my_catchup'], ['catch-up', 'my_catchup'], ['what did I miss', 'my_catchup'],

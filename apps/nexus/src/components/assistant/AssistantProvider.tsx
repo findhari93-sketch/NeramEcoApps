@@ -8,7 +8,7 @@ import { captureScreenshot } from '@/lib/capture-screenshot';
 import { isTeamsPadPath } from '@/lib/pad/embedded';
 import ReportIssueDialog from '@/components/issues/ReportIssueDialog';
 import {
-  ASSISTANT_FLAG, AssistantHttpError, BRIEF_KEY, OFFLINE, isRetryable, newMessageId, cancelActionRequest, confirmActionRequest, getAiStatus, loadThread, newThread, postTurn,
+  ASSISTANT_FLAG, AssistantHttpError, BRIEF_KEY, OFFLINE, isRetryable, newMessageId, cancelActionRequest, confirmActionRequest, getAiStatus, loadThread, newThread, pageNow, postTurn,
   type ActionProposal, type AiStatus, type Attachment, type Envelope, type PageContext, type Suggestion,
 } from './client';
 import { onSentence } from '@/lib/assistant/ai-status-words';
@@ -247,7 +247,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     const userId = nextId();
     setMessages((prev) => [...prev, { id: userId, role: 'user', text: trimmed || 'Photo attached' }, { id: nextId(), role: 'assistant', text: '', pending: true }]);
     try {
-      const env = await postTurn(getToken, { threadId: threadRef.current, text: trimmed, attachment, pageContext, clientMessageId });
+      const env = await postTurn(getToken, { threadId: threadRef.current, text: trimmed, attachment, pageContext: pageNow(pageContext.path), clientMessageId });
       if (gen === genRef.current) applyEnvelope(env, null);
     } catch (err) {
       // The student's message is never lost: the bubble stays, marked, and Try
@@ -336,7 +336,7 @@ export function AssistantProvider({ children }: { children: React.ReactNode }) {
     failedRef.current = null;
     setCanRetry(false);
     try {
-      const id = await newThread(getToken, pageContext);
+      const id = await newThread(getToken, pageNow(pageContext.path));
       // A send that already started its own thread keeps it.
       if (gen !== genRef.current || threadRef.current) return;
       threadRef.current = id;

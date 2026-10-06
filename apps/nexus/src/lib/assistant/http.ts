@@ -30,11 +30,15 @@ export function assistantErrorResponse(err: unknown, where: string): NextRespons
 }
 
 /** A page context from a request body: a path (capped) and two optional ids, nothing else. */
+const QUESTION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}(~[a-z0-9]{1,8})?$/i;
+
 export function readPage(raw: unknown): PageContext | null {
   const r = raw as Record<string, unknown> | null;
   if (!r || typeof r !== 'object' || typeof r.path !== 'string') return null;
   const page: PageContext = { path: r.path.slice(0, 200) };
   if (typeof r.classroomId === 'string') page.classroomId = r.classroomId.slice(0, 64);
   if (typeof r.classId === 'string') page.classId = r.classId.slice(0, 64);
+  // A practice atom id is `<uuid>~<part>`; anything else is dropped, never echoed into the prompt.
+  if (typeof r.questionId === 'string' && QUESTION_ID.test(r.questionId)) page.questionId = r.questionId;
   return page;
 }

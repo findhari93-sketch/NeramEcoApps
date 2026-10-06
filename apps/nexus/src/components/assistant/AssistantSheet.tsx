@@ -1,19 +1,19 @@
 'use client';
 
-import { useId } from 'react';
-import { Box, Button, Drawer, IconButton, SwipeableDrawer, Typography, alpha, useMediaQuery, useTheme } from '@neram/ui';
+import { useId, useMemo, useState } from 'react';
+import { Box, Button, Drawer, IconButton, SwipeableDrawer, Tooltip, Typography, alpha, useMediaQuery, useTheme } from '@neram/ui';
 import AddCommentOutlinedIcon from '@mui/icons-material/AddCommentOutlined';
 import CloseIcon from '@mui/icons-material/Close';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import ActionCard from './ActionCard';
 import { useAssistant } from './AssistantProvider';
-import { SKETCHBOOK_FLAG, uploadImage } from './client';
+import { QUESTION_BANK_FLAG, SKETCHBOOK_FLAG, pageNow, uploadImage } from './client';
 import Composer from './Composer';
 import { focusRing } from './focusRing';
 import { stableHover } from './stableHover';
 import MessageBubble from './MessageBubble';
 import MessageList from './MessageList';
-import QuickActions from './QuickActions';
+import QuickActions, { type ExamHelp } from './QuickActions';
 import SuggestionChips from './SuggestionChips';
 
 export const SHEET_WIDTH = 420;
@@ -25,6 +25,15 @@ export default function AssistantSheet() {
   const { getToken, isFeatureEnabled } = useNexusAuthContext();
   // Ruling 25: no door into a feature the app has switched off.
   const sketchbook = isFeatureEnabled(SKETCHBOOK_FLAG);
+  const questionBank = isFeatureEnabled(QUESTION_BANK_FLAG);
+  // Read on each open: the practice page changes `?qid=` without a route change.
+  const exam: ExamHelp = useMemo(
+    () => (!questionBank ? null : pageNow(a.pageContext.path).questionId ? 'question' : 'bank'),
+    [questionBank, a.pageContext.path, a.open], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  /** Bumped by "Ask a maths or exam question": the message box takes focus with a maths prompt. */
+  const [askKey, setAskKey] = useState(0);
+  const hasChat = a.messages.length > 0 || Boolean(a.pendingAction);
   const theme = useTheme();
   // md is where the bottom nav goes away, so the side drawer takes over there.
   const desktop = useMediaQuery(theme.breakpoints.up('md'));
@@ -42,10 +51,22 @@ export default function AssistantSheet() {
   const body = (
     // flex: 1 (not height: 100%) so the sheet's drag handle above it is not pushed off screen.
     <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, height: '100%', '& .Mui-focusVisible': focusRing(theme.palette.primary.main) }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1, borderBottom: `1px solid ${theme.palette.divider}` }}>
-        <Typography id={titleId} variant="h6" component="h2" sx={{ flex: 1, fontWeight: 700 }}>Neram Assistant</Typography>
-        <IconButton aria-label="New chat" onClick={() => void a.newChat()} sx={{ width: 48, height: 48 }}><AddCommentOutlinedIcon /></IconButton>
-        <IconButton aria-label="Close" onClick={a.closePanel} sx={{ width: 48, height: 48 }}><CloseIcon /></IconButton>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, pl: 2, pr: 0.5, py: 0.25, flexShrink: 0, borderBottom: `1px solid ${theme.palette.divider}` }}>
+        <Typography id={titleId} variant="subtitle1" component="h2" sx={{ flex: 1, minWidth: 0, fontWeight: 700, fontSize: '1.0625rem' }}>Neram Assistant</Typography>
+        {/* Named in words, not an icon alone, and only once there is a chat to clear:
+            on an empty panel it had nothing visible to do. */}
+        {hasChat && (
+          <Tooltip title="Clear this chat and start again" describeChild>
+            <Button
+              onClick={() => void a.newChat()}
+              startIcon={<AddCommentOutlinedIcon />}
+              sx={{ ...stableHover, minHeight: 44, px: 1.25, flexShrink: 0, textTransform: 'none', fontWeight: 700 }}
+            >
+              New chat
+            </Button>
+          </Tooltip>
+        )}
+        <IconButton aria-label="Close" onClick={a.closePanel} sx={{ width: 44, height: 44 }}><CloseIcon /></IconButton>
       </Box>
       <AiStatusLine status={a.aiStatus} />
       {a.messages.length === 0 && a.loadingHistory ? (
@@ -53,7 +74,7 @@ export default function AssistantSheet() {
         // quick action cannot be tapped into the middle of an earlier flow.
         <Box sx={{ flex: 1, minHeight: 0, py: 1 }}><MessageBubble message={{ id: 'history', role: 'assistant', text: '', pending: true }} label="Loading your chat" /></Box>
       ) : a.messages.length === 0 ? (
-        <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}><QuickActions onSend={(t) => void a.send(t)} onReport={() => void a.reportProblem()} sketchbook={sketchbook} /></Box>
+        <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}><QuickActions onSend={(t) => void a.send(t)} onReport={() => void a.reportProblem()} sketchbook={sketchbook} exam={exam} onAsk={() => setAskKey((k) => k + 1)} /></Box>
       ) : (
         <MessageList messages={a.messages} />
       )}
@@ -63,12 +84,12 @@ export default function AssistantSheet() {
           <Typography role="alert" variant="body2" color="error" sx={{ flex: 1 }}>{a.error}</Typography>
           {/* The failed message is still on screen; this sends it again, photo and all. */}
           {a.canRetry && (
-            <Button variant="text" onClick={() => void a.retry()} disabled={a.busy} sx={{ ...stableHover, minHeight: 48, flexShrink: 0, textTransform: 'none', fontWeight: 700 }}>Try again</Button>
+            <Button variant="text" onClick={() => void a.retry()} disabled={a.busy} sx={{ ...stableHover, minHeight: 44, flexShrink: 0, textTransform: 'none', fontWeight: 700 }}>Try again</Button>
           )}
         </Box>
       )}
       <SuggestionChips items={a.messages.length ? a.suggestions : []} onPick={(s) => void a.send(s)} disabled={a.busy} />
-      <Composer onSend={a.send} busy={a.busy} wantsAttachment={a.wantsAttachment} upload={uploadImage} getToken={getToken} allowAttachment={sketchbook} />
+      <Composer onSend={a.send} busy={a.busy} wantsAttachment={a.wantsAttachment} upload={uploadImage} getToken={getToken} allowAttachment={sketchbook} focusKey={askKey} focusPrompt="Type your maths or exam question" />
     </Box>
   );
 
@@ -93,13 +114,13 @@ export default function AssistantSheet() {
         ...dialogProps,
         sx: {
           ...paperTransition,
-          borderTopLeftRadius: 16, borderTopRightRadius: 16, height: '85vh', overscrollBehavior: 'contain',
+          borderTopLeftRadius: 16, borderTopRightRadius: 16, height: '92vh', overscrollBehavior: 'contain',
           // dvh follows the phone keyboard and the browser bars where supported.
-          '@supports (height: 100dvh)': { height: '85dvh' },
+          '@supports (height: 100dvh)': { height: '92dvh' },
         },
       }}
     >
-      <Box aria-hidden sx={{ display: 'flex', justifyContent: 'center', pt: 1.5, flexShrink: 0 }}>
+      <Box aria-hidden sx={{ display: 'flex', justifyContent: 'center', pt: 1, flexShrink: 0 }}>
         <Box sx={{ width: 32, height: 4, borderRadius: 2, bgcolor: alpha(theme.palette.text.secondary, 0.3) }} />
       </Box>
       {body}
