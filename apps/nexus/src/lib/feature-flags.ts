@@ -68,6 +68,13 @@ export const FEATURES: FeatureDef[] = [
   // nexus_settings (assistant_pilot_user_ids) narrows it further.
   { id: 'student.assistant-chat', label: 'Neram Assistant (chat, brief card, guided actions)', surface: 'student', group: 'Home', paths: [], defaultEnabled: false },
   /**
+   * The AI Tutor: "Learn with tutor" on a maths question in the question bank,
+   * and the My Learning page it saves to. Needs the Assistant on as well (same
+   * pilot list, AI access rule and daily allowance) and the question bank on.
+   * Not a question-bank switch: the bank keeps its one switch.
+   */
+  { id: 'student.ai-tutor', label: 'AI Tutor (Learn with tutor, My Learning)', surface: 'student', group: 'Learn', paths: ['/student/my-learning'], defaultEnabled: false },
+  /**
    * Not a page (`paths: []`). A drawing assignment opens as a workspace: the
    * drawing fixed on one side, the teacher's voice note, notes and scores
    * scrolling beside it, earlier attempts switched in place. Off, the same URL
@@ -185,6 +192,17 @@ export const FEATURES: FeatureDef[] = [
   // never withheld and every student joins exactly as they do today, which is
   // why it ships off. Reversing a rule this visible needs a switch, not a revert.
   { id: 'student.class-prep-gate', label: 'Require class prep before joining', surface: 'student', group: 'Access', paths: [], defaultEnabled: false },
+  // Also not a page. Arms the full-screen hold for a student who has missed
+  // three classes in a row with no reason recorded anywhere, and the standing
+  // warning on class posts. OFF, and it must stay off until the nudges alone
+  // have run for a fortnight and /api/admin/delivery-health shows a real seen
+  // rate for absence_reason_needed: a hold is only defensible if we can prove
+  // the student saw all three messages, and the chase proves nothing on its
+  // first day. This flag also gates the warning line on the class share and the
+  // Teams post, because advertising a rule that is switched off is an empty
+  // threat, and an empty threat teaches students that Nexus notices do not mean
+  // what they say.
+  { id: 'student.absence-reason-gate', label: 'Hold access after three classes missed with no reason', surface: 'student', group: 'Access', paths: [], defaultEnabled: false },
 
   // ── Staff: Teaching panel ─────────────────────────────────────────────────
   { id: 'staff.dashboard', label: 'Dashboard', surface: 'staff', group: 'Teaching', paths: ['/teacher/dashboard'], defaultEnabled: true, core: true },
@@ -212,6 +230,13 @@ export const FEATURES: FeatureDef[] = [
   // holding the test door shut. OFF until the manual message from the Behind on
   // catch-up tile has been used for a week.
   { id: 'staff.test-chase', label: 'Automatic chase for students whose catch-up is holding up a test', surface: 'staff', group: 'Management', paths: [], defaultEnabled: false },
+  // Behaviour switch, not a page. Asks a student for a reason after each class
+  // they missed in silence, one class per morning, three at most. Armed on its
+  // own first and left running for a fortnight while a teacher watches the
+  // Reasons tab, because the nudges are useful by themselves and the hold is
+  // not safe until they have been proven to arrive. Never arm this and
+  // student.absence-reason-gate on the same day.
+  { id: 'staff.absence-reason-chase', label: 'Ask students to record a reason for classes they missed', surface: 'staff', group: 'Management', paths: [], defaultEnabled: false },
   // Behaviour switch, not a page. A personal Neram Assistant message the moment
   // a student clears a missed class, and a bigger one when nothing is left.
   // Replaced the class-group Teams post (2026-10). ON by default; turn it off

@@ -65,15 +65,16 @@ export function fakeDb(tables: Record<string, Row[]>, opts: FakeDbOptions = {}) 
           out.push(row);
         }
       } else if (op === 'upsert') {
-        const r = payload as Row;
-        const existing = rows.find((x) => upsertKeys.every((k) => x[k] === r[k]));
-        if (existing) {
-          Object.assign(existing, r);
-          out = [existing];
-        } else {
-          const row = { id: newId(), created_at: stamp(), ...r };
-          rows.push(row);
-          out = [row];
+        for (const r of Array.isArray(payload) ? payload : [payload as Row]) {
+          const existing = rows.find((x) => upsertKeys.every((k) => x[k] === r[k]));
+          if (existing) {
+            Object.assign(existing, r);
+            out.push(existing);
+          } else {
+            const row = { id: newId(), created_at: stamp(), ...r };
+            rows.push(row);
+            out.push(row);
+          }
         }
       } else if (op === 'update') {
         out = matching();
@@ -100,7 +101,7 @@ export function fakeDb(tables: Record<string, Row[]>, opts: FakeDbOptions = {}) 
     const api: any = {
       select: () => api,
       insert: (p: Row | Row[]) => { op = 'insert'; payload = p; return api; },
-      upsert: (p: Row, o?: { onConflict?: string }) => { op = 'upsert'; payload = p; upsertKeys = (o?.onConflict || 'id').split(',').map((s) => s.trim()); return api; },
+      upsert: (p: Row | Row[], o?: { onConflict?: string }) => { op = 'upsert'; payload = p; upsertKeys = (o?.onConflict || 'id').split(',').map((s) => s.trim()); return api; },
       update: (p: Row) => { op = 'update'; payload = p; return api; },
       delete: () => { op = 'delete'; return api; },
       eq: (c: string, v: unknown) => { filters.push((r) => r[c] === v); return api; },

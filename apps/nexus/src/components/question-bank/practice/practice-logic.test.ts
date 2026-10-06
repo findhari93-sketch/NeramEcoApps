@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { QBAttemptSummary } from '@neram/database';
 import {
+  continueAction,
   firstUnanswered,
   patchAttemptSummary,
   progressOf,
@@ -25,6 +26,34 @@ describe('statusOf', () => {
     expect(statusOf(summary({ total_attempts: 0 }))).toBe('unanswered');
     expect(statusOf(summary({ last_was_correct: true }))).toBe('right');
     expect(statusOf(summary({ last_was_correct: false, best_result: true }))).toBe('wrong');
+  });
+});
+
+describe('continueAction', () => {
+  const base = { targetId: 'q1', currentId: null, answered: 0, scope: 'paper' as const, number: '1' };
+
+  it('offers Start at Q1 on an untouched paper with nothing open (the phone list)', () => {
+    expect(continueAction(base)).toEqual({ id: 'q1', label: 'Start at Q1' });
+  });
+
+  it('hides the button when the target is already open (the laptop reader)', () => {
+    expect(continueAction({ ...base, currentId: 'q1' })).toBeNull();
+    expect(continueAction({ ...base, targetId: 'q5', currentId: 'q5', answered: 4, number: '5' })).toBeNull();
+  });
+
+  it('says Continue once something is answered', () => {
+    expect(continueAction({ ...base, targetId: 'q5', currentId: 'q2', answered: 4, number: '5' })).toEqual({
+      id: 'q5',
+      label: 'Continue at Q5',
+    });
+  });
+
+  it('offers nothing when every question is answered', () => {
+    expect(continueAction({ ...base, targetId: null, answered: 20 })).toBeNull();
+  });
+
+  it('offers no Start outside a paper', () => {
+    expect(continueAction({ ...base, scope: 'exam' })).toBeNull();
   });
 });
 

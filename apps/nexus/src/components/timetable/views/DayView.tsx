@@ -32,6 +32,8 @@ interface DayViewProps {
   onClassClick?: (cls: ClassCardData) => void;
   onSlotClick?: (date: string, startTime: string, event?: React.MouseEvent) => void;
   rsvpData?: Record<string, RsvpSummary>;
+  /** Pass-through to GridView. See its own doc. */
+  attendedByClassId?: Record<string, number>;
   scrollToTime?: string;
   /** Teacher only: catch-up standing per past class, drawn by GridView. */
   catchupByClassId?: Map<string, CalendarClass>;
@@ -58,6 +60,7 @@ export default function DayView({
   onClassClick,
   onSlotClick,
   rsvpData,
+  attendedByClassId,
   scrollToTime,
   catchupByClassId,
 }: DayViewProps) {
@@ -131,6 +134,7 @@ export default function DayView({
         onClassClick={onClassClick}
         onSlotClick={onSlotClick}
         rsvpData={rsvpData}
+        attendedByClassId={attendedByClassId}
         scrollToTime={scrollToTime}
         catchupByClassId={catchupByClassId}
       />

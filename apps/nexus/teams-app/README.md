@@ -19,7 +19,7 @@ Files:
 
 ```bash
 node scripts/answer-pad/package-teams-app.mjs
-# writes apps/nexus/teams-app/dist/neram-assistant-1.1.0.zip
+# writes apps/nexus/teams-app/dist/neram-assistant-<version>.zip
 ```
 
 The script checks the manifest first (no property the Teams schema refuses, every page
@@ -33,19 +33,10 @@ defined `packageName`, 1.21 does not, and moving up a version turned a valid key
 refused upload. **When you raise `manifestVersion`, save the new schema here under its
 version, or the build stops and tells you to.**
 
-For local testing through a tunnel, build a separate dev app that points at the tunnel:
-
-```bash
-node scripts/answer-pad/package-teams-app.mjs --dev --host <tunnel host, no https://>
-# writes dist/neram-pad-dev-1.1.0.zip ("Neram Pad Dev", its own app id)
-```
-
-The dev app leaves the bot out unless you add `--bot`, because a bot id can belong to
-only one Teams app in the tenant. Until Neram Assistant 1.1.0 is uploaded, build the dev
-app with `--bot`: the question pop-up, the red badge, the class chat card and the
-automatic button all need the bot and its permissions. Without `--bot` the package keeps
-only the permission for sharing results to the meeting screen. Each re-upload to the
-Teams admin center needs a higher version, for example `--version 1.1.1`.
+Each upload to the Teams admin center needs a higher `version` in `manifest.json`. The
+separate "Neram Pad Dev" app the script used to build for tunnel testing is retired:
+Neram Assistant is the only Teams app, and its Answer Pad tab runs on
+`nexus.neramclasses.com`.
 
 ## Reminders: one-time admin setup (tenant admin)
 
@@ -100,14 +91,11 @@ In the Azure portal, App registrations, `aa039c70-50d2-4c91-bd0e-5675df5e50ff`,
 **Expose an API**:
 
 1. Application ID URI: `api://nexus.neramclasses.com/aa039c70-50d2-4c91-bd0e-5675df5e50ff`.
-   While testing through a tunnel, use `api://<tunnel host>/aa039c70-50d2-4c91-bd0e-5675df5e50ff`
-   instead, then set it back before launch (see `Docs/answer-pad/HOW_TO_TEST.md` section 1.5).
 2. Add a scope named `access_as_user` (who can consent: admins and users).
 3. Add both Teams clients as authorized client applications, with that scope:
    - `1fec8e78-bce4-4aaf-ab1b-5451cc387264` (Teams desktop and mobile)
    - `5e3ce6c0-2b1f-4285-8d4b-75ee78787346` (Teams web)
-4. Locally, set `TEAMS_SSO_RESOURCE_HOSTS=nexus.neramclasses.com,<tunnel host>` in
-   `apps/nexus/.env.local`. Production needs nothing: the default is
+4. Nothing to set in Nexus: `TEAMS_SSO_RESOURCE_HOSTS` defaults to
    `nexus.neramclasses.com`.
 
 ### B. The meeting bot (optional, recommended)
@@ -120,8 +108,7 @@ and the console's Class details say "Meeting list off".
 
 1. Create an **Azure Bot** (pricing tier F0). Type of app: **Single Tenant**, using
    the existing app registration `aa039c70-50d2-4c91-bd0e-5675df5e50ff`.
-2. Messaging endpoint: `https://nexus.neramclasses.com/api/pad/bot/messages`
-   (for dev, the same path on the tunnel).
+2. Messaging endpoint: `https://nexus.neramclasses.com/api/pad/bot/messages`.
 3. Channels: add **Microsoft Teams**.
 4. In the [Teams Developer Portal](https://dev.teams.microsoft.com/), open the app,
    **Meeting event subscriptions**, and select **Participant join** and
@@ -209,9 +196,9 @@ the meeting chat and pins the Answer Pad tab, and leaves a meeting that already 
    | Variable | Value |
    |---|---|
    | `PAD_AUTO_ADD_CLASSROOMS` | Comma-separated classroom ids, or `all`. Empty means off |
-   | `PAD_TEAMS_APP_CATALOG_ID` | Only while testing the dev app: its App ID from the Teams admin center. Otherwise `TEAMS_APP_CATALOG_ID` is used |
-   | `PAD_TEAMS_TAB_ORIGIN` | Only behind a tunnel: `https://<tunnel host>`. The pop-up and chat card links use it too |
-   | `PAD_TEAMS_APP_ID` | The manifest id, for the chat card's **Open Answer Pad** link: `df4f6b2d-ea18-46d1-8934-f508ac248e6c`, or `7b1e4f0a-3c52-4d8e-9a61-2f9c0b7d5e43` for Neram Pad Dev |
+   | `PAD_TEAMS_APP_CATALOG_ID` | Optional override of `TEAMS_APP_CATALOG_ID` (Neram Assistant's App ID in the Teams admin center). Leave it unset |
+   | `PAD_TEAMS_TAB_ORIGIN` | Optional: the https origin of the tab pages, when it is not this deployment's own. The pop-up and chat card links use it too. Leave it unset |
+   | `PAD_TEAMS_APP_ID` | The manifest id, for the chat card's **Open Answer Pad** link: `df4f6b2d-ea18-46d1-8934-f508ac248e6c` |
    | `CRON_SECRET` | Already set in production; the sweep refuses to run without it |
 
    The `staff.answer-pad` flag must be on as well.

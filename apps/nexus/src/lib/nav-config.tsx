@@ -57,6 +57,7 @@ import PersonOutlinedIcon from '@mui/icons-material/PersonOutlined';
 import ArchitectureOutlinedIcon from '@mui/icons-material/ArchitectureOutlined';
 import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
 import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import BookmarksOutlinedIcon from '@mui/icons-material/BookmarksOutlined';
 import { QB_EXAM_LABELS, QB_EXAM_ORDER, qbExamPath, qbHomePath, type QBSurface } from '@/lib/qb-exam-routes';
 import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
@@ -305,6 +306,7 @@ export const CATCHUP_PATH = '/student/catch-up';
 export const CLASS_RECAP_PATH = '/student/class-recap';
 export const RESOURCES_PATH = '/student/resources';
 export const DRAWINGS_PATH = '/student/sketchbook';
+export const MY_LEARNING_PATH = '/student/my-learning';
 
 export interface ZoneConfig {
   id: StudentZoneId;
@@ -361,6 +363,8 @@ const CLASSROOM: ZoneConfig = {
       items: [
         { label: 'Library', path: '/student/library', icon: <VideoLibraryOutlinedIcon /> },
         questionBankFolder('student', 'Question Bank'),
+        // What the AI Tutor saved. Behind student.ai-tutor (its flag's paths).
+        { label: 'My Learning', path: MY_LEARNING_PATH, icon: <BookmarksOutlinedIcon /> },
         { label: 'Checklist', path: '/student/checklist', icon: <ChecklistOutlinedIcon /> },
         { label: 'Leaderboard', path: '/student/leaderboard', icon: <LeaderboardOutlinedIcon /> },
       ],
@@ -420,6 +424,8 @@ const STUDY: ZoneConfig = {
       label: 'Learn',
       items: [
         questionBankFolder('student', 'Question Bank'),
+        // What the AI Tutor saved. Behind student.ai-tutor (its flag's paths).
+        { label: 'My Learning', path: MY_LEARNING_PATH, icon: <BookmarksOutlinedIcon /> },
         { label: 'Checklist', path: '/student/checklist', icon: <ChecklistOutlinedIcon /> },
       ],
     },

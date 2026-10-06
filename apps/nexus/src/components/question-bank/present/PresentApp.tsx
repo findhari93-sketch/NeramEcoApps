@@ -143,7 +143,7 @@ export default function PresentApp({ source }: { source: PresentSource }) {
     if (tokenReady) void findSession();
   }, [tokenReady, findSession]);
 
-  // Waiting for the teacher to open Neram Pad in the meeting: look again every few seconds.
+  // Waiting for the teacher to open the Answer Pad in the meeting: look again every few seconds.
   useEffect(() => {
     if (pad.kind !== 'none' || showOnly) return;
     const timer = setInterval(() => void findSession(), FIND_SESSION_MS);

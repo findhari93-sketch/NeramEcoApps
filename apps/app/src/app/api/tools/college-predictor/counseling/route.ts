@@ -11,7 +11,7 @@ import {
   predictCollegesFromKeamCutoffs,
   getRequiredScoreForCollege,
   logToolUsage,
-  getSupabaseBrowserClient,
+  getSupabaseAdminClient,
 } from '@neram/database';
 import { verifyIdToken } from '@/lib/firebase-admin';
 import { withoutSimilarStudents } from '@/lib/public-candidate';
@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseBrowserClient();
+    const supabase = getSupabaseAdminClient();
 
     // Resolve system
     const system = await getCounselingSystemByCode(systemCode, supabase);

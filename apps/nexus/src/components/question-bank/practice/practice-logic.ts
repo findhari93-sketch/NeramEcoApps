@@ -6,6 +6,7 @@
 
 import type { QBAttemptSummary } from '@neram/database';
 import { QB_CATEGORY_LABELS, type QBCategory } from '@neram/database';
+import type { PracticeScope } from '@/lib/qb-paper-number';
 
 /** Where a student stands on one question. Mirrors AttemptIndicator. */
 export type QuestionStatus = 'unanswered' | 'right' | 'wrong';
@@ -59,6 +60,28 @@ export function progressOf(items: { attempt_summary: QBAttemptSummary | null }[]
 /** Where "Continue" takes the student: the first question they have not answered. */
 export function firstUnanswered(items: { id: string; attempt_summary: QBAttemptSummary | null }[]): string | null {
   return items.find((item) => statusOf(item.attempt_summary) === 'unanswered')?.id ?? null;
+}
+
+/**
+ * The header's jump button, or null when it would go nowhere new.
+ *
+ * Null when the target is the question already open: on a laptop Q1 opens in
+ * the reader by itself, and a "Start" button that lands on the same question
+ * looked dead. "Start at Q1" rather than "Start the paper", which read like
+ * the timed sitting on the paper page.
+ */
+export function continueAction(args: {
+  targetId: string | null;
+  currentId: string | null;
+  answered: number;
+  scope: PracticeScope;
+  number: string | null;
+}): { id: string; label: string } | null {
+  const { targetId, currentId, answered, scope, number } = args;
+  if (!targetId || targetId === currentId) return null;
+  if (answered > 0) return { id: targetId, label: `Continue at Q${number}` };
+  if (scope === 'paper') return { id: targetId, label: `Start at Q${number}` };
+  return null;
 }
 
 /** One step along the list, or null past either end. */

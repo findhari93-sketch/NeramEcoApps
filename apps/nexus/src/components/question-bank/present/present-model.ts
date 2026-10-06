@@ -89,7 +89,9 @@ export function stageView(item: DeckItem, snapshot: TeacherSnapshot | null, pad:
   }
 
   const counts = current ? snapshot?.counts ?? null : null;
-  const joined = counts?.joined ?? null;
+  // "18 of 22" reads as the console does: out of who joined this round, less
+  // anyone excused ("Can't use the pad" or an approved reason).
+  const joined = counts?.joined == null ? null : Math.max(0, counts.joined - (counts.excused_joined ?? 0));
   return {
     phase,
     primary,

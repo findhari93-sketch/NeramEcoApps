@@ -6,7 +6,8 @@
  * dialog that connects one, and the answer picker for a question the bank has
  * no key for.
  *
- * The best way in is the Teams meeting: the teacher opens Neram Pad there and
+ * The best way in is the Teams meeting: the teacher opens the Answer Pad there
+ * (the Neram Assistant app's meeting tab, already in class meetings) and
  * this screen finds that session by itself. Starting one here works too, and
  * the meeting takes it over when the pad is opened there later.
  */
@@ -138,8 +139,8 @@ export function ConnectPadDialog({
             </Stack>
             <Typography color="text.secondary">
               {info?.inMeeting
-                ? 'Students in the Teams meeting answer in the Neram Pad panel.'
-                : 'Students join at nexus.neramclasses.com/pad with the room code. Open Neram Pad in your Teams meeting and students there join by themselves.'}
+                ? 'Students in the Teams meeting answer in the Answer Pad panel.'
+                : 'Students join at nexus.neramclasses.com/pad with the room code. Open the Answer Pad in your Teams meeting and students there join by themselves.'}
             </Typography>
             {info?.roomCode && (
               <Typography sx={{ fontSize: 32, fontWeight: 800, letterSpacing: 4, fontVariantNumeric: 'tabular-nums' }} aria-label={`Room code ${info.roomCode.split('').join(' ')}`}>
@@ -152,9 +153,9 @@ export function ConnectPadDialog({
         ) : (
           <Stack spacing={2}>
             <Box>
-              <Typography sx={{ fontWeight: 700 }}>Best: open Neram Pad in your Teams meeting</Typography>
+              <Typography sx={{ fontWeight: 700 }}>Best: open the Answer Pad in your Teams meeting</Typography>
               <Typography color="text.secondary">
-                In the meeting, open Apps and choose Neram Pad. This screen connects to it by itself within a few seconds.
+                Select Answer Pad in the meeting's top bar (if it is not there, open Apps and add Neram Assistant). This screen connects to it by itself within a few seconds.
               </Typography>
             </Box>
             <Box>

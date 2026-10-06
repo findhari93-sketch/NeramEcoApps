@@ -21,6 +21,7 @@ import { describeError } from '@/lib/api-errors';
 import { canActivateQuestion, statusAfterAnswerSave } from '@/lib/qb-activation';
 import { applyDrawingPartsToWrite } from '@/lib/drawing-parts';
 import { storedSolutionVideo } from '@/lib/solution-video';
+import { tutorAvailableFor, type TutorQuestion } from '@/lib/assistant/tutor/store';
 
 /** Only the activation fields this request actually sends, so absent ones do not blank the stored values. */
 function pickActivationFields(body: Record<string, unknown>) {
@@ -58,7 +59,7 @@ export async function GET(
     const isStaff = resolveStaffRole(caller) !== null;
     // "What to study" rides on this payload, so opening a question stays one
     // invocation. A failure here must never cost the student the question.
-    const [tag_ids, study, study_row] = await Promise.all([
+    const [tag_ids, study, study_row, tutor_available] = await Promise.all([
       getQuestionTagIds(id),
       getQBQuestionStudyView(id, data.categories).catch((err) => {
         console.error('[QB API] study refs:', describeError(err));
@@ -66,6 +67,8 @@ export async function GET(
       }),
       // Staff also get the stored row, unreviewed or not, for the editor.
       isStaff ? getQBQuestionStudyRow(id).catch(() => null) : Promise.resolve(null),
+      // AI Tutor: a live pack for this maths question. The panel's own flags gate the button.
+      tutorAvailableFor(getSupabaseAdminClient(), data as unknown as TutorQuestion),
     ]);
 
     /**
@@ -84,7 +87,7 @@ export async function GET(
     }
 
     return NextResponse.json(
-      { data: { ...data, drawing_question_id, tag_ids, origin, study, ...(isStaff ? { study_row } : {}) } },
+      { data: { ...data, drawing_question_id, tag_ids, origin, study, tutor_available, ...(isStaff ? { study_row } : {}) } },
       { status: 200 },
     );
   } catch (err) {

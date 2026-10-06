@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import AssistantSheet from './AssistantSheet';
+import { setTutorDoor } from '@/components/tutor/tutor-presence';
 
 let sketchbookOn = true;
 vi.mock('@/hooks/useNexusAuth', () => ({
@@ -73,5 +74,33 @@ describe('AssistantSheet', () => {
     const box = screen.getByRole('textbox', { name: 'Message Neram Assistant' });
     expect(document.activeElement).toBe(box);
     expect(box.getAttribute('placeholder')).toBe('Type your maths or exam question');
+  });
+  it('hands Explain to the tutor when its door is for the question on screen, and keeps chat otherwise', () => {
+    const qid = 'a1b2c3d4-0000-4000-8000-000000000001';
+    window.history.replaceState(null, '', `/student/question-bank/questions?qid=${qid}`);
+    Object.assign(ctx, { pageContext: { path: '/student/question-bank/questions' } });
+    const open = vi.fn();
+    ctx.send.mockClear();
+    ctx.closePanel.mockClear();
+    try {
+      setTutorDoor({ questionId: qid, open });
+      const { unmount } = render(<AssistantSheet />);
+      fireEvent.click(screen.getByRole('button', { name: /Explain this question/ }));
+      expect(ctx.closePanel).toHaveBeenCalled();
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(ctx.send).not.toHaveBeenCalled();
+      unmount();
+
+      // A door left by another question is not this one's: Explain stays in chat.
+      setTutorDoor({ questionId: 'ffffffff-0000-4000-8000-000000000009', open });
+      render(<AssistantSheet />);
+      fireEvent.click(screen.getByRole('button', { name: /Explain this question/ }));
+      expect(open).toHaveBeenCalledTimes(1);
+      expect(ctx.send).toHaveBeenCalledWith('Explain this question step by step.');
+    } finally {
+      setTutorDoor(null);
+      Object.assign(ctx, { pageContext: { path: '/student/dashboard' } });
+      window.history.replaceState(null, '', '/');
+    }
   });
 });

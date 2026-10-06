@@ -40,6 +40,8 @@ const withPWA = require('next-pwa')({
   runtimeCaching: [authNetworkOnly, apiNetworkOnly, ...defaultRuntimeCaching],
 });
 
+const legacyRedirects = require('./legacy-redirects');
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -49,6 +51,11 @@ const nextConfig = {
     ignoreBuildErrors: true,
   },
   transpilePackages: ['@neram/ui', '@neram/database', '@neram/auth', '@neram/i18n', '@neram/geo'],
+  experimental: {
+    // @neram/ui's root barrel is 'use client', so without this every page
+    // ships every component it re-exports (ChatWidget, uploaders, ...).
+    optimizePackageImports: ['@neram/ui', '@neram/auth'],
+  },
   async rewrites() {
     return [
       {
@@ -58,16 +65,8 @@ const nextConfig = {
     ];
   },
   async redirects() {
-    return [
-      // Old tool URLs. Each points straight at the live page (no chains).
-      { source: '/tools/cutoff-calculator', destination: '/tools/nata/cutoff-calculator', permanent: true },
-      { source: '/tools/college-predictor', destination: '/tools/counseling/college-predictor', permanent: true },
-      { source: '/tools/nata/college-predictor', destination: '/tools/counseling/college-predictor', permanent: true },
-      { source: '/tools/nata/rank-predictor', destination: '/tools/counseling/rank-predictor', permanent: true },
-      { source: '/tools/exam-centers', destination: '/tools/nata/exam-centers', permanent: true },
-      { source: '/tools/josaa-predictor', destination: '/tools/counseling/josaa-predictor', permanent: true },
-      { source: '/tools/question-bank', destination: '/tools/nata/question-bank', permanent: true },
-    ];
+    // Old tool URLs, kept permanently. See legacy-redirects.js.
+    return legacyRedirects;
   },
   images: {
     minimumCacheTTL: 2592000, // 30 days — Supabase storage images are immutable

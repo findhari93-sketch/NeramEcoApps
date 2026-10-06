@@ -13,7 +13,8 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { Box, Typography, Button, LoginModal } from '@neram/ui';
+import dynamic from 'next/dynamic';
+import { Box, Typography, Button } from '@neram/ui';
 import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import { useSSOToken } from '@/hooks/useSSOToken';
 import { OnboardingWizard } from '@/components/onboarding';
@@ -31,6 +32,9 @@ import { collectDeviceInfo, collectLocation } from '@/lib/device-collector';
 import { useDeviceRegistration } from '@/hooks/useDeviceRegistration';
 import { useActiveTimeTracker } from '@/hooks/useActiveTimeTracker';
 import { trackFunnelEvent, trackFunnelEventImmediate, setFunnelTrackerToken } from '@/lib/funnel-tracker';
+
+// Only phone-unverified students see this, so keep it out of every page's first load.
+const LoginModal = dynamic(() => import('@neram/ui').then((m) => m.LoginModal), { ssr: false });
 
 const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3010';
 

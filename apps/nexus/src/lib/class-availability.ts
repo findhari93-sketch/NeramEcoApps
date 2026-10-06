@@ -155,6 +155,101 @@ export interface ForecastLike {
   declined: number;
   atRisk: number;
   estimated: boolean;
+  /**
+   * Optional on purpose. A caller built before the past/future split, and every
+   * existing test fixture, omits these four and keeps the exact wording it had.
+   * Absent `outcome` reads as 'forecast', which is what those callers meant.
+   */
+  outcome?: 'forecast' | 'actual' | 'past_unmeasured';
+  actual?: number | null;
+  discounted?: number;
+  confidence?: 'firm' | 'soft';
+}
+
+/**
+ * A class that has run and was never read from Teams.
+ *
+ * Deliberately NOT a number. The temptation is to keep showing the forecast,
+ * and that is how "36 of 38" ended up describing a room that held twenty. The
+ * only honest thing to say about an unread class is that we did not read it.
+ */
+export const NOT_READ_NOTE = 'Not read from Teams yet';
+
+/** The headcount this day should be judged on, or null when there is none. */
+export function headcountOf(f: ForecastLike): number | null {
+  if (f.outcome === 'past_unmeasured') return null;
+  if (f.outcome === 'actual') return f.actual ?? 0;
+  return f.likely;
+}
+
+/**
+ * The turnout verdict, or null when there is nothing to judge.
+ *
+ * Every caller must go through this rather than calling forecastVerdict with
+ * `.likely` directly: a measured past date has to be judged on who actually
+ * came, and an unread one must get no verdict at all. "Good turnout" over a
+ * class nobody read is the screen inventing an opinion out of a missing row.
+ */
+export function forecastVerdictOf(f: ForecastLike): Turnout | null {
+  const head = headcountOf(f);
+  return head === null ? null : forecastVerdict(head, f.onRoll);
+}
+
+/**
+ * One class block's headcount: what happened, or what is expected.
+ *
+ * THIS IS THE LINE THE COMPLAINT WAS ABOUT. A week block read "36 of 38" for a
+ * class that had already run and held about twenty, because `compactLabel`
+ * states an expectation and nothing downstream of it ever learned the class was
+ * over. The day-level forecast had the same bug and is fixed in class-forecast;
+ * this is the per-class surface, which reads a summary rather than a forecast
+ * and so needs its own repair.
+ *
+ * `present` is undefined until Teams has been read, and an undefined count is
+ * NOT a zero: one means nobody looked, the other means nobody came. Callers
+ * must key their map on synced classes only, never default the number to 0.
+ *
+ * The denominator stays `total`, the same one the expectation used, so a
+ * teacher comparing the two is comparing like with like: "36 of 38 expected"
+ * becomes "20 of 38 came" rather than switching to a roll they never saw.
+ */
+export function classCountLabel(s: RsvpSummary, present?: number): string {
+  if (present === undefined) return compactLabel(s);
+  return `${present} of ${s.total} came`;
+}
+
+/**
+ * The shortest honest form, for a month-grid pill with room for a few glyphs.
+ *
+ * `likelyLabel` is the right length for a card or a day list and far too long
+ * for a cell in a 7-column grid: "Not read from Teams yet" is 23 characters in
+ * a pill sized for 9, and it would either wrap the cell or truncate into
+ * nonsense. Nothing is lost, because the cell's aria-label already carries the
+ * whole sentence through announceForecast.
+ *
+ * "18 came" rather than "18 of 30 came": the denominator is the one part a
+ * teacher can reconstruct from the row, and the past tense is what distinguishes
+ * this from a forecast at a glance.
+ */
+export function compactForecastLabel(f: ForecastLike): string {
+  if (f.outcome === 'past_unmeasured') return 'Not read';
+  if (f.outcome === 'actual') return `${f.actual ?? 0} came`;
+  return `${f.estimated ? '~' : ''}${f.likely} of ${f.onRoll}`;
+}
+
+/**
+ * The headline above a day card or calendar cell.
+ *
+ * One place for the three suffixes. `decidable` is the caller's judgement that
+ * the day is still worth asking about: false once its classes have ended, and
+ * false on a date with nothing scheduled, where the honest word is "available"
+ * rather than "likely" because nobody has been asked yet. A past date takes
+ * neither, since "18 of 30 came likely" is the sort of line that teaches a
+ * teacher to stop reading the number.
+ */
+export function forecastHeadline(f: ForecastLike, decidable: boolean): string {
+  if (f.outcome === 'actual' || f.outcome === 'past_unmeasured') return likelyLabel(f);
+  return decidable ? `${likelyLabel(f)} likely` : `${likelyLabel(f)} available`;
 }
 
 /**
@@ -166,11 +261,20 @@ export interface ForecastLike {
  * on every other cell too.
  */
 export function likelyLabel(f: ForecastLike): string {
+  if (f.outcome === 'past_unmeasured') return NOT_READ_NOTE;
+  if (f.outcome === 'actual') return `${f.actual ?? 0} of ${f.onRoll} came`;
   return `${f.estimated ? '~' : ''}${f.likely} of ${f.onRoll}`;
 }
 
-/** The same, spelled out, where there is room for a word. */
+/**
+ * The same, spelled out, where there is room for a word.
+ *
+ * A past date says nothing extra: "18 of 30 came" is already a whole sentence,
+ * and "18 of 30 came likely" is the kind of line that makes a teacher stop
+ * believing the screen.
+ */
 export function likelySentence(f: ForecastLike): string {
+  if (f.outcome === 'actual' || f.outcome === 'past_unmeasured') return likelyLabel(f);
   return `${likelyLabel(f)} likely`;
 }
 
@@ -182,13 +286,39 @@ export function likelySentence(f: ForecastLike): string {
  * out" is noise on the twenty-nine days a month where nobody did.
  */
 export function forecastBreakdownLabel(f: ForecastLike): string {
+  if (f.outcome === 'past_unmeasured') return NOT_READ_NOTE;
   const parts = [
     onRollLabel(f.onRoll),
     awayLabel(f.away),
     steppedOutLabel(f.declined),
-    f.atRisk > 0 ? `${f.atRisk} rarely come` : '',
+    // A class that has run needs no prediction behind it. The roll, the away
+    // days and the opt-outs still explain the shape of the room; "4 rarely
+    // come" about a night already counted is noise.
+    f.outcome === 'actual' ? '' : riskLabel(f),
+    f.outcome === 'actual' ? '' : softNote(f),
   ];
   return parts.filter(Boolean).join(', ');
+}
+
+/**
+ * "4 rarely come, about 3 fewer".
+ *
+ * Both halves, because under an expected-value forecast they are genuinely two
+ * numbers. `atRisk` is how many people the "See who" sheet will name; the
+ * second is how many chairs their records actually take off, which is smaller
+ * because an unreliable student is not a certain absence. Printing only the
+ * first leaves a teacher unable to reconcile the headline; printing only the
+ * second leaves the sheet listing four names for a drop of three.
+ */
+function riskLabel(f: ForecastLike): string {
+  if (f.atRisk <= 0) return '';
+  const fewer = f.discounted ?? 0;
+  return fewer > 0 ? `${f.atRisk} rarely come, about ${fewer} fewer` : `${f.atRisk} rarely come`;
+}
+
+/** Says out loud when the estimate is mostly the room's average. */
+function softNote(f: ForecastLike): string {
+  return f.confidence === 'soft' ? 'estimate is soft, little history to go on' : '';
 }
 
 /**
@@ -213,10 +343,14 @@ export function attendanceRecordLabel(record: { judged: number; rate: number | n
  * the whole sum goes in the accessible name.
  */
 export function announceForecast(f: ForecastLike, dayLabel: string, scheduled: boolean): string {
+  const head = headcountOf(f);
+  const past = f.outcome === 'actual' || f.outcome === 'past_unmeasured';
   const parts = [
     dayLabel,
-    scheduled ? likelySentence(f) : `${likelyLabel(f)} available`,
-    forecastVerdict(f.likely, f.onRoll).label,
+    past || scheduled ? likelySentence(f) : `${likelyLabel(f)} available`,
+    // No verdict on a class nobody read. "Good turnout" about an unknown night
+    // is the screen inventing an opinion out of a missing row.
+    head === null ? '' : forecastVerdict(head, f.onRoll).label,
     forecastBreakdownLabel(f),
   ];
   return parts.filter(Boolean).join(', ');

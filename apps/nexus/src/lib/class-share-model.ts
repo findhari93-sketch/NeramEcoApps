@@ -15,6 +15,7 @@
  */
 
 import { classShareLinks } from '@/lib/class-share-links';
+import { classPostAbsenceNotice } from './absence-reason-message';
 
 export type ClassShareState = 'upcoming' | 'past' | 'cancelled';
 
@@ -112,6 +113,20 @@ export interface ClassSharePayload {
   prepTest: ShareTestInfo | null;
   classTest: ShareTestInfo | null;
   assignments: ShareAssignment[];
+  /**
+   * Whether the silent-absence hold is actually armed
+   * (student.absence-reason-gate).
+   *
+   * Drives one standing line on an upcoming class: a student should learn the
+   * rule BEFORE they miss anything rather than on their third strike, which
+   * turns a hold from a surprise into a published condition.
+   *
+   * Optional and defaulting to false, so a caller that has not resolved the
+   * flag says nothing. Advertising a rule that is switched off is an empty
+   * threat, and an empty threat teaches students that a Nexus notice does not
+   * mean what it says, which is the credibility the hold depends on.
+   */
+  absenceGateEnabled?: boolean;
 }
 
 /**
@@ -311,6 +326,11 @@ export function buildShareSections(payload: ClassSharePayload): ShareSection[] {
     if (rsvp) {
       lines.push({ emoji: '✋', text: "Can't make it? Tap to RSVP", url: rsvp });
       lines.push({ text: 'You are marked attending by default.', muted: true });
+      // Sits with the RSVP link on purpose. The notice asks them to record it,
+      // and the link is how they do it; a consequence stated with no door next
+      // to it is a threat rather than a rule.
+      const absenceNotice = classPostAbsenceNotice(!!payload.absenceGateEnabled);
+      if (absenceNotice) lines.push({ text: absenceNotice, muted: true });
     }
     if (lines.length) {
       sections.push({ id: 'join', lines, toggleable: true, checkboxLabel: 'Join and RSVP links' });

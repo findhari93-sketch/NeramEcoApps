@@ -10,7 +10,7 @@ import {
   getRankListCommunityStats,
   getAllotmentCommunityStats,
   getAllotmentCollegeStats,
-  getSupabaseBrowserClient,
+  getSupabaseAdminClient,
 } from '@neram/database';
 
 /**
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     const systemId = searchParams.get('systemId');
     const yearParam = searchParams.get('year');
 
-    const supabase = getSupabaseBrowserClient();
+    const supabase = getSupabaseAdminClient();
 
     // No systemId → return systems list
     if (!systemId) {

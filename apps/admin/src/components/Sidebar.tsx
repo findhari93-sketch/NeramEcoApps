@@ -75,6 +75,11 @@ import HistoryEduIcon from '@mui/icons-material/HistoryEdu';
 import PhoneCallbackIcon from '@mui/icons-material/PhoneCallback';
 import MergeTypeIcon from '@mui/icons-material/MergeType';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
+import AutoGraphIcon from '@mui/icons-material/AutoGraph';
+import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
+import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
+import TuneIcon from '@mui/icons-material/Tune';
+import HistoryIcon from '@mui/icons-material/History';
 import { useMicrosoftAuth } from '@neram/auth';
 import NotificationBell from './NotificationBell';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -183,6 +188,16 @@ const menuGroups: MenuGroup[] = [
       { text: 'Testimonials', icon: FormatQuoteIcon, path: '/testimonials' },
       { text: 'Social Proofs', icon: GraphicEqIcon, path: '/social-proofs' },
       { text: 'Careers', icon: WorkIcon, path: '/careers', hasBadge: 'careers' },
+    ],
+  },
+  {
+    label: 'Marketing Intelligence',
+    items: [
+      { text: 'Ads Overview', icon: AutoGraphIcon, path: '/marketing-ai' },
+      { text: 'Recommendations', icon: FactCheckOutlinedIcon, path: '/marketing-ai/recommendations' },
+      { text: 'Campaigns', icon: CampaignOutlinedIcon, path: '/marketing-ai/campaigns' },
+      { text: 'Agent Settings', icon: TuneIcon, path: '/marketing-ai/settings' },
+      { text: 'Agent Audit Log', icon: HistoryIcon, path: '/marketing-ai/audit' },
     ],
   },
   {
@@ -320,9 +335,10 @@ export default function Sidebar() {
             )}
             <List disablePadding sx={{ px: showCollapsed ? 0.5 : 0.75 }}>
               {group.items.map((item) => {
+                const matches = (path: string) => pathname === path || (path !== '/' && pathname.startsWith(`${path}/`));
+                // A section's Overview (/college-hub, /marketing-ai) must not stay lit on its subpages.
                 const isActive =
-                  pathname === item.path ||
-                  (item.path !== '/' && pathname.startsWith(item.path));
+                  matches(item.path) && !group.items.some((other) => other.path.length > item.path.length && matches(other.path));
 
                 const handleNavClick = () => {
                   router.push(item.path);

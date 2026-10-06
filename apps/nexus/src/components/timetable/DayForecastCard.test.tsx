@@ -43,6 +43,8 @@ const sum = (over: Partial<RsvpSummary> = {}): RsvpSummary => ({
 
 const day = (over: Partial<RsvpDaySummary> = {}): RsvpDaySummary => ({
   date: on(2),
+  measured: false,
+  present: 0,
   summary: sum(),
   away_ids: ['away1'],
   declined_ids: ['dec1'],
@@ -62,6 +64,11 @@ const forecast = (over: Partial<DayForecast> = {}): DayForecast => ({
   atRisk: 4,
   likely: 16,
   estimated: true,
+  discounted: 0,
+  actual: null,
+  outcome: 'forecast' as const,
+  unknowns: [],
+  confidence: 'firm' as const,
   newcomers: [],
   scheduled: true,
   ...over,

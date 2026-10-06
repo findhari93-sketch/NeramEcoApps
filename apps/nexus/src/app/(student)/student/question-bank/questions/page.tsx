@@ -18,7 +18,7 @@ import { isQBExamType, qbExamPath, rememberQBExam } from '@/lib/qb-exam-routes';
 import { usePracticeSession, type PracticeContext } from '@/components/question-bank/practice/usePracticeSession';
 import { useTestSelection } from '@/components/question-bank/practice/useTestSelection';
 import { usePracticeKeyboard } from '@/components/question-bank/practice/usePracticeKeyboard';
-import { firstUnanswered } from '@/components/question-bank/practice/practice-logic';
+import { continueAction, firstUnanswered } from '@/components/question-bank/practice/practice-logic';
 import { usePracticeView } from '@/components/question-bank/practice/ViewToggle';
 import PracticeWorkspace from '@/components/question-bank/practice/PracticeWorkspace';
 import PracticeHeader from '@/components/question-bank/practice/PracticeHeader';
@@ -30,6 +30,7 @@ import SelectionBar from '@/components/question-bank/practice/SelectionBar';
 import ShortcutsDialog from '@/components/question-bank/practice/ShortcutsDialog';
 import CreateTestDialog, { type CreateTestSettings } from '@/components/question-bank/practice/CreateTestDialog';
 import { safeBackPath } from '@/lib/safe-back-path';
+import { usePracticeTutor } from '@/components/tutor/usePracticeTutor';
 
 /** Stable identity, so a render with no counts does not re-trigger consumers. */
 const EMPTY_COUNTS: Record<string, number> = {};
@@ -305,6 +306,23 @@ export default function QuestionListPage() {
   const gridAvailable = session.scope === 'paper' && !filters.search_text;
   const [view, setView] = usePracticeView('grid');
 
+  // ─── The AI Tutor (hidden unless its flags are on and this question has a pack) ──
+  const openFromTutor = useCallback(
+    (id: string, mode: 'push' | 'replace') => {
+      writeUrl(mode, id);
+      sessionOpen(id);
+    },
+    [writeUrl, sessionOpen],
+  );
+  const tutor = usePracticeTutor({
+    currentId: session.currentId,
+    detail: session.detail,
+    docked: isTwoPane,
+    lang,
+    getToken,
+    openQuestion: openFromTutor,
+  });
+
   const examLabel = isQBExamType(exam) ? QB_EXAM_TYPE_LABELS[exam as QBExamType] : exam;
   const paperLabel = [examLabel, year, sessionName].filter(Boolean).join(' ') || null;
   const title = (() => {
@@ -345,12 +363,13 @@ export default function QuestionListPage() {
         : `${session.currentIndex + 1} of ${session.total}`;
 
   const continueId = firstUnanswered(session.questions);
-  const continueLabel =
-    continueId && session.progress.answered > 0
-      ? `Continue at Q${numberLabel(continueId)}`
-      : continueId && session.scope === 'paper'
-        ? 'Start the paper'
-        : null;
+  const continueTo = continueAction({
+    targetId: continueId,
+    currentId: session.currentId,
+    answered: session.progress.answered,
+    scope: session.scope,
+    number: numberLabel(continueId),
+  });
 
   // ─── Moving around ────────────────────────────────────────────────────────
   /** Open a question from the list, the grid, Continue or a jump. */
@@ -564,7 +583,9 @@ export default function QuestionListPage() {
     showLang,
     showSourceBadges: session.scope !== 'paper',
     priorAnswer: session.priorAnswer,
-    onSubmit: session.submit,
+    onSubmit: tutor.wrapSubmit(session.submit),
+    headerAction: tutor.headerAction,
+    bodyOverlay: tutor.bodyOverlay,
     onStudyToggle: (id: string) => {
       session.toggleStudied(id).catch(() => notify('Could not update the studied mark', 'error'));
     },
@@ -583,8 +604,8 @@ export default function QuestionListPage() {
       shown={session.questions.length}
       total={session.total}
       loading={session.loading}
-      continueLabel={continueLabel}
-      onContinue={() => continueId && openQuestion(continueId)}
+      continueLabel={continueTo?.label ?? null}
+      onContinue={() => continueTo && openQuestion(continueTo.id)}
       lang={lang}
       onLangChange={setLang}
       // On a laptop the reader carries the language switch, beside the text it changes.
@@ -691,6 +712,7 @@ export default function QuestionListPage() {
           header={header}
           rail={browser}
           reader={<PracticeReader variant="pane" {...readerProps} answerHandle={answerHandle} />}
+          tutor={tutor.dock}
         />
         {overlays}
       </>
@@ -709,6 +731,7 @@ export default function QuestionListPage() {
         onClose={closeReader}
         onExited={revealLastRead}
       />
+      {tutor.sheet}
       {selection.active && (
         <SelectionBar
           variant="fixed"

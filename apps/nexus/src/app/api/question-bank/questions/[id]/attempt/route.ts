@@ -3,8 +3,10 @@ import { verifyQBAccess } from '@/lib/qb-auth';
 import {
   submitQBAttempt,
   getQBQuestionDetail,
+  getSupabaseAdminClient,
   DRAWING_ATTEMPT_ERROR,
 } from '@neram/database';
+import { recordPracticeEvidence } from '@/lib/assistant/tutor/evidence';
 
 import { describeError } from '@/lib/api-errors';
 
@@ -40,8 +42,12 @@ export async function POST(
       mode || 'practice',
     );
 
-    // Get the question detail to return explanation
-    const question = await getQBQuestionDetail(questionId, caller.id);
+    // Get the question detail to return explanation. Alongside it, the answer
+    // becomes concept mastery evidence for the AI Tutor (never throws).
+    const [question] = await Promise.all([
+      getQBQuestionDetail(questionId, caller.id),
+      recordPracticeEvidence(getSupabaseAdminClient() as any, { studentId: caller.id, questionId, isCorrect: Boolean(isCorrect), selected: selected_answer }),
+    ]);
     if (!question) {
       return NextResponse.json({ error: 'Question not found' }, { status: 404 });
     }

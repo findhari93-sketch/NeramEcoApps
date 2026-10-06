@@ -21,7 +21,7 @@ interface PracticeHeaderProps {
   shown: number;
   total: number;
   loading: boolean;
-  /** "Continue at Q13", or null when every question is answered. */
+  /** "Continue at Q13" or "Start at Q1", or null when there is nowhere new to go. */
   continueLabel: string | null;
   onContinue: () => void;
   lang: 'en' | 'hi';

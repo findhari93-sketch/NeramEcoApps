@@ -20,6 +20,8 @@ const state = vi.hoisted(() => ({
   classes: [] as Record<string, unknown>[],
   rsvps: [] as Record<string, unknown>[],
   awayWindows: [] as Record<string, unknown>[],
+  /** Rows are pre-filtered to attended === true, as the route's .eq would. */
+  attendance: [] as Record<string, unknown>[],
   awayError: null as unknown,
   members: [] as Record<string, unknown>[],
   writes: [] as string[],
@@ -31,11 +33,12 @@ function builder(table: string) {
     if (table === 'nexus_scheduled_classes') return state.classes;
     if (table === 'nexus_class_rsvp') return state.rsvps;
     if (table === 'nexus_student_away_windows') return state.awayWindows;
+    if (table === 'nexus_attendance') return state.attendance;
     if (table === 'users') return [{ id: 'staff-1', user_type: state.userType }];
     return [];
   };
   const chain = () => b;
-  for (const m of ['select', 'eq', 'gte', 'lte', 'not', 'is', 'or', 'in', 'order', 'limit']) {
+  for (const m of ['select', 'eq', 'gte', 'lte', 'not', 'is', 'or', 'in', 'order', 'limit', 'range']) {
     b[m] = chain;
   }
 
@@ -141,6 +144,7 @@ beforeEach(() => {
   state.classes = [aClass()];
   state.rsvps = [];
   state.awayWindows = [];
+  state.attendance = [];
 });
 
 describe('the headline arithmetic', () => {
@@ -728,5 +732,93 @@ describe('the roll as of the date', () => {
     const body = await (await forClass()).json();
     expect(body.attending.length).toBe(3);
     for (const s of body.attending) expect(s).not.toHaveProperty('enrolled_at');
+  });
+});
+
+/**
+ * What actually happened, as opposed to what was expected.
+ *
+ * The calendar kept rendering a forecast for classes that had already run, so a
+ * block reading "36 of 38" described a room that held twenty. These two fields
+ * are what let the client tell a question from an answer.
+ */
+describe('who actually came', () => {
+  const present = (studentId: string, classId = 'class-1') => ({
+    scheduled_class_id: classId,
+    student_id: studentId,
+  });
+
+  it('counts the attenders on each class and on the date', async () => {
+    state.attendance = ['s1', 's2', 's3'].map((id) => present(id));
+    const body = await (await forRange('2026-09-22', '2026-09-22')).json();
+
+    expect(body.classes[0].present).toBe(3);
+    expect(body.days[0].present).toBe(3);
+    expect(body.days[0].measured).toBe(false);
+  });
+
+  it('marks a date measured only once every class on it has been read', async () => {
+    state.classes = [
+      aClass({ id: 'c-a', attendance_synced_at: '2026-09-22T15:00:00Z' }),
+      aClass({ id: 'c-b', start_time: '20:00', attendance_synced_at: null }),
+    ];
+    const body = await (await forRange('2026-09-22', '2026-09-22')).json();
+
+    // One unread class out of two means the day's headcount is missing whoever
+    // was in that room. A partial truth renders as a thin class, not an unread
+    // one, which is the exact falsehood this flag exists to prevent.
+    expect(body.days[0].measured).toBe(false);
+
+    state.classes = state.classes.map((c) => ({ ...c, attendance_synced_at: '2026-09-22T15:00:00Z' }));
+    const read = await (await forRange('2026-09-22', '2026-09-22')).json();
+    expect(read.days[0].measured).toBe(true);
+  });
+
+  it('counts a student once for the day however many of its classes they sat', async () => {
+    state.classes = [aClass({ id: 'c-a' }), aClass({ id: 'c-b', start_time: '20:00' })];
+    state.attendance = [present('s1', 'c-a'), present('s1', 'c-b'), present('s2', 'c-a')];
+    const body = await (await forRange('2026-09-22', '2026-09-22')).json();
+
+    // Same rule the declines already follow: one person in the room is one
+    // person, not two.
+    expect(body.days[0].present).toBe(2);
+  });
+
+  it('never calls a date with nothing scheduled measured', async () => {
+    state.classes = [];
+    const body = await (await forRange('2026-09-22', '2026-09-22')).json();
+
+    expect(body.days[0].measured).toBe(false);
+    expect(body.days[0].present).toBe(0);
+  });
+
+  it('carries the sync stamp through so the client can tell past from future', async () => {
+    state.classes = [aClass({ attendance_synced_at: '2026-09-22T15:00:00Z' })];
+    const body = await (await forRange('2026-09-22', '2026-09-22')).json();
+
+    expect(body.classes[0].attendance_synced_at).toBe('2026-09-22T15:00:00Z');
+  });
+
+  it('reports nobody present rather than throwing when nothing was read', async () => {
+    state.attendance = [];
+    const res = await forRange('2026-09-22', '2026-09-22');
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.classes[0].present).toBe(0);
+    // And `present` must not quietly become the headcount: an unread class and
+    // an empty one say completely different things, and `measured` is the only
+    // field entitled to tell them apart.
+    expect(body.days[0].measured).toBe(false);
+  });
+
+  it('leaves the expected-headcount invariants untouched', async () => {
+    state.attendance = ['s1', 's2'].map((id) => present(id));
+    state.awayWindows = ['s1', 's2'].map((id) => window(id, '2026-09-20', '2026-09-25'));
+    const body = await (await forRange('2026-09-22', '2026-09-22')).json();
+    const s = body.classes[0].summary;
+
+    expect(s.attending + s.not_attending).toBe(s.total);
+    expect(s.total + s.away).toBe(s.on_roll);
   });
 });

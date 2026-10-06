@@ -6,7 +6,6 @@ import { Box, Typography, Button, Container } from '@neram/ui';
 import { CheckCircleOutlined } from '@mui/icons-material';
 
 const GA_ADS_ID = process.env.NEXT_PUBLIC_GOOGLE_ADS_ID;
-const GA_ADS_PURCHASE_LABEL = process.env.NEXT_PUBLIC_GOOGLE_ADS_PURCHASE_LABEL;
 const GA_ADS_CREDIT_SIGNUP_LABEL = process.env.NEXT_PUBLIC_GOOGLE_ADS_CREDIT_SIGNUP_LABEL;
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
 
@@ -22,23 +21,22 @@ function ThankYouContent() {
   const searchParams = useSearchParams();
   const applicationNumber = searchParams.get('app') || '';
 
-  // Fire Google Ads conversions on page load
+  // This page confirms a submitted application, not a payment. It used to fire
+  // the Purchase conversion on every load (refreshes included, no
+  // transaction_id), which taught Smart Bidding that a form fill was a sale.
+  // Paid admissions now reach Google Ads as the offline "Admission paid"
+  // conversion, uploaded nightly by the admin app (lib/marketing-ai), with the
+  // real fee as its value. transaction_id stops a refresh counting twice.
   useEffect(() => {
-    if (typeof window !== 'undefined' && (window as any).gtag && GA_ADS_ID) {
-      if (GA_ADS_PURCHASE_LABEL) {
-        (window as any).gtag('event', 'conversion', {
-          send_to: `${GA_ADS_ID}/${GA_ADS_PURCHASE_LABEL}`,
-        });
-      }
-      if (GA_ADS_CREDIT_SIGNUP_LABEL) {
-        (window as any).gtag('event', 'conversion', {
-          send_to: `${GA_ADS_ID}/${GA_ADS_CREDIT_SIGNUP_LABEL}`,
-          value: 1.0,
-          currency: 'INR',
-        });
-      }
+    if (typeof window !== 'undefined' && (window as any).gtag && GA_ADS_ID && GA_ADS_CREDIT_SIGNUP_LABEL) {
+      (window as any).gtag('event', 'conversion', {
+        send_to: `${GA_ADS_ID}/${GA_ADS_CREDIT_SIGNUP_LABEL}`,
+        value: 1.0,
+        currency: 'INR',
+        transaction_id: applicationNumber || undefined,
+      });
     }
-  }, []);
+  }, [applicationNumber]);
 
   return (
     <Container maxWidth="sm" sx={{ py: { xs: 6, md: 10 } }}>

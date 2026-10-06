@@ -22,6 +22,8 @@ const summary = (over: Partial<RsvpSummary> = {}): RsvpSummary => ({
 
 const day = (over: Partial<RsvpDaySummary> = {}): RsvpDaySummary => ({
   date: '2026-09-25',
+  measured: false,
+  present: 0,
   summary: summary(),
   away_ids: [],
   declined_ids: [],
@@ -46,10 +48,24 @@ const student = (id: string, over: Partial<ForecastStudent> = {}): ForecastStude
   ...over,
 });
 
-/** Ten students, all of whom turn up. */
+/**
+ * Reliable students: present in 9 of 10. NOT perfect, which matters now.
+ *
+ * Under the old cliff these contributed a whole chair each, because 90% is
+ * nowhere near RARELY_COMES_RATE. Under the expected-value model nine of them
+ * are worth about 8.1 chairs, which is the arithmetic a teacher planning the
+ * room actually needs. Several numbers below moved by one for exactly that
+ * reason and each is called out where it happens.
+ */
 const regulars = (n: number, over: Partial<ForecastStudent> = {}) =>
   Array.from({ length: n }, (_, i) =>
     student(`ok${i}`, { present: 9, counted: 10, ...over }),
+  );
+
+/** Students who have genuinely never missed. The only case that costs nothing. */
+const perfect = (n: number, over: Partial<ForecastStudent> = {}) =>
+  Array.from({ length: n }, (_, i) =>
+    student(`all${i}`, { present: 10, counted: 10, standing: 'keeping_up', ...over }),
   );
 
 const cls = (id: string, batchId: string | null = null): RsvpClassSummary =>
@@ -66,17 +82,58 @@ describe('the realistic headcount', () => {
     const roster = [...regulars(8), student('rare1'), student('rare2')];
     const f = forecastFor(day(), roster);
 
+    // 8 students at 90% plus 2 at 10%, against a room base rate of 74%:
+    // 8 x 0.873 + 2 x 0.207 = 7.40, rounded once at the end.
     expect(f.expected).toBe(10);
     expect(f.atRisk).toBe(2);
-    expect(f.likely).toBe(8);
+    expect(f.likely).toBe(7);
     expect(f.estimated).toBe(true);
+    // The named count and the chairs are now two different numbers, and both
+    // are reported so the "See who" sheet can list 2 names under a drop of 3.
+    expect(f.discounted).toBe(3);
   });
 
   it('leaves the count alone when everyone turns up', () => {
-    const f = forecastFor(day(), regulars(10));
+    const f = forecastFor(day(), perfect(10));
     expect(f.likely).toBe(10);
     // Nothing was estimated, so nothing should be dressed up as an estimate.
+    // This is the one case that still costs nothing, and it is the reason the
+    // tilde keeps meaning something after the move to probabilities.
     expect(f.estimated).toBe(false);
+    expect(f.discounted).toBe(0);
+  });
+
+  // THE BUG THIS MODEL EXISTS FOR. A class read "36 of 38" and held twenty,
+  // because every student sat on the comfortable side of a 40% step and so
+  // cost the forecast nothing at all. A record is evidence in proportion to
+  // what it says, not only once it crosses a line.
+  it('no longer moves by a whole class either side of the rarely-comes line', () => {
+    const roomAt = (rate: number) =>
+      forecastFor(
+        day({ summary: summary({ attending: 30, total: 30, on_roll: 30 }) }),
+        Array.from({ length: 30 }, (_, i) =>
+          student(`s${i}`, { present: Math.round(rate * 20), counted: 20 }),
+        ),
+      );
+
+    const just_under = roomAt(0.39);
+    const just_over = roomAt(0.41);
+
+    // Under the old step these were 0 and 30. They are now one chair apart.
+    expect(Math.abs(just_under.likely - just_over.likely)).toBeLessThanOrEqual(1);
+    // And both are near the truth, which neither of them used to be.
+    expect(just_under.likely).toBeGreaterThan(8);
+    expect(just_over.likely).toBeLessThan(16);
+  });
+
+  it('counts a student with no history at all at the room average, never at zero', () => {
+    const roster = [...regulars(9), student('ghost', { present: 0, counted: 0 })];
+    const f = forecastFor(day(), roster);
+
+    // Never having looked is not evidence that they do not come.
+    expect(f.likely).toBeGreaterThanOrEqual(8);
+    expect(f.unknowns).toContain('ghost');
+    expect(f.atRisk).toBe(0);
   });
 
   // The trap this module exists for. Away and stepped-out have ALREADY left
@@ -90,7 +147,10 @@ describe('the realistic headcount', () => {
 
     const f = forecastFor(d, roster);
     expect(f.atRisk).toBe(0);
-    expect(f.likely).toBe(9);
+    // 9 reliable students at 90%, so about 8 chairs. The point of the test is
+    // that the away student is not taken off a SECOND time: `expected` is 9
+    // because they already left it, and `likely` reflects only the other nine.
+    expect(f.likely).toBe(8);
   });
 
   it('does not subtract a student who already stepped out', () => {
@@ -103,7 +163,8 @@ describe('the realistic headcount', () => {
 
     const f = forecastFor(d, roster, [cls('c1')]);
     expect(f.atRisk).toBe(0);
-    expect(f.likely).toBe(9);
+    // Same reasoning as the away case above: nine reliable students, not ten.
+    expect(f.likely).toBe(8);
   });
 
   it('never goes below zero even if the sets disagree', () => {
@@ -196,6 +257,65 @@ describe('the batch gate', () => {
   });
 });
 
+// A class that has already run is not a question any more. The calendar used to
+// keep rendering the forecast for it, which is how a block reading "36 of 38"
+// came to describe a room that held twenty.
+describe('a date that has already happened', () => {
+  const past = '2026-09-10';
+
+  it('reports what actually happened once Teams has been read', () => {
+    const d = day({ date: past, measured: true, present: 18, class_ids: ['c1'] });
+    const f = forecastFor(d, regulars(10), [cls('c1')]);
+
+    expect(f.outcome).toBe('actual');
+    expect(f.actual).toBe(18);
+    // No tilde on a counted room. The estimate is over; this is the register.
+    expect(f.estimated).toBe(false);
+  });
+
+  it('offers no number at all for a past class nobody read', () => {
+    const d = day({ date: past, measured: false, class_ids: ['c1'] });
+    const f = forecastFor(d, regulars(10), [cls('c1')]);
+
+    expect(f.outcome).toBe('past_unmeasured');
+    expect(f.actual).toBeNull();
+    expect(f.estimated).toBe(false);
+  });
+
+  it('still forecasts today and every date ahead of it', () => {
+    const todayRow = forecastFor(day({ date: TODAY }), regulars(10));
+    const ahead = forecastFor(day({ date: '2026-09-25' }), regulars(10));
+
+    // Today has not finished, so it is still a question worth asking.
+    expect(todayRow.outcome).toBe('forecast');
+    expect(ahead.outcome).toBe('forecast');
+  });
+
+  it('never reads a future date as measured even if the flag is wrong', () => {
+    const f = forecastFor(day({ date: '2026-09-25', measured: true, present: 4 }), regulars(10));
+    expect(f.outcome).toBe('forecast');
+    expect(f.actual).toBeNull();
+  });
+});
+
+describe('saying how much of the estimate is guesswork', () => {
+  it('calls the estimate soft when most of the room has little history', () => {
+    const roster = [
+      ...regulars(2),
+      ...Array.from({ length: 8 }, (_, i) => student(`thin${i}`, { present: 1, counted: 2 })),
+    ];
+    const f = forecastFor(day(), roster);
+    expect(f.confidence).toBe('soft');
+    expect(f.unknowns).toHaveLength(8);
+  });
+
+  it('calls it firm when the records are real', () => {
+    const f = forecastFor(day(), regulars(10));
+    expect(f.confidence).toBe('firm');
+    expect(f.unknowns).toHaveLength(0);
+  });
+});
+
 describe('the roll as of the date', () => {
   it('leaves a student out of dates before they enrolled', () => {
     const joined20th = student('newbie', {
@@ -209,8 +329,10 @@ describe('the roll as of the date', () => {
     const before = forecastFor(day({ date: '2026-09-18', summary: summary({ attending: 9, total: 9, on_roll: 9 }) }), roster);
     const after = forecastFor(day({ date: '2026-09-25' }), roster);
 
-    expect(before.likely).toBe(9);
-    expect(after.likely).toBe(10);
+    // 9 reliable students on the 18th; on the 25th the new joiner is on the
+    // roll too and, being inside the joining grace, is never discounted.
+    expect(before.likely).toBe(8);
+    expect(after.likely).toBe(9);
   });
 });
 

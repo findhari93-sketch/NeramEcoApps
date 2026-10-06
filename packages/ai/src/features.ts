@@ -70,6 +70,20 @@ export interface AiFeatureDef {
    * visitor is locked out for the rest of the day.
    */
   perClientHourlyCap?: number;
+  /**
+   * An env var holding this feature's own Gemini key, from a separate Google
+   * Cloud project, so its spend shows on its own bill and its own budget
+   * alert. While the var is unset the feature uses GEMINI_API_KEY as before.
+   * Once it is set the feature uses that key only: never the shared key, which
+   * would mix the bills, and never the free key.
+   */
+  keyEnv?: string;
+  /**
+   * The models to try, in order, while the feature runs on its own key. A new
+   * Google project cannot use some older models, so the tier's first choice may
+   * only answer 404 there; listing the ones it can use saves that round trip.
+   */
+  keyEnvModels?: string[];
 }
 
 /** The nexus_settings row that holds the overrides. */
@@ -172,6 +186,24 @@ export const AI_FEATURES = [
     defaultMode: 'auto',
     supportsManual: true,
     allowFreeKey: true,
+  },
+  /**
+   * The Google Ads agent (apps/admin/src/lib/marketing-ai). Classifies search
+   * terms, explains findings and drafts ad copy, once a night plus on-demand
+   * audits. Spend data is commercially sensitive, so no free key. When this is
+   * blocked the rules still raise recommendations, just without AI text.
+   */
+  {
+    id: 'admin.ads-analyst',
+    label: 'Google Ads agent analysis',
+    app: 'admin',
+    group: 'Admin tools',
+    trigger: 'cron',
+    tier: 'standard',
+    defaultMode: 'auto',
+    supportsManual: false,
+    allowFreeKey: false,
+    dailyCallCap: 60,
   },
 
   // ── Nexus: teaching content. Carries student data, so no free key. ───────
@@ -395,6 +427,32 @@ export const AI_FEATURES = [
     allowFreeKey: true,
     dailyCallCap: 600,
     perClientHourlyCap: 40,
+  },
+
+  // ── Nexus: AI Tutor ──────────────────────────────────────────────────────
+  /**
+   * The AI Tutor (apps/nexus/src/lib/assistant/tutor). Hints, steps, checks
+   * and the solution come from a precomputed tutor pack and cost nothing; the
+   * model is called only for a typed reply the rules cannot read, or a second
+   * "why" on a step. One call per such turn, at most 300 output tokens. It
+   * never decides right or wrong: the bank's maths grader does. What the
+   * student typed is student data, so never the free key.
+   */
+  {
+    id: 'nexus.tutor-interpret',
+    label: 'AI Tutor: read a typed reply',
+    app: 'nexus',
+    group: 'Student tools',
+    trigger: 'student',
+    tier: 'cheap',
+    defaultMode: 'auto',
+    supportsManual: false,
+    allowFreeKey: false,
+    dailyCallCap: 300,
+    perClientHourlyCap: 30,
+    keyEnv: 'GEMINI_API_KEY_TUTOR',
+    // The tutor's project (created 2026-10) is refused gemini-2.5-flash-lite.
+    keyEnvModels: ['gemini-3.1-flash-lite'],
   },
 
   // ── Nexus: student profile photos ────────────────────────────────────────

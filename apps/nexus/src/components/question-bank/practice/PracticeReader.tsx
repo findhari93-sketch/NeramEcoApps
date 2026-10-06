@@ -55,6 +55,10 @@ interface PracticeReaderProps {
   onRetryLoad: () => void;
   /** Filled in by the open question, for the keyboard shortcuts. */
   answerHandle?: MutableRefObject<ReaderAnswerHandle | null>;
+  /** Beside the language switch: the AI Tutor's door, when it has one for this question. */
+  headerAction?: ReactNode;
+  /** Floats over the foot of the body, above the action bar: the phone's "Back to tutor" pill. */
+  bodyOverlay?: ReactNode;
 }
 
 /**
@@ -112,6 +116,10 @@ export default function PracticeReader(props: PracticeReaderProps) {
           minHeight: 56,
           borderBottom: '1px solid',
           borderColor: 'divider',
+          // Lets the header's own buttons size to the pane, not the window
+          // (the tutor's door is an icon in a narrow pane, labelled in a wide one).
+          containerType: 'inline-size',
+          containerName: 'reader-head',
         }}
       >
         {screen && onClose && (
@@ -155,6 +163,7 @@ export default function PracticeReader(props: PracticeReaderProps) {
           </Tooltip>
         )}
         <Box sx={{ flex: 1 }} />
+        {props.headerAction}
         {showLang && <LangToggle lang={lang} onChange={onLangChange} />}
         {/* Said once per move, so a screen reader hears where it landed. */}
         <Box component="span" aria-live="polite" sx={SR_ONLY}>
@@ -279,23 +288,30 @@ function runPrimary(
 
 // ─── Layout pieces ───────────────────────────────────────────────────────────
 
-function ReaderShell({ children, footer, variant }: PracticeReaderProps & { children: ReactNode; footer: ReactNode }) {
+function ReaderShell({ children, footer, variant, bodyOverlay }: PracticeReaderProps & { children: ReactNode; footer: ReactNode }) {
   return (
     <>
       {/* Body: the only thing that scrolls. Keyed with the question, so it opens at the top. */}
-      <Box
-        data-reader-body
-        sx={{
-          flex: 1,
-          minHeight: 0,
-          overflowY: 'auto',
-          overscrollBehavior: 'contain',
-          px: { xs: 2, md: 3 },
-          pt: { xs: 2, md: 2.5 },
-          pb: 3,
-        }}
-      >
-        <Box sx={{ maxWidth: 760, mx: 'auto' }}>{children}</Box>
+      <Box sx={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+        <Box
+          data-reader-body
+          sx={{
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+            overscrollBehavior: 'contain',
+            px: { xs: 2, md: 3 },
+            pt: { xs: 2, md: 2.5 },
+            pb: bodyOverlay ? 10 : 3,
+          }}
+        >
+          <Box sx={{ maxWidth: 760, mx: 'auto' }}>{children}</Box>
+        </Box>
+        {bodyOverlay && (
+          <Box sx={{ position: 'absolute', left: 0, right: 0, bottom: 12, display: 'flex', justifyContent: 'center', pointerEvents: 'none', '& > *': { pointerEvents: 'auto' } }}>
+            {bodyOverlay}
+          </Box>
+        )}
       </Box>
       {footer && (
         <Box

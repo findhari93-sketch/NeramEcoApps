@@ -12,7 +12,7 @@ import {
   getAllotmentCommunityStats,
   getAllotmentYearSummary,
   logToolUsage,
-  getSupabaseBrowserClient,
+  getSupabaseAdminClient,
 } from '@neram/database';
 import { verifyIdToken } from '@/lib/firebase-admin';
 import { toPublicCandidates } from '@/lib/public-candidate';
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
       if (!systemId) {
         return NextResponse.json({ error: 'systemId required' }, { status: 400 });
       }
-      const supabase = getSupabaseBrowserClient();
+      const supabase = getSupabaseAdminClient();
       const yearsWithSource = await getAvailableYearsWithSource(systemId, supabase);
       const years = yearsWithSource.map((y) => y.year);
 
@@ -74,7 +74,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Default: return systems
-    const supabase = getSupabaseBrowserClient();
+    const supabase = getSupabaseAdminClient();
     const systems = await getCounselingSystems(supabase);
     return NextResponse.json({ systems }, {
       headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400' },
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const supabase = getSupabaseBrowserClient();
+    const supabase = getSupabaseAdminClient();
 
     // Resolve system
     const system = await getCounselingSystemByCode(systemCode, supabase);

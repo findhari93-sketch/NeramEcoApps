@@ -140,6 +140,8 @@ interface Attempt {
   model: string;
   apiKey: string;
   keyTier: 'paid' | 'free';
+  /** The env var the key came from, named when Google rejects it. */
+  keyEnv: string;
 }
 
 /**
@@ -191,7 +193,7 @@ export async function generateGemini(opts: GenerateOptions): Promise<GeminiResul
     });
   }
 
-  const attempts = planAttempts(opts, def?.tier ?? 'standard', def?.allowFreeKey ?? false);
+  const attempts = planAttempts(opts, def?.tier ?? 'standard', def?.allowFreeKey ?? false, def?.keyEnv, def?.keyEnvModels);
   const body = buildRequestBody(opts);
   const startedAt = Date.now();
 
@@ -276,7 +278,7 @@ export async function generateGemini(opts: GenerateOptions): Promise<GeminiResul
       }
 
       console.error(`[ai] auth error (${res.status}):`, JSON.stringify(errBody));
-      const message = `Gemini API key invalid or unauthorized (${res.status}). Check GEMINI_API_KEY.`;
+      const message = `Gemini API key invalid or unauthorized (${res.status}). Check ${attempt.keyEnv}.`;
       logUsage({
         featureId: opts.feature,
         app,
@@ -385,13 +387,23 @@ export function buildManualPrompt(opts: GenerateOptions): string {
  * The free key goes first when the feature allows it. Free tier inputs are used
  * by Google to improve their products, so allowFreeKey is false for anything
  * carrying student work; see the note in features.ts.
+ *
+ * A feature with its own key (keyEnv, when that var is set) uses it alone,
+ * with keyEnvModels in place of the tier's list when it names any.
  */
 function planAttempts(
   opts: GenerateOptions,
   tier: keyof typeof TIER_MODELS,
-  allowFreeKey: boolean
+  allowFreeKey: boolean,
+  keyEnv?: string,
+  keyEnvModels?: string[]
 ): Attempt[] {
   const models = opts.models?.length ? opts.models : TIER_MODELS[tier];
+  const ownKey = keyEnv ? process.env[keyEnv] : undefined;
+  if (keyEnv && ownKey) {
+    const own = opts.models?.length ? opts.models : keyEnvModels?.length ? keyEnvModels : models;
+    return own.map((model) => ({ model, apiKey: ownKey, keyTier: 'paid', keyEnv }));
+  }
   const paidKey = process.env.GEMINI_API_KEY;
   const freeKey = allowFreeKey ? process.env.GEMINI_API_KEY_FREE : undefined;
 
@@ -401,10 +413,10 @@ function planAttempts(
 
   const attempts: Attempt[] = [];
   if (freeKey) {
-    for (const model of models) attempts.push({ model, apiKey: freeKey, keyTier: 'free' });
+    for (const model of models) attempts.push({ model, apiKey: freeKey, keyTier: 'free', keyEnv: 'GEMINI_API_KEY_FREE' });
   }
   if (paidKey) {
-    for (const model of models) attempts.push({ model, apiKey: paidKey, keyTier: 'paid' });
+    for (const model of models) attempts.push({ model, apiKey: paidKey, keyTier: 'paid', keyEnv: 'GEMINI_API_KEY' });
   }
   return attempts;
 }

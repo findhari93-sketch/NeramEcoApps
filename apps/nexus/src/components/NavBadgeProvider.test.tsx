@@ -34,7 +34,12 @@ function Probe() {
 
 type Pending = { signal?: AbortSignal; resolve: (badges: Record<string, number>) => void };
 let pending: Pending[];
-const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+/** What a request to any route other than /api/nav-badges answers with. */
+let otherStatus = 200;
+const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+  if (!String(url).startsWith('/api/nav-badges')) {
+    return Promise.resolve(new Response('{}', { status: otherStatus }));
+  }
   return new Promise<Response>((resolve, reject) => {
     const p: Pending = {
       signal: init?.signal ?? undefined,
@@ -48,6 +53,7 @@ const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
 beforeEach(() => {
   vi.useFakeTimers();
   pending = [];
+  otherStatus = 200;
   fetchMock.mockClear();
   vi.stubGlobal('fetch', fetchMock);
   vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -97,7 +103,7 @@ describe('NavBadgeProvider polling', () => {
     // An explicit refresh (a teacher just approved a photo) always goes out.
     await act(async () => {
       ctx.refreshBadges();
-      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(300);
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     await act(async () => {
@@ -187,5 +193,87 @@ describe('NavBadgeProvider polling', () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * The sidebar kept a 3 on Issues after the last ticket was closed: the page
+ * never called refreshBadges(), and nothing else refreshed for two minutes.
+ * The provider now refreshes after any successful badge-changing request.
+ */
+describe('NavBadgeProvider refresh after an action', () => {
+  const badgeCalls = () =>
+    fetchMock.mock.calls.filter(([url]) => String(url).startsWith('/api/nav-badges')).length;
+
+  const settled = async () => {
+    await mount();
+    await act(async () => {
+      pending[0].resolve({ issues: 3 });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(badgeCalls()).toBe(1);
+  };
+
+  const request = async (url: string, init?: RequestInit) => {
+    await act(async () => {
+      await window.fetch(url, init);
+      await vi.advanceTimersByTimeAsync(300);
+    });
+  };
+
+  it('closing a ticket refreshes the badge once', async () => {
+    await settled();
+    await request('/api/foundation/issues/abc', { method: 'PATCH' });
+    expect(badgeCalls()).toBe(2);
+    await act(async () => {
+      pending[1].resolve({ issues: 0 });
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(ctx.getBadgeCount('/teacher/issues')).toBe(0);
+  });
+
+  it('opening a ticket (the seen=1 read) refreshes the badge', async () => {
+    await settled();
+    await request('/api/foundation/issues/abc?seen=1');
+    expect(badgeCalls()).toBe(2);
+  });
+
+  it('a refused action does not refresh', async () => {
+    await settled();
+    otherStatus = 409;
+    await request('/api/foundation/issues/abc', { method: 'PATCH' });
+    expect(badgeCalls()).toBe(1);
+  });
+
+  it('a request that cannot move a badge does not refresh', async () => {
+    await settled();
+    await request('/api/exams/e1/answers', { method: 'POST' });
+    await request('/api/foundation/issues');
+    expect(badgeCalls()).toBe(1);
+  });
+
+  it('a page calling refreshBadges() beside the automatic refresh costs one request', async () => {
+    await settled();
+    await act(async () => {
+      await window.fetch('/api/photo-review', { method: 'POST' });
+      ctx.refreshBadges();
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(badgeCalls()).toBe(2);
+  });
+
+  it('a burst of actions costs one request', async () => {
+    await settled();
+    await act(async () => {
+      for (let i = 0; i < 5; i++) await window.fetch(`/api/photo-review?i=${i}`, { method: 'POST' });
+      await vi.advanceTimersByTimeAsync(300);
+    });
+    expect(badgeCalls()).toBe(2);
+  });
+
+  it('unwraps fetch on unmount', async () => {
+    await settled();
+    cleanup();
+    expect(window.fetch).toBe(fetchMock);
   });
 });

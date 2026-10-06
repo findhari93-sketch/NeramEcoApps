@@ -6,11 +6,9 @@
  *   node scripts/answer-pad/package-teams-app.mjs
  *       apps/nexus/teams-app/dist/neram-assistant-<version>.zip, from manifest.json as it is.
  *
- *   node scripts/answer-pad/package-teams-app.mjs --dev --host <tunnel host> [--bot] [--version 1.1.1]
- *       A separate "Neram Pad Dev" app with its own app id, whose tab pages, valid
- *       domain and sign-in resource are the tunnel (the host only, no https://).
- *       The bot and its permissions are left out unless --bot is given: a bot id
- *       belongs to one Teams app in a tenant, and the real app already uses it.
+ * Raise `version` in manifest.json before each upload: the Teams admin center
+ * takes an update only with a higher one. (The separate "Neram Pad Dev" build
+ * for tunnel testing is retired; Neram Assistant is the only Teams app.)
  *
  * The manifest is checked before anything is zipped: it carries no property the
  * Teams schema for its manifestVersion refuses, every page is https on a valid
@@ -27,35 +25,6 @@ import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const APP_DIR = join(ROOT, 'apps/nexus/teams-app');
-const PROD_HOST = 'nexus.neramclasses.com';
-/** The dev copy's own Teams app id, so it can sit next to the real app. */
-const DEV_APP_ID = '7b1e4f0a-3c52-4d8e-9a61-2f9c0b7d5e43';
-
-function option(name) {
-  const index = process.argv.indexOf(name);
-  return index === -1 ? null : (process.argv[index + 1] ?? null);
-}
-
-function devManifest(prod, host, withBot) {
-  const swapHost = (url) => url.split(`https://${PROD_HOST}`).join(`https://${host}`);
-  const manifest = structuredClone(prod);
-
-  manifest.id = DEV_APP_ID;
-  manifest.name = { short: 'Neram Pad Dev', full: 'Neram Answer Pad (development)' };
-  // My Work stays in the real app; the dev copy is only the Answer Pad.
-  delete manifest.staticTabs;
-  manifest.configurableTabs = prod.configurableTabs.map((tab) => ({ ...tab, configurationUrl: swapHost(tab.configurationUrl) }));
-  manifest.validDomains = [host];
-  manifest.webApplicationInfo = { ...prod.webApplicationInfo, resource: `api://${host}/${prod.webApplicationInfo.id}` };
-  if (!withBot) {
-    delete manifest.bots;
-    // Sharing results to the meeting screen needs no bot, so its delegated permission stays.
-    const delegated = (prod.authorization?.permissions?.resourceSpecific ?? []).filter((permission) => permission.type === 'Delegated');
-    if (delegated.length > 0) manifest.authorization = { permissions: { resourceSpecific: delegated } };
-    else delete manifest.authorization;
-  }
-  return manifest;
-}
 
 /**
  * Every object in the Teams manifest schema refuses properties it does not
@@ -168,18 +137,7 @@ function zip(manifest, out) {
   }
 }
 
-const dev = process.argv.includes('--dev');
-const host = dev ? option('--host') : PROD_HOST;
-if (dev && (!host || !/^[a-z0-9.-]+$/i.test(host))) {
-  console.error('Usage: node scripts/answer-pad/package-teams-app.mjs --dev --host <tunnel host, without https://> [--bot]');
-  process.exit(1);
-}
-
-const prod = JSON.parse(readFileSync(join(APP_DIR, 'manifest.json'), 'utf8'));
-const manifest = dev ? devManifest(prod, host, process.argv.includes('--bot')) : prod;
-// The Teams admin center takes an update only with a higher version, so the dev copy can be given one.
-const version = option('--version');
-if (dev && version) manifest.version = version;
+const manifest = JSON.parse(readFileSync(join(APP_DIR, 'manifest.json'), 'utf8'));
 
 const problems = problemsWith(manifest);
 if (problems.length > 0) {
@@ -189,6 +147,6 @@ if (problems.length > 0) {
 
 const outDir = join(APP_DIR, 'dist');
 mkdirSync(outDir, { recursive: true });
-const out = join(outDir, `${dev ? 'neram-pad-dev' : 'neram-assistant'}-${manifest.version}.zip`);
+const out = join(outDir, `neram-assistant-${manifest.version}.zip`);
 zip(manifest, out);
 console.log(`Wrote ${out}`);

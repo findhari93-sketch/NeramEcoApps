@@ -329,7 +329,8 @@ export async function getAvailableYearsWithSource(
 
 /**
  * Find students with similar scores (for rank predictor UI)
- * Returns anonymized entries within ±range marks of the input score
+ * Returns anonymized entries within ±range marks of the input score.
+ * Never select name, date of birth or application number here.
  */
 export async function findSimilarStudents(
   systemId: string,
@@ -338,14 +339,14 @@ export async function findSimilarStudents(
   range: number = 5,
   limit: number = 20,
   client?: TypedSupabaseClient
-): Promise<RankListEntry[]> {
+): Promise<SimilarStudent[]> {
   const supabase = client || getSupabaseBrowserClient();
 
   // Try with initial range, expand if empty (e.g. score above/below all data)
   for (const r of [range, 20, 50]) {
     const { data, error } = await supabase
       .from('rank_list_entries')
-      .select('*')
+      .select('rank, aggregate_mark, community, community_rank')
       .eq('counseling_system_id', systemId)
       .eq('year', year)
       .gte('aggregate_mark', score - r)
@@ -354,7 +355,7 @@ export async function findSimilarStudents(
       .limit(limit);
 
     if (error) throw error;
-    if (data && data.length > 0) return data;
+    if (data && data.length > 0) return data as SimilarStudent[];
   }
 
   return [];
@@ -384,7 +385,7 @@ export async function findSimilarStudentsFromAllotment(
     const rankRange = 15; // ±15 ranks around predicted
     const { data: result, error } = await supabase
       .from('allotment_list_entries')
-      .select('rank, aggregate_mark, community, college_code, college_name, allotted_category, candidate_name')
+      .select('rank, aggregate_mark, community, college_code, college_name, allotted_category')
       .eq('counseling_system_id', systemId)
       .eq('year', year)
       .not('rank', 'is', null)
@@ -403,7 +404,7 @@ export async function findSimilarStudentsFromAllotment(
     for (const r of [range, 20, 50]) {
       const { data: result, error } = await supabase
         .from('allotment_list_entries')
-        .select('rank, aggregate_mark, community, college_code, college_name, allotted_category, candidate_name')
+        .select('rank, aggregate_mark, community, college_code, college_name, allotted_category')
         .eq('counseling_system_id', systemId)
         .eq('year', year)
         .not('rank', 'is', null)
@@ -484,7 +485,6 @@ export async function findSimilarStudentsFromAllotment(
       college_code: d.college_code || undefined,
       college_name: d.college_name || undefined,
       allotted_category: d.allotted_category || undefined,
-      candidate_name: d.candidate_name || undefined,
     };
   });
 }

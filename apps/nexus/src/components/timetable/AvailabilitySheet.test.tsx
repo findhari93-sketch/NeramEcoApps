@@ -52,6 +52,8 @@ const sum = (over: Partial<RsvpSummary> = {}): RsvpSummary => ({
 
 const day = (date: string, over: Partial<RsvpDaySummary> = {}): RsvpDaySummary => ({
   date,
+  measured: false,
+  present: 0,
   summary: sum(),
   away_ids: [],
   declined_ids: [],
@@ -68,6 +70,8 @@ const cls = (over: Partial<RsvpClassSummary> = {}): RsvpClassSummary => ({
   scheduled_date: on(2),
   start_time: '19:00',
   end_time: '20:00',
+  attendance_synced_at: null,
+  present: 0,
   batch_id: null,
   status: 'scheduled',
   summary: sum({ attending: 18, not_attending: 4, total: 22, on_roll: 28, away: 6 }),

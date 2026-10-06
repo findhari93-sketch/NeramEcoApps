@@ -11,7 +11,7 @@ import type { ClassCardData } from '../ClassCard';
 import { type HolidayInfo, formatDateISO, formatTime, hasClassEnded, isToday, type WeekDates } from '../date-utils';
 import { LAYOUT, RADIUS, SHADOW, iconTagSx, tagSx } from '../timetable-theme';
 import ClassCoverThumb from '../ClassCoverThumb';
-import { announce, compactLabel } from '@/lib/class-availability';
+import { announce, classCountLabel } from '@/lib/class-availability';
 import type { RsvpSummary } from '@/app/api/timetable/rsvp-dashboard/route';
 import type { CalendarClass } from '@/lib/catchup-calendar';
 import CatchupBadge from '../CatchupBadge';
@@ -34,6 +34,14 @@ interface PlannerWeekListProps {
    * the exact planning mistake the whole feature exists to stop.
    */
   availability?: Record<string, RsvpSummary>;
+  /**
+   * Who actually came, for the classes Teams has already been read for.
+   *
+   * A MISSING key and a zero are different facts: missing means nobody read the
+   * class, zero means it was read and nobody came. Keyed only on synced classes
+   * so the two can never be confused.
+   */
+  attendedByClassId?: Record<string, number>;
   onSelect: (cls: ClassCardData) => void;
   onAddClass: (date: string) => void;
   /**
@@ -65,6 +73,7 @@ export default function PlannerWeekList({
   selectedId,
   assignmentCounts,
   availability,
+  attendedByClassId,
   onSelect,
   onAddClass,
   onAssignmentClick,
@@ -293,7 +302,7 @@ export default function PlannerWeekList({
                             "expected" would cost the title characters it needs
                             more. The full sentence is on the away badge's label
                             and in the sheet. */}
-                        {expected ? ` · ${compactLabel(expected)}` : ''}
+                        {expected ? ` · ${classCountLabel(expected, attendedByClassId?.[cls.id])}` : ''}
                       </Typography>
                       {/* A link out to the class on the Catch-up calendar. It
                           stops its own click, like the assignment button beside it. */}

@@ -25,7 +25,7 @@ export const TOOLS: Tool[] = [
     id: 'college-predictor',
     title: 'College Predictor',
     description: 'Find the best architecture colleges based on your NATA score. Browse 5,000+ B.Arch colleges across India with fee details.',
-    href: '/tools/nata/college-predictor',
+    href: '/tools/counseling/college-predictor',
     icon: 'School',
     color: '#1a8fff',
     featured: true,

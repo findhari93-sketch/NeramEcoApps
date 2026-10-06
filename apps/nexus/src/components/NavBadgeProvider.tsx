@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { usePathname } from 'next/navigation';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
+import { affectsBadges, describeFetch } from '@/lib/badge-mutations';
 
 /** Map of nav path suffixes to badge counts */
 type BadgeCounts = Record<string, number>;
@@ -10,7 +11,10 @@ type BadgeCounts = Record<string, number>;
 interface NavBadgeContextValue {
   /** Get the badge count for a navigation path (e.g. '/student/issues' or '/teacher/issues') */
   getBadgeCount: (path: string) => number;
-  /** Force refresh badge counts immediately (call after actions that change counts) */
+  /**
+   * Refresh badge counts now (after a short debounce). Rarely needed: a successful
+   * request to any route in lib/badge-mutations.ts already triggers this.
+   */
   refreshBadges: () => void;
 }
 
@@ -24,7 +28,7 @@ export function useNavBadges() {
 }
 
 /** Path suffix → badge key mapping */
-const PATH_TO_BADGE_KEY: Record<string, string> = {
+export const PATH_TO_BADGE_KEY: Record<string, string> = {
   '/student/issues': 'issues',
   '/teacher/issues': 'issues',
   '/teacher/assignments': 'assignment_drawings',
@@ -60,6 +64,12 @@ const STALE_AFTER = 30_000;
  * poll interval, and holds the in-flight guard below for all of it.
  */
 const REQUEST_TIMEOUT = 15_000;
+/**
+ * How long a refresh after an action waits for more actions. Approving ten
+ * photos, or a page's own refreshBadges() landing beside the automatic one,
+ * becomes one badge request instead of several.
+ */
+const REFRESH_DEBOUNCE = 300;
 
 export default function NavBadgeProvider({ children }: { children: React.ReactNode }) {
   // Silent: this polls on a timer, and the redirecting getToken would send the
@@ -119,12 +129,54 @@ export default function NavBadgeProvider({ children }: { children: React.ReactNo
   /**
    * The timed and on-return polls. They skip while a request is still out, so a slow
    * server gets one request at a time from each tab instead of a growing pile.
-   * refreshBadges() (after a teacher acts) is never skipped: it calls fetchBadges.
+   * A refresh after an action (scheduleRefresh) is never skipped: it calls fetchBadges.
    */
   const pollBadges = useCallback(() => {
     if (inFlightRef.current > 0) return;
     void fetchBadges();
   }, [fetchBadges]);
+
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** A refresh after something changed: never skipped, but coalesced. */
+  const scheduleRefresh = useCallback(() => {
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+    refreshTimerRef.current = setTimeout(() => {
+      refreshTimerRef.current = null;
+      void fetchBadges();
+    }, REFRESH_DEBOUNCE);
+  }, [fetchBadges]);
+
+  useEffect(() => () => {
+    if (refreshTimerRef.current) clearTimeout(refreshTimerRef.current);
+  }, []);
+
+  // Refresh after any successful request that can move a badge, wherever it was
+  // made. Pages used to have to call refreshBadges() themselves and most never
+  // did: closing the last ticket on Issues left the old number in the sidebar
+  // for up to two minutes. The list of routes lives in lib/badge-mutations.ts.
+  const scheduleRefreshRef = useRef(scheduleRefresh);
+  scheduleRefreshRef.current = scheduleRefresh;
+  useEffect(() => {
+    if (!user || typeof window.fetch !== 'function') return;
+    const previous = window.fetch;
+    const watched: typeof window.fetch = async (input, init) => {
+      const res = await previous(input, init);
+      try {
+        if (res.ok) {
+          const { method, url } = describeFetch(input, init);
+          if (affectsBadges(method, url)) scheduleRefreshRef.current();
+        }
+      } catch {
+        // Badges are non-critical: never let the watch break the request it watched.
+      }
+      return res;
+    };
+    window.fetch = watched;
+    return () => {
+      // Only unwrap if nobody wrapped on top of us since.
+      if (window.fetch === watched) window.fetch = previous;
+    };
+  }, [user]);
 
   // Fetch on mount and poll, but only while somebody is actually looking.
   //
@@ -207,7 +259,7 @@ export default function NavBadgeProvider({ children }: { children: React.ReactNo
     [counts],
   );
 
-  const value = useMemo(() => ({ getBadgeCount, refreshBadges: fetchBadges }), [getBadgeCount, fetchBadges]);
+  const value = useMemo(() => ({ getBadgeCount, refreshBadges: scheduleRefresh }), [getBadgeCount, scheduleRefresh]);
 
   return (
     <NavBadgeContext.Provider value={value}>

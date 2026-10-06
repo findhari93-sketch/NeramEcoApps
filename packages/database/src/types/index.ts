@@ -4480,7 +4480,6 @@ export interface SimilarStudent {
   community: string;
   community_rank: number | null;
   // Present only when data source is allotment_list:
-  candidate_name?: string;
   college_code?: string;
   college_name?: string;
   allotted_category?: string;

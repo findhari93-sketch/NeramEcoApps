@@ -37,6 +37,7 @@ export const MORE_TOOLS: { label: string; desc: string; href: string }[] = [
   { label: 'Re-classify topics', desc: 'Move questions between categories in bulk', href: '/teacher/question-bank/reclassify' },
   { label: 'Fix numbering clashes', desc: 'Questions crammed onto the same number', href: '/teacher/question-bank/section-collisions' },
   { label: 'Reported questions', desc: 'What students flagged as wrong', href: '/teacher/question-bank/reports' },
+  { label: 'Tutor packs', desc: 'Check and approve the AI Tutor step-by-step lessons', href: '/teacher/question-bank/tutor-packs' },
 ];
 
 interface HubLink {

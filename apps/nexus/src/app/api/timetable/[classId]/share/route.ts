@@ -266,6 +266,13 @@ async function assembleSharePayload(
       ? { questionCount: classTest.question_count, passingPct: classTest.passing_pct }
       : null,
     assignments,
+    // Standing notice that missing a class without recording a reason can put
+    // Nexus on hold. Strict `=== true`, not `!== false` like the prep gate
+    // above: that one defaults to armed, this one must fail closed. A share
+    // sent while the rule is switched off would be advertising a consequence
+    // that cannot happen, and a notice students learn to discount is worse
+    // than no notice at all.
+    absenceGateEnabled: flags['student.absence-reason-gate'] === true,
   };
 
   const everySection = new Set<ShareSectionId>(TOGGLEABLE_SECTIONS);

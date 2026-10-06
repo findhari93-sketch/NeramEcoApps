@@ -272,6 +272,26 @@ export default function TeacherTimetable() {
   }, [availability]);
 
   /**
+   * Who actually came, for the classes Teams has already been read for.
+   *
+   * Keyed ONLY on synced classes, and the absence of a key is the signal. A
+   * class nobody read and a class nobody came to are completely different
+   * statements, and defaulting the number to 0 would turn the first into the
+   * second on every block in the week.
+   *
+   * This is what stops a class that has already run from going on advertising
+   * its own forecast. A block read "36 of 38" for a room that held twenty,
+   * because the expected count had no idea the evening was over.
+   */
+  const attendedByClassId = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const c of availability?.classes ?? []) {
+      if (c.attendance_synced_at) map[c.class_id] = c.present;
+    }
+    return map;
+  }, [availability]);
+
+  /**
    * How reliably each student actually turns up.
    *
    * A SECOND request, and deliberately so. /api/attendance/standing says in its
@@ -1571,6 +1591,7 @@ export default function TeacherTimetable() {
             onSlotClick={handleSlotClick}
             onClassClick={handleClassClick}
             rsvpData={rsvpData}
+            attendedByClassId={attendedByClassId}
             scrollToTime={configuredWindow.start}
             catchupByClassId={catchupByClassId}
           />
@@ -1588,6 +1609,7 @@ export default function TeacherTimetable() {
             onSlotClick={handleSlotClick}
             onClassClick={handleClassClick}
             rsvpData={rsvpData}
+            attendedByClassId={attendedByClassId}
             scrollToTime={configuredWindow.start}
             catchupByClassId={catchupByClassId}
           />
@@ -1620,6 +1642,7 @@ export default function TeacherTimetable() {
               onAssignmentClick={openAssignmentMenu}
               onAddClass={(date) => openCreateDialog(date)}
               availability={rsvpData}
+              attendedByClassId={attendedByClassId}
               catchupByClassId={catchupByClassId}
             />
             {/* The rail only exists at lg+. Below that the sheet is the panel,

@@ -9,8 +9,8 @@ import {
   announceForecast,
   awayLabel,
   expectedLabel,
-  forecastVerdict,
-  likelyLabel,
+  compactForecastLabel,
+  forecastVerdictOf,
   likelySentence,
 } from '@/lib/class-availability';
 import type { DayForecast } from '@/lib/class-forecast';
@@ -297,8 +297,8 @@ export default function MonthView({
           {(() => {
             const forecast = forecastOn(selectedISO);
             if (!forecast || !onOpenDayAvailability) return null;
-            const verdict = forecastVerdict(forecast.likely, forecast.onRoll);
-            const thin = verdict.key === 'thin' || verdict.key === 'very_thin';
+            const verdict = forecastVerdictOf(forecast);
+            const thin = verdict?.key === 'thin' || verdict?.key === 'very_thin';
             return (
               <Box
                 component="button"
@@ -562,8 +562,10 @@ export default function MonthView({
               {(() => {
                 const forecast = forecastOn(iso);
                 if (!forecast || !onOpenDayAvailability) return null;
-                const verdict = forecastVerdict(forecast.likely, forecast.onRoll);
-                const thin = verdict.key === 'thin' || verdict.key === 'very_thin';
+                // Null on a past class nobody read: no verdict, so no warning
+                // styling. An unread night is not a thin one.
+                const verdict = forecastVerdictOf(forecast);
+                const thin = verdict?.key === 'thin' || verdict?.key === 'very_thin';
                 return (
                 <Box
                   component="button"
@@ -572,7 +574,7 @@ export default function MonthView({
                     e.stopPropagation();
                     onOpenDayAvailability(iso);
                   }}
-                  data-turnout={verdict.key}
+                  data-turnout={verdict?.key ?? 'unread'}
                   aria-label={announceForecast(
                     forecast,
                     day.toLocaleDateString('en-IN', { day: 'numeric', month: 'long' }),
@@ -641,7 +643,7 @@ export default function MonthView({
                 >
                   {thin && <WarningAmberOutlinedIcon aria-hidden sx={{ fontSize: 12 }} />}
                   <Box component="span" aria-hidden>
-                    {likelyLabel(forecast)}
+                    {compactForecastLabel(forecast)}
                   </Box>
                 </Box>
                 );

@@ -126,6 +126,22 @@ describe('usePracticeSession', () => {
     await waitFor(() => expect(result.current.currentId).toBe('c'));
   });
 
+  it('opens a linked question that is not in the list (My Learning, a similar question)', async () => {
+    const { result } = setup({ layout: 'reader', initialQid: 'zz' });
+    await waitFor(() => expect(result.current.currentId).toBe('zz'));
+    await waitFor(() => expect(result.current.detail?.id).toBe('zz'));
+  });
+
+  it('keeps an off-list question open when the tutor opens it', async () => {
+    const { result } = setup({ layout: 'panes' });
+    await waitFor(() => expect(result.current.currentId).toBe('a'));
+    act(() => result.current.open('yy'));
+    await waitFor(() => expect(result.current.detail?.id).toBe('yy'));
+    act(() => result.current.reload());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.currentId).toBe('yy');
+  });
+
   it('drops a detail that lands after the student moved on', async () => {
     const slow = deferred<Response>();
     detailGate.set('a', slow);

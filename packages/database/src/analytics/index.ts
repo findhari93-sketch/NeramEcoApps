@@ -235,6 +235,7 @@ export const FIRST_TOUCH_KEYS = [
   'utm_content',
   'gclid',
   'wbraid',
+  'gbraid',
   'referral_code',
   'landing_page',
   'referrer',

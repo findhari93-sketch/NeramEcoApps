@@ -24,8 +24,10 @@ export interface MessageRow {
   thread_id: string;
   role: 'user' | 'assistant';
   text: string;
-  mode: Mode | null;
+  /** 'tutor' rows live in tutor:<questionId> threads (lib/assistant/tutor), never in a chat thread. */
+  mode: Mode | 'tutor' | null;
   llm: boolean;
+  /** A chat envelope. Tutor rows hold a TutorEnvelope; threads/[id] never returns a tutor thread. */
   envelope: Envelope | null;
   external_id: string | null;
   reply_to: string | null;
@@ -139,7 +141,7 @@ export async function touchThread(
  */
 export async function appendMessage(
   supabase: any,
-  input: { threadId: string; role: 'user' | 'assistant'; text: string; externalId?: string | null; replyTo?: string | null; envelope?: Envelope | null; mode?: Mode | null; llm?: boolean;
+  input: { threadId: string; role: 'user' | 'assistant'; text: string; externalId?: string | null; replyTo?: string | null; envelope?: Envelope | Record<string, unknown> | null; mode?: Mode | 'tutor' | null; llm?: boolean;
     model?: string | null; promptTokens?: number | null; outputTokens?: number | null; costUsd?: number | null; toolCalls?: unknown[] | null },
 ): Promise<{ inserted: boolean; row: MessageRow | null }> {
   const { data, error } = await supabase

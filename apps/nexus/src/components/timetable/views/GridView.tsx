@@ -6,7 +6,7 @@ import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined';
 import { type ClassCardData } from '../ClassCard';
-import { announce, compactLabel } from '@/lib/class-availability';
+import { announce, classCountLabel } from '@/lib/class-availability';
 import type { RsvpSummary } from '@/app/api/timetable/rsvp-dashboard/route';
 import {
   type HolidayInfo,
@@ -57,6 +57,14 @@ interface GridViewProps {
   /** Expected headcount per class id. `total` is the roll minus the away. */
   rsvpData?: Record<string, RsvpSummary>;
   /**
+   * Who actually came, for the classes Teams has already been read for.
+   *
+   * A MISSING key and a zero are different facts: missing means nobody read the
+   * class, zero means it was read and nobody came. Keyed only on synced classes
+   * so the two can never be confused.
+   */
+  attendedByClassId?: Record<string, number>;
+  /**
    * Where to park the scroll when the visible range holds no class, as "HH:MM".
    * Pass the configured window start: on a full-day band an empty week would
    * otherwise open at 8 AM, hours above where classes actually happen.
@@ -91,6 +99,7 @@ export default function GridView({
   onClassClick,
   onSlotClick,
   rsvpData,
+  attendedByClassId,
   scrollToTime,
   catchupByClassId,
 }: GridViewProps) {
@@ -547,7 +556,7 @@ export default function GridView({
                         }}
                       >
                         {role === 'teacher' && rsvp
-                          ? compactLabel(rsvp)
+                          ? classCountLabel(rsvp, attendedByClassId?.[cls.id])
                           : formatTime(cls.start_time)}
                       </Typography>
                       {role === 'teacher' && rsvp && rsvp.away > 0 && (

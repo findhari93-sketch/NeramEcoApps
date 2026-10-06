@@ -160,6 +160,13 @@ export function usePracticeSession({
   const currentIdRef = useRef<string | null>(null);
   currentIdRef.current = currentId;
   const pendingQid = useRef<string | null>(initialQid);
+  /**
+   * A question opened by link or by the tutor that is not in this list (My
+   * Learning's "Open the question", a similar question from another paper).
+   * It stays open when the list changes under it, which would otherwise close
+   * it on a phone or swap it for the first question on a laptop.
+   */
+  const offList = useRef<string | null>(null);
   const details = useRef(new Map<string, NexusQBQuestionDetail>());
   const inflight = useRef(new Map<string, Promise<NexusQBQuestionDetail | null>>());
   const answers = useRef(new Map<string, PriorAnswer>());
@@ -314,12 +321,11 @@ export function usePracticeSession({
     const wanted = pendingQid.current;
     if (wanted) {
       pendingQid.current = null;
-      if (questions.some((q) => q.id === wanted)) {
-        setCurrentId(wanted);
-        return;
-      }
+      if (!questions.some((q) => q.id === wanted)) offList.current = wanted;
+      setCurrentId(wanted);
+      return;
     }
-    setCurrentId((cur) => reconcileCurrent(questions, cur, layout));
+    setCurrentId((cur) => (cur && cur === offList.current ? cur : reconcileCurrent(questions, cur, layout)));
     // layout is listed so widening a phone into two panes fills the empty pane.
   }, [questions, loading, layout]);
 
@@ -410,7 +416,12 @@ export function usePracticeSession({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentId, classroomId, fetchDetail, prefetch]);
 
-  const open = useCallback((id: string) => setCurrentId(id), []);
+  const questionsRef = useRef(questions);
+  questionsRef.current = questions;
+  const open = useCallback((id: string) => {
+    offList.current = questionsRef.current.some((q) => q.id === id) ? null : id;
+    setCurrentId(id);
+  }, []);
   const close = useCallback(() => setCurrentId(null), []);
   const neighbour = useCallback((delta: number) => stepFrom(questions, currentIdRef.current, delta), [questions]);
   const priorAnswer = useCallback((id: string) => answers.current.get(id) ?? null, []);

@@ -14,6 +14,9 @@ import { stableHover } from './stableHover';
 import MessageBubble from './MessageBubble';
 import MessageList from './MessageList';
 import QuickActions, { type ExamHelp } from './QuickActions';
+import { EXPLAIN_THIS } from '@/lib/assistant/page-suggestions';
+import { baseIdOf } from '@/lib/practice-atoms';
+import { useTutorDoor } from '@/components/tutor/tutor-presence';
 import SuggestionChips from './SuggestionChips';
 
 export const SHEET_WIDTH = 420;
@@ -31,6 +34,11 @@ export default function AssistantSheet() {
     () => (!questionBank ? null : pageNow(a.pageContext.path).questionId ? 'question' : 'bank'),
     [questionBank, a.pageContext.path, a.open], // eslint-disable-line react-hooks/exhaustive-deps
   );
+  // The AI Tutor's door, only for the question on screen: Explain hands off to it (the panel closes).
+  const door = useTutorDoor();
+  const onQuestion = exam === 'question' && door && baseIdOf(pageNow(a.pageContext.path).questionId) === door.questionId;
+  const explainInTutor = onQuestion ? () => { a.closePanel(); door.open(); } : undefined;
+  const pickChip = (send: string) => (explainInTutor && send === EXPLAIN_THIS ? explainInTutor() : void a.send(send));
   /** Bumped by "Ask a maths or exam question": the message box takes focus with a maths prompt. */
   const [askKey, setAskKey] = useState(0);
   const hasChat = a.messages.length > 0 || Boolean(a.pendingAction);
@@ -74,7 +82,7 @@ export default function AssistantSheet() {
         // quick action cannot be tapped into the middle of an earlier flow.
         <Box sx={{ flex: 1, minHeight: 0, py: 1 }}><MessageBubble message={{ id: 'history', role: 'assistant', text: '', pending: true }} label="Loading your chat" /></Box>
       ) : a.messages.length === 0 ? (
-        <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}><QuickActions onSend={(t) => void a.send(t)} onReport={() => void a.reportProblem()} sketchbook={sketchbook} exam={exam} onAsk={() => setAskKey((k) => k + 1)} /></Box>
+        <Box sx={{ flex: 1, minHeight: 0, overflowY: 'auto' }}><QuickActions onSend={(t) => void a.send(t)} onReport={() => void a.reportProblem()} sketchbook={sketchbook} exam={exam} onAsk={() => setAskKey((k) => k + 1)} onExplain={explainInTutor} /></Box>
       ) : (
         <MessageList messages={a.messages} />
       )}
@@ -88,7 +96,7 @@ export default function AssistantSheet() {
           )}
         </Box>
       )}
-      <SuggestionChips items={a.messages.length ? a.suggestions : []} onPick={(s) => void a.send(s)} disabled={a.busy} />
+      <SuggestionChips items={a.messages.length ? a.suggestions : []} onPick={pickChip} disabled={a.busy} />
       <Composer onSend={a.send} busy={a.busy} wantsAttachment={a.wantsAttachment} upload={uploadImage} getToken={getToken} allowAttachment={sketchbook} focusKey={askKey} focusPrompt="Type your maths or exam question" />
     </Box>
   );

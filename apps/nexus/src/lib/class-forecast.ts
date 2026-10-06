@@ -31,7 +31,12 @@
  * line of defence rather than as arithmetic anyone should rely on.
  */
 import type { RsvpDaySummary, RsvpClassSummary } from '@/app/api/timetable/rsvp-dashboard/route';
-import { turnoutRecord, type TurnoutRecord } from './attendance-standing';
+import {
+  turnoutRecord,
+  turnoutProbability,
+  baseTurnoutRate,
+  type TurnoutRecord,
+} from './attendance-standing';
 import { joinedAfterClass } from './attendance-quality';
 import { NEW_JOINER_GRACE_DAYS } from './inactivity-score';
 
@@ -61,6 +66,21 @@ export interface RarelyComes {
   record: TurnoutRecord;
 }
 
+/**
+ * Whether this date is still a question, or already an answer.
+ *
+ * `forecast`         still ahead, or today, so `likely` is a prediction.
+ * `actual`           it has run and Teams told us who came. `actual` is the truth.
+ * `past_unmeasured`  it has run and we never read it. We offer NO number.
+ *
+ * That third case matters more than it looks. The calendar used to keep
+ * rendering a forecast for classes that had already happened, so a block that
+ * read "36 of 38" was describing a room that actually held twenty. A prediction
+ * about the past is not a prediction, and it is the fastest way to teach a
+ * teacher to distrust every other number on the screen.
+ */
+export type ForecastOutcome = 'forecast' | 'actual' | 'past_unmeasured';
+
 export interface DayForecast {
   date: string;
   /** summary.attending, restated so callers never have to reach past this. */
@@ -68,10 +88,23 @@ export interface DayForecast {
   onRoll: number;
   away: number;
   declined: number;
-  /** Expected students whose record says they will not be there. */
+  /** Expected students whose record says they will not be there. NAMED count. */
   atRisk: number;
-  /** expected minus atRisk, never below zero. */
+  /** The forecast headcount: the sum of per-student chances, rounded once. */
   likely: number;
+  /**
+   * expected minus likely: the chairs the record takes off, as arithmetic.
+   *
+   * Deliberately a SECOND field rather than a redefinition of `atRisk`. Three
+   * screens read `atRisk` as "how many people to name in the sheet", and under
+   * an expected-value model the named count and the discounted chairs no longer
+   * match: four unreliable students can cost about three chairs. Keeping both
+   * is what lets "See who" list four names under a headline that moved by three.
+   */
+  discounted: number;
+  /** Who actually came. Only ever set when `outcome` is 'actual'. */
+  actual: number | null;
+  outcome: ForecastOutcome;
   /**
    * Whether `likely` is a prediction rather than a restatement of `expected`.
    *
@@ -82,8 +115,24 @@ export interface DayForecast {
   estimated: boolean;
   /** Recent joiners on the roll that date. Never discounted, always named. */
   newcomers: string[];
+  /**
+   * On the roll, past the joining grace, and still too thinly measured to
+   * predict. Counted at the room's average and named, never hidden: a number
+   * resting on students we know nothing about should say so.
+   */
+  unknowns: string[];
+  /**
+   * How much of this estimate is the room's average rather than real records.
+   *
+   * A word, not a confidence interval. A teacher can act on "soft". Nobody can
+   * act on plus or minus 2.4.
+   */
+  confidence: 'firm' | 'soft';
   scheduled: boolean;
 }
+
+/** Past this share of counted students resting on the prior, the estimate is soft. */
+export const SOFT_CONFIDENCE_SHARE = 1 / 3;
 
 /**
  * Which batches a date's classes invite, or null for the whole classroom.
@@ -154,13 +203,21 @@ export function buildForecast(input: ForecastInput): Map<string, DayForecast> {
   const roster = students || [];
 
   // Computed once: the record does not change from one date to the next, only
-  // whether it applies to that date.
+  // whether it applies to that date. The room's base rate is read from the same
+  // roster, so a classroom is always predicted against itself rather than
+  // against some school-wide average it has never met.
+  const baseRate = baseTurnoutRate(roster);
   const recordById = new Map<string, TurnoutRecord>();
   const rarely = new Set<string>();
+  const chanceById = new Map<string, number>();
+  const thin = new Set<string>();
   for (const s of roster) {
     const record = turnoutRecord(s);
     recordById.set(s.id, record);
     if (record.rarely && !isNewcomer(s, today)) rarely.add(s.id);
+    const { p, thin: isThin } = turnoutProbability(s, baseRate);
+    chanceById.set(s.id, p);
+    if (isThin) thin.add(s.id);
   }
 
   const out = new Map<string, DayForecast>();
@@ -180,7 +237,10 @@ export function buildForecast(input: ForecastInput): Map<string, DayForecast> {
     const trustworthy = roster.length > 0 && computedOnRoll === day.summary.on_roll;
 
     let atRisk = 0;
+    let likelyExact = 0;
+    let counted = 0;
     const newcomers: string[] = [];
+    const unknowns: string[] = [];
 
     if (trustworthy) {
       const excluded = new Set([...day.away_ids, ...day.declined_ids]);
@@ -189,15 +249,38 @@ export function buildForecast(input: ForecastInput): Map<string, DayForecast> {
         // Already subtracted upstream. Counting them again would take the same
         // empty chair off the roll twice.
         if (excluded.has(s.id)) continue;
+        counted += 1;
         if (isNewcomer(s, today)) {
+          // "Never discounted, always named" is this field's standing promise,
+          // so a newcomer contributes a whole chair rather than the room's
+          // average. Two weeks of nothing is not a record, and a class of new
+          // joiners must read as its own roll, not as a prediction about
+          // strangers.
           newcomers.push(s.id);
+          likelyExact += 1;
           continue;
         }
         if (rarely.has(s.id)) atRisk += 1;
+        if (thin.has(s.id)) unknowns.push(s.id);
+        likelyExact += chanceById.get(s.id) ?? 1;
       }
     }
 
-    const likely = Math.max(0, expected - atRisk);
+    // Rounded ONCE, here, at the end. Rounding each p as it was added would
+    // rebuild the very cliff turnoutProbability exists to remove, and Math.floor
+    // would be a systematic lie in the pessimistic direction. Clamped to
+    // `expected` because a sum of probabilities must never claim more people
+    // than the roll already allows.
+    const likely = trustworthy
+      ? Math.min(expected, Math.max(0, Math.round(likelyExact)))
+      : expected;
+
+    const past = day.date < today;
+    const outcome: ForecastOutcome = !past
+      ? 'forecast'
+      : day.measured
+        ? 'actual'
+        : 'past_unmeasured';
 
     out.set(day.date, {
       date: day.date,
@@ -207,8 +290,19 @@ export function buildForecast(input: ForecastInput): Map<string, DayForecast> {
       declined: day.summary.not_attending,
       atRisk,
       likely,
-      estimated: trustworthy && atRisk > 0,
+      discounted: Math.max(0, expected - likely),
+      actual: outcome === 'actual' ? day.present : null,
+      outcome,
+      // A past date has stopped estimating: either we know, or we say we do not.
+      // The tilde therefore cannot survive the class running, which is the whole
+      // repair. On a future date it still means exactly what it always meant,
+      // that something was discounted, now measured in half-chairs rather than
+      // in whole ones so a room where everyone is reliable stays a plain count.
+      estimated: outcome === 'forecast' && trustworthy && Math.abs(likelyExact - expected) >= 0.5,
       newcomers,
+      unknowns,
+      confidence:
+        counted > 0 && unknowns.length > counted * SOFT_CONFIDENCE_SHARE ? 'soft' : 'firm',
       scheduled: day.class_ids.length > 0,
     });
   }

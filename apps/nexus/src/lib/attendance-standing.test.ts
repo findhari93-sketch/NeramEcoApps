@@ -7,6 +7,9 @@ import {
   STANDING_META,
   STANDING_ORDER,
   turnoutRecord,
+  turnoutProbability,
+  baseTurnoutRate,
+  NO_HISTORY_BASE_RATE,
   type StandingInput,
 } from './attendance-standing';
 
@@ -284,5 +287,57 @@ describe('turnoutRecord', () => {
   it('never reports more than everything, however the tallies arrive', () => {
     const r = turnoutRecord({ counted: 10, present: 10, away: 6 });
     expect(r.rate).toBe(100);
+  });
+});
+
+describe('turnoutProbability', () => {
+  const room = (rate: number, n = 10) =>
+    Array.from({ length: n }, () => ({ counted: 10, present: Math.round(rate * 10), away: 0 }));
+
+  it('reads the room rate off the room, away days already out', () => {
+    expect(baseTurnoutRate(room(0.8))).toBeCloseTo(0.8, 5);
+    // Away days leave the denominator, exactly as turnoutRecord does it, so a
+    // student on declared leave cannot drag the room's rate down.
+    expect(baseTurnoutRate([{ counted: 10, present: 5, away: 5 }])).toBe(1);
+  });
+
+  it('calls a room with nothing measured fully present rather than empty', () => {
+    // Honesty rule 1 pointed at a forecast: never having looked is not evidence
+    // that nobody comes.
+    expect(baseTurnoutRate([])).toBe(NO_HISTORY_BASE_RATE);
+    expect(baseTurnoutRate([null, undefined])).toBe(1);
+  });
+
+  it('is continuous across the rarely-comes line', () => {
+    const under = turnoutProbability({ counted: 100, present: 39, away: 0 }, 0.5).p;
+    const over = turnoutProbability({ counted: 100, present: 41, away: 0 }, 0.5).p;
+    // The step function this replaces jumped from 0 chairs to 1 here.
+    expect(Math.abs(under - over)).toBeLessThan(0.05);
+    expect(over).toBeGreaterThan(under);
+  });
+
+  it('pulls a thin record toward the room and says it did', () => {
+    const thin = turnoutProbability({ counted: 1, present: 0, away: 0 }, 0.9);
+    expect(thin.thin).toBe(true);
+    // One miss is not a record. Mostly the room, not mostly the student.
+    expect(thin.p).toBeGreaterThan(0.5);
+  });
+
+  it('lets a long record speak for itself', () => {
+    const long = turnoutProbability({ counted: 100, present: 20, away: 0 }, 0.9);
+    expect(long.thin).toBe(false);
+    expect(long.p).toBeLessThan(0.25);
+  });
+
+  it('gives a student with no history the room average exactly', () => {
+    expect(turnoutProbability({ counted: 0, present: 0, away: 0 }, 0.7).p).toBeCloseTo(0.7, 5);
+    expect(turnoutProbability(null, 0.7).p).toBeCloseTo(0.7, 5);
+  });
+
+  it('never returns a probability outside 0 to 1', () => {
+    // A tally that disagrees with itself must not produce a nonsense chair.
+    expect(turnoutProbability({ counted: 2, present: 99, away: 0 }, 1).p).toBeLessThanOrEqual(1);
+    expect(turnoutProbability({ counted: 10, present: -5, away: 0 }, 0).p).toBeGreaterThanOrEqual(0);
+    expect(turnoutProbability({ counted: 10, present: 5, away: 0 }, NaN).p).toBeLessThanOrEqual(1);
   });
 });

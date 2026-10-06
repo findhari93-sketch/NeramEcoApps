@@ -109,6 +109,82 @@ export function turnoutRecord(t: TurnoutTally | null | undefined): TurnoutRecord
   return { judged, rate, rarely: judged >= MIN_JUDGED_CLASSES && rate < RARELY_COMES_RATE };
 }
 
+/**
+ * How much history a student needs before their own record outweighs the room's.
+ *
+ * DELIBERATELY NOT MIN_JUDGED_CLASSES, and conflating them is the mistake this
+ * comment exists to stop. That constant decides whether we say anything about a
+ * student at all. This one decides how fast a record earns trust once we do:
+ * it is the weight, in classes, of the prior. At 2, a student with 20 judged
+ * classes lands within a few points of their own raw rate, so a reliable room
+ * still reads 29 of 30 rather than drifting pessimistic, while a student with
+ * two classes is still mostly judged by the room around them.
+ */
+export const SHRINK_ALPHA = 2;
+
+/**
+ * The room's rate when the room has no measured history at all.
+ *
+ * 1, not 0. Honesty rule 1 in reverse: never having looked is not evidence that
+ * nobody comes. A brand new classroom predicts everyone present, which is the
+ * same thing the forecast did before it could predict anything, and the only
+ * claim we are entitled to make.
+ */
+export const NO_HISTORY_BASE_RATE = 1;
+
+export interface TurnoutProbability {
+  /** 0 to 1. The chance this student is in the room on a day they are expected. */
+  p: number;
+  /** The room's rate, not their own record, is doing most of the work here. */
+  thin: boolean;
+}
+
+/** The classroom's own attendance rate over the same measured window, 0 to 1. */
+export function baseTurnoutRate(tallies: Array<TurnoutTally | null | undefined>): number {
+  let present = 0;
+  let judged = 0;
+  for (const t of tallies) {
+    const j = Math.max(0, (t?.counted ?? 0) - (t?.away ?? 0));
+    if (j <= 0) continue;
+    judged += j;
+    present += Math.min(t?.present ?? 0, j);
+  }
+  return judged > 0 ? present / judged : NO_HISTORY_BASE_RATE;
+}
+
+/**
+ * The chance one student is in the room, for summing into a forecast.
+ *
+ * THE CLIFF THIS REPLACES: `rarely` is a step function at RARELY_COMES_RATE, and
+ * the forecast subtracted a whole head on the wrong side of it. Two students at
+ * 39% and 41% differed by one chair each, so a 2-point difference in a record
+ * moved a 30-person class by 23 heads. Teachers read that number every day and
+ * it was wrong in the optimistic direction, which is the direction that empties
+ * a room nobody planned for.
+ *
+ * Beta-binomial shrinkage toward the room's own rate. Continuous and monotone,
+ * so 41% now costs 0.59 of a head rather than nothing, and no student can move
+ * the total by a whole person by crossing a line. A student with no history at
+ * all lands exactly on the room's average, because no history is not evidence
+ * of absence.
+ *
+ * `judged` already has declared away days out of the denominator, which is the
+ * entire reason turnoutRecord computes it that way, and the reason this can be
+ * summed in front of a teacher without misrepresenting anyone who told us in
+ * advance. Callers must round the SUM once at the end and never round p here:
+ * rounding per student rebuilds the cliff with extra steps.
+ */
+export function turnoutProbability(
+  t: TurnoutTally | null | undefined,
+  baseRate: number,
+): TurnoutProbability {
+  const judged = Math.max(0, (t?.counted ?? 0) - (t?.away ?? 0));
+  const present = Math.min(t?.present ?? 0, judged);
+  const m = Number.isFinite(baseRate) ? Math.min(1, Math.max(0, baseRate)) : NO_HISTORY_BASE_RATE;
+  const p = (present + SHRINK_ALPHA * m) / (judged + SHRINK_ALPHA);
+  return { p: Math.min(1, Math.max(0, p)), thin: judged < MIN_JUDGED_CLASSES };
+}
+
 export interface StandingInput {
   /** IST YYYY-MM-DD. One value for the whole cohort, never per row. */
   today: string;

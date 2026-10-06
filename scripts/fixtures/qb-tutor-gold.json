@@ -1,0 +1,105 @@
+{
+  "note": "Gold set for scripts/qb-tutor-packs.ts. The founder adds about 20 maths questions checked by hand, as {\"question_id\": \"<uuid>\", \"expect_final\": \"<option id for MCQ, or the value for NUMERICAL>\", \"note\": \"optional\"}. A gold question counts when its pack verifies and its final answer is expect_final. Apply stops below 90%. While items is empty, apply needs --skip-gold. Filled 2026-10-06 with 20 questions across 17 chapters; expect_final is the stored key (keys were double-checked in the 2026-10-01 audit). Replace any you have hand-checked differently.",
+  "items": [
+    {
+      "question_id": "1d521230-84be-416b-9e7f-a4c8fbb428d2",
+      "expect_final": "c",
+      "note": "areas_of_triangles"
+    },
+    {
+      "question_id": "43230b90-7691-44e0-8a40-51e3116a8549",
+      "expect_final": "a",
+      "note": "complex_numbers"
+    },
+    {
+      "question_id": "3db8a368-798a-4cd9-aa4c-fb1e2a03cf52",
+      "expect_final": "d",
+      "note": "heights_and_distances"
+    },
+    {
+      "question_id": "22aceb86-07ac-4882-9fd4-ff336c314a63",
+      "expect_final": "d",
+      "note": "sets_and_relations"
+    },
+    {
+      "question_id": "0edae44c-4470-4146-9efb-725ee75f292a",
+      "expect_final": "c",
+      "note": "functions"
+    },
+    {
+      "question_id": "4fbb1421-521f-459a-aad0-798507e169eb",
+      "expect_final": "b",
+      "note": "matrices"
+    },
+    {
+      "question_id": "f6d629f8-9ff2-493b-b8bb-d415c21c0968",
+      "expect_final": "d",
+      "note": "determinants"
+    },
+    {
+      "question_id": "ac5dc0b7-5eb2-47ef-ac44-c3848dc31130",
+      "expect_final": "c",
+      "note": "ellipse"
+    },
+    {
+      "question_id": "8750f0bb-9a2a-4e21-9444-badca1b64a13",
+      "expect_final": "c",
+      "note": "locus"
+    },
+    {
+      "question_id": "6088feaf-e03e-4bcf-80c4-3a551cc8f4e8",
+      "expect_final": "c",
+      "note": "parabola"
+    },
+    {
+      "question_id": "2b74020b-58ce-4a91-a09f-cd2b3dd0312d",
+      "expect_final": "a",
+      "note": "differentiability"
+    },
+    {
+      "question_id": "b146ebf0-7fc7-4054-a919-45f394100f59",
+      "expect_final": "c",
+      "note": "indefinite_integrals"
+    },
+    {
+      "question_id": "50ccc618-569f-4341-87a6-181c2322d8e1",
+      "expect_final": "a",
+      "note": "3d_geometry"
+    },
+    {
+      "question_id": "3a3d115e-c2f6-423d-86f3-97539ba40126",
+      "expect_final": "d",
+      "note": "permutations_combinations"
+    },
+    {
+      "question_id": "a9c8f3b1-e722-481c-8748-19cc28897e2e",
+      "expect_final": "b",
+      "note": "differentiation"
+    },
+    {
+      "question_id": "d17771df-c9a3-4e4a-a9b8-dd2b9e1a2bbb",
+      "expect_final": "c",
+      "note": "probability"
+    },
+    {
+      "question_id": "96fee566-4880-4b3e-b159-d6ae6e8b449d",
+      "expect_final": "a",
+      "note": "area_under_curves"
+    },
+    {
+      "question_id": "bcd080b3-a1d0-4cd0-a944-bb7bb78540d6",
+      "expect_final": "18",
+      "note": "determinants (numerical)"
+    },
+    {
+      "question_id": "f5d7d99b-fb6c-49fe-9333-8d5f2074ab81",
+      "expect_final": "35",
+      "note": "sets_and_relations (numerical)"
+    },
+    {
+      "question_id": "a41de804-990a-44b4-b1ae-52e2530170e8",
+      "expect_final": "128",
+      "note": "straight_lines (numerical)"
+    }
+  ]
+}

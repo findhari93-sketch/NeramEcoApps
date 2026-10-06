@@ -138,10 +138,9 @@ Resume after the cause is fixed, then re-run the whole affected level and the re
 | Environment | Detail |
 |---|---|
 | Local dev server | Nexus on Node 20, port 3022, `apps/nexus/.env.local` pointing at the **staging** Supabase project. Automated levels only: it accepts `test_` sign-ins, so it is never tunnelled |
-| Local production mode | The same code built with `next build` and served by `next start` on port 3022, still on staging. Used for manual testing in Teams, because it refuses `test_` sign-ins |
+| Production Nexus | `https://nexus.neramclasses.com`. Used for manual testing in Teams, because Neram Assistant's pages and bot point there and it refuses `test_` sign-ins |
 | Staging database | Supabase staging (`hgxjavrsrvpihqrpezdh`) with migration `20260911090100_answer_pad.sql` applied and verified by schema fingerprint |
-| Tunnel for Teams | `cloudflared` quick tunnel in front of the production-mode server only, with the dev Teams app built by `package-teams-app.mjs --dev` |
-| Teams app catalog | For the automatic button, the dev package is uploaded in the Teams admin center and limited to the testers, so it has a catalog id; the tab origin and app ids come from `PAD_*` settings in `.env.local` |
+| Teams app | Neram Assistant, published in the Teams admin center; its meeting tab is the Answer Pad. The automatic button uses its catalog id (`TEAMS_APP_CATALOG_ID`). The separate dev app is retired |
 | Teams clients | Desktop (Windows, macOS), web (Edge, Chrome) on laptops, Android, iOS. About 90% of students use the phone apps, so phone results decide. Microsoft's notes on what each client supports are confirmed on devices first (TC-PAD-080) |
 | Widths | 280px and 320px side panel, 360px to 412px phones, the question pop-up (280px to 460px wide, about 300px tall), the meeting screen (472x382 to 994x678), 768px tablet |
 | Production | Not used. `.env.development` at the repository root points at production and must never be used for testing |

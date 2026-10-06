@@ -1,7 +1,7 @@
 /**
  * Attribution capture for Google Ads + UTM.
  *
- * Reads gclid / wbraid / utm_* from the URL on first paint and persists them
+ * Reads gclid / wbraid / gbraid / utm_* from the URL on first paint and persists them
  * so they survive page hops (landing → /apply, landing → inline form submit).
  * Lead-capture surfaces spread leadAttribution() into their POST body, so the
  * backend can attribute the conversion even when the form is on a different
@@ -19,6 +19,8 @@ const MAX_VALUE_LENGTH = 100;
 export interface AttributionData {
   gclid?: string;
   wbraid?: string;
+  /** iOS app-to-web click id. Kept on the cookie (users.first_touch) only; the lead tables have no column for it. */
+  gbraid?: string;
   utm_source?: string;
   utm_medium?: string;
   utm_campaign?: string;
@@ -38,6 +40,7 @@ export type LeadAttribution = Pick<
 const CAMPAIGN_KEYS = [
   'gclid',
   'wbraid',
+  'gbraid',
   'utm_source',
   'utm_medium',
   'utm_campaign',
@@ -238,6 +241,7 @@ export function classifyChannel(input: {
   utm_medium?: string | null;
   gclid?: string | null;
   wbraid?: string | null;
+  gbraid?: string | null;
   fbclid?: string | null;
   referrer?: string | null;
 }): Channel {
@@ -245,7 +249,7 @@ export function classifyChannel(input: {
   const medium = (input.utm_medium ?? '').toLowerCase();
   const host = hostOf(input.referrer);
 
-  if (input.gclid || input.wbraid || (source === 'google' && /cpc|ppc|paid/.test(medium))) return 'google_ads';
+  if (input.gclid || input.wbraid || input.gbraid || (source === 'google' && /cpc|ppc|paid/.test(medium))) return 'google_ads';
   if (input.fbclid || ((/facebook|instagram|meta|fb|ig/.test(source)) && /cpc|ppc|paid|ads?/.test(medium))) return 'meta_ads';
 
   // The "Website" link on a Google Business Profile carries utm_medium=gbp
@@ -279,7 +283,7 @@ export function nextTouches(
 ): Touches | null {
   const params = new URLSearchParams(page.search);
   const refHost = hostOf(page.referrer);
-  const hasCampaign = ['utm_source', 'utm_medium', 'utm_campaign', 'gclid', 'wbraid', 'fbclid'].some((k) => params.get(k));
+  const hasCampaign = ['utm_source', 'utm_medium', 'utm_campaign', 'gclid', 'wbraid', 'gbraid', 'fbclid'].some((k) => params.get(k));
   const external = !!refHost && !isOwnHost(refHost);
   // A first visit with no referrer is a direct touch; later direct loads are not new touches.
   if (!hasCampaign && !external && prev.first) return null;
@@ -294,6 +298,7 @@ export function nextTouches(
       utm_medium: params.get('utm_medium'),
       gclid: params.get('gclid'),
       wbraid: params.get('wbraid'),
+      gbraid: params.get('gbraid'),
       fbclid: params.get('fbclid'),
       referrer: external ? page.referrer : null,
     }),

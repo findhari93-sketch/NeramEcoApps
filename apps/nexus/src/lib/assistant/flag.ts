@@ -9,3 +9,6 @@ export const ATTENDANCE_FLAG = 'student.attendance';
 export const TESTS_FLAG = 'student.tests';
 export const QUESTION_BANK_FLAG = 'student.question-bank';
 export const INSPIRATION_FLAG = 'student.inspiration';
+
+/** The AI Tutor (lib/assistant/tutor). Needs ASSISTANT_FLAG and QUESTION_BANK_FLAG on too. */
+export const TUTOR_FLAG = 'student.ai-tutor';

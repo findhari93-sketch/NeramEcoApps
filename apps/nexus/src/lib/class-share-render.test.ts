@@ -176,3 +176,41 @@ describe('renderShareHtml', () => {
     expect(html).not.toContain('&mdash;');
   });
 });
+
+/**
+ * The standing notice on a shared class. A student should learn the rule before
+ * they miss anything, not on their third strike.
+ */
+describe('the silent-absence notice on a class share', () => {
+  const NOTICE = 'record it in Nexus';
+  // The notice only ever rides the Join and RSVP section, which exists on an
+  // upcoming class. The shared fixture above is a past one.
+  const upcoming = (over: Partial<ClassSharePayload> = {}) =>
+    fullPayload({ state: 'upcoming', links: { ...fullPayload().links, join: `${BASE}/join` }, ...over });
+
+  it('says nothing at all while the hold is switched off', () => {
+    // The default, and the state prod is in. Advertising a rule that is not
+    // armed is an empty threat, and an empty threat teaches students that a
+    // Nexus notice does not mean what it says.
+    const text = renderShareText(buildShareSections(upcoming()), ALL);
+    expect(text).not.toContain(NOTICE);
+  });
+
+  it('appears in both the pasteable text and the Teams card once armed', () => {
+    const payload = upcoming({ absenceGateEnabled: true });
+    expect(renderShareText(buildShareSections(payload), ALL)).toContain(NOTICE);
+    expect(renderShareHtml(buildShareSections(payload), ALL)).toContain(NOTICE);
+  });
+
+  it('sits beside the RSVP link, which is the door it tells them to use', () => {
+    const payload = upcoming({ absenceGateEnabled: true });
+    const text = renderShareText(buildShareSections(payload), ALL);
+    // A consequence stated with no way to act on it is a threat, not a rule.
+    expect(text.indexOf('RSVP')).toBeLessThan(text.indexOf(NOTICE));
+  });
+
+  it('never appears on a class that has already run', () => {
+    const payload = { ...fullPayload(), state: 'past' as const, absenceGateEnabled: true };
+    expect(renderShareText(buildShareSections(payload), ALL)).not.toContain(NOTICE);
+  });
+});

@@ -49,6 +49,7 @@ const zeroSpend = { calls: 0, blockedCalls: 0, promptTokens: 0, outputTokens: 0,
 beforeEach(() => {
   process.env.GEMINI_API_KEY = 'test-key';
   delete process.env.GEMINI_API_KEY_FREE;
+  delete process.env.GEMINI_API_KEY_TUTOR;
   clearBudgetCache();
   // recordAiUsage is async, so the mock has to return a promise: the client
   // attaches a .catch to it and a bare undefined would throw right there.
@@ -467,5 +468,62 @@ describe('buildManualPrompt', () => {
   it('asks for bare JSON, since the answer gets pasted back into a parser', () => {
     const prompt = buildManualPrompt({ feature: FEATURE, parts: [{ text: 'go' }] });
     expect(prompt).toMatch(/JSON only/);
+  });
+});
+
+describe('a feature with its own key', () => {
+  const TUTOR = 'nexus.tutor-interpret';
+
+  it('uses the shared key while its own is not set', async () => {
+    const f = vi.fn(async () => ok('{}'));
+    vi.stubGlobal('fetch', f);
+
+    await generateGemini({ feature: TUTOR, parts: [{ text: 'hi' }] });
+
+    expect((f.mock.calls[0] as any)[0]).toContain('key=test-key');
+    expect((f.mock.calls[0] as any)[0]).toContain(`/${TIER_MODELS.cheap[0]}:`);
+  });
+
+  it('goes straight to its own-key models once its key is set', async () => {
+    process.env.GEMINI_API_KEY_TUTOR = 'tutor-key';
+    const f = vi.fn(async () => ok('{}'));
+    vi.stubGlobal('fetch', f);
+
+    const result = await generateGemini({ feature: TUTOR, parts: [{ text: 'hi' }] });
+
+    expect(f).toHaveBeenCalledTimes(1);
+    expect((f.mock.calls[0] as any)[0]).toContain('/gemini-3.1-flash-lite:');
+    expect(result.model).toBe('gemini-3.1-flash-lite');
+  });
+
+  it('uses only its own key once set, even when every model is limited', async () => {
+    // Falling through to the shared key would put this spend on the other bill.
+    process.env.GEMINI_API_KEY_TUTOR = 'tutor-key';
+    const f = vi.fn(async () => fail(429));
+    vi.stubGlobal('fetch', f);
+
+    await expect(generateGemini({ feature: TUTOR, parts: [{ text: 'hi' }] })).rejects.toThrow(/429/);
+
+    expect(f.mock.calls.length).toBeGreaterThan(0);
+    for (const call of f.mock.calls) expect((call as any)[0]).toContain('key=tutor-key');
+  });
+
+  it('names its own key when Google rejects it', async () => {
+    process.env.GEMINI_API_KEY_TUTOR = 'bad-tutor-key';
+    vi.stubGlobal('fetch', vi.fn(async () => fail(403)));
+
+    await expect(generateGemini({ feature: TUTOR, parts: [{ text: 'hi' }] })).rejects.toThrow(
+      /GEMINI_API_KEY_TUTOR/
+    );
+  });
+
+  it('leaves every other feature on the shared key', async () => {
+    process.env.GEMINI_API_KEY_TUTOR = 'tutor-key';
+    const f = vi.fn(async () => ok('{}'));
+    vi.stubGlobal('fetch', f);
+
+    await generateGemini({ feature: FEATURE, parts: [{ text: 'hi' }] });
+
+    expect((f.mock.calls[0] as any)[0]).toContain('key=test-key');
   });
 });

@@ -11,6 +11,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
+import { useServerInsertedHTML } from 'next/navigation';
 import { ThemeProvider as MuiThemeProvider, Theme, CssBaseline } from '@mui/material';
 import { CacheProvider, EmotionCache } from '@emotion/react';
 import createCache from '@emotion/cache';
@@ -61,8 +62,101 @@ export function createEmotionCache(): EmotionCache {
   return createCache({ key: 'neram-mui', insertionPoint });
 }
 
-// Client-side cache, shared for the whole session
-const clientSideEmotionCache = createEmotionCache();
+// Browser cache, shared for the whole session. Never used on the server: a
+// module-level cache there remembers every class it has emitted, so later
+// renders in the same process (other prerendered pages, warm lambdas) shipped
+// HTML without the CSS for those classes.
+const clientSideEmotionCache = isBrowser ? createEmotionCache() : undefined;
+
+interface ServerInsert {
+  name: string;
+  isGlobal: boolean;
+}
+
+/**
+ * One cache per server render, flushed into the HTML stream with
+ * useServerInsertedHTML (the MUI App Router pattern). compat stops Emotion
+ * from also rendering inline <style> tags next to elements.
+ */
+function createServerEmotionCache() {
+  const cache = createEmotionCache();
+  cache.compat = true;
+  const prevInsert = cache.insert;
+  let inserted: ServerInsert[] = [];
+  cache.insert = (...args) => {
+    const [selector, serialized] = args;
+    if (cache.inserted[serialized.name] === undefined) {
+      inserted.push({ name: serialized.name, isGlobal: !selector });
+    }
+    return prevInsert(...args);
+  };
+  const flush = () => {
+    const prev = inserted;
+    inserted = [];
+    return prev;
+  };
+  return { cache, flush };
+}
+
+// Set by the outermost provider so nested providers (for example a page that
+// forces its own theme) reuse its cache instead of opening a second one.
+const EmotionCacheOwnerContext = createContext(false);
+
+function EmotionCacheBoundary({
+  emotionCache,
+  children,
+}: {
+  emotionCache?: EmotionCache;
+  children: ReactNode;
+}): JSX.Element {
+  const nested = useContext(EmotionCacheOwnerContext);
+  const [server] = useState(() =>
+    nested || emotionCache || isBrowser ? null : createServerEmotionCache()
+  );
+
+  useServerInsertedHTML(() => {
+    if (!server) return null;
+    const names = server.flush();
+    if (names.length === 0) return null;
+
+    const { cache } = server;
+    const globals: { name: string; style: string }[] = [];
+    let styles = '';
+    let dataEmotion = cache.key;
+    for (const { name, isGlobal } of names) {
+      const style = cache.inserted[name];
+      if (typeof style !== 'string') continue;
+      if (isGlobal) {
+        globals.push({ name, style });
+      } else {
+        styles += style;
+        dataEmotion += ` ${name}`;
+      }
+    }
+
+    return (
+      <>
+        {globals.map(({ name, style }) => (
+          <style
+            key={name}
+            data-emotion={`${cache.key}-global ${name}`}
+            dangerouslySetInnerHTML={{ __html: style }}
+          />
+        ))}
+        {styles && <style data-emotion={dataEmotion} dangerouslySetInnerHTML={{ __html: styles }} />}
+      </>
+    );
+  });
+
+  if (nested && !emotionCache) return <>{children}</>;
+
+  const cache = emotionCache ?? server?.cache ?? clientSideEmotionCache!;
+  return (
+    <EmotionCacheOwnerContext.Provider value>
+      <CacheProvider value={cache}>{children}</CacheProvider>
+    </EmotionCacheOwnerContext.Provider>
+  );
+}
 
 // ============================================
 // CONTEXT
@@ -140,31 +234,32 @@ export function NeramThemeProvider({
   theme,
   lightTheme: customLightTheme,
   darkTheme: customDarkTheme,
-  emotionCache = clientSideEmotionCache,
+  emotionCache,
   storageKey = 'neram-theme-mode',
 }: ThemeProviderProps): JSX.Element {
-  const [mode, setModeState] = useState<ThemeMode>(() => 
-    getInitialMode(storageKey, defaultMode)
-  );
+  // Start from defaultMode on the server and on the first client render so
+  // hydration matches; the stored choice is applied right after mount.
+  const [mode, setModeState] = useState<ThemeMode>(defaultMode);
+  const [systemMode, setSystemMode] = useState<'light' | 'dark'>('light');
   const [mounted, setMounted] = useState(false);
 
-  // Handle system theme changes
   useEffect(() => {
+    setModeState(getInitialMode(storageKey, defaultMode));
+    setSystemMode(getSystemTheme());
     setMounted(true);
+  }, [storageKey, defaultMode]);
 
-    if (mode === 'system') {
-      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-      const handleChange = () => {
-        // Force re-render when system theme changes
-        setModeState('system');
-      };
-      
-      mediaQuery.addEventListener('change', handleChange);
-      return () => mediaQuery.removeEventListener('change', handleChange);
-    }
+  // Follow the OS setting while in system mode
+  useEffect(() => {
+    if (mode !== 'system') return;
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleChange = () => setSystemMode(mediaQuery.matches ? 'dark' : 'light');
+    handleChange();
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
   }, [mode]);
 
-  // Persist mode to storage
+  // Persist mode to storage (only after the stored value has been read)
   useEffect(() => {
     if (mounted) {
       try {
@@ -176,12 +271,7 @@ export function NeramThemeProvider({
   }, [mode, storageKey, mounted]);
 
   // Calculate actual mode (resolving 'system')
-  const actualMode = useMemo<'light' | 'dark'>(() => {
-    if (mode === 'system') {
-      return getSystemTheme();
-    }
-    return mode;
-  }, [mode]);
+  const actualMode: 'light' | 'dark' = mode === 'system' ? systemMode : mode;
 
   // Select the appropriate theme
   const selectedTheme = useMemo(() => {
@@ -208,21 +298,15 @@ export function NeramThemeProvider({
     },
   }), [mode, actualMode]);
 
-  // Prevent flash of wrong theme during hydration
-  // by not rendering children until mounted
-  const content = (
-    <ThemeContext.Provider value={contextValue}>
-      <MuiThemeProvider theme={selectedTheme}>
-        <CssBaseline />
-        {children}
-      </MuiThemeProvider>
-    </ThemeContext.Provider>
-  );
-
   return (
-    <CacheProvider value={emotionCache}>
-      {content}
-    </CacheProvider>
+    <EmotionCacheBoundary emotionCache={emotionCache}>
+      <ThemeContext.Provider value={contextValue}>
+        <MuiThemeProvider theme={selectedTheme}>
+          <CssBaseline />
+          {children}
+        </MuiThemeProvider>
+      </ThemeContext.Provider>
+    </EmotionCacheBoundary>
   );
 }
 

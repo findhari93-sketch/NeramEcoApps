@@ -10,7 +10,8 @@ import {
   announceForecast,
   attendanceRecordLabel,
   forecastBreakdownLabel,
-  forecastVerdict,
+  forecastHeadline,
+  forecastVerdictOf,
   likelyLabel,
   reasonSummaryLabel,
   steppedOutLabel,
@@ -169,8 +170,18 @@ export default function DayForecastCard({
     declined: day.summary.not_attending,
     atRisk: 0,
     likely: day.summary.attending,
+    discounted: 0,
+    // Even with no standing data to predict from, a day Teams has already been
+    // read for can still state what happened. `measured` is only ever true
+    // after a class has run, so this cannot mistake a future date for a past
+    // one; what it cannot tell apart is past-and-unread, which falls back to
+    // the entitled count exactly as this whole branch always has.
+    actual: day.measured ? day.present : null,
+    outcome: day.measured ? 'actual' : 'forecast',
     estimated: false,
     newcomers: [],
+    unknowns: [],
+    confidence: 'firm',
     scheduled,
   };
   const atRisk = rarelyComing ?? [];
@@ -181,7 +192,10 @@ export default function DayForecastCard({
 
   // "expected" is a claim about a reply. On a date with no class nobody was
   // ever asked, so the same figure has to be worded as availability instead.
-  const headline = decidable ? `${likelyLabel(f)} likely` : `${likelyLabel(f)} available`;
+  const headline = forecastHeadline(f, decidable);
+  // No chip at all on a past class nobody read: there is nothing to have an
+  // opinion about. On a measured one the chip now rates the real turnout.
+  const verdict = allEnded && f.outcome === 'forecast' ? null : forecastVerdictOf(f);
   const alsoDeclined = new Set(day.also_declined_ids);
   const detailId = `day-detail-${day.date}`;
 
@@ -222,7 +236,7 @@ export default function DayForecastCard({
             height={8}
           />
         </Box>
-        {!allEnded && <TurnoutChip verdict={forecastVerdict(f.likely, f.onRoll)} />}
+        {verdict && <TurnoutChip verdict={verdict} />}
       </Box>
 
       {/* The sum behind the headline, in the order it is subtracted. The

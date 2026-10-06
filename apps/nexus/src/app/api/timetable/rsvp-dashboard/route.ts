@@ -166,7 +166,9 @@ export async function GET(request: NextRequest) {
 
       const { data: classes } = await supabase
         .from('nexus_scheduled_classes')
-        .select('id, title, scheduled_date, start_time, end_time, batch_id, status')
+        .select(
+          'id, title, scheduled_date, start_time, end_time, batch_id, status, attendance_synced_at',
+        )
         .eq('classroom_id', classroomId)
         .gte('scheduled_date', start)
         .lte('scheduled_date', end)
@@ -191,9 +193,10 @@ export async function GET(request: NextRequest) {
       // on deploy-db-production. A raw query here would 500 the entire calendar
       // in the window between Vercel going live and the migration landing.
       const classIds = (classes || []).map((c: any) => c.id);
-      const [byClass, awayWindows] = await Promise.all([
+      const [byClass, awayWindows, presentByClass] = await Promise.all([
         fetchOptOuts(supabase, classIds),
         loadAwayWindows(supabase, { studentIds, from: start, to: end }),
+        fetchPresent(supabase, classIds, studentIds),
       ]);
       const awayByStudent = groupByStudent(awayWindows);
 
@@ -215,6 +218,8 @@ export async function GET(request: NextRequest) {
           end_time: cls.end_time,
           batch_id: cls.batch_id,
           status: cls.status,
+          attendance_synced_at: cls.attendance_synced_at ?? null,
+          present: (presentByClass.get(cls.id) || EMPTY_IDS).size,
           summary: full.summary,
           // Ids only. Naming every attending student once per class would repeat
           // the same twenty-odd objects twenty-six times over a month grid, and
@@ -275,8 +280,24 @@ export async function GET(request: NextRequest) {
           awayByStudent,
         });
 
+        // Who actually came, counted ONCE for the day however many classes ran.
+        // Same rule as the declines just above: a student who sat both of
+        // Thursday's classes is one person in the room, not two.
+        const dayPresent = new Set<string>();
+        for (const c of dayClasses) {
+          for (const id of presentByClass.get(c.id) || EMPTY_IDS) dayPresent.add(id);
+        }
+
         return {
           date,
+          // A date is measured only when EVERY class on it has been read. One
+          // unsynced class out of two means the day's headcount is missing
+          // whoever was in that room, and a partial truth here renders as a
+          // thin class rather than as an unread one. A date with nothing
+          // scheduled is not measured either: there was nothing to read.
+          measured:
+            dayClasses.length > 0 && dayClasses.every((c: any) => !!c.attendance_synced_at),
+          present: dayPresent.size,
           summary: full.summary,
           away_ids: full.away.map((a) => a.id),
           declined_ids: full.not_attending.map((d) => d.id),
@@ -418,6 +439,18 @@ export interface RsvpClassSummary {
   end_time: string;
   batch_id: string | null;
   status: string;
+  /**
+   * When Teams attendance was last read for this class. Null means never.
+   *
+   * The ONLY thing that tells a past class apart from a future one for display
+   * purposes. The calendar used to keep showing a forecast for a class that had
+   * already run; with this it can show what happened instead, and a cell flips
+   * by itself when /api/cron/sync-attendance lands, with no clock logic
+   * anywhere in the pure forecast module.
+   */
+  attendance_synced_at: string | null;
+  /** Students from the roll who actually attended. Meaningless until synced. */
+  present: number;
   summary: RsvpSummary;
   /** Student ids away on this class's date AND in this class's batch. */
   away_ids: string[];
@@ -448,6 +481,13 @@ export interface RsvpClassSummary {
  */
 export interface RsvpDaySummary {
   date: string;
+  /**
+   * Every class on this date has had its attendance read. False when nothing
+   * was scheduled, and false when even one of the day's classes is unsynced.
+   */
+  measured: boolean;
+  /** Who came, counted once for the day. Only meaningful when `measured`. */
+  present: number;
   /** Day level, de-duplicated across the day's classes. */
   summary: RsvpSummary;
   away_ids: string[];
@@ -503,6 +543,64 @@ async function fetchOptOuts(supabase: any, classIds: string[]): Promise<Map<stri
     const list = byClass.get(row.scheduled_class_id) || [];
     list.push(row);
     byClass.set(row.scheduled_class_id, list);
+  }
+  return byClass;
+}
+
+/** Shared empty set, so the hot loops never allocate one per class. */
+const EMPTY_IDS: ReadonlySet<string> = new Set<string>();
+
+/** PostgREST's default row cap, and a bound so a bad range cannot spin. */
+const ATTENDANCE_PAGE_SIZE = 1000;
+const ATTENDANCE_MAX_PAGES = 20;
+
+/**
+ * Who actually turned up, per class. One paged read for the whole range.
+ *
+ * PAGED, unlike fetchOptOuts above, and the difference is not stylistic. An
+ * opt-out table is sparse: a class produces a row only when somebody declines,
+ * so a month of them stays well inside one page. An attendance table produces a
+ * row per ATTENDER per class, so a thirty-class month for a forty-student
+ * classroom is twelve hundred rows and PostgREST would return the first
+ * thousand without a word. register/route.ts:145-175 pages this same read and
+ * states the stake, which applies here exactly: a truncated attendance read
+ * does not render as "unknown", it renders as a class that half the room
+ * skipped. That is the same kind of confident falsehood the away read was
+ * bounded to prevent, pointing the other way.
+ *
+ * Ordered by the table's own UNIQUE pair (scheduled_class_id, student_id) so a
+ * row cannot shift across a page boundary between requests.
+ */
+async function fetchPresent(
+  supabase: any,
+  classIds: string[],
+  studentIds: string[],
+): Promise<Map<string, Set<string>>> {
+  const byClass = new Map<string, Set<string>>();
+  if (classIds.length === 0 || studentIds.length === 0) return byClass;
+
+  for (let page = 0; page < ATTENDANCE_MAX_PAGES; page += 1) {
+    const from = page * ATTENDANCE_PAGE_SIZE;
+    const { data, error } = await supabase
+      .from('nexus_attendance')
+      .select('scheduled_class_id, student_id')
+      .in('scheduled_class_id', classIds)
+      // Bounded to the roster on purpose: `present` has to count the same
+      // population `on_roll` counts, or a dormant student who turned up would
+      // push the headcount past its own denominator.
+      .in('student_id', studentIds)
+      .eq('attended', true)
+      .order('scheduled_class_id', { ascending: true })
+      .order('student_id', { ascending: true })
+      .range(from, from + ATTENDANCE_PAGE_SIZE - 1);
+    if (error) throw error;
+    const rows = data || [];
+    for (const row of rows) {
+      const set = byClass.get(row.scheduled_class_id);
+      if (set) set.add(row.student_id);
+      else byClass.set(row.scheduled_class_id, new Set([row.student_id]));
+    }
+    if (rows.length < ATTENDANCE_PAGE_SIZE) break;
   }
   return byClass;
 }

@@ -53,6 +53,20 @@ describe('QuickActions', () => {
     for (const [text] of onSend.mock.calls) expect(routeIntent(text, page)).toEqual({ kind: 'llm', mode: 'exam' });
   });
 
+  it('with the tutor ready for the open question, Explain opens the tutor and sends nothing', () => {
+    const onSend = vi.fn();
+    const onExplain = vi.fn();
+    render(<QuickActions onSend={onSend} onReport={vi.fn()} sketchbook exam="question" onExplain={onExplain} />);
+    const explain = screen.getByRole('button', { name: /Explain this question/ });
+    expect(explain.textContent).toMatch(/Opens the tutor/);
+    fireEvent.click(explain);
+    expect(onExplain).toHaveBeenCalledTimes(1);
+    expect(onSend).not.toHaveBeenCalled();
+    // Hint stays a chat reply.
+    fireEvent.click(screen.getByRole('button', { name: /Give me a hint/ }));
+    expect(onSend).toHaveBeenCalledTimes(1);
+  });
+
   it('elsewhere, the maths row puts the cursor in the message box and sends nothing', () => {
     const onSend = vi.fn();
     const onAsk = vi.fn();

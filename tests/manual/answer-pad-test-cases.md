@@ -17,8 +17,8 @@
 
 | Item | Value |
 |------|-------|
-| **Nexus** | Local production-mode build (`next start`) on `http://localhost:3022`, wired to staging and reached from Teams through a Cloudflare quick tunnel. Never the dev server, which accepts test sign-ins (HOW_TO_TEST 1.3). The Answer Pad is not deployed to a hosted environment yet |
-| **Teams app** | "Neram Pad Dev" (dev package) for testing; "Neram Assistant" 1.1.0 once published |
+| **Nexus** | Production (`https://nexus.neramclasses.com`) for everything inside Teams, since Neram Assistant's pages point there. The local dev server on `http://localhost:3022` (staging database) for browser-only cases (HOW_TO_TEST 1.3) |
+| **Teams app** | "Neram Assistant" (published); its meeting tab is **Answer Pad**. The separate "Neram Pad Dev" app is retired |
 | **Database** | Supabase staging (`hgxjavrsrvpihqrpezdh`), migration `20260911090100_answer_pad.sql` |
 | **Auth** | Microsoft Entra ID through Teams single sign-on; Nexus sign-in on `/pad` |
 | **Teams clients** | Desktop (Windows or macOS), web (Edge or Chrome), Android, iOS |
@@ -81,9 +81,9 @@ Run these first. If one fails, stop and report it.
 ### TC-PAD-001: Teacher starts the Answer Pad in a meeting
 **Priority:** P0
 **Type:** Smoke
-**Preconditions:** Neram Pad Dev added to a meeting (TC-PAD-007). T1 in the meeting on Teams desktop.
+**Preconditions:** Answer Pad in the meeting (Nexus adds it to class meetings; see TC-PAD-007). T1 in the meeting on Teams desktop.
 **Steps:**
-1. Open Neram Pad Dev from the meeting toolbar.
+1. Open Answer Pad from the meeting toolbar.
 2. If asked "Which class is this?", select E2E Test Classroom.
 **Expected Result:** "Starting the Answer Pad." shows briefly, then the console with the classroom name, "Started" time, the "Before you ask" panel with a six digit room code, and the **Ask question 1** button. No sign-in prompt appears.
 **Actual Result:**
@@ -96,7 +96,7 @@ Run these first. If one fails, stop and report it.
 **Type:** Smoke
 **Preconditions:** TC-PAD-001 done. S1 in the same meeting.
 **Steps:**
-1. S1 opens Neram Pad Dev from the meeting toolbar.
+1. S1 opens Answer Pad from the meeting toolbar.
 2. T1 watches the "Before you ask" panel.
 **Expected Result:** S1 sees "You're connected" and "Questions will appear here when your teacher asks.", with "No score yet". Within about 10 seconds T1's count rises by one ("1 of N students have the pad open").
 **Actual Result:**
@@ -152,7 +152,7 @@ Run these first. If one fails, stop and report it.
 ### TC-PAD-006: The Teams package uploads cleanly
 **Priority:** P0
 **Type:** Installation
-**Preconditions:** Package built with `package-teams-app.mjs` (dev or production).
+**Preconditions:** Package built with `package-teams-app.mjs` and its version raised above the published one.
 **Steps:**
 1. Upload the zip (Teams, Manage your apps, Upload a custom app; or Teams admin center for production).
 **Expected Result:** No validation errors. The app shows its name, icons and, for production, the new meeting permissions to review.
@@ -166,7 +166,7 @@ Run these first. If one fails, stop and report it.
 **Type:** Installation
 **Preconditions:** A scheduled meeting organised by T1.
 **Steps:**
-1. In the meeting chat, select **+** (Apps) and choose the app.
+1. In the meeting chat, select **+** (Apps), choose **Neram Assistant**, then **Answer Pad**.
 2. Read the configuration page, then select **Save**.
 **Expected Result:** The page reads "Answer Pad" and "There is nothing to set up. Select Save, then open the Answer Pad from the meeting toolbar during class." Save succeeds, and the app appears in the meeting toolbar and as a chat tab.
 **Actual Result:**
@@ -177,7 +177,7 @@ Run these first. If one fails, stop and report it.
 ### TC-PAD-008: Silent sign-in on Teams desktop
 **Priority:** P0
 **Type:** Functional
-**Preconditions:** SSO configured (HOW_TO_TEST 1.5). T1 and S1 on Teams desktop.
+**Preconditions:** SSO configured (`teams-app/README.md` section A). T1 and S1 on Teams desktop.
 **Steps:**
 1. Open the Answer Pad in the meeting as T1, then as S1.
 **Expected Result:** No sign-in window or consent prompt. T1 gets the console, S1 the pad.
@@ -1157,7 +1157,7 @@ About 90% of students join on the Teams phone app. Run TC-PAD-080 first: it reco
 ### TC-PAD-080: Device check, what each Teams client shows
 **Priority:** P0
 **Type:** Compatibility
-**Preconditions:** Neram Pad Dev built with `--bot` and uploaded (HOW_TO_TEST 1.6). A scheduled test meeting with the Answer Pad in it. T1 on Teams desktop; S1 on Teams in Chrome or Edge on a laptop; S2 on Android; S3 on iPhone.
+**Preconditions:** Neram Assistant published with its bot (HOW_TO_TEST 1.4). A scheduled test meeting with the Answer Pad in it. T1 on Teams desktop; S1 on Teams in Chrome or Edge on a laptop; S2 on Android; S3 on iPhone.
 **Steps:**
 1. On each client, find the Answer Pad in the meeting and open it.
 2. T1 asks a question. Each student notes whether a pop-up appears and whether they can answer inside it.
@@ -1173,7 +1173,7 @@ About 90% of students join on the Teams phone app. Run TC-PAD-080 first: it reco
 ### TC-PAD-081: The button is already in a class meeting
 **Priority:** P1
 **Type:** Functional
-**Preconditions:** `teams-app/README.md` section F done: both Graph permissions with admin consent, `PAD_AUTO_ADD_CLASSROOMS` lists E2E Test Classroom, `PAD_TEAMS_APP_CATALOG_ID` set. A scheduled class for E2E Test Classroom whose meeting has no Answer Pad yet.
+**Preconditions:** `teams-app/README.md` section F done: both Graph permissions with admin consent, `PAD_AUTO_ADD_CLASSROOMS` lists E2E Test Classroom (or is `all`), `TEAMS_APP_CATALOG_ID` is Neram Assistant's catalog id. A scheduled class for E2E Test Classroom whose meeting has no Answer Pad yet.
 **Steps:**
 1. Before anyone joins, run the sweep for the class (HOW_TO_TEST 3.5) and note the outcome.
 2. T1 joins the meeting. If step 1 said `chat_not_ready`, run the sweep again.
@@ -1261,7 +1261,7 @@ About 90% of students join on the Teams phone app. Run TC-PAD-080 first: it reco
 2. T1 closes the Answer Pad panel and opens it again.
 3. S2 on Android selects **Open Answer Pad** in the card.
 4. S1 on a laptop browser selects **Answer in browser**.
-**Expected Result:** After step 1 one card appears in the meeting chat: "Answer Pad is on for this class", the room code as two groups of three digits, and both buttons. Step 2 posts nothing more. Step 3 opens the Answer Pad panel on the phone. Step 4 opens this class's room code page in a new tab, signed in (see HOW_TO_TEST 3.4 about sign-in through a quick tunnel).
+**Expected Result:** After step 1 one card appears in the meeting chat: "Answer Pad is on for this class", the room code as two groups of three digits, and both buttons. Step 2 posts nothing more. Step 3 opens the Answer Pad panel on the phone. Step 4 opens this class's room code page in a new tab, signed in.
 **Actual Result:**
 **Status:** Not Run
 

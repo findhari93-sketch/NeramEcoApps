@@ -97,6 +97,12 @@ describe('stageView', () => {
     });
   });
 
+  it('the count leaves out excused students, as the console does', () => {
+    const snap = snapshot({ state: 'open' }, [entry()]);
+    snap.counts = { joined: 22, answered_joined: 18, excused_joined: 2 } as TeacherSnapshot['counts'];
+    expect(stageView(item('q1'), snap, LIVE, false)).toMatchObject({ answered: 18, joined: 20 });
+  });
+
   it('once closed: Reveal, the spread, still no key though the bank has one', () => {
     const view = stageView(item('q1'), snapshot({ state: 'closed' }, [entry({ state: 'closed' })]), LIVE, false);
     expect(view).toMatchObject({ phase: 'closed', primary: 'reveal', canReveal: true, closesAt: null, revealedKeys: null });

@@ -63,6 +63,13 @@ describe('feature-flags registry', () => {
     // student's pad at the first ASK. It ships dark until the Teams app, the bot
     // and the manual test run are signed off, then goes on for one pilot class.
     'staff.answer-pad',
+    // Same family as the chases above, and with a second reason on top. The
+    // first run would message every student carrying a silent miss across the
+    // whole lookback at once. More importantly, these messages are the evidence
+    // a hold is later built on: student.absence-reason-gate only fires when all
+    // three were proven seen, so arming the chase is step one of a two-step
+    // rollout and the two must never be switched on the same day.
+    'staff.absence-reason-chase',
   ]);
 
   /**

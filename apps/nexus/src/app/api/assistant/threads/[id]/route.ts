@@ -4,6 +4,7 @@ import { NO_STORE, assistantErrorResponse } from '@/lib/assistant/http';
 import { isUuid } from '@/lib/assistant/ids';
 import { filterSuggestions } from '@/lib/assistant/page-suggestions';
 import { getThread, listMessages } from '@/lib/assistant/store';
+import { isTutorThread } from '@/lib/assistant/tutor/store';
 
 export const dynamic = 'force-dynamic';
 // GET-only: Next 14 would otherwise write the uncached Graph /me fetch in ms-verify to the Data Cache (billed as ISR writes).
@@ -15,7 +16,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const { caller, supabase, features } = await resolveAssistantCaller(request.headers.get('Authorization'));
     if (!isUuid(params.id)) return NextResponse.json({ error: 'Not found' }, { status: 404, headers: NO_STORE });
     const thread = await getThread(supabase, params.id);
-    if (!thread || thread.user_id !== caller.id) return NextResponse.json({ error: 'Not found' }, { status: 404, headers: NO_STORE });
+    // Tutor transcripts (tutor:<questionId>) belong to the tutor panel, never the chat sheet.
+    if (!thread || thread.user_id !== caller.id || isTutorThread(thread.external_id)) return NextResponse.json({ error: 'Not found' }, { status: 404, headers: NO_STORE });
     const messages = await listMessages(supabase, thread.id, 50);
     return NextResponse.json(
       {

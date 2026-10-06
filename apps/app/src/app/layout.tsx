@@ -3,6 +3,7 @@ import { DM_Sans } from 'next/font/google';
 import { NeramThemeProvider } from '@neram/ui';
 import { enterpriseLightTheme, enterpriseDarkTheme } from '@/lib/theme';
 import GoogleAdsTag from '@/components/GoogleAdsTag';
+import AdClickCapture from '@/components/AdClickCapture';
 import EnvBadge from '@/components/EnvBadge';
 import { AUTH_HINT_SCRIPT } from '@/lib/auth-hint';
 import './globals.css';
@@ -85,6 +86,7 @@ export default function RootLayout({
       </head>
       <body className={dmSans.className}>
         <GoogleAdsTag />
+        <AdClickCapture />
         <NeramThemeProvider
           lightTheme={enterpriseLightTheme}
           darkTheme={enterpriseDarkTheme}

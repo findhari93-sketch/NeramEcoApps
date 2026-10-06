@@ -22,13 +22,17 @@ export type ExamHelp = 'question' | 'bank' | null;
  * `sketchbook` is the student.sketchbook flag: with it off, Add a sketch is not offered (Ruling 25).
  * `exam` puts the maths tutor in view: with a bank question open, Explain and Hint lead the list;
  * elsewhere one row puts the cursor in the message box, since a maths question has to be typed.
+ * `onExplain` is the AI Tutor's door: when the open question has a tutor pack, Explain opens the
+ * tutor (steps, checks, hints) instead of a one-off chat reply.
  */
-export default function QuickActions({ onSend, onReport, sketchbook, exam = null, onAsk }: {
-  onSend: (text: string) => void; onReport: () => void; sketchbook: boolean; exam?: ExamHelp; onAsk?: () => void;
+export default function QuickActions({ onSend, onReport, sketchbook, exam = null, onAsk, onExplain }: {
+  onSend: (text: string) => void; onReport: () => void; sketchbook: boolean; exam?: ExamHelp; onAsk?: () => void; onExplain?: () => void;
 }) {
   const tutor: QuickAction[] = exam === 'question'
     ? [
-      { label: 'Explain this question', hint: 'Step by step. The answer once you have tried it', icon: <SchoolOutlinedIcon />, onPick: () => onSend(EXPLAIN_THIS) },
+      onExplain
+        ? { label: 'Explain this question', hint: 'Opens the tutor: one step at a time, with checks', icon: <SchoolOutlinedIcon />, onPick: onExplain }
+        : { label: 'Explain this question', hint: 'Step by step. The answer once you have tried it', icon: <SchoolOutlinedIcon />, onPick: () => onSend(EXPLAIN_THIS) },
       { label: 'Give me a hint', hint: 'A nudge in the right direction, not the answer', icon: <LightbulbOutlinedIcon />, onPick: () => onSend(HINT_THIS) },
     ]
     : exam === 'bank' && onAsk

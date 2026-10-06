@@ -8,3 +8,6 @@ public/workbox-*.js
 public/workbox-*.js.map
 public/worker-*.js
 public/worker-*.js.map
+
+# Private Google Ads snapshot (spend, bids): the repo is public
+Docs/neram-google-ads-account-context.md

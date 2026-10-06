@@ -155,7 +155,7 @@ describe('browserHost', () => {
 });
 
 describe('consolePopOut', () => {
-  const APP_ID = '7b1e4f0a-3c52-4d8e-9a61-2f9c0b7d5e43';
+  const APP_ID = 'df4f6b2d-ea18-46d1-8934-f508ac248e6c';
   type Teams = Parameters<typeof consolePopOut>[0];
 
   function fakeTeams(supported = true, open: (...args: unknown[]) => Promise<void> = vi.fn(async () => undefined)) {

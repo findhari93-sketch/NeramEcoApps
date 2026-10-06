@@ -7,7 +7,8 @@ import { coveringWindow, describeWindow } from '@/lib/away-windows';
 import { describeReason } from '@/lib/rsvp-reasons';
 import {
   availableLabel,
-  forecastVerdict,
+  forecastVerdictOf,
+  forecastHeadline,
   likelyLabel,
   reasonSummaryLabel,
   turnoutVerdict,
@@ -60,9 +61,10 @@ export default function DateAvailabilityNote({
 
   if (!date || !day) return null;
 
-  const verdict = forecast
-    ? forecastVerdict(forecast.likely, forecast.onRoll)
-    : turnoutVerdict(day.summary);
+  // Judged on who CAME once the day has been read, never on a forecast for a
+  // class that already ran. Null when nobody read it, and the whole note then
+  // falls back to the entitled count rather than inventing a verdict.
+  const verdict = (forecast ? forecastVerdictOf(forecast) : null) ?? turnoutVerdict(day.summary);
   const reasons = reasonSummaryLabel(day.away_tally);
   const hasClass = day.class_ids.length > 0;
 
@@ -82,7 +84,7 @@ export default function DateAvailabilityNote({
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
         <TurnoutChip verdict={verdict} />
         <Typography variant="caption" sx={{ fontWeight: 700 }}>
-          {forecast ? `${likelyLabel(forecast)} available` : availableLabel(day.summary)}
+          {forecast ? forecastHeadline(forecast, false) : availableLabel(day.summary)}
         </Typography>
       </Box>
 
