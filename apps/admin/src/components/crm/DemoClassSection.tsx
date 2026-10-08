@@ -11,6 +11,8 @@ import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
 import ThumbUpAltIcon from '@mui/icons-material/ThumbUpAlt';
 import LightbulbIcon from '@mui/icons-material/Lightbulb';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import Link from 'next/link';
+import { formatDemoDateTime, formatDemoPreference } from '@neram/database/demo-schedule';
 import type { UserJourneyDetail } from '@neram/database';
 
 interface DemoClassSectionProps {
@@ -27,9 +29,10 @@ function formatDate(dateStr: string | null): string {
 }
 
 const REG_STATUS_CONFIG: Record<string, { color: string; bgColor: string; label: string }> = {
-  pending: { color: '#F57C00', bgColor: '#F57C0014', label: 'Pending' },
-  approved: { color: '#1976D2', bgColor: '#1976D214', label: 'Approved' },
-  rejected: { color: '#D32F2F', bgColor: '#D32F2F14', label: 'Rejected' },
+  pending: { color: '#F57C00', bgColor: '#F57C0014', label: 'New request' },
+  contacted: { color: '#0277BD', bgColor: '#0277BD14', label: 'Called' },
+  approved: { color: '#1976D2', bgColor: '#1976D214', label: 'Confirmed' },
+  rejected: { color: '#D32F2F', bgColor: '#D32F2F14', label: 'Not interested' },
   attended: { color: '#2E7D32', bgColor: '#2E7D3214', label: 'Attended' },
   no_show: { color: '#D32F2F', bgColor: '#D32F2F14', label: 'No Show' },
   cancelled: { color: '#78909C', bgColor: '#78909C14', label: 'Cancelled' },
@@ -97,7 +100,7 @@ export default function DemoClassSection({ detail }: DemoClassSectionProps) {
                 {/* Registration header */}
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
                   <Typography variant="body2" sx={{ fontWeight: 700, fontSize: 13 }}>
-                    {(reg as any).slot?.title || 'Demo Class'}
+                    {(reg as any).slot?.title || ((reg as any).ref_code ? `Demo ${(reg as any).ref_code}` : 'Demo Class')}
                   </Typography>
                   <Chip
                     label={statusConfig.label}
@@ -134,6 +137,20 @@ export default function DemoClassSection({ detail }: DemoClassSectionProps) {
                       size="small"
                       sx={{ height: 18, fontSize: 9.5, fontWeight: 600, bgcolor: '#E3F2FD', color: '#1565C0', borderRadius: 1, textTransform: 'capitalize' }}
                     />
+                  </Box>
+                )}
+
+                {/* Demo Class v2: asked-for window or confirmed time, and a way into the desk */}
+                {!(reg as any).slot && (reg as any).ref_code && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', mb: 1 }}>
+                    <Typography variant="caption" sx={{ color: 'text.secondary', fontSize: 11.5 }}>
+                      {(reg as any).scheduled_start
+                        ? formatDemoDateTime(new Date((reg as any).scheduled_start))
+                        : `Asked for ${formatDemoPreference((reg as any).preferred_date, (reg as any).preferred_window)}`}
+                    </Typography>
+                    <Link href={`/demo-classes?id=${reg.id}`} style={{ fontSize: 12, fontWeight: 600 }}>
+                      Open in Demo classes
+                    </Link>
                   </Box>
                 )}
 

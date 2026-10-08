@@ -9,6 +9,10 @@
       "schedule": "0 2 * * *"
     },
     {
+      "path": "/api/cron/demo-staff-reminders",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/sync-teams-meetings",
       "schedule": "45 15 * * *"
     },

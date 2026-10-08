@@ -129,14 +129,19 @@ describe('qb_explain_answer (D3, Review Focus 2)', () => {
   });
 
   it('refuses while a test of theirs is in progress, without saying which', async () => {
-    const out = await tool('qb_explain_answer').run(ctx({ nexus_qb_questions: [question], nexus_qb_student_attempts: [{ student_id: 's1', question_id: Q }], nexus_test_attempts: [{ id: 'x', student_id: 's1', status: 'in_progress' }] }), { question_id: Q });
-    expect(out.reply).toBe('Finish the test you have open first. I can explain questions after you submit it.');
+    const out = await tool('qb_explain_answer').run(ctx({ nexus_qb_questions: [question], nexus_qb_student_attempts: [{ student_id: 's1', question_id: Q }], nexus_test_attempts: [{ id: 'x', student_id: 's1', status: 'in_progress', started_at: new Date(Date.now() - 10 * 60_000).toISOString() }] }), { question_id: Q });
+    expect(out.reply).toBe('You have a test running. Finish it first, then I can explain questions.');
     expect(out.data).toEqual({ refused: 'test_in_progress' });
+  });
+
+  it('ignores a test the student walked away from long ago', async () => {
+    const out = await tool('qb_explain_answer').run(ctx({ nexus_qb_questions: [question], nexus_qb_student_attempts: [{ student_id: 's1', question_id: Q }], nexus_test_attempts: [{ id: 'old', student_id: 's1', status: 'in_progress', started_at: '2026-08-26T17:41:04.293+00:00' }] }), { question_id: Q });
+    expect(out.data).toMatchObject({ correct_answer: 'a' });
   });
 
   const failing = (table: string, tables: Record<string, any[]>): ToolContext => {
     const real = fakeDb(tables);
-    const supabase = { from: (n: string) => (n === table ? { select: () => { const q: any = { eq: () => q, limit: () => q, maybeSingle: () => q, then: (r: any) => r({ data: null, error: { message: 'down' } }) }; return q; } } : real.from(n)) };
+    const supabase = { from: (n: string) => (n === table ? { select: () => { const q: any = { eq: () => q, gte: () => q, in: () => q, limit: () => q, maybeSingle: () => q, then: (r: any) => r({ data: null, error: { message: 'down' } }) }; return q; } } : real.from(n)) };
     return { ...ctx(), supabase } as ToolContext;
   };
 
@@ -163,7 +168,7 @@ describe('qb_explain_answer (D3, Review Focus 2)', () => {
   });
 
   it("ignores another student's open test", async () => {
-    const out = await tool('qb_explain_answer').run(ctx({ nexus_qb_questions: [question], nexus_qb_student_attempts: [{ student_id: 's1', question_id: Q }], nexus_test_attempts: [{ id: 'y', student_id: 's2', status: 'in_progress' }] }), { question_id: Q });
+    const out = await tool('qb_explain_answer').run(ctx({ nexus_qb_questions: [question], nexus_qb_student_attempts: [{ student_id: 's1', question_id: Q }], nexus_test_attempts: [{ id: 'y', student_id: 's2', status: 'in_progress', started_at: new Date().toISOString() }] }), { question_id: Q });
     expect(out.data).toMatchObject({ correct_answer: 'a' });
   });
 

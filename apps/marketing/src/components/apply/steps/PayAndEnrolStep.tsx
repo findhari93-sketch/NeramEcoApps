@@ -6,6 +6,7 @@ import EditOutlined from '@mui/icons-material/EditOutlined';
 import CheckCircleOutlined from '@mui/icons-material/CheckCircleOutlined';
 import { useTranslations } from 'next-intl';
 import { useFormContext } from '../FormContext';
+import StepHeading from '../StepHeading';
 import PaymentPanel from '../PaymentPanel';
 
 const COURSE_KEYS: Record<string, string> = {
@@ -29,17 +30,13 @@ export default function PayAndEnrolStep() {
 
   return (
     <Box>
-      <Typography variant="h5" component="h1" gutterBottom fontWeight={700}>
-        {t('pay.title')}
-      </Typography>
-      <Typography variant="body1" color="text.secondary" sx={{ mb: 1 }}>
-        {t('pay.subtitle')}
-      </Typography>
-      {submittedApplication?.applicationNumber && (
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 3, fontFamily: 'monospace' }}>
-          {t('pay.applicationNumber', { number: submittedApplication.applicationNumber })}
-        </Typography>
-      )}
+      <StepHeading title={t('pay.title')} subtitle={t('pay.subtitle')}>
+        {submittedApplication?.applicationNumber && (
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 1, fontFamily: 'monospace' }}>
+            {t('pay.applicationNumber', { number: submittedApplication.applicationNumber })}
+          </Typography>
+        )}
+      </StepHeading>
       {!paymentLocked && (
         <Button
           variant="text"

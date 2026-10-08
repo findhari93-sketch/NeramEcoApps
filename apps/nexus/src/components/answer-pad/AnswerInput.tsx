@@ -6,12 +6,20 @@
  * closes answers. The chosen one shows as selected (aria-pressed). Typed
  * answers save with one button. Every target is at least 64px tall, well above
  * the 44px minimum, because a phone in a moving hand is the normal case here.
+ *
+ * A number may be a formula (3/4, 2√3, π/2): the maths keys type what a phone's
+ * decimal keyboard lacks, and the line under the box shows how it reads. The
+ * server grades it by value, as the question bank does.
  */
 
-import { useId, useState, type FormEvent } from 'react';
-import { Box, Button, Stack, TextField, Typography } from '@neram/ui';
+import { useId, useRef, useState, type FormEvent } from 'react';
+import dynamic from 'next/dynamic';
+import { Box, Button, IconButton, InputAdornment, Stack, TextField, Tooltip, Typography } from '@neram/ui';
 import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded';
+import FunctionsRounded from '@mui/icons-material/FunctionsRounded';
 import SaveRounded from '@mui/icons-material/SaveRounded';
+import MathKeypad from '@/components/common/MathKeypad';
+import { MATH_INPUT_MAX_LENGTH } from '@/lib/math-keypad';
 import { displayAnswer } from '@/lib/pad/client/format';
 import { mcqLetters } from '@/lib/pad/client/teacher-view';
 import type { AnswerType } from '@/lib/pad/client/types';
@@ -27,8 +35,20 @@ interface AnswerInputProps {
   optionTexts?: Array<string | null> | null;
   /** The answer shown as chosen: the one being saved, or the one the server holds. */
   selected?: string | null;
+  /** Numbers only: start with the maths keys showing. The question pop-up starts with them hidden. */
+  mathKeysOpen?: boolean;
   onAnswer: (answer: string) => void;
 }
+
+/**
+ * "Reads as 2√3 ≈ 3.4641". Loaded only for a numerical question: it brings the
+ * formula reader and KaTeX, which a multiple choice pad never needs. Its line is
+ * reserved while it loads, so the Save button does not move.
+ */
+const MathAnswerPreview = dynamic(() => import('@/components/common/MathAnswerPreview'), {
+  ssr: false,
+  loading: () => <Box sx={{ minHeight: 32, mt: 0.75 }} />,
+});
 
 export default function AnswerInput({
   answerType,
@@ -38,6 +58,7 @@ export default function AnswerInput({
   initialValue = '',
   optionTexts,
   selected = null,
+  mathKeysOpen = true,
   onAnswer,
 }: AnswerInputProps) {
   if (answerType === 'mcq') {
@@ -59,7 +80,16 @@ export default function AnswerInput({
   if (answerType === 'yesno') {
     return <ChoiceGrid values={['yes', 'no']} answerType={answerType} columns={2} disabled={disabled} selected={selected} onAnswer={onAnswer} />;
   }
-  return <TypedAnswer numeric={answerType === 'numeric'} disabled={disabled} error={error} initialValue={initialValue} onAnswer={onAnswer} />;
+  return (
+    <TypedAnswer
+      numeric={answerType === 'numeric'}
+      disabled={disabled}
+      error={error}
+      initialValue={initialValue}
+      mathKeysOpen={mathKeysOpen}
+      onAnswer={onAnswer}
+    />
+  );
 }
 
 /** Shared by both choice layouts. A chosen option is filled; the rest stay outlined. */
@@ -171,16 +201,21 @@ function TypedAnswer({
   disabled,
   error,
   initialValue,
+  mathKeysOpen,
   onAnswer,
 }: {
   numeric: boolean;
   disabled: boolean;
   error: string | null;
   initialValue: string;
+  mathKeysOpen: boolean;
   onAnswer: (answer: string) => void;
 }) {
   const [value, setValue] = useState(initialValue);
+  const [showKeys, setShowKeys] = useState(mathKeysOpen);
+  const inputRef = useRef<HTMLInputElement>(null);
   const helperId = useId();
+  const keysId = useId();
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -190,22 +225,53 @@ function TypedAnswer({
   return (
     <Stack component="form" spacing={1.5} onSubmit={submit} noValidate>
       <TextField
-        label={numeric ? 'Your number' : 'Your answer'}
+        label="Your answer"
         value={value}
         onChange={(event) => setValue(event.target.value)}
         disabled={disabled}
         autoComplete="off"
         error={Boolean(error)}
-        helperText={error ?? (numeric ? 'Digits, a decimal point and a minus sign.' : 'Up to 100 characters.')}
+        helperText={error ?? (numeric ? 'A number, or a formula like 3/4 or 2√3.' : 'Up to 100 characters.')}
         FormHelperTextProps={{ id: helperId, role: error ? 'alert' : undefined }}
+        inputRef={inputRef}
         inputProps={{
           inputMode: numeric ? 'decimal' : 'text',
-          maxLength: numeric ? 30 : 100,
+          maxLength: numeric ? MATH_INPUT_MAX_LENGTH : 100,
+          spellCheck: false,
           'aria-describedby': helperId,
           style: { fontSize: '1.25rem' },
         }}
+        InputProps={
+          numeric
+            ? {
+                endAdornment: (
+                  <InputAdornment position="end">
+                    <Tooltip title={showKeys ? 'Hide maths keys' : 'Fraction, root and π keys'} arrow>
+                      <IconButton
+                        edge="end"
+                        aria-label="Maths keys"
+                        aria-pressed={showKeys}
+                        aria-controls={keysId}
+                        onClick={() => setShowKeys((open) => !open)}
+                        disabled={disabled}
+                        sx={{ minWidth: 48, minHeight: 48 }}
+                      >
+                        <FunctionsRounded />
+                      </IconButton>
+                    </Tooltip>
+                  </InputAdornment>
+                ),
+              }
+            : undefined
+        }
         fullWidth
       />
+      {numeric && (
+        <Box id={keysId} sx={{ '& > [role="group"]': { mt: 0 } }}>
+          {showKeys && <MathKeypad inputRef={inputRef} value={value} onChange={setValue} disabled={disabled} />}
+          <MathAnswerPreview value={value} />
+        </Box>
+      )}
       <Button
         type="submit"
         variant="contained"

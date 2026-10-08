@@ -1,8 +1,13 @@
 'use client';
 
 /**
- * The Neram Assistant's own tab in Teams: what opens when a student clicks one
- * of its Activity items.
+ * The Neram Assistant's own tab in Teams: what opens when someone clicks one of
+ * its Activity items.
+ *
+ * A click carries the notification's id (the deep link's subEntityId, read here
+ * as `context.page.subPageId`), so the tab opens on that notification in full
+ * with an "Open in Nexus" button to the exact page. Opened directly, it lists
+ * the viewer's recent notifications. Both read with the Teams sign-in token.
  *
  * It used to be /student/assignments itself, which Nexus refuses to let any
  * other site frame (X-Frame-Options: SAMEORIGIN), so every Activity item opened
@@ -22,7 +27,9 @@ import OpenInNewRounded from '@mui/icons-material/OpenInNewRounded';
 import type { SvgIconComponent } from '@mui/icons-material';
 import { Box, Stack, Typography } from '@neram/ui';
 import PadShell from './PadShell';
-import { themeFromTeams, type PadTheme } from '@/lib/pad/client/pad-host';
+import { cachedTokenGetter, themeFromTeams, type PadTheme } from '@/lib/pad/client/pad-host';
+import { notificationIdFromContext } from '@/lib/assistant-tab-link';
+import { AssistantNotificationView, AssistantRecentList, type TokenGetter } from './AssistantNotificationView';
 
 const INIT_TIMEOUT_MS = 5_000;
 
@@ -42,13 +49,17 @@ export const ASSISTANT_HOME_LINKS: AssistantHomeLink[] = [
 
 export default function AssistantHomeTab() {
   const [theme, setTheme] = useState<PadTheme>('light');
+  /** Null outside Teams, where there is no Teams sign-in and the links below are all there is. */
+  const [getToken, setGetToken] = useState<TokenGetter | null>(null);
+  /** The notification on screen, and whether Back returns to the list. */
+  const [openId, setOpenId] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
 
     void (async () => {
       try {
-        const { app } = await import('@microsoft/teams-js');
+        const { app, authentication } = await import('@microsoft/teams-js');
         await Promise.race([
           app.initialize(),
           new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), INIT_TIMEOUT_MS)),
@@ -59,6 +70,9 @@ export default function AssistantHomeTab() {
         app.registerOnThemeChangeHandler((next) => {
           if (active) setTheme(themeFromTeams(next));
         });
+        const getter = cachedTokenGetter(() => authentication.getAuthToken());
+        setGetToken(() => getter);
+        setOpenId(notificationIdFromContext(context));
         void app.notifySuccess();
       } catch {
         // Opened outside Teams: the links work the same in a plain browser tab.
@@ -69,6 +83,14 @@ export default function AssistantHomeTab() {
       active = false;
     };
   }, []);
+
+  if (getToken && openId) {
+    return (
+      <PadShell theme={theme}>
+        <AssistantNotificationView id={openId} getToken={getToken} onBack={() => setOpenId(null)} />
+      </PadShell>
+    );
+  }
 
   return (
     <PadShell theme={theme}>
@@ -82,51 +104,55 @@ export default function AssistantHomeTab() {
           </Typography>
         </Box>
 
-        <Stack component="nav" aria-label="Open in Nexus" spacing={1}>
-          {ASSISTANT_HOME_LINKS.map(({ label, hint, href, Icon }) => (
-            <Box
-              key={href}
-              component="a"
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`${label}, opens Nexus in a new tab`}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1.5,
-                minHeight: 64,
-                px: 2,
-                py: 1.25,
-                borderRadius: 2,
-                border: 1,
-                borderColor: 'divider',
-                bgcolor: 'background.paper',
-                color: 'text.primary',
-                textDecoration: 'none',
-                cursor: 'pointer',
-                touchAction: 'manipulation',
-                transition: 'border-color 150ms ease, background-color 150ms ease',
-                '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' },
-                '&:focus-visible': { outline: '3px solid', outlineColor: 'primary.main', outlineOffset: '2px' },
-              }}
-            >
-              <Icon aria-hidden sx={{ color: 'primary.main', fontSize: 28, flexShrink: 0 }} />
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography fontWeight={700}>{label}</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {hint}
-                </Typography>
+        {getToken && <AssistantRecentList getToken={getToken} onOpen={setOpenId} />}
+
+        {!getToken && (
+          <Stack component="nav" aria-label="Open in Nexus" spacing={1}>
+            {ASSISTANT_HOME_LINKS.map(({ label, hint, href, Icon }) => (
+              <Box
+                key={href}
+                component="a"
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`${label}, opens Nexus in a new tab`}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1.5,
+                  minHeight: 64,
+                  px: 2,
+                  py: 1.25,
+                  borderRadius: 2,
+                  border: 1,
+                  borderColor: 'divider',
+                  bgcolor: 'background.paper',
+                  color: 'text.primary',
+                  textDecoration: 'none',
+                  cursor: 'pointer',
+                  touchAction: 'manipulation',
+                  transition: 'border-color 150ms ease, background-color 150ms ease',
+                  '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' },
+                  '&:focus-visible': { outline: '3px solid', outlineColor: 'primary.main', outlineOffset: '2px' },
+                }}
+              >
+                <Icon aria-hidden sx={{ color: 'primary.main', fontSize: 28, flexShrink: 0 }} />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography fontWeight={700}>{label}</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {hint}
+                  </Typography>
+                </Box>
+                <OpenInNewRounded aria-hidden fontSize="small" sx={{ color: 'text.secondary', flexShrink: 0 }} />
               </Box>
-              <OpenInNewRounded aria-hidden fontSize="small" sx={{ color: 'text.secondary', flexShrink: 0 }} />
-            </Box>
-          ))}
-        </Stack>
+            ))}
+          </Stack>
+        )}
 
         <Stack direction="row" spacing={1} alignItems="flex-start">
           <ChatBubbleOutlineRounded aria-hidden fontSize="small" sx={{ color: 'text.secondary', mt: '2px' }} />
           <Typography variant="body2" color="text.secondary">
-            Messages from Neram Assistant arrive here in Teams. Tap the button on a message to open it in Nexus.
+            Messages from Neram Assistant arrive here in Teams. Tap one to see it in full, then open it in Nexus.
           </Typography>
         </Stack>
       </Stack>

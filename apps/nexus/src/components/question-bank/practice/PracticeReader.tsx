@@ -23,8 +23,11 @@ export interface ReaderAnswerHandle {
 }
 
 interface PracticeReaderProps {
-  /** `pane` beside the rail on a laptop, `screen` for the phone's full-screen reader. */
-  variant: 'pane' | 'screen';
+  /**
+   * `pane` beside the rail on a laptop, `screen` for the phone's full-screen
+   * reader, `focus` beside the tutor (one question: no moving on, no jump).
+   */
+  variant: 'pane' | 'screen' | 'focus';
   questionId: string | null;
   /**
    * Which option of an either-or drawing is open. The detail is the whole
@@ -95,6 +98,7 @@ export default function PracticeReader(props: PracticeReaderProps) {
   } = props;
 
   const screen = variant === 'screen';
+  const focus = variant === 'focus';
   // The API answers with the question row, so its id never carries a part.
   // `questionId` may name one option of an either-or drawing ("<id>~a"), and
   // comparing the two as they came left a split question on its skeleton for
@@ -127,7 +131,7 @@ export default function PracticeReader(props: PracticeReaderProps) {
             <ArrowBackIcon />
           </IconButton>
         )}
-        {!screen && (
+        {variant === 'pane' && (
           <Tooltip title="Previous (Left arrow)">
             <span>
               <IconButton onClick={onPrev} disabled={!hasPrev} aria-label="Previous question" sx={{ width: 48, height: 48 }}>
@@ -136,24 +140,31 @@ export default function PracticeReader(props: PracticeReaderProps) {
             </span>
           </Tooltip>
         )}
-        <Button
-          onClick={(e: MouseEvent<HTMLElement>) => onJump(e.currentTarget)}
-          endIcon={<ArrowDropDownIcon />}
-          aria-haspopup="dialog"
-          aria-label={`${positionLabel}. Jump to a question`}
-          sx={{
-            minHeight: 44,
-            px: 1.5,
-            textTransform: 'none',
-            fontWeight: 700,
-            fontSize: '1rem',
-            color: 'text.primary',
-            fontVariantNumeric: 'tabular-nums',
-          }}
-        >
-          {positionLabel}
-        </Button>
-        {!screen && (
+        {focus ? (
+          // The focus screen's own bar already says which question this is.
+          <Typography component="p" sx={{ px: 1.5, fontWeight: 700, fontSize: '1rem' }}>
+            Question
+          </Typography>
+        ) : (
+          <Button
+            onClick={(e: MouseEvent<HTMLElement>) => onJump(e.currentTarget)}
+            endIcon={<ArrowDropDownIcon />}
+            aria-haspopup="dialog"
+            aria-label={`${positionLabel}. Jump to a question`}
+            sx={{
+              minHeight: 44,
+              px: 1.5,
+              textTransform: 'none',
+              fontWeight: 700,
+              fontSize: '1rem',
+              color: 'text.primary',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {positionLabel}
+          </Button>
+        )}
+        {variant === 'pane' && (
           <Tooltip title="Next (Right arrow)">
             <span>
               <IconButton onClick={onNext} disabled={!hasNext} aria-label="Next question" sx={{ width: 48, height: 48 }}>
@@ -166,9 +177,11 @@ export default function PracticeReader(props: PracticeReaderProps) {
         {props.headerAction}
         {showLang && <LangToggle lang={lang} onChange={onLangChange} />}
         {/* Said once per move, so a screen reader hears where it landed. */}
-        <Box component="span" aria-live="polite" sx={SR_ONLY}>
-          {positionLabel}
-        </Box>
+        {!focus && (
+          <Box component="span" aria-live="polite" sx={SR_ONLY}>
+            {positionLabel}
+          </Box>
+        )}
       </Box>
 
       {!questionId ? (
@@ -323,8 +336,8 @@ function ReaderShell({ children, footer, variant, bodyOverlay }: PracticeReaderP
             px: { xs: 1, md: 2 },
             pt: 1,
             pb: variant === 'screen' ? 'calc(8px + env(safe-area-inset-bottom, 0px))' : 1,
-            // The report-a-problem button sits bottom right on a laptop.
-            pr: { md: 11 },
+            // The report-a-problem button sits bottom right on a laptop (not over the tutor).
+            pr: { md: variant === 'focus' ? 2 : 11 },
           }}
         >
           {footer}
@@ -345,6 +358,8 @@ interface ActionBarProps extends PracticeReaderProps {
 function ActionBar(props: ActionBarProps) {
   const { state, answer, answerable, typed, hasPrev, hasNext, onPrev, onNext, onClose, variant } = props;
   const submitted = !!answer?.submitted;
+  // Beside the tutor the student stays on this question: no moving on.
+  const focus = variant === 'focus';
 
   let primary: ReactNode;
   if (state === 'loading') {
@@ -365,6 +380,18 @@ function ActionBar(props: ActionBarProps) {
         {answer?.submitting ? 'Checking...' : answer?.selected ? 'Check answer' : typed ? 'Type your answer' : 'Choose an answer'}
       </Button>
     );
+  } else if (focus) {
+    primary = answerable ? (
+      <Button
+        variant="outlined"
+        fullWidth
+        onClick={() => answer?.reset()}
+        startIcon={<ReplayIcon />}
+        sx={{ minHeight: 48, textTransform: 'none', fontWeight: 700, fontSize: '1rem' }}
+      >
+        Try again
+      </Button>
+    ) : null;
   } else if (hasNext) {
     primary = (
       <Button
@@ -393,15 +420,17 @@ function ActionBar(props: ActionBarProps) {
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, maxWidth: 760, mx: 'auto' }}>
-      <IconButton
-        onClick={onPrev}
-        disabled={!hasPrev}
-        aria-label="Previous question"
-        sx={{ width: 48, height: 48, border: '1px solid', borderColor: 'divider', flexShrink: 0 }}
-      >
-        <ChevronLeftIcon />
-      </IconButton>
-      {answerable && submitted && (
+      {!focus && (
+        <IconButton
+          onClick={onPrev}
+          disabled={!hasPrev}
+          aria-label="Previous question"
+          sx={{ width: 48, height: 48, border: '1px solid', borderColor: 'divider', flexShrink: 0 }}
+        >
+          <ChevronLeftIcon />
+        </IconButton>
+      )}
+      {answerable && submitted && !focus && (
         <>
           {/* Four controls share a 375px phone, so Try again is its icon there
               and "Next question" keeps one line. */}
@@ -437,14 +466,16 @@ function ActionBar(props: ActionBarProps) {
         </>
       )}
       <Box sx={{ flex: 1, minWidth: 0 }}>{primary}</Box>
-      <IconButton
-        onClick={onNext}
-        disabled={!hasNext}
-        aria-label="Next question"
-        sx={{ width: 48, height: 48, border: '1px solid', borderColor: 'divider', flexShrink: 0 }}
-      >
-        <ChevronRightIcon />
-      </IconButton>
+      {!focus && (
+        <IconButton
+          onClick={onNext}
+          disabled={!hasNext}
+          aria-label="Next question"
+          sx={{ width: 48, height: 48, border: '1px solid', borderColor: 'divider', flexShrink: 0 }}
+        >
+          <ChevronRightIcon />
+        </IconButton>
+      )}
     </Box>
   );
 }

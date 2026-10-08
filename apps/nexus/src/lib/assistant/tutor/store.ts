@@ -147,13 +147,6 @@ export async function loadLatestAttempt(supabase: any, studentId: string, questi
   return row ? { isCorrect: Boolean(row.is_correct), selected: String(row.selected_answer ?? '') } : null;
 }
 
-/** D3: nothing about a question opens while one of the student's tests is in progress. Fails closed. */
-export async function hasTestInProgress(supabase: any, studentId: string): Promise<boolean> {
-  const { data, error } = await supabase.from('nexus_test_attempts').select('id').eq('student_id', studentId).eq('status', 'in_progress').limit(1);
-  if (error) return true;
-  return (data || []).length > 0;
-}
-
 // ── sessions ─────────────────────────────────────────────────────────────────
 
 export interface SessionRow {

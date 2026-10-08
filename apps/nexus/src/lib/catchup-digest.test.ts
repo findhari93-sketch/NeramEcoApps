@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   buildStaffDigest,
+  buildStaffDigestItems,
+  staffDigestHref,
   buildParentNotice,
   clampText,
   TEAMS_TEXT_LIMIT,
@@ -191,5 +193,63 @@ describe('buildParentNotice', () => {
     ])!;
     expect(notice.subject).not.toMatch(/[—–]|--/);
     expect(notice.plain).not.toMatch(/[—–]|--/);
+  });
+});
+
+describe('buildStaffDigestItems', () => {
+  it('lists who and why, reasons first, so opening the digest shows names, not a count', () => {
+    const { items, more } = buildStaffDigestItems([
+      event({ kind: 'completed', studentId: 's2', studentName: 'Asha', reasonCode: null }),
+      event({ reasonNote: '  had fever  ', studentPhoto: 'https://x/p.jpg' }),
+    ]);
+    expect(more).toBe(0);
+    expect(items).toEqual([
+      {
+        kind: 'reason',
+        studentId: 's1',
+        studentName: 'Hari Heera',
+        studentPhoto: 'https://x/p.jpg',
+        classTitle: 'Coordinate Geometry',
+        scheduledDate: '2026-07-29',
+        reasonLabel: expect.any(String),
+        reasonNote: 'had fever',
+      },
+      {
+        kind: 'completed',
+        studentId: 's2',
+        studentName: 'Asha',
+        studentPhoto: null,
+        classTitle: 'Coordinate Geometry',
+        scheduledDate: '2026-07-29',
+        reasonLabel: null,
+        reasonNote: null,
+      },
+    ]);
+    expect(items[0].reasonLabel).not.toBe('');
+  });
+
+  it('caps the list and says how many were left out', () => {
+    const many = Array.from({ length: 30 }, (_, i) => event({ studentId: `s${i}`, studentName: `S${i}` }));
+    const { items, more } = buildStaffDigestItems(many, 25);
+    expect(items).toHaveLength(25);
+    expect(more).toBe(5);
+  });
+
+  it('never prints a blank name or class', () => {
+    const { items } = buildStaffDigestItems([event({ studentName: null, classTitle: ' ' })]);
+    expect(items[0].studentName).toBe('A student');
+    expect(items[0].classTitle).toBe('Class');
+  });
+});
+
+describe('staffDigestHref', () => {
+  it('opens the one class on the calendar when the digest is about one class', () => {
+    expect(staffDigestHref([event(), event({ studentId: 's2' })])).toBe(
+      '/teacher/catch-up?view=calendar&month=2026-07&class=c1',
+    );
+  });
+
+  it('opens the catch-up page when several classes are involved', () => {
+    expect(staffDigestHref([event(), event({ classId: 'c2' })])).toBe('/teacher/catch-up');
   });
 });

@@ -14,6 +14,7 @@ import CheckCircleRounded from '@mui/icons-material/CheckCircleRounded';
 import StudentAvatar from '@/components/students/StudentAvatar';
 import { displayAnswer } from '@/lib/pad/client/format';
 import { padFetch } from '@/lib/pad/client/pad-fetch';
+import { padAnswerCorrect } from '@/lib/pad/formula-answer';
 import type { PadHost } from '@/lib/pad/client/pad-host';
 import { foldAnswers, namesByAnswer, namesPreview, stacksAnswerLabels, unansweredNames } from '@/lib/pad/client/teacher-view';
 import type { AnswerType, ParticipationRow, PromptState } from '@/lib/pad/client/types';
@@ -70,14 +71,13 @@ export default function OptionNames({
   }, [host, prompt.id, prompt.version, prompt.state, refreshKey]);
 
   const revealed = prompt.state === 'revealed' && !prompt.ungraded;
-  const keys = new Set(prompt.correct_keys ?? []);
   const fromCounts = new Map(groups.map((group) => [group.value, group.count]));
   const bars: BarRow[] = namesByAnswer(prompt, rows ?? []).map((answer) => ({
     key: answer.value,
     label: displayAnswer(prompt.answer_type, answer.value),
     count: rows ? answer.count : (fromCounts.get(answer.value) ?? 0),
     names: answer.names,
-    tone: !revealed ? 'plain' : keys.has(answer.value) ? 'right' : 'wrong',
+    tone: !revealed ? 'plain' : padAnswerCorrect(prompt.answer_type, answer.value, prompt.correct_keys) ? 'right' : 'wrong',
   }));
   // Typed answers draw from the snapshot's counts until the names arrive.
   if (!rows && prompt.answer_type !== 'mcq' && prompt.answer_type !== 'yesno') {

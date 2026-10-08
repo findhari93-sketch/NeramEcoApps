@@ -16,6 +16,7 @@ import {
 import EditOutlined from '@mui/icons-material/EditOutlined';
 import CheckCircleOutlined from '@mui/icons-material/CheckCircleOutlined';
 import { useTranslations } from 'next-intl';
+import StepHeading from '../StepHeading';
 import { useFormContext } from '../FormContext';
 import type { FormStep } from '../types';
 import { APPLICANT_CATEGORY_OPTIONS, CASTE_CATEGORY_OPTIONS, SCHOOL_TYPE_OPTIONS } from '@neram/database';
@@ -165,12 +166,7 @@ export default function ReviewStep({ onEditStep }: ReviewStepProps) {
 
   return (
     <Box>
-      <Typography variant="h5" component="h1" gutterBottom fontWeight={700}>
-        {t('review.title')}
-      </Typography>
-      <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-        {t('review.subtitle')}
-      </Typography>
+      <StepHeading title={t('review.title')} subtitle={t('review.subtitle')} />
 
       <Section title={t('review.aboutYou')} step={0}>
         <ReviewItem label={t('aboutYou.studentName')} value={personal.firstName} />

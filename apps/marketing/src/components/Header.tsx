@@ -38,6 +38,7 @@ import { Link, usePathname, useRouter } from '@/i18n/routing';
 import { locales, localeLabels, type Locale } from '@/i18n';
 import { useTranslations } from 'next-intl';
 import AuthButton from './AuthButton';
+import BrandWordmark from './brand/BrandWordmark';
 import UserNotificationBell from './UserNotificationBell';
 // Search (dialog + Fuse + the ~70 KB generated index) is its own chunk, fetched
 // on the first open (or on hover/focus of the search button) instead of being
@@ -416,48 +417,7 @@ export default function Header() {
                 flexShrink: 0,
               }}
             >
-              <Typography
-                sx={{
-                  fontFamily: '"Museo", sans-serif',
-                  fontSize: '20px',
-                  lineHeight: 1.2,
-                  color: 'inherit',
-                }}
-              >
-                <Box component="span" sx={{ fontWeight: 700 }}>neram</Box>
-                <Box component="span" sx={{ fontWeight: 300 }}>Classes</Box>
-              </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                <Typography
-                  sx={{
-                    fontSize: '9px',
-                    fontStyle: 'italic',
-                    fontWeight: 400,
-                    color: 'rgb(81 81 81)',
-                    letterSpacing: '0.19px',
-                    lineHeight: 1,
-                  }}
-                >
-                  Supported by
-                </Typography>
-                <Box sx={{ width: 9, height: 9, position: 'relative', flexShrink: 0 }}>
-                  <Box sx={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '4px', bgcolor: '#F25022', borderRadius: '0.5px' }} />
-                  <Box sx={{ position: 'absolute', top: 0, right: 0, width: '4px', height: '4px', bgcolor: '#7FBA00', borderRadius: '0.5px' }} />
-                  <Box sx={{ position: 'absolute', bottom: 0, left: 0, width: '4px', height: '4px', bgcolor: '#00A4EF', borderRadius: '0.5px' }} />
-                  <Box sx={{ position: 'absolute', bottom: 0, right: 0, width: '4px', height: '4px', bgcolor: '#FFB900', borderRadius: '0.5px' }} />
-                </Box>
-                <Typography
-                  sx={{
-                    fontSize: '9.6px',
-                    fontWeight: 700,
-                    color: 'inherit',
-                    letterSpacing: '0.19px',
-                    lineHeight: 1,
-                  }}
-                >
-                  Microsoft
-                </Typography>
-              </Box>
+              <BrandWordmark />
             </Box>
 
             {/* ── Desktop: Grouped nav buttons ── */}
@@ -928,33 +888,7 @@ export default function Header() {
               py: 1.5,
             }}
           >
-            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-              <Typography
-                sx={{
-                  fontFamily: '"Museo", sans-serif',
-                  fontSize: '18px',
-                  lineHeight: 1.2,
-                  color: 'text.primary',
-                }}
-              >
-                <Box component="span" sx={{ fontWeight: 700 }}>neram</Box>
-                <Box component="span" sx={{ fontWeight: 300 }}>Classes</Box>
-              </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                <Typography sx={{ fontSize: '9px', fontStyle: 'italic', fontWeight: 400, color: 'text.primary', letterSpacing: '0.19px', lineHeight: 1 }}>
-                  Supported by
-                </Typography>
-                <Box sx={{ width: 9, height: 9, position: 'relative', flexShrink: 0 }}>
-                  <Box sx={{ position: 'absolute', top: 0, left: 0, width: '4px', height: '4px', bgcolor: '#F25022', borderRadius: '0.5px' }} />
-                  <Box sx={{ position: 'absolute', top: 0, right: 0, width: '4px', height: '4px', bgcolor: '#7FBA00', borderRadius: '0.5px' }} />
-                  <Box sx={{ position: 'absolute', bottom: 0, left: 0, width: '4px', height: '4px', bgcolor: '#00A4EF', borderRadius: '0.5px' }} />
-                  <Box sx={{ position: 'absolute', bottom: 0, right: 0, width: '4px', height: '4px', bgcolor: '#FFB900', borderRadius: '0.5px' }} />
-                </Box>
-                <Typography sx={{ fontSize: '9.6px', fontWeight: 700, color: 'text.primary', letterSpacing: '0.19px', lineHeight: 1 }}>
-                  Microsoft
-                </Typography>
-              </Box>
-            </Box>
+            <BrandWordmark size="sm" />
             <IconButton onClick={toggleMobileMenu} aria-label={t('header.closeMenu')}>
               <CloseIcon />
             </IconButton>

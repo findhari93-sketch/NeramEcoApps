@@ -27,6 +27,8 @@ export interface DigestEvent {
   kind: 'reason' | 'completed';
   studentId: string;
   studentName: string | null;
+  /** users.avatar_url, so the digest shows a face beside the name. */
+  studentPhoto?: string | null;
   classId: string;
   classTitle: string | null;
   /** YYYY-MM-DD of the class that was missed. */
@@ -131,6 +133,66 @@ export function buildStaffDigest(events: DigestEvent[]): StaffDigest | null {
     message: `${message}${detail}`,
     teamsText: clampText(`${title}. ${message}`),
   };
+}
+
+/** How many people the digest lists on the notification itself. */
+export const DIGEST_ITEM_LIMIT = 25;
+
+/** One line of the staff digest, stored on the bell row and shown in the Assistant's tab. */
+export interface StaffDigestItem {
+  kind: 'reason' | 'completed';
+  studentId: string;
+  studentName: string;
+  studentPhoto: string | null;
+  classTitle: string;
+  /** YYYY-MM-DD of the missed class. */
+  scheduledDate: string;
+  /** "Unwell", "Family", ... Null for a completion. */
+  reasonLabel: string | null;
+  /** What the student typed for their teacher. Staff see it on /teacher/catch-up already. */
+  reasonNote: string | null;
+}
+
+/**
+ * Who the digest is about, so opening it shows the names instead of a count.
+ * Reasons first (they may need a reply), then completions, each oldest class
+ * first. Capped, with `more` saying how many were left out.
+ */
+export function buildStaffDigestItems(
+  events: DigestEvent[],
+  limit = DIGEST_ITEM_LIMIT,
+): { items: StaffDigestItem[]; more: number } {
+  const ordered = [...events].sort(
+    (a, b) =>
+      (a.kind === b.kind ? 0 : a.kind === 'reason' ? -1 : 1) ||
+      a.scheduledDate.localeCompare(b.scheduledDate) ||
+      (a.studentName || '').localeCompare(b.studentName || ''),
+  );
+  const items = ordered.slice(0, limit).map(
+    (e): StaffDigestItem => ({
+      kind: e.kind,
+      studentId: e.studentId,
+      studentName: e.studentName?.trim() || 'A student',
+      studentPhoto: e.studentPhoto ?? null,
+      classTitle: e.classTitle?.trim() || 'Class',
+      scheduledDate: e.scheduledDate,
+      reasonLabel: e.kind === 'reason' ? reasonShortLabel(e.reasonCode) : null,
+      reasonNote: e.kind === 'reason' ? e.reasonNote?.trim() || null : null,
+    }),
+  );
+  return { items, more: Math.max(0, ordered.length - items.length) };
+}
+
+/**
+ * Where "Open in Nexus" goes: the class itself on the catch-up calendar when the
+ * digest is about one class, otherwise the catch-up page.
+ */
+export function staffDigestHref(events: DigestEvent[]): string {
+  const classIds = new Set(events.map((e) => e.classId));
+  if (classIds.size !== 1) return '/teacher/catch-up';
+  const only = events[0];
+  const p = new URLSearchParams({ view: 'calendar', month: only.scheduledDate.slice(0, 7), class: only.classId });
+  return `/teacher/catch-up?${p.toString()}`;
 }
 
 /**

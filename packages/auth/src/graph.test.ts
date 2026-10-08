@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { setAccountEnabled, removeAllLicenses, addLicenses, classifyGraphError, getUserMsStatus, getUserProfile, getUserPhoto, userExists, findUserOidByEmail } from './graph';
+import { setAccountEnabled, removeAllLicenses, addLicenses, classifyGraphError, getUserMsStatus, getUserProfile, getUserPhoto, userExists, findUserOidByEmail, sendTeamsActivityNotification, teamsEntityDeepLink } from './graph';
 
 // These tests mock global.fetch so no real Microsoft Graph call is made. The
 // app-only token endpoint is mocked alongside the Graph endpoints.
@@ -253,5 +253,72 @@ describe('addLicenses', () => {
     mockGraph(() => new Response('should not be called', { status: 500 }));
     const res = await addLicenses('oid-123', []);
     expect(res.success).toBe(true);
+  });
+});
+
+describe('teamsEntityDeepLink', () => {
+  it('opens one tab on one item through context.subEntityId', () => {
+    const link = teamsEntityDeepLink({ appId: 'app-1', entityId: 'nexusAssignments', subEntityId: 'n-42' });
+    expect(link).toBe(
+      'https://teams.microsoft.com/l/entity/app-1/nexusAssignments?context=' +
+        encodeURIComponent('{"subEntityId":"n-42"}'),
+    );
+    const context = JSON.parse(decodeURIComponent(new URL(link).searchParams.get('context') || ''));
+    expect(context).toEqual({ subEntityId: 'n-42' });
+  });
+});
+
+describe('sendTeamsActivityNotification', () => {
+  const target = { appId: 'app-1', entityId: 'nexusAssignments', subEntityId: 'n-42' };
+
+  function mockFeed(feed: (body: any) => Response) {
+    const bodies: any[] = [];
+    mockGraph((url, init) => {
+      if (url.includes('/teamwork/installedApps')) {
+        return new Response(JSON.stringify({ value: [{ id: 'inst-1', teamsApp: { id: 'cat-1' } }] }), { status: 200 });
+      }
+      if (url.includes('/sendActivityNotification')) {
+        const body = JSON.parse(init.body);
+        bodies.push(body);
+        return feed(body);
+      }
+      return new Response('', { status: 404 });
+    });
+    return bodies;
+  }
+
+  it('points the click at the notification itself when given a target', async () => {
+    const bodies = mockFeed(() => new Response(null, { status: 204 }));
+    const r = await sendTeamsActivityNotification('oid-1', { text: 'Head', preview: 'Body', catalogAppId: 'cat-1', target });
+    expect(r.ok).toBe(true);
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0].topic).toEqual({ source: 'text', value: 'Neram Assistant', webUrl: teamsEntityDeepLink(target) });
+    expect(bodies[0].templateParameters).toEqual([{ name: 'systemDefaultText', value: 'Head' }]);
+  });
+
+  it('still sends the alert, on the app topic, when Graph refuses the deep link', async () => {
+    const bodies = mockFeed((body) =>
+      body.topic.source === 'text' ? new Response('bad topic', { status: 400 }) : new Response(null, { status: 204 }),
+    );
+    const r = await sendTeamsActivityNotification('oid-1', { text: 'Head', catalogAppId: 'cat-1', target });
+    expect(r.ok).toBe(true);
+    expect(r.reason).toMatch(/deep link refused/);
+    expect(bodies.map((b) => b.topic.source)).toEqual(['text', 'entityUrl']);
+    expect(bodies[1].topic.value).toBe('https://graph.microsoft.com/v1.0/users/oid-1/teamwork/installedApps/inst-1');
+  });
+
+  it('does not retry a failure that is not about the topic', async () => {
+    const bodies = mockFeed(() => new Response('denied', { status: 403 }));
+    const r = await sendTeamsActivityNotification('oid-1', { text: 'Head', catalogAppId: 'cat-1', target });
+    expect(r.ok).toBe(false);
+    expect(r.status).toBe(403);
+    expect(bodies).toHaveLength(1);
+  });
+
+  it('uses the app topic when no target is given, as before', async () => {
+    const bodies = mockFeed(() => new Response(null, { status: 204 }));
+    const r = await sendTeamsActivityNotification('oid-1', { text: 'Head', catalogAppId: 'cat-1' });
+    expect(r.ok).toBe(true);
+    expect(bodies[0].topic.source).toBe('entityUrl');
   });
 });

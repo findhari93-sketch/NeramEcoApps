@@ -106,8 +106,9 @@ export const DEFAULT_PROFILE: AccountProfile = {
     coaching: 'https://neramclasses.com/nata-coaching/tamil-nadu',
     resources: 'https://neramclasses.com/free-resources',
   },
-  target_area: 'Tamil Nadu',
-  outside_places: ['bangalore', 'bengaluru', 'hyderabad', 'mumbai', 'delhi', 'pune', 'kolkata', 'kerala', 'kochi', 'trivandrum', 'andhra', 'vizag', 'dubai'],
+  // Bengaluru is in scope: Neram coaches it online (user, 2026-10-06).
+  target_area: 'Tamil Nadu, and Bengaluru for online coaching',
+  outside_places: ['hyderabad', 'mumbai', 'delhi', 'pune', 'kolkata', 'kerala', 'kochi', 'trivandrum', 'andhra', 'vizag', 'dubai'],
 };
 
 export const DEFAULT_SETTINGS: AgentSettings = {

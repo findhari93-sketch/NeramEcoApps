@@ -9,7 +9,8 @@
     { "path": "/api/cron/marketing-ai/ingest", "schedule": "30 0 * * *" },
     { "path": "/api/cron/marketing-ai/analyze", "schedule": "0 1 * * *" },
     { "path": "/api/cron/marketing-ai/conversions", "schedule": "15 */6 * * *" },
-    { "path": "/api/cron/marketing-ai/weekly", "schedule": "0 2 * * 1" }
+    { "path": "/api/cron/marketing-ai/weekly", "schedule": "0 2 * * 1" },
+    { "path": "/api/cron/demo-messages", "schedule": "*/5 * * * *" }
   ],
   "headers": [
     {

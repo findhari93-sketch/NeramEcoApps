@@ -77,7 +77,7 @@ describe('runTutorTurn', () => {
   });
 
   it('refuses during an open test, and when there is no live pack', async () => {
-    await expect(turn(seed({ tests: [{ id: 't', student_id: 's1', status: 'in_progress' }] }), { type: 'start' })).rejects.toMatchObject({ message: TEST_OPEN, status: 409 });
+    await expect(turn(seed({ tests: [{ id: 't', student_id: 's1', status: 'in_progress', started_at: '2026-10-06T04:30:00Z' }] }), { type: 'start' })).rejects.toMatchObject({ message: TEST_OPEN, status: 409 });
     await expect(turn(seed({ pack: { status: 'draft' } }), { type: 'start' })).rejects.toMatchObject({ message: NOT_READY, status: 404 });
     await expect(turn(seed({ question: { section: 'aptitude' } }), { type: 'start' })).rejects.toBeInstanceOf(ApiError);
   });

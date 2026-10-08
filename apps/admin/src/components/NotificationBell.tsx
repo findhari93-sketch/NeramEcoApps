@@ -65,8 +65,8 @@ const EVENT_SECTION_MAP: Record<string, string> = {
 
 function getNavigationUrl(notification: AdminNotification): string | null {
   if (notification.event_type === 'demo_registration') {
-    const slotId = notification.metadata?.slot_id as string;
-    if (slotId) return `/demo-classes/${slotId}`;
+    const registrationId = notification.metadata?.registration_id as string;
+    if (registrationId) return `/demo-classes?id=${encodeURIComponent(registrationId)}`;
     return '/demo-classes';
   }
 

@@ -472,6 +472,9 @@ function formatTelegramMessage(event: NotificationEvent): string | null {
         `<b>Name:</b> ${data.user_name || data.userName || 'Unknown'}`,
         `<b>Phone:</b> ${data.phone || ''}`,
         data.slot_date ? `<b>Date:</b> ${data.slot_date}` : '',
+        data.ref_code ? `<b>Ref:</b> ${data.ref_code}` : '',
+        data.preference ? `<b>Prefers:</b> ${data.preference}` : '',
+        data.parent_joining ? '<b>Parent joining:</b> yes' : '',
       ].filter(Boolean).join('\n');
 
     case 'new_callback':
@@ -1178,6 +1181,43 @@ export async function notifyDemoRegistration(
         slot_title: data.slotTitle,
         current_class: data.currentClass || '',
         interest_course: data.interestCourse || '',
+        registration_id: data.registrationId,
+      },
+    },
+    client
+  );
+}
+
+/**
+ * Notify staff of a Demo Class v2 request (day + window, call to confirm).
+ * Same channel as slot registrations: Telegram + admin bell.
+ */
+export async function notifyDemoRequest(
+  data: {
+    userName: string;
+    phone: string;
+    email?: string | null;
+    refCode: string;
+    preference: string;
+    parentJoining: boolean;
+    currentClass?: string | null;
+    registrationId: string;
+  },
+  client?: TypedSupabaseClient
+): Promise<void> {
+  await dispatchNotification(
+    {
+      type: 'demo_registration',
+      title: 'New Demo Class Request',
+      message: `${data.userName} (${data.phone}) asked for a demo: ${data.preference}. Call to confirm. Ref ${data.refCode}`,
+      data: {
+        user_name: data.userName,
+        phone: data.phone,
+        email: data.email || '',
+        ref_code: data.refCode,
+        preference: data.preference,
+        parent_joining: data.parentJoining,
+        current_class: data.currentClass || '',
         registration_id: data.registrationId,
       },
     },

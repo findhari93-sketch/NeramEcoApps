@@ -15,10 +15,10 @@ export const TUTOR_BUTTON_LABEL = 'Learn with tutor';
 
 /**
  * Wide enough for the label, measured on the reader's header (PracticeReader
- * names it `reader-head`). A viewport breakpoint cannot see that a 1024px
- * window leaves the reader pane 330px once the rail and the tutor take theirs.
+ * names it `reader-head`). A viewport breakpoint cannot see how much of the
+ * window the sidebar and the question rail leave the reader.
  */
-const ROOMY = '@container reader-head (min-width: 560px)';
+const ROOMY = '@container reader-head (min-width: 480px)';
 
 /**
  * The door into the AI Tutor, in the reader's header beside the language

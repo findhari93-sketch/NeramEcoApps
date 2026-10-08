@@ -341,7 +341,7 @@ export default function MarketingAiSettingsPage() {
               </Box>
               <ChipListField
                 label="Places outside that area"
-                helper="A keyword naming one of these is flagged, for example 'nata coaching in bangalore' in a Tamil Nadu campaign."
+                helper="A keyword naming one of these is flagged, for example 'nata coaching in hyderabad' in a Tamil Nadu campaign."
                 value={draft.profile.outside_places}
                 onChange={(v) => set(['profile', 'outside_places'], v)}
                 lower

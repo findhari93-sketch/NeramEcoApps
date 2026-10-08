@@ -428,6 +428,7 @@ function ViewBody({
             error={inputError}
             initialValue={draft}
             selected={view.selected}
+            mathKeysOpen={!compact}
             onAnswer={choose}
           />
           {view.selected && <ChosenAnswer answer={displayAnswer(view.prompt.answer_type, view.selected)} save={view.save} />}

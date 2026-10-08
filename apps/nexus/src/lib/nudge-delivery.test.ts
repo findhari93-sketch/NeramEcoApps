@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { escapeHtml, plainToHtml, plainToHtmlWithLink } from './nudge-delivery';
+import { escapeHtml, nexusPathFromUrl, plainToHtml, plainToHtmlWithLink } from './nudge-delivery';
 
 /**
  * The link is the point of the whole change, so what is pinned here is that it
@@ -41,5 +41,25 @@ describe('plainToHtmlWithLink', () => {
 describe('escapeHtml', () => {
   it('covers the four characters that matter in an attribute or a body', () => {
     expect(escapeHtml('<a href="x">&</a>')).toBe('&lt;a href=&quot;x&quot;&gt;&amp;&lt;/a&gt;');
+  });
+});
+
+describe('nexusPathFromUrl', () => {
+  it('keeps the Nexus page a link points at, on any Nexus host', () => {
+    expect(nexusPathFromUrl('https://nexus.neramclasses.com/student/timetable/k1/exam?x=1#top')).toBe(
+      '/student/timetable/k1/exam?x=1#top',
+    );
+    expect(nexusPathFromUrl('https://staging-nexus.neramclasses.com/teacher/issues?issue=7')).toBe('/teacher/issues?issue=7');
+    expect(nexusPathFromUrl('http://localhost:3012/student/catch-up')).toBe('/student/catch-up');
+    expect(nexusPathFromUrl('/student/catch-up')).toBe('/student/catch-up');
+  });
+
+  it('gives null for anything that is not a Nexus page', () => {
+    expect(nexusPathFromUrl('https://www.youtube.com/watch?v=1')).toBeNull();
+    expect(nexusPathFromUrl('https://teams.microsoft.com/l/chat/0/0?users=a@b.c')).toBeNull();
+    expect(nexusPathFromUrl('https://nexus.neramclasses.com.evil.example/x')).toBeNull();
+    expect(nexusPathFromUrl('//evil.example/x')).toBeNull();
+    expect(nexusPathFromUrl('')).toBeNull();
+    expect(nexusPathFromUrl(undefined)).toBeNull();
   });
 });

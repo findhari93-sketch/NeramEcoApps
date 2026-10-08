@@ -82,4 +82,14 @@ describe('PracticeReader', () => {
     );
     expect(screen.queryByTestId('question-detail')).toBeNull();
   });
+
+  it('beside the tutor, stays on one question: no moving on, no jump', () => {
+    const mcq = detail({ question_format: 'MCQ', options: [{ id: 'a', text: '1' }, { id: 'b', text: '2' }] } as Partial<NexusQBQuestionDetail>);
+    render(<PracticeReader {...base} variant="focus" questionId={QUESTION_ID} partKey={null} detail={mcq} />);
+    expect(screen.queryByRole('button', { name: 'Previous question' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Next question' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Jump to a question/ })).toBeNull();
+    expect(screen.getByText('Question')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Choose an answer' })).toBeTruthy();
+  });
 });

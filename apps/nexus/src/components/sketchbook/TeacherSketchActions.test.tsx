@@ -119,6 +119,30 @@ describe('TeacherSketchActions', () => {
     expect(screen.getByText('Sent Wow')).toBeTruthy();
   });
 
+  it('on the review screen, holds the reaction for the review and never says Sent', () => {
+    const onReact = vi.fn();
+    render(
+      <TeacherSketchActions sketchId="a" reaction={null} featured={[]} onChanged={vi.fn()} compact hideComment
+        onReact={onReact} sendsWith="Goes to Anuvika with your review" footer={<span>shelf line</span>} />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Wow' }));
+    expect(onReact).toHaveBeenCalledWith('wow', undefined);
+    expect(api.reactToSketch).not.toHaveBeenCalled();
+    expect(screen.queryByText('Sent Wow')).toBeNull();
+    expect(screen.getByText('Goes to Anuvika with your review')).toBeTruthy();
+    expect(screen.getByText('shelf line')).toBeTruthy();
+  });
+
+  it('lets the footer say Featured instead of a chip beside it', () => {
+    render(
+      <TeacherSketchActions sketchId="a" reaction={null} onChanged={vi.fn()} compact hideComment onReact={vi.fn()}
+        featured={[{ classroom_id: 'c1', classroom_name: 'Class 1', featured_at: '2026-09-01T00:00:00.000Z' }]}
+        footer={<span>Featured: posted to your class</span>} />,
+    );
+    expect(screen.queryByText('Featured in Class 1')).toBeNull();
+    expect(screen.getByRole('button', { name: /Un-feature/ })).toBeTruthy();
+  });
+
   it('with onComment, Send posts the comment alone and is off while the box is empty', () => {
     const onComment = vi.fn();
     render(<TeacherSketchActions sketchId="a" reaction="heart" featured={[]} onChanged={vi.fn()} compact onReact={vi.fn()} onComment={onComment} />);

@@ -14,6 +14,8 @@ import { plainToHtml, sendNudge } from '@/lib/nudge-delivery';
 import { resolveParentContacts } from '@/lib/parent-notify';
 import {
   buildStaffDigest,
+  buildStaffDigestItems,
+  staffDigestHref,
   buildParentNotice,
   type DigestEvent,
   type ParentChildEvents,
@@ -99,7 +101,7 @@ export async function GET(request: NextRequest) {
     const classroomIds = [...new Set(items.map((i: any) => i.classroom_id))] as string[];
 
     const [{ data: students }, { data: classrooms }] = await Promise.all([
-      supabase.from('users').select('id, name').in('id', studentIds),
+      supabase.from('users').select('id, name, avatar_url').in('id', studentIds),
       supabase
         .from('nexus_classrooms')
         .select('id, catchup_window_days, catchup_optout_window_days')
@@ -108,6 +110,9 @@ export async function GET(request: NextRequest) {
 
     const nameById = new Map<string, string | null>(
       (students || []).map((s: any) => [s.id, s.name ?? null]),
+    );
+    const photoById = new Map<string, string | null>(
+      (students || []).map((s: any) => [s.id, s.avatar_url ?? null]),
     );
 
     // The window each classroom gives, so a deadline is derived the same way
@@ -144,6 +149,7 @@ export async function GET(request: NextRequest) {
       const base = {
         studentId: row.student_id as string,
         studentName: nameById.get(row.student_id) ?? null,
+        studentPhoto: photoById.get(row.student_id) ?? null,
         classId: row.scheduled_class_id as string,
         classTitle: (row.class.title as string) ?? null,
         scheduledDate,
@@ -216,10 +222,15 @@ export async function GET(request: NextRequest) {
           plain: digest.message,
           teamsText: digest.teamsText,
           eventType: 'catchup_digest',
+          // `items` is who and why, so opening the notification (the bell, or a
+          // Teams Activity click into the Assistant's tab) shows the names rather
+          // than a count. `href` is where "Open in Nexus" goes.
           metadata: {
             classroom_id: classroomId,
             reasons: events.filter((e) => e.kind === 'reason').length,
             completed: events.filter((e) => e.kind === 'completed').length,
+            ...buildStaffDigestItems(events),
+            href: staffDigestHref(events),
           },
           source: { kind: 'catchup_digest', refId: classroomId },
         });

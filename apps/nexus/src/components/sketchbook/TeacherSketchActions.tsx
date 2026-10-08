@@ -54,6 +54,14 @@ interface TeacherSketchActionsProps {
    * "Sent" line, because the card moves on and the Undo bar already says it.
    */
   dock?: { before?: ReactNode; after?: ReactNode };
+  /**
+   * The review screen holds the reaction for its own send. Any value other than
+   * undefined turns off the "Sent" line; a string is shown under the reactions
+   * instead (the page passes one only while the reaction differs from the saved one).
+   */
+  sendsWith?: string | null;
+  /** Shown under the Feature row (the review screen's Inspiration status). */
+  footer?: ReactNode;
 }
 
 interface DockToolProps {
@@ -106,6 +114,7 @@ export function DockTool({ icon, label, onClick, href, disabled, emphasis, color
 
 export default function TeacherSketchActions({
   sketchId, reaction, featured, studentName, onChanged, compact = false, hideComment = false, onReact, onComment, dock,
+  sendsWith, footer,
 }: TeacherSketchActionsProps) {
   // Reactions become a Teams chat from this teacher, so they carry the chat-scoped
   // token (the standing rule for anything a teacher presses Send on).
@@ -213,6 +222,9 @@ export default function TeacherSketchActions({
   return (
     <Box sx={{ mb: 2 }}>
       {reactionRow}
+      {onReact && sendsWith && (
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>{sendsWith}</Typography>
+      )}
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center', mt: 0.5 }}>
         {compact && !hideComment && (
           <Button variant="text" disabled={busy !== null} onClick={() => setCommentOpen((o) => !o)}
@@ -231,8 +243,12 @@ export default function TeacherSketchActions({
           </Button>
         )}
       </Box>
-      {sent && <Typography variant="caption" color="success.main" sx={{ display: 'block', mt: 0.5 }}>Sent {REACTION_LABEL[sent]}</Typography>}
-      {live && <Chip size="small" icon={<StarOutlinedIcon />} color="warning" label={`Featured in ${live.classroom_name}`} sx={{ mt: 1 }} />}
+      {/* The review screen holds the reaction for its one send (sendsWith), so
+          "Sent" would be untrue there; the line above says where it goes. */}
+      {sent && sendsWith === undefined && <Typography variant="caption" color="success.main" sx={{ display: 'block', mt: 0.5 }}>Sent {REACTION_LABEL[sent]}</Typography>}
+      {/* The footer's Inspiration line already says "Featured", so no chip beside it. */}
+      {live && !footer && <Chip size="small" icon={<StarOutlinedIcon />} color="warning" label={`Featured in ${live.classroom_name}`} sx={{ mt: 1 }} />}
+      {footer}
       {!hideComment && (!compact || commentOpen) && commentBox}
       {errorLine}
       {featureSheet}

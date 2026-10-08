@@ -382,6 +382,9 @@ export async function PATCH(
         rating: tutorRating,
         previousFeedback: sub?.tutor_feedback ?? null,
         feedback: tutor_feedback || null,
+        previousReaction: sub?.reaction ?? null,
+        reaction,
+        voiceSentNow: !!voice,
       })
     ) {
       try {
@@ -391,6 +394,9 @@ export async function PATCH(
           teacherName: (user as any).name ?? null,
           sourceType: sub?.source_type ?? null,
           rating: tutorRating,
+          reaction,
+          hasVoice: !!voice,
+          update: wasAlreadyReviewed && sub?.status !== 'redo',
         });
         const { results } = await sendNudge({
           teacher: { authHeader, userId: user.id },

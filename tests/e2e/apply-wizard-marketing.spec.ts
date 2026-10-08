@@ -60,7 +60,7 @@ test.describe('Apply wizard', () => {
     await page.getByRole('button', { name: /type it myself/i }).click();
     await page.locator('input[name="firstName"]').fill('Arun');
     await page.locator('input[name="fatherName"]').fill('Rajendran');
-    await page.getByRole('button', { name: /^continue$/i }).click();
+    await page.getByRole('button', { name: /continue to your course/i }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
     await expect(page.getByText(/step 1 of 4/i)).toBeVisible();
   });

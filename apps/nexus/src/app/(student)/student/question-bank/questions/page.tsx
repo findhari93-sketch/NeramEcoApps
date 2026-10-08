@@ -711,9 +711,10 @@ export default function QuestionListPage() {
         <PracticeWorkspace
           header={header}
           rail={browser}
-          reader={<PracticeReader variant="pane" {...readerProps} answerHandle={answerHandle} />}
-          tutor={tutor.dock}
+          // Remounted as the tutor opens and closes, so it shows any answer given beside the tutor.
+          reader={<PracticeReader key={tutor.showing ? 'under-tutor' : 'reader'} variant="pane" {...readerProps} answerHandle={answerHandle} />}
         />
+        {tutor.renderFocus(<PracticeReader variant="focus" {...readerProps} headerAction={null} bodyOverlay={null} />, positionLabel)}
         {overlays}
       </>
     );
@@ -731,7 +732,7 @@ export default function QuestionListPage() {
         onClose={closeReader}
         onExited={revealLastRead}
       />
-      {tutor.sheet}
+      {tutor.renderFocus(null, positionLabel)}
       {selection.active && (
         <SelectionBar
           variant="fixed"

@@ -300,7 +300,8 @@ describe('the mock account end to end', () => {
     expect(findings.find((f) => f.category === 'bid_cut')).toMatchObject({ title: expect.stringContaining('NATA coaching in chennai'), proposedChange: { from_micros: 30e6, to_micros: 24e6 } });
     expect(findings.find((f) => f.category === 'bid_raise')).toMatchObject({ title: expect.stringContaining('nata entrance exam'), proposedChange: { from_micros: 25e6, to_micros: 30e6 } });
     expect(by('R19').map((f) => f.title)).toEqual(['Pause the duplicate keyword "NATA coaching in Madurai"']);
-    expect(by('R21').map((f) => f.title)).toEqual([expect.stringContaining('Bangalore')]);
+    // Bengaluru is coached online, so its keyword is in scope.
+    expect(by('R21')).toEqual([]);
     const negatives = findings.filter((f) => f.category === 'add_negative').map((f) => (f.proposedChange as any).text);
     expect(negatives).toEqual(expect.arrayContaining(['neet', 'jobs']));
     // Free NATA material is how app sign-ups happen: never blocked.
@@ -422,12 +423,13 @@ describe('R18 to R21 and the account profile', () => {
     expect(found.find((f) => f.category === 'new_ad')?.proposedChange).toMatchObject({ headlines: ['NATA 2027 Coaching', 'Live Classes', 'Free Demo'], descriptions: ['Prepare for NATA 2027 with us.', 'Online and offline.'] });
   });
 
-  it('R21 flags a keyword naming a place outside the target area', () => {
+  it('R21 flags a keyword naming a place outside the target area, and leaves Bengaluru alone', () => {
     const rows = [
-      day('keyword', END, { entity_key: 'ag1~1', ad_group_id: 'ag1', text: 'nata coaching in Bangalore', status: 'ENABLED' }),
+      day('keyword', END, { entity_key: 'ag1~1', ad_group_id: 'ag1', text: 'nata coaching in Hyderabad', status: 'ENABLED' }),
       day('keyword', END, { entity_key: 'ag1~2', ad_group_id: 'ag1', text: 'nata coaching in chennai', status: 'ENABLED' }),
+      day('keyword', END, { entity_key: 'ag1~3', ad_group_id: 'ag1', text: 'nata coaching in Bangalore', status: 'ENABLED' }),
     ];
-    expect(ruleOutOfAreaKeyword(ctx(rows)).map((f) => f.title)).toEqual(['Keyword "nata coaching in Bangalore" names Bangalore, outside Tamil Nadu']);
+    expect(ruleOutOfAreaKeyword(ctx(rows)).map((f) => f.title)).toEqual(['Keyword "nata coaching in Hyderabad" names Hyderabad, outside Tamil Nadu, and Bengaluru for online coaching']);
   });
 
   it('never blocks a search for free NATA material, or a protected keyword', () => {

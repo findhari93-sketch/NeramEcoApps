@@ -8,6 +8,7 @@
  * closes answers, and from then on the server's answer is the one shown.
  */
 
+import { shownAnswer } from '../formula-answer';
 import { displayAnswer, promptTitle } from './format';
 import type { QBQuestionView, StudentPrompt, StudentSnapshot } from './types';
 
@@ -119,6 +120,8 @@ export function deriveStudentView(
   if (!prompt) return { kind: 'idle', classroomName: snapshot.session.classroom_name };
 
   const mine = snapshot.my_response;
+  // A formula answer shows as the student wrote it ("2√3"), not as the value it is kept as.
+  const mineShown = mine ? shownAnswer(prompt.answer_type, mine.answer, mine.raw_answer) : null;
   const timeUp = isTimeUp(prompt, serverNow);
   let pendingHere = pending && pending.promptId === prompt.id ? pending : null;
   // A refusal from before the teacher reopened the question (or added time) no longer applies.
@@ -135,7 +138,7 @@ export function deriveStudentView(
   if (prompt.state === 'revealed') {
     if (mine) {
       const outcome = prompt.ungraded ? 'poll' : mine.is_correct ? 'correct' : 'incorrect';
-      return { kind: 'result', prompt, answer: mine.answer, outcome };
+      return { kind: 'result', prompt, answer: mineShown ?? mine.answer, outcome };
     }
     return { kind: 'missed', prompt, reason: missedReason(prompt.id, pendingHere, seenOpen), revealed: true };
   }
@@ -152,14 +155,14 @@ export function deriveStudentView(
     if (pendingHere && pendingHere.status !== 'refused') {
       return { kind: 'answering', prompt, selected: pendingHere.answer, save: pendingHere.status };
     }
-    return { kind: 'answering', prompt, selected: mine?.answer ?? null, save: mine ? 'saved' : null };
+    return { kind: 'answering', prompt, selected: mineShown, save: mine ? 'saved' : null };
   }
 
   // Closed, or open with its time up. The server's answer always wins over
   // anything the pad is still sending; a tap made before 0 keeps trying, and the
   // server's two seconds of grace decide whether it counts.
   if (mine && !(pendingHere && pendingHere.status !== 'refused' && prompt.state === 'open')) {
-    return { kind: 'locked', prompt, answer: mine.answer, ...(timeUp ? { timeUp: true } : {}) };
+    return { kind: 'locked', prompt, answer: mineShown ?? mine.answer, ...(timeUp ? { timeUp: true } : {}) };
   }
 
   if (pendingHere && pendingHere.status !== 'refused') {

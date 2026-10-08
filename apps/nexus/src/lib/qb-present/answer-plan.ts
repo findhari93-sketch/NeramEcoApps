@@ -12,7 +12,11 @@
  * PURE: no React, no database. The SQL pad_normalize is the single definition
  * of a normalised answer; normalizeNumeric and normalizeText here copy it so
  * the key sent to pad_ask is already in its final form (a test compares them).
+ * A formula key (2√3, 3/4, π/2) is sent as its value, the way the pad stores a
+ * student's formula answer (formulaValue), and is graded by value.
  */
+
+import { formulaValue } from '@/lib/pad/formula-value';
 
 export interface QBAnswerSource {
   question_format: string | null;
@@ -20,7 +24,7 @@ export interface QBAnswerSource {
   correct_answer: string | null;
 }
 
-export type KeyFrom = 'option_id' | 'nta_id' | 'is_correct' | 'letter' | 'option_text' | 'value';
+export type KeyFrom = 'option_id' | 'nta_id' | 'is_correct' | 'letter' | 'option_text' | 'value' | 'formula';
 
 export type AnswerPlan =
   | { type: 'mcq'; optionCount: number; keys: string[] | null; keyFrom: KeyFrom | null }
@@ -108,12 +112,14 @@ function mcqKeyIndex(options: QBOption[], answer: string): { index: number; from
   return null;
 }
 
-/** "2:3" and "2 / 3" style answers: kept as text, written both tight and spaced. */
+/** "2:3" style answers: kept as text, written both tight and spaced. ("3/4" is a formula, read first.) */
 const RATIO = /^\s*([+-]?\d+(?:\.\d+)?)\s*([:/])\s*(\d+(?:\.\d+)?)\s*$/;
 
 function valuePlan(answer: string | null): AnswerPlan {
   const numeric = normalizeNumeric(answer);
   if (numeric) return { type: 'numeric', keys: [numeric], keyFrom: 'value' };
+  const formula = formulaValue(answer);
+  if (formula) return { type: 'numeric', keys: [formula], keyFrom: 'formula' };
   const ratio = answer ? RATIO.exec(answer) : null;
   if (ratio) {
     const [, a, sep, b] = ratio;

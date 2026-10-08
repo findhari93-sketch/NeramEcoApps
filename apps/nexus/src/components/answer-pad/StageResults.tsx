@@ -22,6 +22,7 @@ import { padFetch } from '@/lib/pad/client/pad-fetch';
 import type { PadHost } from '@/lib/pad/client/pad-host';
 import { nextPollDelay, type RealtimeState } from '@/lib/pad/client/poll-policy';
 import { loadRealtimeClient } from '@/lib/pad/client/realtime-client';
+import { padAnswerCorrect } from '@/lib/pad/formula-answer';
 import { roundName } from '@/lib/pad/round-results';
 import type { StageResults as StageRoundResults, StageView } from '@/lib/pad/stage';
 import LiveAnnouncement from './LiveAnnouncement';
@@ -327,7 +328,6 @@ function StageBody({ stage }: { stage: StageView }) {
   }
 
   const { reveal } = prompt;
-  const correct = new Set(reveal.correct_keys);
   const max = Math.max(1, ...reveal.distribution.map((row) => row.count));
 
   return (
@@ -356,7 +356,7 @@ function StageBody({ stage }: { stage: StageView }) {
         <Stack spacing={{ xs: 0.75, sm: 1.25 }} role="list" aria-label="How the class answered">
           {reveal.distribution.map((row) => {
             const label = displayAnswer(prompt.answer_type, row.value);
-            const isKey = correct.has(row.value);
+            const isKey = padAnswerCorrect(prompt.answer_type, row.value, reveal.correct_keys);
             const color = isKey ? theme.palette.success.main : theme.palette.primary.main;
             return (
               <Stack

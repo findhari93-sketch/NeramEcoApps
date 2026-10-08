@@ -47,6 +47,25 @@ function signupOriginFields(): { anonymous_id?: string; first_touch?: unknown } 
   return out;
 }
 
+/**
+ * Google Ads "Sign-up (1)": a sign-up with a verified phone, the account's one
+ * primary conversion. Fired here because every OTP flow, in the app and on the
+ * marketing site, ends in this modal. The label is set on production only, so
+ * staging never counts. transaction_id is our user id (never the phone), and
+ * stops a retry counting the same student twice. Never throws.
+ */
+export function firePhoneVerifiedConversion(userId: string | undefined) {
+  const adsId = process.env.NEXT_PUBLIC_GOOGLE_ADS_ID;
+  const label = process.env.NEXT_PUBLIC_GOOGLE_ADS_PHONE_VERIFIED_LABEL;
+  const gtag = typeof window !== 'undefined' ? (window as any).gtag : undefined;
+  if (!adsId || !label || typeof gtag !== 'function') return;
+  try {
+    gtag('event', 'conversion', { send_to: `${adsId}/${label}`, transaction_id: userId });
+  } catch {
+    // Tracking never blocks sign-in.
+  }
+}
+
 // ============================================
 // TYPES
 // ============================================
@@ -448,7 +467,8 @@ export default function LoginModal({
       const currentUser = auth.currentUser;
       if (currentUser) {
         const idToken = await currentUser.getIdToken(true); // Force refresh to include phone claim
-        await verifyPhone(idToken, `+91${phoneNumber}`);
+        const verified = await verifyPhone(idToken, `+91${phoneNumber}`);
+        firePhoneVerifiedConversion(verified?.user?.id);
       }
 
       onAuthenticated?.(phoneNumber);

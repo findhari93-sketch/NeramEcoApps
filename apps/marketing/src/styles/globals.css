@@ -57,6 +57,12 @@ html {
 html,
 body {
   max-width: 100vw;
+}
+
+/* Only html clips sideways. When body clips too, body becomes its own
+   scroll container and position: sticky stops working on the whole site
+   (the apply shell header and its phone action bar were scrolling away). */
+html {
   overflow-x: hidden;
 }
 

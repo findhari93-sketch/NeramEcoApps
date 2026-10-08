@@ -1,17 +1,18 @@
 /**
- * The AI Tutor in the student practice reader, on a phone and docked at md.
+ * The AI Tutor's focus screen in the student practice reader, on a phone and at md.
  *
  * The server side is stubbed, so no pack, session or model is needed: the
  * question detail answers with `tutor_available: true` added, and
  * /api/assistant/tutor/turn answers from a tiny scripted tutor below. The
  * attempt route is stubbed too, so nothing is written.
  *
- *  - Learn with tutor opens a full-screen Tutor sheet and puts tutor=1 in the URL
+ *  - Learn with tutor opens a full-screen focus screen and puts tutor=1 in the URL
  *  - Guide me shows step 1 with lettered choices; a wrong choice is greyed as tried
  *  - Give me a hint shows "Hint 1 of 4"
  *  - Back closes the tutor and the question stays open (qid kept, reader showing)
  *  - every control in the sheet is at least 44 by 44, nothing scrolls sideways
- *  - at 1024px the tutor docks as a column beside the reader and the rail steps aside
+ *  - at 1024px the focus screen covers the page (no list, header or Create test)
+ *    with the question beside the conversation; Try it myself lands on its options
  *
  * The test-mode session turns every feature flag on, so the tutor's gate opens.
  *
@@ -165,8 +166,13 @@ async function openPaper(page: Page) {
   await page.getByRole('button', { name: 'Skip' }).click({ timeout: 5_000 }).catch(() => {});
 }
 
+// A stubbed detail fetch can still be in flight when a test ends; let it go quietly.
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: 'ignoreErrors' });
+});
+
 const reader = (page: Page) => page.getByRole('dialog', { name: 'Question reader' });
-const tutorSheet = (page: Page) => page.getByRole('dialog', { name: 'Tutor', exact: true });
+const tutorSheet = (page: Page) => page.getByRole('dialog', { name: 'Learn with tutor', exact: true });
 
 test.describe('AI Tutor on a phone', () => {
   test.use({ viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true });
@@ -210,7 +216,7 @@ test.describe('AI Tutor on a phone', () => {
     await page.screenshot({ path: 'test-results/tutor-mobile-sheet.png' });
 
     // Sized for a thumb, and nothing scrolls sideways.
-    await assertTouchTargetSize(page, '[role="dialog"][aria-label="Tutor"] button:visible, [role="dialog"][aria-label="Tutor"] [role="button"]:visible');
+    await assertTouchTargetSize(page, '[role="dialog"][aria-label="Learn with tutor"] button:visible, [role="dialog"][aria-label="Learn with tutor"] [role="button"]:visible');
     await assertNoHorizontalOverflow(page);
     const sheetPaper = tutorSheet(page);
     expect(await sheetPaper.evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(1);
@@ -240,29 +246,47 @@ test.describe('AI Tutor on a phone', () => {
   });
 });
 
-test.describe('AI Tutor docked at md', () => {
+test.describe('AI Tutor focus screen at md', () => {
   test.use({ viewport: { width: 1024, height: 768 }, hasTouch: false, isMobile: false });
 
-  test('docks as a column beside the reader, and the rail steps aside', async ({ page }) => {
+  test('covers the page, keeps the question answerable beside the tutor, and closes back to it', async ({ page }) => {
     await setUp(page);
     await openPaper(page);
     const door = page.getByRole('button', { name: 'Learn with tutor' });
     await expect(door).toBeVisible({ timeout: 120_000 });
     await door.click();
-    const dock = page.getByRole('region', { name: 'Tutor', exact: true });
-    await expect(dock).toBeVisible();
-    await expect(dock.getByText('How do you want to work on this one?')).toBeVisible();
-    const box = await dock.boundingBox();
-    expect(Math.round(box!.width)).toBeGreaterThanOrEqual(398);
-    expect(Math.round(box!.width)).toBeLessThanOrEqual(402);
-    await expect(page.getByRole('region', { name: 'Questions', exact: true })).toBeHidden();
-    await expect(page.getByRole('region', { name: 'Question', exact: true })).toBeVisible();
+    const focus = tutorSheet(page);
+    await expect(focus).toBeVisible();
+    await expect(page).toHaveURL(/tutor=1/);
+    await expect(focus.getByText('How do you want to work on this one?')).toBeVisible();
+    // Nothing else on the page is reachable: the list, the header and Create test are behind it.
+    await expect(page.getByRole('button', { name: 'Create test' })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Questions', exact: true })).toHaveCount(0);
+    const question = focus.getByRole('region', { name: 'Question', exact: true });
+    await expect(question).toBeVisible();
+    await expect(question.getByRole('button', { name: 'Next question' })).toHaveCount(0);
     await assertNoHorizontalOverflow(page);
-    await page.screenshot({ path: 'test-results/tutor-md-dock.png' });
+    await page.screenshot({ path: 'test-results/tutor-md-focus.png' });
 
-    await dock.getByRole('button', { name: 'Close tutor' }).click();
-    await expect(dock).toBeHidden();
+    // Try it myself hands the student to the question's options, without leaving.
+    await focus.getByRole('button', { name: 'Try it myself' }).click();
+    await expect(focus).toBeVisible();
+    // An option on a choice question, the answer box on a typed one.
+    await expect(question.locator('[role="radio"], textarea, input:not([type="hidden"])').first()).toBeFocused();
+
+    await focus.getByRole('button', { name: 'Back to the question' }).click();
+    await expect(focus).toBeHidden();
     await expect(page.getByRole('region', { name: 'Questions', exact: true })).toBeVisible();
+    expect(page.url()).not.toContain('tutor=1');
+  });
+
+  test('Escape closes it too', async ({ page }) => {
+    await setUp(page);
+    await openPaper(page);
+    await page.getByRole('button', { name: 'Learn with tutor' }).click({ timeout: 120_000 });
+    await expect(tutorSheet(page)).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(tutorSheet(page)).toBeHidden();
     expect(page.url()).not.toContain('tutor=1');
   });
 });

@@ -21,7 +21,7 @@ export interface TutorError {
 }
 
 /** 404 from the turn route: the tutor is off, or there is no pack for this question. */
-export const NOT_READY = 'The tutor is not ready for this question yet.';
+export { NOT_READY } from '@/lib/assistant/tutor/copy';
 
 export interface TutorSession {
   questionId: string | null;

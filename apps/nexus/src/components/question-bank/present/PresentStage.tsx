@@ -21,7 +21,8 @@ import ZoomInRoundedIcon from '@mui/icons-material/ZoomInRounded';
 import { qbSectionLabel } from '@neram/database';
 import MathText from '@/components/common/MathText';
 import MathAnswer from '@/components/common/MathAnswer';
-import { promptTitle } from '@/lib/pad/client/format';
+import { displayAnswer, displayKeys, promptTitle } from '@/lib/pad/client/format';
+import { padAnswerCorrect } from '@/lib/pad/formula-answer';
 import type { DeckItem } from '@/lib/qb-present/deck';
 import TimerRing from './TimerRing';
 import { correctIndexes, optionCounts, optionLetter, type StageView } from './present-model';
@@ -63,8 +64,10 @@ export default function PresentStage({ title, item, position, view, secondsLeft,
   });
 
   const longOptions = item.options.some((o) => (o.text?.length ?? 0) > LONG_OPTION);
+  // A typed answer's key and spread read as the pad stores them: a formula's value shows as "≈ 3.4641".
+  const typedAnswerType = item.plan.type === 'text' ? 'text' : 'numeric';
   const answerValue =
-    view.phase === 'revealed' && item.plan.type !== 'mcq' && view.revealedKeys?.length ? view.revealedKeys.join(' or ') : null;
+    view.phase === 'revealed' && item.plan.type !== 'mcq' && view.revealedKeys?.length ? displayKeys(typedAnswerType, view.revealedKeys) : null;
 
   return (
     <Box
@@ -207,7 +210,7 @@ export default function PresentStage({ title, item, position, view, secondsLeft,
           )}
 
           {spread === null && showDistribution && view.distribution && item.plan.type !== 'mcq' && view.distribution.length > 0 && (
-            <ValueSpread groups={view.distribution} keys={view.revealedKeys} />
+            <ValueSpread groups={view.distribution} keys={view.revealedKeys} answerType={typedAnswerType} />
           )}
         </Box>
 
@@ -401,17 +404,17 @@ function OptionCard({
   );
 }
 
-function ValueSpread({ groups, keys }: { groups: Array<{ value: string; count: number }>; keys: string[] | null }) {
+function ValueSpread({ groups, keys, answerType }: { groups: Array<{ value: string; count: number }>; keys: string[] | null; answerType: 'numeric' | 'text' }) {
   const top = groups.slice(0, 5);
   const total = groups.reduce((sum, g) => sum + g.count, 0);
   return (
     <Stack spacing="0.3em" aria-label="How the class answered" sx={{ fontSize: '0.6em' }}>
       {top.map((group) => {
-        const right = keys?.includes(group.value);
+        const right = padAnswerCorrect(answerType, group.value, keys);
         const percent = total ? Math.round((group.count / total) * 100) : 0;
         return (
           <Stack key={group.value} direction="row" spacing={1.5} alignItems="center">
-            <Box sx={{ minWidth: '5em', fontWeight: 700, color: right ? 'success.dark' : 'text.primary' }}>{group.value}</Box>
+            <Box sx={{ minWidth: '5em', fontWeight: 700, color: right ? 'success.dark' : 'text.primary' }}>{displayAnswer(answerType, group.value)}</Box>
             <Box sx={{ flex: 1, height: 10, borderRadius: 5, bgcolor: 'action.hover', overflow: 'hidden' }}>
               <Box sx={{ width: `${percent}%`, height: '100%', bgcolor: right ? 'success.main' : 'primary.main' }} />
             </Box>

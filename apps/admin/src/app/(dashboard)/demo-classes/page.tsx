@@ -1,404 +1,264 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import {
-  Box,
-  Typography,
-  Button,
-  Chip,
-  Card,
-  CardContent,
-  Grid,
-  Tabs,
-  Tab,
-  CircularProgress,
-  Alert,
-  TextField,
-  IconButton,
-} from '@neram/ui';
-import AddIcon from '@mui/icons-material/Add';
-import EventIcon from '@mui/icons-material/Event';
-import PeopleIcon from '@mui/icons-material/People';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import SaveIcon from '@mui/icons-material/Save';
-import DataTable from '@/components/DataTable';
-import type { DemoClassSlot, DemoSlotStatus } from '@neram/database';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Alert, Box, Button, Paper, Tab, Tabs, Typography } from '@neram/ui';
+import VideocamIcon from '@mui/icons-material/Videocam';
+import SettingsIcon from '@mui/icons-material/Settings';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import InboxIcon from '@mui/icons-material/Inbox';
+import { OpsPageHeader, OpsSkeleton, EmptyState } from '@/components/ops/OpsUi';
+import RequestList from '@/components/demo-requests/RequestList';
+import RequestPanel from '@/components/demo-requests/RequestPanel';
+import DemoSettingsDialog from '@/components/demo-requests/DemoSettingsDialog';
+import WhatsAppHealthDialog from '@/components/demo-requests/WhatsAppHealthDialog';
+import { DESK_TABS, sortForTab, tabOf, type DeskDetail, type DeskList, type DeskTab } from '@/components/demo-requests/types';
 
-interface TabPanelProps {
-  children?: React.ReactNode;
-  index: number;
-  value: number;
+const EMPTY: Record<DeskTab, { title: string; body: string }> = {
+  new: { title: 'No new requests', body: 'New demo requests from the website land here. Call them within 2 hours.' },
+  followup: { title: 'Nobody waiting on a call back', body: 'Requests you have called but not confirmed show here.' },
+  upcoming: { title: 'No confirmed demos', body: 'Confirm a request to create its Teams meeting.' },
+  done: { title: 'No finished demos yet', body: 'Mark attendance after each demo to send the thank-you.' },
+  closed: { title: 'Nothing closed', body: 'Not interested and cancelled requests are kept here.' },
+};
+
+function Kpi({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
+  return (
+    <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+      <Typography variant="caption" color="text.secondary" fontWeight={600}>
+        {label}
+      </Typography>
+      <Typography variant="h5" component="p" fontWeight={700}>
+        {value}
+      </Typography>
+      {hint && (
+        <Typography variant="caption" color="text.secondary">
+          {hint}
+        </Typography>
+      )}
+    </Paper>
+  );
 }
 
-function TabPanel(props: TabPanelProps) {
-  const { children, value, index, ...other } = props;
+function DemoDesk() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const selectedId = params.get('id');
+
+  const [list, setList] = useState<DeskList | null>(null);
+  const [listError, setListError] = useState<string | null>(null);
+  const [tab, setTab] = useState<DeskTab>('new');
+  const [detail, setDetail] = useState<DeskDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [healthOpen, setHealthOpen] = useState(false);
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+
+  const loadList = useCallback(async () => {
+    try {
+      const res = await fetch('/api/demo-requests');
+      const d = await res.json();
+      if (!res.ok) throw new Error(d.error || 'Failed');
+      setList(d);
+      setListError(null);
+    } catch (e) {
+      setListError(e instanceof Error ? e.message : 'Could not load demo requests');
+    }
+  }, []);
+
+  useEffect(() => {
+    loadList();
+  }, [loadList]);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setDetail(null);
+      return;
+    }
+    let cancelled = false;
+    setDetailLoading(true);
+    fetch(`/api/demo-requests/${selectedId}`)
+      .then(async (r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled) setDetail(d);
+      })
+      .catch(() => {
+        if (!cancelled) setDetail(null);
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId]);
+
+  // Opening a request from a link (bell, Telegram) jumps to its tab once.
+  useEffect(() => {
+    if (detail && detail.request.id === selectedId) setTab(tabOf(detail.request));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [detail?.request.id]);
+
+  const select = (id: string | null) => {
+    router.replace(id ? `/demo-classes?id=${encodeURIComponent(id)}` : '/demo-classes', { scroll: false });
+  };
+
+  const onAction = async (body: Record<string, unknown>): Promise<string | null> => {
+    if (!selectedId) return 'No request selected';
+    try {
+      const res = await fetch(`/api/demo-requests/${selectedId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const d = await res.json();
+      if (!res.ok) return d.error || 'Something went wrong';
+      setDetail(d);
+      setList((prev) =>
+        prev ? { ...prev, requests: prev.requests.map((r) => (r.id === d.request.id ? d.request : r)) } : prev,
+      );
+      loadList();
+      return null;
+    } catch {
+      return 'Network error. Check your connection and try again.';
+    }
+  };
+
+  const counts = useMemo(() => {
+    const c: Record<DeskTab, number> = { new: 0, followup: 0, upcoming: 0, done: 0, closed: 0 };
+    list?.requests.forEach((r) => c[tabOf(r)]++);
+    return c;
+  }, [list]);
+
+  const rows = useMemo(
+    () => (list ? sortForTab(tab, list.requests.filter((r) => tabOf(r) === tab)) : []),
+    [list, tab],
+  );
+
+  const k = list?.kpis;
+
   return (
-    <div hidden={value !== index} {...other}>
-      {value === index && <Box sx={{ pt: 3 }}>{children}</Box>}
-    </div>
+    <Box sx={{ maxWidth: 1600, mx: 'auto' }}>
+      <OpsPageHeader
+        icon={VideocamIcon}
+        title="Demo classes"
+        subtitle="Students pick a day and time on the website and sign in at the end. Call them, confirm a time, and the Teams meeting, Gmail invite and WhatsApp reminders go out by themselves."
+        actions={
+          <>
+            <Button variant="outlined" startIcon={<WhatsAppIcon />} onClick={() => setHealthOpen(true)} sx={{ minHeight: 44 }}>
+              WhatsApp status
+            </Button>
+            <Button variant="outlined" startIcon={<SettingsIcon />} onClick={() => setSettingsOpen(true)} sx={{ minHeight: 44 }}>
+              Demo settings
+            </Button>
+            <Button startIcon={<RefreshIcon />} onClick={loadList} sx={{ minHeight: 44 }}>
+              Refresh
+            </Button>
+          </>
+        }
+      />
+
+      {list && !list.settings.hosts.length && (
+        <Alert
+          severity="warning"
+          sx={{ mb: 2 }}
+          action={
+            <Button color="inherit" onClick={() => setSettingsOpen(true)}>
+              Set up team
+            </Button>
+          }
+        >
+          Add the demo team (Hari, Tamil Selvan, Shanthi) in Demo settings, so Confirm can create the Teams meeting and send reminders.
+        </Alert>
+      )}
+      {listError && (
+        <Alert severity="error" sx={{ mb: 2 }} action={<Button color="inherit" onClick={loadList}>Retry</Button>}>
+          {listError}
+        </Alert>
+      )}
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(5, 1fr)' }, gap: 1.5, mb: 2 }}>
+        {k ? (
+          <>
+            <Kpi label="New, needs a call" value={k.newRequests} />
+            <Kpi label="Demos today" value={k.today} />
+            <Kpi label="Confirmed, next 7 days" value={k.confirmedNext7} />
+            <Kpi label="Attendance, 30 days" value={k.attendanceRate30 === null ? 'No data' : `${k.attendanceRate30}%`} />
+            <Kpi label="Enrolled after demo" value={k.enrolled30} hint={`of ${k.requests30} who asked in 30 days`} />
+          </>
+        ) : (
+          Array.from({ length: 5 }).map((_, i) => <OpsSkeleton key={i} variant="rounded" height={86} />)
+        )}
+      </Box>
+
+      <Tabs
+        value={tab}
+        onChange={(_, v) => setTab(v)}
+        variant="scrollable"
+        allowScrollButtonsMobile
+        aria-label="Demo request stages"
+        sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
+      >
+        {DESK_TABS.map((t) => (
+          <Tab key={t.id} value={t.id} label={`${t.label} (${counts[t.id]})`} title={t.hint} sx={{ minHeight: 48 }} />
+        ))}
+      </Tabs>
+
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', lg: selectedId ? 'minmax(0, 7fr) minmax(0, 5fr)' : '1fr' },
+          gap: 2,
+          alignItems: 'start',
+        }}
+      >
+        <Box sx={{ minWidth: 0 }}>
+          {!list ? (
+            <OpsSkeleton variant="rounded" height={320} />
+          ) : rows.length === 0 ? (
+            <EmptyState icon={InboxIcon} title={EMPTY[tab].title} body={EMPTY[tab].body} />
+          ) : (
+            <RequestList
+              rows={rows}
+              tab={tab}
+              selectedId={selectedId}
+              onSelect={(id) => select(id)}
+              schedule={list.settings.schedule}
+              now={now}
+            />
+          )}
+        </Box>
+        {selectedId && list && (
+          <Box sx={{ minWidth: 0, position: { lg: 'sticky' }, top: { lg: 80 } }}>
+            <RequestPanel
+              key={selectedId}
+              detail={detail}
+              loading={detailLoading}
+              settings={list.settings}
+              now={now}
+              onAction={onAction}
+              onClose={() => select(null)}
+            />
+          </Box>
+        )}
+      </Box>
+
+      <DemoSettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} onSaved={loadList} />
+      <WhatsAppHealthDialog open={healthOpen} onClose={() => setHealthOpen(false)} />
+    </Box>
   );
 }
 
 export default function DemoClassesPage() {
-  const router = useRouter();
-  const [tabValue, setTabValue] = useState(0);
-  const [slots, setSlots] = useState<DemoClassSlot[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [stats, setStats] = useState({
-    totalSlots: 0,
-    upcomingSlots: 0,
-    totalRegistrations: 0,
-    pendingApprovals: 0,
-  });
-  const [youtubeUrl, setYoutubeUrl] = useState('');
-  const [savingSettings, setSavingSettings] = useState(false);
-
-  useEffect(() => {
-    fetchDemoSlots();
-  }, [tabValue]);
-
-  useEffect(() => {
-    fetchSettings();
-  }, []);
-
-  const fetchSettings = async () => {
-    try {
-      const res = await fetch('/api/settings/demo-class');
-      const data = await res.json();
-      setYoutubeUrl(data.settings?.youtube_video_url || '');
-    } catch {
-      // ignore
-    }
-  };
-
-  const saveYoutubeUrl = async () => {
-    try {
-      setSavingSettings(true);
-      await fetch('/api/settings/demo-class', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ youtube_video_url: youtubeUrl }),
-      });
-    } catch {
-      // ignore
-    } finally {
-      setSavingSettings(false);
-    }
-  };
-
-  const fetchDemoSlots = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      const statusFilter = tabValue === 0
-        ? 'scheduled,confirmed'
-        : tabValue === 1
-        ? 'conducted'
-        : 'cancelled';
-
-      const response = await fetch(`/api/demo-classes?status=${statusFilter}`);
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to fetch demo classes');
-      }
-
-      setSlots(data.slots || []);
-      if (data.stats) {
-        setStats(data.stats);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getStatusColor = (status: DemoSlotStatus) => {
-    switch (status) {
-      case 'scheduled':
-        return 'info';
-      case 'confirmed':
-        return 'success';
-      case 'conducted':
-        return 'default';
-      case 'cancelled':
-        return 'error';
-      default:
-        return 'default';
-    }
-  };
-
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-IN', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric',
-    });
-  };
-
-  const formatTime = (timeStr: string) => {
-    const [hours, minutes] = timeStr.split(':').map(Number);
-    const period = hours >= 12 ? 'PM' : 'AM';
-    const displayHours = hours % 12 || 12;
-    return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
-  };
-
-  const columns = [
-    {
-      field: 'slot_date',
-      headerName: 'Date',
-      width: 150,
-      renderCell: (params: { value: string }) => formatDate(params.value),
-    },
-    {
-      field: 'slot_time',
-      headerName: 'Time',
-      width: 100,
-      renderCell: (params: { value: string }) => formatTime(params.value),
-    },
-    { field: 'title', headerName: 'Title', width: 180 },
-    {
-      field: 'current_registrations',
-      headerName: 'Registrations',
-      width: 130,
-      renderCell: (params: { row: DemoClassSlot }) => (
-        <Typography variant="body2">
-          {params.row.current_registrations} / {params.row.max_registrations}
-        </Typography>
-      ),
-    },
-    {
-      field: 'status',
-      headerName: 'Status',
-      width: 120,
-      renderCell: (params: { value: DemoSlotStatus }) => (
-        <Chip
-          label={params.value}
-          color={getStatusColor(params.value)}
-          size="small"
-        />
-      ),
-    },
-    {
-      field: 'demo_mode',
-      headerName: 'Mode',
-      width: 100,
-      renderCell: (params: { value: string }) => (
-        <Chip
-          label={params.value}
-          variant="outlined"
-          size="small"
-        />
-      ),
-    },
-    {
-      field: 'actions',
-      headerName: 'Actions',
-      width: 120,
-      renderCell: (params: { row: DemoClassSlot }) => (
-        <Button
-          size="small"
-          variant="outlined"
-          onClick={() => router.push(`/demo-classes/${params.row.id}`)}
-        >
-          View
-        </Button>
-      ),
-    },
-  ];
-
   return (
-    <Box>
-      {/* Header */}
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Box>
-          <Typography variant="h4" component="h1" gutterBottom fontWeight="bold">
-            Demo Classes
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Manage demo class slots and registrations
-          </Typography>
-        </Box>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => router.push('/demo-classes/create')}
-        >
-          Create Slot
-        </Button>
-      </Box>
-
-      {/* Stats Cards */}
-      <Grid container spacing={2} sx={{ mb: 2.5 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <EventIcon color="primary" sx={{ fontSize: 40 }} />
-              <Box>
-                <Typography variant="h4" fontWeight="bold">
-                  {stats.upcomingSlots}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Upcoming Slots
-                </Typography>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <PeopleIcon color="info" sx={{ fontSize: 40 }} />
-              <Box>
-                <Typography variant="h4" fontWeight="bold">
-                  {stats.totalRegistrations}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Total Registrations
-                </Typography>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <CheckCircleIcon color="warning" sx={{ fontSize: 40 }} />
-              <Box>
-                <Typography variant="h4" fontWeight="bold">
-                  {stats.pendingApprovals}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Pending Approvals
-                </Typography>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card>
-            <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <EventIcon color="success" sx={{ fontSize: 40 }} />
-              <Box>
-                <Typography variant="h4" fontWeight="bold">
-                  {stats.totalSlots}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Total Slots
-                </Typography>
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-      </Grid>
-
-      {/* YouTube Video Setting */}
-      <Card sx={{ mb: 2.5 }}>
-        <CardContent>
-          <Typography variant="subtitle2" gutterBottom>
-            Sample YouTube Video (shown on demo class booking page)
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-            <TextField
-              size="small"
-              fullWidth
-              placeholder="https://www.youtube.com/watch?v=..."
-              value={youtubeUrl}
-              onChange={(e) => setYoutubeUrl(e.target.value)}
-            />
-            <IconButton
-              color="primary"
-              onClick={saveYoutubeUrl}
-              disabled={savingSettings}
-            >
-              {savingSettings ? <CircularProgress size={20} /> : <SaveIcon />}
-            </IconButton>
-          </Box>
-        </CardContent>
-      </Card>
-
-      {/* Tabs */}
-      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Tabs value={tabValue} onChange={(_, v) => setTabValue(v)}>
-          <Tab label="Upcoming" />
-          <Tab label="Completed" />
-          <Tab label="Cancelled" />
-        </Tabs>
-      </Box>
-
-      {/* Tab Panels */}
-      {error && (
-        <Alert severity="error" sx={{ mt: 2 }}>
-          {error}
-        </Alert>
-      )}
-
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-          <CircularProgress />
-        </Box>
-      ) : (
-        <>
-          <TabPanel value={tabValue} index={0}>
-            <DataTable
-              rows={slots}
-              columns={columns}
-              onRowClick={(row) => router.push(`/demo-classes/${row.id}`)}
-            />
-            {slots.length === 0 && (
-              <Box sx={{ textAlign: 'center', py: 8 }}>
-                <Typography variant="body1" color="text.secondary" gutterBottom>
-                  No upcoming demo classes
-                </Typography>
-                <Button
-                  variant="contained"
-                  startIcon={<AddIcon />}
-                  onClick={() => router.push('/demo-classes/create')}
-                  sx={{ mt: 2 }}
-                >
-                  Create Your First Slot
-                </Button>
-              </Box>
-            )}
-          </TabPanel>
-
-          <TabPanel value={tabValue} index={1}>
-            <DataTable
-              rows={slots}
-              columns={columns}
-              onRowClick={(row) => router.push(`/demo-classes/${row.id}`)}
-            />
-            {slots.length === 0 && (
-              <Box sx={{ textAlign: 'center', py: 8 }}>
-                <Typography variant="body1" color="text.secondary">
-                  No completed demo classes yet
-                </Typography>
-              </Box>
-            )}
-          </TabPanel>
-
-          <TabPanel value={tabValue} index={2}>
-            <DataTable
-              rows={slots}
-              columns={columns}
-              onRowClick={(row) => router.push(`/demo-classes/${row.id}`)}
-            />
-            {slots.length === 0 && (
-              <Box sx={{ textAlign: 'center', py: 8 }}>
-                <Typography variant="body1" color="text.secondary">
-                  No cancelled demo classes
-                </Typography>
-              </Box>
-            )}
-          </TabPanel>
-        </>
-      )}
-    </Box>
+    <Suspense fallback={<OpsSkeleton variant="rounded" height={400} />}>
+      <DemoDesk />
+    </Suspense>
   );
 }

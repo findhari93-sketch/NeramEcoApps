@@ -532,12 +532,16 @@ export class PadTestDb {
     return this.fn(`select pad_reopen($1::uuid, $2::uuid) as r`, [actor, promptId]);
   }
 
-  setKey(actor: string | null, promptId: string, keys: string[] | null, ungraded = false): Promise<Json> {
-    return this.fn(`select pad_set_key($1::uuid, $2::uuid, $3::text[], $4::boolean) as r`, [
+  /** keyValues: each key's value as the key route works it out for a formula (formulaValue), null where not one. */
+  setKey(actor: string | null, promptId: string, keys: string[] | null, ungraded = false, keyValues: Array<string | null> | null = null): Promise<Json> {
+    const textArray = (items: Array<string | null>) =>
+      `{${items.map((k) => (k === null ? 'NULL' : `"${k.replace(/(["\\])/g, '\\$1')}"`)).join(',')}}`;
+    return this.fn(`select pad_set_key($1::uuid, $2::uuid, $3::text[], $4::boolean, $5::text[]) as r`, [
       actor,
       promptId,
-      keys === null ? null : `{${keys.map((k) => `"${k.replace(/(["\\])/g, '\\$1')}"`).join(',')}}`,
+      keys === null ? null : textArray(keys),
       ungraded,
+      keyValues === null ? null : textArray(keyValues),
     ]);
   }
 
@@ -549,8 +553,9 @@ export class PadTestDb {
     return this.fn(`select pad_set_label($1::uuid, $2::uuid, $3::text) as r`, [actor, promptId, label]);
   }
 
-  submit(actor: string | null, promptId: string, raw: string | null): Promise<Json> {
-    return this.fn(`select pad_submit($1::uuid, $2::uuid, $3::text) as r`, [actor, promptId, raw]);
+  /** value: a formula answer's value, as the submit route works it out (formulaValue). */
+  submit(actor: string | null, promptId: string, raw: string | null, value: string | null = null): Promise<Json> {
+    return this.fn(`select pad_submit($1::uuid, $2::uuid, $3::text, $4::text) as r`, [actor, promptId, raw, value]);
   }
 
   joinByCode(actor: string | null, code: string, ipHash: string | null = null): Promise<Json> {

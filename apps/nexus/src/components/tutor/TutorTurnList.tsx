@@ -1,7 +1,10 @@
 'use client';
 
-import { useEffect, useRef, type ReactNode } from 'react';
-import { Box, Paper, Skeleton, alpha, useMediaQuery, useTheme } from '@neram/ui';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Box, IconButton, Paper, Skeleton, alpha, useMediaQuery, useTheme } from '@neram/ui';
+import ArrowDownwardRoundedIcon from '@mui/icons-material/ArrowDownwardRounded';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
+import { focusRing } from '@/components/assistant/focusRing';
 import type { TutorBlock } from '@/lib/assistant/tutor/types';
 import MathText from '@/components/common/MathText';
 import { SR_ONLY } from '@/components/question-bank/practice/QuestionRow';
@@ -25,18 +28,55 @@ interface TutorTurnListProps {
   children?: ReactNode;
 }
 
-/** The three-line bubble while a turn is in flight. Still under reduced motion. */
-export function PendingBubble() {
+/** The reading column: ChatGPT-like, about 70 characters a line at 16px. */
+export const COLUMN_MAX = 720;
+
+/** The tutor's mark at the start of each of its turns. */
+export function TutorAvatar() {
   const theme = useTheme();
+  return (
+    <Box
+      aria-hidden
+      sx={{
+        width: 28,
+        height: 28,
+        borderRadius: '50%',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        bgcolor: alpha(theme.palette.primary.main, 0.12),
+        color: 'primary.main',
+        mt: '2px',
+      }}
+    >
+      <SchoolOutlinedIcon sx={{ fontSize: 18 }} />
+    </Box>
+  );
+}
+
+/** A tutor turn's frame: the avatar, then the blocks. */
+export function TutorRow({ children }: { children: ReactNode }) {
+  return (
+    <Box sx={{ display: 'grid', gridTemplateColumns: '28px minmax(0, 1fr)', columnGap: 1.5, alignItems: 'start', minWidth: 0 }}>
+      <TutorAvatar />
+      <Box sx={{ display: 'grid', gap: 1.25, minWidth: 0 }}>{children}</Box>
+    </Box>
+  );
+}
+
+/** Three lines while a turn is in flight. Still under reduced motion. */
+export function PendingBubble() {
   const reduce = useMediaQuery('(prefers-reduced-motion: reduce)');
   const animation = reduce ? false : 'pulse';
   return (
-    <Box role="status" aria-label="The tutor is thinking" sx={{ display: 'flex' }}>
-      <Paper elevation={0} sx={{ p: 1.5, borderRadius: 3, width: '75%', bgcolor: alpha(theme.palette.primary.main, 0.06) }}>
-        <Skeleton animation={animation} width="92%" />
-        <Skeleton animation={animation} width="78%" />
-        <Skeleton animation={animation} width="45%" />
-      </Paper>
+    <Box role="status" aria-label="The tutor is thinking">
+      <TutorRow>
+        <Box sx={{ width: '80%' }}>
+          <Skeleton animation={animation} width="92%" />
+          <Skeleton animation={animation} width="78%" />
+          <Skeleton animation={animation} width="45%" />
+        </Box>
+      </TutorRow>
     </Box>
   );
 }
@@ -56,6 +96,16 @@ export default function TutorTurnList({ session, onChoose, onSave, onOpenSimilar
   const lastTurnRef = useRef<HTMLDivElement | null>(null);
   const { turns, pending } = session;
   const lastTurn = turns[turns.length - 1];
+  // Scrolled up to reread: offer a way back down.
+  const [away, setAway] = useState(false);
+  const onScroll = useCallback(() => {
+    const box = scrollRef.current;
+    if (box) setAway(box.scrollHeight - box.scrollTop - box.clientHeight > 240);
+  }, []);
+  const toLatest = () => {
+    const box = scrollRef.current;
+    box?.scrollTo?.({ top: box.scrollHeight, behavior: reduce ? 'auto' : 'smooth' });
+  };
 
   useEffect(() => {
     const box = scrollRef.current;
@@ -72,11 +122,8 @@ export default function TutorTurnList({ session, onChoose, onSave, onOpenSimilar
   const renderBlock = (b: TutorBlock) => {
     switch (b.kind) {
       case 'tutor_text':
-        return (
-          <Paper elevation={0} sx={{ p: 1.5, borderRadius: 3, bgcolor: alpha(theme.palette.primary.main, 0.06), maxWidth: '100%' }}>
-            <TutorText md={b.md} />
-          </Paper>
-        );
+        // No bubble: the teaching reads as the page, as in ChatGPT and Claude.
+        return <TutorText md={b.md} />;
       case 'check_question':
         return (
           <CheckQuestion
@@ -119,7 +166,16 @@ export default function TutorTurnList({ session, onChoose, onSave, onOpenSimilar
         <Box key={t.id} ref={isLast ? lastTurnRef : undefined} sx={{ display: 'flex', justifyContent: 'flex-end' }}>
           <Paper
             elevation={0}
-            sx={{ px: 1.5, py: 1, borderRadius: 3, maxWidth: '85%', minWidth: 0, bgcolor: 'primary.main', color: 'primary.contrastText' }}
+            sx={{
+              px: 2,
+              py: 1.25,
+              borderRadius: '20px 20px 6px 20px',
+              maxWidth: '85%',
+              minWidth: 0,
+              // Soft, so the student's own line does not outshout the teaching.
+              bgcolor: alpha(theme.palette.primary.main, 0.1),
+              color: 'text.primary',
+            }}
           >
             <Box component="span" sx={SR_ONLY}>
               You:
@@ -132,41 +188,68 @@ export default function TutorTurnList({ session, onChoose, onSave, onOpenSimilar
     const blocks = t.envelope?.blocks || [];
     if (!blocks.length) return null;
     return (
-      <Box key={t.id} ref={isLast ? lastTurnRef : undefined} sx={{ display: 'grid', gap: 1.25, minWidth: 0 }}>
-        {blocks.map((b) => (
-          <Box key={b.id} sx={{ minWidth: 0 }}>
-            {renderBlock(b)}
-          </Box>
-        ))}
+      <Box key={t.id} ref={isLast ? lastTurnRef : undefined} sx={{ minWidth: 0 }}>
+        <TutorRow>
+          {blocks.map((b) => (
+            <Box key={b.id} sx={{ minWidth: 0 }}>
+              {renderBlock(b)}
+            </Box>
+          ))}
+        </TutorRow>
       </Box>
     );
   };
 
   return (
-    <Box
-      ref={scrollRef}
-      role="log"
-      aria-live="polite"
-      aria-relevant="additions"
-      aria-label="Tutor conversation"
-      data-tutor-log
-      sx={{
-        position: 'relative',
-        flex: 1,
-        minHeight: 0,
-        overflowY: 'auto',
-        overflowX: 'hidden',
-        overscrollBehavior: 'contain',
-        px: 2,
-        py: 1.5,
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 1.75,
-      }}
-    >
-      {children}
-      {turns.map((t, i) => renderTurn(t, i === turns.length - 1))}
-      {pending && turns.length > 0 && <PendingBubble />}
+    <Box sx={{ position: 'relative', flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <Box
+        ref={scrollRef}
+        onScroll={onScroll}
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions"
+        aria-label="Tutor conversation"
+        data-tutor-log
+        sx={{
+          position: 'relative',
+          flex: 1,
+          minHeight: 0,
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          overscrollBehavior: 'contain',
+          px: 2,
+          py: { xs: 2, md: 3 },
+        }}
+      >
+        {/* The scrollbar stays at the edge; the words keep to a reading column. */}
+        <Box sx={{ maxWidth: COLUMN_MAX, mx: 'auto', display: 'flex', flexDirection: 'column', gap: { xs: 2.5, md: 3 } }}>
+          {children}
+          {turns.map((t, i) => renderTurn(t, i === turns.length - 1))}
+          {pending && turns.length > 0 && <PendingBubble />}
+        </Box>
+      </Box>
+      {away && (
+        <IconButton
+          onClick={toLatest}
+          aria-label="Jump to the latest reply"
+          sx={{
+            position: 'absolute',
+            left: '50%',
+            bottom: 12,
+            transform: 'translateX(-50%)',
+            width: 44,
+            height: 44,
+            bgcolor: 'background.paper',
+            border: '1px solid',
+            borderColor: 'divider',
+            boxShadow: 2,
+            '@media (hover: hover)': { '&:hover': { bgcolor: 'background.paper', borderColor: 'primary.main' } },
+            '&.Mui-focusVisible': focusRing(theme.palette.primary.dark),
+          }}
+        >
+          <ArrowDownwardRoundedIcon />
+        </IconButton>
+      )}
     </Box>
   );
 }

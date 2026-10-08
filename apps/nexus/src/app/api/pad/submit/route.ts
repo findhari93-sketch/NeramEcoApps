@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { assertPadStudent, resolvePadCaller } from '@/lib/pad/caller';
 import { parseSubmitRequest } from '@/lib/pad/prompt-requests';
+import { formulaValue } from '@/lib/pad/formula-value';
 import { PadRefusal, callPad, padErrorResponse, padJson } from '@/lib/pad/rpc';
 import { hintPrompt, padDb } from '@/lib/pad/sessions';
 
@@ -21,6 +22,9 @@ const TEACHER_HINT_THROTTLE_MS = 1_000;
  * A different answer arriving after CLOSE is refused with 409 PROMPT_NOT_OPEN,
  * and the refusal carries `answer`: the answer that stands (absent when they
  * never answered). The pad shows that answer as locked, not as an error.
+ *
+ * A numerical answer may be a formula ("2√3", "3/4"). Its value goes along as
+ * p_value, and pad_submit stores and grades that while keeping what was typed.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -33,7 +37,7 @@ export async function POST(request: NextRequest) {
     const result = await callPad<{ status: 'accepted' | 'changed' | 'unchanged'; answer: string; raw_answer: string; responded_at: string }>(
       padDb(),
       'pad_submit',
-      { p_actor: caller.user.id, p_prompt: parsed.value.promptId, p_raw: parsed.value.answer },
+      { p_actor: caller.user.id, p_prompt: parsed.value.promptId, p_raw: parsed.value.answer, p_value: formulaValue(parsed.value.answer) },
     );
     if (result.status !== 'unchanged') {
       await hintPrompt(parsed.value.promptId, 'teacher', { throttleMs: TEACHER_HINT_THROTTLE_MS });

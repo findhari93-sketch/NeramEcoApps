@@ -4,6 +4,7 @@
  * than a zero percent before anything has been graded.
  */
 
+import { isFormulaValue, shortFormulaValue } from '../formula-answer';
 import type { AnswerType, AnyReason, SkipReason, StudentScore } from './types';
 
 /** "I can't answer": the reasons a student picks from, as the pad and the console word them. */
@@ -48,6 +49,8 @@ export function displayAnswer(answerType: AnswerType, value: string): string {
     if (value === 'yes') return 'Yes';
     if (value === 'no') return 'No';
   }
+  // A formula's stored value (2√3 is kept as 3.46410161514) reads short.
+  if (answerType === 'numeric' && isFormulaValue(value)) return shortFormulaValue(value);
   return value;
 }
 

@@ -73,7 +73,7 @@ describe('config', () => {
     expect(s.profile.competitors).toEqual(['iarch']);
     expect(s.profile.protected_keywords).toEqual(['nata coaching']);
     expect(s.profile.landing_pages.coaching).toBe('https://neramclasses.com/nata-coaching/tamil-nadu');
-    expect(s.profile.target_area).toBe('Tamil Nadu');
+    expect(s.profile.target_area).toBe('Tamil Nadu, and Bengaluru for online coaching');
     expect(s.targets.proxy_history_since).toBeNull(); // an explicit null turns last season off
     expect(resolveSettings({}).targets.proxy_history_since).toBe('2026-01-01');
     expect(s.guardrails.max_cpc_ceiling_inr).toBe(200);

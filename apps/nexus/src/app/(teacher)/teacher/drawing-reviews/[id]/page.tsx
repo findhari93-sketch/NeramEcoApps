@@ -33,12 +33,13 @@ import ReviewHeader from '@/components/drawings/review/ReviewHeader';
 import ReviewPanelBody from '@/components/drawings/review/ReviewPanelBody';
 import ReviewActionBar from '@/components/drawings/review/ReviewActionBar';
 import ReviewDialogs from '@/components/drawings/review/ReviewDialogs';
-import InspirationSwitch from '@/components/drawings/review/InspirationSwitch';
+import InspirationStatus from '@/components/drawings/review/InspirationStatus';
+import { hasPracticeChanges, type PracticeReviewBaseline } from '@/lib/practice-review-changes';
 import TeacherSketchActions from '@/components/sketchbook/TeacherSketchActions';
 import PractisedFrom from '@/components/drawings/PractisedFrom';
 import type { QBPracticeOrigin } from '@neram/database/queries/nexus';
 import { flipSketch } from '@/components/sketchbook/sketchbook-api';
-import { canRedo, opensForGrading, reviewKindOf, wasReviewedBefore } from '@/lib/drawing-source';
+import { canRedo, carriesGrade, opensForGrading, reviewKindOf, wasReviewedBefore } from '@/lib/drawing-source';
 import {
   drawingAttemptsToViews,
   attemptStatusLabel,
@@ -133,6 +134,9 @@ export default function DrawingReviewDetailPage() {
   const [stagePlayback, setStagePlayback] = useState<StagePlayback | null>(null);
   const stageAnchorRef = useRef<HTMLDivElement | null>(null);
   const stageWasOpenRef = useRef(false);
+  // What the row held when the sheet opened, so the practice bar can tell Skip
+  // from Send & next (lib/practice-review-changes).
+  const [baseline, setBaseline] = useState<PracticeReviewBaseline | null>(null);
 
   const handleDeleteSubmission = async () => {
     setDeleting(true);
@@ -244,8 +248,9 @@ export default function DrawingReviewDetailPage() {
 
     // Restore region annotations from ai_overlay_annotations if they have the new shape
     const saved = (submission as any).ai_overlay_annotations;
-    if (Array.isArray(saved) && saved.length > 0 && saved[0]?.x !== undefined) {
-      setRegionAnnotations(saved as RegionAnnotation[]);
+    const savedRegions = Array.isArray(saved) && saved.length > 0 && saved[0]?.x !== undefined ? (saved as RegionAnnotation[]) : [];
+    if (savedRegions.length > 0) {
+      setRegionAnnotations(savedRegions);
     }
 
     // Which rounds open ready to grade (see opensForGrading in lib/drawing-source).
@@ -258,6 +263,7 @@ export default function DrawingReviewDetailPage() {
     // Hydrate tag labels from the loaded submission.
     const existingTags = ((submission as any).tags as DrawingTag[] | undefined) || [];
     setTagLabels(existingTags.map((t) => t.label));
+    setBaseline({ fields: initial, tags: existingTags.map((t) => t.label), regionCount: savedRegions.length });
   }, [submission?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Rotation ───────────────────────────────────────────────────────────────
@@ -345,6 +351,12 @@ export default function DrawingReviewDetailPage() {
       workspaceRef.current = nextWorkspace;
       setWorkspaceData(nextWorkspace);
       if (clearAnnotations) setRegionAnnotations([]);
+      // The turn is already stored, so it is not something left to send.
+      setBaseline((prev) => (prev ? {
+        ...prev,
+        fields: { ...prev.fields, overlayImageUrl: nextWorkspace.overlayImageUrl, correctedImageUrl: nextWorkspace.correctedImageUrl },
+        regionCount: clearAnnotations ? 0 : prev.regionCount,
+      } : prev));
 
       // Merge the fresh row in rather than refetching, so the stage swaps to the
       // upright image without a full-page loading flash.
@@ -499,6 +511,8 @@ export default function DrawingReviewDetailPage() {
         : prev));
       const freshTags = ((fresh.tags as DrawingTag[] | undefined) || []).map((t) => t.label);
       if (freshTags.length) {
+        // Gemini's tags are already on the row, so they are not a change to send.
+        setBaseline((prev) => (prev ? { ...prev, tags: [...prev.tags, ...freshTags] } : prev));
         setTagLabels((prev) => {
           const seen = new Set(prev.map((l) => l.toLowerCase()));
           const added = freshTags.filter((l) => !seen.has(l.toLowerCase()));
@@ -543,14 +557,38 @@ export default function DrawingReviewDetailPage() {
     router.push(queue.nextId ? reviewHref(queue.nextId, reviewCtx) : backHref);
   }, [reviewCtx, submission, getToken, router, queue.nextId, backHref]);
 
+  // Practice: would the student get anything new? Picks Skip or Send & next.
+  const practiceHasChanges = isPracticeRef.current && hasPracticeChanges(baseline, {
+    fields: workspaceData,
+    tags: tagLabels,
+    regionCount: regionAnnotations.length,
+    unsentVoice: !!voice && !voice.sent_at,
+  });
+
+  /** Fresh shelf state after a feature or un-feature, without reloading the sheet. */
+  const refreshInspiration = useCallback(async () => {
+    try {
+      const token = await getToken();
+      const res = await fetch(`/api/drawing/submissions/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) return;
+      const data = await res.json();
+      setInspiration(data.inspiration ?? null);
+    } catch {
+      // The line catches up on the next open.
+    }
+  }, [getToken, id]);
+
   // Handlers change identity every render; the key listener reads the latest.
   const saveReviewRef = useRef(handleSaveReview);
   saveReviewRef.current = handleSaveReview;
-  const keyStateRef = useRef({ isEditMode, saving, draftSaving, voiceBusy, queue });
-  keyStateRef.current = { isEditMode, saving, draftSaving, voiceBusy, queue };
+  const nextRef = useRef(handleNext);
+  nextRef.current = handleNext;
+  const keyStateRef = useRef({ isEditMode, saving, draftSaving, voiceBusy, queue, skipOnEnter: false });
+  keyStateRef.current = { isEditMode, saving, draftSaving, voiceBusy, queue, skipOnEnter: isPracticeRef.current && !practiceHasChanges };
 
   /**
-   * J next, K previous, Enter completes.
+   * J next, K previous, Enter presses the main button: Complete, Send & next,
+   * or on an untouched practice sheet, Skip (there is nothing to send).
    *
    * Only when nothing interactive has focus. Enter on a button activates that
    * button, Enter in the feedback box is a new line, and nothing here fires
@@ -576,6 +614,7 @@ export default function DrawingReviewDetailPage() {
       else if (e.key === 'Enter') {
         if (!state.isEditMode || state.saving || state.draftSaving || state.voiceBusy) return;
         e.preventDefault();
+        if (state.skipOnEnter) { nextRef.current(); return; }
         setAction('complete');
         void saveReviewRef.current('complete');
       }
@@ -913,6 +952,18 @@ export default function DrawingReviewDetailPage() {
   ) : null;
 
   // The student's own Teams chat, where any reply to the review card lands.
+  // Where the drawing stands on the Inspiration shelf. Under Feature on practice,
+  // at the top of the rail on owed work, which has no Feature.
+  const inspirationLine = inspiration?.original ? (
+    <InspirationStatus
+      state={inspiration.original}
+      featured={featured.length > 0}
+      graded={carriesGrade(sub)}
+      getToken={getToken}
+      onChange={(next) => setInspiration((prev) => (prev ? { ...prev, original: next } : prev))}
+    />
+  ) : null;
+
   const teamsChatUrl = studentTeamsEmail
     ? `https://teams.microsoft.com/l/chat/0/0?users=${encodeURIComponent(studentTeamsEmail)}`
     : null;
@@ -1063,15 +1114,27 @@ export default function DrawingReviewDetailPage() {
                 reaction={(['heart', 'fire', 'wow'] as const).includes(workspaceData.reaction as never) ? (workspaceData.reaction as 'heart' | 'fire' | 'wow') : null}
                 featured={featured}
                 studentName={sub.student?.name ?? null}
-                onChanged={(change) => {
-                  if (change.reaction !== undefined) {
-                    const next = { ...workspaceRef.current, reaction: change.reaction as WorkspaceData['reaction'] };
-                    workspaceRef.current = next;
-                    setWorkspaceData(next);
-                  }
-                  if (change.featured) setFeatured(change.featured);
+                // Held for the one send in the action bar, never a chat of its own.
+                // On a locked sheet a reaction is a change, so it opens grading.
+                onReact={(r) => {
+                  const next = { ...workspaceRef.current, reaction: r as WorkspaceData['reaction'] };
+                  workspaceRef.current = next;
+                  setWorkspaceData(next);
+                  if (!isEditMode) setIsEditMode(true);
                 }}
+                sendsWith={(workspaceData.reaction ?? null) !== (baseline?.fields.reaction ?? null)
+                  ? `Goes to ${String(sub.student?.name || '').trim().split(/\s+/)[0] || 'the student'} with your review`
+                  : null}
+                onChanged={(change) => {
+                  if (change.featured) {
+                    setFeatured(change.featured);
+                    void refreshInspiration();
+                  }
+                }}
+                footer={inspirationLine}
               />
+            ) : inspirationLine ? (
+              <Box sx={{ mb: 1.5 }}>{inspirationLine}</Box>
             ) : null}
             supersededBanner={supersededBanner}
             reReviewNotice={reReviewNotice}
@@ -1105,15 +1168,7 @@ export default function DrawingReviewDetailPage() {
             mode={isPractice ? 'practice' : 'owed'}
             canRedo={canRedo(sub)}
             onNext={isPractice ? handleNext : null}
-            inspirationSlot={
-              inspiration?.original ? (
-                <InspirationSwitch
-                  state={inspiration.original}
-                  getToken={getToken}
-                  onChange={(next) => setInspiration((prev) => (prev ? { ...prev, original: next } : prev))}
-                />
-              ) : null
-            }
+            hasChanges={practiceHasChanges}
           />
         }
       />

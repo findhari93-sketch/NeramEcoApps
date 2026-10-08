@@ -71,6 +71,8 @@ import { postGroupMessage, type GroupPostResult } from './teams-group-post';
 import type { TeamsMention } from './teams-class-announcements';
 import { assistantEnabled, sendAssistantMessage, type AssistantFrom } from './teams-assistant';
 import { sendTeamsChatMessage } from './teams-messaging';
+import { assistantNotificationTarget } from './assistant-tab-link';
+import { isNexusPath } from './notification-links';
 
 export interface NudgeResult {
   studentId: string;
@@ -342,6 +344,26 @@ export function automaticChatHtml(subject: string, plain: string, link?: { url: 
   return link ? `${body}<p><a href="${escapeHtml(link.url)}">${escapeHtml(link.label)}</a></p>` : body;
 }
 
+/**
+ * The Nexus path in a link, so the bell row can remember where the message
+ * pointed: `https://nexus.neramclasses.com/student/x?y=1` becomes `/student/x?y=1`.
+ * A link to anywhere else (YouTube, a Teams chat) is not a Nexus page and gives null.
+ */
+export function nexusPathFromUrl(url: string | null | undefined): string | null {
+  const raw = String(url || '').trim();
+  if (isNexusPath(raw)) return raw;
+  try {
+    const u = new URL(raw);
+    const host = u.hostname.toLowerCase();
+    const nexusHost =
+      host === 'localhost' || /^(staging-)?nexus\.neramclasses\.com$/.test(host) || host.endsWith('.vercel.app');
+    if (!nexusHost || !isNexusPath(u.pathname)) return null;
+    return `${u.pathname}${u.search}${u.hash}`;
+  } catch {
+    return null;
+  }
+}
+
 export async function sendNudge(
   rawInput: SendNudgeInput,
 ): Promise<{ results: NudgeResult[]; counts: NudgeCounts }> {
@@ -368,7 +390,12 @@ export async function sendNudge(
     : unified;
   const { studentIds: requestedIds, subject, plain, eventType } = input;
   const teamsText = input.teamsText || subject;
-  const metadata = input.metadata || {};
+  // The page the message points at, kept on the bell row. A Teams Activity click
+  // opens that row in the Assistant's tab, and the tab's "Open in Nexus" button
+  // goes here. Without it a chat that fell back to the feed lost its link.
+  const linkPath = nexusPathFromUrl(input.assistant?.link?.url);
+  const metadata: Record<string, unknown> =
+    linkPath && !isNexusPath(input.metadata?.href) ? { ...(input.metadata || {}), href: linkPath } : input.metadata || {};
 
   const supabase = getSupabaseAdminClient() as any;
   // When unset, the activity-feed tier is skipped. Trimmed: a value added with
@@ -527,7 +554,31 @@ ${plainFor}` },
           chatResult?.reason || 'Neram Assistant did not send';
       }
 
-      // 1) Teams Activity-feed ping, only when no chat landed (chat first).
+      // 1) The in-app notification, always (persistent record + bell). Written
+      //    before the feed so the feed can carry its id: a Teams click then opens
+      //    this exact notification instead of the Assistant's home.
+      // The id is chosen here rather than read back, so nothing has to round-trip.
+      let inapp = false;
+      const rowId = globalThis.crypto.randomUUID();
+      try {
+        const { error } = await supabase.from('user_notifications').insert({
+          id: rowId,
+          user_id: sid,
+          event_type: eventType,
+          title: subjectFor,
+          message: plainFor,
+          metadata,
+          is_read: false,
+        });
+        if (error) console.error(`${eventType} notification insert failed:`, error.message);
+        else inapp = true;
+      } catch (e) {
+        console.error(`${eventType} notification insert threw:`, e);
+      }
+      const notificationId = inapp ? rowId : null;
+
+      // 2) Teams Activity-feed ping, only when no chat landed (chat first). A bell
+      //    row that did not save still gets the ping; it just opens the tab's home.
       let teams = false;
       const teamsUserId = u.ms_oid || teamsBy.get(sid) || null;
       if (chat || input.bellOnly) {
@@ -541,29 +592,15 @@ ${plainFor}` },
           text: teamsTextFor,
           preview: plainFor,
           catalogAppId,
+          ...(notificationId ? { target: assistantNotificationTarget(notificationId) } : {}),
         });
         teams = r.ok;
         if (!r.ok) {
           console.error(`${eventType} teams send failed for ${sid}:`, r.reason);
           reasons.teams = `Teams alert did not send (${String(r.reason || r.status).slice(0, 180)})`;
+        } else if (r.reason) {
+          console.warn(`${eventType} teams alert for ${sid}:`, r.reason);
         }
-      }
-
-      // 2) Always record the in-app notification (persistent record + bell).
-      let inapp = false;
-      try {
-        const { error } = await supabase.from('user_notifications').insert({
-          user_id: sid,
-          event_type: eventType,
-          title: subjectFor,
-          message: plainFor,
-          metadata,
-          is_read: false,
-        });
-        if (error) console.error(`${eventType} notification insert failed:`, error.message);
-        else inapp = true;
-      } catch (e) {
-        console.error(`${eventType} notification insert threw:`, e);
       }
 
       const parts = [

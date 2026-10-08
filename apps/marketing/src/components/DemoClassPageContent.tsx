@@ -1,745 +1,394 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+/**
+ * /demo-class: book a free live demo.
+ *
+ * The booking card sits in the hero so a phone visitor can pick a day before
+ * scrolling. Everything below it answers "why bother": what happens in the
+ * demo, what Nexus looks like, why parents should come, and how it compares
+ * with offline coaching. Sign-in happens only at the last step of the card.
+ */
+
+import { useEffect, useState } from 'react';
+import Image from 'next/image';
+import { alpha } from '@mui/material/styles';
 import {
+  Accordion,
+  AccordionDetails,
+  AccordionSummary,
   Box,
-  Container,
-  Typography,
   Button,
-  Card,
-  CardContent,
-  Grid,
-  TextField,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Alert,
-  CircularProgress,
-  Chip,
-  Stack,
-  Dialog,
-  DialogTitle,
-  DialogContent,
+  Container,
+  Paper,
   Slide,
-  useMediaQuery,
-  useTheme,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Typography,
 } from '@neram/ui';
-import { TransitionProps } from '@mui/material/transitions';
-import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import { LoginModal } from '@neram/ui';
-import { useFirebaseAuth } from '@neram/auth';
-import { getStoredAttribution, touchAttribution } from '@/lib/attribution';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import CheckIcon from '@mui/icons-material/Check';
+import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
+import PhoneIphoneIcon from '@mui/icons-material/PhoneIphone';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
+import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
+import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
+import FamilyRestroomIcon from '@mui/icons-material/FamilyRestroom';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
+import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined';
 import { ClassVideo } from '@/components/coaching-location/ClassVideo';
-import { trackTaxonomyEvent } from '@/lib/funnel-tracker';
+import DemoBookingCard from '@/components/demo-class/DemoBookingCard';
+import { COMPARISON, DEMO_FAQ, DEMO_STEPS, NEXUS_SHOTS, PARENT_POINTS } from '@/components/demo-class/demo-content';
 
-// Slide transition for bottom sheet on mobile
-const SlideTransition = (props: TransitionProps & { children: React.ReactElement }) => (
-  <Slide direction="up" {...props} />
-);
+const SHOT_ICON: Record<string, typeof PhoneIphoneIcon> = {
+  nexus: PhoneIphoneIcon,
+  tutor: AutoAwesomeIcon,
+  assistant: ForumOutlinedIcon,
+  drawing: BrushOutlinedIcon,
+};
 
-interface DemoSlot {
-  id: string;
-  title: string;
-  slot_date: string;
-  slot_time: string;
-  duration_minutes: number;
-  max_registrations: number;
-  current_registrations: number;
-  status: string;
-  demo_mode: string;
-  display_date?: string;
-  display_time?: string;
-  spots_left?: number;
+const STEP_ICON = [SchoolOutlinedIcon, PhoneIphoneIcon, QuestionAnswerOutlinedIcon];
+
+function scrollToBooking() {
+  const el = document.getElementById('book');
+  if (!el) return;
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
 }
 
-interface SundayOption {
-  date: string;
-  displayDate: string;
-  dayName: string;
-  monthDay: string;
+function youtubeId(url: string | null): string | null {
+  if (!url) return null;
+  return url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&?/]+)/)?.[1] ?? null;
+}
+
+function SectionHeading({ eyebrow, title, sub }: { eyebrow: string; title: string; sub?: string }) {
+  return (
+    <Box sx={{ mb: { xs: 2.5, md: 4 }, maxWidth: 680 }}>
+      <Typography variant="overline" color="primary" sx={{ fontWeight: 800, letterSpacing: 1 }}>
+        {eyebrow}
+      </Typography>
+      <Typography variant="h4" component="h2" fontWeight={800} sx={{ fontSize: { xs: '1.5rem', md: '2rem' }, lineHeight: 1.25 }}>
+        {title}
+      </Typography>
+      {sub && (
+        <Typography color="text.secondary" sx={{ mt: 1, fontSize: { xs: '1rem', md: '1.1rem' } }}>
+          {sub}
+        </Typography>
+      )}
+    </Box>
+  );
+}
+
+/** Mobile-only bar that brings the booking card back once it scrolls away. */
+function StickyBookBar() {
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const el = document.getElementById('book');
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(([entry]) => setShow(!entry.isIntersecting && entry.boundingClientRect.top < 0), {
+      threshold: 0,
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return (
+    <Slide direction="up" in={show} appear={false}>
+      <Box
+        sx={{
+          display: { xs: 'block', md: 'none' },
+          position: 'fixed',
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 30,
+          p: 1.5,
+          pb: 'calc(12px + env(safe-area-inset-bottom))',
+          bgcolor: 'background.paper',
+          borderTop: 1,
+          borderColor: 'divider',
+          boxShadow: '0 -4px 16px rgba(0,0,0,0.08)',
+        }}
+      >
+        <Button variant="contained" fullWidth size="large" onClick={scrollToBooking} sx={{ minHeight: 52, fontWeight: 800 }}>
+          Book your free demo
+        </Button>
+      </Box>
+    </Slide>
+  );
+}
+
+function SampleVideo() {
+  const [id, setId] = useState<string | null>(null);
+  useEffect(() => {
+    fetch('/api/demo-class/settings')
+      .then((r) => r.json())
+      .then((d) => setId(youtubeId(d?.settings?.youtube_video_url ?? null)))
+      .catch(() => {});
+  }, []);
+  if (!id) return null;
+  return (
+    <Box sx={{ maxWidth: 720 }}>
+      <ClassVideo youtubeId={id} title="Watch a real Neram class" />
+    </Box>
+  );
 }
 
 export default function DemoClassPageContent() {
-  const params = useParams();
-  const locale = params.locale as string;
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const { user } = useFirebaseAuth();
-
-  // State
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
-
-  // Slots and selection
-  const [availableSlots, setAvailableSlots] = useState<DemoSlot[]>([]);
-  const [sundays, setSundays] = useState<SundayOption[]>([]);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [selectedTime, setSelectedTime] = useState<'morning' | 'afternoon' | null>(null);
-  const [selectedSlot, setSelectedSlot] = useState<DemoSlot | null>(null);
-
-  // Form state
-  const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({
-    name: '',
-    phone: '',
-    email: '',
-    currentClass: '',
-    interestCourse: '',
-    city: '',
-    parentName: '',
-    parentPhone: '',
-    language: 'en',
-  });
-
-  // Phone verification
-  const [showPhoneVerification, setShowPhoneVerification] = useState(false);
-  const [verifiedPhone, setVerifiedPhone] = useState<string | null>(null);
-
-  // YouTube video
-  const [youtubeVideoUrl, setYoutubeVideoUrl] = useState<string | null>(null);
-
-  // Active registration check
-  const [activeRegistration, setActiveRegistration] = useState<{
-    id: string;
-    status: string;
-    slotDate?: string;
-    slotTime?: string;
-    slotTitle?: string;
-  } | null>(null);
-
-  useEffect(() => {
-    generateSundays();
-    fetchAvailableSlots();
-    fetchSettings();
-  }, []);
-
-  const fetchSettings = async () => {
-    try {
-      const res = await fetch('/api/demo-class/settings');
-      const data = await res.json();
-      if (data.settings?.youtube_video_url) {
-        setYoutubeVideoUrl(data.settings.youtube_video_url);
-      }
-    } catch {
-      // ignore
-    }
-  };
-
-  const getYoutubeEmbedId = (url: string): string | null => {
-    const match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&?/]+)/);
-    return match?.[1] || null;
-  };
-
-  useEffect(() => {
-    // Pre-fill user data if logged in
-    if (user) {
-      setFormData(prev => ({
-        ...prev,
-        name: user.name || prev.name,
-        email: user.email || prev.email,
-        phone: user.phone?.replace('+91', '') || prev.phone,
-      }));
-      if (user.phone) {
-        const cleanPhone = user.phone.replace('+91', '');
-        setVerifiedPhone(cleanPhone);
-        checkActiveRegistration(cleanPhone);
-      }
-    }
-  }, [user]);
-
-  const generateSundays = () => {
-    const result: SundayOption[] = [];
-    const today = new Date();
-
-    // Find next Sunday
-    const dayOfWeek = today.getDay();
-    const daysUntilSunday = dayOfWeek === 0 ? 7 : 7 - dayOfWeek; // Skip today if Sunday
-    const nextSunday = new Date(today);
-    nextSunday.setDate(today.getDate() + daysUntilSunday);
-
-    for (let i = 0; i < 4; i++) {
-      const sunday = new Date(nextSunday);
-      sunday.setDate(nextSunday.getDate() + i * 7);
-
-      const dateStr = `${sunday.getFullYear()}-${String(sunday.getMonth() + 1).padStart(2, '0')}-${String(sunday.getDate()).padStart(2, '0')}`;
-      const displayDate = sunday.toLocaleDateString('en-IN', {
-        weekday: 'long',
-        month: 'short',
-        day: 'numeric',
-      });
-      const dayName = sunday.toLocaleDateString('en-IN', { weekday: 'short' });
-      const monthDay = sunday.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
-
-      result.push({ date: dateStr, displayDate, dayName, monthDay });
-    }
-
-    setSundays(result);
-    if (result.length > 0) {
-      setSelectedDate(result[0].date);
-    }
-  };
-
-  const fetchAvailableSlots = async () => {
-    try {
-      setLoading(true);
-      const response = await fetch('/api/demo-class/slots');
-      const data = await response.json();
-
-      if (response.ok) {
-        setAvailableSlots(data.slots || []);
-      }
-    } catch (err) {
-      console.error('Failed to fetch slots:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDateSelect = (date: string) => {
-    setSelectedDate(date);
-    setSelectedTime(null);
-    setSelectedSlot(null);
-  };
-
-  const handleTimeSelect = (time: 'morning' | 'afternoon') => {
-    setSelectedTime(time);
-
-    // Find matching slot
-    const targetTime = time === 'morning' ? '10:00' : '15:00';
-    const slot = availableSlots.find(
-      s => s.slot_date === selectedDate && s.slot_time.startsWith(targetTime)
-    );
-    setSelectedSlot(slot || null);
-  };
-
-  const handleProceed = () => {
-    if (!selectedSlot) {
-      setError('Please select a date and time');
-      return;
-    }
-    setShowForm(true);
-  };
-
-  const handleFormChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-    setError(null);
-  };
-
-  const checkActiveRegistration = async (phone: string) => {
-    try {
-      const res = await fetch(`/api/demo-class/status?phone=${phone}`);
-      const data = await res.json();
-      if (data.registration) {
-        setActiveRegistration(data.registration);
-      }
-    } catch {
-      // Silently ignore — user can still proceed
-    }
-  };
-
-  const handlePhoneVerified = (phone: string) => {
-    setVerifiedPhone(phone);
-    setFormData(prev => ({ ...prev, phone }));
-    setShowPhoneVerification(false);
-    checkActiveRegistration(phone);
-  };
-
-  const handleSubmit = async () => {
-    // Validation
-    if (!formData.name.trim()) {
-      setError('Please enter your name');
-      return;
-    }
-
-    if (!verifiedPhone && !formData.phone) {
-      setShowPhoneVerification(true);
-      return;
-    }
-
-    if (!verifiedPhone) {
-      setShowPhoneVerification(true);
-      return;
-    }
-
-    try {
-      setSubmitting(true);
-      setError(null);
-
-      const attribution = getStoredAttribution();
-      const response = await fetch('/api/demo-class/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          slotId: selectedSlot?.id,
-          name: formData.name,
-          phone: verifiedPhone,
-          email: formData.email,
-          currentClass: formData.currentClass,
-          interestCourse: formData.interestCourse,
-          city: formData.city,
-          firebaseUid: user?.id,
-          utmSource: attribution.utm_source,
-          utmMedium: attribution.utm_medium,
-          utmCampaign: attribution.utm_campaign,
-          referralCode: attribution.referral_code,
-          parentName: formData.parentName,
-          parentPhone: formData.parentPhone,
-          language: formData.language,
-          ...touchAttribution(),
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Registration failed');
-      }
-
-      setSuccess(true);
-      setShowForm(false);
-      trackTaxonomyEvent('demo_requested', { source: 'demo_class_page', interest_course: formData.interestCourse || null });
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const formatTime = (timeStr: string) => {
-    const [hours] = timeStr.split(':').map(Number);
-    return hours < 12 ? 'Morning' : 'Afternoon';
-  };
-
-  const getSpotsLeft = (slot: DemoSlot) => {
-    return slot.max_registrations - slot.current_registrations;
-  };
-
-  const getSlotForTime = (time: 'morning' | 'afternoon') => {
-    const targetTime = time === 'morning' ? '10:00' : '15:00';
-    return availableSlots.find(
-      s => s.slot_date === selectedDate && s.slot_time.startsWith(targetTime)
-    );
-  };
-
-  // Success Screen
-  if (success) {
-    return (
-      <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-        <Container maxWidth="sm" sx={{ py: { xs: 4, md: 8 }, textAlign: 'center' }}>
+  return (
+    <Box sx={{ bgcolor: 'background.default', pb: { xs: 10, md: 0 } }}>
+      {/* Hero with the booking card */}
+      <Box sx={{ bgcolor: 'primary.main', color: 'primary.contrastText', pt: { xs: 2, md: 7 }, pb: { xs: 3, md: 7 } }}>
+        <Container maxWidth="lg" sx={{ px: 2 }}>
           <Box
             sx={{
-              width: 80,
-              height: 80,
-              borderRadius: '50%',
-              bgcolor: 'success.main',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              mx: 'auto',
-              mb: 3,
+              display: 'grid',
+              gridTemplateColumns: { xs: 'minmax(0, 1fr)', md: 'minmax(0, 1.05fr) minmax(0, 0.95fr)' },
+              gap: { xs: 2.5, md: 6 },
+              alignItems: 'start',
             }}
           >
-            <CheckCircleIcon sx={{ fontSize: 48, color: 'white' }} />
-          </Box>
-
-          <Typography variant="h4" fontWeight="bold" gutterBottom>
-            You&apos;re Registered!
-          </Typography>
-
-          <Typography variant="h6" color="text.secondary" gutterBottom>
-            {selectedSlot && sundays.find(s => s.date === selectedSlot.slot_date)?.displayDate}
-          </Typography>
-
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 4 }}>
-            {selectedTime === 'morning' ? '10:00 AM' : '3:00 PM'}
-          </Typography>
-
-          <Alert severity="info" sx={{ mb: 3, textAlign: 'left' }}>
-            <Typography variant="body2">
-              Your registration is being reviewed. You&apos;ll receive a confirmation email with class
-              details once approved.
-            </Typography>
-          </Alert>
-
-          <Stack spacing={2}>
-            <Button
-              variant="contained"
-              size="large"
-              fullWidth
-              href={`/${locale}`}
-              sx={{ minHeight: 48 }}
-            >
-              Back to Home
-            </Button>
-            <Button
-              variant="outlined"
-              size="large"
-              fullWidth
-              href={`/${locale}/courses`}
-              sx={{ minHeight: 48 }}
-            >
-              Explore Courses
-            </Button>
-          </Stack>
-        </Container>
-      </Box>
-    );
-  }
-
-  return (
-    <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
-      {/* Hero Section */}
-      <Box
-        sx={{
-          bgcolor: 'primary.main',
-          color: 'primary.contrastText',
-          py: { xs: 4, md: 6 },
-          textAlign: 'center',
-        }}
-      >
-        <Container maxWidth="md">
-          <Typography variant="h3" component="h1" fontWeight="bold" gutterBottom sx={{ fontSize: { xs: '2rem', md: '3rem' } }}>
-            Free Demo Class
-          </Typography>
-          <Typography variant="h6" sx={{ opacity: 0.9, fontSize: { xs: '1rem', md: '1.25rem' } }}>
-            Experience our teaching methodology before enrolling
-          </Typography>
-        </Container>
-      </Box>
-
-      <Container maxWidth="md" sx={{ py: { xs: 3, md: 6 } }}>
-        {error && (
-          <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
-            {error}
-          </Alert>
-        )}
-
-        {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-            <CircularProgress />
-          </Box>
-        ) : activeRegistration ? (
-          <>
-            {/* Active Registration Banner */}
-            <Alert severity="info" sx={{ mb: 3 }}>
-              <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                You have an active demo class booking
-              </Typography>
-              <Typography variant="body2">
-                {activeRegistration.slotTitle},{' '}{activeRegistration.slotDate && new Date(activeRegistration.slotDate + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' })}
-              </Typography>
-              <Chip
-                label={activeRegistration.status === 'pending' ? 'Awaiting Approval' : 'Approved'}
-                color={activeRegistration.status === 'approved' ? 'success' : 'warning'}
-                size="small"
-                sx={{ mt: 1 }}
-              />
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                You&apos;ll receive a confirmation once your registration is processed. You can book a new demo class after this one is completed.
-              </Typography>
-            </Alert>
-          </>
-        ) : (
-          <>
-            {/* Sample YouTube Video */}
-            {youtubeVideoUrl && getYoutubeEmbedId(youtubeVideoUrl) && (
-              <Box sx={{ mb: 4 }}>
-                <Typography variant="h6" gutterBottom>
-                  Watch a Sample Class
-                </Typography>
-                <ClassVideo youtubeId={getYoutubeEmbedId(youtubeVideoUrl)!} title="Sample class" />
+            <Box sx={{ pt: { md: 2 } }}>
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: { xs: 1, md: 1.5 } }}>
+                {['Free', 'Live on Teams', 'About 45 minutes'].map((t) => (
+                  <Box
+                    key={t}
+                    component="span"
+                    sx={{ px: 1.25, py: 0.5, borderRadius: 999, bgcolor: 'rgba(255,255,255,0.16)', fontSize: '0.8rem', fontWeight: 700 }}
+                  >
+                    {t}
+                  </Box>
+                ))}
               </Box>
-            )}
-
-            {/* Date Selection */}
-            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <CalendarTodayIcon /> Select a Date
-            </Typography>
-
-            <Box
-              sx={{
-                display: 'flex',
-                gap: 2,
-                overflowX: 'auto',
-                pb: 2,
-                mb: 4,
-                '&::-webkit-scrollbar': { height: 6 },
-                '&::-webkit-scrollbar-thumb': { bgcolor: 'grey.300', borderRadius: 3 },
-              }}
-            >
-              {sundays.map((sunday) => (
-                <Card
-                  key={sunday.date}
-                  onClick={() => handleDateSelect(sunday.date)}
-                  sx={{
-                    minWidth: 100,
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                    border: 2,
-                    borderColor: selectedDate === sunday.date ? 'primary.main' : 'transparent',
-                    bgcolor: selectedDate === sunday.date ? 'primary.50' : 'background.paper',
-                    transition: 'all 0.2s',
-                    '&:hover': { borderColor: 'primary.light' },
-                  }}
-                >
-                  <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-                    <Typography variant="caption" color="text.secondary">
-                      {sunday.dayName}
-                    </Typography>
-                    <Typography variant="h6" fontWeight="bold">
-                      {sunday.monthDay}
-                    </Typography>
-                  </CardContent>
-                </Card>
-              ))}
+              <Typography
+                variant="h1"
+                sx={{ fontSize: { xs: '1.5rem', sm: '2.25rem', md: '3rem' }, fontWeight: 800, lineHeight: 1.2, color: 'inherit' }}
+              >
+                Experience an AI-powered NATA and JEE Paper 2 classroom, free
+              </Typography>
+              <Typography sx={{ mt: 1.5, fontSize: { xs: '1rem', md: '1.2rem' }, opacity: 0.92, maxWidth: 560, display: { xs: 'none', sm: 'block' } }}>
+                Sit in a live class with an architect, tour the Nexus app, and ask every question you have. Parents are welcome.
+              </Typography>
+              <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0, mt: 2.5, display: { xs: 'none', sm: 'grid' }, gap: 1 }}>
+                {[
+                  'Pick a day and a time of day. We call to fix the exact time.',
+                  'Get the Teams link on WhatsApp and in your calendar.',
+                  'Send us any drawing for personal feedback from an architect.',
+                ].map((t) => (
+                  <Box component="li" key={t} sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                    <CheckIcon aria-hidden sx={{ fontSize: 20, mt: '2px' }} />
+                    <Typography sx={{ color: 'inherit' }}>{t}</Typography>
+                  </Box>
+                ))}
+              </Box>
             </Box>
+            <Box id="book" sx={{ scrollMarginTop: 80, color: 'text.primary' }}>
+              <DemoBookingCard />
+            </Box>
+          </Box>
+        </Container>
+      </Box>
 
-            {/* Time Selection */}
-            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <AccessTimeIcon /> Select a Time
-            </Typography>
-
-            <Grid container spacing={2} sx={{ mb: 4 }}>
-              {(['morning', 'afternoon'] as const).map((time) => {
-                const slot = getSlotForTime(time);
-                const spotsLeft = slot ? getSpotsLeft(slot) : 0;
-                const isFull = slot && spotsLeft <= 0;
-                const isSelected = selectedTime === time;
-
-                return (
-                  <Grid item xs={6} key={time}>
-                    <Card
-                      onClick={() => !isFull && handleTimeSelect(time)}
-                      sx={{
-                        cursor: isFull ? 'not-allowed' : 'pointer',
-                        opacity: isFull ? 0.5 : 1,
-                        border: 2,
-                        borderColor: isSelected ? 'primary.main' : 'transparent',
-                        bgcolor: isSelected ? 'primary.50' : 'background.paper',
-                        transition: 'all 0.2s',
-                        '&:hover': { borderColor: isFull ? 'transparent' : 'primary.light' },
-                      }}
-                    >
-                      <CardContent sx={{ textAlign: 'center', p: { xs: 2, md: 3 } }}>
-                        <Typography variant="h6" fontWeight="bold">
-                          {time === 'morning' ? 'Morning' : 'Afternoon'}
-                        </Typography>
-                        <Typography variant="h5" color="primary.main" fontWeight="bold">
-                          {time === 'morning' ? '10:00 AM' : '3:00 PM'}
-                        </Typography>
-                        {slot ? (
-                          <Chip
-                            label={isFull ? 'Full' : `${spotsLeft} spots left`}
-                            color={isFull ? 'error' : spotsLeft < 10 ? 'warning' : 'success'}
-                            size="small"
-                            sx={{ mt: 1 }}
-                          />
-                        ) : (
-                          <Chip label="No slot" variant="outlined" size="small" sx={{ mt: 1 }} />
-                        )}
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                );
-              })}
-            </Grid>
-
-            {/* Info */}
-            <Alert severity="info" sx={{ mb: 4 }}>
-              Demo class will be conducted when 10+ students register. You&apos;ll receive a
-              confirmation email once your registration is approved.
-            </Alert>
-
-            {/* Continue Button */}
-            <Button
-              variant="contained"
-              size="large"
-              fullWidth
-              onClick={handleProceed}
-              disabled={!selectedSlot}
-              sx={{ minHeight: 56, fontSize: '1.1rem' }}
-            >
-              Continue
-            </Button>
-          </>
-        )}
+      {/* What happens */}
+      <Container maxWidth="lg" sx={{ px: 2, py: { xs: 5, md: 9 } }}>
+        <SectionHeading eyebrow="Your 45 minutes" title="What happens in your free demo" />
+        <Box component="ol" sx={{ listStyle: 'none', p: 0, m: 0, display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 2 }}>
+          {DEMO_STEPS.map((s, i) => {
+            const Icon = STEP_ICON[i];
+            return (
+              <Paper component="li" key={s.title} variant="outlined" sx={{ p: 2.5, borderRadius: 3 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <Box
+                    aria-hidden
+                    sx={{ width: 44, height: 44, borderRadius: 2, bgcolor: 'primary.main', color: 'primary.contrastText', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}
+                  >
+                    <Icon />
+                  </Box>
+                  <Typography variant="caption" color="text.secondary" fontWeight={800}>
+                    STEP {i + 1}
+                  </Typography>
+                </Box>
+                <Typography variant="h6" component="h3" fontWeight={800} sx={{ mt: 1.5 }}>
+                  {s.title}
+                </Typography>
+                <Typography color="text.secondary" sx={{ mt: 0.5 }}>
+                  {s.body}
+                </Typography>
+              </Paper>
+            );
+          })}
+        </Box>
+        <Box sx={{ mt: 4 }}>
+          <SampleVideo />
+        </Box>
       </Container>
 
-      {/* Registration Form (Bottom Sheet on Mobile) */}
-      <Dialog
-        open={showForm}
-        onClose={() => setShowForm(false)}
-        fullScreen={isMobile}
-        maxWidth="sm"
-        fullWidth
-        TransitionComponent={isMobile ? SlideTransition : undefined}
-        sx={{
-          '& .MuiDialog-paper': {
-            ...(isMobile && {
-              position: 'fixed',
-              bottom: 0,
-              m: 0,
-              borderRadius: '12px 12px 0 0',
-              maxHeight: '90vh',
-            }),
-          },
-        }}
-      >
-        <DialogTitle sx={{ textAlign: 'center', pt: 3 }}>
-          <Typography variant="h5" fontWeight="bold">
-            Complete Registration
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {selectedSlot && sundays.find(s => s.date === selectedSlot.slot_date)?.displayDate} at{' '}
-            {selectedTime === 'morning' ? '10:00 AM' : '3:00 PM'}
-          </Typography>
-        </DialogTitle>
+      {/* Inside Nexus */}
+      <Box sx={{ bgcolor: 'action.hover', py: { xs: 5, md: 9 } }}>
+        <Container maxWidth="lg" sx={{ px: 2 }}>
+          <SectionHeading
+            eyebrow="Inside the classroom"
+            title="A classroom designed by architects and software engineers"
+            sub="Neram runs on Nexus, our own learning app. In the demo you will see it working."
+          />
+          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', lg: 'repeat(4, 1fr)' }, gap: 2 }}>
+            {NEXUS_SHOTS.map((s) => {
+              const Icon = SHOT_ICON[s.key] ?? PhoneIphoneIcon;
+              return (
+                <Paper key={s.key} variant="outlined" sx={{ borderRadius: 3, overflow: 'hidden', bgcolor: 'background.paper' }}>
+                  <Box
+                    sx={{
+                      position: 'relative',
+                      // Real screenshots get a 4:3 frame; the icon stand-in stays a short tinted strip.
+                      aspectRatio: s.src ? '4 / 3' : '16 / 6',
+                      bgcolor: (t) => (s.src ? t.palette.action.hover : alpha(t.palette.primary.main, 0.08)),
+                      color: 'primary.main',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    {s.src ? (
+                      <Image src={s.src} alt={s.alt} fill sizes="(max-width: 600px) 100vw, (max-width: 1200px) 50vw, 25vw" style={{ objectFit: 'cover' }} />
+                    ) : (
+                      <Icon aria-hidden sx={{ fontSize: 44 }} />
+                    )}
+                  </Box>
+                  <Box sx={{ p: 2 }}>
+                    <Typography variant="h6" component="h3" fontWeight={800} sx={{ fontSize: '1.05rem' }}>
+                      {s.title}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                      {s.body}
+                    </Typography>
+                  </Box>
+                </Paper>
+              );
+            })}
+          </Box>
+        </Container>
+      </Box>
 
-        <DialogContent>
-          <Stack spacing={3} sx={{ py: 2 }}>
-            <TextField
-              fullWidth
-              label="Your Name"
-              value={formData.name}
-              onChange={(e) => handleFormChange('name', e.target.value)}
-              required
-              inputProps={{ style: { fontSize: 16 } }}
+      {/* Parents */}
+      <Container maxWidth="lg" sx={{ px: 2, py: { xs: 5, md: 9 } }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '0.9fr 1.1fr' }, gap: { xs: 2.5, md: 6 }, alignItems: 'center' }}>
+          <Box>
+            <FamilyRestroomIcon aria-hidden color="primary" sx={{ fontSize: 44 }} />
+            <SectionHeading
+              eyebrow="For parents"
+              title="Join the demo with your child"
+              sub="This is the best hour to ask us anything. See how a real class runs, meet the faculty and decide together."
             />
+          </Box>
+          <Box sx={{ display: 'grid', gap: 1.5 }}>
+            {PARENT_POINTS.map((p) => (
+              <Paper key={p.title} variant="outlined" sx={{ p: 2, borderRadius: 3, display: 'flex', gap: 1.5 }}>
+                <CheckIcon aria-hidden color="success" sx={{ mt: '2px' }} />
+                <Box>
+                  <Typography fontWeight={800}>{p.title}</Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    {p.body}
+                  </Typography>
+                </Box>
+              </Paper>
+            ))}
+          </Box>
+        </Box>
+      </Container>
 
-            <Box>
-              <TextField
-                fullWidth
-                label="Phone Number"
-                value={verifiedPhone || formData.phone}
-                onChange={(e) => handleFormChange('phone', e.target.value)}
-                disabled={!!verifiedPhone}
-                required
-                InputProps={{
-                  startAdornment: (
-                    <Typography sx={{ mr: 1, color: 'text.secondary' }}>+91</Typography>
-                  ),
-                  endAdornment: verifiedPhone ? (
-                    <CheckCircleIcon color="success" />
-                  ) : (
-                    <Button size="small" onClick={() => setShowPhoneVerification(true)}>
-                      Verify
-                    </Button>
-                  ),
-                }}
-                inputProps={{ inputMode: 'numeric', style: { fontSize: 16 } }}
-              />
-              {verifiedPhone && (
-                <Typography variant="caption" color="success.main">
-                  Phone verified
+      {/* Comparison */}
+      <Box sx={{ bgcolor: 'action.hover', py: { xs: 5, md: 9 } }}>
+        <Container maxWidth="md" sx={{ px: 2 }}>
+          <SectionHeading eyebrow="Online, done properly" title="Why students choose Neram over offline coaching" />
+          {/* Cards on phones, a table from tablet up: no sideways scrolling at 375px. */}
+          <Box sx={{ display: { xs: 'grid', sm: 'none' }, gap: 1.5 }}>
+            {COMPARISON.map((c) => (
+              <Paper key={c.topic} variant="outlined" sx={{ p: 2, borderRadius: 3 }}>
+                <Typography variant="overline" color="text.secondary" fontWeight={800}>
+                  {c.topic}
                 </Typography>
-              )}
-            </Box>
+                <Typography variant="body2" color="text.secondary">
+                  Offline: {c.offline}
+                </Typography>
+                <Typography fontWeight={700} sx={{ mt: 0.5, display: 'flex', gap: 0.75 }}>
+                  <CheckIcon aria-hidden color="success" fontSize="small" sx={{ mt: '2px' }} />
+                  Neram: {c.neram}
+                </Typography>
+              </Paper>
+            ))}
+          </Box>
+          <TableContainer component={Paper} variant="outlined" sx={{ display: { xs: 'none', sm: 'block' }, borderRadius: 3 }}>
+            <Table aria-label="Offline coaching compared with Neram">
+              <TableHead>
+                <TableRow>
+                  <TableCell />
+                  <TableCell sx={{ fontWeight: 800 }}>Typical offline coaching</TableCell>
+                  <TableCell sx={{ fontWeight: 800, color: 'primary.main' }}>Neram</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {COMPARISON.map((c) => (
+                  <TableRow key={c.topic}>
+                    <TableCell component="th" scope="row" sx={{ fontWeight: 700 }}>
+                      {c.topic}
+                    </TableCell>
+                    <TableCell sx={{ color: 'text.secondary' }}>{c.offline}</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>
+                      <Box sx={{ display: 'flex', gap: 0.75 }}>
+                        <CheckIcon aria-hidden color="success" fontSize="small" sx={{ mt: '2px' }} />
+                        {c.neram}
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Container>
+      </Box>
 
-            <TextField
-              fullWidth
-              label="Email (Optional)"
-              type="email"
-              value={formData.email}
-              onChange={(e) => handleFormChange('email', e.target.value)}
-              inputProps={{ style: { fontSize: 16 } }}
-            />
+      {/* Drawing hook */}
+      <Container maxWidth="lg" sx={{ px: 2, py: { xs: 5, md: 9 } }}>
+        <Paper variant="outlined" sx={{ p: { xs: 2.5, md: 5 }, borderRadius: 4, display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr auto' }, gap: 3, alignItems: 'center' }}>
+          <Box>
+            <BrushOutlinedIcon aria-hidden color="primary" sx={{ fontSize: 40 }} />
+            <Typography variant="h4" component="h2" fontWeight={800} sx={{ fontSize: { xs: '1.4rem', md: '1.9rem' }, mt: 1 }}>
+              Love to draw? Get feedback from an architect
+            </Typography>
+            <Typography color="text.secondary" sx={{ mt: 1, maxWidth: 640 }}>
+              After you book, send us any drawing on WhatsApp. It does not have to be exam work: we look at the quality of
+              your hand, not the topic. An architect replies with a voice note on what is impressive and what to try next.
+            </Typography>
+          </Box>
+          <Button variant="contained" size="large" onClick={scrollToBooking} sx={{ minHeight: 52, fontWeight: 800 }}>
+            Book my demo first
+          </Button>
+        </Paper>
+      </Container>
 
-            {/* Family demo: parents usually decide, so we ask for them too (optional). */}
-            <TextField
-              fullWidth
-              label="Parent's name (optional)"
-              value={formData.parentName}
-              onChange={(e) => handleFormChange('parentName', e.target.value)}
-              autoComplete="off"
-              inputProps={{ style: { fontSize: 16 } }}
-            />
-            <TextField
-              fullWidth
-              label="Parent's mobile (optional)"
-              value={formData.parentPhone}
-              onChange={(e) => handleFormChange('parentPhone', e.target.value.replace(/\D/g, '').slice(0, 10))}
-              InputProps={{ startAdornment: <Typography sx={{ mr: 1, color: 'text.secondary' }}>+91</Typography> }}
-              inputProps={{ inputMode: 'numeric', style: { fontSize: 16 } }}
-            />
-            <FormControl fullWidth>
-              <InputLabel>Class language</InputLabel>
-              <Select value={formData.language} label="Class language" onChange={(e) => handleFormChange('language', e.target.value)}>
-                <MenuItem value="en">English</MenuItem>
-                <MenuItem value="ta">Tamil</MenuItem>
-                <MenuItem value="kn">Kannada</MenuItem>
-                <MenuItem value="hi">Hindi</MenuItem>
-                <MenuItem value="ml">Malayalam</MenuItem>
-              </Select>
-            </FormControl>
+      {/* FAQ */}
+      <Container maxWidth="md" sx={{ px: 2, pb: { xs: 5, md: 9 } }}>
+        <SectionHeading eyebrow="Questions" title="Before you book" />
+        {DEMO_FAQ.map((f) => (
+          <Accordion key={f.q} disableGutters variant="outlined" sx={{ '&:not(:last-of-type)': { borderBottom: 0 }, '&:before': { display: 'none' } }}>
+            <AccordionSummary expandIcon={<ExpandMoreIcon />} sx={{ minHeight: 56 }}>
+              <Typography fontWeight={700}>{f.q}</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <Typography color="text.secondary">{f.a}</Typography>
+            </AccordionDetails>
+          </Accordion>
+        ))}
+        <Box sx={{ textAlign: 'center', mt: 4 }}>
+          <Button variant="contained" size="large" startIcon={<VideocamOutlinedIcon />} onClick={scrollToBooking} sx={{ minHeight: 52, fontWeight: 800 }}>
+            Book your free demo
+          </Button>
+        </Box>
+      </Container>
 
-            <Grid container spacing={2}>
-              <Grid item xs={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Current Class</InputLabel>
-                  <Select
-                    value={formData.currentClass}
-                    label="Current Class"
-                    onChange={(e) => handleFormChange('currentClass', e.target.value)}
-                  >
-                    <MenuItem value="10th">Class 10</MenuItem>
-                    <MenuItem value="11th">Class 11</MenuItem>
-                    <MenuItem value="12th">Class 12</MenuItem>
-                    <MenuItem value="12th-pass">12th Pass</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-              <Grid item xs={6}>
-                <FormControl fullWidth>
-                  <InputLabel>Interest</InputLabel>
-                  <Select
-                    value={formData.interestCourse}
-                    label="Interest"
-                    onChange={(e) => handleFormChange('interestCourse', e.target.value)}
-                  >
-                    <MenuItem value="nata">NATA</MenuItem>
-                    <MenuItem value="jee_paper2">JEE Paper 2</MenuItem>
-                    <MenuItem value="both">Both</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-            </Grid>
-
-            <Button
-              variant="contained"
-              size="large"
-              fullWidth
-              onClick={handleSubmit}
-              disabled={submitting || !verifiedPhone || !formData.name}
-              sx={{ minHeight: 56, fontSize: '1.1rem' }}
-            >
-              {submitting ? <CircularProgress size={24} color="inherit" /> : 'Book Demo Class'}
-            </Button>
-          </Stack>
-        </DialogContent>
-      </Dialog>
-
-      {/* Phone Verification Modal */}
-      <LoginModal
-        open={showPhoneVerification}
-        onClose={() => setShowPhoneVerification(false)}
-        allowClose={true}
-        onAuthenticated={() => {
-          setShowPhoneVerification(false);
-          // Re-check user phone after verification
-          if (user?.phone) {
-            setVerifiedPhone(user.phone.replace('+91', ''));
-            setFormData(prev => ({ ...prev, phone: user.phone!.replace('+91', '') }));
-          }
-        }}
-        apiBaseUrl={process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011'}
-        phoneOnly={true}
-      />
+      <StickyBookBar />
     </Box>
   );
 }

@@ -16,7 +16,8 @@ const state = vi.hoisted(() => ({
   dormant: [] as string[],
   chatCalls: [] as string[],
   chat: (_recipient: string, _token?: string): any => ({ ok: true, status: 201 }),
-  activityCalls: [] as Array<{ id: string; catalogAppId: string }>,
+  activityCalls: [] as Array<{ id: string; catalogAppId: string; target?: { appId: string; entityId: string; subEntityId: string } }>,
+  insertError: null as null | { message: string },
   activity: (): any => ({ ok: true, status: 204 }),
   assistantOn: true,
   assistantCalls: [] as Array<{ user: { id: string; ms_oid: string | null }; message: any }>,
@@ -53,6 +54,7 @@ vi.mock('@neram/database', () => ({
           error: null,
         }),
         insert: async (row: any) => {
+          if (state.insertError && row.event_type) return { error: state.insertError };
           state.inserted.push(row);
           return { error: null };
         },
@@ -72,8 +74,8 @@ vi.mock('@neram/database', () => ({
 }));
 
 vi.mock('@neram/auth', () => ({
-  sendTeamsActivityNotification: vi.fn(async (id: string, opts: { catalogAppId: string }) => {
-    state.activityCalls.push({ id, catalogAppId: opts.catalogAppId });
+  sendTeamsActivityNotification: vi.fn(async (id: string, opts: { catalogAppId: string; target?: any }) => {
+    state.activityCalls.push({ id, catalogAppId: opts.catalogAppId, target: opts.target });
     return state.activity();
   }),
 }));
@@ -108,6 +110,7 @@ beforeEach(() => {
   state.dormant = [];
   state.chatCalls = [];
   state.activityCalls = [];
+  state.insertError = null;
   state.chat = () => ({ ok: true, status: 201 });
   state.activity = () => ({ ok: true, status: 204 });
   state.assistantOn = true;
@@ -350,5 +353,62 @@ describe('personal chat (support tickets only)', () => {
     state.users = [student('s1', 'Humaira safrin')];
     await sendNudge({ ...BASE, studentIds: ['s1'], respectDormancy: false, bellOnly: true, personal: { delegatedToken: 'real', html: '<p>x</p>' } });
     expect(state.chatCalls).toHaveLength(0);
+  });
+});
+
+describe('a Teams Activity click opens the notification it is about', () => {
+  it('saves the bell row first and hands its id to the feed as the deep link', async () => {
+    state.users = [student('asha', 'Asha')];
+    await sendNudge({ ...BASE, studentIds: ['asha'], respectDormancy: false });
+    const bell = state.inserted.find((r) => r.event_type === 'test_reopened');
+    expect(bell.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(state.activityCalls).toHaveLength(1);
+    expect(state.activityCalls[0].target).toEqual({
+      appId: 'df4f6b2d-ea18-46d1-8934-f508ac248e6c',
+      entityId: 'nexusAssignments',
+      subEntityId: bell.id,
+    });
+  });
+
+  it('still sends the Teams alert, with no deep link, when the bell row did not save', async () => {
+    state.users = [student('asha', 'Asha')];
+    state.insertError = { message: 'boom' };
+    const { results } = await sendNudge({ ...BASE, studentIds: ['asha'], respectDormancy: false });
+    expect(results[0].teams).toBe(true);
+    expect(results[0].inapp).toBe(false);
+    expect(state.activityCalls[0].target).toBeUndefined();
+  });
+
+  it('remembers the Assistant link on the bell row, so a feed fallback still lands on that page', async () => {
+    state.users = [student('asha', 'Asha')];
+    state.assistantOn = false;
+    await sendNudge({
+      ...BASE,
+      studentIds: ['asha'],
+      respectDormancy: false,
+      assistant: { link: { url: 'https://nexus.neramclasses.com/student/timetable/k1/exam?x=1', label: 'See my result' } },
+    });
+    const bell = state.inserted.find((r) => r.event_type === 'test_reopened');
+    expect(bell.metadata.href).toBe('/student/timetable/k1/exam?x=1');
+  });
+
+  it("never overwrites a caller's own href, and ignores links that are not Nexus pages", async () => {
+    state.users = [student('asha', 'Asha'), student('ben', 'Ben')];
+    await sendNudge({
+      ...BASE,
+      studentIds: ['asha'],
+      respectDormancy: false,
+      metadata: { href: '/student/own' },
+      assistant: { link: { url: 'https://nexus.neramclasses.com/student/other', label: 'Go' } },
+    });
+    await sendNudge({
+      ...BASE,
+      studentIds: ['ben'],
+      respectDormancy: false,
+      assistant: { link: { url: 'https://youtube.com/watch?v=1', label: 'Watch' } },
+    });
+    const rows = state.inserted.filter((r) => r.event_type === 'test_reopened');
+    expect(rows[0].metadata.href).toBe('/student/own');
+    expect(rows[1].metadata.href).toBeUndefined();
   });
 });

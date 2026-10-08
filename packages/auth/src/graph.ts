@@ -816,17 +816,44 @@ export async function ensureTeamsAppInstalledForUser(
   }
 }
 
+/** Which tab, and which item in it, a Teams Activity click should open. */
+export interface TeamsActivityTarget {
+  /** The app's manifest id (manifest.json `id`), not the catalog id. */
+  appId: string;
+  /** The static tab's `entityId` in the manifest. */
+  entityId: string;
+  /** Handed to the tab as `context.page.subPageId`. */
+  subEntityId: string;
+}
+
+/**
+ * A Teams deep link that opens one personal tab on one item:
+ * https://teams.microsoft.com/l/entity/{appId}/{entityId}?context={"subEntityId":...}
+ * The tab reads the item from `app.getContext()` as `page.subPageId`.
+ */
+export function teamsEntityDeepLink(target: TeamsActivityTarget): string {
+  return (
+    `https://teams.microsoft.com/l/entity/${encodeURIComponent(target.appId)}/${encodeURIComponent(target.entityId)}` +
+    `?context=${encodeURIComponent(JSON.stringify({ subEntityId: target.subEntityId }))}`
+  );
+}
+
 /**
  * Send a Teams Activity-feed notification to a user (app-only). Lands in their
- * Teams "Activity" (bell), separate from all chats. Clicking it opens the Neram
- * Assistant personal tab (the student's Nexus assignments). Ensures the app is
+ * Teams "Activity" (bell), separate from all chats. Ensures the app is
  * installed first (that also yields the per-user installation id the entityUrl
  * topic needs). Never throws.
  *
  * Uses the reserved `systemDefault` activity type (no manifest `activities`
  * declaration needed); the free text goes in templateParameters.systemDefaultText.
- * The topic MUST be an entityUrl pointing at the installed app: Graph rejects a
- * plain `text` topic whose webUrl is not a teams.microsoft.com/l/ deep link.
+ *
+ * Where a click lands:
+ * - With `target`, the topic is `text` whose webUrl is a teams.microsoft.com/l/
+ *   deep link to the Assistant's tab on that one item, so the click opens the
+ *   notification itself. Graph accepts a `text` topic only with such a webUrl.
+ * - Without it, or when Graph refuses that topic (400), the topic is an
+ *   entityUrl on the installed app, which opens the tab on its home. A refused
+ *   deep link costs the landing page, never the alert.
  *
  * The feed card renders `text` as the bold headline and `preview` as the grey
  * second line, so pass two different strings (headline = what and which item,
@@ -834,7 +861,7 @@ export async function ensureTeamsAppInstalledForUser(
  */
 export async function sendTeamsActivityNotification(
   userMsOid: string,
-  opts: { text: string; preview?: string; catalogAppId: string },
+  opts: { text: string; preview?: string; catalogAppId: string; target?: TeamsActivityTarget },
 ): Promise<TeamsActivityResult> {
   if (!userMsOid || !opts.catalogAppId) return { ok: false, status: 0, reason: 'missing_oid_or_app_id' };
   try {
@@ -845,24 +872,38 @@ export async function sendTeamsActivityNotification(
     const text = opts.text.slice(0, 150);
     // Collapse newlines: the feed renders the preview as a single truncated line.
     const preview = (opts.preview || opts.text).replace(/\s+/g, ' ').trim().slice(0, 150);
-    const res = await graphFetch(
-      `/users/${encodeURIComponent(userMsOid)}/teamwork/sendActivityNotification`,
-      {
+    const send = (topic: Record<string, string>) =>
+      graphFetch(`/users/${encodeURIComponent(userMsOid)}/teamwork/sendActivityNotification`, {
         method: 'POST',
         body: JSON.stringify({
-          topic: {
-            source: 'entityUrl',
-            value: `https://graph.microsoft.com/v1.0/users/${userMsOid}/teamwork/installedApps/${install.installationId}`,
-          },
+          topic,
           activityType: 'systemDefault',
           previewText: { content: preview },
           templateParameters: [{ name: 'systemDefaultText', value: text }],
         }),
-      },
-    );
-    if (res.ok || res.status === 204) return { ok: true, status: res.status };
+      });
+    const appTopic = {
+      source: 'entityUrl',
+      value: `https://graph.microsoft.com/v1.0/users/${userMsOid}/teamwork/installedApps/${install.installationId}`,
+    };
+
+    let deepLinkRefused = '';
+    if (opts.target) {
+      const res = await send({ source: 'text', value: 'Neram Assistant', webUrl: teamsEntityDeepLink(opts.target) });
+      if (res.ok || res.status === 204) return { ok: true, status: res.status };
+      const errText = await res.text().catch(() => '');
+      if (res.status !== 400) {
+        return { ok: false, status: res.status, reason: `sendActivityNotification ${res.status}: ${errText}` };
+      }
+      deepLinkRefused = `deep link refused (400: ${errText.slice(0, 200)}); `;
+    }
+
+    const res = await send(appTopic);
+    if (res.ok || res.status === 204) {
+      return { ok: true, status: res.status, ...(deepLinkRefused ? { reason: deepLinkRefused.trim() } : {}) };
+    }
     const errText = await res.text().catch(() => '');
-    return { ok: false, status: res.status, reason: `sendActivityNotification ${res.status}: ${errText}` };
+    return { ok: false, status: res.status, reason: `${deepLinkRefused}sendActivityNotification ${res.status}: ${errText}` };
   } catch (error) {
     return { ok: false, status: 0, reason: error instanceof Error ? error.message : 'unknown_error' };
   }

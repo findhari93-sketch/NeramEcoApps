@@ -7,7 +7,7 @@
  * bids and first-page bids, and a Brand group that never served (₹8 default
  * bid, ad under review). The account's own problems are kept on purpose so
  * every rule has something to find: case duplicates, 2026 keywords and ad text,
- * a Bangalore keyword in a Tamil Nadu campaign, competitor and off-scope
+ * a Bangalore keyword (Bengaluru is coached online), competitor and off-scope
  * searches, and keywords below the first-page bid that convert well.
  *
  * Numbers are 30-day totals spread over the requested dates deterministically,
@@ -168,7 +168,7 @@ const PARTS: Array<{ hour: number; share: number; convShare: number }> = [
 ];
 const DAYS = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
 
-/** Cities: Bengaluru spends with no sign-ups even though the campaign targets Tamil Nadu. */
+/** Cities: Bengaluru spends with no sign-ups, so R16 can show its location advice. */
 const CITIES: Array<{ id: string; name: string; share: number; convShare: number }> = [
   { id: '1007768', name: 'Chennai', share: 0.42, convShare: 0.45 },
   { id: '1007751', name: 'Coimbatore', share: 0.16, convShare: 0.17 },

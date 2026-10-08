@@ -1,5 +1,6 @@
 import { baseIdOf } from '@/lib/practice-atoms';
 import { isUuid } from '@/lib/assistant/ids';
+import { hasTestRunning } from '@/lib/assistant/test-lock';
 import type { ToolDef } from '@/lib/assistant/types';
 import { questionUrl } from './shared';
 
@@ -20,15 +21,15 @@ export const qbExplainAnswer: ToolDef = {
   async run(ctx, args) {
     const id = baseIdOf(typeof args.question_id === 'string' ? args.question_id : '') ?? '';
     if (!isUuid(id)) return { ok: false, error: 'Open the question in the question bank and ask me there, so I know which one you mean.' };
-    const [{ data: q, error: qErr }, { data: openTests, error: testErr }, { data: tried, error: triedErr }] = await Promise.all([
+    const [{ data: q, error: qErr }, testRunning, { data: tried, error: triedErr }] = await Promise.all([
       ctx.supabase.from('nexus_qb_questions').select('id, question_text, options, correct_answer, explanation_brief, explanation_detailed, is_active, status').eq('id', id).maybeSingle(),
-      ctx.supabase.from('nexus_test_attempts').select('id').eq('student_id', ctx.caller.id).eq('status', 'in_progress').limit(1),
+      hasTestRunning(ctx.supabase, ctx.caller.id),
       ctx.supabase.from('nexus_qb_student_attempts').select('question_id').eq('student_id', ctx.caller.id).eq('question_id', id).limit(1),
     ]);
     if (qErr || !q || q.is_active === false || q.status !== 'active') return { ok: false, error: 'I could not find that question.' };
-    // Fail closed: a failed read of the open-test table counts as a test in progress.
-    if (testErr || (openTests || []).length > 0) {
-      return { ok: true, reply: 'Finish the test you have open first. I can explain questions after you submit it.', data: { refused: 'test_in_progress' } };
+    // hasTestRunning fails closed: a failed read counts as a test running.
+    if (testRunning) {
+      return { ok: true, reply: 'You have a test running. Finish it first, then I can explain questions.', data: { refused: 'test_in_progress' } };
     }
     const raw: Option[] = Array.isArray(q.options) ? q.options : [];
     const options = raw.map((o) => ({ id: o?.id ?? null, text: o?.text ?? '' }));

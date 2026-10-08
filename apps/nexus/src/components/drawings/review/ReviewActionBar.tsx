@@ -3,9 +3,16 @@
 /**
  * The bar that closes a drawing review, in its two states.
  *
- * Owed work (assignments, tests): Save draft, Redo, Complete. Practice: Next and
- * Send review, marking optional. Both carry the Show in Inspiration switch when
- * the drawing has an item.
+ * Owed work (assignments, tests): Save draft, Redo, Complete. Practice: one
+ * forward button that says what it does. Nothing changed, it is Skip (or Next on
+ * a sketch already reviewed). Anything changed, it is Send & next (or Update &
+ * next), with a quiet Skip beside it that plainly leaves without sending.
+ *
+ * Practice used to show Next and Send review side by side at all times. Both
+ * moved on, a reaction had already gone to the student on tap, and nothing said
+ * which of the two would send what, so teachers stopped to guess on every sketch.
+ * Everything a teacher touches now waits for the one send, and this bar only
+ * holds things that do.
  * Locked: a finished or superseded round, with an explicit way back into grading
  * so the teacher is never left on a screen with nothing to press.
  *
@@ -15,7 +22,6 @@
  * branch feeding two copies of the tree, and is now breakpoints on one.
  */
 
-import type { ReactNode } from 'react';
 import { completeLabel } from '@/lib/drawing-ai-draft';
 import { Box, Button, IconButton, Typography } from '@neram/ui';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
@@ -83,10 +89,10 @@ export interface ReviewActionBarProps {
   mode: 'owed' | 'practice';
   /** A sketch and a test drawing have no redo round. */
   canRedo: boolean;
-  /** Practice: move on without saving. Null hides Next. */
+  /** Practice: move on without saving. Null hides Skip. */
   onNext: (() => void) | null;
-  /** The Show in Inspiration switch, when this drawing has an Inspiration item. */
-  inspirationSlot?: ReactNode;
+  /** Practice: something on this sheet differs from what the student already has. */
+  hasChanges?: boolean;
 }
 
 export default function ReviewActionBar({
@@ -94,7 +100,7 @@ export default function ReviewActionBar({
   onEvaluate, onOpenLatest,
   onSaveDraft, draftSaving, draftSaved,
   onRedo, onComplete, saving, pendingAction, hasAiDraft,
-  voiceBusy, mode, canRedo, onNext, inspirationSlot,
+  voiceBusy, mode, canRedo, onNext, hasChanges = false,
 }: ReviewActionBarProps) {
   if (!isEditMode) {
     return (
@@ -149,19 +155,8 @@ export default function ReviewActionBar({
         // While a note is being recorded on a phone, the recorder's own Stop bar
         // takes this spot. Redo and Complete wait for the note regardless.
         display: voiceBusy ? { xs: 'none', md: 'flex' } : 'flex',
-        // From 900px the gallery switch takes a thin row of its own above the
-        // buttons: in a 360px rail four controls on one line cut Complete off.
-        flexWrap: { md: 'wrap' },
-        rowGap: { md: 0.25 },
-        pt: { md: 0.25 },
       }}
     >
-      {inspirationSlot && (
-        <Box sx={{ order: { xs: 10, md: -1 }, width: { md: '100%' }, display: 'flex', justifyContent: 'flex-end', minHeight: { md: 32 } }}>
-          {inspirationSlot}
-        </Box>
-      )}
-
       {mode === 'owed' && (
         <>
           {/* Draft: icon-only where the bar is tight, icon and text where it is not. */}
@@ -218,43 +213,80 @@ export default function ReviewActionBar({
         </Button>
       )}
 
-      {mode === 'practice' && onNext && (
-        <Button
-          variant="outlined"
-          size="small"
-          onClick={onNext}
+      {mode === 'practice' ? (
+        <PracticeButtons
+          hasChanges={hasChanges}
+          alreadyReviewed={alreadyReviewed}
+          onNext={onNext}
+          onSend={onComplete}
           disabled={saving || draftSaving || voiceBusy}
-          sx={{
-            textTransform: 'none', fontWeight: 600, fontSize: '0.78rem',
-            minHeight: 48, minWidth: 0, px: { xs: 1.5, md: 2 }, whiteSpace: 'nowrap',
-          }}
+          sending={saving && pendingAction === 'complete'}
+        />
+      ) : (
+        <Button
+          variant="contained"
+          color="success"
+          size="small"
+          onClick={onComplete}
+          disabled={saving || draftSaving || voiceBusy}
+          startIcon={<CheckCircleOutlineIcon />}
+          sx={{ ...primarySx, ...hideStartIconOnPhone }}
         >
-          Next
+          {/* 'Save' only where it is honest: updating an already-finished review.
+              A redo round is still open, and this button completes it. */}
+          {saving && pendingAction === 'complete'
+            ? '...'
+            : completeLabel({ hasDraft: !!hasAiDraft, alreadyReviewed })}
         </Button>
       )}
 
-      <Button
-        variant="contained"
-        color="success"
-        size="small"
-        onClick={onComplete}
-        disabled={saving || draftSaving || voiceBusy}
-        startIcon={<CheckCircleOutlineIcon />}
-        sx={{
-          textTransform: 'none', fontWeight: 600, fontSize: '0.78rem',
-          minHeight: 48, flex: 1, px: { xs: 1.5, md: 2 }, whiteSpace: 'nowrap',
-          ...hideStartIconOnPhone,
-        }}
-      >
-        {/* 'Save' only where it is honest: updating an already-finished review.
-            A redo round is still open, and this button completes it. */}
-        {saving && pendingAction === 'complete'
-          ? '...'
-          : mode === 'practice'
-            ? (alreadyReviewed ? 'Update review' : 'Send review')
-            : completeLabel({ hasDraft: !!hasAiDraft, alreadyReviewed })}
-      </Button>
-
     </Box>
+  );
+}
+
+const primarySx = {
+  textTransform: 'none', fontWeight: 600, fontSize: '0.78rem',
+  minHeight: 48, flex: 1, px: { xs: 1.5, md: 2 }, whiteSpace: 'nowrap',
+} as const;
+
+const quietSx = {
+  textTransform: 'none', fontWeight: 600, fontSize: '0.78rem',
+  minHeight: 48, minWidth: 0, px: { xs: 1.5, md: 2 }, whiteSpace: 'nowrap',
+} as const;
+
+/**
+ * Practice's forward buttons. Untouched, there is one: leave. Touched, the send
+ * is the loud one and Skip stays, quieter, because on a phone this bar is the
+ * only way past a sketch and an accidental tap must not trap the teacher.
+ */
+function PracticeButtons({ hasChanges, alreadyReviewed, onNext, onSend, disabled, sending }: {
+  hasChanges: boolean;
+  alreadyReviewed: boolean;
+  onNext: (() => void) | null;
+  onSend: () => void;
+  disabled: boolean;
+  sending: boolean;
+}) {
+  if (!hasChanges && onNext) {
+    return (
+      <Button variant="outlined" size="small" onClick={onNext} disabled={disabled}
+        endIcon={<ArrowForwardIcon />} sx={primarySx}>
+        {alreadyReviewed ? 'Next' : 'Skip'}
+      </Button>
+    );
+  }
+  return (
+    <>
+      {onNext && (
+        <Button variant="text" size="small" color="inherit" onClick={onNext} disabled={disabled}
+          aria-label="Skip without sending" sx={quietSx}>
+          Skip
+        </Button>
+      )}
+      <Button variant="contained" color="success" size="small" onClick={onSend} disabled={disabled}
+        endIcon={<ArrowForwardIcon />} sx={primarySx}>
+        {sending ? 'Sending' : alreadyReviewed ? 'Update & next' : 'Send & next'}
+      </Button>
+    </>
   );
 }

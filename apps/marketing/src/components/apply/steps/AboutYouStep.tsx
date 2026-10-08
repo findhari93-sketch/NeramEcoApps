@@ -24,6 +24,7 @@ import EditOutlined from '@mui/icons-material/EditOutlined';
 import MyLocationOutlined from '@mui/icons-material/MyLocationOutlined';
 import VerifiedOutlined from '@mui/icons-material/VerifiedOutlined';
 import { useTranslations } from 'next-intl';
+import StepHeading from '../StepHeading';
 import { useFormContext } from '../FormContext';
 import { SUPPORTED_COUNTRIES, getCountryConfig } from '../countryConfig';
 
@@ -223,12 +224,7 @@ export default function AboutYouStep() {
 
   return (
     <Box>
-      <Typography variant="h5" component="h1" gutterBottom fontWeight={700}>
-        {t('aboutYou.title')}
-      </Typography>
-      <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-        {t('aboutYou.subtitle')}
-      </Typography>
+      <StepHeading title={t('aboutYou.title')} subtitle={t('aboutYou.subtitle')} />
 
       <Stack spacing={2.5}>
         {/* Student name */}

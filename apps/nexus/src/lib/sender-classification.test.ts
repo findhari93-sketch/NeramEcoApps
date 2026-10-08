@@ -65,6 +65,8 @@ const ASSISTANT: Record<string, string> = {
     'Class notices: created, moved, cancelled, recording up, week published. An announcement to a class.',
   'apps/nexus/src/lib/catchup-congrats.ts':
     'Well done on a cleared class, and on a clean slate. The system noticed; nobody pressed anything.',
+  'apps/nexus/src/app/api/cron/demo-staff-reminders/route.ts':
+    "audience: 'staff'. Demo requests and demo-day reminders to the demo team, queued by the system.",
 };
 
 /**

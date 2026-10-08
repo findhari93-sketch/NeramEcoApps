@@ -152,7 +152,7 @@ export function generateDemoClassICS(options: {
   let fullDescription = description || 'Join us for a free demo class to experience our teaching methodology.';
   fullDescription += '\\n\\nNeram Classes';
   fullDescription += '\\nWebsite: https://neramclasses.com';
-  fullDescription += '\\nPhone: +91 XXXXXXXXXX';
+  fullDescription += '\\nPhone: +91 91761 37043';
 
   return generateICSFile({
     title,

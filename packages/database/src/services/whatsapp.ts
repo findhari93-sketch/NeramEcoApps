@@ -563,6 +563,244 @@ export async function sendDemoClassReminder(
 }
 
 // ============================================
+// DEMO CLASS V2 (request-first bookings)
+// ============================================
+
+export type DemoWaKind =
+  | 'received'
+  | 'confirmed'
+  | 'reminder_day'
+  | 'reminder_soon'
+  | 'rescheduled'
+  | 'cancelled'
+  | 'thanks'
+  | 'missed';
+
+export interface DemoWaParams {
+  /** Who the message is addressed to (student or parent). */
+  recipientName: string;
+  /** "you" when the student is the recipient, else the student's name. */
+  studentName: string;
+  ref: string;
+  /** "Tue, 14 Oct, Evening (6 PM to 8:30 PM)" */
+  preference: string;
+  /** "Tue, 14 Oct at 6:30 PM" */
+  when: string;
+  /** "6:30 PM" */
+  time: string;
+  hostName: string;
+  reason: string;
+  /** /d/{token} join-link token for the URL button. */
+  token: string;
+  surveyUrl: string;
+}
+
+/**
+ * The Meta templates this feature needs, in the exact shape to submit in
+ * WhatsApp Manager (category Utility, language English "en"). The URL button
+ * on the linked ones is `https://neramclasses.com/d/{{1}}`. Meta rejects a
+ * body that starts or ends with a variable, so every body ends in text.
+ */
+export const DEMO_WA_TEMPLATES: Record<
+  DemoWaKind,
+  { name: string; params: Array<keyof DemoWaParams>; button: boolean; body: string }
+> = {
+  received: {
+    name: 'demo_request_received',
+    params: ['recipientName', 'studentName', 'ref', 'preference'],
+    button: false,
+    body:
+      'Hi {{1}}, we have received the free Neram demo class request for {{2}} (ref {{3}}). Preferred time: {{4}}. ' +
+      'Our team will call you soon from +91 91761 37043 to fix the exact time. While you wait, send any drawing ' +
+      'to that number on WhatsApp and an architect will reply with personal feedback.',
+  },
+  confirmed: {
+    name: 'demo_confirmed',
+    params: ['recipientName', 'studentName', 'when', 'hostName', 'ref'],
+    button: true,
+    body:
+      'Hi {{1}}, the free Neram demo class for {{2}} is confirmed for {{3}} with {{4}} (ref {{5}}). It is a live ' +
+      'Microsoft Teams class, and parents are welcome to join and ask their doubts. Tap the button below for the ' +
+      'join link and to add it to your calendar.',
+  },
+  reminder_day: {
+    name: 'demo_reminder_today',
+    params: ['recipientName', 'studentName', 'time'],
+    button: true,
+    body:
+      'Hi {{1}}, a reminder that the free Neram demo class for {{2}} is today at {{3}}. Join from a laptop or a ' +
+      'phone with the Microsoft Teams app, and keep a pencil and paper ready. Tap below to join.',
+  },
+  reminder_soon: {
+    name: 'demo_reminder_soon',
+    params: ['recipientName', 'studentName', 'time'],
+    button: true,
+    body:
+      'Hi {{1}}, the free Neram demo class for {{2}} starts in 30 minutes, at {{3}}. Tap below to join. If Teams ' +
+      'asks you to wait in the lobby, our teacher will let you in.',
+  },
+  rescheduled: {
+    name: 'demo_rescheduled',
+    params: ['recipientName', 'studentName', 'when', 'reason'],
+    button: true,
+    body:
+      'Hi {{1}}, the free Neram demo class for {{2}} has moved to {{3}}. Reason: {{4}}. Tap below for the join ' +
+      'link and the updated calendar invite.',
+  },
+  cancelled: {
+    name: 'demo_cancelled',
+    params: ['recipientName', 'studentName', 'when', 'reason'],
+    button: false,
+    body:
+      'Hi {{1}}, the free Neram demo class for {{2}} on {{3}} has been cancelled. Reason: {{4}}. You can pick a ' +
+      'new time any day at neramclasses.com/demo-class.',
+  },
+  thanks: {
+    name: 'demo_thank_you',
+    params: ['recipientName', 'surveyUrl'],
+    button: false,
+    body:
+      'Hi {{1}}, thank you for attending the free Neram demo class. Share your feedback in one minute here: {{2}} ' +
+      'and when you are ready to join, call or WhatsApp us on +91 91761 37043.',
+  },
+  missed: {
+    name: 'demo_missed',
+    params: ['recipientName', 'studentName'],
+    button: false,
+    body:
+      'Hi {{1}}, we missed {{2}} at the free Neram demo class today. No problem. Pick a new time at ' +
+      'neramclasses.com/demo-class or WhatsApp us on +91 91761 37043 and we will set it up.',
+  },
+};
+
+/** Send one demo message. Empty values are replaced, since Meta rejects blank parameters. */
+export async function sendDemoRequestMessage(
+  phone: string,
+  kind: DemoWaKind,
+  params: DemoWaParams,
+): Promise<WhatsAppSendResult> {
+  if (!isWhatsAppConfigured()) {
+    return { success: false, error: 'WA_NOT_CONFIGURED: WHATSAPP_PHONE_NUMBER_ID or WHATSAPP_ACCESS_TOKEN is not set' };
+  }
+  const t = DEMO_WA_TEMPLATES[kind];
+  const text = (k: keyof DemoWaParams) => {
+    const v = String(params[k] ?? '').replace(/\s+/g, ' ').trim();
+    return v || (k === 'reason' ? 'a schedule change' : '-');
+  };
+  const components: TemplateComponent[] = [
+    { type: 'body', parameters: t.params.map((k) => ({ type: 'text' as const, text: text(k) })) },
+  ];
+  if (t.button) {
+    components.push({ type: 'button', sub_type: 'url', index: '0', parameters: [{ type: 'text', text: params.token }] });
+  }
+  return sendWhatsAppTemplate(phone, t.name, 'en', components);
+}
+
+export interface WhatsAppHealth {
+  configured: boolean;
+  phoneNumberId: string | null;
+  phone: Record<string, unknown> | null;
+  phoneError: string | null;
+  /** Plain-language reading of the most likely problem, or null when healthy. */
+  diagnosis: string | null;
+  businessAccountId: string | null;
+  templates: Array<{ name: string; status: string; language: string; category?: string }> | null;
+  templatesError: string | null;
+  demoTemplates: Array<{ kind: DemoWaKind; name: string; status: string }>;
+}
+
+/**
+ * What Meta says about our sender: which number is on the Cloud API, whether
+ * the token still works, and which templates are approved. Read-only.
+ */
+export async function getWhatsAppHealth(): Promise<WhatsAppHealth> {
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID || null;
+  const token = process.env.WHATSAPP_ACCESS_TOKEN || null;
+  const businessAccountId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID || null;
+  const health: WhatsAppHealth = {
+    configured: !!(phoneNumberId && token),
+    phoneNumberId,
+    phone: null,
+    phoneError: null,
+    diagnosis: null,
+    businessAccountId,
+    templates: null,
+    templatesError: null,
+    demoTemplates: [],
+  };
+
+  if (!phoneNumberId || !token) {
+    health.diagnosis =
+      'WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN are not both set on this deployment, so nothing can be sent.';
+  } else {
+    const get = async (path: string) => {
+      const res = await fetch(`${WHATSAPP_API_BASE}/${path}`, {
+        cache: 'no-store',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json().catch(() => ({}));
+      return { ok: res.ok, json: json as any, status: res.status };
+    };
+
+    try {
+      const r = await get(
+        `${phoneNumberId}?fields=display_phone_number,verified_name,quality_rating,code_verification_status,name_status,platform_type,status,throughput`,
+      );
+      if (r.ok) {
+        health.phone = r.json;
+      } else {
+        health.phoneError = formatWhatsAppError(r.json, r.status);
+        const code = r.json?.error?.code;
+        health.diagnosis =
+          code === 190
+            ? 'The access token has expired or was revoked (Meta #190). Tokens copied from API Setup last 24 hours; create a permanent System User token in Business Settings and update WHATSAPP_ACCESS_TOKEN.'
+            : code === 100
+              ? 'Meta does not recognise WHATSAPP_PHONE_NUMBER_ID, or the token has no access to it (Meta #100). Copy the Phone Number ID from WhatsApp > API Setup.'
+              : 'Meta refused the phone number lookup. See the error below.';
+      }
+    } catch (err) {
+      health.phoneError = err instanceof Error ? err.message : 'Network error';
+    }
+
+    if (businessAccountId) {
+      try {
+        const r = await get(`${businessAccountId}/message_templates?fields=name,status,language,category&limit=200`);
+        if (r.ok) {
+          health.templates = (r.json?.data ?? []).map((t: any) => ({
+            name: t.name,
+            status: t.status,
+            language: t.language,
+            category: t.category,
+          }));
+        } else {
+          health.templatesError = formatWhatsAppError(r.json, r.status);
+        }
+      } catch (err) {
+        health.templatesError = err instanceof Error ? err.message : 'Network error';
+      }
+    } else {
+      health.templatesError =
+        'Set WHATSAPP_BUSINESS_ACCOUNT_ID (WhatsApp Manager > Account tools > WhatsApp Business Account ID) to list template approval status.';
+    }
+
+    if (!health.diagnosis && health.phone) {
+      const status = String(health.phone.status ?? '');
+      if (status && status !== 'CONNECTED') {
+        health.diagnosis = `The number's API status is ${status}, not CONNECTED. Finish registration in WhatsApp Manager.`;
+      }
+    }
+  }
+
+  health.demoTemplates = (Object.keys(DEMO_WA_TEMPLATES) as DemoWaKind[]).map((kind) => {
+    const name = DEMO_WA_TEMPLATES[kind].name;
+    const found = health.templates?.find((t) => t.name === name && t.language.startsWith('en'));
+    return { kind, name, status: found ? found.status : health.templates ? 'MISSING' : 'UNKNOWN' };
+  });
+
+  return health;
+}
+
+// ============================================
 // FIRST-TOUCH AUTO MESSAGES
 // ============================================
 

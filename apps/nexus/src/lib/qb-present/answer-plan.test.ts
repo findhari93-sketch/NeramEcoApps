@@ -91,14 +91,20 @@ describe('answerPlan: values, pictures and drawings', () => {
     });
   });
 
-  it('asks a number with no key when the answer is a formula the pad cannot match', () => {
-    // The pad grades by exact text in SQL, so a key of 2√3 or \frac{1}{2} has
-    // nothing to compare against. It must fall back to "teacher reveals", not throw.
-    for (const formula of ['2√3', '\\frac{1}{2}', 'π/2']) {
+  it('asks a number keyed by its value when the answer is a formula', () => {
+    // The pad stores a formula as its value with 12 significant digits, the same
+    // text a student's 2√3 or 2*sqrt(3) is stored as, and grades by value.
+    const cases: Array<[string, string]> = [
+      ['2√3', '3.46410161514'],
+      ['\\frac{1}{2}', '0.5'],
+      ['π/2', '1.57079632679'],
+      ['3/4', '0.75'],
+    ];
+    for (const [formula, value] of cases) {
       expect(answerPlan({ question_format: 'NUMERICAL', options: null, correct_answer: formula })).toEqual({
         type: 'numeric',
-        keys: null,
-        keyFrom: null,
+        keys: [value],
+        keyFrom: 'formula',
       });
     }
   });

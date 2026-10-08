@@ -53,6 +53,20 @@ test.describe('Application shell', () => {
     await expect(page.getByRole('menuitem', { name: /call us/i })).toBeVisible();
     await expect(page.getByRole('menuitem', { name: /contact/i })).toBeVisible();
   });
+
+  test('the header offers Log in on /apply and it opens the sign-in dialog', async ({ page }) => {
+    await page.goto(`${MARKETING_URL}/apply`);
+    const login = page.getByRole('banner').getByRole('button', { name: /log in/i });
+    await expect(login).toBeVisible();
+    await login.click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+  });
+
+  test('/pay has no Log in button, because nothing there registers one', async ({ page }) => {
+    await page.goto(`${MARKETING_URL}/pay?app=NERAM-0000-00000`);
+    await expect(page.getByRole('banner')).toBeVisible();
+    await expect(page.getByRole('banner').getByRole('button', { name: /log in/i })).toHaveCount(0);
+  });
 });
 
 test.describe('Application shell on a phone', () => {
@@ -71,6 +85,19 @@ test.describe('Application shell on a phone', () => {
     await expect(page.locator('button.MuiButton-contained:visible')).toHaveCount(0);
     await page.getByRole('button', { name: /type it myself/i }).click();
     await expect(page.locator('button.MuiButton-contained:visible')).toHaveCount(1);
+  });
+
+  test('the header and the action bar stick while the step scrolls', async ({ page }) => {
+    await page.goto(`${MARKETING_URL}/apply`);
+    await page.getByRole('button', { name: /type it myself/i }).click();
+    await expect(page.locator('input[name="firstName"]')).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, 600));
+    await page.waitForTimeout(300);
+    const banner = (await page.getByRole('banner').boundingBox())!;
+    expect(Math.round(banner.y), 'the header stays at the top').toBe(0);
+    const cta = (await page.locator('button.MuiButton-contained:visible').first().boundingBox())!;
+    expect(cta.y + cta.height, 'the primary button rides the bottom edge').toBeLessThanOrEqual(812);
+    expect(cta.y, 'the primary button is on screen').toBeGreaterThan(400);
   });
 
   test('the legal strip is not hidden under the action bar at the end of the page', async ({ page }) => {

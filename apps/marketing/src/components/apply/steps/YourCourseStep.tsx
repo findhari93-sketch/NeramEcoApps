@@ -41,6 +41,7 @@ import PhoneOutlined from '@mui/icons-material/PhoneOutlined';
 import ScheduleOutlined from '@mui/icons-material/ScheduleOutlined';
 import AccessTimeOutlined from '@mui/icons-material/AccessTimeOutlined';
 import { useTranslations } from 'next-intl';
+import StepHeading from '../StepHeading';
 import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import { useFormContext } from '../FormContext';
 import type { CourseType, OfflineCenter } from '@neram/database';
@@ -292,12 +293,7 @@ export default function YourCourseStep() {
 
   return (
     <Box>
-      <Typography variant="h5" component="h1" gutterBottom fontWeight={700}>
-        {t('yourCourse.title')}
-      </Typography>
-      <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-        {t('yourCourse.subtitle')}
-      </Typography>
+      <StepHeading title={t('yourCourse.title')} subtitle={t('yourCourse.subtitle')} />
 
       {/* Course Selection */}
       <Box sx={{ mb: 4 }}>

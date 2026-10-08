@@ -314,11 +314,41 @@ describe('StudentPad', () => {
     mocks.padFetch.mockRejectedValue(new PadClientError(400, 'INVALID_ANSWER', 'INVALID_ANSWER'));
     render(pad());
 
-    fireEvent.change(screen.getByLabelText('Your number'), { target: { value: '12..5' } });
+    fireEvent.change(screen.getByLabelText('Your answer'), { target: { value: '12..5' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save answer' }));
 
     expect(await screen.findByText('That answer does not fit this question. Please check it.')).toBeTruthy();
-    expect((screen.getByLabelText('Your number') as HTMLInputElement).value).toBe('12..5');
+    expect((screen.getByLabelText('Your answer') as HTMLInputElement).value).toBe('12..5');
+  });
+
+  it('gives a numerical question the maths keys, and sends the formula as typed', async () => {
+    mocks.snapshot = snap({ prompt: prompt({ answer_type: 'numeric', option_count: null }) });
+    mocks.padFetch.mockResolvedValue({ status: 'accepted', answer: '3.46410161514', rawAnswer: '2√(3)', respondedAt: '2026-09-10T10:00:05Z' });
+    render(pad());
+
+    const box = screen.getByLabelText('Your answer') as HTMLInputElement;
+    expect(screen.getByRole('group', { name: 'Maths keys' })).toBeTruthy();
+    fireEvent.change(box, { target: { value: '2' } });
+    box.setSelectionRange(1, 1);
+    fireEvent.click(screen.getByRole('button', { name: 'Square root' }));
+    expect(box.value).toBe('2√()');
+    fireEvent.change(box, { target: { value: '2√(3)' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save answer' }));
+
+    await waitFor(() => expect(mocks.padFetch).toHaveBeenCalled());
+    const [, url, init] = mocks.padFetch.mock.calls[0];
+    expect(url).toBe('/api/pad/submit');
+    expect((init as { body: { answer: string } }).body.answer).toBe('2√(3)');
+  });
+
+  it('shows a locked formula answer as the student wrote it, not as its stored value', () => {
+    mocks.snapshot = snap({
+      prompt: prompt({ answer_type: 'numeric', option_count: null, state: 'closed', version: 2 }),
+      my_response: { ...response('3.46410161514'), raw_answer: '2√3' },
+    });
+    render(pad());
+    expect(screen.getByText(/Locked: 2√3/)).toBeTruthy();
+    expect(screen.queryByText(/3\.4641016/)).toBeNull();
   });
 
   it('shows correct, incorrect and poll results only after REVEAL', () => {

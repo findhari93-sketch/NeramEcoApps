@@ -69,6 +69,9 @@ export {
   isWhatsAppConfigured,
   sendDemoClassApproved,
   sendDemoClassReminder,
+  sendDemoRequestMessage,
+  getWhatsAppHealth,
+  DEMO_WA_TEMPLATES,
   sendTicketConfirmation as sendWhatsAppTicketConfirmation,
   sendFirstTouchQuickQuestion,
   sendFirstTouchResultsVideo,
@@ -77,6 +80,7 @@ export {
   formatWhatsAppError,
   isPermanentWhatsAppFailure,
 } from './services/whatsapp';
+export type { DemoWaKind, DemoWaParams, WhatsAppHealth } from './services/whatsapp';
 
 // Services - Unified Notifications
 export {
@@ -93,6 +97,7 @@ export {
   notifyScholarshipRevisionRequested,
   notifyNewCallback,
   notifyDemoRegistration,
+  notifyDemoRequest,
   notifyContactMessageReceived,
   notifyClassroomAccessRequested,
   notifyRefundRequested,
@@ -173,6 +178,8 @@ export {
 } from './utils/lifecycle-rules';
 export type { LifecycleInput, ExamYearSource, ActivityGroup } from './utils/lifecycle-rules';
 export { createUnsubscribeToken, verifyUnsubscribeToken } from './utils/unsubscribe-token';
+// Demo Class v2 scheduling (client-safe copy at '@neram/database/demo-schedule')
+export * from './utils/demo-schedule';
 export { fetchAllRows, countRowsByKey, countRowsForIds } from './utils/paged-rows';
 export {
   classifyCatchupCandidate,

@@ -24,13 +24,24 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const body = await request.json();
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json({ error: 'Bad request' }, { status: 400 });
+    }
     const supabase = getSupabaseAdminClient();
+
+    // Merge, so the video URL editor and the request desk's settings dialog
+    // (hosts, windows, drawing number) never overwrite each other's keys.
+    const { data: current } = await (supabase as any)
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'demo_class')
+      .maybeSingle();
 
     const { error } = await (supabase as any)
       .from('site_settings')
       .upsert({
         key: 'demo_class',
-        value: body,
+        value: { ...((current?.value as Record<string, unknown>) || {}), ...body },
         updated_at: new Date().toISOString(),
       });
 

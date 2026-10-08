@@ -102,11 +102,14 @@
     "shell": {
       "home": "Neram Classes home",
       "help": "Help",
+      "secure": "Secure application",
       "callUs": "Call us",
       "contactPage": "Contact page",
       "terms": "Terms",
       "privacy": "Privacy",
-      "refund": "Refund policy"
+      "refund": "Refund policy",
+      "haveAccount": "Have an account?",
+      "logIn": "Log in"
     },
     "progress": "Step {current} of {total}",
     "steps": {
@@ -123,7 +126,60 @@
       "saving": "Saving",
       "submitting": "Submitting",
       "saved": "Progress saved",
-      "saveFailed": "Could not save to the server. Your answers are kept on this device."
+      "saveFailed": "Could not save to the server. Your answers are kept on this device.",
+      "continueToCourse": "Continue to your course",
+      "reviewApplication": "Review application",
+      "noPaymentYet": "No payment needed yet. We save as you go.",
+      "nextReview": "Next: check everything before you pay",
+      "nextPayment": "Next: fees and payment options"
+    },
+    "showcase": {
+      "eyebrow": "Inside the Nexus app",
+      "headline": "India's largest AI-enabled learning platform for",
+      "headlineAccent": "architecture entrance.",
+      "windowAlt": "A short tour of the Nexus app: drawing review, revision scores, question prediction, the AI tutor, the class library, the sketchbook and a live class.",
+      "pause": "Pause the tour",
+      "play": "Play the tour",
+      "previous": "Previous scene",
+      "next": "Next scene",
+      "scenes": {
+        "review": {
+          "label": "Review",
+          "caption": "Your teacher sketches on your drawing and talks you through it."
+        },
+        "revise": {
+          "label": "Revise",
+          "caption": "Fix it, resubmit, watch the score climb."
+        },
+        "predict": {
+          "label": "Predict",
+          "caption": "AI predicts this year's questions from 17 years of chapter weightage."
+        },
+        "tutor": {
+          "label": "AI tutor",
+          "caption": "Every question solved: video, image, and a tutor you can ask anything."
+        },
+        "library": {
+          "label": "Library",
+          "caption": "3,000+ recorded classes for NATA and JEE Paper 2."
+        },
+        "sketchbook": {
+          "label": "Sketchbook",
+          "caption": "Your digital sketchbook, plus inspiration from every drawing question."
+        },
+        "live": {
+          "label": "Live",
+          "caption": "Live classes with answer pads, inside Microsoft Teams."
+        }
+      },
+      "stats": {
+        "rank": "AIR 1",
+        "rankNote": "JEE B.Arch 2024",
+        "questions": "10,000+",
+        "questionsNote": "solved questions",
+        "global": "Global",
+        "globalNote": "students across the world"
+      }
     },
     "aboutYou": {
       "title": "About you",

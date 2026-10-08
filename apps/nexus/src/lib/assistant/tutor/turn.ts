@@ -11,21 +11,21 @@ import { ApiError, describeError } from '@/lib/api-errors';
 import { appendMessage, findReplyToExternalId } from '../store';
 import type { AssistantCaller } from '../types';
 import { isUuid } from '../ids';
+import { hasTestRunning } from '../test-lock';
 import { hydrateState, step, type EngineOut, type Facts, type SessionState } from './engine';
 import { interpretReply, type InterpretMeta } from './interpret';
 import { tutorMatchers } from './matchers';
 import type { TutorPack } from './pack';
 import { buildLearningItem } from './save';
 import {
-  createSession, ensureTutorThread, getOpenSession, hasTestInProgress, loadConcepts, loadLatestAttempt, loadLivePack,
+  createSession, ensureTutorThread, getOpenSession, loadConcepts, loadLatestAttempt, loadLivePack,
   loadMastery, loadQuestion, loadRecentlyChecked, loadSimilar, saveLearningItem, saveSession, writeEvents, writeEvidence,
   type ConceptRef, type SessionRow,
 } from './store';
 import type { MasteryState, TutorAction, TutorBlock, TutorEnvelope } from './types';
+import { NOT_READY, STILL_WORKING, TEST_OPEN } from './copy';
 
-export const TEST_OPEN = 'Finish the test you have open first. The tutor opens again after you submit it.';
-export const NOT_READY = 'The tutor is not ready for this question yet.';
-export const STILL_WORKING = 'Still working on your last tap. Try again in a moment.';
+export { NOT_READY, STILL_WORKING, TEST_OPEN };
 
 const ACTION_TYPES = new Set(['start', 'guide_me', 'try_myself', 'reader_answered', 'choose', 'answer', 'hint', 'why', 'show_solution', 'similar', 'save', 'skip_check', 'end']);
 
@@ -87,7 +87,7 @@ export async function runTutorTurn(input: TutorTurnInput): Promise<TutorEnvelope
   const now = input.now ?? new Date();
   if (!isUuid(input.questionId)) throw new ApiError(NOT_READY, 404);
 
-  if (await hasTestInProgress(supabase, caller.id)) throw new ApiError(TEST_OPEN, 409);
+  if (await hasTestRunning(supabase, caller.id, now)) throw new ApiError(TEST_OPEN, 409);
   const question = await loadQuestion(supabase, input.questionId);
   const live = question ? await loadLivePack(supabase, question) : null;
   if (!question || !live) throw new ApiError(NOT_READY, 404);

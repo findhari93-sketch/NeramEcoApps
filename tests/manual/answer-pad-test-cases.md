@@ -1381,3 +1381,18 @@ About 90% of students join on the Teams phone app. Run TC-PAD-080 first: it reco
 **Expected Result:** Answer buttons within about 3 seconds of the pop-up, and within about 5 seconds from More after a cold start. Record both times, on both phones, against TEST_SUMMARY_REPORT observation O-03.
 **Actual Result:**
 **Status:** Not Run
+
+---
+
+### TC-PAD-095: A formula answer is graded by its value
+**Priority:** P1
+**Type:** Functional
+**Preconditions:** Present to class open on a JEE numerical question whose bank answer is a formula (for example 2√3), with the Answer Pad connected. S1 on a phone, S2 in the Teams side panel, S3 on a laptop.
+**Steps:**
+1. T1 selects Start. Each student looks under the answer box.
+2. S1 types 2, taps **√**, types 3 and saves. S2 types 3.46 and saves. S3 types 3.47 and saves.
+3. T1 closes and reveals.
+4. Each student looks at their pad. T1 looks at the spread on the shared screen.
+**Expected Result:** Step 1: the maths keys (a/b, √, π, power, brackets, minus, delete) show under the box, each easy to tap, and the box says "A number, or a formula like 3/4 or 2√3". In the question pop-up they start hidden behind the maths keys button. Step 2: under S1's box, "Reads as 2√3 ≈ 3.4641". Step 4: S1 and S2 are correct, S3 is incorrect. S1's pad shows "2√3" as their answer, not a long decimal. The shared screen shows the answer as "≈ 3.4641" with 2√3 and 3.46 marked correct.
+**Actual Result:**
+**Status:** Not Run

@@ -1,16 +1,16 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { Alert, Box, Button, CircularProgress, Skeleton, Snackbar, Typography } from '@neram/ui';
-import KeyboardArrowLeft from '@mui/icons-material/KeyboardArrowLeft';
-import KeyboardArrowRight from '@mui/icons-material/KeyboardArrowRight';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Alert, Skeleton, Snackbar, Typography } from '@neram/ui';
 import { LoginModal } from '@neram/ui';
 import { useFirebaseAuth } from '@neram/auth';
 import { useTranslations } from 'next-intl';
 import { useFormContext } from './FormContext';
 import type { ApplicationFormData, FormStep } from './types';
-import StepShell from './StepShell';
+import StepShell, { type StepActions } from './StepShell';
+import StepHeading from './StepHeading';
 import EntryChoices from './EntryChoices';
+import { useShellLogin } from './shell/ShellActionsContext';
 import ApplicationDashboard from './ApplicationDashboard';
 import AboutYouStep from './steps/AboutYouStep';
 import YourCourseStep from './steps/YourCourseStep';
@@ -77,6 +77,10 @@ export default function ApplyFlow() {
 
   const currentValidation = validateStep(activeStep);
   const showEntryChoices = activeStep === 0 && !isAuthenticated && !entryChosen;
+
+  // The shell header shows Log in until the visitor is signed in.
+  const openLogin = useCallback(() => setShowLoginModal(true), []);
+  useShellLogin(isAuthenticated ? null : openLogin);
 
   // A signed-in user whose phone is not verified is asked once, after the form renders.
   useEffect(() => {
@@ -156,41 +160,34 @@ export default function ApplyFlow() {
       : null;
 
   // No action bar while choosing how to start (the cards are the action) or on the pay step (the panel has its own button).
-  const actions =
-    activeStep === 3 || showEntryChoices ? undefined : (
-      <>
-        <Button
-          variant="outlined"
-          onClick={goToPreviousStep}
-          disabled={activeStep === 0 || isSubmitting || isSavingDraft}
-          startIcon={<KeyboardArrowLeft />}
-          sx={{ minHeight: 48, flex: { xs: 1, sm: 'unset' } }}
-        >
-          {t('actions.back')}
-        </Button>
-        <Button
-          variant="contained"
-          onClick={handleContinue}
-          disabled={isSubmitting || isSavingDraft}
-          endIcon={isSubmitting || isSavingDraft ? <CircularProgress size={16} color="inherit" /> : <KeyboardArrowRight />}
-          sx={{ minHeight: 48, flex: { xs: 2, sm: 'unset' }, minWidth: { sm: 220 } }}
-        >
-          {isSavingDraft
-            ? t('actions.saving')
-            : isSubmitting
-            ? t('actions.submitting')
-            : activeStep === 2
-            ? returnUserMode === 'edit'
-              ? t('actions.updateApplication')
-              : t('actions.continueToPayment')
-            : t('actions.continue')}
-        </Button>
-      </>
-    );
+  const busy = isSubmitting || isSavingDraft;
+  const primaryLabel = isSavingDraft
+    ? t('actions.saving')
+    : isSubmitting
+    ? t('actions.submitting')
+    : activeStep === 2
+    ? returnUserMode === 'edit'
+      ? t('actions.updateApplication')
+      : t('actions.continueToPayment')
+    : activeStep === 1
+    ? t('actions.reviewApplication')
+    : t('actions.continueToCourse');
+  const note = activeStep === 0 ? t('actions.noPaymentYet') : activeStep === 1 ? t('actions.nextReview') : t('actions.nextPayment');
+  const actions: StepActions | undefined =
+    activeStep === 3 || showEntryChoices
+      ? undefined
+      : {
+          primaryLabel,
+          onPrimary: handleContinue,
+          busy,
+          onBack: activeStep === 0 ? undefined : goToPreviousStep,
+          backDisabled: busy,
+          note,
+        };
 
   return (
     <>
-      <StepShell step={activeStep} actions={actions}>
+      <StepShell step={activeStep} actions={actions} onStepClick={(step) => setActiveStep(step)}>
         {welcomeLine && (
           <Alert severity="success" icon={false} sx={{ mb: 2 }}>
             {welcomeLine}
@@ -218,12 +215,7 @@ export default function ApplyFlow() {
 
         {showEntryChoices && (
           <>
-            <Typography variant="h5" component="h1" gutterBottom fontWeight={700}>
-              {t('aboutYou.title')}
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-              {t('aboutYou.subtitle')}
-            </Typography>
+            <StepHeading title={t('aboutYou.title')} subtitle={t('aboutYou.subtitle')} />
             <EntryChoices
               onManual={() => {
                 markApplicationStarted();

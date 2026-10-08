@@ -42,6 +42,11 @@ export const EVENT_TAXONOMY = {
   course_page_viewed: 'marketing',
   tool_page_viewed: 'marketing',
   demo_requested: 'marketing',
+  demo_window_picked: 'marketing',
+  demo_details_done: 'marketing',
+  demo_signin_started: 'marketing',
+  demo_drawing_share_clicked: 'marketing',
+  demo_parent_share_clicked: 'marketing',
   callback_requested: 'marketing',
   // Application and enrollment
   application_started: 'application',

@@ -11,8 +11,7 @@ import { useTutorGate } from './useTutorGate';
 import { useTutorSession } from './useTutorSession';
 import { setTutorDoor, setTutorPresence } from './tutor-presence';
 import TutorButton from './TutorButton';
-import TutorPanel from './TutorPanel';
-import TutorSheet from './TutorSheet';
+import TutorFocus from './TutorFocus';
 
 /** The address-bar key for "the tutor is open". qb-practice-url passes unknown keys through. */
 export const TUTOR_PARAM = 'tutor';
@@ -22,7 +21,7 @@ type DetailWithTutor = NexusQBQuestionDetail & { tutor_available?: boolean; ques
 interface UsePracticeTutorOptions {
   currentId: string | null;
   detail: NexusQBQuestionDetail | null;
-  /** Two panes (md up): the tutor docks beside the reader; below, a full-screen sheet. */
+  /** md up: the focus screen puts the question, answerable, beside the conversation. Below, a card above it. */
   docked: boolean;
   lang: 'en' | 'hi';
   getToken: GetToken;
@@ -38,10 +37,15 @@ export interface PracticeTutor {
   headerAction: ReactNode;
   /** For PracticeReader's body overlay on a phone: the "Back to tutor" pill. */
   bodyOverlay: ReactNode;
-  /** The docked panel (two panes), or null while closed. */
-  dock: ReactNode;
-  /** The phone's sheet; always rendered so it can slide out. Null when docked. */
-  sheet: ReactNode;
+  /** The tutor is open (the page remounts the reader under it as it closes, so the reader shows answers given in it). */
+  showing: boolean;
+  /**
+   * The focus screen, rendered once by the page at every width. Always
+   * mounted while this question has a tutor, so it can slide or fade out.
+   * `questionPane` is the answerable question for md and up (null on a phone);
+   * `label` is "Q2 of 30".
+   */
+  renderFocus: (questionPane: ReactNode | null, label: string | null) => ReactNode;
   /**
    * Wraps the reader's submit: after Check answer succeeds on this question
    * while a tutor session exists for it, the tutor hears `reader_answered`.
@@ -67,13 +71,15 @@ const urlSaysOpen = () => {
 };
 
 /**
- * The AI Tutor on the practice screen: who sees the door, where the panel
- * goes at each width, and how it lives in the address bar.
+ * The AI Tutor on the practice screen: who sees the door, the focus screen it
+ * opens (TutorFocus, over the whole page at every width), and how it lives in
+ * the address bar.
  *
- * Opening pushes `tutor=1`, so a phone's Back closes the tutor and stays on
- * the question; the close button goes back through history for the same
- * result. "Try it myself" on a phone parks the tutor (the conversation stays
- * in memory) and leaves a "Back to tutor" pill in the reader.
+ * Opening pushes `tutor=1`, so Back closes the tutor and stays on the
+ * question; the close button and Escape go back through history for the same
+ * result. "Try it myself" on md and up moves to the question's options beside
+ * the conversation; on a phone it parks the tutor (the conversation stays in
+ * memory) and leaves a "Back to tutor" pill in the reader.
  */
 export function usePracticeTutor({ currentId, detail, docked, lang, getToken, openQuestion }: UsePracticeTutorOptions): PracticeTutor {
   const gate = useTutorGate();
@@ -143,21 +149,14 @@ export function usePracticeTutor({ currentId, detail, docked, lang, getToken, op
 
   // The Assistant's "Explain this question" opens the tutor through this door while there is one.
   // Its sheet is closing as this runs, so open on the next tick: the sheet hands focus back first,
-  // then the phone's tutor dialog takes it, or (docked, no trap) the docked panel is focused.
-  const dockedRef = useRef(docked);
-  dockedRef.current = docked;
+  // then the focus screen's dialog takes it.
   const doorQuestion = available ? d!.id : null;
   useEffect(() => {
     if (!doorQuestion) return;
     const door = {
       questionId: doorQuestion,
       open: () => {
-        window.setTimeout(() => {
-          openTutor();
-          if (dockedRef.current) {
-            window.setTimeout(() => document.querySelector<HTMLElement>('[data-tutor-dock]')?.focus(), 0);
-          }
-        }, 0);
+        window.setTimeout(openTutor, 0);
       },
     };
     setTutorDoor(door);
@@ -175,7 +174,16 @@ export function usePracticeTutor({ currentId, detail, docked, lang, getToken, op
   }, []);
 
   const tryMyself = useCallback(() => {
-    if (docked) return;
+    if (docked) {
+      // The question is beside the conversation: hand the student to its first option.
+      window.setTimeout(() => {
+        const pane = document.querySelector<HTMLElement>('[data-tutor-question]');
+        const target = pane?.querySelector<HTMLElement>('[role="radio"], textarea, input:not([type="hidden"])') ?? pane;
+        target?.focus();
+        target?.scrollIntoView?.({ block: 'nearest' });
+      }, 0);
+      return;
+    }
     // The press and the tutor's answer to it are both seen: the pill's dot is for what comes after.
     setSeenTurns(session.turns.length + 2);
     setParked(true);
@@ -229,9 +237,7 @@ export function usePracticeTutor({ currentId, detail, docked, lang, getToken, op
   const questionText = d ? (lang === 'hi' && d.question_text_hi ? d.question_text_hi : d.question_text) ?? null : null;
   const unseen = parked && session.turns.length > seenTurns;
 
-  const headerAction = available ? (
-    <TutorButton onClick={showing && docked ? closeTutor : openTutor} active={showing} />
-  ) : null;
+  const headerAction = available ? <TutorButton onClick={openTutor} active={showing} /> : null;
 
   const bodyOverlay =
     available && parked && !showing && !docked ? (
@@ -248,20 +254,27 @@ export function usePracticeTutor({ currentId, detail, docked, lang, getToken, op
       </Badge>
     ) : null;
 
-  const panelProps = {
-    session,
-    onClose: closeTutor,
-    getToken,
-    questionText,
-    onTryMyself: tryMyself,
-    onOpenSimilar: openSimilar,
-  };
+  const options = (d?.options ?? []).map((o: { id?: string | null; text?: string | null }) => ({ id: String(o?.id ?? ''), text: String(o?.text ?? '') }));
+  const renderFocus = (questionPane: ReactNode | null, label: string | null) =>
+    available ? (
+      <TutorFocus
+        open={showing}
+        session={session}
+        onClose={closeTutor}
+        getToken={getToken}
+        label={label}
+        questionPane={docked ? questionPane : null}
+        question={{ text: questionText, options }}
+        onTryMyself={tryMyself}
+        onOpenSimilar={openSimilar}
+      />
+    ) : null;
 
   return {
     headerAction,
     bodyOverlay,
-    dock: docked && showing ? <TutorPanel {...panelProps} variant="dock" /> : null,
-    sheet: !docked && available ? <TutorSheet {...panelProps} open={showing} /> : null,
+    showing,
+    renderFocus,
     wrapSubmit,
   };
 }
