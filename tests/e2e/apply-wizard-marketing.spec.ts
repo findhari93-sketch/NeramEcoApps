@@ -1,10 +1,33 @@
 import { test, expect } from '@playwright/test';
 
 /**
- * The four-step apply flow on marketing: entry choices, About you fields,
- * location on request only, PIN lookup, phone gate, old-draft remap, events.
+ * The four-step apply flow on marketing: About you (name and father's name,
+ * mobile, class, and a PIN code that finds the place, or a country and city
+ * abroad), the few details left on Review, phone gate, old-draft remap, events.
  */
 const MARKETING_URL = process.env.E2E_MARKETING_URL || 'http://localhost:3010';
+
+/** A version 2 draft that reopens on Review: name, verified phone, class and city done. */
+function reviewDraft(personal: Record<string, unknown> = {}) {
+  return JSON.stringify({
+    version: 2,
+    activeStep: 2,
+    savedAt: new Date().toISOString(),
+    formData: {
+      personal: { firstName: 'Arun', fatherName: 'Rajendran', phone: '9876543210', phoneVerified: true, ...personal },
+      location: { country: 'IN', pincode: '625001', city: 'Madurai', state: 'Tamil Nadu', locationSource: 'pincode' },
+      academic: {
+        currentlyIn: '12',
+        applicantCategory: 'school_student',
+        targetExamYear: '2027-28',
+        schoolStudentData: { current_class: '12', school_name: 'TVS', board: 'CBSE' },
+      },
+      course: { interestCourse: 'not_sure', learningMode: 'online_only' },
+    },
+  });
+}
+
+const currentStep = (page: import('@playwright/test').Page) => page.locator('[aria-current="step"]');
 
 test.describe('Apply wizard', () => {
   test.beforeEach(async ({ page }) => {
@@ -27,51 +50,103 @@ test.describe('Apply wizard', () => {
     await page.route('**/api/funnel-events', (route) => route.fulfill({ json: { ok: true } }));
   });
 
-  test('step 1 shows the entry choices, then the fields, and never asks for location on its own', async ({ page }) => {
+  test('step 1 asks name, father name, mobile, email, class and the PIN, and never asks for location', async ({ page }) => {
     await page.goto(`${MARKETING_URL}/apply`);
     await expect(page.getByRole('heading', { name: /about you/i })).toBeVisible();
-    await expect(page.getByText(/step 1 of 4/i)).toBeVisible();
-    await page.getByRole('button', { name: /type it myself/i }).click();
-    await expect(page.locator('input[name="firstName"]')).toBeVisible();
+    await expect(currentStep(page)).toContainText(/about you/i);
+    await expect(page.getByRole('button', { name: /continue with google/i })).toBeVisible();
+    for (const name of ['firstName', 'fatherName', 'phone', 'email', 'pincode']) {
+      await expect(page.locator(`input[name="${name}"]`)).toBeVisible();
+    }
+    await expect(page.getByRole('group', { name: /currently in/i })).toBeVisible();
+    await expect(page.locator('input[name="dateOfBirth"], input[name="state"], input[name="city"]')).toHaveCount(0);
     expect(await page.evaluate(() => (window as any).__geoCalls)).toBe(0);
-
-    await page.getByRole('button', { name: /use my current location/i }).click();
-    expect(await page.evaluate(() => (window as any).__geoCalls)).toBe(1);
-    await expect(page.getByRole('alert').filter({ hasText: /pin code/i })).toBeVisible();
   });
 
-  test('a PIN code fills City and State, which stay editable', async ({ page }) => {
+  test('the Google card goes straight to Google, with no sign-in dialog of our own', async ({ page }) => {
     await page.goto(`${MARKETING_URL}/apply`);
-    await page.getByRole('button', { name: /type it myself/i }).click();
-    await page.locator('input[name="pincode"]').fill('625001');
-    await expect(page.locator('input[name="city"]')).toHaveValue('Madurai');
-    await expect(page.locator('input[name="state"]')).toHaveValue('Tamil Nadu');
-    await expect(page.getByText('Madurai, Tamil Nadu')).toBeVisible();
-    for (const edit of await page.getByRole('button', { name: /^edit$/i }).all()) {
-      const box = (await edit.boundingBox())!;
-      expect(Math.min(box.width, box.height), 'pencil is a 44 px target').toBeGreaterThanOrEqual(44);
-    }
-    await page.getByRole('button', { name: /^edit$/i }).first().click();
-    await expect(page.locator('input[name="city"]')).toBeEditable();
+    const card = page.getByRole('button', { name: /continue with google/i });
+    await expect(card).toBeVisible();
+    // Retried: a click before hydration does nothing.
+    const popup = await (async () => {
+      for (let i = 0; i < 5; i++) {
+        const waiting = page.waitForEvent('popup', { timeout: 5000 }).catch(() => null);
+        await card.click();
+        const opened = await waiting;
+        if (opened) return opened;
+      }
+      return null;
+    })();
+    expect(popup, 'Google sign-in window').not.toBeNull();
+    await popup!.close();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 
   test('Continue asks for phone verification before leaving step 1', async ({ page }) => {
     await page.goto(`${MARKETING_URL}/apply`);
-    await page.getByRole('button', { name: /type it myself/i }).click();
     await page.locator('input[name="firstName"]').fill('Arun');
     await page.locator('input[name="fatherName"]').fill('Rajendran');
+    await page.getByRole('button', { name: /class 12/i }).click();
+    await page.locator('input[name="pincode"]').fill('625001');
+    await expect(page.getByTestId('apply-place-line')).toContainText('Madurai, Tamil Nadu, India');
     await page.getByRole('button', { name: /continue to your course/i }).click();
     await expect(page.getByRole('dialog')).toBeVisible();
-    await expect(page.getByText(/step 1 of 4/i)).toBeVisible();
+    await expect(currentStep(page)).toContainText(/about you/i);
   });
 
-  test('the father name field is empty for a new visitor (no display-name guess)', async ({ page }) => {
+  test('a PIN code shows the place under it, and Edit lets the student correct it', async ({ page }) => {
     await page.goto(`${MARKETING_URL}/apply`);
-    await page.getByRole('button', { name: /type it myself/i }).click();
-    await expect(page.locator('input[name="fatherName"]')).toHaveValue('');
+    await page.locator('input[name="pincode"]').fill('625001');
+    const line = page.getByTestId('apply-place-line');
+    await expect(line).toContainText('Madurai, Tamil Nadu, India');
+    await expect(page.locator('input[name="state"]')).toHaveCount(0);
+
+    const edit = page.getByRole('button', { name: /edit place/i });
+    const box = (await edit.boundingBox())!;
+    expect(Math.min(box.width, box.height), 'pencil is a 44 px target').toBeGreaterThanOrEqual(44);
+    await edit.click();
+    await page.locator('input[name="city"]').fill('Thirumangalam');
+    await expect(page.locator('input[name="state"]')).toHaveValue('Tamil Nadu');
+    // The edit is saved with the draft as the student typed it.
+    await expect
+      .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('neram_application_draft') || '{}').formData?.location))
+      .toMatchObject({ city: 'Thirumangalam', locationSource: 'manual', detectedLocation: { city: 'Madurai' } });
   });
 
-  test('choosing the manual path records application_started and manual_entry_started', async ({ page }) => {
+  test('step 1 asks for the location only on a press', async ({ page }) => {
+    await page.goto(`${MARKETING_URL}/apply`);
+    await page.getByRole('button', { name: /use my location/i }).click();
+    expect(await page.evaluate(() => (window as any).__geoCalls)).toBe(1);
+    await expect(page.getByRole('alert').filter({ hasText: /pin code/i })).toBeVisible();
+  });
+
+  test('a student abroad picks a country and types a city, with no PIN or state', async ({ page }) => {
+    await page.goto(`${MARKETING_URL}/apply`);
+    await page.getByRole('button', { name: /live outside india/i }).click();
+    await expect(page.locator('input[name="pincode"]')).toHaveCount(0);
+    await expect(page.locator('input[name="country"]')).toHaveValue('AE');
+    await page.locator('input[name="city"]').fill('Dubai');
+    // The mobile was still empty, so its code followed.
+    await expect(page.getByRole('button', { name: /country code/i })).toContainText('+971');
+    await page.getByRole('button', { name: /i live in india/i }).click();
+    await expect(page.locator('input[name="pincode"]')).toBeVisible();
+  });
+
+  test('Review asks only date of birth, gender, address and parent mobile', async ({ page }) => {
+    await page.addInitScript((draft) => localStorage.setItem('neram_application_draft', draft), reviewDraft());
+    await page.goto(`${MARKETING_URL}/apply`);
+    await expect(currentStep(page)).toContainText(/review/i);
+    await expect(page.getByRole('heading', { name: /a few more details/i })).toBeVisible();
+    for (const name of ['dateOfBirth', 'address', 'parentPhone']) {
+      await expect(page.locator(`[name="${name}"]`)).toBeVisible();
+    }
+    await expect(page.locator('input[name="fatherName"], input[name="pincode"], input[name="state"]')).toHaveCount(0);
+    await expect(page.getByText('Rajendran')).toBeVisible();
+    await expect(page.getByText('Madurai, Tamil Nadu, India, 625001')).toBeVisible();
+    expect(await page.evaluate(() => (window as any).__geoCalls)).toBe(0);
+  });
+
+  test('typing on step 1 records application_started and manual_entry_started', async ({ page }) => {
     const events: string[] = [];
     await page.route('**/api/funnel-events', async (route) => {
       const body = route.request().postDataJSON();
@@ -80,7 +155,6 @@ test.describe('Apply wizard', () => {
       await route.fulfill({ json: { ok: true } });
     });
     await page.goto(`${MARKETING_URL}/apply`);
-    await page.getByRole('button', { name: /type it myself/i }).click();
     await page.locator('input[name="firstName"]').fill('A');
     await expect.poll(() => events.includes('application_started'), { timeout: 8000 }).toBe(true);
     await expect.poll(() => events.includes('manual_entry_started'), { timeout: 8000 }).toBe(true);
@@ -156,7 +230,7 @@ test.describe('Apply wizard', () => {
       );
     });
     await page.goto(`${MARKETING_URL}/apply`);
-    await expect(page.getByText(/step 2 of 4/i)).toBeVisible();
+    await expect(currentStep(page)).toContainText(/course/i);
     await expect(page.getByRole('heading', { name: /your course/i })).toBeVisible();
   });
 
@@ -174,7 +248,7 @@ test.describe('Apply wizard', () => {
       );
     });
     await page.goto(`${MARKETING_URL}/apply`);
-    await expect(page.getByText(/step 3 of 4/i)).toBeVisible();
+    await expect(currentStep(page)).toContainText(/review/i);
     await expect(page.getByText('NERAM-2609-99999')).toHaveCount(0);
   });
 

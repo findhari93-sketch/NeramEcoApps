@@ -72,6 +72,8 @@ export {
   sendDemoRequestMessage,
   getWhatsAppHealth,
   DEMO_WA_TEMPLATES,
+  APPLY_WA_TEMPLATES,
+  sendApplyDraftDemoNudge,
   sendTicketConfirmation as sendWhatsAppTicketConfirmation,
   sendFirstTouchQuickQuestion,
   sendFirstTouchResultsVideo,

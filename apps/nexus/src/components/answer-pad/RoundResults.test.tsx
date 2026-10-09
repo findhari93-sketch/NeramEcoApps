@@ -138,8 +138,8 @@ describe('PresenterBanner', () => {
       options?.method === 'POST' ? { state: 'locked', allowedPresenters: 'organizer', canFix: true } : { state: 'open', allowedPresenters: 'everyone', canFix: true },
     );
     render(<PresenterBanner host={host} sessionId="s1" />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Only I can present' }));
-    expect(await screen.findByText('Only you can present now. Students cannot share over your screen.')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Only teachers can present' }));
+    expect(await screen.findByText('Only teachers can present now. Students cannot share over your screen.')).toBeTruthy();
     expect(mocks.padFetch).toHaveBeenCalledWith(host, '/api/pad/sessions/s1/presenters', { method: 'POST' });
   });
 
@@ -148,8 +148,8 @@ describe('PresenterBanner', () => {
       options?.method === 'POST' ? { state: 'unknown', allowedPresenters: null, canFix: false } : { state: 'open', allowedPresenters: 'everyone', canFix: true },
     );
     render(<PresenterBanner host={host} sessionId="s1" />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Only I can present' }));
-    expect(await screen.findByText(/set Who can present to Only me/)).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Only teachers can present' }));
+    expect(await screen.findByText(/set Who can present to Specific people/)).toBeTruthy();
   });
 
   it('says nothing when the meeting is already locked, or cannot be read', async () => {

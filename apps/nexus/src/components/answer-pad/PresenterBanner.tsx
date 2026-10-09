@@ -59,13 +59,13 @@ export default function PresenterBanner({ host, sessionId }: { host: PadHost; se
     case 'fixed':
       return (
         <Alert severity="success" role="status" onClose={() => setPhase({ kind: 'quiet' })}>
-          Only you can present now. Students cannot share over your screen.
+          Only teachers can present now. Students cannot share over your screen.
         </Alert>
       );
     case 'manual':
       return (
         <Alert severity="warning" role="status" onClose={() => setPhase({ kind: 'quiet' })}>
-          This meeting could not be changed from here. In Teams, open More, then Meeting options, and set Who can present to Only me.
+          This meeting could not be changed from here. In Teams, open More, then Meeting options, and set Who can present to Specific people.
         </Alert>
       );
     default:
@@ -83,7 +83,7 @@ export default function PresenterBanner({ host, sessionId }: { host: PadHost; se
               startIcon={phase.kind === 'fixing' ? <CircularProgress size={16} color="inherit" aria-hidden /> : <LockRounded />}
               sx={{ minHeight: 44 }}
             >
-              Only I can present
+              Only teachers can present
             </Button>
           </Stack>
         </Alert>

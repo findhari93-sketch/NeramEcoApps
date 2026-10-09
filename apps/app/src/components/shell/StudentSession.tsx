@@ -476,6 +476,8 @@ export default function StudentSession({
           onAuthenticated={handlePhoneVerified}
           apiBaseUrl=""
           phoneOnly={true}
+          // An email/password account clicks its verification link first.
+          requireEmailVerification
           allowEscapeHatch
           maxAttemptsBeforeEscape={2}
           onGetHelp={() =>

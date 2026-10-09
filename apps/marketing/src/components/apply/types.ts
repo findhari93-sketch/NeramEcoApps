@@ -27,7 +27,10 @@ export interface PersonalInfoData {
   firstName: string;
   fatherName: string;
   email: string;
+  /** The mobile's national digits; its country code is phoneCountry. */
   phone: string;
+  /** The mobile's country (IN, AE, ...), separate from where the student lives. */
+  phoneCountry: string;
   parentPhone: string;
   phoneVerified: boolean;
   phoneVerifiedAt: string | null;
@@ -48,7 +51,10 @@ export interface DetectedLocation {
 }
 
 export interface LocationData {
+  /** Where the student lives: IN (PIN code), a listed Gulf code, or OTHER with countryName. */
   country: string;
+  /** The typed country when country is OTHER. */
+  countryName: string;
   pincode: string;
   city: string;
   state: string;
@@ -63,7 +69,15 @@ export interface LocationData {
 /**
  * Academic data (category-specific)
  */
+/** The "I'm currently in" answer on About you. '' means not answered yet. */
+export type CurrentlyIn = '' | '11' | '12' | 'repeater' | 'other';
+
 export interface AcademicDetailsData {
+  /**
+   * What the applicant tapped on About you. Read it through currentlyInOf(),
+   * which prefers what Your studies says once a category is chosen there.
+   */
+  currentlyIn: CurrentlyIn;
   applicantCategory: ApplicantCategory | null;
   casteCategory: CasteCategory | null;
   targetExamYear: string | null;
@@ -151,6 +165,7 @@ export const DEFAULT_FORM_DATA: ApplicationFormData = {
     fatherName: '',
     email: '',
     phone: '',
+    phoneCountry: 'IN',
     parentPhone: '',
     phoneVerified: false,
     phoneVerifiedAt: null,
@@ -159,6 +174,7 @@ export const DEFAULT_FORM_DATA: ApplicationFormData = {
   },
   location: {
     country: 'IN',
+    countryName: '',
     pincode: '',
     city: '',
     state: '',
@@ -170,6 +186,7 @@ export const DEFAULT_FORM_DATA: ApplicationFormData = {
     detectedLocation: null,
   },
   academic: {
+    currentlyIn: '',
     applicantCategory: null,
     casteCategory: null,
     targetExamYear: '',
@@ -207,6 +224,22 @@ export const DEFAULT_FORM_DATA: ApplicationFormData = {
   gclid: null,
   wbraid: null,
 };
+
+/**
+ * The "I'm currently in" answer, derived from Your studies when a category is
+ * set there (so the two never disagree), else the tap stored on About you.
+ */
+export function currentlyInOf(academic: AcademicDetailsData): CurrentlyIn {
+  const { applicantCategory, schoolStudentData } = academic;
+  if (!applicantCategory) return academic.currentlyIn === 'other' ? 'other' : '';
+  if (applicantCategory !== 'school_student') return 'other';
+  const cls = schoolStudentData?.current_class;
+  if (cls === '11') return '11';
+  if (cls === '12') return '12';
+  if (cls === '12_completed') return 'repeater';
+  if (cls) return 'other';
+  return academic.currentlyIn || '';
+}
 
 // ============================================
 // FORM STEP TYPES

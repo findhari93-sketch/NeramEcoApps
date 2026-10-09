@@ -5,12 +5,13 @@ import { addMemberToTeam } from '@/lib/teams-sync';
 import { getSupabaseAdminClient } from '@neram/database';
 import {
   buildStaffAttendees,
+  buildStaffPresenters,
   type GraphAttendee,
   type StaffCalendarRow,
 } from '@/lib/class-attendees';
 import { resolveClassAttendees } from '@/lib/class-calendar';
 import { addPadWithinBudget } from '@/lib/pad/auto-add';
-import { applyMeetingOptions, findOnlineMeetingId, type AllowedPresenters } from '@/lib/meeting-options';
+import { applyMeetingOptions, findOnlineMeetingId, type AllowedPresenters, type StaffPresenter } from '@/lib/meeting-options';
 
 /**
  * POST /api/timetable/teams-meeting
@@ -151,16 +152,18 @@ export async function POST(request: NextRequest) {
     const schedulerName = user.name || user.email || 'Neram Classes';
     let tutorName = schedulerName;
     let tutorEmail = user.email || '';
+    let tutorRow: StaffCalendarRow | null = null;
     const tutorClassId = (scheduledClass as Record<string, unknown>).teacher_id as string | null;
     if (tutorClassId && tutorClassId !== user.id) {
       const { data: tutor } = await supabase
         .from('users')
-        .select('name, email')
+        .select('name, email, ms_oid')
         .eq('id', tutorClassId)
         .single();
       if (tutor) {
         tutorName = tutor.name || tutor.email || schedulerName;
         tutorEmail = tutor.email || '';
+        tutorRow = tutor as StaffCalendarRow;
       }
     }
     const postMeta = { tutorName, schedulerName };
@@ -168,7 +171,8 @@ export async function POST(request: NextRequest) {
     // Who sees this class on their Teams calendar: the tutor (required) plus the
     // internal core team (optional). External teachers are invited only to the
     // classes they tutor. See buildStaffAttendees.
-    const staffAttendees = await getStaffAttendees(supabase, tutorEmail);
+    // Who may present: every member of staff, so whoever takes the class can share.
+    const { attendees: staffAttendees, presenters: staffPresenters } = await getStaffForClass(supabase, tutorEmail, tutorRow);
 
     if (scope === 'channel_meeting' && classroom?.ms_team_id) {
       // ── CHANNEL MEETING: proper group calendar event (shows in Teams channel + sends invites) ──
@@ -294,10 +298,16 @@ export async function POST(request: NextRequest) {
         if (onlineMeetingId) {
           const applied = await applyMeetingOptions(token, { kind: 'me' }, onlineMeetingId, {
             recordAutomatically: true,
-            allowedPresenters: ((scheduledClass.allowed_presenters as string) || 'organizer') as AllowedPresenters,
+            allowedPresenters: ((scheduledClass.allowed_presenters as string) || 'roleIsPresenter') as AllowedPresenters,
+            presenters: staffPresenters,
           });
           extras.autoRecord = applied.record;
           extras.presentersLocked = applied.presenters;
+          if (applied.presentersFallback) {
+            // Students are still locked out, but so is the tutor, so say how to fix it.
+            extras.presenterNote =
+              'Teams meeting created, but only you can present. In Teams, open the meeting, then Meeting options, and set Who can present to Specific people with the tutor added.';
+          }
         }
       } catch (err) {
         console.error('Meeting options failed (non-blocking):', err);
@@ -400,6 +410,11 @@ async function createStandaloneMeeting(
   // meeting policies reject these extras with a 4xx, so on a client error we
   // retry with just the essentials rather than hard-failing (auto-record is then
   // re-applied best-effort by applyMeetingOptions after the meeting exists).
+  //
+  // Staff presenters ('roleIsPresenter') need the participant list, which
+  // applyMeetingOptions sets once the meeting exists. Until then the meeting is
+  // created locked to the organizer, so students can never present.
+  const presenters = (scheduledClass.allowed_presenters as string) || 'roleIsPresenter';
   let res = await post({
     subject: scheduledClass.title,
     startDateTime,
@@ -408,7 +423,7 @@ async function createStandaloneMeeting(
     lobbyBypassSettings: {
       scope: (scheduledClass.lobby_bypass as string) || 'organization',
     },
-    allowedPresenters: (scheduledClass.allowed_presenters as string) || 'organizer',
+    allowedPresenters: presenters === 'roleIsPresenter' ? 'organizer' : presenters,
   });
 
   if (!res.ok && res.status >= 400 && res.status < 500) {
@@ -607,19 +622,25 @@ async function createPersonalCalendarEvent(
 }
 
 /**
- * Load the staff rows and apply the attendee rule. The rule itself lives in
- * @/lib/class-attendees (pure, unit tested); this only does the fetch.
+ * Load the staff rows once and apply both rules: who is invited, and who may
+ * present. The rules live in @/lib/class-attendees (pure, unit tested); this
+ * only does the fetch.
  */
-async function getStaffAttendees(
+async function getStaffForClass(
   supabase: ReturnType<typeof getSupabaseAdminClient>,
   tutorEmail: string,
-): Promise<GraphAttendee[]> {
+  tutorRow: StaffCalendarRow | null,
+): Promise<{ attendees: GraphAttendee[]; presenters: StaffPresenter[] }> {
   const { data: staff } = await supabase
     .from('users')
     .select('name, email, ms_oid, user_type, staff_role, is_disabled')
     .in('user_type', ['teacher', 'admin']);
 
-  return buildStaffAttendees((staff || []) as StaffCalendarRow[], tutorEmail);
+  const rows = (staff || []) as StaffCalendarRow[];
+  return {
+    attendees: buildStaffAttendees(rows, tutorEmail),
+    presenters: buildStaffPresenters(rows, tutorRow),
+  };
 }
 
 /** Default channel to announce scheduled meetings in (falls back to General). */

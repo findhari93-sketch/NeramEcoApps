@@ -8,6 +8,9 @@ vi.mock('next-intl', () => ({
     values ? `${key}:${Object.values(values).join(',')}` : key,
 }));
 
+const trackTaxonomyEvent = vi.fn();
+vi.mock('@/lib/funnel-tracker', () => ({ trackTaxonomyEvent: (...args: unknown[]) => trackTaxonomyEvent(...args) }));
+
 let formData: ApplicationFormData = structuredClone(DEFAULT_FORM_DATA);
 const updateFormData = vi.fn((section: keyof ApplicationFormData, data: object) => {
   formData = { ...formData, [section]: { ...(formData[section] as object), ...data } } as ApplicationFormData;
@@ -26,53 +29,106 @@ vi.mock('../FormContext', () => ({
 
 import AboutYouStep from './AboutYouStep';
 
-const getCurrentPosition = vi.fn();
-
 beforeEach(() => {
   formData = structuredClone(DEFAULT_FORM_DATA);
   updateFormData.mockClear();
-  getCurrentPosition.mockClear();
-  Object.defineProperty(navigator, 'geolocation', { value: { getCurrentPosition }, configurable: true });
+  markApplicationStarted.mockClear();
+  trackTaxonomyEvent.mockClear();
 });
 afterEach(() => cleanup());
 
 describe('AboutYouStep', () => {
-  it('never asks for the location on mount', () => {
-    render(<AboutYouStep />);
-    expect(getCurrentPosition).not.toHaveBeenCalled();
-  });
-
-  it('asks for the location only when the student presses the button', () => {
-    render(<AboutYouStep />);
-    fireEvent.click(screen.getByRole('button', { name: 'aboutYou.useMyLocation' }));
-    expect(getCurrentPosition).toHaveBeenCalledTimes(1);
-  });
-
-  it('shows the PIN-code fallback copy when the browser refuses', () => {
-    getCurrentPosition.mockImplementation((_ok: unknown, fail: (e: { message: string }) => void) => fail({ message: 'denied' }));
-    render(<AboutYouStep />);
-    fireEvent.click(screen.getByRole('button', { name: 'aboutYou.useMyLocation' }));
-    expect(screen.getByRole('alert').textContent).toContain('aboutYou.locationFailed');
-  });
-
-  it('renders every field one per row with the parent phone and optional email', () => {
+  it('asks name, father name, mobile, email, class and the PIN, and nothing from Review', () => {
     const { container } = render(<AboutYouStep />);
-    for (const name of ['firstName', 'fatherName', 'dateOfBirth', 'pincode', 'phone', 'parentPhone', 'email']) {
+    for (const name of ['firstName', 'fatherName', 'phone', 'email', 'pincode']) {
       expect(container.querySelector(`input[name="${name}"]`), name).not.toBeNull();
     }
-    expect(container.querySelector('input[name="email"]')?.hasAttribute('required')).toBe(false);
+    for (const name of ['dateOfBirth', 'state', 'city', 'address', 'parentPhone']) {
+      expect(container.querySelector(`[name="${name}"]`), name).toBeNull();
+    }
+    expect(screen.getByRole('group', { name: 'aboutYou.currentlyIn' })).toBeTruthy();
   });
 
-  it('shows the found city and state under the PIN code', () => {
-    formData.location = { ...formData.location, pincode: '625001', city: 'Madurai', state: 'Tamil Nadu', locationSource: 'pincode' };
+  it('labels every input from above, tied by id', () => {
     render(<AboutYouStep />);
-    expect(screen.getByText('aboutYou.pinFound:Madurai,Tamil Nadu')).toBeTruthy();
+    expect((screen.getByLabelText('aboutYou.fullName') as HTMLInputElement).name).toBe('firstName');
+    expect((screen.getByLabelText('aboutYou.fatherName') as HTMLInputElement).name).toBe('fatherName');
+    expect((screen.getByLabelText('aboutYou.pinCode') as HTMLInputElement).name).toBe('pincode');
   });
 
-  it('marks the application as started on the first keystroke', () => {
-    const { container } = render(<AboutYouStep />);
-    fireEvent.change(container.querySelector('input[name="firstName"]')!, { target: { value: 'A' } });
+  it('shows the Google card only while signed out, and it opens sign-in', () => {
+    const onSignIn = vi.fn();
+    render(<AboutYouStep onSignIn={onSignIn} />);
+    fireEvent.click(screen.getByRole('button', { name: /aboutYou.googleTitle/ }));
+    expect(onSignIn).toHaveBeenCalledTimes(1);
+    cleanup();
+    render(<AboutYouStep />);
+    expect(screen.queryByRole('button', { name: /aboutYou.googleTitle/ })).toBeNull();
+  });
+
+  it('Class 12 makes the applicant a school student in class 12', () => {
+    render(<AboutYouStep />);
+    fireEvent.click(screen.getByRole('button', { name: 'aboutYou.currentlyIn12' }));
+    expect(formData.academic.currentlyIn).toBe('12');
+    expect(formData.academic.applicantCategory).toBe('school_student');
+    expect(formData.academic.schoolStudentData?.current_class).toBe('12');
+  });
+
+  it('Repeater records class 12 completed, and keeps a school name already typed', () => {
+    formData.academic = {
+      ...formData.academic,
+      applicantCategory: 'school_student',
+      schoolStudentData: { current_class: '11', school_name: 'TVS', board: 'CBSE' },
+    };
+    render(<AboutYouStep />);
+    fireEvent.click(screen.getByRole('button', { name: 'aboutYou.currentlyInRepeater' }));
+    expect(formData.academic.schoolStudentData).toMatchObject({ current_class: '12_completed', school_name: 'TVS' });
+  });
+
+  it('Other clears a school category so Your studies asks which best describes them', () => {
+    formData.academic = {
+      ...formData.academic,
+      applicantCategory: 'school_student',
+      schoolStudentData: { current_class: '11', school_name: '', board: '' },
+    };
+    render(<AboutYouStep />);
+    fireEvent.click(screen.getByRole('button', { name: 'aboutYou.currentlyInOther' }));
+    expect(formData.academic.currentlyIn).toBe('other');
+    expect(formData.academic.applicantCategory).toBeNull();
+  });
+
+  it('shows the class Your studies already holds as selected', () => {
+    formData.academic = {
+      ...formData.academic,
+      applicantCategory: 'school_student',
+      schoolStudentData: { current_class: '11', school_name: '', board: '' },
+    };
+    render(<AboutYouStep />);
+    expect(screen.getByRole('button', { name: 'aboutYou.currentlyIn11' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('marks the application as started on the first keystroke, and the manual path once when signed out', () => {
+    const { container } = render(<AboutYouStep onSignIn={vi.fn()} />);
+    const name = container.querySelector('input[name="firstName"]')!;
+    fireEvent.change(name, { target: { value: 'A' } });
+    fireEvent.change(name, { target: { value: 'Ar' } });
     expect(markApplicationStarted).toHaveBeenCalled();
     expect(updateFormData).toHaveBeenCalledWith('personal', { firstName: 'A' });
+    expect(trackTaxonomyEvent.mock.calls.filter(([e]) => e === 'manual_entry_started')).toHaveLength(1);
+  });
+
+  it('does not count a signed-in student as the manual path', () => {
+    const { container } = render(<AboutYouStep />);
+    fireEvent.change(container.querySelector('input[name="firstName"]')!, { target: { value: 'A' } });
+    expect(trackTaxonomyEvent).not.toHaveBeenCalledWith('manual_entry_started');
+  });
+
+  it('the country code changes only the mobile, never where the student lives', () => {
+    formData.location = { ...formData.location, pincode: '600001', city: 'Chennai' };
+    render(<AboutYouStep />);
+    fireEvent.click(screen.getByRole('button', { name: /aboutYou.countryCode/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /United Arab Emirates/ }));
+    expect(formData.personal.phoneCountry).toBe('AE');
+    expect(formData.location).toMatchObject({ country: 'IN', pincode: '600001', city: 'Chennai' });
   });
 });

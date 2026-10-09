@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildStaffAttendees, type StaffCalendarRow } from './class-attendees';
+import { buildStaffAttendees, buildStaffPresenters, type StaffCalendarRow } from './class-attendees';
 
 // The real cast of staff, so the assertions read like the actual requirement.
 const HARI: StaffCalendarRow = {
@@ -166,5 +166,36 @@ describe('buildStaffAttendees', () => {
   it('handles an empty or nullish staff list', () => {
     expect(buildStaffAttendees([], 'x@y.com')).toEqual([]);
     expect(buildStaffAttendees(null as never, 'x@y.com')).toEqual([]);
+  });
+});
+
+describe('buildStaffPresenters', () => {
+  it('makes every member of staff a presenter, external teachers included', () => {
+    // 2026-10-08: Tamil scheduled (and was the saved tutor), Hari taught and could not share.
+    const result = buildStaffPresenters(ALL_STAFF, TAMIL);
+    expect(result.map((p) => p.oid).sort()).toEqual(['oid-hari', 'oid-shanthi', 'oid-sivaram', 'oid-sudarshini', 'oid-tamil']);
+    expect(result.find((p) => p.oid === 'oid-hari')).toEqual({ upn: 'Haribabu@neramclasses.com', oid: 'oid-hari' });
+  });
+
+  it('adds a tutor whose row is not in the staff list', () => {
+    const guest: StaffCalendarRow = { name: 'Guest', email: 'guest@neramclasses.com', ms_oid: 'oid-guest', user_type: 'student' };
+    expect(buildStaffPresenters([HARI], guest).map((p) => p.oid)).toEqual(['oid-hari', 'oid-guest']);
+  });
+
+  it('skips unlinked, test-seed and disabled accounts, and duplicates', () => {
+    const result = buildStaffPresenters([
+      HARI,
+      { ...HARI, name: 'Duplicate' },
+      { ...TAMIL, ms_oid: null },
+      { ...SHANTHI, ms_oid: 'test-oid-123' },
+      { ...SIVARAM, is_disabled: true },
+      { ...SUDARSHINI, email: null },
+    ]);
+    expect(result.map((p) => p.oid)).toEqual(['oid-hari']);
+  });
+
+  it('handles an empty or nullish staff list', () => {
+    expect(buildStaffPresenters([])).toEqual([]);
+    expect(buildStaffPresenters(null as never, null)).toEqual([]);
   });
 });

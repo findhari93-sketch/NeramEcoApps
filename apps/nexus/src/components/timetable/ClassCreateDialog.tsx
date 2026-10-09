@@ -157,7 +157,7 @@ const emptyForm: ClassFormData = {
   description: '',
   meeting_scope: 'auto',
   lobby_bypass: 'organization',
-  allowed_presenters: 'organizer',
+  allowed_presenters: 'roleIsPresenter',
   recurrence: 'none',
   recurrence_days: [],
   recurrence_end_date: '',
@@ -335,7 +335,7 @@ export default function ClassCreateDialog({
         description: editingClass.description || '',
         meeting_scope: 'auto',
         lobby_bypass: 'organization',
-        allowed_presenters: 'organizer',
+        allowed_presenters: 'roleIsPresenter',
         recurrence: 'none',
         recurrence_days: [],
         recurrence_end_date: '',
@@ -1199,10 +1199,17 @@ export default function ClassCreateDialog({
                         notched
                         sx={{ minHeight: 44 }}
                       >
-                        <MenuItem value="everyone">Everyone</MenuItem>
-                        <MenuItem value="organization">People in my organization</MenuItem>
+                        <MenuItem value="roleIsPresenter">Teachers and staff (recommended)</MenuItem>
                         <MenuItem value="organizer">Only me (organizer)</MenuItem>
+                        <MenuItem value="everyone">Everyone, students too</MenuItem>
                       </Select>
+                      <FormHelperText>
+                        {formData.allowed_presenters === 'roleIsPresenter'
+                          ? 'Any teacher can share their screen. Students cannot.'
+                          : formData.allowed_presenters === 'organizer'
+                            ? 'Only you can share. The tutor cannot, unless you change it in Teams.'
+                            : 'Students can share too, and one press of Share replaces the teacher’s screen.'}
+                      </FormHelperText>
                     </FormControl>
                   </Box>
                 </Collapse>

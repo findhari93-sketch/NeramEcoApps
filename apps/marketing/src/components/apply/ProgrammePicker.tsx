@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Box, Card, CardActionArea, Skeleton, Stack, Typography, Alert } from '@neram/ui';
+import { selectedCardSx } from './styles';
 import CheckCircleOutlined from '@mui/icons-material/CheckCircleOutlined';
 import { useTranslations } from 'next-intl';
 
@@ -110,12 +111,7 @@ export default function ProgrammePicker({ courseType, value, onChange }: Program
           <Card
             key={row.id}
             variant="outlined"
-            sx={{
-              borderColor: selected ? 'primary.main' : 'divider',
-              borderWidth: selected ? 2 : 1,
-              bgcolor: selected ? 'primary.50' : 'background.paper',
-              transition: 'border-color 150ms',
-            }}
+            sx={selectedCardSx(selected)}
           >
             <CardActionArea
               role="radio"
@@ -143,7 +139,7 @@ export default function ProgrammePicker({ courseType, value, onChange }: Program
                   {t('yourCourse.standardFee', { amount: formatRupees(Number(row.fee_amount)) })}
                 </Typography>
               </Box>
-              {selected && <CheckCircleOutlined color="primary" aria-hidden />}
+              {selected && <CheckCircleOutlined aria-hidden sx={{ color: 'text.primary' }} />}
             </CardActionArea>
           </Card>
         );

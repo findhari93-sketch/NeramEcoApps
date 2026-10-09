@@ -8,8 +8,6 @@ import { useTranslations } from 'next-intl';
 import { useFormContext } from './FormContext';
 import type { ApplicationFormData, FormStep } from './types';
 import StepShell, { type StepActions } from './StepShell';
-import StepHeading from './StepHeading';
-import EntryChoices from './EntryChoices';
 import { useShellLogin } from './shell/ShellActionsContext';
 import ApplicationDashboard from './ApplicationDashboard';
 import AboutYouStep from './steps/AboutYouStep';
@@ -17,6 +15,9 @@ import YourCourseStep from './steps/YourCourseStep';
 import ReviewStep from './steps/ReviewStep';
 import PayAndEnrolStep from './steps/PayAndEnrolStep';
 import { trackTaxonomyEvent } from '@/lib/funnel-tracker';
+import { ensureAccount } from '@/lib/ensure-account';
+import { getCountryConfig } from './countryConfig';
+import { DemoExitIntent, DemoNotSureLink } from './DemoNudge';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
 
@@ -37,9 +38,10 @@ function fireSignupConversion(transactionId: string | undefined, formData: Appli
 }
 
 /**
- * The four steps. Step 0 opens with the entry choices for a new visitor and
- * with a welcome line for a signed-in one; Review writes the application and
- * moves to Pay; Pay renders the payment panel and has no Continue of its own.
+ * The four steps. Step 0 opens with the Google card and the five fields for a
+ * new visitor and with a welcome line for a signed-in one; Review asks the
+ * remaining personal details, writes the application and moves to Pay; Pay
+ * renders the payment panel and has no Continue of its own.
  */
 export default function ApplyFlow() {
   const t = useTranslations('apply');
@@ -66,39 +68,82 @@ export default function ApplyFlow() {
     returningUserCheckComplete,
     submitApplication,
     markApplicationStarted,
-    prefilledFields,
+    isReturningAccount,
+    refreshAccount,
   } = useFormContext();
 
-  const [entryChosen, setEntryChosen] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const [googleError, setGoogleError] = useState<string | null>(null);
   const [showValidationErrors, setShowValidationErrors] = useState(false);
   const [saveSnackbar, setSaveSnackbar] = useState<{ open: boolean; success: boolean }>({ open: false, success: false });
   const autoPromptedRef = useRef(false);
 
   const currentValidation = validateStep(activeStep);
-  const showEntryChoices = activeStep === 0 && !isAuthenticated && !entryChosen;
 
   // The shell header shows Log in until the visitor is signed in.
   const openLogin = useCallback(() => setShowLoginModal(true), []);
   useShellLogin(isAuthenticated ? null : openLogin);
 
-  // A signed-in user whose phone is not verified is asked once, after the form renders.
+  const country = getCountryConfig(formData.personal.phoneCountry);
+
+  // A signed-in user whose phone is not verified is asked once, after the
+  // account has loaded (so a verified one is never asked) and never while the
+  // sign-in dialog is still running its own steps.
   useEffect(() => {
     if (
       isAuthenticated &&
       returningUserCheckComplete &&
+      !showLoginModal &&
+      !googleBusy &&
       activeStep === 0 &&
       !formData.personal.phoneVerified &&
       !autoPromptedRef.current
     ) {
       autoPromptedRef.current = true;
-      const timer = setTimeout(() => setShowPhoneVerification(true), 500);
-      return () => clearTimeout(timer);
+      setShowPhoneVerification(true);
     }
-  }, [isAuthenticated, returningUserCheckComplete, activeStep, formData.personal.phoneVerified, setShowPhoneVerification]);
+  }, [isAuthenticated, returningUserCheckComplete, showLoginModal, googleBusy, activeStep, formData.personal.phoneVerified, setShowPhoneVerification]);
+
+  // Signed out again: the next sign-in may ask again.
+  useEffect(() => {
+    if (!isAuthenticated) autoPromptedRef.current = false;
+  }, [isAuthenticated]);
+
+  // The account turned out to be verified already: no dialog to dismiss.
+  useEffect(() => {
+    if (formData.personal.phoneVerified && showPhoneVerification) setShowPhoneVerification(false);
+  }, [formData.personal.phoneVerified, showPhoneVerification, setShowPhoneVerification]);
+
+  /**
+   * "Continue with Google" on the form: straight to Google, no second dialog.
+   * Then the phone OTP at once if the account has no verified number, and the
+   * form fills itself from the account (FormContext).
+   */
+  const handleGoogleCard = async () => {
+    setGoogleError(null);
+    setGoogleBusy(true);
+    try {
+      const { signInWithGoogleOrRedirect } = await import('@neram/auth');
+      const signedIn = await signInWithGoogleOrRedirect();
+      if (!signedIn) return; // closed the popup, or redirecting to Google
+      markApplicationStarted();
+      autoPromptedRef.current = true;
+      const account = await ensureAccount();
+      if (!account?.phone_verified) setShowPhoneVerification(true);
+    } catch {
+      setGoogleError(t('aboutYou.googleFailed'));
+    } finally {
+      setGoogleBusy(false);
+    }
+  };
+
+  /** Continue asked for the phone first: carry on by itself once it is verified. */
+  const continueAfterVerifyRef = useRef(false);
 
   const handleContinue = async () => {
     if (activeStep === 0 && !formData.personal.phoneVerified) {
+      continueAfterVerifyRef.current = true;
       setShowPhoneVerification(true);
       return;
     }
@@ -131,35 +176,32 @@ export default function ApplyFlow() {
     goToNextStep();
   };
 
-  if (isAuthLoading || (isAuthenticated && !returningUserCheckComplete)) {
-    return (
-      <StepShell step={0}>
-        <Skeleton variant="text" width="60%" height={40} sx={{ mb: 1 }} />
-        <Skeleton variant="text" width="80%" height={24} sx={{ mb: 3 }} />
-        <Skeleton variant="rectangular" height={56} sx={{ borderRadius: 1, mb: 2 }} />
-        <Skeleton variant="rectangular" height={56} sx={{ borderRadius: 1, mb: 2 }} />
-        <Skeleton variant="rectangular" height={48} sx={{ borderRadius: 1 }} />
-      </StepShell>
-    );
-  }
+  useEffect(() => {
+    if (
+      continueAfterVerifyRef.current &&
+      formData.personal.phoneVerified &&
+      returningUserCheckComplete &&
+      !showPhoneVerification &&
+      activeStep === 0 &&
+      !(isReturningUser && returnUserMode === 'dashboard')
+    ) {
+      continueAfterVerifyRef.current = false;
+      handleContinue();
+    }
+  });
 
-  if (isReturningUser && returnUserMode === 'dashboard') {
-    return (
-      <StepShell step={0}>
-        <ApplicationDashboard />
-      </StepShell>
-    );
-  }
+  const loadingAccount = isAuthLoading || (isAuthenticated && !returningUserCheckComplete);
+  const showDashboard = !loadingAccount && isReturningUser && returnUserMode === 'dashboard';
 
-  const firstName = formData.personal.firstName || user?.name?.split(' ')[0] || '';
+  const firstName = (formData.personal.firstName || user?.name || '').trim().split(/\s+/)[0] || '';
   const welcomeLine =
-    isAuthenticated && activeStep === 0 && prefilledFields.size > 0
+    isAuthenticated && activeStep === 0 && isReturningAccount
       ? firstName
         ? t('aboutYou.welcomeBack', { name: firstName })
         : t('aboutYou.welcomeBackGeneric')
       : null;
 
-  // No action bar while choosing how to start (the cards are the action) or on the pay step (the panel has its own button).
+  // No action block on the pay step: the payment panel has its own button.
   const busy = isSubmitting || isSavingDraft;
   const primaryLabel = isSavingDraft
     ? t('actions.saving')
@@ -174,7 +216,7 @@ export default function ApplyFlow() {
     : t('actions.continueToCourse');
   const note = activeStep === 0 ? t('actions.noPaymentYet') : activeStep === 1 ? t('actions.nextReview') : t('actions.nextPayment');
   const actions: StepActions | undefined =
-    activeStep === 3 || showEntryChoices
+    activeStep === 3
       ? undefined
       : {
           primaryLabel,
@@ -185,80 +227,123 @@ export default function ApplyFlow() {
           note,
         };
 
+  // The two dialogs stay mounted while the account loads: unmounting them
+  // mid sign-in used to drop the student back to the first dialog step.
   return (
     <>
-      <StepShell step={activeStep} actions={actions} onStepClick={(step) => setActiveStep(step)}>
-        {welcomeLine && (
-          <Alert severity="success" icon={false} sx={{ mb: 2 }}>
-            {welcomeLine}
-          </Alert>
-        )}
+      {loadingAccount ? (
+        <StepShell step={0}>
+          <Skeleton variant="text" width="60%" height={40} sx={{ mb: 1 }} />
+          <Skeleton variant="text" width="80%" height={24} sx={{ mb: 3 }} />
+          <Skeleton variant="rectangular" height={56} sx={{ borderRadius: 1, mb: 2 }} />
+          <Skeleton variant="rectangular" height={56} sx={{ borderRadius: 1, mb: 2 }} />
+          <Skeleton variant="rectangular" height={48} sx={{ borderRadius: 1 }} />
+        </StepShell>
+      ) : showDashboard ? (
+        <StepShell step={0}>
+          <ApplicationDashboard />
+        </StepShell>
+      ) : (
+        <StepShell
+          step={activeStep}
+          actions={actions}
+          onStepClick={(step) => setActiveStep(step)}
+          aside={
+            (activeStep === 1 || activeStep === 2) && returnUserMode !== 'edit' ? (
+              <DemoNotSureLink step={activeStep} />
+            ) : undefined
+          }
+        >
+          {welcomeLine && (
+            <Alert severity="success" icon={false} sx={{ mb: 2 }}>
+              {welcomeLine}
+            </Alert>
+          )}
 
-        {submissionError && (
-          <Alert severity="error" role="alert" sx={{ mb: 2 }} onClose={() => setSubmissionError(null)}>
-            {submissionError.startsWith('errors.') ? t(submissionError) : submissionError}
-          </Alert>
-        )}
+          {submissionError && (
+            <Alert severity="error" role="alert" sx={{ mb: 2 }} onClose={() => setSubmissionError(null)}>
+              {submissionError.startsWith('errors.') ? t(submissionError) : submissionError}
+            </Alert>
+          )}
 
-        {showValidationErrors && !currentValidation.isValid && (
-          <Alert severity="warning" role="alert" sx={{ mb: 2 }}>
-            <Typography variant="body2" fontWeight={600}>
-              {t('errors.heading')}
-            </Typography>
-            <ul style={{ margin: '4px 0 0', paddingLeft: 20 }}>
-              {currentValidation.errors.map((err) => (
-                <li key={err.field}>{t(err.message)}</li>
-              ))}
-            </ul>
-          </Alert>
-        )}
+          {showValidationErrors && !currentValidation.isValid && (
+            <Alert severity="warning" role="alert" sx={{ mb: 2 }}>
+              <Typography variant="body2" fontWeight={600}>
+                {t('errors.heading')}
+              </Typography>
+              <ul style={{ margin: '4px 0 0', paddingLeft: 20 }}>
+                {currentValidation.errors.map((err) => (
+                  <li key={err.field}>{t(err.message)}</li>
+                ))}
+              </ul>
+            </Alert>
+          )}
 
-        {showEntryChoices && (
-          <>
-            <StepHeading title={t('aboutYou.title')} subtitle={t('aboutYou.subtitle')} />
-            <EntryChoices
-              onManual={() => {
-                markApplicationStarted();
-                trackTaxonomyEvent('manual_entry_started');
-                setEntryChosen(true);
-              }}
-              onSignIn={() => setShowLoginModal(true)}
+          {activeStep === 0 && (
+            <AboutYouStep
+              onSignIn={isAuthenticated ? undefined : handleGoogleCard}
+              signInBusy={googleBusy}
+              signInError={googleError}
             />
-          </>
-        )}
+          )}
+          {activeStep === 1 && <YourCourseStep />}
+          {activeStep === 2 && <ReviewStep onEditStep={(step) => setActiveStep(step as FormStep)} />}
+          {activeStep === 3 && <PayAndEnrolStep />}
+        </StepShell>
+      )}
 
-        {!showEntryChoices && activeStep === 0 && <AboutYouStep />}
-        {activeStep === 1 && <YourCourseStep />}
-        {activeStep === 2 && <ReviewStep onEditStep={(step) => setActiveStep(step as FormStep)} />}
-        {activeStep === 3 && <PayAndEnrolStep />}
-      </StepShell>
+      {/* Desktop only, once per session: a free demo for a student about to leave unsure. */}
+      <DemoExitIntent
+        step={activeStep}
+        enabled={
+          !loadingAccount &&
+          !showDashboard &&
+          activeStep <= 2 &&
+          returnUserMode !== 'edit' &&
+          !showLoginModal &&
+          !showPhoneVerification &&
+          (activeStep >= 1 || !!formData.personal.firstName.trim())
+        }
+      />
 
+      {/* Phone verification. Closable: Continue still needs a verified number, so closing never skips it. */}
       <LoginModal
         open={showPhoneVerification}
-        onClose={() => setShowPhoneVerification(false)}
-        allowClose={false}
-        initialPhone={formData.personal.phone}
-        onAuthenticated={async (verifiedPhone) => {
+        onClose={() => {
+          continueAfterVerifyRef.current = false;
           setShowPhoneVerification(false);
-          let phone = verifiedPhone || '';
-          if (!phone) {
-            const { getFirebaseAuth } = await import('@neram/auth');
-            phone = getFirebaseAuth().currentUser?.phoneNumber || user?.phone || formData.personal.phone || '';
-          }
-          onPhoneVerified(phone);
+        }}
+        allowClose={true}
+        allowEscapeHatch
+        requireEmailVerification
+        initialPhone={formData.personal.phone}
+        dialCode={country.phonePrefix}
+        phoneLength={country.phoneLength}
+        onAuthenticated={(verifiedPhone) => {
+          setShowPhoneVerification(false);
+          // No number back means the account was already verified: re-read it.
+          if (verifiedPhone) onPhoneVerified(verifiedPhone);
+          else refreshAccount();
         }}
         apiBaseUrl={APP_URL}
         phoneOnly={true}
       />
 
+      {/* Header "Log in": Google, or email and password (with sign up). */}
       <LoginModal
         open={showLoginModal}
         onClose={() => setShowLoginModal(false)}
         allowClose={true}
-        onAuthenticated={() => {
+        allowEscapeHatch
+        requireEmailVerification
+        dialCode={country.phonePrefix}
+        phoneLength={country.phoneLength}
+        onAuthenticated={(verifiedPhone) => {
           setShowLoginModal(false);
-          setEntryChosen(true);
+          autoPromptedRef.current = true;
           markApplicationStarted();
+          if (verifiedPhone) onPhoneVerified(verifiedPhone);
+          else refreshAccount();
         }}
         apiBaseUrl={APP_URL}
       />

@@ -72,3 +72,34 @@ export function buildStaffAttendees(
 
   return out;
 }
+
+/**
+ * Who may present in a class meeting: every member of staff (internal staff
+ * and external teachers alike), plus the tutor even if their row is somehow
+ * not a staff row. Students never.
+ *
+ * Wider than buildStaffAttendees on purpose. A visiting teacher does not need
+ * every class on their calendar, but whoever ends up taking a class must be
+ * able to share their screen, and the scheduled tutor is often not that person.
+ *
+ * `staff` is the `users` rows with user_type teacher or admin; `tutor` is the
+ * class's teacher_id row when known.
+ */
+export function buildStaffPresenters(
+  staff: StaffCalendarRow[],
+  tutor?: StaffCalendarRow | null,
+): Array<{ upn: string; oid: string }> {
+  const out: Array<{ upn: string; oid: string }> = [];
+  const seen = new Set<string>();
+  for (const s of [...(staff || []), ...(tutor ? [tutor] : [])]) {
+    const email = s.email?.trim();
+    const oid = s.ms_oid?.trim();
+    if (!email || !oid || oid.startsWith('test-oid-')) continue;
+    if (s.is_disabled === true) continue;
+    const key = oid.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ upn: email, oid });
+  }
+  return out;
+}

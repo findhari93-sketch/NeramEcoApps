@@ -97,9 +97,19 @@
     }
   },
   "apply": {
+    "demo": {
+      "notSure": "ക്ലാസുകൾ എങ്ങനെയാണെന്ന് ഉറപ്പില്ലേ?",
+      "notSureLink": "ആദ്യം ഒരു സൗജന്യ ഡെമോ ക്ലാസിൽ ഇരിക്കൂ",
+      "exitTitle": "നിങ്ങളുടെ ഉത്തരങ്ങൾ സേവ് ചെയ്തിട്ടുണ്ട്",
+      "exitBody": "ക്ലാസുകൾ എങ്ങനെയാണെന്ന് ഉറപ്പില്ലേ? ആദ്യം ഒരു ആർക്കിടെക്റ്റിനൊപ്പം സൗജന്യ ലൈവ് ഡെമോ ക്ലാസിൽ ഇരിക്കൂ. മാതാപിതാക്കൾക്കും വരാം.",
+      "exitCta": "സൗജന്യ ഡെമോ ബുക്ക് ചെയ്യുക",
+      "exitKeep": "തുടരുക",
+      "exitClose": "അടയ്ക്കുക"
+    },
     "title": "Apply to Neram Classes",
     "subtitle": "Takes about 2 to 3 minutes.",
     "shell": {
+      "bookDemo": "സൗജന്യ ഡെമോ ക്ലാസ് ബുക്ക് ചെയ്യുക",
       "home": "Neram Classes home",
       "help": "Help",
       "secure": "Secure application",
@@ -109,7 +119,8 @@
       "privacy": "Privacy",
       "refund": "Refund policy",
       "haveAccount": "Have an account?",
-      "logIn": "Log in"
+      "logIn": "Log in",
+      "copyright": "© Neram Classes"
     },
     "progress": "Step {current} of {total}",
     "steps": {
@@ -219,7 +230,37 @@
       "verified": "Verified",
       "parentPhone": "Parent or guardian mobile (optional)",
       "email": "Email (optional)",
-      "prefilled": "Pre-filled"
+      "prefilled": "Pre-filled",
+      "subtitleShort": "Two minutes. We save as you go.",
+      "fullName": "Full name",
+      "fullNamePlaceholder": "As on your Class 12 marksheet",
+      "phoneWhatsapp": "Mobile (WhatsApp)",
+      "phonePlaceholder": "98xxx xxxxx",
+      "emailPlaceholder": "you@example.com",
+      "currentlyIn": "I'm currently in",
+      "currentlyIn11": "Class 11",
+      "currentlyIn12": "Class 12",
+      "currentlyInRepeater": "Repeater",
+      "currentlyInOther": "Other",
+      "cityPlaceholder": "Chennai",
+      "countryCode": "Country code, {country}",
+      "googleTitle": "Continue with Google",
+      "googleBody": "Fills in your name and email in one tap.",
+      "orTypeIt": "or type it yourself",
+      "googleFailed": "Google sign-in did not work. Try again, or type your details below.",
+      "fatherPlaceholder": "അച്ഛന്റെ മുഴുവൻ പേര്",
+      "pinCode": "പിൻ കോഡ്",
+      "pinPlaceholder": "600001",
+      "pinNotFound": "ഈ പിൻ കോഡ് കണ്ടെത്താനായില്ല. പരിശോധിക്കുക, അല്ലെങ്കിൽ താഴെ നിങ്ങളുടെ നഗരം നൽകുക.",
+      "pinLooking": "നിങ്ങളുടെ പ്രദേശം തിരയുന്നു",
+      "editPlace": "സ്ഥലം മാറ്റുക",
+      "useMyLocationShort": "പിൻ കോഡ് അറിയില്ലേ? എന്റെ ലൊക്കേഷൻ ഉപയോഗിക്കുക",
+      "liveAbroad": "ഇന്ത്യയ്ക്ക് പുറത്താണോ താമസം?",
+      "liveInIndia": "ഞാൻ ഇന്ത്യയിൽ താമസിക്കുന്നു",
+      "countryOther": "മറ്റൊരു രാജ്യം",
+      "countryName": "രാജ്യത്തിന്റെ പേര്",
+      "cityAbroadPlaceholder": "Dubai",
+      "stateOptional": "സംസ്ഥാനം (ഐച്ഛികം)"
     },
     "yourCourse": {
       "title": "Your course",
@@ -270,7 +311,9 @@
       "notChosen": "Not chosen",
       "mode": "Learning mode",
       "centre": "Preferred centre",
-      "terms": "I agree to the <terms>Terms</terms> and the <refund>Refund policy</refund>."
+      "terms": "I agree to the <terms>Terms</terms> and the <refund>Refund policy</refund>.",
+      "moreDetails": "A few more details",
+      "moreDetailsBody": "We need these for your admission records."
     },
     "pay": {
       "title": "Pay and enrol",
@@ -310,7 +353,16 @@
       "completedGrade": "Choose what you completed before the diploma.",
       "yearOfStudy": "Choose your year of study.",
       "twelfthYear": "Choose the year you completed 12th.",
-      "terms": "Please agree to the Terms and the Refund policy."
+      "terms": "Please agree to the Terms and the Refund policy.",
+      "currentlyIn": "Tell us which class you are in.",
+      "countryName": "നിങ്ങൾ താമസിക്കുന്ന രാജ്യം നൽകുക."
+    },
+    "eyebrow": "Apply · Neram Classes",
+    "stepsShort": {
+      "aboutYou": "About you",
+      "yourCourse": "Course",
+      "review": "Review",
+      "pay": "Pay"
     }
   },
   "footer": {
@@ -370,7 +422,10 @@
     "goToApp": "ആപ്പിലേക്ക് പോകുക",
     "joinNow": "ഇപ്പോൾ ചേരുക",
     "viewFees": "ഫീസ് കാണുക",
-    "fees": "ഫീസ്"
+    "fees": "ഫീസ്",
+    "freeDemo": "സൗജന്യ ഡെമോ",
+    "freeDemoClass": "സൗജന്യ ഡെമോ ക്ലാസ്",
+    "myDemo": "എന്റെ ഡെമോ"
   },
   "centers": {
     "title": "ഞങ്ങളുടെ പഠന കേന്ദ്രങ്ങൾ സന്ദർശിക്കുക",

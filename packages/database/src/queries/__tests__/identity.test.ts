@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, vi } from 'vitest';
 import { createFakeSupabase } from './fake-supabase';
-import { getOrCreateUserFromFirebase, getUserByEmail, getUserByFirebaseUid } from '../users';
+import { getOrCreateUserFromFirebase, getUserByEmail, getUserByFirebaseUid, findVerifiedPhoneOwner } from '../users';
 import { reconcileMsIdentity } from '../ms-identity';
 import { recordIdentity, findUserIdByIdentity } from '../identity';
 
@@ -87,6 +87,38 @@ describe('getOrCreateUserFromFirebase', () => {
     expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
   });
+  it('never attaches an unverified email to an existing person', async () => {
+    const { client, tables } = world([{ ...googleRow, firebase_uid: 'fb-owner' }]);
+    const r = await getOrCreateUserFromFirebase(
+      { uid: 'fb-imposter', email: 'priya@gmail.com', emailVerified: false },
+      client,
+    );
+    expect(r.isNewUser).toBe(true);
+    expect(r.user.id).not.toBe('u-google');
+    // users.email is unique: the claimed address stays off the new row until verified.
+    expect(r.user.email).toBeNull();
+    expect(r.user.email_verified).toBe(false);
+    expect(tables.users).toHaveLength(2);
+    expect(tables.users[0].firebase_uid).toBe('fb-owner');
+  });
+
+  it('marks the email verified once the token says so', async () => {
+    const { client, tables } = world([{ ...googleRow, firebase_uid: 'fb-mail', email_verified: false }]);
+    await getOrCreateUserFromFirebase({ uid: 'fb-mail', email: 'priya@gmail.com', emailVerified: true }, client);
+    expect(tables.users[0].email_verified).toBe(true);
+  });
+
+  it('the loser of a parallel create reads the winner instead of failing', async () => {
+    const { client, tables } = world([{ id: 'u-race', name: 'Arun', email: null, phone: null, firebase_uid: 'fb-race', ms_oid: null }]);
+    const realFrom = client.from;
+    const empty = world().client;
+    let usersCalls = 0;
+    // The first lookup misses (the other request has not committed yet); the insert then collides.
+    client.from = (t: string) => (t === 'users' && usersCalls++ === 0 ? empty.from(t) : realFrom(t));
+    const r = await getOrCreateUserFromFirebase({ uid: 'fb-race', emailVerified: false }, client);
+    expect(r).toMatchObject({ isNewUser: false, user: { id: 'u-race' } });
+    expect(tables.users).toHaveLength(1);
+  });
 });
 
 describe('getUserByFirebaseUid', () => {
@@ -149,5 +181,17 @@ describe('reconcileMsIdentity', () => {
     );
     const r = await reconcileMsIdentity(client, { msOid: 'oid-old', upn: 'old@neramclasses.com', allowCreate: false });
     expect(r).toMatchObject({ action: 'matched_ms_oid', user: { id: 'u-google' } });
+  });
+});
+
+describe('findVerifiedPhoneOwner', () => {
+  it('ignores a number someone only typed, and finds a verified owner', async () => {
+    const { client } = world([
+      { ...googleRow, id: 'u-typed', firebase_uid: 'fb-a', phone: '+919876543210', phone_verified: false, email: 'a@x.com' },
+    ]);
+    expect(await findVerifiedPhoneOwner('9876543210', 'u-me', client)).toBeNull();
+    const verified = world([{ ...googleRow, id: 'u-owner', phone_verified: true }]);
+    expect((await findVerifiedPhoneOwner('+919876543210', 'u-me', verified.client))?.id).toBe('u-owner');
+    expect(await findVerifiedPhoneOwner('+919876543210', 'u-owner', verified.client)).toBeNull();
   });
 });

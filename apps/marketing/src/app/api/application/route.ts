@@ -17,6 +17,7 @@ import {
   type CreateApplicationInput,
 } from '@neram/database/queries';
 import { verifyFirebaseToken } from '../_lib/auth';
+import { isSamePhone } from '@/lib/phone';
 
 const log = createLogger('[Application API]');
 
@@ -26,6 +27,11 @@ const GENDERS = ['male', 'female', 'other'] as const;
 const FEE_SOURCES = ['standard', 'admin', 'link'] as const;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const digits = (value: unknown): string => (typeof value === 'string' ? value.replace(/\D/g, '') : '');
+/** An Indian mobile stays 10 digits; one sent with its code (+971...) keeps it. */
+const phoneValue = (value: unknown): string => {
+  const d = digits(value);
+  return d && typeof value === 'string' && value.trim().startsWith('+') ? `+${d}` : d;
+};
 const isoDate = (value: unknown): string | undefined =>
   typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : undefined;
 const validGender = (value: unknown): 'male' | 'female' | 'other' | undefined =>
@@ -102,7 +108,7 @@ async function sendSubmissionEmails(
       name: userName,
       fatherName: application.father_name || '',
       email: userEmail,
-      phone: '+91 ' + (application.phone || 'N/A'),
+      phone: application.phone ? (String(application.phone).startsWith('+') ? application.phone : '+91 ' + application.phone) : 'N/A',
       phoneVerified: application.phone_verified || false,
       course: courseLabel,
       category: categoryLabel,
@@ -151,8 +157,12 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
     const body = await request.json();
     const supabase = createAdminClient();
 
+    // Phone verification is the account's, never the browser's say-so: the
+    // number on this application must be the one proven by OTP on the account.
+    const phoneVerified = auth.phoneVerified && !!body.phone && isSamePhone(phoneValue(body.phone), auth.phone);
+
     // Validate required fields (only enforce phone verification for final submission)
-    if (!body.phone_verified && body.status === 'submitted') {
+    if (!phoneVerified && body.status === 'submitted') {
       return NextResponse.json(
         { success: false, error: 'Phone verification is required to submit an application.' },
         { status: 400 }
@@ -200,8 +210,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
       first_name: body.first_name || undefined,
       father_name: body.father_name,
       email: validEmail(body.email),
-      phone: digits(body.phone) || undefined,
-      parent_phone: digits(body.parent_phone) || undefined,
+      phone: phoneValue(body.phone) || undefined,
+      parent_phone: phoneValue(body.parent_phone) || undefined,
       date_of_birth: isoDate(body.date_of_birth),
       gender: validGender(body.gender),
       fee_structure_id: body.fee_structure_id || undefined,
@@ -231,8 +241,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
       learning_mode: body.learning_mode || 'hybrid',
       school_type: body.school_type || undefined,
       status: isSubmitting ? 'submitted' : 'draft',
-      phone_verified: body.phone_verified,
-      phone_verified_at: body.phone_verified_at || undefined,
+      phone_verified: phoneVerified,
+      phone_verified_at: phoneVerified ? body.phone_verified_at || new Date().toISOString() : undefined,
       source: 'website_form',
       utm_source: body.utm_source || undefined,
       utm_medium: body.utm_medium || undefined,
@@ -586,11 +596,15 @@ export async function PATCH(request: NextRequest): Promise<NextResponse<Applicat
       if (email) updateData.email = email; else delete updateData.email;
     }
     if (updateData.phone !== undefined) {
-      const phone = digits(updateData.phone);
+      const phone = phoneValue(updateData.phone);
       if (phone) updateData.phone = phone; else delete updateData.phone;
     }
+    if (updateData.phone !== undefined) {
+      // A changed number is only verified if it is the account's OTP-verified one.
+      updateData.phone_verified = auth.phoneVerified && isSamePhone(updateData.phone, auth.phone);
+    }
     if (updateData.parent_phone !== undefined) {
-      const phone = digits(updateData.parent_phone);
+      const phone = phoneValue(updateData.parent_phone);
       if (phone) updateData.parent_phone = phone; else delete updateData.parent_phone;
     }
     if (updateData.date_of_birth !== undefined && !isoDate(updateData.date_of_birth)) delete updateData.date_of_birth;

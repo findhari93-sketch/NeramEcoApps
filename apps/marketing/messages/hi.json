@@ -97,9 +97,19 @@
     }
   },
   "apply": {
+    "demo": {
+      "notSure": "पता नहीं क्लास कैसे होती है?",
+      "notSureLink": "पहले एक फ्री डेमो क्लास में बैठें",
+      "exitTitle": "आपके जवाब सेव हैं",
+      "exitBody": "पता नहीं क्लास कैसे होती है? पहले एक आर्किटेक्ट के साथ फ्री लाइव डेमो क्लास में बैठें। माता-पिता भी आ सकते हैं।",
+      "exitCta": "फ्री डेमो बुक करें",
+      "exitKeep": "जारी रखें",
+      "exitClose": "बंद करें"
+    },
     "title": "Apply to Neram Classes",
     "subtitle": "Takes about 2 to 3 minutes.",
     "shell": {
+      "bookDemo": "फ्री डेमो क्लास बुक करें",
       "home": "Neram Classes home",
       "help": "Help",
       "secure": "Secure application",
@@ -109,7 +119,8 @@
       "privacy": "Privacy",
       "refund": "Refund policy",
       "haveAccount": "Have an account?",
-      "logIn": "Log in"
+      "logIn": "Log in",
+      "copyright": "© Neram Classes"
     },
     "progress": "Step {current} of {total}",
     "steps": {
@@ -219,7 +230,37 @@
       "verified": "Verified",
       "parentPhone": "Parent or guardian mobile (optional)",
       "email": "Email (optional)",
-      "prefilled": "Pre-filled"
+      "prefilled": "Pre-filled",
+      "subtitleShort": "Two minutes. We save as you go.",
+      "fullName": "Full name",
+      "fullNamePlaceholder": "As on your Class 12 marksheet",
+      "phoneWhatsapp": "Mobile (WhatsApp)",
+      "phonePlaceholder": "98xxx xxxxx",
+      "emailPlaceholder": "you@example.com",
+      "currentlyIn": "I'm currently in",
+      "currentlyIn11": "Class 11",
+      "currentlyIn12": "Class 12",
+      "currentlyInRepeater": "Repeater",
+      "currentlyInOther": "Other",
+      "cityPlaceholder": "Chennai",
+      "countryCode": "Country code, {country}",
+      "googleTitle": "Continue with Google",
+      "googleBody": "Fills in your name and email in one tap.",
+      "orTypeIt": "or type it yourself",
+      "googleFailed": "Google sign-in did not work. Try again, or type your details below.",
+      "fatherPlaceholder": "पिता का पूरा नाम",
+      "pinCode": "पिन कोड",
+      "pinPlaceholder": "600001",
+      "pinNotFound": "यह पिन कोड नहीं मिला। इसे जांचें, या नीचे अपना शहर लिखें।",
+      "pinLooking": "आपका क्षेत्र खोज रहे हैं",
+      "editPlace": "जगह बदलें",
+      "useMyLocationShort": "पिन कोड नहीं पता? मेरी लोकेशन इस्तेमाल करें",
+      "liveAbroad": "भारत से बाहर रहते हैं?",
+      "liveInIndia": "मैं भारत में रहता/रहती हूँ",
+      "countryOther": "अन्य देश",
+      "countryName": "देश का नाम",
+      "cityAbroadPlaceholder": "Dubai",
+      "stateOptional": "राज्य (वैकल्पिक)"
     },
     "yourCourse": {
       "title": "Your course",
@@ -270,7 +311,9 @@
       "notChosen": "Not chosen",
       "mode": "Learning mode",
       "centre": "Preferred centre",
-      "terms": "I agree to the <terms>Terms</terms> and the <refund>Refund policy</refund>."
+      "terms": "I agree to the <terms>Terms</terms> and the <refund>Refund policy</refund>.",
+      "moreDetails": "A few more details",
+      "moreDetailsBody": "We need these for your admission records."
     },
     "pay": {
       "title": "Pay and enrol",
@@ -310,7 +353,16 @@
       "completedGrade": "Choose what you completed before the diploma.",
       "yearOfStudy": "Choose your year of study.",
       "twelfthYear": "Choose the year you completed 12th.",
-      "terms": "Please agree to the Terms and the Refund policy."
+      "terms": "Please agree to the Terms and the Refund policy.",
+      "currentlyIn": "Tell us which class you are in.",
+      "countryName": "वह देश लिखें जहाँ आप रहते हैं।"
+    },
+    "eyebrow": "Apply · Neram Classes",
+    "stepsShort": {
+      "aboutYou": "About you",
+      "yourCourse": "Course",
+      "review": "Review",
+      "pay": "Pay"
     }
   },
   "footer": {
@@ -370,7 +422,10 @@
     "goToApp": "ऐप पर जाएं",
     "joinNow": "अभी जुड़ें",
     "viewFees": "फीस देखें",
-    "fees": "फीस"
+    "fees": "फीस",
+    "freeDemo": "फ्री डेमो",
+    "freeDemoClass": "फ्री डेमो क्लास",
+    "myDemo": "मेरा डेमो"
   },
   "centers": {
     "title": "हमारे लर्निंग सेंटर देखें",

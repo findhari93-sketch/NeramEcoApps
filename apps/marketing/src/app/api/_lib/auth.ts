@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { createAdminClient } from '@neram/database';
+import { createAdminClient, getUserByFirebaseUid } from '@neram/database';
 import { getAuth } from 'firebase-admin/auth';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 
@@ -23,6 +23,8 @@ export interface AuthResult {
   email: string | null;
   name: string | null;
   phone: string | null;
+  /** users.phone_verified: the number on the account was proven by OTP. */
+  phoneVerified: boolean;
 }
 
 /**
@@ -39,19 +41,17 @@ export async function verifyFirebaseToken(request: NextRequest): Promise<AuthRes
   try {
     const decodedToken = await getAuth().verifyIdToken(token);
 
-    const supabase = createAdminClient();
-    const { data: user } = await (supabase
-      .from('users') as any)
-      .select('id, email, first_name, last_name, phone')
-      .eq('firebase_uid', decodedToken.uid)
-      .single();
+    // getUserByFirebaseUid also follows user_identities, so a person's second
+    // sign-in method (phone OTP after Google, or Google after a phone-first
+    // application) reaches the same account instead of a 401.
+    const user: any = await getUserByFirebaseUid(decodedToken.uid, createAdminClient() as any);
 
     if (!user) {
       return null;
     }
 
     const name = [user.first_name, user.last_name].filter(Boolean).join(' ') || null;
-    return { userId: user.id, email: user.email, name, phone: user.phone };
+    return { userId: user.id, email: user.email, name, phone: user.phone, phoneVerified: user.phone_verified === true };
   } catch {
     return null;
   }

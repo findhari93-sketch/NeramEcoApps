@@ -10,7 +10,7 @@ import StepShell from './StepShell';
 afterEach(() => cleanup());
 
 describe('StepShell', () => {
-  it('renders the step, the progress line, one primary button, Back and the note', () => {
+  it('renders the eyebrow, the step, one wide primary button, one Back and the note, all inline', () => {
     const onPrimary = vi.fn();
     const onBack = vi.fn();
     render(
@@ -18,19 +18,20 @@ describe('StepShell', () => {
         <p>step body</p>
       </StepShell>,
     );
+    expect(screen.getByText('eyebrow')).toBeTruthy();
     expect(screen.getByText('step body')).toBeTruthy();
-    expect(screen.getByText('progress {"current":2,"total":4}')).toBeTruthy();
+    // The step count is spoken by the indicator, not printed twice.
+    expect(screen.getByRole('list').getAttribute('aria-label')).toBe('progress {"current":2,"total":4}');
 
     fireEvent.click(screen.getByRole('button', { name: 'Review application' }));
     expect(onPrimary).toHaveBeenCalledTimes(1);
 
-    // Two Back controls exist: the phone icon button and the desktop text button. CSS shows one at a time.
     const backs = screen.getAllByRole('button', { name: 'actions.back' });
-    expect(backs).toHaveLength(2);
+    expect(backs).toHaveLength(1);
     fireEvent.click(backs[0]);
     expect(onBack).toHaveBeenCalledTimes(1);
 
-    expect(screen.getAllByText('Next: review')).toHaveLength(2);
+    expect(screen.getAllByText('Next: review')).toHaveLength(1);
   });
 
   it('shows no Back on the first step and disables the primary button while busy', () => {
@@ -52,5 +53,17 @@ describe('StepShell', () => {
     expect(screen.getByText('pay step')).toBeTruthy();
     // Only the four step-indicator buttons remain.
     expect(screen.getAllByRole('button')).toHaveLength(4);
+  });
+
+  it('renders the aside under the actions', () => {
+    render(
+      <StepShell step={1} actions={{ primaryLabel: 'Review application', onPrimary: vi.fn() }} aside={<a href="/demo-class">demo link</a>}>
+        <p>body</p>
+      </StepShell>,
+    );
+    const primary = screen.getByRole('button', { name: 'Review application' });
+    const aside = screen.getByRole('link', { name: 'demo link' });
+    // The link comes after the primary button in reading order.
+    expect(primary.compareDocumentPosition(aside) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

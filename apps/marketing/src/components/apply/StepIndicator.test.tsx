@@ -26,8 +26,9 @@ describe('StepIndicator', () => {
 
   it('names every step with its number', () => {
     render(<StepIndicator step={0} />);
-    expect(screen.getByText('steps.aboutYou')).toBeTruthy();
-    expect(screen.getByText('steps.pay')).toBeTruthy();
+    expect(screen.getByText('stepsShort.aboutYou')).toBeTruthy();
+    expect(screen.getByText('stepsShort.yourCourse')).toBeTruthy();
+    expect(screen.getByText('stepsShort.pay')).toBeTruthy();
     expect(screen.getByText('04')).toBeTruthy();
     expect(screen.getByRole('list').getAttribute('aria-label')).toContain('progress');
   });

@@ -44,6 +44,7 @@ import { useTranslations } from 'next-intl';
 import StepHeading from '../StepHeading';
 import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import { useFormContext } from '../FormContext';
+import { selectedCardSx } from '../styles';
 import type { CourseType, OfflineCenter } from '@neram/database';
 import { leadAttribution } from '@/lib/attribution';
 import { trackTaxonomyEvent } from '@/lib/funnel-tracker';
@@ -304,21 +305,11 @@ export default function YourCourseStep() {
           {COURSE_OPTIONS.map((option) => (
             <Grid item xs={6} md={3} key={option.value}>
               <Card
-                variant={course.interestCourse === option.value ? 'elevation' : 'outlined'}
-                sx={{
-                  height: '100%',
-                  borderColor: course.interestCourse === option.value ? 'primary.main' : 'divider',
-                  borderWidth: course.interestCourse === option.value ? 2 : 1,
-                  bgcolor:
-                    course.interestCourse === option.value ? 'primary.50' : 'background.paper',
-                  position: 'relative',
-                }}
+                variant="outlined"
+                sx={selectedCardSx(course.interestCourse === option.value, { height: '100%', position: 'relative' })}
               >
                 {course.interestCourse === option.value && (
-                  <CheckCircleOutlined
-                    color="primary"
-                    sx={{ position: 'absolute', top: 8, right: 8 }}
-                  />
+                  <CheckCircleOutlined sx={{ position: 'absolute', top: 10, right: 8, color: 'text.primary' }} aria-hidden />
                 )}
                 <CardActionArea
                   onClick={() => handleCourseSelect(option.value)}
@@ -327,7 +318,7 @@ export default function YourCourseStep() {
                   <Box
                     sx={{
                       color:
-                        course.interestCourse === option.value ? 'primary.main' : 'text.secondary',
+                        course.interestCourse === option.value ? 'text.primary' : 'text.secondary',
                       mb: 1,
                     }}
                   >
@@ -393,28 +384,18 @@ export default function YourCourseStep() {
           {/* Hybrid Option */}
           <Grid item xs={12} sm={6}>
             <Card
-              variant={course.learningMode === 'hybrid' ? 'elevation' : 'outlined'}
-              sx={{
-                height: '100%',
-                borderColor: course.learningMode === 'hybrid' ? 'primary.main' : 'divider',
-                borderWidth: course.learningMode === 'hybrid' ? 2 : 1,
-                bgcolor: course.learningMode === 'hybrid' ? 'primary.50' : 'background.paper',
-                cursor: 'pointer',
-                position: 'relative',
-              }}
+              variant="outlined"
+              sx={selectedCardSx(course.learningMode === 'hybrid', { height: '100%', cursor: 'pointer', position: 'relative' })}
               onClick={() => handleLearningModeSelect('hybrid')}
             >
               {course.learningMode === 'hybrid' && (
-                <CheckCircleOutlined
-                  color="primary"
-                  sx={{ position: 'absolute', top: 8, right: 8 }}
-                />
+                <CheckCircleOutlined sx={{ position: 'absolute', top: 10, right: 8, color: 'text.primary' }} aria-hidden />
               )}
               <CardContent sx={{ textAlign: 'center', py: 3 }}>
                 <SchoolOutlined
                   sx={{
                     fontSize: 40,
-                    color: course.learningMode === 'hybrid' ? 'primary.main' : 'text.secondary',
+                    color: course.learningMode === 'hybrid' ? 'text.primary' : 'text.secondary',
                   }}
                 />
                 <Typography variant="subtitle1" fontWeight={600} mt={1}>
@@ -430,30 +411,19 @@ export default function YourCourseStep() {
           {/* Online Only Option */}
           <Grid item xs={12} sm={6}>
             <Card
-              variant={course.learningMode === 'online_only' ? 'elevation' : 'outlined'}
-              sx={{
-                height: '100%',
-                borderColor: course.learningMode === 'online_only' ? 'success.main' : 'divider',
-                borderWidth: course.learningMode === 'online_only' ? 2 : 1,
-                bgcolor:
-                  course.learningMode === 'online_only' ? 'success.50' : 'background.paper',
-                cursor: 'pointer',
-                position: 'relative',
-              }}
+              variant="outlined"
+              sx={selectedCardSx(course.learningMode === 'online_only', { height: '100%', cursor: 'pointer', position: 'relative' })}
               onClick={() => handleLearningModeSelect('online_only')}
             >
               {course.learningMode === 'online_only' && (
-                <CheckCircleOutlined
-                  color="success"
-                  sx={{ position: 'absolute', top: 8, right: 8 }}
-                />
+                <CheckCircleOutlined sx={{ position: 'absolute', top: 10, right: 8, color: 'text.primary' }} aria-hidden />
               )}
               <CardContent sx={{ textAlign: 'center', py: 3 }}>
                 <LaptopOutlined
                   sx={{
                     fontSize: 40,
                     color:
-                      course.learningMode === 'online_only' ? 'success.main' : 'text.secondary',
+                      course.learningMode === 'online_only' ? 'text.primary' : 'text.secondary',
                   }}
                 />
                 <Typography variant="subtitle1" fontWeight={600} mt={1}>
@@ -522,20 +492,8 @@ export default function YourCourseStep() {
                   {filteredCenters.map((center) => (
                     <Grid item xs={12} sm={6} key={center.id}>
                       <Card
-                        variant={
-                          course.selectedCenterId === center.id ? 'elevation' : 'outlined'
-                        }
-                        sx={{
-                          height: '100%',
-                          borderColor:
-                            course.selectedCenterId === center.id ? 'primary.main' : 'divider',
-                          borderWidth: course.selectedCenterId === center.id ? 2 : 1,
-                          cursor: 'pointer',
-                          transition: 'border-color 0.2s, box-shadow 0.2s',
-                          '&:hover': {
-                            borderColor: 'primary.light',
-                          },
-                        }}
+                        variant="outlined"
+                        sx={selectedCardSx(course.selectedCenterId === center.id, { height: '100%', cursor: 'pointer' })}
                         onClick={() => handleCenterSelect(center)}
                       >
                         <CardContent>
@@ -565,7 +523,7 @@ export default function YourCourseStep() {
                               )}
                             </Box>
                             {course.selectedCenterId === center.id && (
-                              <CheckCircleOutlined color="primary" />
+                              <CheckCircleOutlined sx={{ color: 'text.primary' }} aria-hidden />
                             )}
                           </Box>
                           {center.facilities && center.facilities.length > 0 && (
@@ -770,7 +728,7 @@ export default function YourCourseStep() {
                           variant="body2"
                           component="a"
                           href={`tel:${center.contact_phone}`}
-                          sx={{ color: 'primary.main', textDecoration: 'none' }}
+                          sx={{ color: 'text.primary', fontWeight: 600 }}
                         >
                           {center.contact_phone}
                         </Typography>

@@ -20,6 +20,7 @@ function complete(): ApplicationFormData {
       fatherName: 'Rajendran',
       email: '',
       phone: '9876543210',
+      phoneCountry: 'IN',
       parentPhone: '',
       phoneVerified: true,
       phoneVerifiedAt: '2026-09-26T10:00:00.000Z',
@@ -68,22 +69,59 @@ describe('validateAboutYou', () => {
     expect(validateAboutYou(data).errors.map((e) => e.field)).toContain('phoneVerified');
   });
 
-  it('requires name, father name, date of birth and location', () => {
+  it("requires name, father name, I'm currently in and the PIN", () => {
     const data = complete();
     data.personal.firstName = 'A';
     data.personal.fatherName = '';
-    data.personal.dateOfBirth = '';
     data.location.pincode = '';
-    data.location.city = '';
-    data.location.state = '';
+    data.academic = { ...DEFAULT_FORM_DATA.academic };
     const fields = validateAboutYou(data).errors.map((e) => e.field);
-    expect(fields).toEqual(['firstName', 'fatherName', 'dateOfBirth', 'pincode', 'city', 'state']);
+    expect(fields).toEqual(['firstName', 'fatherName', 'currentlyIn', 'pincode']);
+  });
+
+  it('in India, a PIN with no place found or typed asks for the city', () => {
+    const data = complete();
+    data.location.city = ' ';
+    data.location.state = '';
+    expect(validateAboutYou(data).errors.map((e) => e.field)).toEqual(['city']);
+  });
+
+  it('abroad needs a country and a city, never a PIN or state', () => {
+    const data = complete();
+    data.location = { ...DEFAULT_FORM_DATA.location, country: 'AE', city: 'Dubai' };
+    expect(validateAboutYou(data).isValid).toBe(true);
+    data.location.city = '';
+    expect(validateAboutYou(data).errors.map((e) => e.field)).toEqual(['city']);
+  });
+
+  it('"Other country" needs the country name', () => {
+    const data = complete();
+    data.location = { ...DEFAULT_FORM_DATA.location, country: 'OTHER', countryName: '', city: 'London' };
+    expect(validateAboutYou(data).errors.map((e) => e.field)).toEqual(['countryName']);
+  });
+
+  it('checks the mobile against its own country, not where the student lives', () => {
+    const data = complete();
+    data.personal = { ...data.personal, phone: '501234567', phoneCountry: 'AE', phoneVerified: false };
+    expect(validateAboutYou(data).errors.map((e) => e.field)).toEqual(['phoneVerified']);
+  });
+
+  it('leaves date of birth to Review', () => {
+    const data = complete();
+    data.personal.dateOfBirth = '';
+    expect(validateAboutYou(data).isValid).toBe(true);
+  });
+
+  it('accepts "Other" with no category yet (Your studies asks it next)', () => {
+    const data = complete();
+    data.academic = { ...DEFAULT_FORM_DATA.academic, currentlyIn: 'other' };
+    expect(validateAboutYou(data).isValid).toBe(true);
   });
 
   it('uses i18n keys as messages', () => {
     const data = complete();
-    data.personal.fatherName = '';
-    expect(validateAboutYou(data).errors[0].message).toBe('errors.fatherName');
+    data.personal.firstName = '';
+    expect(validateAboutYou(data).errors[0].message).toBe('errors.firstName');
   });
 });
 
@@ -133,6 +171,14 @@ describe('validateReview and validateStep', () => {
     expect(validateReview(data).errors.map((e) => e.field)).toEqual(['terms']);
   });
 
+  it('asks only the date of birth from the personal details (the rest is optional)', () => {
+    const data = complete();
+    data.personal.dateOfBirth = '';
+    data.location.address = '';
+    data.personal.parentPhone = '';
+    expect(validateReview(data).errors.map((e) => e.field)).toEqual(['dateOfBirth']);
+  });
+
   it('the pay step is always valid', () => {
     expect(validateStep(3, DEFAULT_FORM_DATA).isValid).toBe(true);
   });
@@ -153,6 +199,14 @@ describe('payloads', () => {
     expect(p).not.toHaveProperty('interest_course');
     expect(p.email).toBeUndefined();
     expect(p.gender).toBeUndefined();
+    // "I'm currently in" already set the class, so an abandoned step-1 lead keeps it.
+    expect(p).toMatchObject({ applicant_category: 'school_student', academic_data: { current_class: '11' } });
+  });
+
+  it('the draft payload after step 0 sends no studies when the class is not known yet', () => {
+    const data = complete();
+    data.academic = { ...DEFAULT_FORM_DATA.academic, currentlyIn: 'other' };
+    expect(buildDraftPayload(data, 0)).not.toHaveProperty('applicant_category');
   });
 
   it('the draft payload after step 1 carries studies, course and programme', () => {
@@ -191,6 +245,19 @@ describe('payloads', () => {
       gclid: 'g-1',
       wbraid: 'w-1',
     });
+  });
+
+  it('a mobile from another country is sent with its code, an Indian one as 10 digits', () => {
+    const data = complete();
+    data.personal = { ...data.personal, phone: '501234567', phoneCountry: 'AE', parentPhone: '509876543' };
+    data.location = { ...DEFAULT_FORM_DATA.location, country: 'IN', pincode: '600001', city: 'Chennai' };
+    expect(buildSubmitPayload(data)).toMatchObject({ phone: '+971501234567', parent_phone: '+971509876543', country: 'IN' });
+  });
+
+  it('"Other country" is saved by its typed name', () => {
+    const data = complete();
+    data.location = { ...DEFAULT_FORM_DATA.location, country: 'OTHER', countryName: 'Singapore', city: 'Singapore' };
+    expect(buildSubmitPayload(data)).toMatchObject({ country: 'Singapore', city: 'Singapore' });
   });
 
   it('the submit payload has no fee_source when no programme was chosen', () => {

@@ -29,6 +29,7 @@ import {
 import HomeRoundedIcon from '@mui/icons-material/HomeRounded';
 import SearchIcon from '@mui/icons-material/Search';
 import CurrencyRupeeIcon from '@mui/icons-material/CurrencyRupee';
+import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import SchoolIcon from '@mui/icons-material/School';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
@@ -47,6 +48,7 @@ const loadSearchDialog = () => import('./SearchDialog');
 const SearchDialog = dynamic(loadSearchDialog, { ssr: false });
 import { useApplicationStatus, type AppStatusSummary } from '@/hooks/useApplicationStatus';
 import { useGoToApp } from '@/hooks/useGoToApp';
+import { getDemoCta, readDemoActive, type DemoActiveFlag } from '@/lib/demo-cta';
 
 // ─── CTA config (unchanged) ────────────────────────────────────────────────
 
@@ -325,6 +327,17 @@ export default function Header() {
   const isEnrolled = appStatus === 'enrolled' || appStatus === 'partial_payment';
   // Students check the fee before they apply, so Fees sits right beside the CTA.
   const showFeesLink = !isEnrolled && !isApplyPage && pathname !== '/fees';
+
+  // "Free demo" beside Join Now, or "My demo" once one is booked. Read from a
+  // browser flag the booking card writes, so no page pays for an API call.
+  const [demoActive, setDemoActive] = useState<DemoActiveFlag | null>(null);
+  useEffect(() => {
+    setDemoActive(readDemoActive());
+    const onStorage = () => setDemoActive(readDemoActive());
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, [pathname]);
+  const demoCta = getDemoCta({ pathname, applicationStatus: appStatus, enrolled: isEnrolled, active: demoActive });
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpenState] = useState(false);
@@ -695,6 +708,35 @@ export default function Header() {
                     {t('header.fees')}
                   </Button>
                 )}
+                {demoCta && (
+                  <Button
+                    component={Link}
+                    href={demoCta.href}
+                    variant="outlined"
+                    size="small"
+                    startIcon={<VideocamOutlinedIcon sx={{ fontSize: 18 }} />}
+                    sx={{
+                      display: 'none',
+                      // Needs the room Fees leaves at 1100px and up; phones get it in the drawer
+                      '@media (min-width: 1100px)': { display: 'inline-flex' },
+                      flexShrink: 0,
+                      mr: 1,
+                      px: 1.75,
+                      minHeight: 40,
+                      borderRadius: '6px',
+                      borderWidth: 1.5,
+                      fontWeight: 600,
+                      fontSize: '0.875rem',
+                      textTransform: 'none',
+                      whiteSpace: 'nowrap',
+                      '& .MuiButton-startIcon': { mr: 0.5 },
+                      '&:hover': { borderWidth: 1.5 },
+                      '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+                    }}
+                  >
+                    {demoCta.label === 'myDemo' ? t('header.myDemo') : t('header.freeDemo')}
+                  </Button>
+                )}
                 <Button
                   component={Link}
                   href={ctaConfig.href}
@@ -1055,6 +1097,25 @@ export default function Header() {
           {/* Mobile CTA */}
           {!isApplyPage && (
             <Box sx={{ px: 2, pb: 1.5 }}>
+              {demoCta && (
+                <Button
+                  component={Link}
+                  href={demoCta.href}
+                  variant="outlined"
+                  fullWidth
+                  onClick={toggleMobileMenu}
+                  startIcon={<VideocamOutlinedIcon />}
+                  sx={{
+                    mb: 1,
+                    minHeight: 48,
+                    borderRadius: '6px',
+                    fontWeight: 600,
+                    textTransform: 'none',
+                  }}
+                >
+                  {demoCta.label === 'myDemo' ? t('header.myDemo') : t('header.freeDemoClass')}
+                </Button>
+              )}
               {ctaConfig.href ? (
                 <Button
                   component={Link}

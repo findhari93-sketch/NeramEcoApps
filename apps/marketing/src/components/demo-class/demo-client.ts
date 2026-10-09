@@ -7,7 +7,8 @@ import type { DemoWindow } from '@neram/database/demo-schedule';
 import type { PublicDemoRequest } from '@/lib/demo-request';
 
 export interface DemoDraft {
-  step: 0 | 1 | 2;
+  /** 0 When, 1 Who (sign in, then the details). */
+  step: 0 | 1;
   date: string | null;
   window: DemoWindow | null;
   name: string;
@@ -35,7 +36,10 @@ const DRAFT_KEY = 'neram_demo_draft';
 export function loadDraft(): DemoDraft | null {
   try {
     const raw = window.sessionStorage.getItem(DRAFT_KEY);
-    return raw ? { ...EMPTY_DRAFT, ...(JSON.parse(raw) as Partial<DemoDraft>) } : null;
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as Partial<Omit<DemoDraft, 'step'>> & { step?: number };
+    // Drafts saved before the booking went to two steps may say step 2.
+    return { ...EMPTY_DRAFT, ...saved, step: saved.step && saved.step > 0 ? 1 : 0 };
   } catch {
     return null;
   }
@@ -54,6 +58,55 @@ export function clearDraft(): void {
     window.sessionStorage.removeItem(DRAFT_KEY);
   } catch {
     // ignore
+  }
+}
+
+const APPLY_DRAFT_KEY = 'neram_application_draft';
+
+/** The apply form's "I'm currently in" answer as a demo class pill. */
+const APPLY_CLASS_TO_DEMO: Record<string, string> = {
+  '11': '11th',
+  '12': '12th',
+  repeater: '12th-pass',
+  other: 'other',
+};
+
+/** The apply form saved a draft on this device (it keeps one for 7 days). */
+export function hasApplyDraft(): boolean {
+  try {
+    return !!window.localStorage.getItem(APPLY_DRAFT_KEY);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Name and class from the apply draft, for a student who left the form to
+ * book a demo. Only what the form already holds; empty strings otherwise.
+ */
+export function applyDraftPrefill(): { name: string; currentClass: string } {
+  try {
+    const raw = window.localStorage.getItem(APPLY_DRAFT_KEY);
+    if (!raw) return { name: '', currentClass: '' };
+    const state = JSON.parse(raw) as {
+      formData?: {
+        personal?: { firstName?: string };
+        academic?: { applicantCategory?: string; currentlyIn?: string; schoolStudentData?: { current_class?: string } | null };
+      };
+    };
+    const name = (state.formData?.personal?.firstName || '').trim();
+    const academic = state.formData?.academic;
+    let currentlyIn = academic?.currentlyIn || '';
+    if (academic?.applicantCategory === 'school_student') {
+      const cls = academic.schoolStudentData?.current_class;
+      if (cls === '11' || cls === '12') currentlyIn = cls;
+      else if (cls === '12_completed') currentlyIn = 'repeater';
+    } else if (academic?.applicantCategory) {
+      currentlyIn = 'other';
+    }
+    return { name, currentClass: APPLY_CLASS_TO_DEMO[currentlyIn] || '' };
+  } catch {
+    return { name: '', currentClass: '' };
   }
 }
 

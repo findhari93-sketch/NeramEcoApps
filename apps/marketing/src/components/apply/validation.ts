@@ -4,8 +4,8 @@
  * the four new steps. Messages are i18n keys (apply.errors.*), so the same
  * rule reads right in Tamil.
  */
-import type { ApplicationFormData, FormStep, StepValidation, ValidationError } from './types';
-import { getCountryConfig } from './countryConfig';
+import { currentlyInOf, type ApplicationFormData, type FormStep, type StepValidation, type ValidationError } from './types';
+import { INDIA_PIN, OTHER_COUNTRY, getCountryConfig, storedResidence, toStoredPhone } from './countryConfig';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -13,27 +13,40 @@ function err(field: string, key: string): ValidationError {
   return { field, message: `errors.${key}` };
 }
 
+/**
+ * Step 1: full name and father's name, the mobile (verified), email, "I'm
+ * currently in", and where the student lives. In India that is a PIN code
+ * whose place was found or typed; elsewhere a country and a city.
+ */
 export function validateAboutYou(data: ApplicationFormData): StepValidation {
   const errors: ValidationError[] = [];
   const { personal, location } = data;
-  const country = getCountryConfig(location.country);
+  const phoneCountry = getCountryConfig(personal.phoneCountry);
 
   if (!personal.firstName || personal.firstName.trim().length < 2) errors.push(err('firstName', 'firstName'));
   if (!personal.fatherName || personal.fatherName.trim().length < 2) errors.push(err('fatherName', 'fatherName'));
   if (personal.email && !EMAIL.test(personal.email)) errors.push(err('email', 'email'));
   if (!personal.phoneVerified) {
-    if (!personal.phone || !country.phonePattern.test(personal.phone)) errors.push(err('phone', 'phone'));
+    if (!personal.phone || !phoneCountry.phonePattern.test(personal.phone)) errors.push(err('phone', 'phone'));
     errors.push(err('phoneVerified', 'phoneVerified'));
   }
-  if (!personal.dateOfBirth) errors.push(err('dateOfBirth', 'dateOfBirth'));
+  if (!currentlyInOf(data.academic)) errors.push(err('currentlyIn', 'currentlyIn'));
 
-  if (country.postalCode.required) {
-    const format = country.postalCode.format;
-    if (!location.pincode || (format && !format.test(location.pincode))) errors.push(err('pincode', 'pincode'));
+  if (location.country === 'IN') {
+    if (!INDIA_PIN.test(location.pincode)) errors.push(err('pincode', 'pincode'));
+    else if (!location.city.trim()) errors.push(err('city', 'city'));
+  } else {
+    if (location.country === OTHER_COUNTRY && !location.countryName.trim()) errors.push(err('countryName', 'countryName'));
+    if (!location.city.trim()) errors.push(err('city', 'city'));
   }
-  if (country.locationFields.cityRequired && !location.city) errors.push(err('city', 'city'));
-  if (country.locationFields.stateRequired && !location.state) errors.push(err('state', 'state'));
 
+  return { isValid: errors.length === 0, errors };
+}
+
+/** The personal details Review still asks for ("A few more details"): date of birth. */
+export function validateMoreDetails(data: ApplicationFormData): StepValidation {
+  const errors: ValidationError[] = [];
+  if (!data.personal.dateOfBirth) errors.push(err('dateOfBirth', 'dateOfBirth'));
   return { isValid: errors.length === 0, errors };
 }
 
@@ -76,7 +89,7 @@ export function validateYourCourse(data: ApplicationFormData): StepValidation {
 }
 
 export function validateReview(data: ApplicationFormData): StepValidation {
-  const errors: ValidationError[] = [];
+  const errors: ValidationError[] = [...validateMoreDetails(data).errors];
   if (!data.termsAccepted) errors.push(err('terms', 'terms'));
   return { isValid: errors.length === 0, errors };
 }
@@ -117,8 +130,8 @@ function contactFields(data: ApplicationFormData): Record<string, unknown> {
     first_name: orUndefined(personal.firstName),
     father_name: orUndefined(personal.fatherName),
     email: orUndefined(personal.email),
-    phone: orUndefined(personal.phone),
-    parent_phone: orUndefined(personal.parentPhone),
+    phone: orUndefined(toStoredPhone(personal.phone, personal.phoneCountry)),
+    parent_phone: orUndefined(toStoredPhone(personal.parentPhone, personal.phoneCountry)),
     date_of_birth: orUndefined(personal.dateOfBirth),
     gender: orUndefined(personal.gender),
     phone_verified: personal.phoneVerified,
@@ -129,7 +142,7 @@ function contactFields(data: ApplicationFormData): Record<string, unknown> {
 function locationFields(data: ApplicationFormData): Record<string, unknown> {
   const { location } = data;
   return {
-    country: location.country || 'IN',
+    country: storedResidence(location.country, location.countryName),
     city: orUndefined(location.city),
     state: orUndefined(location.state),
     district: orUndefined(location.district),
@@ -189,6 +202,9 @@ export function buildDraftPayload(formData: ApplicationFormData, stepCompleted: 
   };
   if (stepCompleted >= 1) {
     Object.assign(payload, studiesFields(formData), courseFields(formData));
+  } else if (formData.academic.applicantCategory) {
+    // "I'm currently in" on About you already says the class: keep it on abandoned step-1 leads.
+    Object.assign(payload, studiesFields(formData));
   }
   return payload;
 }

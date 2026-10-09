@@ -384,7 +384,7 @@ export async function POST(request: NextRequest) {
       target_scope: target_scope || (typeById.get(cid) === 'common' ? 'all' : 'classroom'),
       description: description || null,
       lobby_bypass: lobby_bypass || 'organization',
-      allowed_presenters: allowed_presenters || 'organizer',
+      allowed_presenters: allowed_presenters || 'roleIsPresenter',
       status: 'scheduled',
       // Callers must opt IN to drafting. Everything that existed before the
       // planner (including the Teams sync) keeps publishing immediately.

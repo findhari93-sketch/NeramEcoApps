@@ -79,7 +79,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const name = str(body.name, 100) || str(user?.name, 100);
+    // The typed name wins: a parent may book for their child.
+    const name = str(body.name, 100) || str(user?.name, 100) || str(auth.name, 100);
     if (name.length < 2) return NextResponse.json({ error: 'Please enter the student name.' }, { status: 400 });
 
     const currentClass = CLASSES.has(str(body.currentClass, 20)) ? str(body.currentClass, 20) : null;

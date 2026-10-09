@@ -28,6 +28,7 @@ import ExpandMoreOutlined from '@mui/icons-material/ExpandMoreOutlined';
 import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import { useTranslations } from 'next-intl';
 import { useFormContext } from '../FormContext';
+import { selectedCardSx } from '../styles';
 import {
   CLASS_OPTIONS,
   YEAR_OF_STUDY_OPTIONS,
@@ -176,15 +177,8 @@ export default function YourStudiesBlock() {
           {APPLICANT_CATEGORY_OPTIONS.map((option) => (
             <Grid item xs={6} sm={3} key={option.value}>
               <Card
-                variant={academic.applicantCategory === option.value ? 'elevation' : 'outlined'}
-                sx={{
-                  height: '100%',
-                  borderColor:
-                    academic.applicantCategory === option.value ? 'primary.main' : 'divider',
-                  borderWidth: academic.applicantCategory === option.value ? 2 : 1,
-                  bgcolor:
-                    academic.applicantCategory === option.value ? 'primary.50' : 'background.paper',
-                }}
+                variant="outlined"
+                sx={selectedCardSx(academic.applicantCategory === option.value, { height: '100%' })}
               >
                 <CardActionArea
                   onClick={() => handleCategoryChange(option.value)}
@@ -194,7 +188,7 @@ export default function YourStudiesBlock() {
                     sx={{
                       color:
                         academic.applicantCategory === option.value
-                          ? 'primary.main'
+                          ? 'text.primary'
                           : 'text.secondary',
                       mb: 1,
                     }}

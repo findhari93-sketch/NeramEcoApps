@@ -696,6 +696,34 @@ export async function sendDemoRequestMessage(
   return sendWhatsAppTemplate(phone, t.name, 'en', components);
 }
 
+/**
+ * Templates for applicants. `apply_draft_demo` goes once to a student who left
+ * the application unfinished (see claimDraftsForDemoNudge). Meta will likely
+ * file it as Marketing, not Utility: it offers something rather than reporting
+ * on a request. The body ends in text, as Meta requires.
+ */
+export const APPLY_WA_TEMPLATES = {
+  apply_draft_demo: {
+    name: 'apply_draft_demo',
+    params: ['recipientName'] as const,
+    body:
+      'Hi {{1}}, your Neram Classes application is saved. Not sure how our classes work? Sit in a free live demo ' +
+      'class with an architect first, and parents are welcome. Pick a time at neramclasses.com/demo-class or call ' +
+      '+91 91761 37043.',
+  },
+};
+
+/** The one "book a free demo" nudge for an unfinished application. */
+export async function sendApplyDraftDemoNudge(phone: string, name: string): Promise<WhatsAppSendResult> {
+  if (!isWhatsAppConfigured()) {
+    return { success: false, error: 'WA_NOT_CONFIGURED: WHATSAPP_PHONE_NUMBER_ID or WHATSAPP_ACCESS_TOKEN is not set' };
+  }
+  const recipient = name.replace(/\s+/g, ' ').trim() || 'there';
+  return sendWhatsAppTemplate(phone, APPLY_WA_TEMPLATES.apply_draft_demo.name, 'en', [
+    { type: 'body', parameters: [{ type: 'text', text: recipient }] },
+  ]);
+}
+
 export interface WhatsAppHealth {
   configured: boolean;
   phoneNumberId: string | null;

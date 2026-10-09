@@ -107,9 +107,19 @@
     }
   },
   "apply": {
+    "demo": {
+      "notSure": "Not sure how the classes work?",
+      "notSureLink": "Sit in a free demo class first",
+      "exitTitle": "Your answers are saved",
+      "exitBody": "Not sure how the classes work? Sit in a free live demo class with an architect first. Parents are welcome.",
+      "exitCta": "Book a free demo",
+      "exitKeep": "Keep going",
+      "exitClose": "Close"
+    },
     "title": "Apply to Neram Classes",
     "subtitle": "Takes about 2 to 3 minutes.",
     "shell": {
+      "bookDemo": "Book a free demo class",
       "home": "Neram Classes home",
       "help": "Help",
       "secure": "Secure application",
@@ -119,7 +129,8 @@
       "privacy": "Privacy",
       "refund": "Refund policy",
       "haveAccount": "Have an account?",
-      "logIn": "Log in"
+      "logIn": "Log in",
+      "copyright": "© Neram Classes"
     },
     "progress": "Step {current} of {total}",
     "steps": {
@@ -229,7 +240,37 @@
       "verified": "Verified",
       "parentPhone": "Parent or guardian mobile (optional)",
       "email": "Email (optional)",
-      "prefilled": "Pre-filled"
+      "prefilled": "Pre-filled",
+      "subtitleShort": "Two minutes. We save as you go.",
+      "fullName": "Full name",
+      "fullNamePlaceholder": "As on your Class 12 marksheet",
+      "phoneWhatsapp": "Mobile (WhatsApp)",
+      "phonePlaceholder": "98xxx xxxxx",
+      "emailPlaceholder": "you@example.com",
+      "currentlyIn": "I'm currently in",
+      "currentlyIn11": "Class 11",
+      "currentlyIn12": "Class 12",
+      "currentlyInRepeater": "Repeater",
+      "currentlyInOther": "Other",
+      "cityPlaceholder": "Chennai",
+      "countryCode": "Country code, {country}",
+      "googleTitle": "Continue with Google",
+      "googleBody": "Fills in your name and email in one tap.",
+      "orTypeIt": "or type it yourself",
+      "googleFailed": "Google sign-in did not work. Try again, or type your details below.",
+      "fatherPlaceholder": "Father's full name",
+      "pinCode": "PIN code",
+      "pinPlaceholder": "600001",
+      "pinNotFound": "We could not find this PIN code. Check it, or type your city below.",
+      "pinLooking": "Finding your area",
+      "editPlace": "Edit place",
+      "useMyLocationShort": "Don't know your PIN? Use my location",
+      "liveAbroad": "Live outside India?",
+      "liveInIndia": "I live in India",
+      "countryOther": "Other country",
+      "countryName": "Country name",
+      "cityAbroadPlaceholder": "Dubai",
+      "stateOptional": "State (optional)"
     },
     "yourCourse": {
       "title": "Your course",
@@ -280,7 +321,9 @@
       "notChosen": "Not chosen",
       "mode": "Learning mode",
       "centre": "Preferred centre",
-      "terms": "I agree to the <terms>Terms</terms> and the <refund>Refund policy</refund>."
+      "terms": "I agree to the <terms>Terms</terms> and the <refund>Refund policy</refund>.",
+      "moreDetails": "A few more details",
+      "moreDetailsBody": "We need these for your admission records."
     },
     "pay": {
       "title": "Pay and enrol",
@@ -320,7 +363,16 @@
       "completedGrade": "Choose what you completed before the diploma.",
       "yearOfStudy": "Choose your year of study.",
       "twelfthYear": "Choose the year you completed 12th.",
-      "terms": "Please agree to the Terms and the Refund policy."
+      "terms": "Please agree to the Terms and the Refund policy.",
+      "currentlyIn": "Tell us which class you are in.",
+      "countryName": "Enter the country you live in."
+    },
+    "eyebrow": "Apply · Neram Classes",
+    "stepsShort": {
+      "aboutYou": "About you",
+      "yourCourse": "Course",
+      "review": "Review",
+      "pay": "Pay"
     }
   },
   "footer": {
@@ -452,7 +504,10 @@
     "goToApp": "Go to App",
     "joinNow": "Join Now",
     "viewFees": "View fees",
-    "fees": "Fees"
+    "fees": "Fees",
+    "freeDemo": "Free demo",
+    "freeDemoClass": "Free demo class",
+    "myDemo": "My demo"
   },
   "centers": {
     "title": "Visit Our Learning Centers",

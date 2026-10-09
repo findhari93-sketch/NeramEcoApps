@@ -14,6 +14,10 @@ import {
   Auth,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  signInWithCredential,
+  updatePhoneNumber,
+  AuthCredential,
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPhoneNumber,
@@ -131,6 +135,29 @@ export async function signInWithGoogle(): Promise<FirebaseUser> {
   return result.user;
 }
 
+const GOOGLE_CANCELLED = new Set(['auth/popup-closed-by-user', 'auth/cancelled-popup-request', 'auth/user-cancelled']);
+
+/**
+ * Google sign-in for a button that should never dead-end: the popup first;
+ * if the browser blocks popups, a full-page redirect (the session comes back
+ * through onAuthStateChanged, so the page picks up from there). Returns null
+ * when the student closes the popup or the page is redirecting.
+ */
+export async function signInWithGoogleOrRedirect(): Promise<FirebaseUser | null> {
+  const auth = getFirebaseAuth();
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    return result.user;
+  } catch (error: any) {
+    if (GOOGLE_CANCELLED.has(error?.code)) return null;
+    if (error?.code === 'auth/popup-blocked' || error?.code === 'auth/operation-not-supported-in-this-environment') {
+      await signInWithRedirect(auth, googleProvider);
+      return null;
+    }
+    throw error;
+  }
+}
+
 /**
  * Sign in with Google including YouTube scope for subscription management
  * Returns both the Firebase user and the OAuth access token for YouTube API calls
@@ -188,9 +215,36 @@ export async function createAccountWithEmail(
   if (displayName) {
     await updateProfile(result.user, { displayName });
   }
-  
-  await sendEmailVerification(result.user);
+
+  await sendEmailVerification(result.user, verificationLinkSettings());
   return result.user;
+}
+
+/** The verification link brings the student back to the page they signed up on. */
+function verificationLinkSettings(): { url: string } | undefined {
+  if (typeof window === 'undefined') return undefined;
+  return { url: window.location.href };
+}
+
+/**
+ * Re-read the signed-in user from Firebase and refresh the ID token, so a
+ * click on the verification link (in another tab or on the phone) shows up
+ * here and in the token's email_verified claim.
+ */
+export async function refreshEmailVerified(): Promise<boolean> {
+  const user = getFirebaseAuth().currentUser;
+  if (!user) return false;
+  await user.reload();
+  const fresh = getFirebaseAuth().currentUser;
+  if (fresh?.emailVerified) await fresh.getIdToken(true);
+  return Boolean(fresh?.emailVerified);
+}
+
+/** Send the verification email again to the signed-in user. */
+export async function resendVerificationEmail(): Promise<void> {
+  const user = getFirebaseAuth().currentUser;
+  if (!user) throw new Error('No user is signed in');
+  await sendEmailVerification(user, verificationLinkSettings());
 }
 
 export async function resetPassword(email: string): Promise<void> {
@@ -204,6 +258,8 @@ export async function resetPassword(email: string): Promise<void> {
 
 let recaptchaVerifier: RecaptchaVerifier | null = null;
 let confirmationResult: ConfirmationResult | null = null;
+/** The E.164 number the current confirmationResult was sent to. */
+let otpPhoneNumber: string | null = null;
 
 export function initRecaptcha(
   containerId: string,
@@ -258,6 +314,7 @@ export async function sendPhoneOTP(phoneNumber: string): Promise<ConfirmationRes
     : `+91${phoneNumber.replace(/\D/g, '')}`;
   
   confirmationResult = await signInWithPhoneNumber(auth, formattedPhone, recaptchaVerifier);
+  otpPhoneNumber = formattedPhone;
   return confirmationResult;
 }
 
@@ -288,37 +345,59 @@ export async function verifyPhoneAndLink(otp: string): Promise<FirebaseUser> {
   const auth = getFirebaseAuth();
   const currentUser = auth.currentUser;
 
-  if (currentUser) {
-    // User is already signed in — link phone to their existing account
-    // instead of creating a new sign-in that would replace the session
-    const credential = PhoneAuthProvider.credential(
-      confirmationResult.verificationId,
-      otp
-    );
-
-    try {
-      const result = await linkWithCredential(currentUser, credential);
-      return result.user;
-    } catch (error: any) {
-      if (error?.code === 'auth/provider-already-linked') {
-        // Phone provider already linked to this account — OTP was still validated
-        return currentUser;
-      }
-      if (error?.code === 'auth/credential-already-in-use' ||
-          error?.code === 'auth/account-exists-with-different-credential') {
-        // Phone number is already associated with a different Firebase account
-        // (e.g., from a previous test or orphaned phone-only account).
-        // The OTP was still validated by Firebase — return current user
-        // so session is not disrupted. Phone will be saved to Supabase.
-        return currentUser;
-      }
-      throw error;
-    }
-  } else {
-    // No user signed in — regular phone sign-in flow
+  if (!currentUser) {
+    // No user signed in: a regular phone sign-in.
     const result = await confirmationResult.confirm(otp);
     return result.user;
   }
+
+  // Signed in (Google or email): attach the phone to THIS account. A plain
+  // confirm() here would sign in as a separate phone-only account and replace
+  // the session.
+  const credential = PhoneAuthProvider.credential(confirmationResult.verificationId, otp);
+  const hasPhone = currentUser.providerData.some((p) => p.providerId === 'phone');
+
+  try {
+    if (hasPhone) {
+      if (otpPhoneNumber && currentUser.phoneNumber === otpPhoneNumber) return currentUser;
+      // A different number is already on the account: replace it.
+      await updatePhoneNumber(currentUser, credential);
+      return currentUser;
+    }
+    const result = await linkWithCredential(currentUser, credential);
+    return result.user;
+  } catch (error: any) {
+    if (error?.code === 'auth/provider-already-linked') {
+      await updatePhoneNumber(currentUser, credential);
+      return currentUser;
+    }
+    if (error?.code === 'auth/credential-already-in-use' || error?.code === 'auth/account-exists-with-different-credential') {
+      // The number belongs to another Firebase account. Hand the verified
+      // credential back so the caller can offer "Sign in with this number".
+      throw new PhoneInUseError(PhoneAuthProvider.credentialFromError(error));
+    }
+    throw error;
+  }
+}
+
+/**
+ * The verified phone number already belongs to a different account. Carries
+ * the credential so the student can sign in to that account without a new OTP.
+ */
+export class PhoneInUseError extends Error {
+  code = 'neram/phone-in-use' as const;
+  credential: AuthCredential | null;
+  constructor(credential: AuthCredential | null) {
+    super('This phone number is already on another Neram account.');
+    this.name = 'PhoneInUseError';
+    this.credential = credential;
+  }
+}
+
+/** Sign in to the account that owns a verified phone credential (from PhoneInUseError). */
+export async function signInWithPhoneCredential(credential: AuthCredential): Promise<FirebaseUser> {
+  const result = await signInWithCredential(getFirebaseAuth(), credential);
+  return result.user;
 }
 
 export async function linkPhoneToAccount(
@@ -483,6 +562,7 @@ export function clearRecaptcha(): void {
     recaptchaVerifier = null;
   }
   confirmationResult = null;
+  otpPhoneNumber = null;
 
   // Clear rendered reCAPTCHA widgets from DOM to prevent "already rendered" errors
   if (typeof document !== 'undefined') {

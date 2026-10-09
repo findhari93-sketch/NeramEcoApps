@@ -32,6 +32,7 @@ import {
 import type { PublicDemoRequest } from '@/lib/demo-request';
 import DemoStatusCard, { type DemoPublicSettings } from './DemoStatusCard';
 import { fetchMyDemo, updateMyDemo } from './demo-client';
+import { writeDemoActive } from '@/lib/demo-cta';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
 const focusRing = { '&:focus-visible': { outline: '3px solid', outlineColor: 'primary.main', outlineOffset: 2 } };
@@ -103,7 +104,11 @@ export default function MyDemoContent() {
       return;
     }
     fetchMyDemo()
-      .then((d) => setRequest(d.request))
+      .then((d) => {
+        setRequest(d.request);
+        // Keeps the header's "My demo" honest: an ended demo turns it back to "Free demo".
+        writeDemoActive(d.request);
+      })
       .finally(() => setLoaded(true));
   }, [user, authLoading]);
 
@@ -118,6 +123,7 @@ export default function MyDemoContent() {
     setBusy(false);
     if (r.ok) {
       setRequest(r.request);
+      writeDemoActive(r.request);
       setDialog(null);
     } else {
       setError(r.message);

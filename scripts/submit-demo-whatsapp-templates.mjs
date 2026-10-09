@@ -9,6 +9,10 @@
  *
  *   node scripts/submit-demo-whatsapp-templates.mjs          # check only, sends nothing
  *   node scripts/submit-demo-whatsapp-templates.mjs --go     # submit to Meta
+ *   node scripts/submit-demo-whatsapp-templates.mjs --go --only=apply_draft_demo   # just one
+ *
+ * Also carries APPLY_WA_TEMPLATES (the unfinished-application demo nudge),
+ * submitted as MARKETING because it offers something rather than reporting.
  *
  * Re-running is safe: a template that already exists comes back as an error
  * for that name and the rest continue.
@@ -19,8 +23,9 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const go = process.argv.includes('--go');
+const only = process.argv.find((a) => a.startsWith('--only='))?.slice('--only='.length) || null;
 
-const { DEMO_WA_TEMPLATES } = await import(
+const { DEMO_WA_TEMPLATES, APPLY_WA_TEMPLATES } = await import(
   pathToFileURL(path.join(root, 'packages/database/src/services/whatsapp.ts')).href
 );
 
@@ -61,8 +66,14 @@ const BUTTON_LABEL = {
   reminder_soon: 'Join the demo',
 };
 
+const TEMPLATES = [
+  ...Object.entries(DEMO_WA_TEMPLATES).map(([kind, t]) => [kind, t, 'UTILITY']),
+  ...Object.entries(APPLY_WA_TEMPLATES).map(([kind, t]) => [kind, { ...t, button: false }, 'MARKETING']),
+].filter(([, t]) => !only || t.name === only);
+if (only && !TEMPLATES.length) throw new Error(`No template named ${only}`);
+
 let failed = 0;
-for (const [kind, t] of Object.entries(DEMO_WA_TEMPLATES)) {
+for (const [kind, t, category] of TEMPLATES) {
   const vars = (t.body.match(/\{\{\d+\}\}/g) || []).length;
   if (vars !== t.params.length) throw new Error(`${kind}: body has ${vars} variables but ${t.params.length} params`);
   // Meta rejects a body that starts or ends with a variable (trailing punctuation does not count as text).
@@ -84,14 +95,14 @@ for (const [kind, t] of Object.entries(DEMO_WA_TEMPLATES)) {
   }
 
   if (!go) {
-    console.log(`ok  ${t.name} (${vars} variables${t.button ? `, button "${BUTTON_LABEL[kind]}"` : ''})`);
+    console.log(`ok  ${t.name} (${category}, ${vars} variables${t.button ? `, button "${BUTTON_LABEL[kind]}"` : ''})`);
     continue;
   }
 
   const res = await fetch(`https://graph.facebook.com/v21.0/${waba}/message_templates`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: t.name, language: 'en', category: 'UTILITY', components }),
+    body: JSON.stringify({ name: t.name, language: 'en', category, components }),
   });
   const j = await res.json();
   if (j.error) {

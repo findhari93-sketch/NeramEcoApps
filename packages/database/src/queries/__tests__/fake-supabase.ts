@@ -107,6 +107,14 @@ export function createFakeSupabase(
       ilike: (c: string, p: string) => (filters.push((r) => ilikeMatch(r[c], p)), b),
       or: (expr: string) => (filters.push(parseOr(expr)), b),
       in: (c: string, vs: unknown[]) => (filters.push((r) => vs.includes(r[c])), b),
+      is: (c: string, v: null) => (filters.push((r) => (r[c] ?? null) === v), b),
+      not: (c: string, op: string, v: unknown) => {
+        if (op !== 'is') throw new Error(`fake not(): unsupported op ${op}`);
+        filters.push((r) => (r[c] ?? null) !== v);
+        return b;
+      },
+      gte: (c: string, v: string | number) => (filters.push((r) => r[c] != null && r[c] >= v), b),
+      lte: (c: string, v: string | number) => (filters.push((r) => r[c] != null && r[c] <= v), b),
       order: (c: string, o: { ascending?: boolean } = {}) => (orders.push([c, o.ascending !== false]), b),
       limit: (n: number) => ((limit = n), b),
       maybeSingle: async () => {

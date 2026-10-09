@@ -5,7 +5,9 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   CircularProgress,
+  InputAdornment,
   Collapse,
   FormControlLabel,
   LoginModal,
@@ -24,6 +26,10 @@ import NightsStayOutlinedIcon from '@mui/icons-material/NightsStayOutlined';
 import PhoneInTalkOutlinedIcon from '@mui/icons-material/PhoneInTalkOutlined';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import SmartphoneOutlinedIcon from '@mui/icons-material/SmartphoneOutlined';
+import VerifiedOutlinedIcon from '@mui/icons-material/VerifiedOutlined';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import ShareIcon from '@mui/icons-material/Share';
 import {
   availableDemoDays,
@@ -37,13 +43,19 @@ import {
 } from '@neram/database/demo-schedule';
 import { touchAttribution } from '@/lib/attribution';
 import { trackTaxonomyEvent } from '@/lib/funnel-tracker';
+import { ensureAccount, type EnsuredAccount } from '@/lib/ensure-account';
+import { writeDemoActive } from '@/lib/demo-cta';
+import GoogleCard from '@/components/apply/fields/GoogleCard';
+import OrDivider from '@/components/apply/fields/OrDivider';
 import type { PublicDemoRequest } from '@/lib/demo-request';
 import DemoStatusCard, { type DemoPublicSettings } from './DemoStatusCard';
 import {
   EMPTY_DRAFT,
+  applyDraftPrefill,
   clearDraft,
   fetchMyDemo,
   fireDemoConversion,
+  hasApplyDraft,
   loadDraft,
   saveDraft,
   submitDemoRequest,
@@ -75,7 +87,25 @@ const LANGUAGES = [
   { v: 'te', l: 'Telugu' },
 ];
 
-const STEP_TITLES = ['When suits you?', 'Who is joining?', 'Get your demo link'];
+const STEP_TITLES = ['When suits you?', 'Who is joining?'];
+
+/**
+ * Where the visitor came from (`?from=`), stored as the lead's page code
+ * (two letters, a dash, three letters) so staff can see which door works.
+ */
+const FROM_PAGE_CODE: Record<string, string> = {
+  apply: 'DC-APL',
+  apply_help: 'DC-APH',
+  apply_exit: 'DC-APX',
+  apply_nudge: 'DC-WAN',
+};
+
+/** "+91 98xxx xx210": enough to recognise the number, not enough to copy it. */
+function maskPhone(phone: string | null | undefined): string {
+  const d = (phone || '').replace(/\D/g, '').slice(-10);
+  if (d.length !== 10) return phone || '';
+  return `+91 ${d.slice(0, 2)}xxx xx${d.slice(7)}`;
+}
 
 const focusRing = { '&:focus-visible': { outline: '3px solid', outlineColor: 'primary.main', outlineOffset: 2 } };
 
@@ -135,15 +165,33 @@ export default function DemoBookingCard() {
   const [booked, setBooked] = useState<PublicDemoRequest | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [login, setLogin] = useState<'full' | 'phone' | null>(null);
+  // The OTP dialog: on its own it signs a visitor in by phone, after Google it
+  // adds the phone to that account.
+  const [phoneDialog, setPhoneDialog] = useState(false);
+  const [account, setAccount] = useState<EnsuredAccount | null>(null);
+  const [accountLoading, setAccountLoading] = useState(false);
+  const [googleBusy, setGoogleBusy] = useState(false);
+  const [signInError, setSignInError] = useState<string | null>(null);
+  const [from, setFrom] = useState<string | null>(null);
+  const [applyDraftExists, setApplyDraftExists] = useState(false);
   const headingRef = useRef<HTMLHeadingElement>(null);
+  const accountSeq = useRef(0);
+  const autoPromptedRef = useRef(false);
 
   // Days depend on "now", so they are computed only in the browser.
   useEffect(() => {
     setMounted(true);
     setNow(new Date());
     const saved = loadDraft();
-    if (saved) setDraft(saved);
+    const source = new URLSearchParams(window.location.search).get('from');
+    setFrom(source && FROM_PAGE_CODE[source] ? source : null);
+    setApplyDraftExists(hasApplyDraft());
+    // Left the application to book a demo: carry over what the form knows.
+    const carried = source?.startsWith('apply') ? applyDraftPrefill() : { name: '', currentClass: '' };
+    const base = saved ?? EMPTY_DRAFT;
+    if (saved || carried.name || carried.currentClass) {
+      setDraft({ ...base, name: base.name || carried.name, currentClass: base.currentClass || carried.currentClass });
+    }
     fetch('/api/demo-class/settings', { cache: 'no-store' })
       .then((r) => r.json())
       .then((d) => {
@@ -158,10 +206,38 @@ export default function DemoBookingCard() {
       .catch(() => {});
   }, []);
 
+  /**
+   * Load the account behind the signed-in user (name, verified phone). Each
+   * call outdates the ones before it, so a slow cached answer from before the
+   * OTP can never overwrite the fresh "verified" one.
+   */
+  const loadAccount = useCallback(async (force = false) => {
+    const seq = ++accountSeq.current;
+    setAccountLoading(true);
+    const acc = await ensureAccount({ force });
+    if (seq !== accountSeq.current) return acc;
+    setAccount(acc);
+    setAccountLoading(false);
+    if (acc?.name) {
+      const name = acc.name;
+      setDraft((d) => {
+        if (d.name) return d;
+        const next = { ...d, name };
+        saveDraft(next);
+        return next;
+      });
+    }
+    return acc;
+  }, []);
+
   // A signed-in visitor with an open request sees it instead of the form.
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
+      accountSeq.current++;
+      setAccount(null);
+      setAccountLoading(false);
+      autoPromptedRef.current = false;
       setCheckedExisting(true);
       return;
     }
@@ -169,14 +245,37 @@ export default function DemoBookingCard() {
     fetchMyDemo()
       .then(({ request }) => {
         if (cancelled) return;
-        if (request && ['pending', 'contacted', 'approved'].includes(request.status)) setExisting(request);
+        if (request && ['pending', 'contacted', 'approved'].includes(request.status)) {
+          setExisting(request);
+          writeDemoActive(request);
+        }
       })
       .finally(() => !cancelled && setCheckedExisting(true));
-    setDraft((d) => (d.name ? d : { ...d, name: user.name || '' }));
+    // Google's display name fills the field at once; the account's name follows.
+    setDraft((d) => (d.name || !user.name ? d : { ...d, name: user.name }));
+    loadAccount();
     return () => {
       cancelled = true;
     };
-  }, [user, authLoading]);
+  }, [user, authLoading, loadAccount]);
+
+  // Signed in on "Who is joining?" but the phone is not verified (for example,
+  // back from a Google redirect): ask for the OTP once, by itself.
+  useEffect(() => {
+    if (
+      user &&
+      account &&
+      !account.phone_verified &&
+      !accountLoading &&
+      draft.step === 1 &&
+      !phoneDialog &&
+      !googleBusy &&
+      !autoPromptedRef.current
+    ) {
+      autoPromptedRef.current = true;
+      setPhoneDialog(true);
+    }
+  }, [user, account, accountLoading, draft.step, phoneDialog, googleBusy]);
 
   const days = useMemo(() => (now ? availableDemoDays(now, schedule) : []), [now, schedule]);
 
@@ -196,7 +295,7 @@ export default function DemoBookingCard() {
     });
   }, []);
 
-  const goStep = (step: 0 | 1 | 2) => {
+  const goStep = (step: 0 | 1) => {
     update({ step });
     setError(null);
     requestAnimationFrame(() => headingRef.current?.focus());
@@ -206,25 +305,37 @@ export default function DemoBookingCard() {
   const parentPhoneOk = !draft.parentPhone || /^[6-9]\d{9}$/.test(draft.parentPhone.replace(/\D/g, '').slice(-10));
   const step0Done = draft.window === 'anytime' || (!!draft.date && !!draft.window);
   const step1Done = draft.name.trim().length >= 2 && parentPhoneOk;
+  const phoneVerified = !!account?.phone_verified;
+  const accountName = account?.name || user?.name || '';
+  const namePrefilled = !!draft.name && draft.name === accountName;
 
   const submit = async () => {
     setSubmitting(true);
     setError(null);
-    const result = await submitDemoRequest(draft, touchAttribution() as unknown as Record<string, unknown>);
+    const pageCode = from ? FROM_PAGE_CODE[from] : undefined;
+    const result = await submitDemoRequest(draft, touchAttribution(pageCode) as unknown as Record<string, unknown>);
     setSubmitting(false);
     if (result.ok) {
       clearDraft();
       setBooked(result.request);
+      writeDemoActive(result.request);
       fireDemoConversion(result.request.ref);
-      trackTaxonomyEvent('demo_requested', { ref: result.request.ref, window: draft.window, parent: draft.parentJoining });
+      trackTaxonomyEvent('demo_requested', { ref: result.request.ref, window: draft.window, parent: draft.parentJoining, from });
       requestAnimationFrame(() => headingRef.current?.focus());
       return;
     }
-    if (result.code === 'SIGN_IN_REQUIRED') setLogin('full');
-    else if (result.code === 'PHONE_REQUIRED') setLogin('phone');
-    else if (result.code === 'ACTIVE_REQUEST' && result.request) {
+    // Safety nets: the button shows only when signed in with a verified phone,
+    // but the session can expire or the account can change underneath.
+    if (result.code === 'SIGN_IN_REQUIRED') {
+      setError('Your sign-in expired. Please sign in again.');
+      loadAccount(true);
+    } else if (result.code === 'PHONE_REQUIRED') {
+      setPhoneDialog(true);
+      loadAccount(true);
+    } else if (result.code === 'ACTIVE_REQUEST' && result.request) {
       clearDraft();
       setExisting(result.request);
+      writeDemoActive(result.request);
     } else {
       setError(result.message);
       if (/no longer available/i.test(result.message)) {
@@ -234,10 +345,51 @@ export default function DemoBookingCard() {
     }
   };
 
-  const onFinalButton = () => {
-    trackTaxonomyEvent('demo_signin_started', { signedIn: !!user });
-    if (!user) setLogin('full');
-    else submit();
+  /** "Continue with Google": straight to Google, then the OTP if the account has no verified phone. */
+  const onGoogle = async () => {
+    trackTaxonomyEvent('demo_signin_started', { method: 'google' });
+    setSignInError(null);
+    setGoogleBusy(true);
+    autoPromptedRef.current = true;
+    try {
+      const { signInWithGoogleOrRedirect } = await import('@neram/auth');
+      const signedIn = await signInWithGoogleOrRedirect();
+      if (!signedIn) return; // closed the popup, or on the way to Google
+      trackTaxonomyEvent('demo_signin_completed', { method: 'google' });
+      const acc = await loadAccount(true);
+      if (!acc?.phone_verified) setPhoneDialog(true);
+    } catch {
+      setSignInError('Google sign-in did not finish. Try again, or use your phone number.');
+    } finally {
+      setGoogleBusy(false);
+    }
+  };
+
+  /** "Use my phone number": the OTP on its own signs the visitor in. */
+  const onPhone = () => {
+    trackTaxonomyEvent('demo_signin_started', { method: 'phone' });
+    setSignInError(null);
+    autoPromptedRef.current = true;
+    setPhoneDialog(true);
+  };
+
+  /** "Not you?": sign out but keep the time and the answers. */
+  const onSwitchAccount = async () => {
+    setError(null);
+    try {
+      const { firebaseSignOut } = await import('@neram/auth');
+      await firebaseSignOut();
+    } catch {
+      // Already signed out.
+    }
+  };
+
+  const onPhoneVerified = async () => {
+    const signedInBefore = !!user;
+    setPhoneDialog(false);
+    if (!signedInBefore) trackTaxonomyEvent('demo_signin_completed', { method: 'phone' });
+    trackTaxonomyEvent('demo_phone_verified');
+    await loadAccount(true);
   };
 
   const shareWithParent = async () => {
@@ -291,6 +443,11 @@ export default function DemoBookingCard() {
               <Button href="/demo-class/my" sx={{ minHeight: 48 }}>
                 View my demo
               </Button>
+              {applyDraftExists && (
+                <Button href="/apply" endIcon={<ArrowForwardIcon />} sx={{ minHeight: 48 }}>
+                  Continue your application
+                </Button>
+              )}
             </>
           }
         />
@@ -327,7 +484,7 @@ export default function DemoBookingCard() {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
         {step > 0 && (
           <Button
-            onClick={() => goStep((step - 1) as 0 | 1)}
+            onClick={() => goStep(0)}
             startIcon={<ArrowBackIcon />}
             sx={{ minHeight: 44, ml: -1, px: 1 }}
             aria-label={`Back to step ${step}`}
@@ -336,11 +493,11 @@ export default function DemoBookingCard() {
           </Button>
         )}
         <Typography variant="caption" color="text.secondary" fontWeight={700} sx={{ ml: 'auto' }}>
-          Step {step + 1} of 3
+          Step {step + 1} of {STEP_TITLES.length}
         </Typography>
       </Box>
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 0.5, mb: 2 }} aria-hidden>
-        {[0, 1, 2].map((i) => (
+      <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(${STEP_TITLES.length}, 1fr)`, gap: 0.5, mb: 2 }} aria-hidden>
+        {STEP_TITLES.map((_, i) => (
           <Box key={i} sx={{ height: 4, borderRadius: 2, bgcolor: i <= step ? 'primary.main' : 'action.disabledBackground' }} />
         ))}
       </Box>
@@ -503,134 +660,233 @@ export default function DemoBookingCard() {
         </Box>
       )}
 
-      {/* Step 2: who */}
+      {/* Step 2: who. Sign in first, then only what the account cannot tell us. */}
       {step === 1 && (
-        <Box component="form" noValidate onSubmit={(e) => { e.preventDefault(); if (step1Done) { trackTaxonomyEvent('demo_details_done'); goStep(2); } }}>
+        <Box>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
             {formatDemoPreference(draft.date, draft.window as DemoWindow, schedule)}
           </Typography>
-          <TextField
-            label="Student name"
-            value={draft.name}
-            onChange={(e) => update({ name: e.target.value })}
-            fullWidth
-            required
-            autoComplete="name"
-            sx={{ mt: 2 }}
-            inputProps={{ maxLength: 100, style: { fontSize: 16 } }}
-          />
-          <Typography component="p" variant="subtitle2" fontWeight={700} sx={{ mt: 2.5, mb: 1 }} id="class-label">
-            Class
-          </Typography>
-          <Box role="group" aria-labelledby="class-label" sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-            {CLASSES.map((c) => (
-              <Pill key={c.v} selected={draft.currentClass === c.v} onClick={() => update({ currentClass: draft.currentClass === c.v ? '' : c.v })}>
-                {c.l}
-              </Pill>
-            ))}
-          </Box>
-          <Typography component="p" variant="subtitle2" fontWeight={700} sx={{ mt: 2.5, mb: 1 }} id="lang-label">
-            Class language
-          </Typography>
-          <Box role="group" aria-labelledby="lang-label" sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-            {LANGUAGES.map((l) => (
-              <Pill key={l.v} selected={draft.language === l.v} onClick={() => update({ language: l.v })}>
-                {l.l}
-              </Pill>
-            ))}
-          </Box>
 
-          <Box sx={{ mt: 2.5, p: 2, borderRadius: 2, bgcolor: 'action.hover' }}>
-            <FormControlLabel
-              control={<Switch checked={draft.parentJoining} onChange={(e) => update({ parentJoining: e.target.checked })} />}
-              label={<Typography fontWeight={700}>A parent will join too</Typography>}
-              sx={{ minHeight: 48, mr: 0 }}
-            />
-            <Typography variant="body2" color="text.secondary">
-              Parents are welcome. Ask all your doubts together and see how a real class runs.
-            </Typography>
-            <Collapse in={draft.parentJoining} unmountOnExit>
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5, mt: 1.5 }}>
-                <TextField
-                  label="Parent name (optional)"
-                  value={draft.parentName}
-                  onChange={(e) => update({ parentName: e.target.value })}
-                  inputProps={{ maxLength: 100, style: { fontSize: 16 } }}
-                />
-                <TextField
-                  label="Parent WhatsApp (optional)"
-                  value={draft.parentPhone}
-                  onChange={(e) => update({ parentPhone: e.target.value.replace(/[^\d+ ]/g, '') })}
-                  inputProps={{ inputMode: 'tel', maxLength: 15, style: { fontSize: 16 } }}
-                  error={!parentPhoneOk}
-                  helperText={parentPhoneOk ? 'Gets the reminders too' : 'Enter a 10-digit mobile number'}
-                />
+          {(authLoading || (user && accountLoading && !account)) && (
+            <Box aria-busy aria-label="Checking your account" sx={{ mt: 2 }}>
+              <Skeleton variant="rounded" height={76} />
+              <Skeleton variant="rounded" height={56} sx={{ mt: 2 }} />
+              <Skeleton variant="text" width="30%" sx={{ mt: 2 }} />
+              <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                {[0, 1, 2, 3].map((i) => (
+                  <Skeleton key={i} variant="rounded" width={96} height={48} sx={{ borderRadius: 999 }} />
+                ))}
               </Box>
-            </Collapse>
-          </Box>
-
-          <Button
-            type="submit"
-            variant="contained"
-            size="large"
-            fullWidth
-            disabled={!step1Done}
-            sx={{ mt: 2.5, minHeight: 52, fontWeight: 700, fontSize: '1.05rem' }}
-          >
-            Continue
-          </Button>
-        </Box>
-      )}
-
-      {/* Step 3: sign in and send */}
-      {step === 2 && (
-        <Box>
-          <Box sx={{ mt: 1.5, p: 2, borderRadius: 2, border: 1, borderColor: 'divider' }}>
-            <Typography fontWeight={800}>{formatDemoPreference(draft.date, draft.window as DemoWindow, schedule)}</Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
-              {draft.name}
-              {draft.currentClass ? `, ${CLASSES.find((c) => c.v === draft.currentClass)?.l}` : ''}
-              {draft.parentJoining ? ', with a parent' : ''}
-            </Typography>
-          </Box>
-          <Typography variant="body2" sx={{ mt: 2, display: 'flex', gap: 1, alignItems: 'flex-start' }}>
-            <LockOutlinedIcon aria-hidden fontSize="small" sx={{ mt: '2px', color: 'text.secondary' }} />
-            {user
-              ? `Booking as ${user.name || user.email || 'you'}. The Teams link goes to your WhatsApp and your calendar.`
-              : 'Sign in so we can send the Teams link to your WhatsApp and Google Calendar. We never share your number.'}
-          </Typography>
-          {error && (
-            <Alert severity="error" sx={{ mt: 2 }}>
-              {error}
-            </Alert>
+            </Box>
           )}
-          <Button
-            variant="contained"
-            size="large"
-            fullWidth
-            onClick={onFinalButton}
-            disabled={submitting}
-            startIcon={submitting ? <CircularProgress size={18} color="inherit" /> : undefined}
-            sx={{ mt: 2.5, minHeight: 56, fontWeight: 800, fontSize: '1.05rem' }}
-          >
-            {submitting ? 'Booking your demo' : user ? 'Request my free demo' : 'Sign in to get your demo link'}
-          </Button>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center', mt: 1 }}>
-            Free. No payment, no card.
-          </Typography>
+
+          {/* Signed out: one tap with Google, or the phone OTP on its own. */}
+          {!authLoading && !user && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                Sign in so we know who to call. Your name fills in by itself and the Teams link reaches your WhatsApp.
+              </Typography>
+              <GoogleCard
+                title="Continue with Google"
+                body="Fills in your name. Then we verify your phone with a code."
+                onClick={onGoogle}
+                busy={googleBusy}
+              />
+              <Box sx={{ my: 2 }}>
+                <OrDivider label="or" />
+              </Box>
+              <Button
+                variant="outlined"
+                size="large"
+                fullWidth
+                onClick={onPhone}
+                disabled={googleBusy}
+                startIcon={<SmartphoneOutlinedIcon aria-hidden />}
+                sx={{ minHeight: 52, fontWeight: 700, borderWidth: 2, '&:hover': { borderWidth: 2 } }}
+              >
+                Use my phone number
+              </Button>
+              {signInError && (
+                <Alert severity="error" sx={{ mt: 2 }}>
+                  {signInError}
+                </Alert>
+              )}
+              {error && (
+                <Alert severity="warning" sx={{ mt: 2 }}>
+                  {error}
+                </Alert>
+              )}
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 2, display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                <LockOutlinedIcon aria-hidden fontSize="small" sx={{ mt: '2px' }} />
+                We only use your number to call you about this demo and send the Teams link on WhatsApp. Free, no payment.
+              </Typography>
+            </Box>
+          )}
+
+          {/* Signed in: who is booking, then the few questions left. */}
+          {!authLoading && user && (account || !accountLoading) && (
+            <Box
+              component="form"
+              noValidate
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (step1Done && phoneVerified && !submitting) {
+                  trackTaxonomyEvent('demo_details_done');
+                  submit();
+                }
+              }}
+            >
+              <Box
+                sx={{
+                  mt: 2,
+                  p: 2,
+                  borderRadius: 2,
+                  border: 1,
+                  borderColor: phoneVerified ? 'divider' : 'warning.main',
+                  bgcolor: phoneVerified ? 'background.paper' : 'action.hover',
+                }}
+              >
+                <Typography fontWeight={800} sx={{ overflowWrap: 'anywhere' }}>
+                  {accountName || account?.email || user.email || 'Signed in'}
+                </Typography>
+                {phoneVerified ? (
+                  <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, mt: 0.5 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      {maskPhone(account?.phone)}
+                    </Typography>
+                    <Chip
+                      icon={<VerifiedOutlinedIcon aria-hidden />}
+                      label="Verified"
+                      size="small"
+                      color="success"
+                      variant="outlined"
+                    />
+                  </Box>
+                ) : (
+                  <Box sx={{ mt: 1 }}>
+                    <Typography variant="body2" sx={{ display: 'flex', gap: 0.75, alignItems: 'flex-start' }}>
+                      <ErrorOutlineIcon aria-hidden fontSize="small" sx={{ mt: '2px', color: 'warning.dark' }} />
+                      Verify your WhatsApp number so we can call you and send the Teams link.
+                    </Typography>
+                    <Button
+                      variant="contained"
+                      onClick={() => setPhoneDialog(true)}
+                      startIcon={<SmartphoneOutlinedIcon aria-hidden />}
+                      sx={{ mt: 1.5, minHeight: 48, fontWeight: 700 }}
+                    >
+                      Verify phone
+                    </Button>
+                  </Box>
+                )}
+                <Button
+                  onClick={onSwitchAccount}
+                  size="small"
+                  sx={{ mt: 1, ml: -1, minHeight: 44, px: 1, fontWeight: 600 }}
+                >
+                  Not you? Use another account
+                </Button>
+              </Box>
+
+              <TextField
+                label="Student name"
+                value={draft.name}
+                onChange={(e) => update({ name: e.target.value })}
+                fullWidth
+                required
+                autoComplete="name"
+                helperText="Booking for your child? Change the name."
+                sx={{ mt: 2.5 }}
+                inputProps={{ maxLength: 100, style: { fontSize: 16 } }}
+                InputProps={{
+                  endAdornment: namePrefilled ? (
+                    <InputAdornment position="end">
+                      <Chip label="Pre-filled" size="small" color="info" variant="outlined" />
+                    </InputAdornment>
+                  ) : undefined,
+                }}
+              />
+              <Typography component="p" variant="subtitle2" fontWeight={700} sx={{ mt: 2.5, mb: 1 }} id="class-label">
+                Class
+              </Typography>
+              <Box role="group" aria-labelledby="class-label" sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {CLASSES.map((c) => (
+                  <Pill key={c.v} selected={draft.currentClass === c.v} onClick={() => update({ currentClass: draft.currentClass === c.v ? '' : c.v })}>
+                    {c.l}
+                  </Pill>
+                ))}
+              </Box>
+              <Typography component="p" variant="subtitle2" fontWeight={700} sx={{ mt: 2.5, mb: 1 }} id="lang-label">
+                Class language
+              </Typography>
+              <Box role="group" aria-labelledby="lang-label" sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {LANGUAGES.map((l) => (
+                  <Pill key={l.v} selected={draft.language === l.v} onClick={() => update({ language: l.v })}>
+                    {l.l}
+                  </Pill>
+                ))}
+              </Box>
+
+              <Box sx={{ mt: 2.5, p: 2, borderRadius: 2, bgcolor: 'action.hover' }}>
+                <FormControlLabel
+                  control={<Switch checked={draft.parentJoining} onChange={(e) => update({ parentJoining: e.target.checked })} />}
+                  label={<Typography fontWeight={700}>A parent will join too</Typography>}
+                  sx={{ minHeight: 48, mr: 0 }}
+                />
+                <Typography variant="body2" color="text.secondary">
+                  Parents are welcome. Ask all your doubts together and see how a real class runs.
+                </Typography>
+                <Collapse in={draft.parentJoining} unmountOnExit>
+                  <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.5, mt: 1.5 }}>
+                    <TextField
+                      label="Parent name (optional)"
+                      value={draft.parentName}
+                      onChange={(e) => update({ parentName: e.target.value })}
+                      inputProps={{ maxLength: 100, style: { fontSize: 16 } }}
+                    />
+                    <TextField
+                      label="Parent WhatsApp (optional)"
+                      value={draft.parentPhone}
+                      onChange={(e) => update({ parentPhone: e.target.value.replace(/[^\d+ ]/g, '') })}
+                      inputProps={{ inputMode: 'tel', maxLength: 15, style: { fontSize: 16 } }}
+                      error={!parentPhoneOk}
+                      helperText={parentPhoneOk ? 'Gets the reminders too' : 'Enter a 10-digit mobile number'}
+                    />
+                  </Box>
+                </Collapse>
+              </Box>
+
+              {error && (
+                <Alert severity="error" sx={{ mt: 2 }}>
+                  {error}
+                </Alert>
+              )}
+              <Button
+                type="submit"
+                variant="contained"
+                size="large"
+                fullWidth
+                disabled={!step1Done || !phoneVerified || submitting}
+                startIcon={submitting ? <CircularProgress size={18} color="inherit" /> : undefined}
+                sx={{ mt: 2.5, minHeight: 56, fontWeight: 800, fontSize: '1.05rem' }}
+              >
+                {submitting ? 'Booking your demo' : 'Request my free demo'}
+              </Button>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center', mt: 1 }}>
+                {phoneVerified ? 'Free. No payment, no card.' : 'Verify your phone above to send the request.'}
+              </Typography>
+            </Box>
+          )}
         </Box>
       )}
 
       <LoginModal
-        open={login !== null}
-        onClose={() => setLogin(null)}
+        open={phoneDialog}
+        onClose={() => setPhoneDialog(false)}
         allowClose
-        phoneOnly={login === 'phone'}
+        phoneOnly
+        initialPhone={(account?.phone || '').replace(/\D/g, '').slice(-10)}
         apiBaseUrl={APP_URL}
-        onAuthenticated={() => {
-          setLogin(null);
-          submit();
-        }}
+        onAuthenticated={onPhoneVerified}
       />
     </Paper>
   );

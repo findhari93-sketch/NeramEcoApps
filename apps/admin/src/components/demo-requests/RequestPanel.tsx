@@ -46,6 +46,13 @@ import ScheduleDialog, { type ScheduleSubmit } from './ScheduleDialog';
 import type { DeskDetail, DeskSettings, DemoRequest } from './types';
 import { ago, classLabel, prettyPhone, telHref, waHref } from './format';
 
+/** Page codes the demo booking stores for its entry points (marketing DemoBookingCard). */
+const DEMO_DOOR: Record<string, string> = {
+  'DC-APL': 'From application (Not sure yet link)',
+  'DC-APH': 'From application (Help menu)',
+  'DC-APX': 'From application (leaving card)',
+  'DC-WAN': 'From application (WhatsApp nudge)',
+};
 const LANG: Record<string, string> = { en: 'English', ta: 'Tamil', kn: 'Kannada', hi: 'Hindi', ml: 'Malayalam', te: 'Telugu' };
 const INTEREST: Record<string, string> = { nata: 'NATA', jee_paper2: 'JEE Paper 2', both: 'NATA + JEE Paper 2' };
 
@@ -443,7 +450,7 @@ export default function RequestPanel({
       </Row>
       <Row label="Came from">
         <Typography variant="body2">
-          {[r.channel, r.utm_source, r.utm_campaign].filter(Boolean).join(' · ') || 'Direct'}
+          {[r.page_code ? DEMO_DOOR[r.page_code] : null, r.channel, r.utm_source, r.utm_campaign].filter(Boolean).join(' · ') || 'Direct'}
         </Typography>
       </Row>
       {r.user_id && (

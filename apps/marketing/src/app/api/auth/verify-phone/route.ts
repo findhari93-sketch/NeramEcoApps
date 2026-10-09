@@ -71,6 +71,7 @@ export async function POST(req: NextRequest) {
         const result = await getOrCreateUserFromFirebase({
           uid: decodedToken.uid,
           email: decodedToken.email || null,
+          emailVerified: decodedToken.email_verified === true,
           phoneNumber: phoneNumber,
           displayName: decodedToken.name || null,
         });

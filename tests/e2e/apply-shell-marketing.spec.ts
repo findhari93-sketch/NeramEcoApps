@@ -74,35 +74,37 @@ test.describe('Application shell on a phone', () => {
 
   test('no horizontal overflow and 44 px targets', async ({ page }) => {
     await page.goto(`${MARKETING_URL}/apply`);
-    await page.getByRole('button', { name: /type it myself/i }).click();
+    await expect(page.locator('input[name="firstName"]')).toBeVisible();
     await assertNoHorizontalOverflow(page);
     await assertTouchTargetSize(page, 'button:visible, a[href]:visible', 44);
   });
 
-  test('exactly one primary button per step, and none while choosing how to start', async ({ page }) => {
+  test('step 1 opens straight on the fields, with exactly one primary button', async ({ page }) => {
     await page.goto(`${MARKETING_URL}/apply`);
-    await expect(page.getByRole('button', { name: /type it myself/i })).toBeVisible();
-    await expect(page.locator('button.MuiButton-contained:visible')).toHaveCount(0);
-    await page.getByRole('button', { name: /type it myself/i }).click();
+    await expect(page.getByRole('button', { name: /continue with google/i })).toBeVisible();
+    await expect(page.locator('input[name="firstName"]')).toBeVisible();
     await expect(page.locator('button.MuiButton-contained:visible')).toHaveCount(1);
   });
 
-  test('the header and the action bar stick while the step scrolls', async ({ page }) => {
+  test('the header sticks, and the primary button sits inline under the last field', async ({ page }) => {
     await page.goto(`${MARKETING_URL}/apply`);
-    await page.getByRole('button', { name: /type it myself/i }).click();
-    await expect(page.locator('input[name="firstName"]')).toBeVisible();
+    await expect(page.locator('input[name="pincode"]')).toBeVisible();
     await page.evaluate(() => window.scrollTo(0, 600));
     await page.waitForTimeout(300);
     const banner = (await page.getByRole('banner').boundingBox())!;
     expect(Math.round(banner.y), 'the header stays at the top').toBe(0);
+    const city = (await page.locator('input[name="pincode"]').boundingBox())!;
     const cta = (await page.locator('button.MuiButton-contained:visible').first().boundingBox())!;
-    expect(cta.y + cta.height, 'the primary button rides the bottom edge').toBeLessThanOrEqual(812);
-    expect(cta.y, 'the primary button is on screen').toBeGreaterThan(400);
+    expect(cta.y, 'the primary button follows the fields').toBeGreaterThan(city.y + city.height);
+    const position = await page
+      .locator('button.MuiButton-contained:visible')
+      .first()
+      .evaluate((el) => getComputedStyle(el.parentElement!).position);
+    expect(position, 'no sticky action bar').toBe('static');
   });
 
-  test('the legal strip is not hidden under the action bar at the end of the page', async ({ page }) => {
+  test('the legal strip is reachable at the end of the page', async ({ page }) => {
     await page.goto(`${MARKETING_URL}/apply`);
-    await page.getByRole('button', { name: /type it myself/i }).click();
     await expect(page.locator('input[name="firstName"]')).toBeVisible();
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     const terms = page.locator('footer a[href$="/terms"]');

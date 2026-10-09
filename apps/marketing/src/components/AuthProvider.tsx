@@ -1,47 +1,26 @@
 'use client';
 
 import { ReactNode, useEffect, useState } from 'react';
-import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
+import { useFirebaseAuth } from '@neram/auth';
 import type { AccountTier } from '@neram/database';
 import { AccountTierProvider } from '@/contexts/AccountTierContext';
-import { signupAttributionFields } from '@neram/database/analytics';
-
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
+import { ensureAccount } from '@/lib/ensure-account';
 
 export default function AuthProvider({ children }: { children: ReactNode }) {
   const { user, loading } = useFirebaseAuth();
   const [accountTier, setAccountTier] = useState<AccountTier>('visitor');
 
-  // Register/sync user with Supabase when logged in
+  // Register/sync user with Supabase when logged in. Shares one request per
+  // uid with the apply form (ensureAccount), so a new user is created once.
   useEffect(() => {
-    async function syncUser() {
-      if (!user || loading) return;
-
-      try {
-        const auth = getFirebaseAuth();
-        const currentUser = auth.currentUser;
-        if (!currentUser) return;
-
-        const idToken = await currentUser.getIdToken();
-        const res = await fetch(`${APP_URL}/api/auth/register-user`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          // Cross-origin: the app cannot see this site's cookies, so send the
-          // anonymous id and campaign touch with the sign-up.
-          body: JSON.stringify({ idToken, ...signupAttributionFields() }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.account_tier) {
-            setAccountTier(data.account_tier);
-          }
-        }
-      } catch (error) {
-        console.error('Error syncing user:', error);
-      }
-    }
-
-    syncUser();
+    if (!user || loading) return;
+    let cancelled = false;
+    ensureAccount().then((account) => {
+      if (!cancelled && account?.account_tier) setAccountTier(account.account_tier as AccountTier);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [user, loading]);
 
   // Reset tier on sign out

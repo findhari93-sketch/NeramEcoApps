@@ -1161,8 +1161,8 @@ export default function TeacherTimetable() {
       const data = await res.json();
       if (res.ok) {
         setSnackbar(
-          data.degraded
-            ? { open: true, message: data.note || 'Meeting link created (standalone).', severity: 'info' }
+          data.degraded || data.presenterNote
+            ? { open: true, message: data.note || data.presenterNote || 'Meeting link created (standalone).', severity: 'info' }
             : {
                 open: true,
                 message: data.alreadyExists ? 'Meeting already exists' : 'Teams meeting created!',
@@ -1211,8 +1211,8 @@ export default function TeacherTimetable() {
       const data = await res.json();
       if (res.ok) {
         setSnackbar(
-          data.degraded
-            ? { open: true, message: data.note || 'Meeting link created (standalone).', severity: 'info' }
+          data.degraded || data.presenterNote
+            ? { open: true, message: data.note || data.presenterNote || 'Meeting link created (standalone).', severity: 'info' }
             : { open: true, message: 'Teams meeting created!', severity: 'success' },
         );
         fetchClasses(true);

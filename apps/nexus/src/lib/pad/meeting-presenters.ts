@@ -6,9 +6,14 @@
  * over that is the meeting's "Who can present". The pad's Teams SSO token
  * cannot call Graph, so this reads and writes with the app-only token on the
  * organizer's meeting, which needs OnlineMeetings.ReadWrite.All.
+ *
+ * Locking means "teachers and staff" (Specific people), not "only the
+ * organizer": the teacher taking the class is often not the one who scheduled
+ * it, and organizer-only stops them sharing (2026-10-08).
  */
 
 import { getAppOnlyToken } from '@/lib/graph-app-token';
+import { buildStaffPresenters, type StaffCalendarRow } from '@/lib/class-attendees';
 import {
   applyMeetingOptions,
   findOnlineMeetingId,
@@ -76,9 +81,19 @@ async function meetingFor(sessionId: string): Promise<MeetingRef | null> {
   };
 }
 
-function stateOf(allowed: AllowedPresenters | null): PresenterState {
+/** Organizer-only and Specific people both keep students from presenting. */
+export function stateOf(allowed: AllowedPresenters | null): PresenterState {
   if (!allowed) return 'unknown';
-  return allowed === 'organizer' ? 'locked' : 'open';
+  return allowed === 'organizer' || allowed === 'roleIsPresenter' ? 'locked' : 'open';
+}
+
+async function staffPresenters() {
+  const { data, error } = await padDb()
+    .from('users')
+    .select('name, email, ms_oid, user_type, staff_role, is_disabled')
+    .in('user_type', ['teacher', 'admin']);
+  if (error) throw error;
+  return buildStaffPresenters((data || []) as StaffCalendarRow[]);
 }
 
 /**
@@ -103,9 +118,14 @@ export async function checkSessionPresenters(sessionId: string, options: { lock?
     if (!meetingId) return UNKNOWN;
 
     if (options.lock) {
-      const applied = await applyMeetingOptions(token, owner, meetingId, { allowedPresenters: 'organizer' });
+      const applied = await applyMeetingOptions(token, owner, meetingId, {
+        allowedPresenters: 'roleIsPresenter',
+        presenters: await staffPresenters(),
+      });
       if (!applied.presenters) {
-        console.error(`[pad] could not lock presenters for session ${sessionId}: Graph ${applied.status}`);
+        console.error(
+          `[pad] could not set staff presenters for session ${sessionId}: Graph ${applied.status}${applied.presentersFallback ? ', locked to the organizer instead' : ''}`,
+        );
       }
     }
     const read = await readAllowedPresenters(token, owner, meetingId);

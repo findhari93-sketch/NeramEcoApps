@@ -414,6 +414,8 @@ export type AcademicData =
 export interface LeadProfile extends Timestamps {
   id: string;
   user_id: string;
+  /** When the one "book a free demo" WhatsApp for this unfinished draft was claimed. */
+  demo_nudge_sent_at?: string | null;
 
   // Application number (auto-generated)
   application_number: string | null;

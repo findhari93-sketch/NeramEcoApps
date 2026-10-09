@@ -72,23 +72,138 @@ async function patch(token: string, owner: MeetingOwner, meetingId: string, body
 }
 
 /**
- * Set who may present, and optionally auto-record, in one PATCH.
+ * A member of staff who may present: a Microsoft account, by UPN and object id.
+ * Built by buildStaffPresenters in @/lib/class-attendees.
+ */
+export interface StaffPresenter {
+  upn: string;
+  oid: string;
+}
+
+/** One entry of onlineMeeting.participants.attendees, as Graph returns it. */
+export interface MeetingParticipant {
+  upn?: string | null;
+  role?: string | null;
+  identity?: { user?: { id?: string | null } | null } | null;
+}
+
+/**
+ * The attendee list that makes every member of staff a presenter.
+ *
+ * Read-modify-write, because the PATCH replaces the whole list: everyone
+ * already on the meeting stays on it with their role (students stay
+ * attendees), staff already listed are promoted, staff not yet listed are
+ * added. Matched on object id and on UPN without case, since Microsoft keeps
+ * admin-set UPN casing and the stored email can differ from it.
+ */
+export function buildPresenterParticipants(
+  existing: MeetingParticipant[],
+  presenters: StaffPresenter[],
+  organizer?: MeetingParticipant | null,
+): Array<{ upn?: string; role: string; identity?: { user: { id: string } } }> {
+  // The organizer always presents and is not an attendee; listing them as one
+  // is a list Graph may refuse.
+  const orgOid = organizer?.identity?.user?.id?.toLowerCase() || '';
+  const orgUpn = organizer?.upn?.toLowerCase() || '';
+  const isOrganizer = (p: StaffPresenter) =>
+    (!!orgOid && p.oid.toLowerCase() === orgOid) || (!!orgUpn && p.upn.toLowerCase() === orgUpn);
+
+  const byOid = new Map<string, StaffPresenter>();
+  const byUpn = new Map<string, StaffPresenter>();
+  for (const p of presenters) {
+    if (isOrganizer(p)) continue;
+    if (p.oid) byOid.set(p.oid.toLowerCase(), p);
+    if (p.upn) byUpn.set(p.upn.toLowerCase(), p);
+  }
+
+  const placed = new Set<StaffPresenter>();
+  const out: Array<{ upn?: string; role: string; identity?: { user: { id: string } } }> = [];
+  for (const a of existing || []) {
+    const oid = a.identity?.user?.id || '';
+    const upn = a.upn || '';
+    const staff = byOid.get(oid.toLowerCase()) || byUpn.get(upn.toLowerCase());
+    if (staff) placed.add(staff);
+    const entry: { upn?: string; role: string; identity?: { user: { id: string } } } = {
+      role: staff ? 'presenter' : a.role || 'attendee',
+    };
+    if (upn) entry.upn = upn;
+    if (oid) entry.identity = { user: { id: oid } };
+    out.push(entry);
+  }
+
+  const seen = new Set<string>();
+  for (const p of presenters) {
+    if (placed.has(p) || isOrganizer(p)) continue;
+    const key = (p.oid || p.upn).toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ upn: p.upn, role: 'presenter', identity: { user: { id: p.oid } } });
+  }
+  return out;
+}
+
+/**
+ * Teams "Who can present: Specific people", with every member of staff on the
+ * list. Students stay attendees, so they still cannot share over the teacher.
+ *
+ * This is the setting a class needs: the person who scheduled the class is
+ * often not the one teaching it (2026-10-08, the tutor could not share until
+ * the organizer changed it by hand), and "People in my organization" would let
+ * students present, since they have @neramclasses.com accounts.
+ */
+async function applyStaffPresenters(
+  token: string,
+  owner: MeetingOwner,
+  meetingId: string,
+  presenters: StaffPresenter[],
+  fetchImpl: FetchLike,
+): Promise<Response> {
+  const read = await fetchImpl(`${base(owner)}/${encodeURIComponent(meetingId)}?$select=participants`, {
+    cache: 'no-store',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  // Without the current list the PATCH would drop everyone already on it.
+  if (!read.ok) return read;
+  const body = (await read.json().catch(() => null)) as
+    | { participants?: { organizer?: MeetingParticipant; attendees?: MeetingParticipant[] } }
+    | null;
+  const attendees = buildPresenterParticipants(body?.participants?.attendees ?? [], presenters, body?.participants?.organizer);
+  return patch(token, owner, meetingId, { allowedPresenters: 'roleIsPresenter', participants: { attendees } }, fetchImpl);
+}
+
+/**
+ * Set who may present, and optionally auto-record.
  *
  * A tenant meeting policy can refuse one of the two settings and the whole
  * PATCH fails with it, so when both were asked for and the pair is refused,
  * each is retried alone: a policy that forbids auto-record must not also leave
  * the students able to present.
+ *
+ * `roleIsPresenter` with `presenters` makes every member of staff a presenter.
+ * When Graph refuses that, the meeting falls back to organizer-only and
+ * `presentersFallback` says so. It never falls back to `organization` or
+ * `everyone`: either would let students present.
  */
 export async function applyMeetingOptions(
   token: string,
   owner: MeetingOwner,
   meetingId: string,
-  options: { allowedPresenters?: AllowedPresenters; recordAutomatically?: boolean },
+  options: { allowedPresenters?: AllowedPresenters; recordAutomatically?: boolean; presenters?: StaffPresenter[] },
   fetchImpl: FetchLike = fetch,
-): Promise<{ presenters: boolean; record: boolean; status: number }> {
+): Promise<{ presenters: boolean; record: boolean; status: number; presentersFallback?: boolean }> {
   const wantPresenters = !!options.allowedPresenters;
   const wantRecord = options.recordAutomatically === true;
   if (!wantPresenters && !wantRecord) return { presenters: false, record: false, status: 0 };
+
+  if (options.allowedPresenters === 'roleIsPresenter') {
+    // Staff presenters need the participant list, so this is its own PATCH and
+    // auto-record is set separately: neither can then take the other down.
+    const record = wantRecord ? await patch(token, owner, meetingId, { recordAutomatically: true }, fetchImpl) : null;
+    const staff = await applyStaffPresenters(token, owner, meetingId, options.presenters ?? [], fetchImpl);
+    if (staff.ok) return { presenters: true, record: !!record?.ok, status: staff.status };
+    const locked = await patch(token, owner, meetingId, { allowedPresenters: 'organizer' }, fetchImpl);
+    return { presenters: false, record: !!record?.ok, status: staff.status, presentersFallback: locked.ok };
+  }
 
   const both: Record<string, unknown> = {};
   if (wantPresenters) both.allowedPresenters = options.allowedPresenters;

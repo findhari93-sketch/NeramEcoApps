@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 import { getAuth } from 'firebase-admin/auth';
-import { getSupabaseAdminClient, getOnboardingPrefillData } from '@neram/database';
+import { getSupabaseAdminClient, getOnboardingPrefillData, getUserByFirebaseUid } from '@neram/database';
 
 if (getApps().length === 0) {
   try {
@@ -35,12 +35,8 @@ export async function GET(req: NextRequest) {
     const decodedToken = await getAuth().verifyIdToken(token);
     const adminClient = getSupabaseAdminClient();
 
-    // Look up user
-    const { data: user } = await (adminClient
-      .from('users') as any)
-      .select('id')
-      .eq('firebase_uid', decodedToken.uid)
-      .single();
+    // Look up user (primary uid or a second sign-in method in user_identities)
+    const user = await getUserByFirebaseUid(decodedToken.uid, adminClient);
 
     if (!user) {
       return NextResponse.json({ error: 'User not found' }, { status: 404 });

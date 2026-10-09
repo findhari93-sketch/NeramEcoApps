@@ -102,11 +102,24 @@ export interface LoginModalProps {
   maxAttemptsBeforeEscape?: number;
   /** Called when the user chooses "Skip for now" (only meaningful with allowEscapeHatch). */
   onSkip?: () => void;
-  /** Called when the user opens the "Get help" panel (analytics hook). */
+  /** Called when the user opens the "Get help" panel (analytics hook). Setting it alone shows "Get help" after repeated failures. */
   onGetHelp?: () => void;
+  /**
+   * Email/password accounts must click the verification link before going on
+   * to phone verification: the dialog waits on a "Check your inbox" step that
+   * notices the click by itself. Default: false.
+   */
+  requireEmailVerification?: boolean;
+  /** Country dialling code for the phone step. Default: '+91'. */
+  dialCode?: string;
+  /** Digits in a national mobile number for `dialCode`. Default: 10. */
+  phoneLength?: number;
 }
 
-type ModalStep = 'login' | 'phone' | 'otp';
+type ModalStep = 'login' | 'verifyEmail' | 'phone' | 'otp' | 'phoneInUse';
+
+/** How often the "Check your inbox" step asks Firebase whether the link was clicked. */
+const EMAIL_POLL_MS = 4000;
 
 // ============================================
 // SLIDE TRANSITION
@@ -149,13 +162,36 @@ function getFirebaseErrorMessage(error: any): string {
     case 'auth/internal-error':
       return 'Verification service error. Please try again.';
     case 'auth/popup-closed-by-user':
-      return 'Sign-in popup was closed. Please try again.';
     case 'auth/cancelled-popup-request':
+    case 'auth/user-cancelled':
       return '';
+    case 'auth/popup-blocked':
+      return 'Your browser blocked the Google window. Allow pop-ups for this site and try again.';
     case 'auth/account-exists-with-different-credential':
       return 'An account already exists with this email. Try signing in with a different method.';
-    default:
-      return error?.message || 'An error occurred. Please try again.';
+    case 'auth/email-already-in-use':
+      return 'An account with this email already exists. Sign in instead, or use Continue with Google if you signed up with Google.';
+    case 'auth/weak-password':
+      return 'Choose a stronger password: at least 6 characters.';
+    case 'auth/invalid-email':
+      return 'That email address does not look right.';
+    case 'auth/invalid-credential':
+    case 'auth/invalid-login-credentials':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+      return 'Email or password is incorrect. Try again, or use Forgot password.';
+    case 'auth/user-disabled':
+      return 'This account has been disabled. Please contact Neram Classes.';
+    case 'auth/missing-password':
+      return 'Please enter your password.';
+    case 'auth/operation-not-allowed':
+      return 'This sign-in method is not available right now. Please use Continue with Google.';
+    default: {
+      const message = String(error?.message || '');
+      // Never show raw "Firebase: Error (auth/...)" text to a student.
+      if (!message || message.startsWith('Firebase:')) return 'Something went wrong. Please try again.';
+      return message;
+    }
   }
 }
 
@@ -177,6 +213,9 @@ export default function LoginModal({
   maxAttemptsBeforeEscape = 2,
   onSkip,
   onGetHelp,
+  requireEmailVerification = false,
+  dialCode = '+91',
+  phoneLength = 10,
 }: LoginModalProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
@@ -187,9 +226,18 @@ export default function LoginModal({
   // Login state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState('');
+  const [loginNotice, setLoginNotice] = useState('');
+
+  // "Check your inbox" state
+  const [verifyEmailAddress, setVerifyEmailAddress] = useState('');
+  const [emailResendTimer, setEmailResendTimer] = useState(0);
+  const [emailChecking, setEmailChecking] = useState(false);
+  const [emailNotice, setEmailNotice] = useState('');
+  const advancingRef = useRef(false);
 
   // Phone state
   const [phoneNumber, setPhoneNumber] = useState(initialPhone);
@@ -199,27 +247,53 @@ export default function LoginModal({
   const [resendTimer, setResendTimer] = useState(0);
   const [failedAttempts, setFailedAttempts] = useState(0);
   const [showHelp, setShowHelp] = useState(false);
+  /** The verified number belongs to another account; credential lets them sign in to it. */
+  const [phoneInUse, setPhoneInUse] = useState<{ credential: unknown | null } | null>(null);
+  const [switchLoading, setSwitchLoading] = useState(false);
   const recaptchaInitialized = useRef(false);
   const recaptchaContainerRef = useRef<HTMLDivElement | null>(null);
 
-  const showEscapeHatch = allowEscapeHatch && failedAttempts >= maxAttemptsBeforeEscape;
+  const showEscapeHatch = (allowEscapeHatch || !!onGetHelp) && failedAttempts >= maxAttemptsBeforeEscape;
+  const fullPhone = `${dialCode}${phoneNumber}`;
 
-  // Reset state when modal opens/closes
+  // Reset state each time the dialog OPENS. Only on the closed-to-open edge: a
+  // late change to initialPhone (say, a profile prefill arriving) must not wipe
+  // an OTP the student is typing.
+  const wasOpenRef = useRef(false);
   useEffect(() => {
-    if (open) {
+    if (open && !wasOpenRef.current) {
       setStep(phoneOnly ? 'phone' : 'login');
       setLoginError('');
+      setLoginNotice('');
       setPhoneError('');
       setEmail('');
       setPassword('');
+      setFullName('');
       setPhoneNumber(initialPhone);
       setOtp('');
       setIsSignUp(false);
       setResendTimer(0);
       setFailedAttempts(0);
       setShowHelp(false);
+      setPhoneInUse(null);
+      setEmailNotice('');
+      advancingRef.current = false;
+
+      // Someone who closed "Check your inbox" earlier and is still signed in
+      // with an unverified email goes back there, never straight to phone.
+      if (requireEmailVerification) {
+        import('@neram/auth').then(({ getFirebaseAuth }) => {
+          const current = getFirebaseAuth().currentUser;
+          const usesPassword = current?.providerData.some((p) => p.providerId === 'password');
+          if (current && usesPassword && !current.emailVerified) {
+            setVerifyEmailAddress(current.email || '');
+            setStep('verifyEmail');
+          }
+        }).catch(() => undefined);
+      }
     }
-  }, [open, phoneOnly, initialPhone]);
+    wasOpenRef.current = open;
+  }, [open, phoneOnly, initialPhone, requireEmailVerification]);
 
   // Reinitialize the reCAPTCHA verifier. Firebase consumes the verifier on every
   // signInWithPhoneNumber call, so we recreate it before each send. The container
@@ -271,6 +345,13 @@ export default function LoginModal({
     }
   }, [resendTimer]);
 
+  useEffect(() => {
+    if (emailResendTimer > 0) {
+      const timer = setTimeout(() => setEmailResendTimer(emailResendTimer - 1), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [emailResendTimer]);
+
   // ---- API Helpers ----
 
   const registerUser = useCallback(async (idToken: string) => {
@@ -299,7 +380,10 @@ export default function LoginModal({
           'This phone number is already registered with another account. Please use a different number.'
         );
       }
-      throw new Error(`Phone verification failed: ${response.status}`);
+      if (errorData.error === 'PHONE_NOT_VERIFIED') {
+        throw new Error('We could not confirm this number on your account. Request a new OTP and try again.');
+      }
+      throw new Error('We could not save your verified number. Please try again.');
     }
     return response.json();
   }, [apiBaseUrl]);
@@ -315,6 +399,14 @@ export default function LoginModal({
 
       const idToken = await currentUser.getIdToken();
       const { user: dbUser } = await registerUser(idToken);
+
+      // An email/password account proves its address before anything else.
+      const usesPassword = currentUser.providerData.some((p) => p.providerId === 'password');
+      if (requireEmailVerification && usesPassword && !currentUser.emailVerified) {
+        setVerifyEmailAddress(currentUser.email || '');
+        setStep('verifyEmail');
+        return;
+      }
 
       if (skipPhoneVerification || dbUser.phone_verified) {
         // All done
@@ -333,7 +425,72 @@ export default function LoginModal({
         onAuthenticated?.();
       }
     }
-  }, [registerUser, skipPhoneVerification, onAuthenticated]);
+  }, [registerUser, skipPhoneVerification, onAuthenticated, requireEmailVerification]);
+
+  // ---- Email verification ----
+
+  /** Ask Firebase whether the link was clicked; if so, carry on to the phone step. */
+  const checkEmailVerified = useCallback(async (manual: boolean) => {
+    if (advancingRef.current) return;
+    if (manual) {
+      setEmailChecking(true);
+      setEmailNotice('');
+    }
+    try {
+      const { refreshEmailVerified } = await import('@neram/auth');
+      const verified = await refreshEmailVerified();
+      if (verified) {
+        advancingRef.current = true;
+        onFunnelEvent?.({ funnel: 'auth', event: 'email_verified', status: 'completed' });
+        await handlePostLogin();
+        advancingRef.current = false;
+      } else if (manual) {
+        setEmailNotice('Not verified yet. Open the email from Neram Classes and tap the link, then come back here.');
+      }
+    } catch (err: any) {
+      if (manual) setEmailNotice(getFirebaseErrorMessage(err));
+    } finally {
+      if (manual) setEmailChecking(false);
+    }
+  }, [handlePostLogin, onFunnelEvent]);
+
+  // While waiting on the link, check every few seconds (only when the tab is
+  // visible) and the moment the student comes back to this tab.
+  useEffect(() => {
+    if (!open || step !== 'verifyEmail') return;
+    const tick = () => {
+      if (typeof document === 'undefined' || document.visibilityState === 'visible') checkEmailVerified(false);
+    };
+    const interval = setInterval(tick, EMAIL_POLL_MS);
+    window.addEventListener('focus', tick);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', tick);
+    };
+  }, [open, step, checkEmailVerified]);
+
+  const handleResendVerification = async () => {
+    if (emailResendTimer > 0) return;
+    setEmailNotice('');
+    try {
+      const { resendVerificationEmail } = await import('@neram/auth');
+      await resendVerificationEmail();
+      setEmailResendTimer(60);
+      setEmailNotice(`We sent a new link to ${verifyEmailAddress}.`);
+    } catch (err: any) {
+      setEmailNotice(getFirebaseErrorMessage(err));
+    }
+  };
+
+  /** "Use a different email": sign out of the unverified account and start again. */
+  const handleUseDifferentEmail = async () => {
+    const { firebaseSignOut } = await import('@neram/auth');
+    await firebaseSignOut().catch(() => {});
+    setStep('login');
+    setIsSignUp(true);
+    setPassword('');
+    setEmailNotice('');
+  };
 
   // ---- Login Handlers ----
 
@@ -341,9 +498,10 @@ export default function LoginModal({
     setLoginLoading(true);
     setLoginError('');
     try {
-      const { signInWithGoogle } = await import('@neram/auth');
-      await signInWithGoogle();
-      await handlePostLogin();
+      const { signInWithGoogleOrRedirect } = await import('@neram/auth');
+      // Null: the student closed the popup, or the page is redirecting to Google.
+      const user = await signInWithGoogleOrRedirect();
+      if (user) await handlePostLogin();
     } catch (err: any) {
       const msg = getFirebaseErrorMessage(err);
       if (msg) setLoginError(msg);
@@ -359,25 +517,49 @@ export default function LoginModal({
     try {
       if (isSignUp) {
         const { createAccountWithEmail } = await import('@neram/auth');
-        await createAccountWithEmail(email, password);
+        await createAccountWithEmail(email.trim(), password, fullName.trim() || undefined);
+        setEmailResendTimer(60);
+        onFunnelEvent?.({ funnel: 'auth', event: 'email_signup', status: 'completed' });
       } else {
         const { signInWithEmail } = await import('@neram/auth');
-        await signInWithEmail(email, password);
+        await signInWithEmail(email.trim(), password);
       }
       await handlePostLogin();
     } catch (err: any) {
       const msg = getFirebaseErrorMessage(err);
       if (msg) setLoginError(msg);
+      // An existing address: switch to Sign In with the email kept.
+      if (err?.code === 'auth/email-already-in-use') setIsSignUp(false);
     } finally {
       setLoginLoading(false);
     }
   };
 
+  const handleForgotPassword = async () => {
+    setLoginError('');
+    setLoginNotice('');
+    if (!email.trim()) {
+      setLoginError('Enter your email above, then tap Forgot password.');
+      return;
+    }
+    try {
+      const { resetPassword } = await import('@neram/auth');
+      await resetPassword(email.trim());
+    } catch (err: any) {
+      // Never confirm whether an address has an account; only a malformed one is reported.
+      if (err?.code === 'auth/invalid-email') {
+        setLoginError(getFirebaseErrorMessage(err));
+        return;
+      }
+    }
+    setLoginNotice(`If ${email.trim()} has an account, a password reset link is on its way.`);
+  };
+
   // ---- Phone Handlers ----
 
   const handleSendOtp = async () => {
-    if (phoneNumber.length !== 10) {
-      setPhoneError('Please enter a valid 10-digit phone number');
+    if (phoneNumber.length !== phoneLength) {
+      setPhoneError(`Please enter a valid ${phoneLength}-digit phone number`);
       return;
     }
 
@@ -397,7 +579,7 @@ export default function LoginModal({
           await fetch(`${apiBaseUrl}/api/auth/capture-phone`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ idToken, phoneNumber: `+91${phoneNumber}` }),
+            body: JSON.stringify({ idToken, phoneNumber: fullPhone }),
           });
         }
       } catch {
@@ -408,7 +590,7 @@ export default function LoginModal({
       // the verifier on each signInWithPhoneNumber call.
       await reinitRecaptcha();
 
-      await sendPhoneOTP(phoneNumber);
+      await sendPhoneOTP(fullPhone);
       onFunnelEvent?.({ funnel: 'auth', event: 'otp_requested', status: 'completed' });
       setStep('otp');
       setResendTimer(60);
@@ -423,7 +605,7 @@ export default function LoginModal({
         try {
           const { sendPhoneOTP } = await import('@neram/auth');
           await reinitRecaptcha();
-          await sendPhoneOTP(phoneNumber);
+          await sendPhoneOTP(fullPhone);
           onFunnelEvent?.({ funnel: 'auth', event: 'otp_requested', status: 'completed', metadata: { retry: true } });
           setStep('otp');
           setResendTimer(60);
@@ -451,42 +633,33 @@ export default function LoginModal({
     setPhoneError('');
     setPhoneLoading(true);
     try {
-      const { verifyPhoneOTP, verifyPhoneAndLink, getFirebaseAuth } = await import('@neram/auth');
+      const { verifyPhoneAndLink, getFirebaseAuth } = await import('@neram/auth');
 
-      // When phoneOnly=true, the user is already signed in (e.g., via Google).
-      // Use verifyPhoneAndLink to link phone to their existing account
-      // instead of creating a new sign-in that would replace their session.
-      if (phoneOnly) {
-        await verifyPhoneAndLink(otp);
-      } else {
-        await verifyPhoneOTP(otp);
-      }
+      // Signed in (Google or email): the phone is attached to THIS account.
+      // Nobody signed in (phone-first): a normal phone sign-in. A bare
+      // confirm() after Google used to replace the Google session.
+      await verifyPhoneAndLink(otp);
 
       // Save to Supabase
       const auth = getFirebaseAuth();
       const currentUser = auth.currentUser;
       if (currentUser) {
         const idToken = await currentUser.getIdToken(true); // Force refresh to include phone claim
-        const verified = await verifyPhone(idToken, `+91${phoneNumber}`);
+        const verified = await verifyPhone(idToken, fullPhone);
         firePhoneVerifiedConversion(verified?.user?.id);
       }
 
       onAuthenticated?.(phoneNumber);
     } catch (err: any) {
-      // Check if this is a duplicate phone error from our API
       const errMsg = err?.message || '';
-      if (errMsg.includes('already registered')) {
+      if (err?.code === 'neram/phone-in-use' || errMsg.includes('already registered')) {
         onFunnelEvent?.({ funnel: 'auth', event: 'phone_already_exists', status: 'failed', error_message: errMsg, error_code: 'PHONE_ALREADY_EXISTS' });
-        setPhoneError(errMsg);
-        // Go back to phone step so user can enter a different number
-        setStep('phone');
+        // Firebase-level: the number is another sign-in, which they can switch to.
+        // Database-level (409): only a different number or help.
+        setPhoneInUse({ credential: err?.code === 'neram/phone-in-use' ? err.credential ?? null : null });
+        setStep('phoneInUse');
         setOtp('');
-        // Re-initialize reCAPTCHA since it was consumed during OTP send
-        try {
-          await reinitRecaptcha();
-        } catch (recaptchaErr) {
-          console.error('Failed to reinitialize reCAPTCHA:', recaptchaErr);
-        }
+        setFailedAttempts((n) => n + 1);
       } else {
         onFunnelEvent?.({ funnel: 'auth', event: 'otp_failed', status: 'failed', error_message: getFirebaseErrorMessage(err), error_code: err?.code });
         setPhoneError(getFirebaseErrorMessage(err));
@@ -497,10 +670,45 @@ export default function LoginModal({
     }
   };
 
+  /**
+   * "Sign in with this number": switch to the account that owns the verified
+   * number (no new OTP; the credential is already proven), ask the server to
+   * fold the account made moments ago into it, then save the phone as usual.
+   */
+  const handleSignInWithNumber = async () => {
+    if (!phoneInUse?.credential) return;
+    setSwitchLoading(true);
+    setPhoneError('');
+    try {
+      const { getFirebaseAuth, signInWithPhoneCredential } = await import('@neram/auth');
+      const previousIdToken = await getFirebaseAuth().currentUser?.getIdToken().catch(() => undefined);
+      const user = await signInWithPhoneCredential(phoneInUse.credential as any);
+      const idToken = await user.getIdToken(true);
+      if (previousIdToken) {
+        await fetch(`${apiBaseUrl}/api/auth/adopt-account`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ previousIdToken, idToken }),
+        }).catch(() => undefined);
+      }
+      await registerUser(idToken).catch(() => undefined);
+      const verified = await verifyPhone(idToken, fullPhone);
+      firePhoneVerifiedConversion(verified?.user?.id);
+      onFunnelEvent?.({ funnel: 'auth', event: 'phone_account_switched', status: 'completed' });
+      onAuthenticated?.(phoneNumber);
+    } catch (err: any) {
+      setPhoneError(getFirebaseErrorMessage(err));
+      setFailedAttempts((n) => n + 1);
+    } finally {
+      setSwitchLoading(false);
+    }
+  };
+
   const handleChangePhone = async () => {
     setStep('phone');
     setOtp('');
     setPhoneError('');
+    setPhoneInUse(null);
     // Re-initialize reCAPTCHA since it was consumed during OTP send
     try {
       await reinitRecaptcha();
@@ -517,7 +725,7 @@ export default function LoginModal({
     try {
       const { sendPhoneOTP } = await import('@neram/auth');
       await reinitRecaptcha();
-      await sendPhoneOTP(phoneNumber);
+      await sendPhoneOTP(fullPhone);
       setResendTimer(60);
     } catch (err: any) {
       setPhoneError(getFirebaseErrorMessage(err));
@@ -590,14 +798,18 @@ export default function LoginModal({
       <DialogTitle sx={{ pb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Box>
           <Typography variant="h5" component="div" sx={{ fontWeight: 600 }}>
-            {step === 'login' && 'Sign In'}
+            {step === 'login' && (isSignUp ? 'Create your account' : 'Sign In')}
+            {step === 'verifyEmail' && 'Check your inbox'}
             {step === 'phone' && 'Verify Your Phone'}
             {step === 'otp' && 'Enter OTP'}
+            {step === 'phoneInUse' && 'This number already has an account'}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
             {step === 'login' && 'Sign in to access your Neram Classes account'}
+            {step === 'verifyEmail' && 'Confirm your email to keep your account safe'}
             {step === 'phone' && 'We need to verify your phone for account security'}
-            {step === 'otp' && `Enter the OTP sent to +91 ${phoneNumber}`}
+            {step === 'otp' && `Enter the OTP sent to ${dialCode} ${phoneNumber}`}
+            {step === 'phoneInUse' && `${dialCode} ${phoneNumber} is already on a Neram account`}
           </Typography>
         </Box>
         {allowClose && onClose && (
@@ -652,6 +864,18 @@ export default function LoginModal({
 
               {/* Email/Password Form */}
               <form onSubmit={handleEmailAuth}>
+                {isSignUp && (
+                  <TextField
+                    fullWidth
+                    label="Full name"
+                    value={fullName}
+                    onChange={(e) => setFullName(e.target.value)}
+                    required
+                    sx={{ mb: 2 }}
+                    autoComplete="name"
+                    inputProps={{ style: { fontSize: '16px' } }}
+                  />
+                )}
                 <TextField
                   fullWidth
                   type="email"
@@ -672,12 +896,26 @@ export default function LoginModal({
                   required
                   sx={{ mb: 2 }}
                   autoComplete={isSignUp ? 'new-password' : 'current-password'}
+                  helperText={isSignUp ? 'At least 6 characters' : undefined}
                   inputProps={{ minLength: 6, style: { fontSize: '16px' } }}
                 />
+
+                {!isSignUp && (
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: -1, mb: 1 }}>
+                    <Button variant="text" size="small" onClick={handleForgotPassword} sx={{ textTransform: 'none', minHeight: 44 }}>
+                      Forgot password?
+                    </Button>
+                  </Box>
+                )}
 
                 {loginError && (
                   <Alert severity="error" sx={{ mb: 2 }}>
                     {loginError}
+                  </Alert>
+                )}
+                {loginNotice && (
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    {loginNotice}
                   </Alert>
                 )}
 
@@ -706,6 +944,7 @@ export default function LoginModal({
                   onClick={() => {
                     setIsSignUp(!isSignUp);
                     setLoginError('');
+                    setLoginNotice('');
                   }}
                   sx={{ textTransform: 'none' }}
                 >
@@ -713,6 +952,61 @@ export default function LoginModal({
                     ? 'Already have an account? Sign In'
                     : "Don't have an account? Sign Up"}
                 </Button>
+              </Box>
+            </Box>
+          )}
+
+          {/* ---- CHECK YOUR INBOX ---- */}
+          {step === 'verifyEmail' && (
+            <Box>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                We sent a verification link to <strong>{verifyEmailAddress}</strong>. Open it on any device, then come back:
+                this page continues by itself.
+              </Alert>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                No email? Check Spam or Promotions, or send it again.
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, color: 'text.secondary', mb: 1 }}>
+                <CircularProgress size={14} />
+                <Typography variant="body2">Waiting for you to tap the link</Typography>
+              </Box>
+              {emailNotice && (
+                <Alert severity="warning" sx={{ mt: 2 }}>
+                  {emailNotice}
+                </Alert>
+              )}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mt: 2 }}>
+                <Button variant="text" size="small" onClick={handleUseDifferentEmail} sx={{ textTransform: 'none', minHeight: 44 }}>
+                  Use a different email
+                </Button>
+                <Button
+                  variant="text"
+                  size="small"
+                  onClick={handleResendVerification}
+                  disabled={emailResendTimer > 0}
+                  sx={{ textTransform: 'none', minHeight: 44 }}
+                >
+                  {emailResendTimer > 0 ? `Resend in ${emailResendTimer}s` : 'Resend email'}
+                </Button>
+              </Box>
+            </Box>
+          )}
+
+          {/* ---- NUMBER ALREADY ON ANOTHER ACCOUNT ---- */}
+          {step === 'phoneInUse' && (
+            <Box>
+              <Typography variant="body1" sx={{ mb: 2 }}>
+                {phoneInUse?.credential
+                  ? 'You may have signed up with this number before. Sign in with it to continue on that account, with everything you saved there.'
+                  : 'Another Neram account already uses this number. Use a different number, or contact us and we will join the accounts.'}
+              </Typography>
+              {phoneError && (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  {phoneError}
+                </Alert>
+              )}
+              <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, mt: 1 }}>
+                <ConnectToOffice />
               </Box>
             </Box>
           )}
@@ -725,7 +1019,7 @@ export default function LoginModal({
               </Alert>
 
               <Typography variant="body2" color="text.secondary" gutterBottom>
-                Enter your 10-digit mobile number
+                Enter your {phoneLength}-digit mobile number
               </Typography>
               <TextField
                 fullWidth
@@ -733,14 +1027,14 @@ export default function LoginModal({
                 placeholder="9876543210"
                 value={phoneNumber}
                 onChange={(e) => {
-                  const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+                  const value = e.target.value.replace(/\D/g, '').slice(0, phoneLength);
                   setPhoneNumber(value);
                   setPhoneError('');
                 }}
                 InputProps={{
                   startAdornment: (
                     <Typography variant="body1" color="text.secondary" sx={{ mr: 1 }}>
-                      +91
+                      {dialCode}
                     </Typography>
                   ),
                 }}
@@ -838,14 +1132,52 @@ export default function LoginModal({
         </Box>
       </DialogContent>
 
-      <DialogActions sx={{ px: 3, pb: 3, pt: 1 }}>
+      <DialogActions sx={{ px: 3, pb: 3, pt: 1, flexDirection: 'column', gap: 1, '& > :not(style) ~ :not(style)': { ml: 0 } }}>
+        {step === 'verifyEmail' && (
+          <Button
+            variant="contained"
+            fullWidth
+            size="large"
+            onClick={() => checkEmailVerified(true)}
+            disabled={emailChecking}
+            sx={{ py: 1.5, fontSize: '16px', minHeight: 48 }}
+          >
+            {emailChecking ? <CircularProgress size={24} color="inherit" /> : "I've verified my email"}
+          </Button>
+        )}
+
+        {step === 'phoneInUse' && !!phoneInUse?.credential && (
+          <Button
+            variant="contained"
+            fullWidth
+            size="large"
+            onClick={handleSignInWithNumber}
+            disabled={switchLoading}
+            sx={{ py: 1.5, fontSize: '16px', minHeight: 48 }}
+          >
+            {switchLoading ? <CircularProgress size={24} color="inherit" /> : 'Sign in with this number'}
+          </Button>
+        )}
+        {step === 'phoneInUse' && (
+          <Button
+            variant={phoneInUse?.credential ? 'text' : 'contained'}
+            fullWidth
+            size="large"
+            onClick={handleChangePhone}
+            disabled={switchLoading}
+            sx={{ py: 1.5, fontSize: '16px', minHeight: 48 }}
+          >
+            Use a different number
+          </Button>
+        )}
+
         {step === 'phone' && (
           <Button
             variant="contained"
             fullWidth
             size="large"
             onClick={handleSendOtp}
-            disabled={phoneLoading || phoneNumber.length !== 10}
+            disabled={phoneLoading || phoneNumber.length !== phoneLength}
             sx={{ py: 1.5, fontSize: '16px', minHeight: 48 }}
           >
             {phoneLoading ? <CircularProgress size={24} color="inherit" /> : 'Send OTP'}

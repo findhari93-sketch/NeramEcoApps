@@ -16,6 +16,7 @@ export * from './profile-history';
 export * from './applications';
 export * from './demo-classes';
 export * from './demo-requests';
+export * from './apply-draft-nudge';
 export * from './onboarding';
 export * from './fee-structures';
 export * from './notifications';

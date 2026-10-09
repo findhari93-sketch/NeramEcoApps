@@ -2,9 +2,11 @@
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import type { ApplicationFormData, FormStep, StepValidation } from './types';
+import { ensureAccount } from '@/lib/ensure-account';
 import { DEFAULT_FORM_DATA, STEP_COUNT } from './types';
 import { useFirebaseAuth } from '@neram/auth';
-import { getCountryConfig } from './countryConfig';
+import { fromStoredPhone, isListedCountry, residenceFromStored, toStoredPhone } from './countryConfig';
+import { isSamePhone } from '@/lib/phone';
 import { captureAttributionFromUrl } from '@/lib/attribution';
 import { trackTaxonomyEvent } from '@/lib/funnel-tracker';
 import {
@@ -22,6 +24,22 @@ import {
 
 const STORAGE_KEY = 'neram_application_draft';
 const STARTED_KEY = 'neram_application_started';
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
+
+/** Onboarding education stages to applicant_category values. */
+const ONBOARDING_CATEGORY_MAP: Record<string, string> = {
+  '8th': 'school_student',
+  '9th': 'school_student',
+  '10th': 'school_student',
+  '11th': 'school_student',
+  '12th': 'school_student',
+  college: 'college_student',
+  working: 'working_professional',
+  school_student: 'school_student',
+  diploma_student: 'diploma_student',
+  college_student: 'college_student',
+  working_professional: 'working_professional',
+};
 
 export interface SubmittedApplication {
   id: string;
@@ -34,12 +52,15 @@ interface SavedFormState {
   activeStep: FormStep;
   savedAt: string;
   submittedApplication?: SubmittedApplication | null;
+  /** The Firebase uid that saved this draft, so another account on a shared device never inherits it. */
+  ownerUid?: string | null;
 }
 
 function saveToStorage(
   formData: ApplicationFormData,
   activeStep: FormStep,
   submittedApplication: SubmittedApplication | null,
+  ownerUid: string | null = null,
 ): void {
   try {
     const state: SavedFormState = {
@@ -48,6 +69,7 @@ function saveToStorage(
       activeStep,
       savedAt: new Date().toISOString(),
       submittedApplication,
+      ownerUid,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
@@ -164,6 +186,11 @@ interface FormContextType {
 
   // Analytics: fires application_started once per browser session
   markApplicationStarted: () => void;
+
+  /** The signed-in account existed before this visit (it had data to bring back). */
+  isReturningAccount: boolean;
+  /** Re-read the account (after phone verification or an account switch). */
+  refreshAccount: () => void;
 }
 
 const FormContext = createContext<FormContextType | null>(null);
@@ -196,6 +223,10 @@ export function FormProvider({ children }: FormProviderProps) {
   const [isReturningUser, setIsReturningUser] = useState(false);
   const [returnUserMode, setReturnUserMode] = useState<ReturnUserMode>('new-form');
   const [returningUserCheckComplete, setReturningUserCheckComplete] = useState(false);
+  const [isReturningAccount, setIsReturningAccount] = useState(false);
+  const [accountRefresh, setAccountRefresh] = useState(0);
+  /** Who saved the draft on this device (null: typed before signing in). */
+  const draftOwnerRef = useRef<string | null>(null);
 
   // Restore saved state from localStorage after mount (avoids hydration mismatch)
   useEffect(() => {
@@ -203,6 +234,7 @@ export function FormProvider({ children }: FormProviderProps) {
     hasRestoredRef.current = true;
     const saved = loadFromStorage();
     if (saved) {
+      draftOwnerRef.current = saved.ownerUid ?? null;
       // Sanitize any stale onboarding values stored in localStorage
       const validCategories = ['school_student', 'diploma_student', 'college_student', 'working_professional'];
       const categoryMap: Record<string, string> = {
@@ -218,11 +250,15 @@ export function FormProvider({ children }: FormProviderProps) {
 
       // Older drafts have no feeStructureId etc.; merge over the defaults so
       // every key exists, then reopen on the remapped step.
+      // Before phoneCountry existed, the one country also gave the mobile's code.
+      const savedPersonal: Partial<ApplicationFormData['personal']> = saved.formData.personal || {};
+      const savedLocation: Partial<ApplicationFormData['location']> = saved.formData.location || {};
+      const legacyCountry = savedLocation.country && isListedCountry(savedLocation.country) ? savedLocation.country : 'IN';
       setFormData({
         ...DEFAULT_FORM_DATA,
         ...saved.formData,
-        personal: { ...DEFAULT_FORM_DATA.personal, ...saved.formData.personal },
-        location: { ...DEFAULT_FORM_DATA.location, ...saved.formData.location },
+        personal: { ...DEFAULT_FORM_DATA.personal, phoneCountry: legacyCountry, ...savedPersonal },
+        location: { ...DEFAULT_FORM_DATA.location, ...savedLocation },
         academic: { ...DEFAULT_FORM_DATA.academic, ...saved.formData.academic },
         course: { ...DEFAULT_FORM_DATA.course, ...saved.formData.course },
       });
@@ -237,7 +273,7 @@ export function FormProvider({ children }: FormProviderProps) {
   useEffect(() => {
     if (!hasRestoredRef.current) return; // Don't save until initial restore is done
     if (draftForgottenRef.current) return; // Paid: nothing left to resume on this device
-    saveToStorage(formData, activeStep, null);
+    saveToStorage(formData, activeStep, null, draftOwnerRef.current);
   }, [formData, activeStep]);
 
   const forgetDraft = useCallback(() => {
@@ -266,7 +302,7 @@ export function FormProvider({ children }: FormProviderProps) {
       },
       location: {
         ...prev.location,
-        country: app.country || prev.location.country || 'IN',
+        ...(app.country ? residenceFromStored(app.country) : {}),
         pincode: app.pincode || prev.location.pincode || '',
         city: app.city || prev.location.city || '',
         state: app.state || prev.location.state || '',
@@ -350,178 +386,174 @@ export function FormProvider({ children }: FormProviderProps) {
     }
   }, [user, formData]);
 
-  // Pre-fill form from user profile (only fills empty fields, won't overwrite saved data)
+  // When an account signs in: make sure its row exists (ensureAccount), then
+  // fill the form from what the account already knows, then look for a draft
+  // or a submitted application. Runs again after the phone is verified (that
+  // can switch to an older account with its own applications). Rules:
+  // - nothing typed is ever overwritten; "Pre-filled" marks only what was filled;
+  // - phoneVerified always comes from the account, never from this device;
+  // - a draft saved on this device by a different account is dropped first.
+  const lastUidRef = useRef<string | null>(null);
   useEffect(() => {
-    const fetchAndPrefill = async () => {
-      if (!user || authLoading) return;
+    if (authLoading) return;
+
+    if (!user) {
+      if (lastUidRef.current) {
+        // Signed out: nothing on this device may still claim a verified phone.
+        lastUidRef.current = null;
+        setFormData((prev) => ({ ...prev, personal: { ...prev.personal, phoneVerified: false, phoneVerifiedAt: null } }));
+        setExistingApplications([]);
+        setIsReturningUser(false);
+        setIsReturningAccount(false);
+        setReturnUserMode('new-form');
+        setDraftId(null);
+        setPrefilledFields(new Set());
+      }
+      setReturningUserCheckComplete(true);
+      return;
+    }
+
+    const uid = user.id;
+    const uidChanged = lastUidRef.current !== uid;
+    lastUidRef.current = uid;
+    if (uidChanged) setReturningUserCheckComplete(false);
+    let cancelled = false;
+
+    const run = async () => {
+      // A draft another account left on this device is not this student's.
+      if (uidChanged && draftOwnerRef.current && draftOwnerRef.current !== uid) {
+        setFormData((prev) => ({
+          ...DEFAULT_FORM_DATA,
+          utmSource: prev.utmSource,
+          utmMedium: prev.utmMedium,
+          utmCampaign: prev.utmCampaign,
+          referralCode: prev.referralCode,
+          gclid: prev.gclid,
+          wbraid: prev.wbraid,
+        }));
+        setActiveStepState(0);
+        setDraftId(null);
+      }
+      draftOwnerRef.current = uid;
+
+      const account = await ensureAccount({ force: accountRefresh > 0 });
+      if (cancelled) return;
 
       const prefilled = new Set<string>();
-
-      try {
-        const idToken = await (user.raw as any)?.getIdToken?.();
-        if (!idToken) return;
-
-        const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
-        const response = await fetch(`${appUrl}/api/profile`, {
-          headers: { Authorization: `Bearer ${idToken}` },
+      /** Fill one field only if it is empty; remember it was filled. */
+      const fill = (field: string, update: (prev: ApplicationFormData) => ApplicationFormData | null) => {
+        setFormData((prev) => {
+          const next = update(prev);
+          if (!next) return prev;
+          prefilled.add(field);
+          return next;
         });
-
-        if (response.ok) {
-          const { user: profile } = await response.json();
-
-          // Only pre-fill fields that are currently empty (don't overwrite saved data)
-          if (profile.first_name) {
-            setFormData((prev) => {
-              if (prev.personal.firstName) return prev;
-              return { ...prev, personal: { ...prev.personal, firstName: profile.first_name } };
-            });
-            prefilled.add('firstName');
-          }
-
-          if (profile.email) {
-            setFormData((prev) => {
-              if (prev.personal.email) return prev;
-              return { ...prev, personal: { ...prev.personal, email: profile.email } };
-            });
-            prefilled.add('email');
-          }
-
-          if (profile.phone) {
-            // Strip country prefix using country-aware config (not generic regex)
-            // Generic /^\+\d{1,3}/ is greedy and eats first digit of phone
-            // e.g. "+916380194614" → strips "+916" instead of "+91"
-            setFormData((prev) => {
-              if (prev.personal.phone) return prev;
-              const config = getCountryConfig(prev.location.country || 'IN');
-              const prefixEscaped = config.phonePrefix.replace(/\+/g, '\\+');
-              const cleanedPhone = profile.phone.replace(new RegExp(`^${prefixEscaped}`), '');
-              return {
-                ...prev,
-                personal: {
-                  ...prev.personal,
-                  phone: cleanedPhone,
-                  phoneVerified: profile.phone_verified || false,
-                },
-              };
-            });
+      };
+      // The account's phone and whether it is verified, applied to the form.
+      if (account) {
+        setFormData((prev) => {
+          if (!prev.personal.phone && account.phone) {
             prefilled.add('phone');
-            if (profile.phone_verified) {
-              prefilled.add('phoneVerified');
-            }
+            return {
+              ...prev,
+              personal: {
+                ...prev.personal,
+                ...fromStoredPhone(account.phone, prev.personal.phoneCountry),
+                phoneVerified: account.phone_verified === true,
+                phoneVerifiedAt: account.phone_verified ? prev.personal.phoneVerifiedAt || new Date().toISOString() : null,
+              },
+            };
           }
-
-          if (profile.date_of_birth) {
-            setFormData((prev) => {
-              if (prev.personal.dateOfBirth) return prev;
-              return { ...prev, personal: { ...prev.personal, dateOfBirth: profile.date_of_birth } };
-            });
-            prefilled.add('dateOfBirth');
-          }
-
-          if (profile.gender === 'male' || profile.gender === 'female' || profile.gender === 'other') {
-            setFormData((prev) => {
-              if (prev.personal.gender) return prev;
-              return { ...prev, personal: { ...prev.personal, gender: profile.gender } };
-            });
-            prefilled.add('gender');
-          }
-        }
-      } catch (error) {
-        console.error('Error pre-filling form:', error);
+          const verified =
+            account.phone_verified === true &&
+            !!prev.personal.phone &&
+            isSamePhone(toStoredPhone(prev.personal.phone, prev.personal.phoneCountry), account.phone);
+          if (verified === prev.personal.phoneVerified) return prev;
+          return {
+            ...prev,
+            personal: { ...prev.personal, phoneVerified: verified, phoneVerifiedAt: verified ? new Date().toISOString() : null },
+          };
+        });
       }
 
-      // Pre-fill from onboarding responses (maps_to_field mapping)
+      let idToken: string | undefined;
       try {
-        const idToken = await (user.raw as any)?.getIdToken?.();
-        if (idToken) {
-          const prefillRes = await fetch('/api/onboarding/prefill', {
-            headers: { Authorization: `Bearer ${idToken}` },
-          });
+        idToken = await (user.raw as any)?.getIdToken?.();
+      } catch {
+        idToken = undefined;
+      }
+      if (cancelled) return;
 
-          if (prefillRes.ok) {
-            const { prefill } = await prefillRes.json();
-
-            // Map onboarding fields to form fields
-            if (prefill.interest_course && !prefilled.has('interestCourse')) {
-              const courseValue = Array.isArray(prefill.interest_course)
-                ? prefill.interest_course[0]
-                : prefill.interest_course;
-              setFormData((prev) => ({
-                ...prev,
-                course: { ...prev.course, interestCourse: courseValue },
-              }));
-              prefilled.add('interestCourse');
+      let accountHadData = false;
+      if (idToken) {
+        try {
+          const response = await fetch(`${APP_URL}/api/profile`, { headers: { Authorization: `Bearer ${idToken}` } });
+          if (response.ok && !cancelled) {
+            const { user: profile } = await response.json();
+            const fullName =
+              profile.first_name && profile.last_name
+                ? `${profile.first_name} ${profile.last_name}`
+                : profile.first_name || (profile.name && profile.name !== 'User' ? profile.name : '');
+            if (fullName) fill('firstName', (prev) => (prev.personal.firstName ? null : { ...prev, personal: { ...prev.personal, firstName: fullName } }));
+            if (profile.email) fill('email', (prev) => (prev.personal.email ? null : { ...prev, personal: { ...prev.personal, email: profile.email } }));
+            if (profile.date_of_birth) {
+              accountHadData = true;
+              fill('dateOfBirth', (prev) => (prev.personal.dateOfBirth ? null : { ...prev, personal: { ...prev.personal, dateOfBirth: profile.date_of_birth } }));
             }
-
-            if (prefill.applicant_category && !prefilled.has('applicantCategory')) {
-              // Map onboarding education stage values to valid applicant_category enum values
-              const categoryMap: Record<string, string> = {
-                '8th': 'school_student',
-                '9th': 'school_student',
-                '10th': 'school_student',
-                '11th': 'school_student',
-                '12th': 'school_student',
-                'college': 'college_student',
-                'working': 'working_professional',
-                // Pass through already-valid values
-                'school_student': 'school_student',
-                'diploma_student': 'diploma_student',
-                'college_student': 'college_student',
-                'working_professional': 'working_professional',
-              };
-              const mappedCategory = categoryMap[prefill.applicant_category];
-              if (mappedCategory) {
-                setFormData((prev) => ({
-                  ...prev,
-                  academic: { ...prev.academic, applicantCategory: mappedCategory as any },
-                }));
-                prefilled.add('applicantCategory');
-              }
-            }
-
-            if (prefill.caste_category && !prefilled.has('casteCategory')) {
-              setFormData((prev) => ({
-                ...prev,
-                academic: { ...prev.academic, casteCategory: prefill.caste_category },
-              }));
-              prefilled.add('casteCategory');
+            if (profile.gender === 'male' || profile.gender === 'female' || profile.gender === 'other') {
+              fill('gender', (prev) => (prev.personal.gender ? null : { ...prev, personal: { ...prev.personal, gender: profile.gender } }));
             }
           }
+        } catch (error) {
+          console.error('Error pre-filling form:', error);
         }
-      } catch (error) {
-        // Non-critical — onboarding pre-fill is optional
-        console.error('Error pre-filling from onboarding:', error);
       }
+      if (cancelled) return;
 
-      // Fallback: the first word of the Google display name is a fair guess at
-      // the student's first name. The rest of it is NOT the father's name
-      // (it is usually a surname or an initial), so that guess is gone.
+      // Onboarding answers, only where the form has nothing yet.
+      if (idToken) {
+        try {
+          const prefillRes = await fetch('/api/onboarding/prefill', { headers: { Authorization: `Bearer ${idToken}` } });
+          if (prefillRes.ok && !cancelled) {
+            const { prefill } = await prefillRes.json();
+            if (prefill?.interest_course) {
+              const courseValue = Array.isArray(prefill.interest_course) ? prefill.interest_course[0] : prefill.interest_course;
+              fill('interestCourse', (prev) => (prev.course.interestCourse ? null : { ...prev, course: { ...prev.course, interestCourse: courseValue } }));
+            }
+            const mappedCategory = prefill?.applicant_category ? ONBOARDING_CATEGORY_MAP[prefill.applicant_category] : undefined;
+            if (mappedCategory) {
+              // Never second-guess an "I'm currently in" answer already given.
+              fill('applicantCategory', (prev) =>
+                prev.academic.applicantCategory || prev.academic.currentlyIn
+                  ? null
+                  : { ...prev, academic: { ...prev.academic, applicantCategory: mappedCategory as any } },
+              );
+            }
+            if (prefill?.caste_category) {
+              fill('casteCategory', (prev) => (prev.academic.casteCategory ? null : { ...prev, academic: { ...prev.academic, casteCategory: prefill.caste_category } }));
+            }
+          }
+        } catch (error) {
+          // Non-critical: onboarding pre-fill is optional
+          console.error('Error pre-filling from onboarding:', error);
+        }
+      }
+      if (cancelled) return;
+
+      // Google's own name and email, when the account had none.
       if (user.name) {
-        const firstName = user.name.trim().split(/\s+/)[0] || '';
-        if (firstName && !prefilled.has('firstName')) {
-          setFormData((prev) => (prev.personal.firstName ? prev : { ...prev, personal: { ...prev.personal, firstName } }));
-          prefilled.add('firstName');
-        }
+        const googleName = user.name.trim();
+        fill('firstName', (prev) => (prev.personal.firstName ? null : { ...prev, personal: { ...prev.personal, firstName: googleName } }));
       }
-
-      // Fallback: use Google email if not yet filled
-      if (!prefilled.has('email') && user.email) {
-        setFormData((prev) => ({
-          ...prev,
-          personal: { ...prev.personal, email: user.email! },
-        }));
-        prefilled.add('email');
+      if (user.email) {
+        fill('email', (prev) => (prev.personal.email ? null : { ...prev, personal: { ...prev.personal, email: user.email! } }));
       }
 
       // Restore draft or detect returning user from database
-      try {
-        const idToken = await (user.raw as any)?.getIdToken?.();
-        if (idToken) {
-          const draftRes = await fetch('/api/application', {
-            headers: { Authorization: `Bearer ${idToken}` },
-          });
-
-          if (draftRes.ok) {
+      if (idToken) {
+        try {
+          const draftRes = await fetch('/api/application', { headers: { Authorization: `Bearer ${idToken}` } });
+          if (draftRes.ok && !cancelled) {
             const { data: applications } = await draftRes.json();
             const allApps = applications || [];
             setExistingApplications(allApps);
@@ -530,27 +562,26 @@ export function FormProvider({ children }: FormProviderProps) {
             const submittedApps = allApps.filter((a: any) =>
               ['submitted', 'under_review', 'approved', 'rejected', 'pending_verification', 'enrolled', 'partial_payment'].includes(a.status)
             );
+            if (allApps.length > 0) accountHadData = true;
 
             if (draft) {
-              // Existing behavior: restore draft into form
               setDraftId(draft.id);
-
-              // Restore lead_profile-specific fields into form (only empty fields)
+              // Restore lead_profile fields into the form (only empty fields)
               setFormData((prev) => ({
                 ...prev,
                 personal: {
                   ...prev.personal,
+                  firstName: prev.personal.firstName || draft.first_name || '',
                   fatherName: prev.personal.fatherName || draft.father_name || '',
                   email: prev.personal.email || draft.email || '',
                   parentPhone: prev.personal.parentPhone || draft.parent_phone || '',
                   dateOfBirth: prev.personal.dateOfBirth || draft.date_of_birth || '',
                   gender: prev.personal.gender || draft.gender || '',
-                  phoneVerified: prev.personal.phoneVerified || draft.phone_verified || false,
-                  phoneVerifiedAt: prev.personal.phoneVerifiedAt || draft.phone_verified_at || null,
                 },
                 location: {
                   ...prev.location,
-                  country: prev.location.country || draft.country || 'IN',
+                  // The saved country only while the student has not started on the place here.
+                  ...(draft.country && !prev.location.pincode && !prev.location.city ? residenceFromStored(draft.country) : {}),
                   pincode: prev.location.pincode || draft.pincode || '',
                   city: prev.location.city || draft.city || '',
                   state: prev.location.state || draft.state || '',
@@ -578,7 +609,6 @@ export function FormProvider({ children }: FormProviderProps) {
                   selectedCourseId: prev.course.selectedCourseId || draft.selected_course_id || null,
                   selectedCenterId: prev.course.selectedCenterId || draft.selected_center_id || null,
                   hybridLearningAccepted: prev.course.hybridLearningAccepted || draft.hybrid_learning_accepted || false,
-                  learningMode: prev.course.learningMode || draft.learning_mode || 'hybrid',
                   feeStructureId: prev.course.feeStructureId || draft.fee_structure_id || null,
                 },
               }));
@@ -593,25 +623,25 @@ export function FormProvider({ children }: FormProviderProps) {
               setReturnUserMode('dashboard');
             }
           }
+        } catch (error) {
+          // Non-critical: draft restoration is optional
+          console.error('Error restoring draft from DB:', error);
         }
-      } catch (error) {
-        // Non-critical — draft restoration is optional
-        console.error('Error restoring draft from DB:', error);
       }
+      if (cancelled) return;
 
+      setIsReturningAccount(accountHadData || account?.isNewUser === false);
       setPrefilledFields(prefilled);
       setReturningUserCheckComplete(true);
     };
 
-    fetchAndPrefill();
-  }, [user, authLoading]);
-
-  // Mark check complete for unauthenticated users
-  useEffect(() => {
-    if (!authLoading && !user) {
-      setReturningUserCheckComplete(true);
-    }
-  }, [authLoading, user]);
+    run();
+    return () => {
+      cancelled = true;
+    };
+    // user.id, not user: a token refresh hands back a new object for the same person.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, authLoading, accountRefresh]);
 
   // Get UTM + Google Ads click IDs, center selection, and learning mode from URL.
   // captureAttributionFromUrl() also reads from sessionStorage so attribution
@@ -723,22 +753,23 @@ export function FormProvider({ children }: FormProviderProps) {
 
   const onPhoneVerified = useCallback((phone: string) => {
     setFormData((prev) => {
-      const config = getCountryConfig(prev.location.country);
-      // Strip the country prefix if present
-      const prefixEscaped = config.phonePrefix.replace(/\+/g, '\\+');
-      const cleanedPhone = phone.replace(new RegExp(`^${prefixEscaped}`), '');
+      // The verified number carries its own code (+91..., +971...).
       return {
         ...prev,
         personal: {
           ...prev.personal,
-          phone: cleanedPhone,
+          ...fromStoredPhone(phone, prev.personal.phoneCountry),
           phoneVerified: true,
           phoneVerifiedAt: new Date().toISOString(),
         },
       };
     });
     setShowPhoneVerification(false);
+    // The verified number may have switched to an older account: read it again.
+    setAccountRefresh((n) => n + 1);
   }, []);
+
+  const refreshAccount = useCallback(() => setAccountRefresh((n) => n + 1), []);
 
   const isFieldPrefilled = useCallback(
     (field: string) => prefilledFields.has(field),
@@ -886,6 +917,8 @@ export function FormProvider({ children }: FormProviderProps) {
     submitApplication,
     submittedApplication,
     markApplicationStarted,
+    isReturningAccount,
+    refreshAccount,
   };
 
   return <FormContext.Provider value={value}>{children}</FormContext.Provider>;

@@ -12,8 +12,9 @@ interface StepIndicatorProps {
 
 /**
  * Four columns, one per step: a 4 px bar (gold now, ink done, pale to come)
- * over "01 About you". Done steps are buttons so an applicant can go back to
- * fix something; nothing is clickable on the pay step, where the application
+ * over "01 About you", every label shown even on a phone. Done steps are
+ * buttons so an applicant can go back to fix something; nothing is clickable
+ * on the pay step, where the application
  * has already been written and "Change details" is the way back.
  */
 export default function StepIndicator({ step, onStepClick }: StepIndicatorProps) {
@@ -24,7 +25,7 @@ export default function StepIndicator({ step, onStepClick }: StepIndicatorProps)
     <Box
       component="ol"
       aria-label={t('progress', { current: step + 1, total: STEP_COUNT })}
-      sx={{ listStyle: 'none', m: 0, p: 0, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 0.5 }}
+      sx={{ listStyle: 'none', m: 0, p: 0, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', columnGap: 1 }}
     >
       {STEP_KEYS.map((key, index) => {
         const done = index < step;
@@ -78,9 +79,8 @@ export default function StepIndicator({ step, onStepClick }: StepIndicatorProps)
                 <Box component="span" sx={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', flexShrink: 0 }}>
                   {`0${index + 1}`}
                 </Box>
-                {/* A phone only has room for the current step's name; the others keep their number. */}
-                <Box component="span" sx={{ display: { xs: active ? 'inline' : 'none', sm: 'inline' }, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {t(`steps.${key}`)}
+                <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {t(`stepsShort.${key}`)}
                 </Box>
               </Typography>
             </Box>

@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { isSamePhone } from '@/lib/phone-match';
 import { verifyIdToken } from '@/lib/firebase-admin';
-import { getUserByFirebaseUid, updateUser, getOrCreateUserFromFirebase, checkPhoneExists, getSupabaseAdminClient, insertFunnelEvent, recordDuplicateCandidate } from '@neram/database';
+import { getUserByFirebaseUid, updateUser, getOrCreateUserFromFirebase, checkPhoneExists, findVerifiedPhoneOwner, getSupabaseAdminClient, insertFunnelEvent, recordDuplicateCandidate } from '@neram/database';
 
 import { getCorsHeaders } from '@/lib/cors';
 
@@ -63,6 +63,7 @@ export async function POST(req: NextRequest) {
         const result = await getOrCreateUserFromFirebase({
           uid: decodedToken.uid,
           email: decodedToken.email || null,
+          emailVerified: decodedToken.email_verified === true,
           phoneNumber: phoneNumber,
           displayName: decodedToken.name || null,
         });
@@ -76,8 +77,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Check if this phone number is already used by a DIFFERENT user
-    const existingPhoneUser = await checkPhoneExists(phoneNumber, user.id, adminClient);
+    // Only a VERIFIED owner blocks this number. A row where someone merely
+    // typed it (capture-phone, an old unverified form) must not lock out the
+    // student who just proved it by OTP; that pair goes to staff as a weak
+    // duplicate instead.
+    const typedElsewhere = await checkPhoneExists(phoneNumber, user.id, adminClient);
+    const existingPhoneUser = typedElsewhere ? await findVerifiedPhoneOwner(phoneNumber, user.id, adminClient) : null;
+    if (typedElsewhere && !existingPhoneUser) {
+      await recordDuplicateCandidate(
+        { userA: user.id, userB: typedElsewhere.id, reason: 'phone_otp_conflict', confidence: 'likely', detectedBy: 'signin' },
+        adminClient,
+      ).catch(() => {});
+    }
     if (existingPhoneUser) {
       await insertFunnelEvent(adminClient, {
         user_id: user.id,

@@ -231,6 +231,35 @@ export async function checkPhoneExists(
 }
 
 /**
+ * The user whose VERIFIED phone is this number, other than `excludeUserId`.
+ * A number someone merely typed (capture-phone, an unverified form) does not
+ * own it: the student who proves it by OTP may still claim it.
+ */
+export async function findVerifiedPhoneOwner(
+  phone: string,
+  excludeUserId?: string,
+  client?: TypedSupabaseClient
+): Promise<User | null> {
+  const supabase = client || getSupabaseAdminClient();
+  const normalizedPhone = phone.replace(/\D/g, '');
+
+  let query = supabase
+    .from('users')
+    .select('*')
+    .eq('phone_verified', true)
+    .or(`phone.eq.${normalizedPhone},phone.eq.+91${normalizedPhone},phone.eq.+${normalizedPhone}`);
+
+  if (excludeUserId) {
+    query = query.neq('id', excludeUserId);
+  }
+
+  const { data, error } = await query.limit(1);
+  if (error) throw error;
+
+  return data && data.length > 0 ? data[0] : null;
+}
+
+/**
  * Get or create user from Firebase auth.
  *
  * Lookup order: Firebase uid (users.firebase_uid, then user_identities) → the
@@ -249,6 +278,13 @@ export async function getOrCreateUserFromFirebase(
   firebaseUser: {
     uid: string;
     email?: string | null;
+    /**
+     * The token's email_verified claim. An unverified address (email/password
+     * sign-up before the link is clicked) is stored but never used to find an
+     * existing person, or anyone could claim an account by typing its email.
+     * Omitted means verified, for callers that predate the flag.
+     */
+    emailVerified?: boolean;
     phoneNumber?: string | null;
     displayName?: string | null;
     photoURL?: string | null;
@@ -256,6 +292,7 @@ export async function getOrCreateUserFromFirebase(
   client?: TypedSupabaseClient
 ): Promise<{ user: User; isNewUser: boolean }> {
   const supabase = client || getSupabaseAdminClient();
+  const emailVerified = firebaseUser.emailVerified !== false;
 
   // Build profile updates from Firebase data (fill missing fields)
   function buildProfileUpdates(existingUser: User): Record<string, unknown> {
@@ -265,6 +302,14 @@ export async function getOrCreateUserFromFirebase(
     }
     if (firebaseUser.email && !existingUser.email) {
       updates.email = firebaseUser.email;
+      updates.email_verified = emailVerified;
+    } else if (
+      emailVerified &&
+      firebaseUser.email &&
+      !existingUser.email_verified &&
+      existingUser.email?.toLowerCase() === firebaseUser.email.toLowerCase()
+    ) {
+      // The student clicked the verification link since the last sign-in.
       updates.email_verified = true;
     }
     if (firebaseUser.photoURL && !existingUser.avatar_url) {
@@ -287,16 +332,28 @@ export async function getOrCreateUserFromFirebase(
   async function attach(existing: User): Promise<{ user: User; isNewUser: boolean }> {
     const updates: Record<string, unknown> = { ...buildProfileUpdates(existing) };
     if (!existing.firebase_uid) updates.firebase_uid = firebaseUser.uid;
-    const user = Object.keys(updates).length > 0 ? await updateUser(existing.id, updates, supabase) : existing;
+    const user = await applyProfileUpdates(existing, updates);
     await remember(user.id);
     return { user, isNewUser: false };
+  }
+
+  // Profile fill-ins never fail a sign-in: if the email now collides with
+  // another row (users.email is unique), keep everything else and skip it.
+  async function applyProfileUpdates(existing: User, updates: Record<string, unknown>): Promise<User> {
+    if (Object.keys(updates).length === 0) return existing;
+    try {
+      return await updateUser(existing.id, updates, supabase);
+    } catch (error: any) {
+      if (error?.code !== '23505' || !('email' in updates)) throw error;
+      const { email: _email, email_verified: _verified, ...rest } = updates;
+      return Object.keys(rest).length > 0 ? updateUser(existing.id, rest, supabase) : existing;
+    }
   }
 
   // First, the uid itself (primary column, then any recorded second identity).
   let user = await getUserByFirebaseUid(firebaseUser.uid, supabase);
   if (user) {
-    const updates = buildProfileUpdates(user);
-    const result = Object.keys(updates).length > 0 ? await updateUser(user.id, updates, supabase) : user;
+    const result = await applyProfileUpdates(user, buildProfileUpdates(user));
     await remember(result.id);
     return { user: result, isNewUser: false };
   }
@@ -307,8 +364,8 @@ export async function getOrCreateUserFromFirebase(
     if (user) return attach(user);
   }
 
-  // Same verified email, whatever the casing.
-  if (firebaseUser.email) {
+  // Same verified email, whatever the casing. Never on an unverified address.
+  if (firebaseUser.email && emailVerified) {
     user = await getUserByEmail(firebaseUser.email, supabase);
     if (user) return attach(user);
   }
@@ -329,24 +386,41 @@ export async function getOrCreateUserFromFirebase(
     }
   }
 
-  // Create new user
-  const newUser = await createUser({
-    name: firebaseUser.displayName || 'User',
-    email: firebaseUser.email || null,
-    phone: phoneForNewUser,
-    username: null,
-    avatar_url: firebaseUser.photoURL || null,
-    firebase_uid: firebaseUser.uid,
-    ms_oid: null,
-    google_id: null,
-    user_type: 'lead',
-    status: 'active',
-    email_verified: Boolean(firebaseUser.email),
-    phone_verified: phoneVerifiedForNewUser,
-    preferred_language: 'en',
-    last_login_at: new Date().toISOString(),
-    metadata: null,
-  }, supabase);
+  // An unverified address that already belongs to someone stays off the new
+  // row (users.email is unique); it is added once verified, if still free.
+  let emailForNewUser = firebaseUser.email || null;
+  if (emailForNewUser && !emailVerified && (await getUserByEmail(emailForNewUser, supabase))) {
+    emailForNewUser = null;
+  }
+
+  // Create new user. Two sign-in calls can race here (the page and the dialog
+  // both register the user); the loser of the UNIQUE(firebase_uid) race reads
+  // the winner's row instead of failing.
+  let newUser: User;
+  try {
+    newUser = await createUser({
+      name: firebaseUser.displayName || 'User',
+      email: emailForNewUser,
+      phone: phoneForNewUser,
+      username: null,
+      avatar_url: firebaseUser.photoURL || null,
+      firebase_uid: firebaseUser.uid,
+      ms_oid: null,
+      google_id: null,
+      user_type: 'lead',
+      status: 'active',
+      email_verified: Boolean(emailForNewUser) && emailVerified,
+      phone_verified: phoneVerifiedForNewUser,
+      preferred_language: 'en',
+      last_login_at: new Date().toISOString(),
+      metadata: null,
+    }, supabase);
+  } catch (error: any) {
+    if (error?.code !== '23505') throw error;
+    const winner = await getUserByFirebaseUid(firebaseUser.uid, supabase);
+    if (!winner) throw error;
+    return { user: winner, isNewUser: false };
+  }
   await remember(newUser.id);
   return { user: newUser, isNewUser: true };
 }

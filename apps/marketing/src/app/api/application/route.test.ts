@@ -59,8 +59,10 @@ vi.mock('@neram/database/queries', () => ({
   deleteApplication: vi.fn(),
 }));
 
+const INDIAN_AUTH = { userId: 'user-1', email: 'arun@example.com', name: 'Arun', phone: '+919876543210', phoneVerified: true };
+let authResult: typeof INDIAN_AUTH = INDIAN_AUTH;
 vi.mock('../_lib/auth', () => ({
-  verifyFirebaseToken: async () => ({ userId: 'user-1', email: 'arun@example.com', name: 'Arun', phone: '+919876543210' }),
+  verifyFirebaseToken: async () => authResult,
 }));
 
 import { POST, PATCH } from './route';
@@ -91,6 +93,7 @@ beforeEach(() => {
   calls.length = 0;
   existingApplications = [];
   singleRow = null;
+  authResult = INDIAN_AUTH;
   createApplication.mockClear();
   submitApplication.mockClear();
 });
@@ -131,6 +134,19 @@ describe('POST /api/application', () => {
     const input = createApplication.mock.calls[0][1];
     expect(input.gender).toBeUndefined();
     expect(input.fee_source).toBeUndefined();
+  });
+
+  it('marks a Gulf number verified when it is the OTP-verified one on the account, and keeps its code', async () => {
+    authResult = { ...INDIAN_AUTH, phone: '+971501234567' };
+    const res = await POST(request('POST', { ...submitBody, phone: '+971501234567', parent_phone: '+971509876543' }));
+    expect(res.status).toBe(201);
+    expect(createApplication.mock.calls[0][1]).toMatchObject({ phone: '+971501234567', parent_phone: '+971509876543', phone_verified: true });
+  });
+
+  it('never trusts phone_verified from the browser for a number the account did not verify', async () => {
+    const res = await POST(request('POST', { ...submitBody, phone: '9000000001' }));
+    expect(res.status).toBe(400);
+    expect(createApplication).not.toHaveBeenCalled();
   });
 
   it('updates the existing draft rather than inserting a second application', async () => {
