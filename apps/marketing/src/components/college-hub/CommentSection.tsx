@@ -30,7 +30,7 @@ function CommentItem({ comment, onReply }: CommentItemProps) {
         </Avatar>
         <Box sx={{ flex: 1 }}>
           <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
-            <Typography variant="subtitle2" sx={{ fontWeight: 700, fontSize: '0.875rem' }}>
+            <Typography variant="subtitle2" component="p" sx={{ fontWeight: 700, fontSize: '0.875rem' }}>
               {comment.author_name}
             </Typography>
             {comment.is_ambassador && (
@@ -109,11 +109,13 @@ function CommentItem({ comment, onReply }: CommentItemProps) {
 interface CommentSectionProps {
   collegeId: string;
   collegeName: string;
+  /** First page rendered on the server (ISR), so Q&A text is in the HTML. */
+  initialComments?: (CollegeComment & { replies?: CollegeComment[] })[];
 }
 
-export default function CommentSection({ collegeId, collegeName }: CommentSectionProps) {
-  const [comments, setComments] = useState<(CollegeComment & { replies?: CollegeComment[] })[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function CommentSection({ collegeId, collegeName, initialComments }: CommentSectionProps) {
+  const [comments, setComments] = useState<(CollegeComment & { replies?: CollegeComment[] })[]>(initialComments ?? []);
+  const [loading, setLoading] = useState(!initialComments);
   const [authorName, setAuthorName] = useState('');
   const [commentBody, setCommentBody] = useState('');
   const [replyTo, setReplyTo] = useState<{ id: string; author: string } | null>(null);
@@ -131,8 +133,10 @@ export default function CommentSection({ collegeId, collegeName }: CommentSectio
   }, [collegeId]);
 
   useEffect(() => {
+    // Server already rendered the first page; posting a comment still reloads.
+    if (initialComments) return;
     loadComments();
-  }, [loadComments]);
+  }, [loadComments, initialComments]);
 
   const handleSubmit = async () => {
     if (!authorName || commentBody.length < 5) {
@@ -169,7 +173,7 @@ export default function CommentSection({ collegeId, collegeName }: CommentSectio
     <Box>
       <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 2 }}>
         <QuestionAnswerIcon sx={{ color: 'primary.main' }} />
-        <Typography variant="h6" fontWeight={700}>Questions and Answers</Typography>
+        <Typography variant="h6" component="h2" fontWeight={700}>Questions and Answers</Typography>
         <Typography variant="body2" color="text.secondary">({comments.length})</Typography>
       </Stack>
 

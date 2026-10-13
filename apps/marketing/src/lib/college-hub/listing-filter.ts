@@ -180,6 +180,7 @@ export const LISTING_COLLEGE_FIELDS = [
   'counseling_systems',
   'logo_url',
   'hero_image_url',
+  'hero_image_credit',
   'admissions_phone',
   'brochure_url',
   'avg_placement_salary',

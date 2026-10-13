@@ -8,7 +8,7 @@
 
 import { cache } from 'react';
 import { createAdminClientISR, getSupabaseAdminClient } from '@neram/database';
-import type { College, CollegeDetail, CollegeListItem, CollegeFilters } from './types';
+import type { College, CollegeComment, CollegeDetail, CollegeFaqRow, CollegeListItem, CollegeFilters, CollegeReview } from './types';
 import { COLLEGES_PER_PAGE } from './constants';
 
 // ISR revalidation buckets — must match `export const revalidate` on the pages.
@@ -23,6 +23,9 @@ const ISR_EXAM_HUB = 86400; // TNEA / JoSAA hubs (1 day)
 
 // ─── List queries ────────────────────────────────────────────────────────────
 
+// hero_image_credit (migration 20261114090000) is left out on purpose: every
+// listing page would fail if this code reached an environment before that
+// migration. Add it when a listing card shows the photo credit.
 const LISTING_SELECT = `
   id, slug, name, short_name, city, state, state_slug, type, neram_tier,
   coa_approved, naac_grade, nirf_rank, nirf_rank_architecture, arch_index_score,
@@ -232,6 +235,120 @@ export const getCollegeBySlug = cache(async (slug: string): Promise<CollegeDetai
     infrastructure: infraRes.data ?? null,
     faculty: facultyRes.data ?? [],
   } as CollegeDetail;
+});
+
+// ─── Detail page extras (fetched inside the ISR render, no API route) ────────
+
+// FAQs written by the Admin content cron or staff. Empty (and the page falls
+// back to the template FAQs) when there are no rows or the table is missing.
+export const getCollegeFaqs = cache(async (collegeId: string): Promise<CollegeFaqRow[]> => {
+  try {
+    const supabase = createAdminClientISR(ISR_COLLEGE);
+    const { data, error } = await supabase
+      .from('college_faqs')
+      .select('id, college_id, position, question, answer, intent, fact_keys, generated_by, locked, created_at, updated_at')
+      .eq('college_id', collegeId)
+      .order('position', { ascending: true });
+    if (error) return [];
+    return (data ?? []) as CollegeFaqRow[];
+  } catch {
+    return [];
+  }
+});
+
+// First page of approved reviews, same shape and size as GET /api/colleges/reviews.
+export const getCollegeReviewsFirstPage = cache(async (collegeId: string): Promise<CollegeReview[]> => {
+  try {
+    const supabase = createAdminClientISR(ISR_COLLEGE);
+    const { data, error } = await supabase
+      .from('college_reviews')
+      .select(
+        'id,college_id,reviewer_name,reviewer_year,rating_overall,rating_studio,rating_faculty,rating_campus,rating_placements,rating_value,rating_infrastructure,title,body,pros,cons,status,created_at'
+      )
+      .eq('college_id', collegeId)
+      .eq('status', 'approved')
+      .order('created_at', { ascending: false })
+      .limit(20);
+    if (error) return [];
+    return (data ?? []) as CollegeReview[];
+  } catch {
+    return [];
+  }
+});
+
+// First page of Q&A, nested like GET /api/colleges/comments.
+export const getCollegeCommentsFirstPage = cache(
+  async (collegeId: string): Promise<(CollegeComment & { replies?: CollegeComment[] })[]> => {
+    try {
+      const supabase = createAdminClientISR(ISR_COLLEGE);
+      const { data, error } = await supabase
+        .from('college_comments')
+        .select('id,college_id,parent_id,author_name,body,is_ambassador,status,created_at')
+        .eq('college_id', collegeId)
+        .eq('status', 'approved')
+        .order('created_at', { ascending: false })
+        .limit(50);
+      if (error) return [];
+      const rows = (data ?? []) as CollegeComment[];
+      const replies = rows.filter((c) => c.parent_id);
+      return rows
+        .filter((c) => !c.parent_id)
+        .map((c) => ({ ...c, replies: replies.filter((r) => r.parent_id === c.id) }));
+    } catch {
+      return [];
+    }
+  }
+);
+
+export interface CollegeSitemapRow {
+  state_slug: string | null;
+  slug: string;
+  updated_at: string | null;
+  last_data_update: string | null;
+  faqs_generated_at?: string | null;
+  hero_image_url: string | null;
+}
+
+// One cheap select for the sitemaps. faqs_generated_at is new (20261115090000):
+// if a database does not have it yet, retry without it rather than drop every
+// college from the sitemap.
+export async function getCollegeSitemapRows(): Promise<CollegeSitemapRow[]> {
+  const supabase = createAdminClientISR(ISR_COLLEGE);
+  const base = 'state_slug, slug, updated_at, last_data_update, hero_image_url';
+  const first = await supabase.from('colleges').select(`${base}, faqs_generated_at`).eq('status', 'active').order('state_slug');
+  if (!first.error) return (first.data ?? []) as CollegeSitemapRow[];
+  const second = await supabase.from('colleges').select(base).eq('status', 'active').order('state_slug');
+  if (second.error) throw second.error;
+  return (second.data ?? []) as CollegeSitemapRow[];
+}
+
+export interface CollegeLlmsRow {
+  name: string;
+  slug: string;
+  state: string;
+  state_slug: string | null;
+  city: string | null;
+  type: string | null;
+  annual_fee_approx: number | null;
+  total_barch_seats: number | null;
+  counseling_systems: string[] | null;
+}
+
+// llms-full.txt college directory: one cached query for every active college.
+export const getLlmsCollegeRows = cache(async (): Promise<CollegeLlmsRow[]> => {
+  try {
+    const supabase = createAdminClientISR(ISR_COLLEGE);
+    const { data, error } = await supabase
+      .from('colleges')
+      .select('name, slug, state, state_slug, city, type, annual_fee_approx, total_barch_seats, counseling_systems')
+      .eq('status', 'active')
+      .order('state', { ascending: true })
+      .order('name', { ascending: true });
+    if (error) return [];
+    return (data ?? []) as CollegeLlmsRow[];
+  } catch {
+    return [];
+  }
 });
 
 // ─── Sitemap / generateStaticParams helpers ──────────────────────────────────

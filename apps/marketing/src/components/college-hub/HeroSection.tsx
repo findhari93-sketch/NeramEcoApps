@@ -11,9 +11,18 @@ import type { College } from '@/lib/college-hub/types';
 
 interface HeroSectionProps {
   college: College;
+  /** Answer-first summary under the H1 (detail page). id="college-summary" is the speakable target. */
+  summary?: string;
+  /** "Last updated" date (pre-formatted on the server) and the sources shown on the page. */
+  updated?: { iso: string; label: string } | null;
+  sources?: string[];
+  /** CC BY credit on the cover photo. Detail page only. */
+  showPhotoCredit?: boolean;
 }
 
-export default function HeroSection({ college }: HeroSectionProps) {
+export default function HeroSection({ college, summary, updated, sources = [], showPhotoCredit = false }: HeroSectionProps) {
+  const credit = showPhotoCredit ? college.hero_image_credit?.trim() : null;
+  const creditHref = college.hero_image_source_url?.trim() || null;
   const tier = TIER_CONFIG[college.neram_tier as keyof typeof TIER_CONFIG] ?? TIER_CONFIG.free;
   const hasHero = !!college.hero_image_url;
 
@@ -38,6 +47,48 @@ export default function HeroSection({ college }: HeroSectionProps) {
             style={{ objectFit: 'cover', opacity: 0.85 }}
             sizes="100vw"
           />
+          {credit && (
+            <Typography
+              component="p"
+              sx={{
+                position: 'absolute',
+                right: 0,
+                bottom: 0,
+                m: 0,
+                px: 1,
+                py: 0.25,
+                maxWidth: '100%',
+                fontSize: '0.75rem',
+                lineHeight: 1.6,
+                color: '#fff',
+                bgcolor: 'rgba(15, 23, 42, 0.72)',
+                borderTopLeftRadius: 6,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Photo:{' '}
+              {creditHref ? (
+                <MuiLink
+                  href={creditHref}
+                  target="_blank"
+                  rel="nofollow noopener"
+                  sx={{
+                    color: 'inherit',
+                    textDecorationColor: 'rgba(255,255,255,0.7)',
+                    display: 'inline-block',
+                    py: 0.5,
+                    '&:focus-visible': { outline: '2px solid #fff', outlineOffset: 2 },
+                  }}
+                >
+                  {credit}
+                </MuiLink>
+              ) : (
+                credit
+              )}
+            </Typography>
+          )}
         </Box>
       )}
 
@@ -170,6 +221,23 @@ export default function HeroSection({ college }: HeroSectionProps) {
               Neram ArchIndex: composite rating based on studio, faculty, placements, and more.
             </Typography>
           </Box>
+        )}
+
+        {/* Answer-first summary (server-rendered facts) */}
+        {summary && (
+          <Typography
+            id="college-summary"
+            component="p"
+            sx={{ mt: 2, fontSize: '1rem', lineHeight: 1.6, color: 'text.primary', maxWidth: 720 }}
+          >
+            {summary}
+          </Typography>
+        )}
+        {updated && (
+          <Typography component="p" sx={{ mt: 1, fontSize: '0.875rem', lineHeight: 1.5, color: 'text.secondary' }}>
+            Last updated <time dateTime={updated.iso}>{updated.label}</time>
+            {sources.length > 0 && ` · Sources: ${sources.join(', ')}`}
+          </Typography>
         )}
 
         {/* Website link */}

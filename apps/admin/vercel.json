@@ -12,7 +12,9 @@
     { "path": "/api/cron/marketing-ai/weekly", "schedule": "0 2 * * 1" },
     { "path": "/api/cron/demo-messages", "schedule": "*/5 * * * *" },
     { "path": "/api/cron/seo-audit/daily", "schedule": "0 3 * * *" },
-    { "path": "/api/cron/seo-audit/weekly", "schedule": "30 3 * * 1" }
+    { "path": "/api/cron/seo-audit/weekly", "schedule": "30 3 * * 1" },
+    { "path": "/api/cron/college-photos", "schedule": "0 23 * * *" },
+    { "path": "/api/cron/college-content", "schedule": "30 23 * * *" }
   ],
   "headers": [
     {

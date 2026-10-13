@@ -1,7 +1,8 @@
 import { MetadataRoute } from 'next';
 import { locales } from '@/i18n';
 import { indexableLocales } from '@/lib/seo/indexable-locales';
-import { getAllCollegeSlugs, getActiveStates, getNIRFRankedCollegeSlugs } from '@/lib/college-hub/queries';
+import { getCollegeSitemapRows, getNIRFRankedCollegeSlugs } from '@/lib/college-hub/queries';
+import { collegeLastModified, stateLastModified } from '@/lib/college-hub/sitemap-lastmod';
 import { ROUTED_HUB_SLUGS } from '@/data/counselling-2026';
 import { coursesData } from '@/data/courses';
 import { getReviewSummary } from '@/lib/review-stats';
@@ -277,38 +278,33 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Centre detail pages (/contact/{slug}) 301 to their city page, which the
   // coaching-locations sitemap lists.
 
-  // ─── College Hub: state pages (all locales) ───────────────────────────────
+  // ─── College Hub: state and college pages ────────────────────────────────
+  // English only: non-English /colleges/* variants are noindexed in next.config.js.
+  // lastModified is the newest of updated_at, last_data_update and
+  // faqs_generated_at, so IndexNow (selectRecent) resubmits pages that changed.
+  // Hero images go in /sitemaps/college-images/sitemap.xml (Next 14's sitemap
+  // type has no image field).
   try {
-    const activeStates = await getActiveStates();
-    for (const { state_slug } of activeStates) {
-      const statePath = `/colleges/${state_slug}`;
-      // English only: non-English /colleges/* variants are noindexed in next.config.js.
+    const rows = await getCollegeSitemapRows();
+    const byState = stateLastModified(rows);
+    for (const [stateSlug, lastModified] of byState) {
       entries.push({
-        url: `${baseUrl}${statePath}`,
-        lastModified: new Date('2026-04-12'),
+        url: `${baseUrl}/colleges/${stateSlug}`,
+        lastModified,
         changeFrequency: 'weekly' as const,
         priority: 0.85,
       });
     }
-  } catch (err) {
-    console.error('Failed to fetch college state slugs for sitemap:', err);
-  }
-
-  // ─── College Hub: individual college pages (all locales) ─────────────────
-  try {
-    const collegeSlugs = await getAllCollegeSlugs();
-    for (const { state, slug } of collegeSlugs) {
-      const collegePath = `/colleges/${state}/${slug}`;
-      // English only: non-English /colleges/* variants are noindexed in next.config.js.
+    for (const row of rows) {
       entries.push({
-        url: `${baseUrl}${collegePath}`,
-        lastModified: new Date('2026-04-12'),
+        url: `${baseUrl}/colleges/${row.state_slug ?? 'india'}/${row.slug}`,
+        lastModified: collegeLastModified(row),
         changeFrequency: 'weekly' as const,
         priority: 0.8,
       });
     }
   } catch (err) {
-    console.error('Failed to fetch college slugs for sitemap:', err);
+    console.error('Failed to fetch colleges for sitemap:', err);
   }
 
   // ─── NIRF ranking per-college history pages ──────────────────────────────

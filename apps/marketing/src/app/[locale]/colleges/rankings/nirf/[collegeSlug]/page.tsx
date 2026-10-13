@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
+import { localePrefix } from '@/lib/college-hub/detail-content';
 import Link from 'next/link';
-import Script from 'next/script';
+import { JsonLd } from '@/components/seo/JsonLd';
+import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { notFound } from 'next/navigation';
 import {
   Container,
@@ -49,7 +51,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     ? `${years[0]} to ${years[years.length - 1]}`
     : '';
   return {
-    title: `${name}: NIRF Architecture Ranking History ${yearRange} | Neram`,
+    // The layout template appends "| Neram Classes".
+    title: `${name}: NIRF Architecture Ranking History ${yearRange}`,
     description:
       rows.length > 0
         ? `Year-by-year NIRF Architecture ranking for ${name}. ${rows.length} years of data including overall score and parameter breakdown (TLR, RPC, GO, OI, PR).`
@@ -67,6 +70,7 @@ function bestRank(rows: { rank: number }[]) {
 
 export default async function NIRFCollegeHistoryPage({ params }: PageProps) {
   const { locale, collegeSlug } = params;
+  const prefix = localePrefix(locale);
   setRequestLocale(locale);
 
   const rows = await getNIRFRankingByCollege(collegeSlug);
@@ -87,22 +91,26 @@ export default async function NIRFCollegeHistoryPage({ params }: PageProps) {
       addressRegion: college.state,
       addressCountry: 'IN',
     },
-    url: `https://neramclasses.com/${locale}/colleges/${college.state_slug}/${college.slug}`,
+    // Canonical, unprefixed URL (English is served at / with localePrefix 'as-needed').
+    url: `https://neramclasses.com/colleges/${college.state_slug}/${college.slug}`,
   };
+
+  const breadcrumbLd = generateBreadcrumbSchema([
+    { name: 'Home', url: 'https://neramclasses.com' },
+    { name: 'Colleges', url: 'https://neramclasses.com/colleges' },
+    { name: 'NIRF Architecture Rankings', url: 'https://neramclasses.com/colleges/rankings/nirf' },
+    { name: college.name, url: `https://neramclasses.com/colleges/rankings/nirf/${collegeSlug}` },
+  ]);
 
   return (
     <Container maxWidth="lg" sx={{ py: { xs: 2, sm: 4 } }}>
-      <Script
-        id="nirf-college-jsonld"
-        type="application/ld+json"
-        // eslint-disable-next-line react/no-danger
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
+      {/* Plain <script> tags so the schema is in the server HTML (next/script injected it after hydration). */}
+      <JsonLd data={[jsonLd, breadcrumbLd]} />
 
       <Breadcrumbs
         items={[
-          { name: 'Colleges', href: `/${locale}/colleges` },
-          { name: 'NIRF Rankings', href: `/${locale}/colleges/rankings/nirf` },
+          { name: 'Colleges', href: `${prefix}/colleges` },
+          { name: 'NIRF Rankings', href: `${prefix}/colleges/rankings/nirf` },
           { name: college.name },
         ]}
       />
@@ -242,7 +250,7 @@ export default async function NIRFCollegeHistoryPage({ params }: PageProps) {
       <Stack direction="row" spacing={1.5} sx={{ flexWrap: 'wrap', gap: 1 }}>
         <Button
           component={Link}
-          href={`/${locale}/colleges/${college.state_slug}/${college.slug}`}
+          href={`${prefix}/colleges/${college.state_slug}/${college.slug}`}
           variant="contained"
           sx={{ minHeight: 48 }}
         >
@@ -250,7 +258,7 @@ export default async function NIRFCollegeHistoryPage({ params }: PageProps) {
         </Button>
         <Button
           component={Link}
-          href={`/${locale}/colleges/rankings/nirf`}
+          href={`${prefix}/colleges/rankings/nirf`}
           variant="outlined"
           sx={{ minHeight: 48 }}
         >

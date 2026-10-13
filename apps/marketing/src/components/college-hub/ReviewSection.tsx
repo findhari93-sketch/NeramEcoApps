@@ -27,6 +27,8 @@ const RATING_LABELS = [
 interface ReviewSectionProps {
   collegeId: string;
   collegeName: string;
+  /** First page rendered on the server (ISR), so review text is in the HTML. */
+  initialReviews?: CollegeReview[];
 }
 
 function StarDisplay({ value }: { value: number | null | undefined }) {
@@ -48,7 +50,7 @@ function ReviewCard({ review }: { review: CollegeReview }) {
         </Avatar>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
-            <Typography variant="subtitle2" fontWeight={700}>{review.reviewer_name}</Typography>
+            <Typography variant="subtitle2" component="p" fontWeight={700}>{review.reviewer_name}</Typography>
             {review.reviewer_year && (
               <Chip label={review.reviewer_year} size="small" sx={{ fontSize: '0.7rem', height: 20 }} />
             )}
@@ -106,9 +108,9 @@ function ReviewCard({ review }: { review: CollegeReview }) {
   );
 }
 
-export default function ReviewSection({ collegeId, collegeName }: ReviewSectionProps) {
-  const [reviews, setReviews] = useState<CollegeReview[]>([]);
-  const [loading, setLoading] = useState(true);
+export default function ReviewSection({ collegeId, collegeName, initialReviews }: ReviewSectionProps) {
+  const [reviews, setReviews] = useState<CollegeReview[]>(initialReviews ?? []);
+  const [loading, setLoading] = useState(!initialReviews);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
@@ -124,12 +126,14 @@ export default function ReviewSection({ collegeId, collegeName }: ReviewSectionP
   const [cons, setCons] = useState('');
 
   useEffect(() => {
+    // Server already rendered the first page: skip the duplicate request.
+    if (initialReviews) return;
     fetch(`/api/colleges/reviews?college_id=${collegeId}`)
       .then((r) => r.json())
       .then((json) => setReviews(json.data ?? []))
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [collegeId]);
+  }, [collegeId, initialReviews]);
 
   const avgRating = reviews.length
     ? (reviews.reduce((s, r) => s + (r.rating_overall ?? 0), 0) / reviews.length).toFixed(1)
@@ -176,7 +180,6 @@ export default function ReviewSection({ collegeId, collegeName }: ReviewSectionP
       {/* Header */}
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
         <Box>
-          <Typography variant="h6" fontWeight={700}>Student Reviews</Typography>
           {avgRating && (
             <Stack direction="row" alignItems="center" gap={1} sx={{ mt: 0.5 }}>
               <Typography variant="h4" fontWeight={800} color="primary">{avgRating}</Typography>

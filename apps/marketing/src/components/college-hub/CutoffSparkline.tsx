@@ -62,7 +62,7 @@ export default function CutoffSparkline({
         {latest.cutoff_value !== null && (
           <Box>
             <Typography variant="caption" color="text.secondary">
-              {new Date().getFullYear() - 1} Cutoff ({category.toUpperCase()})
+              {latest.academic_year} Cutoff ({category.toUpperCase()})
             </Typography>
             <Typography variant="h5" sx={{ fontWeight: 800, lineHeight: 1 }}>
               {isRankBased

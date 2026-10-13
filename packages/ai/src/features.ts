@@ -206,6 +206,46 @@ export const AI_FEATURES = [
     dailyCallCap: 60,
   },
 
+  /**
+   * College photo finder (apps/admin/src/lib/college-photos). Looks at the
+   * public campus photos and logos found on Wikimedia and the college's own
+   * site and picks the best one. Public images only, so the free key is fine.
+   * When blocked, the cron stops and the colleges stay queued for the next night.
+   */
+  {
+    id: 'admin.college-photo-pick',
+    label: 'College photo picker',
+    app: 'admin',
+    group: 'College hub',
+    trigger: 'cron',
+    tier: 'document',
+    defaultMode: 'auto',
+    supportsManual: false,
+    allowFreeKey: true,
+    // The nightly cron needs about 8; a full backfill plus researched imports
+    // about 300 (each call is a fraction of a cent).
+    dailyCallCap: 400,
+  },
+  /**
+   * College page FAQs (apps/admin/src/lib/college-content). Writes questions
+   * and answers from the college's own public facts only. When blocked, the
+   * template answers are used instead.
+   */
+  {
+    id: 'admin.college-faq-write',
+    label: 'College page FAQ writer',
+    app: 'admin',
+    group: 'College hub',
+    trigger: 'cron',
+    tier: 'standard',
+    defaultMode: 'auto',
+    supportsManual: false,
+    allowFreeKey: true,
+    // Nightly cron about 10; a full backfill about 190, and a rerun after a
+    // template change can touch most colleges again the same day.
+    dailyCallCap: 400,
+  },
+
   // ── Nexus: teaching content. Carries student data, so no free key. ───────
   /**
    * Shared by five routes (recap preview, recap autopublish, module items,

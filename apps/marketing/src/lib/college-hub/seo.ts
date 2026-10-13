@@ -4,7 +4,8 @@
 import type { Metadata } from 'next';
 import { buildAlternates, buildOgImage } from '@/lib/seo/metadata';
 import type { College, CollegeListItem } from './types';
-import { COUNSELING_LABELS, COLLEGE_TYPE_SLUGS, ACCREDITATION_FILTERS } from './constants';
+import { COUNSELING_LABELS, COLLEGE_TYPE_SLUGS, ACCREDITATION_FILTERS, admissionYear } from './constants';
+import { annualFee, canonicalCollegePath, displayName, examLabels, feeText, joinAnd, joinOr, systemLabels } from './detail-content';
 
 const BASE_URL = 'https://neramclasses.com';
 
@@ -61,38 +62,151 @@ export function generateStateListingMetadata(
 
 // ─── College detail page ─────────────────────────────────────────────────────
 
-export function generateCollegeDetailMetadata(
-  locale: string,
-  college: Pick<College, 'name' | 'slug' | 'state_slug' | 'city' | 'state' | 'type' | 'naac_grade' | 'annual_fee_approx' | 'annual_fee_min' | 'about' | 'logo_url' | 'hero_image_url' | 'total_barch_seats' | 'accepted_exams'>
-): Metadata {
-  const feeStr = college.annual_fee_approx
-    ? `~₹${(college.annual_fee_approx / 100000).toFixed(1)}L/yr`
-    : 'fee details available';
-  const naacStr = college.naac_grade ? `, NAAC ${college.naac_grade}` : '';
-  const seatsStr = college.total_barch_seats ? `, ${college.total_barch_seats} B.Arch seats` : '';
+/** Characters the layout template adds after every title: "%s | Neram Classes". */
+export const TITLE_SUFFIX = ' | Neram Classes';
+export const TITLE_MAX = 60;
+export const DESCRIPTION_MAX = 155;
 
-  const title = `${college.name}: B.Arch Admission, Fees, Cutoffs 2026`;
-  const description =
-    college.about ??
-    `${college.name} in ${college.city}, ${college.state}${naacStr}. ${feeStr}${seatsStr}. Check NATA cutoffs, fee structure, placements, faculty, and infrastructure.`;
+const OG_LOCALES: Record<string, string> = { ta: 'ta_IN', hi: 'hi_IN', kn: 'kn_IN', ml: 'ml_IN' };
+const ogLocale = (locale: string) => OG_LOCALES[locale] ?? 'en_IN';
 
-  const canonicalPath = `/colleges/${college.state_slug ?? 'india'}/${college.slug}`;
-  const ogImage = college.hero_image_url ?? buildOgImage(college.name, `${college.city}, ${college.state}`, 'tool');
+/** Cut to `max` characters at a word boundary, dropping trailing punctuation. */
+export function truncateAtWord(text: string, max: number): string {
+  const t = text.replace(/\s+/g, ' ').trim();
+  if (t.length <= max) return t;
+  const cut = t.slice(0, max + 1);
+  const lastSpace = cut.lastIndexOf(' ');
+  const base = (lastSpace > max * 0.5 ? cut.slice(0, lastSpace) : t.slice(0, max)).replace(/[\s,;:(]+$/, '');
+  return base;
+}
+
+type TitleInput = Pick<College, 'name' | 'short_name' | 'meta_title'>;
+
+/**
+ * Longest variant that fits in 60 characters before the layout suffix:
+ *   "{n} B.Arch {Y}: Fees, Cutoff, Placements"
+ *   "{n} B.Arch Fees, Cutoff {Y}"
+ *   "{n} B.Arch {Y}"
+ * n is the short name when there is one. A staff meta_title always wins.
+ */
+export function buildCollegeTitle(c: TitleInput, year: number = admissionYear()): string {
+  if (c.meta_title?.trim()) return c.meta_title.trim();
+  const n = displayName(c);
+  const ladder = [
+    `${n} B.Arch ${year}: Fees, Cutoff, Placements`,
+    `${n} B.Arch Fees, Cutoff ${year}`,
+    `${n} B.Arch ${year}`,
+  ];
+  const fit = ladder.find((t) => t.length <= TITLE_MAX);
+  if (fit) return fit;
+  const tail = ` B.Arch ${year}`;
+  return `${truncateAtWord(n, TITLE_MAX - tail.length)}${tail}`;
+}
+
+type DescriptionInput = Pick<
+  College,
+  | 'name'
+  | 'short_name'
+  | 'city'
+  | 'state'
+  | 'naac_grade'
+  | 'annual_fee_approx'
+  | 'annual_fee_min'
+  | 'total_barch_seats'
+  | 'accepted_exams'
+  | 'counseling_systems'
+  | 'coa_approved'
+  | 'type'
+  | 'meta_description'
+>;
+
+/**
+ * Answer-first, built from facts, at most 155 characters. Names the college's
+ * own counselling systems (first two), never a default exam. Whole sentences
+ * are added while they fit; only a too-long first sentence is cut.
+ */
+export function buildCollegeDescription(c: DescriptionInput): string {
+  if (c.meta_description?.trim()) return c.meta_description.trim();
+  const name = c.name.length > 60 ? displayName(c) : c.name;
+  const place = [c.city, c.state].filter(Boolean).join(', ');
+  const fee = annualFee(c);
+  const facts: string[] = [];
+  if (c.total_barch_seats) facts.push(`${c.total_barch_seats} seats`);
+  if (fee) facts.push(`${fee.from ? 'from ' : ''}${feeText(fee.amount)} a year`);
+  if (c.naac_grade) facts.push(`NAAC ${c.naac_grade}`);
+
+  const first = `${name}${place ? `, ${place}` : ''}: B.Arch${facts.length ? ` with ${joinAnd(facts)}` : ''}.`;
+  const systems = systemLabels(c.counseling_systems).slice(0, 2);
+  const exams = examLabels(c.accepted_exams).slice(0, 2);
+  const sentences = [first];
+  if (systems.length) sentences.push(`Admission through ${joinAnd(systems)} counselling.`);
+  else if (exams.length) sentences.push(`Admission on ${joinOr(exams)} scores.`);
+  if (c.coa_approved) sentences.push('COA approved.');
+  sentences.push(systems.length ? 'See cutoffs, fees and FAQs.' : 'See fees, admission and FAQs.');
+
+  let out = '';
+  for (const s of sentences) {
+    const next = out ? `${out} ${s}` : s;
+    if (next.length > DESCRIPTION_MAX) {
+      if (!out) out = truncateAtWord(s, DESCRIPTION_MAX);
+      break;
+    }
+    out = next;
+  }
+  return out;
+}
+
+export type DetailMetadataInput = TitleInput &
+  DescriptionInput &
+  Pick<College, 'slug' | 'state_slug' | 'hero_image_url'>;
+
+export function generateCollegeDetailMetadata(locale: string, college: DetailMetadataInput): Metadata {
+  const title = buildCollegeTitle(college);
+  const description = buildCollegeDescription(college);
+  const n = displayName(college);
+
+  const canonicalPath = canonicalCollegePath(college);
+  const image = college.hero_image_url
+    ? { url: college.hero_image_url, alt: `${college.name} campus` }
+    : {
+        url: buildOgImage(`${n} B.Arch`, [college.city, college.state].filter(Boolean).join(', '), 'tool'),
+        width: 1200,
+        height: 630,
+        alt: `${college.name}: B.Arch fees, cutoff and admission`,
+      };
+  // The layout's suffix is not applied to og:title, so add it here.
+  const socialTitle = `${title}${TITLE_SUFFIX}`;
 
   return {
     title,
     description,
-    keywords: `${college.name}, ${college.name} B.Arch, ${college.name} fees, ${college.name} cutoff, ${college.city} architecture college`,
+    keywords: `${n}, ${n} B.Arch, ${n} fees, ${n} cutoff, ${college.city} architecture college`,
     alternates: buildAlternates(locale, canonicalPath),
+    // Next replaces (not merges) openGraph and twitter objects, so the layout's
+    // siteName, locale, site and creator are repeated here.
     openGraph: {
-      title,
+      title: socialTitle,
       description,
       type: 'website',
       url: `${BASE_URL}${canonicalPath}`,
-      images: [ogImage],
+      siteName: 'Neram Classes',
+      locale: ogLocale(locale),
+      images: [image],
     },
-    twitter: { card: 'summary_large_image', title, description },
+    twitter: {
+      card: 'summary_large_image',
+      site: '@neramclasses',
+      creator: '@neramclasses',
+      title: socialTitle,
+      description,
+      images: [{ url: image.url, alt: image.alt }],
+    },
   };
+}
+
+/** Metadata for a slug with no active college. */
+export function collegeNotFoundMetadata(): Metadata {
+  return { title: 'College not found', robots: { index: false, follow: true } };
 }
 
 // ─── TNEA hub page ───────────────────────────────────────────────────────────

@@ -102,6 +102,26 @@ export interface College {
   contact_status?: string | null;
   last_outreach_at?: string | null;
   outreach_count?: number | null;
+  // Geo (filled by a cron; 0/null until then)
+  latitude?: number | null;
+  longitude?: number | null;
+  // Photo provenance (photo cron, migration 20261114090000)
+  hero_image_credit?: string | null;
+  hero_image_source_url?: string | null;
+  hero_image_license?: string | null;
+  logo_source_url?: string | null;
+  photo_status?: string | null;
+  photo_checked_at?: string | null;
+  photo_attempts?: number | null;
+  // Entity + FAQ content (migration 20261115090000)
+  aliases?: string[] | null;
+  wikidata_id?: string | null;
+  faq_facts_hash?: string | null;
+  faqs_generated_at?: string | null;
+  // SEO overrides set by staff
+  meta_title?: string | null;
+  meta_description?: string | null;
+  nirf_year?: number | null;
   // Timestamps
   created_at: string | null;
   updated_at: string | null;
@@ -229,6 +249,8 @@ export interface CollegeListItem {
   counseling_systems: string[] | null;
   logo_url: string | null;
   hero_image_url: string | null;
+  /** Photographer credit for hero_image_url (CC BY). Optional until every env has the column. */
+  hero_image_credit?: string | null;
   admissions_phone: string | null;
   brochure_url: string | null;
   avg_placement_salary: number | null;
@@ -306,6 +328,27 @@ export interface CollegeComment {
   status: 'approved' | 'removed';
   created_at: string;
   replies?: CollegeComment[];
+}
+
+/** One row of college_faqs (public read). Written by the Admin content cron or staff. */
+export interface CollegeFaqRow {
+  id: string;
+  college_id: string;
+  position: number;
+  question: string;
+  answer: string;
+  intent: string | null;
+  fact_keys: string[];
+  generated_by: 'ai' | 'template' | 'staff';
+  locked: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+/** A question and answer as rendered on the page and in FAQPage JSON-LD. */
+export interface CollegeFaqItem {
+  question: string;
+  answer: string;
 }
 
 // Phase 6: Virtual campus tour data (Platinum-tier colleges only)

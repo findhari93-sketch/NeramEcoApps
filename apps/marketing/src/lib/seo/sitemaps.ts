@@ -3,7 +3,7 @@
  * the index format and the "what changed recently" selection are unit-tested.
  */
 
-export const CHILD_SITEMAPS = ['/sitemaps/core/sitemap.xml', '/sitemaps/coaching-locations/sitemap.xml', '/sitemaps/videos/sitemap.xml', '/sitemaps/centre-images/sitemap.xml'];
+export const CHILD_SITEMAPS = ['/sitemaps/core/sitemap.xml', '/sitemaps/coaching-locations/sitemap.xml', '/sitemaps/videos/sitemap.xml', '/sitemaps/centre-images/sitemap.xml', '/sitemaps/college-images/sitemap.xml'];
 
 export function buildSitemapIndex(baseUrl: string, lastmod: string): string {
   return `<?xml version="1.0" encoding="UTF-8"?>
@@ -62,12 +62,13 @@ const xmlEsc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').rep
  * (Google allows up to 1,000 images per page). Pages without photos are left
  * out. Next 14's sitemap.ts has no image field, hence a hand-built XML.
  */
-export function buildImageSitemap(pages: Array<{ loc: string; images: string[] }>): string {
+export function buildImageSitemap(pages: Array<{ loc: string; images: string[]; lastmod?: string | null }>): string {
   const urls = pages
     .filter((p) => p.images.length > 0)
     .map(
       (p) => `  <url>
-    <loc>${xmlEsc(p.loc)}</loc>
+    <loc>${xmlEsc(p.loc)}</loc>${p.lastmod ? `
+    <lastmod>${xmlEsc(p.lastmod)}</lastmod>` : ''}
 ${p.images
   .slice(0, 1000)
   .map((src) => `    <image:image><image:loc>${xmlEsc(src)}</image:loc></image:image>`)

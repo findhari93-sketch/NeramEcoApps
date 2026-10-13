@@ -206,3 +206,23 @@ export const EXAM_TYPES = [
   { value: 'NATA', label: 'NATA' },
   { value: 'JEE_PAPER_2', label: 'JEE Paper 2' },
 ] as const;
+
+// ─── Admission cycle ─────────────────────────────────────────────────────────
+
+/**
+ * The B.Arch admission year students are searching for. Counselling for the
+ * current year ends by June, so from July (month index 6) the next cycle is
+ * the one that matters: in October 2026 students search "B.Arch 2027".
+ */
+export function admissionYear(now: Date = new Date()): number {
+  return now.getMonth() >= 6 ? now.getFullYear() + 1 : now.getFullYear();
+}
+
+/** Admission year at module load. Prefer admissionYear() inside renders. */
+export const ADMISSION_YEAR = admissionYear();
+
+/** Display labels for raw accepted_exams values (the DB mixes styles). */
+export const EXAM_LABELS: Record<string, string> = {
+  JEE_PAPER_2: 'JEE Main Paper 2',
+  'MHT-CET': 'MHT CET',
+};

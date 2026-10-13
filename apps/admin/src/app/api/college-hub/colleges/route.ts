@@ -3,9 +3,10 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@neram/database';
 import { parseCollegeListQuery } from '@/lib/college-list-query';
+import { pickCollegePatch } from '@/lib/college-photos/patch';
 
 const LIST_COLUMNS =
-  'id,slug,name,short_name,city,state,type,neram_tier,coa_approved,naac_grade,nirf_rank_architecture,arch_index_score,verified,data_completeness,claimed';
+  'id,slug,name,short_name,city,state,type,neram_tier,coa_approved,naac_grade,nirf_rank_architecture,arch_index_score,verified,data_completeness,claimed,hero_image_url,logo_url,photo_status';
 
 /**
  * GET /api/college-hub/colleges
@@ -39,13 +40,21 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({ data: data ?? [], total: count ?? (data ?? []).length });
 }
 
+/**
+ * PATCH /api/college-hub/colleges  { id, ...fields }
+ *
+ * Only the fields in lib/college-photos/patch.ts (tier, photos, aliases) go
+ * through. Editing a photo marks the college 'manual' so the photo cron leaves it.
+ */
 export async function PATCH(request: NextRequest) {
-  const body = await request.json();
-  const { id, ...updates } = body;
-  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 });
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!body || typeof body.id !== 'string') return NextResponse.json({ error: 'id required' }, { status: 400 });
+  const { id, ...rest } = body;
+  const patch = pickCollegePatch(rest);
+  if (!patch.ok) return NextResponse.json({ error: patch.error }, { status: 400 });
 
   const supabase = createAdminClient();
-  const { error } = await supabase.from('colleges').update(updates).eq('id', id);
+  const { error } = await supabase.from('colleges').update(patch.updates as never).eq('id', id as string);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ success: true });
 }

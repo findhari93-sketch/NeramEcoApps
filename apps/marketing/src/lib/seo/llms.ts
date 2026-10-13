@@ -15,6 +15,61 @@ import { allCityGates, allStateGates } from './location-pages';
 
 const U = (path: string) => `${ORG_FACTS.url}${path}`;
 
+/** The college fields the llms files list (one cached select, see college-hub/queries). */
+export interface LlmsCollege {
+  name: string;
+  slug: string;
+  state: string;
+  state_slug: string | null;
+  city: string | null;
+  type: string | null;
+  annual_fee_approx: number | null;
+  total_barch_seats: number | null;
+  counseling_systems: string[] | null;
+}
+
+const collegeUrl = (c: Pick<LlmsCollege, 'slug' | 'state_slug'>) => U(`/colleges/${c.state_slug ?? 'india'}/${c.slug}`);
+
+const titleCase = (s: string) => s.trim().toLowerCase().replace(/\b\w/g, (m) => m.toUpperCase());
+
+/** "- [Name](url): city, type, ₹1,50,000/yr, 60 seats, TNEA". Missing facts are skipped. */
+export function collegeLine(c: LlmsCollege): string {
+  const systems = (c.counseling_systems ?? []).filter((s) => s && s.toLowerCase() !== 'other').map((s) => s.replace(/_/g, ' '));
+  const facts = [
+    c.city?.trim() || null,
+    c.type ? titleCase(c.type) : null,
+    c.annual_fee_approx ? `${inr(c.annual_fee_approx)}/yr` : null,
+    c.total_barch_seats ? `${c.total_barch_seats} seats` : null,
+    systems.length ? systems.join(', ') : null,
+  ].filter(Boolean);
+  return `- [${c.name}](${collegeUrl(c)})${facts.length ? `: ${facts.join(', ')}` : ''}`;
+}
+
+/** States that have a /colleges/{state} hub, alphabetical. */
+function collegeStates(colleges: LlmsCollege[]): Array<{ slug: string; name: string; count: number }> {
+  const m = new Map<string, { slug: string; name: string; count: number }>();
+  for (const c of colleges) {
+    if (!c.state_slug) continue;
+    const e = m.get(c.state_slug);
+    if (e) e.count++;
+    else m.set(c.state_slug, { slug: c.state_slug, name: c.state, count: 1 });
+  }
+  return [...m.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** "## B.Arch colleges in India", grouped by state, one line per college. */
+export function collegeDirectory(colleges: LlmsCollege[]): string[] {
+  if (!colleges.length) return [];
+  const out = ['## B.Arch colleges in India', ''];
+  for (const st of collegeStates(colleges)) {
+    out.push(`### ${st.name}`, U(`/colleges/${st.slug}`));
+    const inState = colleges.filter((c) => c.state_slug === st.slug).sort((a, b) => a.name.localeCompare(b.name));
+    for (const c of inState) out.push(collegeLine(c));
+    out.push('');
+  }
+  return out;
+}
+
 function header(): string[] {
   return [
     `# ${ORG_FACTS.name}`,
@@ -79,8 +134,9 @@ function mainPages(): string[] {
 }
 
 /** Short version: facts, main pages and the indexed state hubs. */
-export function buildLlmsTxt(ds: GeoDatasets): string {
+export function buildLlmsTxt(ds: GeoDatasets, colleges: LlmsCollege[] = []): string {
   const states = allStateGates('nata', ds).filter((s) => s.gate.index);
+  const hubs = collegeStates(colleges);
   return [
     ...header(),
     ...centres(ds.centres),
@@ -88,13 +144,16 @@ export function buildLlmsTxt(ds: GeoDatasets): string {
     '## NATA coaching by state',
     ...states.map(({ state }) => `- ${state.name}: ${U(EXAMS.nata.statePath(state.slug))}`),
     '',
-    `For every city page, local B.Arch colleges and NATA test cities, see ${U('/llms-full.txt')}`,
+    ...(hubs.length
+      ? ['## B.Arch colleges by state', ...hubs.map((h) => `- ${h.name} (${h.count} ${h.count === 1 ? "college" : "colleges"}): ${U(`/colleges/${h.slug}`)}`), '']
+      : []),
+    `For every city page, every B.Arch college, local colleges and NATA test cities, see ${U('/llms-full.txt')}`,
     '',
   ].join('\n');
 }
 
 /** Full version: adds every indexed state and city with its answer, as the pages state it. */
-export function buildLlmsFullTxt(ds: GeoDatasets): string {
+export function buildLlmsFullTxt(ds: GeoDatasets, colleges: LlmsCollege[] = []): string {
   const stateGates = new Map(allStateGates('nata', ds).map((s) => [s.state.slug, s]));
   const cities = allCityGates('nata', ds).filter((c) => c.gate.index);
   const out = [...header(), ...centres(ds.centres), ...mainPages(), '## NATA coaching by state and city', ''];
@@ -116,5 +175,6 @@ export function buildLlmsFullTxt(ds: GeoDatasets): string {
     for (const c of gulf) out.push(`- ${c.place.name}, ${c.facts.regionName}: ${U(EXAMS.nata.cityPath(c.place.slug))}`);
     out.push('');
   }
+  out.push(...collegeDirectory(colleges));
   return out.join('\n');
 }
