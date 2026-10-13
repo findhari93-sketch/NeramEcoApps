@@ -109,5 +109,8 @@ docs/audits/perf/**/.ledger.lock
 docs/audits/perf/**/.snapshot.json
 docs/audits/perf/**/*.tmp
 
+# Supabase security advisor reports name open tables and functions; the repo is public.
+docs/audits/security/reports/
+
 # Subagent-driven-development ledgers (per-plan scratch)
 .superpowers/

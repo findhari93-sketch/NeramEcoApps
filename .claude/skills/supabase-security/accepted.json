@@ -1,0 +1,53 @@
+{
+  "_comment": "Advisor findings we keep on purpose. triage.mjs and the weekly GitHub check ignore these. object is schema.name (or the metadata entity), or * for every object of that rule. env is prod or staging; leave it out for both. Add an entry only with a reason the user agreed to.",
+  "accepted": [
+    {
+      "rule": "rls_enabled_no_policy",
+      "object": "*",
+      "reason": "INFO. RLS on with no policy means only the service role can read or write, which is how every app reaches these tables (createAdminClient).",
+      "since": "2026-10-13"
+    },
+    {
+      "rule": "extension_in_public",
+      "object": "public.pg_net",
+      "reason": "pg_net does not support ALTER EXTENSION SET SCHEMA; moving it means drop and recreate, which breaks the pg_cron jobs that call it.",
+      "since": "2026-10-13"
+    },
+    {
+      "rule": "extension_in_public",
+      "object": "public.pg_trgm",
+      "reason": "Trigram indexes and search functions reference public operator classes. Moving the extension has risk and no security gain.",
+      "since": "2026-10-13"
+    },
+    {
+      "rule": "anon_security_definer_function_executable",
+      "object": "public.check_username_available",
+      "reason": "apps/app /api/auth/check-username calls it with the anon client. It only says whether a username is taken.",
+      "since": "2026-10-13"
+    },
+    {
+      "rule": "authenticated_security_definer_function_executable",
+      "object": "public.check_username_available",
+      "reason": "Same as the anon entry.",
+      "since": "2026-10-13"
+    },
+    {
+      "rule": "anon_security_definer_function_executable",
+      "object": "public.suggest_usernames",
+      "reason": "apps/app /api/auth/check-username calls it with the anon client. It only suggests free usernames.",
+      "since": "2026-10-13"
+    },
+    {
+      "rule": "authenticated_security_definer_function_executable",
+      "object": "public.suggest_usernames",
+      "reason": "Same as the anon entry.",
+      "since": "2026-10-13"
+    },
+    {
+      "rule": "auth_leaked_password_protection",
+      "object": "*",
+      "reason": "Nobody signs in with Supabase Auth passwords. Students use Firebase, staff use Microsoft Entra.",
+      "since": "2026-10-13"
+    }
+  ]
+}
