@@ -274,12 +274,13 @@ export default function ClassCard({
               </Typography>
             </Box>
           )}
-          {/* "There is extra help on this class." A count, not a list: the week
+          {/* "There is extra help on this class": reference material and videos to
+              watch first, counted together. A count, not a list: the week
               payload deliberately carries only the number. */}
           {materialCount > 0 && (
             <MenuBookOutlinedIcon
               sx={{ fontSize: 14, color: 'text.disabled' }}
-              titleAccess={`${materialCount} piece${materialCount === 1 ? '' : 's'} of reference material`}
+              titleAccess={`${materialCount} thing${materialCount === 1 ? '' : 's'} to read or watch for this class`}
             />
           )}
         </Box>

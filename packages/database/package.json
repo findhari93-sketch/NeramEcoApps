@@ -12,7 +12,8 @@
     "./queries": "./src/queries/index.ts",
     "./queries/nexus": "./src/queries/nexus/index.ts",
     "./analytics": "./src/analytics/index.ts",
-    "./demo-schedule": "./src/utils/demo-schedule.ts"
+    "./demo-schedule": "./src/utils/demo-schedule.ts",
+    "./drawing-grade": "./src/queries/nexus/drawing-grade.ts"
   },
   "scripts": {
     "generate": "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID > src/types/supabase.ts",

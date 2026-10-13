@@ -5,7 +5,12 @@ const swr = vi.fn();
 // vi.hoisted: this factory returns `api` directly (not a lazy closure over it like the
 // swr mock below), so it is read at mock-registration time, before imports run. Without
 // vi.hoisted, `api` would still be in its temporal dead zone at that point.
-const api = vi.hoisted(() => ({ flipSketch: vi.fn(async () => ({ ok: true })), reactToSketch: vi.fn(async () => ({ reaction: 'fire' })), featureSketch: vi.fn(), unfeatureSketch: vi.fn() }));
+const api = vi.hoisted(() => ({
+  flipSketch: vi.fn(async () => ({ ok: true })),
+  saveEvaluation: vi.fn(async () => ({ reaction: 'fire', grade: null, evaluated: false })),
+  featureSketch: vi.fn(),
+  unfeatureSketch: vi.fn(),
+}));
 const badges = vi.hoisted(() => ({ refreshBadges: vi.fn() }));
 vi.mock('@/lib/nexus-swr', () => ({ useAuthSWR: (...a: unknown[]) => swr(...a) }));
 vi.mock('./sketchbook-api', async (importOriginal) => ({ ...(await importOriginal<typeof import('./sketchbook-api')>()), ...api }));
@@ -22,35 +27,34 @@ vi.mock('@/components/students/StudentStageFactsProvider', () => ({ useStudentSt
 // mock would collide with `getByText('Asha Rao')` (two elements with that exact text).
 vi.mock('@/components/students/StudentStageAvatar', () => ({ default: ({ name }: { name?: string | null }) => <div aria-label={name ? `Avatar for ${name}` : 'Avatar'} /> }));
 
-import FlipThrough, { ADVANCE_AFTER_MS, SWIPE_MIN_PX, UNDO_WINDOW_MS } from './FlipThrough';
+import FlipThrough, { SWIPE_MIN_PX, UNDO_WINDOW_MS, describeChange } from './FlipThrough';
 
 const row = (id: string, name = 'Asha Rao') => ({
   id, student_id: 's1', original_image_url: `https://x/${id}.jpg`, thumbnail_url: null, self_note: 'a chair',
-  reaction: null, submitted_at: '2026-09-09T10:00:00.000Z', is_gallery_visible: false,
+  reaction: null, drawing_grade: null, evaluated_at: null, submitted_at: '2026-09-09T10:00:00.000Z', is_gallery_visible: false,
   source_type: 'sketchbook', status: 'completed', assignment_id: null, reviewed_at: null,
   student: { id: 's1', name, avatar_url: null, ms_oid: null },
   featured: [],
 });
 
 const inbox = (...ids: string[]) => ({ data: { sketches: ids.map((id) => row(id)), remaining: 0 }, isLoading: false, mutate: vi.fn() });
-const reactCalls = () => api.reactToSketch.mock.calls as unknown[][];
+const saves = () => api.saveEvaluation.mock.calls as unknown[][];
 const skips = () => (api.flipSketch.mock.calls as unknown[][]).filter((c) => c[2] === 'skipped');
 
 describe('FlipThrough', () => {
   beforeEach(() => {
     api.flipSketch.mockClear();
-    api.reactToSketch.mockReset();
-    api.reactToSketch.mockResolvedValue({ reaction: 'fire' });
+    api.saveEvaluation.mockReset();
+    api.saveEvaluation.mockResolvedValue({ reaction: 'fire', grade: null, evaluated: false });
     badges.refreshBadges.mockClear();
   });
 
-  it('shows the first sketch with the student name and three reaction buttons', () => {
+  it('shows the first sketch with the student name, the grade row and three reaction buttons', () => {
     swr.mockReturnValue(inbox('a', 'b'));
     render(<FlipThrough classroomId="c1" />);
     expect(screen.getByText('Asha Rao')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Nice' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Great' })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Wow' })).toBeTruthy();
+    for (const name of ['Top', 'Mid', 'Needs practice', 'Nice', 'Great', 'Wow']) expect(screen.getByRole('button', { name })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Grade for this drawing' })).toBeTruthy();
     expect(screen.getByText('1 of 2')).toBeTruthy();
   });
 
@@ -87,7 +91,6 @@ describe('FlipThrough', () => {
     render(<FlipThrough classroomId="c1" />);
     for (const name of ['Previous', 'Comment', 'Feature', 'Next']) expect(screen.getByRole('button', { name })).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Previous' }) as HTMLButtonElement).disabled).toBe(true);
-    // No "Sent" line or chip in the dock: the card moves on and the Undo bar says it.
     expect(screen.queryByText(/^Sent /)).toBeNull();
   });
 
@@ -125,115 +128,186 @@ describe('FlipThrough', () => {
     expect(screen.queryByText('Could not load the flip through')).toBeNull();
   });
 
-  describe('instant reactions', () => {
+  it('describes a save in plain words', () => {
+    expect(describeChange({ grade: 'mid', reaction: 'wow', comment: 'x' })).toBe('Mid, Wow and comment');
+    expect(describeChange({ reaction: 'heart' })).toBe('Nice');
+    expect(describeChange({ grade: 'needs_practice', comment: 'x' })).toBe('Needs practice and comment');
+  });
+
+  describe('save on move', () => {
     beforeEach(() => { vi.useFakeTimers(); });
     afterEach(() => { vi.useRealTimers(); });
 
     const tick = async (ms: number) => { await act(async () => { await vi.advanceTimersByTimeAsync(ms); }); };
+    const tap = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
+    const comment = (text: string) => {
+      tap('Comment');
+      fireEvent.change(screen.getByLabelText('Comment'), { target: { value: text } });
+      tap('Add');
+    };
 
-    it('a reaction moves to the next sketch at once and sends after the undo window', async () => {
+    it('a grade or a reaction marks the card and never moves it or sends', async () => {
       swr.mockReturnValue(inbox('a', 'b'));
       render(<FlipThrough classroomId="c1" />);
-      fireEvent.click(screen.getByRole('button', { name: 'Great' }));
-      await tick(ADVANCE_AFTER_MS);
-      expect(screen.getByText('2 of 2')).toBeTruthy();
-      expect(screen.getByTestId('flip-status').textContent).toContain('Great for Asha');
-      expect(api.reactToSketch).not.toHaveBeenCalled();
+      tap('Mid');
+      tap('Wow');
+      await tick(UNDO_WINDOW_MS * 3);
+      expect(screen.getByText('1 of 2')).toBeTruthy();
+      expect(api.saveEvaluation).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: 'Mid' }).getAttribute('aria-pressed')).toBe('true');
+      expect(screen.getByRole('button', { name: 'Wow' }).getAttribute('aria-pressed')).toBe('true');
+    });
 
+    it('the status chip says what is missing until both are given', () => {
+      swr.mockReturnValue(inbox('a', 'b'));
+      render(<FlipThrough classroomId="c1" />);
+      expect(screen.getByTestId('flip-evaluation').textContent).toBe('Not evaluated');
+      tap('Great');
+      expect(screen.getByTestId('flip-evaluation').textContent).toBe('Needs grade');
+      tap('Top');
+      expect(screen.getByTestId('flip-evaluation').textContent).toBe('Evaluated');
+      tap('Great'); // a second tap takes the reaction back
+      expect(screen.getByTestId('flip-evaluation').textContent).toBe('Needs reaction');
+    });
+
+    it('Next sends grade, reaction and comment as one save after the undo window', async () => {
+      swr.mockReturnValue(inbox('a', 'b'));
+      render(<FlipThrough classroomId="c1" />);
+      tap('Mid');
+      tap('Wow');
+      comment('Softer shadow');
+      expect(screen.getByTestId('flip-comments').textContent).toContain('Softer shadow');
+      tap('Next');
+      expect(screen.getByText('2 of 2')).toBeTruthy();
+      expect(screen.getByTestId('flip-status').textContent).toContain('Sending to Asha: Mid, Wow and comment');
+      expect(api.saveEvaluation).not.toHaveBeenCalled();
       await tick(UNDO_WINDOW_MS);
-      expect(reactCalls()).toHaveLength(1);
-      expect(reactCalls()[0].slice(1)).toEqual(['a', 'fire', undefined, { keepalive: true }]);
-      const getter = reactCalls()[0][0] as () => Promise<string>;
-      expect(await getter()).toBe('teacher-t');
+      expect(saves()).toHaveLength(1);
+      expect(saves()[0].slice(1)).toEqual(['a', { grade: 'mid', reaction: 'wow', comment: 'Softer shadow' }, { keepalive: true }]);
+      expect(await (saves()[0][0] as () => Promise<string>)()).toBe('teacher-t');
+      expect(skips()).toHaveLength(0);
       expect(badges.refreshBadges).toHaveBeenCalled();
+    });
+
+    it('swiping either way saves the card too', async () => {
+      swr.mockReturnValue(inbox('a', 'b'));
+      render(<FlipThrough classroomId="c1" />);
+      const swipe = (fromX: number, toX: number) => {
+        const sketch = screen.getByTestId('flip-sketch');
+        fireEvent.touchStart(sketch, { touches: [{ clientX: fromX, clientY: 300 }] });
+        fireEvent.touchEnd(sketch, { changedTouches: [{ clientX: toX, clientY: 300 }] });
+      };
+      tap('Top');
+      swipe(300, 300 - SWIPE_MIN_PX - 10);
+      expect(screen.getByText('2 of 2')).toBeTruthy();
+      tap('Nice');
+      swipe(100, 100 + SWIPE_MIN_PX + 10);
+      expect(screen.getByText('1 of 2')).toBeTruthy();
+      await tick(UNDO_WINDOW_MS);
+      expect(saves().map((c) => [c[1], c[2]])).toEqual([['a', { grade: 'top' }], ['b', { reaction: 'heart' }]]);
+    });
+
+    it('Undo returns to the card with the choices still made, and sends nothing', async () => {
+      swr.mockReturnValue(inbox('a', 'b'));
+      render(<FlipThrough classroomId="c1" />);
+      tap('Mid');
+      tap('Wow');
+      tap('Next');
+      tap('Undo');
+      expect(screen.getByText('1 of 2')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Mid' }).getAttribute('aria-pressed')).toBe('true');
+      expect(screen.getByRole('button', { name: 'Wow' }).getAttribute('aria-pressed')).toBe('true');
+      await tick(UNDO_WINDOW_MS * 2);
+      expect(api.saveEvaluation).not.toHaveBeenCalled();
+    });
+
+    it('Next with nothing given is a skip and sends nothing', async () => {
+      swr.mockReturnValue(inbox('a', 'b'));
+      render(<FlipThrough classroomId="c1" />);
+      tap('Wow');
+      tap('Wow'); // changed their mind
+      tap('Next');
+      await tick(UNDO_WINDOW_MS);
+      expect(api.saveEvaluation).not.toHaveBeenCalled();
+      expect(skips()).toHaveLength(1);
       expect(screen.queryByTestId('flip-status')).toBeNull();
     });
 
-    it('Undo inside the window sends nothing and returns to that sketch', async () => {
+    it('1, 2 and 3 set the reaction from the keyboard without moving on', async () => {
       swr.mockReturnValue(inbox('a', 'b'));
       render(<FlipThrough classroomId="c1" />);
-      fireEvent.click(screen.getByRole('button', { name: 'Wow' }));
-      await tick(ADVANCE_AFTER_MS);
-      fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
-      expect(screen.getByText('1 of 2')).toBeTruthy();
-      await tick(UNDO_WINDOW_MS * 2);
-      expect(api.reactToSketch).not.toHaveBeenCalled();
-      // The card no longer shows Wow as chosen.
-      expect(screen.getByRole('button', { name: 'Wow' }).className).not.toMatch(/contained/i);
-    });
-
-    it('1, 2 and 3 react from the keyboard', async () => {
-      swr.mockReturnValue(inbox('a', 'b', 'c'));
-      render(<FlipThrough classroomId="c1" />);
       fireEvent.keyDown(window, { key: '3' });
-      await tick(ADVANCE_AFTER_MS);
-      expect(screen.getByText('2 of 3')).toBeTruthy();
-      fireEvent.keyDown(window, { key: '1' });
-      await tick(ADVANCE_AFTER_MS + UNDO_WINDOW_MS);
-      expect(reactCalls().map((c) => [c[1], c[2]])).toEqual([['a', 'wow'], ['b', 'heart']]);
+      expect(screen.getByText('1 of 2')).toBeTruthy();
+      fireEvent.keyDown(window, { key: 'ArrowRight' });
+      await tick(UNDO_WINDOW_MS);
+      expect(saves()[0].slice(1, 3)).toEqual(['a', { reaction: 'wow' }]);
     });
 
-    it('keeps Undo reachable after reacting to the last sketch', async () => {
+    it('keeps Undo reachable after the last sketch', async () => {
       swr.mockReturnValue(inbox('a'));
       render(<FlipThrough classroomId="c1" />);
-      fireEvent.click(screen.getByRole('button', { name: 'Nice' }));
-      await tick(ADVANCE_AFTER_MS);
+      tap('Nice');
+      tap('Next');
       expect(screen.getByText('You have flipped through everything.')).toBeTruthy();
-      fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+      tap('Undo');
       expect(screen.getByText('1 of 1')).toBeTruthy();
     });
 
     it('a failed send says so and Retry sends it again', async () => {
-      api.reactToSketch.mockRejectedValueOnce(new Error('offline'));
+      api.saveEvaluation.mockRejectedValueOnce(new Error('offline'));
       swr.mockReturnValue(inbox('a', 'b'));
       render(<FlipThrough classroomId="c1" />);
-      fireEvent.click(screen.getByRole('button', { name: 'Great' }));
-      await tick(ADVANCE_AFTER_MS + UNDO_WINDOW_MS);
-      expect(screen.getByTestId('flip-status').textContent).toContain('Could not send Great to Asha');
-      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-      await tick(0);
-      expect(reactCalls()).toHaveLength(2);
-      expect(reactCalls()[1].slice(1)).toEqual(['a', 'fire', undefined, { keepalive: true }]);
-    });
-
-    it('a comment on its own goes through the same window and moves on', async () => {
-      swr.mockReturnValue(inbox('a', 'b'));
-      render(<FlipThrough classroomId="c1" />);
-      fireEvent.click(screen.getByRole('button', { name: 'Comment' }));
-      fireEvent.change(screen.getByLabelText('Comment'), { target: { value: 'Softer shadow' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-      await tick(ADVANCE_AFTER_MS);
-      expect(screen.getByText('2 of 2')).toBeTruthy();
+      tap('Great');
+      tap('Next');
       await tick(UNDO_WINDOW_MS);
-      expect(reactCalls()[0].slice(1)).toEqual(['a', undefined, 'Softer shadow', { keepalive: true }]);
+      expect(screen.getByTestId('flip-status').textContent).toContain('Could not send to Asha');
+      tap('Retry');
+      await tick(0);
+      expect(saves()).toHaveLength(2);
+      expect(saves()[1].slice(1, 3)).toEqual(['a', { reaction: 'fire' }]);
     });
 
-    it('leaving the screen sends what is held instead of dropping it', async () => {
+    it('coming back inside the window folds a new choice into the same save', async () => {
+      swr.mockReturnValue(inbox('a', 'b'));
+      render(<FlipThrough classroomId="c1" />);
+      tap('Wow');
+      tap('Next');
+      tap('Previous');
+      tap('Mid');
+      tap('Next');
+      await tick(UNDO_WINDOW_MS);
+      expect(saves()).toHaveLength(1);
+      expect(saves()[0].slice(1, 3)).toEqual(['a', { reaction: 'wow', grade: 'mid' }]);
+    });
+
+    it('leaving the screen sends the card on screen and anything held', async () => {
       swr.mockReturnValue(inbox('a', 'b'));
       const { unmount } = render(<FlipThrough classroomId="c1" />);
-      fireEvent.click(screen.getByRole('button', { name: 'Wow' }));
+      tap('Wow');
+      tap('Next');
+      tap('Top');
       unmount();
       await tick(0);
-      expect(reactCalls()).toHaveLength(1);
-      expect(reactCalls()[0][1]).toBe('a');
+      expect(saves().map((c) => c[1]).sort()).toEqual(['a', 'b']);
     });
 
-    it('answering one photo of a sheet takes its twin off the stack, and Undo puts it back', async () => {
+    it('an evaluated photo takes its twin off the stack, and Undo puts it back', async () => {
       const twinA = { ...row('a'), twin_ids: ['c'] };
       const twinC = { ...row('c'), twin_ids: ['a'] };
       swr.mockReturnValue({ data: { sketches: [twinA, row('b'), twinC], remaining: 0 }, isLoading: false, mutate: vi.fn() });
       render(<FlipThrough classroomId="c1" />);
-      fireEvent.click(screen.getByRole('button', { name: 'Wow' }));
-      await tick(ADVANCE_AFTER_MS);
+      tap('Mid');
+      tap('Wow');
+      tap('Next');
       expect(screen.getByText('2 of 2')).toBeTruthy(); // c is gone, b is next
-      fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+      tap('Undo');
       expect(screen.getByText('1 of 3')).toBeTruthy();
     });
 
     it('the list does not shrink under the teacher when the inbox refetches mid-flip', async () => {
       swr.mockReturnValue(inbox('a', 'b', 'c'));
       const { rerender } = render(<FlipThrough classroomId="c1" />);
-      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+      tap('Next');
       expect(screen.getByText('2 of 3')).toBeTruthy();
       swr.mockReturnValue(inbox('c'));
       rerender(<FlipThrough classroomId="c1" />);

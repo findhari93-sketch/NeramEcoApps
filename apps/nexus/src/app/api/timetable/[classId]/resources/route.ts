@@ -19,6 +19,8 @@ import {
   MAX_TITLE_LENGTH,
   MAX_NOTE_LENGTH,
   CLASS_RESOURCE_FOLDER_ID,
+  NOT_PREWATCH_KINDS,
+  isPrewatchKind,
   cleanText,
   detectResourceKind,
   displayHost,
@@ -63,6 +65,8 @@ async function listResources(supabase: any, classId: string) {
     .from('nexus_class_resources')
     .select(RESOURCE_COLS)
     .eq('scheduled_class_id', classId)
+    // Watch-before-class videos live in this table too, as their own section.
+    .not('kind', 'in', NOT_PREWATCH_KINDS)
     .order('sort_order', { ascending: true })
     .order('created_at', { ascending: true });
   return data || [];
@@ -147,9 +151,10 @@ export async function GET(request: NextRequest, { params }: Ctx) {
 
       let query = supabase
         .from('nexus_class_resources')
-        .select(`${RESOURCE_COLS}, cls:nexus_scheduled_classes!inner(id, title, scheduled_date)`)
+        .select(`${RESOURCE_COLS}, cls:nexus_scheduled_classes!nexus_class_resources_scheduled_class_id_fkey!inner(id, title, scheduled_date)`)
         .eq('created_by', access.userId)
         .neq('scheduled_class_id', params.classId)
+        .not('kind', 'in', NOT_PREWATCH_KINDS)
         .order('created_at', { ascending: false })
         .limit(LIBRARY_LIMIT);
       // Escape the PostgREST wildcards so a title with % or _ searches literally.
@@ -360,7 +365,7 @@ async function buildFromCopy(
     .select('id, kind, title, note, url, thumb_url, study_file_id, storage_path, created_by')
     .eq('id', sourceId)
     .maybeSingle();
-  if (!source) throw new Error('That material no longer exists');
+  if (!source || isPrewatchKind(source.kind)) throw new Error('That material no longer exists');
   if (source.created_by !== userId) {
     throw new Error('You can only reuse material you added yourself');
   }

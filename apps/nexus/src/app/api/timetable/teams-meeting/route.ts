@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { buildMeetingHtml, type PostMeta } from '@/lib/teams-meeting-html';
+import { isPrewatchEnabled, loadPrewatch, prewatchLinks } from '@/lib/prewatch-server';
 import { verifyMsToken, extractBearerToken } from '@/lib/ms-verify';
 import { getAppOnlyToken } from '@/lib/graph-app-token';
 import { addMemberToTeam } from '@/lib/teams-sync';
@@ -166,7 +168,21 @@ export async function POST(request: NextRequest) {
         tutorRow = tutor as StaffCalendarRow;
       }
     }
-    const postMeta = { tutorName, schedulerName };
+    const postMeta: PostMeta = { tutorName, schedulerName };
+    // "Watch before class" videos were attached in the create, before this runs,
+    // so the post can list them. Best effort: a failure here costs the list, never
+    // the meeting.
+    try {
+      if (await isPrewatchEnabled()) {
+        const { items } = await loadPrewatch(supabase, scheduledClass.id as string);
+        if (items.length) {
+          const base = process.env.NEXT_PUBLIC_NEXUS_URL || request.nextUrl.origin;
+          postMeta.prewatch = prewatchLinks(base, scheduledClass.id as string, items);
+        }
+      }
+    } catch (err) {
+      console.warn('[teams-meeting] prewatch list skipped:', err instanceof Error ? err.message : err);
+    }
 
     // Who sees this class on their Teams calendar: the tutor (required) plus the
     // internal core team (optional). External teachers are invited only to the
@@ -645,32 +661,6 @@ async function getStaffForClass(
 
 /** Default channel to announce scheduled meetings in (falls back to General). */
 const MEETING_CHANNEL_NAME = 'Class Meeting Details';
-
-/** Tutor + scheduler names surfaced in the Teams channel/chat announcement. */
-type PostMeta = { tutorName?: string; schedulerName?: string };
-
-/** Shared HTML body for the channel post and the group-chat post. */
-function buildMeetingHtml(scheduledClass: Record<string, unknown>, joinUrl: string, rsvpUrl?: string, meta?: PostMeta): string {
-  const desc = (scheduledClass.description as string | null | undefined)?.trim();
-  const tutorName = meta?.tutorName?.trim();
-  const schedulerName = meta?.schedulerName?.trim();
-  const tutorLine = tutorName
-    ? `<p>👩‍🏫 <strong>Tutor:</strong> ${tutorName}${
-        schedulerName && schedulerName !== tutorName
-          ? ` &nbsp;·&nbsp; <strong>Scheduled by:</strong> ${schedulerName}`
-          : ''
-      }</p>`
-    : '';
-  return `<h3>📅 ${scheduledClass.title}</h3>
-<p><strong>Date:</strong> ${scheduledClass.scheduled_date}<br/>
-<strong>Time:</strong> ${scheduledClass.start_time} to ${scheduledClass.end_time} (IST)</p>
-${tutorLine}${desc ? `<p>${desc.replace(/\n/g, '<br/>')}</p>` : ''}
-<p><a href="${joinUrl}">🔗 Join Meeting</a></p>${
-    rsvpUrl
-      ? `\n<p>✋ Can't make it? <a href="${rsvpUrl}">Tap to RSVP</a> (you're marked attending by default).</p>`
-      : ''
-  }`;
-}
 
 /** Absolute URL of the student RSVP page for a class, shared into Teams/WhatsApp. */
 function buildRsvpUrl(request: NextRequest, classId: unknown): string {

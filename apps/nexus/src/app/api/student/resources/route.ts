@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
-import { RESOURCE_COLS } from '@/lib/class-resources';
+import { referenceOnly, RESOURCE_COLS } from '@/lib/class-resources';
 
 /**
  * GET /api/student/resources
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
     const { data: classes } = await supabase
       .from('nexus_scheduled_classes')
       .select(
-        `id, title, scheduled_date, resources:nexus_class_resources!inner(${RESOURCE_COLS})`,
+        `id, title, scheduled_date, resources:nexus_class_resources!nexus_class_resources_scheduled_class_id_fkey!inner(${RESOURCE_COLS})`,
       )
       .in('classroom_id', classroomIds)
       .order('scheduled_date', { ascending: false })
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
         class_id: c.id,
         class_title: c.title,
         scheduled_date: c.scheduled_date,
-        resources: [...(c.resources || [])].sort(
+        resources: referenceOnly(c.resources).sort(
           (a: any, b: any) =>
             a.sort_order - b.sort_order || a.created_at.localeCompare(b.created_at),
         ),

@@ -8,6 +8,7 @@ const m = vi.hoisted(() => ({
   recordFlip: vi.fn(),
   roster: vi.fn(),
   markVoiceSent: vi.fn(),
+  evaluate: vi.fn(),
   updates: [] as Array<{ table: string; values: any }>,
 }));
 
@@ -33,6 +34,8 @@ vi.mock('@neram/database/queries/nexus', () => ({
   setSubmissionTags: async () => undefined,
   recomputeExamAttemptScore: async () => undefined,
   recordFlip: (...a: unknown[]) => m.recordFlip(...a),
+  savePracticeEvaluation: (...a: unknown[]) => m.evaluate(...a),
+  isDrawingGrade: (v: unknown) => ['top', 'mid', 'needs_practice'].includes(v as string),
 }));
 vi.mock('@/lib/nudge-delivery', () => ({ sendNudge: (...a: unknown[]) => m.sendNudge(...a), plainToHtmlWithLink: () => '<p>html</p>' }));
 vi.mock('@/lib/teams-assignment-announcements', () => ({ canPostToGraph: () => false }));
@@ -110,6 +113,19 @@ describe('PATCH review for practice', () => {
     m.tables.drawing_submissions = { data: { ...sketch, source_type: 'question_bank' }, error: null };
     await PATCH(patch({ tutor_rating: 4, tutor_feedback: 'Good lines', action: 'complete' }), ctx);
     expect(m.save).toHaveBeenCalledWith('d1', expect.objectContaining({ tutor_rating: 4 }), 'complete');
+  });
+
+  it('saves the practice grade with the reaction and tells the student the grade', async () => {
+    m.tables.drawing_submissions = { data: sketch, error: null };
+    await PATCH(patch({ tutor_feedback: 'Good lines', reaction: 'wow', drawing_grade: 'mid', action: 'complete' }), ctx);
+    expect(m.evaluate).toHaveBeenCalledWith(expect.objectContaining({ id: 'd1' }), { reaction: 'wow', grade: 'mid' }, 't1');
+    expect(m.sendNudge.mock.calls[0][0].plain).toContain('Grade: Mid.');
+  });
+
+  it('a new grade alone on a reviewed sketch is news', async () => {
+    m.tables.drawing_submissions = { data: { ...sketch, reviewed_at: '2026-09-16T10:00:00Z', tutor_feedback: 'Good lines', reaction: 'wow' }, error: null };
+    await PATCH(patch({ tutor_feedback: 'Good lines', reaction: 'wow', drawing_grade: 'top', action: 'complete' }), ctx);
+    expect(m.sendNudge).toHaveBeenCalledTimes(1);
   });
 
   it('refuses a redo on a sketch without saving anything', async () => {

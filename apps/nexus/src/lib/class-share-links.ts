@@ -51,6 +51,8 @@ export interface ClassShareLinkBuilder {
    * the page and the card can never disagree about the parameter name again.
    */
   classInTimetable(classId: string): string;
+  /** One "watch before class" video, played inside Nexus. Keyed on the attachment row. */
+  prewatch(classId: string, resourceId: string): string;
 }
 
 export function classShareLinks(base: string): ClassShareLinkBuilder {
@@ -63,5 +65,6 @@ export function classShareLinks(base: string): ClassShareLinkBuilder {
     catchUp: (classId) => `${b}/student/timetable/${classId}/catch-up`,
     rsvp: (classId) => `${b}/student/rsvp/${classId}`,
     classInTimetable: (classId) => `${b}/student/timetable?class=${classId}`,
+    prewatch: (classId, resourceId) => `${b}/student/timetable/${classId}/watch/${resourceId}`,
   };
 }

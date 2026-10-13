@@ -45,7 +45,7 @@ import {
   attemptStatusLabel,
 } from '@/lib/submission-history';
 import { useNavBadges } from '@/components/NavBadgeProvider';
-import type { DrawingSubmission, DrawingSubmissionWithDetails, DrawingTag } from '@neram/database/types';
+import type { DrawingGrade, DrawingSubmission, DrawingSubmissionWithDetails, DrawingTag } from '@neram/database/types';
 import type { SketchbookFeatureFact, SubmissionInspirationState } from '@neram/database/queries/nexus';
 import type { RegionAnnotation } from '@/lib/drawing-prompt-templates';
 import type { Rotation } from '@/lib/image-rotation';
@@ -137,6 +137,11 @@ export default function DrawingReviewDetailPage() {
   // What the row held when the sheet opened, so the practice bar can tell Skip
   // from Send & next (lib/practice-review-changes).
   const [baseline, setBaseline] = useState<PracticeReviewBaseline | null>(null);
+  // Practice only: this drawing's grade (Top / Mid / Needs practice). With a
+  // reaction it makes the drawing evaluated. Held for the one send, like the reaction.
+  const gradeRef = useRef<DrawingGrade | null>(null);
+  const [drawingGrade, setDrawingGrade] = useState<DrawingGrade | null>(null);
+  const [baselineGrade, setBaselineGrade] = useState<DrawingGrade | null>(null);
 
   const handleDeleteSubmission = async () => {
     setDeleting(true);
@@ -173,6 +178,7 @@ export default function DrawingReviewDetailPage() {
           ai_overlay_annotations: regionAnnotations.length > 0 ? regionAnnotations : null,
           tutor_resources: ws.resources,
           reaction: ws.reaction,
+          ...(isPracticeRef.current ? { drawing_grade: gradeRef.current } : {}),
           tag_labels: tagLabels,
           action: 'draft',
         }),
@@ -264,6 +270,10 @@ export default function DrawingReviewDetailPage() {
     const existingTags = ((submission as any).tags as DrawingTag[] | undefined) || [];
     setTagLabels(existingTags.map((t) => t.label));
     setBaseline({ fields: initial, tags: existingTags.map((t) => t.label), regionCount: savedRegions.length });
+    const savedGrade = ((submission as any).drawing_grade ?? null) as DrawingGrade | null;
+    gradeRef.current = savedGrade;
+    setDrawingGrade(savedGrade);
+    setBaselineGrade(savedGrade);
   }, [submission?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Rotation ───────────────────────────────────────────────────────────────
@@ -400,6 +410,7 @@ export default function DrawingReviewDetailPage() {
           ai_overlay_annotations: regionAnnotations.length > 0 ? regionAnnotations : null,
           tutor_resources: ws.resources,
           reaction: ws.reaction,
+          ...(isPracticeRef.current ? { drawing_grade: gradeRef.current } : {}),
           // The old gallery flag stays as it was. Inspiration has its own switch.
           is_gallery_visible: !!(submission as any)?.is_gallery_visible,
           tag_labels: tagLabels,
@@ -558,12 +569,12 @@ export default function DrawingReviewDetailPage() {
   }, [reviewCtx, submission, getToken, router, queue.nextId, backHref]);
 
   // Practice: would the student get anything new? Picks Skip or Send & next.
-  const practiceHasChanges = isPracticeRef.current && hasPracticeChanges(baseline, {
+  const practiceHasChanges = isPracticeRef.current && (drawingGrade !== baselineGrade || hasPracticeChanges(baseline, {
     fields: workspaceData,
     tags: tagLabels,
     regionCount: regionAnnotations.length,
     unsentVoice: !!voice && !voice.sent_at,
-  });
+  }));
 
   /** Fresh shelf state after a feature or un-feature, without reloading the sheet. */
   const refreshInspiration = useCallback(async () => {
@@ -1122,7 +1133,13 @@ export default function DrawingReviewDetailPage() {
                   setWorkspaceData(next);
                   if (!isEditMode) setIsEditMode(true);
                 }}
-                sendsWith={(workspaceData.reaction ?? null) !== (baseline?.fields.reaction ?? null)
+                grade={drawingGrade}
+                onGrade={(g) => {
+                  gradeRef.current = g;
+                  setDrawingGrade(g);
+                  if (!isEditMode) setIsEditMode(true);
+                }}
+                sendsWith={(workspaceData.reaction ?? null) !== (baseline?.fields.reaction ?? null) || drawingGrade !== baselineGrade
                   ? `Goes to ${String(sub.student?.name || '').trim().split(/\s+/)[0] || 'the student'} with your review`
                   : null}
                 onChanged={(change) => {

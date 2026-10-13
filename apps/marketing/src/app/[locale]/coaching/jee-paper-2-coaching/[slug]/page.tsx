@@ -12,10 +12,10 @@ import { cityFactsFor, cityMetadata, lookupCity, nearbyCities, travelFromCities 
  * /coaching/jee-paper-2-coaching/jee-paper-2-coaching-in-{city}: JEE Main
  * Paper 2 (B.Arch) coaching for every Indian city in the registry. Nothing is
  * prebuilt (Vercel 15k-file cap); pages render on first visit and are cached for
- * a day. The location gate indexes only cities with real JEE facts (a JoSAA or
+ * a week. The location gate indexes only cities with real JEE facts (a JoSAA or
  * JEE-accepting college nearby, a classroom, or local content).
  */
-export const revalidate = 86400;
+export const revalidate = 604800;
 export const dynamicParams = true;
 
 interface PageProps {

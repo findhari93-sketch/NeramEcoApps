@@ -10278,6 +10278,9 @@ export type GalleryReactionType = 'heart' | 'clap' | 'fire' | 'star' | 'wow';
 /** The three reactions a teacher can give a sketch. A subset of GalleryReactionType. */
 export type SketchbookReaction = Extract<GalleryReactionType, 'heart' | 'fire' | 'wow'>;
 
+/** A teacher's grade for one practice drawing (not the student's overall level). Shown to the student. */
+export type DrawingGrade = 'top' | 'mid' | 'needs_practice';
+
 export interface NexusSketchbookPracticeDay {
   student_id: string;
   /** YYYY-MM-DD in Asia/Kolkata. */

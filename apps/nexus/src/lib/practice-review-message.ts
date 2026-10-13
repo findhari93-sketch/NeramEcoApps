@@ -11,7 +11,7 @@
  * review, and this is the one message.
  */
 
-import { REACTION_LABEL } from './sketchbook-messages';
+import { GRADE_LABEL, REACTION_LABEL } from './sketchbook-messages';
 
 export interface PracticeNoticeInput {
   action: 'complete' | 'redo';
@@ -23,6 +23,8 @@ export interface PracticeNoticeInput {
   feedback: string | null;
   previousReaction?: string | null;
   reaction?: string | null;
+  previousGrade?: string | null;
+  grade?: string | null;
   /** A voice note recorded since the last send went out with this save. */
   voiceSentNow?: boolean;
 }
@@ -35,7 +37,8 @@ export function shouldNotifyPractice(input: PracticeNoticeInput): boolean {
   const sameWords = (input.previousFeedback ?? '').trim() === (input.feedback ?? '').trim();
   // Taking a reaction away is not news; giving or changing one is.
   const newReaction = !!input.reaction && input.reaction !== (input.previousReaction ?? null);
-  return !(sameStars && sameWords) || newReaction;
+  const newGrade = !!input.grade && input.grade !== (input.previousGrade ?? null);
+  return !(sameStars && sameWords) || newReaction || newGrade;
 }
 
 function firstName(name: string | null): string {
@@ -53,6 +56,8 @@ export function buildPracticeReviewMessage(input: {
   sourceType: string | null;
   rating: number | null;
   reaction?: string | null;
+  /** Practice grade: top, mid or needs_practice. */
+  grade?: string | null;
   hasVoice?: boolean;
   /** The student already had a review of this drawing; this one replaces it. */
   update?: boolean;
@@ -75,10 +80,12 @@ export function buildPracticeReviewMessage(input: {
         ? `${who} said ${said} to your ${noun}.`
         : null;
   const close = input.hasVoice ? 'Open it to hear the voice note.' : 'Open it to read the feedback.';
+  const graded = input.grade && input.grade in GRADE_LABEL ? `Grade: ${GRADE_LABEL[input.grade as keyof typeof GRADE_LABEL]}.` : null;
+  const lead = [verdict, graded].filter(Boolean).join(' ') || null;
   return {
     subject: input.update ? `${who} updated the review of your ${noun}` : `${who} reviewed your ${noun}`,
-    plain: verdict
-      ? `${verdict} ${close}`
+    plain: lead
+      ? `${lead} ${close}`
       : input.hasVoice
         ? `${who} left a voice note on your ${noun}. Open it to listen.`
         : `${who} left feedback on your ${noun}. Open it to read it.`,

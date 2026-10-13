@@ -1,4 +1,4 @@
-import type { SketchbookReaction } from '@neram/database/types';
+import type { DrawingGrade, SketchbookReaction } from '@neram/database/types';
 import type { ImageQuality } from '@/lib/image-quality';
 
 type GetToken = () => Promise<string | null>;
@@ -60,6 +60,22 @@ export interface SendOptions {
  */
 export const chatTokenGetter = (getTeacherToken: GetToken, getToken: GetToken): GetToken =>
   async () => (await getTeacherToken().catch(() => null)) ?? getToken();
+
+/**
+ * One Flip through save: any of a grade, a reaction and a comment. A field left
+ * out stays as it is on the drawing; null clears it.
+ */
+export const saveEvaluation = (
+  getToken: GetToken,
+  id: string,
+  change: { grade?: DrawingGrade | null; reaction?: SketchbookReaction | null; comment?: string },
+  options: SendOptions = {},
+) =>
+  call<{ reaction: SketchbookReaction | null; grade: DrawingGrade | null; evaluated: boolean }>(getToken, `/api/sketchbook/entries/${id}/react`, {
+    method: 'POST',
+    body: JSON.stringify(change),
+    keepalive: options.keepalive,
+  });
 
 /**
  * React, clear (null), or leave `reaction` undefined to send `comment` on its

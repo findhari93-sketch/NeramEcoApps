@@ -71,6 +71,7 @@ export * from './assignment-questions';
 export * from './drawing-checklist';
 export * from './drawing-gallery';
 export * from './sketchbook';
+export * from './drawing-grade';
 export * from './drawing-fingerprint';
 export * from './inspiration';
 export * from './drawing-references';

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { reactionMessage, featuredMessage, firstName, REACTION_LABEL } from './sketchbook-messages';
+import { reactionMessage, evaluationMessage, featuredMessage, firstName, REACTION_LABEL } from './sketchbook-messages';
 
 describe('sketchbook messages', () => {
   it('labels the three reactions', () => {
@@ -14,6 +14,19 @@ describe('sketchbook messages', () => {
     expect(m.subject).toBe('Hari reacted to your sketch');
     expect(m.plain).toBe('Hari said Great to a sketch in your sketchbook. Keep the rhythm going.');
     expect(m.plain).not.toContain('—');
+  });
+  it('writes one message for a save, from whatever was given', () => {
+    expect(evaluationMessage('Hari', { reaction: 'wow', grade: 'mid', comment: 'Softer shadow' })).toEqual({
+      subject: 'Hari reacted to your sketch',
+      plain: 'Hari said Wow to a sketch in your sketchbook. Grade: Mid. Hari wrote: Softer shadow',
+    });
+    expect(evaluationMessage('Hari', { reaction: 'fire' }).plain).toBe('Hari said Great to a sketch in your sketchbook. Keep the rhythm going.');
+    expect(evaluationMessage('Hari', { grade: 'needs_practice' })).toEqual({
+      subject: 'Hari graded your sketch',
+      plain: 'Hari graded a sketch in your sketchbook: Needs practice.',
+    });
+    expect(evaluationMessage('Hari', { comment: 'Softer shadow' })).toEqual({ subject: 'Hari commented on your sketch', plain: 'Softer shadow' });
+    for (const m of [evaluationMessage('Hari', { reaction: 'wow', grade: 'top' })]) expect(m.plain).not.toMatch(/—|--/);
   });
   it('appreciates the student by name and says where the drawing went', () => {
     const m = featuredMessage('Hari', 'JEE B.Arch Session 1');

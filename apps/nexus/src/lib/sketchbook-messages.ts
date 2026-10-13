@@ -1,4 +1,5 @@
-import type { SketchbookReaction } from '@neram/database/types';
+import type { DrawingGrade, SketchbookReaction } from '@neram/database/types';
+import { DRAWING_GRADE_LABEL } from '@neram/database/drawing-grade';
 
 /** Copy for every sketchbook message. Pure so it can be tested and reused by the Teams card. */
 
@@ -19,6 +20,32 @@ export function reactionMessage(teacherFirstName: string, reaction: SketchbookRe
     subject: `${teacherFirstName} reacted to your sketch`,
     plain: `${teacherFirstName} said ${REACTION_LABEL[reaction]} to a sketch in your sketchbook. Keep the rhythm going.`,
   };
+}
+
+/** The grade a student sees on a drawing. */
+export const GRADE_LABEL = DRAWING_GRADE_LABEL;
+
+/**
+ * The one message for one save from Flip through: whatever changed in it (a
+ * reaction, a grade, a comment), in that order, as a single chat. Each part is
+ * there only when it was given.
+ */
+export function evaluationMessage(
+  teacherFirstName: string,
+  given: { reaction?: SketchbookReaction; grade?: DrawingGrade; comment?: string },
+): { subject: string; plain: string } {
+  const who = teacherFirstName;
+  const subject = given.reaction
+    ? `${who} reacted to your sketch`
+    : given.grade
+      ? `${who} graded your sketch`
+      : `${who} commented on your sketch`;
+  const parts: string[] = [];
+  if (given.reaction) parts.push(`${who} said ${REACTION_LABEL[given.reaction]} to a sketch in your sketchbook.`);
+  if (given.grade) parts.push(given.reaction ? `Grade: ${GRADE_LABEL[given.grade]}.` : `${who} graded a sketch in your sketchbook: ${GRADE_LABEL[given.grade]}.`);
+  if (given.comment) parts.push(parts.length ? `${who} wrote: ${given.comment}` : given.comment);
+  else if (given.reaction) parts.push('Keep the rhythm going.');
+  return { subject, plain: parts.join(' ') };
 }
 
 /**

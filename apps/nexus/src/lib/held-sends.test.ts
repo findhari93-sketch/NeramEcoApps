@@ -56,6 +56,23 @@ describe('createHeldSends: an outward message with an undo window', () => {
     expect(commit).toHaveBeenCalledWith('b', { reaction: 'fire' });
   });
 
+  it('peek shows what is held, a per-call window overrides the default, and flush(key) sends only that one', async () => {
+    const { sends, commit } = setup();
+    sends.hold('a', { reaction: 'heart' }, 60_000);
+    sends.hold('b', { reaction: 'fire' }, 60_000);
+    expect(sends.peek('a')).toEqual({ reaction: 'heart' });
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(commit).not.toHaveBeenCalled();
+    sends.flush('a');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(commit).toHaveBeenCalledTimes(1);
+    expect(commit).toHaveBeenCalledWith('a', { reaction: 'heart' });
+    expect(sends.peek('a')).toBeNull();
+    expect(sends.isHeld('b')).toBe(true);
+    sends.flush('missing');
+    expect(commit).toHaveBeenCalledTimes(1);
+  });
+
   it('flush sends everything held at once, for a teacher closing the tab', async () => {
     const { sends, commit } = setup();
     sends.hold('a', { reaction: 'heart' });

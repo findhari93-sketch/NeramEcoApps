@@ -53,3 +53,12 @@ describe('isNexusPath', () => {
     expect(isNexusPath(undefined)).toBe(false);
   });
 });
+
+describe('class notices open the class', () => {
+  it('opens the class on the student timetable, never the missing /timetable/{id} page', () => {
+    for (const type of ['class_created', 'class_cancelled', 'class_rescheduled', 'recording_available']) {
+      expect(notificationHref(row(type, { class_id: 'k1' }), 'student')).toBe('/student/timetable?class=k1');
+      expect(notificationHref(row(type, { class_id: 'k1' }), 'teacher')).toBe('/teacher/timetable');
+    }
+  });
+});

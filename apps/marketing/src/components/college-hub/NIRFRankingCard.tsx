@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { localePrefix } from '@/lib/college-hub/detail-content';
 import { Box, Paper, Typography, Stack, Divider } from '@mui/material';
 import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
 import type { NIRFRankingWithCollege } from '@neram/database';
@@ -42,7 +43,7 @@ function typeChip(type?: string | null) {
 
 export default function NIRFRankingCard({ row, locale, showYear = false }: Props) {
   const c = row.college;
-  const detailHref = c ? `/${locale}/colleges/rankings/nirf/${c.slug}` : null;
+  const detailHref = c ? `${localePrefix(locale)}/colleges/rankings/nirf/${c.slug}` : null;
   const innerCard = (
     <Paper
       variant="outlined"

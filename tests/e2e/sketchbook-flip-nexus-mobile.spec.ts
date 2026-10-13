@@ -3,11 +3,11 @@ import { APP_URLS, injectAuthForPage } from '../utils/credentials';
 import { assertNoHorizontalOverflow } from '../utils/mobile-helpers';
 
 /**
- * Flip through answers a reaction at once, and Class rhythm says who Nexus
- * reminded (2026-09-22).
+ * Flip through saves a card when the teacher moves on (grade, reaction and
+ * comment as one save, 2026-10-10), and Class rhythm says who Nexus reminded.
  *
- * The inbox, react and flip routes are mocked with page.route, so no student is
- * messaged on Teams by a test and the react route can be made deliberately slow:
+ * The inbox, save and flip routes are mocked with page.route, so no student is
+ * messaged on Teams by a test and the save route can be made deliberately slow:
  * the card must move on before the server answers, the send must wait out the
  * Undo window, and Undo must send nothing at all.
  */
@@ -25,6 +25,8 @@ const sketch = (id: string, name: string) => ({
   thumbnail_url: IMAGE,
   self_note: null,
   reaction: null,
+  drawing_grade: null,
+  evaluated_at: null,
   submitted_at: '2026-09-15T14:44:43.000Z',
   is_gallery_visible: false,
   source_type: 'sketchbook',
@@ -55,7 +57,7 @@ async function mockFlip(page: Page): Promise<Sent[]> {
     sent.push({ id, body: req.postDataJSON(), at: Date.now() });
     // Slower than a real Teams chain on a bad day: the screen must not wait for it.
     await new Promise((r) => setTimeout(r, 3000));
-    await route.fulfill({ json: { reaction: req.postDataJSON()?.reaction ?? null } });
+    await route.fulfill({ json: { reaction: req.postDataJSON()?.reaction ?? null, grade: req.postDataJSON()?.grade ?? null, evaluated: false } });
   });
   await page.route('**/api/sketchbook/entries/*/flip', (route) => route.fulfill({ json: { ok: true } }));
   return sent;
@@ -75,69 +77,80 @@ async function openFlip(page: Page): Promise<boolean> {
 test.describe('Flip through on a phone', () => {
   test.use({ viewport: { width: 375, height: 812 } });
 
-  test('a reaction moves on before the server answers, and sends once the Undo window closes', async ({ page }, testInfo) => {
+  test('grade, reaction and comment stay on the card, and Next sends them as one save after the Undo window', async ({ page }, testInfo) => {
     const sent = await mockFlip(page);
     test.skip(!(await openFlip(page)), 'Nexus not running or no classroom picked');
 
-    const tapped = Date.now();
+    await page.getByRole('button', { name: 'Mid' }).click();
     await page.getByRole('button', { name: 'Wow' }).click();
-    await expect(page.getByText('2 of 3')).toBeVisible({ timeout: 1500 });
-    expect(Date.now() - tapped).toBeLessThan(1500);
-    const status = page.getByTestId('flip-status');
-    await expect(status).toContainText('Wow for Poheem');
+    await expect(page.getByTestId('flip-evaluation')).toHaveText('Evaluated');
+    await page.getByRole('button', { name: 'Comment' }).click();
+    await page.getByLabel('Comment').fill('Softer shadow under the apple');
+    await page.getByRole('button', { name: 'Add' }).click();
+    await expect(page.getByTestId('flip-comments')).toContainText('Softer shadow under the apple');
+    // Nothing moved and nothing left the device.
+    await expect(page.getByText('1 of 3')).toBeVisible();
     expect(sent).toHaveLength(0);
 
     await assertNoHorizontalOverflow(page);
-    const undo = page.getByRole('button', { name: 'Undo' });
-    expect(((await undo.boundingBox())?.height ?? 0) >= 44).toBe(true);
-    for (const name of ['Nice', 'Great', 'Wow']) {
+    for (const name of ['Top', 'Mid', 'Needs practice', 'Nice', 'Great', 'Wow']) {
       expect(((await page.getByRole('button', { name }).boundingBox())?.height ?? 0) >= 44).toBe(true);
     }
-    if (SCRATCH_SHOTS) await page.screenshot({ path: `${SCRATCH_SHOTS}/flip-phone-held.png` });
-    await page.screenshot({ path: testInfo.outputPath('flip-phone-held.png') });
+    if (SCRATCH_SHOTS) await page.screenshot({ path: `${SCRATCH_SHOTS}/flip-phone-graded.png` });
+    await page.screenshot({ path: testInfo.outputPath('flip-phone-graded.png') });
+    // The dock itself: grade, reactions and tools, scrolled to as a teacher would.
+    await page.getByRole('button', { name: 'Next' }).scrollIntoViewIfNeeded();
+    if (SCRATCH_SHOTS) await page.screenshot({ path: `${SCRATCH_SHOTS}/flip-phone-dock.png` });
+
+    const moved = Date.now();
+    await page.getByRole('button', { name: 'Next' }).click();
+    await expect(page.getByText('2 of 3')).toBeVisible({ timeout: 1500 });
+    await expect(page.getByTestId('flip-status')).toContainText('Sending to Poheem: Mid, Wow and comment');
+    const undo = page.getByRole('button', { name: 'Undo' });
+    expect(((await undo.boundingBox())?.height ?? 0) >= 44).toBe(true);
 
     await expect.poll(() => sent.length, { timeout: 8000 }).toBe(1);
     expect(sent[0].id).toBe('a1');
-    expect(sent[0].body).toEqual({ reaction: 'wow' });
-    expect(sent[0].at - tapped).toBeGreaterThanOrEqual(3500);
+    expect(sent[0].body).toEqual({ grade: 'mid', reaction: 'wow', comment: 'Softer shadow under the apple' });
+    expect(sent[0].at - moved).toBeGreaterThanOrEqual(3500);
   });
 
-  test('Undo inside the window sends nothing and goes back to that sketch', async ({ page }) => {
+  test('a swipe saves the card, and Undo brings it back with the choices still made', async ({ page }) => {
     const sent = await mockFlip(page);
     test.skip(!(await openFlip(page)), 'Nexus not running or no classroom picked');
 
     await page.getByRole('button', { name: 'Great' }).click();
+    await expect(page.getByTestId('flip-evaluation')).toHaveText('Needs grade');
+    const box = await page.getByTestId('flip-sketch').boundingBox();
+    if (!box) throw new Error('no sketch');
+    const y = box.y + box.height / 2;
+    await page.getByTestId('flip-sketch').dispatchEvent('touchstart', { touches: [{ identifier: 1, clientX: box.x + 300, clientY: y }] });
+    await page.getByTestId('flip-sketch').dispatchEvent('touchend', { changedTouches: [{ identifier: 1, clientX: box.x + 100, clientY: y }] });
     await expect(page.getByText('2 of 3')).toBeVisible({ timeout: 1500 });
+
     await page.getByRole('button', { name: 'Undo' }).click();
     await expect(page.getByText('1 of 3')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Great' })).toHaveAttribute('aria-pressed', 'true');
     await page.waitForTimeout(5500);
     expect(sent).toHaveLength(0);
-  });
-
-  test('a comment can go on its own and the card still moves on', async ({ page }) => {
-    const sent = await mockFlip(page);
-    test.skip(!(await openFlip(page)), 'Nexus not running or no classroom picked');
-
-    await page.getByRole('button', { name: 'Comment' }).click();
-    await page.getByLabel('Comment').fill('Softer shadow under the apple');
-    await page.getByRole('button', { name: 'Send' }).click();
-    await expect(page.getByText('2 of 3')).toBeVisible({ timeout: 1500 });
-    await expect.poll(() => sent.length, { timeout: 8000 }).toBe(1);
-    expect(sent[0].body).toEqual({ comment: 'Softer shadow under the apple' });
   });
 });
 
 test.describe('Flip through on a laptop', () => {
   test.use({ viewport: { width: 1280, height: 900 } });
 
-  test('1, 2 and 3 react from the keyboard', async ({ page }) => {
+  test('1, 2 and 3 set the reaction, and the arrow key saves and moves on', async ({ page }) => {
     const sent = await mockFlip(page);
     test.skip(!(await openFlip(page)), 'Nexus not running or no classroom picked');
 
     await page.keyboard.press('3');
+    await expect(page.getByText('1 of 3')).toBeVisible();
+    await page.keyboard.press('ArrowRight');
     await expect(page.getByText('2 of 3')).toBeVisible({ timeout: 1500 });
     await page.keyboard.press('2');
+    await page.keyboard.press('ArrowRight');
     await expect(page.getByText('3 of 3')).toBeVisible({ timeout: 1500 });
+    await assertNoHorizontalOverflow(page);
     await expect.poll(() => sent.map((s) => [s.id, s.body.reaction]).sort(), { timeout: 10_000 })
       .toEqual([['a1', 'wow'], ['b2', 'fire']]);
   });

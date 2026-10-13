@@ -27,6 +27,20 @@ describe('TeacherSketchActions', () => {
     api.unfeatureSketch.mockClear();
   });
 
+  it('shows a grade row only with onGrade, and a second tap clears the grade', () => {
+    const onGrade = vi.fn();
+    const { rerender } = render(<TeacherSketchActions sketchId="a" reaction={null} featured={[]} onChanged={vi.fn()} />);
+    expect(screen.queryByRole('group', { name: 'Grade for this drawing' })).toBeNull();
+
+    rerender(<TeacherSketchActions sketchId="a" reaction={null} featured={[]} onChanged={vi.fn()} grade="mid" onGrade={onGrade} />);
+    expect(screen.getByRole('button', { name: 'Mid' }).getAttribute('aria-pressed')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Needs practice' }));
+    expect(onGrade).toHaveBeenLastCalledWith('needs_practice');
+    fireEvent.click(screen.getByRole('button', { name: 'Mid' }));
+    expect(onGrade).toHaveBeenLastCalledWith(null);
+    expect(api.reactToSketch).not.toHaveBeenCalled();
+  });
+
   it('shows Un-feature and the chip when featured, and un-featuring clears it', async () => {
     const onChanged = vi.fn();
     render(

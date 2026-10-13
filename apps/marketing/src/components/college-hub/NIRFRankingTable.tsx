@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { localePrefix } from '@/lib/college-hub/detail-content';
 import {
   Box,
   Paper,
@@ -94,7 +95,7 @@ export default function NIRFRankingTable({ rows, showYear = false, locale }: Pro
           {rows.map((r) => {
             const college = r.college;
             const detailHref = college
-              ? `/${locale}/colleges/rankings/nirf/${college.slug}`
+              ? `${localePrefix(locale)}/colleges/rankings/nirf/${college.slug}`
               : null;
             return (
               <TableRow

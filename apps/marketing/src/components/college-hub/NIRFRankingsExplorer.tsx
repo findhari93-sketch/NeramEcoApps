@@ -2,6 +2,7 @@
 
 import { Suspense, useMemo } from 'react';
 import Link from 'next/link';
+import { localePrefix } from '@/lib/college-hub/detail-content';
 import { useSearchParams } from 'next/navigation';
 import { Typography, Box, Stack, Button, Alert } from '@mui/material';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
@@ -64,8 +65,8 @@ function ExplorerBody({ rows, availableYears, states, cities, locale, yearRangeL
   const filtersActive = hasActiveFilters(filters);
 
   const compareHref = filters.compare
-    ? `/${locale}/colleges/rankings/nirf`
-    : `/${locale}/colleges/rankings/nirf?compare=1`;
+    ? `${localePrefix(locale)}/colleges/rankings/nirf`
+    : `${localePrefix(locale)}/colleges/rankings/nirf?compare=1`;
 
   return (
     <>
@@ -142,7 +143,7 @@ function ExplorerBody({ rows, availableYears, states, cities, locale, yearRangeL
           </Button>
           <Button
             component={Link}
-            href={`/${locale}/colleges/rankings/nirf`}
+            href={`${localePrefix(locale)}/colleges/rankings/nirf`}
             aria-label="Share NIRF rankings"
             sx={{
               borderRadius: 5,
@@ -169,7 +170,7 @@ function ExplorerBody({ rows, availableYears, states, cities, locale, yearRangeL
           mb: 1,
         }}
       >
-        NIRF Architecture Rankings
+        NIRF Architecture Rankings {latestYear ?? ''}
       </Typography>
       <Typography
         color="text.secondary"
@@ -180,9 +181,10 @@ function ExplorerBody({ rows, availableYears, states, cities, locale, yearRangeL
           lineHeight: 1.55,
         }}
       >
-        National Institutional Ranking Framework for B.Arch programs across India.
-        Filter by year, state, city, type or score, click any institution for its
-        full year-over-year profile.
+        Every architecture college ranked by the National Institutional Ranking
+        Framework (NIRF) in the Architecture and Planning category, {yearRangeLabel}.
+        Filter by year, state, city, type or score, and open any college for its
+        rank history.
       </Typography>
 
       {/* Stats row */}
@@ -271,7 +273,7 @@ function ExplorerBody({ rows, availableYears, states, cities, locale, yearRangeL
           {filtersActive && (
             <Button
               component={Link}
-              href={`/${locale}/colleges/rankings/nirf`}
+              href={`${localePrefix(locale)}/colleges/rankings/nirf`}
               variant="outlined"
               sx={{ borderRadius: 5, textTransform: 'none' }}
             >

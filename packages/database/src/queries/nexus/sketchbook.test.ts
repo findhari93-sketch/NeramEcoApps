@@ -6,6 +6,7 @@ import {
   listSketchbookMonth,
   listUnflipped,
   monthRangeIst,
+  savePracticeEvaluation,
   setSketchbookReaction,
 } from './sketchbook';
 
@@ -65,12 +66,22 @@ describe('sketchbook reads cover every drawing', () => {
 });
 
 describe('practice-only reads and writes', () => {
-  it('lists the flip inbox from unreviewed practice only', async () => {
+  it('lists the flip inbox from unevaluated practice only', async () => {
     const { client, calls } = fakeClient({ data: [], error: null });
     await listUnflipped('t1', ['s1'], 20, client);
     expect(named(calls, 'in')).toContainEqual(['source_type', [...PRACTICE_SOURCE_TYPES]]);
     expect(named(calls, 'is')).toContainEqual(['assignment_id', null]);
-    expect(named(calls, 'is')).toContainEqual(['reviewed_at', null]);
+    expect(named(calls, 'is')).toContainEqual(['evaluated_at', null]);
+  });
+
+  it('falls back to the old rule where the grade columns do not exist yet', async () => {
+    const { client, calls } = tableClient({
+      drawing_submissions: [{ data: null, error: { code: '42703', message: 'column drawing_submissions.evaluated_at does not exist' } }, { data: [] }],
+    });
+    await listUnflipped('t1', ['s1'], 20, client);
+    const is = calls.filter(([t, p]) => t === 'drawing_submissions' && p === 'is').map(([, , a]) => a);
+    expect(is).toContainEqual(['reaction', null]);
+    expect(is).toContainEqual(['reviewed_at', null]);
   });
 
   it('finds a practice drawing and never an assignment drawing', async () => {
@@ -78,6 +89,25 @@ describe('practice-only reads and writes', () => {
     await getPracticeDrawing('d1', client);
     expect(named(calls, 'in')).toContainEqual(['source_type', [...PRACTICE_SOURCE_TYPES]]);
     expect(named(calls, 'is')).toContainEqual(['assignment_id', null]);
+  });
+
+  it('saves a grade and a reaction together and marks the drawing evaluated', async () => {
+    const { client, calls } = fakeClient({ data: null, error: null });
+    const out = await savePracticeEvaluation({ id: 'd1', reaction: null, drawing_grade: null, evaluated_at: null }, { reaction: 'wow', grade: 'mid' }, 't1', client);
+    const [patch] = named(calls, 'update')[0] as [Record<string, unknown>];
+    expect(patch).toMatchObject({ reaction: 'wow', drawing_grade: 'mid', graded_by: 't1' });
+    expect(typeof patch.evaluated_at).toBe('string');
+    expect(out).toMatchObject({ reaction: 'wow', drawing_grade: 'mid' });
+    expect(named(calls, 'is')).toContainEqual(['assignment_id', null]);
+  });
+
+  it('a grade alone leaves the reaction untouched and the drawing unevaluated', async () => {
+    const { client, calls } = fakeClient({ data: null, error: null });
+    const out = await savePracticeEvaluation({ id: 'd1', reaction: null, drawing_grade: null, evaluated_at: null }, { grade: 'top' }, 't1', client);
+    const [patch] = named(calls, 'update')[0] as [Record<string, unknown>];
+    expect(patch).not.toHaveProperty('reaction');
+    expect(patch.evaluated_at).toBeNull();
+    expect(out.evaluated_at).toBeNull();
   });
 
   it('reacts on practice drawings only', async () => {
@@ -119,29 +149,29 @@ const sketch = (id: string, over: Record<string, unknown> = {}) => ({
 });
 
 describe('listUnflipped: evaluated anywhere counts as evaluated', () => {
-  it('leaves out a sketch any teacher already reacted to', async () => {
+  it('leaves out an evaluated sketch (graded and reacted), for every teacher', async () => {
     const { client, calls } = tableClient({ drawing_submissions: [{ data: [] }] });
     await listUnflipped('t1', ['s1'], 20, client);
-    expect(calls.filter(([t, p]) => t === 'drawing_submissions' && p === 'is').map(([, , a]) => a)).toContainEqual(['reaction', null]);
+    expect(calls.filter(([t, p]) => t === 'drawing_submissions' && p === 'is').map(([, , a]) => a)).toContainEqual(['evaluated_at', null]);
   });
 
-  it('leaves out a sketch another teacher commented on or featured', async () => {
-    const { client } = tableClient({
-      drawing_submissions: [{ data: [sketch('a'), sketch('b'), sketch('c')] }],
+  it('a comment or a feature on its own no longer takes a sketch out of the list', async () => {
+    const { client, calls } = tableClient({
+      drawing_submissions: [{ data: [sketch('a'), sketch('b')] }],
       nexus_sketchbook_flips: [{ data: [] }],
-      drawing_submission_comments: [{ data: [{ submission_id: 'a' }] }],
-      nexus_sketchbook_features: [{ data: [{ submission_id: 'b' }] }],
     });
-    const { rows, remaining } = await listUnflipped('t1', ['s1'], 20, client);
-    expect(rows.map((r) => r.id)).toEqual(['c']);
-    expect(remaining).toBe(0);
+    const { rows } = await listUnflipped('t1', ['s1'], 20, client);
+    expect(rows.map((r) => r.id)).toEqual(['a', 'b']);
+    expect(calls.some(([t]) => t === 'drawing_submission_comments' || t === 'nexus_sketchbook_features')).toBe(false);
   });
 
-  it('asks only for teacher comments and live features', async () => {
-    const { client, calls } = tableClient({ drawing_submissions: [{ data: [sketch('a')] }] });
-    await listUnflipped('t1', ['s1'], 20, client);
-    expect(calls).toContainEqual(['drawing_submission_comments', 'eq', ['author_role', 'teacher']]);
-    expect(calls).toContainEqual(['nexus_sketchbook_features', 'is', ['unfeatured_at', null]]);
+  it('a half done sketch comes back even to the teacher who flipped it', async () => {
+    const { client } = tableClient({
+      drawing_submissions: [{ data: [sketch('graded', { drawing_grade: 'mid' }), sketch('reacted', { reaction: 'wow' }), sketch('passed')] }],
+      nexus_sketchbook_flips: [{ data: [{ submission_id: 'graded' }, { submission_id: 'reacted' }, { submission_id: 'passed' }] }],
+    });
+    const { rows } = await listUnflipped('t1', ['s1'], 20, client);
+    expect(rows.map((r) => r.id)).toEqual(['graded', 'reacted']);
   });
 
   it('still hides what this teacher skipped, and only for this teacher', async () => {

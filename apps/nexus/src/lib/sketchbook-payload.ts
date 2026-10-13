@@ -109,7 +109,7 @@ export function entryFor(
   practice: { origin?: QBPracticeOrigin | null; helpUsed?: string[]; timeZone?: string | null } = {},
 ): SketchbookEntry {
   const released = viewer === 'staff' || isReleasedForStudent(row, heldIds);
-  const visible = released ? row : { ...row, tutor_rating: null, tutor_marks: null, reaction: null, reviewed_at: null };
+  const visible = released ? row : { ...row, tutor_rating: null, tutor_marks: null, reaction: null, reviewed_at: null, drawing_grade: null };
   const safe = viewer === 'student' ? { ...visible, is_gallery_visible: false } : visible;
   return {
     ...safe,

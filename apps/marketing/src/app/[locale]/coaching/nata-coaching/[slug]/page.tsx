@@ -12,10 +12,10 @@ import { cityFactsFor, cityMetadata, citySegment, lookupCity, nearbyCities, preb
  * /coaching/nata-coaching/nata-coaching-centers-in-{city}: one page per city in
  * the location registry (~770). Only the classroom cities and metros are
  * prebuilt (the marketing build is near Vercel's 15k-file cap); the rest render
- * on first visit and are cached for a day. Whether a page is indexed is decided
+ * on first visit and are cached for a week. Whether a page is indexed is decided
  * by the location gate (lib/seo/location-gate.ts), never here.
  */
-export const revalidate = 86400;
+export const revalidate = 604800;
 export const dynamicParams = true;
 
 interface PageProps {

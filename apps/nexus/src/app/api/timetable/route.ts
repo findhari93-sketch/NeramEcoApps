@@ -25,6 +25,14 @@ import { ApiError, httpStatusForError, messageOf, throwIfReadFailed } from '@/li
 import { classStartIso } from '@/lib/prework';
 import { CLASS_IMAGES_EMBED } from '@/lib/class-cover';
 import { SCHEDULED_CLASS_LIST_COLUMNS, selectWithColumnFallback } from '@/lib/scheduled-class-columns';
+import { normalizePicks } from '@/lib/prewatch';
+import {
+  PrewatchError,
+  insertPrewatchForClasses,
+  isPrewatchEnabled,
+  resolvePrewatchPicks,
+  type PrewatchTemplate,
+} from '@/lib/prewatch-server';
 
 const CLASS_SELECT = `*, topic:nexus_topics(id, title, category), course_topic:nexus_course_topics(id, title), teacher:users!nexus_scheduled_classes_teacher_id_fkey(id, name, avatar_url), batch:nexus_batches!nexus_scheduled_classes_batch_id_fkey(id, name)`;
 
@@ -40,7 +48,7 @@ const CLASS_SELECT = `*, topic:nexus_topics(id, title, category), course_topic:n
  * requested response in the app, so a card gets enough to say "there is material
  * here" and the list itself is fetched only when a class is actually opened.
  */
-const CLASS_SELECT_WITH_IMAGES = `${CLASS_SELECT}, ${CLASS_IMAGES_EMBED}, class_resources:nexus_class_resources(count)`;
+const CLASS_SELECT_WITH_IMAGES = `${CLASS_SELECT}, ${CLASS_IMAGES_EMBED}, class_resources:nexus_class_resources!nexus_class_resources_scheduled_class_id_fkey(count)`;
 
 /**
  * The same read with an explicit column list instead of `*`, dropping the Teams
@@ -285,7 +293,7 @@ export async function POST(request: NextRequest) {
       classroom_id, classroom_ids, title, scheduled_date, start_time, end_time,
       topic_id, course_topic_id, batch_id, teams_meeting_scope, target_scope, description,
       lobby_bypass, allowed_presenters, recurrence_rule, recurrence_end_date,
-      publish_state, teacher_id: tutorIdInput,
+      publish_state, teacher_id: tutorIdInput, prewatch,
     } = body;
 
     // Multi-classroom: one logical class can target several classrooms. Each classroom
@@ -351,6 +359,25 @@ export async function POST(request: NextRequest) {
         );
       }
       tutorId = teacherId;
+    }
+
+    // "Watch before class" videos picked in Add Class. Checked BEFORE any class
+    // is inserted, so a pick that has gone stale is a 400 and nothing is created,
+    // rather than a class that silently lost a video the teacher chose.
+    const prewatchPicks = normalizePicks(prewatch) || [];
+    let prewatchTemplates: PrewatchTemplate[] = [];
+    let prewatchWarning: string | null = null;
+    if (prewatchPicks.length) {
+      if (!(await isPrewatchEnabled())) {
+        prewatchWarning = 'Watch before class is switched off, so the videos were not attached.';
+      } else {
+        try {
+          prewatchTemplates = await resolvePrewatchPicks(supabase, prewatchPicks);
+        } catch (err) {
+          if (err instanceof PrewatchError) return NextResponse.json({ error: err.message }, { status: 400 });
+          throw err;
+        }
+      }
     }
 
     // Classroom types drive the display-only target_scope ('all' for the common cohort).
@@ -423,6 +450,19 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error;
 
+    // Attach the videos to every row just made (each classroom, each date). This
+    // runs here, inside the create, because the Teams post is built right after
+    // this response and lists them. A failure keeps the classes: they are the
+    // thing the teacher came to make, and the videos can be added from the panel.
+    if (prewatchTemplates.length && data?.length) {
+      try {
+        await insertPrewatchForClasses(supabase, data.map((c) => c.id), prewatchTemplates, teacherId);
+      } catch (err) {
+        console.error('[timetable] prewatch attach failed:', err instanceof Error ? err.message : err);
+        prewatchWarning = 'The class was created, but the videos could not be attached. Add them from the class panel.';
+      }
+    }
+
     // Notify students per classroom (students are enrolled per classroom). Send once
     // per classroom for the first date only; drafts stay silent until publish.
     try {
@@ -444,6 +484,7 @@ export async function POST(request: NextRequest) {
         classes: data,
         count: data?.length || 0,
         meeting_group_id: meetingGroupId,
+        ...(prewatchWarning ? { prewatchWarning } : {}),
         ...(data && data.length === 1 ? { class: data[0] } : {}),
       },
       { status: 201 },

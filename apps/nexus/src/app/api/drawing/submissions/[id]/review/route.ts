@@ -8,8 +8,10 @@ import {
   setSubmissionTags,
   recomputeExamAttemptScore,
   recordFlip,
+  isDrawingGrade,
+  savePracticeEvaluation,
 } from '@neram/database/queries/nexus';
-import type { GalleryReactionType } from '@neram/database/types';
+import type { DrawingGrade, GalleryReactionType, SketchbookReaction } from '@neram/database/types';
 import { reactionEmoji, praiseFor } from '@/lib/assignment-reactions';
 import { sendNudge, plainToHtmlWithLink } from '@/lib/nudge-delivery';
 import { canPostToGraph } from '@/lib/teams-assignment-announcements';
@@ -101,6 +103,12 @@ export async function PATCH(
       );
     }
     const reaction = parseReaction(rawReaction);
+    // Practice carries a grade of its own (Top / Mid / Needs practice), which
+    // with a reaction makes it evaluated. Left out means unchanged.
+    const askedGrade: DrawingGrade | null | undefined =
+      kind === 'practice' && Object.prototype.hasOwnProperty.call(body, 'drawing_grade')
+        ? (body.drawing_grade === null ? null : isDrawingGrade(body.drawing_grade) ? body.drawing_grade : undefined)
+        : undefined;
     // A sketch carries no grade, and the database refuses one. The review page
     // still scores a sketch on the rubric and sends the stars, which failed
     // every save of a sketch, so the grade is dropped here, the one writer.
@@ -216,6 +224,21 @@ export async function PATCH(
 
     if (Array.isArray(tag_labels)) {
       await setSubmissionTags(id, tag_labels, user.id);
+    }
+
+    // Practice: the grade, and evaluated_at kept true to grade + reaction, so the
+    // drawing leaves the flip through once both are given. Never allowed to fail
+    // a review that has already saved.
+    if (kind === 'practice') {
+      try {
+        await savePracticeEvaluation(
+          { id, reaction: (sub?.reaction ?? null) as SketchbookReaction | null, drawing_grade: sub?.drawing_grade ?? null, evaluated_at: sub?.evaluated_at ?? null },
+          { reaction: (reaction ?? null) as SketchbookReaction | null, grade: askedGrade },
+          user.id,
+        );
+      } catch (err) {
+        console.error('[Drawing review] grade was not saved:', err);
+      }
     }
 
     // An exam drawing moves the student's total the moment it is marked.
@@ -384,6 +407,8 @@ export async function PATCH(
         feedback: tutor_feedback || null,
         previousReaction: sub?.reaction ?? null,
         reaction,
+        previousGrade: sub?.drawing_grade ?? null,
+        grade: askedGrade === undefined ? (sub?.drawing_grade ?? null) : askedGrade,
         voiceSentNow: !!voice,
       })
     ) {
@@ -395,6 +420,7 @@ export async function PATCH(
           sourceType: sub?.source_type ?? null,
           rating: tutorRating,
           reaction,
+          grade: askedGrade === undefined ? (sub?.drawing_grade ?? null) : askedGrade,
           hasVoice: !!voice,
           update: wasAlreadyReviewed && sub?.status !== 'redo',
         });

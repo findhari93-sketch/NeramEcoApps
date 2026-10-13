@@ -23,7 +23,7 @@ import {
   type CatchupKind,
 } from '@neram/database';
 import { CLASS_IMAGES_EMBED } from '@/lib/class-cover';
-import { CLASS_RESOURCES_EMBED } from '@/lib/class-resources';
+import { CLASS_RESOURCES_EMBED, referenceOnly } from '@/lib/class-resources';
 import { isRsvpReasonCode } from '@/lib/rsvp-reasons';
 import { loadAwayWindows } from '@/lib/away-windows';
 import { resolveAbsenceReason, describeReasonSourceForStudent } from '@/lib/absence-reason';
@@ -333,7 +333,9 @@ export async function GET(request: NextRequest, { params }: Ctx) {
     });
 
     return NextResponse.json({
-      class: access.cls,
+      // Watch-before-class videos share the resources table; this screen shows
+      // reference material only.
+      class: { ...access.cls, class_resources: referenceOnly((access.cls as any).class_resources) },
       // Key kept as `absence` so the existing screen keeps compiling. It is now
       // "the row for this class", which for a late joiner is a backlog item.
       absence: item || null,

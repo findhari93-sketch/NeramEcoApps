@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient, getRecapForStudent, upsertRecapProgress } from '@neram/database';
-import { RESOURCE_COLS } from '@/lib/class-resources';
+import { NOT_PREWATCH_KINDS, RESOURCE_COLS } from '@/lib/class-resources';
 import { watchModeFor } from '@/lib/recap-obligation';
 
 /**
@@ -65,6 +65,7 @@ export async function GET(
       .from('nexus_class_resources')
       .select(RESOURCE_COLS)
       .eq('scheduled_class_id', recap.scheduled_class_id)
+      .not('kind', 'in', NOT_PREWATCH_KINDS)
       .order('sort_order', { ascending: true })
       .order('created_at', { ascending: true });
 

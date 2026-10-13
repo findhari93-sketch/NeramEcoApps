@@ -315,3 +315,30 @@ describe('buildShareSections, hostile input', () => {
     expect(ids(s)).not.toContain('join');
   });
 });
+
+describe('watch before class', () => {
+  const videos = [
+    { title: 'Humans on the street', url: `${BASE}/student/timetable/cls-1/watch/r1`, durationSeconds: 1500 },
+    { title: 'Crowds and scale', url: `${BASE}/student/timetable/cls-1/watch/r2`, durationSeconds: null },
+  ];
+
+  it('lists the videos before the join links, with their length', () => {
+    const s = buildShareSections(payload({ prewatch: videos }));
+    expect(ids(s).indexOf('prewatch')).toBeLessThan(ids(s).indexOf('join'));
+    const section = s.find((x) => x.id === 'prewatch')!;
+    expect(section.checkboxLabel).toBe('Watch before class (2)');
+    expect(section.lines[0]).toMatchObject({ text: 'Humans on the street (25 min)', url: videos[0].url, bullet: true });
+    expect(section.lines[1]).toMatchObject({ text: 'Crowds and scale', url: videos[1].url });
+  });
+
+  it('says nothing after the class, or when there are no videos', () => {
+    expect(ids(buildShareSections(payload({ state: 'past', prewatch: videos })))).not.toContain('prewatch');
+    expect(ids(buildShareSections(payload({ prewatch: [] })))).not.toContain('prewatch');
+    expect(ids(buildShareSections(payload()))).not.toContain('prewatch');
+  });
+
+  it('drops a link that is not http(s)', () => {
+    const s = buildShareSections(payload({ prewatch: [{ title: 'x', url: 'javascript:alert(1)', durationSeconds: 60 }] }));
+    expect(ids(s)).not.toContain('prewatch');
+  });
+});

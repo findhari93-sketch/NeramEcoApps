@@ -214,3 +214,24 @@ describe('the silent-absence notice on a class share', () => {
     expect(renderShareText(buildShareSections(payload), ALL)).not.toContain(NOTICE);
   });
 });
+
+describe('watch before class renders the same links in text and HTML', () => {
+  it('carries every video link in both', () => {
+    const sections = buildShareSections(
+      fullPayload({
+        state: 'upcoming',
+        prewatch: [
+          { title: 'Humans & streets', url: `${BASE}/student/timetable/cls-1/watch/r1`, durationSeconds: 600 },
+          { title: 'Crowds', url: `${BASE}/student/timetable/cls-1/watch/r2`, durationSeconds: null },
+        ],
+      }),
+    );
+    const text = renderShareText(sections, ALL);
+    const html = renderShareHtml(sections, ALL);
+    const expected = shareUrls(sections, ALL);
+    expect(expected).toContain(`${BASE}/student/timetable/cls-1/watch/r1`);
+    expected.forEach((url) => expect(text).toContain(url));
+    expect(new Set(hrefs(html))).toEqual(new Set(expected));
+    expect(html).toContain('Humans &amp; streets');
+  });
+});

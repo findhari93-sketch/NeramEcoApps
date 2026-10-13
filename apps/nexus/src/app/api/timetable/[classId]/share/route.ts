@@ -28,7 +28,8 @@ import {
   postChatMessageDetailed,
   resolveMeetingChannelId,
 } from '@/lib/teams-class-announcements';
-import { FEATURE_FLAGS_KEY, featureForPath, resolveFlags, type FlagMap } from '@/lib/feature-flags';
+import { FEATURE_FLAGS_KEY, PREWATCH_FEATURE, featureForPath, resolveFlags, type FlagMap } from '@/lib/feature-flags';
+import { loadPrewatch, prewatchLinks } from '@/lib/prewatch-server';
 
 /**
  * "Share this class": one message a teacher can paste into the class group or
@@ -241,6 +242,15 @@ async function assembleSharePayload(
   const gateArmed = !past && !!prepTest && flags['student.class-prep-gate'] !== false;
   const joinUrl = gateArmed ? null : cls.teams_meeting_join_url || cls.teams_meeting_url;
 
+  // "Watch before class" videos. Only when the student page is switched on, and
+  // only before the class. A failure drops the section, never the share.
+  const prewatch =
+    !past && flags[PREWATCH_FEATURE] === true
+      ? await loadPrewatch(supabase, cls.id)
+          .then(({ items }) => prewatchLinks(base, cls.id, items))
+          .catch(() => [])
+      : [];
+
   const payload: ClassSharePayload = {
     classId: cls.id,
     title: cls.title || 'Class',
@@ -273,6 +283,7 @@ async function assembleSharePayload(
     // that cannot happen, and a notice students learn to discount is worse
     // than no notice at all.
     absenceGateEnabled: flags['student.absence-reason-gate'] === true,
+    prewatch,
   };
 
   const everySection = new Set<ShareSectionId>(TOGGLEABLE_SECTIONS);

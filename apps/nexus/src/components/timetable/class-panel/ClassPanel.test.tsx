@@ -9,6 +9,7 @@ vi.mock('../ClassPrepRoster', () => ({ default: () => <div data-testid="prep-ros
 vi.mock('../ClassAssignmentsSection', () => ({ default: () => <div data-testid="assignments" /> }));
 vi.mock('../ClassPrepTestSection', () => ({ default: () => <div data-testid="prep-test" /> }));
 vi.mock('../ClassResourcesSection', () => ({ default: () => <div data-testid="resources" /> }));
+vi.mock('../prewatch/PrewatchSection', () => ({ default: () => <div data-testid="prewatch" /> }));
 vi.mock('../ClassCaptureView', () => ({ default: () => <div data-testid="capture" /> }));
 vi.mock('../WrapUpSection', () => ({ default: () => <div data-testid="wrap-up" /> }));
 vi.mock('../MeetingRecap', () => ({ default: () => <div data-testid="recap" /> }));

@@ -18,14 +18,16 @@ export interface HeldSendsOptions<P> {
 }
 
 export interface HeldSends<P> {
-  /** Start (or restart) the window for this key with this payload. */
-  hold: (key: string, payload: P) => void;
+  /** Start (or restart) the window for this key with this payload. `holdMs` overrides the default for this one. */
+  hold: (key: string, payload: P, holdMs?: number) => void;
+  /** What is held for this key, without touching it. */
+  peek: (key: string) => P | null;
   /** Cancel a held send. Returns its payload, or null when nothing was held. */
   undo: (key: string) => P | null;
   /** Send this payload now, replacing anything held for the key. */
   sendNow: (key: string, payload: P) => void;
-  /** Send every held payload now. */
-  flush: () => void;
+  /** Send every held payload now, or only the one for `key`. */
+  flush: (key?: string) => void;
   isHeld: (key: string) => boolean;
   /** Cancel everything without sending. */
   dispose: () => void;
@@ -50,21 +52,22 @@ export function createHeldSends<P>(options: HeldSendsOptions<P>): HeldSends<P> {
   };
 
   return {
-    hold(key, payload) {
+    hold(key, payload, holdMs = options.holdMs) {
       cancel(key);
       const timer = setTimeout(() => {
         held.delete(key);
         send(key, payload);
-      }, options.holdMs);
+      }, holdMs);
       held.set(key, { payload, timer });
     },
+    peek: (key) => held.get(key)?.payload ?? null,
     undo: cancel,
     sendNow(key, payload) {
       cancel(key);
       send(key, payload);
     },
-    flush() {
-      for (const key of [...held.keys()]) {
+    flush(only) {
+      for (const key of only === undefined ? [...held.keys()] : [only]) {
         const payload = cancel(key);
         if (payload !== null) send(key, payload);
       }

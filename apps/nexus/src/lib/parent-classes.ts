@@ -47,6 +47,7 @@ import {
 } from '@/lib/parent-attendance';
 import { loadAwayWindows } from '@/lib/away-windows';
 import { CLASS_IMAGES_EMBED, sortClassImages } from '@/lib/class-cover';
+import { NOT_PREWATCH_KINDS } from '@/lib/class-resources';
 import type { ClassScope } from '@/lib/parent-data';
 import { istToday } from '@/lib/parent-data';
 import { sessionWindow } from '@/lib/attendance-register';
@@ -125,7 +126,9 @@ async function loadResourceCounts(classIds: string[]): Promise<Map<string, numbe
     const supabase = getSupabaseAdminClient();
     const { data, error } = await (supabase.from('nexus_class_resources' as any) as any)
       .select('scheduled_class_id')
-      .in('scheduled_class_id', classIds);
+      .in('scheduled_class_id', classIds)
+      // Reference material only; watch-before-class videos are their own thing.
+      .not('kind', 'in', NOT_PREWATCH_KINDS);
     if (error) return counts;
     for (const row of (data || []) as { scheduled_class_id: string }[]) {
       counts.set(row.scheduled_class_id, (counts.get(row.scheduled_class_id) || 0) + 1);

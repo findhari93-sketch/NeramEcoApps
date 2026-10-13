@@ -208,8 +208,12 @@ function mappedHref(
     case 'class_rescheduled':
     case 'class_created':
     case 'recording_available': {
+      // There is no /timetable/{classId} page. The student timetable opens a
+      // class from ?class=; the teacher timetable has no deep link yet, so it
+      // opens on the week. The old path 404'd on every one of these bells.
       const classId = notification.metadata?.class_id as string | undefined;
-      return classId ? `/${nexusRole || 'student'}/timetable/${classId}` : `/${nexusRole || 'student'}/timetable`;
+      const role = nexusRole || 'student';
+      return classId && role === 'student' ? `/student/timetable?class=${classId}` : `/${role}/timetable`;
     }
     case 'week_published':
       return `/${nexusRole || 'student'}/timetable`;

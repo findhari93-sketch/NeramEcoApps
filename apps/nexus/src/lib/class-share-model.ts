@@ -16,12 +16,14 @@
 
 import { classShareLinks } from '@/lib/class-share-links';
 import { classPostAbsenceNotice } from './absence-reason-message';
+import { formatDuration } from './prewatch';
 
 export type ClassShareState = 'upcoming' | 'past' | 'cancelled';
 
 export type ShareSectionId =
   | 'header'
   | 'description'
+  | 'prewatch'
   | 'join'
   | 'recording'
   | 'tests'
@@ -38,6 +40,7 @@ export type ShareSectionId =
 /** Sections the teacher may switch off. Header and footer are always in. */
 export const TOGGLEABLE_SECTIONS: ShareSectionId[] = [
   'description',
+  'prewatch',
   'join',
   'recording',
   'tests',
@@ -127,6 +130,18 @@ export interface ClassSharePayload {
    * mean what it says, which is the credibility the hold depends on.
    */
   absenceGateEnabled?: boolean;
+  /**
+   * "Watch before class" videos, each linking to the Nexus watch page.
+   * Optional: only filled when student.class-prewatch is on, because a link to
+   * a switched-off page is a dead end for every student who taps it.
+   */
+  prewatch?: SharePrewatchVideo[];
+}
+
+export interface SharePrewatchVideo {
+  title: string;
+  url: string;
+  durationSeconds: number | null;
 }
 
 /**
@@ -315,6 +330,27 @@ export function buildShareSections(payload: ClassSharePayload): ShareSection[] {
       toggleable: true,
       checkboxLabel: past ? 'What we covered' : 'What we will cover',
     });
+  }
+
+  // ─── Watch before class. Upcoming only: after the class it is just a video. ───
+  if (!past) {
+    const lines: ShareLine[] = [];
+    for (const v of payload.prewatch || []) {
+      const url = safeUrl(v.url);
+      if (!url) continue;
+      const length = formatDuration(v.durationSeconds);
+      lines.push({ text: length ? `${v.title.trim()} (${length})` : v.title.trim(), url, bullet: true });
+    }
+    if (lines.length) {
+      lines.push({ text: 'Optional. Opens in Nexus and remembers where you stopped.', muted: true });
+      sections.push({
+        id: 'prewatch',
+        heading: { emoji: '🎬', text: 'Watch before class' },
+        lines,
+        toggleable: true,
+        checkboxLabel: `Watch before class (${lines.length - 1})`,
+      });
+    }
   }
 
   // ─── Join + RSVP. Upcoming only. ───

@@ -43,6 +43,9 @@ export interface FeatureDef {
 /** The settings key under which overrides live in `nexus_settings`. */
 export const FEATURE_FLAGS_KEY = 'feature_flags';
 
+/** Watch before class (see the registry entry below). */
+export const PREWATCH_FEATURE = 'student.class-prewatch';
+
 export const FEATURES: FeatureDef[] = [
   // ── Student ──────────────────────────────────────────────────────────────
   { id: 'student.dashboard', label: 'Dashboard', surface: 'student', group: 'Home', paths: ['/student/dashboard'], defaultEnabled: true, core: true },
@@ -182,6 +185,13 @@ export const FEATURES: FeatureDef[] = [
   // this was built to close stays open until somebody remembers a switch.
   { id: 'student.protected-video', label: 'Protected video delivery', surface: 'student', group: 'Study Zone', paths: [], defaultEnabled: true },
   { id: 'student.resources', label: 'Reference Material', surface: 'student', group: 'Study Zone', paths: ['/student/resources'], defaultEnabled: false },
+  // "Watch before class" videos a teacher attaches while scheduling a class: a
+  // Library video or a past class's recording, played inside Nexus and tracked.
+  // `paths: []` on purpose: the watch page sits under /student/timetable/, and a
+  // path here would, by longest-prefix matching, also gate catch-up and exams.
+  // The page and the routes check this flag themselves. It also hides the field
+  // in Add Class, so a teacher never attaches videos students cannot open.
+  { id: PREWATCH_FEATURE, label: 'Watch before class videos', surface: 'student', group: 'Live Class', paths: [], defaultEnabled: false },
 
   // Access rules. Not a page: `paths: []` can never match in featureForPath, so
   // this is a pure on/off switch with no page-gating side effect. It arms the

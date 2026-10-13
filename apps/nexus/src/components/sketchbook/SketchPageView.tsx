@@ -10,7 +10,7 @@ import CommentSection from '@/components/drawings/CommentSection';
 import PractisedFrom from '@/components/drawings/PractisedFrom';
 import PageHeader from '@/components/PageHeader';
 import { drawingSourceLabel } from '@/lib/drawing-source';
-import { REACTION_LABEL } from '@/lib/sketchbook-messages';
+import { GRADE_LABEL, REACTION_LABEL } from '@/lib/sketchbook-messages';
 import { formatPracticeDay } from '@/lib/sketchbook-rhythm';
 import type { GridSketch } from './SketchGrid';
 
@@ -69,6 +69,11 @@ export default function SketchPageView({ sketch, mode, backHref, getToken, onDel
         ))}
         {sketch.reaction && REACTION_LABEL[sketch.reaction as keyof typeof REACTION_LABEL] && (
           <Chip label={`${REACTION_LABEL[sketch.reaction as keyof typeof REACTION_LABEL]} from your teacher`} color="primary" variant="outlined" sx={{ height: 36 }} />
+        )}
+        {/* The teacher's grade for this drawing. Same neutral style for every
+            grade: Needs practice is a next step, not a red mark. */}
+        {sketch.drawing_grade && GRADE_LABEL[sketch.drawing_grade] && (
+          <Chip label={`Grade: ${GRADE_LABEL[sketch.drawing_grade]}`} variant="outlined" sx={{ height: 36, fontWeight: 600 }} />
         )}
         {sketch.seenBy && <Chip label={`Seen by ${sketch.seenBy.name?.split(' ')[0] || 'your teacher'}`} variant="outlined" sx={{ height: 36 }} />}
       </Box>

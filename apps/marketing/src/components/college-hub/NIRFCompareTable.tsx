@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { localePrefix } from '@/lib/college-hub/detail-content';
 import {
   Box,
   Paper,
@@ -71,7 +72,7 @@ export default function NIRFCompareTable({ rows, years, locale }: Props) {
             <TableRow key={college!.slug} hover>
               <TableCell sx={{ position: 'sticky', left: 0, bgcolor: 'background.paper', zIndex: 1 }}>
                 <Link
-                  href={`/${locale}/colleges/rankings/nirf/${college!.slug}`}
+                  href={`${localePrefix(locale)}/colleges/rankings/nirf/${college!.slug}`}
                   style={{ color: 'inherit', textDecoration: 'none' }}
                 >
                   <Typography variant="body2" fontWeight={600}>

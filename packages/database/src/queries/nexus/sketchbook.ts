@@ -1,7 +1,8 @@
 // @ts-nocheck: sketchbook tables land in the generated types after the migration is applied; regenerate with pnpm supabase:gen:types
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../../client';
-import type { SketchbookReaction, NexusSketchbookFeature } from '../../types';
+import type { DrawingGrade, SketchbookReaction, NexusSketchbookFeature } from '../../types';
 import { SAME_SHEET_WINDOW_HOURS, fingerprintOf, isSameSheet } from './drawing-fingerprint';
+import { nextEvaluatedAt } from './drawing-grade';
 
 /**
  * Sketchbook data access. Every function here is service-role; the routes
@@ -32,6 +33,10 @@ export interface SketchbookSketchRow {
   tutor_rating: number | null;
   tutor_marks: number | null;
   inspiration_item_id: string | null;
+  /** This drawing's grade. Absent where the grade migration has not run. */
+  drawing_grade?: DrawingGrade | null;
+  /** Set once the drawing has a grade and a reaction (lib drawing-grade.ts). */
+  evaluated_at?: string | null;
   assignment: { id: string; title: string | null; evaluation_type: string | null; max_marks: number | null } | null;
 }
 
@@ -57,6 +62,19 @@ const SKETCH_COLUMNS =
   'source_type, status, assignment_id, question_id, reviewed_at, tutor_rating, tutor_marks, inspiration_item_id, ' +
   'assignment:nexus_class_assignments!drawing_submissions_assignment_id_fkey(id, title, evaluation_type, max_marks)';
 
+/** The grade columns (20261118090000_drawing_grade.sql), read where they exist. */
+const GRADED_SKETCH_COLUMNS = `${SKETCH_COLUMNS}, drawing_grade, evaluated_at`;
+
+/**
+ * Run a read with the grade columns, and again without them where the grade
+ * migration has not run yet. The student sketchbook shares these reads, so a
+ * missing column must never cost a student their drawings.
+ */
+async function readGraded<T>(run: (columns: string) => PromiseLike<{ data: T; error: any }>): Promise<{ data: T; error: any }> {
+  const first = await run(GRADED_SKETCH_COLUMNS);
+  return isMissingColumn(first.error) ? run(SKETCH_COLUMNS) : first;
+}
+
 /** IST bounds for a YYYY-MM month, as ISO strings PostgREST compares correctly. */
 export function monthRangeIst(month: string): { from: string; to: string } {
   const [y, m] = month.split('-').map(Number);
@@ -77,14 +95,16 @@ export async function listSketchbookMonth(
 ): Promise<SketchbookSketchRow[]> {
   const supabase = client || getSupabaseAdminClient();
   const { from, to } = monthRangeIst(month);
-  let query = supabase
-    .from('drawing_submissions')
-    .select(SKETCH_COLUMNS)
-    .eq('student_id', studentId)
-    .gte('submitted_at', from)
-    .lt('submitted_at', to);
-  if (viewer === 'student') query = query.neq('source_type', 'exam');
-  const { data, error } = await query.order('submitted_at', { ascending: false });
+  const { data, error } = await readGraded((columns) => {
+    let query = supabase
+      .from('drawing_submissions')
+      .select(columns)
+      .eq('student_id', studentId)
+      .gte('submitted_at', from)
+      .lt('submitted_at', to);
+    if (viewer === 'student') query = query.neq('source_type', 'exam');
+    return query.order('submitted_at', { ascending: false });
+  });
   if (error) throw error;
   return data || [];
 }
@@ -126,12 +146,8 @@ export async function getSketchbookSketch(
   client?: TypedSupabaseClient,
 ): Promise<SketchbookSketchRow | null> {
   const supabase = client || getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from('drawing_submissions')
-    .select(SKETCH_COLUMNS)
-    .eq('id', id)
-    .eq('source_type', 'sketchbook')
-    .maybeSingle();
+  const { data, error } = await readGraded((columns) =>
+    supabase.from('drawing_submissions').select(columns).eq('id', id).eq('source_type', 'sketchbook').maybeSingle());
   if (error) throw error;
   return data;
 }
@@ -142,7 +158,7 @@ export async function getSketchbookDrawing(
   client?: TypedSupabaseClient,
 ): Promise<SketchbookSketchRow | null> {
   const supabase = client || getSupabaseAdminClient();
-  const { data, error } = await supabase.from('drawing_submissions').select(SKETCH_COLUMNS).eq('id', id).maybeSingle();
+  const { data, error } = await readGraded((columns) => supabase.from('drawing_submissions').select(columns).eq('id', id).maybeSingle());
   if (error) throw error;
   return data;
 }
@@ -157,13 +173,14 @@ export async function getPracticeDrawing(
   client?: TypedSupabaseClient,
 ): Promise<SketchbookSketchRow | null> {
   const supabase = client || getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from('drawing_submissions')
-    .select(SKETCH_COLUMNS)
-    .eq('id', id)
-    .in('source_type', [...PRACTICE_SOURCE_TYPES])
-    .is('assignment_id', null)
-    .maybeSingle();
+  const { data, error } = await readGraded((columns) =>
+    supabase
+      .from('drawing_submissions')
+      .select(columns)
+      .eq('id', id)
+      .in('source_type', [...PRACTICE_SOURCE_TYPES])
+      .is('assignment_id', null)
+      .maybeSingle());
   if (error) throw error;
   return data;
 }
@@ -344,17 +361,19 @@ const SAME_SHEET_WINDOW_MS = SAME_SHEET_WINDOW_HOURS * 3600 * 1000;
 /** Ceiling on the reference rows read for re-upload matching: a few students over four days. */
 const SAME_SHEET_REFERENCE_LIMIT = 500;
 
-/** Postgres "undefined column": an environment that has not had image_quality migrated in. */
+/** Postgres "undefined column": an environment that has not had image_quality or the grade columns migrated in. */
 const isMissingColumn = (e: { code?: string; message?: string } | null) =>
-  !!e && (e.code === '42703' || /image_quality/.test(e.message || ''));
+  !!e && (e.code === '42703' || /image_quality|drawing_grade|evaluated_at/.test(e.message || ''));
 
 /**
- * The flip inbox: practice drawings still waiting for a look, newest first.
+ * The flip inbox: practice drawings not yet evaluated, newest first.
  *
  * Evaluated anywhere counts as evaluated. A drawing leaves EVERY teacher inbox
- * once anyone reacted to it, commented on it, featured it or completed a
- * review; only a Skip (or a passing glance) stays personal to the teacher who
- * did it. It also leaves when it is a re-upload of a sheet that was already
+ * once it has a grade and a reaction (evaluated_at, drawing-grade.ts). A half
+ * done drawing (only one of the two) stays in every inbox until someone
+ * finishes it. A drawing this teacher passed with nothing given (a Skip, or a
+ * passing glance) stays hidden from this teacher only. A comment or a feature
+ * no longer counts as an answer on its own. It also leaves when it is a re-upload of a sheet that was already
  * handled or sent to an assignment: same student, within SAME_SHEET_WINDOW_HOURS,
  * matching photo fingerprint (drawing-fingerprint.ts). Before this, a sheet a
  * teacher marked 4 stars in an assignment came back in Flip through as new work.
@@ -377,48 +396,47 @@ export async function listUnflipped(
   const candidateLimit = Math.min(limit * 5, 200);
   // drawing_submissions has exactly one FK to users (student_id), so the
   // relationship is unambiguous and needs no !hint.
-  const candidatesQuery = (columns: string) =>
-    supabase
+  const candidatesQuery = (columns: string, graded: boolean) => {
+    // Practice not yet evaluated. Assignment and test drawings are owed work
+    // with their own homes and badges. Where the grade migration has not run,
+    // the old rule: nobody reacted to or reviewed it yet.
+    let query = supabase
       .from('drawing_submissions')
       .select(`${columns}, student:users(id, name, avatar_url, ms_oid)`)
-      // Practice nobody has reacted to or reviewed yet. Assignment and test
-      // drawings are owed work with their own homes and badges, and a drawing a
-      // teacher already answered is not news to the next teacher.
       .in('source_type', [...PRACTICE_SOURCE_TYPES])
-      .is('assignment_id', null)
-      .is('reviewed_at', null)
-      .is('reaction', null)
+      .is('assignment_id', null);
+    query = graded ? query.is('evaluated_at', null) : query.is('reviewed_at', null).is('reaction', null);
+    return query
       .in('student_id', studentIds)
       .order('submitted_at', { ascending: false })
       .limit(candidateLimit);
-  let { data: candidates, error: candidatesError } = await candidatesQuery(`${SKETCH_COLUMNS}, image_quality`);
-  if (isMissingColumn(candidatesError)) ({ data: candidates, error: candidatesError } = await candidatesQuery(SKETCH_COLUMNS));
+  };
+  let { data: candidates, error: candidatesError } = await candidatesQuery(`${GRADED_SKETCH_COLUMNS}, image_quality`, true);
+  if (isMissingColumn(candidatesError)) ({ data: candidates, error: candidatesError } = await candidatesQuery(SKETCH_COLUMNS, false));
   if (candidatesError) throw candidatesError;
   const candidateRows = (candidates || []) as Array<SketchbookInboxRow & { image_quality?: unknown }>;
   if (candidateRows.length === 0) return { rows: [], remaining: 0 };
 
   const candidateIds = candidateRows.map((r) => r.id);
-  const [flipsRes, commentsRes, featuresRes] = await Promise.all([
-    supabase.from('nexus_sketchbook_flips').select('submission_id').eq('teacher_id', teacherId).in('submission_id', candidateIds),
-    supabase.from('drawing_submission_comments').select('submission_id').eq('author_role', 'teacher').in('submission_id', candidateIds),
-    supabase.from('nexus_sketchbook_features').select('submission_id').is('unfeatured_at', null).in('submission_id', candidateIds),
-  ]);
+  const flipsRes = await supabase
+    .from('nexus_sketchbook_flips')
+    .select('submission_id')
+    .eq('teacher_id', teacherId)
+    .in('submission_id', candidateIds);
   if (flipsRes.error) throw flipsRes.error;
-  if (commentsRes.error) throw commentsRes.error;
-  if (featuresRes.error) throw featuresRes.error;
   const flippedSet = new Set((flipsRes.data || []).map((f) => f.submission_id));
-  // Answered by any teacher: a comment or a live feature. A reaction or a
-  // completed review never reaches this point (the candidate query drops them).
-  const answered = new Set([...(commentsRes.data || []), ...(featuresRes.data || [])].map((r) => r.submission_id));
+  // Half done (a grade or a reaction, not both) comes back to every teacher,
+  // including the one who started it, until someone finishes it.
+  const halfDone = (r: SketchbookInboxRow) => !!(r.reaction || r.drawing_grade);
 
   const fp = new Map<string, string>();
   for (const r of candidateRows) {
     const f = fingerprintOf(r.image_quality);
     if (f) fp.set(r.id, f);
   }
-  const reuploads = await findReuploads(supabase, candidateRows.filter((r) => fp.has(r.id)), fp, answered);
+  const reuploads = await findReuploads(supabase, candidateRows.filter((r) => fp.has(r.id)), fp);
 
-  const unflippedInWindow = candidateRows.filter((r) => !flippedSet.has(r.id) && !answered.has(r.id) && !reuploads.has(r.id));
+  const unflippedInWindow = candidateRows.filter((r) => (halfDone(r) || !flippedSet.has(r.id)) && !reuploads.has(r.id));
   const page = unflippedInWindow.slice(0, limit);
   const rows = page.map(({ image_quality: _quality, ...row }) => {
     const mine = fp.get(row.id);
@@ -435,14 +453,13 @@ export async function listUnflipped(
 /**
  * Candidates that are the same sheet as a drawing already handled: owed work
  * (an assignment or exam copy, which is reviewed there), or a practice copy a
- * teacher reacted to, reviewed, commented on or featured. Read only when some
+ * teacher reacted to or reviewed. Read only when some
  * candidate has a fingerprint, so it costs nothing until photos carry one.
  */
 async function findReuploads(
   supabase: TypedSupabaseClient,
   withFingerprint: Array<{ id: string; student_id: string; submitted_at: string }>,
   fp: Map<string, string>,
-  answered: Set<string>,
 ): Promise<Set<string>> {
   const out = new Set<string>();
   if (withFingerprint.length === 0) return out;
@@ -463,7 +480,7 @@ async function findReuploads(
   }
   const handled = (data || []).filter((r) =>
     fingerprintOf(r.image_quality) &&
-    (r.assignment_id || r.source_type === 'assignment' || r.source_type === 'exam' || r.reaction || r.reviewed_at || answered.has(r.id)),
+    (r.assignment_id || r.source_type === 'assignment' || r.source_type === 'exam' || r.reaction || r.reviewed_at),
   );
   for (const c of withFingerprint) {
     const at = Date.parse(c.submitted_at);
@@ -650,6 +667,55 @@ export async function setSketchbookReaction(
     .in('source_type', [...PRACTICE_SOURCE_TYPES])
     .is('assignment_id', null);
   if (error) throw error;
+}
+
+/**
+ * Save a teacher's grade and/or reaction on a practice drawing, and keep
+ * evaluated_at true to the rule in drawing-grade.ts. `undefined` leaves a field
+ * as it is; null clears it. Returns what the drawing now holds.
+ *
+ * Where the grade migration has not run, a reaction still saves (the old way)
+ * and a grade is refused with a plain message.
+ */
+export async function savePracticeEvaluation(
+  before: { id: string; reaction: SketchbookReaction | null; drawing_grade?: DrawingGrade | null; evaluated_at?: string | null },
+  change: { reaction?: SketchbookReaction | null; grade?: DrawingGrade | null },
+  gradedBy: string,
+  client?: TypedSupabaseClient,
+): Promise<{ reaction: SketchbookReaction | null; drawing_grade: DrawingGrade | null; evaluated_at: string | null }> {
+  const supabase = client || getSupabaseAdminClient();
+  const now = new Date().toISOString();
+  const was = { reaction: before.reaction ?? null, drawing_grade: before.drawing_grade ?? null, evaluated_at: before.evaluated_at ?? null };
+  const after = {
+    reaction: change.reaction === undefined ? was.reaction : change.reaction,
+    drawing_grade: change.grade === undefined ? was.drawing_grade : change.grade,
+  };
+  const evaluated_at = nextEvaluatedAt(was, after, now);
+  const patch: Record<string, unknown> = { evaluated_at };
+  if (change.reaction !== undefined) patch.reaction = change.reaction;
+  if (change.grade !== undefined && change.grade !== was.drawing_grade) {
+    patch.drawing_grade = change.grade;
+    patch.graded_at = change.grade ? now : null;
+    patch.graded_by = change.grade ? gradedBy : null;
+  }
+  // Scoped to practice so a wrong id can never overwrite the shared `reaction`
+  // column on an assignment or test drawing, which the review screen owns.
+  const write = (body: Record<string, unknown>) =>
+    supabase
+      .from('drawing_submissions')
+      .update(body)
+      .eq('id', before.id)
+      .in('source_type', [...PRACTICE_SOURCE_TYPES])
+      .is('assignment_id', null);
+  const { error } = await write(patch);
+  if (isMissingColumn(error)) {
+    if (change.grade !== undefined) throw new Error('Grades are not switched on here yet. The reaction was not saved either; try again shortly.');
+    const { error: plainError } = await write({ reaction: after.reaction });
+    if (plainError) throw plainError;
+    return { reaction: after.reaction, drawing_grade: null, evaluated_at: null };
+  }
+  if (error) throw error;
+  return { ...after, evaluated_at };
 }
 
 export async function setFeatureOptOut(userId: string, optOut: boolean, client?: TypedSupabaseClient): Promise<void> {

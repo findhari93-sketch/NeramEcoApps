@@ -10,7 +10,8 @@ import FavoriteBorderOutlinedIcon from '@mui/icons-material/FavoriteBorderOutlin
 import LocalFireDepartmentOutlinedIcon from '@mui/icons-material/LocalFireDepartmentOutlined';
 import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import SendOutlinedIcon from '@mui/icons-material/SendOutlined';
-import type { SketchbookReaction } from '@neram/database/types';
+import type { DrawingGrade, SketchbookReaction } from '@neram/database/types';
+import { DRAWING_GRADES, DRAWING_GRADE_LABEL } from '@neram/database/drawing-grade';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { REACTION_LABEL } from '@/lib/sketchbook-messages';
 import type { SketchbookFeatureFact } from '@neram/database/queries/nexus';
@@ -44,7 +45,7 @@ interface TeacherSketchActionsProps {
    * uses this to answer the tap at once and hold the send for Undo; without it
    * the reaction is sent and awaited in place (the review screen).
    */
-  onReact?: (reaction: SketchbookReaction, comment?: string) => void;
+  onReact?: (reaction: SketchbookReaction | null, comment?: string) => void;
   /** With onReact: send the comment on its own, keeping the current reaction. */
   onComment?: (comment: string) => void;
   /**
@@ -62,6 +63,10 @@ interface TeacherSketchActionsProps {
   sendsWith?: string | null;
   /** Shown under the Feature row (the review screen's Inspiration status). */
   footer?: ReactNode;
+  /** This drawing's grade (Top / Mid / Needs practice). With onGrade, a grade row shows above the reactions. */
+  grade?: DrawingGrade | null;
+  /** Choose or clear (null) the grade. The parent holds it for its own send. */
+  onGrade?: (grade: DrawingGrade | null) => void;
 }
 
 interface DockToolProps {
@@ -114,7 +119,7 @@ export function DockTool({ icon, label, onClick, href, disabled, emphasis, color
 
 export default function TeacherSketchActions({
   sketchId, reaction, featured, studentName, onChanged, compact = false, hideComment = false, onReact, onComment, dock,
-  sendsWith, footer,
+  sendsWith, footer, grade = null, onGrade,
 }: TeacherSketchActionsProps) {
   // Reactions become a Teams chat from this teacher, so they carry the chat-scoped
   // token (the standing rule for anything a teacher presses Send on).
@@ -128,10 +133,15 @@ export default function TeacherSketchActions({
   const live = featured[0];
   const trimmed = comment.trim();
 
+  // In the dock the parent's draft is the truth: a second tap on the chosen
+  // reaction takes it back, like the grade.
+  const shown = dock ? reaction : (sent ?? reaction);
+
   const react = async (r: SketchbookReaction) => {
     if (onReact) {
-      setSent(r); setComment(''); setError('');
-      onReact(r, trimmed || undefined);
+      const next = dock && reaction === r ? null : r;
+      setSent(next); setComment(''); setError('');
+      onReact(next, trimmed || undefined);
       return;
     }
     setBusy(r); setError('');
@@ -145,6 +155,8 @@ export default function TeacherSketchActions({
   const sendComment = () => {
     if (!onComment || !trimmed) return;
     setComment('');
+    // In the dock the comment now shows on the card, so the box folds away.
+    if (dock) setCommentOpen(false);
     onComment(trimmed);
   };
 
@@ -160,9 +172,25 @@ export default function TeacherSketchActions({
   const reactionRow = (
     <Box sx={{ display: 'flex', gap: 1 }}>
       {ORDER.map((r) => (
-        <Button key={r} variant={(sent ?? reaction) === r ? 'contained' : 'outlined'} startIcon={ICONS[r]} disabled={busy !== null}
-          onClick={() => react(r)} aria-label={REACTION_LABEL[r]} sx={{ minHeight: 48, flex: '1 1 0', minWidth: 0, px: 1 }}>
+        <Button key={r} variant={shown === r ? 'contained' : 'outlined'} startIcon={ICONS[r]} disabled={busy !== null}
+          onClick={() => react(r)} aria-label={REACTION_LABEL[r]} aria-pressed={shown === r} sx={{ minHeight: 48, flex: '1 1 0', minWidth: 0, px: 1 }}>
           {REACTION_LABEL[r]}
+        </Button>
+      ))}
+    </Box>
+  );
+
+  // The grade comes first: it is what makes a drawing evaluated, with a
+  // reaction. Needs practice is the long label, so it gets the wider slot and
+  // the row still fits a 360px phone without wrapping.
+  const gradeRow = onGrade && (
+    <Box role="group" aria-label="Grade for this drawing" sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+      <Typography variant="caption" sx={{ width: 40, flexShrink: 0, fontWeight: 600, color: 'text.secondary' }}>Grade</Typography>
+      {DRAWING_GRADES.map((g) => (
+        <Button key={g} variant={grade === g ? 'contained' : 'outlined'} disabled={busy !== null}
+          onClick={() => onGrade(grade === g ? null : g)} aria-pressed={grade === g}
+          sx={{ minHeight: 44, flex: g === 'needs_practice' ? '1.6 1 0' : '1 1 0', minWidth: 0, px: 0.5, fontSize: '0.8125rem', whiteSpace: 'nowrap' }}>
+          {DRAWING_GRADE_LABEL[g]}
         </Button>
       ))}
     </Box>
@@ -171,7 +199,7 @@ export default function TeacherSketchActions({
   const commentBox = (
     <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', mt: dock ? 1 : 1.5 }}>
       <TextField
-        label={onComment ? 'Add a line (sent with a reaction, or press Send)' : 'Add a line (optional, sent with your reaction)'}
+        label={dock ? 'Add a line (sent when you move on)' : onComment ? 'Add a line (sent with a reaction, or press Send)' : 'Add a line (optional, sent with your reaction)'}
         value={comment}
         onChange={(e) => setComment(e.target.value.slice(0, 300))}
         onKeyDown={(e) => { if (onComment && e.key === 'Enter') { e.preventDefault(); sendComment(); } }}
@@ -182,8 +210,9 @@ export default function TeacherSketchActions({
         inputProps={{ 'aria-label': 'Comment' }}
       />
       {onComment && (
-        <Button variant="outlined" startIcon={<SendOutlinedIcon />} disabled={!trimmed} onClick={sendComment} sx={{ minHeight: 44, flexShrink: 0 }}>
-          Send
+        // In the dock nothing leaves until the teacher moves on, so it is Add, not Send.
+        <Button variant="outlined" startIcon={dock ? undefined : <SendOutlinedIcon />} disabled={!trimmed} onClick={sendComment} sx={{ minHeight: 44, flexShrink: 0 }}>
+          {dock ? 'Add' : 'Send'}
         </Button>
       )}
     </Box>
@@ -199,6 +228,7 @@ export default function TeacherSketchActions({
   if (dock) {
     return (
       <Box>
+        {gradeRow}
         {reactionRow}
         {commentOpen && commentBox}
         {errorLine}
@@ -221,6 +251,7 @@ export default function TeacherSketchActions({
 
   return (
     <Box sx={{ mb: 2 }}>
+      {gradeRow}
       {reactionRow}
       {onReact && sendsWith && (
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>{sendsWith}</Typography>

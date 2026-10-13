@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Typography,
@@ -44,6 +44,11 @@ import type { DayForecast } from '@/lib/class-forecast';
 import type { RsvpDashboardRangeResponse } from '@/app/api/timetable/rsvp-dashboard/route';
 import { type HolidayInfo, classStartDate } from './date-utils';
 import { buildClassDraftPrompt, parseClassDraft } from '@/lib/class-ai-draft';
+import PrewatchField from './prewatch/PrewatchField';
+import { candidateOfItem, picksOf, samePicks } from './prewatch/prewatch-client';
+import type { PrewatchCandidate } from '@/lib/prewatch-suggest';
+import { PREWATCH_FEATURE } from '@/lib/feature-flags';
+import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 
 interface TopicOption {
   id: string;
@@ -363,6 +368,45 @@ export default function ClassCreateDialog({
     setAiPromptCopied(false);
   }, [editingClass, open, effectiveDefaultId, prefillDate, prefillTime]);
 
+  // "Watch before class". Kept out of formData: the videos are saved by their
+  // own request in edit mode, and only when they changed.
+  const { isFeatureEnabled } = useNexusAuthContext();
+  const prewatchEnabled = isFeatureEnabled(PREWATCH_FEATURE);
+  const [prewatch, setPrewatch] = useState<PrewatchCandidate[]>([]);
+  const [prewatchInitial, setPrewatchInitial] = useState<PrewatchCandidate[]>([]);
+  const [prewatchLoading, setPrewatchLoading] = useState(false);
+  const editingId = editingClass?.id ?? null;
+  // A fresh getToken each render must not reload (and so reset) the list the
+  // teacher is editing.
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+  useEffect(() => {
+    setPrewatch([]);
+    setPrewatchInitial([]);
+    if (!open || !editingId || !prewatchEnabled) return;
+    let cancelled = false;
+    setPrewatchLoading(true);
+    (async () => {
+      try {
+        const token = await getTokenRef.current();
+        if (!token) return;
+        const res = await fetch(`/api/timetable/${editingId}/prewatch`, { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        const current = (data.items || []).map(candidateOfItem);
+        setPrewatch(current);
+        setPrewatchInitial(current);
+      } catch {
+        // The field starts empty; saving then only changes what the teacher touches.
+      } finally {
+        if (!cancelled) setPrewatchLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, editingId, prewatchEnabled]);
+
   // Selected classrooms → display info + meeting capability.
   const selectedClassrooms = effectiveClassrooms.filter((c) => formData.classroom_ids.includes(c.id));
   const isCommon = selectedClassrooms.some((c) => c.type === 'common');
@@ -551,6 +595,9 @@ export default function ClassCreateDialog({
         recurrence_rule: recurrenceRule,
         recurrence_end_date: recurrenceRule ? formData.recurrence_end_date : null,
       };
+      // On create the videos ride along, so every row (each classroom, each
+      // date) gets them before the Teams post is written.
+      if (!editingClass && prewatchEnabled && prewatch.length) body.prewatch = picksOf(prewatch);
 
       const method = editingClass ? 'PATCH' : 'POST';
       if (editingClass) {
@@ -576,6 +623,20 @@ export default function ClassCreateDialog({
       // The class saved and only the Teams subject did not. Say so, rather than
       // holding the dialog open over something the teacher cannot fix from here.
       if (data.teamsWarning && onMeetingError) onMeetingError(data.teamsWarning);
+      if (data.prewatchWarning && onMeetingError) onMeetingError(data.prewatchWarning);
+
+      // Edit: the videos have their own save, and only when they changed.
+      if (editingClass && prewatchEnabled && !prewatchLoading && !samePicks(prewatch, prewatchInitial)) {
+        const putRes = await fetch(`/api/timetable/${editingClass.id}/prewatch`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ items: picksOf(prewatch) }),
+        }).catch(() => null);
+        if (!putRes?.ok && onMeetingError) {
+          const err = await putRes?.json().catch(() => ({}));
+          onMeetingError(err?.error || 'The class was saved, but the videos to watch were not. Try again from the class panel.');
+        }
+      }
 
       // Close dialog and refresh list immediately — don't wait for Teams meeting
       const wantsMeeting = !editingClass && formData.create_meeting;
@@ -976,6 +1037,19 @@ export default function ClassCreateDialog({
             onChange={(e) => setFormData((f) => ({ ...f, description: e.target.value }))}
             placeholder="Optional notes or agenda for this class"
           />
+
+          {prewatchEnabled && (
+            <PrewatchField
+              value={prewatch}
+              onChange={setPrewatch}
+              title={formData.title}
+              courseTopicId={formData.topic_id || null}
+              classroomIds={formData.classroom_ids}
+              excludeClassId={editingClass?.id ?? null}
+              getToken={getToken}
+              loading={prewatchLoading}
+            />
+          )}
 
           {/* ─── Recurrence Section ─── */}
           {!editingClass && (

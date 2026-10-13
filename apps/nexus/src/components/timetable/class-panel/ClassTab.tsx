@@ -8,6 +8,7 @@ import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import IosShareIcon from '@mui/icons-material/IosShare';
 import PrepGateCard from '../PrepGateCard';
 import ClassManageSection from './ClassManageSection';
+import PrewatchSection from '../prewatch/PrewatchSection';
 import { RADIUS, tagSx } from '../timetable-theme';
 import type { ClassPanelTabProps } from './types';
 import { awayLabel, expectedLabel } from '@/lib/class-availability';
@@ -128,6 +129,21 @@ export default function ClassTab(props: ClassPanelTabProps) {
           />
         )}
       </Box>
+
+      {/* Videos to watch first. Before Join on purpose: it is what a student
+          should do before they get there. Hidden when there are none. */}
+      {!isCancelled && (
+        <PrewatchSection
+          classId={cls.id}
+          classTitle={cls.title}
+          role={role}
+          isUpcoming={isUpcoming}
+          courseTopicId={cls.course_topic?.id ?? null}
+          classroomId={(cls as { classroom_id?: string | null }).classroom_id ?? cls.classroom?.id ?? null}
+          getToken={getToken}
+          onNotify={onNotify}
+        />
+      )}
 
       {/* RSVP is the only number that means anything before a class has
           happened. Afterwards the After tab carries the real turnout. */}

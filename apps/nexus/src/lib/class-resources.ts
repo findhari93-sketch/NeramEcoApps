@@ -29,7 +29,28 @@ export const RESOURCE_COLS =
  * added to the weekly schedule payload: that is the most requested response in
  * the app and only carries the count.
  */
-export const CLASS_RESOURCES_EMBED = `class_resources:nexus_class_resources(${RESOURCE_COLS})`;
+export const CLASS_RESOURCES_EMBED = `class_resources:nexus_class_resources!nexus_class_resources_scheduled_class_id_fkey(${RESOURCE_COLS})`;
+
+/**
+ * "Watch before class" videos share the nexus_class_resources table (see
+ * 20261116090000_nexus_class_prewatch.sql) but are a separate section with
+ * their own player and tracking. Every reader of reference material leaves
+ * these kinds out; lib/prewatch-server.ts is the one place that reads them.
+ */
+export const PREWATCH_KINDS = ['library_video', 'class_recording'] as const;
+export type PrewatchKind = (typeof PREWATCH_KINDS)[number];
+
+/** PostgREST `.not('kind', 'in', ...)` value that leaves the prewatch kinds out. */
+export const NOT_PREWATCH_KINDS = `(${PREWATCH_KINDS.join(',')})`;
+
+export function isPrewatchKind(kind: unknown): kind is PrewatchKind {
+  return typeof kind === 'string' && (PREWATCH_KINDS as readonly string[]).includes(kind);
+}
+
+/** Drop prewatch rows from an embedded list (embeds cannot filter on kind). */
+export function referenceOnly<T extends { kind?: unknown }>(rows: T[] | null | undefined): T[] {
+  return (rows || []).filter((r) => !isPrewatchKind(r?.kind));
+}
 
 /** Hard ceiling per class. Enforced server-side; the client copy is advisory. */
 export const MAX_RESOURCES_PER_CLASS = 20;
