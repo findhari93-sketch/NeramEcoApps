@@ -65,6 +65,7 @@ export const BACK_TARGETS: Record<string, { href: string; label: string }> = {
   leads: { href: '/leads', label: 'Back to Leads' },
   duplicates: { href: '/duplicates', label: 'Back to Duplicates' },
   'follow-ups': { href: '/follow-ups', label: 'Back to Follow-ups' },
+  'phone-sign-in': { href: '/phone-sign-in', label: 'Back to Stuck at phone sign-in' },
   lifecycle: { href: '/lifecycle', label: 'Back to Lifecycle' },
   testimonials: { href: '/testimonials', label: 'Back to Testimonials' },
   students: { href: '/students', label: 'Back to Students' },

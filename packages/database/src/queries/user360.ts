@@ -13,6 +13,7 @@
 
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../client';
 import { listUserIdentities } from './identity';
+import { getPhoneAttemptsForUser, type PhoneAttempt } from './phone-attempts';
 
 export interface TimelineEntry {
   occurred_at: string;
@@ -39,6 +40,8 @@ export interface User360 {
   merges: Array<Record<string, any>>;
   openDuplicates: number;
   suggestions: Array<Record<string, any>>;
+  /** Every number typed into a phone-OTP dialog, verified first. */
+  phoneNumbers: PhoneAttempt[];
 }
 
 async function safe<T>(label: string, fn: () => Promise<T>, fallback: T): Promise<T> {
@@ -88,7 +91,7 @@ export async function getUser360(userId: string, client?: TypedSupabaseClient): 
     ));
   if (!person) return null;
 
-  const [identities, enrollments, ownerRow, followUps, notes, payments, appFeedback, testimonials, outcomes, merges, dupes, suggestions] =
+  const [identities, enrollments, ownerRow, followUps, notes, payments, appFeedback, testimonials, outcomes, merges, dupes, suggestions, phoneNumbers] =
     await Promise.all([
       safe('identities', () => listUserIdentities(userId, supabase), []),
       safe(
@@ -211,6 +214,7 @@ export async function getUser360(userId: string, client?: TypedSupabaseClient): 
           ),
         [],
       ),
+      safe('phone numbers', () => getPhoneAttemptsForUser(userId, supabase), [] as PhoneAttempt[]),
     ]);
 
   const paid = (payments as any[]).filter((p) => p.status === 'paid');
@@ -229,6 +233,7 @@ export async function getUser360(userId: string, client?: TypedSupabaseClient): 
     merges,
     openDuplicates: dupes,
     suggestions,
+    phoneNumbers,
   };
 }
 

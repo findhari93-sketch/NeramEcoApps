@@ -213,4 +213,38 @@ describe('LoginModal', () => {
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByText('Sign In')).toBeTruthy();
   });
+
+  /** The capture-phone bodies, in the order they were sent. */
+  function captureBodies(fetchMock: ReturnType<typeof mockServer>) {
+    return fetchMock.mock.calls
+      .filter(([url]) => String(url).endsWith('/api/auth/capture-phone'))
+      .map(([, init]) => JSON.parse((init as any).body));
+  }
+
+  it('saves the number for staff while signed out, before the OTP goes out, then marks it sent', async () => {
+    state.signedIn = false;
+    const fetchMock = mockServer();
+    render(<LoginModal open phoneOnly apiBaseUrl="https://app.test" />);
+    fireEvent.change(screen.getByLabelText('Phone Number'), { target: { value: '9876543210' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send OTP' }));
+    await screen.findByLabelText('OTP');
+
+    await waitFor(() => expect(captureBodies(fetchMock).map((b) => b.event)).toEqual(['entered', 'otp_sent']));
+    const [entered] = captureBodies(fetchMock);
+    expect(entered.phoneNumber).toBe('+919876543210');
+    expect(entered.idToken).toBeUndefined();
+    expect(entered.anonymousId).toMatch(/^anon_[0-9a-f]{32}$/);
+  });
+
+  it('saves the failure reason when the OTP cannot be sent', async () => {
+    state.signedIn = false;
+    const fetchMock = mockServer();
+    auth.sendPhoneOTP.mockRejectedValueOnce(Object.assign(new Error('Too many'), { code: 'auth/too-many-requests' }));
+    render(<LoginModal open phoneOnly apiBaseUrl="https://app.test" />);
+    fireEvent.change(screen.getByLabelText('Phone Number'), { target: { value: '9876543210' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send OTP' }));
+
+    await waitFor(() => expect(captureBodies(fetchMock).map((b) => b.event)).toEqual(['entered', 'failed']));
+    expect(captureBodies(fetchMock)[1]).toMatchObject({ errorCode: 'auth/too-many-requests' });
+  });
 });

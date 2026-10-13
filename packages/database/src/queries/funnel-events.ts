@@ -7,6 +7,7 @@
 
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../client';
 import type { UserFunnelEvent, UserFunnelEventInsert, AuthFunnelSummary } from '../types';
+import { linkPhoneAttempts } from './phone-attempts';
 
 // Auth funnel event order (for determining "last step reached")
 const AUTH_EVENT_ORDER: Record<string, number> = {
@@ -138,6 +139,8 @@ export async function linkAnonymousEvents(
   if (error) {
     console.error('Failed to link anonymous events:', error);
   }
+  // Numbers the visitor typed into a phone dialog while signed out.
+  await linkPhoneAttempts(anonymousId, userId, client);
 }
 
 // ============================================

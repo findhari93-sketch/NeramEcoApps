@@ -16,7 +16,12 @@ import {
   updateUser,
   getOrCreateUserFromFirebase,
   checkPhoneExists,
-  getSupabaseAdminClient, recordDuplicateCandidate } from '@neram/database';
+  getSupabaseAdminClient, recordDuplicateCandidate,
+  linkPhoneAttempts,
+  normalizeAttemptPhone,
+  recordPhoneAttempt,
+} from '@neram/database';
+import { isValidAnonymousId } from '@neram/database/analytics';
 
 // Firebase Admin is initialized in _lib/auth.ts — ensure it's imported
 import '@/app/api/_lib/auth';
@@ -30,7 +35,8 @@ function verifyIdToken(idToken: string) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { idToken, phoneNumber } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { idToken, phoneNumber } = body;
 
     if (!idToken || !phoneNumber) {
       return NextResponse.json(
@@ -110,6 +116,17 @@ export async function POST(req: NextRequest) {
       phone: phoneNumber,
       phone_verified: true,
     }, adminClient);
+
+    // The number's row in phone_attempts gets its tick (see the app's route).
+    const verifiedPhone = normalizeAttemptPhone(phoneNumber);
+    if (verifiedPhone) {
+      const anonymousId = isValidAnonymousId(body.anonymousId) ? body.anonymousId : null;
+      await linkPhoneAttempts(anonymousId, user.id, adminClient);
+      await recordPhoneAttempt(
+        { userId: user.id, anonymousId, phone: verifiedPhone, event: 'verified', sourceApp: 'marketing' },
+        adminClient,
+      );
+    }
 
     return NextResponse.json({
       success: true,

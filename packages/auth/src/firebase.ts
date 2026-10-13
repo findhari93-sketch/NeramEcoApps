@@ -285,14 +285,25 @@ export function initRecaptcha(
     recaptchaVerifier = null;
   }
 
-  // Also wipe any leftover reCAPTCHA iframes injected by Google SDK
+  // Render into a fresh child element every time. An invisible verifier renders
+  // straight into the element it is given, and grecaptcha remembers every element
+  // it has rendered in, even after innerHTML is cleared. Reusing the container
+  // made the second Send OTP in an open dialog ("Change number", Resend) fail
+  // with "reCAPTCHA has already been rendered in this element".
+  let target: string | HTMLElement = containerId;
   if (typeof document !== 'undefined') {
+    // Also wipe any leftover reCAPTCHA iframes injected by Google SDK
     document.querySelectorAll('iframe[src*="recaptcha"]').forEach((el) => el.remove());
     const container = document.getElementById(containerId);
-    if (container) container.innerHTML = '';
+    if (container) {
+      container.innerHTML = '';
+      const host = document.createElement('div');
+      container.appendChild(host);
+      target = host;
+    }
   }
 
-  recaptchaVerifier = new RecaptchaVerifier(auth, containerId, {
+  recaptchaVerifier = new RecaptchaVerifier(auth, target, {
     size: options?.size || 'invisible',
     callback: options?.callback,
     'expired-callback': options?.['expired-callback'],

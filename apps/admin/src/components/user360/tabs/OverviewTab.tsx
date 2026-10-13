@@ -10,11 +10,13 @@ import ChecklistOutlinedIcon from '@mui/icons-material/ChecklistOutlined';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import EventOutlinedIcon from '@mui/icons-material/EventOutlined';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import PhoneIphoneOutlinedIcon from '@mui/icons-material/PhoneIphoneOutlined';
 import { profileCompleteness } from '@neram/database';
 import UserProfileSection from '@/components/crm/UserProfileSection';
 import { formatDate, formatDateTime, isOverdue, relativeTime, sentenceCase, suggestionLabel } from '@/lib/user360-view';
 import { EmptyNote, KeyValue, SectionCard, TwoColumns, type User360TabProps } from '../shared';
 import IdentityList from '../IdentityList';
+import PhoneNumberList from '../PhoneNumberList';
 
 const FIRST_TOUCH_LABELS: Record<string, string> = {
   utm_source: 'Source',
@@ -104,6 +106,10 @@ export default function OverviewTab({ data, detail, onNavigateTab }: User360TabP
 
         <SectionCard title="Sign-in methods" icon={<FactCheckOutlinedIcon />}>
           <IdentityList data={data} compact />
+        </SectionCard>
+
+        <SectionCard title="Phone numbers" icon={<PhoneIphoneOutlinedIcon />}>
+          <PhoneNumberList numbers={data.phoneNumbers || []} />
         </SectionCard>
 
         <SectionCard title="First touch" icon={<TravelExploreOutlinedIcon />}>

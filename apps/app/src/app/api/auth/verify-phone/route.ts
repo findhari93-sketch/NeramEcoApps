@@ -10,7 +10,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { isSamePhone } from '@/lib/phone-match';
 import { verifyIdToken } from '@/lib/firebase-admin';
-import { getUserByFirebaseUid, updateUser, getOrCreateUserFromFirebase, checkPhoneExists, findVerifiedPhoneOwner, getSupabaseAdminClient, insertFunnelEvent, recordDuplicateCandidate } from '@neram/database';
+import { getUserByFirebaseUid, updateUser, getOrCreateUserFromFirebase, checkPhoneExists, findVerifiedPhoneOwner, getSupabaseAdminClient, insertFunnelEvent, recordDuplicateCandidate, linkPhoneAttempts, normalizeAttemptPhone, recordPhoneAttempt } from '@neram/database';
+import { isValidAnonymousId } from '@neram/database/analytics';
 
 import { getCorsHeaders } from '@/lib/cors';
 
@@ -22,7 +23,8 @@ export async function OPTIONS(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const corsHeaders = getCorsHeaders(req.headers.get('Origin'));
   try {
-    const { idToken, phoneNumber } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const { idToken, phoneNumber } = body;
 
     if (!idToken || !phoneNumber) {
       return NextResponse.json(
@@ -130,6 +132,18 @@ export async function POST(req: NextRequest) {
       phone: phoneNumber,
       phone_verified: true,
     }, adminClient);
+
+    // The number's row in phone_attempts gets its tick. Attempts typed while
+    // signed out (phone-first sign-in) move onto this account first.
+    const verifiedPhone = normalizeAttemptPhone(phoneNumber);
+    if (verifiedPhone) {
+      const anonymousId = isValidAnonymousId(body.anonymousId) ? body.anonymousId : null;
+      await linkPhoneAttempts(anonymousId, user.id, adminClient);
+      await recordPhoneAttempt(
+        { userId: user.id, anonymousId, phone: verifiedPhone, event: 'verified', sourceApp: 'app' },
+        adminClient,
+      );
+    }
 
     // Track successful phone verification
     await insertFunnelEvent(adminClient, {

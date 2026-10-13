@@ -73,6 +73,7 @@ import AnalyticsIcon from '@mui/icons-material/Analytics';
 import MarkEmailReadIcon from '@mui/icons-material/MarkEmailRead';
 import HistoryEduIcon from '@mui/icons-material/HistoryEdu';
 import PhoneCallbackIcon from '@mui/icons-material/PhoneCallback';
+import PhoneMissedOutlinedIcon from '@mui/icons-material/PhoneMissedOutlined';
 import MergeTypeIcon from '@mui/icons-material/MergeType';
 import AutorenewIcon from '@mui/icons-material/Autorenew';
 import AutoGraphIcon from '@mui/icons-material/AutoGraph';
@@ -126,6 +127,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       { text: 'Users (CRM)', icon: PeopleIcon, path: '/crm' },
       { text: 'Follow-ups', icon: PhoneCallbackIcon, path: '/follow-ups', hasBadge: 'follow_ups' },
+      { text: 'Stuck at phone sign-in', icon: PhoneMissedOutlinedIcon, path: '/phone-sign-in' },
       { text: 'Duplicates', icon: MergeTypeIcon, path: '/duplicates', hasBadge: 'duplicates' },
       { text: 'Lifecycle', icon: AutorenewIcon, path: '/lifecycle', hasBadge: 'lifecycle' },
       { text: 'Exam Batches', icon: CalendarMonthIcon, path: '/exam-batches' },

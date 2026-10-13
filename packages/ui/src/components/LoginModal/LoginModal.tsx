@@ -48,6 +48,29 @@ function signupOriginFields(): { anonymous_id?: string; first_touch?: unknown } 
 }
 
 /**
+ * The visitor id phone attempts are filed under while signed out: the shared
+ * neram_anon_id cookie, or (cookie blocked or not set yet) one id kept for
+ * this tab, in the same anon_ + 32 hex format the server accepts.
+ */
+function phoneAttemptAnonymousId(): string | undefined {
+  const fromCookie = signupOriginFields().anonymous_id;
+  if (fromCookie) return fromCookie;
+  try {
+    const key = 'neram_phone_attempt_anon';
+    let id = sessionStorage.getItem(key);
+    if (!id) {
+      const bytes = new Uint8Array(16);
+      crypto.getRandomValues(bytes);
+      id = `anon_${Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')}`;
+      sessionStorage.setItem(key, id);
+    }
+    return id;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Google Ads "Sign-up (1)": a sign-up with a verified phone, the account's one
  * primary conversion. Fired here because every OTP flow, in the app and on the
  * marketing site, ends in this modal. The label is set on production only, so
@@ -370,7 +393,7 @@ export default function LoginModal({
     const response = await fetch(`${apiBaseUrl}/api/auth/verify-phone`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ idToken, phoneNumber: phone }),
+      body: JSON.stringify({ idToken, phoneNumber: phone, anonymousId: phoneAttemptAnonymousId() }),
     });
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -387,6 +410,47 @@ export default function LoginModal({
     }
     return response.json();
   }, [apiBaseUrl]);
+
+  /**
+   * Save the typed number for staff (phone_attempts), signed in or not, before
+   * and whatever the OTP outcome. Calls run one after another so "entered"
+   * always lands before "otp_sent" or "failed". Fire and forget: never awaited
+   * by the sign-in, never throws.
+   */
+  const captureQueue = useRef<Promise<void>>(Promise.resolve());
+  const capturePhone = useCallback(
+    (phone: string, event: 'entered' | 'otp_sent' | 'failed', error?: { code?: string; message?: string }) => {
+      const send = async () => {
+        // Signed out, or the token cannot be read: the visitor id still files it.
+        let idToken: string | undefined;
+        try {
+          const { getFirebaseAuth } = await import('@neram/auth');
+          idToken = await getFirebaseAuth().currentUser?.getIdToken();
+        } catch {
+          idToken = undefined;
+        }
+        try {
+          await fetch(`${apiBaseUrl}/api/auth/capture-phone`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              idToken,
+              anonymousId: phoneAttemptAnonymousId(),
+              phoneNumber: phone,
+              event,
+              source: typeof window !== 'undefined' ? window.location.pathname : undefined,
+              errorCode: error?.code,
+              errorMessage: error?.message,
+            }),
+          });
+        } catch {
+          // A lost backup number must never block the sign-in.
+        }
+      };
+      captureQueue.current = captureQueue.current.then(send);
+    },
+    [apiBaseUrl],
+  );
 
   // ---- Post-Login Flow ----
 
@@ -567,30 +631,18 @@ export default function LoginModal({
     setPhoneError('');
     setPhoneLoading(true);
     try {
-      const { sendPhoneOTP, getFirebaseAuth } = await import('@neram/auth');
+      const { sendPhoneOTP } = await import('@neram/auth');
 
-      // Capture phone number as lead BEFORE sending OTP so it's never lost
-      // even if OTP fails or user drops off
-      try {
-        const auth = getFirebaseAuth();
-        const currentUser = auth.currentUser;
-        if (currentUser) {
-          const idToken = await currentUser.getIdToken();
-          await fetch(`${apiBaseUrl}/api/auth/capture-phone`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ idToken, phoneNumber: fullPhone }),
-          });
-        }
-      } catch {
-        // Non-critical: don't block OTP send if capture fails
-      }
+      // Save the number for staff BEFORE sending, so it is kept even if the OTP
+      // never goes out or the student drops off. Not awaited.
+      capturePhone(fullPhone, 'entered');
 
       // Always reinitialize reCAPTCHA before each OTP attempt: Firebase consumes
       // the verifier on each signInWithPhoneNumber call.
       await reinitRecaptcha();
 
       await sendPhoneOTP(fullPhone);
+      capturePhone(fullPhone, 'otp_sent');
       onFunnelEvent?.({ funnel: 'auth', event: 'otp_requested', status: 'completed' });
       setStep('otp');
       setResendTimer(60);
@@ -606,16 +658,19 @@ export default function LoginModal({
           const { sendPhoneOTP } = await import('@neram/auth');
           await reinitRecaptcha();
           await sendPhoneOTP(fullPhone);
+          capturePhone(fullPhone, 'otp_sent');
           onFunnelEvent?.({ funnel: 'auth', event: 'otp_requested', status: 'completed', metadata: { retry: true } });
           setStep('otp');
           setResendTimer(60);
           return;
         } catch (retryErr: any) {
+          capturePhone(fullPhone, 'failed', { code: retryErr?.code, message: retryErr?.message });
           setPhoneError(getFirebaseErrorMessage(retryErr));
           setFailedAttempts((n) => n + 1);
           return;
         }
       }
+      capturePhone(fullPhone, 'failed', { code: err?.code, message: err?.message });
       setPhoneError(errMsg);
       setFailedAttempts((n) => n + 1);
     } finally {
@@ -662,6 +717,7 @@ export default function LoginModal({
         setFailedAttempts((n) => n + 1);
       } else {
         onFunnelEvent?.({ funnel: 'auth', event: 'otp_failed', status: 'failed', error_message: getFirebaseErrorMessage(err), error_code: err?.code });
+        capturePhone(fullPhone, 'failed', { code: err?.code || 'otp_verify_failed', message: err?.message });
         setPhoneError(getFirebaseErrorMessage(err));
         setFailedAttempts((n) => n + 1);
       }
@@ -724,10 +780,13 @@ export default function LoginModal({
     setPhoneLoading(true);
     try {
       const { sendPhoneOTP } = await import('@neram/auth');
+      capturePhone(fullPhone, 'entered');
       await reinitRecaptcha();
       await sendPhoneOTP(fullPhone);
+      capturePhone(fullPhone, 'otp_sent');
       setResendTimer(60);
     } catch (err: any) {
+      capturePhone(fullPhone, 'failed', { code: err?.code, message: err?.message });
       setPhoneError(getFirebaseErrorMessage(err));
       setFailedAttempts((n) => n + 1);
     } finally {
