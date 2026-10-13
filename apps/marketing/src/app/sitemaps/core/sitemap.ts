@@ -6,7 +6,8 @@ import { collegeLastModified, stateLastModified } from '@/lib/college-hub/sitema
 import { ROUTED_HUB_SLUGS } from '@/data/counselling-2026';
 import { coursesData } from '@/data/courses';
 import { getReviewSummary } from '@/lib/review-stats';
-import { loadLearnerStories } from '@/lib/reviews/data';
+import { loadLearnerStories, loadVerifiedPublishedCount } from '@/lib/reviews/data';
+import { shouldSwitchOver } from '@/lib/reviews/hub';
 import { MIN_ITEMS_FOR_INDEX, REVIEW_EXAMS, reviewsPath, shouldIndexReviewsPage } from '@/lib/reviews/rules';
 import RETIRED_CITY_GUIDES from '@/data/geo/retired-city-guides.json';
 import APP_TOOL_REDIRECTS from '@/data/app-tool-redirects.json';
@@ -199,8 +200,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // This prevents "Duplicate, Google chose different canonical" for hardcoded English pages.
   // Tool landings that now 301 to the app (src/data/app-tool-redirects.json) leave the sitemap.
   const movedToApp = new Set(APP_TOOL_REDIRECTS.enabled.map((slug) => `/tools/${slug}`));
+  // After the review switch-over /testimonials redirects to /reviews, so it leaves the sitemap.
+  const reviewsSwitchedOver = shouldSwitchOver(await loadVerifiedPublishedCount());
   for (const page of staticPages) {
     if (movedToApp.has(page.path)) continue;
+    if (reviewsSwitchedOver && page.path === '/testimonials') continue;
     const isHomepage = page.path === '';
     const isHighPriority = page.path.includes('coaching') || page.path.includes('nata') || page.path.includes('jee');
     // Locale copies only where indexable-locales says the page is really translated,
@@ -354,8 +358,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   // ─── Reviews and learner stories (English only, data-gated) ────────────
   // Listed only while the page is indexable: a review page needs enough
-  // published ratings for an honest AggregateRating, the stories page needs
-  // enough verified outcomes. Until then the pages noindex themselves.
+  // published reviews not to be thin, the stories page needs enough verified
+  // outcomes. Until then the pages noindex themselves.
   try {
     const summaries = await Promise.all(REVIEW_EXAMS.map((exam) => getReviewSummary(exam)));
     REVIEW_EXAMS.forEach((exam, i) => {

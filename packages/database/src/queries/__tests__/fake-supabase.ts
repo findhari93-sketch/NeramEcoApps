@@ -115,6 +115,8 @@ export function createFakeSupabase(
       },
       gte: (c: string, v: string | number) => (filters.push((r) => r[c] != null && r[c] >= v), b),
       lte: (c: string, v: string | number) => (filters.push((r) => r[c] != null && r[c] <= v), b),
+      lt: (c: string, v: string | number) => (filters.push((r) => r[c] != null && r[c] < v), b),
+      gt: (c: string, v: string | number) => (filters.push((r) => r[c] != null && r[c] > v), b),
       order: (c: string, o: { ascending?: boolean } = {}) => (orders.push([c, o.ascending !== false]), b),
       limit: (n: number) => ((limit = n), b),
       maybeSingle: async () => {

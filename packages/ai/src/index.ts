@@ -61,3 +61,15 @@ export { checkBudget, getAiControls, clearBudgetCache, noteSpend } from './budge
 export type { BudgetReason, BudgetVerdict } from './budget';
 
 export { hashClientKey, ipFromHeaders } from './client-key';
+
+export {
+  REVIEW_HELPED_CHIPS,
+  REVIEW_COMPOSE_SCHEMA,
+  REVIEW_AUDIO_MIME,
+  buildReviewComposeInstruction,
+  coursePhrase,
+  factLines,
+  parseComposedReview,
+  stripDashes,
+} from './review-compose';
+export type { ReviewFacts, ReviewHelpedChip, ComposedReview } from './review-compose';

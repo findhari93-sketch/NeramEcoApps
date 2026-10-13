@@ -7,6 +7,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import CentreReviewLinks from '@/components/centres/CentreReviewLinks';
 import { useParams } from 'next/navigation';
 import {
   Alert,
@@ -435,6 +436,9 @@ export default function CentreEditPage() {
               </Box>
             </Box>
           </Card>
+          <Box sx={{ mt: 3 }}>
+            <CentreReviewLinks centreId={id} onSaved={setToast} />
+          </Box>
         </Box>
 
         <Paper variant="outlined" component="aside" aria-label="What the page still needs" sx={{ p: 2.5, position: { lg: 'sticky' }, top: { lg: 88 } }}>

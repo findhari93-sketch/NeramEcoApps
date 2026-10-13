@@ -22,6 +22,7 @@ import {
 } from '@neram/ui';
 import { neramaiArchitekDarkTheme } from '@neram/ui';
 import StarIcon from '@mui/icons-material/Star';
+import NorthEastIcon from '@mui/icons-material/NorthEast';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import type { SelectChangeEvent } from '@mui/material';
@@ -188,8 +189,8 @@ function TestimonialCard({ testimonial }: { testimonial: Testimonial }) {
                 display: 'block',
               }}
             >
-              {testimonial.city} \u2022 {formatLearningMode(testimonial.learning_mode)}
-              {testimonial.college_admitted ? ` \u2022 ${testimonial.college_admitted}` : ''}
+              {testimonial.city} · {formatLearningMode(testimonial.learning_mode)}
+              {testimonial.college_admitted ? ` · ${testimonial.college_admitted}` : ''}
             </Typography>
           </Box>
         </Box>
@@ -844,6 +845,7 @@ export default function TestimonialsPageContent({
                 <span className="arrow">&rarr;</span>
               </Button>
               <Button
+                endIcon={<NorthEastIcon fontSize="small" aria-hidden />}
                 component={Link}
                 href="/demo-class"
                 variant="text"
@@ -862,7 +864,7 @@ export default function TestimonialsPageContent({
                   },
                 }}
               >
-                Book Demo Class &nearr;
+                Book Demo Class
               </Button>
             </Box>
           </Container>

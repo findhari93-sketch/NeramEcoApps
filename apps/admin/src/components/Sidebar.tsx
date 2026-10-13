@@ -40,6 +40,8 @@ import CampaignIcon from '@mui/icons-material/Campaign';
 import FormatQuoteIcon from '@mui/icons-material/FormatQuote';
 import GraphicEqIcon from '@mui/icons-material/GraphicEq';
 import RateReviewIcon from '@mui/icons-material/RateReview';
+import ReviewsOutlinedIcon from '@mui/icons-material/ReviewsOutlined';
+import StarRateOutlinedIcon from '@mui/icons-material/StarRateOutlined';
 import StorefrontOutlinedIcon from '@mui/icons-material/StorefrontOutlined';
 import InsightsIcon from '@mui/icons-material/Insights';
 import PersonSearchIcon from '@mui/icons-material/PersonSearch';
@@ -189,6 +191,8 @@ const menuGroups: MenuGroup[] = [
       { text: 'Marketing Content', icon: CampaignIcon, path: '/marketing-content' },
       { text: 'Centres', icon: StorefrontOutlinedIcon, path: '/centres' },
       { text: 'Testimonials', icon: FormatQuoteIcon, path: '/testimonials' },
+      { text: 'Review requests', icon: ReviewsOutlinedIcon, path: '/review-requests' },
+      { text: 'Google reviews', icon: StarRateOutlinedIcon, path: '/google-reviews' },
       { text: 'Social Proofs', icon: GraphicEqIcon, path: '/social-proofs' },
       { text: 'Careers', icon: WorkIcon, path: '/careers', hasBadge: 'careers' },
     ],

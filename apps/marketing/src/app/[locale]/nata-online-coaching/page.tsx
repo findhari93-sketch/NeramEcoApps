@@ -34,6 +34,8 @@ import { buildAlternates, buildOgImage } from '@/lib/seo/metadata';
 import { APP_URL, BASE_URL } from '@/lib/seo/constants';
 import { COURSE_FEES, PROOF_POINTS } from '@/lib/seo/facts';
 import NataOnlineCoachingTamil from '@/components/nata-coaching/localized/NataOnlineCoachingTamil';
+import { ReviewCard } from '@/components/reviews/ReviewParts';
+import { loadReviewsByMode } from '@/lib/reviews/data';
 import NataOnlineCoachingHindi from '@/components/nata-coaching/localized/NataOnlineCoachingHindi';
 
 export const revalidate = 86400;
@@ -272,7 +274,7 @@ const trustPoints = [
   'Live online across India and the Gulf',
 ];
 
-export default function NataOnlineCoachingPage({ params: { locale } }: PageProps) {
+export default async function NataOnlineCoachingPage({ params: { locale } }: PageProps) {
   setRequestLocale(locale);
 
   // Native-script landing pages for Tamil and Hindi. Each ships its own schema,
@@ -390,19 +392,16 @@ export default function NataOnlineCoachingPage({ params: { locale } }: PageProps
     },
   ];
 
-  // Verified testimonials from Supabase student_profiles + counsellor-confirmed.
-  // To wire to live data, replace this constant with a server-side query.
-  // Currently scoped to publicly shareable initials + city + outcome only (no last names).
-  const testimonials: Array<{
-    studentName: string;
-    cityState: string;
-    outcome: string;
-    year: number;
-    quote: string;
-  }> = [
-    // Marketing team: replace with real, consent-verified student testimonials.
-    // Each item should include name (or initials), city, outcome, year, and a short quote.
-  ];
+  // Real, published reviews from students who studied online (the same cached
+  // read as /reviews, purged when staff publish). Empty means the section hides.
+  const onlineReviews = locale === 'en' ? await loadReviewsByMode(['online', 'hybrid'], locale, 4) : [];
+  const reviewCardLabels = {
+    stars: (rating: number) => `Rated ${rating} out of 5`,
+    joined: (college: string) => `Joined ${college}`,
+    featured: 'Featured',
+    verified: 'Verified student',
+    modes: { online: 'Online classes', hybrid: 'Hybrid classes', offline: 'Classroom' },
+  };
 
   return (
     <>
@@ -1036,11 +1035,12 @@ export default function NataOnlineCoachingPage({ params: { locale } }: PageProps
           </Container>
         </Box>
 
-        {/* Testimonials (rendered when populated) */}
-        {testimonials.length > 0 && (
-          <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
+        {/* Reviews from online students (rendered when there are any) */}
+        {onlineReviews.length > 0 && (
+          <Box component="section" aria-labelledby="online-reviews-title" sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
             <Container maxWidth="lg">
               <Typography
+                id="online-reviews-title"
                 variant="h2"
                 component="h2"
                 align="center"
@@ -1055,25 +1055,18 @@ export default function NataOnlineCoachingPage({ params: { locale } }: PageProps
                 color="text.secondary"
                 sx={{ mb: 6, maxWidth: 700, mx: 'auto' }}
               >
-                Verified outcomes from students across India and the Gulf
+                Reviews from students who studied with us online, checked by our team
               </Typography>
-              <Grid container spacing={3}>
-                {testimonials.map((t) => (
-                  <Grid item xs={12} md={6} key={`${t.studentName}-${t.year}`}>
-                    <Card sx={{ p: 3, height: '100%' }}>
-                      <Typography variant="body1" sx={{ fontStyle: 'italic', mb: 2, lineHeight: 1.7 }}>
-                        &ldquo;{t.quote}&rdquo;
-                      </Typography>
-                      <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                        {t.studentName}, {t.cityState}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        {t.outcome} (NATA {t.year})
-                      </Typography>
-                    </Card>
-                  </Grid>
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 3 }}>
+                {onlineReviews.map((review) => (
+                  <ReviewCard key={review.id} review={review} labels={reviewCardLabels} />
                 ))}
-              </Grid>
+              </Box>
+              <Box sx={{ textAlign: 'center', mt: 4 }}>
+                <Button component={Link} href="/reviews" variant="outlined" sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}>
+                  Read all student reviews
+                </Button>
+              </Box>
             </Container>
           </Box>
         )}

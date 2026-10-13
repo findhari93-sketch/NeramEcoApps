@@ -5,6 +5,7 @@
  * Pure, with no DOM and no database, so the recorder in the browser, the upload
  * route and the listen route all read one set of rules and cannot drift apart.
  */
+import { pickRecordingMime, recordingContainer } from '@neram/ui/utils';
 import { formatClock } from '../components/video/format';
 
 /** Three minutes. Long enough to walk through a drawing, short enough to finish. */
@@ -22,21 +23,6 @@ export const HEARD_FULLY_RATIO = 0.9;
 /** Private bucket. Reads and writes go through short-lived signed URLs only. */
 export const VOICE_FEEDBACK_BUCKET = 'drawing-voice-feedback';
 
-/**
- * Formats to ask MediaRecorder for, best first.
- *
- * AAC in MP4 leads because it is the one container every phone plays back.
- * WebM Opus is what Chrome records by default, but iPhones on iOS 15.4 to 17.3
- * refuse it in an audio element, so it is the fallback rather than the default.
- * Plain audio/mp4 is Safari, which answers no to any string carrying a codec.
- */
-const MIME_PREFERENCE = [
-  'audio/mp4;codecs=mp4a.40.2',
-  'audio/webm;codecs=opus',
-  'audio/mp4',
-  'audio/ogg;codecs=opus',
-] as const;
-
 const EXT_BY_CONTAINER: Record<string, 'm4a' | 'webm' | 'ogg'> = {
   'audio/mp4': 'm4a',
   'audio/webm': 'webm',
@@ -45,19 +31,11 @@ const EXT_BY_CONTAINER: Record<string, 'm4a' | 'webm' | 'ogg'> = {
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}';
 
-export function pickRecordingMime(isTypeSupported: (mime: string) => boolean): string | null {
-  for (const mime of MIME_PREFERENCE) {
-    try {
-      if (isTypeSupported(mime)) return mime;
-    } catch {
-      // Some embedded browsers ship a MediaRecorder stub that throws here.
-    }
-  }
-  return null;
-}
+/** The format list is shared with the Marketing review link; see @neram/ui/utils. */
+export { pickRecordingMime };
 
 function container(mime: string): string {
-  return (mime || '').split(';')[0].trim().toLowerCase();
+  return recordingContainer(mime);
 }
 
 export function extForMime(mime: string): 'm4a' | 'webm' | 'ogg' | null {

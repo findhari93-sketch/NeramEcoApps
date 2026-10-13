@@ -117,7 +117,13 @@ export async function listTestimonialsForModeration(
   const { status = 'pending_moderation', source = 'all', limit = 100 } = options;
   let query = supabase
     .from('testimonials')
-    .select('id, user_id, student_name, content, rating, exam_type, year, city, source, publication_status, consent_given_at, consent_by, consent_display_name, submitted_at, moderated_by, moderated_at, moderation_note, created_at, is_featured')
+    .select(
+      'id, user_id, student_name, student_photo, content, rating, exam_type, year, city, rank, percentile, college_admitted, source, publication_status, consent_given_at, consent_by, consent_display_name, submitted_at, moderated_by, moderated_at, moderation_note, created_at, is_featured, ' +
+        // Verified reviews from a review link (20261117090000): the student's own
+        // words, the transcript, staff edits, and what the student did on Google.
+        'is_verified_student, original_text, voice_transcript, input_mode, staff_edited, edited_at, review_request_id, ' +
+        'review_request:review_requests!testimonials_review_request_id_fkey(student_corrections, phone, google_clicked_at, google_posted_self_reported_at, secondary_platform, secondary_clicked_at)',
+    )
     .order('submitted_at', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
     .limit(limit);
@@ -209,7 +215,12 @@ export async function getPublishedReviews(
   const { exam = 'all', limit = 24, offset = 0 } = options;
   let query = supabase
     .from('testimonials')
-    .select('id, student_name, consent_display_name, student_photo, content, rating, exam_type, year, city, college_admitted, course_name, source, is_featured, created_at', { count: 'exact' })
+    .select(
+      'id, student_name, consent_display_name, student_photo, content, rating, exam_type, year, city, college_admitted, course_name, source, is_featured, created_at, ' +
+        // Verified review facts (20261117090000).
+        'rank, percentile, learning_mode, center_id, is_verified_student',
+      { count: 'exact' },
+    )
     .eq('publication_status', 'published')
     // Only testimonials a person confirmed in moderation. Rows that predate the
     // workflow stay off the review pages until staff confirm them.

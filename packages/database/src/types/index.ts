@@ -2050,6 +2050,68 @@ export interface Testimonial extends Timestamps {
   is_homepage: boolean;
   display_order: number;
   is_active: boolean;
+
+  // Verified reviews (20261117090000). Optional: older readers select narrower rows.
+  percentile?: number | null;
+  center_id?: string | null;
+  review_request_id?: string | null;
+  is_verified_student?: boolean;
+  /** The student's own words as submitted. Staff edits change content.en, never this. */
+  original_text?: string | null;
+  voice_transcript?: string | null;
+  input_mode?: 'typed' | 'voice' | null;
+  staff_edited?: boolean;
+  edited_by?: string | null;
+  edited_at?: string | null;
+}
+
+/**
+ * Review requests: one link asking a past student for a review (20261117090000).
+ */
+export type ReviewRequestStatus = 'active' | 'opened' | 'submitted' | 'expired' | 'cancelled';
+export type ReviewSecondaryPlatform = 'justdial' | 'sulekha';
+
+export interface ReviewRequest {
+  id: string;
+  token: string;
+  status: ReviewRequestStatus;
+  user_id: string | null;
+  student_result_id: string | null;
+  student_name: string;
+  photo_url: string | null;
+  exam_type: 'NATA' | 'JEE_PAPER_2' | 'BOTH';
+  exam_year: number | null;
+  air_rank: number | null;
+  percentile: number | null;
+  score: number | null;
+  college_admitted: string | null;
+  center_id: string | null;
+  city: string | null;
+  learning_mode: TestimonialLearningMode | null;
+  phone: string | null;
+  student_corrections: Record<string, string>;
+  testimonial_id: string | null;
+  ai_call_count: number;
+  google_target_url: string | null;
+  google_clicked_at: string | null;
+  google_posted_self_reported_at: string | null;
+  /** Set by the Google sync when the student's review is found on Google (20261118093000). */
+  google_review_id?: string | null;
+  google_review_matched_at?: string | null;
+  secondary_platform: ReviewSecondaryPlatform | null;
+  secondary_clicked_at: string | null;
+  reminder_sent_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  expires_at: string;
+  sent_at: string | null;
+  sent_by: string | null;
+  opened_at: string | null;
+  open_count: number;
+  submitted_at: string | null;
+  cancelled_by: string | null;
+  cancelled_at: string | null;
 }
 
 /**

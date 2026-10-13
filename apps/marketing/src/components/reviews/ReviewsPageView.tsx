@@ -1,36 +1,44 @@
 /**
  * /reviews, /reviews/nata and /reviews/jee (and their /page/N pages).
  *
- * Server component. Mobile first: one column at 375px, the rating summary above
- * the list, two review columns from 900px. Pagination is plain links so every
- * page is a cacheable ISR page and works without JavaScript.
+ * The site's source of truth for reviews. Server component. Mobile first: one
+ * column at 375px, the facts block and Google's ratings above the list, two
+ * review columns from 900px. Pagination is plain links so every page is a
+ * cacheable ISR page and works without JavaScript; the year, city, mode and
+ * college filters are a small client layer over the edge-cached search API.
  */
 
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { Box, Button, Container, LinearProgress, Paper, Stack, Typography } from '@neram/ui';
+import { Box, Button, Container, Paper, Stack, Typography } from '@neram/ui';
 import { JsonLd } from '@/components/seo/JsonLd';
 import Breadcrumbs from '@/components/seo/Breadcrumbs';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates, buildOgImage } from '@/lib/seo/metadata';
 import { BASE_URL } from '@/lib/seo/constants';
 import { getReviewSummary } from '@/lib/review-stats';
-import { loadRatingDistribution, loadReviewsPage } from '@/lib/reviews/data';
+import { loadAllPublishedReviews, loadCentreProfiles, loadReviewsPage } from '@/lib/reviews/data';
 import { buildReviewsPageJsonLd } from '@/lib/reviews/json-ld';
 import {
-  MIN_RATINGS_FOR_AGGREGATE,
-  aggregateRatingFromSummary,
-  hasEnoughRatings,
   localePath,
   reviewsPath,
   shouldIndexReviewsPage,
   totalPages,
   type ReviewExam,
-  type ReviewSummary,
 } from '@/lib/reviews/rules';
-import { EmptyState, LinkButtons, ReviewCard, Stars, focusRing } from './ReviewParts';
+import {
+  combinedGoogleRating,
+  facetOptions,
+  factsSentence,
+  quotableGoogleRatings,
+  sameAsUrls,
+  topColleges,
+} from '@/lib/reviews/hub';
+import { EmptyState, LinkButtons, ReviewCard, focusRing } from './ReviewParts';
+import ReviewHubPanel from './ReviewHubPanel';
+import ReviewFilters from './ReviewFilters';
 
 const TITLE_KEY = { all: 'titleAll', nata: 'titleNata', jee: 'titleJee' } as const;
 const META_TITLE_KEY = { all: 'metaTitleAll', nata: 'metaTitleNata', jee: 'metaTitleJee' } as const;
@@ -69,96 +77,37 @@ export async function buildReviewsMetadata(locale: string, exam: ReviewExam, pag
   };
 }
 
-function RatingSummaryCard({
-  summary,
-  distribution,
-  t,
-}: {
-  summary: ReviewSummary | null;
-  distribution: Array<{ stars: number; count: number }> | null;
-  t: (key: string, values?: Record<string, string | number>) => string;
-}) {
-  const enough = hasEnoughRatings(summary);
-  const max = distribution ? Math.max(1, ...distribution.map((d) => d.count)) : 1;
-  return (
-    <Paper component="section" aria-labelledby="rating-summary-title" variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3 }}>
-      <Typography id="rating-summary-title" component="h2" sx={{ fontSize: '1.125rem', fontWeight: 700, mb: 2 }}>
-        {t('summaryTitle')}
-      </Typography>
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={{ xs: 2.5, sm: 4 }} alignItems={{ xs: 'stretch', sm: 'center' }}>
-        <Box sx={{ minWidth: { sm: 200 } }}>
-          {enough ? (
-            <>
-              <Typography component="p" aria-hidden="true" sx={{ fontSize: '2.5rem', fontWeight: 800, lineHeight: 1.1 }}>
-                {summary.average.toFixed(1)}
-              </Typography>
-              <Stars rating={summary.average} label={t('averageOutOf', { average: summary.average.toFixed(1) })} size={24} />
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                {t('basedOn', { count: summary.ratingCount })}
-              </Typography>
-            </>
-          ) : (
-            <Typography color="text.secondary" sx={{ lineHeight: 1.6 }}>
-              {t('notEnoughRatings', { min: MIN_RATINGS_FOR_AGGREGATE, count: summary?.ratingCount ?? 0 })}
-            </Typography>
-          )}
-          <Typography variant="body2" sx={{ mt: 1, fontWeight: 600 }}>
-            {t('reviewCount', { count: summary?.reviewCount ?? 0 })}
-          </Typography>
-        </Box>
-
-        {distribution && distribution.some((d) => d.count > 0) && (
-          <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-            <Typography component="h3" variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-              {t('distributionLabel')}
-            </Typography>
-            <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0, display: 'grid', gap: 0.75 }}>
-              {distribution.map((d) => (
-                <Box
-                  component="li"
-                  key={d.stars}
-                  aria-label={t('starRowCount', { stars: d.stars, count: d.count })}
-                  sx={{ display: 'grid', gridTemplateColumns: '64px 1fr 32px', alignItems: 'center', gap: 1 }}
-                >
-                  <Typography variant="body2" aria-hidden="true" sx={{ whiteSpace: 'nowrap' }}>
-                    {t('starRow', { stars: d.stars })}
-                  </Typography>
-                  <LinearProgress
-                    variant="determinate"
-                    value={(d.count / max) * 100}
-                    aria-hidden="true"
-                    sx={{ height: 8, borderRadius: 4, bgcolor: 'action.hover', '& .MuiLinearProgress-bar': { bgcolor: 'warning.main', borderRadius: 4 } }}
-                  />
-                  <Typography variant="body2" aria-hidden="true" sx={{ textAlign: 'right' }}>
-                    {d.count}
-                  </Typography>
-                </Box>
-              ))}
-            </Box>
-          </Box>
-        )}
-      </Stack>
-    </Paper>
-  );
-}
-
 export default async function ReviewsPageView({ locale, exam, page }: { locale: string; exam: ReviewExam; page: number }) {
   setRequestLocale(locale);
   const t = await getTranslations({ locale, namespace: 'reviews' });
 
-  const [summary, pageData, distribution] = await Promise.all([
+  const [summary, pageData, allPublished, profiles] = await Promise.all([
     getReviewSummary(exam),
     loadReviewsPage(exam, page, locale),
-    loadRatingDistribution(exam),
+    loadAllPublishedReviews(locale),
+    loadCentreProfiles(),
   ]);
+  const inScope = allPublished.filter((r) =>
+    exam === 'nata' ? r.examType === 'NATA' || r.examType === 'BOTH' : exam === 'jee' ? r.examType === 'JEE_PAPER_2' || r.examType === 'BOTH' : true,
+  );
+  const googleRatings = quotableGoogleRatings(profiles.centres);
+  const sentence = factsSentence({
+    publishedCount: inScope.length,
+    verifiedCount: inScope.filter((r) => r.isVerified).length,
+    google: combinedGoogleRating(googleRatings),
+    colleges: topColleges(inScope),
+  });
+  const sameAs = sameAsUrls([...profiles.centres.map((c) => c.google_business_url), ...profiles.directoryUrls]);
 
   const pages = totalPages(pageData.total);
   // A /page/N beyond the last page is not a page.
   if (page > 1 && page > pages) notFound();
 
-  const aggregateRating = aggregateRatingFromSummary(summary);
   const pageUrl = absoluteUrl(locale, reviewsPath(exam, page));
-  const reviewsJsonLd = buildReviewsPageJsonLd({ reviews: pageData.reviews, aggregateRating, inLanguage: locale });
+  // No AggregateRating: staff choose what is published, so an average of it is
+  // self-serving (and Google shows no stars for it). sameAs ties the Google
+  // profiles and directory listings to this organization for answer engines.
+  const reviewsJsonLd = buildReviewsPageJsonLd({ reviews: pageData.reviews, aggregateRating: null, inLanguage: locale, sameAs });
 
   const crumbs = [
     { name: t('breadcrumbHome'), url: absoluteUrl(locale, '/'), href: localePath(locale, '/') },
@@ -169,10 +118,33 @@ export default async function ReviewsPageView({ locale, exam, page }: { locale: 
   ];
   if (page > 1) crumbs.push({ name: t('pageSuffix', { page }), url: pageUrl, href: localePath(locale, reviewsPath(exam, page)) });
 
+  const modes = { online: t('modeOnline'), hybrid: t('modeHybrid'), offline: t('modeOffline') };
   const cardLabels = {
     stars: (rating: number) => t('starsLabel', { rating }),
     joined: (college: string) => t('joined', { college }),
     featured: t('featured'),
+    verified: t('verifiedLabel'),
+    modes,
+  };
+  // Templates for the client filter cards: next-intl fills {rating} with the
+  // literal placeholder, and the client fills it per card.
+  const filterLabels = {
+    heading: t('filterHeading'),
+    year: t('filterYear'),
+    city: t('filterCity'),
+    mode: t('filterMode'),
+    college: t('filterCollege'),
+    any: t('filterAny'),
+    clear: t('filterClear'),
+    matches: t('filterMatches', { count: '{count}' }),
+    matchesOne: t('filterMatchesOne'),
+    noMatchTitle: t('filterNoMatchTitle'),
+    noMatchBody: t('filterNoMatchBody'),
+    modes,
+    starsTemplate: t('starsLabel', { rating: '{rating}' }),
+    joinedTemplate: t('joined', { college: '{college}' }),
+    featured: t('featured'),
+    verified: t('verifiedLabel'),
   };
 
   const filters: Array<{ exam: ReviewExam; label: string }> = [
@@ -224,9 +196,22 @@ export default async function ReviewsPageView({ locale, exam, page }: { locale: 
           </Box>
 
           <Box sx={{ mb: { xs: 3, md: 4 } }}>
-            <RatingSummaryCard summary={summary} distribution={distribution} t={t} />
+            <ReviewHubPanel
+              sentence={sentence}
+              google={googleRatings}
+              labels={{
+                factsTitle: t('factsTitle'),
+                reviewCount: t('reviewCount', { count: summary?.reviewCount ?? inScope.length }),
+                googleTitle: t('googleTitle'),
+                googleIntro: t('googleIntro'),
+                googleRating: (rating: string) => t('googleRating', { rating }),
+                googleReviews: (count: number) => t('googleReviews', { count }),
+                googleOpen: t('googleOpen'),
+              }}
+            />
           </Box>
 
+          <ReviewFilters exam={exam} locale={locale} facets={page === 1 ? facetOptions(inScope) : facetOptions([])} labels={filterLabels}>
           {pageData.reviews.length === 0 ? (
             <EmptyState
               title={t('emptyTitle')}
@@ -286,6 +271,7 @@ export default async function ReviewsPageView({ locale, exam, page }: { locale: 
               )}
             </Box>
           )}
+          </ReviewFilters>
 
           <Paper component="section" aria-labelledby="how-collected-title" variant="outlined" sx={{ mt: { xs: 4, md: 5 }, p: { xs: 2, sm: 3 }, borderRadius: 3 }}>
             <Typography id="how-collected-title" component="h2" sx={{ fontSize: '1.125rem', fontWeight: 700, mb: 1 }}>

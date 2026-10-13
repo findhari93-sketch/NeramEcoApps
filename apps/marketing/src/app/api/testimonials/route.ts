@@ -10,6 +10,8 @@ import {
   getTestimonialStats,
 } from '@neram/database/queries';
 import type { TestimonialLearningMode, ExamType } from '@neram/database';
+import { loadAllPublishedReviews } from '@/lib/reviews/data';
+import { shouldSwitchOver } from '@/lib/reviews/hub';
 
 /**
  * GET /api/testimonials
@@ -30,8 +32,23 @@ export async function GET(request: NextRequest) {
 
     const cacheHeaders = PUBLIC_CACHE_HEADERS;
 
-    // Homepage testimonials
+    // Homepage testimonials. After the review switch-over the homepage shows
+    // verified, published reviews (same shape the homepage maps), not the
+    // templated rows staff entered before real ones existed.
     if (searchParams.get('homepage') === 'true') {
+      const verified = (await loadAllPublishedReviews('en')).filter((r) => r.isVerified);
+      if (shouldSwitchOver(verified.length)) {
+        const data = verified.slice(0, 12).map((r) => ({
+          content: { en: r.body },
+          student_photo: r.photo,
+          student_name: r.displayName,
+          exam_type: r.examType || 'NATA',
+          year: r.year,
+          college_admitted: r.collegeAdmitted,
+          city: r.city || '',
+        }));
+        return NextResponse.json({ success: true, data }, { headers: cacheHeaders });
+      }
       const data = await getHomepageTestimonials(supabase);
       return NextResponse.json({ success: true, data }, { headers: cacheHeaders });
     }

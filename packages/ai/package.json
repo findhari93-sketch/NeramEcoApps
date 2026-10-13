@@ -8,6 +8,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./features": "./src/features.ts",
+    "./review-compose": "./src/review-compose.ts",
     "./pricing": "./src/pricing.ts"
   },
   "scripts": {

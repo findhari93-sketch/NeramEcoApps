@@ -9,6 +9,7 @@ import { neramaiArchitekDarkTheme } from '@neram/ui';
 import { NewHeroSection } from '@/components/hero';
 import CourseCard from '@/components/CourseCard';
 import SectionDivider from '@/components/SectionDivider';
+import NorthEastIcon from '@mui/icons-material/NorthEast';
 import { APP_URL } from '@/lib/seo/constants';
 import type { Testimonial } from '@/components/ui/testimonials-columns';
 import type { AskSeniorsEvent, AskSeniorsCollege } from '@neram/database';
@@ -89,64 +90,6 @@ const tools = [
   },
 ];
 
-// Fallback testimonials (shown while DB data loads or if fetch fails)
-const fallbackTestimonials: Testimonial[] = [
-  {
-    text: 'Neram Classes provided excellent guidance throughout my NATA preparation. The IIT alumni faculty made complex concepts easy to understand.',
-    image: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=80&h=80&fit=crop&crop=face',
-    name: 'Ananya Krishnan',
-    role: 'NATA 2024 - Top Scorer',
-  },
-  {
-    text: 'The personalized attention and regular mock tests helped me crack JEE Paper 2. Thanks to Neram Classes, I got into NIT Trichy B.Arch.',
-    image: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=80&h=80&fit=crop&crop=face',
-    name: 'Vikram Reddy',
-    role: 'JEE Paper 2 2024 - NIT Trichy',
-  },
-  {
-    text: 'The Revit training was industry-focused and practical. I got placed immediately after completing the course. Highly recommend for architecture students.',
-    image: 'https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=80&h=80&fit=crop&crop=face',
-    name: 'Meera Sundaram',
-    role: 'Revit Certified Professional',
-  },
-  {
-    text: 'The drawing and sketching workshops completely transformed my approach to design problems. I scored 145+ in NATA drawing section.',
-    image: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=80&h=80&fit=crop&crop=face',
-    name: 'Arjun Menon',
-    role: 'NATA 2026 - AIR 42',
-  },
-  {
-    text: 'From zero knowledge to AIR under 500, all thanks to the systematic approach and mentorship at Neram. The crash course is worth every rupee.',
-    image: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=80&h=80&fit=crop&crop=face',
-    name: 'Priya Venkat',
-    role: 'JEE Paper 2 2026 - IIT Kharagpur',
-  },
-  {
-    text: 'Mock tests with detailed analysis helped me identify my weak areas. The faculty is always available for doubt clearing even after class hours.',
-    image: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=80&h=80&fit=crop&crop=face',
-    name: 'Karthik Subramani',
-    role: 'NATA 2024 - Top 100',
-  },
-  {
-    text: 'I joined the year-long program and the structured curriculum covered everything. The best part was getting feedback from practicing architects.',
-    image: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=80&h=80&fit=crop&crop=face',
-    name: 'Deepika Raj',
-    role: 'NATA 2024 - SPA Delhi',
-  },
-  {
-    text: 'The online classes are just as effective as offline. I could study from my hometown and still cracked NATA in my first attempt with 140+ marks.',
-    image: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=80&h=80&fit=crop&crop=face',
-    name: 'Rahul Prakash',
-    role: 'NATA 2026 - First Attempt Clear',
-  },
-  {
-    text: 'The AutoCAD and Revit combo course gave me a huge edge. I got an internship at a top firm even before graduating from architecture college.',
-    image: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=80&h=80&fit=crop&crop=face',
-    name: 'Swetha Iyer',
-    role: 'AutoCAD + Revit Certified',
-  },
-];
-
 /** Map DB testimonial format to the component's expected shape. */
 function mapDbTestimonial(t: {
   content: Record<string, string>;
@@ -173,7 +116,9 @@ interface HomePageContentProps {
 export default function HomePageContent({ askSeniorsEvent, askSeniorsColleges }: HomePageContentProps) {
   const t = useTranslations('home');
 
-  const [testimonials, setTestimonials] = useState<Testimonial[]>(fallbackTestimonials);
+  // Real reviews only. No placeholder people while it loads: the section stays
+  // hidden until there is something true to show.
+  const [testimonials, setTestimonials] = useState<Testimonial[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -185,7 +130,7 @@ export default function HomePageContent({ askSeniorsEvent, askSeniorsColleges }:
         }
       })
       .catch(() => {
-        // Keep fallback data on error
+        // No reviews to show; the section stays hidden.
       });
     return () => { cancelled = true; };
   }, []);
@@ -386,7 +331,8 @@ export default function HomePageContent({ askSeniorsEvent, askSeniorsColleges }:
 
         <SectionDivider />
 
-        {/* ─── Testimonials ─── */}
+        {/* ─── Testimonials (only when real reviews loaded) ─── */}
+        {testimonials.length > 0 && (
         <Box sx={{ py: { xs: 6, md: 10 }, position: 'relative' }}>
           <Container maxWidth="lg">
             <Typography
@@ -444,8 +390,9 @@ export default function HomePageContent({ askSeniorsEvent, askSeniorsColleges }:
             </div>
           </Container>
         </Box>
+        )}
 
-        <SectionDivider />
+        {testimonials.length > 0 && <SectionDivider />}
 
         {/* ─── Student Results Showcase ─── */}
         <StudentResultsTeaser />
@@ -542,6 +489,7 @@ export default function HomePageContent({ askSeniorsEvent, askSeniorsColleges }:
               <Button
                 variant="text"
                 size="large"
+                endIcon={<NorthEastIcon fontSize="small" aria-hidden />}
                 href={`${APP_URL}/tools`}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -558,7 +506,7 @@ export default function HomePageContent({ askSeniorsEvent, askSeniorsColleges }:
                   },
                 }}
               >
-                Explore Free Tools &nearr;
+                Explore Free Tools
               </Button>
             </Box>
           </Container>

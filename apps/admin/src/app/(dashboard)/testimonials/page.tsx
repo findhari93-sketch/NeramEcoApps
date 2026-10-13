@@ -311,7 +311,7 @@ export default function TestimonialsPage() {
         ) : (
           <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: 'minmax(0,1fr)', xl: 'minmax(0,1fr) minmax(0,1fr)' } }}>
             {visible.map((t) => (
-              <ModerationCard key={t.id} t={t} busy={busyId === t.id} onAction={onAction} />
+              <ModerationCard key={t.id} t={t} busy={busyId === t.id} onAction={onAction} onEdited={load} />
             ))}
           </Box>
         )}

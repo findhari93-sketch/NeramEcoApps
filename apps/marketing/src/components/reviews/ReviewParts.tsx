@@ -13,6 +13,7 @@ import StarHalfIcon from '@mui/icons-material/StarHalf';
 import VerifiedOutlinedIcon from '@mui/icons-material/VerifiedOutlined';
 import type { PublicReview } from '@/lib/reviews/json-ld';
 import { examLabel, initials, isOptimizableImage } from '@/lib/reviews/rules';
+import { resultLabel } from '@/lib/reviews/hub';
 
 /** Visible keyboard focus for every link and button on these pages. */
 export const focusRing = {
@@ -32,16 +33,23 @@ export function Stars({ rating, label, size = 20 }: { rating: number; label: str
   );
 }
 
-export function PersonAvatar({ name, photo, size = 48 }: { name: string; photo: string | null; size?: number }) {
+/**
+ * The gold ring a verified student's photo gets, matching the review link page.
+ * Plain values only: this file renders inside Server Components, which cannot
+ * hand a theme function to MUI's client components (that 500ed /reviews).
+ */
+const ringSx = (on: boolean) => (on ? { outline: '2px solid', outlineColor: 'warning.main', outlineOffset: '2px' } : {});
+
+export function PersonAvatar({ name, photo, size = 48, ring = false }: { name: string; photo: string | null; size?: number; ring?: boolean }) {
   if (isOptimizableImage(photo)) {
     return (
-      <Box sx={{ width: size, height: size, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, position: 'relative' }}>
-        <Image src={photo} alt={name} fill sizes={`${size}px`} style={{ objectFit: 'cover' }} />
+      <Box sx={{ width: size, height: size, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, position: 'relative', ...ringSx(ring) }}>
+        <Image src={photo} alt={name} fill sizes={`${size}px`} style={{ objectFit: 'cover', borderRadius: '50%' }} />
       </Box>
     );
   }
   return (
-    <Avatar aria-hidden="true" sx={{ width: size, height: size, bgcolor: 'primary.main', color: 'primary.contrastText', fontWeight: 700, flexShrink: 0 }}>
+    <Avatar aria-hidden="true" sx={{ width: size, height: size, bgcolor: 'primary.main', color: 'primary.contrastText', fontWeight: 700, flexShrink: 0, ...ringSx(ring) }}>
       {initials(name)}
     </Avatar>
   );
@@ -51,15 +59,21 @@ export interface ReviewCardLabels {
   stars: (rating: number) => string;
   joined: (college: string) => string;
   featured: string;
+  /** "Verified student": shown on reviews that came from a staff-made review link. */
+  verified?: string;
+  /** Learning mode names, e.g. { online: 'Online classes' }. */
+  modes?: Partial<Record<'online' | 'hybrid' | 'offline', string>>;
 }
 
 export function ReviewCard({ review, labels, headingLevel = 'h3' }: { review: PublicReview; labels: ReviewCardLabels; headingLevel?: 'h3' | 'h4' }) {
   const meta = [examLabel(review.examType), review.year ? String(review.year) : '', review.city || ''].filter(Boolean).join(' · ');
+  const result = resultLabel(review);
+  const mode = review.learningMode ? labels.modes?.[review.learningMode] : null;
   return (
     <Card component="article" variant="outlined" sx={{ height: '100%', display: 'flex', flexDirection: 'column', borderRadius: 3 }}>
       <CardContent sx={{ p: { xs: 2, sm: 2.5 }, display: 'flex', flexDirection: 'column', gap: 1.5, flexGrow: 1, '&:last-child': { pb: { xs: 2, sm: 2.5 } } }}>
         <Stack direction="row" spacing={1.5} alignItems="center">
-          <PersonAvatar name={review.displayName} photo={review.photo} />
+          <PersonAvatar name={review.displayName} photo={review.photo} ring={!!review.isVerified} />
           <Box sx={{ minWidth: 0 }}>
             <Typography component={headingLevel} sx={{ fontSize: '1rem', fontWeight: 700, lineHeight: 1.3, overflowWrap: 'anywhere' }}>
               {review.displayName}
@@ -67,6 +81,11 @@ export function ReviewCard({ review, labels, headingLevel = 'h3' }: { review: Pu
             {meta && (
               <Typography variant="body2" color="text.secondary" sx={{ overflowWrap: 'anywhere' }}>
                 {meta}
+              </Typography>
+            )}
+            {(result || mode) && (
+              <Typography variant="body2" sx={{ fontWeight: 600, overflowWrap: 'anywhere' }}>
+                {[result, mode].filter(Boolean).join(' · ')}
               </Typography>
             )}
           </Box>
@@ -81,8 +100,17 @@ export function ReviewCard({ review, labels, headingLevel = 'h3' }: { review: Pu
           {review.body}
         </Typography>
 
-        {(review.collegeAdmitted || review.isFeatured) && (
+        {(review.collegeAdmitted || review.isFeatured || (review.isVerified && labels.verified)) && (
           <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap">
+            {review.isVerified && labels.verified && (
+              <Chip
+                size="small"
+                icon={<VerifiedOutlinedIcon aria-hidden="true" />}
+                label={labels.verified}
+                // Dark green on a light green tint: well above 4.5:1, unlike white on success.light.
+                sx={{ fontWeight: 600, bgcolor: 'rgba(46,125,50,0.10)', color: 'success.dark', border: '1px solid rgba(46,125,50,0.35)', '& .MuiChip-icon': { color: 'inherit' } }}
+              />
+            )}
             {review.collegeAdmitted && (
               <Chip
                 size="small"

@@ -23,11 +23,12 @@ export const config = {
   // Excludes: api, sso, signout, thank-you, college-dashboard (college admin portal),
   // unsubscribe (public, non-localized outreach opt-out), s (the student detail link,
   // kept short and locale-free because it is pasted raw into WhatsApp), d (the demo
-  // join link behind WhatsApp buttons, same reason), Next.js internals, and anything
+  // join link behind WhatsApp buttons, same reason), r (the review link sent to past
+  // students, same reason), Next.js internals, and anything
   // with a file extension.
   matcher: [
     '/',
     '/(en|ta|hi|kn|ml)/:path*',
-    '/((?!api|sso|signout|thank-you|college-dashboard|unsubscribe|s/|d/|_next|_vercel|.*\\..*).*)',
+    '/((?!api|sso|signout|thank-you|college-dashboard|unsubscribe|s/|d/|r/|_next|_vercel|.*\\..*).*)',
   ],
 };

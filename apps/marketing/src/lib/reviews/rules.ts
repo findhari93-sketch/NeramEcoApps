@@ -82,9 +82,14 @@ export function aggregateRatingFromSummary(summary: ReviewSummary | null | undef
   };
 }
 
-/** A review page is indexable only when its rating is honest (enough ratings). */
+/**
+ * A review page is indexable once it has enough published reviews to not be thin.
+ * It used to wait for enough ratings to state an average; the hub no longer states
+ * one (staff choose what is published, so it would be self-serving), so the count
+ * of reviews is what matters.
+ */
 export function shouldIndexReviewsPage(summary: ReviewSummary | null | undefined): boolean {
-  return hasEnoughRatings(summary);
+  return !!summary && summary.reviewCount >= MIN_ITEMS_FOR_INDEX;
 }
 
 /** Counts of 5, 4, 3, 2 and 1 star ratings, highest first. Lower ratings stay visible. */

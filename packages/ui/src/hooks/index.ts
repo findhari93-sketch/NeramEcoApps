@@ -532,3 +532,10 @@ export type {
   UsePhotoViewerGestureReturn,
   PhotoViewerGestureHandlers,
 } from './usePhotoViewerGesture';
+
+// ============================================
+// VOICE RECORDER HOOK
+// ============================================
+
+export { useVoiceRecorder } from './useVoiceRecorder';
+export type { RecorderStatus, FinishedRecording, VoiceRecorderOptions } from './useVoiceRecorder';

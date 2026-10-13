@@ -75,7 +75,14 @@ interface RawReview {
   course_name?: string | null;
   is_featured?: boolean | null;
   created_at?: string | null;
+  rank?: number | null;
+  percentile?: number | string | null;
+  learning_mode?: string | null;
+  is_verified_student?: boolean | null;
+  center_id?: string | null;
 }
+
+const LEARNING_MODES = ['online', 'hybrid', 'offline'] as const;
 
 export function toPublicReview(raw: RawReview, locale: string): PublicReview {
   return {
@@ -91,6 +98,12 @@ export function toPublicReview(raw: RawReview, locale: string): PublicReview {
     photo: raw.student_photo ?? null,
     isFeatured: !!raw.is_featured,
     createdAt: raw.created_at ?? null,
+    rank: raw.rank == null ? null : Number(raw.rank),
+    percentile: raw.percentile == null ? null : Number(raw.percentile),
+    learningMode: (LEARNING_MODES as readonly string[]).includes(raw.learning_mode || '')
+      ? (raw.learning_mode as PublicReview['learningMode'])
+      : null,
+    isVerified: !!raw.is_verified_student,
   };
 }
 
@@ -213,7 +226,10 @@ const readLearnerOutcomes = unstable_cache(
 const readLocalReviews = unstable_cache(
   async (): Promise<RawReview[]> => {
     const { data, error } = await (client().from('testimonials' as never) as any)
-      .select('id, student_name, consent_display_name, student_photo, content, rating, exam_type, year, city, state, college_admitted, course_name, is_featured, created_at')
+      .select(
+        'id, student_name, consent_display_name, student_photo, content, rating, exam_type, year, city, state, college_admitted, course_name, is_featured, created_at, ' +
+          'rank, percentile, learning_mode, is_verified_student, center_id',
+      )
       .eq('publication_status', 'published')
       .not('moderated_at', 'is', null)
       .order('is_featured', { ascending: false })
@@ -248,5 +264,82 @@ export async function loadLocalReviews(
     return { scope: 'state', reviews: state.slice(0, limit).map((r) => toPublicReview(r, locale)) };
   } catch {
     return { scope: 'city', reviews: [] };
+  }
+}
+
+// ── The /reviews hub as the source of truth (Phase 2) ──────────────────────
+
+/** Every published, moderated review in the reader's language. Same cached read as the city pages. */
+export async function loadAllPublishedReviews(locale: string): Promise<PublicReview[]> {
+  try {
+    const rows = await readLocalReviews();
+    return rows.map((r) => toPublicReview(r, locale)).filter((r) => r.body && r.displayName);
+  } catch (error) {
+    console.error('[reviews] all published read failed:', error);
+    return [];
+  }
+}
+
+/** How many published reviews came from a verified review link: the switch-over gate. */
+export async function loadVerifiedPublishedCount(): Promise<number> {
+  try {
+    const rows = await readLocalReviews();
+    return rows.filter((r) => r.is_verified_student).length;
+  } catch {
+    return 0;
+  }
+}
+
+/** Published reviews from students who studied this way, for the course pages. */
+export async function loadReviewsByMode(
+  modes: Array<'online' | 'hybrid' | 'offline'>,
+  locale: string,
+  limit = 4,
+): Promise<PublicReview[]> {
+  const all = await loadAllPublishedReviews(locale);
+  return all.filter((r) => r.learningMode && modes.includes(r.learningMode)).slice(0, limit);
+}
+
+interface CentreProfileRow {
+  name: string;
+  city: string | null;
+  rating: number | string | null;
+  review_count: number | null;
+  google_reviews_url: string | null;
+  google_business_url: string | null;
+}
+
+/**
+ * Google ratings per centre and the profile links for sameAs. Centres change
+ * rarely; daily, and purged on centre saves through the "centers" tag.
+ */
+const readCentreProfiles = unstable_cache(
+  async (): Promise<{ centres: CentreProfileRow[]; directoryUrls: string[] }> => {
+    const supabase = client();
+    const [{ data: centres, error }, { data: links }] = await Promise.all([
+      (supabase.from('offline_centers' as never) as any)
+        .select('name, city, rating, review_count, google_reviews_url, google_business_url')
+        .eq('is_active', true),
+      (supabase.from('review_platform_urls' as never) as any).select('review_url, platform').eq('is_active', true),
+    ]);
+    if (error) throw error;
+    return {
+      centres: (centres as CentreProfileRow[]) || [],
+      // A directory's review URL doubles as its listing URL for sameAs.
+      directoryUrls: ((links as Array<{ review_url: string; platform: string }>) || [])
+        .filter((l) => l.platform !== 'google')
+        .map((l) => l.review_url),
+    };
+  },
+  ['marketing-centre-profiles-v1'],
+  { revalidate: REVIEWS_REVALIDATE, tags: [CACHE_TAGS.centers] },
+);
+
+export async function loadCentreProfiles() {
+  try {
+    return await readCentreProfiles();
+  } catch (error) {
+    console.error('[reviews] centre profiles read failed:', error);
+    return { centres: [] as CentreProfileRow[], directoryUrls: [] as string[] };
   }
 }

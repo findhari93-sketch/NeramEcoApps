@@ -23,6 +23,11 @@ export interface PublicReview {
   photo: string | null;
   isFeatured: boolean;
   createdAt: string | null;
+  /** Verified review facts (20261117090000). Optional so older callers still type-check. */
+  rank?: number | null;
+  percentile?: number | null;
+  learningMode?: 'online' | 'hybrid' | 'offline' | null;
+  isVerified?: boolean;
 }
 
 /** ISO date (YYYY-MM-DD) or undefined when the value is not a date. */
@@ -59,8 +64,15 @@ export function buildReviewJsonLd(review: PublicReview, inLanguage: string) {
  */
 export function buildReviewsPageJsonLd(opts: {
   reviews: PublicReview[];
+  /**
+   * The /reviews hub passes null: staff choose what is published, so an average
+   * of published ratings is self-serving and Google shows no stars for it. Kept
+   * for callers that still state one.
+   */
   aggregateRating: AggregateRatingJsonLd | null;
   inLanguage: string;
+  /** Google profiles and directory listings, so engines tie them to this organization. */
+  sameAs?: string[];
 }) {
   const reviews = opts.reviews.filter((r) => r.body && r.displayName);
   if (reviews.length === 0 && !opts.aggregateRating) return null;
@@ -70,6 +82,7 @@ export function buildReviewsPageJsonLd(opts: {
     '@id': `${BASE_URL}/#organization`,
     name: ORG_NAME,
     url: BASE_URL,
+    ...(opts.sameAs && opts.sameAs.length ? { sameAs: opts.sameAs } : {}),
     ...(opts.aggregateRating ? { aggregateRating: opts.aggregateRating } : {}),
     ...(reviews.length > 0 ? { review: reviews.map((r) => buildReviewJsonLd(r, opts.inLanguage)) } : {}),
   };

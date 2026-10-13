@@ -1,16 +1,17 @@
 import { Suspense } from 'react';
 import { Metadata } from 'next';
+import { permanentRedirect } from 'next/navigation';
 import { setRequestLocale } from 'next-intl/server';
 import { JsonLd } from '@/components/seo/JsonLd';
-import { generateBreadcrumbSchema, generateTestimonialsPageSchema } from '@/lib/seo/schemas';
+import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import TestimonialsPageContent from '@/components/TestimonialsPageContent';
-import { getAggregateRating, getReviewSummary } from '@/lib/review-stats';
-import { hasEnoughRatings } from '@/lib/reviews/rules';
+import { loadVerifiedPublishedCount } from '@/lib/reviews/data';
+import { shouldSwitchOver } from '@/lib/reviews/hub';
+import { localePath } from '@/lib/reviews/rules';
 import ClientIntl from '@/components/i18n/ClientIntl';
 
-// ISR: the rating below comes from published reviews (cached for a day; admin
-// review edits purge it at once through /api/revalidate).
+// ISR, daily, purged at once by the "reviews" tag when staff publish a review.
 export const revalidate = 86400;
 
 const baseUrl = 'https://neramclasses.com';
@@ -36,6 +37,8 @@ export async function generateMetadata({
       'Read published reviews from Neram Classes students who prepared for NATA and JEE Paper 2. Filter by city, course, year, and learning mode.',
     keywords:
       'Neram Classes reviews, NATA coaching reviews, student testimonials, architecture coaching success stories, NATA student results',
+    // Stays indexable until the switch-over below: it ranks today, and the
+    // permanent redirect then hands that ranking to /reviews.
     alternates: buildAlternates(locale, '/testimonials'),
     openGraph: {
       title: 'Student Success Stories',
@@ -54,9 +57,11 @@ export default async function TestimonialsPage({
 }) {
   setRequestLocale(locale);
 
-  // Data-driven only: null (and no AggregateRating) until enough published ratings exist.
-  const [aggregateRating, summary] = await Promise.all([getAggregateRating('all'), getReviewSummary('all')]);
-  const ratingSchema = generateTestimonialsPageSchema(aggregateRating);
+  // Switch-over: once enough verified reviews are published, /reviews is the one
+  // review page and this one sends its visitors (and its links) there for good.
+  if (shouldSwitchOver(await loadVerifiedPublishedCount())) {
+    permanentRedirect(localePath(locale, '/reviews'));
+  }
 
   return (
     <>
@@ -66,11 +71,11 @@ export default async function TestimonialsPage({
             { name: 'Home', url: baseUrl },
             { name: 'Testimonials', url: `${baseUrl}/testimonials` },
           ]),
-          ...(ratingSchema ? [ratingSchema] : []),
         ]}
       />
       <Suspense>
-        <ClientIntl locale={locale} namespaces={['testimonials']}><TestimonialsPageContent averageRating={hasEnoughRatings(summary) ? summary.average : null} /></ClientIntl>
+        {/* No average here: it would mix templated rows with real ones. */}
+        <ClientIntl locale={locale} namespaces={['testimonials']}><TestimonialsPageContent averageRating={null} /></ClientIntl>
       </Suspense>
     </>
   );

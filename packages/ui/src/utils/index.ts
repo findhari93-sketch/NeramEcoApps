@@ -499,3 +499,14 @@ export function removeFromStorage(key: string): void {
     console.warn(`Failed to remove from localStorage: ${key}`);
   }
 }
+
+// ============================================
+// AUDIO RECORDING FORMATS
+// ============================================
+
+export {
+  RECORDING_MIME_PREFERENCE,
+  DEFAULT_RECORDING_BITS_PER_SECOND,
+  pickRecordingMime,
+  recordingContainer,
+} from './recording';

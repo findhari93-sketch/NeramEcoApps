@@ -163,6 +163,26 @@ export const AI_FEATURES = [
     dailyCallCap: 500,
     perClientHourlyCap: 20,
   },
+  /**
+   * The review link a past student opens (/r/<token>). Turns a spoken or typed
+   * review into a written one. Carries a student's voice and words, so no free
+   * key. The link itself also caps calls (MAX_AI_CALLS_PER_REQUEST), so a
+   * forwarded link cannot be used as a free transcription service; the student
+   * can always type, so blocked means typing, never a dead end.
+   */
+  {
+    id: 'marketing.review-compose',
+    label: 'Student review: voice or text to a written review',
+    app: 'marketing',
+    group: 'Student reviews',
+    trigger: 'public',
+    tier: 'cheap',
+    defaultMode: 'auto',
+    supportsManual: false,
+    allowFreeKey: false,
+    dailyCallCap: 300,
+    perClientHourlyCap: 8,
+  },
 
   // ── Admin: staff-triggered, low volume ───────────────────────────────────
   {
@@ -187,6 +207,30 @@ export const AI_FEATURES = [
     supportsManual: true,
     allowFreeKey: true,
   },
+  /** Draft owner replies to Google reviews (Admin > Google reviews). Staff read and post. */
+  {
+    id: 'admin.gbp-reply',
+    label: 'Draft a reply to a Google review',
+    app: 'admin',
+    group: 'Admin tools',
+    trigger: 'staff',
+    tier: 'cheap',
+    defaultMode: 'auto',
+    supportsManual: true,
+    allowFreeKey: false,
+  },
+  /** Staff tidying a student review in the moderation queue. Student words, so no free key. */
+  {
+    id: 'admin.review-edit',
+    label: 'Tidy a student review before publishing',
+    app: 'admin',
+    group: 'Admin tools',
+    trigger: 'staff',
+    tier: 'cheap',
+    defaultMode: 'auto',
+    supportsManual: true,
+    allowFreeKey: false,
+  },
   /**
    * The Google Ads agent (apps/admin/src/lib/marketing-ai). Classifies search
    * terms, explains findings and drafts ad copy, once a night plus on-demand
@@ -205,7 +249,6 @@ export const AI_FEATURES = [
     allowFreeKey: false,
     dailyCallCap: 60,
   },
-
   /**
    * College photo finder (apps/admin/src/lib/college-photos). Looks at the
    * public campus photos and logos found on Wikimedia and the college's own

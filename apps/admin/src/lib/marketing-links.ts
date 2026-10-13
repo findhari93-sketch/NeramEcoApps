@@ -75,3 +75,65 @@ export function whatsappMessage(firstName: string | null | undefined, url: strin
     'The link works for 14 days. Reply here if it does not open.',
   ].join('\n');
 }
+
+/**
+ * The review link a past student opens: neramclasses.com/r/<token>.
+ * Short for the same reason as the detail link: it is read off a phone screen.
+ */
+export function reviewRequestUrl(
+  token: string,
+  options: { adminOrigin?: string | null; configured?: string | null } = {},
+): string {
+  const base = marketingOriginFor(options.adminOrigin, options.configured);
+  return `${base}/r/${encodeURIComponent(token)}`;
+}
+
+/**
+ * The message staff paste into WhatsApp to ask a past student for a review.
+ *
+ * Congratulates first and says who it is from, so it does not read like a forward.
+ * Mentions speaking, because "write a review" is what makes people put it off.
+ * No em dashes: this is user-visible copy.
+ */
+export function reviewRequestMessage(
+  firstName: string | null | undefined,
+  url: string,
+  college?: string | null,
+): string {
+  const name = (firstName || '').trim();
+  const greeting = name ? `Hi ${name},` : 'Hi,';
+  const cheer = college?.trim() ? `Congratulations on joining ${college.trim()}!` : 'Congratulations on your results!';
+  return [
+    `${greeting} this is Neram Classes. ${cheer}`,
+    '',
+    'Could you share a few words about your time with Neram? It helps the next student choose.',
+    'You can just tap the mic and speak. It takes about two minutes and needs no password:',
+    url,
+    '',
+    'Thank you!',
+  ].join('\n');
+}
+
+const PLATFORM_NAMES = { google: 'Google', justdial: 'Justdial', sulekha: 'Sulekha' } as const;
+
+/**
+ * The one follow-up to a student who sent a review but has not posted it on
+ * Google (or their directory). The link reopens their thank-you screen, where
+ * one tap copies the review and opens the right page. No em dashes.
+ */
+export function reviewReminderMessage(
+  firstName: string | null | undefined,
+  url: string,
+  platform: 'google' | 'justdial' | 'sulekha',
+): string {
+  const name = (firstName || '').trim();
+  const greeting = name ? `Hi ${name},` : 'Hi,';
+  const where = PLATFORM_NAMES[platform];
+  return [
+    `${greeting} thank you again for your review of Neram Classes!`,
+    '',
+    `One small favour: could you post the same review on ${where}? Most parents check ${where} before choosing.`,
+    'Open this link and tap the button. Your review is copied for you, so it takes about 20 seconds:',
+    url,
+  ].join('\n');
+}
