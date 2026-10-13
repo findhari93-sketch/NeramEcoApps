@@ -2,6 +2,14 @@ import type { Metadata } from 'next';
 import { absoluteUrl } from './tool-schemas';
 
 /**
+ * The full title when it fits in the 60 characters Google shows, else the
+ * shorter one. Cutting at 60 instead left titles like "...Aurangabad, Maharash".
+ */
+export function fitTitle(full: string, short: string): string {
+  return full.length <= 60 ? full : short;
+}
+
+/**
  * Metadata for a public tool or place page: its own canonical (never the
  * homepage), Open Graph, and robots from the index gate. `title` is used as
  * written (the root template would push it past 60 characters).

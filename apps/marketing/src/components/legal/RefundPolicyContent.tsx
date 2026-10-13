@@ -28,7 +28,7 @@ export default function RefundPolicyContent({ compact = false }: RefundPolicyCon
     <Box>
       {!compact && (
         <>
-          <Typography variant="h4" fontWeight={800} gutterBottom>
+          <Typography variant="h4" component="h1" fontWeight={800} gutterBottom>
             {t('pageTitle')}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>

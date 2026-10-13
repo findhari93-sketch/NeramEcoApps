@@ -67,10 +67,10 @@ function YouTubeRewardInner() {
                 mb: 3,
               }}
             >
-              <Typography variant="h3">!</Typography>
+              <Typography variant="h3" component="span" aria-hidden>!</Typography>
             </Box>
 
-            <Typography variant="h4" gutterBottom sx={{ fontWeight: 700 }}>
+            <Typography variant="h4" component="h1" gutterBottom sx={{ fontWeight: 700 }}>
               Oops! Something went wrong
             </Typography>
 
@@ -162,7 +162,7 @@ function YouTubeRewardInner() {
             </Box>
           </Box>
 
-          <Typography variant="h3" gutterBottom sx={{ fontWeight: 700, color: 'success.main' }}>
+          <Typography variant="h3" component="h1" gutterBottom sx={{ fontWeight: 700, color: 'success.main' }}>
             {t('title')}
           </Typography>
 

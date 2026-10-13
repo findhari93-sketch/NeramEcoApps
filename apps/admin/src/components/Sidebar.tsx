@@ -81,6 +81,7 @@ import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
 import TuneIcon from '@mui/icons-material/Tune';
 import HistoryIcon from '@mui/icons-material/History';
+import TravelExploreIcon from '@mui/icons-material/TravelExplore';
 import { useMicrosoftAuth } from '@neram/auth';
 import NotificationBell from './NotificationBell';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -196,6 +197,7 @@ const menuGroups: MenuGroup[] = [
     label: 'Marketing Intelligence',
     items: [
       { text: 'Ads Overview', icon: AutoGraphIcon, path: '/marketing-ai' },
+      { text: 'SEO Health', icon: TravelExploreIcon, path: '/seo' },
       { text: 'Recommendations', icon: FactCheckOutlinedIcon, path: '/marketing-ai/recommendations' },
       { text: 'Campaigns', icon: CampaignOutlinedIcon, path: '/marketing-ai/campaigns' },
       { text: 'Agent Settings', icon: TuneIcon, path: '/marketing-ai/settings' },

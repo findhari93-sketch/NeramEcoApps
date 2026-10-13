@@ -5,11 +5,11 @@ import ToolPublicPage from '@/components/tools/page/ToolPublicPage';
 import { DataTable, Section } from '@/components/tools/page/parts';
 import CollegePredictorDemo from '@/features/tools/college-predictor/CollegePredictorDemo';
 import { getToolSeo } from '@/lib/tools/tool-seo';
-import { GEO_BASE, indexedCities, predictorPages } from '@/lib/tools/geo-pages';
+import { GEO_BASE, indexedCities, predictorPages, distinctCityName } from '@/lib/tools/geo-pages';
 import { lookupCity } from '@/lib/tools/places';
 import { demoSystems } from '@/lib/tools/data/predictor-props';
 import { marketing } from '@/lib/tools/marketing-links';
-import { toolPageMetadata } from '@/lib/seo/tool-metadata';
+import { fitTitle, toolPageMetadata } from '@/lib/seo/tool-metadata';
 import { itemListSchema } from '@/lib/seo/tool-schemas';
 import { nataCycleYear } from '@/lib/tools/cycle';
 import type { CutoffCollege } from '@/lib/tools/data/facts';
@@ -37,8 +37,9 @@ export async function generateMetadata({ params }: { params: { state: string; ci
   if (!data) return {};
   const { page } = data;
   const near = [...page.facts.inCity, ...page.facts.inDistrict];
+  const name = distinctCityName(page.city);
   return toolPageMetadata({
-    title: `B.Arch College Predictor near ${page.city.name} ${nataCycleYear()}`.slice(0, 60),
+    title: fitTitle(`B.Arch College Predictor near ${name} ${nataCycleYear()}`, `B.Arch College Predictor near ${name}`),
     description: `${near.length} B.Arch college${near.length === 1 ? '' : 's'} in and around ${page.city.name} with last year's closing ${near[0]?.system === 'TNEA_BARCH' ? 'marks' : 'ranks'}. Check which you can get with your score.`,
     path: page.path,
     index: page.gate.index,

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { STATES, getCity } from '@/data/geo';
 import { FIXTURE_DATASETS as ds } from './__fixtures__/geo-datasets';
 import { buildLlmsFullTxt, buildLlmsTxt } from './llms';
-import { cityAnswer, cityDescription, cityFaqs, cityTitle, stateAnswer, stateFaqs, stateTitle } from './location-copy';
+import { cityAnswer, cityDescription, cityFaqs, cityTitle, distinctCityName, stateAnswer, stateFaqs, stateTitle } from './location-copy';
 import { allCityGates, cityFactsFor, lookupCity, stateFactsFor } from './location-pages';
 
 /** Copy rules from CLAUDE.md and the SEO strategy: no em dashes, no unverifiable claims. */
@@ -97,5 +97,13 @@ describe('llms.txt', () => {
       expect(txt).not.toMatch(/best-nata-coaching-online|best-nata-coaching-india|\.com\/nata-coaching\/[a-z]/);
     }
     expect(buildLlmsFullTxt(ds)).toMatch(/nata-coaching-centers-in-chennai/);
+  });
+});
+
+describe('distinctCityName', () => {
+  it('adds the state only when two cities share a name', () => {
+    expect(distinctCityName(getCity('aurangabad-bihar')!)).toBe('Aurangabad, Bihar');
+    expect(distinctCityName(getCity('aurangabad')!)).toBe('Aurangabad, Maharashtra');
+    expect(distinctCityName(getCity('chennai')!)).toBe('Chennai');
   });
 });

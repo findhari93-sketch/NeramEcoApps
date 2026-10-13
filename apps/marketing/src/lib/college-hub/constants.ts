@@ -88,6 +88,9 @@ export const COUNSELING_LABELS: Record<string, string> = {
   KEAM: 'KEAM (Kerala)',
   KCET: 'KCET (Karnataka)',
   AP_EAPCET: 'AP EAPCET (Andhra Pradesh)',
+  // B.Arch in Andhra Pradesh goes through APSCHE, not EAPCET; CENTAC runs Puducherry admissions.
+  APSCHE: 'APSCHE (Andhra Pradesh)',
+  CENTAC: 'CENTAC (Puducherry)',
   TS_EAPCET: 'TS EAPCET (Telangana)',
   UPSEE: 'UPSEE (Uttar Pradesh)',
   MHT_CET: 'MHT CET (Maharashtra)',

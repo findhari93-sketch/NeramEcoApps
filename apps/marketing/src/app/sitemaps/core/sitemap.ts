@@ -1,5 +1,6 @@
 import { MetadataRoute } from 'next';
 import { locales } from '@/i18n';
+import { indexableLocales } from '@/lib/seo/indexable-locales';
 import { getAllCollegeSlugs, getActiveStates, getNIRFRankedCollegeSlugs } from '@/lib/college-hub/queries';
 import { ROUTED_HUB_SLUGS } from '@/data/counselling-2026';
 import { coursesData } from '@/data/courses';
@@ -70,7 +71,6 @@ const staticPages: Array<{ path: string; lastModified: string; i18n?: boolean }>
   { path: '/colleges/rankings/nirf', lastModified: '2026-04-13' },
   { path: '/colleges/rankings/archindex', lastModified: '2026-04-13' },
   { path: '/scholarship', lastModified: '2026-02-01', i18n: true },
-  { path: '/youtube-reward', lastModified: '2026-01-10', i18n: true },
   { path: '/free-resources', lastModified: '2026-02-15', i18n: true },
   // English-only content pages (hardcoded, no translations)
   { path: '/previous-year-papers', lastModified: '2026-02-20' },
@@ -202,7 +202,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     if (movedToApp.has(page.path)) continue;
     const isHomepage = page.path === '';
     const isHighPriority = page.path.includes('coaching') || page.path.includes('nata') || page.path.includes('jee');
-    const pageLocales = page.i18n ? locales : (['en'] as const);
+    // Locale copies only where indexable-locales says the page is really translated,
+    // the same rule as the noindex header and the hreflang tags, so the three agree.
+    const translated = indexableLocales(page.path);
+    const pageLocales = page.i18n ? locales.filter((l) => translated.includes(l)) : (['en'] as const);
 
     for (const locale of pageLocales) {
       entries.push({
@@ -210,11 +213,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         lastModified: new Date(page.lastModified),
         changeFrequency: isHomepage ? 'daily' : isHighPriority ? 'weekly' : 'weekly',
         priority: isHomepage ? 1.0 : isHighPriority ? 0.9 : 0.8,
-        ...(page.i18n
+        ...(pageLocales.length > 1
           ? {
               alternates: {
                 languages: Object.fromEntries(
-                  locales.map((l) => [l, localeUrl(l, page.path)])
+                  pageLocales.map((l) => [l, localeUrl(l, page.path)])
                 ),
               },
             }

@@ -21,6 +21,10 @@ export async function generateMetadata({
     keywords:
       'NATA coaching discount, YouTube subscription reward, free NATA videos, architecture coaching discount',
     alternates: buildAlternates(locale, '/youtube-reward'),
+    // The landing page after the subscribe flow: it shows the coupon passed in
+    // ?coupon=. Arriving from search it would show an empty coupon, so it stays
+    // out of the index (and out of the sitemap).
+    robots: { index: false, follow: true },
     openGraph: {
       title: 'YouTube Subscription Reward - Get Discount on NATA Coaching',
       description:

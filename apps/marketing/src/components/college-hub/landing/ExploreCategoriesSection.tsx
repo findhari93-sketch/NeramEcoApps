@@ -67,7 +67,8 @@ export default function ExploreCategoriesSection({ stateData, counselingData, ci
     count: s.count,
   }));
 
-  const counselingItems = counselingData.slice(0, 10).map((c) => ({
+  // Only systems with a page: /colleges/counseling/[system] 404s on any name COUNSELING_LABELS lacks.
+  const counselingItems = counselingData.filter((c) => c.system in COUNSELING_LABELS).slice(0, 10).map((c) => ({
     label: COUNSELING_LABELS[c.system] ?? c.system,
     href: `/colleges/counseling/${c.system.toLowerCase().replace(/_/g, '-')}`,
     count: c.count,

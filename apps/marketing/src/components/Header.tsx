@@ -164,7 +164,7 @@ const NAV_GROUPS: NavGroup[] = [
           { label: 'JEE Main Paper 2', href: '/colleges' },
           { label: 'TNEA Counseling', href: '/colleges/tnea' },
           { label: 'JoSAA Counseling', href: '/colleges/josaa' },
-          { label: 'KEAM Counseling', href: '/colleges/counseling/keam' },
+          { label: 'KEAM Counseling', href: '/counseling/keam-arch' },
           { label: 'KCET Counseling', href: '/colleges/counseling/kcet' },
           { label: 'All counseling \u2192', href: '/colleges' },
         ],

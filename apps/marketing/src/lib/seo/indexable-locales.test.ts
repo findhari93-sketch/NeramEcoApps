@@ -24,10 +24,26 @@ describe('indexableLocales', () => {
     expect(indexableLocales('/learner-stories')).toEqual(['en']);
   });
 
+  it('treats the untranslated hubs and exam guides as English only', () => {
+    for (const p of ['/aat-2026/syllabus', '/pgeta-2026', '/counseling/josaa', '/contact', '/courses', '/demo-class', '/nata-hub']) {
+      expect(indexableLocales(p), p).toEqual(['en']);
+    }
+  });
+
+  it('indexes the home page and the fees page in English only', () => {
+    expect(indexableLocales('')).toEqual(['en']);
+    expect(indexableLocales('/fees')).toEqual(['en']);
+  });
+
+  it('indexes the apply form in English and Tamil only', () => {
+    expect(indexableLocales('/apply')).toEqual(['en', 'ta']);
+    expect(buildAlternates('hi', '/apply').canonical).toBe(`${BASE}/apply`);
+  });
+
   it('keeps the partial and full translations', () => {
     expect(indexableLocales('/nata-online-coaching')).toEqual(['en', 'ta', 'hi']);
     expect(indexableLocales('/about')).toEqual(['en', 'ta', 'hi', 'kn', 'ml']);
-    expect(indexableLocales('')).toEqual(['en', 'ta', 'hi', 'kn', 'ml']);
+    expect(indexableLocales('/centers')).toEqual(['en', 'ta', 'hi', 'kn', 'ml']);
   });
 });
 

@@ -21,6 +21,19 @@ import { DemoExitIntent, DemoNotSureLink } from './DemoNudge';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
 
+/** Read by screen readers and crawlers, not shown. Sizes are strings: in sx a bare 1 means 100%. */
+const visuallyHidden = {
+  position: 'absolute',
+  width: '1px',
+  height: '1px',
+  p: 0,
+  m: '-1px',
+  overflow: 'hidden',
+  clip: 'rect(0 0 0 0)',
+  whiteSpace: 'nowrap',
+  border: 0,
+} as const;
+
 function fireSignupConversion(transactionId: string | undefined, formData: ApplicationFormData) {
   if (typeof window === 'undefined' || !(window as any).gtag) return;
   const adsId = process.env.NEXT_PUBLIC_GOOGLE_ADS_ID;
@@ -233,6 +246,11 @@ export default function ApplyFlow() {
     <>
       {loadingAccount ? (
         <StepShell step={0}>
+          {/* The server always renders this branch, so the page needs its H1 here; the
+              step's own H1 replaces it once we know which step this visitor is on. */}
+          <Typography component="h1" sx={visuallyHidden}>
+            {t('title')}
+          </Typography>
           <Skeleton variant="text" width="60%" height={40} sx={{ mb: 1 }} />
           <Skeleton variant="text" width="80%" height={24} sx={{ mb: 3 }} />
           <Skeleton variant="rectangular" height={56} sx={{ borderRadius: 1, mb: 2 }} />

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams, useRouter, usePathname } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { ThemeProvider } from '@mui/material/styles';
 import {
@@ -301,7 +301,6 @@ export default function TestimonialsPageContent({
   averageRating?: number | null;
 } = {}) {
   const t = useTranslations('testimonials');
-  const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
 
@@ -312,13 +311,22 @@ export default function TestimonialsPageContent({
   const [loadingMore, setLoadingMore] = useState(false);
   const [stats, setStats] = useState<TestimonialStats | null>(null);
   const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
-  const [filters, setFilters] = useState<Filters>({
-    year: searchParams.get('year') || '',
-    city: searchParams.get('city') || '',
-    course_name: searchParams.get('course_name') || '',
-    learning_mode: searchParams.get('learning_mode') || '',
-    exam_type: searchParams.get('exam_type') || '',
-  });
+  const [filters, setFilters] = useState<Filters>({ year: '', city: '', course_name: '', learning_mode: '', exam_type: '' });
+  // Filters from a shared link are read after mount, not with useSearchParams:
+  // that hook made this whole page render in the browser only, so search
+  // engines got an empty page with no H1.
+  const [urlRead, setUrlRead] = useState(false);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    setFilters({
+      year: q.get('year') || '',
+      city: q.get('city') || '',
+      course_name: q.get('course_name') || '',
+      learning_mode: q.get('learning_mode') || '',
+      exam_type: q.get('exam_type') || '',
+    });
+    setUrlRead(true);
+  }, []);
 
   // Build query string from filters
   const buildQueryString = useCallback((f: Filters, offset = 0) => {
@@ -384,9 +392,10 @@ export default function TestimonialsPageContent({
 
   // Fetch testimonials when filters change
   useEffect(() => {
+    if (!urlRead) return;
     fetchTestimonials(filters);
     updateUrl(filters);
-  }, [filters, fetchTestimonials, updateUrl]);
+  }, [urlRead, filters, fetchTestimonials, updateUrl]);
 
   // Handle filter change
   const handleFilterChange = (key: keyof Filters) => (event: SelectChangeEvent<string>) => {

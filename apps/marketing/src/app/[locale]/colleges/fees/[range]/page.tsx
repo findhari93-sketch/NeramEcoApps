@@ -21,8 +21,10 @@ export async function generateMetadata({
   const rangeInfo = FEE_RANGES[params.range as FeeRangeKey];
   if (!rangeInfo) return {};
   return {
-    title: `B.Arch Colleges ${rangeInfo.label}, India | Neram`,
+    title: `B.Arch Colleges ${rangeInfo.label}, India`,
     description: `List of COA-approved B.Arch colleges in India with annual fees ${rangeInfo.label.toLowerCase()}. Compare fees, placements, and cutoffs.`,
+    // College pages are English only; without this Google picked its own canonical.
+    alternates: { canonical: `/colleges/fees/${params.range}` },
   };
 }
 

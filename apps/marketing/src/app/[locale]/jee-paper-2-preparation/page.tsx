@@ -166,7 +166,7 @@ export default function JeePaper2PreparationPage({ params: { locale } }: PagePro
             <Button
               variant="outlined"
               component={Link}
-              href="/courses/jee-paper-2-coaching"
+              href="/courses/architecture-entrance-year-long"
               sx={{ borderColor: 'white', color: 'white' }}
             >
               View Course

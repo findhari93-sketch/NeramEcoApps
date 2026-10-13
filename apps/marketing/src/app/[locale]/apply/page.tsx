@@ -1,5 +1,5 @@
 import { Metadata } from 'next';
-import { setRequestLocale } from 'next-intl/server';
+import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
@@ -13,6 +13,11 @@ export async function generateMetadata({
 }: {
   params: { locale: string };
 }): Promise<Metadata> {
+  // Tamil is the one translated copy of the form (lib/seo/indexable-locales.ts).
+  if (locale === 'ta') {
+    const t = await getTranslations({ locale, namespace: 'apply' });
+    return { title: t('title'), description: t('subtitle'), alternates: buildAlternates(locale, '/apply') };
+  }
   return {
     title: 'Apply for NATA Coaching - Neram Classes Admission',
     description:

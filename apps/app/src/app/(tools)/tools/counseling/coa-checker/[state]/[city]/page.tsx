@@ -4,11 +4,11 @@ import ToolPublicPage from '@/components/tools/page/ToolPublicPage';
 import { DataTable, Section } from '@/components/tools/page/parts';
 import CoaDemo from '@/features/tools/coa-checker/CoaDemo';
 import { getToolSeo } from '@/lib/tools/tool-seo';
-import { GEO_BASE, coaPages, indexedCities } from '@/lib/tools/geo-pages';
+import { GEO_BASE, coaPages, indexedCities, distinctCityName } from '@/lib/tools/geo-pages';
 import { lookupCity } from '@/lib/tools/places';
 import { demoCoa } from '@/lib/tools/data/demo-props';
 import { marketing } from '@/lib/tools/marketing-links';
-import { toolPageMetadata } from '@/lib/seo/tool-metadata';
+import { fitTitle, toolPageMetadata } from '@/lib/seo/tool-metadata';
 import { itemListSchema } from '@/lib/seo/tool-schemas';
 
 export const revalidate = 86400;
@@ -32,8 +32,9 @@ export async function generateMetadata({ params }: { params: { state: string; ci
   if (!data) return {};
   const { page } = data;
   const n = page.facts.inCity.length;
+  const name = distinctCityName(page.city);
   return toolPageMetadata({
-    title: `COA Approved Architecture Colleges in ${page.city.name}`.slice(0, 60),
+    title: fitTitle(`COA Approved Architecture Colleges in ${name}`, `COA Approved B.Arch Colleges in ${name}`),
     description: `${n} B.Arch institution${n === 1 ? '' : 's'} in ${page.city.name} on the Council of Architecture list, with intake. Check before you apply.`,
     path: page.path,
     index: page.gate.index,

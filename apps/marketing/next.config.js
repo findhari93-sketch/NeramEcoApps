@@ -141,14 +141,14 @@ const nextConfig = {
       // These pages have no real translations — Google sees them as duplicates of the
       // English version and reports "Duplicate, Google chose different canonical".
       {
-        source: '/(ta|hi|kn|ml)/(nata-2026|blog|tools|colleges|nata-syllabus|nata-preparation-guide|nata-important-questions|jee-paper-2-preparation|best-books-nata-jee|how-to-score-150-in-nata|previous-year-papers|nata-app|best-nata-coaching-online|nata-cutoff-trends-2015-2025|nata-coaching|aiarchitek)/:path*',
+        source: '/(ta|hi|kn|ml)/(nata-2026|blog|tools|colleges|nata-syllabus|nata-preparation-guide|nata-important-questions|jee-paper-2-preparation|best-books-nata-jee|how-to-score-150-in-nata|previous-year-papers|nata-app|best-nata-coaching-online|nata-cutoff-trends-2015-2025|nata-coaching|aiarchitek|counseling|careers|contact|free-resources|demo-class|courses|nata-hub|jee-barch-hub|scholarship|premium|alumni|aat-2026|pgeta-2026|fees)/:path*',
         headers: [
           { key: 'X-Robots-Tag', value: 'noindex, follow' },
         ],
       },
       // Also catch the root-level (non-nested) versions of these paths
       {
-        source: '/(ta|hi|kn|ml)/(nata-2026|blog|colleges|nata-syllabus|nata-preparation-guide|nata-important-questions|jee-paper-2-preparation|best-books-nata-jee|how-to-score-150-in-nata|previous-year-papers|nata-app|best-nata-coaching-online|nata-cutoff-trends-2015-2025|nata-coaching|aiarchitek)',
+        source: '/(ta|hi|kn|ml)/(nata-2026|blog|colleges|nata-syllabus|nata-preparation-guide|nata-important-questions|jee-paper-2-preparation|best-books-nata-jee|how-to-score-150-in-nata|previous-year-papers|nata-app|best-nata-coaching-online|nata-cutoff-trends-2015-2025|nata-coaching|aiarchitek|counseling|careers|contact|free-resources|demo-class|courses|nata-hub|jee-barch-hub|scholarship|premium|alumni|aat-2026|pgeta-2026|fees)',
         headers: [
           { key: 'X-Robots-Tag', value: 'noindex, follow' },
         ],
@@ -163,6 +163,21 @@ const nextConfig = {
       },
       {
         source: '/(kn|ml)/nata-online-coaching',
+        headers: [
+          { key: 'X-Robots-Tag', value: 'noindex, follow' },
+        ],
+      },
+      // The home page is English in every locale (lib/seo/indexable-locales.ts).
+      {
+        source: '/(ta|hi|kn|ml)',
+        headers: [
+          { key: 'X-Robots-Tag', value: 'noindex, follow' },
+        ],
+      },
+      // The apply form is translated in Tamil only (PARTIAL_TRANSLATIONS in
+      // lib/seo/indexable-locales.ts); the hi, kn and ml copies are English.
+      {
+        source: '/(hi|kn|ml)/apply',
         headers: [
           { key: 'X-Robots-Tag', value: 'noindex, follow' },
         ],

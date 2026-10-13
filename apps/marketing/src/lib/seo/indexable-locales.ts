@@ -25,6 +25,23 @@ export const ENGLISH_ONLY_SECTIONS = [
   'nata-cutoff-trends-2015-2025',
   'nata-coaching',
   'aiarchitek',
+  // Measured 2026-10-13: 0% translated in ta, hi, kn and ml, so every locale copy
+  // was a duplicate of the English page. Translate a section, then take it out.
+  'counseling',
+  'careers',
+  'contact',
+  'free-resources',
+  'demo-class',
+  'courses',
+  'nata-hub',
+  'jee-barch-hub',
+  'scholarship',
+  'premium',
+  'alumni',
+  'aat-2026',
+  'pgeta-2026',
+  // Only the "what's included" block is translated; title, plans and FAQ are English.
+  'fees',
 ] as const;
 
 /**
@@ -40,6 +57,8 @@ const SELF_NOINDEXED_SECTIONS = ['coaching', 'reviews', 'learner-stories'];
 const PARTIAL_TRANSLATIONS: Record<string, readonly string[]> = {
   // Tamil and Hindi ship native-script pages; kn and ml are noindexed in next.config.js.
   'nata-online-coaching': ['en', 'ta', 'hi'],
+  // The apply form is translated in Tamil only (2026-10-13).
+  apply: ['en', 'ta'],
 };
 
 function firstSegment(path: string): string {
@@ -49,6 +68,9 @@ function firstSegment(path: string): string {
 /** The locales in which `path` (no locale prefix) is an indexable page. */
 export function indexableLocales(path: string): string[] {
   const section = firstSegment(path);
+  // The home page renders English in every locale (1 to 2% translated, 2026-10-13),
+  // so /ta, /hi, /kn and /ml are copies of /. next.config.js noindexes them.
+  if (section === '') return [DEFAULT_LOCALE];
   if ((ENGLISH_ONLY_SECTIONS as readonly string[]).includes(section)) return [DEFAULT_LOCALE];
   if (SELF_NOINDEXED_SECTIONS.includes(section)) return [DEFAULT_LOCALE];
   if (PARTIAL_TRANSLATIONS[section]) return [...PARTIAL_TRANSLATIONS[section]];

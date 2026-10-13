@@ -14,8 +14,9 @@ export const revalidate = 86400;
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
-    title: 'Neram ArchIndex: Best B.Arch Colleges Ranking 2026 | Neram',
+    title: 'Neram ArchIndex: Best B.Arch Colleges Ranking 2026',
     description: 'Neram ArchIndex is a composite 0-100 score rating B.Arch colleges on studio quality, faculty strength, placements, infrastructure, and alumni outcomes.',
+    alternates: { canonical: '/colleges/rankings/archindex' },
   };
 }
 

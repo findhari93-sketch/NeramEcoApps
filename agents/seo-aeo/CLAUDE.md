@@ -181,3 +181,4 @@ Run this audit on every page:
 - PageSpeed Insights — Core Web Vitals
 - Google Search Console — indexing and ranking data
 - Schema.org validator — structured data correctness
+- **SEO Health (Admin > SEO Health)**: the daily audit. Search Console data plus our own crawl, turned into open issues in the `seo_findings` table. Start any SEO task by querying open findings (`select rule_id, severity, url, title, detail from seo_findings where status = 'open'`); fixes close themselves on the next run. Rules and setup: `docs/seo-audit/README.md`.

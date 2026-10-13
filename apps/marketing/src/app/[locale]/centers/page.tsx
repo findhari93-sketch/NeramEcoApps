@@ -1,5 +1,6 @@
 import { Metadata } from 'next';
-import { setRequestLocale } from 'next-intl/server';
+import { getTranslations, setRequestLocale } from 'next-intl/server';
+import { buildAlternates } from '@/lib/seo/metadata';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import CentersPageContent from '@/components/CentersPageContent';
@@ -9,13 +10,15 @@ import ClientIntl from '@/components/i18n/ClientIntl';
 const baseUrl = 'https://neramclasses.com';
 
 export async function generateMetadata({ params: { locale } }: { params: { locale: string } }): Promise<Metadata> {
+  if (locale !== 'en') {
+    const t = await getTranslations({ locale, namespace: 'centers' });
+    return { title: t('title'), description: t('subtitle'), alternates: buildAlternates(locale, '/centers') };
+  }
   return {
     title: 'Neram Classes Centers - NATA Coaching Locations Across India',
     description: 'Find Neram Classes NATA coaching centers near you. Online and offline classes available across Tamil Nadu, Karnataka, Kerala, and major cities in India.',
     keywords: 'NATA coaching centers, NATA coaching near me, architecture coaching locations, Neram Classes branches',
-    alternates: {
-      canonical: locale === 'en' ? `${baseUrl}/centers` : `${baseUrl}/${locale}/centers`,
-    },
+    alternates: buildAlternates(locale, '/centers'),
   };
 }
 

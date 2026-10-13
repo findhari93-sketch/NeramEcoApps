@@ -10,6 +10,7 @@
  */
 import { cache } from 'react';
 import { INDIAN_CITIES, STATES, type GeoCity, type GeoState, type GateResult } from '@neram/geo';
+import { sameNameAsState } from './city-names';
 import {
   centresInState,
   coaCityGate,
@@ -25,6 +26,8 @@ import {
   type NearCentre,
 } from './data/facts';
 import { loadCentres, loadCoaColleges, loadCutoffColleges, loadMarketingColleges } from './data/loaders';
+
+export { distinctCityName, sameNameAsState } from './city-names';
 
 export const GEO_BASE = {
   examCentres: '/tools/nata/exam-centers',
@@ -53,6 +56,7 @@ export interface CityPage<F> {
 }
 
 const stateBySlug = new Map(STATES.map((s) => [s.slug, s]));
+
 
 // ─── Exam centres ─────────────────────────────────────────────────────────
 
@@ -183,7 +187,7 @@ export const coaPages = cache(async () => {
       city,
       state: stateBySlug.get(city.stateSlug)!,
       path: `${GEO_BASE.coaChecker}/${city.stateSlug}/${city.slug}`,
-      gate: coaCityGate(inCity.length),
+      gate: sameNameAsState(city) ? { ...coaCityGate(inCity.length), index: false } : coaCityGate(inCity.length),
       facts: { inCity: [...inCity].sort((a, b) => a.name.localeCompare(b.name)), stateCount: coa.filter((c) => c.stateSlug === city.stateSlug).length },
     });
   }

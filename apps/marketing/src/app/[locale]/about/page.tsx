@@ -1,5 +1,5 @@
 import { Metadata } from 'next';
-import { setRequestLocale } from 'next-intl/server';
+import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
@@ -14,6 +14,17 @@ export async function generateMetadata({
 }: {
   params: { locale: string };
 }): Promise<Metadata> {
+  // Translated copies get a translated title and description; with English ones
+  // every locale shared the same title and read as duplicates.
+  if (locale !== 'en') {
+    const t = await getTranslations({ locale, namespace: 'about' });
+    return {
+      title: t('pageTitle'),
+      description: t('heroSubtitle'),
+      alternates: buildAlternates(locale, '/about'),
+      openGraph: { title: t('pageTitle'), description: t('heroSubtitle'), type: 'website', url: `${baseUrl}/${locale}/about` },
+    };
+  }
   return {
     title: 'About Neram Classes - Best NATA Coaching Institute in Tamil Nadu',
     description:

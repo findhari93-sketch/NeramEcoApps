@@ -6,6 +6,7 @@
  */
 import { getBySlug } from '@/data/counselling-2026';
 import { COURSE_FEES } from '@/lib/fees';
+import { INDIAN_CITIES, getState } from '@/data/geo';
 import { EXAMS } from './exam-config';
 import { streetOnly } from './centre-page';
 import type { CityFacts, StateFacts, TestCityFact } from './location-facts';
@@ -54,16 +55,32 @@ export function centreLocality(f: CityFacts): string | null {
  * A classroom city answers "{exam} coaching centre in {city}", the search a
  * student makes when they want a place to walk into. Other cities are online.
  */
+/** City names used by more than one Indian city (Aurangabad, Bijapur, ...). */
+const SHARED_CITY_NAMES = (() => {
+  const seen = new Map<string, number>();
+  for (const c of INDIAN_CITIES) seen.set(c.name.toLowerCase(), (seen.get(c.name.toLowerCase()) ?? 0) + 1);
+  return new Set([...seen].filter(([, n]) => n > 1).map(([k]) => k));
+})();
+
+/** "Aurangabad, Bihar" when another city shares the name, else just the name: two pages must not share a title. */
+export function distinctCityName(place: { name: string; stateSlug: string }): string {
+  if (!SHARED_CITY_NAMES.has(place.name.toLowerCase())) return place.name;
+  const state = getState(place.stateSlug)?.name;
+  return state ? `${place.name}, ${state}` : place.name;
+}
+
 export function cityTitle(f: CityFacts): string {
   const exam = EXAMS[f.exam].name;
-  const name = f.place.name;
+  const name = distinctCityName(f.place);
   if (f.mode === 'classroom') {
     const area = f.centres.length > 1 ? null : centreLocality(f);
     const withArea = area && `${exam} Coaching Centre in ${name}: ${area} Classroom`;
     // Google shows about 60 characters; past that the locality would be cut off.
     return withArea && withArea.length <= 60 ? withArea : `${exam} Coaching Centre in ${name}: Classroom and Online`;
   }
-  return `${exam} Coaching in ${name}: Live Online Classes`;
+  const online = `${exam} Coaching in ${name}: Live Online Classes`;
+  // A state-qualified name ("Bilaspur, Himachal Pradesh") can push it past 60.
+  return online.length <= 60 ? online : `${exam} Coaching in ${name}: Online`;
 }
 
 export function cityH1(f: CityFacts): string {

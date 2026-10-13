@@ -5,6 +5,7 @@ import { generateOrganizationSchema, generateWebSiteSchema, generateBreadcrumbSc
 import HomePageContent from '@/components/HomePageContent';
 import { getCachedAskSeniorsEvent, getCachedAskSeniorsColleges } from '@/lib/ask-seniors-data';
 import ClientIntl from '@/components/i18n/ClientIntl';
+import { buildAlternates } from '@/lib/seo/metadata';
 import { COURSE_FEES, ORG_FACTS, PROOF_POINTS } from '@/lib/seo/facts';
 
 // ISR daily. The only data here is the #AskSeniors block (tagged 'ask-seniors',
@@ -86,17 +87,9 @@ export async function generateMetadata({
     description: `NATA and JEE Paper 2 coaching since 2009: ${PROOF_POINTS.line}. Live online classes across India and the Gulf, classrooms in Tamil Nadu and Bangalore.`,
     keywords:
       'NATA coaching, NATA coaching online, NATA coaching centre, NATA classes, NATA drawing classes, JEE Paper 2 coaching, B.Arch entrance coaching, NATA coaching Chennai, NATA coaching Bangalore, NATA coaching Tamil Nadu, NATA 2026 preparation',
-    alternates: {
-      canonical: locale === 'en' ? baseUrl : `${baseUrl}/${locale}`,
-      languages: {
-        en: baseUrl,
-        ta: `${baseUrl}/ta`,
-        hi: `${baseUrl}/hi`,
-        kn: `${baseUrl}/kn`,
-        ml: `${baseUrl}/ml`,
-        'x-default': baseUrl,
-      },
-    },
+    // The home page is English in every locale, so /ta, /hi, /kn and /ml point
+    // their canonical at / (lib/seo/indexable-locales.ts).
+    alternates: buildAlternates(locale, ''),
     openGraph: {
       title: 'Neram Classes: NATA Coaching Online and in Classrooms Since 2009',
       description: `${PROOF_POINTS.line}. Live online NATA classes across India and the Gulf, classrooms in Tamil Nadu and Bangalore.`,

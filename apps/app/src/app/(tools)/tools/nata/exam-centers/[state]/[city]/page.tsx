@@ -5,11 +5,11 @@ import ToolPublicPage from '@/components/tools/page/ToolPublicPage';
 import { DataTable, Section } from '@/components/tools/page/parts';
 import ExamCentresDemo from '@/features/tools/exam-centers/ExamCentresDemo';
 import { getToolSeo } from '@/lib/tools/tool-seo';
-import { GEO_BASE, examCentrePages, indexedCities } from '@/lib/tools/geo-pages';
+import { GEO_BASE, examCentrePages, indexedCities, distinctCityName } from '@/lib/tools/geo-pages';
 import { lookupCity } from '@/lib/tools/places';
 import { demoCentres, demoCities, demoStates } from '@/lib/tools/data/demo-props';
 import { marketing } from '@/lib/tools/marketing-links';
-import { toolPageMetadata } from '@/lib/seo/tool-metadata';
+import { fitTitle, toolPageMetadata } from '@/lib/seo/tool-metadata';
 import { itemListSchema } from '@/lib/seo/tool-schemas';
 import { nataCycleYear } from '@/lib/tools/cycle';
 
@@ -38,8 +38,9 @@ export async function generateMetadata({ params }: { params: { state: string; ci
   const { page } = data;
   const first = page.facts.near[0];
   const y = nataCycleYear();
+  const name = distinctCityName(page.city);
   return toolPageMetadata({
-    title: `NATA Exam Centre near ${page.city.name} ${y}: Nearest Test City`.slice(0, 60),
+    title: fitTitle(`NATA Exam Centre near ${name} ${y}: Nearest Test City`, `NATA ${y} Exam Centre near ${name}`),
     description: first
       ? first.inThisCity
         ? `${page.city.name} is itself a NATA test city. See the venue, the next nearest test cities with distance in km, and plan your exam day.`
