@@ -38,6 +38,9 @@ jobs:
     env:
       NEXUS_URL: https://nexus.neramclasses.com
       RECORDING_TRIM_TOKEN: ${{ secrets.RECORDING_TRIM_TOKEN }}
+      # Runners have no working IPv6; trying it first was dropping connections
+      # to SharePoint and Nexus as a bare "fetch failed".
+      NODE_OPTIONS: --dns-result-order=ipv4first
     steps:
       - uses: actions/checkout@v4
         with:

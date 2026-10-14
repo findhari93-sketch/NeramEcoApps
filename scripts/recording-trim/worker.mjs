@@ -51,12 +51,42 @@ function log(message) {
   console.log(`[recording-trim] ${message}`);
 }
 
+/** The network-level reason behind Node's bare "fetch failed". */
+function describe(err) {
+  const cause = err?.cause;
+  return [err?.message, cause?.code, cause?.message].filter(Boolean).join(': ');
+}
+
+/**
+ * fetch with retries for network-level failures. The first real run (2026-10-14)
+ * lost 13 of 43 attempts to a bare "fetch failed" from the runner, on SharePoint
+ * downloads and on calls back to Nexus alike, and most succeeded on a retry.
+ * HTTP errors are not retried here: they are answers, not dropped connections.
+ */
+async function fetchRetry(url, init, label, attempts = 4) {
+  let last;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fetch(url, init);
+    } catch (err) {
+      last = err;
+      log(`${label}: network error (${describe(err)}), attempt ${i + 1} of ${attempts}`);
+      await new Promise((r) => setTimeout(r, 3000 * (i + 1)));
+    }
+  }
+  throw Object.assign(new Error(describe(last)), { reason: 'NETWORK' });
+}
+
 async function api(action, body = {}) {
-  const res = await fetch(`${NEXUS}/api/internal/recording-trim`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ action, ...body }),
-  });
+  const res = await fetchRetry(
+    `${NEXUS}/api/internal/recording-trim`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, ...body }),
+    },
+    `nexus ${action}`,
+  );
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(`${action} failed (${res.status}): ${data.error || 'no detail'}`);
   return data;
@@ -95,9 +125,18 @@ async function streamDurations(file) {
 }
 
 async function download(url, file) {
-  const res = await fetch(url);
-  if (!res.ok || !res.body) throw new Error(`download failed (${res.status})`);
-  await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
+  // A connection dropped part way through a 200 MB download is retried whole.
+  for (let i = 0; i < 3; i++) {
+    const res = await fetchRetry(url, {}, 'download');
+    if (!res.ok || !res.body) throw Object.assign(new Error(`download failed (${res.status})`), { reason: 'DOWNLOAD_FAILED' });
+    try {
+      await pipeline(Readable.fromWeb(res.body), createWriteStream(file));
+      return;
+    } catch (err) {
+      log(`download interrupted (${describe(err)}), attempt ${i + 1} of 3`);
+      if (i === 2) throw Object.assign(new Error(describe(err)), { reason: 'DOWNLOAD_FAILED' });
+    }
+  }
 }
 
 async function measure(file) {
@@ -164,11 +203,11 @@ async function upload(file, uploadUrl) {
     const end = Math.min(offset + CHUNK, size);
     let res = null;
     for (let attempt = 0; attempt < 3; attempt++) {
-      res = await fetch(uploadUrl, {
+      res = await fetchRetry(uploadUrl, {
         method: 'PUT',
         headers: { 'Content-Length': String(end - offset), 'Content-Range': `bytes ${offset}-${end - 1}/${size}` },
         body: data.subarray(offset, end),
-      }).catch(() => null);
+      }, 'upload').catch(() => null);
       if (res && (res.status === 200 || res.status === 201 || res.status === 202)) break;
       await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
     }
@@ -211,8 +250,8 @@ async function processJob(job) {
     });
     log(`${job.job_id}: ${done.status} after ${Math.round((Date.now() - started) / 1000)}s`);
   } catch (err) {
-    log(`${job.job_id}: failed (${err.reason || 'WORKER_FAILED'})`);
-    await api('fail', { job_id: job.job_id, reason: err.reason || 'WORKER_FAILED', detail: String(err.message).slice(0, 400) }).catch(() => {});
+    log(`${job.job_id}: failed (${err.reason || 'WORKER_FAILED'}: ${err?.cause?.code || 'no code'})`);
+    await api('fail', { job_id: job.job_id, reason: err.reason || 'WORKER_FAILED', detail: describe(err).slice(0, 400) }).catch(() => {});
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
