@@ -7,11 +7,10 @@ import { createWatchAccumulator } from '@/lib/watch-progress';
  * Persists watch progress for any gated video, so a student can leave and come
  * back. Recaps, Foundation chapter tracks, anything the shared player drives.
  *
- * This is useWatchHeartbeat with the recap URL lifted out. Nothing else about it
- * was recap-shaped: the accumulator, the cadence and the unload handling apply
- * to any video whose position we care about. The one thing a caller must supply
- * is where to POST, because each surface owns its own progress route and its own
- * idea of what a position means.
+ * Gated recaps and chapter tracks now use useWatchSession, which sends
+ * cumulative totals and played ranges so nothing is ever lost. This delta
+ * heartbeat remains for the "watch before class" videos, whose route takes
+ * deltas. The one thing a caller must supply is where to POST.
  *
  * Nothing wrote nexus_class_recap_progress.last_video_position_seconds before
  * this existed: RecapPlayer accepted an onTimeUpdate prop that the page never
@@ -95,6 +94,17 @@ export function useVideoProgress({
   const inFlightRef = useRef(false);
   const blockedRef = useRef(0);
 
+  /**
+   * A flush that did not land puts its delta back, so the next one carries it.
+   * This used to be dropped, and on a weak connection that quietly erased real
+   * watching. The rare cost is a flush that landed but whose reply was lost
+   * being counted twice, which the server's per-call cap bounds.
+   */
+  const restore = useCallback((payload: Record<string, number>) => {
+    accumulatorRef.current.restore(payload.watched_delta_seconds);
+    blockedRef.current += payload.blocked_seeks_delta;
+  }, []);
+
   const send = useCallback(
     (url: string, authToken: string, useKeepalive: boolean, payload: Record<string, number>) => {
       inFlightRef.current = true;
@@ -107,16 +117,18 @@ export function useVideoProgress({
         },
         body: JSON.stringify(payload),
       })
+        .then((res) => {
+          if (!res.ok) restore(payload);
+        })
         .catch(() => {
-          // Offline or unloading. The next tick re-dirties the accumulator, so
-          // there is nothing useful to do here and nothing worth alarming the
-          // student about.
+          // Offline or unloading. Nothing worth alarming the student about.
+          restore(payload);
         })
         .finally(() => {
           inFlightRef.current = false;
         });
     },
-    [],
+    [restore],
   );
 
   const flush = useCallback(
@@ -131,9 +143,8 @@ export function useVideoProgress({
 
       const { position, watchedDelta, duration } = accumulator.snapshot();
       const blocked = blockedRef.current;
-      // Cleared optimistically. Losing one flush costs at most a few seconds of
-      // resume accuracy, whereas holding the delta until a response arrives would
-      // double-count it against the next flush on a slow connection.
+      // Cleared on send so the next flush does not count it again while this
+      // one is in flight; a failure puts it back (see restore).
       accumulator.markFlushed();
       blockedRef.current = 0;
 
@@ -151,6 +162,7 @@ export function useVideoProgress({
         // access token lives 60-90+ minutes.
         const authToken = lastTokenRef.current;
         if (authToken) send(url, authToken, true, payload);
+        else restore(payload);
         return;
       }
 
@@ -159,15 +171,19 @@ export function useVideoProgress({
         .current()
         .then((authToken) => {
           inFlightRef.current = false;
-          if (!authToken) return;
+          if (!authToken) {
+            restore(payload);
+            return;
+          }
           lastTokenRef.current = authToken;
           send(url, authToken, false, payload);
         })
         .catch(() => {
           inFlightRef.current = false;
+          restore(payload);
         });
     },
-    [send],
+    [send, restore],
   );
 
   // Seeds the keepalive fallback before the first periodic tick would

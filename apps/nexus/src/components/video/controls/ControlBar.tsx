@@ -111,7 +111,9 @@ export default function ControlBar(props: ControlBarProps) {
         bottom: 0,
         px: { xs: 1, sm: 2 },
         pb: { xs: 0.5, sm: 1 },
-        pt: 4,
+        // The gradient's run-in. Shorter on a phone, where the whole player is
+        // under 200px tall and every pixel of bar covers the picture.
+        pt: { xs: 2, sm: 4 },
         background: 'linear-gradient(to top, rgba(0,0,0,0.85), rgba(0,0,0,0))',
         opacity: visible ? 1 : 0,
         // Not just invisible: an invisible bar still swallows the tap that was
@@ -227,8 +229,15 @@ export default function ControlBar(props: ControlBarProps) {
       {lockedAhead && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, pb: 0.5, px: 0.5 }}>
           <LockRoundedIcon sx={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }} />
+          {/* One line on a phone. Two lines made the bar cover most of a 193px
+              tall player, with the paused Play button sitting on the seek rail. */}
           <Typography sx={{ fontSize: 11, color: 'rgba(255,255,255,0.7)' }}>
-            Move freely up to the lock. Pass its quiz to unlock the next part.
+            <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+              Pass the quiz at the lock to go on.
+            </Box>
+            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+              Move freely up to the lock. Pass its quiz to unlock the next part.
+            </Box>
           </Typography>
         </Box>
       )}

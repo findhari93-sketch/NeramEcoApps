@@ -9,6 +9,7 @@ import ControlBar from './controls/ControlBar';
 import CenterOverlay from './controls/CenterOverlay';
 import CheckpointNotice from './controls/CheckpointNotice';
 import WatchMoreNotice from './controls/WatchMoreNotice';
+import CatchUpChip from './controls/CatchUpChip';
 import StreamStoppedNotice from './controls/StreamStoppedNotice';
 import Nudge from './controls/Nudge';
 import TitleBar from './controls/TitleBar';
@@ -22,7 +23,16 @@ import useKeyboardShortcuts from './hooks/useKeyboardShortcuts';
 import useTouchGestures from './hooks/useTouchGestures';
 import { clamp, type TimeRange } from './format';
 import type { VideoGate } from '@/lib/video-gate';
-import type { TextTrackDescriptor, VideoSource, VideoSurfaceEvents, VideoTransport } from './types';
+import type { PlayedRange } from '@/lib/played-ranges';
+import { armAndConfirm, grantTtlFromSrc } from '@/lib/video-grant-client';
+import { createStepClassifier } from '@/lib/playback-steps';
+import type {
+  PlaybackEvent,
+  TextTrackDescriptor,
+  VideoSource,
+  VideoSurfaceEvents,
+  VideoTransport,
+} from './types';
 
 /**
  * The one video player in Nexus.
@@ -95,6 +105,21 @@ const RECOVERY_PROGRESS_SECONDS = 3;
  */
 const STALE_STREAM_MS = 9 * 60_000;
 const STALL_RECOVERY_MS = 20_000;
+/**
+ * Fetch the next grant this long before the current one runs out. Generous on
+ * purpose: a slow sign-in token or a sleepy phone radio can take a while, and
+ * an early refresh costs nothing.
+ */
+const GRANT_REFRESH_LEAD_MS = 2 * 60_000;
+/**
+ * When the browser will not send the grant cookie, the fresh URL is swapped in
+ * at the next pause, or this close to expiry if the student never pauses.
+ */
+const GRANT_SWAP_LEAD_MS = 20_000;
+/** A stall once the grant has run out is expiry, not a slow connection. */
+const EXPIRED_STALL_MS = 4_000;
+/** A refresh that failed (offline, sign-in hiccup) is not retried every tick. */
+const GRANT_REFRESH_RETRY_MS = 30_000;
 const STREAM_STOPPED_MESSAGE = 'The recording stopped loading.';
 /** A move past the checkpoint. The section before it is free; past it is not. */
 const LOCKED_MESSAGE = 'Pass this checkpoint quiz to go further.';
@@ -130,6 +155,15 @@ export interface NeramVideoPlayerProps {
    * is the reload, not the student, and a progress heartbeat would save it.
    */
   onTimeUpdate?: (seconds: number, duration: number) => void;
+  /**
+   * A stretch the student really played, decided here once for every caller
+   * (lib/playback-steps.ts): a step counts when real time passed behind it, so
+   * a drag never arrives and a late tick on a busy phone still does. This is
+   * what the quiz gate and the saved record should grow from.
+   */
+  onPlayedSpan?: (from: number, to: number) => void;
+  /** Stalls, reloads, grant top-ups and discarded jumps, for the heartbeat. */
+  onPlaybackEvent?: (event: PlaybackEvent) => void;
   /** Playback reached the end of the checkpoint the student owes. */
   onCheckpointReached?: () => void;
   onLoadedMetadata?: (duration: number) => void;
@@ -166,11 +200,24 @@ export interface NeramVideoPlayerProps {
    */
   transportRef?: React.MutableRefObject<VideoTransport | null>;
   /**
+   * Filled in with the player's own actions, for a page control that needs
+   * more than raw transport: the catch-up list's "Continue" button.
+   */
+  actionsRef?: React.MutableRefObject<VideoPlayerActions | null>;
+  /**
    * The raw YT.Player, for the one caller that needs more than the transport
    * exposes: the Library's watch tracker attaches to a player instance. YouTube
    * sources only.
    */
   youtubePlayerRef?: React.MutableRefObject<any>;
+}
+
+export interface VideoPlayerActions {
+  /**
+   * Carry on with the section owed: play only the parts missed, or go to the
+   * checkpoint when enough has been watched. False when there is nothing owed.
+   */
+  continueOwed: () => boolean;
 }
 
 export default function NeramVideoPlayer({
@@ -183,6 +230,8 @@ export default function NeramVideoPlayer({
   watched,
   captions = null,
   onTimeUpdate,
+  onPlayedSpan,
+  onPlaybackEvent,
   onCheckpointReached,
   onLoadedMetadata,
   onBlockedSeek,
@@ -191,6 +240,7 @@ export default function NeramVideoPlayer({
   onFullscreenChange,
   videoRef,
   transportRef: externalTransportRef,
+  actionsRef,
   youtubePlayerRef,
 }: NeramVideoPlayerProps) {
   const internalTransportRef = useRef<VideoTransport | null>(null);
@@ -206,6 +256,8 @@ export default function NeramVideoPlayer({
   const [pipActive, setPipActive] = useState(false);
   const [tracks, setTracks] = useState<ReadonlyArray<TextTrackDescriptor>>([]);
   const [activeTrack, setActiveTrack] = useState<string | null>(null);
+  const activeTrackRef = useRef(activeTrack);
+  activeTrackRef.current = activeTrack;
 
   /**
    * Stream renewal. The caller hands over a src and a way to get a new one; the
@@ -241,6 +293,35 @@ export default function NeramVideoPlayer({
   const streamStartedAtRef = useRef(Date.now());
   const stalledSinceRef = useRef<number | null>(null);
 
+  /**
+   * Grant refresh (lib/video-grant-client.ts). A stream whose URL carries a
+   * grant has it topped up every few minutes through a cookie, so the <video>
+   * never sees it expire. These are inert for a URL with no grant in it.
+   *
+   * grantExpiresAtRef: when whatever currently authorises the stream runs out,
+   *   by this device's clock (worked out from the grant's lifetime, not its
+   *   timestamp, so a phone with the wrong time still refreshes on schedule).
+   * cookieWorksRef: whether the browser sends the grant cookie back. Unknown
+   *   until the first arm; false sends every refresh down the swap path.
+   * pendingSwapRef: a fresh URL waiting for a quiet moment to replace the
+   *   current one, when the cookie route is not available.
+   */
+  const grantExpiresAtRef = useRef<number | null>(null);
+  const cookieWorksRef = useRef<boolean | null>(null);
+  const refreshingRef = useRef(false);
+  const refreshRetryAtRef = useRef(0);
+  const pendingSwapRef = useRef<string | null>(null);
+  /** The freshest grant URL, for a caption track that has not loaded yet. */
+  const [captionGrantSrc, setCaptionGrantSrc] = useState<string | null>(null);
+
+  /**
+   * "Play the parts I missed". A snapshot of the stretches taken when it
+   * starts (the live list shrinks as they fill), and which one is playing. Any
+   * pause or move of the playhead by the student ends it.
+   */
+  const catchUpRef = useRef<{ stretches: PlayedRange[]; index: number } | null>(null);
+  const [catchUpPart, setCatchUpPart] = useState<{ index: number; total: number } | null>(null);
+
   // A PiP window escapes the watermark and the control bar, so the decision is
   // not left to the caller alone: a gated or watermarked video refuses it here.
   const pipPermitted =
@@ -258,10 +339,39 @@ export default function NeramVideoPlayer({
   // latest gate without re-registering on every render.
   const gateRef = useRef(gate);
   gateRef.current = gate;
-  const cbRef = useRef({ onTimeUpdate, onCheckpointReached, onLoadedMetadata, onBlockedSeek, onFullscreenChange });
-  cbRef.current = { onTimeUpdate, onCheckpointReached, onLoadedMetadata, onBlockedSeek, onFullscreenChange };
+  const cbRef = useRef({
+    onTimeUpdate,
+    onPlayedSpan,
+    onPlaybackEvent,
+    onCheckpointReached,
+    onLoadedMetadata,
+    onBlockedSeek,
+    onFullscreenChange,
+  });
+  cbRef.current = {
+    onTimeUpdate,
+    onPlayedSpan,
+    onPlaybackEvent,
+    onCheckpointReached,
+    onLoadedMetadata,
+    onBlockedSeek,
+    onFullscreenChange,
+  };
+  /** One classifier for the life of the player: what counts as played. */
+  const stepsRef = useRef(createStepClassifier());
+  /** Mirrors play/pause for the classifier, which reads it on every tick. */
+  const playingRef = useRef(false);
+  const emit = useCallback((event: PlaybackEvent) => cbRef.current.onPlaybackEvent?.(event), []);
   const resumeRef = useRef(resumeAt);
   resumeRef.current = resumeAt;
+  /**
+   * A place asked for before the stream's metadata arrived: a tap on Continue
+   * or a missed part while a slow phone is still loading. Without this the
+   * metadata handler sent the student back to the stored resume point and the
+   * request was lost.
+   */
+  const metadataLoadedRef = useRef(false);
+  const earlySeekRef = useRef<number | null>(null);
   // One-shot: set only when onLoadedMetadata issues the silent mount-time
   // resume-seek, consumed unconditionally by the very next onTick regardless
   // of what that tick does. A programmatic seek fires a native timeupdate even
@@ -298,12 +408,19 @@ export default function NeramVideoPlayer({
       const ceiling = gateRef.current.seekCeiling;
       const upper = Number.isFinite(ceiling) ? ceiling : duration || seconds;
       const target = clamp(seconds, 0, upper);
+      stepsRef.current.markDiscontinuity();
+      // A move by the student ends "Play the parts I missed".
+      if (catchUpRef.current) {
+        catchUpRef.current = null;
+        setCatchUpPart(null);
+      }
       if (Number.isFinite(ceiling) && seconds > ceiling + 0.5) {
         flashRef.current(LOCKED_MESSAGE);
         cbRef.current.onBlockedSeek?.();
       }
       transport.seek(target);
       setCurrent(target);
+      if (!metadataLoadedRef.current) earlySeekRef.current = target;
       // Mid-renewal, the stream reloading underneath would otherwise put them
       // back where it failed rather than where they just asked to go.
       if (pendingResumeRef.current) pendingResumeRef.current.at = target;
@@ -340,6 +457,8 @@ export default function NeramVideoPlayer({
     recoveriesRef.current += 1;
     setStreamFailure(null);
     stalledSinceRef.current = null;
+    stepsRef.current.markDiscontinuity();
+    emit({ type: 'reload' });
 
     const renew = renewRef.current;
     if (!renew) {
@@ -366,12 +485,74 @@ export default function NeramVideoPlayer({
       .finally(() => {
         renewingRef.current = false;
       });
-  }, [transportRef]);
+  }, [transportRef, emit]);
 
   const retryStream = useCallback(() => {
     recoveriesRef.current = 0;
     recoverStream();
   }, [recoverStream]);
+
+  /**
+   * Replace the stream with a fresh URL already in hand, keeping the place.
+   * The fallback for a browser that will not send the grant cookie: a reload at
+   * a pause is a blink, where letting the grant lapse mid-play was a freeze.
+   */
+  const swapStream = useCallback(
+    (src: string) => {
+      const from = callerSrcRef.current;
+      if (!from || renewingRef.current || pendingResumeRef.current) return;
+      pendingSwapRef.current = null;
+      pendingResumeRef.current = {
+        at: lastGoodTimeRef.current ?? transportRef.current?.getTime() ?? resumeRef.current,
+        play: wantsPlayRef.current,
+      };
+      stepsRef.current.markDiscontinuity();
+      emit({ type: 'reload' });
+      if (src === liveSrcRef.current) setReloadKey((k) => k + 1);
+      setRenewed({ from, src });
+    },
+    [transportRef, emit],
+  );
+
+  /**
+   * Fetch the next grant before this one runs out, and hand it to the proxy as
+   * a cookie so the current URL keeps working. When the cookie is not getting
+   * through, keep the fresh URL for a swap instead.
+   */
+  const refreshGrant = useCallback(async () => {
+    const renew = renewRef.current;
+    const from = callerSrcRef.current;
+    if (!renew || !from || refreshingRef.current || renewingRef.current) return;
+    refreshingRef.current = true;
+    try {
+      const fresh = await renew();
+      if (callerSrcRef.current !== from) return;
+      const ttl = grantTtlFromSrc(fresh);
+      if (ttl !== null && cookieWorksRef.current !== false) {
+        const ok = await armAndConfirm(fresh);
+        if (callerSrcRef.current !== from) return;
+        cookieWorksRef.current = ok;
+        emit({ type: 'grant_refresh', ok });
+        if (ok) {
+          grantExpiresAtRef.current = Date.now() + ttl * 1000;
+          // A track that is already showing has its file; reloading it every
+          // few minutes would only cost a request.
+          if (!activeTrackRef.current) setCaptionGrantSrc(fresh);
+          return;
+        }
+      }
+      pendingSwapRef.current = fresh;
+    } catch {
+      // Try again shortly. If the grant lapses first, the expiry stall recovers it.
+      refreshRetryAtRef.current = Date.now() + GRANT_REFRESH_RETRY_MS;
+      emit({ type: 'grant_refresh', ok: false });
+    } finally {
+      refreshingRef.current = false;
+    }
+  }, [emit]);
+  // Read by the surface events, which are built once.
+  const refreshGrantRef = useRef(refreshGrant);
+  refreshGrantRef.current = refreshGrant;
 
   /**
    * Snap a seek back to the ceiling. Shared by the `seeked` listener (the <video>
@@ -389,6 +570,7 @@ export default function NeramVideoPlayer({
       const ceiling = unlockedUntil > 0 ? unlockedUntil : seekCeiling;
       if (!Number.isFinite(ceiling)) return false;
       if (time <= ceiling + SEEK_TOLERANCE_SECONDS) return false;
+      stepsRef.current.markDiscontinuity();
       transportRef.current?.seek(Math.max(0, ceiling));
       flashRef.current(LOCKED_MESSAGE);
       cbRef.current.onBlockedSeek?.();
@@ -404,6 +586,15 @@ export default function NeramVideoPlayer({
     setActiveTrack(transport.getActiveTextTrack());
   }, [transportRef]);
 
+  /** A stall is over: report how long the student waited, if they were. */
+  const endStall = useCallback(() => {
+    const since = stalledSinceRef.current;
+    stalledSinceRef.current = null;
+    if (since === null || !wantsPlayRef.current) return;
+    const seconds = (Date.now() - since) / 1000;
+    if (seconds >= 1) emit({ type: 'stall', seconds: Math.round(seconds) });
+  }, [emit]);
+
   const events: VideoSurfaceEvents = useMemo(
     () => ({
       onTick: (seconds, dur) => {
@@ -411,12 +602,48 @@ export default function NeramVideoPlayer({
         // where the student is, and passing it on would let a heartbeat save it
         // and the gate treat it as a position.
         if (pendingResumeRef.current) return;
+        const step = stepsRef.current.observe({
+          t: seconds,
+          wall: typeof performance !== 'undefined' ? performance.now() : Date.now(),
+          playing: playingRef.current,
+          rate: speedRef.current,
+        });
+        if (step.kind === 'played') cbRef.current.onPlayedSpan?.(step.from, step.to);
+        else if (step.kind === 'discarded') cbRef.current.onPlaybackEvent?.({ type: 'discarded', seconds: step.seconds });
         lastGoodTimeRef.current = seconds;
+
+        // "Play the parts I missed": at the end of one missed stretch, jump to
+        // the next; after the last, go to the checkpoint, where the quiz opens
+        // if that was enough and the notice says what is left if it was not.
+        const catchUp = catchUpRef.current;
+        if (catchUp) {
+          const stretch = catchUp.stretches[catchUp.index];
+          if (stretch && seconds >= stretch[1] - 0.1) {
+            const next = catchUp.stretches.findIndex((r, i) => i > catchUp.index && r[1] > seconds);
+            let target: number | null = null;
+            if (next >= 0) {
+              catchUp.index = next;
+              setCatchUpPart({ index: next, total: catchUp.stretches.length });
+              if (catchUp.stretches[next][0] > seconds + 0.5) target = catchUp.stretches[next][0];
+            } else {
+              catchUpRef.current = null;
+              setCatchUpPart(null);
+              const boundary = gateRef.current.unlockedUntil;
+              if (boundary > seconds + 0.5) target = boundary;
+            }
+            if (target !== null) {
+              stepsRef.current.markDiscontinuity();
+              transportRef.current?.seek(target);
+              setCurrent(target);
+              return;
+            }
+          }
+        }
         if (recoveredAtRef.current !== null && seconds >= recoveredAtRef.current + RECOVERY_PROGRESS_SECONDS) {
           recoveriesRef.current = 0;
           recoveredAtRef.current = null;
         }
-        if (stalledSinceRef.current !== null && seconds > 0) stalledSinceRef.current = null;
+        if (stalledSinceRef.current !== null && seconds > 0) endStall();
         setCurrent(seconds);
         if (dur > 0) setDuration(dur);
         cbRef.current.onTimeUpdate?.(seconds, dur);
@@ -452,10 +679,25 @@ export default function NeramVideoPlayer({
       onSeeked: (seconds) => {
         clampIfBeyond(seconds);
       },
+      onSeeking: () => {
+        stepsRef.current.markDiscontinuity();
+        if (!metadataLoadedRef.current && transportRef.current) earlySeekRef.current = transportRef.current.getTime();
+      },
       onPlayingChange: (isPlaying) => {
+        playingRef.current = isPlaying;
         // The pause a reload fires is the browser's, not a choice to stop.
         if (!pendingResumeRef.current) wantsPlayRef.current = isPlaying;
+        if (!isPlaying && !pendingResumeRef.current && catchUpRef.current) {
+          catchUpRef.current = null;
+          setCatchUpPart(null);
+        }
         setPlaying(isPlaying);
+        // Back from a long pause: the grant may have lapsed while nothing was
+        // asking for bytes. Top it up now, while the buffer covers the gap.
+        const exp = grantExpiresAtRef.current;
+        if (isPlaying && exp !== null && exp - Date.now() <= GRANT_REFRESH_LEAD_MS) {
+          void refreshGrantRef.current();
+        }
       },
       onLoadedMetadata: (dur) => {
         setDuration(dur);
@@ -471,7 +713,11 @@ export default function NeramVideoPlayer({
         // the moment they pressed play (NXS-0130).
         const { seekCeiling } = gateRef.current;
         const ceiling = Number.isFinite(seekCeiling) ? Math.min(seekCeiling, dur) : dur;
-        const target = Math.min(pending ? pending.at : resumeRef.current, ceiling);
+        const early = earlySeekRef.current;
+        earlySeekRef.current = null;
+        metadataLoadedRef.current = true;
+        const target = Math.min(pending ? pending.at : early ?? resumeRef.current, ceiling);
+        stepsRef.current.markDiscontinuity();
         if (target > 0 && target < dur - 1) {
           suppressNextCheckpointRef.current = true;
           transportRef.current?.seek(target);
@@ -510,33 +756,80 @@ export default function NeramVideoPlayer({
         setBuffering(true);
       },
       onPlayable: () => {
-        stalledSinceRef.current = null;
+        endStall();
         setBuffering(false);
       },
       onVolumeChange: (value, muted) => volumeRef.current.syncFromSurface(value, muted),
       onPipChange: setPipActive,
       onTextTracksChange: readTracks,
     }),
-    [clampIfBeyond, transportRef, readTracks, recoverStream],
+    [clampIfBeyond, transportRef, readTracks, recoverStream, endStall],
   );
 
-  // A stall on a stream old enough to have expired is treated as expiry. Some
-  // browsers answer a refused byte range by waiting rather than by erroring,
-  // which left the picture frozen with nothing to recover it. One check every
-  // few seconds, only while an HTML5 stream is mounted.
+  // One check every few seconds, only while an HTML5 stream is mounted:
+  //
+  // 1. Refresh the grant ahead of its expiry while the student is watching.
+  // 2. Swap in a fresh URL at a pause, or just before expiry, when the cookie
+  //    route is not available.
+  // 3. A stall on a stream whose grant has run out is expiry, so renew after a
+  //    few seconds rather than twenty. And as before, a long stall on an old
+  //    stream is treated as expiry too: some browsers answer a refused byte
+  //    range by waiting rather than erroring, which left the picture frozen.
   useEffect(() => {
     if (source.kind !== 'html5' || streamFailure) return;
     const id = setInterval(() => {
+      const now = Date.now();
+      const exp = grantExpiresAtRef.current;
+
+      if (exp !== null && !renewingRef.current && !pendingResumeRef.current) {
+        const swap = pendingSwapRef.current;
+        if (swap) {
+          if (!wantsPlayRef.current || exp - now <= GRANT_SWAP_LEAD_MS) swapStream(swap);
+        } else if (
+          wantsPlayRef.current &&
+          exp - now <= GRANT_REFRESH_LEAD_MS &&
+          now >= refreshRetryAtRef.current &&
+          document.visibilityState !== 'hidden'
+        ) {
+          void refreshGrant();
+        }
+      }
+
       const since = stalledSinceRef.current;
       if (since === null || renewingRef.current) return;
       if (!wantsPlayRef.current) return;
-      const now = Date.now();
+      if (exp !== null && now >= exp && now - since >= EXPIRED_STALL_MS) {
+        recoverStream();
+        return;
+      }
       if (now - since < STALL_RECOVERY_MS) return;
       if (now - streamStartedAtRef.current < STALE_STREAM_MS) return;
       recoverStream();
     }, 5_000);
     return () => clearInterval(id);
-  }, [source.kind, streamFailure, recoverStream]);
+  }, [source.kind, streamFailure, recoverStream, refreshGrant, swapStream]);
+
+  // Every new stream URL starts its own grant clock, and is armed as the cookie
+  // straight away, which is also how the player learns whether the browser
+  // sends that cookie at all. A URL with no grant in it (YouTube, a blob, a
+  // static file) leaves all of this off.
+  useEffect(() => {
+    // A new <video> source starts without metadata. Its loadedmetadata goes to
+    // a renewal's place, or to anything asked for in the meantime.
+    metadataLoadedRef.current = false;
+    pendingSwapRef.current = null;
+    setCaptionGrantSrc(null);
+    const ttl = source.kind === 'html5' ? grantTtlFromSrc(liveSrc) : null;
+    grantExpiresAtRef.current = ttl !== null ? Date.now() + ttl * 1000 : null;
+    if (ttl === null || !liveSrc || cookieWorksRef.current === false) return;
+    let cancelled = false;
+    void armAndConfirm(liveSrc).then((ok) => {
+      if (!cancelled) cookieWorksRef.current = ok;
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [liveSrc, source.kind]);
 
   // A different video from the caller starts clean: no inherited failures, and
   // no resume point carried over from the one before.
@@ -763,13 +1056,60 @@ export default function NeramVideoPlayer({
   }, [gate.quizReady, gate.unlockedUntil, current]);
 
   const owed = gate.owedWatch;
-  const playMissed = useCallback(() => {
-    const at = gateRef.current.owedWatch?.nextUnwatchedAt;
-    if (at === null || at === undefined) return;
-    requestSeek(at);
+
+  /** Move the playhead for the player's own reasons, which never end catch-up. */
+  const jumpTo = useCallback(
+    (seconds: number) => {
+      stepsRef.current.markDiscontinuity();
+      transportRef.current?.seek(seconds);
+      setCurrent(seconds);
+      if (!metadataLoadedRef.current) earlySeekRef.current = seconds;
+      if (pendingResumeRef.current) pendingResumeRef.current.at = seconds;
+    },
+    [transportRef],
+  );
+
+  /** Play only the stretches of the owed section that were never played. */
+  const playMissed = useCallback((): boolean => {
+    const stretches = gateRef.current.owedWatch?.stretches ?? [];
+    if (!stretches.length) return false;
+    catchUpRef.current = { stretches: stretches.map(([a, b]) => [a, b] as const), index: 0 };
+    setCatchUpPart({ index: 0, total: stretches.length });
+    jumpTo(stretches[0][0]);
     wantsPlayRef.current = true;
     transportRef.current?.play();
-  }, [requestSeek, transportRef]);
+    return true;
+  }, [jumpTo, transportRef]);
+
+  /**
+   * Enough has been watched: stop replaying and go to the checkpoint. Playing
+   * on from there pauses at the boundary and opens the quiz, the same path as
+   * arriving there any other way, so nothing about the quiz is special-cased.
+   */
+  useEffect(() => {
+    if (!catchUpRef.current || !gate.quizReady || !(gate.unlockedUntil > 0)) return;
+    catchUpRef.current = null;
+    setCatchUpPart(null);
+    jumpTo(gate.unlockedUntil);
+  }, [gate.quizReady, gate.unlockedUntil, jumpTo]);
+
+  const continueOwed = useCallback((): boolean => {
+    const g = gateRef.current;
+    if (!g.owedWatch || !(g.unlockedUntil > 0)) return false;
+    if (!g.quizReady && playMissed()) return true;
+    jumpTo(g.quizReady ? g.unlockedUntil : g.owedWatch.sectionStart);
+    wantsPlayRef.current = true;
+    transportRef.current?.play();
+    return true;
+  }, [jumpTo, playMissed, transportRef]);
+
+  useEffect(() => {
+    if (!actionsRef) return;
+    actionsRef.current = { continueOwed };
+    return () => {
+      if (actionsRef.current?.continueOwed === continueOwed) actionsRef.current = null;
+    };
+  }, [actionsRef, continueOwed]);
 
   /**
    * The quiz is a DOM child of this container while fullscreen, so its taps and
@@ -778,12 +1118,16 @@ export default function NeramVideoPlayer({
    */
   const fromOverlay = (e: React.SyntheticEvent) => isInsideVideoOverlayDialog(e.target);
 
+  // The track follows the freshest grant held, not only the one the stream
+  // started on: a student who turns captions on twenty minutes in would
+  // otherwise ask for them with a grant that ran out ten minutes ago.
+  const captionGrant = captionGrantSrc ?? liveSrc;
   const liveCaptions = useMemo(() => {
-    if (!captions || !liveSrc) return null;
+    if (!captions || !captionGrant) return null;
     if (typeof captions.src === 'string') return captions as { src: string; label: string; lang: string };
-    const src = captions.src(liveSrc);
+    const src = captions.src(captionGrant);
     return src ? { src, label: captions.label, lang: captions.lang } : null;
-  }, [captions, liveSrc]);
+  }, [captions, captionGrant]);
 
   return (
     <Box
@@ -861,7 +1205,7 @@ export default function NeramVideoPlayer({
 
       {title && fullscreen.isFullscreen && chrome.visible && <TitleBar title={title} />}
 
-      {nudge && <Nudge message={nudge} />}
+      {nudge ? <Nudge message={nudge} /> : catchUpPart && <CatchUpChip index={catchUpPart.index} total={catchUpPart.total} />}
 
       {atCheckpoint && gate.quizReady && <CheckpointNotice />}
       {atCheckpoint && !gate.quizReady && owed && (
@@ -869,7 +1213,9 @@ export default function NeramVideoPlayer({
           watchedSeconds={owed.watchedSeconds}
           requiredSeconds={owed.requiredSeconds}
           sectionSeconds={owed.sectionEnd - owed.sectionStart}
-          onPlayMissed={owed.nextUnwatchedAt !== null ? playMissed : null}
+          parts={owed.stretches.length}
+          missingSeconds={owed.missingSeconds}
+          onPlayMissed={owed.stretches.length > 0 ? playMissed : null}
         />
       )}
 

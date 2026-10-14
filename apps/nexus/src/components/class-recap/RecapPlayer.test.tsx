@@ -31,6 +31,14 @@ vi.mock('@/components/video/NeramVideoPlayer', () => ({
 
 const SECTIONS = [{ id: 's1', end_timestamp_seconds: 60, passed: false }];
 
+/** The page owns the watch session; the player only seeds it and wires it up. */
+const SESSION = {
+  ranges: [],
+  seedFromEmbed: vi.fn(),
+  flushNow: vi.fn(),
+  playerProps: { onTimeUpdate: vi.fn(), onPlayedSpan: vi.fn(), onPlaybackEvent: vi.fn(), onBlockedSeek: vi.fn() },
+};
+
 const SUCCESS_RESPONSE = {
   mode: 'proxy',
   video_source: 'sharepoint',
@@ -45,10 +53,17 @@ describe('RecapPlayer', () => {
     authFetchMock.mockReset();
   });
 
+  it('seeds the watch session of the page from the embed reply', async () => {
+    const reply = { ...SUCCESS_RESPONSE, played_ranges: [[0, 30]] };
+    authFetchMock.mockResolvedValueOnce(reply);
+    render(<RecapPlayer recapId="recap-1" sections={SECTIONS} onSectionEnd={() => {}} session={SESSION} />);
+    await waitFor(() => expect(SESSION.seedFromEmbed).toHaveBeenCalledWith(reply));
+  });
+
   it('fetches the video-embed URL through authFetch on mount, with no token/query param', async () => {
     authFetchMock.mockResolvedValueOnce(SUCCESS_RESPONSE);
 
-    render(<RecapPlayer recapId="recap-1" sections={SECTIONS} onSectionEnd={() => {}} />);
+    render(<RecapPlayer recapId="recap-1" sections={SECTIONS} onSectionEnd={() => {}} session={SESSION} />);
 
     await waitFor(() => expect(authFetchMock).toHaveBeenCalledTimes(1));
     expect(authFetchMock).toHaveBeenCalledWith('/api/student/class-recaps/recap-1/video-embed');
@@ -57,7 +72,7 @@ describe('RecapPlayer', () => {
   it('shows the friendly session-expired message on a 401, not the raw upstream error', async () => {
     authFetchMock.mockRejectedValueOnce(new Error('Your session expired. Please sign in again.'));
 
-    render(<RecapPlayer recapId="recap-1" sections={SECTIONS} onSectionEnd={() => {}} />);
+    render(<RecapPlayer recapId="recap-1" sections={SECTIONS} onSectionEnd={() => {}} session={SESSION} />);
 
     // findByText throws if no match, which is the presence assertion.
     await screen.findByText('Your session expired. Please sign in again.');
@@ -70,7 +85,7 @@ describe('RecapPlayer', () => {
       .mockRejectedValueOnce(new Error('Your session expired. Please sign in again.'))
       .mockResolvedValueOnce(SUCCESS_RESPONSE);
 
-    render(<RecapPlayer recapId="recap-1" sections={SECTIONS} onSectionEnd={() => {}} />);
+    render(<RecapPlayer recapId="recap-1" sections={SECTIONS} onSectionEnd={() => {}} session={SESSION} />);
 
     const retryButton = await screen.findByRole('button', { name: /try again/i });
     fireEvent.click(retryButton);
@@ -82,7 +97,7 @@ describe('RecapPlayer', () => {
   it('renders the html5 source once authFetch resolves', async () => {
     authFetchMock.mockResolvedValueOnce(SUCCESS_RESPONSE);
 
-    render(<RecapPlayer recapId="recap-1" sections={SECTIONS} onSectionEnd={() => {}} />);
+    render(<RecapPlayer recapId="recap-1" sections={SECTIONS} onSectionEnd={() => {}} session={SESSION} />);
 
     const player = await screen.findByTestId('video-player');
     expect(player.textContent).toBe('https://example.com/stream');
@@ -95,7 +110,7 @@ describe('RecapPlayer', () => {
       .mockResolvedValueOnce(SUCCESS_RESPONSE)
       .mockResolvedValueOnce({ ...SUCCESS_RESPONSE, streamUrl: '/api/media/recording?vt=fresh', src: '/api/media/recording?vt=fresh' });
 
-    render(<RecapPlayer recapId="recap-1" sections={SECTIONS} onSectionEnd={() => {}} />);
+    render(<RecapPlayer recapId="recap-1" sections={SECTIONS} onSectionEnd={() => {}} session={SESSION} />);
     await screen.findByTestId('video-player');
 
     expect(typeof lastSource?.renew).toBe('function');
@@ -108,7 +123,7 @@ describe('RecapPlayer', () => {
       .mockResolvedValueOnce(SUCCESS_RESPONSE)
       .mockResolvedValueOnce({ mode: 'youtube', video_source: 'youtube', youtube_id: 'abc' });
 
-    render(<RecapPlayer recapId="recap-1" sections={SECTIONS} onSectionEnd={() => {}} />);
+    render(<RecapPlayer recapId="recap-1" sections={SECTIONS} onSectionEnd={() => {}} session={SESSION} />);
     await screen.findByTestId('video-player');
 
     await expect(lastSource!.renew!()).rejects.toThrow(/reload the page/i);

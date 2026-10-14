@@ -27,15 +27,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Box, Typography, Stack, Skeleton, Chip, Button, EmptyState, alpha } from '@neram/ui';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CheckRoundedIcon from '@mui/icons-material/CheckRounded';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import RecapPlayer from './RecapPlayer';
-import { useWatchHeartbeat } from './useWatchHeartbeat';
+import useWatchSession from '@/components/video/useWatchSession';
 import { openFocusWindow, onFocusWindowClosed, focusChannelName } from './openFocusWindow';
 import QuizModal from '@/components/foundation/QuizModal';
 import type { VideoGateMode } from '@/lib/video-gate';
+import { coveredWithin } from '@/lib/played-ranges';
 
 export interface RecapSection {
   id: string;
@@ -170,10 +172,14 @@ export default function RecapWatch({
     [recap, passedIds],
   );
 
-  // Persists the resume point and how much genuinely played. Without this the
-  // stored position stays 0, which is what stopped the post-fail test re-arm
-  // from ever unlocking.
-  const { onTick, flushNow } = useWatchHeartbeat({ recapId, getToken });
+  // What the student has played and the heartbeat that saves it. Owned here,
+  // not in the player, so the section list can read it too and a remount of
+  // the player between steps does not forget this session's watching.
+  const session = useWatchSession({
+    endpoint: recapId ? `/api/student/class-recaps/${recapId}/progress` : null,
+    getToken,
+  });
+  const { flushNow } = session;
 
   /**
    * Desktop opens a chromeless popup; anything narrow navigates in place, since
@@ -391,7 +397,7 @@ export default function RecapWatch({
           recapId={recap.id}
           sections={playerSections}
           onSectionEnd={openQuiz}
-          onTimeUpdate={onTick}
+          session={session}
           title={recap.title}
           onFullscreenChange={setQuizHost}
           mode={watchMode}
@@ -445,6 +451,15 @@ export default function RecapWatch({
             // Nothing is sequential when nothing is owed, so the list stops
             // being a ladder and becomes chapters.
             const locked = revising ? false : !priorPassed && !isPassed;
+            // How much of the section owed has really been played. Only for
+            // that one row: a passed row is done, and a locked one has not
+            // started. Shown as a number as well as a bar, never colour alone.
+            const owedRow = !revising && !isPassed && !locked;
+            const length = s.end_timestamp_seconds - s.start_timestamp_seconds;
+            const watchedPct =
+              owedRow && length > 0
+                ? Math.min(100, Math.round((coveredWithin(session.ranges, s.start_timestamp_seconds, s.end_timestamp_seconds) / length) * 100))
+                : 0;
             return (
               <Box
                 key={s.id}
@@ -477,7 +492,7 @@ export default function RecapWatch({
                     color: isPassed && !revising ? '#1B5E20' : 'text.secondary',
                   }}
                 >
-                  {isPassed && !revising ? '✓' : i + 1}
+                  {isPassed && !revising ? <CheckRoundedIcon aria-label="Passed" sx={{ fontSize: 18 }} /> : i + 1}
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Typography sx={{ fontWeight: 700, fontSize: '0.9rem', lineHeight: 1.3 }} noWrap>
@@ -491,6 +506,28 @@ export default function RecapWatch({
                       ? ''
                       : ` · ${s.question_count} question${s.question_count === 1 ? '' : 's'}`}
                   </Typography>
+                  {owedRow && watchedPct > 0 && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                      <Box
+                        aria-hidden
+                        sx={{ flex: 1, maxWidth: 160, height: 4, borderRadius: 99, bgcolor: alpha('#1A2027', 0.1) }}
+                      >
+                        <Box
+                          sx={{
+                            width: `${watchedPct}%`,
+                            height: '100%',
+                            borderRadius: 99,
+                            bgcolor: 'primary.main',
+                            transition: 'width 250ms ease-out',
+                            '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+                          }}
+                        />
+                      </Box>
+                      <Typography variant="caption" sx={{ fontWeight: 700, color: 'text.primary', whiteSpace: 'nowrap' }}>
+                        {watchedPct}% watched
+                      </Typography>
+                    </Box>
+                  )}
                 </Box>
                 {isPassed && !revising ? (
                   <CheckCircleIcon sx={{ fontSize: 20, color: '#2E7D32', flexShrink: 0 }} />
@@ -501,12 +538,16 @@ export default function RecapWatch({
                     size="small"
                     startIcon={<PlayCircleOutlineIcon />}
                     onClick={() => {
-                      (window as any).__recapPlayer?.seekTo(Math.max(0, s.start_timestamp_seconds));
-                      (window as any).__recapPlayer?.play();
+                      const player = (window as any).__recapPlayer;
+                      // The section owed, once started, carries on with only the
+                      // parts missed rather than starting it over.
+                      if (owedRow && watchedPct > 0 && player?.continueOwed?.()) return;
+                      player?.seekTo(Math.max(0, s.start_timestamp_seconds));
+                      player?.play();
                     }}
-                    sx={{ minHeight: 40, textTransform: 'none', flexShrink: 0 }}
+                    sx={{ minHeight: 44, minWidth: 44, textTransform: 'none', flexShrink: 0 }}
                   >
-                    Watch
+                    {owedRow && watchedPct > 0 ? 'Continue' : 'Watch'}
                   </Button>
                 )}
               </Box>

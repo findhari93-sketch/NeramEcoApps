@@ -1,7 +1,7 @@
 import { render, act, screen, fireEvent, waitFor } from '@testing-library/react';
 import { createRef } from 'react';
-import { vi, describe, it, expect, beforeAll, beforeEach, type Mock } from 'vitest';
-import NeramVideoPlayer from './NeramVideoPlayer';
+import { vi, describe, it, expect, beforeAll, beforeEach, afterEach, type Mock } from 'vitest';
+import NeramVideoPlayer, { type VideoPlayerActions } from './NeramVideoPlayer';
 import type { VideoGate } from '@/lib/video-gate';
 
 /**
@@ -49,6 +49,9 @@ function gateFor({
             watchedSeconds: watched,
             requiredSeconds: required,
             nextUnwatchedAt: nextGap,
+            holes: nextGap === null ? [] : [[nextGap, nextGap + 30]],
+            missingSeconds: nextGap === null ? 0 : 30,
+            stretches: nextGap === null ? [] : [[nextGap, nextGap + 30]],
           },
   };
 }
@@ -462,7 +465,7 @@ describe('NeramVideoPlayer: a drag cannot buy the quiz (NXS-0130)', () => {
     ctl.seekTo(120.2);
     fire(video, 'timeupdate');
     act(() => {
-      fireEvent.click(screen.getByRole('button', { name: /play the part i missed/i }));
+      fireEvent.click(screen.getByRole('button', { name: /play the missed part/i }));
     });
     expect(ctl.now()).toBe(11);
     expect(ctl.isPaused()).toBe(false);
@@ -925,6 +928,419 @@ describe('NeramVideoPlayer: an expiring stream is renewed without losing the pla
     const ctl2 = instrument(second, 600);
     fire(second, 'loadedmetadata');
     expect(ctl2.now()).toBe(300);
+  });
+});
+
+describe('NeramVideoPlayer: the grant is refreshed before it runs out', () => {
+  /**
+   * The ten minute freeze. Every proxied recording plays from a URL whose grant
+   * lasts ten minutes, and the player used to let it lapse: the next byte range
+   * was refused and the picture froze until a 20 second stall watchdog reloaded
+   * the stream. Prod showed 298 of those in a month, about 41 seconds each.
+   *
+   * Now the player fetches a fresh grant two minutes early and hands it to the
+   * proxy as a cookie, so the <video> keeps its URL and never notices. When the
+   * browser will not send that cookie (some Safari and Teams builds), the fresh
+   * URL is swapped in at the next pause instead, or just before expiry.
+   */
+  const b64 = (o: object) => btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const grantSrc = (n: number) => `https://media.test/recording?vt=vid_${b64({ iat: 0, exp: 600 })}.sig${n}`;
+
+  function stubArm(reply: { armed: boolean; cookie: boolean } | number) {
+    const fetchMock = vi.fn(async () =>
+      typeof reply === 'number'
+        ? new Response('{}', { status: reply })
+        : new Response(JSON.stringify(reply), { status: 200 }),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  function setupGranted(renew: Mock<[], Promise<string>>) {
+    const ref = createRef<HTMLVideoElement>() as React.MutableRefObject<HTMLVideoElement | null>;
+    render(
+      <NeramVideoPlayer
+        source={{ kind: 'html5', src: grantSrc(1), renew }}
+        gate={gateFor({ unlocked: 0, passed: true })}
+        videoRef={ref}
+      />,
+    );
+    const video = ref.current!;
+    const ctl = instrument(video, 3600);
+    return { video, ctl };
+  }
+
+  async function play(video: HTMLVideoElement, ctl: ReturnType<typeof instrument>, at = 30) {
+    fire(video, 'loadedmetadata');
+    video.play();
+    fire(video, 'play');
+    ctl.seekTo(at);
+    fire(video, 'timeupdate');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+  }
+
+  async function wait(ms: number) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  }
+
+  const posts = (fetchMock: Mock) => fetchMock.mock.calls.map(([url]) => url);
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('arms the grant as a cookie and tops it up early, without touching the <video>', async () => {
+    const fetchMock = stubArm({ armed: true, cookie: true });
+    const renew = vi.fn<[], Promise<string>>().mockResolvedValue(grantSrc(2));
+    const { video, ctl } = setupGranted(renew);
+    await play(video, ctl);
+    expect(posts(fetchMock)).toEqual([grantSrc(1)]);
+
+    await wait(7 * 60_000);
+    expect(renew).not.toHaveBeenCalled();
+
+    await wait(90_000);
+    expect(renew).toHaveBeenCalledTimes(1);
+    expect(posts(fetchMock)).toEqual([grantSrc(1), grantSrc(2)]);
+
+    // Well past the first grant's expiry: same URL, no reload, no second renew.
+    await wait(5 * 60_000);
+    expect(video.getAttribute('src')).toBe(grantSrc(1));
+    expect(renew).toHaveBeenCalledTimes(1);
+  });
+
+  it('swaps the fresh URL in just before expiry when the browser drops the cookie, keeping the place', async () => {
+    stubArm({ armed: true, cookie: false });
+    const renew = vi.fn<[], Promise<string>>().mockResolvedValue(grantSrc(2));
+    const { video, ctl } = setupGranted(renew);
+    await play(video, ctl, 300);
+
+    await wait(9 * 60_000);
+    expect(renew).toHaveBeenCalledTimes(1);
+    expect(video.getAttribute('src')).toBe(grantSrc(1));
+
+    await wait(45_000);
+    expect(video.getAttribute('src')).toBe(grantSrc(2));
+    fire(video, 'loadedmetadata');
+    expect(ctl.now()).toBe(300);
+    expect(ctl.isPaused()).toBe(false);
+  });
+
+  it('prefers a pause for the swap', async () => {
+    stubArm(405);
+    const renew = vi.fn<[], Promise<string>>().mockResolvedValue(grantSrc(2));
+    const { video, ctl } = setupGranted(renew);
+    await play(video, ctl, 300);
+    await wait(8 * 60_000 + 5_000);
+    expect(renew).toHaveBeenCalledTimes(1);
+    expect(video.getAttribute('src')).toBe(grantSrc(1));
+
+    video.pause();
+    fire(video, 'pause');
+    await wait(5_000);
+    expect(video.getAttribute('src')).toBe(grantSrc(2));
+    fire(video, 'loadedmetadata');
+    expect(ctl.now()).toBe(300);
+    expect(ctl.isPaused()).toBe(true);
+  });
+
+  it('does not refresh for a paused video, and tops up on resume', async () => {
+    const fetchMock = stubArm({ armed: true, cookie: true });
+    const renew = vi.fn<[], Promise<string>>().mockResolvedValue(grantSrc(2));
+    const { video, ctl } = setupGranted(renew);
+    await play(video, ctl);
+    video.pause();
+    fire(video, 'pause');
+
+    await wait(20 * 60_000);
+    expect(renew).not.toHaveBeenCalled();
+
+    video.play();
+    fire(video, 'play');
+    await wait(0);
+    expect(renew).toHaveBeenCalledTimes(1);
+    expect(posts(fetchMock)).toContain(grantSrc(2));
+  });
+
+  it('backs off after a failed refresh instead of asking every few seconds', async () => {
+    stubArm({ armed: true, cookie: true });
+    const renew = vi.fn<[], Promise<string>>().mockRejectedValue(new Error('offline'));
+    const { video, ctl } = setupGranted(renew);
+    await play(video, ctl, 300);
+    await wait(8 * 60_000 + 25_000);
+    expect(renew).toHaveBeenCalledTimes(1);
+    await wait(10_000);
+    expect(renew).toHaveBeenCalledTimes(2);
+  });
+
+  it('gets a stream whose grant ran out going again within seconds, not twenty', async () => {
+    // Offline until the grant has lapsed, so no refresh could land in time.
+    stubArm(405);
+    const start = Date.now();
+    const renew = vi.fn<[], Promise<string>>(async () => {
+      if (Date.now() - start < 10 * 60_000) throw new Error('offline');
+      return grantSrc(3);
+    });
+    const { video, ctl } = setupGranted(renew);
+    await play(video, ctl, 300);
+
+    await wait(10 * 60_000 + 1_000);
+    expect(video.getAttribute('src')).toBe(grantSrc(1));
+    fire(video, 'waiting');
+    await wait(10_000);
+    expect(video.getAttribute('src')).toBe(grantSrc(3));
+    fire(video, 'loadedmetadata');
+    expect(ctl.now()).toBe(300);
+  });
+});
+
+describe('NeramVideoPlayer: what counts as played', () => {
+  /**
+   * The player decides once, for every page, which steps of the playhead were
+   * the video playing. The old rule (a tick gap over two seconds is a seek)
+   * threw away real playback whenever a busy phone delivered ticks late, and
+   * the same rule fed the 80% quiz gate. Now real elapsed time decides.
+   */
+  let clock = 0;
+  beforeEach(() => {
+    clock = 0;
+    vi.spyOn(performance, 'now').mockImplementation(() => clock);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  function setupSpans() {
+    const ref = createRef<HTMLVideoElement>() as React.MutableRefObject<HTMLVideoElement | null>;
+    const onPlayedSpan = vi.fn();
+    const onPlaybackEvent = vi.fn();
+    render(
+      <NeramVideoPlayer
+        source={{ kind: 'html5', src: 'blob:stream', renew: null }}
+        gate={gateFor({ unlocked: 0, passed: true })}
+        videoRef={ref}
+        onPlayedSpan={onPlayedSpan}
+        onPlaybackEvent={onPlaybackEvent}
+      />,
+    );
+    const video = ref.current!;
+    const ctl = instrument(video, 600);
+    fire(video, 'loadedmetadata');
+    video.play();
+    fire(video, 'play');
+    return { video, ctl, onPlayedSpan, onPlaybackEvent };
+  }
+
+  function tick(video: HTMLVideoElement, ctl: ReturnType<typeof instrument>, t: number, wallMs: number) {
+    clock = wallMs;
+    ctl.seekTo(t);
+    fire(video, 'timeupdate');
+  }
+
+  const total = (spy: Mock) => spy.mock.calls.reduce((sum, [a, b]) => sum + (b - a), 0);
+
+  it('reports ordinary playback as played', () => {
+    const { video, ctl, onPlayedSpan } = setupSpans();
+    for (let i = 0; i <= 40; i++) tick(video, ctl, 100 + i * 0.25, i * 250);
+    expect(total(onPlayedSpan)).toBe(10);
+  });
+
+  it('still counts a step that arrived late on a busy device', () => {
+    const { video, ctl, onPlayedSpan } = setupSpans();
+    tick(video, ctl, 100, 0);
+    tick(video, ctl, 100.25, 250);
+    tick(video, ctl, 103.5, 3500);
+    expect(total(onPlayedSpan)).toBe(3.5);
+  });
+
+  it('never counts a seek, whoever made it', () => {
+    const { video, ctl, onPlayedSpan, onPlaybackEvent } = setupSpans();
+    tick(video, ctl, 100, 0);
+    tick(video, ctl, 100.25, 250);
+    // A drag, the +10 button, a checkpoint list "Watch": the browser says seeking.
+    fire(video, 'seeking');
+    tick(video, ctl, 400, 300);
+    tick(video, ctl, 400.25, 550);
+    expect(total(onPlayedSpan)).toBe(0.5);
+    expect(onPlaybackEvent).not.toHaveBeenCalled();
+  });
+
+  it('throws away a jump that came with no seek event, and says so', () => {
+    const { video, ctl, onPlayedSpan, onPlaybackEvent } = setupSpans();
+    tick(video, ctl, 100, 0);
+    tick(video, ctl, 130, 250);
+    expect(onPlayedSpan).not.toHaveBeenCalled();
+    expect(onPlaybackEvent).toHaveBeenCalledWith({ type: 'discarded', seconds: 30 });
+  });
+
+  it('reports how long a stall kept the student waiting', () => {
+    vi.useFakeTimers();
+    try {
+      const { video, onPlaybackEvent } = setupSpans();
+      fire(video, 'waiting');
+      vi.advanceTimersByTime(7_000);
+      fire(video, 'playing');
+      expect(onPlaybackEvent).toHaveBeenCalledWith({ type: 'stall', seconds: 7 });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('NeramVideoPlayer: play only the parts missed', () => {
+  /**
+   * "Play the part I missed" used to go to the first gap and play on to the
+   * checkpoint, so one skipped minute early in a section meant replaying all of
+   * the rest of it. Now it plays the missing stretches only, one after another,
+   * and goes to the checkpoint the moment enough has been watched.
+   */
+  function owedGate(watched: number, stretches: Array<[number, number]>): VideoGate {
+    const base = gateFor({ unlocked: 120, watched, nextGap: stretches.length ? stretches[0][0] : null });
+    return {
+      ...base,
+      owedWatch: base.owedWatch && {
+        ...base.owedWatch,
+        holes: stretches,
+        stretches,
+        missingSeconds: stretches.reduce((sum, [a, b]) => sum + b - a, 0),
+      },
+    };
+  }
+
+  function setupOwed(gate: VideoGate) {
+    const ref = createRef<HTMLVideoElement>() as React.MutableRefObject<HTMLVideoElement | null>;
+    const actionsRef = { current: null } as React.MutableRefObject<VideoPlayerActions | null>;
+    const onCheckpointReached = vi.fn();
+    const utils = render(
+      <NeramVideoPlayer
+        source={{ kind: 'html5', src: 'blob:stream', renew: null }}
+        gate={gate}
+        videoRef={ref}
+        actionsRef={actionsRef}
+        onCheckpointReached={onCheckpointReached}
+      />,
+    );
+    const video = ref.current!;
+    const ctl = instrument(video, 600);
+    fire(video, 'loadedmetadata');
+    return { ...utils, video, ctl, actionsRef, onCheckpointReached };
+  }
+
+  function arriveAtCheckpoint(video: HTMLVideoElement, ctl: ReturnType<typeof instrument>) {
+    video.play();
+    fire(video, 'play');
+    ctl.seekTo(120);
+    fire(video, 'timeupdate');
+    // The mock element does not answer pause() with an event; a browser does.
+    fire(video, 'pause');
+  }
+
+  /** Press the button, and answer the play() it calls the way a browser would. */
+  function playMissedParts(video: HTMLVideoElement) {
+    fireEvent.click(screen.getByRole('button', { name: /play 2 missed parts/i }));
+    fire(video, 'play');
+  }
+
+  it('names the parts and how long they are, at the checkpoint', () => {
+    const { video, ctl } = setupOwed(owedGate(60, [[10, 40], [70, 100]]));
+    arriveAtCheckpoint(video, ctl);
+    expect(screen.getByText(/watched 50% of this section/i)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Play 2 missed parts (1:00)' })).toBeTruthy();
+  });
+
+  it('plays each missed stretch in turn, then goes to the checkpoint', () => {
+    const { video, ctl } = setupOwed(owedGate(60, [[10, 40], [70, 100]]));
+    arriveAtCheckpoint(video, ctl);
+    playMissedParts(video);
+
+    expect(ctl.now()).toBe(10);
+    expect(ctl.isPaused()).toBe(false);
+    expect(screen.getByText('Missed part 1 of 2')).toBeTruthy();
+
+    ctl.seekTo(40);
+    fire(video, 'timeupdate');
+    expect(ctl.now()).toBe(70);
+    expect(screen.getByText('Missed part 2 of 2')).toBeTruthy();
+
+    ctl.seekTo(100);
+    fire(video, 'timeupdate');
+    expect(ctl.now()).toBe(120);
+    expect(screen.queryByText(/missed part/i)).toBeNull();
+  });
+
+  it('heads for the quiz as soon as enough is watched, without finishing every part', () => {
+    const { video, ctl, rerender, onCheckpointReached } = setupOwed(owedGate(60, [[10, 40], [70, 100]]));
+    arriveAtCheckpoint(video, ctl);
+    playMissedParts(video);
+    ctl.seekTo(30);
+    fire(video, 'timeupdate');
+
+    // The page's ranges grew past 80% of the section.
+    rerender(
+      <NeramVideoPlayer
+        source={{ kind: 'html5', src: 'blob:stream', renew: null }}
+        gate={owedGate(100, [[30, 40]])}
+        videoRef={{ current: video }}
+        onCheckpointReached={onCheckpointReached}
+      />,
+    );
+    expect(ctl.now()).toBe(120);
+    fire(video, 'timeupdate');
+    expect(onCheckpointReached).toHaveBeenCalled();
+  });
+
+  it('stops replaying when the student pauses or moves the playhead', () => {
+    const { video, ctl } = setupOwed(owedGate(60, [[10, 40], [70, 100]]));
+    arriveAtCheckpoint(video, ctl);
+    playMissedParts(video);
+    video.pause();
+    fire(video, 'pause');
+    expect(screen.queryByText(/missed part/i)).toBeNull();
+    video.play();
+    fire(video, 'play');
+    ctl.seekTo(40);
+    fire(video, 'timeupdate');
+    expect(ctl.now()).toBe(40);
+  });
+
+  it('lets the section list carry on with the section owed', () => {
+    const { ctl, actionsRef } = setupOwed(owedGate(60, [[10, 40]]));
+    expect(actionsRef.current?.continueOwed()).toBe(true);
+    expect(ctl.now()).toBe(10);
+    expect(ctl.isPaused()).toBe(false);
+  });
+
+  it('keeps a Continue pressed before the video has loaded, rather than the stored resume point', () => {
+    const ref = createRef<HTMLVideoElement>() as React.MutableRefObject<HTMLVideoElement | null>;
+    const actionsRef = { current: null } as React.MutableRefObject<VideoPlayerActions | null>;
+    render(
+      <NeramVideoPlayer
+        source={{ kind: 'html5', src: 'blob:stream', renew: null }}
+        gate={owedGate(60, [[10, 40]])}
+        videoRef={ref}
+        actionsRef={actionsRef}
+        resumeAt={70}
+      />,
+    );
+    const video = ref.current!;
+    const ctl = instrument(video, 600);
+    actionsRef.current?.continueOwed();
+    fire(video, 'loadedmetadata');
+    expect(ctl.now()).toBe(10);
+  });
+
+  it('sends the section list straight to the quiz once enough is watched', () => {
+    const { ctl, actionsRef } = setupOwed(owedGate(100, [[30, 40]]));
+    expect(actionsRef.current?.continueOwed()).toBe(true);
+    expect(ctl.now()).toBe(120);
   });
 });
 

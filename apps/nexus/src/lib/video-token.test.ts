@@ -5,6 +5,10 @@ import {
   isVideoToken,
   VIDEO_TOKEN_PREFIX,
   VIDEO_TOKEN_TTL_SECONDS,
+  resolveStreamToken,
+  grantCookieName,
+  grantCookieHeader,
+  GRANT_COOKIE_MAX_URL_AGE_SECONDS,
 } from './video-token';
 
 const SECRET = 'test-video-secret-value';
@@ -152,5 +156,64 @@ describe('secret configuration', () => {
     // was used. Otherwise rotating VIDEO_STREAM_SECRET would quietly do nothing.
     delete process.env.VIDEO_STREAM_SECRET;
     expect(verifyVideoToken(token)).toBeNull();
+  });
+});
+
+/**
+ * The Vercel byte route's half of the grant refresh (the media Worker has the
+ * same rule, pinned in media-proxy-handler.test.ts): a lapsed URL grant is
+ * served on a fresh cookie grant for the same video and the same student.
+ */
+describe('a lapsed URL grant is topped up by a fresh cookie', () => {
+  const cookies = (jar: Record<string, string>) => (name: string) => jar[name];
+  const name = grantCookieName(base);
+
+  it('uses the URL grant while it lasts', () => {
+    const { token } = mintVideoToken(base);
+    expect(resolveStreamToken(token, cookies({}))?.via).toBe('url');
+  });
+
+  it('uses a fresh cookie once the URL grant has lapsed', () => {
+    const lapsed = mintVideoToken({ ...base, ttlSeconds: -5 }).token;
+    const fresh = mintVideoToken(base).token;
+    const resolved = resolveStreamToken(lapsed, cookies({ [name]: fresh }));
+    expect(resolved?.via).toBe('cookie');
+    expect(resolved?.token).toBe(fresh);
+  });
+
+  it('refuses a cookie for another student or another video, or one that has lapsed too', () => {
+    const lapsed = mintVideoToken({ ...base, ttlSeconds: -5 }).token;
+    for (const cookie of [
+      mintVideoToken({ ...base, userId: 'stu-2' }).token,
+      mintVideoToken({ ...base, refId: 'recap-2' }).token,
+      mintVideoToken({ ...base, ttlSeconds: -1 }).token,
+      'vid_forged.sig',
+    ]) {
+      expect(resolveStreamToken(lapsed, cookies({ [name]: cookie }))).toBeNull();
+    }
+    expect(resolveStreamToken(lapsed, cookies({}))).toBeNull();
+  });
+
+  it('refuses a forged URL even next to a valid cookie', () => {
+    const fresh = mintVideoToken(base).token;
+    expect(resolveStreamToken('vid_forged.sig', cookies({ [name]: fresh }))).toBeNull();
+  });
+
+  it('refuses a URL minted more than six hours ago, whatever the cookie says', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-10-14T00:00:00Z'));
+    const old = mintVideoToken(base).token;
+    vi.setSystemTime(new Date(Date.now() + (GRANT_COOKIE_MAX_URL_AGE_SECONDS + 60) * 1000));
+    const fresh = mintVideoToken(base).token;
+    expect(resolveStreamToken(old, cookies({ [name]: fresh }))).toBeNull();
+  });
+
+  it('writes the cookie for a cross-site Teams iframe, scoped to the media routes', () => {
+    const { token } = mintVideoToken(base);
+    const header = grantCookieHeader({ ...base, exp: Math.floor(Date.now() / 1000) + 600 }, token);
+    expect(header.startsWith(`vg_recap_recap-1=${token};`)).toBe(true);
+    expect(header).toMatch(/Max-Age=(599|600);/);
+    expect(header).toMatch(/Path=\/api\/media;/);
+    expect(header).toMatch(/SameSite=None; Partitioned$/);
   });
 });

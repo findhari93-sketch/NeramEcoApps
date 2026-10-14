@@ -24,10 +24,10 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import NeramVideoPlayer from '@/components/video/NeramVideoPlayer';
 import { renewFromEmbed } from '@/components/video/renew-from-embed';
-import usePlayedRanges from '@/components/video/usePlayedRanges';
+import useWatchSession from '@/components/video/useWatchSession';
 import { computeGate, type VideoGateMode } from '@/lib/video-gate';
+import { lastPlayedPoint } from '@/lib/played-ranges';
 import { focusChannelName } from '@/components/class-recap/openFocusWindow';
-import { useWatchHeartbeat } from '@/components/class-recap/useWatchHeartbeat';
 import QuizModal from '@/components/foundation/QuizModal';
 
 interface Section {
@@ -75,9 +75,6 @@ export default function FocusRecapPage() {
    */
   const [quizError, setQuizError] = useState<string | null>(null);
   const [loadingQuiz, setLoadingQuiz] = useState(false);
-  /** What was really played, which is what the checkpoint quiz waits on. */
-  const played = usePlayedRanges();
-  const { seed: seedPlayed, record: recordPlayed } = played;
   /**
    * Where the quiz is drawn: the player's container while it is fullscreen by
    * either route, null otherwise. Null means the ordinary viewport drawer.
@@ -91,7 +88,16 @@ export default function FocusRecapPage() {
    */
   const [watchMode, setWatchMode] = useState<VideoGateMode>('gated');
 
-  const { onTick, flushNow } = useWatchHeartbeat({ recapId, getToken });
+  /**
+   * What was really played, which is what the checkpoint quiz waits on, and the
+   * heartbeat that saves it. Same hook and same server record as the inline
+   * player, so the two players can never disagree about what was watched.
+   */
+  const session = useWatchSession({
+    endpoint: recapId ? `/api/student/class-recaps/${recapId}/progress` : null,
+    getToken,
+  });
+  const { flushNow, seedFromEmbed } = session;
 
   const load = useCallback(async () => {
     try {
@@ -115,14 +121,12 @@ export default function FocusRecapPage() {
       // seek. Seeding from it is what let a stray tap park a student on
       // checkpoint 1 for good (NXS-0130). Resume goes no further than that
       // either, or the student lands on the checkpoint and is told to watch more.
-      const resume = Number(embedRes.resume_at) || 0;
-      const playedUntil = Number(embedRes.played_until ?? embedRes.resume_at) || 0;
-      seedPlayed(playedUntil);
-      setResumeAt(recapRes.watch_mode === 'revision' ? resume : Math.min(resume, playedUntil));
+      seedFromEmbed(embedRes);
+      setResumeAt(Number(embedRes.resume_at) || 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not open this recording');
     }
-  }, [authFetch, recapId, seedPlayed]);
+  }, [authFetch, recapId, seedFromEmbed]);
 
   useEffect(() => {
     if (!authLoading && recapId) load();
@@ -159,10 +163,10 @@ export default function FocusRecapPage() {
         })),
         duration,
         furthestSeconds: 0,
-        playedRanges: played.ranges,
+        playedRanges: session.ranges,
         mode: watchMode,
       }),
-    [sections, duration, played.ranges, watchMode],
+    [sections, duration, session.ranges, watchMode],
   );
 
   const passedCount = sections.filter((s) => s.passed).length;
@@ -170,7 +174,8 @@ export default function FocusRecapPage() {
    * Where the player will actually pick up: the stored point, pulled back to how
    * far a seek may reach. The chip must not promise 13:06 and start at 1:11.
    */
-  const resumeFrom = Number.isFinite(gate.seekCeiling) ? Math.min(resumeAt, gate.seekCeiling) : resumeAt;
+  const playedTo = watchMode === 'revision' ? resumeAt : lastPlayedPoint(session.ranges, resumeAt);
+  const resumeFrom = Number.isFinite(gate.seekCeiling) ? Math.min(playedTo, gate.seekCeiling) : playedTo;
 
   /** Checkpoint positions drawn on the scrub bar. */
   const marks = useMemo(
@@ -271,14 +276,6 @@ export default function FocusRecapPage() {
     videoRef.current.currentTime = section.start_timestamp_seconds;
     setTimeout(() => videoRef.current?.play().catch(() => {}), 150);
   }, [activeIdx, sections]);
-
-  const handleTick = useCallback(
-    (seconds: number, dur: number) => {
-      onTick(seconds, dur);
-      recordPlayed(seconds);
-    },
-    [onTick, recordPlayed],
-  );
 
   /**
    * The one gesture that starts playback. Autoplay is refused without it.
@@ -414,9 +411,9 @@ export default function FocusRecapPage() {
             watermark={watermark}
             title={title}
             marks={marks}
-            watched={played.ranges}
-            resumeAt={resumeAt}
-            onTimeUpdate={handleTick}
+            watched={session.ranges}
+            resumeAt={resumeFrom}
+            {...session.playerProps}
             onCheckpointReached={openQuiz}
             onLoadedMetadata={setDuration}
             allowFullscreen

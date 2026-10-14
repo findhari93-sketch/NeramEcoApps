@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
-import { verifyVideoToken } from '@/lib/video-token';
+import { resolveStreamToken } from '@/lib/video-token';
 
 /**
  * GET /api/media/captions?vt=vid_...
@@ -51,8 +51,14 @@ async function classIdForGrant(
 }
 
 export async function GET(request: NextRequest) {
-  const grant = verifyVideoToken(request.nextUrl.searchParams.get('vt'));
-  if (!grant) return deny(401, 'This caption link has expired. Reload the page to keep watching.');
+  // Same cookie fallback as the byte route. The player also points <track> at
+  // the freshest grant it holds, which covers the media Worker case.
+  const resolved = resolveStreamToken(
+    request.nextUrl.searchParams.get('vt'),
+    (name) => request.cookies.get(name)?.value,
+  );
+  if (!resolved) return deny(401, 'This caption link has expired. Reload the page to keep watching.');
+  const { grant } = resolved;
 
   try {
     const supabase = getSupabaseAdminClient() as any;

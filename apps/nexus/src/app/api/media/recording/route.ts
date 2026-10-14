@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyVideoToken } from '@/lib/video-token';
+import { verifyVideoToken, resolveStreamToken, grantCookieHeader, grantCookieName } from '@/lib/video-token';
 import { resolveMedia, evictMedia } from '@/lib/recording-source-cache';
 import {
   resolveByteRange,
@@ -24,6 +24,13 @@ import {
  * plain "bytes=0-" or a request with no Range at all. See http-range.ts for why
  * (short version: it keeps each invocation short regardless of video length,
  * which is what makes this viable on a serverless platform).
+ *
+ * POST /api/media/recording?vt=vid_... (a fresh grant) stores that grant in a
+ * cookie, and a GET whose URL grant has lapsed is served on the cookie instead.
+ * The player re-arms it every few minutes, so the <video> keeps the URL it
+ * started with rather than freezing at the ten minute expiry and reloading.
+ * This route only serves when MEDIA_PROXY_ORIGIN is unset; the media Worker
+ * does the same on its own origin.
  */
 
 export const runtime = 'nodejs';
@@ -36,9 +43,37 @@ function deny(status: number, error: string) {
   return NextResponse.json({ error }, { status, headers: { 'Cache-Control': 'no-store' } });
 }
 
+/**
+ * Store a fresh grant in this video's cookie. Same contract as the Worker's
+ * POST /recording: only a currently valid grant is stored, and the reply says
+ * whether the request already carried a live cookie for this video, which is
+ * how the player learns the browser really sends it.
+ */
+export async function POST(request: NextRequest) {
+  const token = request.nextUrl.searchParams.get('vt');
+  const grant = verifyVideoToken(token);
+  if (!grant || !token) return deny(401, 'This video link has expired.');
+
+  const previous = verifyVideoToken(request.cookies.get(grantCookieName(grant))?.value);
+  const cookieSeen =
+    !!previous &&
+    previous.scope === grant.scope &&
+    previous.refId === grant.refId &&
+    previous.userId === grant.userId;
+
+  return NextResponse.json(
+    { armed: true, cookie: cookieSeen },
+    { headers: { 'Cache-Control': 'no-store', 'Set-Cookie': grantCookieHeader(grant, token) } },
+  );
+}
+
 export async function GET(request: NextRequest) {
-  const grant = verifyVideoToken(request.nextUrl.searchParams.get('vt'));
-  if (!grant) return deny(401, 'This video link has expired. Reload the page to keep watching.');
+  const resolved = resolveStreamToken(
+    request.nextUrl.searchParams.get('vt'),
+    (name) => request.cookies.get(name)?.value,
+  );
+  if (!resolved) return deny(401, 'This video link has expired. Reload the page to keep watching.');
+  const { grant } = resolved;
 
   try {
     let media = await resolveMedia(grant.scope, grant.refId);

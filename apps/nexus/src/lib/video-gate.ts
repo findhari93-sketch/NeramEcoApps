@@ -20,7 +20,7 @@
  * the file at all. This is what stops ordinary skipping by ordinary students.
  */
 
-import { coveredWithin, firstGapWithin, type PlayedRange } from './played-ranges';
+import { catchUpStretches, coveredWithin, firstGapWithin, holesWithin, type PlayedRange } from './played-ranges';
 
 export type VideoGateMode =
   /** Checkpoints bind. The student owes the first one they have not passed. */
@@ -93,6 +93,16 @@ export interface OwedWatch {
   requiredSeconds: number;
   /** Where the first unplayed stretch begins. Null when nothing worth naming is missing. */
   nextUnwatchedAt: number | null;
+  /** Every unplayed stretch of the section, a second or longer. */
+  holes: PlayedRange[];
+  /** Their total length. */
+  missingSeconds: number;
+  /**
+   * What "Play the parts I missed" plays: the holes padded and joined
+   * (catchUpStretches), so the student replays the missing bits only, not the
+   * whole rest of the section after the first gap.
+   */
+  stretches: PlayedRange[];
 }
 
 /**
@@ -219,6 +229,7 @@ export function computeGate(input: VideoGateInput): VideoGate {
     const length = Math.max(0, sectionEnd - sectionStart);
     const watchedSeconds = coveredWithin(playedRanges, sectionStart, sectionEnd);
     const requiredSeconds = length * QUIZ_WATCH_RATIO;
+    const holes = holesWithin(playedRanges, sectionStart, sectionEnd);
     // Half a second of slack: the last tick before the boundary lands a render
     // after the boundary check, and nobody should be one frame short.
     quizReady = watchedSeconds + 0.5 >= requiredSeconds;
@@ -228,6 +239,9 @@ export function computeGate(input: VideoGateInput): VideoGate {
       watchedSeconds,
       requiredSeconds,
       nextUnwatchedAt: firstGapWithin(playedRanges, sectionStart, sectionEnd),
+      holes,
+      missingSeconds: holes.reduce((sum, [a, b]) => sum + (b - a), 0),
+      stretches: catchUpStretches(holes, sectionStart, sectionEnd),
     };
   }
 

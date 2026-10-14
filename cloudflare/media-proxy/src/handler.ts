@@ -6,7 +6,9 @@
  * Vitest (and the Nexus type-check) can import it directly.
  *
  * Flow for GET /recording?vt=vid_...:
- *   1. Verify the HMAC grant locally (no network). Bad or expired: 401.
+ *   1. Verify the HMAC grant locally (no network). Bad: 401. Expired: accept a
+ *      fresh grant for the same video and student from the cookie that
+ *      POST /recording sets, else 401.
  *   2. Find the file's source {downloadUrl, mime, size}: Worker cache first,
  *      keyed scope:refId for 30 minutes, else ask Nexus server to server at
  *      /api/media/recording/source (Graph credentials never leave Nexus).
@@ -16,9 +18,20 @@
  *      class), evict, re-resolve once with ?evict=1, retry once, then give up.
  *   6. If the upstream ignores Range and answers 200, cancel it and 502, so a
  *      single request can never pull a whole lecture.
+ *
+ * POST /recording?vt=vid_... (fresh grant) stores that grant in a cookie. The
+ * player calls it every few minutes, so a <video> keeps playing from the URL it
+ * started with instead of freezing at the ten minute expiry and reloading.
  */
 
-import { verifyVideoGrant, type VideoGrantPayload } from './grant';
+import {
+  verifyVideoGrant,
+  resolveStreamGrant,
+  grantCookieHeader,
+  grantCookieName,
+  readCookie,
+  type VideoGrantPayload,
+} from './grant';
 import {
   resolveByteRange,
   formatContentRange,
@@ -194,6 +207,53 @@ function sourceErrorResponse(err: unknown, origin: string | null): Response {
   return deny(502, 'Could not read the recording.', origin);
 }
 
+/**
+ * Store a fresh grant in this video's cookie.
+ *
+ * Only a currently valid grant is stored, so the cookie can never hold more
+ * authority than the student was just given by Nexus. The reply also says
+ * whether the request already carried a live cookie for this video: that is how
+ * the player learns the browser really sends it (a Safari or Teams build that
+ * drops partitioned cookies says false, and the player falls back to swapping
+ * the URL at a pause instead).
+ *
+ * Reached by fetch with credentials, so the CORS reply must name the origin and
+ * allow credentials, or the browser hides the answer from the page.
+ */
+async function armGrant(request: Request, url: URL, env: MediaEnv, origin: string | null): Promise<Response> {
+  const credentialed = origin
+    ? { ...corsHeaders(origin), 'Access-Control-Allow-Credentials': 'true' }
+    : {};
+  const token = url.searchParams.get('vt');
+  const grant = await verifyVideoGrant(token, env.VIDEO_TOKEN_SECRET);
+  if (!grant || !token) {
+    return new Response(JSON.stringify({ error: 'This video link has expired.' }), {
+      status: 401,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...credentialed },
+    });
+  }
+
+  const previous = await verifyVideoGrant(
+    readCookie(request.headers.get('Cookie'), grantCookieName(grant)),
+    env.VIDEO_TOKEN_SECRET,
+  );
+  const cookieSeen =
+    !!previous &&
+    previous.scope === grant.scope &&
+    previous.refId === grant.refId &&
+    previous.userId === grant.userId;
+
+  return new Response(JSON.stringify({ armed: true, cookie: cookieSeen }), {
+    status: 200,
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+      'Set-Cookie': grantCookieHeader(grant, token, '/'),
+      ...credentialed,
+    },
+  });
+}
+
 export async function handleRequest(request: Request, env: MediaEnv, deps: HandlerDeps): Promise<Response> {
   const url = new URL(request.url);
   const origin = allowedOrigin(request, env);
@@ -204,8 +264,9 @@ export async function handleRequest(request: Request, env: MediaEnv, deps: Handl
       headers: origin
         ? {
             ...corsHeaders(origin),
-            'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS',
+            'Access-Control-Allow-Methods': 'GET, HEAD, POST, OPTIONS',
             'Access-Control-Allow-Headers': 'Range',
+            'Access-Control-Allow-Credentials': 'true',
             'Access-Control-Max-Age': '86400',
           }
         : {},
@@ -214,17 +275,23 @@ export async function handleRequest(request: Request, env: MediaEnv, deps: Handl
 
   if (url.pathname !== '/recording') return deny(404, 'Not found', origin);
 
+  if (request.method === 'POST') return armGrant(request, url, env, origin);
+
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     const res = deny(405, 'Method not allowed', origin);
-    res.headers.set('Allow', 'GET, HEAD, OPTIONS');
+    res.headers.set('Allow', 'GET, HEAD, POST, OPTIONS');
     return res;
   }
 
-  const token = url.searchParams.get('vt');
-  const grant = await verifyVideoGrant(token, env.VIDEO_TOKEN_SECRET);
-  if (!grant || !token) {
+  const resolved = await resolveStreamGrant(
+    url.searchParams.get('vt'),
+    request.headers.get('Cookie'),
+    env.VIDEO_TOKEN_SECRET,
+  );
+  if (!resolved) {
     return deny(401, 'This video link has expired. Reload the page to keep watching.', origin);
   }
+  const { grant, token } = resolved;
 
   let source: MediaSource;
   try {

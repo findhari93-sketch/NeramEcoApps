@@ -189,7 +189,7 @@ describe('media Worker handler', () => {
   });
 
   it('rejects other methods', async () => {
-    const res = await handleRequest(req(`/recording?vt=x`, { method: 'POST' }), env, deps);
+    const res = await handleRequest(req(`/recording?vt=x`, { method: 'PUT' }), env, deps);
     expect(res.status).toBe(405);
   });
 
@@ -199,5 +199,128 @@ describe('media Worker handler', () => {
     expect(ok.headers.get('Access-Control-Allow-Origin')).toBe(NEXUS);
     const other = await handleRequest(req('/recording', { method: 'OPTIONS', headers: { Origin: 'https://evil.example' } }), env, deps);
     expect(other.headers.get('Access-Control-Allow-Origin')).toBeNull();
+  });
+});
+
+/**
+ * The ten minute freeze. A grant in the URL lapses mid-class, and the <video>
+ * keeps asking for that same URL. The player now POSTs a fresh grant to the
+ * stream URL every few minutes; the Worker keeps it in a cookie and serves the
+ * old URL on it, so the picture never stops.
+ */
+describe('media Worker handler: grant cookie', () => {
+  function mint(opts: { refId?: string; userId?: string; ttlSeconds?: number } = {}) {
+    return mintVideoToken({
+      scope: 'recap',
+      refId: opts.refId ?? 'r-1',
+      userId: opts.userId ?? 'u-1',
+      size: SIZE,
+      ttlSeconds: opts.ttlSeconds,
+    }).token;
+  }
+
+  function cookieFrom(res: Response): string {
+    const set = res.headers.get('Set-Cookie') || '';
+    return set.split(';')[0];
+  }
+
+  function streamOk() {
+    fetchMock.mockImplementation(async (url: string) => (url.startsWith(NEXUS) ? sourceReply() : window206(0, 9)));
+  }
+
+  it('arms a valid grant as a partitioned, cross-site cookie with credentialed CORS', async () => {
+    const vt = mint();
+    const res = await handleRequest(
+      req(`/recording?vt=${encodeURIComponent(vt)}`, { method: 'POST', headers: { Origin: NEXUS } }),
+      env,
+      deps,
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ armed: true, cookie: false });
+    const set = res.headers.get('Set-Cookie') || '';
+    expect(set.startsWith(`vg_recap_r-1=${vt};`)).toBe(true);
+    expect(set).toMatch(/HttpOnly/);
+    expect(set).toMatch(/Secure/);
+    expect(set).toMatch(/SameSite=None/);
+    expect(set).toMatch(/Partitioned/);
+    expect(set).toMatch(/Path=\//);
+    expect(res.headers.get('Access-Control-Allow-Origin')).toBe(NEXUS);
+    expect(res.headers.get('Access-Control-Allow-Credentials')).toBe('true');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('reports a live cookie for the same video and student, which proves the browser sends it', async () => {
+    const first = await handleRequest(req(`/recording?vt=${encodeURIComponent(mint())}`, { method: 'POST' }), env, deps);
+    const res = await handleRequest(
+      req(`/recording?vt=${encodeURIComponent(mint())}`, { method: 'POST', headers: { Cookie: cookieFrom(first) } }),
+      env,
+      deps,
+    );
+    expect(await res.json()).toEqual({ armed: true, cookie: true });
+  });
+
+  it('refuses to arm an expired or forged grant', async () => {
+    const expired = await handleRequest(
+      req(`/recording?vt=${encodeURIComponent(mint({ ttlSeconds: -5 }))}`, { method: 'POST' }),
+      env,
+      deps,
+    );
+    expect(expired.status).toBe(401);
+    expect(expired.headers.get('Set-Cookie')).toBeNull();
+    const forged = await handleRequest(req('/recording?vt=vid_bad.sig', { method: 'POST' }), env, deps);
+    expect(forged.status).toBe(401);
+  });
+
+  it('serves a lapsed URL on a fresh cookie, and forwards the fresh grant to the source lookup', async () => {
+    streamOk();
+    const fresh = mint();
+    const lapsed = mint({ ttlSeconds: -5 });
+    const res = await handleRequest(
+      req(`/recording?vt=${encodeURIComponent(lapsed)}`, {
+        headers: { Range: 'bytes=0-9', Cookie: `other=1; vg_recap_r-1=${fresh}` },
+      }),
+      env,
+      deps,
+    );
+    expect(res.status).toBe(206);
+    const [sourceUrl] = fetchMock.mock.calls[0];
+    expect(sourceUrl).toBe(`${NEXUS}${SOURCE_PATH}?vt=${encodeURIComponent(fresh)}`);
+  });
+
+  it('still 401s a lapsed URL with no cookie, an expired cookie, or a cookie for someone else', async () => {
+    streamOk();
+    const lapsed = encodeURIComponent(mint({ ttlSeconds: -5 }));
+    const cases = [
+      undefined,
+      `vg_recap_r-1=${mint({ ttlSeconds: -1 })}`,
+      `vg_recap_r-1=${mint({ userId: 'u-2' })}`,
+      `vg_recap_r-1=${mint({ refId: 'r-2' })}`,
+      'vg_recap_r-1=vid_bad.sig',
+    ];
+    for (const cookie of cases) {
+      const res = await handleRequest(
+        req(`/recording?vt=${lapsed}`, { headers: cookie ? { Cookie: cookie } : {} }),
+        env,
+        deps,
+      );
+      expect(res.status).toBe(401);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('never lets a cookie stand in for a forged URL', async () => {
+    streamOk();
+    const res = await handleRequest(
+      req('/recording?vt=vid_bad.sig', { headers: { Cookie: `vg_recap_r-1=${mint()}` } }),
+      env,
+      deps,
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it('allows credentials on the preflight', async () => {
+    const res = await handleRequest(req('/recording', { method: 'OPTIONS', headers: { Origin: NEXUS } }), env, deps);
+    expect(res.headers.get('Access-Control-Allow-Credentials')).toBe('true');
+    expect(res.headers.get('Access-Control-Allow-Methods')).toMatch(/POST/);
   });
 });

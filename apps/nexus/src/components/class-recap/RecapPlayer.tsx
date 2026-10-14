@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Box, Typography, CircularProgress, Button } from '@neram/ui';
-import NeramVideoPlayer from '@/components/video/NeramVideoPlayer';
+import NeramVideoPlayer, { type VideoPlayerActions } from '@/components/video/NeramVideoPlayer';
 import { computeGate, type VideoGateMode } from '@/lib/video-gate';
 import type { VideoTransport } from '@/components/video/types';
 import { renewFromEmbed } from '@/components/video/renew-from-embed';
-import usePlayedRanges from '@/components/video/usePlayedRanges';
+import type { WatchSession } from '@/components/video/useWatchSession';
+import { lastPlayedPoint } from '@/lib/played-ranges';
 import { useAuthFetch } from '@/components/curriculum/shared';
 
 /**
@@ -52,8 +53,11 @@ interface RecapPlayerProps {
   sections: RecapPlayerSection[];
   /** Fires with the index of the checkpoint whose quiz should open. */
   onSectionEnd: (sectionIndex: number) => void;
-  /** Fires on every playback tick. `duration` is 0 until metadata has loaded. */
-  onTimeUpdate?: (seconds: number, duration: number) => void;
+  /**
+   * What has been played and the heartbeat that saves it (useWatchSession).
+   * Owned by the page so the section list and a remounted player share it.
+   */
+  session: WatchSession;
   /** Shown over the picture in fullscreen, where the page around it is gone. */
   title?: string;
   /**
@@ -81,7 +85,7 @@ export default function RecapPlayer({
   recapId,
   sections,
   onSectionEnd,
-  onTimeUpdate,
+  session,
   title,
   onFullscreenChange,
   mode = 'gated',
@@ -90,29 +94,24 @@ export default function RecapPlayer({
   // Whichever surface is live. The checkpoint list drives playback through this,
   // so it has to work on the YouTube path too.
   const transportRef = useRef<VideoTransport | null>(null);
+  /** The player's own actions: "Continue" on the section list drives this. */
+  const actionsRef = useRef<VideoPlayerActions | null>(null);
   const [streamUrl, setStreamUrl] = useState<string | null>(null);
   const [youtubeId, setYoutubeId] = useState<string | null>(null);
   const [watermark, setWatermark] = useState<Watermark | null>(null);
   const [resumeAt, setResumeAt] = useState(0);
   const [duration, setDuration] = useState(0);
   /**
-   * What the student has really played: the server's credited point, then this
-   * session's playback. The checkpoint quiz waits on it (see playedRanges on
-   * computeGate); a drag through the section adds nothing to it.
+   * What the student has really played: the stored ranges, then this page's
+   * playback. The checkpoint quiz waits on it (see playedRanges on computeGate);
+   * a drag through the section adds nothing to it.
    */
-  const played = usePlayedRanges();
-  const { seed: seedPlayed, record: recordPlayed } = played;
-  /** The server's credited point, kept to cap the resume point while gated. */
-  const [playedUntil, setPlayedUntil] = useState(0);
+  const { ranges: playedRanges, seedFromEmbed, playerProps } = session;
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const onSectionEndRef = useRef(onSectionEnd);
   onSectionEndRef.current = onSectionEnd;
-  // Held in a ref, not read from the closure, so an inline arrow from the page
-  // does not re-register the listener on every render.
-  const onTimeUpdateRef = useRef(onTimeUpdate);
-  onTimeUpdateRef.current = onTimeUpdate;
 
   /** The checkpoint the student owes. -1 once every one is passed. */
   const nextIdx = useMemo(() => sections.findIndex((s) => !s.passed), [sections]);
@@ -139,10 +138,10 @@ export default function RecapPlayer({
         })),
         duration,
         furthestSeconds: 0,
-        playedRanges: played.ranges,
+        playedRanges,
         mode,
       }),
-    [sections, duration, played.ranges, mode],
+    [sections, duration, playedRanges, mode],
   );
   /**
    * Checkpoint positions for the scrub bar.
@@ -223,17 +222,15 @@ export default function RecapPlayer({
       // failed first load comes back through here, and the server's value is
       // the same one it gave before.
       setResumeAt((prev) => (prev > 0 ? prev : Number(data.resume_at) || 0));
-      // Not resume_at: that rises with any seek. A response without the field
-      // falls back to it, which is the old behaviour rather than a lockout.
-      const credited = Number(data.played_until ?? data.resume_at) || 0;
-      seedPlayed(credited);
-      setPlayedUntil((prev) => (credited > prev ? credited : prev));
+      // Not resume_at: that rises with any seek. An older reply without ranges
+      // falls back to its played_until prefix.
+      seedFromEmbed(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load recording');
     } finally {
       setLoading(false);
     }
-  }, [recapId, authFetch, seedPlayed]);
+  }, [recapId, authFetch, seedFromEmbed]);
 
   useEffect(() => {
     fetchStreamUrl();
@@ -262,24 +259,20 @@ export default function RecapPlayer({
       play: () => transportRef.current?.play(),
       pause: () => transportRef.current?.pause(),
       getCurrentTime: () => transportRef.current?.getTime() ?? 0,
+      // Plays only the parts of the owed section that were missed, or goes to
+      // its checkpoint when enough has been watched.
+      continueOwed: () => actionsRef.current?.continueOwed() ?? false,
     };
     return () => {
       delete (window as any).__recapPlayer;
     };
   }, [streamUrl, youtubeId]);
 
-  const handleTick = useCallback(
-    (seconds: number, dur: number) => {
-      recordPlayed(seconds);
-      onTimeUpdateRef.current?.(seconds, dur);
-    },
-    [recordPlayed],
-  );
-
-  // Resume where they had watched to, not where a drag last left the stored
-  // position: that is often the checkpoint itself, and resuming there greets
-  // the student with "watch a bit more" before a frame plays.
-  const resumeFrom = mode === 'gated' ? Math.min(resumeAt, playedUntil) : resumeAt;
+  // Resume where they had really played to, not where a drag last left the
+  // stored position: that is often the checkpoint itself, and resuming there
+  // greets the student with "watch a bit more" before a frame plays. Nor at the
+  // first hole, which replayed the whole rest of a section for one missed bit.
+  const resumeFrom = mode === 'gated' ? lastPlayedPoint(playedRanges, resumeAt) : resumeAt;
 
   /**
    * The video stopped at the end of the checkpoint the student owes.
@@ -318,12 +311,13 @@ export default function RecapPlayer({
         source={{ kind: 'youtube', youtubeId }}
         gate={gate}
         transportRef={transportRef}
+        actionsRef={actionsRef}
         watermark={watermark}
         title={title}
         marks={marks}
-        watched={played.ranges}
+        watched={playedRanges}
         resumeAt={resumeFrom}
-        onTimeUpdate={handleTick}
+        {...playerProps}
         onCheckpointReached={handleBoundary}
         onLoadedMetadata={setDuration}
         allowFullscreen
@@ -353,13 +347,14 @@ export default function RecapPlayer({
       source={{ kind: 'html5', src: streamUrl, renew }}
       gate={gate}
       transportRef={transportRef}
+      actionsRef={actionsRef}
       watermark={watermark}
       title={title}
       marks={marks}
-      watched={played.ranges}
+      watched={playedRanges}
       captions={captions}
       resumeAt={resumeFrom}
-      onTimeUpdate={handleTick}
+      {...playerProps}
       onCheckpointReached={handleBoundary}
       onLoadedMetadata={setDuration}
       allowFullscreen

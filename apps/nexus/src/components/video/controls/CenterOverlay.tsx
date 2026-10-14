@@ -55,7 +55,12 @@ export default function CenterOverlay({
       )}
 
       {/* Big centre target while paused. Easiest thing to hit on a phone.
-          Hidden while buffering so the two never stack. */}
+          Hidden while buffering so the two never stack.
+
+          Above the control bar (4), not below it. On a 375px phone the player
+          is about 193px tall and the bar about 140px, so its seek rail ran
+          straight through this button and a tap on Play seeked instead of
+          playing. The rail still works everywhere else along its width. */}
       {!playing && !buffering && (
         <IconButton
           onClick={onTogglePlay}
@@ -69,7 +74,7 @@ export default function CenterOverlay({
             height: 72,
             bgcolor: 'rgba(0,0,0,0.55)',
             color: '#fff',
-            zIndex: 3,
+            zIndex: 5,
             '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
           }}
         >

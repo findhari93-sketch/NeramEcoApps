@@ -116,6 +116,13 @@ export interface VideoSurfaceEvents {
    * `timeupdate` so the jumped-to frame is never painted.
    */
   onSeeked(seconds: number): void;
+  /**
+   * A seek started, whoever asked for it. It arrives before the timeupdate the
+   * seek produces, which is what lets the player keep that jump out of the
+   * played count. HTML5 only; the YouTube poll has no such event, and a jump
+   * there is caught by the wall-clock rule instead.
+   */
+  onSeeking(): void;
   /** The rate moved under us, possibly from a console. HTML5 only. */
   onRateChange(rate: number): void;
   onError(): void;
@@ -141,3 +148,18 @@ export interface VideoSurfaceProps {
   /** Filled in by the surface on mount so the player can drive it. */
   transportRef: React.MutableRefObject<VideoTransport | null>;
 }
+
+/**
+ * Playback health the player reports alongside position, so a student who says
+ * "it keeps buffering" can be answered from data. Carried on the heartbeat
+ * that is already being sent (useWatchSession), never as requests of its own.
+ */
+export type PlaybackEvent =
+  /** The picture waited for data this long while the student wanted it playing. */
+  | { type: 'stall'; seconds: number }
+  /** The stream had to be reloaded (an error, or an expired grant). */
+  | { type: 'reload' }
+  /** A grant top-up before expiry (lib/video-grant-client.ts). */
+  | { type: 'grant_refresh'; ok: boolean }
+  /** The playhead jumped further than real time allows, so it was not counted. */
+  | { type: 'discarded'; seconds: number };

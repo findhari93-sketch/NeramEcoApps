@@ -226,4 +226,28 @@ describe('useVideoProgress', () => {
     const body = JSON.parse(String(fetchSpy.mock.calls[0][1]?.body));
     expect(body.last_video_position_seconds).toBe(42);
   });
+
+  it('puts back a delta whose flush failed, so the next flush carries it', async () => {
+    vi.useFakeTimers();
+    const fetchSpy = vi
+      .fn(async (_url: string, _init?: RequestInit) => ({ ok: true, json: async () => ({}) }))
+      .mockResolvedValueOnce({ ok: false, json: async () => ({}) });
+    vi.stubGlobal('fetch', fetchSpy);
+    const { result } = renderHook(() =>
+      useVideoProgress({ endpoint: '/api/test/progress', getToken: async () => 't', enabled: true }),
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    for (let t = 0; t <= 20; t += 0.25) act(() => result.current.onTick(t, 100));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    for (let t = 20.25; t <= 30; t += 0.25) act(() => result.current.onTick(t, 100));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000);
+    });
+    const sent = fetchSpy.mock.calls.map(([, init]) => JSON.parse(init!.body as string).watched_delta_seconds);
+    expect(sent).toEqual([20, 30]);
+  });
 });

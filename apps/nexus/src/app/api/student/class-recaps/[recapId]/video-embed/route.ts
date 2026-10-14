@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient } from '@neram/database';
 import { extractYouTubeId } from '@/lib/youtube';
-import { creditedPlayedUntil } from '@/lib/watch-progress';
+import { readWatchProgress } from '@/lib/recap-watch-record';
 import { grantVideoAccess } from '@/lib/video-grant';
 import { isInternalStaff, resolveStaffRole } from '@/lib/staff-capabilities';
 import { errorResponse } from '@/lib/api-errors';
@@ -91,23 +91,20 @@ export async function GET(
       return NextResponse.json({ error: 'No recording available' }, { status: 404 });
     }
 
-    const { data: progress } = await supabase
-      .from('nexus_class_recap_progress')
-      .select('last_video_position_seconds, watched_seconds')
-      .eq('student_id', user.id)
-      .eq('recap_id', recapId)
-      .maybeSingle();
+    const watch = await readWatchProgress(supabase, user.id, recapId);
 
     const watermark = {
       name: user.name || msUser.name || msUser.email || 'Neram student',
       code: shortCode(user.id),
     };
-    const resumeAt = Number(progress?.last_video_position_seconds) || 0;
+    const resumeAt = watch.resumeAt;
     // The stored position rises with any seek, so it says where they got to, not
-    // what they saw. This is what the player lets a forward seek reach and where
-    // it resumes at the latest. A student who watched 11 seconds and tapped the
-    // bar was resuming on checkpoint 1 with its quiz open (NXS-0130).
-    const playedUntil = creditedPlayedUntil(resumeAt, progress?.watched_seconds);
+    // what they saw. played_ranges is what they saw: the quiz gate counts it and
+    // the resume point is pulled back to it. A student who watched 11 seconds and
+    // tapped the bar was resuming on checkpoint 1 with its quiz open (NXS-0130).
+    // played_until is the same as one number, for a page on the previous build.
+    const playedRanges = watch.playedRanges;
+    const playedUntil = watch.playedUntil;
 
     if (recap.video_source === 'youtube') {
       const youtubeId = extractYouTubeId(recap.recording_url);
@@ -123,6 +120,7 @@ export async function GET(
           protection: 'embedded',
           watermark,
           resume_at: resumeAt,
+          played_ranges: playedRanges,
           played_until: playedUntil,
         },
         { headers: { 'Cache-Control': 'no-store' } },
@@ -149,6 +147,7 @@ export async function GET(
         expires_at: grant.expiresAt,
         watermark,
         resume_at: resumeAt,
+        played_ranges: playedRanges,
         played_until: playedUntil,
       },
       // Never cached: the grant inside is short-lived and viewer-specific.

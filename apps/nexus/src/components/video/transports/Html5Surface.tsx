@@ -156,6 +156,7 @@ export default function Html5Surface({
 
     const onTime = () => eventsRef.current.onTick(video.currentTime, duration());
     const onSeeked = () => eventsRef.current.onSeeked(video.currentTime);
+    const onSeeking = () => eventsRef.current.onSeeking();
     const onRate = () => eventsRef.current.onRateChange(video.playbackRate);
     const onPlay = () => eventsRef.current.onPlayingChange(true);
     const onPause = () => eventsRef.current.onPlayingChange(false);
@@ -174,6 +175,7 @@ export default function Html5Surface({
 
     video.addEventListener('timeupdate', onTime);
     video.addEventListener('seeked', onSeeked);
+    video.addEventListener('seeking', onSeeking);
     video.addEventListener('ratechange', onRate);
     video.addEventListener('play', onPlay);
     video.addEventListener('pause', onPause);
@@ -193,6 +195,7 @@ export default function Html5Surface({
     return () => {
       video.removeEventListener('timeupdate', onTime);
       video.removeEventListener('seeked', onSeeked);
+      video.removeEventListener('seeking', onSeeking);
       video.removeEventListener('ratechange', onRate);
       video.removeEventListener('play', onPlay);
       video.removeEventListener('pause', onPause);

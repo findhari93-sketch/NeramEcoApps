@@ -128,11 +128,17 @@ export function isVideoToken(token: string | null | undefined): boolean {
 }
 
 /**
- * Verify signature and expiry. Returns null for anything not a currently valid
- * video token: wrong type, tampered, malformed, or expired. Callers treat null
- * as 401 and never as "probably fine".
+ * Verify the signature only, and report expiry separately.
+ *
+ * An expired grant is still useful for one thing: a <video> keeps requesting
+ * the URL it started with, so ten minutes in, the URL's grant has lapsed while
+ * the student is still allowed to watch. The player keeps a fresh grant in a
+ * cookie, and the stale URL grant names the video and student that cookie must
+ * match (see resolveStreamToken). A forged or tampered token is still null.
  */
-export function verifyVideoToken(token: string | null | undefined): VideoTokenPayload | null {
+export function verifyVideoTokenDetailed(
+  token: string | null | undefined,
+): { payload: VideoTokenPayload; expired: boolean } | null {
   if (!isVideoToken(token)) return null;
 
   let secret: string;
@@ -164,9 +170,75 @@ export function verifyVideoToken(token: string | null | undefined): VideoTokenPa
 
   if (!payload || payload.vid !== true || !payload.refId || !payload.userId) return null;
   if (!['recap', 'class', 'foundation'].includes(payload.scope)) return null;
-  if (typeof payload.exp !== 'number' || payload.exp < Math.floor(Date.now() / 1000)) {
+  if (typeof payload.exp !== 'number') return null;
+
+  return { payload, expired: payload.exp < Math.floor(Date.now() / 1000) };
+}
+
+/**
+ * Verify signature and expiry. Returns null for anything not a currently valid
+ * video token: wrong type, tampered, malformed, or expired. Callers treat null
+ * as 401 and never as "probably fine".
+ */
+export function verifyVideoToken(token: string | null | undefined): VideoTokenPayload | null {
+  const result = verifyVideoTokenDetailed(token);
+  return result && !result.expired ? result.payload : null;
+}
+
+/**
+ * How long after it was minted a URL grant may still be topped up by a cookie.
+ * Longer than any class, short enough that a URL found in a history file a day
+ * later is useless even next to a fresh cookie. Mirrors the media Worker's
+ * GRANT_COOKIE_MAX_URL_AGE_SECONDS (cloudflare/media-proxy/src/grant.ts).
+ */
+export const GRANT_COOKIE_MAX_URL_AGE_SECONDS = 6 * 60 * 60;
+
+/** The byte route and the captions route both sit under this path. */
+export const GRANT_COOKIE_PATH = '/api/media';
+
+/** One cookie per video, the same name the media Worker uses. */
+export function grantCookieName(grant: Pick<VideoTokenPayload, 'scope' | 'refId'>): string {
+  return `vg_${grant.scope}_${grant.refId.replace(/[^A-Za-z0-9-]/g, '')}`;
+}
+
+/**
+ * Set-Cookie for a fresh grant. SameSite=None plus Partitioned because Nexus
+ * also runs as a Teams tab, a cross-site iframe where a Lax cookie is never
+ * sent; Partitioned keeps it to that one top-level site.
+ */
+export function grantCookieHeader(
+  grant: Pick<VideoTokenPayload, 'scope' | 'refId' | 'exp'>,
+  token: string,
+  path: string = GRANT_COOKIE_PATH,
+): string {
+  const maxAge = Math.max(0, grant.exp - Math.floor(Date.now() / 1000));
+  return `${grantCookieName(grant)}=${token}; Max-Age=${maxAge}; Path=${path}; Secure; HttpOnly; SameSite=None; Partitioned`;
+}
+
+/**
+ * The grant that authorises a request: the URL's own while it lasts, else a
+ * fresh one from the cookie, provided it is for the same video and student.
+ * `readCookie` is handed the cookie name, so each runtime can use its own
+ * cookie API.
+ */
+export function resolveStreamToken(
+  urlToken: string | null | undefined,
+  readCookie: (name: string) => string | null | undefined,
+): { grant: VideoTokenPayload; token: string; via: 'url' | 'cookie' } | null {
+  const fromUrl = verifyVideoTokenDetailed(urlToken);
+  if (!fromUrl || !urlToken) return null;
+  if (!fromUrl.expired) return { grant: fromUrl.payload, token: urlToken, via: 'url' };
+  if (Math.floor(Date.now() / 1000) - fromUrl.payload.iat > GRANT_COOKIE_MAX_URL_AGE_SECONDS) return null;
+
+  const cookieToken = readCookie(grantCookieName(fromUrl.payload)) ?? null;
+  const fromCookie = verifyVideoToken(cookieToken);
+  if (!fromCookie || !cookieToken) return null;
+  if (
+    fromCookie.scope !== fromUrl.payload.scope ||
+    fromCookie.refId !== fromUrl.payload.refId ||
+    fromCookie.userId !== fromUrl.payload.userId
+  ) {
     return null;
   }
-
-  return payload;
+  return { grant: fromCookie, token: cookieToken, via: 'cookie' };
 }

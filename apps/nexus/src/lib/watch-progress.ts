@@ -40,6 +40,8 @@ export interface WatchAccumulator {
   snapshot(): WatchSnapshot;
   /** Clears the accumulated delta only. Position and duration are retained. */
   markFlushed(): void;
+  /** Puts back a delta whose flush failed, so the next flush carries it. */
+  restore(watchedDelta: number): void;
   /** True when there is something worth sending. */
   hasPending(): boolean;
 }
@@ -81,6 +83,11 @@ export function createWatchAccumulator(
     markFlushed(): void {
       watchedDelta = 0;
       positionDirty = false;
+    },
+
+    restore(lost: number): void {
+      if (Number.isFinite(lost) && lost > 0) watchedDelta += lost;
+      positionDirty = true;
     },
 
     hasPending(): boolean {

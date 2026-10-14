@@ -25,10 +25,10 @@ import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import NeramVideoPlayer from '@/components/video/NeramVideoPlayer';
-import useVideoProgress from '@/components/video/useVideoProgress';
-import usePlayedRanges from '@/components/video/usePlayedRanges';
+import useWatchSession from '@/components/video/useWatchSession';
 import { renewFromEmbed } from '@/components/video/renew-from-embed';
 import { computeGate } from '@/lib/video-gate';
+import { lastPlayedPoint } from '@/lib/played-ranges';
 import QuizModal from '@/components/foundation/QuizModal';
 import type { VideoSource } from '@/components/video/types';
 
@@ -87,9 +87,6 @@ export default function StudyTrackWatchPage() {
   const [watermark, setWatermark] = useState<{ name: string; code: string } | null>(null);
   const [resumeAt, setResumeAt] = useState(0);
   const [duration, setDuration] = useState(0);
-  /** What was really played, which is what the checkpoint quiz waits on. */
-  const played = usePlayedRanges();
-  const { seed: seedPlayed, record: recordPlayed } = played;
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -105,12 +102,14 @@ export default function StudyTrackWatchPage() {
   /** The player's container while it is fullscreen, so the quiz renders inside it. */
   const [quizHost, setQuizHost] = useState<HTMLElement | null>(null);
 
-  const { onTick, onBlockedSeek, flushNow } = useVideoProgress({
+  /** What was really played, which the checkpoint quiz waits on, and its heartbeat. */
+  const session = useWatchSession({
     endpoint: trackId ? `/api/student/study-videos/tracks/${trackId}/progress` : null,
     getToken,
     // A finished track keeps no further progress: revision is not watching.
     enabled: mode === 'gated',
   });
+  const { flushNow, seedFromEmbed } = session;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -126,14 +125,9 @@ export default function StudyTrackWatchPage() {
       const embed = await authFetch(embedUrl);
       setWatermark(embed.watermark || null);
       // What was really watched, not resume_at, which rises with any seek
-      // (NXS-0130). Missing, it falls back to the old behaviour.
-      const resume = Number(embed.resume_at) || 0;
-      const playedUntil = Number(embed.played_until ?? embed.resume_at) || 0;
-      seedPlayed(playedUntil);
-      // Resume where they had watched to, not where a drag last left the
-      // stored position: that is often the checkpoint itself, and resuming
-      // there greets the student with "watch a bit more" before a frame plays.
-      setResumeAt(data.mode === 'gated' ? Math.min(resume, playedUntil) : resume);
+      // (NXS-0130). The resume point is pulled back to it below.
+      seedFromEmbed(embed);
+      setResumeAt(Number(embed.resume_at) || 0);
       setSource(
         embed.mode === 'youtube'
           ? { kind: 'youtube', youtubeId: embed.youtube_id }
@@ -150,7 +144,7 @@ export default function StudyTrackWatchPage() {
     } finally {
       setLoading(false);
     }
-  }, [authFetch, trackId, seedPlayed]);
+  }, [authFetch, trackId, seedFromEmbed]);
 
   useEffect(() => {
     if (!authLoading && trackId) load();
@@ -171,11 +165,16 @@ export default function StudyTrackWatchPage() {
         })),
         duration,
         furthestSeconds: 0,
-        playedRanges: played.ranges,
+        playedRanges: session.ranges,
         mode,
       }),
-    [sections, duration, played.ranges, mode],
+    [sections, duration, session.ranges, mode],
   );
+
+  // Resume where they had really played to, not where a drag last left the
+  // stored position: that is often the checkpoint itself, and resuming there
+  // greets the student with "watch a bit more" before a frame plays.
+  const resumeFrom = mode === 'gated' ? lastPlayedPoint(session.ranges, resumeAt) : resumeAt;
 
   /** Checkpoint positions drawn on the scrub bar. */
   const marks = useMemo(
@@ -192,14 +191,6 @@ export default function StudyTrackWatchPage() {
   );
 
   const title = track?.title ?? '';
-
-  const handleTick = useCallback(
-    (seconds: number, dur: number) => {
-      recordPlayed(seconds);
-      onTick(seconds, dur);
-    },
-    [onTick, recordPlayed],
-  );
 
   const closeQuiz = useCallback(() => {
     setActiveIdx(null);
@@ -387,10 +378,9 @@ export default function StudyTrackWatchPage() {
           watermark={watermark}
           title={title}
           marks={marks}
-          watched={played.ranges}
-          resumeAt={resumeAt}
-          onTimeUpdate={handleTick}
-          onBlockedSeek={onBlockedSeek}
+          watched={session.ranges}
+          resumeAt={resumeFrom}
+          {...session.playerProps}
           onCheckpointReached={openQuiz}
           onLoadedMetadata={setDuration}
           // Fullscreen is no longer restricted to revision. The quiz portals

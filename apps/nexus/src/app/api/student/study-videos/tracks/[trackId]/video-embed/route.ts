@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient, getStudyTrackForStudent } from '@neram/database';
 import { grantVideoAccess } from '@/lib/video-grant';
 import { extractYouTubeId } from '@/lib/youtube';
-import { creditedPlayedUntil } from '@/lib/watch-progress';
+import { readWatchProgress } from '@/lib/recap-watch-record';
 import { getRequestUser } from '@/lib/study-materials';
 import { assertCanSeeTrack, assertServable, trackErrorResponse } from '@/lib/study-video-access';
 
@@ -42,20 +42,17 @@ export async function GET(request: NextRequest, { params }: { params: { trackId:
     // `as any`: nexus_class_recap* is absent from database.generated.ts. Same
     // convention as class-recaps.ts and the recap routes.
     const supabase = getSupabaseAdminClient() as any;
-    const { data: progress } = await supabase
-      .from('nexus_class_recap_progress')
-      .select('last_video_position_seconds, watched_seconds')
-      .eq('student_id', user.id)
-      .eq('recap_id', params.trackId)
-      .maybeSingle();
-    const resumeAt = Number(progress?.last_video_position_seconds) || 0;
+    const watch = await readWatchProgress(supabase, user.id, params.trackId);
+    const resumeAt = watch.resumeAt;
 
     const shared = {
       watermark,
       resume_at: resumeAt,
-      // How far they really watched. The player lets a forward seek go this far
-      // and no further, and resumes no later than it (NXS-0130).
-      played_until: creditedPlayedUntil(resumeAt, progress?.watched_seconds),
+      // What they really played, which the quiz gate counts and the resume
+      // point is pulled back to (NXS-0130). played_until is the same thing as
+      // one number, for a page still on the previous build.
+      played_ranges: watch.playedRanges,
+      played_until: watch.playedUntil,
       mode_hint: forStudent?.mode ?? 'gated',
       max_scrub_seconds: forStudent?.max_scrub_seconds ?? null,
     };

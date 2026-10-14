@@ -88,17 +88,20 @@ export async function signBody(body: string, secret: string): Promise<string> {
 }
 
 /**
- * Returns the payload of a currently valid grant, or null for anything else:
- * wrong type, tampered, malformed, unknown scope, or expired. Callers treat
- * null as 401 and never as "probably fine".
+ * A grant with a valid signature, and whether it has expired.
  *
- * @param nowSeconds injectable clock for tests; defaults to the wall clock.
+ * Expiry is reported rather than refused because one caller needs an expired
+ * grant: a <video> keeps requesting the URL it was given, so after ten minutes
+ * the URL's grant is stale even though the student is still allowed to watch.
+ * The player keeps a fresh grant in a cookie (see grantCookieName), and the
+ * stale URL grant is what says which video and which student that cookie must
+ * match. A forged or tampered token is still null.
  */
-export async function verifyVideoGrant(
+export async function verifyVideoGrantDetailed(
   token: string | null | undefined,
   secret: string | undefined,
   nowSeconds: number = Math.floor(Date.now() / 1000),
-): Promise<VideoGrantPayload | null> {
+): Promise<{ payload: VideoGrantPayload; expired: boolean } | null> {
   if (!secret) return null;
   if (!token || !token.startsWith(VIDEO_TOKEN_PREFIX)) return null;
 
@@ -126,7 +129,96 @@ export async function verifyVideoGrant(
 
   if (!payload || payload.vid !== true || !payload.refId || !payload.userId) return null;
   if (!(STREAM_SCOPES as readonly string[]).includes(payload.scope)) return null;
-  if (typeof payload.exp !== 'number' || payload.exp < nowSeconds) return null;
+  if (typeof payload.exp !== 'number') return null;
 
-  return payload;
+  return { payload, expired: payload.exp < nowSeconds };
+}
+
+/**
+ * Returns the payload of a currently valid grant, or null for anything else:
+ * wrong type, tampered, malformed, unknown scope, or expired. Callers treat
+ * null as 401 and never as "probably fine".
+ *
+ * @param nowSeconds injectable clock for tests; defaults to the wall clock.
+ */
+export async function verifyVideoGrant(
+  token: string | null | undefined,
+  secret: string | undefined,
+  nowSeconds: number = Math.floor(Date.now() / 1000),
+): Promise<VideoGrantPayload | null> {
+  const result = await verifyVideoGrantDetailed(token, secret, nowSeconds);
+  return result && !result.expired ? result.payload : null;
+}
+
+/**
+ * How long after it was minted a URL grant may still be topped up by a cookie.
+ * Longer than any class, short enough that a URL found in a history file a day
+ * later is useless even to someone holding a fresh cookie for the same video.
+ */
+export const GRANT_COOKIE_MAX_URL_AGE_SECONDS = 6 * 60 * 60;
+
+/** One cookie per video, so two videos open in two tabs do not overwrite each other. */
+export function grantCookieName(grant: Pick<VideoGrantPayload, 'scope' | 'refId'>): string {
+  return `vg_${grant.scope}_${grant.refId.replace(/[^A-Za-z0-9-]/g, '')}`;
+}
+
+/**
+ * The Set-Cookie value for a fresh grant.
+ *
+ * SameSite=None and Partitioned because Nexus also runs as a tab inside
+ * Microsoft Teams, where the page is a cross-site iframe and a Lax cookie would
+ * never be sent. Partitioned (CHIPS) keeps it inside that one top-level site, so
+ * it is not a tracking cookie and third-party cookie blocking leaves it alone.
+ * HttpOnly: no script needs to read it, the browser just has to send it with
+ * the <video> element's range requests.
+ */
+export function grantCookieHeader(
+  grant: Pick<VideoGrantPayload, 'scope' | 'refId' | 'exp'>,
+  token: string,
+  path: string,
+  nowSeconds: number = Math.floor(Date.now() / 1000),
+): string {
+  const maxAge = Math.max(0, grant.exp - nowSeconds);
+  return `${grantCookieName(grant)}=${token}; Max-Age=${maxAge}; Path=${path}; Secure; HttpOnly; SameSite=None; Partitioned`;
+}
+
+/** One cookie's value out of a Cookie header, or null. */
+export function readCookie(header: string | null | undefined, name: string): string | null {
+  if (!header) return null;
+  for (const part of header.split(';')) {
+    const eq = part.indexOf('=');
+    if (eq < 0) continue;
+    if (part.slice(0, eq).trim() === name) return part.slice(eq + 1).trim() || null;
+  }
+  return null;
+}
+
+/**
+ * The grant that authorises this request: the URL's own while it lasts, else a
+ * fresh one from the cookie, provided the cookie is for the same video and the
+ * same student as the URL. Returns the token to forward too, because the source
+ * lookup in Nexus verifies it again and an expired one would be refused there.
+ */
+export async function resolveStreamGrant(
+  urlToken: string | null | undefined,
+  cookieHeader: string | null | undefined,
+  secret: string | undefined,
+  nowSeconds: number = Math.floor(Date.now() / 1000),
+): Promise<{ grant: VideoGrantPayload; token: string; via: 'url' | 'cookie' } | null> {
+  const fromUrl = await verifyVideoGrantDetailed(urlToken, secret, nowSeconds);
+  if (!fromUrl || !urlToken) return null;
+  if (!fromUrl.expired) return { grant: fromUrl.payload, token: urlToken, via: 'url' };
+  if (nowSeconds - fromUrl.payload.iat > GRANT_COOKIE_MAX_URL_AGE_SECONDS) return null;
+
+  const cookieToken = readCookie(cookieHeader, grantCookieName(fromUrl.payload));
+  const fromCookie = await verifyVideoGrant(cookieToken, secret, nowSeconds);
+  if (!fromCookie || !cookieToken) return null;
+  if (
+    fromCookie.scope !== fromUrl.payload.scope ||
+    fromCookie.refId !== fromUrl.payload.refId ||
+    fromCookie.userId !== fromUrl.payload.userId
+  ) {
+    return null;
+  }
+  return { grant: fromCookie, token: cookieToken, via: 'cookie' };
 }
