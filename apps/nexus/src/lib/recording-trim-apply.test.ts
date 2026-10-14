@@ -148,3 +148,57 @@ describe('buildTrimSwitch: guards', () => {
     expect(() => buildTrimSwitch(inputs({ trim: { ...trim, cut_map: null } }))).toThrow('TRIM_HAS_NO_CUT_MAP');
   });
 });
+
+/**
+ * A checkpoint placed over the silent wait before class is emptied by the
+ * trim (Islamic Architecture: 0:00 to 14:37, speech from 20:00). Left alone it
+ * would be zero seconds long, its quiz would never open, and nobody could
+ * complete the class. Its questions move to the next checkpoint instead.
+ */
+describe('buildTrimSwitch: a checkpoint the trim empties', () => {
+  const map = buildCutMap([[1200, 5261]]);
+  const islamic = { ...trim, cut_map: map, trimmed_duration_seconds: 4061 };
+  const recap = {
+    id: 'r1',
+    sections: [
+      { id: 'intro', start_timestamp_seconds: 0, end_timestamp_seconds: 877 },
+      { id: 'phases', start_timestamp_seconds: 877, end_timestamp_seconds: 1709 },
+      { id: 'loads', start_timestamp_seconds: 1709, end_timestamp_seconds: 2600 },
+    ],
+    progress: [],
+    questions: [
+      { id: 'q1', section_id: 'intro' },
+      { id: 'q2', section_id: 'intro' },
+      { id: 'q3', section_id: 'phases' },
+    ],
+  };
+
+  it('folds it into the next checkpoint and retires it', () => {
+    const out = buildTrimSwitch(inputs({ trim: islamic, recaps: [recap] }));
+    expect(out.recaps[0].archive_sections).toEqual(['intro']);
+    expect(out.recaps[0].move_questions).toEqual([{ ids: ['q1', 'q2'], to: 'phases' }]);
+    expect(out.merged).toEqual([{ recap_id: 'r1', from: 'intro', to: 'phases', question_ids: ['q1', 'q2'] }]);
+    // The neighbour now starts at the join, where the lesson begins.
+    expect(out.recaps[0].sections.find((s) => s.id === 'phases')).toEqual({ id: 'phases', start: 0, end: 509 });
+  });
+
+  it('leaves checkpoints of a minute or more alone', () => {
+    const out = buildTrimSwitch(inputs());
+    expect(out.recaps[0].archive_sections).toEqual([]);
+    expect(out.merged).toEqual([]);
+  });
+
+  it('undoes the fold exactly on revert', () => {
+    const merged = [{ recap_id: 'r1', from: 'intro', to: 'phases', question_ids: ['q1', 'q2'] }];
+    const out = buildTrimSwitch(
+      inputs({
+        mode: 'revert',
+        trim: { ...islamic, plan: { merged } },
+        recaps: [{ ...recap, sections: recap.sections.filter((s) => s.id !== 'intro') }],
+      }),
+    );
+    expect(out.recaps[0].restore_sections).toEqual(['intro']);
+    expect(out.recaps[0].move_questions).toEqual([{ ids: ['q1', 'q2'], to: 'intro' }]);
+    expect(out.merged).toEqual([]);
+  });
+});

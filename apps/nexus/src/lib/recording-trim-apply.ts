@@ -34,6 +34,8 @@ export type SwitchMode = 'apply' | 'revert';
 export interface TrimRecord {
   id: string;
   class_id: string;
+  /** The plan; after an apply it also records checkpoints merged away (see MergedCheckpoint). */
+  plan?: { merged?: MergedCheckpoint[] } | null;
   original_url: string;
   original_drive_id: string | null;
   original_item_id: string | null;
@@ -59,7 +61,30 @@ export interface RecapForSwitch {
   id: string;
   sections: Array<{ id: string; start_timestamp_seconds: number; end_timestamp_seconds: number }>;
   progress: ProgressRow[];
+  /** Question ids by section, for folding a checkpoint the trim emptied into its neighbour. */
+  questions?: Array<{ id: string; section_id: string }>;
 }
+
+/**
+ * A checkpoint that trimming left with almost nothing to watch, folded into its
+ * neighbour. Several recaps had checkpoint 1 placed over the silent wait before
+ * class while its questions cover the start of the real lesson (Islamic
+ * Architecture: 0:00 to 14:37, nobody speaks until 20:00). Trimming that wait
+ * leaves the checkpoint zero seconds long, and the gate ignores a zero-length
+ * checkpoint, so its quiz would never open and nobody could complete the class.
+ * Its questions join the next checkpoint's pool (a quiz draws a fixed number,
+ * so it does not get longer) and the empty checkpoint is retired. Recorded so
+ * "Use original" puts it back exactly.
+ */
+export interface MergedCheckpoint {
+  recap_id: string;
+  from: string;
+  to: string;
+  question_ids: string[];
+}
+
+/** A checkpoint shorter than this after trimming is folded into its neighbour. */
+export const MIN_CHECKPOINT_SECONDS = 60;
 
 export interface SwitchInputs {
   mode: SwitchMode;
@@ -81,8 +106,33 @@ export function buildTrimSwitch(input: SwitchInputs) {
   const apply = mode === 'apply';
   const duration = Number(apply ? trim.trimmed_duration_seconds : trim.original_duration_seconds) || 0;
 
+  // Checkpoints the trim empties, folded into their neighbour (apply), or the
+  // folds recorded at apply undone (revert).
+  const merged: MergedCheckpoint[] = [];
+  const movedSections = new Map<string, RecapForSwitch['sections']>();
+  for (const recap of input.recaps) {
+    const moved = moveSections(recap.sections, move);
+    movedSections.set(recap.id, moved);
+    if (!apply) continue;
+    const byStart = [...moved].sort((a, b) => a.start_timestamp_seconds - b.start_timestamp_seconds);
+    const keep = byStart.filter((s) => s.end_timestamp_seconds - s.start_timestamp_seconds >= MIN_CHECKPOINT_SECONDS);
+    if (!keep.length) continue; // nothing to fold into; leave the recap as it is
+    for (const s of byStart) {
+      if (keep.includes(s)) continue;
+      const target = keep.find((k) => k.start_timestamp_seconds >= s.start_timestamp_seconds) ?? keep[keep.length - 1];
+      merged.push({
+        recap_id: recap.id,
+        from: s.id,
+        to: target.id,
+        question_ids: (recap.questions ?? []).filter((q) => q.section_id === s.id).map((q) => q.id),
+      });
+    }
+  }
+  const undo = apply ? [] : (trim.plan?.merged ?? []);
+
   return {
     mode,
+    merged: apply ? merged : [],
     class: {
       // Kept on revert too, so "Use trimmed" can switch straight back.
       trimmed_url: trim.trimmed_url,
@@ -98,11 +148,17 @@ export function buildTrimSwitch(input: SwitchInputs) {
       drive_id: apply ? trim.trimmed_drive_id : trim.original_drive_id,
       item_id: apply ? trim.trimmed_item_id : trim.original_item_id,
       duration_seconds: Math.round(duration),
-      sections: moveSections(recap.sections, move).map((s) => ({
+      sections: (movedSections.get(recap.id) ?? []).map((s) => ({
         id: s.id,
         start: Math.round(s.start_timestamp_seconds),
         end: Math.round(s.end_timestamp_seconds),
       })),
+      archive_sections: merged.filter((m) => m.recap_id === recap.id).map((m) => m.from),
+      restore_sections: undo.filter((m) => m.recap_id === recap.id).map((m) => m.from),
+      move_questions: [
+        ...merged.filter((m) => m.recap_id === recap.id && m.question_ids.length).map((m) => ({ ids: m.question_ids, to: m.to })),
+        ...undo.filter((m) => m.recap_id === recap.id && m.question_ids.length).map((m) => ({ ids: m.question_ids, to: m.from })),
+      ],
       progress: recap.progress.map((row) => {
         // A row from before the watch ledger stands for a prefix; storedRanges
         // turns it into one, so it moves like any other.
@@ -135,7 +191,10 @@ async function readSwitchInputs(supabase: any, trim: TrimRecord, mode: SwitchMod
         supabase
           .from('nexus_class_recap_sections')
           .select('id, recap_id, start_timestamp_seconds, end_timestamp_seconds')
-          .in('recap_id', recapIds),
+          .in('recap_id', recapIds)
+          // A checkpoint already retired (by a teacher, or by an earlier fold) stays
+          // where it is: it is in nobody's way.
+          .is('archived_at', null),
         supabase
           .from('nexus_class_recap_progress')
           .select(
@@ -144,6 +203,10 @@ async function readSwitchInputs(supabase: any, trim: TrimRecord, mode: SwitchMod
           .in('recap_id', recapIds),
       ])
     : [{ data: [] }, { data: [] }];
+  const sectionIds = (sections ?? []).map((s: any) => s.id);
+  const { data: questions } = sectionIds.length
+    ? await supabase.from('nexus_class_recap_questions').select('id, section_id').in('section_id', sectionIds)
+    : { data: [] };
 
   return {
     mode,
@@ -153,6 +216,9 @@ async function readSwitchInputs(supabase: any, trim: TrimRecord, mode: SwitchMod
       id,
       sections: (sections ?? []).filter((s: any) => s.recap_id === id),
       progress: (progress ?? []).filter((p: any) => p.recap_id === id),
+      questions: (questions ?? []).filter((q: any) =>
+        (sections ?? []).some((s: any) => s.recap_id === id && s.id === q.section_id),
+      ),
     })),
     chapters: Array.isArray(meta?.chapters) ? meta.chapters : null,
   };
