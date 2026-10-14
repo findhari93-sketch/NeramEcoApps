@@ -2,7 +2,14 @@ import { describe, it, expect } from 'vitest';
 import {
   LISTING_FILTER_KEYS,
   cityCountsOf,
+  countMatches,
+  expandExamFilter,
+  facetCounts,
+  feeHistogram,
   filterAndSortColleges,
+  lettersOf,
+  stateCountsOf,
+  typeSpellings,
   hasListingFilters,
   parseListingFilters,
   toListingCollege,
@@ -132,6 +139,80 @@ describe('filterAndSortColleges', () => {
     const before = slugs(list);
     filterAndSortColleges(list, { sortBy: 'name' });
     expect(slugs(list)).toEqual(before);
+  });
+});
+
+describe('directory redesign filters', () => {
+  const mixed = [
+    college({ slug: 'p1', name: 'Pune Arch', type: 'Private', accepted_exams: ['NATA'], city_slug: 'pune', naac_grade: 'A', review_avg: 4.6, review_count: 10 }),
+    college({ slug: 'p2', name: 'Mumbai Arch', type: 'private', accepted_exams: ['JEE Main'], city_slug: 'mumbai', naac_grade: null, review_avg: 3.9, review_count: 2 }),
+    college({ slug: 'g1', name: 'Govt Arch', type: 'Government', accepted_exams: ['JEE_PAPER_2', 'NATA'], city_slug: 'pune', naac_grade: 'B+' }),
+    college({ slug: 'd1', name: 'Deemed Arch', type: 'deemed', accepted_exams: ['JEE Main Paper 2'], city_slug: 'nagpur', naac_grade: 'A' }),
+  ];
+
+  it('reads letter and rating from the URL, ignoring junk', () => {
+    expect(parseListingFilters(new URLSearchParams('letter=p&rating=4'), {})).toMatchObject({ letter: 'P', rating: 4 });
+    expect(parseListingFilters(new URLSearchParams('letter=pp&rating=9'), {})).toMatchObject({ letter: undefined, rating: undefined });
+  });
+
+  it('matches type case-insensitively and takes comma lists', () => {
+    expect(slugs(filterAndSortColleges(mixed, { type: 'private' }))).toEqual(['p1', 'p2']);
+    expect(slugs(filterAndSortColleges(mixed, { type: 'Private,deemed' }))).toEqual(['p1', 'p2', 'd1']);
+  });
+
+  it('treats every JEE spelling as JEE Main Paper 2', () => {
+    expect(slugs(filterAndSortColleges(mixed, { exam: 'JEE_PAPER_2' }))).toEqual(['p2', 'g1', 'd1']);
+    expect(slugs(filterAndSortColleges(mixed, { exam: 'NATA,JEE_PAPER_2' }))).toHaveLength(4);
+  });
+
+  it('filters city lists, NAAC with "none", letter, rating and city search', () => {
+    expect(slugs(filterAndSortColleges(mixed, { city: 'pune,nagpur' }))).toEqual(['p1', 'g1', 'd1']);
+    expect(slugs(filterAndSortColleges(mixed, { naacGrade: 'A,none' }))).toEqual(['p1', 'p2', 'd1']);
+    expect(slugs(filterAndSortColleges(mixed, { letter: 'G' }))).toEqual(['g1']);
+    expect(slugs(filterAndSortColleges(mixed, { rating: 4 }))).toEqual(['p1']);
+    expect(slugs(filterAndSortColleges(list, { search: 'coimba' }))).toEqual(['b']);
+  });
+
+  it('sorts by rating with unrated colleges last', () => {
+    expect(slugs(filterAndSortColleges(mixed, { sortBy: 'rating_high' })).slice(0, 2)).toEqual(['p1', 'p2']);
+  });
+
+  it('counts each option with the other filters applied', () => {
+    const f = facetCounts(mixed, { city: 'pune' });
+    // Type counts respect the city filter...
+    expect(f.type).toEqual({ private: 1, government: 1 });
+    // ...but city counts ignore it, so picking one never zeroes the others.
+    expect(f.city).toEqual({ pune: 2, mumbai: 1, nagpur: 1 });
+    expect(f.exam).toEqual({ NATA: 2, JEE_PAPER_2: 1 });
+    expect(f.naac).toEqual({ A: 1, 'B+': 1 });
+    expect(countMatches(mixed, { city: 'pune', type: 'government' })).toBe(1);
+  });
+
+  it('expands filters for the server query', () => {
+    expect(expandExamFilter(['JEE_PAPER_2'])).toEqual(['JEE_PAPER_2', 'JEE Main Paper 2', 'JEE Main']);
+    expect(typeSpellings(['private'])).toEqual(expect.arrayContaining(['private', 'Private']));
+  });
+
+  it('filters and counts states for category pages', () => {
+    const india = [
+      college({ slug: 't1', state_slug: 'tamil-nadu', state: 'Tamil Nadu' }),
+      college({ slug: 't2', state_slug: 'tamil-nadu', state: 'Tamil Nadu', type: 'Government' }),
+      college({ slug: 'k1', state_slug: 'kerala', state: 'Kerala' }),
+    ];
+    expect(slugs(filterAndSortColleges(india, { state: 'kerala,tamil-nadu' }))).toHaveLength(3);
+    expect(slugs(filterAndSortColleges(india, { state: 'kerala' }))).toEqual(['k1']);
+    // State counts ignore the state filter but respect the others.
+    expect(facetCounts(india, { state: 'kerala', type: 'government' }).state).toEqual({ 'tamil-nadu': 1 });
+    expect(stateCountsOf(india)).toEqual([
+      { state: 'Tamil Nadu', state_slug: 'tamil-nadu', count: 2 },
+      { state: 'Kerala', state_slug: 'kerala', count: 1 },
+    ]);
+  });
+
+  it('knows which letters have colleges and buckets fees', () => {
+    expect([...lettersOf(mixed)].sort()).toEqual(['D', 'G', 'M', 'P']);
+    // 90K, 1.5L, 2.5L (one unknown fee is skipped).
+    expect(feeHistogram(list)).toEqual([0, 1, 1, 0, 1, 0]);
   });
 });
 

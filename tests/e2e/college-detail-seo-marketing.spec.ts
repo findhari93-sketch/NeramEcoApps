@@ -181,8 +181,9 @@ test.describe('College detail page at 375px', () => {
     await assertTouchTargetSize(page, 'nav[aria-label="Related pages"] a', 44);
   });
 
-  test('mobile: quick facts are visible in the main column', async ({ page }) => {
+  test('mobile: quick facts are visible near the top', async ({ page }) => {
     await page.goto(`${BASE}${paths[0]}`);
-    await expect(page.getByText('Quick Facts').first()).toBeVisible();
+    // The KPI strip under the hero (annual fee, seats, admission, exam).
+    await expect(page.locator('dl[aria-label="Quick facts"]')).toBeVisible();
   });
 });

@@ -1,13 +1,14 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
-import { Container, Grid, Typography, Box } from '@mui/material';
 import { JsonLd } from '@/components/seo/JsonLd';
-import Breadcrumbs from '@/components/seo/Breadcrumbs';
 import { generateCityMetadata } from '@/lib/college-hub/seo';
 import { generateListingBreadcrumbSchema } from '@/lib/college-hub/schema-markup';
 import { getCollegesByCity, getActiveCities } from '@/lib/college-hub/queries';
-import CollegeListingCard from '@/components/college-hub/CollegeListingCard';
+import { Box } from '@mui/material';
+import DirectoryListing from '@/components/college-hub/directory/DirectoryListing';
+import { toListingCollege } from '@/lib/college-hub/listing-filter';
+import { CATEGORY_INDEX_HREF, relatedCategories } from '@/lib/college-hub/categories';
 
 export const revalidate = 86400;
 
@@ -44,31 +45,31 @@ export default async function CityCollegesPage({ params: { locale, city } }: Pro
     { name: `${cityName} Colleges`, path: `/colleges/city/${city}` },
   ]);
 
+  const stateSlug = colleges[0]?.state_slug;
+  const stateName = colleges[0]?.state;
   return (
     <>
       <JsonLd data={breadcrumb} />
-      <Container maxWidth="lg" sx={{ py: { xs: 3, sm: 4 } }}>
-        <Breadcrumbs items={[
-          { name: 'Colleges', href: '/colleges' },
-          { name: `Architecture Colleges in ${cityName}` },
-        ]} />
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="h1" sx={{ fontSize: { xs: '1.5rem', sm: '2rem' }, fontWeight: 800 }}>
-            Architecture Colleges in {cityName}
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mt: 0.75 }}>
-            {colleges.length} B.Arch colleges in {cityName}
-          </Typography>
-        </Box>
-
-        <Grid container spacing={2}>
-          {colleges.map((college) => (
-            <Grid key={college.id} item xs={12} md={6}>
-              <CollegeListingCard college={college} />
-            </Grid>
-          ))}
-        </Grid>
-      </Container>
+      <Box>
+        <DirectoryListing
+          mode="category"
+          colleges={colleges.map(toListingCollege)}
+          breadcrumbs={[{ name: 'Colleges', href: '/colleges' }, { name: `Architecture Colleges in ${cityName}` }]}
+          category={{
+            eyebrow: 'Category · City',
+            title: `Architecture Colleges in ${cityName}`,
+            shortTitle: cityName,
+            subtitle: `${colleges.length} B.Arch ${colleges.length === 1 ? 'college' : 'colleges'} in ${cityName}.`,
+            related: relatedCategories(
+              `/colleges/city/${city}`,
+              stateSlug && stateName ? [{ label: `All colleges in ${stateName}`, href: `/colleges/${stateSlug}` }] : []
+            ),
+          }}
+          hide={['city', 'state']}
+          stateFilter={false}
+          locked={{ label: `City: ${cityName}`, changeHref: CATEGORY_INDEX_HREF }}
+        />
+      </Box>
     </>
   );
 }

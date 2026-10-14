@@ -1,12 +1,13 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import { Container, Grid, Typography, Box, Alert } from '@mui/material';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateJoSAAMetadata } from '@/lib/college-hub/seo';
 import { generateListingBreadcrumbSchema } from '@/lib/college-hub/schema-markup';
 import { getJoSAAColleges } from '@/lib/college-hub/queries';
-import CollegeListingCard from '@/components/college-hub/CollegeListingCard';
-import Breadcrumbs from '@/components/seo/Breadcrumbs';
+import { Box } from '@mui/material';
+import DirectoryListing from '@/components/college-hub/directory/DirectoryListing';
+import { toListingCollege } from '@/lib/college-hub/listing-filter';
+import { CATEGORY_INDEX_HREF, relatedCategories } from '@/lib/college-hub/categories';
 
 export const revalidate = 86400;
 
@@ -28,43 +29,42 @@ export default async function JoSAACollegesPage({ params: { locale } }: Props) {
     { name: 'JoSAA Colleges', path: '/colleges/josaa' },
   ]);
 
+  if (colleges.length === 0) {
+    return (
+      <>
+        <JsonLd data={breadcrumb} />
+        <Box sx={{ maxWidth: 720, mx: 'auto', px: 2, py: 8, textAlign: 'center' }}>
+          <Box component="h1" sx={{ m: 0, fontSize: '1.75rem', fontWeight: 800 }}>JoSAA B.Arch Colleges 2026: NITs and IITs</Box>
+          <Box component="p" sx={{ color: 'text.secondary' }}>No JoSAA colleges are listed yet. Browse every college in the meantime.</Box>
+          <Box component="a" href="/colleges#browse" sx={{ display: 'inline-flex', alignItems: 'center', minHeight: 48, px: 3, borderRadius: 1.5, bgcolor: 'primary.main', color: 'primary.contrastText', fontWeight: 700, textDecoration: 'none' }}>
+            Browse all colleges
+          </Box>
+        </Box>
+      </>
+    );
+  }
   return (
     <>
       <JsonLd data={breadcrumb} />
-      <Container maxWidth="lg" sx={{ py: { xs: 3, sm: 4 } }}>
-        <Breadcrumbs items={[
-          { name: 'Colleges', href: '/colleges' },
-          { name: 'JoSAA Colleges' },
-        ]} />
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="h1" sx={{ fontSize: { xs: '1.5rem', sm: '2rem' }, fontWeight: 800 }}>
-            JoSAA B.Arch Colleges 2026: NITs and IITs
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mt: 0.75 }}>
-            {colleges.length} NIT and IIT programs admitting through JoSAA counseling (JEE Paper 2)
-          </Typography>
-        </Box>
-
-        <Alert severity="info" sx={{ mb: 3 }}>
-          JoSAA (Joint Seat Allocation Authority) handles admissions to B.Arch programs at NITs, IITs, and other centrally funded institutions. Eligibility requires JEE Paper 2 and a valid NATA score.
-        </Alert>
-
-        {colleges.length === 0 ? (
-          <Box sx={{ textAlign: 'center', py: 8 }}>
-            <Typography color="text.secondary">
-              JoSAA college data will be updated soon.
-            </Typography>
-          </Box>
-        ) : (
-          <Grid container spacing={2}>
-            {colleges.map((college) => (
-              <Grid key={college.id} item xs={12} sm={6} md={4}>
-                <CollegeListingCard college={college} />
-              </Grid>
-            ))}
-          </Grid>
-        )}
-      </Container>
+      <Box>
+        <DirectoryListing
+          mode="category"
+          colleges={colleges.map(toListingCollege)}
+          breadcrumbs={[{ name: 'Colleges', href: '/colleges' }, { name: 'JoSAA Colleges' }]}
+          category={{
+            eyebrow: 'Category · Counselling',
+            title: 'JoSAA B.Arch Colleges 2026: NITs and IITs',
+            shortTitle: 'JoSAA colleges',
+            subtitle: `${colleges.length} NIT and IIT programmes admit through JoSAA counselling (JEE Main Paper 2).`,
+            why: {
+              label: 'How JoSAA works',
+              text: 'JoSAA (Joint Seat Allocation Authority) handles admissions to B.Arch programmes at NITs, IITs and other centrally funded institutions. You need a JEE Main Paper 2 score, and most programmes also ask for a valid NATA score.',
+            },
+            related: relatedCategories('/colleges/josaa'),
+          }}
+          locked={{ label: 'JoSAA counselling', changeHref: CATEGORY_INDEX_HREF }}
+        />
+      </Box>
     </>
   );
 }

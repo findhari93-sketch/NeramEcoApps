@@ -23,7 +23,8 @@ interface CollegeListingCardProps {
 
 function formatFee(min: number | null, max: number | null, approx: number | null): string {
   const val = approx ?? min;
-  if (!val) return 'N/A';
+  // Copy guide: say why a value is missing, never "N/A".
+  if (!val) return 'Not published';
   return val >= 100000
     ? `₹${(val / 100000).toFixed(1)}L/yr`
     : `₹${(val / 1000).toFixed(0)}K/yr`;

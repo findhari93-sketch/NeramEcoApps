@@ -194,7 +194,8 @@ test.describe('College Hub - Save and Compare Buttons', () => {
 
     // CompareButton renders with aria-label or tooltip containing "Compare"
     const compareBtn = page
-      .locator('[aria-label*="Compare"], [aria-label*="compare"]')
+      // :visible skips the phone-only compare toggles, hidden at desktop width.
+      .locator('[aria-label*="Compare"]:visible, [aria-label*="compare"]:visible')
       .first();
     await expect(compareBtn).toBeVisible({ timeout: 10000 });
   });
@@ -204,7 +205,8 @@ test.describe('College Hub - Save and Compare Buttons', () => {
     await page.waitForLoadState('networkidle');
 
     const compareBtn = page
-      .locator('[aria-label*="Compare"], [aria-label*="compare"]')
+      // :visible skips the phone-only compare toggles, hidden at desktop width.
+      .locator('[aria-label*="Compare"]:visible, [aria-label*="compare"]:visible')
       .first();
     if (!(await compareBtn.isVisible({ timeout: 5000 }).catch(() => false))) {
       test.skip(true, 'Compare button not visible on listing');
@@ -335,8 +337,15 @@ test.describe('College Hub - Mobile Responsiveness', () => {
     await page.goto('/en/colleges');
     await page.waitForLoadState('networkidle');
 
-    const collegeLink = page.locator('a[href*="/colleges/"]').first();
-    const href = await collegeLink.getAttribute('href').catch(() => null);
+    // A college page is /colleges/<state>/<slug>; skip compare, saved and the category hubs.
+    const href = await page.locator('a[href*="/colleges/"]').evaluateAll((links) => {
+      const hubs = new Set(['city', 'type', 'accreditation', 'counseling', 'fees', 'rankings', 'compare', 'saved', 'tnea', 'josaa']);
+      for (const a of links) {
+        const m = new URL((a as HTMLAnchorElement).href).pathname.match(/^(?:\/[a-z]{2})?\/colleges\/([a-z0-9-]+)\/([a-z0-9-]+)$/);
+        if (m && !hubs.has(m[1])) return (a as HTMLAnchorElement).pathname;
+      }
+      return null;
+    });
     if (!href) {
       test.skip(true, 'No college link found');
       return;

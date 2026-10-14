@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
 import {
   AppBar,
   Toolbar,
-  Container,
   Typography,
   Button,
   Box,
@@ -46,9 +45,17 @@ import UserNotificationBell from './UserNotificationBell';
 // shipped with the header on every page.
 const loadSearchDialog = () => import('./SearchDialog');
 const SearchDialog = dynamic(loadSearchDialog, { ssr: false });
+// Laptops search in the header itself; same index, its own chunk.
+const loadInlineSearch = () => import('./search/InlineSearch');
+const InlineSearch = dynamic(loadInlineSearch, {
+  ssr: false,
+  loading: () => <Box sx={{ flex: '1 1 auto', maxWidth: 720, mx: 'auto', height: 44, borderRadius: 22, border: '1.5px solid', borderColor: 'primary.main' }} />,
+});
 import { useApplicationStatus, type AppStatusSummary } from '@/hooks/useApplicationStatus';
 import { useGoToApp } from '@/hooks/useGoToApp';
 import { getDemoCta, readDemoActive, type DemoActiveFlag } from '@/lib/demo-cta';
+import CollegesMegaMenu from '@/components/college-hub/CollegesMegaMenu';
+import HeaderCtaPill from './HeaderCtaPill';
 
 // ─── CTA config (unchanged) ────────────────────────────────────────────────
 
@@ -144,9 +151,11 @@ const NAV_GROUPS: NavGroup[] = [
     key: 'colleges',
     labelKey: 'colleges',
     icon: <SchoolIcon fontSize="small" />,
+    // The desktop Colleges menu (CollegesMegaMenu) shows the first three columns;
+    // the last link of each is its "more" link. The phone drawer shows all four.
     columns: [
       {
-        title: 'By State',
+        title: 'By state',
         links: [
           { label: 'Tamil Nadu', href: '/colleges/tamil-nadu' },
           { label: 'Karnataka', href: '/colleges/karnataka' },
@@ -154,40 +163,40 @@ const NAV_GROUPS: NavGroup[] = [
           { label: 'Delhi NCR', href: '/colleges/delhi' },
           { label: 'Kerala', href: '/colleges/kerala' },
           { label: 'Telangana', href: '/colleges/telangana' },
-          { label: 'View all states \u2192', href: '/colleges' },
+          { label: 'All states', href: '/colleges#explore' },
         ],
       },
       {
-        title: 'By Exam & Counseling',
+        title: 'By exam and counselling',
         links: [
-          { label: 'NATA Colleges', href: '/colleges' },
-          { label: 'JEE Main Paper 2', href: '/colleges' },
-          { label: 'TNEA Counseling', href: '/colleges/tnea' },
-          { label: 'JoSAA Counseling', href: '/colleges/josaa' },
-          { label: 'KEAM Counseling', href: '/counseling/keam-arch' },
-          { label: 'KCET Counseling', href: '/colleges/counseling/kcet' },
-          { label: 'All counseling \u2192', href: '/colleges' },
+          { label: 'NATA colleges', href: '/colleges?exam=NATA#browse' },
+          { label: 'JEE Main Paper 2 colleges', href: '/colleges?exam=JEE_PAPER_2#browse' },
+          { label: 'TNEA counselling', href: '/colleges/tnea' },
+          { label: 'JoSAA counselling', href: '/colleges/josaa' },
+          { label: 'KEAM counselling', href: '/counseling/keam-arch' },
+          { label: 'KCET counselling', href: '/colleges/counseling/kcet' },
+          { label: 'All counselling', href: '/colleges#explore' },
         ],
       },
       {
-        title: 'Rankings & Filters',
+        title: 'Rankings and filters',
         links: [
           { label: 'NIRF Architecture', href: '/colleges/rankings/nirf' },
-          { label: 'ArchIndex Top Rated', href: '/colleges/rankings/archindex' },
-          { label: 'COA Approved', href: '/colleges/accreditation/coa-approved' },
-          { label: 'Government Colleges', href: '/colleges/type/government' },
-          { label: 'Private Colleges', href: '/colleges/type/private' },
-          { label: 'Fee: Under \u20B93L', href: '/colleges/fees/below-3-lakhs' },
-          { label: 'All fee ranges \u2192', href: '/colleges' },
+          { label: 'ArchIndex top rated', href: '/colleges/rankings/archindex' },
+          { label: 'COA approved', href: '/colleges/accreditation/coa-approved' },
+          { label: 'Government colleges', href: '/colleges/type/government' },
+          { label: 'Private colleges', href: '/colleges/type/private' },
+          { label: 'Fee under \u20B93L', href: '/colleges/fees/below-3-lakhs' },
+          { label: 'All fee ranges', href: '/colleges#explore' },
         ],
       },
       {
-        title: 'Quick Links',
+        title: 'Your tools',
         links: [
-          { label: '\u2B50 Featured Colleges', href: '/colleges' },
-          { label: '\uD83D\uDD0D Compare Colleges', href: '/colleges/compare' },
-          { label: '\uD83D\uDCBE Saved Colleges', href: '/colleges/saved' },
-          { label: '\uD83C\uDFD9\uFE0F Browse by City', href: '/colleges' },
+          { label: 'Compare colleges', href: '/colleges/compare' },
+          { label: 'Saved colleges', href: '/colleges/saved' },
+          { label: 'Browse by city', href: '/colleges#explore' },
+          { label: 'College predictor', href: '/tools/college-predictor' },
         ],
       },
     ],
@@ -301,6 +310,7 @@ const NAV_GROUPS: NavGroup[] = [
         title: '',
         links: [
           { label: 'About Us', href: '/about' },
+          { label: 'Course fees', href: '/fees' },
           { label: 'Student Reviews', href: '/testimonials' },
           { label: 'Careers', href: '/careers' },
           { label: 'Contact', href: '/contact' },
@@ -325,7 +335,7 @@ export default function Header() {
   const { goToApp } = useGoToApp();
   const ctaConfig = getCtaConfig(appStatus, t);
   const isEnrolled = appStatus === 'enrolled' || appStatus === 'partial_payment';
-  // Students check the fee before they apply, so Fees sits right beside the CTA.
+  // Phones get "View fees" in the drawer; laptops find Course fees under About.
   const showFeesLink = !isEnrolled && !isApplyPage && pathname !== '/fees';
 
   // "Free demo" beside Join Now, or "My demo" once one is booked. Read from a
@@ -350,7 +360,23 @@ export default function Header() {
   };
   const preloadSearch = () => {
     void loadSearchDialog();
+    void loadInlineSearch();
   };
+  // Laptops: the search field replaces the nav until the user is done with it.
+  const [inlineSearch, setInlineSearch] = useState(false);
+  const searchButtonRef = useRef<HTMLButtonElement>(null);
+  const openSearch = () => {
+    if (window.matchMedia('(min-width: 900px)').matches) {
+      setOpenMenu(null);
+      setInlineSearch(true);
+    } else {
+      setSearchOpen(true);
+    }
+  };
+  const closeInlineSearch = useCallback((restoreFocus: boolean) => {
+    setInlineSearch(false);
+    if (restoreFocus) window.setTimeout(() => searchButtonRef.current?.focus(), 0);
+  }, []);
 
   // Desktop: which group's popover is open
   const [openMenu, setOpenMenu] = useState<{ key: string; anchorEl: HTMLElement } | null>(null);
@@ -367,12 +393,16 @@ export default function Header() {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
         e.preventDefault();
-        setSearchOpen(true);
+        openSearch();
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
+    // openSearch only calls state setters, which are stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => setInlineSearch(false), [pathname]);
 
   const toggleMobileMenu = () => setMobileMenuOpen(!mobileMenuOpen);
 
@@ -387,6 +417,7 @@ export default function Header() {
 
   // Check if any link in a group matches the current path
   const isGroupActive = (group: NavGroup) =>
+    (group.key === 'colleges' && /^\/colleges(\/|$)/.test(pathname)) ||
     group.columns.some((col) =>
       col.links.some(
         (link) =>
@@ -413,8 +444,9 @@ export default function Header() {
           '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
         }}
       >
-        <Container maxWidth="lg">
-          <Toolbar disableGutters sx={{ minHeight: { xs: 56, md: 64 } }}>
+        {/* Full width up to 1680px, so the logo sits at the far left on laptops */}
+        <Box sx={{ width: '100%', maxWidth: 1680, mx: 'auto', px: { xs: 2, md: 3 }, boxSizing: 'border-box' }}>
+          <Toolbar disableGutters sx={{ minHeight: { xs: 56, md: 64 }, gap: { md: 0.5 } }}>
 
             {/* ── Logo + Microsoft Badge ── */}
             <Box
@@ -437,7 +469,7 @@ export default function Header() {
             <Box
               sx={{
                 flexGrow: 1,
-                display: { xs: 'none', md: 'flex' },
+                display: { xs: 'none', md: inlineSearch ? 'none' : 'flex' },
                 gap: 0.25,
                 alignItems: 'center',
               }}
@@ -557,80 +589,36 @@ export default function Header() {
               </Button>
             </Box>
 
-            {/* ── Desktop Search (full box from 1200px; below that the icon keeps room for Fees + Join Now) ── */}
-            <Box
-              onClick={() => setSearchOpen(true)}
-              onPointerEnter={preloadSearch}
-              onFocus={preloadSearch}
-              role="button"
-              tabIndex={0}
-              onKeyDown={(e) => e.key === 'Enter' && setSearchOpen(true)}
-              aria-label="Search (Ctrl+K)"
-              sx={{
-                display: { xs: 'none', lg: 'flex' },
-                alignItems: 'center',
-                gap: 1,
-                height: 36,
-                minWidth: { lg: 160, xl: 200 },
-                px: 1.5,
-                mr: 1,
-                borderRadius: '8px',
-                border: '1px solid',
-                borderColor: 'divider',
-                cursor: 'pointer',
-                color: 'text.secondary',
-                transition: 'all 0.2s ease',
-                flexShrink: 0,
-                '&:hover': {
-                  bgcolor: 'action.hover',
-                  borderColor: 'text.secondary',
-                  color: 'text.primary',
-                },
-              }}
-            >
-              <SearchIcon sx={{ fontSize: 17 }} />
-              <Typography variant="body2" sx={{ flex: 1, fontSize: '0.85rem', color: 'inherit' }}>
-                Search
-              </Typography>
-              <Box
-                component="kbd"
-                sx={{
-                  fontSize: '0.65rem',
-                  fontFamily: 'inherit',
-                  px: 0.6,
-                  py: 0.25,
-                  border: '1px solid',
-                  borderColor: 'divider',
-                  borderRadius: '4px',
-                  color: 'text.disabled',
-                  letterSpacing: '0.02em',
-                  lineHeight: 1.4,
-                }}
-              >
-                Ctrl K
-              </Box>
-            </Box>
+            {inlineSearch && <InlineSearch onClose={closeInlineSearch} />}
 
             {/* Spacer for mobile */}
             <Box sx={{ flexGrow: 1, display: { xs: 'block', md: 'none' } }} />
 
-            {/* ── Search Icon (phones, tablets and small laptops) ── */}
-            <IconButton
-              color="inherit"
-              onClick={() => setSearchOpen(true)}
-              onPointerDown={preloadSearch}
-              aria-label="Search"
-              sx={{
-                display: { xs: 'flex', lg: 'none' },
-                width: 40,
-                height: 40,
-                borderRadius: '8px',
-                mr: 0.5,
-                '&:hover': { bgcolor: 'action.hover' },
-              }}
-            >
-              <SearchIcon sx={{ fontSize: 22 }} />
-            </IconButton>
+            {/* ── Search: an icon that opens the field in the header (laptops) or full screen (phones) ── */}
+            {!inlineSearch && (
+              <Tooltip title="Search (Ctrl K)" arrow>
+                <IconButton
+                  ref={searchButtonRef}
+                  color="inherit"
+                  onClick={openSearch}
+                  onPointerEnter={preloadSearch}
+                  onFocus={preloadSearch}
+                  aria-label="Search"
+                  aria-keyshortcuts="Control+K Meta+K"
+                  sx={{
+                    width: 44,
+                    height: 44,
+                    flexShrink: 0,
+                    borderRadius: '50%',
+                    mr: 0.5,
+                    '&:hover': { bgcolor: 'action.hover' },
+                    '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' },
+                  }}
+                >
+                  <SearchIcon sx={{ fontSize: 22 }} />
+                </IconButton>
+              </Tooltip>
+            )}
 
             {/* My Enrollment (enrolled students) */}
             {isEnrolled && (
@@ -677,104 +665,12 @@ export default function Header() {
               >
                 {t('header.needHelp')}
               </Button>
-            ) : ctaConfig.href ? (
-              <>
-                {/* Quiet secondary action beside the primary one, same line */}
-                {showFeesLink && (
-                  <Button
-                    component={Link}
-                    href="/fees"
-                    size="small"
-                    startIcon={<CurrencyRupeeIcon sx={{ fontSize: 16 }} />}
-                    sx={{
-                      display: 'none',
-                      // 900 to 999px has no room beside the nav; phones get it in the drawer
-                      '@media (min-width: 1000px)': { display: 'inline-flex' },
-                      flexShrink: 0,
-                      mr: 1,
-                      px: 1.5,
-                      minHeight: 40,
-                      borderRadius: '6px',
-                      fontWeight: 600,
-                      fontSize: '0.875rem',
-                      textTransform: 'none',
-                      whiteSpace: 'nowrap',
-                      color: 'text.primary',
-                      '& .MuiButton-startIcon': { mr: 0.5 },
-                      '&:hover': { bgcolor: 'action.hover', color: 'primary.main' },
-                      '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
-                    }}
-                  >
-                    {t('header.fees')}
-                  </Button>
-                )}
-                {demoCta && (
-                  <Button
-                    component={Link}
-                    href={demoCta.href}
-                    variant="outlined"
-                    size="small"
-                    startIcon={<VideocamOutlinedIcon sx={{ fontSize: 18 }} />}
-                    sx={{
-                      display: 'none',
-                      // Needs the room Fees leaves at 1100px and up; phones get it in the drawer
-                      '@media (min-width: 1100px)': { display: 'inline-flex' },
-                      flexShrink: 0,
-                      mr: 1,
-                      px: 1.75,
-                      minHeight: 40,
-                      borderRadius: '6px',
-                      borderWidth: 1.5,
-                      fontWeight: 600,
-                      fontSize: '0.875rem',
-                      textTransform: 'none',
-                      whiteSpace: 'nowrap',
-                      '& .MuiButton-startIcon': { mr: 0.5 },
-                      '&:hover': { borderWidth: 1.5 },
-                      '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
-                    }}
-                  >
-                    {demoCta.label === 'myDemo' ? t('header.myDemo') : t('header.freeDemo')}
-                  </Button>
-                )}
-                <Button
-                  component={Link}
-                  href={ctaConfig.href}
-                  variant={ctaConfig.variant}
-                  color={appStatus ? undefined : 'secondary'}
-                  size="small"
-                  sx={{
-                    borderRadius: '6px',
-                    fontWeight: 600,
-                    fontSize: { xs: '0.75rem', md: '0.875rem' },
-                    px: { xs: 1.5, md: 2.5 },
-                    mr: 1,
-                    textTransform: 'none',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
-                    ...ctaConfig.sx,
-                  }}
-                >
-                  {ctaConfig.label}
-                </Button>
-              </>
             ) : (
-              <Button
-                onClick={goToApp}
-                variant={ctaConfig.variant}
-                size="small"
-                sx={{
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  fontSize: { xs: '0.75rem', md: '0.875rem' },
-                  px: { xs: 1.5, md: 2.5 },
-                  mr: 1,
-                  textTransform: 'none',
-                  ...ctaConfig.sx,
-                }}
-              >
-                {ctaConfig.label}
-              </Button>
+              <HeaderCtaPill
+                status={appStatus}
+                demo={demoCta ? { href: demoCta.href, label: demoCta.label === 'myDemo' ? t('header.myDemo') : t('header.freeDemo') } : null}
+                primary={{ label: ctaConfig.label, href: ctaConfig.href, onClick: goToApp }}
+              />
             )}
 
             {/* Desktop: Notifications + Auth */}
@@ -796,7 +692,7 @@ export default function Header() {
               </IconButton>
             </Box>
           </Toolbar>
-        </Container>
+        </Box>
 
         {/* ── Desktop Dropdown Popovers ── */}
         {NAV_GROUPS.map((group) => (
@@ -816,11 +712,14 @@ export default function Header() {
                 border: '1px solid',
                 borderColor: 'divider',
                 overflow: 'visible',
-                minWidth: group.columns.length >= 4 ? 760 : 220,
+                minWidth: group.key === 'colleges' ? undefined : group.columns.length >= 4 ? 760 : 220,
                 maxWidth: '95vw',
               },
             }}
           >
+            {group.key === 'colleges' ? (
+              <CollegesMegaMenu columns={group.columns} pathname={pathname} onNavigate={handleMenuClose} />
+            ) : (
             <Box
               sx={{
                 display: 'flex',
@@ -909,6 +808,7 @@ export default function Header() {
                 </Box>
               ))}
             </Box>
+            )}
           </Popover>
         ))}
 

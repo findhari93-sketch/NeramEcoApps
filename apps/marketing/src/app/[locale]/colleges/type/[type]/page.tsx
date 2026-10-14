@@ -1,14 +1,15 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
-import { Container, Grid, Typography, Box } from '@mui/material';
 import { JsonLd } from '@/components/seo/JsonLd';
-import Breadcrumbs from '@/components/seo/Breadcrumbs';
 import { generateTypeMetadata } from '@/lib/college-hub/seo';
 import { generateListingBreadcrumbSchema } from '@/lib/college-hub/schema-markup';
 import { getCollegesByType } from '@/lib/college-hub/queries';
 import { COLLEGE_TYPE_SLUGS } from '@/lib/college-hub/constants';
-import CollegeListingCard from '@/components/college-hub/CollegeListingCard';
+import { Box } from '@mui/material';
+import DirectoryListing from '@/components/college-hub/directory/DirectoryListing';
+import { toListingCollege } from '@/lib/college-hub/listing-filter';
+import { CATEGORY_INDEX_HREF, relatedCategories } from '@/lib/college-hub/categories';
 
 export const revalidate = 86400;
 
@@ -43,28 +44,22 @@ export default async function TypeCollegesPage({ params: { locale, type } }: Pro
   return (
     <>
       <JsonLd data={breadcrumb} />
-      <Container maxWidth="lg" sx={{ py: { xs: 3, sm: 4 } }}>
-        <Breadcrumbs items={[
-          { name: 'Colleges', href: '/colleges' },
-          { name: `${typeName} Architecture Colleges` },
-        ]} />
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="h1" sx={{ fontSize: { xs: '1.5rem', sm: '2rem' }, fontWeight: 800 }}>
-            {typeName} Architecture Colleges in India
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mt: 0.75 }}>
-            {colleges.length} {typeName.toLowerCase()} B.Arch colleges across India
-          </Typography>
-        </Box>
-
-        <Grid container spacing={2}>
-          {colleges.map((college) => (
-            <Grid key={college.id} item xs={12} md={6}>
-              <CollegeListingCard college={college} />
-            </Grid>
-          ))}
-        </Grid>
-      </Container>
+      <Box>
+        <DirectoryListing
+          mode="category"
+          colleges={colleges.map(toListingCollege)}
+          breadcrumbs={[{ name: 'Colleges', href: '/colleges' }, { name: `${typeName} Architecture Colleges` }]}
+          category={{
+            eyebrow: 'Category · College type',
+            title: `${typeName} Architecture Colleges in India`,
+            shortTitle: `${typeName} colleges`,
+            subtitle: `${colleges.length} ${typeName.toLowerCase()} B.Arch colleges across India.`,
+            related: relatedCategories(`/colleges/type/${type}`),
+          }}
+          hide={['type']}
+          locked={{ label: `${typeName} colleges`, changeHref: CATEGORY_INDEX_HREF }}
+        />
+      </Box>
     </>
   );
 }

@@ -24,6 +24,7 @@ import {
 } from '@/components/college-hub/landing';
 import ExploreCategoriesSection from '@/components/college-hub/landing/ExploreCategoriesSection';
 import { BROWSE_PAGE_SIZE, toListingCollege } from '@/lib/college-hub/listing-filter';
+import MobileBrowsePanel from '@/components/college-hub/landing/MobileBrowsePanel';
 
 // Matches the rest of the college hub. This data is seasonal, not hourly.
 export const revalidate = 86400;
@@ -95,6 +96,9 @@ export default async function CollegesPage({ params: { locale } }: Props) {
 
       {/* Section 1: Hero */}
       <CollegeHubHero stats={stats} />
+
+      {/* Phones: browse by state, exam or ranking right under the hero */}
+      <MobileBrowsePanel states={stateData} counseling={counselingSystemData} coaApprovedCount={stats.coaApprovedCount} totalColleges={stats.totalColleges} />
 
       {/* Section 2: What's Inside */}
       <PlatformFeatures />

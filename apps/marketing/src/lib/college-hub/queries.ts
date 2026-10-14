@@ -10,6 +10,7 @@ import { cache } from 'react';
 import { createAdminClientISR, getSupabaseAdminClient } from '@neram/database';
 import type { College, CollegeComment, CollegeDetail, CollegeFaqRow, CollegeListItem, CollegeFilters, CollegeReview } from './types';
 import { COLLEGES_PER_PAGE } from './constants';
+import { expandExamFilter, typeSpellings } from './listing-filter';
 
 // ISR revalidation buckets — must match `export const revalidate` on the pages.
 //
@@ -35,6 +36,37 @@ const LISTING_SELECT = `
   avg_placement_salary, min_placement_salary, max_placement_salary, city_slug
 `;
 
+// Review and cutoff summaries from the college_listing view
+// (migration 20261121090000). The directory reads the view; until an
+// environment has it, listingQuery falls back to the colleges table and the
+// cards simply hide rating and cutoff.
+const LISTING_STATS_SELECT = 'review_avg, review_count, cutoff_value, cutoff_type, cutoff_system, cutoff_year';
+
+/**
+ * Runs a directory listing query on the college_listing view, retrying once on
+ * the colleges table if the view errors (not migrated yet). `build` gets
+ * withStats=false on the retry so it can skip filters and sorts on view-only
+ * columns.
+ */
+async function listingQuery(
+  supabase: ReturnType<typeof getSupabaseAdminClient>,
+  build: (query: any, withStats: boolean) => any,
+  options?: { count?: 'exact' }
+) {
+  const first = await build(
+    supabase.from('college_listing').select(`${LISTING_SELECT}, ${LISTING_STATS_SELECT}`, options),
+    true
+  );
+  if (!first.error) return first;
+  console.warn('[college-hub] college_listing view unavailable, using colleges:', first.error.message);
+  return build(supabase.from('colleges').select(LISTING_SELECT, options), false);
+}
+
+/** Comma-separated multi-select URL values ("Private,Deemed") as a list. */
+function multi(value: string | undefined): string[] {
+  return (value ?? '').split(',').map((v) => v.trim()).filter(Boolean);
+}
+
 // Filtered listing. Default client is the no-store admin client (Aintra tool,
 // /api/colleges/browse, which the CDN caches). The /colleges page passes the ISR
 // client for its default first page (getCollegesISR) so the page stays static.
@@ -55,44 +87,68 @@ export async function getColleges(
     naacGrade,
     coa,
     search,
+    letter,
     sortBy = 'arch_index',
     page = 1,
     limit = COLLEGES_PER_PAGE,
   } = filters;
 
-  let query = supabase
-    .from('colleges')
-    .select(LISTING_SELECT, { count: 'exact' });
+  const build = (q: any, withStats: boolean) => {
+    let query = q;
+    // Public site shows only active colleges (hide duplicate/defunct/unverified)
+    query = query.eq('status', 'active');
 
-  // Public site shows only active colleges (hide duplicate/defunct/unverified)
-  query = query.eq('status', 'active');
+    const types = multi(type);
+    const exams = expandExamFilter(multi(exam));
+    const cities = multi(city);
+    const grades = multi(naacGrade);
 
-  if (state) query = query.eq('state_slug', state);
-  if (type) query = query.eq('type', type);
-  if (counselingSystem) query = query.contains('counseling_systems', [counselingSystem]);
-  if (exam) query = query.contains('accepted_exams', [exam]);
-  if (city) query = query.eq('city_slug', city);
-  if (coa !== undefined) query = query.eq('coa_approved', coa);
-  if (naacGrade) query = query.eq('naac_grade', naacGrade);
-  if (minFee) query = query.gte('annual_fee_approx', minFee);
-  if (maxFee) query = query.lte('annual_fee_approx', maxFee);
-  if (search) query = query.ilike('name', `%${search}%`);
+    const states = multi(state);
+    if (states.length) query = query.in('state_slug', states);
+    // type is stored in mixed case ("Private" / "private"): match each spelling.
+    if (types.length) query = query.in('type', typeSpellings(types));
+    if (counselingSystem) query = query.contains('counseling_systems', [counselingSystem]);
+    if (exams.length) query = query.overlaps('accepted_exams', exams);
+    if (cities.length) query = query.in('city_slug', cities);
+    if (coa !== undefined) query = query.eq('coa_approved', coa);
+    if (minFee) query = query.gte('annual_fee_approx', minFee);
+    if (maxFee) query = query.lte('annual_fee_approx', maxFee);
 
-  // Sort
-  if (sortBy === 'arch_index') query = query.order('arch_index_score', { ascending: false, nullsFirst: false });
-  else if (sortBy === 'nirf_rank') query = query.order('nirf_rank_architecture', { ascending: true, nullsFirst: false });
-  else if (sortBy === 'fee_low') query = query.order('annual_fee_approx', { ascending: true, nullsFirst: false });
-  else if (sortBy === 'fee_high') query = query.order('annual_fee_approx', { ascending: false, nullsFirst: false });
-  else if (sortBy === 'name') query = query.order('name', { ascending: true });
-  else if (sortBy === 'placement_high') query = query.order('avg_placement_salary', { ascending: false, nullsFirst: false });
-  else if (sortBy === 'naac_grade') query = query.order('naac_grade', { ascending: true, nullsFirst: false });
+    // OR groups (NAAC with "no grade", name-or-city search). Two groups are
+    // ANDed inside a single or=(and(or(..),or(..))) so neither overrides the other.
+    const orGroups: string[] = [];
+    if (grades.length) {
+      const named = grades.filter((g) => g !== 'none');
+      const parts = [];
+      if (named.length) parts.push(`naac_grade.in.(${named.map((g) => `"${g}"`).join(',')})`);
+      if (grades.includes('none')) parts.push('naac_grade.is.null');
+      orGroups.push(parts.join(','));
+    }
+    const needle = search?.replace(/[,()*%"\\]/g, ' ').trim();
+    if (needle) orGroups.push(`name.ilike.*${needle}*,city.ilike.*${needle}*`);
+    if (orGroups.length === 1) query = query.or(orGroups[0]);
+    else if (orGroups.length > 1) query = query.or(`and(${orGroups.map((g) => `or(${g})`).join(',')})`);
+    if (letter) query = query.ilike('name', `${letter}%`);
+    if (rating && withStats) query = query.gte('review_avg', rating);
 
-  // Pagination
-  const from = (page - 1) * limit;
-  const to = from + limit - 1;
-  query = query.range(from, to);
+    // Sort
+    if (sortBy === 'arch_index') query = query.order('arch_index_score', { ascending: false, nullsFirst: false });
+    else if (sortBy === 'nirf_rank') query = query.order('nirf_rank_architecture', { ascending: true, nullsFirst: false });
+    else if (sortBy === 'fee_low') query = query.order('annual_fee_approx', { ascending: true, nullsFirst: false });
+    else if (sortBy === 'fee_high') query = query.order('annual_fee_approx', { ascending: false, nullsFirst: false });
+    else if (sortBy === 'name') query = query.order('name', { ascending: true });
+    else if (sortBy === 'placement_high') query = query.order('avg_placement_salary', { ascending: false, nullsFirst: false });
+    else if (sortBy === 'naac_grade') query = query.order('naac_grade', { ascending: true, nullsFirst: false });
+    else if (sortBy === 'rating_high' && withStats) query = query.order('review_avg', { ascending: false, nullsFirst: false });
+    // Stable tie-break so pages never repeat or skip a college.
+    query = query.order('name', { ascending: true });
 
-  const { data, error, count } = await query;
+    // Pagination
+    const from = (page - 1) * limit;
+    return query.range(from, from + limit - 1);
+  };
+
+  const { data, error, count } = await listingQuery(supabase, build, { count: 'exact' });
   if (error) throw error;
   return { data: (data ?? []) as CollegeListItem[], count: count ?? 0 };
 }
@@ -105,25 +161,27 @@ export function getCollegesISR(filters: CollegeFilters = {}) {
 // ISR: state listing pages are prerendered via generateStaticParams
 export const getStateColleges = cache(async (stateSlug: string): Promise<CollegeListItem[]> => {
   const supabase = createAdminClientISR(ISR_COLLEGE);
-  const { data, error } = await supabase
-    .from('colleges')
-    .select(LISTING_SELECT)
-    .eq('status', 'active')
-    .eq('state_slug', stateSlug)
-    .order('arch_index_score', { ascending: false, nullsFirst: false });
+  const { data, error } = await listingQuery(supabase, (q) =>
+    q
+      .eq('status', 'active')
+      .eq('state_slug', stateSlug)
+      .order('arch_index_score', { ascending: false, nullsFirst: false })
+  );
   if (error) throw error;
   return (data ?? []) as CollegeListItem[];
 });
 
+// Category listings (TNEA, JoSAA, counselling, city, type, accreditation, fee
+// range) read the college_listing view so the cards get rating and cutoff;
+// listingQuery falls back to the colleges table where the view is missing.
+
 // ISR: TNEA hub is prerendered, revalidated daily
 export const getTNEAColleges = cache(async (): Promise<CollegeListItem[]> => {
   const supabase = createAdminClientISR(ISR_EXAM_HUB);
-  const { data, error } = await supabase
-    .from('colleges')
-    .select(LISTING_SELECT)
-    .eq('status', 'active')
-    .contains('counseling_systems', ['TNEA'])
-    .order('nirf_rank_architecture', { ascending: true, nullsFirst: false });
+  const { data, error } = await listingQuery(supabase, (q) =>
+    // Some rows store TNEA under accepted_exams instead.
+    q.eq('status', 'active').or('counseling_systems.cs.{TNEA},accepted_exams.cs.{TNEA}').order('nirf_rank_architecture', { ascending: true, nullsFirst: false })
+  );
   if (error) throw error;
   return (data ?? []) as CollegeListItem[];
 });
@@ -131,12 +189,9 @@ export const getTNEAColleges = cache(async (): Promise<CollegeListItem[]> => {
 // ISR: JoSAA hub is prerendered, revalidated daily
 export const getJoSAAColleges = cache(async (): Promise<CollegeListItem[]> => {
   const supabase = createAdminClientISR(ISR_EXAM_HUB);
-  const { data, error } = await supabase
-    .from('colleges')
-    .select(LISTING_SELECT)
-    .eq('status', 'active')
-    .contains('counseling_systems', ['JoSAA'])
-    .order('nirf_rank', { ascending: true, nullsFirst: false });
+  const { data, error } = await listingQuery(supabase, (q) =>
+    q.eq('status', 'active').contains('counseling_systems', ['JoSAA']).order('nirf_rank', { ascending: true, nullsFirst: false })
+  );
   if (error) throw error;
   return (data ?? []) as CollegeListItem[];
 });
@@ -145,12 +200,9 @@ export const getJoSAAColleges = cache(async (): Promise<CollegeListItem[]> => {
 export const getCollegesByCounseling = cache(
   async (systemKey: string): Promise<CollegeListItem[]> => {
     const supabase = createAdminClientISR(ISR_EXAM_HUB);
-    const { data } = await supabase
-      .from('colleges')
-      .select(LISTING_SELECT)
-      .eq('status', 'active')
-      .contains('counseling_systems', [systemKey])
-      .order('arch_index_score', { ascending: false, nullsFirst: false });
+    const { data } = await listingQuery(supabase, (q) =>
+      q.eq('status', 'active').or(`counseling_systems.cs.{${systemKey}},accepted_exams.cs.{${systemKey}}`).order('arch_index_score', { ascending: false, nullsFirst: false })
+    );
     return (data ?? []) as CollegeListItem[];
   }
 );
@@ -159,12 +211,9 @@ export const getCollegesByCounseling = cache(
 export const getCollegesByCity = cache(
   async (citySlug: string): Promise<CollegeListItem[]> => {
     const supabase = createAdminClientISR(ISR_COLLEGE);
-    const { data } = await supabase
-      .from('colleges')
-      .select(LISTING_SELECT)
-      .eq('status', 'active')
-      .eq('city_slug', citySlug)
-      .order('arch_index_score', { ascending: false, nullsFirst: false });
+    const { data } = await listingQuery(supabase, (q) =>
+      q.eq('status', 'active').eq('city_slug', citySlug).order('arch_index_score', { ascending: false, nullsFirst: false })
+    );
     return (data ?? []) as CollegeListItem[];
   }
 );
@@ -173,12 +222,9 @@ export const getCollegesByCity = cache(
 export const getCollegesByType = cache(
   async (type: string): Promise<CollegeListItem[]> => {
     const supabase = createAdminClientISR(ISR_COLLEGE);
-    const { data } = await supabase
-      .from('colleges')
-      .select(LISTING_SELECT)
-      .eq('status', 'active')
-      .ilike('type', type)
-      .order('arch_index_score', { ascending: false, nullsFirst: false });
+    const { data } = await listingQuery(supabase, (q) =>
+      q.eq('status', 'active').ilike('type', type).order('arch_index_score', { ascending: false, nullsFirst: false })
+    );
     return (data ?? []) as CollegeListItem[];
   }
 );
@@ -187,15 +233,12 @@ export const getCollegesByType = cache(
 export const getCollegesByAccreditation = cache(
   async (filter: string): Promise<CollegeListItem[]> => {
     const supabase = createAdminClientISR(ISR_COLLEGE);
-    let query = supabase.from('colleges').select(LISTING_SELECT).eq('status', 'active');
-
-    if (filter === 'coa-approved') {
-      query = query.eq('coa_approved', true);
-    } else if (filter === 'naac-a-plus') {
-      query = query.in('naac_grade', ['A++', 'A+']);
-    }
-
-    const { data } = await query.order('arch_index_score', { ascending: false, nullsFirst: false });
+    const { data } = await listingQuery(supabase, (q) => {
+      let query = q.eq('status', 'active');
+      if (filter === 'coa-approved') query = query.eq('coa_approved', true);
+      else if (filter === 'naac-a-plus') query = query.in('naac_grade', ['A++', 'A+']);
+      return query.order('arch_index_score', { ascending: false, nullsFirst: false });
+    });
     return (data ?? []) as CollegeListItem[];
   }
 );
@@ -575,13 +618,13 @@ export const getCollegesByFeeRange = cache(async (rangeKey: FeeRangeKey): Promis
   const range = FEE_RANGES[rangeKey];
   if (!range) return [];
   const supabase = createAdminClientISR(ISR_EXAM_HUB);
-  const { data, error } = await supabase
-    .from('colleges')
-    .select(LISTING_SELECT)
-    .eq('status', 'active')
-    .gte('annual_fee_approx', range.min)
-    .lte('annual_fee_approx', range.max)
-    .order('arch_index_score', { ascending: false, nullsFirst: false });
+  const { data, error } = await listingQuery(supabase, (q) =>
+    q
+      .eq('status', 'active')
+      .gte('annual_fee_approx', range.min)
+      .lte('annual_fee_approx', range.max)
+      .order('arch_index_score', { ascending: false, nullsFirst: false })
+  );
   if (error) return [];
   return (data ?? []) as CollegeListItem[];
 });

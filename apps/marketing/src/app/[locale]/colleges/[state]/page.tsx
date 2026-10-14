@@ -5,7 +5,7 @@ import { Box } from '@mui/material';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateStateListingMetadata } from '@/lib/college-hub/seo';
 import { generateListingBreadcrumbSchema } from '@/lib/college-hub/schema-markup';
-import { getStateColleges } from '@/lib/college-hub/queries';
+import { getActiveStates, getStateColleges } from '@/lib/college-hub/queries';
 import { STATE_NAMES } from '@/lib/college-hub/constants';
 import { toListingCollege } from '@/lib/college-hub/listing-filter';
 import StateCollegeListing from '@/components/college-hub/StateCollegeListing';
@@ -41,7 +41,10 @@ export default async function StateCollegesPage({ params: { locale, state } }: P
   setRequestLocale(locale);
 
   const stateName = stateNameOf(state);
-  const colleges = await getStateColleges(state);
+  const [colleges, states] = await Promise.all([
+    getStateColleges(state),
+    getActiveStates().catch(() => []),
+  ]);
   if (colleges.length === 0) notFound();
 
   const breadcrumb = generateListingBreadcrumbSchema([
@@ -53,8 +56,8 @@ export default async function StateCollegesPage({ params: { locale, state } }: P
   return (
     <>
       <JsonLd data={breadcrumb} />
-      <Box sx={{ py: { xs: 1, sm: 4 } }}>
-        <StateCollegeListing colleges={colleges.map(toListingCollege)} state={state} stateName={stateName} />
+      <Box>
+        <StateCollegeListing colleges={colleges.map(toListingCollege)} state={state} stateName={stateName} states={states} />
       </Box>
     </>
   );

@@ -123,22 +123,47 @@ export const FEE_CATEGORY_LABELS: Record<string, string> = {
 export const NAAC_GRADES = ['A++', 'A+', 'A', 'B++', 'B+', 'B'] as const;
 
 // ─── Sort Options ────────────────────────────────────────────────────────────
+// Labels follow the directory copy guide: "Recommended" is the default.
 export const SORT_OPTIONS = [
-  { value: 'arch_index', label: 'Relevance' },
-  { value: 'placement_high', label: 'Highest Placement' },
-  { value: 'fee_low', label: 'Fee: Low to High' },
-  { value: 'fee_high', label: 'Fee: High to Low' },
-  { value: 'naac_grade', label: 'NAAC Grade' },
-  { value: 'name', label: 'Name (A-Z)' },
-  { value: 'nirf_rank', label: 'NIRF Rank' },
+  { value: 'arch_index', label: 'Recommended' },
+  { value: 'fee_low', label: 'Fee: low to high' },
+  { value: 'fee_high', label: 'Fee: high to low' },
+  { value: 'rating_high', label: 'Highest rated' },
+  { value: 'nirf_rank', label: 'NIRF rank' },
+  { value: 'placement_high', label: 'Highest package' },
+  { value: 'name', label: 'Name (A to Z)' },
 ] as const;
 
 // ─── College Type Options ────────────────────────────────────────────────────
+// The DB mixes cases ("Private" and "private"); filters match case-insensitively.
 export const COLLEGE_TYPES = [
-  { value: 'Government', label: 'Government' },
-  { value: 'Private', label: 'Private' },
-  { value: 'Deemed', label: 'Deemed University' },
-  { value: 'Government Aided', label: 'Government Aided' },
+  { value: 'Government', label: 'Government', short: 'Govt' },
+  { value: 'Private', label: 'Private', short: 'Private' },
+  { value: 'Deemed', label: 'Deemed university', short: 'Deemed' },
+  { value: 'Government Aided', label: 'Government aided', short: 'Aided' },
+] as const;
+
+// ─── Directory ───────────────────────────────────────────────────────────────
+export const COMPARE_MAX = 4;
+
+/**
+ * Entrance exam filter options. accepted_exams spells JEE three ways
+ * ("JEE Main", "JEE Main Paper 2", "JEE_PAPER_2"); each option lists every
+ * spelling it matches. The value stays JEE_PAPER_2 so old URLs keep working.
+ */
+export const EXAM_FILTERS = [
+  { value: 'NATA', label: 'NATA', short: 'NATA', matches: ['NATA'] },
+  { value: 'JEE_PAPER_2', label: 'JEE Main Paper 2', short: 'JEE P2', matches: ['JEE_PAPER_2', 'JEE Main Paper 2', 'JEE Main'] },
+] as const;
+
+export const RATING_OPTIONS = [4.5, 4, 3.5] as const;
+
+/** Fee presets of the directory filter (annual fee, rupees). */
+export const DIRECTORY_FEE_PRESETS = [
+  { label: 'Under ₹1L', minFee: undefined, maxFee: 100000 },
+  { label: '₹1L to ₹2L', minFee: 100000, maxFee: 200000 },
+  { label: '₹2L to ₹3L', minFee: 200000, maxFee: 300000 },
+  { label: 'Above ₹3L', minFee: 300000, maxFee: undefined },
 ] as const;
 
 // ─── Page size ───────────────────────────────────────────────────────────────

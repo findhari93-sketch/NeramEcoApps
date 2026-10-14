@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { usePathname } from 'next/navigation';
+import { isHubRoute } from '@/components/college-hub/hub-routes';
 import { useFirebaseAuth } from '@neram/auth';
 import { openTawkChat } from '@/lib/tawk';
 import {
@@ -391,6 +392,9 @@ export default function GeneralChatbot() {
             position: 'fixed',
             bottom: STICKY_CTA_PATH.test(pathname ?? '')
               ? { xs: OVER_STICKY_CTA_BOTTOM, md: FAB_BOTTOM }
+              : isHubRoute(pathname ?? '')
+                ? // Clears the College Hub bottom nav (64px) and the compare tray above it.
+                  { xs: 'calc(148px + env(safe-area-inset-bottom))', md: FAB_BOTTOM }
               : achievementVisible
                 ? { xs: 60, md: FAB_BOTTOM }
                 : FAB_BOTTOM,

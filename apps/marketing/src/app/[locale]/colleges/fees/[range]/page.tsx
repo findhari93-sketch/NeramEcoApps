@@ -1,11 +1,11 @@
 import { Metadata } from 'next';
-import { Container, Typography, Box, Grid, Chip, Button } from '@mui/material';
-import Link from 'next/link';
+import { Box } from '@mui/material';
 import { notFound } from 'next/navigation';
 import { setRequestLocale } from 'next-intl/server';
 import { getCollegesByFeeRange, FEE_RANGES, type FeeRangeKey } from '@/lib/college-hub/queries';
-import CollegeListingCard from '@/components/college-hub/CollegeListingCard';
-import Breadcrumbs from '@/components/seo/Breadcrumbs';
+import DirectoryListing from '@/components/college-hub/directory/DirectoryListing';
+import { toListingCollege } from '@/lib/college-hub/listing-filter';
+import { CATEGORY_INDEX_HREF, relatedCategories } from '@/lib/college-hub/categories';
 
 export const revalidate = 86400;
 
@@ -38,53 +38,27 @@ export default async function CollegeFeeRangePage({
   if (!rangeInfo) notFound();
 
   const colleges = await getCollegesByFeeRange(params.range as FeeRangeKey);
+  // The other fee bands lead the "Also browse" chips.
+  const otherRanges = Object.entries(FEE_RANGES)
+    .filter(([key]) => key !== params.range)
+    .map(([key, info]) => ({ label: info.label, href: `/colleges/fees/${key}` }));
 
   return (
-    <Container maxWidth="lg" sx={{ py: { xs: 3, sm: 4 } }}>
-      <Breadcrumbs items={[
-        { name: 'Colleges', href: '/colleges' },
-        { name: rangeInfo.label },
-      ]} />
-      <Box sx={{ mb: 3 }}>
-        <Chip label="Fee Filter" color="primary" sx={{ mb: 1 }} />
-        <Typography variant="h1" sx={{ fontSize: { xs: '1.5rem', sm: '2rem' }, fontWeight: 900, mb: 1 }}>
-          B.Arch Colleges {rangeInfo.label}
-        </Typography>
-        <Typography color="text.secondary" variant="body2">
-          {colleges.length} COA-approved B.Arch colleges in India with annual fees{' '}
-          {rangeInfo.label.toLowerCase()}. Sorted by Neram ArchIndex score.
-        </Typography>
-      </Box>
-
-      {/* Fee range navigation */}
-      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 3 }}>
-        {Object.entries(FEE_RANGES).map(([key, info]) => (
-          <Button
-            key={key}
-            size="small"
-            variant={key === params.range ? 'contained' : 'outlined'}
-            component={Link}
-            href={`/colleges/fees/${key}`}
-            sx={{ fontSize: '0.75rem' }}
-          >
-            {info.label}
-          </Button>
-        ))}
-      </Box>
-
-      {colleges.length === 0 ? (
-        <Box sx={{ textAlign: 'center', py: 6 }}>
-          <Typography color="text.secondary">No colleges found in this fee range yet.</Typography>
-        </Box>
-      ) : (
-        <Grid container spacing={2}>
-          {colleges.map((college) => (
-            <Grid item xs={12} sm={6} md={4} key={college.id}>
-              <CollegeListingCard college={college} />
-            </Grid>
-          ))}
-        </Grid>
-      )}
-    </Container>
+    <Box>
+      <DirectoryListing
+        mode="category"
+        colleges={colleges.map(toListingCollege)}
+        breadcrumbs={[{ name: 'Colleges', href: '/colleges' }, { name: rangeInfo.label }]}
+        category={{
+          eyebrow: 'Category · Annual fee',
+          title: `B.Arch Colleges ${rangeInfo.label}`,
+          shortTitle: rangeInfo.label,
+          subtitle: `${colleges.length} B.Arch colleges in India with annual fees ${rangeInfo.label.toLowerCase()}. Fees are tuition only.`,
+          related: relatedCategories(`/colleges/fees/${params.range}`, otherRanges, 6),
+        }}
+        hide={['fee']}
+        locked={{ label: `Fee: ${rangeInfo.label}`, changeHref: CATEGORY_INDEX_HREF }}
+      />
+    </Box>
   );
 }

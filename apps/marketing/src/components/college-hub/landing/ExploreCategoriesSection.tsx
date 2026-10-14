@@ -24,7 +24,7 @@ function CategoryColumn({
     <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2.5, height: '100%' }}>
       <Typography
         variant="caption"
-        sx={{ fontWeight: 700, color: 'warning.main', textTransform: 'uppercase', letterSpacing: 1, mb: 1.5, display: 'block' }}
+        sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 1, mb: 1.5, display: 'block' }}
       >
         {title}
       </Typography>
@@ -61,7 +61,8 @@ function CategoryColumn({
 }
 
 export default function ExploreCategoriesSection({ stateData, counselingData, cityData }: ExploreCategoriesSectionProps) {
-  const stateItems = stateData.slice(0, 10).map((s) => ({
+  // Every state with colleges (about 30), so the list itself is the "all states" page.
+  const stateItems = stateData.map((s) => ({
     label: s.state,
     href: `/colleges/${s.state_slug}`,
     count: s.count,
@@ -100,10 +101,10 @@ export default function ExploreCategoriesSection({ stateData, counselingData, ci
   }));
 
   return (
-    <Box sx={{ py: { xs: 4, sm: 6 }, bgcolor: '#f8fafc' }}>
+    <Box id="explore" component="section" aria-labelledby="explore-heading" sx={{ py: { xs: 4, sm: 6 }, bgcolor: '#f8fafc', scrollMarginTop: 72 }}>
       <Container maxWidth="lg">
         <Box sx={{ textAlign: 'center', mb: { xs: 3, sm: 4 } }}>
-          <Typography variant="h2" sx={{ fontSize: { xs: '1.4rem', sm: '1.75rem' }, fontWeight: 800 }}>
+          <Typography id="explore-heading" variant="h2" sx={{ fontSize: { xs: '1.4rem', sm: '1.75rem' }, fontWeight: 800 }}>
             Explore Architecture Colleges
           </Typography>
           <Typography variant="body1" color="text.secondary" sx={{ mt: 0.75 }}>
@@ -113,21 +114,21 @@ export default function ExploreCategoriesSection({ stateData, counselingData, ci
 
         <Grid container spacing={2}>
           <Grid item xs={12} sm={6} md={3}>
-            <CategoryColumn title="📍 By State" items={stateItems} viewAllHref="/colleges" viewAllLabel="All states" />
+            <CategoryColumn title="By state" items={stateItems} />
           </Grid>
           <Grid item xs={12} sm={6} md={3}>
-            <CategoryColumn title="📝 By Counseling" items={counselingItems} />
+            <CategoryColumn title="By counselling" items={counselingItems} />
           </Grid>
           <Grid item xs={12} sm={6} md={3}>
             <Stack gap={2}>
-              <CategoryColumn title="🏆 Rankings" items={rankingItems} />
-              <CategoryColumn title="🏙️ By City" items={cityItems} />
+              <CategoryColumn title="Rankings and approvals" items={rankingItems} />
+              <CategoryColumn title="By city" items={cityItems} />
             </Stack>
           </Grid>
           <Grid item xs={12} sm={6} md={3}>
             <Stack gap={2}>
-              <CategoryColumn title="💰 By Fee Range" items={feeItems} />
-              <CategoryColumn title="🏫 By Type" items={typeItems} />
+              <CategoryColumn title="By fee range" items={feeItems} />
+              <CategoryColumn title="By college type" items={typeItems} />
             </Stack>
           </Grid>
         </Grid>

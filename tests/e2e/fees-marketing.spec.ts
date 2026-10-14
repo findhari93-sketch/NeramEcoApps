@@ -2,10 +2,8 @@ import { test, expect, type Page } from '@playwright/test';
 import { assertNoHorizontalOverflow, assertTouchTargetSize } from '../utils/mobile-helpers';
 
 /**
- * Header "Join Now" + "View fees" and the light /fees page.
- *
- * Students look for the fee before they fill the application form, so the
- * header links to /fees and the page shows prices first with only a short FAQ.
+ * Header "Join Now" + "Course fees" (About menu, "View fees" in the phone
+ * drawer) and the light /fees page, which shows prices first with only a short FAQ.
  * The fee API is mocked so the test does not depend on what staff set in
  * Admin > Fee Structures.
  */
@@ -63,43 +61,36 @@ const HYDRATE = { timeout: 60_000 };
 
 test.describe.configure({ mode: 'default', timeout: 120_000 });
 
-test.describe('Header: Fees + Join Now', () => {
-  test('desktop: new visitor sees Fees beside Join Now on one line', async ({ page }) => {
+test.describe('Header: Course fees + Join Now', () => {
+  test('desktop: Course fees sits in the About menu, Join Now stays in the bar', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await mockFees(page, PLANS);
     await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     const banner = page.locator('header').first();
-    const joinNow = banner.getByRole('link', { name: 'Join Now', exact: true });
-    await expect(joinNow).toBeVisible();
+    await expect(banner.getByRole('link', { name: 'Join Now', exact: true })).toBeVisible();
     await expect(banner.getByRole('link', { name: 'Pay & Join Now' })).toHaveCount(0);
-
-    const feesLink = banner.getByRole('link', { name: 'Fees', exact: true });
-    await expect(feesLink).toBeVisible();
-
-    // Same row, Fees first, and the toolbar keeps its 64px height.
-    const [fees, join, bar] = await Promise.all([
-      feesLink.boundingBox(),
-      joinNow.boundingBox(),
-      banner.locator('.MuiToolbar-root').first().boundingBox(),
-    ]);
-    expect(Math.abs(fees!.y + fees!.height / 2 - (join!.y + join!.height / 2))).toBeLessThanOrEqual(2);
-    expect(fees!.x + fees!.width).toBeLessThanOrEqual(join!.x);
+    // The toolbar no longer carries its own Fees button, and keeps its 64px height.
+    await expect(banner.getByRole('link', { name: 'Fees', exact: true })).toHaveCount(0);
+    const bar = await banner.locator('.MuiToolbar-root').first().boundingBox();
     expect(bar!.height).toBeLessThanOrEqual(64);
 
-    await feesLink.click();
+    // The About button does nothing until the header hydrates, so retry the click.
+    const courseFees = page.getByRole('link', { name: 'Course fees' });
+    await expect(async () => {
+      if (!(await courseFees.isVisible())) await banner.getByRole('button', { name: /About/ }).click();
+      await expect(courseFees).toBeVisible({ timeout: 3000 });
+    }).toPass(HYDRATE);
+    await courseFees.click();
     await expect(page).toHaveURL(/\/fees$/, HYDRATE);
-    // The link hides itself on the page it points to.
-    await expect(banner.getByRole('link', { name: 'Fees', exact: true })).toHaveCount(0);
   });
 
-  test('1024px: Fees and Join Now fit without wrapping or overflow', async ({ page }) => {
+  test('1024px: Join Now fits without wrapping or overflow', async ({ page }) => {
     await page.setViewportSize({ width: 1024, height: 768 });
     await mockFees(page, PLANS);
     await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     const banner = page.locator('header').first();
-    await expect(banner.getByRole('link', { name: 'Fees', exact: true })).toBeVisible();
     const join = await banner.getByRole('link', { name: 'Join Now', exact: true }).boundingBox();
     expect(join!.height).toBeLessThan(50);
     await assertNoHorizontalOverflow(page);

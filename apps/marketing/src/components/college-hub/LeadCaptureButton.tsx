@@ -6,8 +6,8 @@ import {
   DialogContent, DialogTitle, FormControlLabel, Stack, TextField, Typography,
 } from '@mui/material';
 import SchoolIcon from '@mui/icons-material/School';
-import { useFirebaseAuth } from '@neram/auth';
 import PincodeField from './PincodeField';
+import { useCollegeLead } from './useCollegeLead';
 
 interface LeadCaptureButtonProps {
   collegeId: string;
@@ -15,67 +15,23 @@ interface LeadCaptureButtonProps {
 }
 
 export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptureButtonProps) {
-  const { user } = useFirebaseAuth();
+  const { user, name, setName, phone, setPhone, consent, setConsent, submitting, error, success, submit } =
+    useCollegeLead(collegeId);
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [nataScore, setNataScore] = useState('');
   const [pincode, setPincode] = useState('');
   const [resolvedCity, setResolvedCity] = useState('');
   const [manualCity, setManualCity] = useState('');
   const [message, setMessage] = useState('');
-  const [consent, setConsent] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState(false);
 
-  // Prefill from Firebase profile when the user is signed in. Fields stay editable
-  // so a parent submitting on a student's behalf can correct any values.
+  // Prefill the email from the Firebase profile (name and phone come from the hook).
   useEffect(() => {
-    if (!user) return;
-    if (user.name && !name) setName(user.name);
-    if (user.email && !email) setEmail(user.email);
-    if (user.phone && !phone) {
-      const digits = user.phone.replace(/\D/g, '');
-      setPhone(digits.length > 10 ? digits.slice(-10) : digits);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (user?.email) setEmail((v) => v || user.email || '');
   }, [user]);
 
-  const handleSubmit = async () => {
-    if (!name.trim() || !phone || phone.length !== 10 || !consent) {
-      setError('Please fill in your name, a valid 10-digit phone number, and agree to share details.');
-      return;
-    }
-    setSubmitting(true);
-    setError('');
-    try {
-      const cityForSubmit = resolvedCity || manualCity || null;
-      const res = await fetch('/api/colleges/leads', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          college_id: collegeId,
-          name: name.trim(),
-          phone,
-          email: email || null,
-          nata_score: nataScore ? parseFloat(nataScore) : null,
-          city: cityForSubmit,
-          message: message || null,
-          firebase_uid: user?.id ?? null,
-          consent_given: true,
-        }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error);
-      setSuccess(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to submit. Please try again.');
-    } finally {
-      setSubmitting(false);
-    }
-  };
+  const handleSubmit = () =>
+    submit({ email, nataScore, city: resolvedCity || manualCity || null, message });
 
   if (success) {
     return (
@@ -133,7 +89,7 @@ export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptur
             <TextField
               label="Mobile number *"
               value={phone}
-              onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+              onChange={(e) => setPhone(e.target.value)}
               fullWidth
               size="small"
               inputProps={{ inputMode: 'numeric' }}

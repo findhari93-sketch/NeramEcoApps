@@ -260,14 +260,23 @@ export interface CollegeListItem {
   highlights: string[] | null;
   verified: boolean;
   data_completeness: number;
+  /** From the college_listing view; absent where the view is not migrated yet. */
+  review_avg?: number | null;
+  review_count?: number | null;
+  cutoff_value?: number | null;
+  cutoff_type?: 'rank' | 'score' | 'percentile' | null;
+  cutoff_system?: string | null;
+  cutoff_year?: string | null;
 }
 
 // Filter options for listing pages
+// type, exam, city and naacGrade accept comma-separated lists ("Private,Deemed");
+// naacGrade may include 'none' for colleges without a grade.
 export interface CollegeFilters {
   state?: string;
   type?: string;
   counselingSystem?: CounselingSystem;
-  exam?: 'NATA' | 'JEE_PAPER_2';
+  exam?: string;
   city?: string;
   rating?: number;
   minFee?: number;
@@ -275,7 +284,9 @@ export interface CollegeFilters {
   naacGrade?: string;
   coa?: boolean;
   search?: string;
-  sortBy?: 'arch_index' | 'nirf_rank' | 'fee_low' | 'fee_high' | 'name' | 'placement_high' | 'naac_grade';
+  /** First letter of the name (A to Z jump). */
+  letter?: string;
+  sortBy?: 'arch_index' | 'nirf_rank' | 'fee_low' | 'fee_high' | 'name' | 'placement_high' | 'naac_grade' | 'rating_high';
   page?: number;
   limit?: number;
 }

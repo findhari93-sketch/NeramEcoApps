@@ -1,159 +1,127 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { Box, IconButton, Tooltip } from '@mui/material';
-import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import { useEffect, useState } from 'react';
+import { Box } from '@mui/material';
+import TuneIcon from '@mui/icons-material/Tune';
 import type { ReactNode } from 'react';
 
+/** Content width of the directory (canvas: 1360px container). */
+export const DIRECTORY_MAX_WIDTH = 1360;
+
+const SIDEBAR_WIDTH = 280;
+const COLLAPSED_WIDTH = 56;
+const COLLAPSE_KEY = 'college_filter_collapsed';
+/** Site header height on desktop (Header.tsx Toolbar minHeight md). */
+const HEADER_HEIGHT = 64;
+
+export interface SidebarControls {
+  /** Collapses the rail to a slim strip (the button lives in the rail's header row). */
+  onCollapse: () => void;
+}
+
 interface CollegeListingLayoutProps {
-  sidebar: ReactNode;
+  /** Full-width white band above the filters and results (breadcrumb, title, search, stats). */
+  hero?: ReactNode;
+  sidebar: (controls: SidebarControls) => ReactNode;
+  /** Active filter count, shown on the collapsed strip. */
+  activeFilters?: number;
   children: ReactNode;
 }
 
-const SIDEBAR_WIDTH = 280;
-const COLLAPSED_WIDTH = 44;
-const GAP = 24;
-const OUTER_PAD = 24;
-const COLLAPSE_KEY = 'college_filter_collapsed';
-const FIXED_TOP = 72;
-
-export default function CollegeListingLayout({ sidebar, children }: CollegeListingLayoutProps) {
+/**
+ * Directory layout (canvas: Desktop · List view): a full-width hero band, then a
+ * 1360px container with a sticky 280px filter card beside the results. Phones
+ * get the hero and the results only (filters live in the bottom sheet).
+ */
+export default function CollegeListingLayout({ hero, sidebar, activeFilters = 0, children }: CollegeListingLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
-  const [nearFooter, setNearFooter] = useState(false);
-  const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     try {
       if (window.localStorage.getItem(COLLAPSE_KEY) === '1') setCollapsed(true);
     } catch {
-      // Ignore storage errors
+      // Storage blocked: start expanded.
     }
   }, []);
 
-  useEffect(() => {
-    const node = endRef.current;
-    if (!node) return;
-    let ticking = false;
-    const check = () => {
-      ticking = false;
-      const rect = node.getBoundingClientRect();
-      // Hide whenever the sentinel has reached or passed the viewport bottom.
-      // Covers both "footer entering from below" and "scrolled deep into footer".
-      const shouldHide = rect.top < window.innerHeight;
-      setNearFooter((prev) => (prev === shouldHide ? prev : shouldHide));
-    };
-    const onScroll = () => {
-      if (!ticking) {
-        ticking = true;
-        window.requestAnimationFrame(check);
-      }
-    };
-    check();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    window.addEventListener('resize', onScroll);
-    return () => {
-      window.removeEventListener('scroll', onScroll);
-      window.removeEventListener('resize', onScroll);
-    };
-  }, []);
-
-  const toggleCollapsed = () => {
-    setCollapsed((prev) => {
-      const next = !prev;
-      try {
-        window.localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0');
-      } catch {
-        // Ignore storage errors
-      }
-      return next;
-    });
+  const setAndStore = (next: boolean) => {
+    setCollapsed(next);
+    try {
+      window.localStorage.setItem(COLLAPSE_KEY, next ? '1' : '0');
+    } catch {
+      // Ignore storage errors.
+    }
   };
 
-  const sidebarWidth = collapsed ? COLLAPSED_WIDTH : SIDEBAR_WIDTH;
-  const contentOffset = OUTER_PAD + sidebarWidth + GAP;
+  const stickyTop = `calc(var(--broadcast-banner-height, 0px) + ${HEADER_HEIGHT + 16}px)`;
 
   return (
     <>
-      {/* Desktop: fixed left sidebar pinned to viewport (hidden near footer) */}
-      <Box
-        component="aside"
-        aria-hidden={nearFooter}
-        sx={{
-          display: { xs: 'none', md: 'flex' },
-          flexDirection: 'column',
-          position: 'fixed',
-          top: FIXED_TOP,
-          left: OUTER_PAD,
-          width: sidebarWidth,
-          height: `calc(100vh - ${FIXED_TOP + 16}px)`,
-          bgcolor: 'background.paper',
-          border: '1px solid',
-          borderColor: 'divider',
-          borderRadius: 2,
-          transition: 'width 0.2s ease, opacity 0.18s ease, transform 0.18s ease',
-          zIndex: 10,
-          overflow: 'hidden',
-          opacity: nearFooter ? 0 : 1,
-          transform: nearFooter ? 'translateX(-8px)' : 'translateX(0)',
-          pointerEvents: nearFooter ? 'none' : 'auto',
-        }}
-      >
-        {/* Collapse toggle */}
+      {hero && (
+        <Box sx={{ bgcolor: 'background.paper', borderBottom: { md: '1px solid' }, borderColor: { md: 'divider' } }}>
+          <Box sx={{ maxWidth: DIRECTORY_MAX_WIDTH, mx: 'auto', px: { xs: 2, md: 4 }, pt: { xs: 0, md: 2.5 }, pb: { xs: 0, md: 3.5 } }}>{hero}</Box>
+        </Box>
+      )}
+
+      <Box sx={{ bgcolor: (t) => (t.palette.mode === 'light' ? t.palette.grey[50] : t.palette.background.default) }}>
         <Box
           sx={{
+            maxWidth: DIRECTORY_MAX_WIDTH,
+            mx: 'auto',
+            px: { xs: 2, md: 4 },
+            pt: { xs: 0, md: 3 },
+            pb: { xs: 3, md: 7 },
             display: 'flex',
-            justifyContent: collapsed ? 'center' : 'flex-end',
-            p: 0.75,
-            borderBottom: collapsed ? 'none' : '1px solid',
-            borderColor: 'divider',
+            alignItems: 'flex-start',
+            gap: 3.5,
           }}
         >
-          <Tooltip title={collapsed ? 'Expand filters' : 'Collapse filters'} placement="right">
-            <IconButton
-              size="small"
-              onClick={toggleCollapsed}
-              aria-label={collapsed ? 'Expand filters' : 'Collapse filters'}
-              sx={{
-                width: 28,
-                height: 28,
-                bgcolor: 'grey.100',
-                '&:hover': { bgcolor: 'grey.200' },
-              }}
-            >
-              {collapsed ? <ChevronRightIcon fontSize="small" /> : <ChevronLeftIcon fontSize="small" />}
-            </IconButton>
-          </Tooltip>
-        </Box>
+          <Box
+            component="aside"
+            aria-label={collapsed ? 'Filters (collapsed)' : undefined}
+            sx={{
+              display: { xs: 'none', md: 'block' },
+              flex: `0 0 ${collapsed ? COLLAPSED_WIDTH : SIDEBAR_WIDTH}px`,
+              width: collapsed ? COLLAPSED_WIDTH : SIDEBAR_WIDTH,
+              position: 'sticky',
+              top: stickyTop,
+              maxHeight: `calc(100vh - var(--broadcast-banner-height, 0px) - ${HEADER_HEIGHT + 32}px)`,
+              overflowY: 'auto',
+              overscrollBehavior: 'contain',
+              bgcolor: 'background.paper',
+              border: '1px solid',
+              borderColor: 'divider',
+              borderRadius: 2,
+              scrollbarWidth: 'thin',
+            }}
+          >
+            {collapsed ? (
+              <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, py: 1.5 }}>
+                <Box
+                  component="button"
+                  type="button"
+                  onClick={() => setAndStore(false)}
+                  aria-label={activeFilters ? `Expand filters, ${activeFilters} active` : 'Expand filters'}
+                  sx={{ position: 'relative', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid', borderColor: 'divider', borderRadius: 1.5, bgcolor: 'background.paper', color: 'text.primary', cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
+                >
+                  <TuneIcon aria-hidden sx={{ fontSize: 20 }} />
+                  {activeFilters > 0 && (
+                    <Box component="span" sx={{ position: 'absolute', top: -6, right: -6, minWidth: 18, height: 18, px: 0.5, boxSizing: 'border-box', borderRadius: 9, bgcolor: 'primary.main', color: 'primary.contrastText', fontSize: '0.68rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      {activeFilters}
+                    </Box>
+                  )}
+                </Box>
+                <Box component="span" aria-hidden sx={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'text.secondary', mt: 0.5 }}>
+                  Filters
+                </Box>
+              </Box>
+            ) : (
+              sidebar({ onCollapse: () => setAndStore(true) })
+            )}
+          </Box>
 
-        {/* Filter content (hidden when collapsed) */}
-        <Box
-          sx={{
-            flex: 1,
-            minHeight: 0,
-            overflowY: 'auto',
-            display: collapsed ? 'none' : 'block',
-          }}
-        >
-          {sidebar}
+          <Box sx={{ flex: '1 1 auto', minWidth: 0 }}>{children}</Box>
         </Box>
-      </Box>
-
-      {/* Content column: offset by fixed sidebar width on desktop */}
-      <Box
-        sx={{
-          ml: { xs: 0, md: `${contentOffset}px` },
-          mr: { xs: 0, md: `${OUTER_PAD}px` },
-          px: { xs: 2, sm: 3, md: 0 },
-          transition: 'margin-left 0.2s ease',
-          minWidth: 0,
-        }}
-      >
-        {/* Mobile: sidebar renders its own FAB + drawer here */}
-        <Box sx={{ display: { xs: 'block', md: 'none' } }}>{sidebar}</Box>
-        {children}
-        {/* Sentinel: hides the fixed sidebar when it enters viewport (i.e. near footer) */}
-        <Box ref={endRef} aria-hidden sx={{ height: 1, width: '100%' }} />
       </Box>
     </>
   );
