@@ -13,10 +13,14 @@ import {
   DialogTitle,
   FormControlLabel,
   MenuItem,
+  Radio,
+  RadioGroup,
   TextField,
   Typography,
 } from '@neram/ui';
 import {
+  isOwnLinkDemo,
+  pickDemoRoles,
   defaultStartFor,
   formatDemoDateTime,
   formatDemoPreference,
@@ -37,6 +41,8 @@ export interface ScheduleSubmit {
   organizerUpn?: string;
   conflictNote?: string;
   parentEmail?: string;
+  meeting?: 'teams' | 'link';
+  joinUrl?: string;
 }
 
 function istTime(d: Date): string {
@@ -86,17 +92,19 @@ export default function ScheduleDialog({
   }, [mode, request, settings.schedule]);
 
   const initialTeam = mode === 'reschedule' && request.staff_upns?.length ? request.staff_upns : people.map((p) => p.upn);
-  const initialTutor =
-    (mode === 'reschedule' && request.tutor_upn) ||
-    (settings.defaultTutorUpn && initialTeam.includes(settings.defaultTutorUpn) ? settings.defaultTutorUpn : initialTeam[0]) ||
-    '';
+  const initialRoles = pickDemoRoles(settings, initialTeam, {
+    tutor: mode === 'reschedule' ? request.tutor_upn : null,
+    organizer: request.organizer_upn,
+  });
 
   const [date, setDate] = useState(initial.date);
   const [time, setTime] = useState(initial.time);
   const [minutes, setMinutes] = useState(request.scheduled_minutes || settings.schedule.durationMinutes);
   const [team, setTeam] = useState<string[]>(initialTeam);
-  const [tutorUpn, setTutorUpn] = useState(initialTutor);
-  const [organizerUpn, setOrganizerUpn] = useState(request.organizer_upn || initialTutor);
+  const [tutorUpn, setTutorUpn] = useState(initialRoles.tutor ?? '');
+  const [organizerUpn, setOrganizerUpn] = useState(initialRoles.organizer ?? '');
+  const [meeting, setMeeting] = useState<'teams' | 'link'>('teams');
+  const [joinUrl, setJoinUrl] = useState('');
   const [parentEmail, setParentEmail] = useState(request.parent_email || '');
   const [reason, setReason] = useState('');
   const [conflictNote, setConflictNote] = useState('');
@@ -108,14 +116,21 @@ export default function ScheduleDialog({
       setTime(initial.time);
       setReason('');
       setConflictNote('');
+      setMeeting('teams');
+      setJoinUrl('');
     }
   }, [open, initial]);
 
-  // Keep tutor and organizer inside the chosen team.
+  // Keep tutor and organizer inside the chosen team, falling back to the usual ones.
   useEffect(() => {
-    if (team.length && !team.includes(tutorUpn)) setTutorUpn(team[0]);
-    if (team.length && !team.includes(organizerUpn)) setOrganizerUpn(team.includes(tutorUpn) ? tutorUpn : team[0]);
-  }, [team, tutorUpn, organizerUpn]);
+    if (!team.length) return;
+    const roles = pickDemoRoles(settings, team, { tutor: tutorUpn, organizer: organizerUpn });
+    if (roles.tutor && roles.tutor !== tutorUpn) setTutorUpn(roles.tutor);
+    if (roles.organizer && roles.organizer !== organizerUpn) setOrganizerUpn(roles.organizer);
+  }, [team, tutorUpn, organizerUpn, settings]);
+
+  const ownLink = mode === 'confirm' && meeting === 'link';
+  const linkOk = /^https:\/\/[^\s/]+\.[^\s]+/.test(joinUrl.trim());
 
   const nameOf = (upn: string) => people.find((p) => p.upn === upn)?.name ?? upn;
   const start = date && /^\d{2}:\d{2}$/.test(time) ? istDateTime(date, time) : null;
@@ -138,6 +153,7 @@ export default function ScheduleDialog({
     !inPast &&
     (!reasonRequired || reason.trim().length > 2) &&
     (!needsConflictNote || conflictNote.trim().length > 2) &&
+    (!ownLink || linkOk) &&
     (mode === 'reschedule' || (team.length > 0 && !!tutorUpn && !!organizerUpn));
 
   return (
@@ -146,13 +162,42 @@ export default function ScheduleDialog({
       <DialogContent dividers>
         <Typography variant="body2" color="text.secondary">
           {request.name} asked for <b>{formatDemoPreference(request.preferred_date, request.preferred_window, settings.schedule)}</b>.
-          {mode === 'confirm'
-            ? ' Confirming creates the Teams meeting on the organizer’s calendar, invites the team and the student’s Gmail, and sends the WhatsApp confirmation.'
-            : ' Moving updates the same Teams meeting; everyone’s calendar gets the change and WhatsApp tells the student why.'}
+          {mode === 'reschedule'
+            ? isOwnLinkDemo(request)
+              ? ' This demo uses your own meeting link, so tell the student the new time yourself. The team still gets Neram Assistant reminders.'
+              : ' Moving updates the same Teams meeting; everyone’s calendar gets the change and WhatsApp tells the student why.'
+            : ownLink
+              ? ' With your own link, nothing is sent to the student: share the link yourself on WhatsApp. The team still gets Neram Assistant reminders.'
+              : ' Confirming creates the Teams meeting on the organizer’s calendar, invites the team and the student’s Gmail, and sends the WhatsApp confirmation.'}
         </Typography>
 
         {mode === 'confirm' && (
           <>
+            <SectionLabel>Meeting</SectionLabel>
+            <RadioGroup
+              row
+              value={meeting}
+              onChange={(e) => setMeeting(e.target.value as 'teams' | 'link')}
+              aria-label="Meeting"
+            >
+              <FormControlLabel value="teams" control={<Radio />} label="Create a Teams meeting" sx={{ minHeight: 44, mr: 3 }} />
+              <FormControlLabel value="link" control={<Radio />} label="Use my own link (Google Meet etc.)" sx={{ minHeight: 44 }} />
+            </RadioGroup>
+            {ownLink && (
+              <TextField
+                label="Meeting link"
+                value={joinUrl}
+                onChange={(e) => setJoinUrl(e.target.value)}
+                placeholder="https://meet.google.com/abc-defg-hij"
+                error={!!joinUrl.trim() && !linkOk}
+                helperText={joinUrl.trim() && !linkOk ? 'Paste the full link, starting with https://' : 'Saved on the request so the team can join from the desk'}
+                fullWidth
+                required
+                type="url"
+                sx={{ mt: 1 }}
+              />
+            )}
+
             <SectionLabel>Who is on this demo</SectionLabel>
             {people.length === 0 ? (
               <Alert severity="warning">Add the demo team in Demo settings first.</Alert>
@@ -195,8 +240,8 @@ export default function ScheduleDialog({
                     label="Organizer (whose calendar)"
                     value={team.includes(organizerUpn) ? organizerUpn : ''}
                     onChange={(e) => setOrganizerUpn(e.target.value)}
-                    helperText="The meeting lives on this calendar"
-                    disabled={!team.length}
+                    helperText={ownLink ? 'Not used with your own link' : 'The meeting lives on this calendar'}
+                    disabled={!team.length || ownLink}
                   >
                     {team.map((u) => (
                       <MenuItem key={u} value={u}>
@@ -288,7 +333,7 @@ export default function ScheduleDialog({
           />
         )}
 
-        {mode === 'confirm' && (
+        {mode === 'confirm' && !ownLink && (
           <TextField
             label="Parent email (optional)"
             type="email"
@@ -318,7 +363,7 @@ export default function ScheduleDialog({
           />
         )}
 
-        {!request.email && mode === 'confirm' && (
+        {!request.email && mode === 'confirm' && !ownLink && (
           <Alert severity="info" sx={{ mt: 2 }}>
             No email on this request, so only WhatsApp will carry the link.
           </Alert>
@@ -351,12 +396,14 @@ export default function ScheduleDialog({
                     organizerUpn,
                     conflictNote: conflictNote.trim() || undefined,
                     parentEmail: parentEmail.trim(),
+                    meeting,
+                    ...(ownLink ? { joinUrl: joinUrl.trim() } : {}),
                   }
                 : {}),
             })
           }
         >
-          {busy ? 'Saving' : mode === 'confirm' ? 'Confirm and send' : 'Move and notify'}
+          {busy ? 'Saving' : mode === 'confirm' ? (ownLink ? 'Confirm' : 'Confirm and send') : 'Move and notify'}
         </Button>
       </DialogActions>
     </Dialog>

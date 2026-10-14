@@ -21,6 +21,7 @@ export interface DeskSettings {
   /** The demo team. */
   hosts: DemoHost[];
   defaultTutorUpn: string | null;
+  defaultOrganizerUpn: string | null;
   schedule: DemoScheduleSettings;
   drawingWhatsApp: string;
 }

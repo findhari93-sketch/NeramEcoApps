@@ -20,6 +20,8 @@ import {
   demoIcs,
   resolveDemoSettings,
   publicDemoSettings,
+  pickDemoRoles,
+  isOwnLinkDemo,
   drawingWhatsAppLink,
   staffReminderPlan,
   demoTutorName,
@@ -243,6 +245,37 @@ describe('demo team', () => {
     expect(resolveDemoSettings({ hosts: team.hosts, defaultTutorUpn: 'gone@x.com' }).defaultTutorUpn).toBe(
       'haribabu@neramclasses.com',
     );
+  });
+
+  it('keeps a usual organizer only when they are on the team', () => {
+    const withOrganizer = resolveDemoSettings({
+      hosts: team.hosts,
+      defaultTutorUpn: 'haribabu@neramclasses.com',
+      defaultOrganizerUpn: ' TamilSelvan@NeramClasses.com ',
+    });
+    expect(withOrganizer.defaultOrganizerUpn).toBe('tamilselvan@neramclasses.com');
+    expect(resolveDemoSettings({ hosts: team.hosts, defaultOrganizerUpn: 'gone@x.com' }).defaultOrganizerUpn).toBeNull();
+    expect(publicDemoSettings(withOrganizer)).not.toHaveProperty('defaultOrganizerUpn');
+  });
+
+  it('picks tutor and organizer: explicit, then usual, then the tutor', () => {
+    const s = { defaultTutorUpn: 'hari@x', defaultOrganizerUpn: 'tamil@x' };
+    expect(pickDemoRoles(s, ['hari@x', 'tamil@x', 'shanthi@x'])).toEqual({ tutor: 'hari@x', organizer: 'tamil@x' });
+    expect(pickDemoRoles(s, ['hari@x', 'tamil@x', 'shanthi@x'], { organizer: 'Shanthi@X' })).toEqual({
+      tutor: 'hari@x',
+      organizer: 'shanthi@x',
+    });
+    // Usual organizer not on this demo: the tutor's calendar holds it.
+    expect(pickDemoRoles(s, ['hari@x', 'shanthi@x'])).toEqual({ tutor: 'hari@x', organizer: 'hari@x' });
+    // Usual tutor not on this demo: first ticked person; picks outside the team are ignored.
+    expect(pickDemoRoles(s, ['shanthi@x'], { tutor: 'nobody@x' })).toEqual({ tutor: 'shanthi@x', organizer: 'shanthi@x' });
+    expect(pickDemoRoles(s, [])).toEqual({ tutor: null, organizer: null });
+  });
+
+  it('tells an own-link demo from a Teams one', () => {
+    expect(isOwnLinkDemo({ teams_join_url: 'https://meet.google.com/abc', graph_event_id: null })).toBe(true);
+    expect(isOwnLinkDemo({ teams_join_url: 'https://teams.microsoft.com/l/x', graph_event_id: 'AAMk' })).toBe(false);
+    expect(isOwnLinkDemo({ teams_join_url: null, graph_event_id: null })).toBe(false);
   });
 
   it('names the tutor, falling back to the organizer', () => {

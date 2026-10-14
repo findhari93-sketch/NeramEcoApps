@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import {
   Alert,
+  Autocomplete,
+  Avatar,
   Box,
   Button,
   Checkbox,
@@ -20,6 +22,12 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
 import { resolveDemoSettings, type DemoHost, type DemoWindowDef } from '@neram/database/demo-schedule';
 
+interface StaffOption {
+  name: string;
+  email: string;
+  avatar_url: string | null;
+}
+
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 /**
@@ -33,6 +41,8 @@ export default function DemoSettingsDialog({ open, onClose, onSaved }: { open: b
   const [error, setError] = useState<string | null>(null);
   const [hosts, setHosts] = useState<DemoHost[]>([]);
   const [defaultTutor, setDefaultTutor] = useState('');
+  const [defaultOrganizer, setDefaultOrganizer] = useState('');
+  const [staff, setStaff] = useState<StaffOption[]>([]);
   const [windows, setWindows] = useState<DemoWindowDef[]>([]);
   const [daysAhead, setDaysAhead] = useState(7);
   const [closed, setClosed] = useState<number[]>([]);
@@ -51,6 +61,7 @@ export default function DemoSettingsDialog({ open, onClose, onSaved }: { open: b
         const s = resolveDemoSettings(d.settings);
         setHosts(s.hosts.length ? s.hosts : [{ upn: '', name: '', notifyNewRequests: true }]);
         setDefaultTutor(s.defaultTutorUpn || '');
+        setDefaultOrganizer(s.defaultOrganizerUpn || '');
         setWindows(s.schedule.windows);
         setDaysAhead(s.schedule.daysAhead);
         setClosed(s.schedule.closedWeekdays);
@@ -61,7 +72,14 @@ export default function DemoSettingsDialog({ open, onClose, onSaved }: { open: b
       })
       .catch(() => setError('Could not load the settings.'))
       .finally(() => setLoading(false));
+    // The picker list; typing an address still works if this fails.
+    fetch('/api/demo-requests/staff')
+      .then((r) => (r.ok ? r.json() : { staff: [] }))
+      .then((d) => setStaff(d.staff ?? []))
+      .catch(() => setStaff([]));
   }, [open]);
+
+  const setHost = (i: number, patch: Partial<DemoHost>) => setHosts(hosts.map((x, j) => (j === i ? { ...x, ...patch } : x)));
 
   const save = async () => {
     const cleanHosts = hosts.filter((h) => h.upn.trim());
@@ -86,6 +104,7 @@ export default function DemoSettingsDialog({ open, onClose, onSaved }: { open: b
             notifyNewRequests: h.notifyNewRequests,
           })),
           defaultTutorUpn: defaultTutor.trim().toLowerCase() || null,
+          defaultOrganizerUpn: defaultOrganizer.trim().toLowerCase() || null,
           windows,
           daysAhead,
           closedWeekdays: closed,
@@ -121,30 +140,60 @@ export default function DemoSettingsDialog({ open, onClose, onSaved }: { open: b
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                 Everyone who can be on a demo. At Confirm you tick who joins, pick the tutor (students see that name) and
-                whose calendar holds the meeting. Ticked people get the calendar invite and Neram Assistant reminders.
+                the organizer (whose calendar holds the Teams meeting). The usual ones are picked for you.
               </Typography>
               {hosts.map((h, i) => (
                 <Box
                   key={i}
-                  sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1.4fr 1fr auto auto 44px' }, gap: 1, mb: 1.5, alignItems: 'center' }}
+                  sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1.5fr 1fr auto auto auto 44px' }, gap: 1, mb: 1.5, alignItems: 'center' }}
                 >
-                  <TextField
-                    label="Microsoft address"
+                  <Autocomplete
+                    freeSolo
+                    options={staff.filter((o) => o.email === h.upn.trim().toLowerCase() || !hosts.some((x) => x.upn.trim().toLowerCase() === o.email))}
+                    getOptionLabel={(o) => (typeof o === 'string' ? o : o.email)}
+                    filterOptions={(opts, { inputValue }) => {
+                      const q = inputValue.trim().toLowerCase();
+                      return q ? opts.filter((o) => o.name.toLowerCase().includes(q) || o.email.includes(q)) : opts;
+                    }}
                     value={h.upn}
-                    onChange={(e) => setHosts(hosts.map((x, j) => (j === i ? { ...x, upn: e.target.value } : x)))}
-                    size="small"
+                    inputValue={h.upn}
+                    onInputChange={(_, v, reason) => reason !== 'reset' && setHost(i, { upn: v })}
+                    onChange={(_, v) => {
+                      if (!v) return setHost(i, { upn: '' });
+                      if (typeof v === 'string') return setHost(i, { upn: v });
+                      setHost(i, { upn: v.email, name: h.name.trim() || v.name.split(' ')[0] });
+                    }}
+                    renderOption={(props, o) => (
+                      <Box component="li" {...props} key={o.email} sx={{ display: 'flex', gap: 1.5, alignItems: 'center', minHeight: 48 }}>
+                        <Avatar src={o.avatar_url ?? undefined} alt="" sx={{ width: 32, height: 32 }}>
+                          {o.name.charAt(0)}
+                        </Avatar>
+                        <Box sx={{ minWidth: 0 }}>
+                          <Typography variant="body2" fontWeight={600} noWrap>
+                            {o.name}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" noWrap component="div">
+                            {o.email}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    )}
+                    renderInput={(params) => (
+                      <TextField {...params} label="Person (search our staff)" placeholder="Type a name" size="small" />
+                    )}
+                    noOptionsText="No staff match. You can type their Microsoft address."
                   />
                   <TextField
                     label="Name students see"
                     value={h.name}
-                    onChange={(e) => setHosts(hosts.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+                    onChange={(e) => setHost(i, { name: e.target.value })}
                     size="small"
                   />
                   <FormControlLabel
                     control={
                       <Checkbox
                         checked={h.notifyNewRequests}
-                        onChange={(e) => setHosts(hosts.map((x, j) => (j === i ? { ...x, notifyNewRequests: e.target.checked } : x)))}
+                        onChange={(e) => setHost(i, { notifyNewRequests: e.target.checked })}
                       />
                     }
                     label="Ping on new requests"
@@ -157,6 +206,15 @@ export default function DemoSettingsDialog({ open, onClose, onSaved }: { open: b
                       />
                     }
                     label="Usual tutor"
+                  />
+                  <FormControlLabel
+                    control={
+                      <Checkbox
+                        checked={!!h.upn && defaultOrganizer.toLowerCase() === h.upn.trim().toLowerCase()}
+                        onChange={(e) => setDefaultOrganizer(e.target.checked ? h.upn.trim().toLowerCase() : '')}
+                      />
+                    }
+                    label="Usual organizer"
                   />
                   <IconButton aria-label={`Remove ${h.name || 'member'}`} onClick={() => setHosts(hosts.filter((_, j) => j !== i))} sx={{ width: 44, height: 44 }}>
                     <DeleteIcon />

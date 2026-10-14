@@ -18,6 +18,8 @@ import {
   isOutsidePreference,
   formatDemoDateTime,
   drawingWhatsAppLink,
+  pickDemoRoles,
+  isOwnLinkDemo,
   type DemoRequest,
 } from '@neram/database';
 import { getRequestAdminId } from '@/lib/request-admin';
@@ -101,6 +103,17 @@ function parseMinutes(v: unknown, fallback: number): number {
 
 function text(v: unknown, max = 500): string {
   return typeof v === 'string' ? v.trim().slice(0, max) : '';
+}
+
+/** A pasted meeting link (Google Meet, Zoom, Teams): https only. */
+function meetingUrl(v: unknown): string | null {
+  const s = text(v, 500);
+  try {
+    const u = new URL(s);
+    return u.protocol === 'https:' && u.hostname.includes('.') ? u.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 function email(v: unknown): string | null {
@@ -193,12 +206,17 @@ export async function POST(req: Request, { params }: Params) {
         const requested = Array.isArray(body.teamUpns) ? (body.teamUpns as unknown[]).map((u) => text(u, 200).toLowerCase()) : [];
         const team = (requested.length ? requested : settings.hosts.map((h) => h.upn)).filter((u) => known.has(u));
         if (!team.length) throw new ActionError('Pick at least one person from the demo team.');
-        const fallbackTutor = settings.defaultTutorUpn && team.includes(settings.defaultTutorUpn) ? settings.defaultTutorUpn : team[0];
-        const tutorUpn = text(body.tutorUpn, 200).toLowerCase() || fallbackTutor;
-        const organizerUpn = text(body.organizerUpn, 200).toLowerCase() || tutorUpn;
-        if (!team.includes(tutorUpn)) throw new ActionError('The tutor must be one of the people on this demo.');
-        if (!team.includes(organizerUpn)) throw new ActionError('The organizer must be one of the people on this demo.');
+        const pickedTutor = text(body.tutorUpn, 200).toLowerCase();
+        const pickedOrganizer = text(body.organizerUpn, 200).toLowerCase();
+        if (pickedTutor && !team.includes(pickedTutor)) throw new ActionError('The tutor must be one of the people on this demo.');
+        if (pickedOrganizer && !team.includes(pickedOrganizer)) throw new ActionError('The organizer must be one of the people on this demo.');
+        const roles = pickDemoRoles(settings, team, { tutor: pickedTutor, organizer: pickedOrganizer || r.organizer_upn });
+        const tutorUpn = roles.tutor!;
+        const organizerUpn = roles.organizer!;
         const tutor = known.get(tutorUpn)!;
+        // 'link': staff already shared their own meeting (Google Meet etc.), so no Teams event.
+        const ownLink = body.meeting === 'link' ? meetingUrl(body.joinUrl) : null;
+        if (body.meeting === 'link' && !ownLink) throw new ActionError('Paste the full meeting link, starting with https://');
 
         // The tutor's calendar decides. A clash needs an internal note (never sent to the student).
         const conflictNote = text(body.conflictNote) || null;
@@ -220,23 +238,25 @@ export async function POST(req: Request, { params }: Params) {
         for (const upn of team) if (upn !== organizerUpn) attendees.push({ email: upn, name: known.get(upn)!.name });
 
         const myDemoUrl = `${origin}/d/${r.join_token}`;
-        const event = await createDemoEvent(
-          {
-            organizerUpn,
-            subject: demoEventSubject(r),
-            bodyHtml: buildDemoInviteHtml({
-              studentName: r.name,
-              hostName: tutor.name,
-              ref: r.ref_code || '',
-              myDemoUrl,
-              drawingLink: drawingWhatsAppLink(settings.drawingWhatsApp, r.ref_code),
-            }),
-            start,
-            minutes,
-            attendees,
-          },
-          r.ref_code || r.id,
-        );
+        const event = ownLink
+          ? { joinUrl: ownLink, eventId: null }
+          : await createDemoEvent(
+              {
+                organizerUpn,
+                subject: demoEventSubject(r),
+                bodyHtml: buildDemoInviteHtml({
+                  studentName: r.name,
+                  hostName: tutor.name,
+                  ref: r.ref_code || '',
+                  myDemoUrl,
+                  drawingLink: drawingWhatsAppLink(settings.drawingWhatsApp, r.ref_code),
+                }),
+                start,
+                minutes,
+                attendees,
+              },
+              r.ref_code || r.id,
+            );
 
         const staffIds = await staffUserIdsByUpn(team, supabase);
         await updateDemoRequest(
@@ -260,16 +280,20 @@ export async function POST(req: Request, { params }: Params) {
           supabase,
         );
         await cancelPendingDemoMessages(r.id, undefined, supabase);
-        await enqueueDemoMessages(r, demoReminderPlan(start, new Date(), 'confirmed'), supabase);
+        // The approved templates promise a Microsoft Teams class, so an own-link
+        // demo sends the student nothing; staff share the link themselves.
+        if (!ownLink) await enqueueDemoMessages(r, demoReminderPlan(start, new Date(), 'confirmed'), supabase);
         await enqueueStaffPlan(r.id, start, team, tutorUpn, staffIds);
         const names = team.map((u) => known.get(u)!.name).join(', ');
         await log(
           'schedule',
           'confirmed',
-          `${formatDemoDateTime(start)}. Tutor ${tutor.name}, organizer ${known.get(organizerUpn)!.name}, team ${names}` +
+          `${formatDemoDateTime(start)}. Tutor ${tutor.name}, ` +
+            (ownLink ? `own meeting link ${ownLink}` : `organizer ${known.get(organizerUpn)!.name}`) +
+            `, team ${names}` +
             `${reason ? `. Reason: ${reason}` : ''}${conflictNote ? `. Calendar clash note: ${conflictNote}` : ''}`,
         );
-        sendNow = true;
+        sendNow = !ownLink;
         break;
       }
 
@@ -286,10 +310,10 @@ export async function POST(req: Request, { params }: Params) {
           supabase,
         );
         await cancelPendingDemoMessages(r.id, undefined, supabase);
-        await enqueueDemoMessages(r, demoReminderPlan(start, new Date(), 'rescheduled'), supabase);
+        if (!isOwnLinkDemo(r)) await enqueueDemoMessages(r, demoReminderPlan(start, new Date(), 'rescheduled'), supabase);
         await enqueueStaffPlan(r.id, start, r.staff_upns ?? [], r.tutor_upn, await staffUserIdsByUpn(r.staff_upns ?? [], supabase));
         await log('schedule', 'rescheduled', `${formatDemoDateTime(new Date(r.scheduled_start))} moved to ${formatDemoDateTime(start)}. Reason: ${reason}`);
-        sendNow = true;
+        sendNow = !isOwnLinkDemo(r);
         break;
       }
 
@@ -361,6 +385,9 @@ export async function POST(req: Request, { params }: Params) {
       }
 
       case 'resend': {
+        if (r.status === 'approved' && isOwnLinkDemo(r)) {
+          throw new ActionError('This demo uses your own meeting link. Send it to the student yourself on WhatsApp.');
+        }
         if (r.status === 'approved') {
           await enqueueDemoMessages(r, [{ kind: 'confirmed', sendAfter: new Date() }], supabase);
         } else if (r.status === 'pending' || r.status === 'contacted') {

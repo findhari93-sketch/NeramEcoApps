@@ -13,6 +13,8 @@ import type { TypedSupabaseClient } from '../client';
 import { getSupabaseAdminClient } from '../client';
 import {
   ACTIVE_DEMO_STATUSES,
+  makeDemoJoinToken,
+  makeDemoRefCode,
   type DemoMessageKind,
   type DemoRequestStatus,
   type DemoWindow,
@@ -112,6 +114,17 @@ export interface CreateDemoRequestInput {
   parent_phone: string | null;
   preferred_language: string | null;
   interest_course?: string | null;
+  /** Staff-added rows: 'contacted' (time agreed) or attended/no_show (held outside the desk). */
+  status?: DemoRequestStatus;
+  scheduled_start?: string | null;
+  scheduled_minutes?: number;
+  teams_join_url?: string | null;
+  tutor_upn?: string | null;
+  staff_upns?: string[];
+  attended?: boolean | null;
+  attendance_marked_at?: string | null;
+  channel?: string | null;
+  page_code?: string | null;
 }
 
 /** Only v2 rows: a ref_code is what marks a request (vs an old slot registration). */
@@ -127,11 +140,38 @@ export async function createDemoRequest(
 ): Promise<DemoRequest> {
   const { data, error } = await db(client)
     .from('demo_class_registrations')
-    .insert({ ...input, slot_id: null, status: 'pending' })
+    .insert({ slot_id: null, status: 'pending', ...input })
     .select('*')
     .single();
   if (error) throw error;
   return data as DemoRequest;
+}
+
+/** The person already has an open request (one per person). */
+export class DemoActiveRequestError extends Error {
+  constructor() {
+    super('ACTIVE_REQUEST');
+  }
+}
+
+/**
+ * createDemoRequest with a fresh ref code and join token, retrying the rare
+ * ref clash. Throws DemoActiveRequestError when the one-open-request-per-person
+ * index fires.
+ */
+export async function createDemoRequestWithRef(
+  input: Omit<CreateDemoRequestInput, 'ref_code' | 'join_token'>,
+  client?: TypedSupabaseClient,
+): Promise<DemoRequest> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await createDemoRequest({ ...input, ref_code: makeDemoRefCode(), join_token: makeDemoJoinToken() }, client);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String((err as { message?: string })?.message ?? '');
+      if (msg.includes('one_active_per_user')) throw new DemoActiveRequestError();
+      if (!msg.includes('ref_code') || attempt >= 2) throw err;
+    }
+  }
 }
 
 export async function getActiveDemoRequestForUser(

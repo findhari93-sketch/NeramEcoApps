@@ -8,11 +8,13 @@ import SettingsIcon from '@mui/icons-material/Settings';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import InboxIcon from '@mui/icons-material/Inbox';
+import AddIcon from '@mui/icons-material/Add';
 import { OpsPageHeader, OpsSkeleton, EmptyState } from '@/components/ops/OpsUi';
 import RequestList from '@/components/demo-requests/RequestList';
 import RequestPanel from '@/components/demo-requests/RequestPanel';
 import DemoSettingsDialog from '@/components/demo-requests/DemoSettingsDialog';
 import WhatsAppHealthDialog from '@/components/demo-requests/WhatsAppHealthDialog';
+import AddDemoDialog from '@/components/demo-requests/AddDemoDialog';
 import { DESK_TABS, sortForTab, tabOf, type DeskDetail, type DeskList, type DeskTab } from '@/components/demo-requests/types';
 
 const EMPTY: Record<DeskTab, { title: string; body: string }> = {
@@ -53,6 +55,9 @@ function DemoDesk() {
   const [detailLoading, setDetailLoading] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [healthOpen, setHealthOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  // A staff-added request with a time already agreed opens Confirm straight away.
+  const [confirmFor, setConfirmFor] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -106,6 +111,7 @@ function DemoDesk() {
   }, [detail?.request.id]);
 
   const select = (id: string | null) => {
+    setConfirmFor(null);
     router.replace(id ? `/demo-classes?id=${encodeURIComponent(id)}` : '/demo-classes', { scroll: false });
   };
 
@@ -148,9 +154,12 @@ function DemoDesk() {
       <OpsPageHeader
         icon={VideocamIcon}
         title="Demo classes"
-        subtitle="Students pick a day and time on the website and sign in at the end. Call them, confirm a time, and the Teams meeting, Gmail invite and WhatsApp reminders go out by themselves."
+        subtitle="Students pick a day and time on the website, or staff add them with Add demo. Call them, confirm a time, and the Teams meeting, Gmail invite and WhatsApp reminders go out by themselves."
         actions={
           <>
+            <Button variant="contained" startIcon={<AddIcon />} onClick={() => setAddOpen(true)} disabled={!list} sx={{ minHeight: 44 }}>
+              Add demo
+            </Button>
             <Button variant="outlined" startIcon={<WhatsAppIcon />} onClick={() => setHealthOpen(true)} sx={{ minHeight: 44 }}>
               WhatsApp status
             </Button>
@@ -244,6 +253,7 @@ function DemoDesk() {
               now={now}
               onAction={onAction}
               onClose={() => select(null)}
+              openConfirm={confirmFor === selectedId}
             />
           </Box>
         )}
@@ -251,6 +261,20 @@ function DemoDesk() {
 
       <DemoSettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} onSaved={loadList} />
       <WhatsAppHealthDialog open={healthOpen} onClose={() => setHealthOpen(false)} />
+      {list && (
+        <AddDemoDialog
+          open={addOpen}
+          settings={list.settings}
+          onClose={() => setAddOpen(false)}
+          onAdded={(id, mode) => {
+            setAddOpen(false);
+            setTab(mode === 'held' ? 'done' : mode === 'agreed' ? 'followup' : 'new');
+            loadList();
+            select(id);
+            if (mode === 'agreed') setConfirmFor(id);
+          }}
+        />
+      )}
     </Box>
   );
 }

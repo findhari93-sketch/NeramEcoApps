@@ -38,6 +38,7 @@ import SendIcon from '@mui/icons-material/Send';
 import {
   DEMO_STATUS_LABELS,
   formatDemoDateTime,
+  isOwnLinkDemo,
   formatDemoPreference,
   isJoinOpen,
 } from '@neram/database/demo-schedule';
@@ -52,6 +53,7 @@ const DEMO_DOOR: Record<string, string> = {
   'DC-APH': 'From application (Help menu)',
   'DC-APX': 'From application (leaving card)',
   'DC-WAN': 'From application (WhatsApp nudge)',
+  'DC-ADM': 'Added by staff',
 };
 const LANG: Record<string, string> = { en: 'English', ta: 'Tamil', kn: 'Kannada', hi: 'Hindi', ml: 'Malayalam', te: 'Telugu' };
 const INTEREST: Record<string, string> = { nata: 'NATA', jee_paper2: 'JEE Paper 2', both: 'NATA + JEE Paper 2' };
@@ -116,6 +118,7 @@ export default function RequestPanel({
   now,
   onAction,
   onClose,
+  openConfirm = false,
 }: {
   detail: DeskDetail | null;
   loading: boolean;
@@ -123,6 +126,8 @@ export default function RequestPanel({
   now: Date;
   onAction: (body: Record<string, unknown>) => Promise<string | null>;
   onClose: () => void;
+  /** Open Confirm straight away (a staff-added request with a time already agreed). */
+  openConfirm?: boolean;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -130,7 +135,7 @@ export default function RequestPanel({
   const [callNote, setCallNote] = useState('');
   const [callbackAt, setCallbackAt] = useState('');
   const [note, setNote] = useState('');
-  const [schedule, setSchedule] = useState<'confirm' | 'reschedule' | null>(null);
+  const [schedule, setSchedule] = useState<'confirm' | 'reschedule' | null>(openConfirm ? 'confirm' : null);
   const [reasonFor, setReasonFor] = useState<'cancel' | null>(null);
   const [reason, setReason] = useState('');
   const [copied, setCopied] = useState(false);
@@ -152,6 +157,8 @@ export default function RequestPanel({
   const start = r.scheduled_start ? new Date(r.scheduled_start) : null;
   const joinOpen = start ? isJoinOpen(start, r.scheduled_minutes, now) : false;
   const canMarkAttendance = start ? now.getTime() >= start.getTime() - 15 * 60_000 : false;
+  const ownLink = isOwnLinkDemo(r);
+  const heldOutside = !r.tutor_upn && !r.organizer_upn;
 
   const run = async (key: string, body: Record<string, unknown>) => {
     setBusy(key);
@@ -225,10 +232,22 @@ export default function RequestPanel({
             <Typography fontWeight={700}>{formatDemoDateTime(start)}</Typography>
           </Box>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-            {r.scheduled_minutes} min. Tutor {nameOf(r.tutor_upn || r.organizer_upn)}, on {nameOf(r.organizer_upn)}&apos;s calendar
-            {r.staff_upns?.length ? `. Team: ${r.staff_upns.map(nameOf).join(', ')}` : ''}
-            {r.schedule_change_reason ? `. Told the student: ${r.schedule_change_reason}` : ''}
+            {heldOutside ? (
+              'Held outside the desk. See the activity log for where and who.'
+            ) : (
+              <>
+                {r.scheduled_minutes} min. Tutor {nameOf(r.tutor_upn || r.organizer_upn)}
+                {ownLink ? ', on your own meeting link' : `, on ${nameOf(r.organizer_upn)}'s calendar`}
+                {r.staff_upns?.length ? `. Team: ${r.staff_upns.map(nameOf).join(', ')}` : ''}
+                {r.schedule_change_reason ? `. Told the student: ${r.schedule_change_reason}` : ''}
+              </>
+            )}
           </Typography>
+          {r.status === 'approved' && ownLink && (
+            <Alert severity="info" sx={{ mt: 1.5 }}>
+              Own meeting link: the student gets no automatic WhatsApp. Send them the link and time yourself.
+            </Alert>
+          )}
           {r.status === 'approved' && r.teams_join_url && (
             <Box sx={{ display: 'flex', gap: 1, mt: 1.5, flexWrap: 'wrap' }}>
               <Button
@@ -252,9 +271,25 @@ export default function RequestPanel({
               <Button onClick={() => setSchedule('reschedule')} disabled={!!busy} sx={{ minHeight: 44 }}>
                 Move
               </Button>
-              <Button onClick={() => run('resend', { action: 'resend' })} disabled={!!busy} startIcon={<SendIcon />} sx={{ minHeight: 44 }}>
-                {busy === 'resend' ? 'Sending' : 'Resend WhatsApp'}
-              </Button>
+              {ownLink ? (
+                <Button
+                  color="success"
+                  startIcon={<WhatsAppIcon />}
+                  href={waHref(
+                    r.phone,
+                    `Hi ${r.name.split(' ')[0]}, your free Neram demo class is on ${start ? formatDemoDateTime(start) : ''}. Join here: ${r.teams_join_url}`,
+                  )}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={{ minHeight: 44 }}
+                >
+                  Send link on WhatsApp
+                </Button>
+              ) : (
+                <Button onClick={() => run('resend', { action: 'resend' })} disabled={!!busy} startIcon={<SendIcon />} sx={{ minHeight: 44 }}>
+                  {busy === 'resend' ? 'Sending' : 'Resend WhatsApp'}
+                </Button>
+              )}
               <Button color="error" onClick={() => setReasonFor('cancel')} disabled={!!busy} sx={{ minHeight: 44 }}>
                 Cancel demo
               </Button>

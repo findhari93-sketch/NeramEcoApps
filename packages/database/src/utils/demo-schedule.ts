@@ -446,6 +446,8 @@ export interface DemoSettings {
   hosts: DemoHost[];
   /** Who teaches unless changed at Confirm (one of `hosts`). */
   defaultTutorUpn: string | null;
+  /** Whose calendar holds the meeting unless changed at Confirm. Null means the tutor's. */
+  defaultOrganizerUpn: string | null;
   /** Digits with country code, for wa.me links: where students send drawings. */
   drawingWhatsApp: string;
   /** "within 2 working hours" */
@@ -469,11 +471,13 @@ export function resolveDemoSettings(raw: unknown): DemoSettings {
         }))
     : [];
   const tutor = typeof r.defaultTutorUpn === 'string' ? r.defaultTutorUpn.trim().toLowerCase() : '';
+  const organizer = typeof r.defaultOrganizerUpn === 'string' ? r.defaultOrganizerUpn.trim().toLowerCase() : '';
   const wa = typeof r.drawingWhatsApp === 'string' ? r.drawingWhatsApp.replace(/\D/g, '') : '';
   return {
     schedule: resolveDemoSchedule(r),
     hosts,
     defaultTutorUpn: hosts.find((h) => h.upn === tutor)?.upn ?? hosts[0]?.upn ?? null,
+    defaultOrganizerUpn: hosts.find((h) => h.upn === organizer)?.upn ?? null,
     drawingWhatsApp: /^\d{11,13}$/.test(wa) ? wa : DEFAULT_DRAWING_WHATSAPP,
     callbackPromise:
       typeof r.callbackPromise === 'string' && r.callbackPromise.trim() ? r.callbackPromise.trim() : 'within 2 working hours',
@@ -482,9 +486,36 @@ export function resolveDemoSettings(raw: unknown): DemoSettings {
 }
 
 /** The settings a public page may see (no staff mailboxes). */
-export function publicDemoSettings(s: DemoSettings): Omit<DemoSettings, 'hosts' | 'defaultTutorUpn'> {
-  const { hosts: _hosts, defaultTutorUpn: _tutor, ...rest } = s;
+export function publicDemoSettings(s: DemoSettings): Omit<DemoSettings, 'hosts' | 'defaultTutorUpn' | 'defaultOrganizerUpn'> {
+  const { hosts: _hosts, defaultTutorUpn: _tutor, defaultOrganizerUpn: _organizer, ...rest } = s;
   return rest;
+}
+
+/**
+ * Tutor and organizer for a demo, both kept inside the ticked team. Explicit
+ * picks win, then the request's earlier picks, then the settings defaults; the
+ * organizer finally falls back to the tutor.
+ */
+export function pickDemoRoles(
+  s: Pick<DemoSettings, 'defaultTutorUpn' | 'defaultOrganizerUpn'>,
+  team: string[],
+  picked: { tutor?: string | null; organizer?: string | null } = {},
+): { tutor: string | null; organizer: string | null } {
+  const inTeam = (u?: string | null) => {
+    const v = (u || '').trim().toLowerCase();
+    return v && team.includes(v) ? v : null;
+  };
+  const tutor = inTeam(picked.tutor) ?? inTeam(s.defaultTutorUpn) ?? team[0] ?? null;
+  const organizer = inTeam(picked.organizer) ?? inTeam(s.defaultOrganizerUpn) ?? tutor;
+  return { tutor, organizer };
+}
+
+/**
+ * A demo confirmed with staff's own meeting link (Google Meet etc.) rather
+ * than a Teams event we created: it has a join link but no calendar event.
+ */
+export function isOwnLinkDemo(r: { teams_join_url?: string | null; graph_event_id?: string | null }): boolean {
+  return !!r.teams_join_url && !r.graph_event_id;
 }
 
 /** The name students see for a demo's tutor, or null when unknown. */

@@ -664,7 +664,9 @@ export const DEMO_WA_TEMPLATES: Record<
       'and when you are ready to join, call or WhatsApp us on +91 91761 37043.',
   },
   missed: {
-    name: 'demo_missed',
+    // 'demo_missed' was deleted in WhatsApp Manager (2026-10) and Meta locks a
+    // deleted name for weeks, so this one carries a new name.
+    name: 'demo_missed_rebook',
     params: ['recipientName', 'studentName'],
     button: false,
     body:
