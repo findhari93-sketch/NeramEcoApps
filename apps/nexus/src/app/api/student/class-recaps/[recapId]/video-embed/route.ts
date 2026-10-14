@@ -122,6 +122,7 @@ export async function GET(
           resume_at: resumeAt,
           played_ranges: playedRanges,
           played_until: playedUntil,
+        timeline_version: watch.timelineVersion,
         },
         { headers: { 'Cache-Control': 'no-store' } },
       );
@@ -149,6 +150,7 @@ export async function GET(
         resume_at: resumeAt,
         played_ranges: playedRanges,
         played_until: playedUntil,
+        timeline_version: watch.timelineVersion,
       },
       // Never cached: the grant inside is short-lived and viewer-specific.
       { headers: { 'Cache-Control': 'no-store' } },

@@ -34,6 +34,7 @@ const SECTIONS = [{ id: 's1', end_timestamp_seconds: 60, passed: false }];
 /** The page owns the watch session; the player only seeds it and wires it up. */
 const SESSION = {
   ranges: [],
+  stale: false,
   seedFromEmbed: vi.fn(),
   flushNow: vi.fn(),
   playerProps: { onTimeUpdate: vi.fn(), onPlayedSpan: vi.fn(), onPlaybackEvent: vi.fn(), onBlockedSeek: vi.fn() },

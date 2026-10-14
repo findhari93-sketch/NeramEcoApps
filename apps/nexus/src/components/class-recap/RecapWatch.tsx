@@ -34,6 +34,7 @@ import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthFetch } from '@/components/curriculum/shared';
 import RecapPlayer from './RecapPlayer';
 import useWatchSession from '@/components/video/useWatchSession';
+import RecordingUpdatedNotice from '@/components/video/RecordingUpdatedNotice';
 import { openFocusWindow, onFocusWindowClosed, focusChannelName } from './openFocusWindow';
 import QuizModal from '@/components/foundation/QuizModal';
 import type { VideoGateMode } from '@/lib/video-gate';
@@ -381,6 +382,8 @@ export default function RecapWatch({
       {/* The load failure and its retry used to be an Alert here. They moved
           into the quiz drawer itself, because this spot is on the page below
           the player and a fullscreen student cannot see any of it. */}
+
+      {session.stale && <RecordingUpdatedNotice />}
 
       <Box
         sx={{

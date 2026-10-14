@@ -14,6 +14,7 @@ function fakeSupabase(opts: {
   rows?: Row[];
   readError?: { code: string; message: string } | null;
   applyResults?: Array<{ data?: unknown; error?: { code: string; message: string } | null }>;
+  timeline?: number;
 }) {
   const rows = [...(opts.rows ?? [null])];
   const applyResults = [...(opts.applyResults ?? [{ data: true }])];
@@ -30,6 +31,9 @@ function fakeSupabase(opts: {
       },
       eq: () => chain,
       maybeSingle: async () => {
+        if (selects[selects.length - 1] === 'timeline_version') {
+          return { data: { timeline_version: opts.timeline ?? 0 }, error: null };
+        }
         if (opts.readError && selects[selects.length - 1].includes('played_ranges')) {
           return { data: null, error: opts.readError };
         }
@@ -129,6 +133,20 @@ describe('recordWatchReport', () => {
   });
 });
 
+describe('recordWatchReport: a recording switched while the page was open', () => {
+  it('refuses a report from the old timeline and says so', async () => {
+    const { client, rpc } = fakeSupabase({ timeline: 1 });
+    const result = await recordWatchReport(client, 'stu', 'recap', v2({ timeline_version: 0 }));
+    expect(result).toEqual({ ok: false, credited: 0, stale: true });
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it('accepts a report on the current timeline', async () => {
+    const { client } = fakeSupabase({ timeline: 1 });
+    expect((await recordWatchReport(client, 'stu', 'recap', v2({ timeline_version: 1 }))).ok).toBe(true);
+  });
+});
+
 describe('readWatchProgress', () => {
   it('returns stored ranges, and the prefix for older pages', async () => {
     const { client } = fakeSupabase({
@@ -141,6 +159,7 @@ describe('readWatchProgress', () => {
         [400, 500],
       ],
       playedUntil: 300,
+      timelineVersion: 0,
     });
   });
 
@@ -152,6 +171,7 @@ describe('readWatchProgress', () => {
       resumeAt: 3496,
       playedRanges: [[0, 3496]],
       playedUntil: 3496,
+      timelineVersion: 0,
     });
   });
 
@@ -161,7 +181,7 @@ describe('readWatchProgress', () => {
       readError: { code: '42703', message: 'column played_ranges does not exist' },
     });
     const view = await readWatchProgress(client, 'stu', 'recap');
-    expect(selects).toHaveLength(2);
+    expect(selects.filter((c) => c !== 'timeline_version')).toHaveLength(2);
     expect(view.resumeAt).toBe(120);
     expect(view.playedRanges).toEqual([[0, 120]]);
   });

@@ -112,8 +112,14 @@ function deny(status: number, error: string, origin: string | null): Response {
 }
 
 /** Cache key for a source lookup. Uses the Worker's own origin so it is a valid, zone-local URL. */
-export function sourceCacheKey(workerOrigin: string, grant: Pick<VideoGrantPayload, 'scope' | 'refId'>): string {
-  return `${workerOrigin}/__source/${encodeURIComponent(grant.scope)}/${encodeURIComponent(grant.refId)}`;
+export function sourceCacheKey(
+  workerOrigin: string,
+  grant: Pick<VideoGrantPayload, 'scope' | 'refId'> & { size?: number },
+): string {
+  // The size is part of the key: when a recording is swapped for its trimmed
+  // copy, grants minted after the swap carry the new size and must not be
+  // answered from the old file's cached download URL.
+  return `${workerOrigin}/__source/${encodeURIComponent(grant.scope)}/${encodeURIComponent(grant.refId)}/${grant.size || 0}`;
 }
 
 function isMediaSource(value: unknown): value is MediaSource {
@@ -300,8 +306,19 @@ export async function handleRequest(request: Request, env: MediaEnv, deps: Handl
     return sourceErrorResponse(err, origin);
   }
 
-  // The grant carries the size it was minted with, so a stale cache entry
-  // cannot silently change the file out from under an in-flight watch.
+  // The grant carries the size it was minted with. A source of another size is
+  // another file (the recording was swapped for its trimmed copy since): check
+  // once with a fresh lookup, then refuse rather than splice two files.
+  if (grant.size > 0 && source.size > 0 && source.size !== grant.size) {
+    try {
+      source = await getSource(token, grant, url.origin, env, deps, true);
+    } catch (err) {
+      return sourceErrorResponse(err, origin);
+    }
+    if (source.size > 0 && source.size !== grant.size) {
+      return deny(409, 'This recording was updated. Reload the page to keep watching.', origin);
+    }
+  }
   const size = source.size || grant.size;
   if (!size) return deny(409, 'This recording is not ready to stream yet.', origin);
 

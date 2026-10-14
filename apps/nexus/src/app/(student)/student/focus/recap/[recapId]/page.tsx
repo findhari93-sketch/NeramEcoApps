@@ -25,6 +25,7 @@ import { useAuthFetch } from '@/components/curriculum/shared';
 import NeramVideoPlayer from '@/components/video/NeramVideoPlayer';
 import { renewFromEmbed } from '@/components/video/renew-from-embed';
 import useWatchSession from '@/components/video/useWatchSession';
+import RecordingUpdatedNotice from '@/components/video/RecordingUpdatedNotice';
 import { computeGate, type VideoGateMode } from '@/lib/video-gate';
 import { lastPlayedPoint } from '@/lib/played-ranges';
 import { focusChannelName } from '@/components/class-recap/openFocusWindow';
@@ -404,6 +405,11 @@ export default function FocusRecapPage() {
         </Box>
       ) : (
         <>
+          {session.stale && (
+            <Box sx={{ position: 'absolute', top: 16, left: 16, right: 16, zIndex: 20 }}>
+              <RecordingUpdatedNotice />
+            </Box>
+          )}
           <NeramVideoPlayer
             source={{ kind: 'html5', src: src!, renew }}
             gate={gate}

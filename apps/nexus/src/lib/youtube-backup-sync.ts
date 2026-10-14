@@ -470,8 +470,42 @@ export async function syncClassYouTubeBackups(
 
   if (error) throw error;
   const rows = (candidates || []) as BackupClassRow[];
+
+  // Classes already on YouTube whose recording has since been trimmed: the
+  // trimmed copy is uploaded in place of the old video (founder, 2026-10-14).
+  // Includes a re-upload already under way, which no longer reads 'reupload'.
+  // Tolerant of a database without the trim migration: nothing to add then.
+  const { data: reuploads, error: reuploadError } = await supabase
+    .from('nexus_class_video_uploads')
+    .select('class_id')
+    .or('status.eq.reupload,and(status.eq.uploading,replaced_video_id.not.is.null)')
+    .limit(limit);
+  const reuploadIds = reuploadError ? [] : (reuploads || []).map((r: any) => r.class_id);
+  const missing = reuploadIds.filter((id: string) => !rows.some((r) => r.id === id));
+  if (missing.length) {
+    const { data: extra } = await supabase.from('nexus_scheduled_classes').select(YOUTUBE_BACKUP_COLUMNS).in('id', missing);
+    rows.push(...((extra || []) as BackupClassRow[]));
+  }
+
   summary.candidates = rows.length;
   if (!rows.length) return summary;
+
+  // Which file to upload. A class whose silent parts are being trimmed waits
+  // for the trimmed copy rather than spending a day's quota on the long one;
+  // an applied trim uploads the trimmed copy.
+  const { data: trims, error: trimError } = await supabase
+    .from('nexus_recording_trims')
+    .select('class_id, status, trimmed_url')
+    .in('class_id', rows.map((r) => r.id));
+  const trimAware = !trimError;
+  const trimByClass = new Map<string, { status: string; trimmed_url: string | null }>(
+    (trims || []).map((t: any) => [t.class_id, t]),
+  );
+  const awaitingTrim = (id: string) => ['queued', 'running', 'ready'].includes(trimByClass.get(id)?.status ?? '');
+  const uploadUrlFor = (cls: BackupClassRow) => {
+    const trim = trimByClass.get(cls.id);
+    return trim?.status === 'applied' && trim.trimmed_url ? trim.trimmed_url : (cls.recording_url as string);
+  };
 
   // PostgREST has no anti-join, so this is one extra round trip rather than
   // something clever. Same shape as transcript-sync.
@@ -483,6 +517,7 @@ export async function syncClassYouTubeBackups(
   const prior = new Map<string, UploadRow>((existing || []).map((r: any) => [r.class_id, r]));
 
   const due = rows
+    .filter((cls) => !awaitingTrim(cls.id))
     .filter((cls) => backupBlockedReason(cls, prior.get(cls.id), graceMinutes) === null)
     .slice(0, limit);
 
@@ -544,7 +579,7 @@ export async function syncClassYouTubeBackups(
     }
 
     try {
-      const source = await resolveRecordingSource(cls.recording_url as string);
+      const source = await resolveRecordingSource(uploadUrlFor(cls));
 
       let sessionUri = resuming ? (p?.upload_session_uri as string) : null;
       let offset = resuming ? Number(p?.bytes_uploaded || 0) : 0;
@@ -587,6 +622,9 @@ export async function syncClassYouTubeBackups(
             bytes_uploaded: 0,
             source_item_id: source.itemId,
             detail: null,
+            ...(trimAware
+              ? { source_variant: trimByClass.get(cls.id)?.status === 'applied' ? 'trimmed' : 'original' }
+              : {}),
           },
           { onConflict: 'class_id' },
         );

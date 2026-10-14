@@ -216,7 +216,11 @@ export async function resolveStreamGrant(
   if (
     fromCookie.scope !== fromUrl.payload.scope ||
     fromCookie.refId !== fromUrl.payload.refId ||
-    fromCookie.userId !== fromUrl.payload.userId
+    fromCookie.userId !== fromUrl.payload.userId ||
+    // A different size is a different file: the recording was swapped for its
+    // trimmed copy (or back) after this stream started. Its bytes must never
+    // reach a <video> that is part way through the other file.
+    (fromCookie.size > 0 && fromUrl.payload.size > 0 && fromCookie.size !== fromUrl.payload.size)
   ) {
     return null;
   }

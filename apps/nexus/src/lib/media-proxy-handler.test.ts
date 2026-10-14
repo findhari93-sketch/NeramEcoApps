@@ -116,7 +116,7 @@ describe('media Worker handler', () => {
     await handleRequest(req(`/recording?vt=${vt}`, { headers: { Range: 'bytes=0-9' } }), env, deps);
     const nexusCalls = fetchMock.mock.calls.filter(([u]) => String(u).startsWith(NEXUS));
     expect(nexusCalls).toHaveLength(1);
-    expect(cache.store.has(sourceCacheKey(WORKER, { scope: 'recap', refId: 'r-1' }))).toBe(true);
+    expect(cache.store.has(sourceCacheKey(WORKER, { scope: 'recap', refId: 'r-1', size: SIZE }))).toBe(true);
   });
 
   it('416s past the end of the file without touching SharePoint', async () => {
@@ -322,5 +322,36 @@ describe('media Worker handler: grant cookie', () => {
     const res = await handleRequest(req('/recording', { method: 'OPTIONS', headers: { Origin: NEXUS } }), env, deps);
     expect(res.headers.get('Access-Control-Allow-Credentials')).toBe('true');
     expect(res.headers.get('Access-Control-Allow-Methods')).toMatch(/POST/);
+  });
+});
+
+/**
+ * A recording swapped for its trimmed copy while someone is watching. The
+ * bytes of one file must never be spliced into a stream of the other.
+ */
+describe('media Worker handler: the file changed under a stream', () => {
+  it('refuses with 409 when the source is now a different size', async () => {
+    fetchMock.mockImplementation(async (url: string) =>
+      url.startsWith(NEXUS)
+        ? new Response(JSON.stringify({ downloadUrl: 'https://sp/trimmed', mime: 'video/mp4', size: SIZE - 1000 }), { status: 200 })
+        : window206(0, 9),
+    );
+    const res = await handleRequest(req(`/recording?vt=${encodeURIComponent(token())}`, { headers: { Range: 'bytes=0-9' } }), env, deps);
+    expect(res.status).toBe(409);
+    // One fresh lookup before giving up, never a SharePoint read of the wrong file.
+    expect(fetchMock.mock.calls.filter(([u]) => String(u).startsWith(NEXUS))).toHaveLength(2);
+    expect(fetchMock.mock.calls.filter(([u]) => !String(u).startsWith(NEXUS))).toHaveLength(0);
+  });
+
+  it('will not top up an old stream with a grant for the new file', async () => {
+    fetchMock.mockImplementation(async (url: string) => (url.startsWith(NEXUS) ? sourceReply() : window206(0, 9)));
+    const lapsed = mintVideoToken({ scope: 'recap', refId: 'r-1', userId: 'u-1', size: SIZE, ttlSeconds: -5 }).token;
+    const freshOtherFile = mintVideoToken({ scope: 'recap', refId: 'r-1', userId: 'u-1', size: SIZE - 1000 }).token;
+    const res = await handleRequest(
+      req(`/recording?vt=${encodeURIComponent(lapsed)}`, { headers: { Cookie: `vg_recap_r-1=${freshOtherFile}` } }),
+      env,
+      deps,
+    );
+    expect(res.status).toBe(401);
   });
 });

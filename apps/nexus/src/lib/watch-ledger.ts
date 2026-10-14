@@ -99,6 +99,12 @@ export interface WatchReport {
   blockedTotal: number;
   diagnostics: PlaybackDiagnostics;
   userAgent: string | null;
+  /**
+   * The recap timeline the player loaded (nexus_class_recaps.timeline_version).
+   * It goes up when a trimmed recording is switched in or out; a report from
+   * the old timeline is refused. Null from a page that does not send it.
+   */
+  timelineVersion: number | null;
 }
 
 export interface StoredWatch {
@@ -148,6 +154,8 @@ export function parseWatchReport(body: unknown): WatchReport | null {
     blockedTotal: Math.round(nonNegative(b.blocked_total)),
     diagnostics,
     userAgent: typeof b.user_agent === 'string' ? b.user_agent.slice(0, 300) : null,
+    timelineVersion:
+      b.timeline_version === undefined || b.timeline_version === null ? null : Math.round(nonNegative(b.timeline_version)),
   };
 }
 

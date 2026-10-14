@@ -16,6 +16,7 @@
  * rather than treating it as a dead recording.
  */
 
+import { playbackRecordingUrl } from './recording-playback';
 import { getSupabaseAdminClient } from '@neram/database';
 import { resolveRecordingSource, resolveRecordingSourceByIds, type RecordingSource } from './recording-source';
 import { findRecordingItem, type StoredRecordingRef } from './sharepoint-video';
@@ -61,11 +62,13 @@ async function readSource(scope: VideoScope, refId: string): Promise<StoredRecor
   const supabase = getSupabaseAdminClient() as any;
   const { data, error } = await supabase
     .from(table)
-    .select(scope === 'recap' ? '*' : column)
+    // '*' for a class too: an applied trim plays the trimmed copy, and an
+    // environment without the trim columns still plays the original.
+    .select(scope === 'foundation' ? column : '*')
     .eq('id', refId)
     .maybeSingle();
   if (error) throw new Error(`MEDIA_LOOKUP_FAILED: ${error.message}`);
-  const url = data?.[column];
+  const url = scope === 'class' ? playbackRecordingUrl(data) : data?.[column];
   if (!url) throw new Error('MEDIA_NOT_FOUND');
   return {
     url: url as string,

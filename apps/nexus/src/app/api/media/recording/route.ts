@@ -77,6 +77,16 @@ export async function GET(request: NextRequest) {
 
   try {
     let media = await resolveMedia(grant.scope, grant.refId);
+    // Another size is another file: the recording was swapped for its trimmed
+    // copy after this grant was minted. One fresh look, then refuse rather than
+    // splice two files into one <video>.
+    if (grant.size > 0 && media.size > 0 && media.size !== grant.size) {
+      evictMedia(grant.scope, grant.refId);
+      media = await resolveMedia(grant.scope, grant.refId);
+      if (media.size > 0 && media.size !== grant.size) {
+        return deny(409, 'This recording was updated. Reload the page to keep watching.');
+      }
+    }
 
     // The grant carries the size it was minted with, so a stale cache entry
     // cannot silently change the file out from under an in-flight watch.

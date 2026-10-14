@@ -17,6 +17,7 @@ import LinkIcon from '@mui/icons-material/Link';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import type { ClassCardData } from '../ClassCard';
 import type { RecordingAction } from './class-state';
+import RecordingTrimPanel from './RecordingTrimPanel';
 
 /**
  * The recording, and an honest account of where it is.
@@ -199,6 +200,11 @@ export default function RecordingSection({
         >
           {statusLine}
         </Typography>
+      )}
+
+      {/* What silence trimming removed, and the switch back. Staff only. */}
+      {isTeacher && hasRecording && (
+        <RecordingTrimPanel classId={cls.id} getToken={getToken} onNotify={onNotify} onChanged={onChanged} />
       )}
 
       {/* The detail is only worth showing once the sweep has given up: before

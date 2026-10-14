@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { addPlayed, compactRanges, parseRanges, type PlayedRange } from '@/lib/played-ranges';
 import { EMPTY_DIAGNOSTICS, MAX_REPORT_RANGES, type PlaybackDiagnostics } from '@/lib/watch-ledger';
 import usePlayedRanges from './usePlayedRanges';
@@ -59,8 +59,15 @@ export interface WatchSessionPlayerProps {
 export interface WatchSession {
   /** What has been played, server and this page together. */
   ranges: PlayedRange[];
+  /**
+   * The recording was updated (a trimmed copy switched in) while this page was
+   * open. Saving has stopped; the page should ask the student to reload.
+   */
+  stale: boolean;
   /** Seed from an embed reply: `played_ranges`, else the older `played_until`. */
-  seedFromEmbed: (data: { played_ranges?: unknown; played_until?: unknown; resume_at?: unknown } | null) => void;
+  seedFromEmbed: (
+    data: { played_ranges?: unknown; played_until?: unknown; resume_at?: unknown; timeline_version?: unknown } | null,
+  ) => void;
   playerProps: WatchSessionPlayerProps;
   /** Save now: after a passed checkpoint, before opening a quiz. */
   flushNow: () => void;
@@ -104,7 +111,11 @@ export function useWatchSession({ endpoint, getToken, enabled = true }: UseWatch
     acked: 0,
     inFlight: false,
     lastToken: null as string | null,
+    /** The recap timeline this page loaded, sent back with every save. */
+    timeline: null as number | null,
   }).current;
+  const [stale, setStale] = useState(false);
+  const staleRef = useRef(false);
 
   const remember = useCallback(() => {
     if (endpointRef.current) tabCache.set(endpointRef.current, rangesRef.current);
@@ -122,6 +133,7 @@ export function useWatchSession({ endpoint, getToken, enabled = true }: UseWatch
       blocked_total: s.blocked,
       diagnostics: s.diag,
       user_agent: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 300) : null,
+      ...(s.timeline !== null ? { timeline_version: s.timeline } : {}),
     }),
     [s],
   );
@@ -129,7 +141,7 @@ export function useWatchSession({ endpoint, getToken, enabled = true }: UseWatch
   const flush = useCallback(
     (keepalive: boolean) => {
       const url = endpointRef.current;
-      if (!enabledRef.current || !url) return;
+      if (!enabledRef.current || !url || staleRef.current) return;
       if (s.seq === s.acked) return;
       if (s.inFlight && !keepalive) return;
 
@@ -143,10 +155,17 @@ export function useWatchSession({ endpoint, getToken, enabled = true }: UseWatch
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body,
         })
-          .then((res) => {
+          .then(async (res) => {
             // Any 2xx: the totals reached the server. Even if it could not apply
             // them, the next flush carries the same totals and more.
             if (res.ok && sent > s.acked) s.acked = sent;
+            if (res.ok && !keepalive) {
+              const reply = await res.json().catch(() => null);
+              if (reply?.stale) {
+                staleRef.current = true;
+                setStale(true);
+              }
+            }
           })
           .catch(() => {
             // Offline or unloading. Nothing to undo: the totals are still here.
@@ -276,6 +295,8 @@ export function useWatchSession({ endpoint, getToken, enabled = true }: UseWatch
   const seedFromEmbed = useCallback<WatchSession['seedFromEmbed']>(
     (data) => {
       if (!data) return;
+      const timeline = Number(data.timeline_version);
+      if (Number.isFinite(timeline)) s.timeline = timeline;
       if (Array.isArray(data.played_ranges)) {
         seedRanges(parseRanges(data.played_ranges));
       } else {
@@ -283,7 +304,7 @@ export function useWatchSession({ endpoint, getToken, enabled = true }: UseWatch
       }
       remember();
     },
-    [seed, seedRanges, remember],
+    [s, seed, seedRanges, remember],
   );
 
   const flushNow = useCallback(() => flush(false), [flush]);
@@ -293,7 +314,7 @@ export function useWatchSession({ endpoint, getToken, enabled = true }: UseWatch
     [onTimeUpdate, onPlayedSpan, onPlaybackEvent, onBlockedSeek],
   );
 
-  return { ranges: played.ranges, seedFromEmbed, playerProps, flushNow };
+  return { ranges: played.ranges, stale, seedFromEmbed, playerProps, flushNow };
 }
 
 export default useWatchSession;

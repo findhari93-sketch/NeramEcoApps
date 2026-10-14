@@ -18,6 +18,22 @@ const PROGRESS_COLUMNS =
 export interface RecordWatchResult {
   ok: boolean;
   credited: number;
+  /** The player is on a timeline that has since changed: it must reload. */
+  stale?: boolean;
+}
+
+/**
+ * The recap's current timeline (see nexus_apply_recording_trim). 0 where the
+ * column does not exist yet, which is also every recap that was never trimmed.
+ */
+export async function readTimelineVersion(supabase: any, recapId: string): Promise<number> {
+  const { data, error } = await supabase
+    .from('nexus_class_recaps')
+    .select('timeline_version')
+    .eq('id', recapId)
+    .maybeSingle();
+  if (error) return 0;
+  return Number(data?.timeline_version) || 0;
 }
 
 // `any`: the nexus_* tables and RPCs are absent from database.generated.ts,
@@ -78,6 +94,13 @@ export async function recordWatchReport(
   const report = parseWatchReport(body);
   if (!report) return recordLegacy(supabase, studentId, recapId, body);
 
+  // A trimmed recording was switched in (or out) while this page was open: its
+  // positions and stretches are on the old timeline and would land on the
+  // wrong content. Refuse them; the page tells the student to reload.
+  if (report.timelineVersion !== null && report.timelineVersion !== (await readTimelineVersion(supabase, recapId))) {
+    return { ok: false, credited: 0, stale: true };
+  }
+
   // Two flushes can land together (a keepalive on unload overlapping the
   // interval one). The version check makes the loser re-read and re-apply, and
   // because reports are cumulative, re-applying is always safe.
@@ -129,6 +152,8 @@ export interface WatchProgressView {
   playedRanges: PlayedRange[];
   /** The stretch from 0:00, for a page still on the previous build. */
   playedUntil: number;
+  /** Which timeline these times are on; the player sends it back with each save. */
+  timelineVersion: number;
 }
 
 /**
@@ -156,7 +181,9 @@ export async function readWatchProgress(
 
   const stored = readStoredWatch(data ?? null);
   const ranges = storedRanges(stored);
+  const timelineVersion = await readTimelineVersion(supabase, recapId);
   return {
+    timelineVersion,
     resumeAt: stored.position,
     playedRanges: ranges,
     playedUntil: stored.ranges ? prefixEnd(ranges) : creditedPlayedUntil(stored.position, stored.watchedSeconds),

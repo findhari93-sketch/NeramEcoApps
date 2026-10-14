@@ -198,6 +198,21 @@ async function withClassTitles<T extends { scheduled_class_id?: string | null; t
 }
 
 /**
+ * The file a class's recording plays from: the trimmed copy once a trim is
+ * applied (silent stretches removed, see apps/nexus/src/lib/recording-trim.ts),
+ * otherwise the Teams original. Same rule as apps/nexus/src/lib/
+ * recording-playback.ts, inlined because this package cannot import the app.
+ */
+function classPlaybackUrl(cls: {
+  recording_url?: string | null;
+  recording_trimmed_url?: string | null;
+  recording_trim_state?: string | null;
+}): string | null {
+  if (cls.recording_trim_state === 'applied' && cls.recording_trimmed_url) return cls.recording_trimmed_url;
+  return cls.recording_url ?? null;
+}
+
+/**
  * Create (or return the existing) draft recap for a recorded scheduled class.
  * Snapshots the class recording + transcript URLs so later edits to the class
  * row don't strand the recap.
@@ -224,9 +239,9 @@ export async function createRecapForClass(
 
   const { data: cls, error: clsErr } = await supabase
     .from('nexus_scheduled_classes')
-    .select(
-      'id, classroom_id, title, recording_url, youtube_url, transcript_url, recording_duration_minutes',
-    )
+    // '*' so the trim columns are read where they exist and ignored where the
+    // migration has not landed.
+    .select('*')
     .eq('id', scheduledClassId)
     .single();
   if (clsErr) throw clsErr;
@@ -236,9 +251,10 @@ export async function createRecapForClass(
 
   // Prefer the SharePoint recording (has a transcript for AI generation); fall
   // back to the durable YouTube backup so the recap always has a playable video.
-  const hasSharePoint = !!cls.recording_url;
+  const playbackUrl = classPlaybackUrl(cls);
+  const hasSharePoint = !!playbackUrl;
   const videoSource = hasSharePoint ? 'sharepoint' : cls.youtube_url ? 'youtube' : 'sharepoint';
-  const recordingUrl = hasSharePoint ? cls.recording_url : cls.youtube_url ?? null;
+  const recordingUrl = hasSharePoint ? playbackUrl : cls.youtube_url ?? null;
 
   const { data, error } = await supabase
     .from(RECAPS)
@@ -341,14 +357,14 @@ export async function refreshRecapMedia(
   if (rErr) throw rErr;
   const { data: cls, error: cErr } = await supabase
     .from('nexus_scheduled_classes')
-    .select('recording_url, transcript_url, recording_duration_minutes')
+    .select('*')
     .eq('id', recap.scheduled_class_id)
     .single();
   if (cErr) throw cErr;
   const { data, error } = await supabase
     .from(RECAPS)
     .update({
-      recording_url: cls.recording_url ?? null,
+      recording_url: classPlaybackUrl(cls),
       transcript_url: cls.transcript_url ?? null,
       video_duration_seconds:
         cls.recording_duration_minutes != null

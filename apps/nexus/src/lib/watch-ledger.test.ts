@@ -24,6 +24,7 @@ function report(overrides: Partial<WatchReport> = {}): WatchReport {
     blockedTotal: 0,
     diagnostics: { ...EMPTY_DIAGNOSTICS },
     userAgent: null,
+    timelineVersion: null,
     ...overrides,
   };
 }

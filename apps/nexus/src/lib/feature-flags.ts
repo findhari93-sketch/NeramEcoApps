@@ -302,6 +302,12 @@ export const FEATURES: FeatureDef[] = [
   // it on is a decision somebody makes once the OAuth grant is verified, not
   // something a deploy does on their behalf.
   { id: 'staff.youtube-auto-backup', label: 'Automatic YouTube backup', surface: 'staff', group: 'Management', paths: [], defaultEnabled: false },
+  // Not a page (`paths: []`). Gates silence trimming of class recordings
+  // (lib/recording-trim.ts): the GitHub Actions worker takes no jobs while this
+  // is off. Defaults OFF like the YouTube backup above, because turning it on
+  // writes new files into SharePoint and moves students' saved positions. The
+  // nexus_settings key 'recording_trim' then chooses dry run or apply.
+  { id: 'staff.auto-trim', label: 'Trim silent parts out of class recordings', surface: 'staff', group: 'Management', paths: [], defaultEnabled: false },
   // Not a page (`paths: []`). Gates the nightly job that writes a class's title,
   // brief, bullets and tags from its transcript once the class has ended.
   //

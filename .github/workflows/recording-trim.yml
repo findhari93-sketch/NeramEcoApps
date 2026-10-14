@@ -1,0 +1,64 @@
+name: Recording trim
+
+# Cuts the silent stretches out of class recordings (the wait before class,
+# the dead tail, and still-and-silent pauses), so catch-up and the YouTube
+# backup are shorter. See scripts/recording-trim/worker.mjs.
+#
+# The runner does the ffmpeg work; Nexus decides what to cut and holds every
+# credential. Takes no jobs unless the staff.auto-trim flag is on in Nexus.
+
+on:
+  schedule:
+    # Evenings after class, 20:30 to 01:15 IST: trim the day's recordings.
+    - cron: '*/15 15-19 * * *'
+    # 02:00 IST: switch in trims for classes students had already started.
+    - cron: '30 20 * * *'
+  workflow_dispatch:
+    inputs:
+      max_jobs:
+        description: 'Recordings to process in this run'
+        required: false
+        default: '6'
+      apply_ready:
+        description: 'Only switch in trims waiting for the overnight window'
+        type: boolean
+        default: false
+
+concurrency:
+  group: recording-trim
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  trim:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    env:
+      NEXUS_URL: https://nexus.neramclasses.com
+      RECORDING_TRIM_TOKEN: ${{ secrets.RECORDING_TRIM_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts/recording-trim
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Overnight switch-in
+        if: github.event.schedule == '30 20 * * *' || inputs.apply_ready == true
+        run: node scripts/recording-trim/worker.mjs --apply-ready
+
+      - name: Install ffmpeg
+        if: github.event.schedule != '30 20 * * *' && inputs.apply_ready != true
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg > /dev/null
+          ffmpeg -version | head -1
+
+      - name: Trim recordings
+        if: github.event.schedule != '30 20 * * *' && inputs.apply_ready != true
+        run: node scripts/recording-trim/worker.mjs --max-jobs "${{ inputs.max_jobs || '6' }}"

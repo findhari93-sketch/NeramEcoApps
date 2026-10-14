@@ -53,6 +53,7 @@ export async function GET(request: NextRequest, { params }: { params: { trackId:
       // one number, for a page still on the previous build.
       played_ranges: watch.playedRanges,
       played_until: watch.playedUntil,
+      timeline_version: watch.timelineVersion,
       mode_hint: forStudent?.mode ?? 'gated',
       max_scrub_seconds: forStudent?.max_scrub_seconds ?? null,
     };

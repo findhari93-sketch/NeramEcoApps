@@ -65,6 +65,7 @@ import { readRecapDefaults, questionsToPass } from './recap-defaults';
 import { classEndMs } from './class-share-model';
 import { excuseClassObligations } from './class-not-taught';
 import { sendNudge } from './nudge-delivery';
+import { classesAwaitingTrim } from './recording-trim';
 
 /**
  * Classes drafted per run.
@@ -375,6 +376,13 @@ export async function findAutodraftCandidates(
 
   const settledBefore = Date.now() - END_GRACE_MINUTES * 60_000;
   const today = istToday();
+  // A new class whose recording is about to have its silent parts trimmed
+  // waits for that, so its checkpoints are built on the timeline students see.
+  const rowById = new Map<string, any>(rows.map((c: any) => [c.id, c]));
+  const awaitingTrim = await classesAwaitingTrim(supabase, classIds, (id) => {
+    const cls = rowById.get(id);
+    return cls?.scheduled_date && cls?.end_time ? classEndMs(cls.scheduled_date, cls.end_time) : null;
+  }).catch(() => new Set<string>());
 
   const eligible: AutodraftCandidate[] = [];
   for (const cls of rows) {
@@ -382,6 +390,7 @@ export async function findAutodraftCandidates(
     if (!only && !hasSettled(cls, settledBefore, today)) continue;
 
     const recap = recapByClass.get(cls.id);
+    if (!recap && !only && awaitingTrim.has(cls.id)) continue;
     let repair = false;
 
     if (recap) {

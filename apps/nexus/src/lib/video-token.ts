@@ -236,7 +236,10 @@ export function resolveStreamToken(
   if (
     fromCookie.scope !== fromUrl.payload.scope ||
     fromCookie.refId !== fromUrl.payload.refId ||
-    fromCookie.userId !== fromUrl.payload.userId
+    fromCookie.userId !== fromUrl.payload.userId ||
+    // A different size is a different file (a trimmed copy switched in or out
+    // after this stream started); never splice its bytes into this one.
+    (fromCookie.size > 0 && fromUrl.payload.size > 0 && fromCookie.size !== fromUrl.payload.size)
   ) {
     return null;
   }

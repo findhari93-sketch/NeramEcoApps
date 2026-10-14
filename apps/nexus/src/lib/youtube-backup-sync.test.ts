@@ -84,7 +84,7 @@ const DEFAULT_META = { yt_title: 'A title', yt_description: 'd', yt_tags: [] };
 function makeSupabase(
   classes: any[],
   uploads: any[],
-  opts: { startedToday?: number; meta?: any } = {},
+  opts: { startedToday?: number; meta?: any; trims?: any[]; reuploads?: any[]; extraClasses?: any[] } = {},
 ) {
   const upserts: any[] = [];
   const updates: Record<string, any[]> = {};
@@ -94,6 +94,8 @@ function makeSupabase(
     classesChain[m] = vi.fn(() => classesChain);
   }
   classesChain.limit = vi.fn(async () => ({ data: classes, error: null }));
+  // Classes fetched by id for a trimmed re-upload.
+  classesChain.in = vi.fn(async () => ({ data: opts.extraClasses ?? [], error: null }));
 
   const from = vi.fn((table: string) => {
     if (table === 'nexus_scheduled_classes') {
@@ -126,9 +128,15 @@ function makeSupabase(
         sub.eq = vi.fn(() => sub);
         sub.not = vi.fn(() => sub);
         sub.limit = vi.fn(async () => ({ data: [], error: null }));
+        // The trimmed re-upload query: .or().limit()
+        sub.or = vi.fn(() => ({ limit: vi.fn(async () => ({ data: opts.reuploads ?? [], error: null })) }));
         return sub;
       });
       return chain;
+    }
+
+    if (table === 'nexus_recording_trims') {
+      return { select: vi.fn(() => ({ in: vi.fn(async () => ({ data: opts.trims ?? [], error: null })) })) };
     }
 
     // nexus_class_video_meta and anything else
@@ -500,5 +508,44 @@ describe('syncClassYouTubeBackups, dry run', () => {
     expect(initiateUpload).not.toHaveBeenCalled();
     expect(getUploadAccessToken).not.toHaveBeenCalled();
     expect(upserts).toHaveLength(0);
+  });
+});
+
+/**
+ * Recordings with their silent parts trimmed (founder, 2026-10-14): the backup
+ * waits for the trim, uploads the trimmed copy, and re-uploads classes that
+ * were backed up before they were trimmed.
+ */
+describe('syncClassYouTubeBackups: trimmed recordings', () => {
+  const cls = { id: 'c1', scheduled_date: '2026-09-01', end_time: '18:00', recording_url: 'https://sp/orig.mp4', youtube_url: null, title: 'T' };
+
+  it('holds a class whose trim is still running', async () => {
+    succeedInOneChunk();
+    const { supabase } = makeSupabase([cls], [], { trims: [{ class_id: 'c1', status: 'running', trimmed_url: null }] });
+    const summary = await syncClassYouTubeBackups(supabase, { days: 400 });
+    expect(summary.due).toBe(0);
+    expect(resolveRecordingSource).not.toHaveBeenCalled();
+  });
+
+  it('uploads the trimmed copy once the trim is applied, and says so', async () => {
+    succeedInOneChunk();
+    const { supabase, upserts } = makeSupabase([cls], [], {
+      trims: [{ class_id: 'c1', status: 'applied', trimmed_url: 'https://sp/Trimmed/orig (trimmed).mp4' }],
+    });
+    await syncClassYouTubeBackups(supabase, { days: 400 });
+    expect(resolveRecordingSource).toHaveBeenCalledWith('https://sp/Trimmed/orig (trimmed).mp4');
+    expect(upserts[0]).toMatchObject({ class_id: 'c1', source_variant: 'trimmed' });
+  });
+
+  it('re-uploads a class that was on YouTube before it was trimmed', async () => {
+    succeedInOneChunk();
+    const onYouTube = { ...cls, youtube_url: 'https://youtube.com/watch?v=old' };
+    const { supabase, upserts } = makeSupabase([], [{ class_id: 'c1', status: 'reupload', attempts: 0 }], {
+      reuploads: [{ class_id: 'c1' }],
+      extraClasses: [onYouTube],
+      trims: [{ class_id: 'c1', status: 'applied', trimmed_url: 'https://sp/Trimmed/orig (trimmed).mp4' }],
+    });
+    await syncClassYouTubeBackups(supabase, { days: 400 });
+    expect(upserts[0]).toMatchObject({ class_id: 'c1', status: 'uploading', source_variant: 'trimmed' });
   });
 });
