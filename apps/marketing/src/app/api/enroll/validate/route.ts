@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@neram/database';
 import { getDirectEnrollmentLinkByToken, expireOldDirectEnrollmentLinks } from '@neram/database/queries';
 import { verifyFirebaseToken } from '../../_lib/auth';
+import { maskPhone } from '@/lib/phone';
 
 // GET /api/enroll/validate?token=XXX - Validate a direct enrollment token (public, no auth)
 export async function GET(request: NextRequest) {
@@ -226,6 +227,10 @@ export async function GET(request: NextRequest) {
         amountPaid: link.amount_paid,
         paymentMethod: link.payment_method || null,
         expiresAt: link.expires_at,
+        // A link made for a demo person: the enrol page asks them to sign in
+        // with the number they booked the demo with.
+        forDemo: Boolean((link as any).user_id),
+        maskedPhone: maskPhone(link.student_phone),
       },
     });
   } catch (error) {

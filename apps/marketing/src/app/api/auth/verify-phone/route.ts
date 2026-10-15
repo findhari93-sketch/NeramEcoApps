@@ -16,6 +16,7 @@ import {
   updateUser,
   getOrCreateUserFromFirebase,
   checkPhoneExists,
+  findVerifiedPhoneOwner,
   getSupabaseAdminClient, recordDuplicateCandidate,
   linkPhoneAttempts,
   normalizeAttemptPhone,
@@ -93,8 +94,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Check if this phone number is already used by a DIFFERENT user
-    const existingPhoneUser = await checkPhoneExists(phoneNumber, user.id, adminClient);
+    // Only a VERIFIED owner blocks this number (the app's rule). A row where
+    // someone merely typed it (capture-phone, a staff-entered demo booking, an
+    // old unverified form) must not lock out the student who just proved it by
+    // OTP; that pair goes to staff as a weak duplicate instead.
+    const typedElsewhere = await checkPhoneExists(phoneNumber, user.id, adminClient);
+    const existingPhoneUser = typedElsewhere ? await findVerifiedPhoneOwner(phoneNumber, user.id, adminClient) : null;
+    if (typedElsewhere && !existingPhoneUser) {
+      await recordDuplicateCandidate(
+        { userA: user.id, userB: typedElsewhere.id, reason: 'phone_otp_conflict', confidence: 'likely', detectedBy: 'signin' },
+        adminClient,
+      ).catch(() => {});
+    }
     if (existingPhoneUser) {
       // The caller just proved (OTP) that they own this phone, and another row
       // holds it: almost always the same person with two accounts (phone-first

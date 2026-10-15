@@ -22,7 +22,7 @@ import {
   DialogContent,
   DialogActions,
 } from '@neram/ui';
-import { KeyboardArrowLeft, KeyboardArrowRight, CheckCircleOutlined, ErrorOutline, TimerOff, Google, Refresh, SupportAgent, Save as SaveIcon } from '@mui/icons-material';
+import { KeyboardArrowLeft, KeyboardArrowRight, CheckCircleOutlined, ErrorOutline, TimerOff, Google, Refresh, SupportAgent, Save as SaveIcon, PhoneIphone } from '@mui/icons-material';
 import { useFirebaseAuth, getCurrentUser } from '@neram/auth';
 import { LoginModal } from '@neram/ui';
 import { useSearchParams } from 'next/navigation';
@@ -62,7 +62,14 @@ interface LinkData {
   amountPaid: number;
   paymentMethod: string | null;
   expiresAt: string;
+  /** Made for a demo person: sign in with the number used for the demo. */
+  forDemo?: boolean;
+  /** That number with the middle hidden, e.g. 90******77. */
+  maskedPhone?: string | null;
 }
+
+/** The app hosts register-user, verify-phone and adopt-account for every site. */
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
 
 interface LeadProfileData {
   id: string;
@@ -108,7 +115,11 @@ export default function EnrollWizard() {
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
 
-  const { user, loading: authLoading, signInWithGoogle } = useFirebaseAuth();
+  const { user, loading: authLoading, signInWithGoogle, signOut } = useFirebaseAuth();
+
+  // Demo links: phone sign-in dialog, and "signed in with the wrong account".
+  const [showSignIn, setShowSignIn] = useState(false);
+  const [wrongAccount, setWrongAccount] = useState(false);
 
   // Session persistence
   const { restoredState, isResuming, saveProgress, clearProgress, dismissResume } = useEnrollmentProgress(token);
@@ -441,6 +452,12 @@ export default function EnrollWizard() {
       const data = await res.json();
 
       if (!res.ok) {
+        // A demo link opened with a different, established account: nothing was
+        // written. Offer to switch to the demo number (progress is kept).
+        if (data.code === 'WRONG_ACCOUNT') {
+          setWrongAccount(true);
+          throw new Error(data.error || 'Sign in with the number you used for your demo.');
+        }
         // If link was already used, redirect to success/owner view
         if (data.error?.includes('Invalid or expired') || data.error?.includes('already enrolled')) {
           clearProgress();
@@ -1011,6 +1028,98 @@ export default function EnrollWizard() {
   // AUTH GATE
   // ============================================
 
+  // A demo person signs in with the number they booked the demo with: phone
+  // first, Google second. The card stays up while the sign-in dialog finishes
+  // (the phone is saved after Firebase signs in), then the form takes over.
+  if (tokenStatus === 'valid' && !authLoading && linkData?.forDemo && (!user || showSignIn)) {
+    return (
+      <Container maxWidth="sm" sx={{ py: { xs: 3, md: 6 }, px: 2 }}>
+        <Paper
+          elevation={0}
+          sx={{
+            p: { xs: 2.5, md: 4 },
+            border: '1px solid',
+            borderColor: 'divider',
+            borderRadius: 2,
+          }}
+        >
+          <Typography variant="h5" component="h1" fontWeight={700} gutterBottom>
+            Complete Your Enrollment
+          </Typography>
+          <Typography color="text.secondary" mb={1}>
+            Welcome, <strong>{linkData.studentName}</strong>!
+          </Typography>
+          <Typography color="text.primary" mb={3}>
+            Sign in with the number you used for your demo
+            {linkData.maskedPhone ? (
+              <> (<Box component="span" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{linkData.maskedPhone}</Box>)</>
+            ) : null}
+            .
+          </Typography>
+
+          <Paper
+            elevation={0}
+            sx={{
+              p: 2,
+              mb: 3,
+              bgcolor: 'primary.50',
+              border: '1px solid',
+              borderColor: 'primary.100',
+              borderRadius: 1,
+            }}
+          >
+            <Typography variant="body2" fontWeight={600} color="primary.main" mb={1}>
+              Your Course Details
+            </Typography>
+            <Typography variant="body2">
+              Course: {linkData.courseName || linkData.interestCourse?.toUpperCase()}
+            </Typography>
+            <Typography variant="body2">
+              Fee: ₹{Number(linkData.finalFee).toLocaleString('en-IN')} | Paid: ₹{Number(linkData.amountPaid).toLocaleString('en-IN')}
+            </Typography>
+          </Paper>
+
+          <Button
+            variant="contained"
+            size="large"
+            fullWidth
+            onClick={() => setShowSignIn(true)}
+            startIcon={<PhoneIphone />}
+            sx={{ minHeight: 48, fontSize: '1rem', fontWeight: 600, borderRadius: 1, textTransform: 'none' }}
+          >
+            Sign in with phone number
+          </Button>
+
+          <Button
+            variant="outlined"
+            size="large"
+            fullWidth
+            onClick={signInWithGoogle}
+            startIcon={<Google />}
+            sx={{ mt: 1.5, minHeight: 48, fontSize: '1rem', fontWeight: 600, borderRadius: 1, textTransform: 'none' }}
+          >
+            Sign in with Google
+          </Button>
+
+          <Typography variant="body2" color="text.secondary" mt={1.5} textAlign="center">
+            Use Google only if it is the account you booked the demo with.
+          </Typography>
+        </Paper>
+
+        {showSignIn && (
+          <LoginModal
+            open={showSignIn}
+            onClose={() => setShowSignIn(false)}
+            phoneOnly
+            apiBaseUrl={APP_URL}
+            initialPhone={(linkData.studentPhone || '').replace(/\D/g, '').slice(-10)}
+            onAuthenticated={() => setShowSignIn(false)}
+          />
+        )}
+      </Container>
+    );
+  }
+
   if (tokenStatus === 'valid' && !authLoading && !user) {
     return (
       <Container maxWidth="sm" sx={{ py: 6 }}>
@@ -1205,8 +1314,29 @@ export default function EnrollWizard() {
 
       {/* Error alert */}
       {submitError && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setSubmitError(null)}>
+        <Alert
+          severity="error"
+          sx={{ mb: 2 }}
+          onClose={() => { setSubmitError(null); setWrongAccount(false); }}
+        >
           {submitError}
+          {wrongAccount && linkData?.forDemo && (
+            <Box mt={1.5}>
+              <Button
+                variant="contained"
+                color="error"
+                startIcon={<PhoneIphone />}
+                onClick={async () => {
+                  setSubmitError(null);
+                  setWrongAccount(false);
+                  await signOut();
+                }}
+                sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}
+              >
+                Switch to my demo number
+              </Button>
+            </Box>
+          )}
         </Alert>
       )}
 
@@ -1295,7 +1425,7 @@ export default function EnrollWizard() {
           open={showPhoneModal}
           onClose={() => setShowPhoneModal(false)}
           phoneOnly
-          apiBaseUrl=""
+          apiBaseUrl={APP_URL}
           initialPhone={(formData.personal.phone || linkData?.studentPhone || '').replace(/^\+91/, '')}
           onAuthenticated={(verifiedPhoneNumber) => {
             setPhoneVerified(true);

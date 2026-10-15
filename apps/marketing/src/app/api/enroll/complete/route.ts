@@ -13,6 +13,10 @@ import {
   initializeStudentOnboarding,
   enrollUserInDefaultClassroom,
   parseExamYearAnswer,
+  decideEnrolUser,
+  isDisposableAccount,
+  mergeUserRecords,
+  closeDemoFollowUpsOnEnrol,
 } from '@neram/database';
 import { verifyFirebaseToken } from '../../_lib/auth';
 import { normalisePhone } from '@/lib/phone';
@@ -96,11 +100,38 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // A link made for a demo person enrols THAT account. Signed in with another
+    // account: a shell made by this very sign-in is folded into the demo
+    // account (the demo account wins); an established one is refused, so a
+    // student never ends up with two records.
+    let userId = auth.userId;
+    if (link.user_id && link.user_id !== auth.userId) {
+      const { data: signedIn } = await supabase
+        .from('users')
+        .select('id, user_type, created_at')
+        .eq('id', auth.userId)
+        .single();
+      const decision = decideEnrolUser({
+        linkUserId: link.user_id,
+        signedInUserId: auth.userId,
+        signedInIsDisposable: signedIn ? await isDisposableAccount(supabase as any, signedIn) : false,
+      });
+      if (decision.action === 'refuse') {
+        return NextResponse.json({ error: decision.message, code: 'WRONG_ACCOUNT' }, { status: 409 });
+      }
+      if (decision.action === 'merge') {
+        // mergeUserRecords(winnerId, loserId, adminId, client): the demo account wins.
+        await mergeUserRecords(decision.userId, decision.mergeFrom, null, supabase);
+        console.log(`[Direct Enrollment] Merged sign-in account ${decision.mergeFrom} into demo account ${decision.userId}`);
+      }
+      userId = decision.userId;
+    }
+
     // Check if user is already a student
     const { data: existingUser } = await supabase
       .from('users')
       .select('id, user_type, phone')
-      .eq('id', auth.userId)
+      .eq('id', userId)
       .single();
 
     if (existingUser?.user_type === 'student') {
@@ -138,13 +169,13 @@ export async function POST(request: NextRequest) {
       if (resolvedPhone) userUpdate.phone = resolvedPhone;
     }
 
-    await updateUser(auth.userId, userUpdate, supabase);
+    await updateUser(userId, userUpdate, supabase);
 
     // 3. Create student profile first (to get DB-generated student_id)
     let studentProfile;
     try {
       studentProfile = await createStudentProfile({
-        user_id: auth.userId,
+        user_id: userId,
         enrollment_date: new Date().toISOString().split('T')[0],
         batch_id: link.batch_id || null,
         course_id: link.course_id || null,
@@ -178,7 +209,7 @@ export async function POST(request: NextRequest) {
     // a `batches` id, NOT a nexus_batches id, so it is intentionally not passed.
     // Never block enrollment if the classroom isn't configured yet.
     try {
-      await enrollUserInDefaultClassroom(auth.userId, {}, supabase);
+      await enrollUserInDefaultClassroom(userId, {}, supabase);
     } catch (enrollErr: any) {
       console.warn('[Direct Enrollment] Default classroom enroll skipped:', enrollErr?.message);
     }
@@ -186,10 +217,18 @@ export async function POST(request: NextRequest) {
     // Use DB-generated student_id as the canonical application number
     const applicationNumber = studentProfile.student_id;
 
-    const { data: leadProfile, error: leadProfileError } = await supabase
+    // One application per person: a demo person (or anyone who applied before)
+    // already has a lead_profiles row, which is completed here, not duplicated.
+    const { data: existingLead } = await supabase
       .from('lead_profiles')
-      .insert({
-        user_id: auth.userId,
+      .select('id')
+      .eq('user_id', userId)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    const leadFields = {
         application_number: applicationNumber,
         source: 'direct_link',
         status: 'enrolled',
@@ -232,9 +271,13 @@ export async function POST(request: NextRequest) {
         admin_notes: `Direct enrollment via link. Payment: ₹${link.amount_paid} via ${studentPaymentMethod || link.payment_method || 'unknown'}${(transactionReference || link.transaction_reference) ? ` (Ref: ${transactionReference || link.transaction_reference})` : ''}`,
         // Form
         form_step_completed: 4,
-      })
-      .select()
-      .single();
+        // Joined through a demo: the link carries the demo it was made from.
+        demo_registration_id: link.demo_registration_id || null,
+    };
+
+    const { data: leadProfile, error: leadProfileError } = existingLead
+      ? await supabase.from('lead_profiles').update(leadFields).eq('id', existingLead.id).select().single()
+      : await supabase.from('lead_profiles').insert({ user_id: userId, ...leadFields }).select().single();
 
     if (leadProfileError) {
       console.error('[Direct Enrollment] Failed to create lead_profile:', leadProfileError.message, leadProfileError.details);
@@ -254,7 +297,7 @@ export async function POST(request: NextRequest) {
     const { error: paymentError } = await supabase
       .from('payments')
       .insert({
-        user_id: auth.userId,
+        user_id: userId,
         student_profile_id: studentProfile.id,
         lead_profile_id: leadProfile?.id || null,
         amount: link.amount_paid,
@@ -278,10 +321,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Demo attribution: the application takes the demo's source when it has none.
+    if (link.demo_registration_id && leadProfile?.id) {
+      const { data: demo } = await supabase
+        .from('demo_class_registrations')
+        .select('channel, utm_source, utm_medium, utm_campaign')
+        .eq('id', link.demo_registration_id)
+        .maybeSingle();
+      if (demo) {
+        const { error: attributionError } = await supabase
+          .from('lead_profiles')
+          .update({
+            utm_source: demo.utm_source || demo.channel || null,
+            utm_medium: demo.utm_medium || null,
+            utm_campaign: demo.utm_campaign || null,
+          })
+          .eq('id', leadProfile.id)
+          .is('utm_source', null);
+        if (attributionError) {
+          console.error('[Direct Enrollment] Demo attribution failed:', attributionError.message);
+        }
+      }
+    }
+
+    // The enrolment is already written; a failure here only leaves a follow-up
+    // open for the nightly sweep to close, so it is logged, never thrown.
+    await closeDemoFollowUpsOnEnrol(userId, supabase).catch((e) =>
+      console.error('[Direct Enrollment] close follow-ups failed:', e?.message),
+    );
+
     // 6. Mark link as used + save student-provided payment details
     const linkUpdate: Record<string, unknown> = {
       status: 'used',
-      used_by: auth.userId,
+      used_by: userId,
       used_at: new Date().toISOString(),
       lead_profile_id: leadProfile?.id || null,
       student_profile_id: studentProfile.id,
@@ -307,7 +379,7 @@ export async function POST(request: NextRequest) {
       .from('post_enrollment_details')
       .insert({
         student_profile_id: studentProfile.id,
-        user_id: auth.userId,
+        user_id: userId,
         father_name: fatherName || null,
         caste_category: casteCategory || null,
         form_completed: false,
@@ -315,7 +387,7 @@ export async function POST(request: NextRequest) {
 
     // 9. Initialize post-enrollment onboarding steps
     try {
-      await initializeStudentOnboarding(studentProfile.id, auth.userId, 'direct', supabase);
+      await initializeStudentOnboarding(studentProfile.id, userId, 'direct', supabase);
     } catch (e) {
       console.warn('Failed to initialize onboarding steps:', e);
     }

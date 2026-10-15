@@ -32,6 +32,18 @@ export function normalisePhone(raw: unknown): string | null {
 }
 
 /**
+ * A number shown back to someone holding only a link: the last ten digits with
+ * the middle six hidden, so "+91 90000 00077" reads "90******77". Anything that
+ * is not a full ten-digit mobile returns null rather than an unmasked fragment.
+ */
+export function maskPhone(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const ten = raw.replace(/\D/g, '').slice(-10);
+  if (ten.length !== 10) return null;
+  return `${ten.slice(0, 2)}******${ten.slice(-2)}`;
+}
+
+/**
  * True when two numbers are the same phone once normalised. Used to check that
  * the number a client asks us to mark verified is the one Firebase actually
  * verified (the `phone_number` claim of the ID token), not any number it sends.
