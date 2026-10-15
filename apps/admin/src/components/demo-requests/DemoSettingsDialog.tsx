@@ -20,6 +20,9 @@ import {
 } from '@neram/ui';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import CloseIcon from '@mui/icons-material/Close';
 import { resolveDemoSettings, type DemoHost, type DemoWindowDef } from '@neram/database/demo-schedule';
 
 interface StaffOption {
@@ -50,6 +53,8 @@ export default function DemoSettingsDialog({ open, onClose, onSaved }: { open: b
   const [drawingWhatsApp, setDrawingWhatsApp] = useState('');
   const [callbackPromise, setCallbackPromise] = useState('');
   const [youtube, setYoutube] = useState('');
+  const [followUpOwners, setFollowUpOwners] = useState<string[]>([]);
+  const [followUpManager, setFollowUpManager] = useState<string | null>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -69,6 +74,8 @@ export default function DemoSettingsDialog({ open, onClose, onSaved }: { open: b
         setDrawingWhatsApp(s.drawingWhatsApp);
         setCallbackPromise(s.callbackPromise);
         setYoutube(s.youtubeUrl || '');
+        setFollowUpOwners(s.followUpOwnerUpns);
+        setFollowUpManager(s.followUpManagerUpn);
       })
       .catch(() => setError('Could not load the settings.'))
       .finally(() => setLoading(false));
@@ -78,6 +85,15 @@ export default function DemoSettingsDialog({ open, onClose, onSaved }: { open: b
       .then((d) => setStaff(d.staff ?? []))
       .catch(() => setStaff([]));
   }, [open]);
+
+  const staffName = (upn: string) => staff.find((o) => o.email === upn)?.name || upn;
+  const moveOwner = (i: number, by: -1 | 1) => {
+    const j = i + by;
+    if (j < 0 || j >= followUpOwners.length) return;
+    const next = [...followUpOwners];
+    [next[i], next[j]] = [next[j], next[i]];
+    setFollowUpOwners(next);
+  };
 
   const setHost = (i: number, patch: Partial<DemoHost>) => setHosts(hosts.map((x, j) => (j === i ? { ...x, ...patch } : x)));
 
@@ -112,6 +128,8 @@ export default function DemoSettingsDialog({ open, onClose, onSaved }: { open: b
           drawingWhatsApp: drawingWhatsApp.replace(/\D/g, ''),
           callbackPromise: callbackPromise.trim(),
           youtube_video_url: youtube.trim(),
+          followUpOwnerUpns: followUpOwners,
+          followUpManagerUpn: followUpManager,
         }),
       });
       if (!res.ok) throw new Error();
@@ -228,6 +246,70 @@ export default function DemoSettingsDialog({ open, onClose, onSaved }: { open: b
               >
                 Add person
               </Button>
+            </section>
+
+            <section>
+              <Typography variant="subtitle1" fontWeight={700}>
+                Follow-ups
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                Who calls students after a demo. The first person in the list is tried first; if they are away or disabled,
+                the next one gets it, then the manager.
+              </Typography>
+              <Box component="ol" sx={{ listStyle: 'none', p: 0, m: 0, display: 'grid', gap: 1 }}>
+                {followUpOwners.map((upn, i) => (
+                  <Box
+                    component="li"
+                    key={upn}
+                    sx={{ display: 'flex', alignItems: 'center', gap: 1, border: 1, borderColor: 'divider', borderRadius: 1, px: 1.5, minHeight: 52 }}
+                  >
+                    <Typography variant="body2" fontWeight={700} sx={{ width: 24 }}>
+                      {i + 1}
+                    </Typography>
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="body2" fontWeight={600} noWrap>
+                        {staffName(upn)}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" noWrap component="div">
+                        {upn}
+                      </Typography>
+                    </Box>
+                    <IconButton aria-label={`Move ${staffName(upn)} up`} disabled={i === 0} onClick={() => moveOwner(i, -1)} sx={{ width: 44, height: 44 }}>
+                      <ArrowUpwardIcon />
+                    </IconButton>
+                    <IconButton aria-label={`Move ${staffName(upn)} down`} disabled={i === followUpOwners.length - 1} onClick={() => moveOwner(i, 1)} sx={{ width: 44, height: 44 }}>
+                      <ArrowDownwardIcon />
+                    </IconButton>
+                    <IconButton aria-label={`Remove ${staffName(upn)} from follow-up owners`} onClick={() => setFollowUpOwners(followUpOwners.filter((x) => x !== upn))} sx={{ width: 44, height: 44 }}>
+                      <CloseIcon />
+                    </IconButton>
+                  </Box>
+                ))}
+                {!followUpOwners.length && (
+                  <Typography variant="body2" color="text.secondary">
+                    No owners yet. Demo follow-ups go to the manager until you add someone.
+                  </Typography>
+                )}
+              </Box>
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2, mt: 2 }}>
+                <Autocomplete
+                  options={staff.filter((o) => !followUpOwners.includes(o.email))}
+                  getOptionLabel={(o) => o.name}
+                  value={null}
+                  onChange={(_, v) => v && setFollowUpOwners([...followUpOwners, v.email])}
+                  renderInput={(params) => <TextField {...params} label="Add a follow-up owner" placeholder="Type a name" size="small" />}
+                  noOptionsText="No staff match."
+                />
+                <Autocomplete
+                  options={staff}
+                  getOptionLabel={(o) => o.name}
+                  isOptionEqualToValue={(o, v) => o.email === v.email}
+                  value={followUpManager ? staff.find((o) => o.email === followUpManager) ?? { name: followUpManager, email: followUpManager, avatar_url: null } : null}
+                  onChange={(_, v) => setFollowUpManager(v ? v.email : null)}
+                  renderInput={(params) => <TextField {...params} label="Follow-up manager (gets the team summary)" size="small" />}
+                  noOptionsText="No staff match."
+                />
+              </Box>
             </section>
 
             <section>

@@ -16,10 +16,13 @@ export async function GET(request: NextRequest) {
   const missing: LeadTable[] = [];
   const results = await Promise.all(
     (Object.keys(LEAD_TABLES) as LeadTable[]).map(async (table) => {
-      const { data, error } = await (supabase.from(table as never) as any)
+      let query = (supabase.from(table as never) as any)
         .select('channel, landing_page, page_code')
         .gte('created_at', since)
         .limit(5000);
+      // Demo follow-ups are staff work rows, not marketing leads.
+      if (table === 'callback_requests') query = query.or('query_type.is.null,query_type.not.in.(post_demo,demo_rebook)');
+      const { data, error } = await query;
       if (error) {
         // Before migration 20261029090000 the columns do not exist.
         missing.push(table);

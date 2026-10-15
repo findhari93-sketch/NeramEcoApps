@@ -11,6 +11,7 @@
     { "path": "/api/cron/marketing-ai/conversions", "schedule": "15 */6 * * *" },
     { "path": "/api/cron/marketing-ai/weekly", "schedule": "0 2 * * 1" },
     { "path": "/api/cron/demo-messages", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/follow-up-digest", "schedule": "30 3 * * *" },
     { "path": "/api/cron/college-photos", "schedule": "0 23 * * *" },
     { "path": "/api/cron/college-content", "schedule": "30 23 * * *" },
     { "path": "/api/cron/gbp-sync", "schedule": "15 22 * * *" },

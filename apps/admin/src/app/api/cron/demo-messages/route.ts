@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import { isAuthorizedCron } from '@/lib/marketing-ai/guard';
 import { demoMarketingOrigin, sendDueDemoMessages, sweepCancelledDemoEvents } from '@/lib/demo/server';
 import { sendApplyDraftDemoNudges } from '@/lib/demo/draft-nudge';
+import { queueFollowUpNudges } from '@/lib/follow-up-digest';
 
 /**
  * GET /api/cron/demo-messages (Vercel Cron, every 5 minutes; apps/admin/vercel.json)
@@ -26,7 +27,11 @@ export async function GET(request: Request) {
       console.error('apply draft demo nudges failed:', err);
       return { enabled: true, sent: 0, failed: 0, error: true };
     });
-    return NextResponse.json({ success: true, ...summary, meetingsCancelled, draftNudges });
+    const followUpNudges = await queueFollowUpNudges(new Date(), process.env.NEXT_PUBLIC_ADMIN_URL || new URL(request.url).origin).catch((err) => {
+      console.error('follow-up nudges failed:', err);
+      return 0;
+    });
+    return NextResponse.json({ success: true, ...summary, meetingsCancelled, draftNudges, followUpNudges });
   } catch (error) {
     console.error('demo-messages cron failed:', error);
     return NextResponse.json({ error: 'demo-messages cron failed' }, { status: 500 });

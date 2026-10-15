@@ -34,8 +34,6 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseAdminClient();
     const now = new Date();
     const due = await getDueDemoMessages(now, 'assistant', supabase);
-    if (!due.length) return NextResponse.json({ success: true, sent: 0 });
-
     const { data: settingsRow } = await (supabase as any)
       .from('site_settings')
       .select('value')
@@ -48,7 +46,7 @@ export async function GET(request: NextRequest) {
     let skipped = 0;
     let failed = 0;
 
-    for (const m of due) {
+    if (due.length) for (const m of due) {
       if (!requests.has(m.registration_id)) requests.set(m.registration_id, await getDemoRequestById(m.registration_id, supabase));
       const r = requests.get(m.registration_id);
       const skip = !r ? 'request not found' : !m.to_user_id ? 'no recipient' : staffReminderSkipReason(m, r, now);
@@ -88,6 +86,33 @@ export async function GET(request: NextRequest) {
         },
         supabase,
       ).catch(() => {});
+      if (ok) sent++;
+      else failed++;
+    }
+
+    // Follow-up digests queued by the Admin cron (staff_digest_messages).
+    const { data: digests } = await (supabase as any)
+      .from('staff_digest_messages')
+      .select('id, to_user_id, kind, subject, plain, link')
+      .eq('status', 'pending')
+      .lte('send_after', now.toISOString())
+      .limit(50);
+    for (const d of digests ?? []) {
+      const { results } = await sendNudge({
+        studentIds: [d.to_user_id],
+        audience: 'staff',
+        subject: d.subject,
+        plain: d.plain,
+        eventType: 'demo_reminder',
+        assistant: { link: d.link },
+        metadata: { digest_id: d.id, kind: d.kind },
+        source: { kind: 'demo_reminder', refId: d.id },
+      });
+      const ok = !!results[0]?.ok;
+      await (supabase as any)
+        .from('staff_digest_messages')
+        .update({ status: ok ? 'sent' : 'failed', sent_at: ok ? new Date().toISOString() : null, error_message: ok ? null : results[0]?.channel || 'not delivered' })
+        .eq('id', d.id);
       if (ok) sent++;
       else failed++;
     }
