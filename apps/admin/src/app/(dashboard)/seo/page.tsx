@@ -340,6 +340,9 @@ export default function SeoHealthPage() {
  */
 type AskGoogleItem = { url: string; coverage_state: string | null; reason?: string; waiting?: boolean };
 
+/** Main-site pages as a path; other hosts (the Tools app) keep their host so the two never look alike. */
+const pageLabel = (u: string) => (/^https?:\/\/(www\.)?neramclasses\.com/.test(u) ? shortUrl(u) : u.replace(/^https?:\/\//, ''));
+
 const PASTE_HINT = 'In Search Console, paste it in the Inspect box at the top, press Enter, then Request indexing.';
 
 function AskGoogleCard({
@@ -399,10 +402,17 @@ function AskGoogleCard({
           <Typography id="ask-google-title" variant="subtitle1" component="h2" fontWeight={700}>
             Ask Google to index today
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 820 }}>
-            These pages work but Google has not indexed them. For each one: copy the page URL, paste it in the Inspect box at the top of Search Console, press Request indexing (Google allows about 10 a day),
-            then mark it asked here. If Search Console is signed in to another browser, copy the URLs and open Search Console there. Pages we have already fixed come first, then the most valuable.
-          </Typography>
+          {auto ? (
+            <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 820 }}>
+              Google is asked automatically every morning at 09:00 IST, fixed pages first. Pages it has asked for leave this list for 14 days, so the list below is what goes next. To ask for one sooner, use Copy URL
+              and open, press Request indexing in Search Console, then Mark asked.
+            </Typography>
+          ) : (
+            <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 820 }}>
+              These pages work but Google has not indexed them. For each one: Copy URL and open, paste the URL in the Inspect box at the top of Search Console, press Request indexing (Google allows about 10 a
+              day), then mark it asked here. If Search Console is signed in to another browser, use Copy all URLs and open Search Console there. Pages we have already fixed come first, then the most valuable.
+            </Typography>
+          )}
           {auto && <AutoAskStatus run={lastAuto} />}
         </Box>
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
@@ -426,12 +436,18 @@ function AskGoogleCard({
           <CheckCircleOutlineIcon fontSize="small" color="success" aria-hidden /> All asked for today.
         </Typography>
       ) : (
+        <>
+        {auto && (
+          <Typography variant="subtitle2" component="h3" fontWeight={700} sx={{ mb: 0.5 }}>
+            Next in line ({left.length}), asked at the next 09:00 IST run
+          </Typography>
+        )}
         <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, display: 'grid', gap: 1 }}>
           {left.map((i) => (
             <Box component="li" key={i.url} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', py: 0.5, borderTop: 1, borderColor: 'divider' }}>
               <Box sx={{ flex: '1 1 320px', minWidth: 0 }}>
                 <Typography variant="body2" fontWeight={600} noWrap title={i.url}>
-                  {shortUrl(i.url)}
+                  {pageLabel(i.url)}
                 </Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mt: 0.25 }}>
                   {i.waiting && <StatusChip icon={BuildCircleOutlinedIcon} label="Fixed on our side" tone="success" />}
@@ -445,26 +461,18 @@ function AskGoogleCard({
                 size="small"
                 endIcon={<OpenInNewIcon fontSize="small" aria-hidden />}
                 onClick={() => copyAndOpen(i.url)}
-                aria-label={`Copy URL and open Search Console for ${shortUrl(i.url)} (new tab)`}
+                aria-label={`Copy URL and open Search Console for ${pageLabel(i.url)} (new tab)`}
                 sx={TARGET_44}
               >
                 Copy URL and open
               </Button>
-              <Button
-                size="small"
-                startIcon={<ContentCopyIcon fontSize="small" aria-hidden />}
-                onClick={() => copy(i.url, `Page URL copied. ${PASTE_HINT}`)}
-                aria-label={`Copy URL of ${shortUrl(i.url)}`}
-                sx={TARGET_44}
-              >
-                Copy URL
-              </Button>
-              <Button size="small" onClick={() => markAsked(i.url)} disabled={busy === i.url} sx={TARGET_44}>
+              <Button size="small" onClick={() => markAsked(i.url)} disabled={busy === i.url} aria-label={`Mark asked: ${pageLabel(i.url)}`} sx={TARGET_44}>
                 {busy === i.url ? 'Saving…' : 'Mark asked'}
               </Button>
             </Box>
           ))}
         </Box>
+        </>
       )}
     </Paper>
   );
@@ -474,15 +482,19 @@ function AskGoogleCard({
 function AutoAskStatus({ run }: { run?: { status: string | null; started_at?: string; counts?: any; error?: string | null } }) {
   const c = run?.counts ?? {};
   const problem = run?.status === 'failed' || (run?.status === 'partial' && c.errors > 0);
+  const istDay = (d: Date) => d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  const today = !!run?.started_at && istDay(new Date(run.started_at)) === istDay(new Date());
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mt: 1 }}>
       <StatusChip icon={problem ? ErrorOutlineIcon : ScheduleIcon} tone={problem ? 'warning' : 'info'} label="Sent automatically each morning" />
       <Typography variant="body2" color={problem ? 'warning.dark' : 'text.secondary'}>
         {!run?.started_at
-          ? 'Through the Indexing API at 09:00 IST. The buttons below are for anything it missed.'
+          ? 'Through the Indexing API at 09:00 IST. Nothing sent yet.'
           : problem
             ? `Last try ${when(run.started_at)}: ${c.hint || c.firstError || run.error || 'it did not go through'}`
-            : `Last sent ${when(run.started_at)}: ${num(c.requested ?? 0)} pages. The buttons below are for anything it missed.`}
+            : today
+              ? `Asked Google for ${num(c.requested ?? 0)} pages today (${when(run.started_at)}).`
+              : `Last asked ${when(run.started_at)}: ${num(c.requested ?? 0)} pages.`}
       </Typography>
     </Box>
   );

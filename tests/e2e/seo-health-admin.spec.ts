@@ -185,9 +185,9 @@ test.describe('SEO Health @admin', () => {
       expect((await popup).url()).toContain('search.google.com');
       expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('https://neramclasses.com/coaching/nata-coaching-in-assam');
 
-      await card.getByRole('button', { name: /Copy URL of \/coaching\/jee-paper-2-coaching-in-odisha/ }).click();
+      // One button per row: no separate Copy URL.
+      await expect(card.getByRole('button', { name: /^Copy URL of/ })).toHaveCount(0);
       await expect(page.getByText(/Page URL copied\. In Search Console, paste it in the Inspect box/)).toBeVisible();
-      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('https://neramclasses.com/coaching/jee-paper-2-coaching-in-odisha');
 
       await card.getByRole('button', { name: 'Copy all URLs' }).click();
       await expect(page.getByText('2 page URLs copied, one per line.')).toBeVisible();
@@ -200,7 +200,6 @@ test.describe('SEO Health @admin', () => {
         card.getByRole('button', { name: 'Copy all URLs' }),
         card.getByRole('link', { name: 'Open Search Console' }),
         card.getByRole('button', { name: /Copy URL and open/ }).first(),
-        card.getByRole('button', { name: /Copy URL of/ }).first(),
         card.getByRole('button', { name: 'Mark asked' }).first(),
       ]) {
         const box = await target.boundingBox();
@@ -232,7 +231,8 @@ test.describe('SEO Health @admin', () => {
       test.skip(!(await open(page, { summary: auto })), 'Runner is not signed in to the admin app.');
       const card = page.getByRole('region', { name: 'Ask Google to index today' });
       await expect(card.getByText('Sent automatically each morning')).toBeVisible();
-      await expect(card.getByText(/Last sent .*: 50 pages\./)).toBeVisible();
+      await expect(card.getByText(/Asked Google for 50 pages today|Last asked .*: 50 pages\./)).toBeVisible();
+      await expect(card.getByRole('heading', { name: /Next in line \(2\), asked at the next 09:00 IST run/ })).toBeVisible();
 
       let posted: any = null;
       await page.route('**/api/seo-audit/run', async (r) => {
