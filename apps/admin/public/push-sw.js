@@ -1,7 +1,9 @@
 /**
- * Custom service worker code for the admin app. next-pwa (customWorkerDir
- * 'worker', its default) bundles this into public/worker-*.js and the generated
- * sw.js imports it, so it runs beside the Workbox caching.
+ * Push handlers for the admin service worker. Served as is from /push-sw.js and
+ * loaded by the generated sw.js through next-pwa's `importScripts` option
+ * (next.config.js). Kept out of a `worker/` folder on purpose: next-pwa compiles
+ * that folder with babel-loader, which this app does not install, and the
+ * production build failed on it (2026-10-15).
  *
  * Phone alerts: the server sends { title, body, url, tag } with Web Push
  * (packages/database/src/services/staff-push.ts). A tap opens `url` in the
