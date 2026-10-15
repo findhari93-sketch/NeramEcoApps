@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { alpha } from '@mui/material/styles';
 import {
@@ -149,6 +149,20 @@ export default function RequestPanel({
   const [logOpen, setLogOpen] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const { supabaseUserId } = useAdminProfile();
+  const linkReq = detail?.request;
+  const linkPrefill = useMemo(
+    () =>
+      linkReq
+        ? {
+            studentName: linkReq.name,
+            studentPhone: linkReq.phone,
+            studentEmail: linkReq.email || undefined,
+            userId: linkReq.user_id || undefined,
+            demoRegistrationId: linkReq.id,
+          }
+        : undefined,
+    [linkReq?.name, linkReq?.phone, linkReq?.email, linkReq?.user_id, linkReq?.id], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   if (loading && !detail) {
     return (
@@ -305,9 +319,9 @@ export default function RequestPanel({
               </Button>
             </Box>
           )}
-          {r.status === 'attended' && !detail.followUp && (
+          {r.status === 'attended' && !detail.followUp && r.user_id && (
             <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
-            <Button variant="contained" startIcon={<SchoolIcon />} onClick={() => setLinkOpen(true)} sx={{ minHeight: 44 }}>
+            <Button variant="contained" startIcon={<SchoolIcon />} onClick={() => setLinkOpen(true)} disabled={!supabaseUserId} sx={{ minHeight: 44 }}>
               Send enrolment link
             </Button>
             </Box>
@@ -483,9 +497,11 @@ export default function RequestPanel({
             <Button variant="outlined" onClick={() => setLogOpen(true)} sx={{ minHeight: 44 }}>
               Log outcome
             </Button>
-            <Button variant="contained" startIcon={<SchoolIcon />} onClick={() => setLinkOpen(true)} sx={{ minHeight: 44 }}>
+            {r.user_id && (
+            <Button variant="contained" startIcon={<SchoolIcon />} onClick={() => setLinkOpen(true)} disabled={!supabaseUserId} sx={{ minHeight: 44 }}>
               Send enrolment link
             </Button>
+            )}
           </Box>
           <LogOutcomeDialog
             open={logOpen}
@@ -679,13 +695,7 @@ export default function RequestPanel({
           onAction({ action: 'note', note: 'Enrolment link sent' });
         }}
         adminId={supabaseUserId || ''}
-        prefillData={{
-          studentName: r.name,
-          studentPhone: r.phone,
-          studentEmail: r.email || undefined,
-          userId: r.user_id || undefined,
-          demoRegistrationId: r.id,
-        }}
+        prefillData={linkPrefill}
       />
       <AttendedDialog
         open={attendedOpen}

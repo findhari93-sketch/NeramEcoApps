@@ -96,9 +96,26 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseAdminClient();
 
     if (userId) {
-      const { data: u } = await (supabase as any).from('users').select('id, user_type').eq('id', userId).maybeSingle();
+      const { data: u, error: userErr } = await (supabase as any).from('users').select('id, user_type').eq('id', userId).maybeSingle();
+      if (userErr) {
+        console.error('Direct enrollment user lookup failed:', userErr);
+        return NextResponse.json({ error: 'Could not check that person. Try again.' }, { status: 500 });
+      }
       if (!u) return NextResponse.json({ error: 'That person was not found.' }, { status: 400 });
       if (u.user_type === 'student') return NextResponse.json({ error: 'This person is already a student.' }, { status: 409 });
+      if (demoRegistrationId) {
+        const { data: demo, error: demoErr } = await (supabase as any)
+          .from('demo_class_registrations')
+          .select('id')
+          .eq('id', demoRegistrationId)
+          .eq('user_id', userId)
+          .maybeSingle();
+        if (demoErr) {
+          console.error('Direct enrollment demo lookup failed:', demoErr);
+          return NextResponse.json({ error: 'Could not check that demo. Try again.' }, { status: 500 });
+        }
+        if (!demo) return NextResponse.json({ error: 'That demo does not belong to this person.' }, { status: 400 });
+      }
     }
 
     // Generate URL-safe unique token

@@ -190,7 +190,10 @@ export default function GenerateLinkDialog({
       if (prefillData.studentEmail) setStudentEmail(prefillData.studentEmail);
       if (prefillData.interestCourse) setInterestCourse(prefillData.interestCourse);
     }
-  }, [open, prefillData]);
+    // Primitive deps: callers may pass a fresh object each render, which must not
+    // overwrite what staff have typed while the dialog is open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, prefillData?.studentName, prefillData?.studentPhone, prefillData?.studentEmail, prefillData?.interestCourse]);
 
   // Auto-fill fee when course selected
   useEffect(() => {

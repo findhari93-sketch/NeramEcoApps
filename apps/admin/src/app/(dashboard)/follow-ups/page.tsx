@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useCallback, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Box, Tabs, Tab, Alert, Button, ToggleButton, ToggleButtonGroup, Typography } from '@neram/ui';
 import PhoneCallbackIcon from '@mui/icons-material/PhoneCallback';
@@ -49,6 +49,18 @@ function FollowUpsInner() {
   const [logging, setLogging] = useState<FollowUp | null>(null);
   const [linking, setLinking] = useState<FollowUp | null>(null);
   const { supabaseUserId } = useAdminProfile();
+  const linkPrefill = useMemo(
+    () =>
+      linking
+        ? {
+            studentName: linking.person_name || '',
+            studentPhone: linking.person_phone || '',
+            userId: linking.user_id || undefined,
+            demoRegistrationId: linking.demo_registration_id || undefined,
+          }
+        : undefined,
+    [linking],
+  );
   const [now, setNow] = useState(() => new Date());
 
   const load = useCallback(async () => {
@@ -215,7 +227,7 @@ function FollowUpsInner() {
           </Box>
           <Box component="ul" sx={{ display: 'grid', gap: 1, p: 0, m: 0 }}>
             {items.map((item) => (
-              <FollowUpRow key={item.callback_id} item={item} now={now} onLogOutcome={() => setLogging(item)} onSendLink={item.user_id ? () => setLinking(item) : undefined} />
+              <FollowUpRow key={item.callback_id} item={item} now={now} onLogOutcome={() => setLogging(item)} onSendLink={item.user_id && supabaseUserId ? () => setLinking(item) : undefined} />
             ))}
           </Box>
         </>
@@ -225,16 +237,7 @@ function FollowUpsInner() {
         onClose={() => setLinking(null)}
         onSuccess={() => setLinking(null)}
         adminId={supabaseUserId || ''}
-        prefillData={
-          linking
-            ? {
-                studentName: linking.person_name || '',
-                studentPhone: linking.person_phone || '',
-                userId: linking.user_id || undefined,
-                demoRegistrationId: linking.demo_registration_id || undefined,
-              }
-            : undefined
-        }
+        prefillData={linkPrefill}
       />
       <LogOutcomeDialog
         open={!!logging}
