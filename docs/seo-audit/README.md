@@ -49,14 +49,25 @@ SEO Health reads the live site, so a fix only counts once it is deployed to prod
 
 **Import URLs** takes a Search Console export, for example Indexing > Pages > *Server error (5xx)* > Export. It puts those URLs first in the inspection and crawl queues. The Search Console API cannot list the URLs behind each "Why pages aren't indexed" reason, so this is how to check them.
 
-## Ask Google to index (the one manual step)
+## Ask Google to index
 
-Google's Indexing API is only for job postings and livestreams; using it for other pages breaks Google's terms. So there is no API to request indexing for our pages. What is automated: sitemaps with real lastmod, resubmitted daily when they change (`sitemaps` job), and IndexNow for Bing and ChatGPT search (marketing and app `/api/cron/indexnow`, daily).
+Google's Indexing API is documented for job postings and livestreams only. On 2026-10-15 the owner chose to use it for our pages anyway, knowing Google may ignore those requests or withdraw API access (Google documents no ranking penalty). It is behind a switch:
+
+- **On:** set `SEO_INDEXING_API=on` on the admin Vercel project. Every day at 03:30 UTC (09:00 IST), half an hour after the morning run, `/api/cron/seo-audit/indexing` sends the ask-Google pages to the Indexing API (`URL_UPDATED`), fixed pages first, `SEO_INDEXING_DAILY` a day (default 50; Google's quota is 200), and marks them asked (`lib/seo-audit/indexing-api.ts`). **Run now > Ask Google now** does the same on demand.
+- **Off:** remove the variable or set it to anything else, then redeploy. Nothing is sent and nothing is recorded.
+- **Setup, once:**
+  1. Enable "Web Search Indexing API" in Google Cloud project neramclasses-ab480.
+  2. In Search Console > Settings > Users and permissions, make the service account `seo-audit@neramclasses-ab480.iam.gserviceaccount.com` an **Owner**. The Indexing API needs ownership; Full is not enough.
+- **Errors:** a 403 or 429 stops that day's run. The Runs tab and the card say which setup step is missing or that the quota is used up.
+
+Also automated, within Google's rules: sitemaps with real lastmod, resubmitted daily when they change (`sitemaps` job), and IndexNow for Bing and ChatGPT search (marketing and app `/api/cron/indexnow`, daily).
+
+The card below stays as the manual fallback.
 
 The **Ask Google to index today** card on the SEO Health page lists up to 10 sitemap pages that work on our side but are not indexed, most searched first, then hub pages (`pickAskGoogle` in `rules.ts`).
 - Pages already fixed on our side (for example Google last read an old canonical) come first, marked *Fixed on our side*. Each row says in plain words why it is listed.
-- **Open in Search Console** opens URL Inspection for that page; press Request indexing there. Google allows about 10 a day. Request indexing needs an Owner or Full user on the property.
-- **Copy link** and **Copy all links** are for when the Search Console account is signed in to another browser: paste the links there. If both accounts are signed in to the same browser, set `GSC_ACCOUNT_EMAIL` on the admin app and the links open as that account (`authuser`). Simplest of all: add the admin browser's Google account as a Full user under Search Console > Settings > Users and permissions.
+- **Copy URL and open** copies the page URL and opens Search Console. Paste the URL in the "Inspect any URL" box at the top, press Enter, then **Request indexing**. Google allows about 10 a day, and Request indexing needs an Owner or Full user on the property. Search Console no longer accepts a page URL in its links (`/search-console/inspect?id=<url>` now returns a Google 404, since `id` is an internal token), so a link cannot open one page's inspection directly.
+- **Copy URL** and **Copy all URLs** are for when the Search Console account is signed in to another browser: open Search Console there and paste. If both accounts are signed in to the same browser, set `GSC_ACCOUNT_EMAIL` on the admin app so **Open Search Console** opens as that account (`authuser`). Simplest of all: add the admin browser's Google account as a Full user under Search Console > Settings > Users and permissions.
 - **Mark asked** records it (`seo_url_status.index_requested_at`), so the page leaves the list for 14 days and is re-inspected the next morning.
 
 ## Claude Code fixes, twice a week (`.github/workflows/seo-autofix.yml`)

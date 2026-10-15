@@ -9,6 +9,9 @@
  *   GSC_ACCOUNT_EMAIL        optional: the Google account that can use Search Console. Added to
  *                            the "Open in Search Console" links as authuser, so a browser signed
  *                            in to several Google accounts opens the right one
+ *   SEO_INDEXING_API         'on' sends the ask-Google pages to Google's Indexing API each
+ *                            morning (indexing-api.ts). Anything else, or unset, is off
+ *   SEO_INDEXING_DAILY       how many a day, default 50 (Google's quota is 200)
  *
  * Setup steps: docs/seo-audit/README.md.
  */
@@ -25,6 +28,8 @@ export interface SeoAuditEnv {
   origins: string[];
   digestTo: string[];
   accountEmail: string | null;
+  indexingApi: boolean;
+  indexingDaily: number;
 }
 
 export const DEFAULT_SITE_URL = 'sc-domain:neramclasses.com';
@@ -65,6 +70,8 @@ export function readSeoEnv(env: Record<string, string | undefined> = process.env
       origins: origins.length ? origins : DEFAULT_ORIGINS,
       digestTo: list(env.SEO_DIGEST_TO),
       accountEmail: env.GSC_ACCOUNT_EMAIL?.trim() || null,
+      indexingApi: ['on', 'true', '1'].includes((env.SEO_INDEXING_API || '').trim().toLowerCase()),
+      indexingDaily: Math.min(200, Math.max(1, Number(env.SEO_INDEXING_DAILY) || 50)),
     },
     missing,
   };

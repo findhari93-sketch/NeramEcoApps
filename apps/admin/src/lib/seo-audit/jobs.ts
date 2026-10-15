@@ -7,6 +7,9 @@
  * up to 400 URLs, crawl the pages not crawled this week, then analyze.
  * Weekly: analyze, then the email digest.
  * Recheck ("Check my fixes"): only the pages behind open or waiting issues.
+ * Indexing (when SEO_INDEXING_API=on): its own cron at 03:30 UTC, after the
+ * daily run has inspected and crawled, sends the ask-Google pages to Google's
+ * Indexing API.
  *
  * Search and inspection need Search Console; the crawl and the rules do not,
  * so they run (and find real issues) before the key is set.
@@ -20,6 +23,7 @@ import { runAnalyze, urlsToRecheck } from './analyze';
 import { sendSeoDigest } from './digest';
 import { refreshUrlSet } from './urls';
 import { runSitemapSubmit } from './sitemap-submit';
+import { runIndexingRequests } from './indexing-api';
 import { db, finishRun, lastRunCounts, recordNotConnected, selectAll, startRun } from './store';
 import type { FindingRow, RunKind, RunTrigger } from './types';
 
@@ -48,6 +52,16 @@ export async function runJob(kind: RunKind, trigger: RunTrigger, opts: { deadlin
   const deadline = opts.deadline ?? Date.now() + BUDGET_MS;
 
   switch (kind) {
+    case 'indexing': {
+      // Off unless switched on: nothing is recorded, so the Runs tab stays quiet.
+      if (!env.indexingApi) return { kind, status: 'off' };
+      if (!env.serviceAccount) {
+        await recordNotConnected(client, kind, trigger, missing);
+        return { kind, status: 'not_connected', missing };
+      }
+      const serviceAccount = env.serviceAccount;
+      return recorded(client, kind, trigger, () => runIndexingRequests({ serviceAccount, client, limit: env.indexingDaily, deadline }));
+    }
     case 'search':
     case 'inspect':
     case 'sitemaps': {

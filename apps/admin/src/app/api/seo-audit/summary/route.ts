@@ -13,7 +13,7 @@ import { requireSeoAdmin, seoError } from '@/lib/seo-audit/guard';
 import { pickAskGoogle } from '@/lib/seo-audit/rules';
 import { db, latestSearchDate, loadUrlStatus, pageWindow, selectAll, shiftDate } from '@/lib/seo-audit/store';
 
-const KINDS = ['search', 'sitemaps', 'inspect', 'crawl', 'analyze', 'digest'] as const;
+const KINDS = ['search', 'sitemaps', 'inspect', 'crawl', 'analyze', 'digest', 'indexing'] as const;
 const AEO_RULES = ['A1', 'A2', 'A3', 'A4'];
 
 function totals(rows: Array<{ clicks: number; impressions: number; avg_position: number }>) {
@@ -83,7 +83,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({
-      connection: { connected: missing.length === 0, missing, siteUrl: env.siteUrl, accountEmail: env.accountEmail, origins: env.origins, digest: env.digestTo.length > 0 },
+      connection: { connected: missing.length === 0, missing, siteUrl: env.siteUrl, accountEmail: env.accountEmail, indexingApi: env.indexingApi, origins: env.origins, digest: env.digestTo.length > 0 },
       runs,
       coverage,
       findings: { total: findings.length, issues: findings.length - bySeverity.info, waiting: waiting.count ?? 0, bySeverity, byCategory },

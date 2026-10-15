@@ -6,14 +6,14 @@ export const maxDuration = 300;
  * POST /api/seo-audit/run { kind } - run one job now from the SEO Health page.
  * kind: daily (everything the morning cron does), recheck ("Check my fixes":
  * only pages with open or waiting issues), search, sitemaps, inspect, crawl,
- * analyze or digest. A crawl from here re-crawls every page (force). Admins only.
+ * analyze, digest or indexing (send the ask-Google pages to the Indexing API now). A crawl from here re-crawls every page (force). Admins only.
  */
 import { NextResponse } from 'next/server';
 import { requireSeoAdmin, seoError } from '@/lib/seo-audit/guard';
 import { runDaily, runJob, runRecheck } from '@/lib/seo-audit/jobs';
 import type { RunKind } from '@/lib/seo-audit/types';
 
-const KINDS: RunKind[] = ['search', 'sitemaps', 'inspect', 'crawl', 'analyze', 'digest'];
+const KINDS: RunKind[] = ['search', 'sitemaps', 'inspect', 'crawl', 'analyze', 'digest', 'indexing'];
 
 export async function POST(request: Request) {
   const guard = requireSeoAdmin(request);

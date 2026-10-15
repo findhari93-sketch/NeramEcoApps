@@ -16,6 +16,7 @@
     { "path": "/api/cron/college-content", "schedule": "30 23 * * *" },
     { "path": "/api/cron/gbp-sync", "schedule": "15 22 * * *" },
     { "path": "/api/cron/seo-audit/daily", "schedule": "0 3 * * *" },
+    { "path": "/api/cron/seo-audit/indexing", "schedule": "30 3 * * *" },
     { "path": "/api/cron/seo-audit/weekly", "schedule": "30 3 * * 1" }
   ],
   "headers": [

@@ -52,6 +52,7 @@ type TabKey = (typeof TABS)[number];
 
 const RUNS = [
   { kind: 'recheck', label: 'Check my fixes', hint: 'Re-crawl pages with open issues, then rebuild the list' },
+  { kind: 'indexing', label: 'Ask Google now', hint: "Send today's list to Google's Indexing API" },
   { kind: 'daily', label: 'Full morning run', hint: 'Search data, inspection, crawl and rules' },
   { kind: 'search', label: 'Fetch search data', hint: 'Clicks and positions from Search Console' },
   { kind: 'sitemaps', label: 'Resubmit sitemaps', hint: 'Only those that changed or Google stopped reading' },
@@ -61,7 +62,7 @@ const RUNS = [
   { kind: 'digest', label: 'Send the email digest', hint: 'To SEO_DIGEST_TO' },
 ] as const;
 
-const JOB_LABEL: Record<string, string> = { search: 'Search data', sitemaps: 'Sitemap submit', inspect: 'URL Inspection', crawl: 'Crawl', analyze: 'Rules', digest: 'Email digest' };
+const JOB_LABEL: Record<string, string> = { search: 'Search data', sitemaps: 'Sitemap submit', inspect: 'URL Inspection', crawl: 'Crawl', analyze: 'Rules', digest: 'Email digest', indexing: 'Ask Google (Indexing API)' };
 const RUN_STATUS: Record<string, { label: string; tone: Tone; icon: typeof CheckCircleOutlineIcon }> = {
   ok: { label: 'Done', tone: 'success', icon: CheckCircleOutlineIcon },
   partial: { label: 'Partly done', tone: 'warning', icon: ScheduleIcon },
@@ -123,6 +124,12 @@ export default function SeoHealthPage() {
       setToast(
         failed.length
           ? `Finished with an error: ${failed[0].error}`
+          : kind === 'indexing'
+            ? r.status === 'off'
+              ? 'Automatic requests are off. Set SEO_INDEXING_API=on on the admin app to turn them on.'
+              : r.status === 'not_connected'
+                ? 'Search Console is not connected yet.'
+                : `Asked Google for ${num(r.requested ?? 0)} pages.${r.firstError ? ` ${r.hint || r.firstError}` : ''}`
           : kind === 'recheck'
             ? r.checked === 0
               ? 'No open issues to check.'
@@ -267,7 +274,16 @@ export default function SeoHealthPage() {
         </Paper>
       )}
 
-      {s?.askGoogle?.length > 0 && <AskGoogleCard items={s.askGoogle} siteUrl={s.connection.siteUrl} accountEmail={s.connection.accountEmail} setToast={setToast} />}
+      {s?.askGoogle?.length > 0 && (
+        <AskGoogleCard
+          items={s.askGoogle}
+          siteUrl={s.connection.siteUrl}
+          accountEmail={s.connection.accountEmail}
+          auto={!!s.connection.indexingApi}
+          lastAuto={s.runs?.find((r: any) => r.kind === 'indexing')}
+          setToast={setToast}
+        />
+      )}
 
       <Paper variant="outlined" sx={{ borderRadius: 2 }}>
         <Tabs value={tab} onChange={(_, v) => changeTab(v)} variant="scrollable" allowScrollButtonsMobile aria-label="SEO Health views" sx={{ borderBottom: 1, borderColor: 'divider', px: 1 }}>
@@ -314,24 +330,53 @@ export default function SeoHealthPage() {
  * Google's API cannot request indexing for ordinary pages, so this is the one
  * manual step: open the page in Search Console URL Inspection and press
  * "Request indexing" there (about 10 a day). Marking it here takes the page off
- * the list for 14 days. The Search Console account often lives in another
- * browser, so every link can also be copied (one, or all at once).
+ * the list for 14 days.
+ *
+ * Search Console no longer accepts a page URL in its inspect links (`/inspect?id=`
+ * now takes an internal token and 404s on a URL), so we cannot deep-link to one
+ * page. Instead each row copies the page URL and opens Search Console, where it
+ * is pasted into the "Inspect any URL" box. The Search Console account often
+ * lives in another browser, so the URLs can also just be copied.
  */
 type AskGoogleItem = { url: string; coverage_state: string | null; reason?: string; waiting?: boolean };
 
-function AskGoogleCard({ items, siteUrl, accountEmail, setToast }: { items: AskGoogleItem[]; siteUrl: string; accountEmail?: string | null; setToast: (m: string) => void }) {
+const PASTE_HINT = 'In Search Console, paste it in the Inspect box at the top, press Enter, then Request indexing.';
+
+function AskGoogleCard({
+  items,
+  siteUrl,
+  accountEmail,
+  auto,
+  lastAuto,
+  setToast,
+}: {
+  items: AskGoogleItem[];
+  siteUrl: string;
+  accountEmail?: string | null;
+  /** SEO_INDEXING_API=on: the 03:30 UTC cron sends this list to the Indexing API. */
+  auto: boolean;
+  lastAuto?: { status: string | null; started_at?: string; counts?: any; error?: string | null };
+  setToast: (m: string) => void;
+}) {
   const [done, setDone] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
-  const inspectUrl = (u: string) =>
-    `https://search.google.com/search-console/inspect?resource_id=${encodeURIComponent(siteUrl)}&id=${encodeURIComponent(u)}${accountEmail ? `&authuser=${encodeURIComponent(accountEmail)}` : ''}`;
+  const consoleUrl = `https://search.google.com/search-console?resource_id=${encodeURIComponent(siteUrl)}${accountEmail ? `&authuser=${encodeURIComponent(accountEmail)}` : ''}`;
 
   const copy = async (text: string, ok: string) => {
     try {
       await navigator.clipboard.writeText(text);
       setToast(ok);
+      return true;
     } catch {
-      setToast('Could not copy. Open the link and copy it from the address bar.');
+      setToast(`Could not copy. Select the address and copy it: ${text.split('\n')[0]}`);
+      return false;
     }
+  };
+
+  // Copy first (the tab still has focus), then open Search Console in a new tab.
+  const copyAndOpen = async (u: string) => {
+    await copy(u, `Page URL copied. ${PASTE_HINT}`);
+    window.open(consoleUrl, '_blank', 'noopener,noreferrer');
   };
 
   const markAsked = async (u: string) => {
@@ -355,20 +400,26 @@ function AskGoogleCard({ items, siteUrl, accountEmail, setToast }: { items: AskG
             Ask Google to index today
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 820 }}>
-            These pages work but Google has not indexed them. Open each one in Search Console (or copy the links into the browser signed in to Search Console), press Request indexing (Google allows about 10 a
-            day), then mark it asked here. Pages we have already fixed come first, then the most valuable.
+            These pages work but Google has not indexed them. For each one: copy the page URL, paste it in the Inspect box at the top of Search Console, press Request indexing (Google allows about 10 a day),
+            then mark it asked here. If Search Console is signed in to another browser, copy the URLs and open Search Console there. Pages we have already fixed come first, then the most valuable.
           </Typography>
+          {auto && <AutoAskStatus run={lastAuto} />}
         </Box>
-        {left.length > 0 && (
-          <Button
-            variant="outlined"
-            startIcon={<ContentCopyIcon fontSize="small" aria-hidden />}
-            onClick={() => copy(left.map((i) => inspectUrl(i.url)).join('\n'), `${left.length} links copied. Paste them in the browser signed in to Search Console.`)}
-            sx={TARGET_44}
-          >
-            Copy all links
+        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+          {left.length > 0 && (
+            <Button
+              variant="outlined"
+              startIcon={<ContentCopyIcon fontSize="small" aria-hidden />}
+              onClick={() => copy(left.map((i) => i.url).join('\n'), `${left.length} page URLs copied, one per line.`)}
+              sx={TARGET_44}
+            >
+              Copy all URLs
+            </Button>
+          )}
+          <Button variant="outlined" endIcon={<OpenInNewIcon fontSize="small" aria-hidden />} href={consoleUrl} target="_blank" rel="noopener noreferrer" sx={TARGET_44}>
+            Open Search Console
           </Button>
-        )}
+        </Box>
       </Box>
       {left.length === 0 ? (
         <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -393,22 +444,20 @@ function AskGoogleCard({ items, siteUrl, accountEmail, setToast }: { items: AskG
                 variant="outlined"
                 size="small"
                 endIcon={<OpenInNewIcon fontSize="small" aria-hidden />}
-                href={inspectUrl(i.url)}
-                target="_blank"
-                rel="noopener noreferrer"
-                aria-label={`Open ${shortUrl(i.url)} in Search Console (new tab)`}
+                onClick={() => copyAndOpen(i.url)}
+                aria-label={`Copy URL and open Search Console for ${shortUrl(i.url)} (new tab)`}
                 sx={TARGET_44}
               >
-                Open in Search Console
+                Copy URL and open
               </Button>
               <Button
                 size="small"
                 startIcon={<ContentCopyIcon fontSize="small" aria-hidden />}
-                onClick={() => copy(inspectUrl(i.url), 'Link copied. Paste it in the browser signed in to Search Console.')}
-                aria-label={`Copy link to Search Console for ${shortUrl(i.url)}`}
+                onClick={() => copy(i.url, `Page URL copied. ${PASTE_HINT}`)}
+                aria-label={`Copy URL of ${shortUrl(i.url)}`}
                 sx={TARGET_44}
               >
-                Copy link
+                Copy URL
               </Button>
               <Button size="small" onClick={() => markAsked(i.url)} disabled={busy === i.url} sx={TARGET_44}>
                 {busy === i.url ? 'Saving…' : 'Mark asked'}
@@ -418,6 +467,24 @@ function AskGoogleCard({ items, siteUrl, accountEmail, setToast }: { items: AskG
         </Box>
       )}
     </Paper>
+  );
+}
+
+/** One line under the Ask Google intro: when the Indexing API last ran and how it went. */
+function AutoAskStatus({ run }: { run?: { status: string | null; started_at?: string; counts?: any; error?: string | null } }) {
+  const c = run?.counts ?? {};
+  const problem = run?.status === 'failed' || (run?.status === 'partial' && c.errors > 0);
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mt: 1 }}>
+      <StatusChip icon={problem ? ErrorOutlineIcon : ScheduleIcon} tone={problem ? 'warning' : 'info'} label="Sent automatically each morning" />
+      <Typography variant="body2" color={problem ? 'warning.dark' : 'text.secondary'}>
+        {!run?.started_at
+          ? 'Through the Indexing API at 09:00 IST. The buttons below are for anything it missed.'
+          : problem
+            ? `Last try ${when(run.started_at)}: ${c.hint || c.firstError || run.error || 'it did not go through'}`
+            : `Last sent ${when(run.started_at)}: ${num(c.requested ?? 0)} pages. The buttons below are for anything it missed.`}
+      </Typography>
+    </Box>
   );
 }
 
@@ -769,6 +836,7 @@ function summarise(kind: string, c: any): string {
     case 'inspect':
       return c.skipped ? c.skipped : `${num(c.inspected)} inspected${c.errors ? `, ${c.errors} failed` : ''}${c.firstError ? ` (${c.firstError})` : ''}`;
     case 'crawl':
+      if (c.scope === 'fixes') return `Check my fixes: ${num(c.crawled)} pages with issues re-crawled, ${num(c.linksChecked)} links checked`;
       return `${num(c.crawled)} pages crawled, ${num(c.remaining)} left, ${num(c.linksChecked)} links checked, ${num(c.sitemapUrls)} in sitemaps`;
     case 'analyze':
       return `${num(c.findings)} issues: ${c.created} new, ${c.resolved} fixed, ${c.reopened} reopened`;
@@ -778,6 +846,8 @@ function summarise(kind: string, c: any): string {
         : `Nothing to submit. ${(c.sitemaps ?? []).map((m: any) => `${m.url.replace(/^https?:\/\//, '')}: ${num(m.pages)} pages`).join(', ')}`;
     case 'digest':
       return c.sent ? `Sent to ${c.recipients}` : c.reason ?? 'Not sent';
+    case 'indexing':
+      return `${num(c.requested)} pages sent to the Indexing API${c.errors ? `, ${c.errors} failed` : ''}${c.hint ? `. ${c.hint}` : c.firstError ? ` (${c.firstError})` : ''}`;
     default:
       return '';
   }

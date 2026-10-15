@@ -7,7 +7,7 @@ export type FindingCategory = 'indexing' | 'performance' | 'onsite' | 'aeo';
 export type Severity = 'critical' | 'high' | 'medium' | 'info';
 /** `waiting`: fixed on our side, Google has not re-crawled yet. Not counted as an issue. */
 export type FindingStatus = 'open' | 'waiting' | 'fixed' | 'ignored';
-export type RunKind = 'search' | 'inspect' | 'crawl' | 'analyze' | 'digest' | 'sitemaps';
+export type RunKind = 'search' | 'inspect' | 'crawl' | 'analyze' | 'digest' | 'sitemaps' | 'indexing';
 export type RunTrigger = 'cron' | 'manual';
 export type RunStatus = 'running' | 'ok' | 'partial' | 'failed' | 'not_connected';
 

@@ -11,7 +11,7 @@ import { test, expect, type Page } from '@playwright/test';
  *     database, or when the test account is not user_type 'admin'.
  *  3. The screen, with the API mocked, at 1280 and 900 wide: KPIs, the issue
  *     list, the URL drawer with its fix advice, the empty state, the
- *     not-connected banner, the Ask Google card (reasons, copy links), the
+ *     not-connected banner, the Ask Google card (reasons, copy URL then open Search Console), the
  *     "Check my fixes" run and no sideways scroll. Skips when the runner cannot
  *     get past Microsoft sign-in (see the MFA note in CLAUDE.md).
  *
@@ -25,7 +25,7 @@ test.describe('SEO Health @admin', () => {
 
   test('crons fail closed without the secret', async ({ playwright }) => {
     const anon = await playwright.request.newContext({ baseURL: ADMIN_BASE });
-    for (const job of ['daily', 'weekly']) {
+    for (const job of ['daily', 'weekly', 'indexing']) {
       const res = await anon.get(`/api/cron/seo-audit/${job}`, { failOnStatusCode: false });
       expect(res.status(), job).toBe(401);
     }
@@ -38,7 +38,7 @@ test.describe('SEO Health @admin', () => {
       const res = await anon.get(path, { failOnStatusCode: false });
       expect([401, 403], path).toContain(res.status());
     }
-    for (const kind of ['crawl', 'recheck']) {
+    for (const kind of ['crawl', 'recheck', 'indexing']) {
       const run = await anon.post('/api/seo-audit/run', { failOnStatusCode: false, data: { kind } });
       expect([401, 403], kind).toContain(run.status());
     }
@@ -167,7 +167,7 @@ test.describe('SEO Health @admin', () => {
       await expect(page.getByText('Waiting for Search Console data').first()).toBeVisible();
     });
 
-    test('Ask Google: plain reasons, fixed pages marked, links copy with the account', async ({ page, context }) => {
+    test('Ask Google: plain reasons, fixed pages marked, URL copied before Search Console opens', async ({ page, context }) => {
       await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: ADMIN_BASE });
       const withAccount = { ...summary, connection: { ...summary.connection, accountEmail: 'seo@neramclasses.com' } };
       test.skip(!(await open(page, { summary: withAccount })), 'Runner is not signed in to the admin app.');
@@ -176,23 +176,31 @@ test.describe('SEO Health @admin', () => {
       await expect(card.getByText('Fixed on our side')).toHaveCount(1);
       await expect(card.getByText('Google has never seen this page.')).toBeVisible();
 
-      const open1 = card.getByRole('link', { name: /Open \/coaching\/nata-coaching-in-assam in Search Console/ });
-      await expect(open1).toHaveAttribute('href', /resource_id=sc-domain%3Aneramclasses\.com&id=https%3A%2F%2Fneramclasses\.com%2Fcoaching%2Fnata-coaching-in-assam&authuser=seo%40neramclasses\.com$/);
+      // Search Console cannot deep-link to one page any more (a URL in /inspect?id= is a 404), so we open the property.
+      const consoleUrl = 'https://search.google.com/search-console?resource_id=sc-domain%3Aneramclasses.com&authuser=seo%40neramclasses.com';
+      await expect(card.getByRole('link', { name: 'Open Search Console' })).toHaveAttribute('href', consoleUrl);
 
-      await card.getByRole('button', { name: /Copy link to Search Console for \/coaching\/nata-coaching-in-assam/ }).click();
-      await expect(page.getByText('Link copied. Paste it in the browser signed in to Search Console.')).toBeVisible();
-      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(await open1.getAttribute('href'));
+      const popup = page.waitForEvent('popup');
+      await card.getByRole('button', { name: /Copy URL and open Search Console for \/coaching\/nata-coaching-in-assam/ }).click();
+      expect((await popup).url()).toContain('search.google.com');
+      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('https://neramclasses.com/coaching/nata-coaching-in-assam');
 
-      await card.getByRole('button', { name: 'Copy all links' }).click();
-      await expect(page.getByText('2 links copied. Paste them in the browser signed in to Search Console.')).toBeVisible();
-      const all = (await page.evaluate(() => navigator.clipboard.readText())).split('\n');
-      expect(all).toHaveLength(2);
-      expect(all[1]).toContain('jee-paper-2-coaching-in-odisha');
+      await card.getByRole('button', { name: /Copy URL of \/coaching\/jee-paper-2-coaching-in-odisha/ }).click();
+      await expect(page.getByText(/Page URL copied\. In Search Console, paste it in the Inspect box/)).toBeVisible();
+      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('https://neramclasses.com/coaching/jee-paper-2-coaching-in-odisha');
+
+      await card.getByRole('button', { name: 'Copy all URLs' }).click();
+      await expect(page.getByText('2 page URLs copied, one per line.')).toBeVisible();
+      expect((await page.evaluate(() => navigator.clipboard.readText())).split('\n')).toEqual([
+        'https://neramclasses.com/coaching/nata-coaching-in-assam',
+        'https://neramclasses.com/coaching/jee-paper-2-coaching-in-odisha',
+      ]);
 
       for (const target of [
-        card.getByRole('button', { name: 'Copy all links' }),
-        card.getByRole('button', { name: /Copy link to Search Console/ }).first(),
-        card.getByRole('link', { name: /in Search Console/ }).first(),
+        card.getByRole('button', { name: 'Copy all URLs' }),
+        card.getByRole('link', { name: 'Open Search Console' }),
+        card.getByRole('button', { name: /Copy URL and open/ }).first(),
+        card.getByRole('button', { name: /Copy URL of/ }).first(),
         card.getByRole('button', { name: 'Mark asked' }).first(),
       ]) {
         const box = await target.boundingBox();
@@ -213,6 +221,28 @@ test.describe('SEO Health @admin', () => {
       await items.first().click();
       await expect(page.getByText('Checked 12 pages. 4 fixed, 9 waiting for Google, 3 still open.')).toBeVisible();
       expect(posted).toMatchObject({ kind: 'recheck' });
+    });
+
+    test('Ask Google now sends the list and the card shows the last automatic run', async ({ page }) => {
+      const auto = {
+        ...summary,
+        connection: { ...summary.connection, indexingApi: true },
+        runs: [...summary.runs, { kind: 'indexing', status: 'ok', trigger: 'cron', started_at: '2026-10-15T03:30:00Z', counts: { requested: 50, errors: 0 } }],
+      };
+      test.skip(!(await open(page, { summary: auto })), 'Runner is not signed in to the admin app.');
+      const card = page.getByRole('region', { name: 'Ask Google to index today' });
+      await expect(card.getByText('Sent automatically each morning')).toBeVisible();
+      await expect(card.getByText(/Last sent .*: 50 pages\./)).toBeVisible();
+
+      let posted: any = null;
+      await page.route('**/api/seo-audit/run', async (r) => {
+        posted = r.request().postDataJSON();
+        await r.fulfill({ json: { kind: 'indexing', status: 'partial', requested: 3, errors: 1, firstError: 'Indexing API 429: Quota exceeded', hint: "Google's daily Indexing API quota is used up; the rest go tomorrow." } });
+      });
+      await page.getByRole('button', { name: 'Run now' }).click();
+      await page.getByRole('menuitem', { name: /Ask Google now/ }).click();
+      await expect(page.getByText("Asked Google for 3 pages. Google's daily Indexing API quota is used up; the rest go tomorrow.")).toBeVisible();
+      expect(posted).toMatchObject({ kind: 'indexing' });
     });
 
     test('buttons meet the 44px target', async ({ page }) => {
