@@ -17,6 +17,9 @@ import {
   thanksSendAfter,
   demoPhone10,
   formatDemoDateTime,
+  openDemoFollowUp,
+  rebookFollowUpAt,
+  type InterestLevel,
   type DemoRequest,
   type DemoWindow,
   type UserType,
@@ -139,6 +142,14 @@ export async function POST(req: Request) {
     const channelDef = STAFF_DEMO_CHANNELS.find((c) => c.id === channel);
     if (!channelDef) throw new AddError('Pick where they came from.');
 
+    // Held + attended starts a follow-up: validate before anything is written (incl. a new person).
+    const heldAttended = mode === 'held' && body.outcome !== 'no_show';
+    const interest = ['hot', 'warm', 'cold'].includes(String(body.interest)) ? (body.interest as InterestLevel) : null;
+    const nextAt = typeof body.nextFollowUpAt === 'string' ? new Date(body.nextFollowUpAt) : null;
+    if (heldAttended && (!interest || !nextAt || Number.isNaN(nextAt.getTime()))) {
+      throw new AddError('Pick how interested they are and the first follow-up date.');
+    }
+
     // ---- Who
     const phone = demoPhone10(str(body.phone, 20));
     if (!phone) throw new AddError('Enter a 10-digit Indian mobile number.');
@@ -244,6 +255,12 @@ export async function POST(req: Request) {
           ).trim(),
           actor_id: actorId,
         },
+        supabase,
+      );
+      await openDemoFollowUp(
+        attended
+          ? { userId, demoRegistrationId: row.id, kind: 'post_demo', dueAt: nextAt!, interest, note: note || null, actorId }
+          : { userId, demoRegistrationId: row.id, kind: 'demo_rebook', dueAt: rebookFollowUpAt(new Date()), actorId },
         supabase,
       );
       if (body.sendFollowUp === true) {

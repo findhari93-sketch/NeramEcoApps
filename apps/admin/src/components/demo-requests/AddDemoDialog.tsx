@@ -23,6 +23,7 @@ import {
 } from '@neram/ui';
 import { istDateKey, istDateTime } from '@neram/database/demo-schedule';
 import { STAFF_DEMO_CHANNELS, STAFF_DEMO_PLATFORMS } from '@/lib/demo/staff-add';
+import AttendedFields, { defaultAttendedValue, type AttendedValue } from './AttendedFields';
 import type { DeskSettings } from './types';
 
 type Mode = 'request' | 'agreed' | 'held';
@@ -100,6 +101,7 @@ export default function AddDemoDialog({
   const [outcome, setOutcome] = useState<'attended' | 'no_show'>('attended');
   const [note, setNote] = useState('');
   const [sendFollowUp, setSendFollowUp] = useState(false);
+  const [attendedValue, setAttendedValue] = useState<AttendedValue>(defaultAttendedValue());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -107,6 +109,7 @@ export default function AddDemoDialog({
   useEffect(() => {
     if (!open) return;
     const today = istDateKey(new Date());
+    setAttendedValue(defaultAttendedValue());
     setPerson(null);
     setQuery('');
     setOptions([]);
@@ -171,6 +174,7 @@ export default function AddDemoDialog({
   const linkOk = !joinUrl.trim() || /^https:\/\/\S+\.\S+/.test(joinUrl.trim());
   const heldAt = heldDate && /^\d{2}:\d{2}$/.test(heldTime) ? istDateTime(heldDate, heldTime) : null;
   const heldInFuture = heldAt ? heldAt.getTime() > Date.now() + 5 * 60_000 : false;
+  const attendedNext = attendedValue.nextDate && /^\d{2}:\d{2}$/.test(attendedValue.nextTime) ? istDateTime(attendedValue.nextDate, attendedValue.nextTime) : null;
   const windows = useMemo(() => settings.schedule.windows, [settings.schedule.windows]);
 
   const canSave =
@@ -178,7 +182,8 @@ export default function AddDemoDialog({
     phoneOk &&
     !!channel &&
     (mode !== 'request' || window === 'anytime' || !!date) &&
-    (mode !== 'held' || (!!heldAt && !heldInFuture && linkOk));
+    (mode !== 'held' || (!!heldAt && !heldInFuture && linkOk)) &&
+    (mode !== 'held' || outcome !== 'attended' || (!!attendedValue.interest && !!attendedNext && attendedNext.getTime() > Date.now()));
 
   const save = async () => {
     setTouched({ name: true, phone: true });
@@ -201,7 +206,7 @@ export default function AddDemoDialog({
           channel,
           ...(mode === 'request' ? { window, date: window === 'anytime' ? null : date, sendAck } : {}),
           ...(mode === 'held'
-            ? { heldAt: heldAt?.toISOString(), platform, joinUrl: joinUrl.trim(), outcome, note: note.trim(), sendFollowUp }
+            ? { heldAt: heldAt?.toISOString(), platform, joinUrl: joinUrl.trim(), outcome, interest: attendedValue.interest, note: outcome === 'attended' ? attendedValue.note.trim() : note.trim(), nextFollowUpAt: attendedNext?.toISOString(), sendFollowUp }
             : {}),
         }),
       });
@@ -447,15 +452,19 @@ export default function AddDemoDialog({
                 <ToggleButton value="no_show">No-show</ToggleButton>
               </ToggleButtonGroup>
             </Box>
-            <TextField
-              label="Note (optional)"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="e.g. Interested, asked about fees. Mother joined."
-              multiline
-              minRows={2}
-              inputProps={{ maxLength: 1000 }}
-            />
+            {outcome === 'attended' ? (
+              <AttendedFields value={attendedValue} onChange={setAttendedValue} />
+            ) : (
+              <TextField
+                label="Note (optional)"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="e.g. Interested, asked about fees. Mother joined."
+                multiline
+                minRows={2}
+                inputProps={{ maxLength: 1000 }}
+              />
+            )}
             <FormControlLabel
               control={<Checkbox checked={sendFollowUp} onChange={(e) => setSendFollowUp(e.target.checked)} />}
               label={outcome === 'attended' ? 'Send the thank-you and feedback WhatsApp' : 'Send the "we missed you" WhatsApp'}

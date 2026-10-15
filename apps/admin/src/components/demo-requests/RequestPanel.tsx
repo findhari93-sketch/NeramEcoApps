@@ -43,6 +43,7 @@ import {
   isJoinOpen,
 } from '@neram/database/demo-schedule';
 import { OpsSkeleton, FOCUS_RING } from '@/components/ops/OpsUi';
+import AttendedDialog from './AttendedDialog';
 import ScheduleDialog, { type ScheduleSubmit } from './ScheduleDialog';
 import type { DeskDetail, DeskSettings, DemoRequest } from './types';
 import { ago, classLabel, prettyPhone, telHref, waHref } from './format';
@@ -139,6 +140,7 @@ export default function RequestPanel({
   const [reasonFor, setReasonFor] = useState<'cancel' | null>(null);
   const [reason, setReason] = useState('');
   const [copied, setCopied] = useState(false);
+  const [attendedOpen, setAttendedOpen] = useState(false);
 
   if (loading && !detail) {
     return (
@@ -304,7 +306,7 @@ export default function RequestPanel({
                     color="success"
                     startIcon={<HowToRegIcon />}
                     disabled={!canMarkAttendance || !!busy}
-                    onClick={() => run('attendance', { action: 'attendance', attended: true })}
+                    onClick={() => setAttendedOpen(true)}
                     sx={{ minHeight: 44 }}
                   >
                     Attended
@@ -428,6 +430,11 @@ export default function RequestPanel({
         <Box sx={{ mt: 2 }}>
           {r.status === 'rejected' && r.rejection_reason && <Typography variant="body2">Reason: {r.rejection_reason}</Typography>}
           {r.status === 'cancelled' && r.cancel_reason && <Typography variant="body2">Reason: {r.cancel_reason}</Typography>}
+          {['attended', 'no_show'].includes(r.status) && !detail.followUp && (
+            <Button variant="outlined" onClick={() => setAttendedOpen(true)} disabled={!!busy} sx={{ mt: 1, mr: 1, minHeight: 44 }}>
+              Start follow-up again
+            </Button>
+          )}
           {['rejected', 'cancelled', 'no_show'].includes(r.status) && (
             <Button startIcon={<ReplayIcon />} onClick={() => run('reopen', { action: 'reopen' })} disabled={!!busy} sx={{ mt: 1, minHeight: 44 }}>
               Reopen and call again
@@ -605,6 +612,21 @@ export default function RequestPanel({
           </Typography>
         </Box>
       </Box>
+
+      <AttendedDialog
+        open={attendedOpen}
+        name={r.name}
+        busy={busy === 'attendance'}
+        error={attendedOpen ? error : null}
+        onClose={() => {
+          setAttendedOpen(false);
+          setError(null);
+        }}
+        onSubmit={async (v) => {
+          const err = await run('attendance', { action: r.status === 'approved' ? 'attendance' : 'follow_up', attended: true, ...v });
+          if (!err) setAttendedOpen(false);
+        }}
+      />
 
       {schedule && (
         <ScheduleDialog

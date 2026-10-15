@@ -4,6 +4,7 @@ import type {
   DemoRequestMessage,
   DemoHost,
   DemoScheduleSettings,
+  DemoFollowUpRow,
 } from '@neram/database';
 
 export type { DemoRequest, DemoRequestEvent, DemoRequestMessage, DemoHost, DemoScheduleSettings };
@@ -37,6 +38,7 @@ export interface DeskDetail {
   events: DemoRequestEvent[];
   messages: DemoRequestMessage[];
   actors: Record<string, string>;
+  followUp: DemoFollowUpRow | null;
 }
 
 export type DeskTab = 'new' | 'followup' | 'upcoming' | 'done' | 'closed';

@@ -20,6 +20,10 @@ import {
   drawingWhatsAppLink,
   pickDemoRoles,
   isOwnLinkDemo,
+  openDemoFollowUp,
+  getOpenDemoFollowUp,
+  rebookFollowUpAt,
+  type InterestLevel,
   type DemoRequest,
 } from '@neram/database';
 import { getRequestAdminId } from '@/lib/request-admin';
@@ -74,7 +78,8 @@ async function detail(id: string) {
     const { data } = await (supabase as any).from('users').select('id, name').in('id', actorIds);
     actors = Object.fromEntries((data ?? []).map((u: { id: string; name: string }) => [u.id, u.name]));
   }
-  return { request, events, messages, actors };
+  const followUp = request.user_id ? await getOpenDemoFollowUp(request.user_id, supabase).catch(() => null) : null;
+  return { request, events, messages, actors, followUp };
 }
 
 /** GET /api/demo-requests/[id]: the request, its activity log and its WhatsApp queue. */
@@ -349,6 +354,11 @@ export async function POST(req: Request, { params }: Params) {
           throw new ActionError('Attendance is marked on a confirmed demo.');
         }
         const attended = body.attended === true;
+        const interest = ['hot', 'warm', 'cold'].includes(String(body.interest)) ? (body.interest as InterestLevel) : null;
+        const nextAt = typeof body.nextFollowUpAt === 'string' ? new Date(body.nextFollowUpAt) : null;
+        if (attended && (!interest || !nextAt || Number.isNaN(nextAt.getTime()))) {
+          throw new ActionError('Pick how interested they are and the first follow-up date.');
+        }
         await updateDemoRequest(
           r.id,
           {
@@ -370,7 +380,15 @@ export async function POST(req: Request, { params }: Params) {
           ],
           supabase,
         );
-        await log('status', attended ? 'attended' : 'no_show', null);
+        if (r.user_id) {
+          await openDemoFollowUp(
+            attended
+              ? { userId: r.user_id, demoRegistrationId: r.id, kind: 'post_demo', dueAt: nextAt!, interest, note: text(body.note, 1000) || null, actorId }
+              : { userId: r.user_id, demoRegistrationId: r.id, kind: 'demo_rebook', dueAt: rebookFollowUpAt(new Date()), actorId },
+            supabase,
+          );
+        }
+        await log('status', attended ? 'attended' : 'no_show', attended ? `Interest ${interest}. ${text(body.note, 1000)}`.trim() : null);
         sendNow = !attended;
         break;
       }
@@ -397,6 +415,16 @@ export async function POST(req: Request, { params }: Params) {
         }
         await log('note', 'resend', 'Resent the WhatsApp message');
         sendNow = true;
+        break;
+      }
+
+      case 'follow_up': {
+        if (!r.user_id) throw new ActionError('This request has no person linked.');
+        const at = typeof body.nextFollowUpAt === 'string' ? new Date(body.nextFollowUpAt) : null;
+        if (!at || Number.isNaN(at.getTime()) || at.getTime() <= Date.now()) throw new ActionError('Pick a follow-up date in the future.');
+        const interest = ['hot', 'warm', 'cold'].includes(String(body.interest)) ? (body.interest as InterestLevel) : null;
+        await openDemoFollowUp({ userId: r.user_id, demoRegistrationId: r.id, kind: 'post_demo', dueAt: at, interest, note: text(body.note, 1000) || null, actorId }, supabase);
+        await log('status', 'follow_up_started', text(body.note, 1000) || null);
         break;
       }
 
