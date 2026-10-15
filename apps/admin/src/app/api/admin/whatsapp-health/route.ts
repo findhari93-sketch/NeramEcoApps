@@ -26,7 +26,13 @@ export async function GET() {
 
     const rows = data ?? [];
     const total = rows.length;
-    const failed = rows.filter((r: any) => r.delivery_status === 'failed').length;
+    // Rows held because the account cannot send (WA_ACCOUNT_BLOCKED) are still
+    // pending, but nothing is going out: count them as failing.
+    const failed = rows.filter(
+      (r: any) =>
+        r.delivery_status === 'failed' ||
+        (r.delivery_status === 'pending' && (r.error_message ?? '').startsWith('WA_ACCOUNT_BLOCKED')),
+    ).length;
     const failureRate = total > 0 ? failed / total : 0;
 
     const errorPrefixCounts: Record<string, number> = {};

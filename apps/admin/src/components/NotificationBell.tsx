@@ -33,6 +33,7 @@ interface AdminNotification {
 }
 
 const EVENT_TYPE_COLORS: Record<string, string> = {
+  new_signup: '#1565c0',
   new_onboarding: '#4caf50',
   onboarding_skipped: '#ff9800',
   new_application: '#2196f3',

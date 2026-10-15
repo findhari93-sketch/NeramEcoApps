@@ -2669,6 +2669,7 @@ export type OnboardingSessionStatus = 'pending' | 'in_progress' | 'completed' | 
 export type ProgramType = 'year_long' | 'crash_course';
 export type NotificationEventType =
   | 'new_onboarding'
+  | 'new_signup'
   | 'onboarding_skipped'
   | 'new_application'
   | 'payment_received'

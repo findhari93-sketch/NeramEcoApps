@@ -20,11 +20,13 @@ import {
   linkPhoneAttempts,
   normalizeAttemptPhone,
   recordPhoneAttempt,
+  queueFirstTouchWhatsApp,
 } from '@neram/database';
 import { isValidAnonymousId } from '@neram/database/analytics';
 
 // Firebase Admin is initialized in _lib/auth.ts — ensure it's imported
 import '@/app/api/_lib/auth';
+import { alertNewSignup } from '@neram/database/signup-alert';
 
 function verifyIdToken(idToken: string) {
   if (!getApps().length) {
@@ -127,6 +129,12 @@ export async function POST(req: NextRequest) {
         adminClient,
       );
     }
+
+    // First verified phone of a new account: tell staff (bell + phone push).
+    await alertNewSignup(adminClient, user.id);
+    // A Google-first sign-in was queued an email welcome (no phone then); now
+    // that the phone is verified it gets the WhatsApp welcome instead.
+    await queueFirstTouchWhatsApp(adminClient, user.id);
 
     return NextResponse.json({
       success: true,

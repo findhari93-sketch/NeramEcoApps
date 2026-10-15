@@ -79,6 +79,12 @@ export const WA_ERROR_PREFIXES = {
   RATE_LIMIT: 'WA_RATE_LIMIT',
   /** #131047 — 24h customer service window expired, must use template. */
   RE_ENGAGEMENT_REQUIRED: 'WA_24H_WINDOW',
+  /**
+   * The sending account itself cannot send (number not registered, account
+   * locked, payment problem, token expired). Nothing about the recipient is
+   * wrong, so queued messages are held, not failed, until Meta allows sends.
+   */
+  ACCOUNT_BLOCKED: 'WA_ACCOUNT_BLOCKED',
   /** Catch-all: WA_ERROR_<code>. */
   GENERIC: 'WA_ERROR',
 } as const;
@@ -95,6 +101,20 @@ export function isPermanentWhatsAppFailure(errorMessage: string | null | undefin
     errorMessage.startsWith(WA_ERROR_PREFIXES.TEMPLATE_PARAM_MISMATCH) ||
     errorMessage.startsWith(WA_ERROR_PREFIXES.UNDELIVERABLE)
   );
+}
+
+/** Meta codes that block every send from the account, whoever the recipient. */
+const ACCOUNT_BLOCKING_CODES: Record<number, string> = {
+  133010: 'the phone number is not registered on the Cloud API',
+  131031: 'the business account is locked',
+  131042: 'there is a payment problem on the business account',
+  368: 'the account is temporarily blocked for a policy violation',
+  190: 'the access token has expired',
+};
+
+/** True when a send failed because the account cannot send at all (see ACCOUNT_BLOCKED). */
+export function isWhatsAppAccountBlocked(errorMessage: string | null | undefined): boolean {
+  return !!errorMessage && errorMessage.startsWith(WA_ERROR_PREFIXES.ACCOUNT_BLOCKED);
 }
 
 /**
@@ -126,6 +146,9 @@ export function formatWhatsAppError(
     case 131047:
       return `${WA_ERROR_PREFIXES.RE_ENGAGEMENT_REQUIRED}: 24-hour customer service window expired (Meta #131047). A template message is required to re-engage this user.`;
     default:
+      if (typeof code === 'number' && ACCOUNT_BLOCKING_CODES[code]) {
+        return `${WA_ERROR_PREFIXES.ACCOUNT_BLOCKED}: WhatsApp cannot send because ${ACCOUNT_BLOCKING_CODES[code]} (Meta #${code}: ${rawMessage}). Fix it in WhatsApp Manager; queued messages are held until then.`;
+      }
       if (typeof code === 'number') {
         const subPart = typeof subcode === 'number' ? `/${subcode}` : '';
         return `${WA_ERROR_PREFIXES.GENERIC}_${code}${subPart}: ${rawMessage}`;

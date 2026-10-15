@@ -30,9 +30,9 @@ import { ConnectToOffice } from '../ChatWidget/ConnectToOffice';
  * anonymous id and keeps only known attribution keys, so the raw values are
  * sent as they are. Never throws.
  */
-function signupOriginFields(): { anonymous_id?: string; first_touch?: unknown } {
+function signupOriginFields(): { anonymous_id?: string; first_touch?: unknown; touches?: unknown } {
   if (typeof document === 'undefined') return {};
-  const out: { anonymous_id?: string; first_touch?: unknown } = {};
+  const out: { anonymous_id?: string; first_touch?: unknown; touches?: unknown } = {};
   try {
     for (const part of document.cookie.split(';')) {
       const [rawName, ...rest] = part.split('=');
@@ -40,6 +40,14 @@ function signupOriginFields(): { anonymous_id?: string; first_touch?: unknown } 
       const value = decodeURIComponent(rest.join('=').trim());
       if (name === 'neram_anon_id' && value) out.anonymous_id = value;
       if (name === 'neram_attribution' && value) out.first_touch = JSON.parse(value);
+      // First and last visit with the referrer and channel (Google search, ChatGPT ...).
+      if (name === 'neram_touches' && value) {
+        try {
+          out.touches = JSON.parse(value);
+        } catch {
+          // An unreadable touches cookie must not drop the cookies after it.
+        }
+      }
     }
   } catch {
     // An unreadable cookie only means no first touch is recorded.
@@ -1115,6 +1123,12 @@ export default function LoginModal({
                   {phoneError}
                 </Alert>
               )}
+
+              {/* Consent for the WhatsApp welcome and follow-up calls (Meta expects opt-in). */}
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 1.5, lineHeight: 1.5 }}>
+                By continuing, you agree that Neram Classes may call you and message you on WhatsApp at this number
+                about our courses and your classes. You can ask us to stop at any time.
+              </Typography>
 
               {escapeHatch}
             </Box>

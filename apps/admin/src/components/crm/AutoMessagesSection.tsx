@@ -46,6 +46,21 @@ function describeError(raw: string | null | undefined): FriendlyError | null {
       actionUrl: 'https://business.facebook.com/settings/security',
     };
   }
+  if (raw.startsWith('WA_ACCOUNT_BLOCKED')) {
+    return {
+      short: 'Held: our WhatsApp account cannot send yet',
+      detail:
+        'Meta refused the send because of our WhatsApp account, not this lead. The message stays queued and goes out automatically once the account is active in WhatsApp Manager (welcomes older than 7 days are dropped).',
+      actionLabel: 'Open WhatsApp Manager',
+      actionUrl: 'https://business.facebook.com/wa/manage/phone-numbers/',
+    };
+  }
+  if (raw.startsWith('WA_EXPIRED')) {
+    return {
+      short: 'Welcome dropped (too old)',
+      detail: 'The WhatsApp welcome could not go out within 7 days, so it was dropped instead of arriving late. Call or message this lead directly.',
+    };
+  }
   if (raw.startsWith('WA_UNDELIVERABLE')) {
     return {
       short: 'Recipient not on WhatsApp',

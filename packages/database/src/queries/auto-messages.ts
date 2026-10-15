@@ -159,6 +159,84 @@ export async function updateAutoMessageResult(
 }
 
 /**
+ * Put a message back in the queue without spending a retry: the WhatsApp
+ * account itself was blocked (WA_ACCOUNT_BLOCKED), not this send. The error
+ * stays on the row so the CRM shows why it is waiting.
+ */
+export async function holdAutoMessage(
+  id: string,
+  error: string,
+  retryAt: Date,
+  client?: TypedSupabaseClient
+): Promise<void> {
+  const supabase = client ?? getSupabaseAdminClient();
+  const { error: updateError } = await supabase
+    .from('auto_messages')
+    .update({ delivery_status: 'pending', error_message: error, send_after: retryAt.toISOString() })
+    .eq('id', id);
+  if (updateError) throw updateError;
+}
+
+/** A welcome older than this is dropped rather than sent: "quick question" weeks later reads wrong. */
+export const FIRST_TOUCH_MAX_AGE_DAYS = 7;
+
+/** Only accounts this new get the WhatsApp welcome when their phone is verified. */
+const FIRST_TOUCH_WHATSAPP_WINDOW_MS = 3 * 24 * 60 * 60 * 1000;
+
+/**
+ * When the WhatsApp welcome goes: 30 minutes after sign-up, as for phone-first
+ * sign-ups, but never sooner than 5 minutes from now.
+ */
+export function firstTouchWhatsAppSendAfter(createdAt: Date, now: Date = new Date()): Date {
+  const thirtyAfterSignup = createdAt.getTime() + 30 * 60 * 1000;
+  return new Date(Math.max(thirtyAfterSignup, now.getTime() + 5 * 60 * 1000));
+}
+
+/**
+ * Queue the WhatsApp welcome for a new lead whose phone was just verified.
+ *
+ * register-user picks the channel at sign-in. A Google sign-in has no phone
+ * yet, so it gets an email row, and the cron skips that email once the phone
+ * is verified: before this, those leads (24 of 33 in Sept to Oct 2026) got no
+ * welcome at all. The unique (user, first_touch, channel) index keeps it to
+ * one WhatsApp row. Never throws: a queue failure must not fail verification.
+ */
+export async function queueFirstTouchWhatsApp(
+  client: TypedSupabaseClient,
+  userId: string,
+  now: Date = new Date()
+): Promise<boolean> {
+  try {
+    const { data: user, error } = await client
+      .from('users')
+      .select('id, name, email, phone, phone_verified, user_type, created_at')
+      .eq('id', userId)
+      .maybeSingle();
+    if (error || !user) return false;
+    const u = user as any;
+    if (!u.phone_verified || !u.phone || u.user_type !== 'lead' || !u.created_at) return false;
+    const createdAt = new Date(u.created_at);
+    if (now.getTime() - createdAt.getTime() > FIRST_TOUCH_WHATSAPP_WINDOW_MS) return false;
+
+    await createAutoMessage(
+      {
+        user_id: userId,
+        message_type: 'first_touch',
+        channel: 'whatsapp',
+        template_name: 'first_touch_quick_question',
+        send_after: firstTouchWhatsAppSendAfter(createdAt, now).toISOString(),
+        metadata: { user_name: u.name ?? null, phone: u.phone, email: u.email ?? null, queued_by: 'verify_phone' },
+      },
+      client
+    );
+    return true;
+  } catch (err) {
+    console.warn('[auto-messages] WhatsApp welcome not queued:', err);
+    return false;
+  }
+}
+
+/**
  * Get all auto messages for a specific user (CRM detail view).
  */
 export async function getAutoMessagesForUser(

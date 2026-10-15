@@ -10,8 +10,10 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { isSamePhone } from '@/lib/phone-match';
 import { verifyIdToken } from '@/lib/firebase-admin';
-import { getUserByFirebaseUid, updateUser, getOrCreateUserFromFirebase, checkPhoneExists, findVerifiedPhoneOwner, getSupabaseAdminClient, insertFunnelEvent, recordDuplicateCandidate, linkPhoneAttempts, normalizeAttemptPhone, recordPhoneAttempt } from '@neram/database';
-import { isValidAnonymousId } from '@neram/database/analytics';
+import { getUserByFirebaseUid, updateUser, getOrCreateUserFromFirebase, checkPhoneExists, findVerifiedPhoneOwner, getSupabaseAdminClient, insertFunnelEvent, recordDuplicateCandidate, linkPhoneAttempts, normalizeAttemptPhone, recordPhoneAttempt, recordFirstTouch, queueFirstTouchWhatsApp } from '@neram/database';
+import { isValidAnonymousId, resolveSignupFirstTouch } from '@neram/database/analytics';
+import { clientIpFromHeaders, signupGeoFromHeaders } from '@neram/database/signup-geo';
+import { alertNewSignup, recordSignupGeo } from '@neram/database/signup-alert';
 
 import { getCorsHeaders } from '@/lib/cors';
 
@@ -70,6 +72,14 @@ export async function POST(req: NextRequest) {
           displayName: decodedToken.name || null,
         });
         user = result.user;
+        // register-user never ran for this account: keep its origin and place here.
+        if (result.isNewUser) {
+          await recordFirstTouch(adminClient, user.id, {
+            anonymousId: isValidAnonymousId(body.anonymousId) ? body.anonymousId : null,
+            firstTouch: resolveSignupFirstTouch({ cookieHeader: req.headers.get('cookie') }),
+          });
+          await recordSignupGeo(adminClient, user.id, signupGeoFromHeaders(req.headers));
+        }
       } catch (createError) {
         console.error('Failed to create fallback user:', createError);
         return NextResponse.json(
@@ -105,7 +115,7 @@ export async function POST(req: NextRequest) {
         device_type: null,
         browser: null,
         os: null,
-        ip_address: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+        ip_address: clientIpFromHeaders(req.headers),
         source_app: 'app',
         page_url: null,
       }).catch(() => {});
@@ -159,10 +169,16 @@ export async function POST(req: NextRequest) {
       device_type: null,
       browser: null,
       os: null,
-      ip_address: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      ip_address: clientIpFromHeaders(req.headers),
       source_app: 'app',
       page_url: null,
     }).catch(() => {});
+
+    // First verified phone of a new account: tell staff (bell + phone push).
+    await alertNewSignup(adminClient, user.id);
+    // A Google-first sign-in was queued an email welcome (no phone then); now
+    // that the phone is verified it gets the WhatsApp welcome instead.
+    await queueFirstTouchWhatsApp(adminClient, user.id);
 
     return NextResponse.json({
       success: true,

@@ -22,6 +22,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import AddIcon from '@mui/icons-material/Add';
 import DataTable from '@/components/DataTable';
+import PhoneAlertsCard from '@/components/settings/PhoneAlertsCard';
 
 interface NotificationPreferences {
   new_onboarding: boolean;
@@ -342,6 +343,8 @@ export default function NotificationRecipientsPage() {
           Add Recipient
         </Button>
       </Box>
+
+      <PhoneAlertsCard />
 
       <DataTable rows={recipients} columns={columns} loading={loading} />
 

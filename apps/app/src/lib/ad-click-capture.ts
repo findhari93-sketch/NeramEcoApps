@@ -10,7 +10,13 @@
  * campaign parameters. /api/auth/register-user reads it (readFirstTouchCookie)
  * into users.first_touch, which the admin app's Google Ads agent uploads with
  * the OTP-verified sign-up. Keep the format in step with the marketing file.
+ *
+ * It also records the visit in `neram_touches` (referrer, landing page,
+ * channel), as the marketing site does, so a visitor who reaches the app first
+ * from Google search, ChatGPT or another website is not filed as "not recorded".
  */
+
+import { nextTouches, parseTouches, readCookie, TOUCH_COOKIE, touchesCookieString } from '@neram/database/analytics';
 
 export const ATTRIBUTION_COOKIE = 'neram_attribution';
 const MAX_AGE_SECONDS = 90 * 24 * 60 * 60;
@@ -56,6 +62,18 @@ export function captureAdClick(): void {
   try {
     const record = campaignFromUrl(window.location.search, window.location.pathname);
     if (record) document.cookie = cookieString(record, window.location.hostname, window.location.protocol === 'https:');
+  } catch {
+    /* cookies blocked */
+  }
+  try {
+    const prev = parseTouches(readCookie(document.cookie, TOUCH_COOKIE)) ?? { first: null, last: null };
+    const next = nextTouches(prev, {
+      search: window.location.search,
+      pathname: window.location.pathname,
+      referrer: document.referrer || null,
+      now: new Date().toISOString(),
+    });
+    if (next) document.cookie = touchesCookieString(next, window.location.hostname, window.location.protocol === 'https:');
   } catch {
     /* cookies blocked */
   }

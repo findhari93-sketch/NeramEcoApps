@@ -672,6 +672,7 @@ function formatTelegramMessage(event: NotificationEvent): string | null {
 function getEmailTemplateSlug(eventType: NotificationEventType): string | null {
   const map: Record<NotificationEventType, string | null> = {
     new_onboarding: 'team-new-onboarding',
+    new_signup: null, // Bell + phone push only (services/signup-alert.ts)
     onboarding_skipped: null,
     new_application: 'team-new-application',
     payment_received: null,

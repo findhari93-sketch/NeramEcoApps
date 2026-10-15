@@ -8,6 +8,10 @@
  * are because the admin funnel chart and diagnostics read them.
  */
 
+import { classifyChannel, isChannel, parseTouches, TOUCH_COOKIE, type Channel, type Touches } from './channel';
+
+export * from './channel';
+
 // ── Funnels ────────────────────────────────────────────────────────────────
 
 /** Mirrors chk_funnel on user_funnel_events. A value outside it fails the insert. */
@@ -247,6 +251,7 @@ export const FIRST_TOUCH_KEYS = [
   'referral_code',
   'landing_page',
   'referrer',
+  'channel',
 ] as const;
 
 export function sanitizeFirstTouch(input: unknown): Record<string, string> | null {
@@ -256,7 +261,42 @@ export function sanitizeFirstTouch(input: unknown): Record<string, string> | nul
     const v = (input as Record<string, unknown>)[key];
     if (typeof v === 'string' && v.trim()) out[key] = v.trim().slice(0, 300);
   }
+  if (out.channel && !isChannel(out.channel)) delete out.channel;
   return Object.keys(out).length ? out : null;
+}
+
+const CAMPAIGN_FIELDS = ['utm_source', 'utm_medium', 'utm_campaign', 'gclid', 'wbraid', 'gbraid'] as const;
+
+/**
+ * What users.first_touch should hold for a new account: the campaign record
+ * (neram_attribution, kept as is because the Google Ads upload reads its click
+ * ids) plus, from the first visit in neram_touches, the referrer, the landing
+ * page and the channel. Without the touches record an organic Google, ChatGPT
+ * or referral visit left first_touch empty.
+ *
+ * The body wins over the cookie: cross-origin callers send both fields, and the
+ * app's own calls carry the shared .neramclasses.com cookies.
+ */
+export function resolveSignupFirstTouch(input: {
+  bodyFirstTouch?: unknown;
+  bodyTouches?: unknown;
+  cookieHeader?: string | null;
+}): Record<string, string> | null {
+  const campaign = sanitizeFirstTouch(input.bodyFirstTouch) ?? readFirstTouchCookie(input.cookieHeader);
+  const touches = parseTouches(input.bodyTouches) ?? parseTouches(readCookie(input.cookieHeader, TOUCH_COOKIE));
+  const first = touches?.first ?? null;
+
+  const out: Record<string, string> = { ...(campaign ?? {}) };
+  if (first) {
+    if (!out.referrer && first.referrer) out.referrer = first.referrer;
+    if (!out.landing_page && first.landing_page) out.landing_page = first.landing_page;
+  }
+  const hasCampaign = CAMPAIGN_FIELDS.some((k) => out[k]);
+  const channel: Channel | null = hasCampaign
+    ? classifyChannel({ ...out, referrer: out.referrer ?? null })
+    : first?.channel ?? (out.referrer ? classifyChannel({ referrer: out.referrer }) : null);
+  if (channel) out.channel = channel;
+  return sanitizeFirstTouch(out);
 }
 
 // ── Browser helpers ────────────────────────────────────────────────────────
@@ -315,12 +355,14 @@ export function readFirstTouchCookie(cookieHeader: string | null | undefined): R
  * callers that post to register-user from another origin (cookies are not sent
  * cross-origin). Browser only; empty object elsewhere.
  */
-export function signupAttributionFields(): { anonymous_id?: string; first_touch?: Record<string, string> } {
+export function signupAttributionFields(): { anonymous_id?: string; first_touch?: Record<string, string>; touches?: Touches } {
   if (typeof document === 'undefined') return {};
-  const out: { anonymous_id?: string; first_touch?: Record<string, string> } = {};
+  const out: { anonymous_id?: string; first_touch?: Record<string, string>; touches?: Touches } = {};
   const anon = getOrCreateAnonymousId();
   if (anon) out.anonymous_id = anon;
   const touch = readFirstTouchCookie(document.cookie);
   if (touch) out.first_touch = touch;
+  const touches = parseTouches(readCookie(document.cookie, TOUCH_COOKIE));
+  if (touches) out.touches = touches;
   return out;
 }

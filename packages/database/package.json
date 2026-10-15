@@ -13,7 +13,10 @@
     "./queries/nexus": "./src/queries/nexus/index.ts",
     "./analytics": "./src/analytics/index.ts",
     "./demo-schedule": "./src/utils/demo-schedule.ts",
-    "./drawing-grade": "./src/queries/nexus/drawing-grade.ts"
+    "./drawing-grade": "./src/queries/nexus/drawing-grade.ts",
+    "./signup-geo": "./src/utils/signup-geo.ts",
+    "./staff-push": "./src/services/staff-push.ts",
+    "./signup-alert": "./src/services/signup-alert.ts"
   },
   "scripts": {
     "generate": "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID > src/types/supabase.ts",
@@ -28,9 +31,11 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.39.0",
-    "resend": "^2.1.0"
+    "resend": "^2.1.0",
+    "web-push": "3.6.7"
   },
   "devDependencies": {
+    "@types/web-push": "3.6.4",
     "typescript": "^5.3.3"
   }
 }

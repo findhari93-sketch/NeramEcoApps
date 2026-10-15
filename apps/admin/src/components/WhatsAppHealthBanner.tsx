@@ -16,6 +16,11 @@ interface HealthStats {
 }
 
 const ERROR_HINTS: Record<string, { hint: string; actionUrl?: string; actionLabel?: string }> = {
+  WA_ACCOUNT_BLOCKED: {
+    hint: 'Meta is refusing every send from our WhatsApp account (for example, the number is not registered or the account is still onboarding). Messages are held, not lost, and go out once WhatsApp Manager shows the account as active.',
+    actionUrl: 'https://business.facebook.com/wa/manage/phone-numbers/',
+    actionLabel: 'Open WhatsApp Manager',
+  },
   WA_DEV_MODE: {
     hint: 'WhatsApp Business App is not in Live mode. Verify business in Meta Business Suite and switch the app to Live.',
     actionUrl: 'https://business.facebook.com/settings/security',

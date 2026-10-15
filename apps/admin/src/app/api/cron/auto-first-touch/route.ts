@@ -9,6 +9,13 @@ export const dynamic = 'force-dynamic';
  *
  * Called every 15 minutes by Supabase pg_cron via pg_net,
  * or manually via curl for testing.
+ *
+ * When Meta refuses a send because the WhatsApp account itself cannot send
+ * (WA_ACCOUNT_BLOCKED: number not registered, account locked ...), the row is
+ * held as pending without spending a retry, and the other WhatsApp rows wait:
+ * one send per run checks whether Meta has lifted the block. Before this every
+ * lead's welcome failed 3 times in a day and was lost for good. A welcome
+ * older than FIRST_TOUCH_MAX_AGE_DAYS is dropped instead of sent late.
  */
 
 import { NextResponse } from 'next/server';
@@ -24,6 +31,9 @@ import {
   sendPhoneDripEmail,
   createUnsubscribeToken,
   isWhatsAppConfigured,
+  isWhatsAppAccountBlocked,
+  holdAutoMessage,
+  FIRST_TOUCH_MAX_AGE_DAYS,
   dispatchNotification,
 } from '@neram/database';
 
@@ -68,7 +78,10 @@ export async function GET(request: Request) {
 
     let sent = 0;
     let failed = 0;
+    let held = 0;
+    let whatsappBlocked: string | null = null;
     const errors: string[] = [];
+    const maxAgeMs = FIRST_TOUCH_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
 
     for (const msg of allMessages) {
       try {
@@ -76,6 +89,22 @@ export async function GET(request: Request) {
         let result: { success: boolean; messageId?: string; error?: string };
 
         if (msg.channel === 'whatsapp') {
+          // Meta already refused this run for the whole account: leave the row
+          // pending (its retry count untouched) for the next run.
+          if (whatsappBlocked) {
+            held++;
+            continue;
+          }
+
+          if (msg.message_type === 'first_touch' && Date.now() - new Date(msg.created_at).getTime() > maxAgeMs) {
+            await updateAutoMessageResult(msg.id, {
+              success: false,
+              error: `WA_EXPIRED: welcome not sent within ${FIRST_TOUCH_MAX_AGE_DAYS} days, dropped so it does not arrive late`,
+            }, supabase);
+            failed++;
+            continue;
+          }
+
           const phone = (msg.metadata as any)?.phone || msg.user_phone;
 
           if (!phone) {
@@ -212,6 +241,13 @@ export async function GET(request: Request) {
           }
         }
 
+        if (msg.channel === 'whatsapp' && !result.success && isWhatsAppAccountBlocked(result.error)) {
+          whatsappBlocked = result.error;
+          await holdAutoMessage(msg.id, result.error, new Date(Date.now() + 60 * 60 * 1000), supabase);
+          held++;
+          continue;
+        }
+
         // Update the record
         await updateAutoMessageResult(msg.id, {
           success: result.success,
@@ -267,6 +303,8 @@ export async function GET(request: Request) {
       total: allMessages.length,
       sent,
       failed,
+      held,
+      whatsappBlocked: whatsappBlocked ?? undefined,
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (error: any) {

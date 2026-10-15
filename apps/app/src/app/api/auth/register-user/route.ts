@@ -14,9 +14,10 @@ import {
   ANON_ID_COOKIE,
   isValidAnonymousId,
   readCookie,
-  readFirstTouchCookie,
-  sanitizeFirstTouch,
+  resolveSignupFirstTouch,
 } from '@neram/database/analytics';
+import { clientIpFromHeaders, signupGeoFromHeaders } from '@neram/database/signup-geo';
+import { alertNewSignup, recordSignupGeo } from '@neram/database/signup-alert';
 
 import { getCorsHeaders } from '@/lib/cors';
 import { isEnrolledStudent } from '@/lib/enrollment';
@@ -41,7 +42,14 @@ export async function POST(req: NextRequest) {
           const fromCookie = readCookie(cookieHeader, ANON_ID_COOKIE);
           return isValidAnonymousId(fromCookie) ? fromCookie : null;
         })();
-    const firstTouch = sanitizeFirstTouch(body.first_touch) ?? readFirstTouchCookie(cookieHeader);
+    // Campaign record plus the first visit's referrer and channel (Google search,
+    // ChatGPT, Google Ads ...), so staff can see how this person reached us.
+    const firstTouch = resolveSignupFirstTouch({
+      bodyFirstTouch: body.first_touch,
+      bodyTouches: body.touches,
+      cookieHeader,
+    });
+    const clientIp = clientIpFromHeaders(req.headers);
 
     if (!idToken) {
       return NextResponse.json(
@@ -78,7 +86,7 @@ export async function POST(req: NextRequest) {
       device_type: null,
       browser: null,
       os: null,
-      ip_address: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      ip_address: clientIp,
       source_app: 'app',
       page_url: null,
     }).catch(() => {});
@@ -97,6 +105,10 @@ export async function POST(req: NextRequest) {
     // anonymous journey from this browser becomes theirs.
     if (isNewUser) {
       await recordFirstTouch(adminClient, user.id, { anonymousId, firstTouch });
+      await recordSignupGeo(adminClient, user.id, signupGeoFromHeaders(req.headers));
+      // Phone-first sign-in: the account is born with a verified phone, so the
+      // staff alert goes now (verify-phone sends it for Google-first sign-ins).
+      if (user.phone_verified) await alertNewSignup(adminClient, user.id);
     } else if (anonymousId) {
       await linkAnonymousEvents(adminClient, anonymousId, user.id);
     }
@@ -115,7 +127,7 @@ export async function POST(req: NextRequest) {
       device_type: null,
       browser: null,
       os: null,
-      ip_address: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+      ip_address: clientIp,
       source_app: 'app',
       page_url: null,
     }).catch(() => {});
@@ -252,7 +264,7 @@ export async function POST(req: NextRequest) {
         device_type: null,
         browser: null,
         os: null,
-        ip_address: req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null,
+        ip_address: clientIpFromHeaders(req.headers),
         source_app: 'app',
         page_url: null,
       });
