@@ -118,7 +118,7 @@ export default function RequestList({
                   {tab === 'done' ? (
                     (() => {
                       const f = followUps[r.id];
-                      const joinedOn = r.user_id && r.user_id in joinedAt ? joinedAt[r.user_id] : undefined;
+                      const joinedOn = r.user_id ? (r.user_id in joinedAt ? joinedAt[r.user_id] : undefined) : undefined;
                       if (joinedOn !== undefined) {
                         return <Chip size="small" color="success" icon={<CheckCircleIcon />} label={joinedOn ? `Joined ${formatIstDate(joinedOn)}` : 'Joined'} />;
                       }
