@@ -763,6 +763,47 @@ export interface WhatsAppHealth {
 }
 
 /**
+ * Pure: the WA_ACCOUNT_BLOCKED reason from Meta's `health_status` field, or
+ * null when sending is not blocked. Lists the errors of every blocked entity
+ * (for example WABA #141008 "The WABA status is not active").
+ */
+export function sendBlockFromHealthStatus(healthStatus: any): string | null {
+  if (!healthStatus || healthStatus.can_send_message !== 'BLOCKED') return null;
+  const reasons: string[] = [];
+  for (const entity of healthStatus.entities ?? []) {
+    if (entity?.can_send_message !== 'BLOCKED') continue;
+    for (const e of entity.errors ?? []) {
+      reasons.push(`${entity.entity_type} #${e.error_code}: ${e.error_description}`);
+    }
+  }
+  const why = reasons.length ? reasons.join('; ') : 'no reason given';
+  return `${WA_ERROR_PREFIXES.ACCOUNT_BLOCKED}: Meta's health check says this WhatsApp account cannot send (${why}). Queued messages are held until WhatsApp Manager shows it as active.`;
+}
+
+/**
+ * Ask Meta whether the number can send at all. Used after a send fails with an
+ * unclear error (Meta answers "#1 An unknown error has occurred" while the
+ * WABA is not active). Null when sending is allowed or the lookup itself
+ * fails, so an unreadable health check never holds the queue.
+ */
+export async function getWhatsAppSendBlock(): Promise<string | null> {
+  const phoneNumberId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+  const token = process.env.WHATSAPP_ACCESS_TOKEN;
+  if (!phoneNumberId || !token) return null;
+  try {
+    const res = await fetch(`${WHATSAPP_API_BASE}/${phoneNumberId}?fields=health_status`, {
+      cache: 'no-store',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return null;
+    const json = (await res.json().catch(() => ({}))) as any;
+    return sendBlockFromHealthStatus(json?.health_status);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * What Meta says about our sender: which number is on the Cloud API, whether
  * the token still works, and which templates are approved. Read-only.
  */

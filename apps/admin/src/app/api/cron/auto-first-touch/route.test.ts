@@ -6,6 +6,7 @@ const db = vi.hoisted(() => ({
   sendQuick: vi.fn(),
   update: vi.fn(),
   hold: vi.fn(),
+  health: vi.fn(),
 }));
 
 vi.mock('@neram/database', () => ({
@@ -27,6 +28,7 @@ vi.mock('@neram/database', () => ({
   createUnsubscribeToken: () => 't',
   isWhatsAppConfigured: () => true,
   isWhatsAppAccountBlocked: (e: string | null) => !!e && e.startsWith('WA_ACCOUNT_BLOCKED'),
+  getWhatsAppSendBlock: (...a: unknown[]) => db.health(...a),
   FIRST_TOUCH_MAX_AGE_DAYS: 7,
   dispatchNotification: vi.fn(),
 }));
@@ -49,6 +51,8 @@ describe('auto-first-touch cron', () => {
     db.sendQuick.mockReset();
     db.update.mockReset();
     db.hold.mockReset();
+    db.health.mockReset();
+    db.health.mockResolvedValue(null);
   });
 
   it('holds the queue without spending retries when Meta blocks the account', async () => {
@@ -75,6 +79,29 @@ describe('auto-first-touch cron', () => {
     db.pending = [row('x')];
     db.sendQuick.mockResolvedValue({ success: false, error: 'WA_UNDELIVERABLE: not on WhatsApp' });
     await GET(new Request('http://x/api/cron/auto-first-touch'));
+    expect(db.hold).not.toHaveBeenCalled();
+    expect(db.update.mock.calls[0][1]).toMatchObject({ success: false });
+  });
+
+  it('asks Meta health once on an unclear error and holds when the account is blocked', async () => {
+    db.pending = [row('p'), row('q')];
+    db.sendQuick.mockResolvedValue({ success: false, error: 'WA_ERROR_1: An unknown error has occurred.' });
+    db.health.mockResolvedValue('WA_ACCOUNT_BLOCKED: Meta health check (WABA #141008)');
+
+    const json = await (await GET(new Request('http://x/api/cron/auto-first-touch'))).json();
+
+    expect(db.health).toHaveBeenCalledTimes(1);
+    expect(db.sendQuick).toHaveBeenCalledTimes(1);
+    expect(db.hold.mock.calls[0][1]).toContain('141008');
+    expect(db.update).not.toHaveBeenCalled();
+    expect(json).toMatchObject({ held: 2, failed: 0 });
+  });
+
+  it('records an unclear error as failed when Meta health says sending works', async () => {
+    db.pending = [row('r')];
+    db.sendQuick.mockResolvedValue({ success: false, error: 'WA_ERROR_1: An unknown error has occurred.' });
+    await GET(new Request('http://x/api/cron/auto-first-touch'));
+    expect(db.health).toHaveBeenCalledTimes(1);
     expect(db.hold).not.toHaveBeenCalled();
     expect(db.update.mock.calls[0][1]).toMatchObject({ success: false });
   });

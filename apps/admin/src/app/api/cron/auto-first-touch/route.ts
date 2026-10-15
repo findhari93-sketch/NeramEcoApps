@@ -32,6 +32,7 @@ import {
   createUnsubscribeToken,
   isWhatsAppConfigured,
   isWhatsAppAccountBlocked,
+  getWhatsAppSendBlock,
   holdAutoMessage,
   FIRST_TOUCH_MAX_AGE_DAYS,
   dispatchNotification,
@@ -80,6 +81,7 @@ export async function GET(request: Request) {
     let failed = 0;
     let held = 0;
     let whatsappBlocked: string | null = null;
+    let healthChecked = false;
     const errors: string[] = [];
     const maxAgeMs = FIRST_TOUCH_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
 
@@ -241,9 +243,18 @@ export async function GET(request: Request) {
           }
         }
 
-        if (msg.channel === 'whatsapp' && !result.success && isWhatsAppAccountBlocked(result.error)) {
-          whatsappBlocked = result.error;
-          await holdAutoMessage(msg.id, result.error, new Date(Date.now() + 60 * 60 * 1000), supabase);
+        // An unclear failure (Meta answers "#1 unknown error" while the WABA
+        // is not active): ask Meta's health check once per run whether the
+        // account can send at all.
+        let accountBlock: string | null =
+          msg.channel === 'whatsapp' && !result.success && isWhatsAppAccountBlocked(result.error) ? result.error : null;
+        if (msg.channel === 'whatsapp' && !result.success && !accountBlock && !healthChecked) {
+          healthChecked = true;
+          accountBlock = await getWhatsAppSendBlock();
+        }
+        if (accountBlock) {
+          whatsappBlocked = accountBlock;
+          await holdAutoMessage(msg.id, accountBlock, new Date(Date.now() + 60 * 60 * 1000), supabase);
           held++;
           continue;
         }

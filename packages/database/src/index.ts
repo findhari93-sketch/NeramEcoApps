@@ -82,6 +82,8 @@ export {
   formatWhatsAppError,
   isPermanentWhatsAppFailure,
   isWhatsAppAccountBlocked,
+  getWhatsAppSendBlock,
+  sendBlockFromHealthStatus,
 } from './services/whatsapp';
 export type { DemoWaKind, DemoWaParams, WhatsAppHealth } from './services/whatsapp';
 
