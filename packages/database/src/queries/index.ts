@@ -84,3 +84,4 @@ export * from './ask-seniors';
 export * from './nirf-rankings';
 export * from './josaa';
 export * from './ai-usage';
+export * from './demo-follow-ups';
