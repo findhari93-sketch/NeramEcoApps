@@ -1,333 +1,172 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import {
-  Box, Typography, Stack, Paper, Grid, TextField, Button,
-  CircularProgress, Alert, Chip, LinearProgress,
-} from '@mui/material';
-import SchoolIcon from '@mui/icons-material/School';
-import VisibilityIcon from '@mui/icons-material/Visibility';
-import PeopleIcon from '@mui/icons-material/People';
-import StarIcon from '@mui/icons-material/Star';
-import SaveIcon from '@mui/icons-material/Save';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { Box, Button, Chip, Skeleton, Stack, Typography } from '@mui/material';
+import VisibilityOutlinedIcon from '@mui/icons-material/VisibilityOutlined';
+import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
+import StarOutlineIcon from '@mui/icons-material/StarOutline';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
+import HourglassTopIcon from '@mui/icons-material/HourglassTop';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { useCollegeDashboard } from './context';
+import { Card, PageHeader, TIER_TONE, formatDay } from './ui';
+import { SECTIONS } from '@/lib/college-dashboard/content-sections';
+import { sectionFilled } from '@/lib/college-dashboard/completeness';
 
-interface CollegeProfile {
-  id: string;
-  name: string;
-  slug: string;
-  neram_tier: string;
-  verified: boolean;
-  about: string | null;
-  phone: string | null;
-  email: string | null;
-  admissions_phone: string | null;
-  admissions_email: string | null;
-  website: string | null;
-  youtube_channel_url: string | null;
-  instagram_handle: string | null;
-}
-
-interface QuickStats {
+interface Stats {
   page_views_30d: number;
+  leads_30d: number;
   lead_count: number;
   review_count: number;
 }
 
-function getCompletionPercent(profile: CollegeProfile): number {
-  const fields: (keyof CollegeProfile)[] = [
-    'about', 'phone', 'email', 'admissions_phone', 'admissions_email',
-    'website', 'youtube_channel_url', 'instagram_handle',
-  ];
-  const filled = fields.filter((f) => !!profile[f]).length;
-  return Math.round((filled / fields.length) * 100);
+interface SectionState {
+  live: Record<string, unknown>;
+  pending: { submitted_at: string } | null;
+  last_decision: { status: string; review_note: string | null } | null;
 }
 
-function StatCard({ label, value, icon }: { label: string; value: number; icon: React.ReactNode }) {
-  return (
-    <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, flex: 1, minWidth: { xs: '100%', sm: 140 } }}>
-      <Stack direction="row" alignItems="center" gap={1.5}>
-        <Box sx={{ color: '#16a34a' }}>{icon}</Box>
-        <Box>
-          <Typography variant="h5" fontWeight={700}>{value.toLocaleString('en-IN')}</Typography>
-          <Typography variant="caption" color="text.secondary">{label}</Typography>
-        </Box>
-      </Stack>
-    </Paper>
-  );
+const WHY: Record<string, string> = {
+  profile: 'The first thing students read',
+  fees: 'Students search for fees more than anything else',
+  admissions: 'Seats, exams and this year\'s dates',
+  facilities: 'Hostels and studios parents ask about',
+  location: 'Puts your campus on the map',
+  photos: 'Pages with photos get more enquiries',
+};
+
+const TIER_PERKS: Record<string, string> = {
+  free: 'A basic listing. Enquiries reach you after Neram staff check them, with phone numbers partly hidden.',
+  silver: 'Infrastructure and faculty sections on your page, and enquiries delivered straight to you.',
+  gold: 'Placements, fee calculator and the AI helper on your page, and enquiries with full phone numbers.',
+  platinum: 'Everything in Gold plus a 360 campus tour.',
+};
+
+function daysLeft(end: string): number {
+  return Math.max(0, Math.ceil((new Date(`${end}T23:59:59+05:30`).getTime() - Date.now()) / 86400000));
 }
 
 export default function CollegeDashboardHome() {
-  const { session, collegeAdmin } = useCollegeDashboard();
-  const [profile, setProfile] = useState<CollegeProfile | null>(null);
-  const [stats, setStats] = useState<QuickStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [saveMsg, setSaveMsg] = useState('');
-  const [saveError, setSaveError] = useState('');
+  const { collegeAdmin, college, plan, api } = useCollegeDashboard();
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [sections, setSections] = useState<Record<string, SectionState> | null>(null);
 
-  const [form, setForm] = useState({
-    about: '',
-    phone: '',
-    email: '',
-    admissions_phone: '',
-    admissions_email: '',
-    website: '',
-    youtube_channel_url: '',
-    instagram_handle: '',
-  });
+  useEffect(() => {
+    void api<Stats>('/api/college-dashboard/analytics').then((r) => r.ok && setStats(r.data));
+    void api<{ sections: Record<string, SectionState> }>('/api/college-dashboard/content').then((r) => r.ok && setSections(r.data.sections));
+  }, [api]);
 
-  const load = useCallback(async () => {
-    if (!session?.access_token) return;
-    setLoading(true);
-    try {
-      const [profileRes, statsRes] = await Promise.all([
-        fetch('/api/college-dashboard/profile', {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        }),
-        fetch('/api/college-dashboard/analytics', {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        }),
-      ]);
-      if (profileRes.ok) {
-        const json = await profileRes.json();
-        setProfile(json.college);
-        setForm({
-          about: json.college.about ?? '',
-          phone: json.college.phone ?? '',
-          email: json.college.email ?? '',
-          admissions_phone: json.college.admissions_phone ?? '',
-          admissions_email: json.college.admissions_email ?? '',
-          website: json.college.website ?? '',
-          youtube_channel_url: json.college.youtube_channel_url ?? '',
-          instagram_handle: json.college.instagram_handle ?? '',
-        });
-      }
-      if (statsRes.ok) {
-        const json = await statsRes.json();
-        setStats(json);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [session?.access_token]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const handleSave = async () => {
-    if (!session?.access_token) return;
-    setSaving(true);
-    setSaveMsg('');
-    setSaveError('');
-    try {
-      const res = await fetch('/api/college-dashboard/profile', {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-        },
-        body: JSON.stringify(form),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error);
-      setSaveMsg('Profile saved successfully.');
-      load();
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : 'Failed to save.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
-
-  const completion = profile ? getCompletionPercent(profile) : 0;
+  const tier = plan?.tier ?? 'free';
+  const tone = TIER_TONE[tier] ?? TIER_TONE.free;
+  const publicUrl = college?.state_slug ? `/colleges/${college.state_slug}/${college.slug}` : null;
 
   return (
-    <Stack gap={3}>
-      {/* Welcome header */}
-      <Box>
-        <Typography variant="h5" fontWeight={700}>
-          Welcome, {collegeAdmin?.name ?? 'College Admin'}
-        </Typography>
-        <Typography variant="body2" color="text.secondary">
-          {profile?.name} College Dashboard
-        </Typography>
+    <Stack gap={2.5}>
+      <PageHeader
+        title={`Welcome, ${collegeAdmin?.name?.split(' ')[0] ?? 'there'}`}
+        intro="Keep your college page accurate and follow up with students who asked about admission."
+        action={
+          publicUrl && (
+            <Button component="a" href={publicUrl} target="_blank" rel="noopener" variant="outlined" endIcon={<OpenInNewIcon />} sx={{ minHeight: 44, textTransform: 'none' }}>
+              See your public page
+            </Button>
+          )
+        }
+      />
+
+      <Card>
+        <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5} justifyContent="space-between" alignItems={{ sm: 'center' }}>
+          <Box>
+            <Stack direction="row" gap={1} alignItems="center" flexWrap="wrap">
+              <Chip label={tone.label} sx={{ bgcolor: tone.bg, color: tone.fg, fontWeight: 700 }} />
+              {college?.verified && <Chip label="Verified college" color="success" variant="outlined" />}
+            </Stack>
+            <Typography sx={{ mt: 1, fontSize: 15, color: 'text.secondary', maxWidth: 640 }}>{TIER_PERKS[tier] ?? TIER_PERKS.free}</Typography>
+          </Box>
+          {plan?.active && (
+            <Box sx={{ textAlign: { sm: 'right' }, flexShrink: 0 }}>
+              <Typography sx={{ fontWeight: 700, fontSize: 18 }}>{daysLeft(plan.active.ends_on)} days left</Typography>
+              <Typography sx={{ fontSize: 13.5, color: 'text.secondary' }}>Until {formatDay(plan.active.ends_on)}</Typography>
+            </Box>
+          )}
+          {plan?.upcoming && !plan.active && (
+            <Typography sx={{ fontSize: 14, color: 'text.secondary' }}>Your plan starts on {formatDay(plan.upcoming.starts_on)}</Typography>
+          )}
+        </Stack>
+      </Card>
+
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: { xs: 1, sm: 1.5 } }}>
+        {[
+          { label: 'Page views, last 30 days', value: stats?.page_views_30d, Icon: VisibilityOutlinedIcon, href: '/college-dashboard/analytics' },
+          { label: 'Enquiries, last 30 days', value: stats?.leads_30d, Icon: ForumOutlinedIcon, href: '/college-dashboard/leads' },
+          { label: 'Published reviews', value: stats?.review_count, Icon: StarOutlineIcon, href: '/college-dashboard/reviews' },
+        ].map(({ label, value, Icon, href }) => (
+          <Box
+            key={label}
+            component={Link}
+            href={href}
+            sx={{
+              display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, alignItems: { xs: 'flex-start', sm: 'center' }, gap: { xs: 0.5, sm: 1.5 }, p: { xs: 1.5, sm: 2 }, minWidth: 0, borderRadius: 2, border: '1px solid', borderColor: 'divider',
+              bgcolor: 'background.paper', color: 'inherit', textDecoration: 'none',
+              '&:hover': { borderColor: 'primary.light' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+            }}
+          >
+            <Icon aria-hidden sx={{ color: 'primary.main' }} />
+            <Box>
+              {value === undefined ? <Skeleton width={40} height={30} /> : <Typography sx={{ fontWeight: 700, fontSize: 24, lineHeight: 1.2 }}>{value.toLocaleString('en-IN')}</Typography>}
+              <Typography sx={{ fontSize: { xs: 12.5, sm: 13.5 }, color: 'text.secondary', lineHeight: 1.35 }}>{label}</Typography>
+            </Box>
+          </Box>
+        ))}
       </Box>
 
-      {/* Tier badge */}
-      {profile && (
-        <Stack direction="row" gap={1} alignItems="center">
-          <Chip
-            label={`${(profile.neram_tier ?? 'free').toUpperCase()} Tier`}
-            size="small"
-            sx={{
-              bgcolor: profile.neram_tier === 'platinum' ? '#7c3aed'
-                : profile.neram_tier === 'gold' ? '#d97706'
-                : profile.neram_tier === 'silver' ? '#6b7280'
-                : '#e5e7eb',
-              color: profile.neram_tier && profile.neram_tier !== 'free' ? 'white' : 'text.secondary',
-              fontWeight: 600,
-              fontSize: 11,
-            }}
-          />
-          {profile.verified && <Chip label="Verified" size="small" color="success" />}
-        </Stack>
-      )}
-
-      {/* Quick stats */}
-      {stats && (
-        <Stack direction={{ xs: 'column', sm: 'row' }} gap={2}>
-          <StatCard label="Page Views (30 days)" value={stats.page_views_30d} icon={<VisibilityIcon />} />
-          <StatCard label="Total Leads" value={stats.lead_count} icon={<PeopleIcon />} />
-          <StatCard label="Approved Reviews" value={stats.review_count} icon={<StarIcon />} />
-        </Stack>
-      )}
-
-      {/* Profile completion */}
-      <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2 }}>
-        <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
-          <Typography variant="subtitle2" fontWeight={600}>Profile Completion</Typography>
-          <Typography variant="subtitle2" fontWeight={700} color={completion === 100 ? 'success.main' : 'warning.main'}>
-            {completion}%
-          </Typography>
-        </Stack>
-        <LinearProgress
-          variant="determinate"
-          value={completion}
-          sx={{
-            height: 6, borderRadius: 3,
-            bgcolor: 'grey.200',
-            '& .MuiLinearProgress-bar': {
-              bgcolor: completion === 100 ? '#16a34a' : '#d97706',
-            },
-          }}
-        />
-        {completion < 100 && (
-          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-            A complete profile attracts more students. Fill in all fields below.
-          </Typography>
+      <Card>
+        <Typography component="h2" sx={{ fontWeight: 700, fontSize: 18, mb: 0.5 }}>
+          Your college page
+        </Typography>
+        <Typography sx={{ fontSize: 14.5, color: 'text.secondary', mb: 1.5 }}>
+          Changes you send are checked by the Neram team, usually within one working day, then go live.
+        </Typography>
+        {!sections ? (
+          <Stack gap={1}>{[0, 1, 2].map((i) => <Skeleton key={i} variant="rounded" height={52} />)}</Stack>
+        ) : (
+          <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
+            {SECTIONS.map((s) => {
+              const st = sections[s.key];
+              const filled = st ? sectionFilled(s.key, st.live) : false;
+              const pending = !!st?.pending;
+              const rejected = st?.last_decision?.status === 'rejected' && !pending;
+              return (
+                <Box component="li" key={s.key} sx={{ borderTop: '1px solid', borderColor: 'divider', '&:first-of-type': { borderTop: 0 } }}>
+                  <Box
+                    component={Link}
+                    href={`/college-dashboard/profile#${s.key}`}
+                    sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minHeight: 56, py: 1, color: 'inherit', textDecoration: 'none', '&:hover .t': { color: 'primary.main' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' } }}
+                  >
+                    {pending ? (
+                      <HourglassTopIcon aria-hidden sx={{ color: 'warning.main' }} />
+                    ) : filled ? (
+                      <CheckCircleIcon aria-hidden sx={{ color: 'success.main' }} />
+                    ) : (
+                      <RadioButtonUncheckedIcon aria-hidden sx={{ color: 'text.disabled' }} />
+                    )}
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography className="t" sx={{ fontWeight: 600, fontSize: 15 }}>{s.title}</Typography>
+                      <Typography sx={{ fontSize: 13.5, color: rejected ? 'error.main' : 'text.secondary' }}>
+                        {pending ? 'Sent for review' : rejected ? 'Not approved last time. Open to see why.' : filled ? 'Up to date' : WHY[s.key]}
+                      </Typography>
+                    </Box>
+                    <ChevronRightIcon aria-hidden sx={{ color: 'text.disabled' }} />
+                  </Box>
+                </Box>
+              );
+            })}
+          </Box>
         )}
-      </Paper>
-
-      {/* Profile Editor */}
-      <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderRadius: 2 }}>
-        <Stack direction="row" alignItems="center" gap={1.5} sx={{ mb: 3 }}>
-          <SchoolIcon sx={{ color: '#16a34a' }} />
-          <Typography variant="h6" fontWeight={700}>Edit Profile</Typography>
-        </Stack>
-
-        {saveMsg && <Alert severity="success" onClose={() => setSaveMsg('')} sx={{ mb: 2 }}>{saveMsg}</Alert>}
-        {saveError && <Alert severity="error" onClose={() => setSaveError('')} sx={{ mb: 2 }}>{saveError}</Alert>}
-
-        <Grid container spacing={2}>
-          <Grid item xs={12}>
-            <TextField
-              label="About Your College"
-              value={form.about}
-              onChange={(e) => setForm((f) => ({ ...f, about: e.target.value }))}
-              fullWidth
-              size="small"
-              multiline
-              rows={4}
-              placeholder="Describe your college, programs, campus, and what makes you unique."
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              label="General Phone"
-              value={form.phone}
-              onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
-              fullWidth
-              size="small"
-              inputProps={{ inputMode: 'tel' }}
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              label="General Email"
-              value={form.email}
-              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-              fullWidth
-              size="small"
-              type="email"
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              label="Admissions Phone"
-              value={form.admissions_phone}
-              onChange={(e) => setForm((f) => ({ ...f, admissions_phone: e.target.value }))}
-              fullWidth
-              size="small"
-              inputProps={{ inputMode: 'tel' }}
-              helperText="Shown to prospective students"
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              label="Admissions Email"
-              value={form.admissions_email}
-              onChange={(e) => setForm((f) => ({ ...f, admissions_email: e.target.value }))}
-              fullWidth
-              size="small"
-              type="email"
-              helperText="Shown to prospective students"
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              label="Website URL"
-              value={form.website}
-              onChange={(e) => setForm((f) => ({ ...f, website: e.target.value }))}
-              fullWidth
-              size="small"
-              type="url"
-              placeholder="https://www.yourcollege.edu.in"
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              label="YouTube Channel URL"
-              value={form.youtube_channel_url}
-              onChange={(e) => setForm((f) => ({ ...f, youtube_channel_url: e.target.value }))}
-              fullWidth
-              size="small"
-              type="url"
-              placeholder="https://youtube.com/@yourcollege"
-            />
-          </Grid>
-          <Grid item xs={12} sm={6}>
-            <TextField
-              label="Instagram Handle"
-              value={form.instagram_handle}
-              onChange={(e) => setForm((f) => ({ ...f, instagram_handle: e.target.value }))}
-              fullWidth
-              size="small"
-              placeholder="@yourcollege"
-              helperText="Include the @ symbol"
-            />
-          </Grid>
-        </Grid>
-
-        <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
-          <Button
-            variant="contained"
-            startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <SaveIcon />}
-            onClick={handleSave}
-            disabled={saving}
-            sx={{ bgcolor: '#16a34a', '&:hover': { bgcolor: '#15803d' }, minWidth: 130 }}
-          >
-            {saving ? 'Saving...' : 'Save Profile'}
-          </Button>
-        </Box>
-      </Paper>
+      </Card>
     </Stack>
   );
 }

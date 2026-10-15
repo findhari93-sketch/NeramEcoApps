@@ -9,7 +9,9 @@
  *
  * Rule ids are stable: staff ignore findings by them and the docs list them.
  */
+import { cityForName, getCity } from '@neram/geo';
 import { AI_CRAWLERS, isAllowed, parseRobots } from './robots';
+import { cycleYear, seasonFor, SEASON_LEAD_DAYS } from './seasons';
 import type { Finding, FindingCategory, PageWindow, QueryPageWindow, RuleInput, Severity, UrlStatus } from './types';
 
 /** Lower-case host, no hash, no trailing slash (except the root). Used to join our URLs with Google's. */
@@ -42,6 +44,11 @@ const originOf = (u: string) => {
   }
 };
 
+/** normUrl, plus http and www folded into https on the bare host: they 301 there, so they are one page. */
+export function foldUrl(u: string): string {
+  return normUrl(u).replace(/^http:\/\//, 'https://').replace(/^https:\/\/www\./, 'https://');
+}
+
 /** Noindex as it is now: our crawler when it has seen the page, else Google's last look. */
 export function isNoindex(r: UrlStatus): boolean {
   if (r.crawled_at && r.http_status === 200) return /noindex/i.test(r.robots_meta || '') || /noindex/i.test(r.x_robots_tag || '');
@@ -73,13 +80,73 @@ const DASHES = /—|--|&mdash;/;
 
 const SEVERITY_ORDER: Record<Severity, number> = { critical: 0, high: 1, medium: 2, info: 3 };
 
+export type CityIntent = 'nata' | 'jee' | 'exam-centre';
+
+/** Words that are never a city, so "nata coaching near me" does not match a town called "Near". */
+const NOT_CITY = new Set(['nata', 'jee', 'main', 'paper', 'coaching', 'classes', 'class', 'centre', 'center', 'centres', 'centers', 'near', 'best', 'online', 'offline', 'exam', 'test', 'institute', 'academy', 'tuition', 'architecture', 'arch', 'barch', 'india', 'top', 'fees', 'fee', 'list', 'with', 'from', 'neram', 'drawing', 'preparation', 'college', 'colleges', 'city', 'cities', 'the', 'and', 'for']);
+
+/** The city and intent of a search like "nata coaching in madurai" or "nata exam centre patna". */
+export function cityIntent(query: string): { city: string; state: string; intent: CityIntent } | null {
+  const q = query.toLowerCase();
+  if (!/\b(nata|jee|b\.?\s?arch|architecture)\b/.test(q)) return null;
+  let intent: CityIntent | null = null;
+  if (/\b(exam|test)\s+(centre|center|centres|centers|city|cities)\b/.test(q)) intent = 'exam-centre';
+  else if (/\b(coaching|classes|class|tuition|institute|academy|centre|center)\b/.test(q)) intent = /\bjee\b/.test(q) ? 'jee' : 'nata';
+  if (!intent) return null;
+  const words = q.replace(/[^a-z\s]/g, ' ').split(/\s+/).filter((w) => w.length >= 3 && !NOT_CITY.has(w));
+  const india = (name: string) => {
+    const slug = cityForName(name);
+    const c = slug ? getCity(slug) : undefined;
+    return c && c.kind === 'india' ? { city: c.slug, state: c.stateSlug, intent: intent as CityIntent } : null;
+  };
+  // Two-word names first ("navi mumbai"), then single words.
+  for (let i = 0; i < words.length - 1; i++) {
+    const hit = india(`${words[i]} ${words[i + 1]}`);
+    if (hit) return hit;
+  }
+  for (const w of words) {
+    const hit = india(w);
+    if (hit) return hit;
+  }
+  return null;
+}
+
+/** The page that answers a city search. Kept in step with exam-config.ts (marketing) and geo-pages.ts (app). */
+export function cityPageUrl(intent: CityIntent, city: string, state: string): string {
+  if (intent === 'exam-centre') return `https://app.neramclasses.com/tools/nata/exam-centers/${state}/${city}`;
+  if (intent === 'jee') return `https://neramclasses.com/coaching/jee-paper-2-coaching/jee-paper-2-coaching-in-${city}`;
+  return `https://neramclasses.com/coaching/nata-coaching/nata-coaching-centers-in-${city}`;
+}
+
+/**
+ * Today's "ask Google" list: sitemap pages Google has not indexed (or never saw)
+ * that work on our side, most valuable first. Requesting indexing is a manual
+ * click in Search Console (the API cannot do it, about 10 a day), so the list is
+ * short and skips pages requested in the last 14 days.
+ */
+export function pickAskGoogle(urls: UrlStatus[], pages28: PageWindow[], now: Date, n = 10): UrlStatus[] {
+  const imp = new Map(pages28.map((p) => [normUrl(p.page), p.impressions]));
+  const t = now.getTime();
+  const depth = (u: string) => pathOf(u).split('/').filter(Boolean).length;
+  return urls
+    .filter((r) => r.expected_index && r.inspected_at && r.verdict !== 'PASS' && r.crawled_at && r.http_status === 200 && !isNoindex(r))
+    .filter((r) => !r.index_requested_at || t - Date.parse(r.index_requested_at) > 14 * 86_400_000)
+    .sort((a, b) => (imp.get(normUrl(b.url)) ?? 0) - (imp.get(normUrl(a.url)) ?? 0) || depth(a.url) - depth(b.url) || (b.sitemap_lastmod ?? '').localeCompare(a.sitemap_lastmod ?? ''))
+    .slice(0, n);
+}
+
 export function runRules(input: RuleInput): Finding[] {
   const out: Finding[] = [];
   const add = (rule_id: string, category: FindingCategory, severity: Severity, url: string | null, title: string, detail: Record<string, unknown>, substance: string, subject?: string) =>
     out.push({ fingerprint: `${rule_id}|${subject ?? url ?? ''}`, rule_id, category, severity, url, title, detail, substance });
+  const wait = (rule_id: string, category: FindingCategory, severity: Severity, url: string, title: string, detail: Record<string, unknown>, substance: string) =>
+    out.push({ fingerprint: `${rule_id}|${url}`, rule_id, category, severity, url, title, detail, substance, waiting: true });
 
   const pages28 = new Map<string, PageWindow>(input.pages28.map((p) => [normUrl(p.page), p]));
   const traffic = (url: string) => pages28.get(normUrl(url)) ?? { page: url, clicks: 0, impressions: 0, avg_position: 0 };
+  const now = input.now ?? new Date();
+  const robotsByOrigin = new Map(input.sites.filter((s) => s.robotsStatus === 200 && s.robotsTxt !== null).map((s) => [s.origin, parseRobots(s.robotsTxt as string)]));
+  const sitemapUrls = new Set(input.urls.filter((r) => r.expected_index).map((r) => normUrl(r.url)));
 
   // ── Indexing ────────────────────────────────────────────────────────────
   for (const r of input.urls) {
@@ -90,6 +157,9 @@ export function runRules(input: RuleInput): Finding[] {
     const gone = status === 404 || status === 410 || fetchState === 'NOT_FOUND' || fetchState === 'SOFT_404';
     const redirected = (status !== null && status >= 300 && status < 400) || !!r.redirect_to || fetchState === 'REDIRECT_ERROR';
     const noindex = isNoindex(r);
+    // Our crawl is the truth for what we serve today. When only Google's last look still
+    // shows a problem we have already fixed, the finding waits for Google to re-crawl.
+    const weServeOk = !!r.crawled_at && status === 200 && !r.redirect_to;
 
     if (serverError) {
       add('I1', 'indexing', 'critical', r.url, 'Server error (5xx)', { http_status: status, page_fetch_state: fetchState, crawl_error: r.crawl_error, clicks28: clicks }, 'I1');
@@ -99,11 +169,16 @@ export function runRules(input: RuleInput): Finding[] {
     if (r.expected_index) {
       if (gone) {
         const soft = fetchState === 'SOFT_404' && status === 200;
-        add('I2', 'indexing', 'high', r.url, soft ? 'In the sitemap, but Google sees an empty page (soft 404)' : 'In the sitemap, but the page is not found (404)', { http_status: status, page_fetch_state: fetchState, sitemap: r.sitemap }, `I2:${soft ? 'soft' : 'gone'}`);
+        if (!soft && weServeOk) {
+          wait('I2', 'indexing', 'high', r.url, 'Google last saw a 404, the page works now: waiting for a re-crawl', { http_status: status, page_fetch_state: fetchState, last_crawl_time: r.last_crawl_time, sitemap: r.sitemap }, 'I2:gone');
+        } else {
+          add('I2', 'indexing', 'high', r.url, soft ? 'In the sitemap, but Google sees an empty page (soft 404)' : 'In the sitemap, but the page is not found (404)', { http_status: status, page_fetch_state: fetchState, sitemap: r.sitemap }, `I2:${soft ? 'soft' : 'gone'}`);
+        }
         continue;
       }
       if (redirected) {
-        add('I2', 'indexing', 'high', r.url, 'In the sitemap, but the page redirects', { http_status: status, redirect_to: r.redirect_to, sitemap: r.sitemap }, `I2:redirect:${r.redirect_to ?? ''}`);
+        if (weServeOk) wait('I2', 'indexing', 'high', r.url, 'Google last saw a redirect, the page loads now: waiting for a re-crawl', { http_status: status, page_fetch_state: fetchState, last_crawl_time: r.last_crawl_time, sitemap: r.sitemap }, 'I2:redirect:');
+        else add('I2', 'indexing', 'high', r.url, 'In the sitemap, but the page redirects', { http_status: status, redirect_to: r.redirect_to, sitemap: r.sitemap }, `I2:redirect:${r.redirect_to ?? ''}`);
         continue;
       }
       if (noindex) {
@@ -111,7 +186,12 @@ export function runRules(input: RuleInput): Finding[] {
         continue;
       }
       if (r.robots_txt_state === 'DISALLOWED') {
-        add('I7', 'indexing', 'high', r.url, 'In the sitemap, but robots.txt blocks it', { sitemap: r.sitemap }, 'I7');
+        const groups = robotsByOrigin.get(originOf(r.url));
+        if (groups && isAllowed(groups, 'Googlebot', pathOf(r.url) || '/')) {
+          wait('I7', 'indexing', 'high', r.url, 'Google last read a robots.txt that blocked it, ours allows it now: waiting for a re-crawl', { sitemap: r.sitemap, last_crawl_time: r.last_crawl_time }, 'I7');
+        } else {
+          add('I7', 'indexing', 'high', r.url, 'In the sitemap, but robots.txt blocks it', { sitemap: r.sitemap }, 'I7');
+        }
         continue;
       }
       if (r.verdict && r.verdict !== 'PASS') {
@@ -122,7 +202,10 @@ export function runRules(input: RuleInput): Finding[] {
         }
       }
       if (r.google_canonical && r.user_canonical && normUrl(r.google_canonical) !== normUrl(r.user_canonical)) {
-        add('I5', 'indexing', 'medium', r.url, 'Google chose a different main URL than ours', { google_canonical: r.google_canonical, user_canonical: r.user_canonical }, `I5:${normUrl(r.google_canonical)}`);
+        // Google read an older canonical than the one we serve (ours names the page itself now).
+        const stale = !!r.canonical && normUrl(r.canonical) === normUrl(r.url) && normUrl(r.user_canonical) !== normUrl(r.url);
+        if (stale) wait('I5', 'indexing', 'medium', r.url, 'Google read an older canonical, ours is correct now: waiting for a re-crawl', { google_canonical: r.google_canonical, user_canonical: r.user_canonical, canonical_now: r.canonical }, `I5:${normUrl(r.google_canonical)}`);
+        else add('I5', 'indexing', 'medium', r.url, 'Google chose a different main URL than ours', { google_canonical: r.google_canonical, user_canonical: r.user_canonical }, `I5:${normUrl(r.google_canonical)}`);
       }
     } else {
       // Known from search data or pasted from a Search Console export.
@@ -172,21 +255,62 @@ export function runRules(input: RuleInput): Finding[] {
     }
   }
 
-  // P4 cannibalisation and P5 demand we do not rank for, both by query.
+  // P4 cannibalisation and P5 demand we do not rank for, both by query. http and www
+  // copies 301 to the bare host, so they are folded into one page first.
   const byQuery = new Map<string, QueryPageWindow[]>();
   for (const q of input.queries28) byQuery.set(q.query, [...(byQuery.get(q.query) ?? []), q]);
   const gaps: Array<{ query: string; impressions: number; best: number; page: string }> = [];
-  for (const [query, rows] of byQuery) {
+  for (const [query, raw] of byQuery) {
+    const folded = new Map<string, QueryPageWindow>();
+    for (const r of raw) {
+      const key = foldUrl(r.page);
+      const prev = folded.get(key);
+      if (!prev) folded.set(key, { ...r, page: key });
+      else {
+        const impressions = prev.impressions + r.impressions;
+        folded.set(key, { ...prev, clicks: prev.clicks + r.clicks, impressions, avg_position: impressions ? (prev.avg_position * prev.impressions + r.avg_position * r.impressions) / impressions : prev.avg_position });
+      }
+    }
+    const rows = [...folded.values()];
     const total = rows.reduce((s, r) => s + r.impressions, 0);
     const competing = rows.filter((r) => r.impressions / total >= 0.2).sort((a, b) => b.impressions - a.impressions);
-    if (total >= 100 && competing.length >= 2) {
+    // A brand search ("neram classes") showing the home page and one more page is a good result.
+    if (total >= 100 && competing.length >= 2 && !/neram/i.test(query)) {
       add('P4', 'performance', 'medium', normUrl(competing[0].page), `${competing.length} of our pages compete for "${query}"`, { query, impressions28: total, pages: competing.map((r) => ({ page: r.page, impressions: r.impressions, position: Math.round(r.avg_position * 10) / 10 })) }, `P4:${competing.map((r) => normUrl(r.page)).sort().join(',')}`, query);
     }
     const best = rows.reduce((b, r) => (r.avg_position < b.avg_position ? r : b), rows[0]);
+    // Spread: a big search split thinly over many of our pages, none of them on page one.
+    // Google cannot tell which page is ours for it ("nata coaching" over 80 pages).
+    if (total >= 200 && competing.length < 2 && rows.length >= 5 && best.avg_position > 10 && !/neram/i.test(query)) {
+      const top = [...rows].sort((a, b) => b.impressions - a.impressions).slice(0, 8);
+      add('P4', 'performance', 'medium', normUrl(top[0].page), `"${query}" is spread over ${rows.length} of our pages, none on page one`, { query, impressions28: total, spread: rows.length, pages: top.map((r) => ({ page: r.page, impressions: r.impressions, position: Math.round(r.avg_position * 10) / 10 })) }, `P4:spread:${rows.length >= 20 ? '20+' : rows.length}`, `spread:${query}`);
+    }
     if (total >= 50 && best.avg_position > 20) gaps.push({ query, impressions: total, best: best.avg_position, page: best.page });
   }
   for (const g of gaps.sort((a, b) => b.impressions - a.impressions).slice(0, 25)) {
     add('P5', 'performance', 'info', normUrl(g.page), `People search "${g.query}" but we rank below 20`, { query: g.query, impressions28: g.impressions, best_position: Math.round(g.best * 10) / 10 }, 'P5', g.query);
+  }
+
+  // P6 city demand: people search coaching or exam centres in a city whose page we hold
+  // back (noindex, so not in a sitemap). Real local facts are what let the gate index it.
+  const cityDemand = new Map<string, { city: string; state: string; intent: CityIntent; page: string; impressions: number; queries: Array<{ query: string; impressions: number; position: number }> }>();
+  for (const [query, rows] of byQuery) {
+    const hit = cityIntent(query);
+    if (!hit) continue;
+    const page = cityPageUrl(hit.intent, hit.city, hit.state);
+    if (sitemapUrls.has(normUrl(page))) continue;
+    const impressions = rows.reduce((s, r) => s + r.impressions, 0);
+    const best = rows.reduce((b, r) => (r.avg_position < b.avg_position ? r : b), rows[0]);
+    const key = `${hit.intent}:${hit.city}`;
+    const cur = cityDemand.get(key) ?? { city: hit.city, state: hit.state, intent: hit.intent, page, impressions: 0, queries: [] };
+    cur.impressions += impressions;
+    cur.queries.push({ query, impressions, position: Math.round(best.avg_position * 10) / 10 });
+    cityDemand.set(key, cur);
+  }
+  for (const d of [...cityDemand.values()].filter((d) => d.impressions >= 20).sort((a, b) => b.impressions - a.impressions).slice(0, 30)) {
+    const name = getCity(d.city)?.name ?? d.city;
+    const what = d.intent === 'exam-centre' ? 'a NATA exam centre' : d.intent === 'jee' ? 'JEE Paper 2 coaching' : 'NATA coaching';
+    add('P6', 'performance', 'medium', d.page, `${d.impressions} searches for ${what} in ${name}, but our ${name} page is held back`, { city: d.city, state: d.state, intent: d.intent, impressions28: d.impressions, queries: d.queries.sort((a, b) => b.impressions - a.impressions).slice(0, 5) }, 'P6', `city:${d.intent}:${d.city}`);
   }
 
   // ── On-site (our crawl of indexable sitemap pages) ──────────────────────
@@ -224,6 +348,37 @@ export function runRules(input: RuleInput): Finding[] {
   }
   for (const [desc, urls] of dupGroups('meta_description')) {
     add('O2', 'onsite', 'info', urls[0], `${urls.length} pages share one meta description`, { meta_description: desc, urls: urls.slice(0, 20) }, `O2:dup:${[...urls].sort().join(',')}`, `dup-desc:${desc.slice(0, 200)}`);
+  }
+
+  // ── Season: pages must name the coming cycle before its searches start ──
+  // A year in the URL (/nata-2026) needs a sibling page for the new year; a page
+  // without one (/counseling/tnea-barch) needs the new year in its title.
+  const hubs = new Map<string, { season: string; want: number; year: number; hub: string; next: string; pages: string[] }>();
+  for (const r of live) {
+    const path = pathOf(r.url);
+    const season = seasonFor(path);
+    if (!season) continue;
+    const want = cycleYear(season, now);
+    if (!want) continue;
+    const inUrl = path.match(/^(\/(?:(?:ta|hi|kn|ml)\/)?[a-z0-9-]+-)(20\d{2})(?=\/|$)/);
+    if (inUrl) {
+      const year = Number(inUrl[2]);
+      if (year >= want) continue;
+      const hub = `${originOf(r.url)}${inUrl[1]}${year}`;
+      const next = `${originOf(r.url)}${inUrl[1]}${want}`;
+      if (sitemapUrls.has(normUrl(next))) continue;
+      const cur = hubs.get(hub) ?? { season: season.label, want, year, hub, next, pages: [] };
+      cur.pages.push(path);
+      hubs.set(hub, cur);
+      continue;
+    }
+    const years = (r.title || '').match(/\b20\d{2}\b/g)?.map(Number).filter((y) => y >= want - 3) ?? [];
+    if (years.length && !years.includes(want) && Math.max(...years) < want) {
+      add('S1', 'performance', 'high', r.url, `Still says ${Math.max(...years)}: ${season.label} ${want} searches start soon`, { season: season.label, cycle: want, title: r.title, lead_days: SEASON_LEAD_DAYS }, `S1:${want}`);
+    }
+  }
+  for (const h of hubs.values()) {
+    add('S1', 'performance', 'high', h.hub, `No ${h.season} ${h.want} page yet: ${h.season} ${h.want} searches start soon`, { season: h.season, cycle: h.want, current_year: h.year, new_url: h.next, pages: h.pages.sort().slice(0, 40) }, `S1:${h.want}`);
   }
 
   // ── AEO: can AI answer engines read us, and do they get the right pages ──

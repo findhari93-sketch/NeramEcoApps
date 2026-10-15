@@ -5,7 +5,7 @@ import {
   Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions,
   DialogContent, DialogTitle, Paper, Snackbar, Stack, Table, TableBody,
   TableCell, TableContainer, TableHead, TableRow, Tabs, Tab, TextField,
-  Typography,
+  Typography, Skeleton, CardActionArea,
 } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
@@ -21,12 +21,16 @@ interface LeadRow {
   college_id: string;
   name: string;
   phone: string;
+  parent_phone: string | null;
   email: string | null;
   city: string | null;
   nata_score: number | null;
   message: string | null;
   source: string | null;
   status: string;
+  college_note: string | null;
+  status_updated_at: string | null;
+  delivered_at: string | null;
   admin_review_status: string | null;
   admin_reviewed_at: string | null;
   admin_reviewed_by: string | null;
@@ -42,6 +46,25 @@ interface LeadRow {
   } | null;
 }
 
+interface CollegeSummary {
+  college_id: string;
+  name: string;
+  total: number;
+  new: number;
+  delivered: number;
+}
+
+const COLLEGE_STATUS_LABEL: Record<string, string> = {
+  new: 'New',
+  contacted: 'Contacted',
+  visited: 'Visited',
+  admitted: 'Admitted',
+  not_interested: 'Not interested',
+  qualified: 'Qualified',
+  converted: 'Converted',
+  dropped: 'Dropped',
+};
+
 const STATUS_COLORS: Record<string, 'default' | 'warning' | 'success' | 'error'> = {
   pending: 'warning',
   approved: 'success',
@@ -54,6 +77,8 @@ export default function CollegeLeadsReviewPage() {
   const [leads, setLeads] = useState<LeadRow[]>([]);
   const [counts, setCounts] = useState({ pending: 0, approved: 0, rejected: 0, spam: 0 });
   const [statusFilter, setStatusFilter] = useState<ReviewStatus>('pending');
+  const [summary, setSummary] = useState<CollegeSummary[] | null>(null);
+  const [collegeFilter, setCollegeFilter] = useState<{ id: string; name: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -73,6 +98,7 @@ export default function CollegeLeadsReviewPage() {
     try {
       const params = new URLSearchParams();
       params.set('status', statusFilter);
+      if (collegeFilter) params.set('college_id', collegeFilter.id);
       const res = await fetch(`/api/college-leads?${params}`, { cache: 'no-store' });
       const data = await res.json();
       if (!res.ok) {
@@ -81,12 +107,13 @@ export default function CollegeLeadsReviewPage() {
       }
       setLeads(data.leads);
       setCounts(data.counts);
+      setSummary(data.summary ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to load');
     } finally {
       setLoading(false);
     }
-  }, [statusFilter]);
+  }, [statusFilter, collegeFilter]);
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
 
@@ -152,6 +179,58 @@ export default function CollegeLeadsReviewPage() {
         <Chip size="small" color="error" label={`Spam: ${counts.spam}`} />
       </Stack>
 
+      <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+        <Typography variant="subtitle2" component="h2" sx={{ mb: 1 }}>
+          Top colleges by leads, last 90 days
+        </Typography>
+        {summary === null ? (
+          <Stack direction="row" gap={1}>
+            {[0, 1, 2, 3].map((i) => (
+              <Skeleton key={i} variant="rounded" width={180} height={56} />
+            ))}
+          </Stack>
+        ) : summary.length === 0 ? (
+          <Typography variant="body2" color="text.secondary">
+            No leads in the last 90 days.
+          </Typography>
+        ) : (
+          <Stack direction="row" gap={1} sx={{ overflowX: 'auto', pb: 0.5 }}>
+            {summary.map((c) => {
+              const selected = collegeFilter?.id === c.college_id;
+              return (
+                <Paper
+                  key={c.college_id}
+                  variant="outlined"
+                  sx={{ flexShrink: 0, borderColor: selected ? 'primary.main' : 'divider', bgcolor: selected ? 'action.selected' : 'background.paper' }}
+                >
+                  <CardActionArea
+                    onClick={() => setCollegeFilter(selected ? null : { id: c.college_id, name: c.name })}
+                    aria-pressed={selected}
+                    sx={{ px: 1.5, py: 1, minWidth: 180, maxWidth: 240, minHeight: 56 }}
+                  >
+                    <Typography variant="body2" fontWeight={600} noWrap title={c.name}>
+                      {c.name}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {c.total} leads, {c.new} new, {c.delivered} delivered
+                    </Typography>
+                  </CardActionArea>
+                </Paper>
+              );
+            })}
+          </Stack>
+        )}
+        {collegeFilter && (
+          <Chip
+            sx={{ mt: 1.5 }}
+            label={`Showing only ${collegeFilter.name}`}
+            onDelete={() => setCollegeFilter(null)}
+            color="primary"
+            variant="outlined"
+          />
+        )}
+      </Paper>
+
       <Paper variant="outlined" sx={{ mb: 2 }}>
         <Tabs
           value={statusFilter}
@@ -191,6 +270,7 @@ export default function CollegeLeadsReviewPage() {
               <TableCell align="right">NATA</TableCell>
               <TableCell>Message</TableCell>
               <TableCell>Status</TableCell>
+              <TableCell>College status</TableCell>
               <TableCell align="right" sx={{ minWidth: 260 }}>Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -204,7 +284,14 @@ export default function CollegeLeadsReviewPage() {
                   {lead.colleges?.name ?? '-'}
                 </TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>{lead.name}</TableCell>
-                <TableCell>{lead.phone}</TableCell>
+                <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                  {lead.phone}
+                  {lead.parent_phone && (
+                    <Typography variant="caption" color="text.secondary" component="div">
+                      Parent: {lead.parent_phone}
+                    </Typography>
+                  )}
+                </TableCell>
                 <TableCell sx={{ fontSize: '0.8rem' }}>{lead.email ?? '-'}</TableCell>
                 <TableCell sx={{ fontSize: '0.8rem' }}>{lead.city ?? '-'}</TableCell>
                 <TableCell align="right">{lead.nata_score ?? '-'}</TableCell>
@@ -218,6 +305,19 @@ export default function CollegeLeadsReviewPage() {
                     color={STATUS_COLORS[lead.admin_review_status ?? 'pending']}
                     sx={{ textTransform: 'capitalize' }}
                   />
+                </TableCell>
+                <TableCell sx={{ maxWidth: 220 }}>
+                  <Chip size="small" variant="outlined" label={COLLEGE_STATUS_LABEL[lead.status] ?? lead.status} />
+                  {lead.delivered_at && (
+                    <Typography variant="caption" color="text.secondary" component="div">
+                      Delivered {new Date(lead.delivered_at).toLocaleDateString('en-IN')}
+                    </Typography>
+                  )}
+                  {lead.college_note && (
+                    <Typography variant="caption" color="text.secondary" component="div" sx={{ whiteSpace: 'normal' }}>
+                      Note: {lead.college_note}
+                    </Typography>
+                  )}
                 </TableCell>
                 <TableCell align="right">
                   {lead.admin_review_status === 'pending' ? (
@@ -245,7 +345,7 @@ export default function CollegeLeadsReviewPage() {
             ))}
             {!loading && leads.length === 0 && (
               <TableRow>
-                <TableCell colSpan={10} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                <TableCell colSpan={11} align="center" sx={{ py: 4, color: 'text.secondary' }}>
                   No {statusFilter !== 'all' ? statusFilter : ''} leads.
                 </TableCell>
               </TableRow>

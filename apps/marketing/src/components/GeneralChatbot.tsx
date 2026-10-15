@@ -13,6 +13,7 @@ import {
   Fab,
   CircularProgress,
   SwipeableDrawer,
+  Button,
 } from '@neram/ui';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
@@ -173,6 +174,8 @@ function InlineMarkdown({ text }: { text: string }) {
 interface ChatMessage {
   role: 'user' | 'model';
   text: string;
+  /** A failed answer: show a WhatsApp button under it so the visitor has a next step. */
+  needsHuman?: boolean;
 }
 
 const MAX_QUESTIONS_PER_SESSION = 20;
@@ -283,18 +286,22 @@ export default function GeneralChatbot() {
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || 'Failed to get response');
+        throw new Error(errData.code === 'AI_UNAVAILABLE' ? 'AI_UNAVAILABLE' : errData.error || 'Failed to get response');
       }
 
       const data = await res.json();
       setMessages((prev) => [...prev, { role: 'model', text: data.reply }]);
     } catch (err) {
-      const errorMsg = err instanceof Error && err.message.includes('temporarily')
-        ? 'Our AI is a bit busy right now. Please try again in a few seconds, or contact us at **+91 91761 37043**.'
-        : 'Sorry, I\'m having trouble connecting. Please try again or call us at **+91 91761 37043**.';
+      const reason = err instanceof Error ? err.message : '';
+      // AI_UNAVAILABLE is an outage, not a blip: retrying will not help, a person will.
+      const errorMsg = reason === 'AI_UNAVAILABLE'
+        ? 'Our assistant is offline for a bit. Our team replies fast on WhatsApp, or call us at **+91 91761 37043**.'
+        : reason.includes('temporarily')
+          ? 'Our AI is a bit busy right now. Please try again in a few seconds, or message our team on WhatsApp.'
+          : 'Sorry, I\'m having trouble connecting. Please try again, or message our team on WhatsApp.';
       setMessages((prev) => [
         ...prev,
-        { role: 'model', text: errorMsg },
+        { role: 'model', text: errorMsg, needsHuman: true },
       ]);
     } finally {
       setLoading(false);
@@ -652,6 +659,24 @@ export default function GeneralChatbot() {
                   <BotMessageContent text={msg.text} />
                 ) : (
                   msg.text
+                )}
+                {msg.needsHuman && (
+                  <Button
+                    onClick={handleWhatsApp}
+                    variant="contained"
+                    size="small"
+                    startIcon={<WhatsAppIcon />}
+                    sx={{
+                      mt: 1.25,
+                      minHeight: 44,
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      bgcolor: '#0F7A3D',
+                      '&:hover': { bgcolor: '#0B6331' },
+                    }}
+                  >
+                    Chat on WhatsApp
+                  </Button>
                 )}
               </Box>
             </Box>

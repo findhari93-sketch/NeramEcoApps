@@ -12,15 +12,19 @@ export async function GET(request: NextRequest) {
   if (!college_id) return NextResponse.json({ error: 'college_id required' }, { status: 400 });
 
   const supabase = createAdminClient();
-  const { data, error } = await supabase
-    .from('college_reviews')
-    .select(
-      'id,reviewer_name,reviewer_year,rating_overall,rating_studio,rating_faculty,rating_campus,rating_placements,rating_value,rating_infrastructure,title,body,pros,cons,created_at'
-    )
-    .eq('college_id', college_id)
-    .eq('status', 'approved')
-    .order('created_at', { ascending: false })
-    .limit(20);
+  const base =
+    'id,reviewer_name,reviewer_year,rating_overall,rating_studio,rating_faculty,rating_campus,rating_placements,rating_value,rating_infrastructure,title,body,pros,cons,created_at';
+  const run = (select: string) =>
+    supabase
+      .from('college_reviews')
+      .select(select)
+      .eq('college_id', college_id)
+      .eq('status', 'approved')
+      .order('created_at', { ascending: false })
+      .limit(20);
+  // college_reply is new (20261127090000): fall back on a database without it.
+  let { data, error } = await run(`${base},college_reply,college_reply_at`);
+  if (error) ({ data, error } = await run(base));
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ data: data ?? [] }, { headers: PUBLIC_CACHE_HEADERS });

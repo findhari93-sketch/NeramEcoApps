@@ -15,6 +15,9 @@
  *    model with a bad key makes three failing calls instead of one, so these
  *    give up immediately. The exception is the optional free key, where a
  *    rejection falls through to the paid key rather than failing the request.
+ *  - 402 is the prepaid credits running out. They belong to the billing
+ *    account, so no other model helps: throw AiBillingError at once (a free
+ *    key's 402 still falls through to the paid key, like its 400 and 403).
  *  - 404 is that model being retired, which Google does without warning. Fall
  *    through to the next one.
  *  - 429 is quota. Try the next model, and if they are all limited say so
@@ -134,6 +137,32 @@ export class AiBlockedError extends Error {
   }
 }
 
+/**
+ * Thrown when Google answers 402: the prepaid credits on the key's billing
+ * account have run out.
+ *
+ * Its own class because nothing in code can fix it (credits are per billing
+ * account, so another model or a retry fails the same way) and the people who
+ * can fix it need telling. Chatbots answer with the human-help options instead
+ * of a dead error, and the usage row is tagged CREDITS_DEPLETED so the admin
+ * pages can say since when.
+ */
+export class AiBillingError extends Error {
+  readonly code = 'CREDITS_DEPLETED' as const;
+  readonly feature: string;
+  readonly keyEnv: string;
+
+  constructor(args: { feature: string; keyEnv: string }) {
+    super(`Gemini credits depleted (402). Top up the billing account behind ${args.keyEnv}.`);
+    this.name = 'AiBillingError';
+    this.feature = args.feature;
+    this.keyEnv = args.keyEnv;
+  }
+}
+
+/** The usage-row error text for a 402, which the admin health check looks for. */
+export const CREDITS_DEPLETED_ERROR = 'CREDITS_DEPLETED (402)';
+
 const GEMINI_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 interface Attempt {
@@ -162,8 +191,9 @@ function logUsage(input: Parameters<typeof recordAiUsage>[0]): void {
 /**
  * Call Gemini, meter it, and return the first candidate.
  *
- * Throws AiBlockedError when the budget guard or a mode switch refused it, and
- * a plain Error on a Gemini failure (message contains '429' when every model
+ * Throws AiBlockedError when the budget guard or a mode switch refused it,
+ * AiBillingError when the key's credits have run out (402), and
+ * a plain Error on any other Gemini failure (message contains '429' when every model
  * was rate limited, and GEMINI_API_KEY when the key is the problem).
  */
 export async function generateGemini(opts: GenerateOptions): Promise<GeminiResult> {
@@ -266,16 +296,37 @@ export async function generateGemini(opts: GenerateOptions): Promise<GeminiResul
     lastStatus = res.status;
     const errBody = await res.json().catch(() => ({}));
 
-    if (res.status === 400 || res.status === 403) {
-      // A bad free key should cost the request nothing: drop the rest of the
-      // free attempts and carry on with the paid ones.
+    if (res.status === 400 || res.status === 402 || res.status === 403) {
+      // A bad or unfunded free key should cost the request nothing: drop the
+      // rest of the free attempts and carry on with the paid ones.
       if (attempt.keyTier === 'free') {
         if (!freeKeyRejected) {
-          console.error('[ai] GEMINI_API_KEY_FREE was rejected, falling back to the paid key.');
+          console.error(`[ai] GEMINI_API_KEY_FREE was rejected (${res.status}), falling back to the paid key.`);
           freeKeyRejected = true;
         }
         continue;
       }
+    }
+
+    if (res.status === 402) {
+      // Credits are per billing account, so every other model on this key
+      // would 402 too. Stop here and say what is wrong.
+      console.error(`[ai] credits depleted (402) on ${attempt.keyEnv}:`, JSON.stringify(errBody));
+      logUsage({
+        featureId: opts.feature,
+        app,
+        model: attempt.model,
+        keyTier: attempt.keyTier,
+        latencyMs: Date.now() - startedAt,
+        status: 'error',
+        error: CREDITS_DEPLETED_ERROR,
+        actorId: opts.actorId ?? null,
+        clientKey: opts.clientKey ?? null,
+      });
+      throw new AiBillingError({ feature: opts.feature, keyEnv: attempt.keyEnv });
+    }
+
+    if (res.status === 400 || res.status === 403) {
 
       console.error(`[ai] auth error (${res.status}):`, JSON.stringify(errBody));
       const message = `Gemini API key invalid or unauthorized (${res.status}). Check ${attempt.keyEnv}.`;
@@ -338,6 +389,7 @@ export async function generateGemini(opts: GenerateOptions): Promise<GeminiResul
     status: 'error',
     error: message,
     actorId: opts.actorId ?? null,
+    clientKey: opts.clientKey ?? null,
   });
   throw new Error(message);
 }

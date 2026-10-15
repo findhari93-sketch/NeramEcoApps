@@ -35,6 +35,17 @@ interface DataTableProps {
    *  page owns the selection so a bulk-action toolbar can read it. */
   selected?: string[];
   onSelectedChange?: (ids: string[]) => void;
+  /**
+   * Server pagination. When set, `rows` is already one page, `serverPagination.total`
+   * is the full count, and page changes go to the caller instead of slicing.
+   */
+  serverPagination?: {
+    total: number;
+    page: number;
+    rowsPerPage: number;
+    onPageChange: (page: number) => void;
+    onRowsPerPageChange: (rowsPerPage: number) => void;
+  };
 }
 
 export default function DataTable({
@@ -46,6 +57,7 @@ export default function DataTable({
   selectable = true,
   selected: controlledSelected,
   onSelectedChange,
+  serverPagination,
 }: DataTableProps) {
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(defaultRowsPerPage);
@@ -59,11 +71,17 @@ export default function DataTable({
   };
 
   const handleChangePage = (_event: unknown, newPage: number) => {
-    setPage(newPage);
+    if (serverPagination) serverPagination.onPageChange(newPage);
+    else setPage(newPage);
   };
 
   const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
+    const next = parseInt(event.target.value, 10);
+    if (serverPagination) {
+      serverPagination.onRowsPerPageChange(next);
+      return;
+    }
+    setRowsPerPage(next);
     setPage(0);
   };
 
@@ -79,7 +97,9 @@ export default function DataTable({
 
   const isSelected = (id: string) => selected.indexOf(id) !== -1;
 
-  const paginatedRows = rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+  const paginatedRows = serverPagination
+    ? rows
+    : rows.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
 
   if (loading) {
     return (
@@ -166,9 +186,9 @@ export default function DataTable({
       <TablePagination
         rowsPerPageOptions={[10, 25, 50, 100]}
         component="div"
-        count={rows.length}
-        rowsPerPage={rowsPerPage}
-        page={page}
+        count={serverPagination ? serverPagination.total : rows.length}
+        rowsPerPage={serverPagination ? serverPagination.rowsPerPage : rowsPerPage}
+        page={serverPagination ? serverPagination.page : page}
         onPageChange={handleChangePage}
         onRowsPerPageChange={handleChangeRowsPerPage}
       />

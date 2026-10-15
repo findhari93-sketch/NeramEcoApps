@@ -164,7 +164,7 @@ export function parseExamCentre(row: ExamCentreRow): ParsedExamCentre | null {
   return {
     label,
     stateSlug,
-    citySlugs: parts.map((p) => cityForName(p)).filter((s): s is string => s !== null),
+    citySlugs: parts.map((p) => cityForName(p, stateSlug)).filter((s): s is string => s !== null),
     isCombined,
     lat,
     lng,
@@ -215,15 +215,15 @@ const byRankThenName = (a: CollegeRow, b: CollegeRow) =>
 
 /** The registry city a college sits in, from its city slug, city name or district seat. */
 function collegeCity(c: CollegeRow): string | null {
-  return cityForName(c.city_slug) ?? cityForName(c.city);
+  return cityForName(c.city_slug, c.state_slug) ?? cityForName(c.city, c.state_slug);
 }
 
 function sameDistrict(c: CollegeRow, place: CityPlace): boolean {
   if (!place.district) return false;
   if (c.district) {
     if (placeKey(c.district) === placeKey(place.district)) return true;
-    const a = cityForName(c.district);
-    if (a && a === cityForName(place.district)) return true;
+    const a = cityForName(c.district, c.state_slug);
+    if (a && a === cityForName(place.district, place.stateSlug)) return true;
   }
   return false;
 }

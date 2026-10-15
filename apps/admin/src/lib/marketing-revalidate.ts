@@ -58,3 +58,48 @@ export async function revalidateMarketing(
     clearTimeout(timer);
   }
 }
+
+export interface CollegePageRef {
+  state_slug: string | null | undefined;
+  slug: string | null | undefined;
+}
+
+/**
+ * Refreshes one or more public college pages (neramclasses.com/colleges/<state>/<slug>)
+ * after staff change a plan, approve college content or set a map pin.
+ *
+ * POSTs `{ colleges: [{ state_slug, slug }] }` to marketing's /api/revalidate.
+ * Same rules as revalidateMarketing: never throws, short timeout, no-op without
+ * REVALIDATE_SECRET or without a usable slug.
+ */
+export async function revalidateCollegePage(
+  colleges: CollegePageRef | CollegePageRef[],
+  options: { adminOrigin?: string | null; fetchImpl?: typeof fetch; timeoutMs?: number } = {},
+): Promise<boolean> {
+  const secret = process.env.REVALIDATE_SECRET;
+  const list = (Array.isArray(colleges) ? colleges : [colleges])
+    .filter((c) => c && c.slug && c.state_slug)
+    .map((c) => ({ state_slug: String(c.state_slug), slug: String(c.slug) }));
+  if (!secret || list.length === 0) return false;
+
+  const origin = marketingOriginFor(options.adminOrigin, process.env.NEXT_PUBLIC_MARKETING_URL);
+  const doFetch = options.fetchImpl ?? fetch;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  try {
+    const res = await doFetch(`${origin}/api/revalidate`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-revalidate-secret': secret },
+      body: JSON.stringify({ colleges: list }),
+      cache: 'no-store',
+      signal: controller.signal,
+    });
+    if (!res.ok) console.warn(`[marketing-revalidate] ${res.status} for colleges ${list.map((c) => c.slug).join(',')}`);
+    return res.ok;
+  } catch (error) {
+    console.warn('[marketing-revalidate] college page failed:', (error as Error)?.message ?? error);
+    return false;
+  } finally {
+    clearTimeout(timer);
+  }
+}

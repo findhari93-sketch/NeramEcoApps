@@ -89,6 +89,17 @@ function ReviewCard({ review }: { review: CollegeReview }) {
             </Stack>
           )}
 
+          {review.college_reply && (
+            <Box sx={{ mt: 1.5, p: 1.5, borderLeft: '3px solid', borderColor: 'primary.main', bgcolor: 'grey.50', borderRadius: 1 }}>
+              <Typography variant="caption" component="p" fontWeight={700} sx={{ m: 0 }}>
+                Response from the college
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                {review.college_reply}
+              </Typography>
+            </Box>
+          )}
+
           {/* Category ratings */}
           <Stack direction="row" flexWrap="wrap" gap={1.5} sx={{ mt: 1.5 }}>
             {RATING_LABELS.map(({ key, label }) => {

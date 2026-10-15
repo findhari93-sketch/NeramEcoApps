@@ -5,7 +5,8 @@
 
 export type FindingCategory = 'indexing' | 'performance' | 'onsite' | 'aeo';
 export type Severity = 'critical' | 'high' | 'medium' | 'info';
-export type FindingStatus = 'open' | 'fixed' | 'ignored';
+/** `waiting`: fixed on our side, Google has not re-crawled yet. Not counted as an issue. */
+export type FindingStatus = 'open' | 'waiting' | 'fixed' | 'ignored';
 export type RunKind = 'search' | 'inspect' | 'crawl' | 'analyze' | 'digest' | 'sitemaps';
 export type RunTrigger = 'cron' | 'manual';
 export type RunStatus = 'running' | 'ok' | 'partial' | 'failed' | 'not_connected';
@@ -44,6 +45,8 @@ export interface UrlStatus {
   broken_links: string[] | null;
   crawled_at: string | null;
   crawl_error: string | null;
+  /** When staff last pressed "Request indexing" in Search Console for it. */
+  index_requested_at?: string | null;
 }
 
 /** Totals for a page over a window (seo_page_window). */
@@ -78,6 +81,8 @@ export interface Finding {
   title: string;
   detail: Record<string, unknown>;
   substance: string;
+  /** Set when only Google's stale view still shows the problem; stored as status `waiting`. */
+  waiting?: boolean;
 }
 
 export interface RuleInput {
@@ -89,6 +94,8 @@ export interface RuleInput {
   pagesPrev7: PageWindow[];
   queries28: QueryPageWindow[];
   sites: SiteFiles[];
+  /** Defaults to now; tests pin it for the season rule. */
+  now?: Date;
 }
 
 /** One row of seo_findings as stored. */

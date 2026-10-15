@@ -11,6 +11,7 @@
 import { cache } from 'react';
 import { INDIAN_CITIES, STATES, type GeoCity, type GeoState, type GateResult } from '@neram/geo';
 import { sameNameAsState } from './city-names';
+import { foldSameAnswer } from './same-answer';
 import {
   centresInState,
   coaCityGate,
@@ -53,6 +54,30 @@ export interface CityPage<F> {
   path: string;
   gate: GateResult;
   facts: F;
+  /** Other towns with the same answer; this page is indexed for all of them. */
+  answersFor: GeoCity[];
+  /** The indexed page that answers for this town when it has the same answer as a stronger one. */
+  answeredBy: { path: string; name: string } | null;
+}
+
+/**
+ * Folds towns with the same answer into the strongest one (see same-answer.ts):
+ * the others are held (`noindex, follow`) and named on the indexed page.
+ */
+function foldPages<F>(pages: CityPage<F>[], keyOf: (p: CityPage<F>) => string): CityPage<F>[] {
+  // Big cities (tier 1 and 2) keep their own page: students search them by name and
+  // Google treats them as distinct places. Only smaller towns fold.
+  const key = (p: CityPage<F>) => (p.city.tier <= 2 ? `own:${p.city.slug}` : keyOf(p));
+  const { leaderOf, members } = foldSameAnswer(pages.map((p) => ({ slug: p.city.slug, key: key(p), index: p.gate.index, score: p.gate.score, population: p.city.population })));
+  const bySlug = new Map(pages.map((p) => [p.city.slug, p]));
+  return pages.map((p) => {
+    const leader = leaderOf.get(p.city.slug) ?? p.city.slug;
+    if (leader !== p.city.slug) {
+      const lead = bySlug.get(leader)!;
+      return { ...p, gate: { ...p.gate, index: false, reasons: [...p.gate.reasons, `same-answer-as-${leader}`] }, answeredBy: { path: lead.path, name: lead.city.name } };
+    }
+    return { ...p, answersFor: (members.get(p.city.slug) ?? []).map((slug) => bySlug.get(slug)!.city) };
+  });
 }
 
 const stateBySlug = new Map(STATES.map((s) => [s.slug, s]));
@@ -85,7 +110,7 @@ export const examCentrePages = cache(async () => {
       facts: { centres: inState, nearestToCapital: capital && inState.length === 0 ? nearestCentres(capital, centres, 3) : [] },
     };
   });
-  const cities: CityPage<CentreCityFacts>[] = [];
+  let cities: CityPage<CentreCityFacts>[] = [];
   for (const city of INDIAN_CITIES) {
     const near = nearestCentres(city, centres, 5);
     if (!examCentreCityHasPage(near)) continue;
@@ -98,8 +123,14 @@ export const examCentrePages = cache(async () => {
       path: `${GEO_BASE.examCentres}/${city.stateSlug}/${city.slug}`,
       gate: examCentreCityGate(city, near, collegesNearby),
       facts: { near, stateCentres: centresInState(city.stateSlug, centres), collegesNearby },
+      answersFor: [],
+      answeredBy: null,
     });
   }
+  // Same nearest test city = the same answer to "where do I write NATA?". The test
+  // city's own page usually leads its set (it scores highest) and lists the towns
+  // around it; towns in different states stay apart (state pages list them).
+  cities = foldPages(cities, (p) => `${p.state.slug}|${p.facts.near[0]?.centre.label ?? p.city.slug}`);
   return { centres, states, cities };
 });
 
@@ -139,7 +170,7 @@ export const predictorPages = cache(async () => {
       facts: { colleges: inState, coaCount },
     });
   }
-  const cities: CityPage<PredictorCityFacts>[] = [];
+  let cities: CityPage<PredictorCityFacts>[] = [];
   for (const city of INDIAN_CITIES) {
     const stateColleges = colleges.filter((c) => c.stateSlug === city.stateSlug);
     if (stateColleges.length === 0) continue;
@@ -152,8 +183,12 @@ export const predictorPages = cache(async () => {
       path: `${GEO_BASE.collegePredictor}/${city.stateSlug}/${city.slug}`,
       gate: predictorCityGate(inCity.length, inDistrict.length, stateColleges.length >= 3),
       facts: { inCity, inDistrict, stateColleges },
+      answersFor: [],
+      answeredBy: null,
     });
   }
+  // Towns with no college of their own show their district's list: one page per district list.
+  cities = foldPages(cities, (p) => (p.facts.inCity.length ? `city|${p.city.slug}` : `district|${p.facts.inDistrict.map((c) => `${c.system}:${c.code}`).sort().join(',')}`));
   return { colleges, states, cities };
 });
 
@@ -189,6 +224,8 @@ export const coaPages = cache(async () => {
       path: `${GEO_BASE.coaChecker}/${city.stateSlug}/${city.slug}`,
       gate: sameNameAsState(city) ? { ...coaCityGate(inCity.length), index: false } : coaCityGate(inCity.length),
       facts: { inCity: [...inCity].sort((a, b) => a.name.localeCompare(b.name)), stateCount: coa.filter((c) => c.stateSlug === city.stateSlug).length },
+      answersFor: [],
+      answeredBy: null,
     });
   }
   return { coa, states, cities };
@@ -235,6 +272,11 @@ export const allGeoPages = cache(async (): Promise<GeoPageSummary[]> => {
   [...ec.states, ...ec.cities, ...cost, ...pred.states, ...pred.cities, ...coa.states, ...coa.cities].forEach(add);
   return out;
 });
+
+/** Every city page of a tool in a state, biggest first, for the state page's full town list. */
+export function allCities<F>(cities: CityPage<F>[], stateSlug: string): CityPage<F>[] {
+  return cities.filter((c) => c.state.slug === stateSlug).sort((a, b) => b.city.population - a.city.population);
+}
 
 /** Indexed city pages of a tool in a state, biggest first: the internal links a state page carries. */
 export function indexedCities<F>(cities: CityPage<F>[], stateSlug: string, limit = 60): CityPage<F>[] {

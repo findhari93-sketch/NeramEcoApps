@@ -60,6 +60,9 @@ import FeedbackIcon from '@mui/icons-material/Feedback';
 import DomainIcon from '@mui/icons-material/Domain';
 import StarHalfIcon from '@mui/icons-material/StarHalf';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import WorkspacePremiumIcon from '@mui/icons-material/WorkspacePremium';
+import PinDropIcon from '@mui/icons-material/PinDrop';
+import AddLinkIcon from '@mui/icons-material/AddLink';
 import LeaderboardIcon from '@mui/icons-material/Leaderboard';
 import ManageAccountsIcon from '@mui/icons-material/ManageAccounts';
 import WindowIcon from '@mui/icons-material/Window';
@@ -84,6 +87,7 @@ import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
 import TuneIcon from '@mui/icons-material/Tune';
 import HistoryIcon from '@mui/icons-material/History';
 import TravelExploreIcon from '@mui/icons-material/TravelExplore';
+import SavingsOutlinedIcon from '@mui/icons-material/SavingsOutlined';
 import { useMicrosoftAuth } from '@neram/auth';
 import NotificationBell from './NotificationBell';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -201,6 +205,7 @@ const menuGroups: MenuGroup[] = [
     label: 'Marketing Intelligence',
     items: [
       { text: 'Ads Overview', icon: AutoGraphIcon, path: '/marketing-ai' },
+      { text: 'Ads ROI', icon: SavingsOutlinedIcon, path: '/marketing-ai/roi' },
       { text: 'SEO Health', icon: TravelExploreIcon, path: '/seo' },
       { text: 'Recommendations', icon: FactCheckOutlinedIcon, path: '/marketing-ai/recommendations' },
       { text: 'Campaigns', icon: CampaignOutlinedIcon, path: '/marketing-ai/campaigns' },
@@ -215,12 +220,15 @@ const menuGroups: MenuGroup[] = [
       { text: 'Colleges', icon: LeaderboardIcon, path: '/college-hub/colleges' },
       { text: 'Review Queue', icon: StarHalfIcon, path: '/college-hub/reviews' },
       { text: 'Leads', icon: PeopleIcon, path: '/college-hub/leads' },
+      { text: 'Plans', icon: WorkspacePremiumIcon, path: '/college-hub/plans' },
       { text: 'College Accounts', icon: ManageAccountsIcon, path: '/college-hub/accounts' },
+      { text: 'Content reviews', icon: RateReviewIcon, path: '/college-hub/content-reviews' },
+      { text: 'Update links', icon: AddLinkIcon, path: '/college-hub/update-links' },
+      { text: 'Map pins', icon: PinDropIcon, path: '/college-hub/map-pins' },
       { text: 'Lead Windows', icon: WindowIcon, path: '/college-hub/lead-windows' },
       { text: 'Comments', icon: CommentIcon, path: '/college-hub/comments' },
       { text: 'Virtual Tour', icon: TourIcon, path: '/college-hub/virtual-tour' },
       { text: 'Partnership Pages', icon: HandshakeIcon, path: '/college-hub/partnership' },
-      { text: 'Tier Management', icon: EmojiEventsIcon, path: '/college-hub/tiers' },
       { text: 'Outreach', icon: MarkEmailReadIcon, path: '/college-outreach' },
       { text: 'Leads Review', icon: PeopleIcon, path: '/college-leads' },
     ],

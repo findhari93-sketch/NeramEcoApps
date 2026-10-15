@@ -108,10 +108,11 @@ export function parseCentre(row: CentreRow): Centre | null {
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || !row.city_brochure) return null;
   const label = row.city_brochure.replace(/\s*\((?:UAE|U\.A\.E\.)\)\s*/i, '').replace(/\s+District$/i, '').trim();
   const parts = label.split(/\s*\/\s*|\s+and\s+/i).map((p) => p.trim()).filter(Boolean);
+  const stateSlug = /international/i.test(row.state) ? 'international' : stateSlugForName(row.state);
   return {
     label,
-    stateSlug: /international/i.test(row.state) ? 'international' : stateSlugForName(row.state),
-    citySlugs: parts.map((p) => cityForName(p)).filter((s): s is string => s !== null),
+    stateSlug,
+    citySlugs: parts.map((p) => cityForName(p, stateSlug)).filter((s): s is string => s !== null),
     isCombined: parts.length > 1 || /periphery/i.test(label),
     lat,
     lng,
@@ -165,7 +166,7 @@ export function collegesNear<T extends { citySlug: string | null; district: stri
 }
 
 export function citySlugFor(name: string | null | undefined, stateSlug: string): string | null {
-  const slug = cityForName(name ?? '');
+  const slug = cityForName(name ?? '', stateSlug);
   if (!slug) return null;
   const city = getCity(slug);
   return city && city.stateSlug === stateSlug ? slug : null;
@@ -211,6 +212,8 @@ export function examCentreCityGate(city: GeoCity, near: NearCentre[], collegesIn
   const first = near[0];
   const km = first ? first.km : null;
   return scoreGate([
+    // A town that is itself a test city has the most local answer there is.
+    first?.inThisCity && { reason: 'is-a-test-city', strength: 'strong' },
     km !== null && km <= TOOL_GATE.CENTRE_NEAR_KM && { reason: 'centre-within-25km', strength: 'strong' },
     km !== null && km > TOOL_GATE.CENTRE_NEAR_KM && km <= TOOL_GATE.CENTRE_REGION_KM && city.tier <= 2 && { reason: 'centre-within-75km-big-city', strength: 'strong' },
     km !== null && km > TOOL_GATE.CENTRE_NEAR_KM && km <= TOOL_GATE.CENTRE_REGION_KM && city.tier > 2 && { reason: 'centre-within-75km', strength: 'weak' },

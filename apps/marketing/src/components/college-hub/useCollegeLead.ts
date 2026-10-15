@@ -19,6 +19,7 @@ export function useCollegeLead(collegeId: string) {
   const { user } = useFirebaseAuth();
   const [name, setName] = useState('');
   const [phone, setPhoneRaw] = useState('');
+  const [parentPhone, setParentPhoneRaw] = useState('');
   const [consent, setConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -35,10 +36,15 @@ export function useCollegeLead(collegeId: string) {
   }, [user]);
 
   const setPhone = (value: string) => setPhoneRaw(value.replace(/\D/g, '').slice(0, 10));
+  const setParentPhone = (value: string) => setParentPhoneRaw(value.replace(/\D/g, '').slice(0, 10));
 
   const submit = async (extras: LeadExtras = {}) => {
     if (!name.trim() || phone.length !== 10 || !consent) {
       setError('Please fill in your name, a valid 10-digit mobile number, and agree to share your details.');
+      return false;
+    }
+    if (parentPhone && parentPhone.length !== 10) {
+      setError("Enter your parent's 10-digit mobile number, or leave it empty.");
       return false;
     }
     setSubmitting(true);
@@ -51,6 +57,7 @@ export function useCollegeLead(collegeId: string) {
           college_id: collegeId,
           name: name.trim(),
           phone,
+          parent_phone: parentPhone || null,
           email: extras.email || null,
           nata_score: extras.nataScore ? parseFloat(extras.nataScore) : null,
           city: extras.city || null,
@@ -71,5 +78,5 @@ export function useCollegeLead(collegeId: string) {
     }
   };
 
-  return { user, name, setName, phone, setPhone, consent, setConsent, submitting, error, success, submit };
+  return { user, name, setName, phone, setPhone, parentPhone, setParentPhone, consent, setConsent, submitting, error, success, submit };
 }

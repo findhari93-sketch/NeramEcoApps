@@ -111,12 +111,12 @@ const nextConfig = {
       // sub-path form below is a separate rule rather than an optional suffix.
       {
         source:
-          '/(sso|signout|thank-you|college-dashboard|unsubscribe|enroll|my-enrollment)',
+          '/(sso|signout|thank-you|college-dashboard|college-update|unsubscribe|enroll|my-enrollment)',
         headers: [{ key: 'CDN-Cache-Control', value: 'no-store' }],
       },
       {
         source:
-          '/(sso|signout|thank-you|college-dashboard|unsubscribe|enroll|my-enrollment)/:path*',
+          '/(sso|signout|thank-you|college-dashboard|college-update|unsubscribe|enroll|my-enrollment)/:path*',
         headers: [{ key: 'CDN-Cache-Control', value: 'no-store' }],
       },
       // enroll, my-enrollment and thank-you also live under [locale], so they are

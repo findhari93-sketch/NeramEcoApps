@@ -31,7 +31,9 @@ export function isAuthorizedCron(request: Request): boolean {
 /**
  * Vercel runs crons on production only. Until the real account is connected
  * (GOOGLE_ADS_MODE=live), production stays quiet instead of filling its tables
- * with the sample account every morning. Manual runs from the app still work.
+ * with the sample account every morning. Manual runs are refused for the same
+ * reason (a 14 Oct audit loaded the sample account into prod); staging and
+ * local keep the sample account for demos.
  */
 export function cronIdleReason(env: Record<string, string | undefined> = process.env): string | null {
   if (env.VERCEL_ENV === 'production' && env.GOOGLE_ADS_MODE !== 'live') return 'GOOGLE_ADS_MODE is not live on production';

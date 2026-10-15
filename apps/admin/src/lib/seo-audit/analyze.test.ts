@@ -85,4 +85,12 @@ describe('reconcile', () => {
     const keys = r.rows.map((x) => Object.keys(x).sort().join(','));
     expect(new Set(keys).size).toBe(1);
   });
+
+  it('stores a finding fixed on our side as waiting, then fixed when Google agrees', () => {
+    const w = reconcile([stored('I2|a', 'open')], [{ ...fresh('I2|a'), waiting: true }], NOW);
+    expect(byFp(w.rows)['I2|a']).toMatchObject({ status: 'waiting', first_seen: EARLIER });
+    expect(w.reopened).toBe(0);
+    const done = reconcile([stored('I2|a', 'waiting')], [], NOW);
+    expect(byFp(done.rows)['I2|a']).toMatchObject({ status: 'fixed', resolved_at: NOW });
+  });
 });

@@ -3,7 +3,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, getActiveAintraKnowledgeBase } from '@neram/database';
 import { isE2ETestRun } from '@/lib/e2e-mode';
-import { AiBlockedError, generateGemini, hashClientKey, ipFromHeaders } from '@neram/ai';
+import { AiBillingError, AiBlockedError, generateGemini, hashClientKey, ipFromHeaders } from '@neram/ai';
+import { signupGeoFromHeaders, type SignupGeo } from '@neram/database/signup-geo';
 
 const NATA_SYSTEM_PROMPT = `You are Aintra, the friendly NATA Assistant by Neram Classes. You ONLY answer questions about NATA (National Aptitude Test in Architecture), B.Arch admissions, and architecture education. If a question is not related to these topics, politely decline and redirect to NATA topics.
 
@@ -415,7 +416,7 @@ async function callGemini(
 
     return { reply: finalReply, model: result.model, finishReason: result.finishReason };
   } catch (err) {
-    if (err instanceof AiBlockedError) throw err;
+    if (err instanceof AiBlockedError || err instanceof AiBillingError) throw err;
     errors.push(err instanceof Error ? err.message : 'unknown');
     console.error('[NataChat] Gemini error:', err);
     return null;
@@ -432,6 +433,8 @@ async function logConversation(params: {
   modelUsed?: string;
   responseTimeMs?: number;
   error?: string;
+  /** Where the visitor is, from Cloudflare's location headers. Never the IP. */
+  geo?: SignupGeo | null;
 }) {
   // The nightly E2E suite talks to the production database, so without this its
   // scripted questions arrive in admin Chat History looking like real leads.
@@ -470,6 +473,10 @@ async function logConversation(params: {
       response_time_ms: params.responseTimeMs || null,
       error: params.error || null,
       source: 'nata_chatbot',
+      geo_city: params.geo?.city ?? null,
+      geo_state: params.geo?.state ?? null,
+      geo_country: params.geo?.country ?? null,
+      geo_source: params.geo?.source ?? null,
     });
   } catch (err) {
     console.error('Failed to log chatbot conversation:', err);
@@ -520,6 +527,7 @@ export async function POST(request: NextRequest) {
      * which was gemini-2.5-pro: the most expensive model on the list, at 25x
      * flash-lite on output. The cheapest fallback was doing the priciest retry.
      */
+    const geo = signupGeoFromHeaders(request.headers);
     const errors: string[] = [];
     let result: { reply: string; model: string; finishReason: string } | null;
     try {
@@ -540,9 +548,27 @@ export async function POST(request: NextRequest) {
           pageUrl,
           error: `AI_BLOCKED:${err.reason}`,
           responseTimeMs: Date.now() - startTime,
+          geo,
         });
         return NextResponse.json(
-          { error: 'The assistant is taking a short break. Please try again later.' },
+          { error: 'The assistant is taking a short break. Please try again later.', humanHelp: true },
+          { status: 503 }
+        );
+      }
+      if (err instanceof AiBillingError) {
+        await logConversation({
+          sessionId: sessionId || 'unknown',
+          userMessage: message.trim(),
+          aiResponse: null,
+          userId,
+          userName,
+          pageUrl,
+          error: 'CREDITS_DEPLETED',
+          responseTimeMs: Date.now() - startTime,
+          geo,
+        });
+        return NextResponse.json(
+          { error: 'Our assistant is offline for a bit.', code: 'AI_UNAVAILABLE', humanHelp: true },
           { status: 503 }
         );
       }
@@ -562,9 +588,10 @@ export async function POST(request: NextRequest) {
         pageUrl,
         error: detailedError,
         responseTimeMs,
+        geo,
       });
       return NextResponse.json(
-        { error: 'AI service temporarily unavailable. Please try again in a moment.' },
+        { error: 'AI service temporarily unavailable. Please try again in a moment.', humanHelp: true },
         { status: 502 }
       );
     }
@@ -579,6 +606,7 @@ export async function POST(request: NextRequest) {
       modelUsed: result.model,
       responseTimeMs,
       error: result.finishReason === 'MAX_TOKENS' ? 'TRUNCATED_MAX_TOKENS' : undefined,
+      geo,
     });
 
     return NextResponse.json({ reply: result.reply, model: result.model, finishReason: result.finishReason });

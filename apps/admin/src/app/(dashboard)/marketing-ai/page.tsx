@@ -177,9 +177,11 @@ export default function MarketingAiOverviewPage() {
             <Button component={Link} href="/marketing-ai/recommendations" variant="contained" sx={TARGET_44} disabled={!data}>
               Review recommendations{pending ? ` (${pending})` : ''}
             </Button>
-            <Button onClick={runAudit} disabled={running || !data} startIcon={running ? <CircularProgress size={16} /> : <PlayArrowIcon />} sx={TARGET_44}>
-              {running ? 'Running audit' : 'Run audit now'}
-            </Button>
+            {!data?.connection.runsBlocked && (
+              <Button onClick={runAudit} disabled={running || !data} startIcon={running ? <CircularProgress size={16} /> : <PlayArrowIcon />} sx={TARGET_44}>
+                {running ? 'Running audit' : 'Run audit now'}
+              </Button>
+            )}
           </>
         }
       />
@@ -223,7 +225,15 @@ export default function MarketingAiOverviewPage() {
         </Box>
       )}
 
-      {data && !data.hasData && (
+      {data && !data.hasData && data.connection.runsBlocked && (
+        <EmptyState
+          icon={AutoGraphIcon}
+          title="Waiting for Google Ads access"
+          body="Your real account appears here once Google approves API access and the account is connected. Until then, check spend and search terms in Google Ads itself."
+        />
+      )}
+
+      {data && !data.hasData && !data.connection.runsBlocked && (
         <EmptyState
           icon={AutoGraphIcon}
           title="No Google Ads data yet"

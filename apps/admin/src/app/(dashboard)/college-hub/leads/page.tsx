@@ -24,6 +24,7 @@ export default function CollegeLeadsPage() {
   const columns: GridColDef[] = [
     { field: 'name', headerName: 'Name', width: 150 },
     { field: 'phone', headerName: 'Phone', width: 130 },
+    { field: 'parent_phone', headerName: 'Parent phone', width: 130 },
     { field: 'college_name', headerName: 'College', flex: 1, minWidth: 180 },
     { field: 'city', headerName: 'City', width: 120 },
     { field: 'nata_score', headerName: 'NATA', width: 90, type: 'number' },
@@ -39,6 +40,7 @@ export default function CollegeLeadsPage() {
         />
       ),
     },
+    { field: 'college_note', headerName: 'College note', flex: 1, minWidth: 160 },
     {
       field: 'created_at',
       headerName: 'Date',

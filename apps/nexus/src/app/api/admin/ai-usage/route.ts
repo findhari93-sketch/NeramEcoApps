@@ -5,6 +5,7 @@ import {
   getAiSpend,
   getAiUsageBreakdown,
   getRecentAiEvents,
+  getAiCreditsHealth,
   utcDay,
   utcMonthStart,
 } from '@neram/database';
@@ -62,12 +63,14 @@ export async function GET(request: NextRequest) {
     const today = utcDay();
     const monthStart = utcMonthStart();
 
-    const [controls, todayTotals, monthTotals, breakdown, recent] = await Promise.all([
+    const [controls, todayTotals, monthTotals, breakdown, recent, credits] = await Promise.all([
       getAiControls(),
       getAiSpend(today, today),
       getAiSpend(monthStart, today),
       getAiUsageBreakdown(monthStart, today),
       getRecentAiEvents(50),
+      // A failed read here must not take the whole panel down.
+      getAiCreditsHealth().catch(() => null),
     ]);
 
     // Roll the per-model rows up per feature, which is the question the page
@@ -167,6 +170,7 @@ export async function GET(request: NextRequest) {
         daysElapsed,
         daysInMonth,
       },
+      credits,
       byFeature,
       orphans,
       byModel: [...byModelMap.values()].sort((a, b) => b.costUsd - a.costUsd),

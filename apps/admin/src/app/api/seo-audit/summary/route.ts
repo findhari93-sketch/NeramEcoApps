@@ -3,13 +3,15 @@ export const dynamic = 'force-dynamic';
 /**
  * GET /api/seo-audit/summary - SEO Health overview: connection state, the last
  * run of each job, index coverage of our sitemap pages, open findings by
- * severity and category, and 28-day search totals against the 28 days before.
+ * severity and category, 28-day search totals against the 28 days before, and
+ * today's short list of pages to ask Google to index.
  * Admins only.
  */
 import { NextResponse } from 'next/server';
 import { readSeoEnv } from '@/lib/seo-audit/config';
 import { requireSeoAdmin, seoError } from '@/lib/seo-audit/guard';
-import { db, latestSearchDate, pageWindow, selectAll, shiftDate } from '@/lib/seo-audit/store';
+import { pickAskGoogle } from '@/lib/seo-audit/rules';
+import { db, latestSearchDate, loadUrlStatus, pageWindow, selectAll, shiftDate } from '@/lib/seo-audit/store';
 
 const KINDS = ['search', 'sitemaps', 'inspect', 'crawl', 'analyze', 'digest'] as const;
 const AEO_RULES = ['A1', 'A2', 'A3', 'A4'];
@@ -40,7 +42,7 @@ export async function GET(request: Request) {
       }),
     );
 
-    const urls = await selectAll<any>((a, b) => client.from('seo_url_status').select('url, expected_index, verdict, inspected_at, crawled_at').order('url').range(a, b));
+    const urls = await loadUrlStatus(client);
     const expected = urls.filter((u) => u.expected_index);
     const coverage = {
       expected: expected.length,
@@ -50,7 +52,10 @@ export async function GET(request: Request) {
       tracked: urls.length,
     };
 
-    const findings = await selectAll<any>((a, b) => client.from('seo_findings').select('id, severity, category, rule_id').eq('status', 'open').order('id').range(a, b));
+    const [findings, waiting] = await Promise.all([
+      selectAll<any>((a, b) => client.from('seo_findings').select('id, severity, category, rule_id').eq('status', 'open').order('id').range(a, b)),
+      client.from('seo_findings').select('id', { count: 'exact', head: true }).eq('status', 'waiting'),
+    ]);
     const bySeverity: Record<string, number> = { critical: 0, high: 0, medium: 0, info: 0 };
     const byCategory: Record<string, number> = { indexing: 0, performance: 0, onsite: 0, aeo: 0 };
     for (const f of findings) {
@@ -61,12 +66,14 @@ export async function GET(request: Request) {
 
     const end = await latestSearchDate(client);
     let search = null;
+    let pages28: Awaited<ReturnType<typeof pageWindow>> = [];
     if (end) {
       const [now28, prev28, trend] = await Promise.all([
         pageWindow(client, shiftDate(end, -27), end),
         pageWindow(client, shiftDate(end, -55), shiftDate(end, -28)),
         client.rpc('seo_daily_totals', { p_from: shiftDate(end, -89), p_to: end }),
       ]);
+      pages28 = now28;
       search = {
         end,
         now: totals(now28),
@@ -79,7 +86,8 @@ export async function GET(request: Request) {
       connection: { connected: missing.length === 0, missing, siteUrl: env.siteUrl, origins: env.origins, digest: env.digestTo.length > 0 },
       runs,
       coverage,
-      findings: { total: findings.length, bySeverity, byCategory },
+      findings: { total: findings.length, issues: findings.length - bySeverity.info, waiting: waiting.count ?? 0, bySeverity, byCategory },
+      askGoogle: pickAskGoogle(urls, pages28, new Date()).map((u) => ({ url: u.url, coverage_state: u.coverage_state })),
       aeo: { checks: AEO_RULES.length, passing: AEO_RULES.length - aeoOpen.size },
       search,
     });

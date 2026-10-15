@@ -40,7 +40,11 @@ export default function CollegeSearchField({
   helperText,
 }: CollegeSearchFieldProps) {
   const [open, setOpen] = useState(false);
-  const [input, setInput] = useState('');
+  // What the box shows (the chosen college's name after a pick) and what was typed
+  // to search. Kept apart so a preset or picked college still shows its name, while
+  // reopening the list searches from scratch instead of for that exact name.
+  const [input, setInput] = useState(value?.name ?? '');
+  const [query, setQuery] = useState('');
   const [options, setOptions] = useState<CollegeSearchOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -54,7 +58,7 @@ export default function CollegeSearchField({
       setFailed(false);
       try {
         const params = new URLSearchParams({ fields: 'options', limit: String(PAGE) });
-        if (input.trim()) params.set('q', input.trim());
+        if (query.trim()) params.set('q', query.trim());
         if (tier) params.set('tier', tier);
         const res = await fetch(`/api/college-hub/colleges?${params.toString()}`, { cache: 'no-store' });
         const json = await res.json();
@@ -69,9 +73,9 @@ export default function CollegeSearchField({
       } finally {
         if (mine === seq.current) setLoading(false);
       }
-    }, input ? DEBOUNCE_MS : 0);
+    }, query ? DEBOUNCE_MS : 0);
     return () => clearTimeout(timer);
-  }, [open, input, tier]);
+  }, [open, query, tier]);
 
   return (
     <Autocomplete
@@ -82,8 +86,9 @@ export default function CollegeSearchField({
       onChange={(_, v) => onChange(v)}
       inputValue={input}
       onInputChange={(_, v, reason) => {
+        setInput(v);
         // Selecting an option fills the box with its name; that is not a new search.
-        if (reason !== 'reset') setInput(v);
+        if (reason !== 'reset') setQuery(v);
       }}
       options={value && !options.some((o) => o.id === value.id) ? [value, ...options] : options}
       // The server already filtered; do not filter again on the client.
@@ -98,7 +103,7 @@ export default function CollegeSearchField({
       )}
       loading={loading}
       disabled={disabled}
-      noOptionsText={failed ? 'Could not load colleges. Try again.' : input.trim() ? 'No colleges match' : 'Type to search colleges'}
+      noOptionsText={failed ? 'Could not load colleges. Try again.' : query.trim() ? 'No colleges match' : 'Type to search colleges'}
       renderInput={(params) => (
         <TextField
           {...params}

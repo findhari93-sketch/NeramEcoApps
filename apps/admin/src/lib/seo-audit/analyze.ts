@@ -5,6 +5,7 @@
  *                             unless its substance changed, then it reopens)
  *   fixed one fires again  -> open again
  *   open one stops firing  -> fixed, with resolved_at
+ *   fixed on our side only -> waiting (Google has not re-crawled), then fixed
  */
 import { createHash } from 'crypto';
 import { runRules } from './rules';
@@ -55,15 +56,16 @@ export function reconcile(existing: FindingRow[], fresh: Finding[], now: string,
     const h = hash(f.substance);
     const ex = byFp.get(f.fingerprint);
     const common = { fingerprint: f.fingerprint, rule_id: f.rule_id, category: f.category, severity: f.severity, url: f.url, title: f.title, detail: f.detail, detail_hash: h, last_seen: now };
+    const live = f.waiting ? 'waiting' : 'open';
     if (!ex) {
       created += 1;
-      rows.push(row({ ...common, status: 'open', first_seen: now }));
+      rows.push(row({ ...common, status: live, first_seen: now }));
     } else if (ex.status === 'ignored' && ex.detail_hash === h) {
       stillIgnored += 1;
       rows.push(row({ ...common, status: 'ignored', first_seen: ex.first_seen, ignored_by: ex.ignored_by, ignore_note: ex.ignore_note }));
     } else {
-      if (ex.status !== 'open') reopened += 1;
-      rows.push(row({ ...common, status: 'open', first_seen: ex.first_seen }));
+      if (ex.status === 'fixed' || ex.status === 'ignored') reopened += 1;
+      rows.push(row({ ...common, status: live, first_seen: ex.first_seen }));
     }
   }
 

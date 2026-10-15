@@ -88,6 +88,7 @@ export default async function PredictorCityPage({ params }: { params: { state: s
         },
       ]}
       moreLinks={[
+        ...(page.answeredBy ? [{ href: page.answeredBy.path, label: `B.Arch colleges near ${page.answeredBy.name}: same district list` }] : []),
         { href: marketing.coachingCity(city.slug), label: `NATA coaching in ${city.name}` },
         { href: marketing.collegesState(state.slug), label: `B.Arch colleges in ${state.name}` },
         { href: `${GEO_BASE.examCentres}/${state.slug}/${city.slug}`, label: `NATA exam centre near ${city.name}` },
@@ -100,6 +101,13 @@ export default async function PredictorCityPage({ params }: { params: { state: s
           rows={near.map((c) => [c.name, c.city ?? c.district ?? '', closing(c) ?? ''])}
         />
       </Section>
+      {page.answersFor.length > 0 && (
+        <Section id="same-answer" title={`Also the nearest B.Arch colleges for`}>
+          <p>
+            Students from {page.answersFor.map((t) => t.name).join(', ')} have the same {city.district ?? state.name} district colleges in reach, so the list above applies to them too.
+          </p>
+        </Section>
+      )}
       <p style={{ fontSize: '0.75rem', opacity: 0.8 }}>{GEONAMES_ATTRIBUTION}</p>
     </ToolPublicPage>
   );

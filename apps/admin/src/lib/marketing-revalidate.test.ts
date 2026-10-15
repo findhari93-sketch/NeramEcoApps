@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { MARKETING_CACHE_TAGS, revalidateMarketing } from './marketing-revalidate';
+import { MARKETING_CACHE_TAGS, revalidateCollegePage, revalidateMarketing } from './marketing-revalidate';
 
 describe('revalidateMarketing', () => {
   const env = { ...process.env };
@@ -61,5 +61,42 @@ describe('revalidateMarketing', () => {
     const ok = await revalidateMarketing(['reviews'], { adminOrigin: 'https://admin.neramclasses.com', fetchImpl: hang as unknown as typeof fetch, timeoutMs: 50 });
     expect(ok).toBe(false);
     expect(Date.now() - started).toBeLessThan(2000);
+  });
+});
+
+describe('revalidateCollegePage', () => {
+  const env = { ...process.env };
+  beforeEach(() => {
+    process.env.REVALIDATE_SECRET = 'sekret';
+    delete process.env.NEXT_PUBLIC_MARKETING_URL;
+  });
+  afterEach(() => {
+    process.env = { ...env };
+  });
+
+  it('POSTs the college slugs as { colleges: [...] }', async () => {
+    const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 }));
+    const ok = await revalidateCollegePage(
+      { state_slug: 'tamil-nadu', slug: 'papni-architecture' },
+      { adminOrigin: 'https://admin.neramclasses.com', fetchImpl },
+    );
+    expect(ok).toBe(true);
+    const [url, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('https://neramclasses.com/api/revalidate');
+    expect((init.headers as Record<string, string>)['x-revalidate-secret']).toBe('sekret');
+    expect(JSON.parse(String(init.body))).toEqual({ colleges: [{ state_slug: 'tamil-nadu', slug: 'papni-architecture' }] });
+  });
+
+  it('skips colleges without both slugs, and does nothing when none are left', async () => {
+    const fetchImpl = vi.fn(async () => new Response('{}', { status: 200 }));
+    expect(await revalidateCollegePage([{ state_slug: null, slug: 'x' }], { fetchImpl })).toBe(false);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it('never throws', async () => {
+    const boom = vi.fn(async () => {
+      throw new Error('down');
+    });
+    expect(await revalidateCollegePage({ state_slug: 'tn', slug: 'x' }, { fetchImpl: boom })).toBe(false);
   });
 });

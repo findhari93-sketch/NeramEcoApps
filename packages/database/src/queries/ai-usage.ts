@@ -264,3 +264,51 @@ function num(value: unknown): number {
   const n = typeof value === 'string' ? parseFloat(value) : (value as number);
   return Number.isFinite(n) ? n : 0;
 }
+
+export interface AiCreditsHealth {
+  /** True when Gemini has answered 402 since the last successful call. */
+  blocked: boolean;
+  /** The first 402 after the last success. */
+  since: string | null;
+  /** Calls refused for credit since then, all apps. */
+  failedCalls: number;
+  lastOkAt: string | null;
+}
+
+/**
+ * How a 402 is logged: packages/ai tags it CREDITS_DEPLETED (402); before that
+ * tag existed it was the generic "Gemini API error: 402".
+ */
+const CREDIT_ERRORS = ['CREDITS_DEPLETED (402)', 'Gemini API error: 402'];
+
+/**
+ * Is Gemini refusing for lack of credit? Credits belong to the billing account,
+ * so one 402 after the last success means every AI feature in every app is down
+ * until someone tops up. Read by the admin Chat History and Nexus AI Usage pages.
+ */
+export async function getAiCreditsHealth(client?: TypedSupabaseClient): Promise<AiCreditsHealth> {
+  const supabase = (client || getSupabaseAdminClient()) as any;
+
+  const { data: lastOk, error: okErr } = await supabase
+    .from('ai_usage_events')
+    .select('created_at')
+    .eq('status', 'ok')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (okErr) throw okErr;
+  const lastOkAt: string | null = lastOk?.created_at ?? null;
+
+  let q = supabase
+    .from('ai_usage_events')
+    .select('created_at', { count: 'exact' })
+    .in('error', CREDIT_ERRORS)
+    .order('created_at', { ascending: true })
+    .limit(1);
+  if (lastOkAt) q = q.gt('created_at', lastOkAt);
+  const { data: first, count, error } = await q;
+  if (error) throw error;
+
+  const since: string | null = first?.[0]?.created_at ?? null;
+  return { blocked: !!since, since, failedCalls: since ? count ?? 0 : 0, lastOkAt };
+}

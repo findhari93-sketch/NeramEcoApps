@@ -12,13 +12,17 @@ interface HealthStats {
   failureRate: number;
   primaryErrorPrefix: string | null;
   primaryErrorCount: number;
+  /** Meta's own reason, live, when the top error is WA_ACCOUNT_BLOCKED. */
+  liveBlock?: string | null;
+  /** WhatsApp Manager overview for our account, when WHATSAPP_BUSINESS_ACCOUNT_ID is set. */
+  managerUrl?: string | null;
   windowHours: number;
 }
 
 const ERROR_HINTS: Record<string, { hint: string; actionUrl?: string; actionLabel?: string }> = {
   WA_ACCOUNT_BLOCKED: {
-    hint: 'Meta is refusing every send from our WhatsApp account (for example, the number is not registered or the account is still onboarding). Messages are held, not lost, and go out once WhatsApp Manager shows the account as active.',
-    actionUrl: 'https://business.facebook.com/wa/manage/phone-numbers/',
+    hint: 'Meta is refusing every send from our WhatsApp Business Account. The phone number showing Connected is not enough. In WhatsApp Manager, check for a "Missing valid payment method" alert and that the display name is approved. If Meta still reports the account as not active, it needs WhatsApp support to activate it. Messages are held, not lost, and go out automatically once Meta allows sending.',
+    actionUrl: 'https://business.facebook.com/latest/whatsapp_manager/overview/',
     actionLabel: 'Open WhatsApp Manager',
   },
   WA_DEV_MODE: {
@@ -60,10 +64,13 @@ export default function WhatsAppHealthBanner() {
   if (!shouldShow) return null;
 
   const hint = stats.primaryErrorPrefix ? ERROR_HINTS[stats.primaryErrorPrefix] : undefined;
+  const actionUrl =
+    stats.primaryErrorPrefix === 'WA_ACCOUNT_BLOCKED' && stats.managerUrl ? stats.managerUrl : hint?.actionUrl;
   const pct = Math.round(stats.failureRate * 100);
 
   return (
     <Box
+      role="alert"
       sx={{
         display: 'flex',
         alignItems: 'flex-start',
@@ -86,29 +93,40 @@ export default function WhatsAppHealthBanner() {
             Likely cause: {hint.hint}
           </Typography>
         )}
+        {stats.liveBlock && (
+          <Typography sx={{ fontSize: 13, color: '#78350F', mt: 0.5 }}>
+            Meta says right now: <Box component="span" sx={{ fontWeight: 600 }}>{stats.liveBlock}</Box>
+          </Typography>
+        )}
         {stats.primaryErrorPrefix && (
           <Typography sx={{ fontSize: 12, color: '#92400E', mt: 0.5, fontFamily: 'monospace' }}>
             Top error: {stats.primaryErrorPrefix} ({stats.primaryErrorCount} occurrences)
           </Typography>
         )}
-        {hint?.actionUrl && (
-          <Box sx={{ mt: 1 }}>
+        {actionUrl && (
+          <Box sx={{ mt: 0.5 }}>
             <Typography
               component="a"
-              href={hint.actionUrl}
+              href={actionUrl}
               target="_blank"
               rel="noopener noreferrer"
               sx={{
                 fontSize: 13,
                 fontWeight: 600,
-                color: '#B45309',
+                color: '#92400E',
                 textDecoration: 'underline',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 0.5,
+                minHeight: 44,
+                px: 0.5,
+                ml: -0.5,
+                borderRadius: 1,
+                '&:hover': { color: '#78350F' },
+                '&:focus-visible': { outline: '2px solid #92400E', outlineOffset: 2 },
               }}
             >
-              {hint.actionLabel ?? 'Open'}
+              {hint?.actionLabel ?? 'Open'}
               <OpenInNewIcon sx={{ fontSize: 14 }} />
             </Typography>
           </Box>

@@ -22,6 +22,8 @@ import {
   Tooltip,
   CircularProgress,
   Divider,
+  ToggleButton,
+  ToggleButtonGroup,
 } from '@neram/ui';
 import ThumbUpIcon from '@mui/icons-material/ThumbUp';
 import ThumbUpOutlinedIcon from '@mui/icons-material/ThumbUpOutlined';
@@ -35,7 +37,12 @@ import PersonIcon from '@mui/icons-material/Person';
 import ClearIcon from '@mui/icons-material/Clear';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import DownloadIcon from '@mui/icons-material/Download';
+import MapOutlinedIcon from '@mui/icons-material/MapOutlined';
+import ListAltIcon from '@mui/icons-material/ListAlt';
+import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import { formatSignupPlace } from '@neram/database/signup-geo';
 import DataTable from '@/components/DataTable';
+import ChatLocations from '@/components/chat-history/ChatLocations';
 
 interface Conversation {
   id: string;
@@ -49,7 +56,24 @@ interface Conversation {
   admin_correction: string | null;
   promoted_to_kb: boolean;
   created_at: string;
+  error?: string | null;
+  geo_city?: string | null;
+  geo_state?: string | null;
+  geo_country?: string | null;
+  geo_source?: string | null;
 }
+
+type ChatView = 'conversations' | 'locations';
+
+interface AiHealth {
+  blocked: boolean;
+  since: string | null;
+  failedCalls: number;
+}
+
+/** How a credits-ran-out failure is logged, old and new forms. */
+const isCreditsError = (e: string | null | undefined) =>
+  !!e && (e.includes('CREDITS_DEPLETED') || e.includes('Gemini API error: 402'));
 
 interface AiReviewResult {
   verdict: string;
@@ -90,6 +114,31 @@ export default function ChatHistoryPage() {
   });
 
   const [staleWarning, setStaleWarning] = useState<string | null>(null);
+  const [view, setView] = useState<ChatView>('conversations');
+  const [aiHealth, setAiHealth] = useState<AiHealth | null>(null);
+
+  // The view lives in ?view= so Back and a shared link return to it. Read once on
+  // mount (useSearchParams here would need a Suspense boundary for the build).
+  useEffect(() => {
+    const v = new URLSearchParams(window.location.search).get('view');
+    if (v === 'locations') setView('locations');
+  }, []);
+
+  const changeView = (next: ChatView) => {
+    setView(next);
+    const url = new URL(window.location.href);
+    if (next === 'locations') url.searchParams.set('view', 'locations');
+    else url.searchParams.delete('view');
+    window.history.replaceState(null, '', url.toString());
+  };
+
+  // Is Gemini out of credit? One cheap read; the banner says since when.
+  useEffect(() => {
+    fetch('/api/ai-health')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => setAiHealth(json && typeof json.blocked === 'boolean' ? json : null))
+      .catch(() => setAiHealth(null));
+  }, []);
 
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -386,6 +435,27 @@ export default function ChatHistoryPage() {
       ),
     },
     {
+      field: 'geo_state',
+      headerName: 'Location',
+      width: 150,
+      renderCell: (params: any) => {
+        const place = formatSignupPlace({
+          city: params.row.geo_city,
+          state: params.row.geo_state,
+          country: params.row.geo_country,
+        });
+        if (!place) return <Typography variant="caption" color="text.disabled">Unknown</Typography>;
+        const fromProfile = params.row.geo_source === 'profile';
+        return (
+          <Tooltip title={fromProfile ? 'From their application form' : 'From their connection at chat time'} arrow>
+            <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.3, display: 'block' }}>
+              {place}
+            </Typography>
+          </Tooltip>
+        );
+      },
+    },
+    {
       field: 'user_message',
       headerName: 'Question',
       flex: 2,
@@ -412,7 +482,11 @@ export default function ChatHistoryPage() {
       headerName: 'Error',
       width: 150,
       renderCell: (params: any) => (
-        params.value
+        isCreditsError(params.value)
+          ? <Tooltip title="Gemini credits ran out, so Aintra could not answer. Top up in Google AI Studio." arrow>
+              <Chip label="Credits ran out" size="small" color="error" variant="outlined" />
+            </Tooltip>
+          : params.value
           ? <Tooltip title={params.value} arrow>
               <Typography variant="caption" color="error.main" sx={{ py: 1, lineHeight: 1.3, cursor: 'help' }} noWrap>
                 {params.value.length > 30 ? `${params.value.slice(0, 30)}…` : params.value}
@@ -504,7 +578,9 @@ export default function ChatHistoryPage() {
           </Box>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Typography variant="body2" color="text.secondary">{total} conversations</Typography>
+          {view === 'conversations' && (
+            <Typography variant="body2" color="text.secondary">{total} conversations</Typography>
+          )}
           <Tooltip
             title={
               dateFrom || dateTo
@@ -528,8 +604,55 @@ export default function ChatHistoryPage() {
         </Box>
       </Box>
 
+      {/* Gemini out of credit: nothing in code fixes this, so say who must act. */}
+      {aiHealth?.blocked && aiHealth.since && (
+        <Alert
+          severity="error"
+          icon={<ErrorOutlineIcon />}
+          sx={{ mb: 2 }}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              href="https://aistudio.google.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={{ minHeight: 44, whiteSpace: 'nowrap' }}
+            >
+              Open AI Studio
+            </Button>
+          }
+        >
+          <strong>
+            Gemini credits ran out on{' '}
+            {new Date(aiHealth.since).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}.
+          </strong>{' '}
+          {aiHealth.failedCalls} AI {aiHealth.failedCalls === 1 ? 'reply has' : 'replies have'} failed since, across Aintra and Nexus.
+          Visitors are being sent to WhatsApp. Top up the prepay balance on the billing account in Google AI Studio.
+        </Alert>
+      )}
+
+      {/* View */}
+      <ToggleButtonGroup
+        value={view}
+        exclusive
+        size="small"
+        color="primary"
+        onChange={(_, v) => v && changeView(v)}
+        aria-label="Chat history view"
+        sx={{ mb: 2 }}
+      >
+        <ToggleButton value="conversations" sx={{ minHeight: 44, px: 2, gap: 1, textTransform: 'none' }}>
+          <ListAltIcon fontSize="small" /> Conversations
+        </ToggleButton>
+        <ToggleButton value="locations" sx={{ minHeight: 44, px: 2, gap: 1, textTransform: 'none' }}>
+          <MapOutlinedIcon fontSize="small" /> Locations
+        </ToggleButton>
+      </ToggleButtonGroup>
+
       {/* Filters */}
       <Box sx={{ display: 'flex', gap: 2, mb: 2, flexWrap: 'wrap', alignItems: 'center' }}>
+        {view === 'conversations' && (
         <TextField
           size="small"
           placeholder="Search questions…"
@@ -540,6 +663,7 @@ export default function ChatHistoryPage() {
             startAdornment: <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment>,
           }}
         />
+        )}
         <FormControl size="small" sx={{ minWidth: 140 }}>
           <InputLabel>Source</InputLabel>
           <Select
@@ -580,18 +704,33 @@ export default function ChatHistoryPage() {
       </Box>
 
       {/* Staleness Warning */}
-      {staleWarning && (
+      {view === 'conversations' && staleWarning && (
         <Alert severity="warning" icon={<WarningAmberIcon />} sx={{ mb: 2 }} onClose={() => setStaleWarning(null)}>
           {staleWarning}
         </Alert>
       )}
 
-      {/* Table */}
-      <DataTable
-        rows={rows}
-        columns={columns}
-        loading={loading}
-      />
+      {view === 'locations' ? (
+        <ChatLocations
+          source={sourceFilter}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onClearDates={() => { setDateFrom(''); setDateTo(''); setPage(0); }}
+        />
+      ) : (
+        <DataTable
+          rows={rows}
+          columns={columns}
+          loading={loading}
+          serverPagination={{
+            total,
+            page,
+            rowsPerPage: pageSize,
+            onPageChange: setPage,
+            onRowsPerPageChange: (n) => { setPageSize(n); setPage(0); },
+          }}
+        />
+      )}
 
       {/* Correction Dialog */}
       <Dialog open={dialogOpen} onClose={closeDialog} maxWidth="md" fullWidth>

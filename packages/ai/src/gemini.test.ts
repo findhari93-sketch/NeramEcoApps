@@ -26,7 +26,14 @@ vi.mock('@neram/database', () => ({
   utcMonthStart: () => '2026-08-01',
 }));
 
-import { AiBlockedError, buildManualPrompt, generateGemini, generateGeminiText } from './gemini';
+import {
+  AiBillingError,
+  AiBlockedError,
+  CREDITS_DEPLETED_ERROR,
+  buildManualPrompt,
+  generateGemini,
+  generateGeminiText,
+} from './gemini';
 import { clearBudgetCache } from './budget';
 import { TIER_MODELS } from './pricing';
 
@@ -434,6 +441,43 @@ describe('the free key', () => {
       .fn()
       .mockResolvedValueOnce(fail(403))
       .mockResolvedValueOnce(fail(403))
+      .mockResolvedValueOnce(ok('{"paid":true}'));
+    vi.stubGlobal('fetch', f);
+
+    const result = await generateGemini({ feature: 'marketing.site-chat', parts: [{ text: 'hi' }] });
+    expect(result.keyTier).toBe('paid');
+  });
+});
+
+describe('credits running out (402)', () => {
+  it('throws AiBillingError on the first 402 and tries no other model', async () => {
+    const f = vi.fn(async () => fail(402));
+    vi.stubGlobal('fetch', f);
+
+    const err = await generateGemini({ feature: FEATURE, parts: [{ text: 'hi' }] }).catch((e) => e);
+
+    expect(err).toBeInstanceOf(AiBillingError);
+    expect(err.code).toBe('CREDITS_DEPLETED');
+    expect(err.keyEnv).toBe('GEMINI_API_KEY');
+    expect(f).toHaveBeenCalledTimes(1);
+  });
+
+  it('tags the usage row so the admin pages can say since when', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => fail(402)));
+    await generateGemini({ feature: 'marketing.site-chat', parts: [{ text: 'hi' }], clientKey: 'v1' }).catch(() => {});
+
+    expect(recordAiUsage).toHaveBeenCalledTimes(1);
+    expect(recordAiUsage).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'error', error: CREDITS_DEPLETED_ERROR, clientKey: 'v1' })
+    );
+  });
+
+  it('falls back to the paid key when only the free key is out of credit', async () => {
+    process.env.GEMINI_API_KEY_FREE = 'free-key';
+    const f = vi
+      .fn()
+      .mockResolvedValueOnce(fail(402))
+      .mockResolvedValueOnce(fail(402))
       .mockResolvedValueOnce(ok('{"paid":true}'));
     vi.stubGlobal('fetch', f);
 

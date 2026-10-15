@@ -33,6 +33,8 @@ export {
   generateGeminiText,
   buildManualPrompt,
   AiBlockedError,
+  AiBillingError,
+  CREDITS_DEPLETED_ERROR,
   ALL_AI_FEATURE_IDS,
 } from './gemini';
 export type { GeminiPart, GeminiContent, GenerateOptions, GeminiResult } from './gemini';

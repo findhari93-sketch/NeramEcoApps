@@ -24,7 +24,7 @@ export interface SignupGeo {
 type HeaderReader = { get(name: string): string | null };
 
 /** ISO 3166-2:IN subdivision codes, old and new spellings both. */
-const INDIA_STATES: Record<string, string> = {
+export const INDIA_STATES: Record<string, string> = {
   AN: 'Andaman and Nicobar Islands',
   AP: 'Andhra Pradesh',
   AR: 'Arunachal Pradesh',

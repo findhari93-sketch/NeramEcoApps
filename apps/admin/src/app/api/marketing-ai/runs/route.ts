@@ -11,7 +11,7 @@ export const maxDuration = 300;
  * Admins only.
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminRole } from '@/lib/marketing-ai/guard';
+import { cronIdleReason, requireAdminRole } from '@/lib/marketing-ai/guard';
 import { errorResponse, readJson } from '@/lib/marketing-ai/http';
 import { lastCompleteDayIST } from '@/lib/marketing-ai/metrics';
 import { agentContext, historyFromError, runAnalyze, runConversions, runIngest, runWeekly } from '@/lib/marketing-ai/pipeline';
@@ -34,6 +34,10 @@ export async function POST(request: NextRequest) {
     const { kind, from } = await readJson(request);
     if (!['ingest', 'analyze', 'conversions', 'audit', 'weekly'].includes(kind)) {
       return NextResponse.json({ error: "kind must be 'ingest', 'analyze', 'conversions', 'audit' or 'weekly'" }, { status: 400 });
+    }
+    const idle = cronIdleReason();
+    if (idle) {
+      return NextResponse.json({ error: `Connect Google Ads first: ${idle}. Nothing was run.` }, { status: 409 });
     }
     const endDate = lastCompleteDayIST();
     if (from !== undefined) {

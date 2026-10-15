@@ -11,6 +11,7 @@ import { createAdminClientISR, getSupabaseAdminClient } from '@neram/database';
 import type { College, CollegeComment, CollegeDetail, CollegeFaqRow, CollegeListItem, CollegeFilters, CollegeReview } from './types';
 import { COLLEGES_PER_PAGE } from './constants';
 import { expandExamFilter, typeSpellings } from './listing-filter';
+import { effectiveTier } from './plan';
 
 // ISR revalidation buckets — must match `export const revalidate` on the pages.
 //
@@ -272,6 +273,8 @@ export const getCollegeBySlug = cache(async (slug: string): Promise<CollegeDetai
 
   return {
     ...(college as College),
+    // Plan dates are enforced here too, not only by the daily database job.
+    neram_tier: effectiveTier(college as College),
     fees: feesRes.data ?? [],
     cutoffs: cutoffsRes.data ?? [],
     placements: placementsRes.data ?? [],
@@ -303,15 +306,20 @@ export const getCollegeFaqs = cache(async (collegeId: string): Promise<CollegeFa
 export const getCollegeReviewsFirstPage = cache(async (collegeId: string): Promise<CollegeReview[]> => {
   try {
     const supabase = createAdminClientISR(ISR_COLLEGE);
-    const { data, error } = await supabase
-      .from('college_reviews')
-      .select(
-        'id,college_id,reviewer_name,reviewer_year,rating_overall,rating_studio,rating_faculty,rating_campus,rating_placements,rating_value,rating_infrastructure,title,body,pros,cons,status,created_at'
-      )
-      .eq('college_id', collegeId)
-      .eq('status', 'approved')
-      .order('created_at', { ascending: false })
-      .limit(20);
+    const base =
+      'id,college_id,reviewer_name,reviewer_year,rating_overall,rating_studio,rating_faculty,rating_campus,rating_placements,rating_value,rating_infrastructure,title,body,pros,cons,status,created_at';
+    const run = (select: string) =>
+      supabase
+        .from('college_reviews')
+        .select(select)
+        .eq('college_id', collegeId)
+        .eq('status', 'approved')
+        .order('created_at', { ascending: false })
+        .limit(20);
+    // college_reply is new (20261127090000): retry without it on a database
+    // that does not have it yet, rather than show no reviews.
+    let { data, error } = await run(`${base},college_reply,college_reply_at`);
+    if (error) ({ data, error } = await run(base));
     if (error) return [];
     return (data ?? []) as CollegeReview[];
   } catch {

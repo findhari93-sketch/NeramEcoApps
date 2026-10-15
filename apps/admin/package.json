@@ -23,6 +23,7 @@
     "@neram/ai": "workspace:*",
     "@neram/auth": "workspace:*",
     "@neram/database": "workspace:*",
+    "@neram/geo": "workspace:*",
     "@neram/ui": "workspace:*",
     "firebase-admin": "^13.6.0",
     "jspdf": "^4.2.0",

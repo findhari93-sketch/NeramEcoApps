@@ -97,6 +97,22 @@ export default function AdmissionHelpCard({ collegeId, collegeName, shortName }:
               10-digit Indian mobile number
             </Box>
           </Box>
+          <Box component="label" sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, fontSize: '0.84rem', fontWeight: 600, color: 'text.secondary' }}>
+            Parent&apos;s mobile (optional)
+            <Box
+              component="input"
+              type="tel"
+              inputMode="numeric"
+              autoComplete="off"
+              aria-describedby="lead-parent-hint"
+              value={lead.parentPhone}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => lead.setParentPhone(e.target.value)}
+              sx={inputSx}
+            />
+            <Box component="span" id="lead-parent-hint" sx={{ fontWeight: 400, fontSize: '0.78rem' }}>
+              Under 18? The college can talk to your parent too.
+            </Box>
+          </Box>
           <Box component="label" sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25, fontSize: '0.84rem', lineHeight: 1.45, color: 'text.secondary', cursor: 'pointer' }}>
             <Box
               component="input"
@@ -105,7 +121,7 @@ export default function AdmissionHelpCard({ collegeId, collegeName, shortName }:
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => lead.setConsent(e.target.checked)}
               sx={{ width: 20, height: 20, m: 0, mt: '1px', flex: '0 0 auto', accentColor: (t) => t.palette.primary.main }}
             />
-            I agree to share my name and number with {collegeName} for admission enquiries.
+            I agree to share my details with {collegeName} so their admissions team can contact me.
           </Box>
           {lead.error && (
             <Alert severity="error" role="alert" sx={{ py: 0.25 }}>

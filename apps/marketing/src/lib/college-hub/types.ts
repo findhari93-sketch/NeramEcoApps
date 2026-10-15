@@ -63,6 +63,12 @@ export interface College {
   tier_start_date: string | null;
   tier_end_date: string | null;
   tier_amount: number | null;
+  // College partner programme (20261127090000). Optional: older databases lack them.
+  /** Section -> ISO time staff last approved content the college provided. */
+  college_provided?: Partial<Record<CollegeContentSection, string>> | null;
+  admission_opens_on?: string | null;
+  admission_closes_on?: string | null;
+  scholarships_text?: string | null;
   // Claim / Verification
   claimed: boolean;
   claimed_by: string | null;
@@ -304,6 +310,8 @@ export interface ArchIndexBreakdown {
 
 // Phase 2: Engagement types
 
+export type CollegeContentSection = 'profile' | 'fees' | 'admissions' | 'facilities' | 'location' | 'photos';
+
 export interface CollegeReview {
   id: string;
   college_id: string;
@@ -325,6 +333,9 @@ export interface CollegeReview {
   status: 'pending' | 'approved' | 'rejected' | 'flagged';
   rejected_reason?: string | null;
   created_at: string;
+  /** One public reply from the college (its dashboard). */
+  college_reply?: string | null;
+  college_reply_at?: string | null;
 }
 
 export interface CollegeComment {

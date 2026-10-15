@@ -40,11 +40,27 @@ Before the key is set, the crawl and the on-page and AI-answer checks still run.
 
 **Import URLs** takes a Search Console export, for example Indexing > Pages > *Server error (5xx)* > Export. It puts those URLs first in the inspection and crawl queues. The Search Console API cannot list the URLs behind each "Why pages aren't indexed" reason, so this is how to check them.
 
-## Weekly Claude Code fixes (`.github/workflows/seo-autofix.yml`)
+## Ask Google to index (the one manual step)
 
-Mondays at 10:30 IST, after the digest, a GitHub Action reads the open findings from `/api/cron/seo-audit/findings` (protected by `SEO_EXPORT_TOKEN`). Claude Code then fixes the ones marked `autofix` in `lib/seo-audit/rule-guide.ts` and opens **one pull request**. The PR lists what was fixed, what was skipped and why, and a "Needs you" list of findings that are not code fixes. Nothing merges or deploys by itself.
+Google's Indexing API is only for job postings and livestreams; using it for other pages breaks Google's terms. So there is no API to request indexing for our pages. What is automated: sitemaps with real lastmod, resubmitted daily when they change (`sitemaps` job), and IndexNow for Bing and ChatGPT search (marketing and app `/api/cron/indexnow`, daily).
 
-- **Skipped while open:** the job skips a week when last week's PR is still open.
+The **Ask Google to index today** card on the SEO Health page lists up to 10 sitemap pages that work on our side but are not indexed, most searched first, then hub pages (`pickAskGoogle` in `rules.ts`).
+- **Open in Search Console** opens URL Inspection for that page; press Request indexing there. Google allows about 10 a day.
+- **Mark asked** records it (`seo_url_status.index_requested_at`), so the page leaves the list for 14 days and is re-inspected the next morning.
+
+## Claude Code fixes, twice a week (`.github/workflows/seo-autofix.yml`)
+
+Mondays and Thursdays at 10:30 IST, a GitHub Action reads up to 40 open findings from `/api/cron/seo-audit/findings?limit=40` (protected by `SEO_EXPORT_TOKEN`). The order is: most severe first, then the pages with the most search impressions, then hub pages. Each rule is capped at 10, so one rule cannot fill the PR.
+
+Claude Code then fixes the ones marked `autofix` in `lib/seo-audit/rule-guide.ts` and opens **one pull request**. Info items are included only for long titles (O1) and answer-first copy (A4). The PR has these sections:
+- what was fixed;
+- "Needs your review": city texts drafted with `reviewed: false`, and new season pages;
+- what was skipped and why;
+- a "Needs you" list of findings that are not code fixes.
+
+Nothing merges or deploys by itself.
+
+- **Skipped while open:** the job skips a run while the last autofix PR is still open.
 - **Restricted tools:** Claude can only edit files and run `tsc` and `vitest`. It has no network, cannot commit and cannot push. Findings quote public search queries, so they are treated as data, not instructions.
 - **Model:** `claude-sonnet-5-5` (change `--model` in the workflow for Opus).
 
@@ -53,9 +69,17 @@ Setup, once:
 2. Add it as `SEO_EXPORT_TOKEN` on the admin Vercel project (production) and as a GitHub Actions secret with the same name.
 3. Add `ANTHROPIC_API_KEY` (or `CLAUDE_CODE_OAUTH_TOKEN` from `claude setup-token`) as a GitHub secret.
 4. Turn on Settings > Actions > General > "Allow GitHub Actions to create and approve pull requests".
-5. Run it once by hand: Actions > SEO Autofix (weekly) > Run workflow.
+5. Run it once by hand: Actions > SEO Autofix (twice a week) > Run workflow.
 
 PRs opened with the built-in `GITHUB_TOKEN` do not trigger other workflows, so CI does not run on them automatically. The job runs its own type-check and marks the PR as a draft if it fails.
+
+## City pages: reaching every town
+
+Students search for a town's name, but Google indexes only one page out of a set of near-identical ones. So:
+- **Marketing city pages** keep the location gate (`apps/marketing/src/lib/seo/location-gate.ts`). A held city becomes indexable when it gains a real local fact; P6 shows where demand already exists.
+- **App exam-centre and college-predictor city pages** fold towns with the same answer into the strongest one (`apps/app/src/lib/tools/same-answer.ts`). For exam centres that means the same nearest test city; for the predictor, the same district college list. The indexed page lists the other towns, and their own pages stay up as `noindex, follow` with a link to it.
+- **Every town is named on an indexed page:** each app state page has a table of every town with its nearest test city.
+- **Shared town names:** `cityForName(name, stateSlug)` in `@neram/geo` resolves a shared name (Aurangabad, Bilaspur, Bijapur, Udaipur) within the state. Until 2026-10-15, Aurangabad in Bihar was treated as a NATA test city because the Maharashtra centre resolved to it.
 
 ## The rules (`lib/seo-audit/rules.ts`)
 
@@ -74,8 +98,10 @@ Noindex is judged only on URLs we put in a sitemap. City pages that the location
 | P1 | medium | Striking distance: searches at position 5 to 20 with 100+ impressions |
 | P2 | medium | CTR under half of what its position normally earns |
 | P3 | high | A page's clicks fall 40%+ week on week (10+ clicks before) |
-| P4 | medium | Two or more of our pages each take 20%+ of one search's impressions |
+| P4 | medium | Two or more of our pages each take 20%+ of one search's impressions, or a 200+ impression search is spread over 5+ of our pages with none on page one ("spread"). http and www copies are folded first; brand searches are skipped |
 | P5 | info | A search with 50+ impressions where our best page ranks below 20 |
+| P6 | medium | 20+ searches in 28 days for coaching or an exam centre in a city whose page is held back by the location gate. The fix is reviewed local text (autofix drafts it with `reviewed: false`), never a looser gate |
+| S1 | high | A season starts within 90 days (`lib/seo-audit/seasons.ts`) and a page still names last year, or a year-in-URL hub like `/nata-2026` has no page for the new year |
 | O1 | high/medium/info | Title missing, duplicated, or over 65 characters |
 | O2 | medium/info | Meta description missing or duplicated |
 | O3 | high/medium | Canonical missing, or a sitemap page naming another URL as canonical |
@@ -91,6 +117,7 @@ Noindex is judged only on URLs we put in a sitemap. City pages that the location
 
 **Lifecycle:**
 - A new finding is `open`.
+- `waiting` means fixed on our side while Google's last look still shows the old problem: our crawl gets a 200 where Google saw a 404 or redirect (I2), our robots.txt allows the URL (I7), or our canonical is now self (I5). It is not counted as an issue, is re-inspected first, and becomes `fixed` once Google agrees.
 - One that stops firing becomes `fixed`.
 - A fixed one that fires again reopens.
 - **Ignore** is for intended cases. An ignored finding stays ignored until its substance changes (for example, a redirect target or the list of competing pages), and then it reopens.

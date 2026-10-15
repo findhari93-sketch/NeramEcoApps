@@ -87,6 +87,8 @@ interface UsageResponse {
     daysElapsed: number;
     daysInMonth: number;
   };
+  /** Null when the check itself failed. */
+  credits: { blocked: boolean; since: string | null; failedCalls: number } | null;
   byFeature: FeatureRow[];
   orphans: Array<{ featureId: string; label: string; calls: number; costUsd: number }>;
   byModel: Array<{ model: string; calls: number; costUsd: number }>;
@@ -290,6 +292,18 @@ export default function AiUsagePage() {
               danger={dayPct >= 90}
             />
           </Box>
+
+          {data.credits?.blocked && data.credits.since && (
+            <Alert severity="error" sx={{ borderRadius: 2 }}>
+              <strong>
+                Gemini credits ran out on{' '}
+                {new Date(data.credits.since).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}.
+              </strong>{' '}
+              {data.credits.failedCalls} AI call{data.credits.failedCalls === 1 ? ' has' : 's have'} failed since, in every
+              app. No setting here fixes it: top up the prepay balance on the billing account in Google AI Studio
+              (aistudio.google.com, Billing).
+            </Alert>
+          )}
 
           {projectedOver && (
             <Alert severity="warning" sx={{ borderRadius: 2 }}>

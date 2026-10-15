@@ -2,7 +2,8 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { getSupabaseAdminClient } from '@neram/database';
+import { getSupabaseAdminClient, getWhatsAppSendBlock } from '@neram/database';
+import { blockReasons } from '@/lib/whatsapp-block';
 
 /**
  * GET /api/admin/whatsapp-health
@@ -53,6 +54,20 @@ export async function GET() {
       }
     }
 
+    // Held rows only say that sending is blocked. Ask Meta why, right now, so
+    // the banner names the real blocker (the phone can show Connected while
+    // the WhatsApp Business Account itself is not active).
+    let liveBlock: string | null = null;
+    if (primaryErrorPrefix === 'WA_ACCOUNT_BLOCKED') {
+      const block = await getWhatsAppSendBlock();
+      liveBlock = block ? blockReasons(block) : null;
+    }
+
+    const wabaId = process.env.WHATSAPP_BUSINESS_ACCOUNT_ID;
+    const managerUrl = wabaId
+      ? `https://business.facebook.com/latest/whatsapp_manager/overview/?asset_id=${encodeURIComponent(wabaId)}`
+      : null;
+
     return NextResponse.json({
       total,
       failed,
@@ -60,12 +75,14 @@ export async function GET() {
       failureRate,
       primaryErrorPrefix,
       primaryErrorCount,
+      liveBlock,
+      managerUrl,
       windowHours: 24,
     });
   } catch (err: any) {
     console.error('whatsapp-health error:', err);
     return NextResponse.json(
-      { total: 0, failed: 0, sent: 0, failureRate: 0, primaryErrorPrefix: null, primaryErrorCount: 0, windowHours: 24 },
+      { total: 0, failed: 0, sent: 0, failureRate: 0, primaryErrorPrefix: null, primaryErrorCount: 0, liveBlock: null, managerUrl: null, windowHours: 24 },
       { status: 200 }
     );
   }

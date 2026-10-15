@@ -1,7 +1,10 @@
 'use client';
 
-import { Box, Typography, Stack, Paper, Grid, Chip } from '@mui/material';
+import Link from 'next/link';
+import { Box, Typography, Stack, Paper, Grid, Chip, Alert, Button } from '@mui/material';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
+import CheckIcon from '@mui/icons-material/Check';
+import WorkspacePremiumIcon from '@mui/icons-material/WorkspacePremium';
 
 const TIER_FEATURES = [
   {
@@ -85,15 +88,23 @@ export default function TierManagementPage() {
         >
           <EmojiEventsIcon sx={{ color: 'white' }} />
         </Box>
-        <Typography variant="h5" fontWeight={700}>
-          Tier Management
+        <Typography variant="h5" component="h1" fontWeight={700}>
+          What each tier includes
         </Typography>
       </Stack>
 
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-        Assign tiers to colleges from the Colleges page. This page shows what each tier includes.
-        Tier changes take effect immediately. Contact the billing team to invoice the college.
-      </Typography>
+      <Alert
+        severity="info"
+        sx={{ mb: 3 }}
+        action={
+          <Button component={Link} href="/college-hub/plans" startIcon={<WorkspacePremiumIcon />} sx={{ minHeight: 40 }}>
+            Open Plans
+          </Button>
+        }
+      >
+        To give a college a tier, use Plans. A plan sets the tier with start and end dates, keeps a history, and drops the
+        college to free automatically when it ends. Prices below are the list prices; the amount on each plan is what was agreed.
+      </Alert>
 
       <Grid container spacing={2}>
         {TIER_FEATURES.map(({ tier, label, color, bg, price, features, limit }) => (
@@ -126,9 +137,7 @@ export default function TierManagementPage() {
                     variant="body2"
                     sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}
                   >
-                    <Box component="span" sx={{ color: 'success.main', fontWeight: 700 }}>
-                      ✓
-                    </Box>{' '}
+                    <CheckIcon fontSize="small" sx={{ color: 'success.main' }} aria-hidden />
                     {f}
                   </Typography>
                 ))}

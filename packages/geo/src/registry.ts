@@ -57,21 +57,37 @@ export function placeKey(name: string): string {
 }
 
 const cityByKey = new Map<string, string>();
+/** Every city a key can mean: four names are shared across states (Aurangabad, Bilaspur, Bijapur, Udaipur). */
+const citiesByKey = new Map<string, string[]>();
 function indexName(name: string, slug: string) {
   const k = placeKey(name);
-  if (k && !cityByKey.has(k)) cityByKey.set(k, slug);
+  if (!k) return;
+  if (!cityByKey.has(k)) cityByKey.set(k, slug);
+  const all = citiesByKey.get(k) ?? [];
+  if (!all.includes(slug)) citiesByKey.set(k, [...all, slug]);
 }
+// Slugs first: "aurangabad" is the Maharashtra city whose slug it is, not the
+// Bihar town that is also named Aurangabad (its slug is aurangabad-bihar).
+for (const c of GENERATED_CITIES) indexName(c.slug, c.slug);
 for (const c of GENERATED_CITIES) {
-  indexName(c.slug, c.slug);
   indexName(c.name, c.slug);
   for (const a of c.altNames ?? []) indexName(a, c.slug);
 }
 for (const [alias, target] of Object.entries(ALIASES)) indexName(alias, target);
 
-/** The registry city a free-text place name refers to, e.g. "Mysuru" -> "mysore". */
-export function cityForName(name: string | null | undefined): string | null {
+/**
+ * The registry city a free-text place name refers to, e.g. "Mysuru" -> "mysore".
+ * Pass the state when it is known: a shared name then resolves to the town in
+ * that state ("Aurangabad" in Bihar -> aurangabad-bihar).
+ */
+export function cityForName(name: string | null | undefined, stateSlug?: string | null): string | null {
   if (!name) return null;
-  return cityByKey.get(placeKey(name)) ?? null;
+  const k = placeKey(name);
+  if (stateSlug) {
+    const inState = (citiesByKey.get(k) ?? []).find((s) => cityBySlug.get(s)?.stateSlug === stateSlug);
+    if (inState) return inState;
+  }
+  return cityByKey.get(k) ?? null;
 }
 
 /** Slugify a state name the way colleges.state_slug does ("Jammu & Kashmir" -> "jammu-and-kashmir"). */

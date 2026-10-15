@@ -11,7 +11,7 @@ import { NextResponse } from 'next/server';
 import { requireSeoAdmin, seoError } from '@/lib/seo-audit/guard';
 import { db, selectAll } from '@/lib/seo-audit/store';
 
-const STATUSES = ['open', 'fixed', 'ignored'];
+const STATUSES = ['open', 'waiting', 'fixed', 'ignored'];
 const CATEGORIES = ['indexing', 'performance', 'onsite', 'aeo'];
 const SEVERITIES = ['critical', 'high', 'medium', 'info'];
 const ORDER: Record<string, number> = { critical: 0, high: 1, medium: 2, info: 3 };
@@ -32,6 +32,8 @@ export async function GET(request: Request) {
         .eq('status', status);
       if (category && CATEGORIES.includes(category)) q = q.eq('category', category);
       if (severity && SEVERITIES.includes(severity)) q = q.eq('severity', severity);
+      // "issues": everything but info, the default view of the Issues tab.
+      else if (severity === 'issues') q = q.neq('severity', 'info');
       return q.order('id').range(a, b);
     });
     rows.sort((a, b) => ORDER[a.severity] - ORDER[b.severity] || (b.last_seen > a.last_seen ? 1 : b.last_seen < a.last_seen ? -1 : 0));

@@ -24,6 +24,8 @@ import SectionTabs, { type SectionTab } from './profile/SectionTabs';
 import AdmissionPath, { EligibilityCard } from './profile/AdmissionPath';
 import FeesPanel from './profile/FeesPanel';
 import LocationContact from './profile/LocationContact';
+import ProvidedByCollege from './profile/ProvidedByCollege';
+import AdmissionDates from './profile/AdmissionDates';
 import SimilarCollegeCards from './profile/SimilarCollegeCards';
 import AdmissionHelpCard from './profile/AdmissionHelpCard';
 import CoachingCard from './profile/CoachingCard';
@@ -194,7 +196,7 @@ export default function CollegePageTemplate({ college, similarColleges, content 
         {/* Main column */}
         <Box sx={{ flex: '999 1 640px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: { xs: 1.25, md: 2.5 } }}>
           {hasAbout && (
-            <ProfileSection id="overview" title="Overview">
+            <ProfileSection id="overview" title="Overview" action={<ProvidedByCollege college={college} section="profile" />}>
               {college.about && (
                 <Typography sx={{ m: 0, fontSize: '1rem', lineHeight: 1.7, color: 'text.secondary', maxWidth: 780, textWrap: 'pretty' }}>{college.about}</Typography>
               )}
@@ -218,7 +220,8 @@ export default function CollegePageTemplate({ college, similarColleges, content 
             </ProfileSection>
           )}
 
-          <ProfileSection id="admission" title="How to get in">
+          <ProfileSection id="admission" title="How to get in" action={<ProvidedByCollege college={college} section="admissions" />}>
+            <AdmissionDates college={college} />
             <AdmissionPath college={college} />
             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap: 1.75 }}>
               <EligibilityCard exams={exams} />
@@ -253,7 +256,7 @@ export default function CollegePageTemplate({ college, similarColleges, content 
             </ProfileSection>
           )}
 
-          <ProfileSection id="fees" title={`${n} fees`}>
+          <ProfileSection id="fees" title={`${n} fees`} action={<ProvidedByCollege college={college} section="fees" />}>
             <FeesPanel college={college} similar={similarColleges} stateName={stateName} />
           </ProfileSection>
 
@@ -355,7 +358,7 @@ export default function CollegePageTemplate({ college, similarColleges, content 
             </ProfileSection>
           )}
 
-          <ProfileSection id="location" title="Location and contact">
+          <ProfileSection id="location" title="Location and contact" action={<ProvidedByCollege college={college} section="location" />}>
             <LocationContact college={college} />
           </ProfileSection>
 
@@ -373,7 +376,7 @@ export default function CollegePageTemplate({ college, similarColleges, content 
               <Typography sx={{ m: 0, fontSize: '0.94rem', color: 'text.secondary' }}>
                 <Box component="b" sx={{ color: 'text.primary' }}>Work at {short}?</Box> Claim this profile to update details and answer student questions.
               </Typography>
-              <Box component={Link} href="/contact" sx={{ display: 'flex', alignItems: 'center', minHeight: 44, px: 2, border: '1px solid', borderColor: 'grey.400', borderRadius: 1.5, color: 'text.primary', fontSize: '0.9rem', fontWeight: 600, textDecoration: 'none', '&:hover': { bgcolor: 'action.hover' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}>
+              <Box component="a" href="/college-dashboard/login?request=1" sx={{ display: 'flex', alignItems: 'center', minHeight: 44, px: 2, border: '1px solid', borderColor: 'grey.400', borderRadius: 1.5, color: 'text.primary', fontSize: '0.9rem', fontWeight: 600, textDecoration: 'none', '&:hover': { bgcolor: 'action.hover' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}>
                 Claim profile
               </Box>
             </Box>

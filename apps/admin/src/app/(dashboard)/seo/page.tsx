@@ -38,6 +38,7 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import LinkOffIcon from '@mui/icons-material/LinkOff';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis } from 'recharts';
 import { EmptyState, OpsPageHeader, OpsSkeleton, StatusChip, TARGET_44, type Tone } from '@/components/ops/OpsUi';
 import { AdminOnly, KpiCard } from '@/components/marketing-ai/Parts';
@@ -259,9 +260,11 @@ export default function SeoHealthPage() {
         </Paper>
       )}
 
+      {s?.askGoogle?.length > 0 && <AskGoogleCard items={s.askGoogle} siteUrl={s.connection.siteUrl} setToast={setToast} />}
+
       <Paper variant="outlined" sx={{ borderRadius: 2 }}>
         <Tabs value={tab} onChange={(_, v) => changeTab(v)} variant="scrollable" allowScrollButtonsMobile aria-label="SEO Health views" sx={{ borderBottom: 1, borderColor: 'divider', px: 1 }}>
-          <Tab value="issues" label={`Issues${s ? ` (${num(s.findings.total)})` : ''}`} sx={TARGET_44} />
+          <Tab value="issues" label={`Issues${s ? ` (${num(s.findings.issues ?? s.findings.total)})` : ''}`} sx={TARGET_44} />
           <Tab value="search" label="Search performance" sx={TARGET_44} />
           <Tab value="urls" label={`URLs${s ? ` (${num(s.coverage.tracked)})` : ''}`} sx={TARGET_44} />
           <Tab value="runs" label="Runs" sx={TARGET_44} />
@@ -298,6 +301,79 @@ export default function SeoHealthPage() {
   );
 }
 
+/* ─────────────────────────── Ask Google ─────────────────────────── */
+
+/**
+ * Google's API cannot request indexing for ordinary pages, so this is the one
+ * manual step: open the page in Search Console URL Inspection and press
+ * "Request indexing" there (about 10 a day). Marking it here takes the page off
+ * the list for 14 days.
+ */
+function AskGoogleCard({ items, siteUrl, setToast }: { items: Array<{ url: string; coverage_state: string | null }>; siteUrl: string; setToast: (m: string) => void }) {
+  const [done, setDone] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState<string | null>(null);
+  const inspectUrl = (u: string) => `https://search.google.com/search-console/inspect?resource_id=${encodeURIComponent(siteUrl)}&id=${encodeURIComponent(u)}`;
+
+  const markAsked = async (u: string) => {
+    setBusy(u);
+    try {
+      await api('/api/seo-audit/ask-google', { method: 'POST', body: JSON.stringify({ url: u }) });
+      setDone((d) => new Set(d).add(u));
+    } catch (e: any) {
+      setToast(e.message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const left = items.filter((i) => !done.has(i.url));
+  return (
+    <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 2 }} component="section" aria-labelledby="ask-google-title">
+      <Typography id="ask-google-title" variant="subtitle1" component="h2" fontWeight={700}>
+        Ask Google to index today
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, maxWidth: 820 }}>
+        These pages work but Google has not indexed them. Open each one in Search Console and press Request indexing (Google allows about 10 a day), then mark it asked here. Most valuable first.
+      </Typography>
+      {left.length === 0 ? (
+        <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <CheckCircleOutlineIcon fontSize="small" color="success" aria-hidden /> All asked for today.
+        </Typography>
+      ) : (
+        <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, display: 'grid', gap: 1 }}>
+          {left.map((i) => (
+            <Box component="li" key={i.url} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', py: 0.5, borderTop: 1, borderColor: 'divider' }}>
+              <Box sx={{ flex: '1 1 320px', minWidth: 0 }}>
+                <Typography variant="body2" fontWeight={600} noWrap title={i.url}>
+                  {shortUrl(i.url)}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {i.coverage_state || 'Not indexed'}
+                </Typography>
+              </Box>
+              <Button
+                variant="outlined"
+                size="small"
+                endIcon={<OpenInNewIcon fontSize="small" aria-hidden />}
+                href={inspectUrl(i.url)}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Open ${shortUrl(i.url)} in Search Console (new tab)`}
+                sx={TARGET_44}
+              >
+                Open in Search Console
+              </Button>
+              <Button size="small" onClick={() => markAsked(i.url)} disabled={busy === i.url} sx={TARGET_44}>
+                {busy === i.url ? 'Saving…' : 'Mark asked'}
+              </Button>
+            </Box>
+          ))}
+        </Box>
+      )}
+    </Paper>
+  );
+}
+
 /* ───────────────────────────── Issues ───────────────────────────── */
 
 function IssuesTab({
@@ -313,9 +389,10 @@ function IssuesTab({
   onChanged: () => void;
   setToast: (m: string) => void;
 }) {
-  const [status, setStatus] = useState<'open' | 'ignored' | 'fixed'>('open');
+  const [status, setStatus] = useState<'open' | 'waiting' | 'ignored' | 'fixed'>('open');
   const [category, setCategory] = useState('');
-  const [severity, setSeverity] = useState('');
+  // Info items (long titles, thin pages) are content work, so they sit behind the filter.
+  const [severity, setSeverity] = useState('issues');
   const [rows, setRows] = useState<any[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -404,6 +481,9 @@ function IssuesTab({
           <ToggleButton value="open" sx={{ minHeight: 44, px: 2 }}>
             Open
           </ToggleButton>
+          <ToggleButton value="waiting" sx={{ minHeight: 44, px: 2 }}>
+            Waiting for Google
+          </ToggleButton>
           <ToggleButton value="ignored" sx={{ minHeight: 44, px: 2 }}>
             Ignored
           </ToggleButton>
@@ -425,7 +505,8 @@ function IssuesTab({
         <FormControl size="small" sx={{ minWidth: 160 }}>
           <InputLabel id="seo-severity">Severity</InputLabel>
           <Select labelId="seo-severity" label="Severity" value={severity} onChange={(e) => setSeverity(String(e.target.value))}>
-            <MenuItem value="">All</MenuItem>
+            <MenuItem value="issues">Critical to medium</MenuItem>
+            <MenuItem value="">All, with info</MenuItem>
             <MenuItem value="critical">Critical</MenuItem>
             <MenuItem value="high">High</MenuItem>
             <MenuItem value="medium">Medium</MenuItem>
@@ -441,8 +522,14 @@ function IssuesTab({
       {rows && rows.length === 0 && !error ? (
         <EmptyState
           icon={CheckCircleOutlineIcon}
-          title={status === 'open' ? 'Nothing to fix' : status === 'ignored' ? 'No ignored issues' : 'Nothing fixed yet'}
-          body={status === 'open' ? 'No open issues match these filters. If this is the first visit, run "Crawl all pages" from Run now.' : undefined}
+          title={status === 'open' ? 'Nothing to fix' : status === 'waiting' ? 'Nothing waiting on Google' : status === 'ignored' ? 'No ignored issues' : 'Nothing fixed yet'}
+          body={
+            status === 'open'
+              ? 'No open issues match these filters. If this is the first visit, run "Crawl all pages" from Run now.'
+              : status === 'waiting'
+                ? 'Issues we fixed but Google has not re-crawled yet show here. They close by themselves once Google catches up.'
+                : undefined
+          }
         />
       ) : (
         <Box sx={{ height: 640 }}>

@@ -3,7 +3,11 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const revalidateTag = vi.fn();
-vi.mock('next/cache', () => ({ revalidateTag: (tag: string) => revalidateTag(tag) }));
+const revalidatePath = vi.fn();
+vi.mock('next/cache', () => ({
+  revalidateTag: (tag: string) => revalidateTag(tag),
+  revalidatePath: (path: string) => revalidatePath(path),
+}));
 
 import { POST } from './route';
 
@@ -23,6 +27,7 @@ describe('POST /api/revalidate', () => {
   const original = process.env.REVALIDATE_SECRET;
   beforeEach(() => {
     revalidateTag.mockClear();
+    revalidatePath.mockClear();
     process.env.REVALIDATE_SECRET = SECRET;
   });
   afterEach(() => {
@@ -67,5 +72,19 @@ describe('POST /api/revalidate', () => {
     const res = await POST(req({ tags: ['unknown'] }, SECRET));
     expect(res.status).toBe(400);
     expect(revalidateTag).not.toHaveBeenCalled();
+  });
+
+  it('purges one college page in every locale', async () => {
+    const res = await POST(req({ colleges: [{ state_slug: 'tamil-nadu', slug: 'papni-architecture' }] }, SECRET));
+    expect(res.status).toBe(200);
+    expect(revalidatePath).toHaveBeenCalledWith('/en/colleges/tamil-nadu/papni-architecture');
+    expect(revalidatePath).toHaveBeenCalledWith('/ta/colleges/tamil-nadu/papni-architecture');
+    expect(revalidateTag).not.toHaveBeenCalled();
+  });
+
+  it('ignores college entries that are not plain slugs', async () => {
+    const res = await POST(req({ colleges: [{ state_slug: '../admin', slug: 'x' }, { slug: 'only-slug' }] }, SECRET));
+    expect(res.status).toBe(400);
+    expect(revalidatePath).not.toHaveBeenCalled();
   });
 });

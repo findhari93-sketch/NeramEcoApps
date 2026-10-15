@@ -310,6 +310,8 @@ export default function CollegeOutreachPage() {
           college_id: tierTarget.id,
           tier: newTier,
           tier_amount: tierAmount ? Number(tierAmount) : undefined,
+          staff_name: staffName,
+          staff_email: user?.email || undefined,
         }),
       });
       const data = await res.json();
@@ -685,7 +687,7 @@ export default function CollegeOutreachPage() {
               <TextField label="Annual amount (optional, INR)" type="number" size="small"
                 value={tierAmount} onChange={(e) => setTierAmount(e.target.value)} />
               <Typography variant="caption" color="text.secondary">
-                Sets tier_start_date to today and tier_end_date to one year from today.
+                Gives a one-year plan from today and ends any current plan. Free ends the current plan. For trials or custom dates use College Hub, Plans.
               </Typography>
             </Stack>
           )}

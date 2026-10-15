@@ -57,6 +57,12 @@ describe('exam centre facts', () => {
     expect(examCentreCityHasPage([{ centre: centres[0], km: 120, inThisCity: false }])).toBe(true);
   });
 
+  it('indexes a town that is itself a test city, even without other facts', () => {
+    const town = { ...getCity('chennai')!, slug: 'gaya-like', tier: 3 as const, isDistrictHQ: false };
+    expect(examCentreCityGate(town, [{ centre: centres[0], km: 0, inThisCity: true }], 0).index).toBe(true);
+    expect(examCentreCityGate(town, [{ centre: centres[0], km: 20, inThisCity: false }], 0).index).toBe(false);
+  });
+
   it('never indexes on weak facts only', () => {
     const city = { ...getCity('chennai')!, slug: 'x', tier: 3 as const, isDistrictHQ: true };
     const far = [{ centre: centres[0], km: 140, inThisCity: false }];

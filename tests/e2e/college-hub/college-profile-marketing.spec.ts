@@ -86,7 +86,8 @@ test.describe('College page: desktop', () => {
     const similar = page.getByRole('button', { name: /^Compare .+ with these$/ });
     if (await similar.count()) {
       await similar.click();
-      await expect(page).toHaveURL(/\/colleges\/compare\?slugs=[^,]+,/);
+      // The compare page can take a while to compile in dev.
+      await expect(page).toHaveURL(/\/colleges\/compare\?slugs=[^,]+,/, { timeout: 20_000 });
     }
   });
 });

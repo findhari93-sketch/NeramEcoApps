@@ -129,6 +129,11 @@ export function buildTrimSwitch(input: SwitchInputs) {
     }
   }
   const undo = apply ? [] : (trim.plan?.merged ?? []);
+  // A folded checkpoint keeps its original times: it is retired, a zero-length
+  // one breaks the sections table's end > start check (Islamic Architecture's
+  // whole switch rolled back on it, 2026-10-15), and "Use original" restores it
+  // onto the original timeline as it stands.
+  const folded = new Set(merged.map((m) => m.from));
 
   return {
     mode,
@@ -148,7 +153,7 @@ export function buildTrimSwitch(input: SwitchInputs) {
       drive_id: apply ? trim.trimmed_drive_id : trim.original_drive_id,
       item_id: apply ? trim.trimmed_item_id : trim.original_item_id,
       duration_seconds: Math.round(duration),
-      sections: (movedSections.get(recap.id) ?? []).map((s) => ({
+      sections: (movedSections.get(recap.id) ?? []).filter((s) => !folded.has(s.id)).map((s) => ({
         id: s.id,
         start: Math.round(s.start_timestamp_seconds),
         end: Math.round(s.end_timestamp_seconds),

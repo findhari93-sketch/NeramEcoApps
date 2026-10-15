@@ -15,7 +15,7 @@ interface LeadCaptureButtonProps {
 }
 
 export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptureButtonProps) {
-  const { user, name, setName, phone, setPhone, consent, setConsent, submitting, error, success, submit } =
+  const { user, name, setName, phone, setPhone, parentPhone, setParentPhone, consent, setConsent, submitting, error, success, submit } =
     useCollegeLead(collegeId);
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState('');
@@ -97,6 +97,15 @@ export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptur
               autoFocus={Boolean(user?.name) && !phone}
             />
             <TextField
+              label="Parent's mobile (optional)"
+              value={parentPhone}
+              onChange={(e) => setParentPhone(e.target.value)}
+              fullWidth
+              size="small"
+              inputProps={{ inputMode: 'numeric' }}
+              helperText="Under 18? The college can talk to your parent too."
+            />
+            <TextField
               label="Email (optional)"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -142,7 +151,7 @@ export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptur
               }
               label={
                 <Typography variant="caption">
-                  I agree to share my name, phone, and score with {collegeName} for admission inquiries.
+                  I agree to share my details with {collegeName} so their admissions team can contact me.
                 </Typography>
               }
             />

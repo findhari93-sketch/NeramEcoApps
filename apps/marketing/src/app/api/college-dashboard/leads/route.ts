@@ -1,93 +1,82 @@
-// @ts-nocheck
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@neram/database';
-import { verifyCollegeDashboardAuth } from '@/lib/college-dashboard/auth';
+import { dashboardErrorResponse, requireCollegeAction, verifyCollegeDashboardAuth, DashboardError } from '@/lib/college-dashboard/auth';
+import { effectiveTier } from '@/lib/college-hub/plan';
+import { LEAD_STATUSES, maskPhone, showsFullPhone } from '@/lib/college-dashboard/leads';
 
-function maskPhone(phone: string): string {
-  if (phone.length < 6) return phone;
-  return phone.slice(0, 2) + 'X'.repeat(phone.length - 4) + phone.slice(-2);
-}
-
+/**
+ * GET   /api/college-dashboard/leads   enquiries delivered to this college
+ * PATCH /api/college-dashboard/leads   {id, status?, college_note?}
+ *
+ * Only delivered leads are shown: approved by staff, or delivered straight
+ * away because the student agreed to share with this college while it was on
+ * a plan. Phones are masked below Gold.
+ */
 export async function GET(request: NextRequest) {
   try {
-    const authUser = await verifyCollegeDashboardAuth(request);
-    const supabase = createAdminClient();
+    const user = await verifyCollegeDashboardAuth(request);
+    const db = createAdminClient() as any;
 
-    // Check the college's tier to decide phone masking
-    const { data: college } = await supabase
+    const { data: college } = await db
       .from('colleges')
-      .select('neram_tier')
-      .eq('id', authUser.college_id)
+      .select('neram_tier, tier_start_date, tier_end_date')
+      .eq('id', user.college_id)
       .single();
+    const tier = effectiveTier(college ?? {});
+    const full = showsFullPhone(tier);
 
-    const tier = college?.neram_tier ?? 'free';
-    const showFullPhone = tier === 'gold' || tier === 'platinum';
-
-    // Only show leads that Neram staff has approved. Pending/rejected/spam leads
-    // stay invisible to the college.
-    const { data: leads, error } = await supabase
+    const { data: leads, error } = await db
       .from('college_leads')
-      .select('id, name, phone, email, city, nata_score, status, created_at')
-      .eq('college_id', authUser.college_id)
+      .select('id, name, phone, parent_phone, email, city, nata_score, jee_score, message, status, college_note, created_at, status_updated_at')
+      .eq('college_id', user.college_id)
       .eq('admin_review_status', 'approved')
       .order('created_at', { ascending: false })
-      .limit(200);
-
+      .limit(300);
     if (error) throw error;
 
-    const rows = (leads ?? []).map((lead) => ({
+    const rows = (leads ?? []).map((lead: any) => ({
       ...lead,
-      phone: showFullPhone ? lead.phone : maskPhone(lead.phone ?? ''),
-      phone_masked: !showFullPhone,
+      phone: full ? lead.phone : maskPhone(lead.phone ?? ''),
+      parent_phone: lead.parent_phone ? (full ? lead.parent_phone : maskPhone(lead.parent_phone)) : null,
+      email: full ? lead.email : null,
+      phone_masked: !full,
     }));
 
     return NextResponse.json({ data: rows, tier });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Error';
-    const status = msg === 'No token' || msg === 'Invalid token' ? 401 : 500;
-    return NextResponse.json({ error: msg }, { status });
+    return dashboardErrorResponse(err);
   }
 }
 
 export async function PATCH(request: NextRequest) {
   try {
-    const authUser = await verifyCollegeDashboardAuth(request);
-    const { id, status } = await request.json();
-
-    const allowedStatuses = ['new', 'contacted', 'qualified', 'dropped'];
-    if (!id || !status || !allowedStatuses.includes(status)) {
-      return NextResponse.json(
-        { error: `status must be one of: ${allowedStatuses.join(', ')}` },
-        { status: 400 }
-      );
+    const user = await requireCollegeAction(request, 'manage_leads');
+    const body = (await request.json().catch(() => ({}))) as { id?: string; status?: string; college_note?: string };
+    if (!body.id) throw new DashboardError(400, 'Choose an enquiry.');
+    const updates: Record<string, unknown> = {};
+    if (body.status !== undefined) {
+      if (!LEAD_STATUSES.some((s) => s.value === body.status)) throw new DashboardError(400, 'Unknown status.');
+      updates.status = body.status;
+      updates.status_updated_at = new Date().toISOString();
     }
-
-    const supabase = createAdminClient();
-
-    // Verify this lead belongs to the college admin's college AND is approved.
-    // Non-approved leads are invisible to the college, so they can't be updated either.
-    const { data: lead } = await supabase
-      .from('college_leads')
-      .select('college_id, admin_review_status')
-      .eq('id', id)
-      .single();
-
-    if (!lead || lead.college_id !== authUser.college_id || lead.admin_review_status !== 'approved') {
-      return NextResponse.json({ error: 'Lead not found' }, { status: 404 });
+    if (body.college_note !== undefined) {
+      const note = String(body.college_note).trim();
+      if (note.length > 1000) throw new DashboardError(400, 'Keep the note under 1000 characters.');
+      updates.college_note = note || null;
     }
+    if (Object.keys(updates).length === 0) throw new DashboardError(400, 'Nothing to update.');
 
-    const { error } = await supabase
-      .from('college_leads')
-      .update({ status })
-      .eq('id', id);
-
+    const db = createAdminClient() as any;
+    const { data: lead } = await db.from('college_leads').select('college_id, admin_review_status').eq('id', body.id).maybeSingle();
+    if (!lead || lead.college_id !== user.college_id || lead.admin_review_status !== 'approved') {
+      throw new DashboardError(404, 'Enquiry not found.');
+    }
+    const { error } = await db.from('college_leads').update(updates).eq('id', body.id);
     if (error) throw error;
     return NextResponse.json({ success: true });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Error';
-    const status = msg === 'No token' || msg === 'Invalid token' ? 401 : 500;
-    return NextResponse.json({ error: msg }, { status });
+    return dashboardErrorResponse(err);
   }
 }

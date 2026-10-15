@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { categoryEligibility } from '@/lib/marketing-ai/autopilot';
 import { DAYS_PER_BILLING_MONTH, effectiveTargets, missingLiveEnv, readAdsEnv } from '@/lib/marketing-ai/config';
-import { requireAdminRole } from '@/lib/marketing-ai/guard';
+import { cronIdleReason, requireAdminRole } from '@/lib/marketing-ai/guard';
 import { errorResponse } from '@/lib/marketing-ai/http';
 import { comparePeriods, dailySeries, lastCompleteDayIST, shiftDate, toTotals, windowEnding } from '@/lib/marketing-ai/metrics';
 import { countSignups } from '@/lib/marketing-ai/funnel';
@@ -133,6 +133,7 @@ export async function GET(request: NextRequest) {
         customerId: env.customerId,
         missing: env.mode === 'live' ? missingLiveEnv(env) : [],
         mutationsAllowed: env.allowMutations,
+        runsBlocked: cronIdleReason() !== null,
         conversionActions: { phone: !!env.conversionActionPhone, demo: !!env.conversionActionDemo, paid: !!env.conversionActionPaid },
       },
       endDate,

@@ -1154,6 +1154,10 @@ export type Database = {
           ai_response: string | null
           created_at: string
           error: string | null
+          geo_city: string | null
+          geo_country: string | null
+          geo_source: string | null
+          geo_state: string | null
           id: string
           lead_name: string | null
           lead_phone: string | null
@@ -1173,6 +1177,10 @@ export type Database = {
           ai_response?: string | null
           created_at?: string
           error?: string | null
+          geo_city?: string | null
+          geo_country?: string | null
+          geo_source?: string | null
+          geo_state?: string | null
           id?: string
           lead_name?: string | null
           lead_phone?: string | null
@@ -1192,6 +1200,10 @@ export type Database = {
           ai_response?: string | null
           created_at?: string
           error?: string | null
+          geo_city?: string | null
+          geo_country?: string | null
+          geo_source?: string | null
+          geo_state?: string | null
           id?: string
           lead_name?: string | null
           lead_phone?: string | null

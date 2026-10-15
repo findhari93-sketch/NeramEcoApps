@@ -65,7 +65,7 @@ export async function runInspect(opts: { gsc: GscClient; client?: any; deadline:
   if (budget === 0) return { inspected: 0, errors: 0, skipped: 'daily budget used' };
 
   const rows = await loadUrlStatus(client);
-  const { data: open } = await client.from('seo_findings').select('url').eq('status', 'open').eq('category', 'indexing').limit(5000);
+  const { data: open } = await client.from('seo_findings').select('url').in('status', ['open', 'waiting']).eq('category', 'indexing').limit(5000);
   const openUrls = new Set<string>((open ?? []).map((f: any) => normUrl(f.url || '')));
   const lastmods = new Map(rows.map((r) => [r.url, r.sitemap_lastmod]));
   const todo = pickForInspection(rows, openUrls, budget, now);

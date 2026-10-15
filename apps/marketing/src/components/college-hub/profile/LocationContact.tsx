@@ -6,6 +6,7 @@ import TrainOutlinedIcon from '@mui/icons-material/TrainOutlined';
 import FlightOutlinedIcon from '@mui/icons-material/FlightOutlined';
 import type { CollegeDetail } from '@/lib/college-hub/types';
 import { statLabelSx } from '../directory/hub-styles';
+import CollegeMap from './CollegeMap';
 
 export function fullAddress(c: CollegeDetail): string {
   const parts = [c.address, c.city, c.district && c.district !== c.city ? `${c.district} District` : null, c.state].filter(Boolean) as string[];
@@ -39,8 +40,15 @@ const button = {
   '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
 };
 
-/** Location and contact (canvas: address, admissions phone, website, directions, call). */
+/**
+ * Location and contact (canvas: map, address, admissions phone, website,
+ * directions, call). The map shows only when the college has a pin; without
+ * one, Directions searches Google Maps by name.
+ */
 export default function LocationContact({ college: c }: { college: CollegeDetail }) {
+  const lat = c.latitude != null ? Number(c.latitude) : NaN;
+  const lng = c.longitude != null ? Number(c.longitude) : NaN;
+  const hasPin = Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0);
   const phone = c.admissions_phone ?? c.phone;
   const email = c.admissions_email ?? c.email;
   const travel = [
@@ -50,6 +58,11 @@ export default function LocationContact({ college: c }: { college: CollegeDetail
 
   return (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2.5 }}>
+      {hasPin && (
+        <Box sx={{ flex: '1 1 100%' }}>
+          <CollegeMap lat={lat} lng={lng} name={c.name} />
+        </Box>
+      )}
       <Box component="dl" sx={{ m: 0, flex: '1 1 300px', display: 'flex', flexDirection: 'column', gap: 1.75 }}>
         <Box>
           <Box component="dt" sx={statLabelSx}>Address</Box>

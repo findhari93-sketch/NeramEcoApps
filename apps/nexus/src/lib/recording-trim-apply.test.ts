@@ -182,6 +182,14 @@ describe('buildTrimSwitch: a checkpoint the trim empties', () => {
     expect(out.recaps[0].sections.find((s) => s.id === 'phases')).toEqual({ id: 'phases', start: 0, end: 509 });
   });
 
+  it('leaves the retired checkpoint on its original times, never zero length', () => {
+    // The sections table checks end > start; writing intro as 0 to 0 rolled
+    // back the whole Islamic Architecture switch on prod (2026-10-15).
+    const out = buildTrimSwitch(inputs({ trim: islamic, recaps: [recap] }));
+    expect(out.recaps[0].sections.map((s) => s.id)).toEqual(['phases', 'loads']);
+    for (const s of out.recaps[0].sections) expect(s.end).toBeGreaterThan(s.start);
+  });
+
   it('leaves checkpoints of a minute or more alone', () => {
     const out = buildTrimSwitch(inputs());
     expect(out.recaps[0].archive_sections).toEqual([]);

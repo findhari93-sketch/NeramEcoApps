@@ -1,197 +1,224 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
-  Box, Typography, Stack, Paper, Chip, CircularProgress,
-  Alert, Select, MenuItem, FormControl, Table, TableBody,
-  TableCell, TableContainer, TableHead, TableRow,
+  Alert, Box, Button, Chip, MenuItem, Skeleton, Stack, TextField, Typography,
 } from '@mui/material';
-import PeopleIcon from '@mui/icons-material/People';
-import LockIcon from '@mui/icons-material/Lock';
+import ForumOutlinedIcon from '@mui/icons-material/ForumOutlined';
+import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { useCollegeDashboard } from '../context';
+import { Card, EmptyState, PageHeader, formatDay } from '../ui';
+import { LEAD_STATUSES, leadStatusLabel } from '@/lib/college-dashboard/leads';
+import { can } from '@/lib/college-dashboard/permissions';
 
 interface Lead {
   id: string;
   name: string;
   phone: string;
+  parent_phone: string | null;
   email: string | null;
   city: string | null;
   nata_score: number | null;
+  jee_score: number | null;
+  message: string | null;
   status: string;
+  college_note: string | null;
   created_at: string;
   phone_masked: boolean;
 }
 
-const STATUS_OPTIONS = ['new', 'contacted', 'qualified', 'dropped'];
+const FILTERS = [{ value: 'all', label: 'All' }, ...LEAD_STATUSES];
 
-const STATUS_COLORS: Record<string, 'warning' | 'info' | 'success' | 'error' | 'default'> = {
-  new: 'warning',
-  contacted: 'info',
-  qualified: 'success',
-  dropped: 'error',
-};
+function LeadCard({ lead, editable, highlight, onSave }: { lead: Lead; editable: boolean; highlight: boolean; onSave: (patch: Partial<Lead>) => Promise<boolean> }) {
+  const [note, setNote] = useState(lead.college_note ?? '');
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const noteChanged = note.trim() !== (lead.college_note ?? '');
 
-export default function CollegeDashboardLeadsPage() {
-  const { session } = useCollegeDashboard();
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [tier, setTier] = useState('free');
-  const [loading, setLoading] = useState(true);
-  const [updateMsg, setUpdateMsg] = useState('');
-
-  const load = useCallback(async () => {
-    if (!session?.access_token) return;
-    setLoading(true);
-    try {
-      const res = await fetch('/api/college-dashboard/leads', {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-      if (res.ok) {
-        const json = await res.json();
-        setLeads(json.data ?? []);
-        setTier(json.tier ?? 'free');
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [session?.access_token]);
-
-  useEffect(() => { load(); }, [load]);
-
-  const updateStatus = async (id: string, status: string) => {
-    if (!session?.access_token) return;
-    await fetch('/api/college-dashboard/leads', {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({ id, status }),
-    });
-    setUpdateMsg('Status updated.');
-    setLeads((prev) => prev.map((l) => (l.id === id ? { ...l, status } : l)));
-    setTimeout(() => setUpdateMsg(''), 2000);
+  const save = async (patch: Partial<Lead>) => {
+    setSaving(true);
+    setSaved(false);
+    const ok = await onSave(patch);
+    setSaving(false);
+    setSaved(ok);
   };
 
-  const phoneMasked = tier === 'free' || tier === 'silver';
+  const details = [
+    lead.city,
+    lead.nata_score != null ? `NATA ${lead.nata_score}` : null,
+    lead.jee_score != null ? `JEE ${lead.jee_score}` : null,
+  ].filter(Boolean);
 
   return (
-    <Stack gap={3}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between">
-        <Stack direction="row" alignItems="center" gap={1.5}>
-          <Box
-            sx={{
-              width: 42, height: 42, bgcolor: '#16a34a',
-              borderRadius: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            }}
+    <Card sx={highlight ? { borderColor: 'primary.main', boxShadow: (t: any) => `0 0 0 2px ${t.palette.primary.light}` } : undefined}>
+      <Box id={`lead-${lead.id}`} sx={{ display: 'flex', flexDirection: { xs: 'column', md: 'row' }, gap: 2 }}>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap">
+            <Typography sx={{ fontWeight: 700, fontSize: 17 }}>{lead.name}</Typography>
+            <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{formatDay(lead.created_at)}</Typography>
+          </Stack>
+          {details.length > 0 && <Typography sx={{ fontSize: 14, color: 'text.secondary' }}>{details.join(' · ')}</Typography>}
+          <Stack direction="row" gap={1} flexWrap="wrap" sx={{ mt: 1.25 }}>
+            {lead.phone_masked ? (
+              <Chip icon={<LockOutlinedIcon />} label={lead.phone} variant="outlined" sx={{ fontFamily: 'monospace' }} />
+            ) : (
+              <Button component="a" href={`tel:+91${lead.phone}`} variant="outlined" startIcon={<PhoneOutlinedIcon />} sx={{ minHeight: 44, textTransform: 'none' }}>
+                Call {lead.phone}
+              </Button>
+            )}
+            {lead.parent_phone &&
+              (lead.phone_masked ? (
+                <Chip label={`Parent ${lead.parent_phone}`} variant="outlined" sx={{ fontFamily: 'monospace' }} />
+              ) : (
+                <Button component="a" href={`tel:+91${lead.parent_phone}`} variant="text" startIcon={<PhoneOutlinedIcon />} sx={{ minHeight: 44, textTransform: 'none' }}>
+                  Parent {lead.parent_phone}
+                </Button>
+              ))}
+            {lead.email && (
+              <Button component="a" href={`mailto:${lead.email}`} variant="text" sx={{ minHeight: 44, textTransform: 'none' }}>
+                {lead.email}
+              </Button>
+            )}
+          </Stack>
+          {lead.message && (
+            <Typography sx={{ mt: 1.25, fontSize: 14.5, bgcolor: 'grey.50', p: 1.25, borderRadius: 1.5, whiteSpace: 'pre-wrap' }}>
+              {lead.message}
+            </Typography>
+          )}
+        </Box>
+        <Stack gap={1.25} sx={{ width: { md: 300 }, flexShrink: 0 }}>
+          <TextField
+            select
+            label="What happened"
+            value={LEAD_STATUSES.some((s) => s.value === lead.status) ? lead.status : 'new'}
+            onChange={(e) => void save({ status: e.target.value })}
+            disabled={!editable || saving}
+            size="small"
+            fullWidth
           >
-            <PeopleIcon sx={{ color: 'white' }} />
-          </Box>
-          <Box>
-            <Typography variant="h5" fontWeight={700}>
-              Leads ({leads.length})
-            </Typography>
-            <Typography variant="caption" color="text.secondary">
-              Students who expressed interest in your college
-            </Typography>
-          </Box>
+            {LEAD_STATUSES.map((s) => (
+              <MenuItem key={s.value} value={s.value} sx={{ minHeight: 44 }}>{s.label}</MenuItem>
+            ))}
+          </TextField>
+          <TextField
+            label="Private note for your team"
+            value={note}
+            onChange={(e) => { setNote(e.target.value); setSaved(false); }}
+            disabled={!editable || saving}
+            multiline
+            minRows={2}
+            size="small"
+            fullWidth
+          />
+          {editable && (noteChanged || saved) && (
+            <Stack direction="row" justifyContent="flex-end" alignItems="center" gap={1}>
+              {saved && !noteChanged && <Typography sx={{ fontSize: 13, color: 'success.dark' }} role="status">Saved</Typography>}
+              {noteChanged && (
+                <Button size="small" variant="contained" onClick={() => void save({ college_note: note })} disabled={saving} sx={{ minHeight: 40 }}>
+                  Save note
+                </Button>
+              )}
+            </Stack>
+          )}
         </Stack>
-      </Stack>
+      </Box>
+    </Card>
+  );
+}
 
-      {phoneMasked && (
-        <Alert severity="info" icon={<LockIcon />}>
-          Phone numbers are partially masked on your current tier. Upgrade to Gold or Platinum to see full phone numbers.
+function LeadsInner() {
+  const { api, collegeAdmin } = useCollegeDashboard();
+  const params = useSearchParams();
+  const highlight = params.get('highlight');
+  const [leads, setLeads] = useState<Lead[] | null>(null);
+  const [tier, setTier] = useState('free');
+  const [filter, setFilter] = useState('all');
+  const [error, setError] = useState('');
+  const editable = can(collegeAdmin?.role, 'manage_leads');
+
+  const load = useCallback(async () => {
+    const r = await api<{ data: Lead[]; tier: string }>('/api/college-dashboard/leads');
+    if (r.ok) {
+      setLeads(r.data.data);
+      setTier(r.data.tier);
+    } else setError(r.data.error ?? 'Could not load enquiries.');
+  }, [api]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    if (leads && highlight) document.getElementById(`lead-${highlight}`)?.scrollIntoView({ block: 'center' });
+  }, [leads, highlight]);
+
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: leads?.length ?? 0 };
+    for (const l of leads ?? []) c[l.status] = (c[l.status] ?? 0) + 1;
+    return c;
+  }, [leads]);
+
+  const shown = (leads ?? []).filter((l) => filter === 'all' || l.status === filter);
+
+  return (
+    <Stack gap={2}>
+      <PageHeader
+        title="Admission enquiries"
+        intro="Students who asked about admission at your college and agreed to share their details with you. Call them soon: most students decide within a few days."
+      />
+      {tier !== 'gold' && tier !== 'platinum' && (
+        <Alert severity="info" icon={<LockOutlinedIcon />}>
+          Phone numbers are partly hidden on your current plan. Gold and Platinum plans show full numbers. Contact Neram Classes to upgrade.
         </Alert>
       )}
+      {error && <Alert severity="error">{error}</Alert>}
 
-      {updateMsg && (
-        <Alert severity="success" sx={{ py: 0.5 }}>{updateMsg}</Alert>
+      <Stack direction="row" gap={1} sx={{ overflowX: 'auto', pb: 0.5 }} role="group" aria-label="Filter by status">
+        {FILTERS.map((f) => (
+          <Chip
+            key={f.value}
+            label={`${f.label}${counts[f.value] ? ` (${counts[f.value]})` : ''}`}
+            onClick={() => setFilter(f.value)}
+            color={filter === f.value ? 'primary' : 'default'}
+            variant={filter === f.value ? 'filled' : 'outlined'}
+            aria-pressed={filter === f.value}
+            sx={{ minHeight: 40, flexShrink: 0 }}
+          />
+        ))}
+      </Stack>
+
+      {!leads && !error && [0, 1].map((i) => <Skeleton key={i} variant="rounded" height={150} />)}
+      {leads && shown.length === 0 && (
+        <EmptyState
+          icon={<ForumOutlinedIcon />}
+          title={leads.length ? `No enquiries marked ${leadStatusLabel(filter).toLowerCase()}` : 'No enquiries yet'}
+          text={leads.length ? 'Choose another filter above.' : 'When a student asks about admission on your college page and agrees to share their details, they appear here and we email your team.'}
+        />
       )}
-
-      {loading && <CircularProgress />}
-
-      {!loading && leads.length === 0 && (
-        <Paper variant="outlined" sx={{ p: 4, textAlign: 'center' }}>
-          <PeopleIcon sx={{ fontSize: 48, color: 'text.disabled', mb: 1 }} />
-          <Typography color="text.secondary">
-            No leads yet. Leads appear here when students click &quot;I&apos;m Interested&quot; on your college page.
-          </Typography>
-        </Paper>
-      )}
-
-      {!loading && leads.length > 0 && (
-        <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
-          <TableContainer>
-            <Table size="small">
-              <TableHead>
-                <TableRow sx={{ bgcolor: 'grey.50' }}>
-                  <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Phone</TableCell>
-                  <TableCell sx={{ fontWeight: 600, display: { xs: 'none', md: 'table-cell' } }}>City</TableCell>
-                  <TableCell sx={{ fontWeight: 600, display: { xs: 'none', sm: 'table-cell' } }}>NATA Score</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
-                  <TableCell sx={{ fontWeight: 600, display: { xs: 'none', sm: 'table-cell' } }}>Date</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {leads.map((lead) => (
-                  <TableRow key={lead.id} hover>
-                    <TableCell>
-                      <Typography variant="body2" fontWeight={500}>{lead.name}</Typography>
-                      {lead.email && (
-                        <Typography variant="caption" color="text.secondary">{lead.email}</Typography>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Stack direction="row" alignItems="center" gap={0.5}>
-                        <Typography variant="body2" fontFamily="monospace">
-                          {lead.phone}
-                        </Typography>
-                        {lead.phone_masked && (
-                          <LockIcon sx={{ fontSize: 12, color: 'text.disabled' }} />
-                        )}
-                      </Stack>
-                    </TableCell>
-                    <TableCell sx={{ display: { xs: 'none', md: 'table-cell' } }}>
-                      <Typography variant="body2">{lead.city ?? 'N/A'}</Typography>
-                    </TableCell>
-                    <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
-                      <Typography variant="body2">{lead.nata_score ?? 'N/A'}</Typography>
-                    </TableCell>
-                    <TableCell>
-                      <FormControl size="small" sx={{ minWidth: 110 }}>
-                        <Select
-                          value={lead.status}
-                          onChange={(e) => updateStatus(lead.id, e.target.value)}
-                          sx={{ fontSize: 12 }}
-                          renderValue={(v) => (
-                            <Chip
-                              label={v}
-                              size="small"
-                              color={STATUS_COLORS[v] ?? 'default'}
-                              sx={{ fontSize: 11, height: 20 }}
-                            />
-                          )}
-                        >
-                          {STATUS_OPTIONS.map((s) => (
-                            <MenuItem key={s} value={s} sx={{ fontSize: 13 }}>
-                              {s.charAt(0).toUpperCase() + s.slice(1)}
-                            </MenuItem>
-                          ))}
-                        </Select>
-                      </FormControl>
-                    </TableCell>
-                    <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}>
-                      <Typography variant="caption" color="text.secondary">
-                        {new Date(lead.created_at).toLocaleDateString('en-IN')}
-                      </Typography>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        </Paper>
-      )}
+      {shown.map((lead) => (
+        <LeadCard
+          key={lead.id}
+          lead={lead}
+          editable={editable}
+          highlight={lead.id === highlight}
+          onSave={async (patch) => {
+            const r = await api('/api/college-dashboard/leads', { method: 'PATCH', body: { id: lead.id, ...patch } });
+            if (r.ok) setLeads((cur) => (cur ?? []).map((l) => (l.id === lead.id ? { ...l, ...patch } : l)));
+            else setError(r.data.error ?? 'Could not save.');
+            return r.ok;
+          }}
+        />
+      ))}
     </Stack>
+  );
+}
+
+export default function CollegeDashboardLeadsPage() {
+  return (
+    <Suspense fallback={null}>
+      <LeadsInner />
+    </Suspense>
   );
 }

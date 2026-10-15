@@ -5,7 +5,8 @@ import ToolPublicPage from '@/components/tools/page/ToolPublicPage';
 import { DataTable, Section } from '@/components/tools/page/parts';
 import ExamCentresDemo from '@/features/tools/exam-centers/ExamCentresDemo';
 import { getToolSeo } from '@/lib/tools/tool-seo';
-import { examCentrePages, indexedCities } from '@/lib/tools/geo-pages';
+import Link from 'next/link';
+import { allCities, examCentrePages, indexedCities } from '@/lib/tools/geo-pages';
 import { demoCentres, demoCities, demoStates } from '@/lib/tools/data/demo-props';
 import { marketing } from '@/lib/tools/marketing-links';
 import { toolPageMetadata } from '@/lib/seo/tool-metadata';
@@ -51,6 +52,8 @@ export default async function ExamCentresStatePage({ params }: { params: { state
   const list = page.facts.centres;
   const year = Math.max(0, ...centres.map((c) => c.year));
   const cityLinks = indexedCities(cities, state.slug);
+  // Every town with a page, indexed or not, so a search for a small town finds it named here.
+  const towns = allCities(cities, state.slug).filter((c) => c.facts.near[0]);
 
   const answer =
     list.length > 0
@@ -95,6 +98,18 @@ export default async function ExamCentresStatePage({ params }: { params: { state
             caption="Venues are our estimate from past years until admit cards are out."
             head={['Test city', 'Likely venue', 'Status']}
             rows={list.map((c) => [c.label, c.venues[0] ?? 'To be announced', c.confirmed ? 'Confirmed' : 'Probable'])}
+          />
+        </Section>
+      )}
+      {towns.length > 0 && (
+        <Section id="every-town" title={`Nearest NATA test city from every town in ${state.name}`}>
+          <DataTable
+            caption="Straight-line distance from the town. Pick a town for the next nearest options."
+            head={['Town', 'Nearest test city', 'Distance km']}
+            rows={towns.map((t) => {
+              const n = t.facts.near[0];
+              return [<Link key={t.path} href={t.path}>{t.city.name}</Link>, n.centre.label, n.inThisCity ? 0 : n.km ?? ''];
+            })}
           />
         </Section>
       )}

@@ -14,7 +14,7 @@ const nextConfig = {
     // Supabase generated types are out of sync with actual DB schema
     ignoreBuildErrors: true,
   },
-  transpilePackages: ['@neram/ai', '@neram/ui', '@neram/database', '@neram/auth'],
+  transpilePackages: ['@neram/ai', '@neram/ui', '@neram/database', '@neram/auth', '@neram/geo'],
   experimental: {
     // Import only the modules a page uses from the shared barrels, instead of the
     // whole package (Nexus does the same, next.config.js "optimizePackageImports").

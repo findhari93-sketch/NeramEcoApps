@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { expectedCtr, expectedSchema, isNoindex, normUrl, runRules } from './rules';
+import { cityIntent, cityPageUrl, expectedCtr, expectedSchema, isNoindex, normUrl, pickAskGoogle, runRules } from './rules';
+import { cycleYear, SEASONS } from './seasons';
 import type { RuleInput, UrlStatus } from './types';
 
 const NOW = '2026-10-13T00:00:00.000Z';
@@ -228,5 +229,130 @@ describe('AEO rules', () => {
     const r = url({ url: 'https://neramclasses.com/nata-hub', answer_first: false });
     expect(rules(input({ urls: [r] }))).toEqual([]);
     expect(rules(input({ urls: [r], pages28: [{ page: r.url, clicks: 0, impressions: 150, avg_position: 9 }] }))).toEqual(['A4']);
+  });
+});
+
+describe('waiting for Google', () => {
+  const find = (r: UrlStatus, extra: Partial<RuleInput> = {}) => runRules(input({ urls: [r], ...extra }));
+
+  it('I2: Google saw a 404 but we serve 200 now', () => {
+    const [f] = find(url({ url: 'https://neramclasses.com/blog/new-post', page_fetch_state: 'NOT_FOUND', verdict: 'FAIL' }));
+    expect(f).toMatchObject({ rule_id: 'I2', waiting: true });
+  });
+
+  it('I2: a real 404 in our crawl stays open', () => {
+    const [f] = find(url({ url: 'https://neramclasses.com/blog/gone', http_status: 404, page_fetch_state: 'NOT_FOUND' }));
+    expect(f.rule_id).toBe('I2');
+    expect(f.waiting).toBeUndefined();
+  });
+
+  it('I7: our robots.txt allows the URL now', () => {
+    const [f] = find(url({ url: 'https://neramclasses.com/b', robots_txt_state: 'DISALLOWED' }));
+    expect(f).toMatchObject({ rule_id: 'I7', waiting: true });
+    const blocked = find(url({ url: 'https://neramclasses.com/api/x', robots_txt_state: 'DISALLOWED' }));
+    expect(blocked[0].waiting).toBeUndefined();
+  });
+
+  it('I5: Google read an older canonical than the one we serve', () => {
+    const stale = url({ url: 'https://app.neramclasses.com/tools/x', user_canonical: 'https://app.neramclasses.com/', google_canonical: 'https://app.neramclasses.com/tools/y' });
+    expect(find(stale, { sites: [] })[0]).toMatchObject({ rule_id: 'I5', waiting: true });
+    const real = url({ url: 'https://neramclasses.com/z', google_canonical: 'https://neramclasses.com/other', user_canonical: 'https://neramclasses.com/z' });
+    expect(find(real)[0].waiting).toBeUndefined();
+  });
+});
+
+describe('P4 host folding', () => {
+  it('http and www copies of one page do not compete', () => {
+    const q = (page: string, impressions: number) => ({ query: 'nata', page, clicks: 0, impressions, avg_position: 6 });
+    expect(rules(input({ queries28: [q('https://www.neramclasses.com/', 80), q('http://www.neramclasses.com/', 40)] }))).not.toContain('P4');
+  });
+
+  it('brand searches are not cannibalisation', () => {
+    const q = (page: string) => ({ query: 'neram classes', page, clicks: 10, impressions: 80, avg_position: 1.3 });
+    expect(rules(input({ queries28: [q('https://neramclasses.com/'), q('https://neramclasses.com/fees')] }))).not.toContain('P4');
+  });
+});
+
+describe('P6 city demand', () => {
+  it('reads the city and intent from a search', () => {
+    expect(cityIntent('nata coaching in madurai')).toMatchObject({ city: 'madurai', intent: 'nata' });
+    expect(cityIntent('jee paper 2 coaching in patna')).toMatchObject({ city: 'patna', intent: 'jee' });
+    expect(cityIntent('nata exam centre patna')).toMatchObject({ city: 'patna', intent: 'exam-centre' });
+    expect(cityIntent('nata coaching near me')).toBeNull();
+    expect(cityIntent('madurai weather')).toBeNull();
+  });
+
+  it('fires when the city page is held back, not when it is in a sitemap', () => {
+    const queries28 = [{ query: 'nata coaching in patna', page: 'https://neramclasses.com/coaching/nata-coaching-in-bihar', clicks: 0, impressions: 91, avg_position: 8.3 }];
+    const f = runRules(input({ queries28 })).find((x) => x.rule_id === 'P6');
+    expect(f).toMatchObject({ url: cityPageUrl('nata', 'patna', 'bihar'), fingerprint: 'P6|city:nata:patna' });
+    const indexed = url({ url: cityPageUrl('nata', 'patna', 'bihar') });
+    expect(rules(input({ queries28, urls: [indexed] }))).not.toContain('P6');
+  });
+
+  it('needs 20 searches in 28 days', () => {
+    const queries28 = [{ query: 'nata coaching in patna', page: 'https://neramclasses.com/', clicks: 0, impressions: 12, avg_position: 30 }];
+    expect(rules(input({ queries28 }))).not.toContain('P6');
+  });
+});
+
+describe('S1 season coming', () => {
+  const oct = new Date('2026-10-15T00:00:00Z');
+  const aug = new Date('2026-08-15T00:00:00Z');
+
+  it('works out the cycle a season page should name', () => {
+    const nata = SEASONS.find((s) => s.id === 'nata')!;
+    const counselling = SEASONS.find((s) => s.id === 'counselling')!;
+    expect(cycleYear(nata, oct)).toBe(2027);
+    expect(cycleYear(nata, aug)).toBeNull();
+    expect(cycleYear(counselling, oct)).toBeNull();
+    expect(cycleYear(counselling, new Date('2027-02-15T00:00:00Z'))).toBe(2027);
+    expect(cycleYear(counselling, new Date('2026-08-01T00:00:00Z'))).toBe(2026);
+  });
+
+  it('a year in the URL needs a page for the new year', () => {
+    const pages = [url({ url: 'https://neramclasses.com/nata-2026', title: 'NATA 2026: Exam Date' }), url({ url: 'https://neramclasses.com/nata-2026/admit-card', title: 'NATA 2026 Admit Card' })];
+    const s1 = runRules(input({ urls: pages, now: oct })).filter((f) => f.rule_id === 'S1');
+    expect(s1).toHaveLength(1);
+    expect(s1[0]).toMatchObject({ url: 'https://neramclasses.com/nata-2026', detail: { new_url: 'https://neramclasses.com/nata-2027', cycle: 2027 } });
+    const withNext = [...pages, url({ url: 'https://neramclasses.com/nata-2027', title: 'NATA 2027: Exam Date' })];
+    expect(rules(input({ urls: withNext, now: oct }))).not.toContain('S1');
+    expect(rules(input({ urls: pages, now: aug }))).not.toContain('S1');
+  });
+
+  it('a page without a year in its URL needs the new year in its title', () => {
+    const tnea = url({ url: 'https://neramclasses.com/counseling/tnea-barch', title: 'TNEA B.Arch 2026: Important Dates' });
+    expect(rules(input({ urls: [tnea], now: new Date('2027-02-15T00:00:00Z') }))).toContain('S1');
+    expect(rules(input({ urls: [tnea], now: oct }))).not.toContain('S1');
+    const fresh = { ...tnea, title: 'TNEA B.Arch 2027: Important Dates' };
+    expect(rules(input({ urls: [fresh], now: new Date('2027-02-15T00:00:00Z') }))).not.toContain('S1');
+  });
+});
+
+describe('pickAskGoogle', () => {
+  const now = new Date(NOW);
+  const notIndexed = (u: string, over: Partial<UrlStatus> = {}) => url({ url: u, verdict: 'NEUTRAL', coverage_state: 'Discovered - currently not indexed', ...over });
+
+  it('picks working, unindexed sitemap pages, most searched first, at most n', () => {
+    const urls = [
+      notIndexed('https://neramclasses.com/a/b/c'),
+      notIndexed('https://neramclasses.com/hub'),
+      notIndexed('https://neramclasses.com/popular/page'),
+      url({ url: 'https://neramclasses.com/indexed' }),
+      notIndexed('https://neramclasses.com/broken', { http_status: 500 }),
+      notIndexed('https://neramclasses.com/asked', { index_requested_at: '2026-10-10T00:00:00.000Z' }),
+    ];
+    const picked = pickAskGoogle(urls, [{ page: 'https://neramclasses.com/popular/page', clicks: 0, impressions: 40, avg_position: 12 }], now, 2).map((r) => r.url);
+    expect(picked).toEqual(['https://neramclasses.com/popular/page', 'https://neramclasses.com/hub']);
+  });
+});
+
+describe('P4 spread', () => {
+  it('flags a big search split thinly over many pages with none on page one', () => {
+    const queries28 = Array.from({ length: 12 }, (_, i) => ({ query: 'nata coaching', page: `https://neramclasses.com/p${i}`, clicks: 0, impressions: 30 - i, avg_position: 15 + i }));
+    const f = runRules(input({ queries28 })).find((x) => x.fingerprint === 'P4|spread:nata coaching');
+    expect(f?.detail).toMatchObject({ spread: 12 });
+    const onPageOne = queries28.map((q, i) => (i === 0 ? { ...q, avg_position: 4 } : q));
+    expect(runRules(input({ queries28: onPageOne })).some((x) => x.fingerprint === 'P4|spread:nata coaching')).toBe(false);
   });
 });

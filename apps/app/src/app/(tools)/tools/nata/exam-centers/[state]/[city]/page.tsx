@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound, permanentRedirect } from 'next/navigation';
-import { GEONAMES_ATTRIBUTION, INDIAN_CITIES } from '@neram/geo';
+import { GEONAMES_ATTRIBUTION, INDIAN_CITIES, haversineKm, roundKm } from '@neram/geo';
 import ToolPublicPage from '@/components/tools/page/ToolPublicPage';
 import { DataTable, Section } from '@/components/tools/page/parts';
 import ExamCentresDemo from '@/features/tools/exam-centers/ExamCentresDemo';
@@ -69,6 +69,8 @@ export default async function ExamCentresCityPage({ params }: { params: { state:
     : tool.answer;
 
   const otherCities = indexedCities(cities, state.slug).filter((c) => c.city.slug !== city.slug).slice(0, 24);
+  // Towns with the same nearest test cities are answered here (see same-answer.ts).
+  const sameAnswer = first && !first.centre.isCombined ? page.answersFor : [];
 
   return (
     <ToolPublicPage
@@ -111,6 +113,7 @@ export default async function ExamCentresCityPage({ params }: { params: { state:
       ]}
       placeLinks={[{ id: 'nearby', title: `Other towns in ${state.name}`, links: otherCities.map((c) => ({ href: c.path, label: c.city.name })) }]}
       moreLinks={[
+        ...(page.answeredBy ? [{ href: page.answeredBy.path, label: `Towns around ${page.answeredBy.name}: same nearest test cities` }] : []),
         { href: marketing.coachingCity(city.slug), label: `NATA coaching in ${city.name}` },
         { href: marketing.collegesState(state.slug), label: `B.Arch colleges in ${state.name}` },
       ]}
@@ -127,6 +130,15 @@ export default async function ExamCentresCityPage({ params }: { params: { state:
           ])}
         />
       </Section>
+      {sameAnswer.length > 0 && (
+        <Section id="same-answer" title={`Also the nearest test city for these towns`}>
+          <DataTable
+            caption={`Students from these towns near ${city.name} write NATA at the same test cities. Straight-line distance to ${first!.centre.label}.`}
+            head={['Town', 'District', `To ${first!.centre.label} km`]}
+            rows={sameAnswer.map((t) => [t.name, t.district ?? '', roundKm(haversineKm(t, first!.centre))])}
+          />
+        </Section>
+      )}
       <p style={{ fontSize: '0.75rem', opacity: 0.8 }}>{GEONAMES_ATTRIBUTION}</p>
     </ToolPublicPage>
   );

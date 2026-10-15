@@ -21,6 +21,7 @@ export default createMiddleware({
 export const config = {
   // Match only internationalized pathnames
   // Excludes: api, sso, signout, thank-you, college-dashboard (college admin portal),
+  // college-update (the no-login college update link sent on WhatsApp),
   // unsubscribe (public, non-localized outreach opt-out), s (the student detail link,
   // kept short and locale-free because it is pasted raw into WhatsApp), d (the demo
   // join link behind WhatsApp buttons, same reason), r (the review link sent to past
@@ -29,6 +30,6 @@ export const config = {
   matcher: [
     '/',
     '/(en|ta|hi|kn|ml)/:path*',
-    '/((?!api|sso|signout|thank-you|college-dashboard|unsubscribe|s/|d/|r/|_next|_vercel|.*\\..*).*)',
+    '/((?!api|sso|signout|thank-you|college-dashboard|college-update|unsubscribe|s/|d/|r/|_next|_vercel|.*\\..*).*)',
   ],
 };
