@@ -34,6 +34,18 @@ export const STAFF_DEMO_CHANNELS: Array<{ id: string; label: string }> = CHANNEL
   label: LABEL_OVERRIDES[id] ?? CHANNEL_LABELS[id] ?? id,
 }));
 
+/** Who took a demo held outside the desk, unless staff pick someone else. */
+export const DEFAULT_HELD_TUTOR = { upn: 'haribabu@neramclasses.com', name: 'Haribabu' } as const;
+
+/**
+ * The "Who took it" choices: the demo team from Demo settings, plus Haribabu
+ * even when he is not in the team list. Haribabu is the default.
+ */
+export function heldTutorOptions(hosts: Array<{ upn: string; name: string }>): Array<{ upn: string; name: string }> {
+  const list = hosts.map((h) => ({ upn: h.upn.toLowerCase(), name: h.name }));
+  return list.some((h) => h.upn === DEFAULT_HELD_TUTOR.upn) ? list : [{ ...DEFAULT_HELD_TUTOR }, ...list];
+}
+
 export const STAFF_DEMO_PLATFORMS = [
   { id: 'google_meet', label: 'Google Meet' },
   { id: 'teams', label: 'Microsoft Teams' },

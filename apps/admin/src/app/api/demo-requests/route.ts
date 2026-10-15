@@ -10,25 +10,20 @@ import {
   createDemoRequestWithRef,
   DemoActiveRequestError,
   getActiveDemoRequestForUser,
-  updateDemoRequest,
   logDemoRequestEvent,
   enqueueDemoMessages,
-  cancelPendingDemoMessages,
-  thanksSendAfter,
   demoPhone10,
-  formatDemoDateTime,
-  openDemoFollowUp,
   listDemoFollowUpsByDemo,
-  rebookFollowUpAt,
-  type InterestLevel,
   type DemoRequest,
+  type TypedSupabaseClient,
   type DemoWindow,
   type UserType,
   type UserStatus,
 } from '@neram/database';
 import { getRequestAdminId } from '@/lib/request-admin';
 import { loadDemoSettings, demoMarketingOrigin, sendDueDemoMessages } from '@/lib/demo/server';
-import { STAFF_DEMO_CHANNELS, STAFF_DEMO_PLATFORMS, STAFF_DEMO_PAGE_CODE } from '@/lib/demo/staff-add';
+import { STAFF_DEMO_CHANNELS, STAFF_DEMO_PAGE_CODE } from '@/lib/demo/staff-add';
+import { HeldDemoError, parseHeldDemoWithSettings, recordHeldDemo } from '@/lib/demo/record-held';
 
 /**
  * GET /api/demo-requests
@@ -122,6 +117,34 @@ function str(v: unknown, max = 200): string {
   return typeof v === 'string' ? v.trim().slice(0, max) : '';
 }
 
+/**
+ * A person staff picked in Add demo. Fill only what their record is missing
+ * (never overwrite), and remember on the account whether it is the parent's.
+ * Email and phone are unique on users, so a clash is skipped, not fatal.
+ */
+async function updatePickedPerson(
+  supabase: TypedSupabaseClient,
+  user: { id: string; email: string | null; phone: string | null; metadata: Record<string, unknown> | null },
+  accountHolder: 'student' | 'parent',
+  typed: { email: string | null; phone: string },
+): Promise<void> {
+  const patch: Record<string, unknown> = {};
+  // On a parent's account the typed email and mobile are usually the student's.
+  if (accountHolder === 'student') {
+    if (!user.email && typed.email) patch.email = typed.email;
+    if (!user.phone) patch.phone = `+91${typed.phone}`;
+  }
+  const meta = user.metadata ?? {};
+  if ((meta.account_holder ?? 'student') !== accountHolder) patch.metadata = { ...meta, account_holder: accountHolder };
+  if (!Object.keys(patch).length) return;
+  const { error } = await (supabase as any).from('users').update(patch).eq('id', user.id);
+  if (!error) return;
+  console.warn('demo add: person update skipped:', error.message);
+  if (patch.metadata) {
+    await (supabase as any).from('users').update({ metadata: patch.metadata }).eq('id', user.id);
+  }
+}
+
 const WINDOWS = new Set(['morning', 'afternoon', 'evening', 'anytime']);
 const CLASSES = new Set(['10th', '11th', '12th', '12th-pass', 'other']);
 
@@ -135,6 +158,8 @@ const CLASSES = new Set(['10th', '11th', '12th', '12th-pass', 'other']);
  *                   attended / no-show. An open request of theirs is closed out instead.
  *
  * The person is the picked user, else the one with this phone, else a new lead.
+ * accountHolder 'parent': the picked account is the parent's; the row still
+ * carries the student's name and number.
  */
 export async function POST(req: Request) {
   const actorId = getRequestAdminId(req);
@@ -153,33 +178,31 @@ export async function POST(req: Request) {
     const channelDef = STAFF_DEMO_CHANNELS.find((c) => c.id === channel);
     if (!channelDef) throw new AddError('Pick where they came from.');
 
-    // Held + attended starts a follow-up: validate before anything is written (incl. a new person).
-    const heldAttended = mode === 'held' && body.outcome !== 'no_show';
-    const interest = ['hot', 'warm', 'cold'].includes(String(body.interest)) ? (body.interest as InterestLevel) : null;
-    const nextAt = typeof body.nextFollowUpAt === 'string' ? new Date(body.nextFollowUpAt) : null;
-    if (heldAttended && (!interest || !nextAt || Number.isNaN(nextAt.getTime()))) {
-      throw new AddError('Pick how interested they are and the first follow-up date.');
-    }
+    // Validate the held-demo fields before anything is written (incl. a new person).
+    const heldParsed = mode === 'held' ? await parseHeldDemoWithSettings(body, supabase) : null;
 
     // ---- Who
     const phone = demoPhone10(str(body.phone, 20));
     if (!phone) throw new AddError('Enter a 10-digit Indian mobile number.');
     const emailIn = str(body.email).toLowerCase();
     const email = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(emailIn) ? emailIn : null;
-    let user: { id: string; name: string | null; email: string | null } | null = null;
+    let user: { id: string; name: string | null; email: string | null; phone: string | null; metadata: Record<string, unknown> | null } | null = null;
     const pickedId = str(body.userId, 64);
     if (pickedId) {
-      const { data } = await (supabase as any).from('users').select('id, name, email').eq('id', pickedId).maybeSingle();
+      const { data } = await (supabase as any).from('users').select('id, name, email, phone, metadata').eq('id', pickedId).maybeSingle();
       user = data ?? null;
       if (!user) throw new AddError('That person was not found. Search again.');
     } else {
-      user = await getUserByPhone(phone, supabase);
+      const found = await getUserByPhone(phone, supabase);
+      user = found ? { id: found.id, name: found.name, email: found.email, phone: found.phone, metadata: (found.metadata as Record<string, unknown>) ?? null } : null;
     }
-    const name = str(body.name, 100) || str(user?.name, 100);
+    // "This is the parent's account" only means something for a person staff picked.
+    const accountHolder: 'student' | 'parent' = pickedId && body.accountHolder === 'parent' ? 'parent' : 'student';
+    const name = str(body.name, 100) || (accountHolder === 'student' ? str(user?.name, 100) : '');
     if (name.length < 2) throw new AddError('Enter the student name.');
     let createdPerson = false;
     if (!user) {
-      user = await createUser(
+      const created = await createUser(
         {
           name,
           email,
@@ -199,7 +222,10 @@ export async function POST(req: Request) {
         } as any,
         supabase,
       );
+      user = { id: created.id, name: created.name, email: created.email, phone: created.phone, metadata: null };
       createdPerson = true;
+    } else if (pickedId) {
+      await updatePickedPerson(supabase, user, accountHolder, { email, phone });
     }
     const userId = user!.id;
 
@@ -209,7 +235,7 @@ export async function POST(req: Request) {
     const base = {
       user_id: userId,
       name,
-      email: email || user!.email || null,
+      email: email || (accountHolder === 'student' ? user!.email : null) || null,
       phone,
       current_class: currentClass,
       parent_joining: !!(parentPhone || parentName),
@@ -218,71 +244,38 @@ export async function POST(req: Request) {
       preferred_language: null,
       channel,
       page_code: STAFF_DEMO_PAGE_CODE,
+      account_holder: accountHolder,
     };
     const who = createdPerson ? ' (new person added to People)' : '';
     let row: DemoRequest;
     let sendNow = false;
 
-    if (mode === 'held') {
-      const at = new Date(str(body.heldAt, 40));
-      if (Number.isNaN(at.getTime())) throw new AddError('Pick when the demo happened.');
-      if (at.getTime() > Date.now() + 5 * 60_000) throw new AddError('That time is in the future. Use "Time already agreed" instead.');
-      const platform = STAFF_DEMO_PLATFORMS.find((p) => p.id === str(body.platform, 20));
-      if (!platform) throw new AddError('Pick where the demo happened.');
-      const attended = heldAttended;
-      const minutes = (await loadDemoSettings(supabase)).schedule.durationMinutes;
-      const joinUrl = str(body.joinUrl, 500);
-      const held = {
-        status: (attended ? 'attended' : 'no_show') as DemoRequest['status'],
-        attended,
-        attendance_marked_at: new Date().toISOString(),
-        scheduled_start: at.toISOString(),
-        scheduled_minutes: minutes,
-        teams_join_url: /^https:\/\//.test(joinUrl) ? joinUrl : null,
-      };
+    if (heldParsed) {
       // Close out an open request (e.g. one booked on the website) instead of duplicating it.
       const open = await getActiveDemoRequestForUser(userId, supabase);
-      if (open) {
-        await updateDemoRequest(open.id, { ...held, next_contact_at: null }, supabase);
-        await cancelPendingDemoMessages(open.id, undefined, supabase);
-        row = { ...open, ...held };
-      } else {
-        row = await createDemoRequestWithRef(
-          { ...base, preferred_date: istDateKey(at), preferred_window: 'anytime', ...held },
-          supabase,
-        );
-      }
-      await (supabase as any).from('demo_class_registrations').update({ attendance_marked_by: actorId }).eq('id', row.id);
-      const note = str(body.note, 1000);
-      await logDemoRequestEvent(
-        {
-          registration_id: row.id,
-          kind: 'status',
-          outcome: attended ? 'attended' : 'no_show',
-          note: (
-            `Held outside the desk on ${platform.label}, ${formatDemoDateTime(at)}. ` +
-            (open ? 'Closed their open request. ' : `Added by staff from ${channelDef.label}${who}. `) +
-            note
-          ).trim(),
-          actor_id: actorId,
-        },
+      // What staff typed lands on that request too; its own channel and page code stay.
+      const patch: Partial<DemoRequest> = {
+        name,
+        phone,
+        account_holder: accountHolder,
+        ...(currentClass ? { current_class: currentClass } : {}),
+        ...(email ? { email } : {}),
+        ...(parentName || parentPhone ? { parent_joining: true, parent_name: parentName, parent_phone: parentPhone } : {}),
+      };
+      const res = await recordHeldDemo({
         supabase,
-      );
-      await openDemoFollowUp(
-        attended
-          ? { userId, demoRegistrationId: row.id, kind: 'post_demo', dueAt: nextAt!, interest, note: note || null, actorId }
-          : { userId, demoRegistrationId: row.id, kind: 'demo_rebook', dueAt: rebookFollowUpAt(new Date()), actorId },
-        supabase,
-      );
-      if (body.sendFollowUp === true) {
-        const now = new Date();
-        await enqueueDemoMessages(
-          row,
-          [attended ? { kind: 'thanks', sendAfter: thanksSendAfter(at, minutes, now) } : { kind: 'missed', sendAfter: now }],
-          supabase,
-        );
-        sendNow = true;
-      }
+        actorId,
+        userId,
+        held: heldParsed.held,
+        minutes: heldParsed.settings.schedule.durationMinutes,
+        tutorName: heldParsed.tutorName,
+        existing: open,
+        create: base,
+        patch,
+        source: open ? `Closed their open request.` : `Added by staff from ${channelDef.label}${who}.`,
+      });
+      row = res.row;
+      sendNow = res.queued;
     } else {
       const window = (mode === 'agreed' ? 'anytime' : str(body.window, 20)) as DemoWindow;
       if (!WINDOWS.has(window)) throw new AddError('Pick a time of day, or Any time.');
@@ -307,7 +300,7 @@ export async function POST(req: Request) {
           registration_id: row.id,
           kind: 'status',
           outcome: mode === 'agreed' ? 'contacted' : 'requested',
-          note: `Added by staff from ${channelDef.label}${who}.${mode === 'agreed' ? ' Time agreed, confirm it next.' : ''}`,
+          note: `Added by staff from ${channelDef.label}${who}.${accountHolder === 'parent' ? " Linked to the parent's account." : ''}${mode === 'agreed' ? ' Time agreed, confirm it next.' : ''}`,
           actor_id: actorId,
         },
         supabase,
@@ -327,6 +320,9 @@ export async function POST(req: Request) {
   } catch (error) {
     if (error instanceof AddError) {
       return NextResponse.json({ error: error.message, ...error.extra }, { status: error.status });
+    }
+    if (error instanceof HeldDemoError) {
+      return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error('demo add failed:', error);
     return NextResponse.json({ error: 'Could not add the demo. Try again.' }, { status: 500 });

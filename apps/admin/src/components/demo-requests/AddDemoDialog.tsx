@@ -17,24 +17,20 @@ import {
   Radio,
   RadioGroup,
   TextField,
-  ToggleButton,
-  ToggleButtonGroup,
   Typography,
 } from '@neram/ui';
-import { istDateKey, istDateTime } from '@neram/database/demo-schedule';
-import { STAFF_DEMO_CHANNELS, STAFF_DEMO_PLATFORMS } from '@/lib/demo/staff-add';
-import AttendedFields, { defaultAttendedValue, type AttendedValue } from './AttendedFields';
+import { istDateKey } from '@neram/database/demo-schedule';
+import { STAFF_DEMO_CHANNELS, heldTutorOptions } from '@/lib/demo/staff-add';
+import type { DemoPerson } from '@/app/api/demo-requests/people/route';
+import HeldDemoFields, { checkHeld, defaultHeldValue, heldPayload, type HeldValue } from './HeldDemoFields';
 import type { DeskSettings } from './types';
 
 type Mode = 'request' | 'agreed' | 'held';
+type Person = DemoPerson;
 
-interface Person {
-  id: string;
-  name: string;
-  phone: string | null;
-  email: string | null;
-  user_type?: string;
-}
+const TYPE_LABEL: Record<string, string> = { lead: 'Lead', student: 'Student', parent: "Parent's account" };
+
+const phone10Of = (p: string | null) => (p || '').replace(/\D/g, '').slice(-10);
 
 const MODES: Array<{ id: Mode; title: string; body: string }> = [
   { id: 'request', title: 'Wants a demo', body: 'Goes to New. Call them and confirm a time as usual.' },
@@ -58,10 +54,6 @@ function SectionLabel({ children }: { children: string }) {
   );
 }
 
-function nowIstTime(): string {
-  return new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date());
-}
-
 /**
  * Staff add a demo for someone who reached us outside the website: WhatsApp to
  * the office, a call, a walk-in. Finds the person (or creates them in People),
@@ -73,11 +65,14 @@ export default function AddDemoDialog({
   settings,
   onClose,
   onAdded,
+  onOpenExisting,
 }: {
   open: boolean;
   settings: DeskSettings;
   onClose: () => void;
   onAdded: (id: string, mode: Mode) => void;
+  /** Open a request that already exists for the picked person. */
+  onOpenExisting: (id: string) => void;
 }) {
   const [person, setPerson] = useState<Person | null>(null);
   const [query, setQuery] = useState('');
@@ -94,14 +89,8 @@ export default function AddDemoDialog({
   const [date, setDate] = useState('');
   const [window, setWindow] = useState('anytime');
   const [sendAck, setSendAck] = useState(true);
-  const [heldDate, setHeldDate] = useState('');
-  const [heldTime, setHeldTime] = useState('');
-  const [platform, setPlatform] = useState('google_meet');
-  const [joinUrl, setJoinUrl] = useState('');
-  const [outcome, setOutcome] = useState<'attended' | 'no_show'>('attended');
-  const [note, setNote] = useState('');
-  const [sendFollowUp, setSendFollowUp] = useState(false);
-  const [attendedValue, setAttendedValue] = useState<AttendedValue>(defaultAttendedValue());
+  const [held, setHeld] = useState<HeldValue>(defaultHeldValue);
+  const [parentAccount, setParentAccount] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
@@ -109,7 +98,8 @@ export default function AddDemoDialog({
   useEffect(() => {
     if (!open) return;
     const today = istDateKey(new Date());
-    setAttendedValue(defaultAttendedValue());
+    setHeld(defaultHeldValue());
+    setParentAccount(false);
     setPerson(null);
     setQuery('');
     setOptions([]);
@@ -124,13 +114,6 @@ export default function AddDemoDialog({
     setDate(today);
     setWindow('anytime');
     setSendAck(true);
-    setHeldDate(today);
-    setHeldTime(nowIstTime());
-    setPlatform('google_meet');
-    setJoinUrl('');
-    setOutcome('attended');
-    setNote('');
-    setSendFollowUp(false);
     setError(null);
     setTouched({});
   }, [open]);
@@ -145,10 +128,10 @@ export default function AddDemoDialog({
     let cancelled = false;
     setSearching(true);
     const t = setTimeout(() => {
-      fetch(`/api/crm/users?search=${encodeURIComponent(q)}&limit=8`)
-        .then((r) => (r.ok ? r.json() : { users: [] }))
+      fetch(`/api/demo-requests/people?q=${encodeURIComponent(q)}`)
+        .then((r) => (r.ok ? r.json() : { people: [] }))
         .then((d) => {
-          if (!cancelled) setOptions((d.users ?? []) as Person[]);
+          if (!cancelled) setOptions((d.people ?? []) as Person[]);
         })
         .catch(() => !cancelled && setOptions([]))
         .finally(() => !cancelled && setSearching(false));
@@ -159,31 +142,54 @@ export default function AddDemoDialog({
     };
   }, [query, open, person]);
 
+  /** Fill the form from the account: as the student, or as the student's parent. */
+  const fillFrom = (p: Person, asParent: boolean) => {
+    if (asParent) {
+      setParentName(p.name || '');
+      setParentPhone(phone10Of(p.phone));
+      setName('');
+      setPhone('');
+      setEmail('');
+    } else {
+      setName(p.name || '');
+      setPhone(phone10Of(p.phone));
+      setEmail(p.email || '');
+      setParentName('');
+      setParentPhone('');
+    }
+  };
+
   const pick = (p: Person | null) => {
     setPerson(p);
-    if (p) {
-      setName(p.name || '');
-      setPhone((p.phone || '').replace(/\D/g, '').slice(-10));
-      setEmail(p.email || '');
-    }
+    const asParent = !!p?.is_parent_account;
+    setParentAccount(asParent);
+    if (p) fillFrom(p, asParent);
+    // Someone with an open request: recording a held demo is the usual reason to be here.
+    if (p?.open_request && mode === 'request') setMode('held');
+  };
+
+  const toggleParentAccount = (on: boolean) => {
+    setParentAccount(on);
+    if (person) fillFrom(person, on);
   };
 
   const phone10 = phone.replace(/\D/g, '').slice(-10);
   const phoneOk = /^[6-9]\d{9}$/.test(phone10);
   const nameOk = name.trim().length >= 2;
-  const linkOk = !joinUrl.trim() || /^https:\/\/\S+\.\S+/.test(joinUrl.trim());
-  const heldAt = heldDate && /^\d{2}:\d{2}$/.test(heldTime) ? istDateTime(heldDate, heldTime) : null;
-  const heldInFuture = heldAt ? heldAt.getTime() > Date.now() + 5 * 60_000 : false;
-  const attendedNext = attendedValue.nextDate && /^\d{2}:\d{2}$/.test(attendedValue.nextTime) ? istDateTime(attendedValue.nextDate, attendedValue.nextTime) : null;
+  const heldCheck = checkHeld(held);
   const windows = useMemo(() => settings.schedule.windows, [settings.schedule.windows]);
+  const tutors = useMemo(() => heldTutorOptions(settings.hosts), [settings.hosts]);
+  const openRequest = person?.open_request ?? null;
+  // The server refuses a second open request for the same person; send staff to the open one.
+  const blockedByOpen = !!openRequest && mode !== 'held';
 
   const canSave =
     nameOk &&
     phoneOk &&
     !!channel &&
+    !blockedByOpen &&
     (mode !== 'request' || window === 'anytime' || !!date) &&
-    (mode !== 'held' || (!!heldAt && !heldInFuture && linkOk)) &&
-    (mode !== 'held' || outcome !== 'attended' || (!!attendedValue.interest && !!attendedNext && attendedNext.getTime() > Date.now()));
+    (mode !== 'held' || heldCheck.ok);
 
   const save = async () => {
     setTouched({ name: true, phone: true });
@@ -197,6 +203,7 @@ export default function AddDemoDialog({
         body: JSON.stringify({
           mode,
           userId: person?.id,
+          accountHolder: person && parentAccount ? 'parent' : 'student',
           name: name.trim(),
           phone: phone10,
           email: email.trim(),
@@ -205,9 +212,7 @@ export default function AddDemoDialog({
           parentPhone: parentPhone.replace(/\D/g, ''),
           channel,
           ...(mode === 'request' ? { window, date: window === 'anytime' ? null : date, sendAck } : {}),
-          ...(mode === 'held'
-            ? { heldAt: heldAt?.toISOString(), platform, joinUrl: joinUrl.trim(), outcome, interest: attendedValue.interest, note: outcome === 'attended' ? attendedValue.note.trim() : note.trim(), nextFollowUpAt: attendedNext?.toISOString(), sendFollowUp }
-            : {}),
+          ...(mode === 'held' ? heldPayload(held) : {}),
         }),
       });
       const d = await res.json();
@@ -245,16 +250,25 @@ export default function AddDemoDialog({
               <Typography variant="body2" fontWeight={600}>
                 {o.name}
               </Typography>
-              <Typography variant="caption" color="text.secondary">
-                {[o.phone, o.email, o.user_type].filter(Boolean).join(' · ')}
+              <Typography variant="caption" color="text.secondary" component="p">
+                {[o.phone, o.email, o.is_parent_account ? TYPE_LABEL.parent : TYPE_LABEL[o.user_type] || o.user_type].filter(Boolean).join(' · ')}
               </Typography>
+              {o.open_request && (
+                <Typography variant="caption" color="info.main" component="p">
+                  Open demo request {o.open_request.ref_code}
+                </Typography>
+              )}
             </Box>
           )}
           renderInput={(params) => (
             <TextField
               {...params}
               label="Search People (name, phone or email)"
-              helperText={person ? 'Existing person. Their record is updated, not duplicated.' : 'Not in People yet? Skip this and fill in the details below.'}
+              helperText={
+                person
+                  ? 'Existing person, linked to this demo. A missing email or mobile is added; nothing is overwritten.'
+                  : 'Not in People yet? Skip this and fill in the details below.'
+              }
               InputProps={{
                 ...params.InputProps,
                 endAdornment: (
@@ -267,6 +281,38 @@ export default function AddDemoDialog({
             />
           )}
         />
+        {person && (
+          <FormControlLabel
+            control={<Checkbox checked={parentAccount} onChange={(e) => toggleParentAccount(e.target.checked)} />}
+            label={
+              <Box sx={{ py: 0.5 }}>
+                <Typography variant="body2" fontWeight={600}>
+                  This is the parent&apos;s account
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Their details go in Parent. Type the student&apos;s own name and mobile below (the parent&apos;s mobile is fine if the
+                  student has none).
+                </Typography>
+              </Box>
+            }
+            sx={{ mt: 1, alignItems: 'flex-start', minHeight: 44, '& .MuiCheckbox-root': { mt: -0.5 } }}
+          />
+        )}
+        {openRequest && (
+          <Alert
+            severity={blockedByOpen ? 'warning' : 'info'}
+            sx={{ mt: 1.5 }}
+            action={
+              <Button color="inherit" onClick={() => onOpenExisting(openRequest.id)} sx={{ minHeight: 44 }}>
+                Open {openRequest.ref_code}
+              </Button>
+            }
+          >
+            {blockedByOpen
+              ? `They already have an open request (${openRequest.ref_code}). Work on that one instead.`
+              : `They have an open request (${openRequest.ref_code}). Recording this demo closes it as done, so it is not counted twice.`}
+          </Alert>
+        )}
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2, mt: 2 }}>
           <TextField
             label="Student name"
@@ -400,76 +446,8 @@ export default function AddDemoDialog({
         )}
 
         {mode === 'held' && (
-          <Box sx={{ mt: 2, display: 'grid', gap: 2 }}>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 2 }}>
-              <TextField
-                label="Date"
-                type="date"
-                value={heldDate}
-                onChange={(e) => setHeldDate(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                inputProps={{ max: istDateKey(new Date()) }}
-                required
-              />
-              <TextField
-                label="Start time (India)"
-                type="time"
-                value={heldTime}
-                onChange={(e) => setHeldTime(e.target.value)}
-                InputLabelProps={{ shrink: true }}
-                error={heldInFuture}
-                helperText={heldInFuture ? 'This is in the future. Use Time already agreed.' : ' '}
-                required
-              />
-              <TextField select label="Held on" value={platform} onChange={(e) => setPlatform(e.target.value)}>
-                {STAFF_DEMO_PLATFORMS.map((p) => (
-                  <MenuItem key={p.id} value={p.id}>
-                    {p.label}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Box>
-            <TextField
-              label="Meeting link (optional)"
-              value={joinUrl}
-              onChange={(e) => setJoinUrl(e.target.value)}
-              error={!linkOk}
-              helperText={linkOk ? 'For the record, e.g. the Google Meet link you shared' : 'Paste the full link, starting with https://'}
-              type="url"
-            />
-            <Box>
-              <Typography variant="body2" sx={{ mb: 1 }} id="held-outcome">
-                Did they join?
-              </Typography>
-              <ToggleButtonGroup
-                exclusive
-                value={outcome}
-                onChange={(_, v) => v && setOutcome(v)}
-                aria-labelledby="held-outcome"
-                sx={{ gap: 1, '& .MuiToggleButton-root': { minHeight: 44, px: 2.5, border: 1, borderColor: 'divider', borderRadius: '8px !important', textTransform: 'none' } }}
-              >
-                <ToggleButton value="attended">Attended</ToggleButton>
-                <ToggleButton value="no_show">No-show</ToggleButton>
-              </ToggleButtonGroup>
-            </Box>
-            {outcome === 'attended' ? (
-              <AttendedFields value={attendedValue} onChange={setAttendedValue} />
-            ) : (
-              <TextField
-                label="Note (optional)"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="e.g. Interested, asked about fees. Mother joined."
-                multiline
-                minRows={2}
-                inputProps={{ maxLength: 1000 }}
-              />
-            )}
-            <FormControlLabel
-              control={<Checkbox checked={sendFollowUp} onChange={(e) => setSendFollowUp(e.target.checked)} />}
-              label={outcome === 'attended' ? 'Send the thank-you and feedback WhatsApp' : 'Send the "we missed you" WhatsApp'}
-              sx={{ minHeight: 44 }}
-            />
+          <Box sx={{ mt: 2 }}>
+            <HeldDemoFields value={held} onChange={setHeld} tutors={tutors} />
           </Box>
         )}
 

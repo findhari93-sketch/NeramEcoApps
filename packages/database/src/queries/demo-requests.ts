@@ -38,6 +38,8 @@ export interface DemoRequest {
   parent_name: string | null;
   parent_phone: string | null;
   parent_email: string | null;
+  /** Whose account user_id is: the student's own, or a parent's. */
+  account_holder?: 'student' | 'parent';
   preferred_language: string | null;
   scheduled_start: string | null;
   scheduled_minutes: number;
@@ -125,6 +127,8 @@ export interface CreateDemoRequestInput {
   attendance_marked_at?: string | null;
   channel?: string | null;
   page_code?: string | null;
+  account_holder?: 'student' | 'parent';
+  host_user_id?: string | null;
 }
 
 /** Only v2 rows: a ref_code is what marks a request (vs an old slot registration). */

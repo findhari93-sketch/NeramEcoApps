@@ -91,6 +91,9 @@ export default function RequestList({
                   <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', color: 'text.secondary' }}>
                     <Typography variant="caption">{r.ref_code}</Typography>
                     {classLabel(r.current_class) && <Typography variant="caption">{classLabel(r.current_class)}</Typography>}
+                    {r.account_holder === 'parent' && (
+                      <Chip size="small" variant="outlined" label="Parent's account" sx={{ height: 20, fontSize: 11 }} />
+                    )}
                     {r.parent_joining && (
                       <Tooltip title="Parent joining">
                         <FamilyRestroomIcon aria-label="Parent joining" sx={{ fontSize: 16 }} />

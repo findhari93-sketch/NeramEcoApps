@@ -126,6 +126,8 @@ function DemoDesk() {
       const d = await res.json();
       if (!res.ok) return d.error || 'Something went wrong';
       setDetail(d);
+      // Recorded as held: follow the request to Done so the follow-up box stays in view.
+      if (body.action === 'held') setTab(tabOf(d.request));
       setList((prev) =>
         prev ? { ...prev, requests: prev.requests.map((r) => (r.id === d.request.id ? d.request : r)) } : prev,
       );
@@ -274,6 +276,12 @@ function DemoDesk() {
             loadList();
             select(id);
             if (mode === 'agreed') setConfirmFor(id);
+          }}
+          onOpenExisting={(id) => {
+            setAddOpen(false);
+            const existing = list.requests.find((r) => r.id === id);
+            if (existing) setTab(tabOf(existing));
+            select(id);
           }}
         />
       )}

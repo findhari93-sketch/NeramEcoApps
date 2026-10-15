@@ -36,6 +36,8 @@ import PersonOffIcon from '@mui/icons-material/PersonOff';
 import ReplayIcon from '@mui/icons-material/Replay';
 import SendIcon from '@mui/icons-material/Send';
 import SchoolIcon from '@mui/icons-material/School';
+import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import FamilyRestroomIcon from '@mui/icons-material/FamilyRestroom';
 import {
   DEMO_STATUS_LABELS,
   formatDemoDateTime,
@@ -49,6 +51,8 @@ import LogOutcomeDialog from '@/components/follow-ups/LogOutcomeDialog';
 import GenerateLinkDialog from '@/components/direct-enrollment/GenerateLinkDialog';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
 import AttendedDialog from './AttendedDialog';
+import HeldDemoDialog from './HeldDemoDialog';
+import { heldTutorOptions } from '@/lib/demo/staff-add';
 import ScheduleDialog, { type ScheduleSubmit } from './ScheduleDialog';
 import type { DeskDetail, DeskSettings, DemoRequest } from './types';
 import { ago, classLabel, prettyPhone, telHref, waHref } from './format';
@@ -146,6 +150,7 @@ export default function RequestPanel({
   const [reason, setReason] = useState('');
   const [copied, setCopied] = useState(false);
   const [attendedOpen, setAttendedOpen] = useState(false);
+  const [heldOpen, setHeldOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
   const { supabaseUserId } = useAdminProfile();
@@ -182,7 +187,9 @@ export default function RequestPanel({
   const joinOpen = start ? isJoinOpen(start, r.scheduled_minutes, now) : false;
   const canMarkAttendance = start ? now.getTime() >= start.getTime() - 15 * 60_000 : false;
   const ownLink = isOwnLinkDemo(r);
-  const heldOutside = !r.tutor_upn && !r.organizer_upn;
+  // Confirm always sets an organizer; a demo recorded as held outside the desk has none.
+  const heldOutside = !r.organizer_upn;
+  const parentAccount = r.account_holder === 'parent';
 
   const run = async (key: string, body: Record<string, unknown>) => {
     setBusy(key);
@@ -235,6 +242,9 @@ export default function RequestPanel({
           </Typography>
           <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', mt: 0.5 }}>
             <Chip size="small" color={STATUS_TONE[r.status]} label={DEMO_STATUS_LABELS[r.status]} />
+            {parentAccount && (
+              <Chip size="small" variant="outlined" icon={<FamilyRestroomIcon />} label="Parent's account" />
+            )}
             <Typography variant="body2" color="text.secondary">
               {r.ref_code} · requested {ago(r.created_at, now)}
             </Typography>
@@ -257,7 +267,7 @@ export default function RequestPanel({
           </Box>
           <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
             {heldOutside ? (
-              'Held outside the desk. See the activity log for where and who.'
+              `Held outside the desk${r.tutor_upn ? `, taken by ${nameOf(r.tutor_upn)}` : ''}. See the activity log for where.`
             ) : (
               <>
                 {r.scheduled_minutes} min. Tutor {nameOf(r.tutor_upn || r.organizer_upn)}
@@ -356,6 +366,9 @@ export default function RequestPanel({
                   </Button>
                 </span>
               </Tooltip>
+              <Button startIcon={<EventAvailableIcon />} onClick={() => setHeldOpen(true)} disabled={!!busy} sx={{ minHeight: 44 }}>
+                Held at another time
+              </Button>
             </Box>
           )}
         </Paper>
@@ -444,6 +457,9 @@ export default function RequestPanel({
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
             <Button variant="contained" color="success" startIcon={<EventIcon />} onClick={() => setSchedule('confirm')} sx={{ minHeight: 44 }}>
               Confirm demo
+            </Button>
+            <Button variant="outlined" startIcon={<EventAvailableIcon />} onClick={() => setHeldOpen(true)} disabled={!!busy} sx={{ minHeight: 44 }}>
+              Demo already held
             </Button>
             <Button onClick={() => run('resend', { action: 'resend' })} disabled={!!busy} sx={{ minHeight: 44 }}>
               {busy === 'resend' ? 'Sending' : 'Resend "request received"'}
@@ -537,6 +553,11 @@ export default function RequestPanel({
           {r.parent_joining ? 'Joining' : 'Not joining'}
           {r.parent_name ? `, ${r.parent_name}` : ''}
         </Typography>
+        {parentAccount && (
+          <Typography variant="caption" color="text.secondary" component="p">
+            The linked People record is the parent&apos;s account.
+          </Typography>
+        )}
         {r.parent_phone && (
           <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
             <Typography variant="body2">{prettyPhone(r.parent_phone)}</Typography>
@@ -679,7 +700,15 @@ export default function RequestPanel({
         ))}
         <Box component="li" sx={{ py: 0.75 }}>
           <Typography variant="body2">
-            <b>Requested</b> on the website
+            {r.page_code === 'DC-ADM' ? (
+              <>
+                <b>Added</b> by staff
+              </>
+            ) : (
+              <>
+                <b>Requested</b> on the website
+              </>
+            )}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             {ago(r.created_at, now)}
@@ -709,6 +738,23 @@ export default function RequestPanel({
         onSubmit={async (v) => {
           const err = await run('attendance', { action: r.status === 'approved' ? 'attendance' : 'follow_up', attended: true, ...v });
           if (!err) setAttendedOpen(false);
+        }}
+      />
+
+      <HeldDemoDialog
+        open={heldOpen}
+        name={r.name}
+        confirmed={r.status === 'approved'}
+        tutors={heldTutorOptions(settings.hosts)}
+        busy={busy === 'held'}
+        error={heldOpen ? error : null}
+        onClose={() => {
+          setHeldOpen(false);
+          setError(null);
+        }}
+        onSubmit={async (body) => {
+          const err = await run('held', body);
+          if (!err) setHeldOpen(false);
         }}
       />
 

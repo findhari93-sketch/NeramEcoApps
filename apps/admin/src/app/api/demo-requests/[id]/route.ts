@@ -29,6 +29,7 @@ import {
 import { getRequestAdminId } from '@/lib/request-admin';
 import { loadDemoSettings, demoMarketingOrigin, sendDueDemoMessages, cancelledEventMarker } from '@/lib/demo/server';
 import { buildDemoInviteHtml, demoEventSubject } from '@/lib/demo/messages';
+import { HeldDemoError, parseHeldDemoWithSettings, recordHeldDemo } from '@/lib/demo/record-held';
 import {
   createDemoEvent,
   rescheduleDemoEvent,
@@ -129,7 +130,7 @@ function email(v: unknown): string | null {
 /**
  * POST /api/demo-requests/[id]  { action, ...fields }
  *
- * log_call | note | confirm | reschedule | cancel | attendance | drawing | resend | reopen
+ * log_call | note | confirm | reschedule | cancel | attendance | held | drawing | resend | reopen
  * Every action writes the activity log and returns the refreshed detail.
  */
 export async function POST(req: Request, { params }: Params) {
@@ -394,6 +395,28 @@ export async function POST(req: Request, { params }: Params) {
         break;
       }
 
+      case 'held': {
+        // The demo happened outside the desk (Google Meet, a call, in person), on an
+        // open request or at another time than the one confirmed. A Teams event on a
+        // confirmed demo is left alone: it is in the past or simply unused.
+        if (!['pending', 'contacted', 'approved'].includes(r.status)) {
+          throw new ActionError('This request is already done or closed.');
+        }
+        const { held, settings, tutorName } = await parseHeldDemoWithSettings(body, supabase);
+        const res = await recordHeldDemo({
+          supabase,
+          actorId,
+          userId: r.user_id,
+          held,
+          minutes: r.status === 'approved' && r.scheduled_minutes ? r.scheduled_minutes : settings.schedule.durationMinutes,
+          tutorName,
+          existing: r,
+          source: r.status === 'approved' ? 'Recorded instead of the confirmed time.' : 'Recorded from the request.',
+        });
+        sendNow = res.queued;
+        break;
+      }
+
       case 'drawing': {
         const field = body.field === 'feedback' ? 'drawing_feedback_at' : body.field === 'received' ? 'drawing_received_at' : null;
         if (!field) throw new ActionError('Bad request');
@@ -463,7 +486,7 @@ export async function POST(req: Request, { params }: Params) {
 
     return NextResponse.json({ ...(await detail(r.id)), send });
   } catch (error) {
-    if (error instanceof ActionError || error instanceof DemoTeamsError) {
+    if (error instanceof ActionError || error instanceof DemoTeamsError || error instanceof HeldDemoError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error('demo-request action failed:', error);
