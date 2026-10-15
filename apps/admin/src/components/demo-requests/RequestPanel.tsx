@@ -35,6 +35,7 @@ import HowToRegIcon from '@mui/icons-material/HowToReg';
 import PersonOffIcon from '@mui/icons-material/PersonOff';
 import ReplayIcon from '@mui/icons-material/Replay';
 import SendIcon from '@mui/icons-material/Send';
+import SchoolIcon from '@mui/icons-material/School';
 import {
   DEMO_STATUS_LABELS,
   formatDemoDateTime,
@@ -45,6 +46,8 @@ import {
 import { OpsSkeleton, FOCUS_RING } from '@/components/ops/OpsUi';
 import { INTEREST_LABELS } from '@neram/database/demo-follow-up';
 import LogOutcomeDialog from '@/components/follow-ups/LogOutcomeDialog';
+import GenerateLinkDialog from '@/components/direct-enrollment/GenerateLinkDialog';
+import { useAdminProfile } from '@/contexts/AdminProfileContext';
 import AttendedDialog from './AttendedDialog';
 import ScheduleDialog, { type ScheduleSubmit } from './ScheduleDialog';
 import type { DeskDetail, DeskSettings, DemoRequest } from './types';
@@ -144,6 +147,8 @@ export default function RequestPanel({
   const [copied, setCopied] = useState(false);
   const [attendedOpen, setAttendedOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const { supabaseUserId } = useAdminProfile();
 
   if (loading && !detail) {
     return (
@@ -298,6 +303,13 @@ export default function RequestPanel({
               <Button color="error" onClick={() => setReasonFor('cancel')} disabled={!!busy} sx={{ minHeight: 44 }}>
                 Cancel demo
               </Button>
+            </Box>
+          )}
+          {r.status === 'attended' && !detail.followUp && (
+            <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
+            <Button variant="contained" startIcon={<SchoolIcon />} onClick={() => setLinkOpen(true)} sx={{ minHeight: 44 }}>
+              Send enrolment link
+            </Button>
             </Box>
           )}
           {r.status === 'approved' && (
@@ -470,6 +482,9 @@ export default function RequestPanel({
           <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
             <Button variant="outlined" onClick={() => setLogOpen(true)} sx={{ minHeight: 44 }}>
               Log outcome
+            </Button>
+            <Button variant="contained" startIcon={<SchoolIcon />} onClick={() => setLinkOpen(true)} sx={{ minHeight: 44 }}>
+              Send enrolment link
             </Button>
           </Box>
           <LogOutcomeDialog
@@ -656,6 +671,22 @@ export default function RequestPanel({
         </Box>
       </Box>
 
+      <GenerateLinkDialog
+        open={linkOpen}
+        onClose={() => setLinkOpen(false)}
+        onSuccess={() => {
+          setLinkOpen(false);
+          onAction({ action: 'note', note: 'Enrolment link sent' });
+        }}
+        adminId={supabaseUserId || ''}
+        prefillData={{
+          studentName: r.name,
+          studentPhone: r.phone,
+          studentEmail: r.email || undefined,
+          userId: r.user_id || undefined,
+          demoRegistrationId: r.id,
+        }}
+      />
       <AttendedDialog
         open={attendedOpen}
         name={r.name}

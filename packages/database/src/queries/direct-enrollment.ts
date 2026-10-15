@@ -37,6 +37,8 @@ export interface CreateDirectEnrollmentLinkInput {
   admin_notes?: string;
   payment_proof_url?: string;
   expires_at?: string;
+  user_id?: string;
+  demo_registration_id?: string;
 }
 
 export interface UpdateDirectEnrollmentLinkInput {
@@ -96,6 +98,8 @@ export async function createDirectEnrollmentLink(
       payment_date: data.payment_date || null,
       admin_notes: data.admin_notes || null,
       payment_proof_url: data.payment_proof_url || null,
+      user_id: data.user_id || null,
+      demo_registration_id: data.demo_registration_id || null,
       expires_at: data.expires_at || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
     })
     .select()

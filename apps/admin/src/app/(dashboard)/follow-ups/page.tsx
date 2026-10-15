@@ -12,6 +12,8 @@ import { pickParam } from '@/lib/ops-format';
 import { OpsPageHeader, EmptyState, OpsSkeleton, FOCUS_RING, TARGET_44 } from '@/components/ops/OpsUi';
 import FollowUpRow, { type FollowUp } from '@/components/follow-ups/FollowUpRow';
 import LogOutcomeDialog from '@/components/follow-ups/LogOutcomeDialog';
+import GenerateLinkDialog from '@/components/direct-enrollment/GenerateLinkDialog';
+import { useAdminProfile } from '@/contexts/AdminProfileContext';
 
 type Range = 'overdue' | 'today' | 'week' | 'all';
 const RANGES: readonly Range[] = ['overdue', 'today', 'week', 'all'];
@@ -45,6 +47,8 @@ function FollowUpsInner() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [logging, setLogging] = useState<FollowUp | null>(null);
+  const [linking, setLinking] = useState<FollowUp | null>(null);
+  const { supabaseUserId } = useAdminProfile();
   const [now, setNow] = useState(() => new Date());
 
   const load = useCallback(async () => {
@@ -211,11 +215,27 @@ function FollowUpsInner() {
           </Box>
           <Box component="ul" sx={{ display: 'grid', gap: 1, p: 0, m: 0 }}>
             {items.map((item) => (
-              <FollowUpRow key={item.callback_id} item={item} now={now} onLogOutcome={() => setLogging(item)} />
+              <FollowUpRow key={item.callback_id} item={item} now={now} onLogOutcome={() => setLogging(item)} onSendLink={item.user_id ? () => setLinking(item) : undefined} />
             ))}
           </Box>
         </>
       )}
+      <GenerateLinkDialog
+        open={!!linking}
+        onClose={() => setLinking(null)}
+        onSuccess={() => setLinking(null)}
+        adminId={supabaseUserId || ''}
+        prefillData={
+          linking
+            ? {
+                studentName: linking.person_name || '',
+                studentPhone: linking.person_phone || '',
+                userId: linking.user_id || undefined,
+                demoRegistrationId: linking.demo_registration_id || undefined,
+              }
+            : undefined
+        }
+      />
       <LogOutcomeDialog
         open={!!logging}
         name={logging?.person_name || logging?.person_phone || ''}

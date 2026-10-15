@@ -63,6 +63,7 @@ export default function JourneyTab({ data, detail, adminId, onRefresh }: User360
       studentPhone: detail?.user.phone || '',
       studentEmail: detail?.user.email || '',
       interestCourse: detail?.leadProfile?.interest_course || '',
+      userId: detail?.user.id,
     }),
     [detail],
   );

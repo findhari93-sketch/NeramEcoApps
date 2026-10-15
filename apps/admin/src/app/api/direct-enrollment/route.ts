@@ -82,6 +82,8 @@ export async function POST(request: NextRequest) {
       paymentDate,
       adminNotes,
       paymentProofUrl,
+      userId,
+      demoRegistrationId,
     } = body;
 
     if (!adminId || !studentName || !interestCourse || !amountPaid) {
@@ -92,6 +94,12 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = getSupabaseAdminClient();
+
+    if (userId) {
+      const { data: u } = await (supabase as any).from('users').select('id, user_type').eq('id', userId).maybeSingle();
+      if (!u) return NextResponse.json({ error: 'That person was not found.' }, { status: 400 });
+      if (u.user_type === 'student') return NextResponse.json({ error: 'This person is already a student.' }, { status: 409 });
+    }
 
     // Generate URL-safe unique token
     const token = crypto.randomBytes(16).toString('base64url');
@@ -116,6 +124,8 @@ export async function POST(request: NextRequest) {
         payment_date: paymentDate || undefined,
         admin_notes: adminNotes || undefined,
         payment_proof_url: paymentProofUrl || undefined,
+        user_id: userId || undefined,
+        demo_registration_id: demoRegistrationId || undefined,
       },
       supabase
     );

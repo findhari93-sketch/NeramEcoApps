@@ -22,6 +22,7 @@ import {
 import CloseIcon from '@mui/icons-material/Close';
 import AddIcon from '@mui/icons-material/Add';
 import { IconButton } from '@neram/ui';
+import { tenDigitPhone } from '@/lib/phone';
 
 interface FeeStructure {
   id: string;
@@ -42,6 +43,8 @@ interface GenerateLinkDialogProps {
     studentPhone?: string;
     studentEmail?: string;
     interestCourse?: string;
+    userId?: string;
+    demoRegistrationId?: string;
   };
 }
 
@@ -183,7 +186,7 @@ export default function GenerateLinkDialog({
   useEffect(() => {
     if (open && prefillData) {
       if (prefillData.studentName) setStudentName(prefillData.studentName);
-      if (prefillData.studentPhone) setStudentPhone(prefillData.studentPhone);
+      if (prefillData.studentPhone) setStudentPhone(tenDigitPhone(prefillData.studentPhone));
       if (prefillData.studentEmail) setStudentEmail(prefillData.studentEmail);
       if (prefillData.interestCourse) setInterestCourse(prefillData.interestCourse);
     }
@@ -292,6 +295,8 @@ export default function GenerateLinkDialog({
           paymentDate: paymentDate || undefined,
           adminNotes: adminNotes.trim() || undefined,
           paymentProofUrl: paymentProofUrl || undefined,
+          userId: prefillData?.userId,
+          demoRegistrationId: prefillData?.demoRegistrationId,
         }),
       });
 
@@ -377,6 +382,11 @@ export default function GenerateLinkDialog({
         </DialogTitle>
 
         <DialogContent dividers sx={{ pt: 2 }}>
+          {prefillData?.userId && (
+            <Alert severity="info" sx={{ mb: 2, borderRadius: 1 }}>
+              For {prefillData.studentName}&apos;s existing account. They sign in with the same phone number, so no second account is made.
+            </Alert>
+          )}
           {error && (
             <Alert severity="error" sx={{ mb: 2, borderRadius: 1 }}>
               {error}
