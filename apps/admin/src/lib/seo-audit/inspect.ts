@@ -16,7 +16,16 @@ import type { UrlStatus } from './types';
 
 const FRESH_MS = 3 * 86_400_000;
 
-export function pickForInspection(rows: UrlStatus[], openIndexingUrls: Set<string>, budget: number, now: Date): string[] {
+/** `only` limits inspection to those URLs ("Check my fixes") and skips the freshness checks; the budget still applies. */
+export function pickForInspection(rows: UrlStatus[], openIndexingUrls: Set<string>, budget: number, now: Date, only?: string[]): string[] {
+  if (only) {
+    const scope = new Set(only.map(normUrl));
+    return rows
+      .filter((r) => scope.has(normUrl(r.url)))
+      .sort((a, b) => (a.inspected_at ? Date.parse(a.inspected_at) : 0) - (b.inspected_at ? Date.parse(b.inspected_at) : 0))
+      .slice(0, budget)
+      .map((r) => r.url);
+  }
   const t = now.getTime();
   const stale = (r: UrlStatus) => !r.inspected_at || t - Date.parse(r.inspected_at) > FRESH_MS;
   const rank = (r: UrlStatus) => {
@@ -52,7 +61,7 @@ export function toInspectionRow(url: string, r: IndexStatusResult, lastmod: stri
   };
 }
 
-export async function runInspect(opts: { gsc: GscClient; client?: any; deadline: number; now?: Date }) {
+export async function runInspect(opts: { gsc: GscClient; client?: any; deadline: number; only?: string[]; now?: Date }) {
   const client = opts.client ?? db();
   const now = opts.now ?? new Date();
 
@@ -68,7 +77,7 @@ export async function runInspect(opts: { gsc: GscClient; client?: any; deadline:
   const { data: open } = await client.from('seo_findings').select('url').in('status', ['open', 'waiting']).eq('category', 'indexing').limit(5000);
   const openUrls = new Set<string>((open ?? []).map((f: any) => normUrl(f.url || '')));
   const lastmods = new Map(rows.map((r) => [r.url, r.sitemap_lastmod]));
-  const todo = pickForInspection(rows, openUrls, budget, now);
+  const todo = pickForInspection(rows, openUrls, budget, now, opts.only);
 
   let quotaHit = false;
   const at = now.toISOString();

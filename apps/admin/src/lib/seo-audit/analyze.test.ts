@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { reconcile } from './analyze';
+import { reconcile, urlsToRecheck } from './analyze';
 import type { Finding, FindingRow } from './types';
 
 const NOW = '2026-10-13T00:00:00.000Z';
@@ -92,5 +92,20 @@ describe('reconcile', () => {
     expect(w.reopened).toBe(0);
     const done = reconcile([stored('I2|a', 'waiting')], [], NOW);
     expect(byFp(done.rows)['I2|a']).toMatchObject({ status: 'fixed', resolved_at: NOW });
+  });
+});
+
+describe('urlsToRecheck', () => {
+  it('takes open and waiting pages once each, and the indexing ones apart', () => {
+    const r = urlsToRecheck([
+      { url: 'https://neramclasses.com/a', category: 'onsite', status: 'open' },
+      { url: 'https://neramclasses.com/a/', category: 'indexing', status: 'waiting' },
+      { url: 'https://neramclasses.com/b', category: 'aeo', status: 'open' },
+      { url: 'https://neramclasses.com/c', category: 'indexing', status: 'fixed' },
+      { url: 'https://neramclasses.com/d', category: 'indexing', status: 'ignored' },
+      { url: null, category: 'aeo', status: 'open' },
+    ]);
+    expect(r.all).toEqual(['https://neramclasses.com/a', 'https://neramclasses.com/b']);
+    expect(r.indexing).toEqual(['https://neramclasses.com/a/']);
   });
 });

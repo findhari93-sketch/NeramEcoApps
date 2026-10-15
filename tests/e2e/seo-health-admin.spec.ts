@@ -11,7 +11,8 @@ import { test, expect, type Page } from '@playwright/test';
  *     database, or when the test account is not user_type 'admin'.
  *  3. The screen, with the API mocked, at 1280 and 900 wide: KPIs, the issue
  *     list, the URL drawer with its fix advice, the empty state, the
- *     not-connected banner and no sideways scroll. Skips when the runner cannot
+ *     not-connected banner, the Ask Google card (reasons, copy links), the
+ *     "Check my fixes" run and no sideways scroll. Skips when the runner cannot
  *     get past Microsoft sign-in (see the MFA note in CLAUDE.md).
  *
  * Run: pnpm test:e2e --project="admin-chrome" --no-deps tests/e2e/seo-health-admin.spec.ts
@@ -37,8 +38,10 @@ test.describe('SEO Health @admin', () => {
       const res = await anon.get(path, { failOnStatusCode: false });
       expect([401, 403], path).toContain(res.status());
     }
-    const run = await anon.post('/api/seo-audit/run', { failOnStatusCode: false, data: { kind: 'crawl' } });
-    expect([401, 403]).toContain(run.status());
+    for (const kind of ['crawl', 'recheck']) {
+      const run = await anon.post('/api/seo-audit/run', { failOnStatusCode: false, data: { kind } });
+      expect([401, 403], kind).toContain(run.status());
+    }
     await anon.dispose();
   });
 
@@ -79,6 +82,15 @@ test.describe('SEO Health @admin', () => {
       coverage: { expected: 1037, inspected: 900, indexed: 640, crawled: 1037, tracked: 1050 },
       findings: { total: 2, bySeverity: { critical: 1, high: 0, medium: 1, info: 0 }, byCategory: { indexing: 1, performance: 0, onsite: 1, aeo: 0 } },
       aeo: { checks: 4, passing: 4 },
+      askGoogle: [
+        {
+          url: 'https://neramclasses.com/coaching/nata-coaching-in-assam',
+          coverage_state: 'Alternate page with proper canonical tag',
+          reason: 'Google last read an old canonical on 22 Apr 2026. Ours is fixed, so ask for a re-crawl.',
+          waiting: true,
+        },
+        { url: 'https://neramclasses.com/coaching/jee-paper-2-coaching-in-odisha', coverage_state: 'URL is unknown to Google', reason: 'Google has never seen this page.', waiting: false },
+      ],
       search: {
         end: '2026-10-10',
         now: { clicks: 820, impressions: 41000, position: 14.2 },
@@ -153,6 +165,54 @@ test.describe('SEO Health @admin', () => {
       await expect(page.getByText('Search Console is not connected yet')).toBeVisible();
       await expect(page.getByText('Nothing to fix')).toBeVisible();
       await expect(page.getByText('Waiting for Search Console data').first()).toBeVisible();
+    });
+
+    test('Ask Google: plain reasons, fixed pages marked, links copy with the account', async ({ page, context }) => {
+      await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: ADMIN_BASE });
+      const withAccount = { ...summary, connection: { ...summary.connection, accountEmail: 'seo@neramclasses.com' } };
+      test.skip(!(await open(page, { summary: withAccount })), 'Runner is not signed in to the admin app.');
+      const card = page.getByRole('region', { name: 'Ask Google to index today' });
+      await expect(card.getByText('Google last read an old canonical on 22 Apr 2026. Ours is fixed, so ask for a re-crawl.')).toBeVisible();
+      await expect(card.getByText('Fixed on our side')).toHaveCount(1);
+      await expect(card.getByText('Google has never seen this page.')).toBeVisible();
+
+      const open1 = card.getByRole('link', { name: /Open \/coaching\/nata-coaching-in-assam in Search Console/ });
+      await expect(open1).toHaveAttribute('href', /resource_id=sc-domain%3Aneramclasses\.com&id=https%3A%2F%2Fneramclasses\.com%2Fcoaching%2Fnata-coaching-in-assam&authuser=seo%40neramclasses\.com$/);
+
+      await card.getByRole('button', { name: /Copy link to Search Console for \/coaching\/nata-coaching-in-assam/ }).click();
+      await expect(page.getByText('Link copied. Paste it in the browser signed in to Search Console.')).toBeVisible();
+      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(await open1.getAttribute('href'));
+
+      await card.getByRole('button', { name: 'Copy all links' }).click();
+      await expect(page.getByText('2 links copied. Paste them in the browser signed in to Search Console.')).toBeVisible();
+      const all = (await page.evaluate(() => navigator.clipboard.readText())).split('\n');
+      expect(all).toHaveLength(2);
+      expect(all[1]).toContain('jee-paper-2-coaching-in-odisha');
+
+      for (const target of [
+        card.getByRole('button', { name: 'Copy all links' }),
+        card.getByRole('button', { name: /Copy link to Search Console/ }).first(),
+        card.getByRole('link', { name: /in Search Console/ }).first(),
+        card.getByRole('button', { name: 'Mark asked' }).first(),
+      ]) {
+        const box = await target.boundingBox();
+        expect(box?.height ?? 0, String(target)).toBeGreaterThanOrEqual(44);
+      }
+    });
+
+    test('Check my fixes runs the recheck and reports what changed', async ({ page }) => {
+      test.skip(!(await open(page)), 'Runner is not signed in to the admin app.');
+      let posted: any = null;
+      await page.route('**/api/seo-audit/run', async (r) => {
+        posted = r.request().postDataJSON();
+        await r.fulfill({ json: { checked: 12, crawl: { status: 'ok' }, inspect: { status: 'ok' }, analyze: { status: 'ok', resolved: 4, waiting: 9, open: 3 } } });
+      });
+      await page.getByRole('button', { name: 'Run now' }).click();
+      const items = page.getByRole('menuitem');
+      await expect(items.first()).toContainText('Check my fixes');
+      await items.first().click();
+      await expect(page.getByText('Checked 12 pages. 4 fixed, 9 waiting for Google, 3 still open.')).toBeVisible();
+      expect(posted).toMatchObject({ kind: 'recheck' });
     });
 
     test('buttons meet the 44px target', async ({ page }) => {

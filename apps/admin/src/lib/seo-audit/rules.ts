@@ -119,19 +119,60 @@ export function cityPageUrl(intent: CityIntent, city: string, state: string): st
 }
 
 /**
+ * Google's last read had a canonical pointing elsewhere, but the page we serve
+ * today names itself. The old canonical is fixed; Google has not re-crawled.
+ */
+export function staleCanonical(r: UrlStatus): boolean {
+  return !!r.user_canonical && normUrl(r.user_canonical) !== normUrl(r.url) && !!r.canonical && normUrl(r.canonical) === normUrl(r.url);
+}
+
+/** Fixed on our side, only Google's last look still shows the problem. Asking for a re-crawl is what closes it. */
+export function waitingOnGoogle(r: UrlStatus): boolean {
+  return staleCanonical(r) || r.page_fetch_state === 'NOT_FOUND' || r.page_fetch_state === 'REDIRECT_ERROR';
+}
+
+const onDate = (iso: string | null) => {
+  if (!iso || Number.isNaN(Date.parse(iso))) return '';
+  return ` on ${new Date(iso).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' })}`;
+};
+
+/** Why a page is on the "ask Google" list, in plain words. */
+export function askGoogleReason(r: UrlStatus): string {
+  const seen = onDate(r.last_crawl_time);
+  if (staleCanonical(r)) return `Google last read an old canonical${seen}. Ours is fixed, so ask for a re-crawl.`;
+  if (r.page_fetch_state === 'NOT_FOUND') return `Google last saw a 404${seen}. The page works now.`;
+  if (r.page_fetch_state === 'REDIRECT_ERROR') return `Google last saw a redirect${seen}. The page loads now.`;
+  const cov = (r.coverage_state ?? '').toLowerCase();
+  if (cov.startsWith('url is unknown')) return 'Google has never seen this page.';
+  if (cov.startsWith('discovered')) return 'Google knows about it but has not crawled it yet.';
+  if (cov.startsWith('crawled')) return `Google crawled it${seen} but chose not to index it.`;
+  return r.coverage_state || 'Not indexed yet.';
+}
+
+export type AskGoogleItem = UrlStatus & { reason: string; waiting: boolean };
+
+/**
  * Today's "ask Google" list: sitemap pages Google has not indexed (or never saw)
  * that work on our side, most valuable first. Requesting indexing is a manual
  * click in Search Console (the API cannot do it, about 10 a day), so the list is
- * short and skips pages requested in the last 14 days.
+ * short and skips pages requested in the last 14 days. Pages already fixed on our
+ * side and only waiting for a re-crawl go first: a request is exactly what they need.
  */
-export function pickAskGoogle(urls: UrlStatus[], pages28: PageWindow[], now: Date, n = 10): UrlStatus[] {
+export function pickAskGoogle(urls: UrlStatus[], pages28: PageWindow[], now: Date, n = 10): AskGoogleItem[] {
   const imp = new Map(pages28.map((p) => [normUrl(p.page), p.impressions]));
   const t = now.getTime();
   const depth = (u: string) => pathOf(u).split('/').filter(Boolean).length;
   return urls
     .filter((r) => r.expected_index && r.inspected_at && r.verdict !== 'PASS' && r.crawled_at && r.http_status === 200 && !isNoindex(r))
     .filter((r) => !r.index_requested_at || t - Date.parse(r.index_requested_at) > 14 * 86_400_000)
-    .sort((a, b) => (imp.get(normUrl(b.url)) ?? 0) - (imp.get(normUrl(a.url)) ?? 0) || depth(a.url) - depth(b.url) || (b.sitemap_lastmod ?? '').localeCompare(a.sitemap_lastmod ?? ''))
+    .map((r) => ({ ...r, reason: askGoogleReason(r), waiting: waitingOnGoogle(r) }))
+    .sort(
+      (a, b) =>
+        Number(b.waiting) - Number(a.waiting) ||
+        (imp.get(normUrl(b.url)) ?? 0) - (imp.get(normUrl(a.url)) ?? 0) ||
+        depth(a.url) - depth(b.url) ||
+        (b.sitemap_lastmod ?? '').localeCompare(a.sitemap_lastmod ?? ''),
+    )
     .slice(0, n);
 }
 
@@ -194,18 +235,22 @@ export function runRules(input: RuleInput): Finding[] {
         }
         continue;
       }
+      // Google read an older canonical than the one we serve (ours names the page itself now).
+      const stale = staleCanonical(r);
       if (r.verdict && r.verdict !== 'PASS') {
         if (clicks >= 3) {
           add('I6', 'indexing', 'critical', r.url, 'Page with search traffic is no longer indexed', { coverage_state: r.coverage_state, clicks28: clicks, last_crawl_time: r.last_crawl_time }, `I6:${r.coverage_state ?? ''}`);
-        } else {
+        } else if (!stale) {
+          // A stale canonical explains the "not indexed" on its own: I5 below waits for the re-crawl.
           add('I4', 'indexing', 'medium', r.url, `Not indexed: ${r.coverage_state || 'reason unknown'}`, { coverage_state: r.coverage_state, verdict: r.verdict, last_crawl_time: r.last_crawl_time, word_count: r.word_count }, `I4:${r.coverage_state ?? ''}`);
         }
       }
       if (r.google_canonical && r.user_canonical && normUrl(r.google_canonical) !== normUrl(r.user_canonical)) {
-        // Google read an older canonical than the one we serve (ours names the page itself now).
-        const stale = !!r.canonical && normUrl(r.canonical) === normUrl(r.url) && normUrl(r.user_canonical) !== normUrl(r.url);
         if (stale) wait('I5', 'indexing', 'medium', r.url, 'Google read an older canonical, ours is correct now: waiting for a re-crawl', { google_canonical: r.google_canonical, user_canonical: r.user_canonical, canonical_now: r.canonical }, `I5:${normUrl(r.google_canonical)}`);
         else add('I5', 'indexing', 'medium', r.url, 'Google chose a different main URL than ours', { google_canonical: r.google_canonical, user_canonical: r.user_canonical }, `I5:${normUrl(r.google_canonical)}`);
+      } else if (stale && !r.google_canonical) {
+        // "Alternate page with proper canonical tag": Google kept no canonical of its own, only our old one.
+        wait('I5', 'indexing', 'medium', r.url, 'Google read an older canonical, ours is correct now: waiting for a re-crawl', { user_canonical: r.user_canonical, canonical_now: r.canonical, last_crawl_time: r.last_crawl_time }, 'I5:stale');
       }
     } else {
       // Known from search data or pasted from a Search Console export.

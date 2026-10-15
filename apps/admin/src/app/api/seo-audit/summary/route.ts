@@ -83,11 +83,11 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json({
-      connection: { connected: missing.length === 0, missing, siteUrl: env.siteUrl, origins: env.origins, digest: env.digestTo.length > 0 },
+      connection: { connected: missing.length === 0, missing, siteUrl: env.siteUrl, accountEmail: env.accountEmail, origins: env.origins, digest: env.digestTo.length > 0 },
       runs,
       coverage,
       findings: { total: findings.length, issues: findings.length - bySeverity.info, waiting: waiting.count ?? 0, bySeverity, byCategory },
-      askGoogle: pickAskGoogle(urls, pages28, new Date()).map((u) => ({ url: u.url, coverage_state: u.coverage_state })),
+      askGoogle: pickAskGoogle(urls, pages28, new Date()).map((u) => ({ url: u.url, coverage_state: u.coverage_state, reason: u.reason, waiting: u.waiting, last_crawl_time: u.last_crawl_time })),
       aeo: { checks: AEO_RULES.length, passing: AEO_RULES.length - aeoOpen.size },
       search,
     });

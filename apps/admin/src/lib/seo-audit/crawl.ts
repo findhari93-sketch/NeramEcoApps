@@ -117,11 +117,13 @@ export async function pool<T, R>(items: T[], concurrency: number, deadline: numb
 }
 
 /** Which URLs to crawl now: never crawled first, then the stalest, skipping those crawled this week. */
-export function pickForCrawl(rows: UrlStatus[], now: Date, force = false): string[] {
+/** `only` limits the crawl to those URLs ("Check my fixes") and always re-crawls them. */
+export function pickForCrawl(rows: UrlStatus[], now: Date, force = false, only?: string[]): string[] {
   const cutoff = now.getTime() - RECRAWL_AFTER_DAYS * 86_400_000;
+  const scope = only ? new Set(only.map(normUrl)) : null;
   return rows
-    .filter((r) => r.expected_index || r.source === 'import' || r.source === 'search')
-    .filter((r) => force || !r.crawled_at || Date.parse(r.crawled_at) < cutoff)
+    .filter((r) => (scope ? scope.has(normUrl(r.url)) : r.expected_index || r.source === 'import' || r.source === 'search'))
+    .filter((r) => force || !!scope || !r.crawled_at || Date.parse(r.crawled_at) < cutoff)
     .sort((a, b) => (a.crawled_at ? Date.parse(a.crawled_at) : 0) - (b.crawled_at ? Date.parse(b.crawled_at) : 0))
     .map((r) => r.url);
 }
@@ -147,12 +149,12 @@ export function brokenLinksFor(links: string[], prevBroken: string[], known: Map
   return [...out];
 }
 
-export async function runCrawl(opts: { client?: any; deadline: number; fetchImpl?: FetchLike; force?: boolean; now?: Date }) {
+export async function runCrawl(opts: { client?: any; deadline: number; fetchImpl?: FetchLike; force?: boolean; only?: string[]; now?: Date }) {
   const client = opts.client ?? db();
   const fetchImpl = opts.fetchImpl ?? fetch;
   const now = opts.now ?? new Date();
   const rows = await loadUrlStatus(client);
-  const todo = pickForCrawl(rows, now, opts.force);
+  const todo = pickForCrawl(rows, now, opts.force, opts.only);
   // Keep about a fifth of the time for the link check.
   const pageDeadline = opts.deadline - Math.max(10_000, (opts.deadline - Date.now()) / 5);
   const results = await pool(todo, 8, pageDeadline, (u) => crawlUrl(u, fetchImpl));

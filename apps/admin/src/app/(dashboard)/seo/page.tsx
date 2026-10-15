@@ -39,6 +39,8 @@ import ScheduleIcon from '@mui/icons-material/Schedule';
 import LinkOffIcon from '@mui/icons-material/LinkOff';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import BuildCircleOutlinedIcon from '@mui/icons-material/BuildCircleOutlined';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip as RTooltip, XAxis, YAxis } from 'recharts';
 import { EmptyState, OpsPageHeader, OpsSkeleton, StatusChip, TARGET_44, type Tone } from '@/components/ops/OpsUi';
 import { AdminOnly, KpiCard } from '@/components/marketing-ai/Parts';
@@ -49,6 +51,7 @@ const TABS = ['issues', 'search', 'urls', 'runs'] as const;
 type TabKey = (typeof TABS)[number];
 
 const RUNS = [
+  { kind: 'recheck', label: 'Check my fixes', hint: 'Re-crawl pages with open issues, then rebuild the list' },
   { kind: 'daily', label: 'Full morning run', hint: 'Search data, inspection, crawl and rules' },
   { kind: 'search', label: 'Fetch search data', hint: 'Clicks and positions from Search Console' },
   { kind: 'sitemaps', label: 'Resubmit sitemaps', hint: 'Only those that changed or Google stopped reading' },
@@ -116,10 +119,14 @@ export default function SeoHealthPage() {
     try {
       const r = await api('/api/seo-audit/run', { method: 'POST', body: JSON.stringify({ kind, force: kind === 'crawl' }) });
       const a = r.analyze ?? (kind === 'analyze' ? r : null);
-      const failed = [r, r.search, r.inspect, r.crawl].filter((x: any) => x?.status === 'failed');
+      const failed = [r, r.search, r.inspect, r.crawl, r.analyze].filter((x: any) => x?.status === 'failed');
       setToast(
         failed.length
           ? `Finished with an error: ${failed[0].error}`
+          : kind === 'recheck'
+            ? r.checked === 0
+              ? 'No open issues to check.'
+              : `Checked ${num(r.checked)} pages. ${a?.resolved ?? 0} fixed, ${a?.waiting ?? 0} waiting for Google, ${a?.open ?? 0} still open.`
           : a
             ? `Done. ${a.created ?? 0} new issues, ${a.resolved ?? 0} fixed.`
             : r.status === 'not_connected'
@@ -260,7 +267,7 @@ export default function SeoHealthPage() {
         </Paper>
       )}
 
-      {s?.askGoogle?.length > 0 && <AskGoogleCard items={s.askGoogle} siteUrl={s.connection.siteUrl} setToast={setToast} />}
+      {s?.askGoogle?.length > 0 && <AskGoogleCard items={s.askGoogle} siteUrl={s.connection.siteUrl} accountEmail={s.connection.accountEmail} setToast={setToast} />}
 
       <Paper variant="outlined" sx={{ borderRadius: 2 }}>
         <Tabs value={tab} onChange={(_, v) => changeTab(v)} variant="scrollable" allowScrollButtonsMobile aria-label="SEO Health views" sx={{ borderBottom: 1, borderColor: 'divider', px: 1 }}>
@@ -307,12 +314,25 @@ export default function SeoHealthPage() {
  * Google's API cannot request indexing for ordinary pages, so this is the one
  * manual step: open the page in Search Console URL Inspection and press
  * "Request indexing" there (about 10 a day). Marking it here takes the page off
- * the list for 14 days.
+ * the list for 14 days. The Search Console account often lives in another
+ * browser, so every link can also be copied (one, or all at once).
  */
-function AskGoogleCard({ items, siteUrl, setToast }: { items: Array<{ url: string; coverage_state: string | null }>; siteUrl: string; setToast: (m: string) => void }) {
+type AskGoogleItem = { url: string; coverage_state: string | null; reason?: string; waiting?: boolean };
+
+function AskGoogleCard({ items, siteUrl, accountEmail, setToast }: { items: AskGoogleItem[]; siteUrl: string; accountEmail?: string | null; setToast: (m: string) => void }) {
   const [done, setDone] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
-  const inspectUrl = (u: string) => `https://search.google.com/search-console/inspect?resource_id=${encodeURIComponent(siteUrl)}&id=${encodeURIComponent(u)}`;
+  const inspectUrl = (u: string) =>
+    `https://search.google.com/search-console/inspect?resource_id=${encodeURIComponent(siteUrl)}&id=${encodeURIComponent(u)}${accountEmail ? `&authuser=${encodeURIComponent(accountEmail)}` : ''}`;
+
+  const copy = async (text: string, ok: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setToast(ok);
+    } catch {
+      setToast('Could not copy. Open the link and copy it from the address bar.');
+    }
+  };
 
   const markAsked = async (u: string) => {
     setBusy(u);
@@ -329,12 +349,27 @@ function AskGoogleCard({ items, siteUrl, setToast }: { items: Array<{ url: strin
   const left = items.filter((i) => !done.has(i.url));
   return (
     <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 2 }} component="section" aria-labelledby="ask-google-title">
-      <Typography id="ask-google-title" variant="subtitle1" component="h2" fontWeight={700}>
-        Ask Google to index today
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, maxWidth: 820 }}>
-        These pages work but Google has not indexed them. Open each one in Search Console and press Request indexing (Google allows about 10 a day), then mark it asked here. Most valuable first.
-      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, flexWrap: 'wrap', mb: 1.5 }}>
+        <Box sx={{ flex: '1 1 420px', minWidth: 0 }}>
+          <Typography id="ask-google-title" variant="subtitle1" component="h2" fontWeight={700}>
+            Ask Google to index today
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 820 }}>
+            These pages work but Google has not indexed them. Open each one in Search Console (or copy the links into the browser signed in to Search Console), press Request indexing (Google allows about 10 a
+            day), then mark it asked here. Pages we have already fixed come first, then the most valuable.
+          </Typography>
+        </Box>
+        {left.length > 0 && (
+          <Button
+            variant="outlined"
+            startIcon={<ContentCopyIcon fontSize="small" aria-hidden />}
+            onClick={() => copy(left.map((i) => inspectUrl(i.url)).join('\n'), `${left.length} links copied. Paste them in the browser signed in to Search Console.`)}
+            sx={TARGET_44}
+          >
+            Copy all links
+          </Button>
+        )}
+      </Box>
       {left.length === 0 ? (
         <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <CheckCircleOutlineIcon fontSize="small" color="success" aria-hidden /> All asked for today.
@@ -347,9 +382,12 @@ function AskGoogleCard({ items, siteUrl, setToast }: { items: Array<{ url: strin
                 <Typography variant="body2" fontWeight={600} noWrap title={i.url}>
                   {shortUrl(i.url)}
                 </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  {i.coverage_state || 'Not indexed'}
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mt: 0.25 }}>
+                  {i.waiting && <StatusChip icon={BuildCircleOutlinedIcon} label="Fixed on our side" tone="success" />}
+                  <Typography variant="caption" color="text.secondary" title={i.coverage_state ?? undefined}>
+                    {i.reason || i.coverage_state || 'Not indexed'}
+                  </Typography>
+                </Box>
               </Box>
               <Button
                 variant="outlined"
@@ -362,6 +400,15 @@ function AskGoogleCard({ items, siteUrl, setToast }: { items: Array<{ url: strin
                 sx={TARGET_44}
               >
                 Open in Search Console
+              </Button>
+              <Button
+                size="small"
+                startIcon={<ContentCopyIcon fontSize="small" aria-hidden />}
+                onClick={() => copy(inspectUrl(i.url), 'Link copied. Paste it in the browser signed in to Search Console.')}
+                aria-label={`Copy link to Search Console for ${shortUrl(i.url)}`}
+                sx={TARGET_44}
+              >
+                Copy link
               </Button>
               <Button size="small" onClick={() => markAsked(i.url)} disabled={busy === i.url} sx={TARGET_44}>
                 {busy === i.url ? 'Saving…' : 'Mark asked'}

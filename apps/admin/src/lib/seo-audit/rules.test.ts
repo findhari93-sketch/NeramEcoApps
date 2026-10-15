@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cityIntent, cityPageUrl, expectedCtr, expectedSchema, isNoindex, normUrl, pickAskGoogle, runRules } from './rules';
+import { askGoogleReason, cityIntent, cityPageUrl, expectedCtr, expectedSchema, isNoindex, normUrl, pickAskGoogle, runRules } from './rules';
 import { cycleYear, SEASONS } from './seasons';
 import type { RuleInput, UrlStatus } from './types';
 
@@ -259,6 +259,32 @@ describe('waiting for Google', () => {
     const real = url({ url: 'https://neramclasses.com/z', google_canonical: 'https://neramclasses.com/other', user_canonical: 'https://neramclasses.com/z' });
     expect(find(real)[0].waiting).toBeUndefined();
   });
+
+  it('I5: "Alternate page" with no Google canonical, ours fixed since: waits instead of I4', () => {
+    const r = url({
+      url: 'https://neramclasses.com/coaching/nata-coaching-in-assam',
+      verdict: 'NEUTRAL',
+      coverage_state: 'Alternate page with proper canonical tag',
+      user_canonical: 'https://neramclasses.com/coaching/nata-coaching-in-undefined',
+      google_canonical: null,
+    });
+    const found = find(r);
+    expect(found).toHaveLength(1);
+    expect(found[0]).toMatchObject({ rule_id: 'I5', waiting: true, fingerprint: 'I5|https://neramclasses.com/coaching/nata-coaching-in-assam' });
+  });
+
+  it('I5: no wait when our live canonical still points elsewhere', () => {
+    const r = url({
+      url: 'https://neramclasses.com/p',
+      verdict: 'NEUTRAL',
+      coverage_state: 'Alternate page with proper canonical tag',
+      user_canonical: 'https://neramclasses.com/q',
+      canonical: 'https://neramclasses.com/q',
+    });
+    const found = find(r);
+    expect(found.some((f) => f.waiting)).toBe(false);
+    expect(found.map((f) => f.rule_id)).toContain('I4');
+  });
 });
 
 describe('P4 host folding', () => {
@@ -344,6 +370,27 @@ describe('pickAskGoogle', () => {
     ];
     const picked = pickAskGoogle(urls, [{ page: 'https://neramclasses.com/popular/page', clicks: 0, impressions: 40, avg_position: 12 }], now, 2).map((r) => r.url);
     expect(picked).toEqual(['https://neramclasses.com/popular/page', 'https://neramclasses.com/hub']);
+  });
+
+  it('puts pages fixed on our side first, with a plain reason', () => {
+    const stale = notIndexed('https://neramclasses.com/coaching/deep/page', {
+      coverage_state: 'Alternate page with proper canonical tag',
+      user_canonical: 'https://neramclasses.com/coaching/nata-coaching-in-undefined',
+      last_crawl_time: '2026-04-22T06:02:48Z',
+    });
+    const popular = notIndexed('https://neramclasses.com/popular');
+    const picked = pickAskGoogle([popular, stale], [{ page: popular.url, clicks: 0, impressions: 500, avg_position: 9 }], now);
+    expect(picked.map((r) => r.url)).toEqual([stale.url, popular.url]);
+    expect(picked[0]).toMatchObject({ waiting: true, reason: 'Google last read an old canonical on 22 Apr 2026. Ours is fixed, so ask for a re-crawl.' });
+    expect(picked[1]).toMatchObject({ waiting: false, reason: 'Google knows about it but has not crawled it yet.' });
+  });
+
+  it('explains each coverage state in plain words', () => {
+    const r = (over: Partial<UrlStatus>) => askGoogleReason(notIndexed('https://neramclasses.com/x', over));
+    expect(r({ coverage_state: 'URL is unknown to Google' })).toBe('Google has never seen this page.');
+    expect(r({ coverage_state: 'Crawled - currently not indexed', last_crawl_time: '2026-10-01T10:00:00Z' })).toBe('Google crawled it on 1 Oct 2026 but chose not to index it.');
+    expect(r({ page_fetch_state: 'NOT_FOUND' })).toBe('Google last saw a 404. The page works now.');
+    expect(r({ coverage_state: 'Something new' })).toBe('Something new');
   });
 });
 

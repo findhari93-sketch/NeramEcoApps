@@ -8,7 +8,7 @@
  *   fixed on our side only -> waiting (Google has not re-crawled), then fixed
  */
 import { createHash } from 'crypto';
-import { runRules } from './rules';
+import { normUrl, runRules } from './rules';
 import { fetchSiteFiles } from './crawl';
 import { db, loadUrlStatus, pageWindow, queryPageWindow, selectAll, shiftDate, upsertBatches, latestSearchDate, lastFinalDate } from './store';
 import type { Finding, FindingRow, RuleInput } from './types';
@@ -80,6 +80,22 @@ export function reconcile(existing: FindingRow[], fresh: Finding[], now: string,
   return { rows, created, reopened, resolved, stillIgnored };
 }
 
+/**
+ * "Check my fixes": the pages behind open and waiting findings, once each, and
+ * the subset with an indexing finding (worth asking Google about again).
+ */
+export function urlsToRecheck(findings: Array<Pick<FindingRow, 'url' | 'category' | 'status'>>): { all: string[]; indexing: string[] } {
+  const all = new Map<string, string>();
+  const indexing = new Map<string, string>();
+  for (const f of findings) {
+    if (!f.url || (f.status !== 'open' && f.status !== 'waiting')) continue;
+    const key = normUrl(f.url);
+    if (!all.has(key)) all.set(key, f.url);
+    if (f.category === 'indexing' && !indexing.has(key)) indexing.set(key, f.url);
+  }
+  return { all: [...all.values()], indexing: [...indexing.values()] };
+}
+
 /** Everything the rules read, loaded in one place. */
 export async function loadRuleInput(client: any, origins: string[]): Promise<RuleInput> {
   const end = (await latestSearchDate(client)) ?? lastFinalDate();
@@ -109,5 +125,8 @@ export async function runAnalyze(opts: { client?: any; origins: string[]; now?: 
     reopened: result.reopened,
     resolved: result.resolved,
     stillIgnored: result.stillIgnored,
+    // Live issues after this run, as the page counts them (info is not an issue).
+    open: result.rows.filter((r) => r.status === 'open' && r.severity !== 'info').length,
+    waiting: result.rows.filter((r) => r.status === 'waiting').length,
   };
 }

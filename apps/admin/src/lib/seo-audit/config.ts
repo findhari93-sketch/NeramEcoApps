@@ -6,6 +6,9 @@
  *                            (a Domain property covers app.neramclasses.com too)
  *   SEO_AUDIT_ORIGINS        sites whose sitemaps we audit, comma separated
  *   SEO_DIGEST_TO            weekly email recipients, comma separated; unset sends nothing
+ *   GSC_ACCOUNT_EMAIL        optional: the Google account that can use Search Console. Added to
+ *                            the "Open in Search Console" links as authuser, so a browser signed
+ *                            in to several Google accounts opens the right one
  *
  * Setup steps: docs/seo-audit/README.md.
  */
@@ -21,6 +24,7 @@ export interface SeoAuditEnv {
   siteUrl: string;
   origins: string[];
   digestTo: string[];
+  accountEmail: string | null;
 }
 
 export const DEFAULT_SITE_URL = 'sc-domain:neramclasses.com';
@@ -60,6 +64,7 @@ export function readSeoEnv(env: Record<string, string | undefined> = process.env
       siteUrl: env.GSC_SITE_URL?.trim() || DEFAULT_SITE_URL,
       origins: origins.length ? origins : DEFAULT_ORIGINS,
       digestTo: list(env.SEO_DIGEST_TO),
+      accountEmail: env.GSC_ACCOUNT_EMAIL?.trim() || null,
     },
     missing,
   };

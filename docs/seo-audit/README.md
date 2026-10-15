@@ -38,6 +38,15 @@ Before the key is set, the crawl and the on-page and AI-answer checks still run.
 
 **Run now > Crawl all pages** re-crawls everything at once (about a minute for 1,000 pages).
 
+## After you fix something
+
+SEO Health reads the live site, so a fix only counts once it is deployed to production.
+
+1. Deploy the fix.
+2. **Run now > Check my fixes.** It re-crawls only the pages behind open or waiting issues, re-inspects the ones with an indexing issue, then rebuilds the list (`runRecheck` in `jobs.ts`, usually under a minute). The message says how many were fixed, how many are waiting for Google and how many are still open.
+3. Fixes we can see on our side (titles, canonicals, schema, broken links, 404s, noindex) close straight away. Issues that only Google's last look still shows move to **waiting**.
+4. Waiting pages go to the top of **Ask Google to index today**, marked *Fixed on our side*. Ask for them; they close on a later morning run once Google has re-crawled.
+
 **Import URLs** takes a Search Console export, for example Indexing > Pages > *Server error (5xx)* > Export. It puts those URLs first in the inspection and crawl queues. The Search Console API cannot list the URLs behind each "Why pages aren't indexed" reason, so this is how to check them.
 
 ## Ask Google to index (the one manual step)
@@ -45,7 +54,9 @@ Before the key is set, the crawl and the on-page and AI-answer checks still run.
 Google's Indexing API is only for job postings and livestreams; using it for other pages breaks Google's terms. So there is no API to request indexing for our pages. What is automated: sitemaps with real lastmod, resubmitted daily when they change (`sitemaps` job), and IndexNow for Bing and ChatGPT search (marketing and app `/api/cron/indexnow`, daily).
 
 The **Ask Google to index today** card on the SEO Health page lists up to 10 sitemap pages that work on our side but are not indexed, most searched first, then hub pages (`pickAskGoogle` in `rules.ts`).
-- **Open in Search Console** opens URL Inspection for that page; press Request indexing there. Google allows about 10 a day.
+- Pages already fixed on our side (for example Google last read an old canonical) come first, marked *Fixed on our side*. Each row says in plain words why it is listed.
+- **Open in Search Console** opens URL Inspection for that page; press Request indexing there. Google allows about 10 a day. Request indexing needs an Owner or Full user on the property.
+- **Copy link** and **Copy all links** are for when the Search Console account is signed in to another browser: paste the links there. If both accounts are signed in to the same browser, set `GSC_ACCOUNT_EMAIL` on the admin app and the links open as that account (`authuser`). Simplest of all: add the admin browser's Google account as a Full user under Search Console > Settings > Users and permissions.
 - **Mark asked** records it (`seo_url_status.index_requested_at`), so the page leaves the list for 14 days and is re-inspected the next morning.
 
 ## Claude Code fixes, twice a week (`.github/workflows/seo-autofix.yml`)

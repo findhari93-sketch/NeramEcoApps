@@ -152,4 +152,20 @@ describe('queues', () => {
     expect(pickForCrawl(rows, now)).toEqual(['https://n.com/never', 'https://n.com/old']);
     expect(pickForCrawl(rows, now, true)).toHaveLength(3);
   });
+
+  it('Check my fixes: crawls only the given pages, even ones crawled today', () => {
+    const rows = [row('https://n.com/fixed', { crawled_at: '2026-10-12T23:00:00Z' }), row('https://n.com/other'), row('https://n.com/pasted', { expected_index: false, source: 'import' })];
+    expect(pickForCrawl(rows, now, false, ['https://n.com/fixed/'])).toEqual(['https://n.com/fixed']);
+    expect(pickForCrawl(rows, now, false, [])).toEqual([]);
+  });
+
+  it('Check my fixes: inspects only the given pages, ignoring freshness, within the budget', () => {
+    const rows = [
+      row('https://n.com/fresh', { inspected_at: '2026-10-12T23:00:00Z' }),
+      row('https://n.com/older', { inspected_at: '2026-10-11T00:00:00Z' }),
+      row('https://n.com/skip', { priority_inspect: true }),
+    ];
+    expect(pickForInspection(rows, new Set(), 10, now, ['https://n.com/fresh', 'https://n.com/older'])).toEqual(['https://n.com/older', 'https://n.com/fresh']);
+    expect(pickForInspection(rows, new Set(), 1, now, ['https://n.com/fresh', 'https://n.com/older'])).toEqual(['https://n.com/older']);
+  });
 });
