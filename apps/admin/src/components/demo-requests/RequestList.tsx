@@ -12,7 +12,13 @@ import {
   Typography,
   IconButton,
   Tooltip,
+  Chip,
 } from '@neram/ui';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import { INTEREST_LABELS } from '@neram/database/demo-follow-up';
+import { formatDemoDateTime } from '@neram/database/demo-schedule';
+import type { InterestLevel } from '@neram/database';
+import { formatIstDate } from '@/lib/ops-format';
 import PhoneIcon from '@mui/icons-material/Phone';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import FamilyRestroomIcon from '@mui/icons-material/FamilyRestroom';
@@ -21,6 +27,7 @@ import ScheduleIcon from '@mui/icons-material/Schedule';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import { FOCUS_RING } from '@/components/ops/OpsUi';
 import type { DemoRequest, DemoScheduleSettings, DeskTab } from './types';
+import type { DemoFollowUpRow } from '@neram/database';
 import { ago, classLabel, isCallbackDue, isOverdueNew, telHref, waHref, whenLabel } from './format';
 
 export default function RequestList({
@@ -30,6 +37,8 @@ export default function RequestList({
   onSelect,
   schedule,
   now,
+  followUps,
+  joinedAt,
 }: {
   rows: DemoRequest[];
   tab: DeskTab;
@@ -37,6 +46,8 @@ export default function RequestList({
   onSelect: (id: string) => void;
   schedule: DemoScheduleSettings;
   now: Date;
+  followUps: Record<string, DemoFollowUpRow>;
+  joinedAt: Record<string, string>;
 }) {
   return (
     <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
@@ -45,7 +56,7 @@ export default function RequestList({
           <TableRow>
             <TableCell sx={{ fontWeight: 700 }}>Student</TableCell>
             <TableCell sx={{ fontWeight: 700 }}>{tab === 'upcoming' || tab === 'done' ? 'Demo' : 'Asked for'}</TableCell>
-            <TableCell sx={{ fontWeight: 700 }}>{tab === 'followup' ? 'Call back' : 'Requested'}</TableCell>
+            <TableCell sx={{ fontWeight: 700 }}>{tab === 'followup' ? 'Call back' : tab === 'done' ? 'Follow-up' : 'Requested'}</TableCell>
             <TableCell sx={{ fontWeight: 700 }} align="right">
               Contact
             </TableCell>
@@ -104,7 +115,43 @@ export default function RequestList({
                   )}
                 </TableCell>
                 <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                  {tab === 'followup' && r.next_contact_at ? (
+                  {tab === 'done' ? (
+                    (() => {
+                      const f = followUps[r.id];
+                      const joined = r.user_id ? joinedAt[r.user_id] : null;
+                      if (joined) {
+                        return <Chip size="small" color="success" icon={<CheckCircleIcon />} label={`Joined ${formatIstDate(joined)}`} />;
+                      }
+                      if (!f) return <Typography variant="body2" color="text.secondary">Not started</Typography>;
+                      const due = f.scheduled_callback_at ? new Date(f.scheduled_callback_at) : null;
+                      const late = f.status !== 'completed' && due !== null && due.getTime() < now.getTime();
+                      return (
+                        <Box>
+                          {f.interest_level && (
+                            <Chip
+                              size="small"
+                              label={INTEREST_LABELS[f.interest_level as InterestLevel]}
+                              sx={{ mr: 0.5 }}
+                              color={f.interest_level === 'hot' ? 'error' : f.interest_level === 'warm' ? 'warning' : 'default'}
+                            />
+                          )}
+                          <Typography
+                            component="span"
+                            variant="body2"
+                            sx={{ color: late ? 'error.main' : 'text.primary', fontWeight: late ? 700 : 400 }}
+                          >
+                            {f.status === 'completed'
+                              ? f.call_outcome === 'not_interested'
+                                ? 'Not interested'
+                                : 'Closed'
+                              : due
+                                ? `${late ? 'Overdue, ' : ''}${formatDemoDateTime(due)}`
+                                : 'No date'}
+                          </Typography>
+                        </Box>
+                      );
+                    })()
+                  ) : tab === 'followup' && r.next_contact_at ? (
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, color: callbackDue ? 'error.main' : 'text.primary' }}>
                       <ScheduleIcon aria-hidden sx={{ fontSize: 16 }} />
                       <Typography variant="body2" fontWeight={callbackDue ? 700 : 400}>

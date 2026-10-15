@@ -240,6 +240,8 @@ function DemoDesk() {
               onSelect={(id) => select(id)}
               schedule={list.settings.schedule}
               now={now}
+              followUps={list.followUps ?? {}}
+              joinedAt={list.joinedAt ?? {}}
             />
           )}
         </Box>

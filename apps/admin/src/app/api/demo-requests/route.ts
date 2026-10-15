@@ -18,6 +18,7 @@ import {
   demoPhone10,
   formatDemoDateTime,
   openDemoFollowUp,
+  listDemoFollowUpsByDemo,
   rebookFollowUpAt,
   type InterestLevel,
   type DemoRequest,
@@ -62,11 +63,15 @@ export async function GET() {
     const recentUserIds = Array.from(
       new Set(requests.filter((r) => r.user_id && new Date(r.created_at).getTime() >= ago30).map((r) => r.user_id as string)),
     );
-    let enrolled = 0;
-    if (recentUserIds.length) {
-      const { data } = await (supabase as any).from('student_profiles').select('user_id').in('user_id', recentUserIds);
-      enrolled = new Set((data ?? []).map((d: { user_id: string }) => d.user_id)).size;
+    const doneIds = requests.filter((r) => r.status === 'attended' || r.status === 'no_show').map((r) => r.id);
+    const followUps = await listDemoFollowUpsByDemo(doneIds, supabase);
+    const userIds = Array.from(new Set(requests.filter((r) => r.user_id).map((r) => r.user_id as string)));
+    const joinedAt: Record<string, string> = {};
+    if (userIds.length) {
+      const { data } = await (supabase as any).from('student_profiles').select('user_id, enrollment_date').in('user_id', userIds);
+      for (const s of data ?? []) joinedAt[s.user_id] = s.enrollment_date;
     }
+    const enrolled = recentUserIds.filter((id) => id in joinedAt).length;
 
     const kpis = {
       newRequests: requests.filter((r) => r.status === 'pending').length,
@@ -83,6 +88,8 @@ export async function GET() {
     return NextResponse.json({
       requests,
       kpis,
+      followUps,
+      joinedAt,
       settings: {
         hosts: settings.hosts,
         defaultTutorUpn: settings.defaultTutorUpn,

@@ -31,6 +31,10 @@ export interface DeskList {
   requests: DemoRequest[];
   kpis: DeskKpis;
   settings: DeskSettings;
+  /** After-demo follow-up per demo request id (attended and no-show only). */
+  followUps: Record<string, DemoFollowUpRow>;
+  /** student_profiles.enrollment_date per user id. */
+  joinedAt: Record<string, string>;
 }
 
 export interface DeskDetail {
