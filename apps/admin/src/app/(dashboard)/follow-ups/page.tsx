@@ -227,7 +227,7 @@ function FollowUpsInner() {
           </Box>
           <Box component="ul" sx={{ display: 'grid', gap: 1, p: 0, m: 0 }}>
             {items.map((item) => (
-              <FollowUpRow key={item.callback_id} item={item} now={now} onLogOutcome={() => setLogging(item)} onSendLink={item.user_id && supabaseUserId ? () => setLinking(item) : undefined} />
+              <FollowUpRow key={item.callback_id} item={item} now={now} onLogOutcome={item.user_id ? () => setLogging(item) : undefined} onSendLink={item.user_id && supabaseUserId ? () => setLinking(item) : undefined} />
             ))}
           </Box>
         </>

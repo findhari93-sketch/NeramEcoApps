@@ -91,12 +91,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Follow-up digests queued by the Admin cron (staff_digest_messages).
-    const { data: digests } = await (supabase as any)
+    const { data: digests, error: digestsErr } = await (supabase as any)
       .from('staff_digest_messages')
       .select('id, to_user_id, kind, subject, plain, link')
       .eq('status', 'pending')
       .lte('send_after', now.toISOString())
       .limit(50);
+    if (digestsErr) throw digestsErr;
     for (const d of digests ?? []) {
       const { results } = await sendNudge({
         studentIds: [d.to_user_id],

@@ -134,7 +134,10 @@ export async function POST(request: NextRequest) {
           provedDemoNumber && signedIn ? await isDisposableAccount(supabase as any, signedIn) : false,
       });
       if (decision.action === 'refuse') {
-        return NextResponse.json({ error: decision.message, code: 'WRONG_ACCOUNT' }, { status: 409 });
+        const message = link.demo_registration_id
+          ? decision.message
+          : decision.message.replace('the number you used for your demo', 'the number on your Neram account');
+        return NextResponse.json({ error: message, code: 'WRONG_ACCOUNT' }, { status: 409 });
       }
       if (decision.action === 'merge') {
         // mergeUserRecords(winnerId, loserId, adminId, client): the demo account wins.
@@ -242,7 +245,7 @@ export async function POST(request: NextRequest) {
     // already has a lead_profiles row, which is completed here, not duplicated.
     const { data: existingLead } = await supabase
       .from('lead_profiles')
-      .select('id, source, admin_notes, application_number')
+      .select('id, source, admin_notes, application_number, country')
       .eq('user_id', userId)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })

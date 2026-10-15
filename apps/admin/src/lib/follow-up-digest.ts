@@ -44,7 +44,14 @@ const MAX_ROWS = 5000;
 /** 09:00 IST: sweep, then one digest per owner and a team summary for the manager. */
 export async function runFollowUpDigest(now: Date, adminOrigin: string) {
   const sb: any = getSupabaseAdminClient();
-  const swept = await sweepDemoFollowUps(now, sb);
+  let swept: { closed: number; reopened: number; failed?: boolean };
+  try {
+    swept = await sweepDemoFollowUps(now, sb);
+  } catch (e: any) {
+    // A bad sweep must never stop the morning digest.
+    console.error('[follow-up-digest] sweep failed:', e?.message || e);
+    swept = { closed: 0, reopened: 0, failed: true };
+  }
   const endOfToday = new Date(new Date(`${istDateKey(now)}T00:00:00+05:30`).getTime() + DAY).toISOString();
   const due: any[] = [];
   for (let from = 0; from < MAX_ROWS; from += PAGE) {

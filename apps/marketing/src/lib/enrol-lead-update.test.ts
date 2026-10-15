@@ -36,6 +36,11 @@ describe('buildLeadProfileUpdate', () => {
     expect(u.demo_registration_id).toBe('demo-1');
   });
 
+  it('does not overwrite an existing country, fills it when empty', () => {
+    expect('country' in buildLeadProfileUpdate({ country: 'UAE' }, { country: 'India' })).toBe(false);
+    expect(buildLeadProfileUpdate({ country: null }, { country: 'India' }).country).toBe('India');
+  });
+
   it('keeps zero and false, which are real answers', () => {
     const u = buildLeadProfileUpdate({}, { discount_amount: 0, phone_verified: false });
     expect(u).toEqual({ discount_amount: 0, phone_verified: false });

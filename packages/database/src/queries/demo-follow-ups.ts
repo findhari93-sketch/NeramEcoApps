@@ -145,6 +145,7 @@ export async function logDemoFollowUpOutcome(
   const { data: row, error: rowErr } = await supabase.from('callback_requests').select(COLS + ', attempt_count').eq('id', input.callbackId).maybeSingle();
   if (rowErr) throw rowErr;
   if (!row) return { error: 'Follow-up not found.' };
+  if (!row.user_id) return { error: 'This request has no account yet. Open it in People first.' };
   const { data: attempts, error: attemptsErr } = await supabase
     .from('callback_attempts')
     .select('outcome')
@@ -242,11 +243,37 @@ export async function sweepDemoFollowUps(now: Date, client?: TypedSupabaseClient
         closed += await closeDemoFollowUpsOnEnrol(r.user_id, supabase);
       }
     } else if (r.status === 'completed' && r.call_outcome === 'joined' && r.completed_at && new Date(r.completed_at).getTime() < cutoff) {
+      // One open demo follow-up per person (unique index): if one is already open,
+      // flag that one instead of reopening this Joined row.
+      const { data: openRow, error: openRowErr } = await supabase
+        .from('callback_requests')
+        .select('id, flags')
+        .eq('user_id', r.user_id)
+        .in('query_type', DEMO_FOLLOW_UP_KINDS)
+        .in('status', OPEN)
+        .maybeSingle();
+      if (openRowErr) throw openRowErr;
+      if (openRow) {
+        if (!(openRow.flags || []).includes('payment_pending')) {
+          const { error: flagErr } = await supabase
+            .from('callback_requests')
+            .update({ flags: Array.from(new Set([...(openRow.flags || []), 'payment_pending'])) })
+            .eq('id', openRow.id);
+          if (flagErr) throw flagErr;
+        }
+        continue;
+      }
       const { error: reopenErr } = await supabase
         .from('callback_requests')
         .update({ status: 'scheduled', scheduled_callback_at: now.toISOString(), flags: Array.from(new Set([...(r.flags || []), 'payment_pending'])) })
         .eq('id', r.id);
-      if (reopenErr) throw reopenErr;
+      if (reopenErr) {
+        if (reopenErr.code === '23505') {
+          console.error('[sweepDemoFollowUps] reopen hit the one-open index, skipped row', r.id);
+          continue;
+        }
+        throw reopenErr;
+      }
       reopened++;
     }
   }

@@ -62,8 +62,10 @@ interface LinkData {
   amountPaid: number;
   paymentMethod: string | null;
   expiresAt: string;
-  /** Made for a demo person: sign in with the number used for the demo. */
+  /** Made from a demo: the copy says "the number you used for your demo". */
   forDemo?: boolean;
+  /** Tied to an account: sign in phone-first with that account's number. */
+  forAccount?: boolean;
   /** That number with the middle hidden, e.g. 90******77. */
   maskedPhone?: string | null;
 }
@@ -456,7 +458,7 @@ export default function EnrollWizard() {
         // written. Offer to switch to the demo number (progress is kept).
         if (data.code === 'WRONG_ACCOUNT') {
           setWrongAccount(true);
-          throw new Error(data.error || 'Sign in with the number you used for your demo.');
+          throw new Error(data.error || 'Sign in with the number on your Neram account.');
         }
         // If link was already used, redirect to success/owner view
         if (data.error?.includes('Invalid or expired') || data.error?.includes('already enrolled')) {
@@ -1031,7 +1033,7 @@ export default function EnrollWizard() {
   // A demo person signs in with the number they booked the demo with: phone
   // first, Google second. The card stays up while the sign-in dialog finishes
   // (the phone is saved after Firebase signs in), then the form takes over.
-  if (tokenStatus === 'valid' && !authLoading && linkData?.forDemo && (!user || showSignIn)) {
+  if (tokenStatus === 'valid' && !authLoading && linkData?.forAccount && (!user || showSignIn)) {
     return (
       <Container maxWidth="sm" sx={{ py: { xs: 3, md: 6 }, px: 2 }}>
         <Paper
@@ -1050,7 +1052,7 @@ export default function EnrollWizard() {
             Welcome, <strong>{linkData.studentName}</strong>!
           </Typography>
           <Typography color="text.primary" mb={3}>
-            Sign in with the number you used for your demo
+            {linkData.forDemo ? 'Sign in with the number you used for your demo' : 'Sign in with the number on your Neram account'}
             {linkData.maskedPhone ? (
               <> (<Box component="span" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{linkData.maskedPhone}</Box>)</>
             ) : null}
@@ -1320,7 +1322,7 @@ export default function EnrollWizard() {
           onClose={() => { setSubmitError(null); setWrongAccount(false); }}
         >
           {submitError}
-          {wrongAccount && linkData?.forDemo && (
+          {wrongAccount && linkData?.forAccount && (
             <Box mt={1.5}>
               <Button
                 variant="contained"
@@ -1333,7 +1335,7 @@ export default function EnrollWizard() {
                 }}
                 sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}
               >
-                Switch to my demo number
+                {linkData?.forDemo ? 'Switch to my demo number' : 'Switch to my account number'}
               </Button>
             </Box>
           )}

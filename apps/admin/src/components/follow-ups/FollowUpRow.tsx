@@ -42,9 +42,11 @@ export interface FollowUp {
   flags: string[] | null;
 }
 
-/** WhatsApp link: ten digit numbers get the 91 prefix. */
+/** WhatsApp link: the last ten digits get the 91 prefix. */
 function waLink(phone: string): string {
-  const digits = phone.replace(/\D/g, '').replace(/^(\d{10})$/, '91$1');
+  const raw = phone.replace(/\D/g, '');
+  // Last ten digits, so 0-prefixed and 91-prefixed numbers both work.
+  const digits = raw.length >= 10 ? `91${raw.slice(-10)}` : raw;
   return `https://wa.me/${digits}`;
 }
 

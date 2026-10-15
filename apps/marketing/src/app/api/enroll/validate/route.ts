@@ -227,9 +227,10 @@ export async function GET(request: NextRequest) {
         amountPaid: link.amount_paid,
         paymentMethod: link.payment_method || null,
         expiresAt: link.expires_at,
-        // A link made for a demo person: the enrol page asks them to sign in
-        // with the number they booked the demo with.
-        forDemo: Boolean((link as any).user_id),
+        // A link tied to an account asks for a phone-first sign-in; the wording
+        // says "demo" only when the link was made from a demo.
+        forDemo: Boolean((link as any).demo_registration_id),
+        forAccount: Boolean((link as any).user_id),
         maskedPhone: maskPhone(link.student_phone),
       },
     });
