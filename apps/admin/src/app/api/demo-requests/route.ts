@@ -67,8 +67,12 @@ export async function GET() {
     const followUps = await listDemoFollowUpsByDemo(doneIds, supabase);
     const userIds = Array.from(new Set(requests.filter((r) => r.user_id).map((r) => r.user_id as string)));
     const joinedAt: Record<string, string> = {};
-    if (userIds.length) {
-      const { data } = await (supabase as any).from('student_profiles').select('user_id, enrollment_date').in('user_id', userIds);
+    for (let i = 0; i < userIds.length; i += 100) {
+      const { data, error } = await (supabase as any)
+        .from('student_profiles')
+        .select('user_id, enrollment_date')
+        .in('user_id', userIds.slice(i, i + 100));
+      if (error) throw error;
       for (const s of data ?? []) joinedAt[s.user_id] = s.enrollment_date;
     }
     const enrolled = recentUserIds.filter((id) => id in joinedAt).length;

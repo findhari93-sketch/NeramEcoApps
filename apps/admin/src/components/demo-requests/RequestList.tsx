@@ -118,9 +118,9 @@ export default function RequestList({
                   {tab === 'done' ? (
                     (() => {
                       const f = followUps[r.id];
-                      const joined = r.user_id ? joinedAt[r.user_id] : null;
-                      if (joined) {
-                        return <Chip size="small" color="success" icon={<CheckCircleIcon />} label={`Joined ${formatIstDate(joined)}`} />;
+                      const joinedOn = r.user_id && r.user_id in joinedAt ? joinedAt[r.user_id] : undefined;
+                      if (joinedOn !== undefined) {
+                        return <Chip size="small" color="success" icon={<CheckCircleIcon />} label={joinedOn ? `Joined ${formatIstDate(joinedOn)}` : 'Joined'} />;
                       }
                       if (!f) return <Typography variant="body2" color="text.secondary">Not started</Typography>;
                       const due = f.scheduled_callback_at ? new Date(f.scheduled_callback_at) : null;

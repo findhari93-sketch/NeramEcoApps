@@ -257,14 +257,17 @@ export async function sweepDemoFollowUps(now: Date, client?: TypedSupabaseClient
 export async function listDemoFollowUpsByDemo(demoIds: string[], client?: TypedSupabaseClient): Promise<Record<string, DemoFollowUpRow>> {
   if (!demoIds.length) return {};
   const supabase = client || getSupabaseAdminClient();
-  const { data, error } = await supabase
-    .from('callback_requests')
-    .select(COLS)
-    .in('demo_registration_id', demoIds)
-    .order('created_at', { ascending: false });
-  if (error) throw error;
   const out: Record<string, DemoFollowUpRow> = {};
-  for (const r of data || []) if (r.demo_registration_id && !out[r.demo_registration_id]) out[r.demo_registration_id] = r;
+  // Chunk the id list so the GET URL stays short. A demo id lives in exactly one chunk,
+  // and rows come newest first, so the first row seen per demo is its latest.
+  for (let i = 0; i < demoIds.length; i += 100) {
+    const { data, error } = await supabase
+      .from('callback_requests')
+      .select(COLS)
+      .in('demo_registration_id', demoIds.slice(i, i + 100))
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    for (const r of data || []) if (r.demo_registration_id && !out[r.demo_registration_id]) out[r.demo_registration_id] = r;
+  }
   return out;
 }
-
