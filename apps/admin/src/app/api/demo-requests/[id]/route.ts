@@ -78,7 +78,7 @@ async function detail(id: string) {
     const { data } = await (supabase as any).from('users').select('id, name').in('id', actorIds);
     actors = Object.fromEntries((data ?? []).map((u: { id: string; name: string }) => [u.id, u.name]));
   }
-  const followUp = request.user_id ? await getOpenDemoFollowUp(request.user_id, supabase).catch(() => null) : null;
+  const followUp = request.user_id ? await getOpenDemoFollowUp(request.user_id, supabase) : null;
   return { request, events, messages, actors, followUp };
 }
 
@@ -359,6 +359,7 @@ export async function POST(req: Request, { params }: Params) {
         if (attended && (!interest || !nextAt || Number.isNaN(nextAt.getTime()))) {
           throw new ActionError('Pick how interested they are and the first follow-up date.');
         }
+        if (attended && nextAt!.getTime() <= Date.now()) throw new ActionError('Pick a follow-up date in the future.');
         await updateDemoRequest(
           r.id,
           {
@@ -419,6 +420,7 @@ export async function POST(req: Request, { params }: Params) {
       }
 
       case 'follow_up': {
+        if (!['attended', 'no_show'].includes(r.status)) throw new ActionError('Start a follow-up after the demo has happened.');
         if (!r.user_id) throw new ActionError('This request has no person linked.');
         const at = typeof body.nextFollowUpAt === 'string' ? new Date(body.nextFollowUpAt) : null;
         if (!at || Number.isNaN(at.getTime()) || at.getTime() <= Date.now()) throw new ActionError('Pick a follow-up date in the future.');

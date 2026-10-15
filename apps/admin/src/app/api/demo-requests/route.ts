@@ -218,7 +218,7 @@ export async function POST(req: Request) {
       if (at.getTime() > Date.now() + 5 * 60_000) throw new AddError('That time is in the future. Use "Time already agreed" instead.');
       const platform = STAFF_DEMO_PLATFORMS.find((p) => p.id === str(body.platform, 20));
       if (!platform) throw new AddError('Pick where the demo happened.');
-      const attended = body.outcome !== 'no_show';
+      const attended = heldAttended;
       const minutes = (await loadDemoSettings(supabase)).schedule.durationMinutes;
       const joinUrl = str(body.joinUrl, 500);
       const held = {
