@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalisePhone, isSamePhone, maskPhone } from './phone';
+import { normalisePhone, isSamePhone, maskPhone, isSameMobile } from './phone';
 
 /**
  * Regression: the Chetana duplicate, 2026-07-28. A direct-enrolment student who
@@ -59,6 +59,20 @@ describe('isSamePhone', () => {
     expect(isSamePhone('+919949414949', '9949414948')).toBe(false);
     expect(isSamePhone(undefined, '9949414949')).toBe(false);
     expect(isSamePhone(null, null)).toBe(false);
+  });
+});
+
+describe('isSameMobile', () => {
+  it('matches the same mobile in any stored shape', () => {
+    expect(isSameMobile('+919000000077', '9000000077')).toBe(true);
+    expect(isSameMobile('+91 90000 00077', '919000000077')).toBe(true);
+  });
+
+  it('rejects a different number, a short number, or nothing', () => {
+    expect(isSameMobile('+919000000077', '+919000000078')).toBe(false);
+    expect(isSameMobile('12345', '12345')).toBe(false);
+    expect(isSameMobile(null, '9000000077')).toBe(false);
+    expect(isSameMobile('9000000077', undefined)).toBe(false);
   });
 });
 

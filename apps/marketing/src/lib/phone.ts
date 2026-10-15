@@ -44,6 +44,18 @@ export function maskPhone(raw: unknown): string | null {
 }
 
 /**
+ * True when both are ten-digit (Indian) mobiles with the same last ten digits:
+ * "+91 90000 00077", "9000000077" and "919000000077" all match. Used to check
+ * that an account proved the demo person's number before it is merged in.
+ */
+export function isSameMobile(a: unknown, b: unknown): boolean {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  const ta = a.replace(/\D/g, '').slice(-10);
+  const tb = b.replace(/\D/g, '').slice(-10);
+  return ta.length === 10 && ta === tb;
+}
+
+/**
  * True when two numbers are the same phone once normalised. Used to check that
  * the number a client asks us to mark verified is the one Firebase actually
  * verified (the `phone_number` claim of the ID token), not any number it sends.

@@ -19,7 +19,8 @@ import {
   closeDemoFollowUpsOnEnrol,
 } from '@neram/database';
 import { verifyFirebaseToken } from '../../_lib/auth';
-import { normalisePhone } from '@/lib/phone';
+import { normalisePhone, isSameMobile } from '@/lib/phone';
+import { buildLeadProfileUpdate } from '@/lib/enrol-lead-update';
 
 // POST /api/enroll/complete - Complete direct enrollment (requires Firebase auth)
 export async function POST(request: NextRequest) {
@@ -101,11 +102,26 @@ export async function POST(request: NextRequest) {
     }
 
     // A link made for a demo person enrols THAT account. Signed in with another
-    // account: a shell made by this very sign-in is folded into the demo
-    // account (the demo account wins); an established one is refused, so a
-    // student never ends up with two records.
+    // account: it is folded into the demo account (the demo account wins) only
+    // when it is a shell made by this very sign-in AND it proved the demo
+    // person's number by OTP. Holding the link alone is never enough. Anything
+    // else is refused, so nobody's account is merged on a link that leaked.
     let userId = auth.userId;
     if (link.user_id && link.user_id !== auth.userId) {
+      const { data: linkUser, error: linkUserError } = await supabase
+        .from('users')
+        .select('id, user_type, phone, phone_verified')
+        .eq('id', link.user_id)
+        .maybeSingle();
+      if (linkUserError) throw linkUserError;
+      if (linkUser?.user_type === 'student') {
+        return NextResponse.json(
+          { error: 'You are already enrolled as a student' },
+          { status: 400 }
+        );
+      }
+      const demoPhone = linkUser?.phone || link.student_phone;
+      const provedDemoNumber = Boolean(linkUser) && auth.phoneVerified === true && isSameMobile(auth.phone, demoPhone);
       const { data: signedIn } = await supabase
         .from('users')
         .select('id, user_type, created_at')
@@ -114,7 +130,8 @@ export async function POST(request: NextRequest) {
       const decision = decideEnrolUser({
         linkUserId: link.user_id,
         signedInUserId: auth.userId,
-        signedInIsDisposable: signedIn ? await isDisposableAccount(supabase as any, signedIn) : false,
+        signedInIsDisposable:
+          provedDemoNumber && signedIn ? await isDisposableAccount(supabase as any, signedIn) : false,
       });
       if (decision.action === 'refuse') {
         return NextResponse.json({ error: decision.message, code: 'WRONG_ACCOUNT' }, { status: 409 });
@@ -123,6 +140,10 @@ export async function POST(request: NextRequest) {
         // mergeUserRecords(winnerId, loserId, adminId, client): the demo account wins.
         await mergeUserRecords(decision.userId, decision.mergeFrom, null, supabase);
         console.log(`[Direct Enrollment] Merged sign-in account ${decision.mergeFrom} into demo account ${decision.userId}`);
+        // The shell proved the demo number by OTP: the demo account now has it verified.
+        const proven: Record<string, unknown> = { phone_verified: true };
+        if (!linkUser.phone) proven.phone = normalisePhone(auth.phone) || auth.phone;
+        await updateUser(decision.userId, proven, supabase);
       }
       userId = decision.userId;
     }
@@ -221,7 +242,7 @@ export async function POST(request: NextRequest) {
     // already has a lead_profiles row, which is completed here, not duplicated.
     const { data: existingLead } = await supabase
       .from('lead_profiles')
-      .select('id')
+      .select('id, source, admin_notes, application_number')
       .eq('user_id', userId)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
@@ -275,8 +296,15 @@ export async function POST(request: NextRequest) {
         demo_registration_id: link.demo_registration_id || null,
     };
 
+    // An existing application is filled in, never overwritten: blank answers,
+    // its source and number stay, and the enrolment note is appended.
     const { data: leadProfile, error: leadProfileError } = existingLead
-      ? await supabase.from('lead_profiles').update(leadFields).eq('id', existingLead.id).select().single()
+      ? await supabase
+          .from('lead_profiles')
+          .update(buildLeadProfileUpdate(existingLead, leadFields))
+          .eq('id', existingLead.id)
+          .select()
+          .single()
       : await supabase.from('lead_profiles').insert({ user_id: userId, ...leadFields }).select().single();
 
     if (leadProfileError) {
