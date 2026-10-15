@@ -28,7 +28,7 @@ export default function AttendedFields({ value, onChange }: { value: AttendedVal
           value={value.interest}
           onChange={(_, v) => v && onChange({ ...value, interest: v })}
           aria-labelledby="interest-label"
-          sx={{ gap: 1, '& .MuiToggleButton-root': { minHeight: 44, px: 3, border: 1, borderColor: 'divider', borderRadius: '8px !important', textTransform: 'none' } }}
+          sx={{ gap: 1, '& .MuiToggleButton-root': { minHeight: 44, px: 3, border: 1, borderColor: 'divider', borderRadius: '8px !important', textTransform: 'none', '&.Mui-focusVisible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } } }}
         >
           {(Object.keys(INTEREST_LABELS) as InterestLevel[]).map((k) => (
             <ToggleButton key={k} value={k}>
