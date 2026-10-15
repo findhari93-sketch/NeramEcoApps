@@ -11,6 +11,7 @@ import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import { pickParam } from '@/lib/ops-format';
 import { OpsPageHeader, EmptyState, OpsSkeleton, FOCUS_RING, TARGET_44 } from '@/components/ops/OpsUi';
 import FollowUpRow, { type FollowUp } from '@/components/follow-ups/FollowUpRow';
+import LogOutcomeDialog from '@/components/follow-ups/LogOutcomeDialog';
 
 type Range = 'overdue' | 'today' | 'week' | 'all';
 const RANGES: readonly Range[] = ['overdue', 'today', 'week', 'all'];
@@ -20,6 +21,9 @@ const RANGE_LABELS: Record<Range, string> = {
   week: 'This week',
   all: 'All open',
 };
+type RowType = 'all' | 'demo' | 'callback';
+const TYPES: readonly RowType[] = ['all', 'demo', 'callback'];
+const TYPE_LABELS: Record<RowType, string> = { all: 'All', demo: 'After demo', callback: 'Callback requests' };
 const LIST_LIMIT = 100;
 
 const EMPTY_COPY: Record<Range, { title: string; body: string }> = {
@@ -34,11 +38,13 @@ function FollowUpsInner() {
   const searchParams = useSearchParams();
   const range = pickParam(searchParams.get('range'), RANGES, 'today');
   const mine = searchParams.get('mine') === 'true';
+  const type = pickParam(searchParams.get('type'), TYPES, 'all');
 
   const [items, setItems] = useState<FollowUp[]>([]);
   const [dueCount, setDueCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [logging, setLogging] = useState<FollowUp | null>(null);
   const [now, setNow] = useState(() => new Date());
 
   const load = useCallback(async () => {
@@ -47,6 +53,7 @@ function FollowUpsInner() {
     try {
       const params = new URLSearchParams({ range });
       if (mine) params.set('mine', 'true');
+      if (type !== 'all') params.set('type', type);
       const res = await fetch(`/api/crm/follow-ups?${params.toString()}`, { cache: 'no-store' });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Could not load follow-ups.');
@@ -58,18 +65,20 @@ function FollowUpsInner() {
     } finally {
       setLoading(false);
     }
-  }, [range, mine]);
+  }, [range, mine, type]);
 
   useEffect(() => {
     load();
   }, [load]);
 
-  const setUrl = (next: { range?: Range; mine?: boolean }) => {
+  const setUrl = (next: { range?: Range; mine?: boolean; type?: RowType }) => {
     const params = new URLSearchParams();
     const r = next.range ?? range;
     const m = next.mine ?? mine;
+    const t = next.type ?? type;
     if (r !== 'today') params.set('range', r);
     if (m) params.set('mine', 'true');
+    if (t !== 'all') params.set('type', t);
     router.replace(`/follow-ups${params.toString() ? `?${params.toString()}` : ''}`, { scroll: false });
   };
 
@@ -99,6 +108,19 @@ function FollowUpsInner() {
                 <GroupsIcon fontSize="small" aria-hidden />
                 Everyone
               </ToggleButton>
+            </ToggleButtonGroup>
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              value={type}
+              onChange={(_, v) => v && setUrl({ type: v })}
+              aria-label="Type of follow-up"
+            >
+              {TYPES.map((t) => (
+                <ToggleButton key={t} value={t} sx={{ ...TARGET_44, ...FOCUS_RING, px: 2, textTransform: 'none' }}>
+                  {TYPE_LABELS[t]}
+                </ToggleButton>
+              ))}
             </ToggleButtonGroup>
             <Button
               variant="outlined"
@@ -175,7 +197,7 @@ function FollowUpsInner() {
             aria-hidden
             sx={{
               display: { xs: 'none', md: 'grid' },
-              gridTemplateColumns: 'minmax(0,1.6fr) minmax(0,1.3fr) minmax(0,1.8fr) minmax(0,1.2fr) 104px',
+              gridTemplateColumns: 'minmax(0,1.6fr) minmax(0,1.3fr) minmax(0,1.8fr) minmax(0,1.2fr) 136px',
               gap: 2,
               px: 2.25,
               pb: 0.5,
@@ -189,11 +211,22 @@ function FollowUpsInner() {
           </Box>
           <Box component="ul" sx={{ display: 'grid', gap: 1, p: 0, m: 0 }}>
             {items.map((item) => (
-              <FollowUpRow key={item.callback_id} item={item} now={now} />
+              <FollowUpRow key={item.callback_id} item={item} now={now} onLogOutcome={() => setLogging(item)} />
             ))}
           </Box>
         </>
       )}
+      <LogOutcomeDialog
+        open={!!logging}
+        name={logging?.person_name || logging?.person_phone || ''}
+        callbackId={logging?.callback_id || ''}
+        interest={logging?.interest_level ?? null}
+        onClose={() => setLogging(null)}
+        onSaved={() => {
+          setLogging(null);
+          load();
+        }}
+      />
     </Box>
   );
 }

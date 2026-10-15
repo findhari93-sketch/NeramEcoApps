@@ -19,7 +19,7 @@ export function istDayBounds(now: Date = new Date()): { start: Date; end: Date }
 
 /** Open callbacks by due time. `owner` filters on the call's assignee or the person's owner. */
 export async function listFollowUps(
-  options: { range?: FollowUpRange; ownerId?: string; limit?: number; now?: Date } = {},
+  options: { range?: FollowUpRange; ownerId?: string; type?: 'demo' | 'callback' | 'all'; limit?: number; now?: Date } = {},
   client?: TypedSupabaseClient,
 ) {
   const supabase = client || getSupabaseAdminClient();
@@ -31,6 +31,8 @@ export async function listFollowUps(
   if (range === 'today') query = query.lt('due_at', end.toISOString());
   if (range === 'week') query = query.lt('due_at', new Date(end.getTime() + 6 * 86_400_000).toISOString());
   if (ownerId) query = query.or(`assigned_to.eq.${ownerId},crm_owner_id.eq.${ownerId}`);
+  if (options.type === 'demo') query = query.in('query_type', ['post_demo', 'demo_rebook']);
+  if (options.type === 'callback') query = query.or('query_type.is.null,query_type.not.in.(post_demo,demo_rebook)');
 
   const { data, error } = await query;
   if (error) throw error;

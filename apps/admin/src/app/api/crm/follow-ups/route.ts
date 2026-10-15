@@ -17,8 +17,10 @@ export async function GET(request: NextRequest) {
   const rangeParam = sp.get('range') as FollowUpRange | null;
   const range = rangeParam && RANGES.includes(rangeParam) ? rangeParam : 'today';
   const ownerId = sp.get('mine') === 'true' ? getRequestAdminId(request) ?? undefined : undefined;
+  const typeParam = sp.get('type');
+  const type = typeParam === 'demo' || typeParam === 'callback' ? typeParam : 'all';
   try {
-    const [followUps, dueCount] = await Promise.all([listFollowUps({ range, ownerId }), countDueFollowUps()]);
+    const [followUps, dueCount] = await Promise.all([listFollowUps({ range, ownerId, type }), countDueFollowUps()]);
     return NextResponse.json({ followUps, dueCount }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {
     console.error('Follow-ups error:', error);

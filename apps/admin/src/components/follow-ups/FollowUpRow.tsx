@@ -4,6 +4,11 @@ import Link from 'next/link';
 import { Box, Paper, Typography, Button } from '@neram/ui';
 import { LIFECYCLE_STAGE_LABELS } from '@neram/database';
 import PhoneIcon from '@mui/icons-material/Phone';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
+import WhatshotIcon from '@mui/icons-material/Whatshot';
+import PhoneDisabledIcon from '@mui/icons-material/PhoneDisabled';
+import PaymentsIcon from '@mui/icons-material/Payments';
+import { INTEREST_LABELS } from '@neram/database/demo-follow-up';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import TodayIcon from '@mui/icons-material/Today';
@@ -32,6 +37,15 @@ export interface FollowUp {
   crm_stage: string | null;
   contacted_status: string | null;
   overdue: boolean;
+  demo_registration_id: string | null;
+  interest_level: 'hot' | 'warm' | 'cold' | null;
+  flags: string[] | null;
+}
+
+/** WhatsApp link: ten digit numbers get the 91 prefix. */
+function waLink(phone: string): string {
+  const digits = phone.replace(/\D/g, '').replace(/^(\d{10})$/, '91$1');
+  return `https://wa.me/${digits}`;
 }
 
 /** Digits and a leading + only, for a tel: link. */
@@ -48,7 +62,17 @@ function Label({ children }: { children: string }) {
   );
 }
 
-export default function FollowUpRow({ item, now }: { item: FollowUp; now: Date }) {
+export default function FollowUpRow({
+  item,
+  now,
+  onLogOutcome,
+  onSendLink,
+}: {
+  item: FollowUp;
+  now: Date;
+  onLogOutcome?: () => void;
+  onSendLink?: () => void;
+}) {
   const due = describeDue(item.due_at, now);
   const overdue = item.overdue || due.tone === 'overdue';
   const name = item.person_name || item.person_phone || 'Unnamed caller';
@@ -69,7 +93,7 @@ export default function FollowUpRow({ item, now }: { item: FollowUp; now: Date }
         borderLeftColor: overdue ? 'error.main' : due.tone === 'today' ? 'warning.main' : 'divider',
         display: 'grid',
         gap: { xs: 1.25, md: 2 },
-        gridTemplateColumns: { xs: '1fr', md: 'minmax(0,1.6fr) minmax(0,1.3fr) minmax(0,1.8fr) minmax(0,1.2fr) 104px' },
+        gridTemplateColumns: { xs: '1fr', md: 'minmax(0,1.6fr) minmax(0,1.3fr) minmax(0,1.8fr) minmax(0,1.2fr) 136px' },
         alignItems: 'start',
       }}
     >
@@ -97,6 +121,15 @@ export default function FollowUpRow({ item, now }: { item: FollowUp; now: Date }
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
           {stageLabel && <StatusChip icon={PersonOutlineIcon} label={stageLabel} />}
           {!item.user_id && <StatusChip icon={PersonOutlineIcon} label="No account" tone="warning" />}
+          {item.interest_level && (
+            <StatusChip
+              icon={WhatshotIcon}
+              label={INTEREST_LABELS[item.interest_level]}
+              tone={item.interest_level === 'hot' ? 'error' : item.interest_level === 'warm' ? 'warning' : undefined}
+            />
+          )}
+          {item.flags?.includes('hard_to_reach') && <StatusChip icon={PhoneDisabledIcon} label="Hard to reach" tone="warning" />}
+          {item.flags?.includes('payment_pending') && <StatusChip icon={PaymentsIcon} label="Payment not received" tone="error" />}
         </Box>
       </Box>
 
@@ -124,11 +157,28 @@ export default function FollowUpRow({ item, now }: { item: FollowUp; now: Date }
       <Box sx={{ minWidth: 0 }}>
         <Label>Request</Label>
         <Typography variant="body2" fontWeight={600}>
-          {item.query_type ? humanizeKey(item.query_type) : 'Callback'}
+          {item.query_type === 'post_demo'
+            ? 'After demo'
+            : item.query_type === 'demo_rebook'
+              ? 'Rebook demo'
+              : item.query_type
+                ? humanizeKey(item.query_type)
+                : 'Callback'}
           <Typography component="span" variant="body2" color="text.secondary">
             {`, ${humanizeKey(item.status)}`}
           </Typography>
         </Typography>
+        {item.demo_registration_id && (
+          <Link href={`/demo-classes?id=${item.demo_registration_id}`}>
+            <Typography
+              component="span"
+              variant="body2"
+              sx={{ color: 'primary.main', textDecoration: 'underline', textUnderlineOffset: 2 }}
+            >
+              See the demo
+            </Typography>
+          </Link>
+        )}
         {item.notes && (
           <Typography
             variant="body2"
@@ -177,6 +227,39 @@ export default function FollowUpRow({ item, now }: { item: FollowUp; now: Date }
             Call
           </Button>
         ) : null}
+        {item.person_phone ? (
+          <Button
+            component="a"
+            href={waLink(item.person_phone)}
+            target="_blank"
+            rel="noopener noreferrer"
+            variant="outlined"
+            startIcon={<WhatsAppIcon />}
+            aria-label={`WhatsApp ${name}`}
+            sx={{ ...TARGET_44, ...FOCUS_RING, textTransform: 'none', flex: { xs: 1, md: 'none' } }}
+          >
+            WhatsApp
+          </Button>
+        ) : null}
+        {onLogOutcome && (
+          <Button
+            variant="outlined"
+            onClick={onLogOutcome}
+            aria-label={`Log outcome for ${name}`}
+            sx={{ ...TARGET_44, ...FOCUS_RING, textTransform: 'none', flex: { xs: 1, md: 'none' } }}
+          >
+            Log outcome
+          </Button>
+        )}
+        {onSendLink && (
+          <Button
+            onClick={onSendLink}
+            aria-label={`Send enrolment link to ${name}`}
+            sx={{ ...TARGET_44, ...FOCUS_RING, textTransform: 'none', flex: { xs: 1, md: 'none' } }}
+          >
+            Enrolment link
+          </Button>
+        )}
         {item.user_id && (
           <Button
             component={Link}

@@ -43,6 +43,8 @@ import {
   isJoinOpen,
 } from '@neram/database/demo-schedule';
 import { OpsSkeleton, FOCUS_RING } from '@/components/ops/OpsUi';
+import { INTEREST_LABELS } from '@neram/database/demo-follow-up';
+import LogOutcomeDialog from '@/components/follow-ups/LogOutcomeDialog';
 import AttendedDialog from './AttendedDialog';
 import ScheduleDialog, { type ScheduleSubmit } from './ScheduleDialog';
 import type { DeskDetail, DeskSettings, DemoRequest } from './types';
@@ -141,6 +143,7 @@ export default function RequestPanel({
   const [reason, setReason] = useState('');
   const [copied, setCopied] = useState(false);
   const [attendedOpen, setAttendedOpen] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
 
   if (loading && !detail) {
     return (
@@ -440,6 +443,46 @@ export default function RequestPanel({
               Reopen and call again
             </Button>
           )}
+        </Box>
+      )}
+
+      {detail.followUp && (
+        <Box sx={{ mt: 2 }}>
+          <SectionTitle>After the demo</SectionTitle>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+            {detail.followUp.interest_level && (
+              <Chip
+                size="small"
+                label={INTEREST_LABELS[detail.followUp.interest_level]}
+                color={detail.followUp.interest_level === 'hot' ? 'error' : detail.followUp.interest_level === 'warm' ? 'warning' : 'default'}
+              />
+            )}
+            <Typography variant="body2">
+              Next follow-up{' '}
+              {detail.followUp.scheduled_callback_at ? formatDemoDateTime(new Date(detail.followUp.scheduled_callback_at)) : 'not set'}
+            </Typography>
+          </Box>
+          {detail.followUp.notes && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              {detail.followUp.notes}
+            </Typography>
+          )}
+          <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
+            <Button variant="outlined" onClick={() => setLogOpen(true)} sx={{ minHeight: 44 }}>
+              Log outcome
+            </Button>
+          </Box>
+          <LogOutcomeDialog
+            open={logOpen}
+            name={r.name}
+            callbackId={detail.followUp.id}
+            interest={detail.followUp.interest_level}
+            onClose={() => setLogOpen(false)}
+            onSaved={async () => {
+              setLogOpen(false);
+              await onAction({ action: 'note', note: 'Follow-up call logged' });
+            }}
+          />
         </Box>
       )}
 
