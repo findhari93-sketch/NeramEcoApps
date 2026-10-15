@@ -51,8 +51,10 @@ export async function resolveDemoFollowUpOwner(userId: string, client?: TypedSup
     .or([...upns.map((u) => `email.ilike.${u}`), ...(ids.length ? [`id.in.(${ids.join(',')})`] : [])].join(',') || 'id.is.null');
   const staffByUpn: Record<string, { id: string; active: boolean }> = {};
   let crmOwnerActive = false;
+  const wanted = new Set(upns.map((u) => u.toLowerCase()));
   for (const u of staff || []) {
-    if (u.email) staffByUpn[u.email.toLowerCase()] = { id: u.id, active: !u.is_disabled };
+    // ilike treats _ and % as wildcards: only exact (case-insensitive) UPN matches count.
+    if (u.email && wanted.has(u.email.toLowerCase())) staffByUpn[u.email.toLowerCase()] = { id: u.id, active: !u.is_disabled };
     if (u.id === person?.crm_owner_id) crmOwnerActive = !u.is_disabled;
   }
   return resolveFollowUpOwnerId({
@@ -140,14 +142,16 @@ export async function logDemoFollowUpOutcome(
   client?: TypedSupabaseClient,
 ): Promise<{ error?: string }> {
   const supabase = client || getSupabaseAdminClient();
-  const { data: row } = await supabase.from('callback_requests').select(COLS + ', attempt_count').eq('id', input.callbackId).maybeSingle();
+  const { data: row, error: rowErr } = await supabase.from('callback_requests').select(COLS + ', attempt_count').eq('id', input.callbackId).maybeSingle();
+  if (rowErr) throw rowErr;
   if (!row) return { error: 'Follow-up not found.' };
-  const { data: attempts } = await supabase
+  const { data: attempts, error: attemptsErr } = await supabase
     .from('callback_attempts')
     .select('outcome')
     .eq('callback_request_id', row.id)
     .order('attempted_at', { ascending: false })
     .limit(5);
+  if (attemptsErr) throw attemptsErr;
   const now = new Date();
   const result = applyFollowUpOutcome({
     outcome: input.outcome,
@@ -214,17 +218,19 @@ export async function closeDemoFollowUpsOnEnrol(userId: string, client?: TypedSu
  */
 export async function sweepDemoFollowUps(now: Date, client?: TypedSupabaseClient): Promise<{ closed: number; reopened: number }> {
   const supabase = client || getSupabaseAdminClient();
-  const { data: open } = await supabase
+  const { data: open, error: openErr } = await supabase
     .from('callback_requests')
     .select('id, user_id, status, call_outcome, completed_at, flags')
     .in('query_type', DEMO_FOLLOW_UP_KINDS)
     .or(`status.in.(${OPEN.join(',')}),and(status.eq.completed,call_outcome.eq.joined)`)
     .not('user_id', 'is', null)
     .limit(2000);
+  if (openErr) throw openErr;
   const userIds = Array.from(new Set((open || []).map((r) => r.user_id)));
   const enrolled = new Set<string>();
   for (let i = 0; i < userIds.length; i += 200) {
-    const { data } = await supabase.from('student_profiles').select('user_id').in('user_id', userIds.slice(i, i + 200));
+    const { data, error: profErr } = await supabase.from('student_profiles').select('user_id').in('user_id', userIds.slice(i, i + 200));
+    if (profErr) throw profErr;
     (data || []).forEach((d) => enrolled.add(d.user_id));
   }
   let closed = 0;
@@ -236,10 +242,11 @@ export async function sweepDemoFollowUps(now: Date, client?: TypedSupabaseClient
         closed += await closeDemoFollowUpsOnEnrol(r.user_id, supabase);
       }
     } else if (r.status === 'completed' && r.call_outcome === 'joined' && r.completed_at && new Date(r.completed_at).getTime() < cutoff) {
-      await supabase
+      const { error: reopenErr } = await supabase
         .from('callback_requests')
         .update({ status: 'scheduled', scheduled_callback_at: now.toISOString(), flags: Array.from(new Set([...(r.flags || []), 'payment_pending'])) })
         .eq('id', r.id);
+      if (reopenErr) throw reopenErr;
       reopened++;
     }
   }
