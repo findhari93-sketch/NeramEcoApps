@@ -448,6 +448,10 @@ export interface DemoSettings {
   defaultTutorUpn: string | null;
   /** Whose calendar holds the meeting unless changed at Confirm. Null means the tutor's. */
   defaultOrganizerUpn: string | null;
+  /** Who owns demo follow-ups when the person has no CRM owner, in order. */
+  followUpOwnerUpns: string[];
+  /** Gets the daily team summary; owner of last resort. */
+  followUpManagerUpn: string | null;
   /** Digits with country code, for wa.me links: where students send drawings. */
   drawingWhatsApp: string;
   /** "within 2 working hours" */
@@ -473,11 +477,17 @@ export function resolveDemoSettings(raw: unknown): DemoSettings {
   const tutor = typeof r.defaultTutorUpn === 'string' ? r.defaultTutorUpn.trim().toLowerCase() : '';
   const organizer = typeof r.defaultOrganizerUpn === 'string' ? r.defaultOrganizerUpn.trim().toLowerCase() : '';
   const wa = typeof r.drawingWhatsApp === 'string' ? r.drawingWhatsApp.replace(/\D/g, '') : '';
+  const upn = (v: unknown) => (typeof v === 'string' && /^[^@\s]+@[^@\s]+$/.test(v.trim()) ? v.trim().toLowerCase() : null);
+  const ownerOrder = Array.isArray(r.followUpOwnerUpns)
+    ? (r.followUpOwnerUpns as unknown[]).map(upn).filter((u): u is string => !!u)
+    : [];
   return {
     schedule: resolveDemoSchedule(r),
     hosts,
     defaultTutorUpn: hosts.find((h) => h.upn === tutor)?.upn ?? hosts[0]?.upn ?? null,
     defaultOrganizerUpn: hosts.find((h) => h.upn === organizer)?.upn ?? null,
+    followUpOwnerUpns: Array.from(new Set(ownerOrder)),
+    followUpManagerUpn: upn(r.followUpManagerUpn),
     drawingWhatsApp: /^\d{11,13}$/.test(wa) ? wa : DEFAULT_DRAWING_WHATSAPP,
     callbackPromise:
       typeof r.callbackPromise === 'string' && r.callbackPromise.trim() ? r.callbackPromise.trim() : 'within 2 working hours',
@@ -486,8 +496,17 @@ export function resolveDemoSettings(raw: unknown): DemoSettings {
 }
 
 /** The settings a public page may see (no staff mailboxes). */
-export function publicDemoSettings(s: DemoSettings): Omit<DemoSettings, 'hosts' | 'defaultTutorUpn' | 'defaultOrganizerUpn'> {
-  const { hosts: _hosts, defaultTutorUpn: _tutor, defaultOrganizerUpn: _organizer, ...rest } = s;
+export function publicDemoSettings(
+  s: DemoSettings,
+): Omit<DemoSettings, 'hosts' | 'defaultTutorUpn' | 'defaultOrganizerUpn' | 'followUpOwnerUpns' | 'followUpManagerUpn'> {
+  const {
+    hosts: _hosts,
+    defaultTutorUpn: _tutor,
+    defaultOrganizerUpn: _organizer,
+    followUpOwnerUpns: _owners,
+    followUpManagerUpn: _manager,
+    ...rest
+  } = s;
   return rest;
 }
 

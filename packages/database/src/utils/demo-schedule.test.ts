@@ -258,6 +258,18 @@ describe('demo team', () => {
     expect(publicDemoSettings(withOrganizer)).not.toHaveProperty('defaultOrganizerUpn');
   });
 
+  it('reads the follow-up owner order and manager, dropping junk', () => {
+    const s = resolveDemoSettings({
+      hosts: team.hosts,
+      followUpOwnerUpns: [' TamilSelvan@neramclasses.com ', 'bad', 'shanthimano@nerasmclasses.onmicrosoft.com'],
+      followUpManagerUpn: 'Haribabu@neramclasses.com',
+    });
+    expect(s.followUpOwnerUpns).toEqual(['tamilselvan@neramclasses.com', 'shanthimano@nerasmclasses.onmicrosoft.com']);
+    expect(s.followUpManagerUpn).toBe('haribabu@neramclasses.com');
+    expect(resolveDemoSettings({}).followUpOwnerUpns).toEqual([]);
+    expect(publicDemoSettings(s)).not.toHaveProperty('followUpOwnerUpns');
+  });
+
   it('picks tutor and organizer: explicit, then usual, then the tutor', () => {
     const s = { defaultTutorUpn: 'hari@x', defaultOrganizerUpn: 'tamil@x' };
     expect(pickDemoRoles(s, ['hari@x', 'tamil@x', 'shanthi@x'])).toEqual({ tutor: 'hari@x', organizer: 'tamil@x' });

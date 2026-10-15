@@ -13,6 +13,7 @@
     "./queries/nexus": "./src/queries/nexus/index.ts",
     "./analytics": "./src/analytics/index.ts",
     "./demo-schedule": "./src/utils/demo-schedule.ts",
+    "./demo-follow-up": "./src/utils/demo-follow-up.ts",
     "./drawing-grade": "./src/queries/nexus/drawing-grade.ts",
     "./signup-geo": "./src/utils/signup-geo.ts",
     "./staff-push": "./src/services/staff-push.ts",

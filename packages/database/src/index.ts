@@ -185,6 +185,7 @@ export type { LifecycleInput, ExamYearSource, ActivityGroup } from './utils/life
 export { createUnsubscribeToken, verifyUnsubscribeToken } from './utils/unsubscribe-token';
 // Demo Class v2 scheduling (client-safe copy at '@neram/database/demo-schedule')
 export * from './utils/demo-schedule';
+export * from './utils/demo-follow-up';
 export { fetchAllRows, countRowsByKey, countRowsForIds } from './utils/paged-rows';
 export {
   classifyCatchupCandidate,
