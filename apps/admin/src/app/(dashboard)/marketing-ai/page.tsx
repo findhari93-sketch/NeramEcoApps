@@ -187,7 +187,7 @@ export default function MarketingAiOverviewPage() {
       />
 
       {error && <Alert severity="error" sx={{ mb: 2 }}>{error.message}</Alert>}
-      {data && <ModeBanner mode={data.connection.mode} mutationsAllowed={data.connection.mutationsAllowed} missing={data.connection.missing} />}
+      {data && <ModeBanner mode={data.connection.mode} mutationsAllowed={data.connection.mutationsAllowed} missing={data.connection.missing} blocked={data.connection.runsBlocked} />}
       {data?.notServing?.length > 0 && <NotServingBanner campaigns={data.notServing} />}
       {data && ((data.connection.mode === 'live' && !data.connection.missing.length) || needsHistory) && (
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap', mb: 2 }}>

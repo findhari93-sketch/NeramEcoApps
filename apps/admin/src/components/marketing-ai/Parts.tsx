@@ -197,7 +197,14 @@ export function AdminOnly() {
 }
 
 /** Banner for mock mode and for live mode with changes switched off. */
-export function ModeBanner({ mode, mutationsAllowed, missing }: { mode: 'mock' | 'live'; mutationsAllowed: boolean; missing: string[] }) {
+export function ModeBanner({ mode, mutationsAllowed, missing, blocked = false }: { mode: 'mock' | 'live'; mutationsAllowed: boolean; missing: string[]; blocked?: boolean }) {
+  // Production in mock mode loads nothing, so "sample account" would be untrue there.
+  if (mode === 'mock' && blocked)
+    return (
+      <Alert severity="info" sx={{ mb: 2 }}>
+        Google Ads is not connected yet. Spend, search terms and recommendations appear here once Google approves API access for the Neram account. Sign-up tracking inside Google Ads already works, and the Ads ROI page works with the monthly spend you type in.
+      </Alert>
+    );
   if (mode === 'mock')
     return (
       <Alert severity="info" sx={{ mb: 2 }}>

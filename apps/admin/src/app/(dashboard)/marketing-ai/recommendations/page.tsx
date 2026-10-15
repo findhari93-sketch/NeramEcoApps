@@ -113,7 +113,7 @@ function RecommendationsInner() {
           </Button>
         }
       />
-      {data?.connection && <ModeBanner mode={data.connection.mode} mutationsAllowed={data.connection.mutationsAllowed} missing={[]} />}
+      {data?.connection && <ModeBanner mode={data.connection.mode} mutationsAllowed={data.connection.mutationsAllowed} missing={[]} blocked={data.connection.runsBlocked} />}
 
       <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center', mb: 2 }}>
         <ToggleButtonGroup exclusive size="small" value={view} onChange={(_, v) => v && setParam({ view: v, id: null })} aria-label="Which recommendations">

@@ -6,7 +6,7 @@ export const dynamic = 'force-dynamic';
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { readAdsEnv } from '@/lib/marketing-ai/config';
-import { requireAdminRole } from '@/lib/marketing-ai/guard';
+import { cronIdleReason, requireAdminRole } from '@/lib/marketing-ai/guard';
 import { errorResponse } from '@/lib/marketing-ai/http';
 import { db } from '@/lib/marketing-ai/store';
 
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     if (error) throw new Error(error.message);
     const items = (data ?? []).sort((a: any, b: any) => PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority] || b.created_at.localeCompare(a.created_at));
     const env = readAdsEnv();
-    return NextResponse.json({ items, connection: { mode: env.mode, mutationsAllowed: env.allowMutations } });
+    return NextResponse.json({ items, connection: { mode: env.mode, mutationsAllowed: env.allowMutations, runsBlocked: cronIdleReason() !== null } });
   } catch (err) {
     return errorResponse(err, 'recommendations');
   }
