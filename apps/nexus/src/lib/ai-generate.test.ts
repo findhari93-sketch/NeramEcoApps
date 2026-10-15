@@ -9,7 +9,7 @@ vi.mock('@neram/ai', () => ({
 }));
 
 import { generateGeminiText } from '@neram/ai';
-import { generateSectionsAndQuestions, MAX_CALLS_PER_RECAP } from './ai-generate';
+import { generateSectionsAndQuestions, isAiUnavailable, sanitiseQuestion, MAX_CALLS_PER_RECAP } from './ai-generate';
 
 /**
  * Half an hour of class, which planSegments turns into two segments at the
@@ -107,6 +107,42 @@ describe('one segment per call', () => {
     await expect(
       generateSectionsAndQuestions(transcript(), 'Perspective', { targetSegmentSeconds: 900 }),
     ).rejects.toThrow(/429/);
+  });
+
+  it('lets used-up credit out too, so it is never reported as no usable segments', async () => {
+    // 2026-10-14: every call returned 402, each was swallowed as a bad batch, and
+    // the class was held as if its transcript were the problem.
+    vi.mocked(generateGeminiText).mockRejectedValue(new Error('Gemini API error: 402'));
+
+    await expect(
+      generateSectionsAndQuestions(transcript(), 'Perspective', { targetSegmentSeconds: 900 }),
+    ).rejects.toThrow(/402/);
+    expect(generateGeminiText).toHaveBeenCalledTimes(1);
+  });
+
+  it('lets a refused key out', async () => {
+    vi.mocked(generateGeminiText).mockRejectedValue(
+      new Error('Gemini API key invalid or unauthorized (403). Check GEMINI_API_KEY.'),
+    );
+
+    await expect(
+      generateSectionsAndQuestions(transcript(), 'Perspective', { targetSegmentSeconds: 900 }),
+    ).rejects.toThrow(/unauthorized/);
+  });
+});
+
+describe('isAiUnavailable', () => {
+  it('knows billing and key failures', () => {
+    expect(isAiUnavailable(Object.assign(new Error('x'), { name: 'AiBillingError' }))).toBe(true);
+    expect(isAiUnavailable(new Error('Gemini API error: 402'))).toBe(true);
+    expect(isAiUnavailable(new Error('CREDITS_DEPLETED (402)'))).toBe(true);
+    expect(isAiUnavailable(new Error('Gemini API key invalid or unauthorized (400). Check GEMINI_API_KEY.'))).toBe(true);
+  });
+
+  it('leaves ordinary failures alone', () => {
+    expect(isAiUnavailable(new Error('malformed JSON from the model'))).toBe(false);
+    expect(isAiUnavailable(new Error('Gemini API error: 500'))).toBe(false);
+    expect(isAiUnavailable(new Error('took 4020ms'))).toBe(false);
   });
 });
 
@@ -274,5 +310,60 @@ describe('the language checkpoints are written in', () => {
     for (const call of vi.mocked(generateGeminiText).mock.calls) {
       expect((call[0] as any).parts[0].text).not.toContain('taught in Tamil');
     }
+  });
+});
+
+describe('sanitiseQuestion', () => {
+  const base = {
+    question_text: 'Which bond uses a cavity to save bricks and mortar?',
+    option_a: 'Rat-trap bond',
+    option_b: 'English bond',
+    option_c: 'Flemish bond',
+    option_d: 'Stretcher bond',
+    explanation: 'The rat-trap bond lays bricks on edge, leaving a cavity.',
+  };
+  // Fisher-Yates with j = i at every step: the order is left alone.
+  const keep = () => 0.999;
+  // j = 0 at every step: the order is fully rotated.
+  const move = () => 0;
+
+  it('reads the answer however a model spells it (Qwen wrote "option_b", 2026-10-15)', () => {
+    expect(sanitiseQuestion({ ...base, correct_option: 'option_b' }, keep)?.correct_option).toBe('b');
+    expect(sanitiseQuestion({ ...base, correct_option: 'B' }, keep)?.correct_option).toBe('b');
+    expect(sanitiseQuestion({ ...base, correct_option: '(c)' }, keep)?.correct_option).toBe('c');
+    expect(sanitiseQuestion({ ...base, correct_option: 'Option D' }, keep)?.correct_option).toBe('d');
+  });
+
+  it('drops a question whose answer cannot be read, rather than guess a', () => {
+    expect(sanitiseQuestion({ ...base, correct_option: 'Rat-trap bond' }, keep)).toBeNull();
+    expect(sanitiseQuestion({ ...base, correct_option: '' }, keep)).toBeNull();
+  });
+
+  it('shuffles the options and keeps the right answer attached to its text', () => {
+    // 26 of 32 answers were "a" in the live Groq run, and the class test built
+    // from these does not shuffle, so a student could clear it by always
+    // picking A.
+    const q = sanitiseQuestion({ ...base, correct_option: 'a' }, move)!;
+    const shown = { a: q.option_a, b: q.option_b, c: q.option_c, d: q.option_d };
+    expect(shown[q.correct_option]).toBe('Rat-trap bond');
+    expect(q.correct_option).not.toBe('a');
+    expect(Object.values(shown).sort()).toEqual(
+      [base.option_a, base.option_b, base.option_c, base.option_d].sort(),
+    );
+  });
+
+  it('leaves the order alone when an option points at the others', () => {
+    const q = sanitiseQuestion({ ...base, option_d: 'All of the above', correct_option: 'd' }, move)!;
+    expect(q.option_d).toBe('All of the above');
+    expect(q.correct_option).toBe('d');
+  });
+
+  it('leaves the order alone when the explanation names a letter', () => {
+    const q = sanitiseQuestion(
+      { ...base, correct_option: 'a', explanation: 'Option A is right because the cavity saves bricks.' },
+      move,
+    )!;
+    expect(q.option_a).toBe('Rat-trap bond');
+    expect(q.correct_option).toBe('a');
   });
 });

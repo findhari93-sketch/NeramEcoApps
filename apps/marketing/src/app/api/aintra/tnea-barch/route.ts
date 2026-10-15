@@ -1,6 +1,9 @@
 // @ts-nocheck
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
+// When Gemini is down the Groq/OpenRouter backup answers, which can take
+// around 20 seconds (Groq refuses a large prompt, then OpenRouter reasons).
+export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from 'next/server';
 import { AiBlockedError, generateGeminiText, hashClientKey, ipFromHeaders } from '@neram/ai';

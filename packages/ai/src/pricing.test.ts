@@ -95,6 +95,17 @@ describe('the model tables', () => {
   });
 });
 
+describe('a key from a new Google project', () => {
+  it('has a 3.x model in every tier, so no tier is stranded (2026-10-15)', () => {
+    // A key made in a new project is refused the 2.5 models with a 404 ("no
+    // longer available to new users"). 404 falls through to the next model, so
+    // every tier needs at least one 3.x model or that tier fails outright.
+    for (const [tier, models] of Object.entries(TIER_MODELS)) {
+      expect(models.some((m) => /^gemini-3/.test(m)), tier).toBe(true);
+    }
+  });
+});
+
 describe('formatUsd', () => {
   it('says unpriced rather than $0.00 when the cost is unknown', () => {
     expect(formatUsd(null)).toBe('unpriced');

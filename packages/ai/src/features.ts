@@ -84,6 +84,13 @@ export interface AiFeatureDef {
    * only answer 404 there; listing the ones it can use saves that round trip.
    */
   keyEnvModels?: string[];
+  /**
+   * When Gemini fails, let the Groq/OpenRouter backup answer this feature even
+   * though it sends tools: the backup drops the tools and answers in plain
+   * text. Only for a chatbot whose prompt can stand on its own, where a reply
+   * without a lookup beats "offline". See fallback.ts.
+   */
+  backupDropsTools?: boolean;
 }
 
 /** The nexus_settings row that holds the overrides. */
@@ -110,6 +117,7 @@ export const AI_FEATURES = [
     allowFreeKey: true,
     dailyCallCap: 2000,
     perClientHourlyCap: 30,
+    backupDropsTools: true,
   },
   {
     id: 'marketing.nata-chat',

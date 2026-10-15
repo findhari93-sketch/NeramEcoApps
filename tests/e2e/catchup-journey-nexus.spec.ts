@@ -88,7 +88,7 @@ test.describe('Nexus — Catch-up journey', () => {
     expect(Array.isArray(body.assignments)).toBe(true);
   });
 
-  test('a student cannot declare they watched a class that has a guided recap', async ({
+  test('a student cannot declare they watched a class', async ({
     request,
   }) => {
     const auth = await getTestAuthToken(request, 'student');
@@ -121,18 +121,14 @@ test.describe('Nexus — Catch-up journey', () => {
       test.skip(true, 'No catch-up item for this student and class');
       return;
     }
-    const body = await detail.json();
-    if (!body.recap) {
-      test.skip(true, 'Class has no published recap, so self-declaration is the correct path');
-      return;
-    }
-
+    // Retired 2026-10-15 for every class, with or without a recap: the
+    // checkpoints are the only proof of watching.
     const res = await request.post(`${NEXUS}/api/timetable/${classes[0].id}/catch-up`, {
       headers,
       data: { action: 'mark_watched' },
     });
     expect(res.status()).toBe(400);
-    expect(String((await res.json()).error)).toContain('guided recap');
+    expect(String((await res.json()).error)).toContain('checkpoints');
   });
 
   test('the class test refuses to hand out questions while locked', async ({ request }) => {

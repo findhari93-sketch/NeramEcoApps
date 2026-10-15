@@ -28,6 +28,22 @@ import { AiBlockedError, generateGeminiText, type AiFeatureId } from '@neram/ai'
 import { planSegments, describeWindow } from './recap-segments';
 import type { TranscriptEntry } from '@neram/database';
 
+/**
+ * The key cannot be used at all: credits used up (402) or the key refused (401,
+ * 403, or the 400 Google sends for a bad key).
+ *
+ * Not a fact about the class. Every call fails the same way until a person tops
+ * up the billing account or fixes the key, so callers must stop and wait rather
+ * than record a failed generation. Matched on `name` and message rather than
+ * `instanceof` because the error crosses the @neram/ai package boundary, and the
+ * message covers builds from before AiBillingError existed.
+ */
+export function isAiUnavailable(err: unknown): boolean {
+  if ((err as { name?: string } | null)?.name === 'AiBillingError') return true;
+  const message = err instanceof Error ? err.message : String(err ?? '');
+  return /\b402\b|CREDITS_DEPLETED|credits depleted|key invalid or unauthorized/i.test(message);
+}
+
 export interface GeneratedQuestion {
   question_text: string;
   option_a: string;
@@ -282,7 +298,28 @@ function dedupe(questions: GeneratedQuestion[]): GeneratedQuestion[] {
   });
 }
 
-function sanitiseQuestion(q: any): GeneratedQuestion | null {
+const LETTERS = ['a', 'b', 'c', 'd'] as const;
+
+/**
+ * The answer letter, however the model spelt it: "b", "B", "(b)", "option_b",
+ * "Option B". Null when it is not a letter at all. Defaulting to "a" here used
+ * to mark a wrong option correct whenever a model wrote "option_b", which the
+ * backup models do (2026-10-15).
+ */
+function readAnswerLetter(raw: unknown): (typeof LETTERS)[number] | null {
+  const m = String(raw ?? '')
+    .trim()
+    .toLowerCase()
+    .match(/^(?:option[\s_-]*)?\(?([abcd])\)?\.?$/);
+  return m ? (m[1] as (typeof LETTERS)[number]) : null;
+}
+
+/** An option that only makes sense in its position: "All of the above", "Both A and B". */
+const POSITIONAL_OPTION = /\b(all|none|both|neither) of the above\b|\bboth\b.*\band\b|\b[abcd]\s*(and|&)\s*[abcd]\b/i;
+/** An explanation that names a letter, which a shuffle would turn into a lie. */
+const LETTER_IN_EXPLANATION = /\boption\s*[abcd]\b|\([abcd]\)|\b[abcd]\)\s/i;
+
+export function sanitiseQuestion(q: any, rand: () => number = Math.random): GeneratedQuestion | null {
   if (!q || typeof q.question_text !== 'string' || q.question_text.trim().length < 10) return null;
   const opts = ['option_a', 'option_b', 'option_c', 'option_d'].map((k) =>
     typeof q[k] === 'string' ? q[k].trim() : '',
@@ -290,15 +327,32 @@ function sanitiseQuestion(q: any): GeneratedQuestion | null {
   if (opts.some((o) => !o)) return null;
   if (new Set(opts.map((o) => o.toLowerCase())).size !== 4) return null;
 
-  const correct = String(q.correct_option || '').toLowerCase();
+  const correct = readAnswerLetter(q.correct_option);
+  if (!correct) return null;
+  const explanation = typeof q.explanation === 'string' ? q.explanation.trim() : '';
+
+  // Shuffle once, here. Models put the answer in A most of the time (26 of 32
+  // in a live run), and the class test built from these questions serves them
+  // in stored order, so an unshuffled bank can be passed by always picking A.
+  // Skipped when an option or the explanation depends on the letters.
+  let order = [0, 1, 2, 3];
+  if (!opts.some((o) => POSITIONAL_OPTION.test(o)) && !LETTER_IN_EXPLANATION.test(explanation)) {
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1));
+      [order[i], order[j]] = [order[j], order[i]];
+    }
+  }
+  const shown = order.map((i) => opts[i]);
+  const correctIndex = order.indexOf(LETTERS.indexOf(correct));
+
   return {
     question_text: q.question_text.trim(),
-    option_a: opts[0],
-    option_b: opts[1],
-    option_c: opts[2],
-    option_d: opts[3],
-    correct_option: (['a', 'b', 'c', 'd'].includes(correct) ? correct : 'a') as 'a' | 'b' | 'c' | 'd',
-    explanation: typeof q.explanation === 'string' ? q.explanation.trim() : '',
+    option_a: shown[0],
+    option_b: shown[1],
+    option_c: shown[2],
+    option_d: shown[3],
+    correct_option: LETTERS[correctIndex],
+    explanation,
   };
 }
 
@@ -389,7 +443,7 @@ Return JSON:
     // prompt asks the model not to write them; this is what happens when it
     // does anyway.
     const questions = dropTranscriptTrivia(
-      ((seg.questions || []) as unknown[]).map(sanitiseQuestion).filter(Boolean) as GeneratedQuestion[],
+      ((seg.questions || []) as unknown[]).map((q) => sanitiseQuestion(q)).filter(Boolean) as GeneratedQuestion[],
     );
 
     out[idx] = {
@@ -548,6 +602,12 @@ export async function generateSectionsAndQuestions(
       // the sweep upstream stops its whole run on it.
       const message = err instanceof Error ? err.message : String(err);
       if (/429|Too Many Requests|quota|RESOURCE_EXHAUSTED/.test(message)) throw err;
+
+      // Same for a key that cannot be used at all. A 402 here was swallowed per
+      // batch from 2026-10-11, so a class whose every call was refused for
+      // billing came back as "no usable segments", spent an attempt and told
+      // teachers the class was the problem.
+      if (isAiUnavailable(err)) throw err;
       console.error('[ai-generate] question batch failed:', message);
       return false;
     }

@@ -29,8 +29,9 @@ vi.mock('@neram/database', () => ({
   })),
 }));
 
-vi.mock('./ai-generate', () => ({
+vi.mock('./ai-generate', async () => ({
   generateSectionsAndQuestions: vi.fn(),
+  isAiUnavailable: (await vi.importActual<typeof import('./ai-generate')>('./ai-generate')).isAiUnavailable,
 }));
 
 vi.mock('./transcript-resolver', () => ({
@@ -884,6 +885,34 @@ describe('autodraftRecapForClass', () => {
     expect(replaceRecapSections).not.toHaveBeenCalled();
   });
 
+  it('waits out used-up AI credit instead of blaming the class (2026-10-14)', async () => {
+    // Every call on the JEE class returned 402. It was held as "no usable
+    // segments", spent an attempt and told teachers the class was the problem.
+    vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
+    vi.mocked(generateSectionsAndQuestions).mockRejectedValue(
+      Object.assign(new Error('Gemini credits depleted (402). Top up the billing account behind GEMINI_API_KEY.'), {
+        name: 'AiBillingError',
+      }),
+    );
+
+    const out = await autodraftRecapForClass({} as any, candidate);
+
+    expect(out).toMatchObject({ ok: false, reason: 'rate_limited', aiUnavailable: true });
+    expect(setRecapReadiness).not.toHaveBeenCalled();
+  });
+
+  it('treats a refused key the same way', async () => {
+    vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
+    vi.mocked(generateSectionsAndQuestions).mockRejectedValue(
+      new Error('Gemini API key invalid or unauthorized (403). Check GEMINI_API_KEY.'),
+    );
+
+    const out = await autodraftRecapForClass({} as any, candidate);
+
+    expect(out).toMatchObject({ ok: false, reason: 'rate_limited', aiUnavailable: true });
+    expect(setRecapReadiness).not.toHaveBeenCalled();
+  });
+
   it('reports a refusal as rate_limited, not as an ordinary error', async () => {
     vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
     vi.mocked(generateSectionsAndQuestions).mockRejectedValue(new Error('429 Too Many Requests'));
@@ -1087,6 +1116,19 @@ describe('runRecapAutodraft', () => {
     expect(run.rateLimited).toBe(true);
     // The third class was never attempted.
     expect(generateSectionsAndQuestions).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops on used-up credit and flags it, so staff hear the real reason', async () => {
+    vi.mocked(readStoredTranscript).mockResolvedValue(richTranscript() as any);
+    // mockReset, not just a new value: the test above leaves a queued Once.
+    vi.mocked(generateSectionsAndQuestions)
+      .mockReset()
+      .mockRejectedValue(new Error('Gemini API error: 402'));
+
+    const run = await runRecapAutodraft(threeCandidates());
+    expect(run.rateLimited).toBe(true);
+    expect(run.aiUnavailable).toBe(true);
+    expect(generateSectionsAndQuestions).toHaveBeenCalledTimes(1);
   });
 
   it('keeps going past an ordinary failure', async () => {

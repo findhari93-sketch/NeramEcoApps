@@ -84,7 +84,10 @@ export const TIER_MODELS: Record<AiTier, string[]> = {
   /** Chat turns, short rewrites, classification. $0.10 / $0.40. */
   cheap: ['gemini-2.5-flash-lite', 'gemini-3.1-flash-lite'],
   /** Structured extraction, question generation, summaries. $0.30 / $2.50. */
-  standard: ['gemini-2.5-flash', 'gemini-2.5-flash-lite'],
+  // gemini-3.5-flash-lite last, at the 2.5-flash price: a key from a new Google
+  // project is refused every 2.5 model (404, "no longer available to new
+  // users"), and without a 3.x model here this tier failed outright on it.
+  standard: ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-3.5-flash-lite'],
   /**
    * Work that reads an attached PDF or image.
    *

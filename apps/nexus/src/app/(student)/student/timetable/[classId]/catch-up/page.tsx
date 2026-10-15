@@ -45,6 +45,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked';
 import SmartDisplayOutlinedIcon from '@mui/icons-material/SmartDisplayOutlined';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import HourglassEmptyOutlinedIcon from '@mui/icons-material/HourglassEmptyOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { RSVP_REASONS } from '@/lib/rsvp-reasons';
 import { RADIUS, SHADOW } from '@/components/timetable/timetable-theme';
@@ -76,11 +77,6 @@ interface CatchUpData {
   absence: { reason_code: string | null; reason_note: string | null; kind?: string } | null;
   assignments: Array<{ id: string; title: string; assignment_type: string; submitted: boolean }>;
   recap: { id: string; status: string } | null;
-  /**
-   * A guided recap went live after this student started the plain recording, so
-   * they finish on the plain recording and `recap` is null for them (NXS-0123).
-   */
-  finish_as_started?: boolean;
   /** Null until a teacher has built the class test for this class. */
   test: {
     placement_id: string;
@@ -322,24 +318,25 @@ export default function CatchUpPage() {
    * is every protection this feature exists to provide, dropped in one click.
    *
    * Now a missing recap falls back to RecordingPlayerDialog, which streams the
-   * same recording through Nexus with a per-viewer grant. It is ungated, so the
-   * "I have watched it" declaration below still applies, but it never leaves the
-   * boundary. Pressing it also queues the class for the recap sweep, so the next
-   * person to open it gets the real thing.
+   * same recording through Nexus with a per-viewer grant. Watching it is allowed
+   * and counts for nothing: since 2026-10-15 a catch-up clears only through the
+   * guided checkpoints, so there is no "I have watched it" any more. Pressing it
+   * also queues the class for the recap sweep.
    */
   const watch = () => {
-    // Pressing Watch is unambiguously starting this class, so it takes the clock
-    // if one is free. If another class already holds it, ask first: switching is
-    // a decision, and the student keeps whatever time is left on the other one.
-    if (!data.active && data.active_elsewhere) {
-      setSwitchAsk(true);
-      return;
-    }
     if (recap) {
+      // Starting the guided recap is starting this class, so it takes the clock
+      // if one is free. If another class already holds it, ask first: switching
+      // is a decision, and the student keeps whatever time is left on the other.
+      if (!data.active && data.active_elsewhere) {
+        setSwitchAsk(true);
+        return;
+      }
       setWatching(true);
       void startClock(false);
       return;
     }
+    // No checkpoints yet, so nothing can be cleared and no clock starts.
     setPlayerOpen(true);
     void queueRecap();
   };
@@ -634,62 +631,31 @@ export default function CatchUpPage() {
               )}
             </Box>
           ) : (
-            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-              <Button
-                variant={steps.watched ? 'outlined' : 'contained'}
-                onClick={watch}
-                startIcon={<SmartDisplayOutlinedIcon />}
-                sx={{ textTransform: 'none', minHeight: 44, borderRadius: RADIUS.control }}
-              >
-                {steps.watched ? 'Watch again' : 'Watch now'}
-              </Button>
-              {/* Only offered when there is no guided recap. Where one exists,
-                  finishing its checkpoints IS the proof, and the server refuses
-                  a self-declaration alongside it. */}
-              {!steps.watched && (
+            <Stack spacing={1.25}>
+              {/* Said plainly, because the only thing that clears this step is
+                  the checkpoints, and a student needs to know that watching now
+                  is a head start, not the finish. */}
+              <Box role="status" sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                <HourglassEmptyOutlinedIcon
+                  aria-hidden
+                  sx={{ fontSize: 20, color: 'text.secondary', mt: '2px', flexShrink: 0 }}
+                />
+                <Typography variant="body2" color="text.secondary">
+                  Checkpoints for this class are being set up. We will message you when they are
+                  ready. You can watch the recording now, but this step clears only after the
+                  checkpoints.
+                </Typography>
+              </Box>
+              <Box>
                 <Button
                   variant="outlined"
-                  disabled={busy}
-                  onClick={() => act({ action: 'mark_watched' }, 'Marked as watched.')}
+                  onClick={watch}
+                  startIcon={<SmartDisplayOutlinedIcon />}
                   sx={{ textTransform: 'none', minHeight: 44, borderRadius: RADIUS.control }}
                 >
-                  I have watched it
+                  Watch the recording
                 </Button>
-              )}
-              {/* Said out loud, because a student who was promised checkpoints
-                  and gets a plain video deserves to know why, and to know it is
-                  temporary rather than the way this class works. */}
-              <Typography variant="caption" color="text.secondary" sx={{ width: '100%', mt: 0.5 }}>
-                {data.finish_as_started
-                  ? 'You started this recording before the guided version was ready, so carry on here. When you have watched it, press I have watched it and the final check opens.'
-                  : 'The guided version with checkpoints is still being prepared for this class. Watch the recording now and it will be here next time.'}
-              </Typography>
-
-              {/* The final check that the checkpoints would have opened, opened
-                  here by the watch instead. Only once it is open: its locked copy
-                  talks about checkpoints this student does not have. */}
-              {data.finish_as_started &&
-                test &&
-                test.source !== 'class_test' &&
-                (test.unlocked || test.passed) && (
-                  <Box sx={{ width: '100%' }}>
-                    <FinalCheckPanel
-                      test={{
-                        passing_pct: test.passing_pct,
-                        unlocked: test.unlocked,
-                        passed: test.passed,
-                        attempts: test.attempts ?? 0,
-                        last_score_pct: test.last_score_pct ?? null,
-                        last_attempt_at: test.last_attempt_at ?? null,
-                        best_score_pct: test.best_score_pct ?? null,
-                        question_count: test.question_count ?? null,
-                        must_get_right: test.must_get_right ?? null,
-                      }}
-                      onStart={() => router.push(test.href || `/student/catch-up/${cls.id}/test`)}
-                      onRewatch={() => setPlayerOpen(true)}
-                    />
-                  </Box>
-                )}
+              </Box>
             </Stack>
           ),
         )}

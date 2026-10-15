@@ -70,10 +70,10 @@ export function watchModeFor(row: ObligationRow | null | undefined): VideoGateMo
  *
  *   owed, recap published    refuse. The guided screen is where a watch counts,
  *                            and letting them watch here means watching twice.
- *   owed, no recap yet       allow. The catch-up screen's own fallback plays
- *                            through this same route and credits the watch with
- *                            its mark_watched action, so refusing would leave the
- *                            student with no way through at all.
+ *   owed, no recap yet       allow. Watching early is fine and helps, but it
+ *                            does not clear anything: since 2026-10-15 a catch-up
+ *                            clears only through the guided checkpoints, and the
+ *                            self-declared mark_watched action is gone.
  *
  * Nothing owed, in either case, is an ordinary rewatch and always allowed.
  *
@@ -81,8 +81,8 @@ export function watchModeFor(row: ObligationRow | null | undefined): VideoGateMo
  * began the plain recording before the recap went live. Pressing Watch is what
  * queues the recap, and the sweep can publish it partway through that very
  * watch. Refusing then blanked the video at the next ten minute renewal and threw
- * away everything watched so far. They finish the way they started, and the final
- * check still stands between them and clearing the class. See
+ * away everything watched so far. They may finish WATCHING the way they started,
+ * but clearing the class still needs the guided checkpoints. See
  * `lib/plain-watch-head-start.ts` for how it is decided.
  *
  * Staff are not modelled here. They never owe a class, and the route checks that

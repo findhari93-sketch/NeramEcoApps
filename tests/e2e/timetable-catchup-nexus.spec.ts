@@ -282,35 +282,30 @@ test.describe('Catch-up loop', () => {
   // assertion at, so the coverage is not being moved, it is going with the
   // route.
 
-  test('AC10: the full gate opens once the steps are done', async ({ request }) => {
+  test('AC10: without a guided recap nothing clears the class', async ({ request }) => {
     test.skip(!classId, 'No class');
 
+    // The "I have watched it" declaration is retired (2026-10-15).
     const watched = await request.post(`${NEXUS}/api/timetable/${classId}/catch-up`, {
       headers: authed(studentToken),
       data: { action: 'mark_watched' },
     });
-    expect(watched.ok()).toBe(true);
+    expect(watched.status()).toBe(400);
 
-    // No assignment was attached to this class, so watching is the last step.
-    const done = await request.post(`${NEXUS}/api/timetable/${classId}/catch-up`, {
+    // This class has no published recap, so the gate stays shut and says why.
+    const detail = await request.get(`${NEXUS}/api/timetable/${classId}/catch-up`, {
+      headers: authed(studentToken),
+    });
+    const body = await detail.json();
+    expect(body.recap).toBeNull();
+    expect(body.canComplete).toBe(false);
+    expect(String(body.blockedReason)).toContain('checkpoints');
+
+    const refused = await request.post(`${NEXUS}/api/timetable/${classId}/catch-up`, {
       headers: authed(studentToken),
       data: { action: 'mark_caught_up' },
     });
-    expect(done.ok()).toBe(true);
-
-    // Closed absences stop following the student around.
-    const schedule = await request.get(
-      `${NEXUS}/api/timetable/my-schedule?start=${istToday()}&end=${istToday()}`,
-      { headers: { Authorization: `Bearer ${studentToken}` } },
-    );
-    const { openAbsences, absences } = await schedule.json();
-    expect((openAbsences || []).some((a: any) => a.class_id === classId)).toBe(false);
-
-    // The row survives with its stamp set, and that stamp is what earns the
-    // ungated recording back: the panel reads it to put "Watch Recording" where
-    // "Do catch-up" used to be. A cleared class must not vanish from this map,
-    // or the panel could not tell "finished it" from "was never absent".
-    expect(absences?.[classId!]?.caught_up_at).toBeTruthy();
+    expect(refused.status()).toBe(400);
   });
 
   test.afterAll(async ({ request }) => {

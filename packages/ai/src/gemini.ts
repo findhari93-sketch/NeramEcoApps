@@ -35,6 +35,7 @@ import { recordAiUsage } from '@neram/database';
 import { checkBudget, noteSpend, type BudgetReason } from './budget';
 import { AI_FEATURES, featureById, type AiFeatureId } from './features';
 import { costOf, RETIRED_MODELS, TIER_MODELS, type TokenUsage } from './pricing';
+import { backupEligibility, generateWithBackup } from './fallback';
 
 export interface GeminiPart {
   text?: string;
@@ -223,6 +224,63 @@ export async function generateGemini(opts: GenerateOptions): Promise<GeminiResul
     });
   }
 
+  try {
+    return await callGemini(opts, def, app);
+  } catch (geminiErr) {
+    // Nexus and Marketing text features get a second provider before failing.
+    // Anything the backup cannot serve (images, tools, other apps, no key) fails as before,
+    // and so does a backup that also fails: callers branch on Gemini's own
+    // error (402, 429), so that is the one they see.
+    const eligible = backupEligibility(opts, app);
+    if (!eligible.ok) throw geminiErr;
+
+    const startedAt = Date.now();
+    const why = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
+    try {
+      const { attempts: _tried, ...result } = await generateWithBackup(opts, { app });
+      console.warn(`[ai] ${opts.feature} answered by ${result.model} because Gemini failed: ${why}`);
+      logUsage({
+        featureId: opts.feature,
+        app,
+        model: result.model,
+        keyTier: 'free',
+        promptTokens: result.usage.promptTokens,
+        outputTokens: result.usage.outputTokens,
+        estimatedCostUsd: 0,
+        latencyMs: Date.now() - startedAt,
+        status: 'ok',
+        actorId: opts.actorId ?? null,
+        clientKey: opts.clientKey ?? null,
+      });
+      return result;
+    } catch (backupErr) {
+      const message = backupErr instanceof Error ? backupErr.message : String(backupErr);
+      console.error(`[ai] ${opts.feature}: backup failed too: ${message}`);
+      logUsage({
+        featureId: opts.feature,
+        app,
+        model: 'backup',
+        keyTier: 'free',
+        latencyMs: Date.now() - startedAt,
+        status: /429/.test(message) ? 'rate_limited' : 'error',
+        error: message,
+        actorId: opts.actorId ?? null,
+        clientKey: opts.clientKey ?? null,
+      });
+      throw geminiErr;
+    }
+  }
+}
+
+/**
+ * The Gemini cascade itself: every (key, model) attempt in order, metered.
+ * Throws on failure; generateGemini decides whether a backup gets a turn.
+ */
+async function callGemini(
+  opts: GenerateOptions,
+  def: ReturnType<typeof featureById>,
+  app: string,
+): Promise<GeminiResult> {
   const attempts = planAttempts(opts, def?.tier ?? 'standard', def?.allowFreeKey ?? false, def?.keyEnv, def?.keyEnvModels);
   const body = buildRequestBody(opts);
   const startedAt = Date.now();

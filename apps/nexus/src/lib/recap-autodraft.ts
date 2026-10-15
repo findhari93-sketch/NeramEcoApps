@@ -52,7 +52,7 @@ import {
   type GeneratedRecapSection,
   type NexusClassRecap,
 } from '@neram/database';
-import { generateSectionsAndQuestions, type GeneratedSection } from './ai-generate';
+import { generateSectionsAndQuestions, isAiUnavailable, type GeneratedSection } from './ai-generate';
 import { readStoredTranscript } from './transcript-resolver';
 import { tagRecapCheckpointQuestions } from './qb-recap-question-tags';
 import {
@@ -175,7 +175,7 @@ export type AutodraftOutcome =
       detail?: string;
     }
   /** Gemini refused. The caller must stop the whole run, not just this class. */
-  | { ok: false; classId: string; reason: 'rate_limited'; detail?: string };
+  | { ok: false; classId: string; reason: 'rate_limited'; detail?: string; aiUnavailable?: boolean };
 
 /** Today in IST as YYYY-MM-DD. Crons run in UTC; classes are Indian evenings. */
 function istToday(): string {
@@ -690,7 +690,16 @@ async function holdRecap(
   } catch (err) {
     console.error('[recap] could not record hold:', err instanceof Error ? err.message : err);
   }
-  await notifyHeld(supabase, recap.id, detail);
+  // The last automatic try. Catch-ups clear only through checkpoints, so from
+  // here the students who missed this class are waiting on a person.
+  const last = (recap.generation_attempts ?? 0) + 1 >= MAX_GENERATION_ATTEMPTS;
+  await notifyHeld(
+    supabase,
+    recap.id,
+    last
+      ? `${detail} This was the last automatic try. Students cannot clear this catch-up until you publish the recap or press "No class was taught".`
+      : detail,
+  );
 }
 
 /**
@@ -949,6 +958,14 @@ export async function autodraftRecapForClass(
       return { ok: false, classId: cls.id, reason: 'rate_limited', detail };
     }
 
+    // The key itself cannot be used (credits gone, key refused). Same handling
+    // as a rate limit: not held, no attempt spent, the row stays 'pending' and
+    // the next sweep after the top-up builds it. Tagged so the run can tell
+    // staff once a day what is actually wrong.
+    if (isAiUnavailable(err)) {
+      return { ok: false, classId: cls.id, reason: 'rate_limited', detail, aiUnavailable: true };
+    }
+
     // Students have already worked through this recap's checkpoints, so the
     // sweep refused to overwrite it. Correct behaviour, not a failure: a stalled
     // draft that students have since started belongs to them now, and any change
@@ -971,6 +988,8 @@ export interface AutodraftRunResult {
   skipped: number;
   /** True when Gemini refused and the run stopped early on purpose. */
   rateLimited: boolean;
+  /** True when the refusal was the key itself (credits or auth), not a rate limit. */
+  aiUnavailable: boolean;
   /**
    * Classroom id to the number of recaps that went live to students this run.
    *
@@ -1002,6 +1021,7 @@ export async function runRecapAutodraft(
     drafted: 0,
     skipped: 0,
     rateLimited: false,
+    aiUnavailable: false,
     publishedByClassroom: new Map(),
     outcomes: [],
   };
@@ -1025,6 +1045,10 @@ export async function runRecapAutodraft(
       // Stop the whole run. Trying the next class would spend another call on a
       // key that has already said no, and every app shares it.
       result.rateLimited = true;
+      if (outcome.aiUnavailable) {
+        result.aiUnavailable = true;
+        await notifyAiUnavailable(supabase, candidates.length);
+      }
       break;
     }
 
@@ -1032,4 +1056,50 @@ export async function runRecapAutodraft(
   }
 
   return result;
+}
+
+/**
+ * Tell the teaching staff, once per IST day, that recaps are waiting on the AI
+ * key rather than on anything about the classes.
+ *
+ * Without this the only trace of a used-up key was a "no usable segments" hold
+ * on one class, which reads as a bad transcript. Deduped on the receipts table
+ * because the sweep runs every fifteen minutes. Best-effort and never throws.
+ */
+async function notifyAiUnavailable(supabase: any, waiting: number): Promise<void> {
+  const day = istToday();
+  try {
+    const { data: sent } = await supabase
+      .from('nexus_notification_deliveries')
+      .select('id')
+      .eq('source', 'ai_unavailable')
+      .eq('ref_id', day)
+      .limit(1);
+    if (sent && sent.length) return;
+
+    const { data: staff } = await supabase
+      .from('users')
+      .select('id')
+      .eq('user_type', 'teacher')
+      .eq('is_active', true)
+      .limit(25);
+    const ids = ((staff || []) as Array<{ id: string }>).map((s) => s.id);
+    if (!ids.length) return;
+
+    const classes = waiting === 1 ? '1 class is' : `${waiting} classes are`;
+    await sendNudge({
+      studentIds: ids,
+      audience: 'staff',
+      subject: 'Class checkpoints are waiting on AI credit',
+      plain:
+        `The AI key has run out of credit, so ${classes} waiting for their checkpoints and students cannot clear those catch-ups yet. ` +
+        'Top up the Gemini billing account and they will build on their own within fifteen minutes.',
+      // An existing enum value, which already links through metadata.href.
+      eventType: 'recap_needs_review',
+      metadata: { href: '/teacher/catch-up?tab=classes' },
+      source: { kind: 'ai_unavailable', refId: day },
+    });
+  } catch (err) {
+    console.error('[recap] AI-unavailable notice failed:', err instanceof Error ? err.message : err);
+  }
 }
