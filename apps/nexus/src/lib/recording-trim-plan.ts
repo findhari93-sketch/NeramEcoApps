@@ -15,7 +15,9 @@
  *
  * Inputs come from ffmpeg on the trim worker (silencedetect, freezedetect, the
  * keyframe list) plus the transcript's cue times, which say where speech is far
- * more reliably than an audio threshold. Pure, so every rule is unit tested.
+ * more reliably than an audio threshold. When there is a transcript it alone
+ * decides who is speaking (founder, 2026-10-15); the audio level is only the
+ * fallback for a class without one. Pure, so every rule is unit tested.
  *
  * Cuts are snapped to keyframes because the worker cuts without re-encoding
  * (fast, no quality loss): a kept stretch can only begin on a keyframe. The
@@ -226,8 +228,13 @@ export function planTrim(input: TrimPlanInput): TrimPlan {
   const tailStart = Math.min(D, end + p.tailMargin);
   if (D - tailStart >= p.tailMinCut) cuts.push({ from: tailStart, to: D, kind: 'tail' });
 
-  // Nobody speaking AND nothing moving on screen.
-  const idle = intersect(input.silences, input.freezes)
+  // Nobody speaking AND nothing moving on screen. With a transcript, "nobody
+  // speaking" means no words in it, not an audio level: open student mics keep
+  // the level above the silence threshold through a pause nobody talks in (the
+  // 14 Oct JEE class kept a 39s pause after the greetings this way, and 19
+  // trimmed classes kept 0.6 to 5 minutes each; founder, 2026-10-15).
+  const quiet = input.speech.length ? complement(speech, D) : input.silences;
+  const idle = intersect(quiet, input.freezes)
     .map(([a, b]) => [Math.max(a, leadEnd), Math.min(b, tailStart)] as [number, number])
     .filter(([a, b]) => b - a >= p.minMidCut)
     // Speech inside an idle span (a quiet voice under the threshold) wins.

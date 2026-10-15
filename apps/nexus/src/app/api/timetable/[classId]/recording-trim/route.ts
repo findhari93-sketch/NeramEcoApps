@@ -4,10 +4,11 @@ import { getSupabaseAdminClient } from '@neram/database';
 import { resolveClassStaffAccess } from '@/lib/class-staff-access';
 import { switchRecordingTrim, type TrimRecord } from '@/lib/recording-trim-apply';
 import { getDriveItem, TrimGraphError } from '@/lib/recording-trim-graph';
+import { requeueTrim } from '@/lib/recording-trim';
 
 /**
  * GET  /api/timetable/[classId]/recording-trim
- * POST /api/timetable/[classId]/recording-trim  { action: 'use_original' | 'use_trimmed' | 'retry' }
+ * POST /api/timetable/[classId]/recording-trim  { action: 'use_original' | 'use_trimmed' | 'retry' | 'retrim' }
  *
  * What silence trimming did to this class's recording, and the staff switch
  * between the trimmed copy and the original (lib/recording-trim.ts). Staff who
@@ -109,7 +110,21 @@ export async function POST(request: NextRequest, { params }: Ctx) {
       return NextResponse.json({ ok: true, message: 'Queued. It is trimmed in the next evening run.' });
     }
 
+    if (body.action === 'retrim') {
+      const outcome = await requeueTrim(supabase, trim);
+      if (outcome === 'busy') {
+        return NextResponse.json({ error: 'This recording is already being trimmed, or uses the original.' }, { status: 409 });
+      }
+      return NextResponse.json({ ok: true, message: 'Queued. Students keep the current copy until the new one is ready.' });
+    }
+
     if (body.action === 'use_original') {
+      if (trim.previous) {
+        return NextResponse.json(
+          { error: 'A new trimmed copy is being made. Try again once it is ready.' },
+          { status: 409 },
+        );
+      }
       if (trim.status !== 'applied') return NextResponse.json({ error: 'The original is already in use' }, { status: 409 });
       // Teams deletes recordings when they expire. Once the original is gone,
       // the trimmed copy is the only one left, so it stays (founder, 2026-10-14).

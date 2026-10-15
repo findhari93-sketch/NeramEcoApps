@@ -46,6 +46,12 @@ export interface TrimRecord {
   trimmed_duration_seconds: number | null;
   removed_seconds: number | null;
   cut_map: CutMapSegment[] | null;
+  /**
+   * Set while a re-trim replaces a trim students already play: the live trim's
+   * cut map and plan (lib/recording-trim.ts requeueTrim). Applying then moves
+   * everything from that copy's timeline, not from the original's.
+   */
+  previous?: { cut_map?: CutMapSegment[] | null; plan?: { merged?: MergedCheckpoint[] } | null } | null;
 }
 
 export interface ProgressRow {
@@ -100,10 +106,15 @@ export function buildTrimSwitch(input: SwitchInputs) {
   const { mode, trim } = input;
   const map = trim.cut_map ?? [];
   if (!map.length) throw new Error('TRIM_HAS_NO_CUT_MAP');
-  const move = mode === 'apply' ? (t: number) => toTrimmed(map, t) : (t: number) => toOriginal(map, t);
-  const moveRanges = mode === 'apply' ? rangesToTrimmed : rangesToOriginal;
-
   const apply = mode === 'apply';
+  // A re-trim switches from the copy students play now: back onto the
+  // original through that copy's map, then onto the new copy.
+  const liveMap = apply && trim.previous?.cut_map?.length ? trim.previous.cut_map : null;
+  const fromLive = (t: number) => (liveMap ? toOriginal(liveMap, t) : t);
+  const move = apply ? (t: number) => toTrimmed(map, fromLive(t)) : (t: number) => toOriginal(map, t);
+  const moveRanges = (m: ReadonlyArray<CutMapSegment>, ranges: ReadonlyArray<readonly [number, number]>) =>
+    apply ? rangesToTrimmed(m, liveMap ? rangesToOriginal(liveMap, ranges) : ranges) : rangesToOriginal(m, ranges);
+
   const duration = Number(apply ? trim.trimmed_duration_seconds : trim.original_duration_seconds) || 0;
 
   // Checkpoints the trim empties, folded into their neighbour (apply), or the
@@ -128,7 +139,11 @@ export function buildTrimSwitch(input: SwitchInputs) {
       });
     }
   }
-  const undo = apply ? [] : (trim.plan?.merged ?? []);
+  // Folds the live trim already made stay made; the record keeps them all, so
+  // "Use original" can undo every one. Undone newest first: a question folded
+  // twice (A into B, then B into C) has to go back through B to reach A.
+  const earlier = liveMap ? (trim.previous?.plan?.merged ?? []) : [];
+  const undo = apply ? [] : [...(trim.plan?.merged ?? [])].reverse();
   // A folded checkpoint keeps its original times: it is retired, a zero-length
   // one breaks the sections table's end > start check (Islamic Architecture's
   // whole switch rolled back on it, 2026-10-15), and "Use original" restores it
@@ -137,7 +152,7 @@ export function buildTrimSwitch(input: SwitchInputs) {
 
   return {
     mode,
-    merged: apply ? merged : [],
+    merged: apply ? [...earlier, ...merged] : [],
     class: {
       // Kept on revert too, so "Use trimmed" can switch straight back.
       trimmed_url: trim.trimmed_url,
@@ -250,7 +265,7 @@ export async function switchRecordingTrim(
     if (!error) {
       evictMedia('class', trim.class_id);
       for (const recap of payload.recaps) evictMedia('recap', recap.id);
-      if (mode === 'apply') await queueYouTubeReupload(supabase, trim.class_id);
+      if (mode === 'apply') await queueYouTubeReupload(supabase, trim.class_id, Boolean(trim.previous?.cut_map?.length));
       return;
     }
     lastError = error;
@@ -261,17 +276,19 @@ export async function switchRecordingTrim(
 
 /**
  * A class already backed up to YouTube untrimmed gets the trimmed copy uploaded
- * in its place (founder, 2026-10-14). The backup sync picks up 'reupload' rows;
+ * in its place (founder, 2026-10-14), and so is one backed up from an earlier
+ * trim when a re-trim replaces it. The backup sync picks up 'reupload' rows;
  * the old video id is kept so staff can make it private once the new one is
  * published.
  */
-async function queueYouTubeReupload(supabase: any, classId: string): Promise<void> {
+async function queueYouTubeReupload(supabase: any, classId: string, retrim = false): Promise<void> {
   const { data: upload } = await supabase
     .from('nexus_class_video_uploads')
     .select('status, source_variant, youtube_video_id')
     .eq('class_id', classId)
     .maybeSingle();
-  if (!upload || upload.status !== 'ok' || upload.source_variant === 'trimmed' || !upload.youtube_video_id) return;
+  if (!upload || upload.status !== 'ok' || !upload.youtube_video_id) return;
+  if (upload.source_variant === 'trimmed' && !retrim) return;
   await supabase
     .from('nexus_class_video_uploads')
     .update({

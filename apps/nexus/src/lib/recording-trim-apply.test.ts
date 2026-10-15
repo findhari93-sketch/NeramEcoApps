@@ -143,6 +143,76 @@ describe('buildTrimSwitch: revert', () => {
   });
 });
 
+/**
+ * Re-trimming a class students already watch trimmed (founder, 2026-10-15:
+ * transcript-based pauses). Everything stored is on the live copy's timeline,
+ * so it goes back through that copy's map and on through the new one.
+ */
+describe('buildTrimSwitch: a re-trim replacing a live trim', () => {
+  // The new plan also cuts a wordless minute at 1500 to 1560.
+  const v2 = buildCutMap([
+    [541, 1500],
+    [1560, 2000],
+    [2120, 4370],
+  ]);
+  const retrim = {
+    ...trim,
+    cut_map: v2,
+    trimmed_url: 'https://sp/Trimmed/orig (trimmed 2).mp4',
+    trimmed_item_id: 'i-trim2',
+    trimmed_duration_seconds: 3649,
+    removed_seconds: 734,
+    previous: { cut_map: MAP, plan: { merged: [{ recap_id: 'r1', from: 'old', to: 's1', question_ids: ['q0'] }] } },
+  };
+  // As stored now: on the first trimmed copy's timeline.
+  const live = inputs({
+    trim: retrim,
+    recaps: [
+      {
+        id: 'r1',
+        sections: [
+          { id: 's1', start_timestamp_seconds: 0, end_timestamp_seconds: 368 },
+          { id: 's5', start_timestamp_seconds: 2768, end_timestamp_seconds: 3705 },
+        ],
+        progress: [
+          {
+            student_id: 'inaya',
+            watch_version: 8,
+            last_video_position_seconds: 2835,
+            furthest_position_seconds: 2835,
+            watched_seconds: 3450,
+            played_ranges: [[0, 2835]],
+          },
+        ],
+      },
+    ],
+  });
+  const out = buildTrimSwitch(live);
+
+  it('moves checkpoints from the live copy onto the new one', () => {
+    expect(out.recaps[0].sections).toEqual([
+      { id: 's1', start: 0, end: 368 },
+      { id: 's5', start: 2708, end: 3645 },
+    ]);
+    expect(out.recaps[0]).toMatchObject({ item_id: 'i-trim2', duration_seconds: 3649 });
+  });
+
+  it('moves each student to the same moment of the lesson', () => {
+    // Live 2835 is original 3496, which is 2775 on the new copy.
+    expect(out.recaps[0].progress[0]).toMatchObject({ pos: 2775, furthest: 2775, ranges: [[0, 2775]] });
+  });
+
+  it('serves the transcript remapped from the original, not from the live copy', () => {
+    expect(out.vtt).toContain('00:00:59.000 --> 00:01:04.000');
+  });
+
+  it('keeps the live trim folds on record so "Use original" can undo them too', () => {
+    expect(out.merged[0]).toEqual({ recap_id: 'r1', from: 'old', to: 's1', question_ids: ['q0'] });
+    expect(out.recaps[0].archive_sections).toEqual([]);
+    expect(out.recaps[0].move_questions).toEqual([]);
+  });
+});
+
 describe('buildTrimSwitch: guards', () => {
   it('refuses a trim with no cut map', () => {
     expect(() => buildTrimSwitch(inputs({ trim: { ...trim, cut_map: null } }))).toThrow('TRIM_HAS_NO_CUT_MAP');
@@ -194,6 +264,19 @@ describe('buildTrimSwitch: a checkpoint the trim empties', () => {
     const out = buildTrimSwitch(inputs());
     expect(out.recaps[0].archive_sections).toEqual([]);
     expect(out.merged).toEqual([]);
+  });
+
+  it('undoes a double fold newest first, so each question gets back to where it began', () => {
+    // A re-trim folded B (holding A's questions) into C after A had gone into B.
+    const merged = [
+      { recap_id: 'r1', from: 'A', to: 'B', question_ids: ['a'] },
+      { recap_id: 'r1', from: 'B', to: 'C', question_ids: ['b', 'a'] },
+    ];
+    const out = buildTrimSwitch(inputs({ mode: 'revert', trim: { ...islamic, plan: { merged } }, recaps: [{ ...recap, sections: [] }] }));
+    expect(out.recaps[0].move_questions).toEqual([
+      { ids: ['b', 'a'], to: 'B' },
+      { ids: ['a'], to: 'A' },
+    ]);
   });
 
   it('undoes the fold exactly on revert', () => {

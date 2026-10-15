@@ -74,11 +74,14 @@ export async function ensureTrimFolder(driveId: string, parentId: string): Promi
   return (await found.json()).id;
 }
 
-/** "Class 12 Oct.mp4" becomes "Class 12 Oct (trimmed).mp4". */
-export function trimmedFileName(original: string): string {
+/**
+ * "Class 12 Oct.mp4" becomes "Class 12 Oct (trimmed).mp4", or with `copy` 2
+ * "Class 12 Oct (trimmed 2).mp4": a re-trim's name while the first copy is live.
+ */
+export function trimmedFileName(original: string, copy: 1 | 2 = 1): string {
   const dot = original.lastIndexOf('.');
   const stem = dot > 0 ? original.slice(0, dot) : original;
-  return `${stem} (trimmed).mp4`;
+  return copy === 2 ? `${stem} (trimmed 2).mp4` : `${stem} (trimmed).mp4`;
 }
 
 /**

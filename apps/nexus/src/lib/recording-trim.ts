@@ -186,7 +186,11 @@ export async function planTrimJob(
   jobId: string,
   report: PlanReport,
 ): Promise<{ keep: Span[] } | { skip: string }> {
-  const { data: job } = await supabase.from('nexus_recording_trims').select('id, class_id, status').eq('id', jobId).maybeSingle();
+  const { data: job } = await supabase
+    .from('nexus_recording_trims')
+    .select('id, class_id, status, previous')
+    .eq('id', jobId)
+    .maybeSingle();
   if (!job || job.status !== 'running') return { skip: 'NOT_RUNNING' };
   const config = await readTrimConfig();
   const speech = await speechSpans(supabase, job.class_id);
@@ -199,15 +203,30 @@ export async function planTrimJob(
     params: config.params,
   });
 
+  // The spans themselves, not just counts, so a pause that was not cut can be
+  // explained afterwards (counts could not say why the 14 Oct JEE class kept
+  // its 39s pause).
   const detection = {
     duration: report.duration,
     silences: report.silences.length,
     freezes: report.freezes.length,
     keyframes: report.keyframes.length,
     speech_cues: speech.length,
+    silence_spans: roundSpans(report.silences),
+    freeze_spans: roundSpans(report.freezes),
     probe: report.probe ?? null,
   };
   const base = { detection, plan, original_duration_seconds: report.duration, updated_at: new Date().toISOString() };
+
+  // A re-trim of a recording students already watch trimmed: when it comes to
+  // nothing, the live trim stays exactly as it was.
+  if (job.previous && (plan.kind === 'skip' || config.mode === 'dry_run')) {
+    await restorePreviousTrim(supabase, job, plan.kind === 'skip' ? `RETRIM_${plan.reason}` : 'RETRIM_DRY_RUN', {
+      ...detection,
+      proposed_plan: plan,
+    });
+    return { skip: plan.kind === 'skip' ? plan.reason : 'DRY_RUN' };
+  }
 
   if (plan.kind === 'skip') {
     await supabase.from('nexus_recording_trims').update({ ...base, status: 'skipped', reason: plan.reason }).eq('id', jobId);
@@ -227,14 +246,21 @@ export async function planTrimJob(
 export async function openTrimUpload(supabase: any, jobId: string): Promise<{ upload_url: string; file_name: string }> {
   const { data: job } = await supabase
     .from('nexus_recording_trims')
-    .select('status, original_drive_id, original_item_id')
+    .select('status, original_drive_id, original_item_id, previous')
     .eq('id', jobId)
     .maybeSingle();
   if (!job || job.status !== 'running' || !job.original_drive_id || !job.original_item_id) throw new Error('NOT_RUNNING');
   const original = await getDriveItem(job.original_drive_id, job.original_item_id);
   if (!original.parentId) throw new Error('NO_PARENT_FOLDER');
   const folderId = await ensureTrimFolder(original.driveId, original.parentId);
-  const fileName = trimmedFileName(original.name);
+  // A re-trim must never land on the copy students are playing: the upload
+  // replaces a file of the same name, which would swap the video under a
+  // timeline that no longer fits it. It alternates between two names instead.
+  let fileName = trimmedFileName(original.name);
+  if (job.previous?.trimmed_drive_id && job.previous?.trimmed_item_id) {
+    const live = await getDriveItem(job.previous.trimmed_drive_id, job.previous.trimmed_item_id).catch(() => null);
+    if (!live || live.name === fileName) fileName = trimmedFileName(original.name, 2);
+  }
   return { upload_url: await createTrimUploadSession(original.driveId, folderId, fileName), file_name: fileName };
 }
 
@@ -309,6 +335,13 @@ export async function completeTrimJob(supabase: any, jobId: string, report: Comp
 }
 
 export async function failTrimJob(supabase: any, jobId: string, reason: string, detail?: string): Promise<void> {
+  const { data: job } = await supabase.from('nexus_recording_trims').select('id, previous').eq('id', jobId).maybeSingle();
+  if (job?.previous) {
+    // A failed re-trim gives up at once and leaves the live trim in place,
+    // rather than mark a class students are watching 'failed'.
+    await restorePreviousTrim(supabase, job, `RETRIM_${reason}`, detail ? { error: detail.slice(0, 500) } : null);
+    return;
+  }
   await supabase
     .from('nexus_recording_trims')
     .update({
@@ -319,6 +352,79 @@ export async function failTrimJob(supabase: any, jobId: string, reason: string, 
       updated_at: new Date().toISOString(),
     })
     .eq('id', jobId);
+}
+
+function roundSpans(spans: ReadonlyArray<Span>): Array<[number, number]> {
+  return spans.map(([a, b]) => [Math.round(a * 10) / 10, Math.round(b * 10) / 10]);
+}
+
+/**
+ * The applied trim a re-trim replaces, kept on the row (column `previous`)
+ * until the new copy is switched in. Students keep playing it all that time.
+ */
+export const PREVIOUS_TRIM_FIELDS = [
+  'trimmed_url',
+  'trimmed_drive_id',
+  'trimmed_item_id',
+  'trimmed_size',
+  'trimmed_duration_seconds',
+  'removed_seconds',
+  'cut_map',
+  'plan',
+  'detection',
+  'applied_at',
+  'applied_by',
+] as const;
+
+/** A re-trim that came to nothing: put the live trim's record back as it was. */
+async function restorePreviousTrim(
+  supabase: any,
+  job: { id: string; previous: Record<string, unknown> },
+  reason: string,
+  retrim: Record<string, unknown> | null,
+): Promise<void> {
+  const restored: Record<string, unknown> = {};
+  for (const field of PREVIOUS_TRIM_FIELDS) restored[field] = job.previous[field] ?? null;
+  await supabase
+    .from('nexus_recording_trims')
+    .update({
+      ...restored,
+      // The re-trim's own measurements sit beside the live trim's.
+      detection: retrim ? { ...((restored.detection as object | null) ?? {}), retrim } : restored.detection,
+      status: 'applied',
+      reason: reason.slice(0, 64),
+      previous: null,
+      claim_expires_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', job.id);
+}
+
+/**
+ * Trim a class again from its original, under the current rules. A class
+ * students already watch trimmed keeps playing that copy until the new one is
+ * switched in (overnight when anyone has started it, like any trim); its
+ * record waits in `previous` meanwhile. A trim not yet live is simply queued
+ * again.
+ */
+export async function requeueTrim(supabase: any, trim: Record<string, any>): Promise<'requeued' | 'busy'> {
+  if (['queued', 'running', 'reverted', 'superseded'].includes(trim.status) || trim.previous) return 'busy';
+  const previous =
+    trim.status === 'applied' ? Object.fromEntries(PREVIOUS_TRIM_FIELDS.map((f) => [f, trim[f] ?? null])) : null;
+  await supabase
+    .from('nexus_recording_trims')
+    .update({
+      status: 'queued',
+      attempts: 0,
+      reason: null,
+      source: 'manual',
+      previous,
+      claim_expires_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', trim.id)
+    .eq('status', trim.status);
+  return 'requeued';
 }
 
 /** The overnight pass: switch in every trim that was waiting for it. */

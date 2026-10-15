@@ -43,6 +43,20 @@ describe('planTrim', () => {
     expect(both.kind === 'cut' && both.cuts).toEqual([{ from: 1001.5, to: 1198.5, kind: 'pause' }]);
   });
 
+  it('trusts the transcript over the audio level: a wordless pause with open mics is cut', () => {
+    // 14 Oct JEE class: "Good evening" at 719s, then nobody speaks until 764s,
+    // but student mics kept the audio above the silence threshold.
+    const speech: Span[] = [[719, 726], ...talk(764, 3935)];
+    const plan = planTrim({ duration: 3945, speech, silences: [], freezes: [[700, 800]], keyframes: [] });
+    expect(plan.kind === 'cut' && plan.cuts.find((c) => c.kind === 'pause')).toEqual({ from: 727.5, to: 762.5, kind: 'pause' });
+  });
+
+  it('of a wordless stretch, only the part where the screen is still goes: drawing without talking is teaching', () => {
+    const speech = [...talk(0, 1000), ...talk(1200, 4000)];
+    const plan = planTrim({ duration: 4000, speech, silences: [], freezes: [[1000, 1100]], keyframes: [] });
+    expect(plan.kind === 'cut' ? plan.cuts : []).toEqual([{ from: 1001.5, to: 1098.5, kind: 'pause' }]);
+  });
+
   it('leaves a pause under 30 seconds alone', () => {
     const speech = [...talk(0, 1000), ...talk(1029, 4000)];
     const plan = planTrim({ duration: 4000, speech, silences: [[1000, 1029]], freezes: [[1000, 1029]], keyframes: [] });
