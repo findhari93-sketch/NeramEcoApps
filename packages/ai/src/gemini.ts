@@ -35,7 +35,8 @@ import { recordAiUsage } from '@neram/database';
 import { checkBudget, noteSpend, type BudgetReason } from './budget';
 import { AI_FEATURES, featureById, type AiFeatureId } from './features';
 import { costOf, RETIRED_MODELS, TIER_MODELS, type TokenUsage } from './pricing';
-import { backupEligibility, generateWithBackup } from './fallback';
+import { backupEligibility, generateWithBackup, streamWithBackup } from './fallback';
+import { readSse } from './sse';
 
 export interface GeminiPart {
   text?: string;
@@ -201,28 +202,7 @@ export async function generateGemini(opts: GenerateOptions): Promise<GeminiResul
   const def = featureById(opts.feature);
   const app = def?.app ?? 'nexus';
 
-  const verdict = await checkBudget(opts.feature, opts.clientKey);
-  if (!verdict.allowed) {
-    const supportsManual = def?.supportsManual ?? false;
-    // A refusal is worth a row: on the panel these are the calls the controls
-    // actually prevented, which is the only evidence the controls are working.
-    logUsage({
-      featureId: opts.feature,
-      app,
-      status: verdict.reason === 'manual' ? 'manual' : 'blocked_budget',
-      error: verdict.reason,
-      actorId: opts.actorId ?? null,
-      clientKey: opts.clientKey ?? null,
-    });
-
-    throw new AiBlockedError({
-      message: verdict.message,
-      reason: verdict.reason,
-      feature: opts.feature,
-      supportsManual,
-      manualPrompt: supportsManual ? buildManualPrompt(opts) : null,
-    });
-  }
+  await guardBudget(opts, def, app);
 
   try {
     return await callGemini(opts, def, app);
@@ -233,53 +213,127 @@ export async function generateGemini(opts: GenerateOptions): Promise<GeminiResul
     // error (402, 429), so that is the one they see.
     const eligible = backupEligibility(opts, app);
     if (!eligible.ok) throw geminiErr;
+    return runBackup(opts, app, geminiErr, () => generateWithBackup(opts, { app }));
+  }
+}
 
-    const startedAt = Date.now();
-    const why = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
-    try {
-      const { attempts: _tried, ...result } = await generateWithBackup(opts, { app });
-      console.warn(`[ai] ${opts.feature} answered by ${result.model} because Gemini failed: ${why}`);
-      logUsage({
-        featureId: opts.feature,
-        app,
-        model: result.model,
-        keyTier: 'free',
-        promptTokens: result.usage.promptTokens,
-        outputTokens: result.usage.outputTokens,
-        estimatedCostUsd: 0,
-        latencyMs: Date.now() - startedAt,
-        status: 'ok',
-        actorId: opts.actorId ?? null,
-        clientKey: opts.clientKey ?? null,
-      });
-      return result;
-    } catch (backupErr) {
-      const message = backupErr instanceof Error ? backupErr.message : String(backupErr);
-      console.error(`[ai] ${opts.feature}: backup failed too: ${message}`);
-      logUsage({
-        featureId: opts.feature,
-        app,
-        model: 'backup',
-        keyTier: 'free',
-        latencyMs: Date.now() - startedAt,
-        status: /429/.test(message) ? 'rate_limited' : 'error',
-        error: message,
-        actorId: opts.actorId ?? null,
-        clientKey: opts.clientKey ?? null,
-      });
-      throw geminiErr;
-    }
+/**
+ * Like generateGemini, but hands the answer over as it is written.
+ *
+ * `onText` gets each text delta the moment it arrives, which is what lets the
+ * site chatbot show an answer word by word instead of after a ten second wait.
+ * The resolved result is the same shape generateGemini returns, so a tool loop
+ * can read functionCalls and modelParts off it exactly as before.
+ *
+ * Failover only happens before the first word. Once text has reached the
+ * visitor there is nothing sensible to switch to, so a dropped connection ends
+ * the answer with finishReason 'INTERRUPTED' and whatever arrived.
+ */
+export async function streamGemini(
+  opts: GenerateOptions & { onText: (delta: string) => void },
+): Promise<GeminiResult> {
+  const def = featureById(opts.feature);
+  const app = def?.app ?? 'nexus';
+
+  await guardBudget(opts, def, app);
+
+  try {
+    return await callGemini(opts, def, app, opts.onText);
+  } catch (geminiErr) {
+    const eligible = backupEligibility(opts, app);
+    if (!eligible.ok) throw geminiErr;
+    return runBackup(opts, app, geminiErr, () => streamWithBackup(opts, { app, onText: opts.onText }));
+  }
+}
+
+/** The budget guard and mode switch. Throws AiBlockedError when the call may not run. */
+async function guardBudget(
+  opts: GenerateOptions,
+  def: ReturnType<typeof featureById>,
+  app: string,
+): Promise<void> {
+  const verdict = await checkBudget(opts.feature, opts.clientKey);
+  if (verdict.allowed) return;
+
+  const supportsManual = def?.supportsManual ?? false;
+  // A refusal is worth a row: on the panel these are the calls the controls
+  // actually prevented, which is the only evidence the controls are working.
+  logUsage({
+    featureId: opts.feature,
+    app,
+    status: verdict.reason === 'manual' ? 'manual' : 'blocked_budget',
+    error: verdict.reason,
+    actorId: opts.actorId ?? null,
+    clientKey: opts.clientKey ?? null,
+  });
+
+  throw new AiBlockedError({
+    message: verdict.message,
+    reason: verdict.reason,
+    feature: opts.feature,
+    supportsManual,
+    manualPrompt: supportsManual ? buildManualPrompt(opts) : null,
+  });
+}
+
+/** Runs a backup provider after Gemini failed, metered like a Gemini call. */
+async function runBackup(
+  opts: GenerateOptions,
+  app: string,
+  geminiErr: unknown,
+  backup: () => Promise<GeminiResult & { attempts: unknown[] }>,
+): Promise<GeminiResult> {
+  const startedAt = Date.now();
+  const why = geminiErr instanceof Error ? geminiErr.message : String(geminiErr);
+  try {
+    const { attempts: _tried, ...result } = await backup();
+    console.warn(`[ai] ${opts.feature} answered by ${result.model} because Gemini failed: ${why}`);
+    logUsage({
+      featureId: opts.feature,
+      app,
+      model: result.model,
+      keyTier: 'free',
+      promptTokens: result.usage.promptTokens,
+      outputTokens: result.usage.outputTokens,
+      estimatedCostUsd: 0,
+      latencyMs: Date.now() - startedAt,
+      status: 'ok',
+      actorId: opts.actorId ?? null,
+      clientKey: opts.clientKey ?? null,
+    });
+    return result;
+  } catch (backupErr) {
+    const message = backupErr instanceof Error ? backupErr.message : String(backupErr);
+    console.error(`[ai] ${opts.feature}: backup failed too: ${message}`);
+    logUsage({
+      featureId: opts.feature,
+      app,
+      model: 'backup',
+      keyTier: 'free',
+      latencyMs: Date.now() - startedAt,
+      status: /429/.test(message) ? 'rate_limited' : 'error',
+      error: message,
+      actorId: opts.actorId ?? null,
+      clientKey: opts.clientKey ?? null,
+    });
+    throw geminiErr;
   }
 }
 
 /**
  * The Gemini cascade itself: every (key, model) attempt in order, metered.
- * Throws on failure; generateGemini decides whether a backup gets a turn.
+ * Throws on failure; the caller decides whether a backup gets a turn.
+ *
+ * With `onText` the call streams (streamGenerateContent over SSE) and each text
+ * delta is handed over as it arrives. The cascade and the status handling are
+ * the same either way: a failed attempt is a non-2xx status, which always comes
+ * before the first byte of an answer.
  */
 async function callGemini(
   opts: GenerateOptions,
   def: ReturnType<typeof featureById>,
   app: string,
+  onText?: (delta: string) => void,
 ): Promise<GeminiResult> {
   const attempts = planAttempts(opts, def?.tier ?? 'standard', def?.allowFreeKey ?? false, def?.keyEnv, def?.keyEnvModels);
   const body = buildRequestBody(opts);
@@ -298,7 +352,9 @@ async function callGemini(
       continue;
     }
 
-    const url = `${GEMINI_BASE_URL}/${attempt.model}:generateContent?key=${attempt.apiKey}`;
+    const url = onText
+      ? `${GEMINI_BASE_URL}/${attempt.model}:streamGenerateContent?alt=sse&key=${attempt.apiKey}`
+      : `${GEMINI_BASE_URL}/${attempt.model}:generateContent?key=${attempt.apiKey}`;
     const res = await fetch(url, {
       cache: 'no-store',
       method: 'POST',
@@ -307,9 +363,9 @@ async function callGemini(
     });
 
     if (res.ok) {
-      const data = await res.json();
-      const candidate = data?.candidates?.[0];
-      const parts: GeminiPart[] = candidate?.content?.parts ?? [];
+      const { parts, finishReason, usageMetadata } = onText
+        ? await readStreamedCandidate(res, onText)
+        : await readCandidate(res);
       const text = parts.map((p) => p.text ?? '').join('');
       const functionCalls = parts
         .filter((p) => p.functionCall)
@@ -321,7 +377,7 @@ async function callGemini(
         throw new Error('AI returned an empty response');
       }
 
-      const usage = readUsage(data?.usageMetadata);
+      const usage = readUsage(usageMetadata);
       const costUsd = costOf(attempt.model, usage);
 
       noteSpend(costUsd);
@@ -347,7 +403,7 @@ async function callGemini(
         keyTier: attempt.keyTier,
         functionCalls,
         modelParts: parts,
-        finishReason: candidate?.finishReason || 'UNKNOWN',
+        finishReason,
       };
     }
 
@@ -450,6 +506,74 @@ async function callGemini(
     clientKey: opts.clientKey ?? null,
   });
   throw new Error(message);
+}
+
+interface ReadCandidate {
+  parts: GeminiPart[];
+  finishReason: string;
+  usageMetadata: unknown;
+}
+
+async function readCandidate(res: Response): Promise<ReadCandidate> {
+  const data = await res.json();
+  const candidate = data?.candidates?.[0];
+  return {
+    parts: candidate?.content?.parts ?? [],
+    finishReason: candidate?.finishReason || 'UNKNOWN',
+    usageMetadata: data?.usageMetadata,
+  };
+}
+
+/**
+ * Reads a streamGenerateContent SSE body. Each event is a partial response:
+ * text is handed to onText as it lands, then consecutive plain text parts are
+ * merged so modelParts looks like the one-shot call's. A function call part
+ * (thoughtSignature and all) arrives whole in a single event and is kept as is.
+ *
+ * A connection that drops after some text has gone out ends the answer as
+ * 'INTERRUPTED' rather than throwing: the visitor already has half an answer,
+ * and a failover would start a second, different one underneath it.
+ */
+async function readStreamedCandidate(res: Response, onText: (delta: string) => void): Promise<ReadCandidate> {
+  const parts: GeminiPart[] = [];
+  let finishReason = 'UNKNOWN';
+  let usageMetadata: unknown;
+  let sentText = false;
+
+  try {
+    await readSse(res, (data) => {
+      let chunk: { candidates?: Array<{ content?: { parts?: GeminiPart[] }; finishReason?: string }>; usageMetadata?: unknown };
+      try {
+        chunk = JSON.parse(data);
+      } catch {
+        return;
+      }
+      const candidate = chunk?.candidates?.[0];
+      if (candidate?.finishReason) finishReason = candidate.finishReason;
+      if (chunk?.usageMetadata) usageMetadata = chunk.usageMetadata;
+
+      for (const part of candidate?.content?.parts ?? []) {
+        if (part.text && !part.thought) {
+          onText(part.text);
+          sentText = true;
+        }
+        const last = parts[parts.length - 1];
+        const mergeable = (p: GeminiPart | undefined) =>
+          !!p && typeof p.text === 'string' && !p.thought && !p.thoughtSignature && !p.functionCall;
+        if (mergeable(part) && mergeable(last)) {
+          last.text += part.text as string;
+        } else {
+          parts.push({ ...part });
+        }
+      }
+    });
+  } catch (err) {
+    if (!sentText) throw err;
+    console.error('[ai] stream dropped mid-answer:', err);
+    finishReason = 'INTERRUPTED';
+  }
+
+  return { parts, finishReason, usageMetadata };
 }
 
 /**

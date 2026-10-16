@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=block">
+<script src="_ds/modernist-e8c2d95e-abf3-4f3e-86df-2b557a2062d6/_ds_bundle.js"></script>
+<style>h1,h2,h3{font-family:Inter,"Noto Sans Tamil",sans-serif}body{margin:0;background:#FAFBFC;color:#1A2027;font-family:Inter,"Noto Sans Tamil",sans-serif;-webkit-font-smoothing:antialiased}a{color:#0b6bd6;text-decoration:none}a:hover{color:#b67a0c}:focus-visible{outline:2px solid #e8a020;outline-offset:2px}</style>
+</helmet>
+<div style="position:sticky;top:0;z-index:50;background:#201e1d;color:#f3f2f2;display:flex;gap:12px;align-items:center;padding:8px 20px;font:600 13px Archivo,system-ui,sans-serif;flex-wrap:wrap">
+  <span>T9 preview</span>
+  <div style="display:flex;border:2px solid #f3f2f2"><button onClick="{{ goAbout }}" style="{{ tabAbout }}">Company: /about</button><button onClick="{{ goLegal }}" style="{{ tabLegal }}">Legal: /terms, /privacy, /refund-policy</button></div>
+</div>
+
+<sc-if value="{{ isAbout }}" hint-placeholder-val="{{ true }}">
+<dc-import name="Site Header" state="guest" active="about" hint-size="100%,64px" style="position:sticky;top:38px;z-index:40;display:block"></dc-import>
+<section style="background-color:#060d1f;background-image:linear-gradient(rgba(255,255,255,0.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.035) 1px,transparent 1px),linear-gradient(rgba(232,160,32,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(232,160,32,0.06) 1px,transparent 1px);background-size:40px 40px,40px 40px,200px 200px,200px 200px;color:#f5f0e8">
+  <div style="max-width:1200px;margin:0 auto;padding:64px 24px 56px;display:flex;flex-direction:column;gap:16px">
+    <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.2em;color:#e8a020">ABOUT US · EST. 2009</span>
+    <h1 style="margin:0;font-size:clamp(2rem,5vw,3.5rem);line-height:1.05;font-weight:800;letter-spacing:-0.01em">About Neram Classes</h1>
+    <p style="margin:0;max-width:640px;font-size:18px;line-height:1.55;color:rgba(245,240,232,0.72)">Empowering students with quality education and personalized guidance since 2009</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,190px));margin-top:16px;border:1px solid rgba(255,255,255,0.08);border-radius:8px;overflow:hidden;width:fit-content;max-width:100%;background:rgba(11,22,41,0.6)">
+      <div style="padding:16px 20px;border-right:1px solid rgba(255,255,255,0.08);display:flex;flex-direction:column;gap:6px"><span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:24px;font-weight:700;color:#e8a020;line-height:1">10+</span><span style="font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:rgba(245,240,232,0.62)">Years of excellence</span></div>
+      <div style="padding:16px 20px;border-right:1px solid rgba(255,255,255,0.08);display:flex;flex-direction:column;gap:6px"><span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:24px;font-weight:700;color:#e8a020;line-height:1">1,000+</span><span style="font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:rgba(245,240,232,0.62)">Students enrolled</span></div>
+      <div style="padding:16px 20px;display:flex;flex-direction:column;gap:6px"><span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:24px;font-weight:700;color:#e8a020;line-height:1">AIR 1</span><span style="font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:rgba(245,240,232,0.62)">JEE B.Arch 2024</span></div>
+    </div>
+  </div>
+</section>
+<section style="padding:72px 24px">
+  <div style="max-width:1200px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:40px">
+    <div style="display:flex;flex-direction:column;gap:12px"><span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.2em;color:#8a5a05">OUR STORY</span><h2 style="margin:0;font-size:clamp(1.75rem,3.5vw,2.5rem);line-height:1.15;font-weight:800">Architects first. Software architects too.</h2></div>
+    <div style="display:flex;flex-direction:column;gap:18px;font-size:17px;line-height:1.7;grid-column:span 1">
+      <p style="margin:0">For bigger exams like JEE and NEET, students have countless platforms, apps, and tools. Architecture entrance preparation had almost none. The field was too niche for anyone to build proper digital infrastructure for it, so we built it ourselves.</p>
+      <p style="margin:0">We are architects first. We studied at IITs, NITs, and Schools of Planning and Architecture, and we design buildings and spaces in the real world. We are also software architects. We combined both crafts to build a digital ecosystem for NATA preparation that no other classroom in India has.</p>
+      <p style="margin:0">At the heart of it is Nexus, our virtual learning assistant. It is a pocket tutor that helps students learn for the exam anytime, anywhere. Built entirely around the student experience, it makes Neram the only AI-enabled learning platform created for architecture entrance preparation.</p>
+    </div>
+  </div>
+</section>
+<section style="background:#fff;border-top:1px solid #E1E5EB;padding:72px 24px">
+  <div style="max-width:1200px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,400px),1fr));border-top:1px solid #1A2027">
+    <div style="padding:28px 32px 28px 0;display:flex;flex-direction:column;gap:12px"><h2 style="margin:0;font-size:24px;font-weight:800">Mission</h2><p style="margin:0;font-size:16px;line-height:1.7;color:#55606c">Architecture is a unique path, and most students who dream of it have no one around them who has walked it. They struggle alone to understand the field, crack the entrance exam, and reach a good college. Neram Classes exists to remove that struggle.</p></div>
+    <div style="padding:28px 32px 28px 0;display:flex;flex-direction:column;gap:12px"><h2 style="margin:0;font-size:24px;font-weight:800">Vision</h2><p style="margin:0;font-size:16px;line-height:1.7;color:#55606c">We see a future where any student who dreams of becoming an architect can crack the exam with a strong score, get into a great college, and build a bright career, no matter which town they come from or who they know.</p></div>
+  </div>
+</section>
+<section style="padding:72px 24px;border-top:1px solid #E1E5EB">
+  <div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:28px">
+    <div style="display:flex;flex-direction:column;gap:12px"><span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.2em;color:#8a5a05">TEAM</span><h2 style="margin:0;font-size:clamp(1.75rem,3.5vw,2.5rem);line-height:1.15;font-weight:800">The people behind Neram</h2></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,260px),1fr));gap:16px">
+      <sc-for list="{{ team }}" as="m" hint-placeholder-count="5">
+        <div style="background:#fff;border:1px solid #E1E5EB;border-radius:8px;padding:20px;display:flex;flex-direction:column;gap:12px">
+          <div style="display:flex;gap:14px;align-items:center"><span style="width:56px;height:56px;border-radius:28px;background:#122040;color:#f5f0e8;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:18px;flex-shrink:0">{{ m.initials }}</span><div style="display:flex;flex-direction:column;gap:2px;min-width:0"><strong style="font-size:16px">{{ m.name }}</strong><span style="font-size:14px;color:#8a5a05;font-weight:600">{{ m.role }}</span></div></div>
+          <sc-if value="{{ m.institute }}" hint-placeholder-val="{{ true }}"><span style="font-size:14px;color:#55606c">{{ m.institute }}</span></sc-if>
+          <sc-if value="{{ m.bio }}" hint-placeholder-val="{{ true }}"><span style="font-size:14px;line-height:1.5;color:#55606c">{{ m.bio }}</span></sc-if>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</section>
+<section style="background:#060d1f;color:#f5f0e8;padding:80px 24px;border-top:1px solid rgba(232,160,32,0.15)">
+  <div style="max-width:760px;margin:0 auto;display:flex;flex-direction:column;align-items:center;text-align:center;gap:16px">
+    <h2 style="margin:0;font-size:clamp(1.75rem,3.5vw,2.5rem);line-height:1.15;font-weight:800">When our students achieve their goals, the world will speak about us.</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:16px;justify-content:center;margin-top:8px"><a href="#" style="display:inline-flex;align-items:center;gap:10px;background:#e8a020;color:#060d1f;font-weight:700;font-size:16px;padding:14px 22px;border-radius:8px">Book your free demo<span class="material-symbols-outlined" style="font-size:20px">arrow_forward</span></a><a href="#" style="display:inline-flex;align-items:center;gap:8px;color:#f5f0e8;font-weight:600;font-size:16px;padding:14px 4px;border-bottom:1px solid rgba(245,240,232,0.3)">Contact us</a></div>
+  </div>
+</section>
+</sc-if>
+
+<sc-if value="{{ isLegal }}" hint-placeholder-val="{{ false }}">
+<dc-import name="Site Header" surface="light" state="guest" hint-size="100%,64px" style="position:sticky;top:38px;z-index:40;display:block"></dc-import>
+<header style="background:#fff;border-bottom:1px solid #E1E5EB">
+  <div style="max-width:1080px;margin:0 auto;padding:40px 24px 32px;display:flex;flex-direction:column;gap:12px">
+    <span style="font-size:13px;color:#55606c;display:flex;gap:6px;align-items:center"><a href="#" style="color:#55606c">Home</a><span class="material-symbols-outlined" style="font-size:16px">chevron_right</span><span style="color:#1A2027">Terms &amp; Conditions</span></span>
+    <h1 style="margin:0;font-size:clamp(2rem,4.5vw,2.75rem);line-height:1.1;font-weight:800">Terms &amp; Conditions</h1>
+    <span style="font-size:14px;color:#55606c">Last updated: 24 February 2026</span>
+    <nav style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px"><a href="#" style="min-height:40px;display:flex;align-items:center;padding:0 14px;border-radius:100px;background:#060d1f;color:#f5f0e8;font-weight:600;font-size:14px">Terms</a><a href="#" style="min-height:40px;display:flex;align-items:center;padding:0 14px;border-radius:100px;border:1px solid #c5ccd4;color:#1A2027;font-weight:600;font-size:14px">Privacy Policy</a><a href="#" style="min-height:40px;display:flex;align-items:center;padding:0 14px;border-radius:100px;border:1px solid #c5ccd4;color:#1A2027;font-weight:600;font-size:14px">Refund Policy</a></nav>
+  </div>
+</header>
+<div style="max-width:1080px;margin:0 auto;padding:40px 24px 80px;display:flex;flex-wrap:wrap;gap:48px;align-items:flex-start">
+  <nav aria-label="On this page" style="flex:0 1 240px;min-width:200px;position:sticky;top:120px;display:flex;flex-direction:column;gap:2px">
+    <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.15em;color:#55606c;padding:0 0 8px">ON THIS PAGE</span>
+    <sc-for list="{{ legal }}" as="s" hint-placeholder-count="7"><a href="#" style="min-height:36px;display:flex;align-items:center;font-size:14px;color:#55606c">{{ s.title }}</a></sc-for>
+  </nav>
+  <article style="flex:1 1 560px;min-width:0;max-width:700px;display:flex;flex-direction:column;gap:32px">
+    <sc-for list="{{ legal }}" as="s" hint-placeholder-count="7"><section style="display:flex;flex-direction:column;gap:10px"><h2 style="margin:0;font-size:20px;line-height:1.3;font-weight:800">{{ s.title }}</h2><p style="margin:0;font-size:16px;line-height:1.75;color:#2d3540">{{ s.content }}</p></section></sc-for>
+    <div style="border-top:1px solid #E1E5EB;padding-top:20px;font-size:15px;color:#55606c">Questions about these terms? Email <a href="#" style="color:#1A2027;font-weight:600">info@neramclasses.com</a></div>
+  </article>
+</div>
+</sc-if>
+<dc-import name="Site Footer" hint-size="100%,420px"></dc-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;view&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;about&quot;,&quot;legal&quot;],&quot;default&quot;:&quot;about&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Preview&quot;}}">
+class Component extends DCLogic {
+  state = { view: null };
+  renderVals() {
+    const view = this.state.view ?? this.props.view ?? 'about';
+    const tab = (on) => ({ background: on ? '#f3f2f2' : 'transparent', color: on ? '#201e1d' : '#f3f2f2', border: 'none', padding: '6px 12px', font: '600 13px Archivo, system-ui, sans-serif', cursor: 'pointer', whiteSpace: 'nowrap' });
+    const go = (v) => () => { this.setState({ view: v }); window.scrollTo(0, 0); };
+    const ini = (n) => { const p = n.trim().split(/\s+/); return p.length === 1 ? p[0].slice(0, 2).toUpperCase() : (p[0][0] + p[p.length - 1][0]).toUpperCase(); };
+    return {
+      isAbout: view === 'about', isLegal: view === 'legal', tabAbout: tab(view === 'about'), tabLegal: tab(view === 'legal'), goAbout: go('about'), goLegal: go('legal'),
+      team: [
+        { name: 'TamilSelvan', role: 'Chief Information Officer (CIO)', institute: 'MBA, Alagappa University', bio: 'Student Guidance | Academic Coordination | Operations' },
+        { name: 'Ar. Haribabu Manoharan', role: 'Student Advisor & Ex-Chief Technology Officer (CTO)', institute: 'NIT Trichy', bio: '' },
+        { name: 'Sudharshini Arjun', role: 'Architectural Mentor', institute: 'University of Oxford, UK', bio: 'RIBA Part 2 Architectural Assistant | Senior Architect at KOID India' },
+        { name: 'Ar. Sivaram', role: 'Architecture Faculty & Mentor', institute: 'B.Arch, Anna University', bio: 'NATA & JEE Paper 2 | Architectural Aptitude | Drawing & Design' },
+        { name: 'Ms. Shanthi Manoharan', role: 'Administration & Student Support Coordinator', institute: '', bio: 'Student Guidance | Parent Communication | Academic Administration' },
+      ].map(m => ({ ...m, initials: ini(m.name.replace(/^(Ar\.|Ms\.)\s*/, '')) })),
+      legal: [
+        { title: '1. Acceptance of Terms', content: 'By accessing or using the services provided by Neram Classes ("Company", "we", "us", or "our"), including our website at neramclasses.com, mobile applications, student portal at app.neramclasses.com, and all related services (collectively, the "Services"), you agree to be bound by these Terms and Conditions ("Terms"). If you do not agree to these Terms, you must not access or use our Services.' },
+        { title: '2. Definitions', content: '"Student" refers to any individual who enrolls in or accesses courses offered by Neram Classes. "Lead" refers to any individual who submits an application or inquiry through our platform. "Services" means all educational content, coaching sessions, study materials, online tools, assessments, demo classes, and any other offerings provided by Neram Classes.' },
+        { title: '3. Eligibility', content: 'Our Services are available to individuals who are at least 14 years of age. If you are under 18, you must have the consent of a parent or legal guardian to use our Services. By using our Services, you represent and warrant that you meet the eligibility requirements and that the information you provide during registration is accurate and complete.' },
+        { title: '4. Enrollment Terms', content: 'Enrollment in any course offered by Neram Classes is subject to application approval by our administration. Submission of an application does not guarantee admission. Upon approval, the student must complete the fee payment within the specified deadline to confirm enrollment.' },
+        { title: '5. Payment Terms', content: 'All fees are quoted in Indian Rupees (INR) and are inclusive of applicable taxes unless stated otherwise. Payments can be made through our approved payment gateway (Razorpay) via UPI, Credit/Debit Cards, Net Banking, or through Direct UPI/Bank Transfer.' },
+        { title: '6. Refund Policy Summary', content: 'Refund requests must be submitted within 24 hours of payment completion. A fee of 30% of the paid amount will be deducted to cover digital platform subscriptions and learning tool licenses purchased for the student upon enrollment. After 24 hours, no refund is possible as these costs have already been incurred.' },
+        { title: '7. Data Collection and Usage', content: 'By using our Services, you consent to the collection, storage, and processing of your personal data as described in our Privacy Policy. You may opt out of marketing communications at any time, but transactional communications related to your enrollment will continue.' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -134,11 +134,14 @@ export default function VoiceInputButton({
           data-testid="aintra-voice-lang"
           aria-label={`Voice language: ${currentLang.label}. Tap to change.`}
           sx={{
-            minWidth: 28,
-            height: size,
+            // 44px: a 28px target was too small to tap reliably on a phone.
+            minWidth: 44,
+            height: Math.max(size, 44),
             px: 0.5,
             border: 'none',
+            borderRadius: 1,
             background: 'none',
+            '&:focus-visible': { outline: '2px solid', outlineColor: color, outlineOffset: -2 },
             cursor: disabled ? 'default' : 'pointer',
             color: color,
             fontSize: '0.6875rem',
@@ -156,6 +159,8 @@ export default function VoiceInputButton({
         anchorEl={menuAnchor}
         open={Boolean(menuAnchor)}
         onClose={() => setMenuAnchor(null)}
+        // Above the Aintra drawer, which sits over the site's announcement bar (1450).
+        sx={{ zIndex: 1460 }}
         anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
         transformOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >

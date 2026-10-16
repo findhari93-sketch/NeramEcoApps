@@ -29,13 +29,20 @@ async function askAintra(page: Page, text: string): Promise<string> {
     )
     .toBeGreaterThan(priorCount);
 
-  // Allow a beat for the full text to render, then return the latest.
-  await page.waitForTimeout(500);
+  // Answers stream in: the message exists before it is finished, so wait for
+  // the widget to mark it complete before reading it.
+  await expect(page.getByTestId('aintra-assistant-message').last()).toHaveAttribute('data-streaming', 'false', {
+    timeout: MODEL_REPLY_TIMEOUT,
+  });
   const texts = await page.getByTestId('aintra-assistant-message').allTextContents();
   return (texts[texts.length - 1] || '').trim();
 }
 
 test.describe('Aintra college hub Q&A @marketing', () => {
+  // A college page takes ~12s to render on a dev server, and a reply may take
+  // MODEL_REPLY_TIMEOUT (35s) on its own: the 30s default could never fit both.
+  test.setTimeout(90_000);
+
   // Every test below drives the real Gemini backend. apps/marketing/.env.local is
   // gitignored, so a runner without the GEMINI_API_KEY secret answered all seven
   // with a missing-key error, which reads as a broken chatbot rather than an

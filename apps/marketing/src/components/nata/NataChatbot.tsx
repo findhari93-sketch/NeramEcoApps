@@ -16,6 +16,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import SendIcon from '@mui/icons-material/Send';
 import Image from 'next/image';
 import VoiceInputButton from '../aintra/VoiceInputButton';
+import AintraRichText from '../aintra/rich/AintraRichText';
 import { leadAttribution } from '@/lib/attribution';
 
 const ASSISTANT_IMG = '/images/nata-ai-assistant.jpg';
@@ -63,92 +64,6 @@ function BotAvatar({ size = 40 }: { size?: number }) {
         onError={() => setImgError(true)}
       />
     </Box>
-  );
-}
-
-/** Lightweight markdown renderer — handles **bold**, *italic*, lists, and paragraphs. */
-function BotMessageContent({ text }: { text: string }) {
-  const paragraphs = text.split(/\n\n+/);
-  return (
-    <Box>
-      {paragraphs.map((para, pi) => {
-        const trimmed = para.trim();
-        if (!trimmed) return null;
-        const ulMatch = trimmed.split('\n').every((l) => /^[-*]\s/.test(l.trim()));
-        if (ulMatch) {
-          return (
-            <Box key={pi} component="ul" sx={{ pl: 2.5, my: 0.5, '& li': { fontSize: '0.9375rem', lineHeight: 1.65, mb: 0.25 } }}>
-              {trimmed.split('\n').map((li, i) => (
-                <li key={i}><InlineMarkdown text={li.replace(/^[-*]\s/, '')} /></li>
-              ))}
-            </Box>
-          );
-        }
-        const olMatch = trimmed.split('\n').every((l) => /^\d+[.)]\s/.test(l.trim()));
-        if (olMatch) {
-          return (
-            <Box key={pi} component="ol" sx={{ pl: 2.5, my: 0.5, '& li': { fontSize: '0.9375rem', lineHeight: 1.65, mb: 0.25 } }}>
-              {trimmed.split('\n').map((li, i) => (
-                <li key={i}><InlineMarkdown text={li.replace(/^\d+[.)]\s/, '')} /></li>
-              ))}
-            </Box>
-          );
-        }
-        return (
-          <Typography key={pi} component="p" sx={{ fontSize: '0.9375rem', lineHeight: 1.65, mb: 1, '&:last-child': { mb: 0 } }}>
-            <InlineMarkdown text={trimmed} />
-          </Typography>
-        );
-      })}
-    </Box>
-  );
-}
-
-/** Detects URLs and email addresses in text and renders them as clickable links */
-function Linkify({ text }: { text: string }) {
-  const linkRegex = /([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|https?:\/\/[^\s,)]+|www\.[^\s,)]+|\b[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)*\.(?:com|in|org|net|edu)(?:\/[^\s,)]*)?)/g;
-  const nodes: React.ReactNode[] = [];
-  let lastIdx = 0;
-  let m;
-  while ((m = linkRegex.exec(text)) !== null) {
-    if (m.index > lastIdx) nodes.push(text.slice(lastIdx, m.index));
-    const match = m[0];
-    const isEmail = match.includes('@') && !match.startsWith('http');
-    const href = isEmail ? `mailto:${match}` : match.startsWith('http') ? match : `https://${match}`;
-    nodes.push(
-      <a key={m.index} href={href} target={isEmail ? undefined : '_blank'} rel={isEmail ? undefined : 'noopener noreferrer'}
-         style={{ color: '#1976d2', textDecoration: 'underline', wordBreak: 'break-all' }}>
-        {match}
-      </a>
-    );
-    lastIdx = m.index + m[0].length;
-  }
-  if (lastIdx < text.length) nodes.push(text.slice(lastIdx));
-  return <>{nodes}</>;
-}
-
-/** Renders **bold**, *italic*, [markdown links](url), and auto-linked URLs */
-function InlineMarkdown({ text }: { text: string }) {
-  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|\[[^\]]+\]\([^)]+\))/g);
-  return (
-    <>
-      {parts.map((part, i) => {
-        if (part.startsWith('**') && part.endsWith('**'))
-          return <strong key={i}><Linkify text={part.slice(2, -2)} /></strong>;
-        if (part.startsWith('*') && part.endsWith('*'))
-          return <em key={i}><Linkify text={part.slice(1, -1)} /></em>;
-        const mdLink = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
-        if (mdLink) {
-          return (
-            <a key={i} href={mdLink[2]} target="_blank" rel="noopener noreferrer"
-               style={{ color: '#1976d2', textDecoration: 'underline' }}>
-              {mdLink[1]}
-            </a>
-          );
-        }
-        return <Linkify key={i} text={part} />;
-      })}
-    </>
   );
 }
 
@@ -497,7 +412,7 @@ export default function NataChatbot() {
                 }}
               >
                 {msg.role === 'model' ? (
-                  <BotMessageContent text={msg.text} />
+                  <AintraRichText text={msg.text} />
                 ) : (
                   msg.text
                 )}

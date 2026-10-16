@@ -37,6 +37,8 @@ export default function robots(): MetadataRoute.Robots {
     // The student detail link. The URL is itself the credential, so it must
     // never be crawled, archived or listed anywhere.
     '/s/',
+    // Internal styleguide (404 on production anyway).
+    '/design-system',
     // Legacy WordPress paths (old site)
     '/wp-admin/',
     '/wp-content/',

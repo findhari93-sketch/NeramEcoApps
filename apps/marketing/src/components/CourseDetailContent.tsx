@@ -1,32 +1,51 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
+import type { ReactNode } from 'react';
 import { notFound } from 'next/navigation';
+import { Box } from '@neram/ui';
+import NorthEastIcon from '@mui/icons-material/NorthEast';
+import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
+import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
+import FunctionsOutlinedIcon from '@mui/icons-material/FunctionsOutlined';
+import PsychologyOutlinedIcon from '@mui/icons-material/PsychologyOutlined';
+import LayersOutlinedIcon from '@mui/icons-material/LayersOutlined';
+import { Link } from '@/i18n/routing';
 import {
-  Box,
-  Container,
-  Typography,
-  Grid,
-  Card,
-  CardContent,
-  Chip,
-  List,
-  ListItem,
-  ListItemText,
-  Button,
-  Divider,
-} from '@neram/ui';
-import { Link } from '@neram/ui';
+  PageHero,
+  StatStrip,
+  AsideLayout,
+  SectionHeader,
+  TopicCard,
+  CheckList,
+  PersonCard,
+  FeeCard,
+  CtaButton,
+  CtaBand,
+  tokens as t,
+  eyebrowSx,
+} from '@/design-system';
 import { useApplicationStatus } from '@/hooks/useApplicationStatus';
 import { useGoToApp } from '@/hooks/useGoToApp';
 import { coursesData } from '@/data/courses';
+import { ORG_FACTS } from '@/lib/seo/facts';
 
 interface CourseDetailContentProps {
   slug: string;
   locale: string;
 }
 
-export default function CourseDetailContent({ slug, locale }: CourseDetailContentProps) {
+/** A subject icon from the curriculum section title. */
+function subjectIcon(title: string): ReactNode {
+  if (/draw|sketch|design/i.test(title)) return <BrushOutlinedIcon />;
+  if (/math/i.test(title)) return <FunctionsOutlinedIcon />;
+  if (/aptitude|reason/i.test(title)) return <PsychologyOutlinedIcon />;
+  return <LayersOutlinedIcon />;
+}
+
+const PHONE_DISPLAY = ORG_FACTS.phone.replace(/^\+91-?(\d{5})(\d{5})$/, '+91 $1 $2');
+
+/** T1 Course detail: dark hero with facts, then main column + sticky fee aside. */
+export default function CourseDetailContent({ slug }: CourseDetailContentProps) {
   const course = coursesData[slug];
   const { status } = useApplicationStatus();
   const { goToApp } = useGoToApp();
@@ -36,207 +55,126 @@ export default function CourseDetailContent({ slug, locale }: CourseDetailConten
     notFound();
   }
 
-  const t = useTranslations('courseDetail');
+  const batchSize = course.batchDetails.batchSize.match(/\d+/)?.[0];
+
+  const primary = isEnrolled ? (
+    <CtaButton variant="success" fullWidth onClick={goToApp} endIcon={<NorthEastIcon aria-hidden />}>
+      Go to App
+    </CtaButton>
+  ) : (
+    <CtaButton fullWidth href={`/apply?course=${slug}`}>
+      Apply now
+    </CtaButton>
+  );
 
   return (
     <Box>
-      {/* Hero Section */}
-      <Box
-        sx={{
-          bgcolor: 'primary.main',
-          color: 'primary.contrastText',
-          py: { xs: 6, md: 8 },
-        }}
+      <PageHero
+        breadcrumb={[{ name: 'Home', href: '/' }, { name: 'Courses', href: '/courses' }, { name: course.title }]}
+        pills={[course.category, course.level]}
+        title={course.title}
+        lede={course.description}
       >
-        <Container maxWidth="lg">
-          <Grid container spacing={4} alignItems="center">
-            <Grid item xs={12} md={8}>
-              <Box sx={{ mb: 2 }}>
-                <Chip label={course.category} sx={{ mr: 1, mb: 1 }} />
-                <Chip label={course.level} variant="outlined" sx={{ mb: 1 }} />
-              </Box>
-              <Typography
-                variant="h2"
-                component="h1"
-                gutterBottom
-                sx={{ fontWeight: 700 }}
+        <Box sx={{ mt: 1 }}>
+          <StatStrip
+            size="compact"
+            items={[
+              { value: course.duration, label: 'Duration' },
+              { value: `₹${course.price}`, label: 'Fee' },
+              ...(batchSize ? [{ value: `${batchSize} max`, label: 'Batch' }] : []),
+            ]}
+          />
+        </Box>
+      </PageHero>
+
+      <AsideLayout
+        aside={
+          <FeeCard
+            component="aside"
+            sticky
+            label="Course fee"
+            price={`₹${course.price}`}
+            priceNote={
+              <Box
+                component={Link}
+                href="/fees"
+                sx={{ color: t.ink, fontWeight: 600, textDecoration: 'underline', '&:focus-visible': { outline: t.focusOutline, outlineOffset: '2px' } }}
               >
-                {course.title}
-              </Typography>
-              <Typography variant="h5" sx={{ opacity: 0.9, mb: 3 }}>
-                {course.description}
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-                <Box>
-                  <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                    Duration
-                  </Typography>
-                  <Typography variant="h6">{course.duration}</Typography>
+                See fees and payment options
+              </Box>
+            }
+            facts={[
+              { label: 'Batch size', value: course.batchDetails.batchSize },
+              { label: 'Timing', value: course.batchDetails.timing },
+              { label: 'Start date', value: course.batchDetails.startDate },
+              { label: 'Mode', value: course.batchDetails.classType },
+            ]}
+            actions={
+              <>
+                {primary}
+                <CtaButton variant="outline" size="md" fullWidth href="/demo-class" startIcon={<VideocamOutlinedIcon aria-hidden />} endIcon={null}>
+                  Book a free demo first
+                </CtaButton>
+              </>
+            }
+            footnote={
+              <>
+                Questions? Call{' '}
+                <Box component="a" href={`tel:${ORG_FACTS.phone.replace(/-/g, '')}`} sx={{ color: t.ink, fontWeight: 600 }}>
+                  {PHONE_DISPLAY}
                 </Box>
-                <Box>
-                  <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                    Price
-                  </Typography>
-                  <Typography variant="h6">{'₹'}{course.price}</Typography>
-                </Box>
-              </Box>
-            </Grid>
-          </Grid>
-        </Container>
-      </Box>
+              </>
+            }
+          />
+        }
+      >
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Box component="h2" sx={{ ...eyebrowSx }}>
+            About this course
+          </Box>
+          <Box component="p" sx={{ m: 0, fontSize: '1.125rem', lineHeight: 1.65, maxWidth: 720, textWrap: 'pretty' }}>
+            {course.longDescription}
+          </Box>
+        </Box>
 
-      {/* Course Details */}
-      <Box sx={{ py: { xs: 6, md: 10 } }}>
-        <Container maxWidth="lg">
-          <Grid container spacing={6}>
-            {/* Main Content */}
-            <Grid item xs={12} md={8}>
-              {/* About Course */}
-              <Box sx={{ mb: 6 }}>
-                <Typography variant="h4" gutterBottom sx={{ fontWeight: 700 }}>
-                  About This Course
-                </Typography>
-                <Typography variant="body1" paragraph>
-                  {course.longDescription}
-                </Typography>
-              </Box>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+          <SectionHeader align="start" size="article" eyebrow="Curriculum" title="What you will study" />
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: 2 }}>
+            {course.curriculum.map((section) => (
+              <TopicCard key={section.title} icon={subjectIcon(section.title)} title={section.title} items={section.topics} />
+            ))}
+          </Box>
+        </Box>
 
-              {/* Curriculum */}
-              <Box sx={{ mb: 6 }}>
-                <Typography variant="h4" gutterBottom sx={{ fontWeight: 700 }}>
-                  Curriculum
-                </Typography>
-                {course.curriculum.map((section, index) => (
-                  <Card key={index} sx={{ mb: 2 }}>
-                    <CardContent>
-                      <Typography variant="h6" gutterBottom>
-                        {section.title}
-                      </Typography>
-                      <List dense>
-                        {section.topics.map((topic, idx) => (
-                          <ListItem key={idx}>
-                            <ListItemText primary={topic} />
-                          </ListItem>
-                        ))}
-                      </List>
-                    </CardContent>
-                  </Card>
-                ))}
-              </Box>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+          <SectionHeader align="start" size="article" eyebrow="What's included" title="Course features" />
+          <CheckList items={course.features} />
+        </Box>
 
-              {/* Features */}
-              <Box sx={{ mb: 6 }}>
-                <Typography variant="h4" gutterBottom sx={{ fontWeight: 700 }}>
-                  Course Features
-                </Typography>
-                <Grid container spacing={2}>
-                  {course.features.map((feature, index) => (
-                    <Grid item xs={12} sm={6} key={index}>
-                      <Card variant="outlined">
-                        <CardContent>
-                          <Typography variant="body1">{feature}</Typography>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  ))}
-                </Grid>
-              </Box>
+        {course.faculty.length > 0 && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+            <SectionHeader align="start" size="article" eyebrow="Faculty" title="Expert faculty" />
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 2 }}>
+              {course.faculty.map((m) => (
+                <PersonCard key={m.name} name={m.name} role={m.subject} detail={m.qualification} />
+              ))}
+            </Box>
+          </Box>
+        )}
+      </AsideLayout>
 
-              {/* Faculty */}
-              <Box sx={{ mb: 6 }}>
-                <Typography variant="h4" gutterBottom sx={{ fontWeight: 700 }}>
-                  Expert Faculty
-                </Typography>
-                {course.faculty.map((member, index) => (
-                  <Card key={index} sx={{ mb: 2 }}>
-                    <CardContent>
-                      <Typography variant="h6">{member.name}</Typography>
-                      <Typography variant="body2" color="primary" gutterBottom>
-                        {member.subject}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {member.qualification}
-                      </Typography>
-                    </CardContent>
-                  </Card>
-                ))}
-              </Box>
-            </Grid>
-
-            {/* Sidebar */}
-            <Grid item xs={12} md={4}>
-              <Card sx={{ position: 'sticky', top: 20 }}>
-                <CardContent sx={{ p: 3 }}>
-                  <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
-                    Enroll Now
-                  </Typography>
-                  <Divider sx={{ my: 2 }} />
-
-                  <Box sx={{ mb: 3 }}>
-                    <Typography variant="h4" color="primary" gutterBottom>
-                      {'₹'}{course.price}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      One-time fee
-                    </Typography>
-                  </Box>
-
-                  <Box sx={{ mb: 3 }}>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Batch Details
-                    </Typography>
-                    <Typography variant="body2" paragraph>
-                      <strong>Batch Size:</strong> {course.batchDetails.batchSize}
-                    </Typography>
-                    <Typography variant="body2" paragraph>
-                      <strong>Timing:</strong> {course.batchDetails.timing}
-                    </Typography>
-                    <Typography variant="body2" paragraph>
-                      <strong>Start Date:</strong> {course.batchDetails.startDate}
-                    </Typography>
-                    <Typography variant="body2">
-                      <strong>Mode:</strong> {course.batchDetails.classType}
-                    </Typography>
-                  </Box>
-
-                  {isEnrolled ? (
-                    <Button
-                      variant="contained"
-                      size="large"
-                      fullWidth
-                      sx={{ mb: 2, bgcolor: '#2E7D32', '&:hover': { bgcolor: '#1B5E20' } }}
-                      onClick={goToApp}
-                    >
-                      Go to App
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="contained"
-                      size="large"
-                      fullWidth
-                      sx={{ mb: 2 }}
-                      component={Link}
-                      href={`/${locale}/apply?course=${slug}`}
-                    >
-                      Apply Now
-                    </Button>
-                  )}
-
-                  <Button
-                    variant="outlined"
-                    size="large"
-                    fullWidth
-                    component={Link}
-                    href={`/${locale}/contact`}
-                  >
-                    Contact Us
-                  </Button>
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
-        </Container>
-      </Box>
+      <CtaBand
+        title="Not sure this is the right course?"
+        lede="Sit in a free live class with an architect and ask everything."
+        actions={
+          <>
+            <CtaButton href="/demo-class">Book your free demo</CtaButton>
+            <CtaButton variant="link" href="/contact" endIcon={<NorthEastIcon aria-hidden />}>
+              Talk to us
+            </CtaButton>
+          </>
+        }
+      />
     </Box>
   );
 }

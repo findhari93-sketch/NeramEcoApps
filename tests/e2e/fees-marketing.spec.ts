@@ -138,7 +138,8 @@ test.describe('/fees page', () => {
 
     // The selling sections are gone; only 4 fee questions remain.
     await expect(page.getByText(/Why invest/i)).toHaveCount(0);
-    await expect(page.locator('.MuiAccordion-root')).toHaveCount(4);
+    // FaqList (design system): one button per question, answers kept in the HTML.
+    await expect(page.locator('#fee-faq').getByRole('button', { expanded: false })).toHaveCount(4);
     await expect(page.getByText('Are there any hidden charges beyond the fee shown?')).toBeVisible();
 
     await expect(page.getByRole('link', { name: /Questions about fees\? Call/ })).toHaveAttribute('href', 'tel:+919176137043');

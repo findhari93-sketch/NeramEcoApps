@@ -7,6 +7,9 @@ import { getCachedAskSeniorsEvent, getCachedAskSeniorsColleges } from '@/lib/ask
 import ClientIntl from '@/components/i18n/ClientIntl';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { COURSE_FEES, ORG_FACTS, PROOF_POINTS } from '@/lib/seo/facts';
+import { siteTokens as t } from '@neram/ui/site-tokens';
+import { Section, CtaBand, CtaButton, FaqList } from '@/design-system';
+import { APP_URL } from '@/lib/seo/constants';
 
 // ISR daily. The only data here is the #AskSeniors block (tagged 'ask-seniors',
 // purged on admin event edits). It used to be hourly, which rebuilt the home
@@ -15,11 +18,25 @@ export const revalidate = 86400;
 
 const baseUrl = 'https://neramclasses.com';
 
-const LINK = { color: '#e8a020', textDecoration: 'underline' } as const;
-const H2 = { fontFamily: 'var(--font-poppins), Poppins, sans-serif', fontSize: '2rem', fontWeight: 700, color: '#e8a020', marginBottom: '24px', lineHeight: 1.3 } as const;
-const H3 = { fontFamily: 'var(--font-poppins), Poppins, sans-serif', fontSize: '1.5rem', fontWeight: 600, color: '#e8a020', marginBottom: '16px', marginTop: '40px', lineHeight: 1.3 } as const;
-const P = { fontSize: '1.05rem', lineHeight: 1.8, color: 'rgba(255,255,255,0.85)', marginBottom: '20px', maxWidth: '800px' } as const;
-const CARD = { color: '#e8a020', textDecoration: 'none', padding: '12px 16px', border: '1px solid rgba(232,160,32,0.3)', borderRadius: '8px', fontSize: '0.95rem' } as const;
+// Light long-form band (server-rendered for crawlers). Inline styles read the
+// design-system tokens; gold text on light is gold800.
+const LINK = { color: t.gold800, textDecoration: 'underline', textUnderlineOffset: '2px' } as const;
+const H2 = { fontSize: 'clamp(1.75rem, 3.5vw, 2.5rem)', fontWeight: 800, color: t.ink, margin: '0 0 24px', lineHeight: 1.15 } as const;
+const H3 = { fontSize: 'clamp(1.25rem, 2vw, 1.375rem)', fontWeight: 700, color: t.ink, margin: '40px 0 16px', lineHeight: 1.25 } as const;
+const P = { fontSize: '1rem', lineHeight: 1.7, color: t.ink, margin: '0 0 20px', maxWidth: '780px' } as const;
+const CARD = {
+  display: 'flex',
+  alignItems: 'center',
+  minHeight: '48px',
+  boxSizing: 'border-box',
+  color: t.ink,
+  background: t.ground,
+  textDecoration: 'none',
+  padding: '12px 16px',
+  border: `1px solid ${t.line}`,
+  borderRadius: `${t.radius}px`,
+  fontSize: '0.9375rem',
+} as const;
 
 const crash = COURSE_FEES.find((c) => c.slug === 'crash-course')!;
 const oneYear = COURSE_FEES.find((c) => c.slug === '1-year-program')!;
@@ -125,8 +142,8 @@ export default async function HomePage({
       <ClientIntl locale={locale} namespaces={['home', 'youtube']}><HomePageContent askSeniorsEvent={askSeniorsEvent} askSeniorsColleges={askSeniorsColleges} /></ClientIntl>
 
       {/* SEO Content: server-rendered for full crawler visibility */}
-      <section style={{ backgroundColor: '#060d1f', color: '#ffffff', padding: '64px 0' }}>
-        <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 24px' }}>
+      <Section tone="white" id="about-neram" gap={0}>
+        <div>
 
           <h2 style={H2}>NATA Coaching Since 2009: Neram Classes</h2>
           <p style={P}>
@@ -178,17 +195,25 @@ export default async function HomePage({
           </div>
 
           <h3 style={H3}>Frequently Asked Questions</h3>
-          <div style={{ maxWidth: '800px' }}>
-            {HOME_FAQS.map((f, i) => (
-              <div key={f.question} style={{ marginBottom: i === HOME_FAQS.length - 1 ? 0 : '24px' }}>
-                <h4 style={{ fontSize: '1.05rem', fontWeight: 700, color: '#fff', marginBottom: '8px' }}>{f.question}</h4>
-                <p style={{ fontSize: '0.95rem', lineHeight: 1.7, color: 'rgba(255,255,255,0.8)', margin: 0 }}>{f.answer}</p>
-              </div>
-            ))}
+          <div style={{ maxWidth: `${t.container.narrow}px` }}>
+            <FaqList items={HOME_FAQS} />
           </div>
 
         </div>
-      </section>
+      </Section>
+
+      <CtaBand
+        title="Ready to Start Your Journey?"
+        lede="Join thousands of successful students who chose Neram Classes"
+        actions={
+          <>
+            <CtaButton href="/apply">Apply Now</CtaButton>
+            <CtaButton variant="link" href={`${APP_URL}/tools`} external>
+              Explore Free Tools
+            </CtaButton>
+          </>
+        }
+      />
     </>
   );
 }

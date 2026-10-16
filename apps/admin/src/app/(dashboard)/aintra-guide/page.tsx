@@ -140,33 +140,33 @@ export default function AintraGuidePage() {
       <Section icon={<EditNoteIcon />} title="How to Train Aintra (Step-by-Step)">
         <Step
           number={1}
-          title="Open Chat History"
-          description="Go to Chat History in the sidebar. You'll see all recent student conversations with Aintra, newest first."
+          title="Open Aintra Inbox"
+          description="Go to Aintra Inbox in the sidebar. Conversations lists every chat with Aintra, newest first. Press Review queue to see only wrong or unanswered ones."
         />
         <Step
           number={2}
-          title="Review AI answers"
-          description="Read the AI Answer column. Look for answers that are wrong, incomplete, or could be clearer."
+          title="Read the conversation"
+          description="Pick a chat on the left. Each question shows Aintra's answer under it, and the panel on the right shows who the person is and how to reach them."
         />
         <Step
           number={3}
-          title="Thumbs-up good answers"
-          description="Click the thumbs-up icon on answers that are accurate and helpful. This flags them as high-quality for reference."
+          title="Rate the answer"
+          description="Thumbs up marks a good answer as Verified. Thumbs down marks it Needs review and opens the correction box. AI Review asks Gemini to check the answer for you."
         />
         <Step
           number={4}
-          title="Write a correction for bad answers"
-          description="Click 'Add' in the Correction column to open the correction dialog. Type a better, accurate answer in the text box and click Save Correction."
+          title="Write a correction"
+          description="Type a better answer in the correction box (Draft with AI can write a first version), keep Add to knowledge base ticked, and press Save correction."
         />
         <Step
           number={5}
-          title="Promote to Aintra's Knowledge Base"
-          description="After saving a correction, click 'Add to Aintra KB'. This teaches Aintra the correct answer for similar future questions. A green checkmark confirms it's been added."
+          title="It goes into Aintra's knowledge base"
+          description="With the box ticked, the correction is added to Aintra Training straight away, so Aintra answers similar questions correctly from then on."
         />
         <Step
           number={6}
           title="Add proactive Q&As"
-          description="Go to Aintra Training in the sidebar to add new Q&A pairs for topics students frequently ask about — even before getting the question wrong."
+          description="Go to Aintra Training in the sidebar to add new Q&A pairs for topics students frequently ask about, even before Aintra gets the question wrong."
         />
       </Section>
 
@@ -223,7 +223,7 @@ export default function AintraGuidePage() {
       <Paper sx={{ p: 2.5, bgcolor: 'primary.50', border: '1px solid', borderColor: 'primary.200' }}>
         <Typography variant="body2" fontWeight={600} gutterBottom>Quick Links</Typography>
         <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', mt: 1 }}>
-          <Chip label="Chat History" icon={<ForumIcon />} component="a" href="/chat-history" clickable size="small" />
+          <Chip label="Aintra Inbox" icon={<ForumIcon />} component="a" href="/aintra-inbox" clickable size="small" />
           <Chip label="Aintra Training (KB)" icon={<SmartToyIcon />} component="a" href="/aintra-kb" clickable size="small" />
         </Box>
       </Paper>

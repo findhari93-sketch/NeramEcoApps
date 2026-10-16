@@ -202,7 +202,7 @@ export default function HeroSection({ locale }: HeroSectionProps) {
               <Typography
                 variant="h1"
                 sx={{
-                  fontFamily: '"Poppins", "Plus Jakarta Sans", sans-serif',
+                  fontFamily: 'inherit',
                   fontWeight: 800,
                   fontSize: { xs: '2rem', sm: '2.5rem', md: '3.2rem' },
                   lineHeight: 1.15,

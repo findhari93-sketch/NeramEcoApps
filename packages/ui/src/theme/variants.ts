@@ -1198,8 +1198,8 @@ export const createAdminTheme = (mode: 'light' | 'dark' = 'light'): Theme => {
 // THEME EXPORTS
 // ============================================
 
-export const marketingLightTheme = createMarketingTheme('light');
-export const marketingDarkTheme = createMarketingTheme('dark');
+// marketingLightTheme / marketingDarkTheme now come from site-2026.ts (the
+// 2026 marketing design system). createMarketingTheme stays for reference.
 
 export const toolsAppLightTheme = createToolsAppTheme('light');
 export const toolsAppDarkTheme = createToolsAppTheme('dark');

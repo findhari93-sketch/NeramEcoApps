@@ -48,7 +48,7 @@ import PersonSearchIcon from '@mui/icons-material/PersonSearch';
 import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1';
 import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
-import ForumIcon from '@mui/icons-material/Forum';
+import MoveToInboxIcon from '@mui/icons-material/MoveToInbox';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import ArchitectureIcon from '@mui/icons-material/Architecture';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
@@ -184,7 +184,7 @@ const menuGroups: MenuGroup[] = [
       { text: 'App Feedback', icon: FeedbackIcon, path: '/feedback', hasBadge: 'app_feedback' },
       { text: 'WhatsApp Templates', icon: WhatsAppIcon, path: '/whatsapp-templates' },
       { text: 'Q&A Moderation', icon: RateReviewIcon, path: '/question-moderation', hasBadge: 'qa_moderation' },
-      { text: 'Chat History', icon: ForumIcon, path: '/chat-history', hasBadge: 'chat_history' },
+      { text: 'Aintra Inbox', icon: MoveToInboxIcon, path: '/aintra-inbox', hasBadge: 'chat_history' },
       { text: 'Aintra Training', icon: SmartToyIcon, path: '/aintra-kb' },
       { text: 'Training Guide', icon: MenuBookIcon, path: '/aintra-guide' },
     ],

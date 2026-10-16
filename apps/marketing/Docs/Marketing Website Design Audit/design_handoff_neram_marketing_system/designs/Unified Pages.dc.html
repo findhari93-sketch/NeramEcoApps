@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=block">
+
+<script src="_ds/modernist-e8c2d95e-abf3-4f3e-86df-2b557a2062d6/_ds_bundle.js"></script>
+<style>
+@font-face{font-family:'Museo';src:url('assets/fonts/Museo300-Regular.woff') format('woff');font-weight:300;font-display:swap}
+@font-face{font-family:'Museo';src:url('assets/fonts/Museo700-Regular.woff') format('woff');font-weight:700;font-display:swap}
+h1,h2,h3{font-family:Inter,"Noto Sans Tamil",sans-serif}body{margin:0;background:#FAFBFC;color:#1A2027;font-family:Inter,"Noto Sans Tamil",sans-serif;-webkit-font-smoothing:antialiased}
+a{color:#0b6bd6;text-decoration:none}a:hover{color:#e8a020}
+:focus-visible{outline:2px solid #e8a020;outline-offset:2px}
+</style>
+</helmet>
+
+<div style="position:sticky;top:0;z-index:50;background:#201e1d;color:#f3f2f2;display:flex;flex-wrap:wrap;align-items:center;gap:16px;padding:10px 20px;font-family:Archivo,system-ui,sans-serif;border-bottom:2px solid #ec3013">
+  <strong style="font-size:14px;letter-spacing:0.02em">Unified preview</strong>
+  <div style="display:flex;gap:0;border:2px solid #f3f2f2">
+    <button onClick="{{ goHome }}" style="{{ tabHome }}">Home</button>
+    <button onClick="{{ goCoaching }}" style="{{ tabCoaching }}">Coaching</button>
+    <button onClick="{{ goTokens }}" style="{{ tabTokens }}">Tokens &amp; components</button>
+  </div>
+  <span style="font-size:13px;opacity:0.8">Built from the audit's recommendation · see <a href="Marketing Design Audit.dc.html" style="color:#ff9b88">audit</a></span>
+</div>
+
+<sc-if value="{{ notTokens }}" hint-placeholder-val="{{ true }}">
+<dc-import name="Site Header" state="guest" hint-size="100%,64px" style="position:sticky;top:46px;z-index:40;display:block"></dc-import>
+</sc-if>
+
+<sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+<main>
+  <section style="position:relative;background-color:#060d1f;background-image:linear-gradient(rgba(255,255,255,0.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.035) 1px,transparent 1px),linear-gradient(rgba(232,160,32,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(232,160,32,0.06) 1px,transparent 1px);background-size:40px 40px,40px 40px,200px 200px,200px 200px;color:#f5f0e8">
+    <sc-if value="{{ showAnnotations }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;top:12px;right:12px;z-index:5;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;font-weight:700;letter-spacing:0.1em;background:#e8a020;color:#060d1f;padding:4px 8px;border-radius:4px">&lt;PageHero tone="dark" variant="home"&gt;</span></sc-if>
+    <div style="max-width:1200px;margin:0 auto;padding:72px 24px 96px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:40px;align-items:center">
+      <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+        <span style="display:inline-flex;align-items:center;gap:8px;width:fit-content;background:rgba(232,160,32,0.1);border:1px solid rgba(232,160,32,0.3);border-radius:100px;padding:5px 14px 5px 6px"><span style="background:#e8a020;color:#060d1f;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;font-weight:700;padding:3px 8px;border-radius:100px;letter-spacing:0.05em">NEW</span><span style="font-size:13px;font-weight:500;color:#f4bf5a">India's First AI-Enabled NATA Learning Platform</span></span>
+        <span style="font-size:12px;letter-spacing:0.15em;text-transform:uppercase;color:rgba(245,240,232,0.62)">நேரம் கிளாஸஸ் · Neram = Time · Est. 2009</span>
+        <h1 style="margin:0;font-size:clamp(2rem,5vw,3.5rem);line-height:1.05;font-weight:800;letter-spacing:-0.01em;text-wrap:balance">Your Time to Crack <em style="color:#e8a020">NATA &amp; JEE Paper 2</em> with <span style="border-bottom:3px solid #e8a020">AI</span></h1>
+        <p style="margin:0;max-width:480px;font-size:17px;line-height:1.55;color:rgba(245,240,232,0.72);text-wrap:pretty">Live classes. Intelligent tools. Real results. <strong style="color:#f5f0e8;font-weight:600">Nexus</strong>, an AI-powered NATA prep companion trusted by AIR toppers across JEE Paper 2 &amp; NATA nationwide in India.</p>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));max-width:520px;border:1px solid rgba(255,255,255,0.08);border-radius:8px;overflow:hidden">
+          <div style="padding:14px 18px;border-right:1px solid rgba(255,255,255,0.08);display:flex;flex-direction:column;gap:4px"><span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:22px;font-weight:700;color:#e8a020;line-height:1">AIR 1</span><span style="font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:rgba(245,240,232,0.62)">JEE B.Arch · 2024</span></div>
+          <div style="padding:14px 18px;border-right:1px solid rgba(255,255,255,0.08);display:flex;flex-direction:column;gap:4px"><span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:22px;font-weight:700;color:#e8a020;line-height:1">1,000+</span><span style="font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:rgba(245,240,232,0.62)">Students</span></div>
+          <div style="padding:14px 18px;border-right:1px solid rgba(255,255,255,0.08);display:flex;flex-direction:column;gap:4px"><span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:22px;font-weight:700;color:#e8a020;line-height:1">189</span><span style="font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:rgba(245,240,232,0.62)">NATA Score</span></div>
+          <div style="padding:14px 18px;display:flex;flex-direction:column;gap:4px"><span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:22px;font-weight:700;color:#e8a020;line-height:1">10+</span><span style="font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:rgba(245,240,232,0.62)">Years</span></div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:4px">
+          <a href="#" style="display:inline-flex;align-items:center;gap:10px;background:#e8a020;color:#060d1f;font-weight:700;font-size:16px;padding:14px 22px;border-radius:8px;min-height:48px;box-sizing:border-box" style-hover="background:#f4bf5a;color:#060d1f">Explore aiArchitek Free Tool<span class="material-symbols-outlined" style="font-size:20px">arrow_forward</span></a>
+          <span style="display:inline-flex;align-items:center;gap:8px;font-size:13px;color:rgba(245,240,232,0.62)"><span style="display:grid;grid-template-columns:7px 7px;gap:2px"><span style="width:7px;height:7px;background:#f25022"></span><span style="width:7px;height:7px;background:#7fba00"></span><span style="width:7px;height:7px;background:#00a4ef"></span><span style="width:7px;height:7px;background:#ffb900"></span></span>Supported by <strong style="color:#f5f0e8;font-weight:500">Microsoft Education</strong></span>
+        </div>
+      </div>
+      <div style="position:relative;min-height:380px;display:flex;align-items:center;justify-content:center">
+        <div style="width:min(100%,380px);aspect-ratio:1;border:1px dashed rgba(232,160,32,0.35);border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;letter-spacing:0.1em;color:rgba(245,240,232,0.5);text-align:center;padding:24px;box-sizing:border-box">CLOCKCANVAS<br>(unchanged)</div>
+        <a href="#" style="position:absolute;top:8%;left:0;display:flex;align-items:center;gap:8px;background:#0b1629;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px 14px;color:#f5f0e8;font-size:14px;font-weight:500" style-hover="border-color:rgba(232,160,32,0.5);color:#f5f0e8"><span class="material-symbols-outlined" style="font-size:20px;color:#e8a020">calculate</span>Cut Off Calculator</a>
+        <a href="#" style="position:absolute;top:44%;right:0;display:flex;align-items:center;gap:8px;background:#0b1629;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px 14px;color:#f5f0e8;font-size:14px;font-weight:500" style-hover="border-color:rgba(232,160,32,0.5);color:#f5f0e8"><span class="material-symbols-outlined" style="font-size:20px;color:#e8a020">school</span>College Predictor</a>
+        <a href="#" style="position:absolute;bottom:6%;left:8%;display:flex;align-items:center;gap:8px;background:#0b1629;border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:10px 14px;color:#f5f0e8;font-size:14px;font-weight:500" style-hover="border-color:rgba(232,160,32,0.5);color:#f5f0e8"><span class="material-symbols-outlined" style="font-size:20px;color:#e8a020">quiz</span>Question Bank</a>
+      </div>
+    </div>
+    <div style="border-top:1px solid rgba(255,255,255,0.06);padding:16px 24px;display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;letter-spacing:0.1em;color:rgba(245,240,232,0.62)">
+      <span style="display:flex;align-items:center;gap:10px"><span style="width:40px;height:1px;background:rgba(255,255,255,0.2)"></span>SCROLL TO EXPLORE</span>
+      <span><span style="color:#e8a020">neramclasses.com</span> · NATA · JEE Paper 2 · B.Arch</span>
+    </div>
+  </section>
+
+  <section style="position:relative;background:#FAFBFC;padding:80px 24px">
+    <sc-if value="{{ showAnnotations }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;top:12px;right:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;font-weight:700;letter-spacing:0.1em;background:#060d1f;color:#e8a020;padding:4px 8px;border-radius:4px">&lt;Surface tone="light"&gt; + &lt;SectionHeader&gt;</span></sc-if>
+    <div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:40px">
+      <div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px">
+        <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.2em;color:#8a5a05">OUR PROGRAMS</span>
+        <h2 style="margin:0;font-size:clamp(1.75rem,3.5vw,2.5rem);line-height:1.15;font-weight:800">Featured Courses</h2>
+        <p style="margin:0;max-width:560px;font-size:17px;line-height:1.55;color:#55606c">Expert-led programs designed to get you into India's top architecture colleges</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:24px">
+        <article style="background:#fff;border:1px solid #E1E5EB;border-radius:8px;overflow:hidden;display:flex;flex-direction:column" style-hover="border-color:#e8a020;box-shadow:0 8px 24px rgba(6,13,31,0.08)">
+          <div style="height:180px;background:#0b1629 url('assets/courses/architecture-year-long.jpg') center/cover;position:relative"><span style="position:absolute;top:12px;right:12px;background:#060d1f;color:#e8a020;font-size:12px;font-weight:600;padding:4px 10px;border-radius:100px">All Levels</span></div>
+          <div style="padding:24px;display:flex;flex-direction:column;gap:12px;flex:1">
+            <h3 style="margin:0;font-size:20px;line-height:1.25;font-weight:700">Architecture Entrance - Year Long</h3>
+            <p style="margin:0;font-size:15px;line-height:1.55;color:#55606c">Comprehensive NATA &amp; JEE Paper 2 preparation with IIT/NIT architect alumni faculty</p>
+            <div style="display:flex;flex-direction:column;gap:2px;margin-top:auto"><span style="font-size:12px;color:#55606c">Duration</span><strong style="font-size:15px">1 Year</strong></div>
+            <a href="#" style="display:flex;align-items:center;justify-content:space-between;border:1px solid #1A2027;color:#1A2027;font-weight:600;font-size:15px;padding:12px 16px;border-radius:8px;min-height:48px;box-sizing:border-box" style-hover="background:#060d1f;color:#f5f0e8">Explore course<span class="material-symbols-outlined" style="font-size:20px">arrow_forward</span></a>
+          </div>
+        </article>
+        <article style="background:#fff;border:1px solid #E1E5EB;border-radius:8px;overflow:hidden;display:flex;flex-direction:column" style-hover="border-color:#e8a020;box-shadow:0 8px 24px rgba(6,13,31,0.08)">
+          <div style="height:180px;background:#0b1629 url('assets/courses/architecture-crash.svg') center/cover;position:relative"><span style="position:absolute;top:12px;right:12px;background:#060d1f;color:#e8a020;font-size:12px;font-weight:600;padding:4px 10px;border-radius:100px">All Levels</span></div>
+          <div style="padding:24px;display:flex;flex-direction:column;gap:12px;flex:1">
+            <h3 style="margin:0;font-size:20px;line-height:1.25;font-weight:700">Architecture Entrance - Crash Course</h3>
+            <p style="margin:0;font-size:15px;line-height:1.55;color:#55606c">Intensive NATA &amp; JEE Paper 2 crash course for quick preparation</p>
+            <div style="display:flex;flex-direction:column;gap:2px;margin-top:auto"><span style="font-size:12px;color:#55606c">Duration</span><strong style="font-size:15px">2-3 Months</strong></div>
+            <a href="#" style="display:flex;align-items:center;justify-content:space-between;border:1px solid #1A2027;color:#1A2027;font-weight:600;font-size:15px;padding:12px 16px;border-radius:8px;min-height:48px;box-sizing:border-box" style-hover="background:#060d1f;color:#f5f0e8">Explore course<span class="material-symbols-outlined" style="font-size:20px">arrow_forward</span></a>
+          </div>
+        </article>
+        <article style="background:#fff;border:1px solid #E1E5EB;border-radius:8px;overflow:hidden;display:flex;flex-direction:column" style-hover="border-color:#e8a020;box-shadow:0 8px 24px rgba(6,13,31,0.08)">
+          <div style="height:180px;background:#0b1629 url('assets/courses/revit.svg') center/cover;position:relative"><span style="position:absolute;top:12px;right:12px;background:#060d1f;color:#e8a020;font-size:12px;font-weight:600;padding:4px 10px;border-radius:100px">Beginner to Advanced</span></div>
+          <div style="padding:24px;display:flex;flex-direction:column;gap:12px;flex:1">
+            <h3 style="margin:0;font-size:20px;line-height:1.25;font-weight:700">Revit Architecture Training</h3>
+            <p style="margin:0;font-size:15px;line-height:1.55;color:#55606c">Professional Autodesk Revit training for architects and designers</p>
+            <div style="display:flex;flex-direction:column;gap:2px;margin-top:auto"><span style="font-size:12px;color:#55606c">Duration</span><strong style="font-size:15px">3 Months</strong></div>
+            <a href="#" style="display:flex;align-items:center;justify-content:space-between;border:1px solid #1A2027;color:#1A2027;font-weight:600;font-size:15px;padding:12px 16px;border-radius:8px;min-height:48px;box-sizing:border-box" style-hover="background:#060d1f;color:#f5f0e8">Explore course<span class="material-symbols-outlined" style="font-size:20px">arrow_forward</span></a>
+          </div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section style="position:relative;background:#fff;border-top:1px solid #E1E5EB;padding:80px 24px">
+    <sc-if value="{{ showAnnotations }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;top:12px;right:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;font-weight:700;letter-spacing:0.1em;background:#060d1f;color:#e8a020;padding:4px 8px;border-radius:4px">&lt;ToolCard&gt; × 3</span></sc-if>
+    <div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:40px">
+      <div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px">
+        <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.2em;color:#8a5a05">FREE TOOLS</span>
+        <h2 style="margin:0;font-size:clamp(1.75rem,3.5vw,2.5rem);line-height:1.15;font-weight:800">Learning Tools</h2>
+        <p style="margin:0;max-width:520px;font-size:17px;line-height:1.55;color:#55606c">Powerful tools to enhance your learning experience</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:24px">
+        <a href="#" style="background:#FAFBFC;border:1px solid #E1E5EB;border-radius:8px;padding:28px;display:flex;flex-direction:column;gap:12px;color:#1A2027" style-hover="border-color:#e8a020;color:#1A2027">
+          <span style="width:48px;height:48px;border-radius:8px;background:#060d1f;color:#e8a020;display:flex;align-items:center;justify-content:center"><span class="material-symbols-outlined">calculate</span></span>
+          <strong style="font-size:19px">Cutoff Calculator</strong>
+          <span style="font-size:15px;line-height:1.5;color:#55606c">Calculate your expected NATA cutoff rank based on score</span>
+        </a>
+        <a href="#" style="background:#FAFBFC;border:1px solid #E1E5EB;border-radius:8px;padding:28px;display:flex;flex-direction:column;gap:12px;color:#1A2027" style-hover="border-color:#e8a020;color:#1A2027">
+          <span style="width:48px;height:48px;border-radius:8px;background:#060d1f;color:#e8a020;display:flex;align-items:center;justify-content:center"><span class="material-symbols-outlined">school</span></span>
+          <strong style="font-size:19px">College Predictor</strong>
+          <span style="font-size:15px;line-height:1.5;color:#55606c">Find architecture colleges based on your expected rank</span>
+        </a>
+        <a href="#" style="background:#FAFBFC;border:1px solid #E1E5EB;border-radius:8px;padding:28px;display:flex;flex-direction:column;gap:12px;color:#1A2027" style-hover="border-color:#e8a020;color:#1A2027">
+          <span style="width:48px;height:48px;border-radius:8px;background:#060d1f;color:#e8a020;display:flex;align-items:center;justify-content:center"><span class="material-symbols-outlined">location_on</span></span>
+          <strong style="font-size:19px">Exam Center Locator</strong>
+          <span style="font-size:15px;line-height:1.5;color:#55606c">Find NATA exam centers near you</span>
+        </a>
+      </div>
+      <div style="display:flex;justify-content:center"><a href="#" style="display:inline-flex;align-items:center;gap:10px;background:#060d1f;color:#f5f0e8;font-weight:700;font-size:16px;padding:14px 22px;border-radius:8px;min-height:48px;box-sizing:border-box" style-hover="background:#122040;color:#f5f0e8">Try Our Free App<span class="material-symbols-outlined" style="font-size:20px">arrow_forward</span></a></div>
+    </div>
+  </section>
+
+  <div style="background:#FAFBFC;border-top:1px solid #E1E5EB;padding:40px 24px;text-align:center;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;letter-spacing:0.1em;color:#55606c">ANNOUNCEMENTS · STUDENT RESULTS · TESTIMONIALS · SOCIAL PROOF · YOUTUBE — same Surface + SectionHeader, not redrawn here</div>
+
+  <section style="position:relative;background:#060d1f;color:#f5f0e8;padding:96px 24px;border-top:1px solid rgba(232,160,32,0.15)">
+    <sc-if value="{{ showAnnotations }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;top:12px;right:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;font-weight:700;letter-spacing:0.1em;background:#e8a020;color:#060d1f;padding:4px 8px;border-radius:4px">&lt;CtaBand&gt;</span></sc-if>
+    <div style="max-width:760px;margin:0 auto;display:flex;flex-direction:column;align-items:center;text-align:center;gap:16px">
+      <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.2em;color:#e8a020">GET STARTED</span>
+      <h2 style="margin:0;font-size:clamp(1.75rem,3.5vw,2.5rem);line-height:1.15;font-weight:800">Ready to Start Your Journey?</h2>
+      <p style="margin:0;max-width:520px;font-size:18px;line-height:1.5;color:rgba(245,240,232,0.72)">Join thousands of successful students who chose Neram Classes</p>
+      <div style="display:flex;flex-wrap:wrap;gap:16px;justify-content:center;margin-top:16px">
+        <a href="#" style="display:inline-flex;align-items:center;gap:10px;background:#e8a020;color:#060d1f;font-weight:700;font-size:16px;padding:14px 22px;border-radius:8px;min-height:48px;box-sizing:border-box" style-hover="background:#f4bf5a;color:#060d1f">Apply Now<span class="material-symbols-outlined" style="font-size:20px">arrow_forward</span></a>
+        <a href="#" style="display:inline-flex;align-items:center;gap:8px;color:#f5f0e8;font-weight:600;font-size:16px;padding:14px 4px;border-bottom:1px solid rgba(245,240,232,0.3);min-height:48px;box-sizing:border-box" style-hover="color:#e8a020;border-bottom-color:#e8a020">Explore Free Tools<span class="material-symbols-outlined" style="font-size:18px">north_east</span></a>
+      </div>
+    </div>
+  </section>
+</main>
+</sc-if>
+
+<sc-if value="{{ isCoaching }}" hint-placeholder-val="{{ false }}">
+<main>
+  <section style="position:relative;background-color:#060d1f;background-image:linear-gradient(rgba(255,255,255,0.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.035) 1px,transparent 1px),linear-gradient(rgba(232,160,32,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(232,160,32,0.06) 1px,transparent 1px);background-size:40px 40px,40px 40px,200px 200px,200px 200px;color:#f5f0e8">
+    <sc-if value="{{ showAnnotations }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;top:12px;right:12px;z-index:5;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;font-weight:700;letter-spacing:0.1em;background:#e8a020;color:#060d1f;padding:4px 8px;border-radius:4px">&lt;PageHero tone="dark"&gt; replaces indigo gradient</span></sc-if>
+    <div style="max-width:1200px;margin:0 auto;padding:72px 24px 0;display:flex;flex-direction:column;gap:16px">
+      <span style="font-size:13px;color:rgba(245,240,232,0.62);display:flex;gap:8px;align-items:center"><a href="#" style="color:rgba(245,240,232,0.62)">Home</a><span class="material-symbols-outlined" style="font-size:16px">chevron_right</span><span style="color:#f5f0e8">Coaching</span></span>
+      <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.2em;color:#e8a020">NATA · JEE PAPER 2 · B.ARCH</span>
+      <h1 style="margin:0;max-width:780px;font-size:clamp(2rem,5vw,3.5rem);line-height:1.05;font-weight:800;letter-spacing:-0.01em;text-wrap:balance">Transform Your Future with <em style="color:#e8a020">Expert Coaching</em></h1>
+      <p style="margin:0;max-width:600px;font-size:18px;line-height:1.55;color:rgba(245,240,232,0.72);text-wrap:pretty">Join India's premier coaching institute for NATA, JEE Paper 2, and Architecture entrance exams. Learn from IIT/NIT architect alumni, achieve the best.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px">
+        <a href="#" style="display:inline-flex;align-items:center;gap:10px;background:#e8a020;color:#060d1f;font-weight:700;font-size:16px;padding:14px 22px;border-radius:8px;min-height:48px;box-sizing:border-box" style-hover="background:#f4bf5a;color:#060d1f">Apply Now<span class="material-symbols-outlined" style="font-size:20px">arrow_forward</span></a>
+        <a href="#" style="display:inline-flex;align-items:center;gap:10px;border:1px solid rgba(245,240,232,0.4);color:#f5f0e8;font-weight:600;font-size:16px;padding:14px 22px;border-radius:8px;min-height:48px;box-sizing:border-box" style-hover="border-color:#e8a020;color:#e8a020">Book Free Counseling</a>
+      </div>
+    </div>
+    <div style="max-width:1200px;margin:56px auto 0;padding:0 24px 56px">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));border:1px solid rgba(255,255,255,0.08);border-radius:8px;overflow:hidden;background:rgba(11,22,41,0.6)">
+        <div style="padding:20px 24px;border-right:1px solid rgba(255,255,255,0.08);display:flex;flex-direction:column;gap:6px"><span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:26px;font-weight:700;color:#e8a020;line-height:1">1,000+</span><span style="font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:rgba(245,240,232,0.62)">Students Taught</span></div>
+        <div style="padding:20px 24px;border-right:1px solid rgba(255,255,255,0.08);display:flex;flex-direction:column;gap:6px"><span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:26px;font-weight:700;color:#e8a020;line-height:1">AIR 1</span><span style="font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:rgba(245,240,232,0.62)">JEE B.Arch 2024</span></div>
+        <div style="padding:20px 24px;border-right:1px solid rgba(255,255,255,0.08);display:flex;flex-direction:column;gap:6px"><span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:26px;font-weight:700;color:#e8a020;line-height:1">10</span><span style="font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:rgba(245,240,232,0.62)">Classrooms</span></div>
+        <div style="padding:20px 24px;display:flex;flex-direction:column;gap:6px"><span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:26px;font-weight:700;color:#e8a020;line-height:1">10+</span><span style="font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:rgba(245,240,232,0.62)">Years Teaching</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section style="position:relative;background:#FAFBFC;padding:80px 24px">
+    <sc-if value="{{ showAnnotations }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;top:12px;right:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;font-weight:700;letter-spacing:0.1em;background:#060d1f;color:#e8a020;padding:4px 8px;border-radius:4px">&lt;SectionHeader&gt; + &lt;ProgramCard&gt;</span></sc-if>
+    <div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:40px">
+      <div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px">
+        <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.2em;color:#8a5a05">OUR PROGRAMS</span>
+        <h2 style="margin:0;font-size:clamp(1.75rem,3.5vw,2.5rem);line-height:1.15;font-weight:800">Our Coaching Programs</h2>
+        <p style="margin:0;max-width:560px;font-size:17px;line-height:1.55;color:#55606c">Specialized programs designed to help you achieve your academic goals</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:24px">
+        <sc-for list="{{ programs }}" as="p" hint-placeholder-count="4">
+          <article style="{{ p.cardStyle }}">
+            <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap">
+              <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+                <h3 style="margin:0;font-size:22px;line-height:1.25;font-weight:700">{{ p.title }}</h3>
+                <span style="font-size:15px;font-weight:600;color:#8a5a05">{{ p.subtitle }}</span>
+              </div>
+              <sc-if value="{{ p.highlight }}" hint-placeholder-val="{{ false }}"><span style="background:#060d1f;color:#e8a020;font-size:12px;font-weight:700;padding:5px 10px;border-radius:100px;flex-shrink:0">Most Popular</span></sc-if>
+            </div>
+            <p style="margin:0;font-size:16px;line-height:1.55;color:#55606c">{{ p.description }}</p>
+            <div style="display:flex;flex-wrap:wrap;gap:8px">
+              <span style="border:1px solid #E1E5EB;border-radius:100px;padding:4px 12px;font-size:13px;font-weight:500">{{ p.duration }}</span>
+              <span style="border:1px solid #E1E5EB;border-radius:100px;padding:4px 12px;font-size:13px;font-weight:500">Online</span>
+              <span style="border:1px solid #E1E5EB;border-radius:100px;padding:4px 12px;font-size:13px;font-weight:500">Offline</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <strong style="font-size:14px">What you'll learn</strong>
+              <ul style="margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px 16px">
+                <sc-for list="{{ p.features }}" as="f" hint-placeholder-count="4"><li style="display:flex;gap:8px;align-items:flex-start;font-size:15px;line-height:1.4"><span class="material-symbols-outlined" style="font-size:18px;color:#8a5a05">check</span>{{ f }}</li></sc-for>
+              </ul>
+            </div>
+            <a href="#" style="margin-top:auto;display:flex;align-items:center;justify-content:space-between;border:1px solid #1A2027;color:#1A2027;font-weight:600;font-size:15px;padding:12px 16px;border-radius:8px;min-height:48px;box-sizing:border-box" style-hover="background:#060d1f;color:#f5f0e8">Explore {{ p.title }}<span class="material-symbols-outlined" style="font-size:20px">arrow_forward</span></a>
+          </article>
+        </sc-for>
+      </div>
+    </div>
+  </section>
+
+  <section style="position:relative;background:#fff;border-top:1px solid #E1E5EB;padding:80px 24px">
+    <sc-if value="{{ showAnnotations }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;top:12px;right:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;font-weight:700;letter-spacing:0.1em;background:#060d1f;color:#e8a020;padding:4px 8px;border-radius:4px">&lt;FeatureCard&gt; — emoji → icons</span></sc-if>
+    <div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:40px">
+      <div style="display:flex;flex-direction:column;align-items:center;text-align:center;gap:12px">
+        <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.2em;color:#8a5a05">WHY NERAM</span>
+        <h2 style="margin:0;font-size:clamp(1.75rem,3.5vw,2.5rem);line-height:1.15;font-weight:800">Why Choose Neram Classes?</h2>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:24px">
+        <sc-for list="{{ reasons }}" as="r" hint-placeholder-count="6">
+          <div style="background:#FAFBFC;border:1px solid #E1E5EB;border-radius:8px;padding:28px;display:flex;flex-direction:column;gap:12px">
+            <span style="width:48px;height:48px;border-radius:8px;background:#060d1f;color:#e8a020;display:flex;align-items:center;justify-content:center"><span class="material-symbols-outlined">{{ r.icon }}</span></span>
+            <strong style="font-size:19px">{{ r.title }}</strong>
+            <span style="font-size:15px;line-height:1.5;color:#55606c">{{ r.desc }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </section>
+
+  <section style="position:relative;background:#060d1f;color:#f5f0e8;padding:96px 24px;border-top:1px solid rgba(232,160,32,0.15)">
+    <sc-if value="{{ showAnnotations }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;top:12px;right:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11px;font-weight:700;letter-spacing:0.1em;background:#e8a020;color:#060d1f;padding:4px 8px;border-radius:4px">&lt;CtaBand&gt; — same as Home</span></sc-if>
+    <div style="max-width:760px;margin:0 auto;display:flex;flex-direction:column;align-items:center;text-align:center;gap:16px">
+      <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.2em;color:#e8a020">GET STARTED</span>
+      <h2 style="margin:0;font-size:clamp(1.75rem,3.5vw,2.5rem);line-height:1.15;font-weight:800">Ready to Start Your Preparation?</h2>
+      <p style="margin:0;max-width:520px;font-size:18px;line-height:1.5;color:rgba(245,240,232,0.72)">Join Neram Classes today and take the first step towards your dream career.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:16px;justify-content:center;margin-top:16px">
+        <a href="#" style="display:inline-flex;align-items:center;gap:10px;background:#e8a020;color:#060d1f;font-weight:700;font-size:16px;padding:14px 22px;border-radius:8px;min-height:48px;box-sizing:border-box" style-hover="background:#f4bf5a;color:#060d1f">Apply Now<span class="material-symbols-outlined" style="font-size:20px">arrow_forward</span></a>
+        <a href="#" style="display:inline-flex;align-items:center;gap:8px;color:#f5f0e8;font-weight:600;font-size:16px;padding:14px 4px;border-bottom:1px solid rgba(245,240,232,0.3);min-height:48px;box-sizing:border-box" style-hover="color:#e8a020;border-bottom-color:#e8a020">Contact Us<span class="material-symbols-outlined" style="font-size:18px">north_east</span></a>
+      </div>
+    </div>
+  </section>
+</main>
+</sc-if>
+
+<sc-if value="{{ notTokens }}" hint-placeholder-val="{{ true }}">
+<dc-import name="Site Footer" hint-size="100%,420px"></dc-import>
+</sc-if>
+
+<sc-if value="{{ isTokens }}" hint-placeholder-val="{{ false }}">
+<div style="max-width:1120px;margin:0 auto;padding:48px 24px 96px;display:flex;flex-direction:column;gap:48px">
+  <div style="display:flex;flex-direction:column;gap:12px">
+    <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.2em;color:#8a5a05">NERAMTOKENS · PROPOSED</span>
+    <h1 style="margin:0;font-size:clamp(2rem,4vw,3rem);line-height:1.05;font-weight:800">One token set, two surfaces</h1>
+    <p style="margin:0;max-width:640px;font-size:17px;line-height:1.55;color:#55606c">Everything on the Home and Coaching previews uses only these values. Each replaces the near-duplicates listed in the audit.</p>
+  </div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:24px">
+    <div style="background:#060d1f;color:#f5f0e8;border-radius:8px;padding:24px;display:flex;flex-direction:column;gap:16px">
+      <strong>Dark surface: hero, CTA, header, footer</strong>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:12px">
+        <div style="display:flex;flex-direction:column;gap:4px"><div style="height:44px;background:#060d1f;border:1px solid rgba(255,255,255,0.15);border-radius:4px"></div>navy.900<br>#060d1f</div>
+        <div style="display:flex;flex-direction:column;gap:4px"><div style="height:44px;background:#0b1629;border-radius:4px"></div>navy.800<br>#0b1629</div>
+        <div style="display:flex;flex-direction:column;gap:4px"><div style="height:44px;background:#122040;border-radius:4px"></div>navy.700<br>#122040</div>
+        <div style="display:flex;flex-direction:column;gap:4px"><div style="height:44px;background:#f5f0e8;border-radius:4px"></div>paper<br>#f5f0e8</div>
+        <div style="display:flex;flex-direction:column;gap:4px"><div style="height:44px;background:#e8a020;border-radius:4px"></div>gold.500<br>#e8a020</div>
+        <div style="display:flex;flex-direction:column;gap:4px"><div style="height:44px;background:#f4bf5a;border-radius:4px"></div>gold.300<br>#f4bf5a</div>
+      </div>
+    </div>
+    <div style="background:#fff;border:1px solid #E1E5EB;border-radius:8px;padding:24px;display:flex;flex-direction:column;gap:16px">
+      <strong>Light surface: long-form and SEO body</strong>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:12px">
+        <div style="display:flex;flex-direction:column;gap:4px"><div style="height:44px;background:#FAFBFC;border:1px solid #E1E5EB;border-radius:4px"></div>ground<br>#FAFBFC</div>
+        <div style="display:flex;flex-direction:column;gap:4px"><div style="height:44px;background:#fff;border:1px solid #E1E5EB;border-radius:4px"></div>surface<br>#ffffff</div>
+        <div style="display:flex;flex-direction:column;gap:4px"><div style="height:44px;background:#E1E5EB;border-radius:4px"></div>line<br>#E1E5EB</div>
+        <div style="display:flex;flex-direction:column;gap:4px"><div style="height:44px;background:#1A2027;border-radius:4px"></div>ink<br>#1A2027</div>
+        <div style="display:flex;flex-direction:column;gap:4px"><div style="height:44px;background:#55606c;border-radius:4px"></div>ink.muted<br>#55606c</div>
+        <div style="display:flex;flex-direction:column;gap:4px"><div style="height:44px;background:#8a5a05;border-radius:4px"></div>gold.800 text<br>#8a5a05</div>
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:12px">
+    <strong style="font-size:18px">Type: Inter + one mono stack</strong>
+    <div style="overflow-x:auto"><table style="width:100%;min-width:600px;font-family:Inter,sans-serif;border-collapse:collapse;text-align:left;font-size:14px">
+      <thead><tr style="border-bottom:2px solid #1A2027"><th style="padding:10px 12px">Role</th><th style="padding:10px 12px">Spec</th><th style="padding:10px 12px">Sample</th></tr></thead>
+      <tbody>
+        <tr style="border-bottom:1px solid #E1E5EB"><td style="padding:10px 12px">display / h1</td><td style="padding:10px 12px">800 · clamp(2rem, 5vw, 3.5rem) · 1.05</td><td style="padding:10px 12px;font-size:28px;font-weight:800;line-height:1.05">Crack NATA</td></tr>
+        <tr style="border-bottom:1px solid #E1E5EB"><td style="padding:10px 12px">h2</td><td style="padding:10px 12px">800 · clamp(1.75rem, 3.5vw, 2.5rem) · 1.15</td><td style="padding:10px 12px;font-size:24px;font-weight:800">Featured Courses</td></tr>
+        <tr style="border-bottom:1px solid #E1E5EB"><td style="padding:10px 12px">h3</td><td style="padding:10px 12px">700 · 20–22px · 1.25</td><td style="padding:10px 12px;font-size:20px;font-weight:700">Year Long</td></tr>
+        <tr style="border-bottom:1px solid #E1E5EB"><td style="padding:10px 12px">body / lede</td><td style="padding:10px 12px">400 · 16px / 17–18px · 1.55</td><td style="padding:10px 12px;font-size:16px">Live classes, real results.</td></tr>
+        <tr style="border-bottom:1px solid #E1E5EB"><td style="padding:10px 12px">eyebrow</td><td style="padding:10px 12px">mono 700 · 12px · 0.2em</td><td style="padding:10px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.2em;color:#8a5a05">OUR PROGRAMS</td></tr>
+        <tr style="border-bottom:1px solid #E1E5EB"><td style="padding:10px 12px">stat</td><td style="padding:10px 12px">mono 700 · 22–26px</td><td style="padding:10px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:22px;font-weight:700">AIR 1</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:12px">
+    <strong style="font-size:18px">Rules</strong>
+    <ul style="margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px;font-size:16px;line-height:1.5">
+      <li>Radius 8px for cards and buttons, 100px for pills. Nothing else.</li>
+      <li>Gold fill is for the primary action only. On light grounds, gold text uses gold.800 (passes 4.5:1).</li>
+      <li>Icons come from Material Symbols Outlined (same family as the MUI icons in Header). No emoji in UI.</li>
+      <li>No glass or backdrop blur on light surfaces. On dark, a 1px rgba(255,255,255,0.08) line does the separating.</li>
+      <li>Green #2E7D32 stays for enrolment status (Go to App) only, read from the theme.</li>
+      <li>Every page: dark PageHero → light body sections → dark CtaBand → footer.</li>
+    </ul>
+  </div>
+</div>
+</sc-if>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;page&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;home&quot;,&quot;coaching&quot;,&quot;tokens&quot;],&quot;default&quot;:&quot;home&quot;,&quot;tsType&quot;:&quot;'home'|'coaching'|'tokens'&quot;,&quot;section&quot;:&quot;Preview&quot;},&quot;showAnnotations&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Preview&quot;}}">
+class Component extends DCLogic {
+  state = { page: null };
+  renderVals() {
+    const page = this.state.page ?? this.props.page ?? 'home';
+    const tab = (on) => ({ background: on ? '#f3f2f2' : 'transparent', color: on ? '#201e1d' : '#f3f2f2', border: 'none', padding: '8px 14px', font: '600 13px Archivo, system-ui, sans-serif', cursor: 'pointer', minHeight: 36, whiteSpace: 'nowrap' });
+    const base = { background: '#fff', border: '1px solid #E1E5EB', borderRadius: 8, padding: 28, display: 'flex', flexDirection: 'column', gap: 16 };
+    const programs = [
+      { title: 'Architecture Entrance - Year Long', subtitle: 'NATA + JEE Paper 2 (B.Arch/B.Planning)', description: 'Comprehensive year-long preparation for NATA and JEE Paper 2 with IIT/NIT architect alumni faculty.', features: ['Drawing & Sketching Masterclass', 'Mathematics & Logical Reasoning', 'General Aptitude Training', '500+ Practice Questions'], duration: '1 Year', highlight: true },
+      { title: 'Architecture Entrance - Crash Course', subtitle: 'NATA + JEE Paper 2 Intensive', description: 'Intensive crash course for NATA and JEE Paper 2. Perfect for quick revision and last-minute preparation.', features: ['Focused Revision', 'Daily Practice Sessions', 'Exam Strategies', 'Previous Year Analysis'], duration: '2-3 Months', highlight: true },
+      { title: 'Revit Architecture Training', subtitle: 'Professional BIM Software', description: 'Industry-focused Autodesk Revit training for architects and designers. Learn BIM modeling and documentation.', features: ['BIM Fundamentals', 'Architectural Modeling', 'Documentation & Sheets', 'Rendering & Visualization'], duration: '3 Months', highlight: false },
+      { title: 'AutoCAD Training', subtitle: '2D & 3D Drafting', description: 'Complete AutoCAD training covering 2D drafting and 3D modeling for architecture professionals.', features: ['2D Drafting Basics', '3D Modeling', 'Layouts & Plotting', 'Industry Standards'], duration: '2 Months', highlight: false },
+    ].map(p => ({ ...p, cardStyle: p.highlight ? { ...base, borderTop: '3px solid #e8a020' } : base }));
+    const reasons = [
+      { icon: 'co_present', title: 'Expert Faculty', desc: 'Learn from IIT/NIT alumni and industry experts with 10+ years of teaching experience.' },
+      { icon: 'menu_book', title: 'Comprehensive Material', desc: 'Well-researched study material covering entire syllabus with practice questions.' },
+      { icon: 'target', title: 'Result Oriented', desc: 'Proven track record with thousands of successful students every year.' },
+      { icon: 'support_agent', title: 'Personal Attention', desc: 'Small batch sizes ensuring individual attention and doubt resolution.' },
+      { icon: 'devices', title: 'Online & Offline', desc: 'Flexible learning options - attend classes from anywhere or visit our centers.' },
+      { icon: 'insights', title: 'Regular Assessment', desc: 'Weekly tests and mock exams to track progress and identify improvement areas.' },
+    ];
+    const go = (p) => () => { this.setState({ page: p }); window.scrollTo(0, 0); };
+    return {
+      isHome: page === 'home', isCoaching: page === 'coaching', isTokens: page === 'tokens', notTokens: page !== 'tokens',
+      tabHome: tab(page === 'home'), tabCoaching: tab(page === 'coaching'), tabTokens: tab(page === 'tokens'),
+      goHome: go('home'), goCoaching: go('coaching'), goTokens: go('tokens'),
+      showAnnotations: this.props.showAnnotations ?? true,
+      programs, reasons,
+    };
+  }
+}
+</script>
+</body>
+</html>

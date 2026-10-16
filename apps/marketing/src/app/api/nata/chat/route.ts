@@ -8,6 +8,7 @@ import { createAdminClient, getActiveAintraKnowledgeBase } from '@neram/database
 import { isE2ETestRun } from '@/lib/e2e-mode';
 import { AiBillingError, AiBlockedError, generateGemini, hashClientKey, ipFromHeaders } from '@neram/ai';
 import { signupGeoFromHeaders, type SignupGeo } from '@neram/database/signup-geo';
+import { chatVisitorFromHeaders, type ChatVisitor } from '@/lib/aintra/visitor';
 
 const NATA_SYSTEM_PROMPT = `You are Aintra, the friendly NATA Assistant by Neram Classes. You ONLY answer questions about NATA (National Aptitude Test in Architecture), B.Arch admissions, and architecture education. If a question is not related to these topics, politely decline and redirect to NATA topics.
 
@@ -438,6 +439,8 @@ async function logConversation(params: {
   error?: string;
   /** Where the visitor is, from Cloudflare's location headers. Never the IP. */
   geo?: SignupGeo | null;
+  /** Visitor id, channel, landing page and device, for Admin > Aintra Inbox. */
+  visitor?: ChatVisitor | null;
 }) {
   // The nightly E2E suite talks to the production database, so without this its
   // scripted questions arrive in admin Chat History looking like real leads.
@@ -480,6 +483,11 @@ async function logConversation(params: {
       geo_state: params.geo?.state ?? null,
       geo_country: params.geo?.country ?? null,
       geo_source: params.geo?.source ?? null,
+      // This route answers with plain JSON and sets no cookie, so a freshly minted id would be lost: keep only a real one.
+      anonymous_id: params.visitor && !params.visitor.minted ? params.visitor.anonymousId : null,
+      channel: params.visitor?.channel ?? null,
+      landing_page: params.visitor?.landingPage ?? null,
+      device: params.visitor?.device ?? null,
     });
   } catch (err) {
     console.error('Failed to log chatbot conversation:', err);
@@ -531,6 +539,7 @@ export async function POST(request: NextRequest) {
      * flash-lite on output. The cheapest fallback was doing the priciest retry.
      */
     const geo = signupGeoFromHeaders(request.headers);
+    const visitor = chatVisitorFromHeaders(request.headers);
     const errors: string[] = [];
     let result: { reply: string; model: string; finishReason: string } | null;
     try {
@@ -552,6 +561,7 @@ export async function POST(request: NextRequest) {
           error: `AI_BLOCKED:${err.reason}`,
           responseTimeMs: Date.now() - startTime,
           geo,
+          visitor,
         });
         return NextResponse.json(
           { error: 'The assistant is taking a short break. Please try again later.', humanHelp: true },
@@ -569,6 +579,7 @@ export async function POST(request: NextRequest) {
           error: 'CREDITS_DEPLETED',
           responseTimeMs: Date.now() - startTime,
           geo,
+          visitor,
         });
         return NextResponse.json(
           { error: 'Our assistant is offline for a bit.', code: 'AI_UNAVAILABLE', humanHelp: true },
@@ -592,6 +603,7 @@ export async function POST(request: NextRequest) {
         error: detailedError,
         responseTimeMs,
         geo,
+        visitor,
       });
       return NextResponse.json(
         { error: 'AI service temporarily unavailable. Please try again in a moment.', humanHelp: true },
@@ -610,6 +622,7 @@ export async function POST(request: NextRequest) {
       responseTimeMs,
       error: result.finishReason === 'MAX_TOKENS' ? 'TRUNCATED_MAX_TOKENS' : undefined,
       geo,
+      visitor,
     });
 
     return NextResponse.json({ reply: result.reply, model: result.model, finishReason: result.finishReason });

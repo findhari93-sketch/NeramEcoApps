@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=block">
+<script src="_ds/modernist-e8c2d95e-abf3-4f3e-86df-2b557a2062d6/_ds_bundle.js"></script>
+<style>h1,h2,h3{font-family:Inter,"Noto Sans Tamil",sans-serif}body{margin:0;background:#FAFBFC;color:#1A2027;font-family:Inter,"Noto Sans Tamil",sans-serif;-webkit-font-smoothing:antialiased}a{color:#0b6bd6;text-decoration:none}a:hover{color:#b67a0c}:focus-visible{outline:2px solid #e8a020;outline-offset:2px}</style>
+</helmet>
+<dc-import name="Site Header" state="guest" active="tools" hint-size="100%,64px" style="position:sticky;top:0;z-index:40;display:block"></dc-import>
+
+<section style="background-color:#060d1f;background-image:linear-gradient(rgba(255,255,255,0.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.035) 1px,transparent 1px),linear-gradient(rgba(232,160,32,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(232,160,32,0.06) 1px,transparent 1px);background-size:40px 40px,40px 40px,200px 200px,200px 200px;color:#f5f0e8">
+  <div style="max-width:1200px;margin:0 auto;padding:48px 24px 56px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,440px),1fr));gap:40px;align-items:start">
+    <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+      <span style="font-size:13px;color:rgba(245,240,232,0.62);display:flex;gap:6px;align-items:center"><a href="#" style="color:rgba(245,240,232,0.62)">Home</a><span class="material-symbols-outlined" style="font-size:16px">chevron_right</span><a href="#" style="color:rgba(245,240,232,0.62)">Free Tools</a><span class="material-symbols-outlined" style="font-size:16px">chevron_right</span><span style="color:#f5f0e8">Cutoff Calculator</span></span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><sc-for list="{{ badges }}" as="b" hint-placeholder-count="3"><span style="background:rgba(232,160,32,0.12);border:1px solid rgba(232,160,32,0.35);color:#f4bf5a;font-size:13px;font-weight:700;padding:5px 12px;border-radius:100px">{{ b }}</span></sc-for></div>
+      <h1 style="margin:0;font-size:clamp(2rem,4.5vw,3.25rem);line-height:1.08;font-weight:800;letter-spacing:-0.01em">NATA Cutoff Calculator 2026</h1>
+      <p style="margin:0;max-width:560px;font-size:17px;line-height:1.6;color:rgba(245,240,232,0.72);text-wrap:pretty">Estimate your NATA cutoff score, check your percentile, and discover which architecture colleges match your marks.</p>
+      <span style="font-size:14px;color:rgba(245,240,232,0.62)">Part of <a href="#" style="color:#f5f0e8;font-weight:700;text-decoration:underline">aiArchitek</a>, free AI-powered NATA preparation tools by Neram Classes</span>
+    </div>
+    <div style="background:#fff;color:#1A2027;border-radius:8px;padding:24px;display:flex;flex-direction:column;gap:16px;box-shadow:0 24px 48px rgba(0,0,0,0.35)">
+      <div style="display:flex;justify-content:space-between;align-items:center"><strong style="font-size:18px">Quick check</strong><span style="font-size:12px;color:#55606c">No login needed</span></div>
+      <label style="display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:700">Board PCM percentage<input type="number" value="{{ board }}" onChange="{{ setBoard }}" style="height:48px;border:1px solid #c5ccd4;border-radius:8px;padding:0 14px;font:400 16px Inter,sans-serif"></label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <label style="display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:700">Part A (out of 80)<input type="number" value="{{ partA }}" onChange="{{ setA }}" style="height:48px;border:1px solid #c5ccd4;border-radius:8px;padding:0 14px;font:400 16px Inter,sans-serif;min-width:0"></label>
+        <label style="display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:700">Part B (out of 120)<input type="number" value="{{ partB }}" onChange="{{ setB }}" style="height:48px;border:1px solid #c5ccd4;border-radius:8px;padding:0 14px;font:400 16px Inter,sans-serif;min-width:0"></label>
+      </div>
+      <div style="background:#060d1f;color:#f5f0e8;border-radius:8px;padding:18px;display:grid;grid-template-columns:auto 1fr;gap:4px 16px;align-items:center">
+        <span style="grid-row:span 2;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:36px;font-weight:700;color:#e8a020;line-height:1">{{ total }}</span>
+        <span style="font-size:13px;color:rgba(245,240,232,0.72)">Cutoff score out of 400</span>
+        <strong style="font-size:15px">{{ tier }}</strong>
+      </div>
+      <a href="#" style="display:flex;align-items:center;justify-content:space-between;min-height:52px;padding:0 18px;border-radius:8px;background:#e8a020;color:#060d1f;font-weight:700;font-size:16px">See matching colleges<span class="material-symbols-outlined" style="font-size:20px">north_east</span></a>
+    </div>
+  </div>
+</section>
+
+<section style="padding:72px 24px">
+  <div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:32px">
+    <div style="display:flex;flex-direction:column;gap:12px;max-width:680px"><span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.2em;color:#8a5a05">HOW IT WORKS</span><h2 style="margin:0;font-size:clamp(1.75rem,3.5vw,2.5rem);line-height:1.15;font-weight:800">Four steps to your cutoff</h2></div>
+    <ol style="margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr));gap:20px">
+      <sc-for list="{{ steps }}" as="s" hint-placeholder-count="4"><li style="background:#fff;border:1px solid #E1E5EB;border-radius:8px;padding:24px;display:flex;flex-direction:column;gap:10px"><span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:13px;font-weight:700;color:#8a5a05">{{ s.n }}</span><strong style="font-size:17px">{{ s.title }}</strong><span style="font-size:15px;line-height:1.55;color:#55606c">{{ s.desc }}</span></li></sc-for>
+    </ol>
+  </div>
+</section>
+
+<section style="background:#fff;border-top:1px solid #E1E5EB;padding:72px 24px">
+  <div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:32px">
+    <div style="display:flex;flex-direction:column;gap:12px;max-width:680px"><span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.2em;color:#8a5a05">FEATURES</span><h2 style="margin:0;font-size:clamp(1.75rem,3.5vw,2.5rem);line-height:1.15;font-weight:800">What the full calculator does</h2></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));border-top:1px solid #1A2027">
+      <sc-for list="{{ features }}" as="f" hint-placeholder-count="6"><div style="padding:20px 24px 20px 0;border-bottom:1px solid #E1E5EB;display:flex;gap:14px"><span class="material-symbols-outlined" style="color:#8a5a05">check_circle</span><div style="display:flex;flex-direction:column;gap:4px"><strong style="font-size:16px">{{ f.title }}</strong><span style="font-size:15px;line-height:1.55;color:#55606c">{{ f.desc }}</span></div></div></sc-for>
+    </div>
+  </div>
+</section>
+
+<section style="padding:64px 24px;border-top:1px solid #E1E5EB">
+  <div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:16px">
+    <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.2em;color:#8a5a05">RELATED TOOLS</span>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:16px">
+      <a href="#" style="background:#fff;border:1px solid #E1E5EB;border-radius:8px;padding:18px;display:flex;gap:12px;align-items:center;color:#1A2027" style-hover="border-color:#e8a020;color:#1A2027"><span style="width:44px;height:44px;border-radius:8px;background:#060d1f;color:#e8a020;display:flex;align-items:center;justify-content:center;flex-shrink:0"><span class="material-symbols-outlined">school</span></span><strong style="font-size:15px">NATA College Predictor 2026</strong></a>
+      <a href="#" style="background:#fff;border:1px solid #E1E5EB;border-radius:8px;padding:18px;display:flex;gap:12px;align-items:center;color:#1A2027" style-hover="border-color:#e8a020;color:#1A2027"><span style="width:44px;height:44px;border-radius:8px;background:#060d1f;color:#e8a020;display:flex;align-items:center;justify-content:center;flex-shrink:0"><span class="material-symbols-outlined">leaderboard</span></span><strong style="font-size:15px">NATA Rank Predictor 2026</strong></a>
+      <a href="#" style="background:#fff;border:1px solid #E1E5EB;border-radius:8px;padding:18px;display:flex;gap:12px;align-items:center;color:#1A2027" style-hover="border-color:#e8a020;color:#1A2027"><span style="width:44px;height:44px;border-radius:8px;background:#060d1f;color:#e8a020;display:flex;align-items:center;justify-content:center;flex-shrink:0"><span class="material-symbols-outlined">rule</span></span><strong style="font-size:15px">NATA Eligibility Checker 2026</strong></a>
+    </div>
+  </div>
+</section>
+
+<section style="background:#060d1f;color:#f5f0e8;padding:80px 24px;border-top:1px solid rgba(232,160,32,0.15)">
+  <div style="max-width:760px;margin:0 auto;display:flex;flex-direction:column;align-items:center;text-align:center;gap:16px">
+    <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.2em;color:#e8a020">FULL TOOL</span>
+    <h2 style="margin:0;font-size:clamp(1.75rem,3.5vw,2.5rem);line-height:1.15;font-weight:800">Save your scores and track every attempt</h2>
+    <a href="#" style="margin-top:8px;display:inline-flex;align-items:center;gap:10px;background:#e8a020;color:#060d1f;font-weight:700;font-size:16px;padding:14px 22px;border-radius:8px">Open in the Neram app<span class="material-symbols-outlined" style="font-size:20px">north_east</span></a>
+  </div>
+</section>
+<dc-import name="Site Footer" hint-size="100%,420px"></dc-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { board: 85, a: 55, b: 80 };
+  renderVals() {
+    const { board, a, b } = this.state;
+    const clamp = (v, m) => Math.max(0, Math.min(m, Number(v) || 0));
+    const total = Math.round((clamp(board, 100) * 2) + clamp(a, 80) + clamp(b, 120));
+    const nata = clamp(a, 80) + clamp(b, 120);
+    const tier = nata >= 150 ? 'IITs and SPAs range (150+)' : nata >= 130 ? 'NITs range (130–150)' : nata >= 110 ? 'Top state colleges (110–130)' : 'Private colleges (below 110)';
+    return {
+      badges: ['Free', 'No Login Required', 'Updated for 2026'],
+      board, partA: a, partB: b, total, tier,
+      setBoard: (e) => this.setState({ board: e.target.value }), setA: (e) => this.setState({ a: e.target.value }), setB: (e) => this.setState({ b: e.target.value }),
+      steps: [
+        { n: '01', title: 'Enter Board Marks', desc: 'Input your 12th board exam details: board type (CBSE, ICSE, or State Board), maximum marks, and marks secured in PCM subjects.' },
+        { n: '02', title: 'Add NATA Scores', desc: 'Enter your NATA Part A (Drawing, 80 marks) and Part B (MCQ, 120 marks) scores. If you took both sessions, enter scores for each attempt.' },
+        { n: '03', title: 'Get Your Cutoff Score', desc: 'The calculator converts your board marks to /200, picks your best NATA score, and combines them into a final cutoff score out of 400.' },
+        { n: '04', title: 'Check College Eligibility', desc: 'See which tier of architecture colleges your cutoff score qualifies for, from IITs and SPAs to state and private colleges.' },
+      ],
+      features: [
+        { title: 'Board Marks Conversion', desc: 'Automatically converts your 12th board marks from any board (CBSE, ICSE, State) to the standardised /200 scale used by colleges for cutoff calculation.' },
+        { title: 'Multi-Attempt Support', desc: 'Enter scores from both NATA sessions. The calculator applies the best-score logic used by counselling bodies to determine your strongest attempt.' },
+        { title: 'Category-wise Cutoffs', desc: 'View cutoff thresholds for General, OBC, SC, ST, and EWS categories based on actual previous year admission data from 500+ colleges.' },
+        { title: 'Historical Cutoff Data', desc: 'Compare your score against cutoff trends from 2020 to 2025. See how cutoffs have changed year over year for different college tiers.' },
+        { title: 'College Tier Matching', desc: 'Get matched to realistic college tiers: IITs and SPAs (150+), NITs (130-150), top state colleges (110-130), and private colleges (below 110).' },
+        { title: 'Eligibility Verification', desc: 'Checks minimum percentage requirements (50% for General, 45% for SC/ST) and flags any eligibility concerns before you apply.' },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

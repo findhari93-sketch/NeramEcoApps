@@ -57,7 +57,7 @@ export default function AboutPage({
           { name: 'About', url: `${baseUrl}/about` },
         ])}
       />
-      <ClientIntl locale={locale} namespaces={['about']}><AboutPageContent /></ClientIntl>
+      <ClientIntl locale={locale} namespaces={['about', 'header.freeDemoClass', 'contact.title']}><AboutPageContent /></ClientIntl>
     </>
   );
 }

@@ -20,6 +20,13 @@ const nextConfig = {
     // whole package (Nexus does the same, next.config.js "optimizePackageImports").
     optimizePackageImports: ['@neram/auth', '@neram/database', '@neram/ui'],
   },
+  async redirects() {
+    return [
+      // Chat History was renamed Aintra Inbox. The query string is kept, and
+      // ?view=locations opens the Insights tab there.
+      { source: '/chat-history', destination: '/aintra-inbox', permanent: true },
+    ];
+  },
   images: {
     minimumCacheTTL: 2592000, // 30 days — Supabase storage images are immutable
     remotePatterns: [

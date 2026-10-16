@@ -4,6 +4,7 @@ export const dynamic = 'force-dynamic';
 import { NextResponse } from 'next/server';
 import { createAdminClient, istDayBounds } from '@neram/database';
 import { ZERO_BADGES, badgeWindow, normalizeBadgeCounts } from '@/lib/admin-badges';
+import { countReviewQueue } from '@/lib/aintra-inbox/server';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
 
@@ -16,12 +17,19 @@ export async function GET() {
   const supabase = createAdminClient();
   const { chatSince, followUpBefore } = badgeWindow();
   try {
-    const { data, error } = await supabase.rpc('admin_badge_counts', {
-      p_chat_since: chatSince,
-      p_follow_up_before: followUpBefore,
-    });
+    const [{ data, error }, reviewQueue] = await Promise.all([
+      supabase.rpc('admin_badge_counts', {
+        p_chat_since: chatSince,
+        p_follow_up_before: followUpBefore,
+      }),
+      countReviewQueue(supabase),
+    ]);
     if (error) throw error;
-    return NextResponse.json(normalizeBadgeCounts(data), { headers: NO_STORE });
+    // Aintra Inbox: the badge is the Review queue (wrong or unanswered, not yet
+    // corrected), the same number as the page's header button.
+    const counts = normalizeBadgeCounts(data);
+    if (reviewQueue !== null) counts.chat_history = reviewQueue;
+    return NextResponse.json(counts, { headers: NO_STORE });
   } catch (rpcErr) {
     // The function ships in a migration; until it is applied in an environment,
     // fall back to the old per-table counts so the sidebar never goes blank.

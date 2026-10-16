@@ -1,17 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import {
-  Box,
-  Container,
-  Typography,
-  Card,
-  CardContent,
-  Button,
-  Alert,
-  CircularProgress,
-  Skeleton,
-} from '@neram/ui';
+import { Box, Alert, Skeleton } from '@neram/ui';
 import {
   SchoolOutlined,
   LoginOutlined,
@@ -23,8 +13,8 @@ import { LoginModal } from '@neram/ui';
 import ScholarshipForm from '@/components/scholarship/ScholarshipForm';
 import ScholarshipStatus from '@/components/scholarship/ScholarshipStatus';
 import type { ScholarshipApplication } from '@neram/database';
-import { Link } from '@/i18n/routing';
 import { buildWhatsAppLink } from '@/lib/whatsapp';
+import { PageHero, Section, EmptyState, CtaButton, tokens as tk } from '@/design-system';
 
 interface ScholarshipData {
   hasApplication: boolean;
@@ -99,8 +89,8 @@ export default function ScholarshipPageContent() {
     if (authLoading) {
       return (
         <Box sx={{ py: 6 }}>
-          <Skeleton variant="rectangular" height={200} sx={{ borderRadius: 1, mb: 2 }} />
-          <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 1 }} />
+          <Skeleton variant="rectangular" height={200} sx={{ borderRadius: `${tk.radius}px`, mb: 2 }} />
+          <Skeleton variant="rectangular" height={120} sx={{ borderRadius: `${tk.radius}px` }} />
         </Box>
       );
     }
@@ -108,34 +98,25 @@ export default function ScholarshipPageContent() {
     // Not logged in
     if (!user) {
       return (
-        <Card variant="outlined" sx={{ textAlign: 'center', py: { xs: 4, md: 6 } }}>
-          <CardContent>
-            <LoginOutlined sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
-            <Typography variant="h6" gutterBottom fontWeight={600}>
-              {t('loginRequired')}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 400, mx: 'auto' }}>
-              Log in with your account to access the scholarship application portal.
-            </Typography>
-            <Button
-              variant="contained"
-              size="large"
-              startIcon={<LoginOutlined />}
-              onClick={() => setShowLoginModal(true)}
-              sx={{ minHeight: 48 }}
-            >
+        <EmptyState
+          icon={<LoginOutlined />}
+          title={t('loginRequired')}
+          body="Log in with your account to access the scholarship application portal."
+          action={
+            <CtaButton onClick={() => setShowLoginModal(true)} startIcon={<LoginOutlined aria-hidden />} endIcon={null}>
               {t('loginButton')}
-            </Button>
-          </CardContent>
-        </Card>
+            </CtaButton>
+          }
+        />
       );
     }
 
     // Loading scholarship data
     if (loading) {
       return (
-        <Box display="flex" justifyContent="center" py={6}>
-          <CircularProgress />
+        <Box aria-busy="true" sx={{ py: 2 }}>
+          <Skeleton variant="rectangular" height={160} sx={{ borderRadius: `${tk.radius}px`, mb: 2 }} />
+          <Skeleton variant="rectangular" height={240} sx={{ borderRadius: `${tk.radius}px` }} />
         </Box>
       );
     }
@@ -145,13 +126,9 @@ export default function ScholarshipPageContent() {
       return (
         <Alert severity="error" sx={{ mb: 3 }}>
           {error}
-          <Button
-            size="small"
-            onClick={fetchScholarshipData}
-            sx={{ ml: 2, textTransform: 'none' }}
-          >
+          <CtaButton variant="link" size="md" onClick={fetchScholarshipData} endIcon={null} sx={{ ml: 2 }}>
             Retry
-          </Button>
+          </CtaButton>
         </Alert>
       );
     }
@@ -159,53 +136,33 @@ export default function ScholarshipPageContent() {
     // No application submitted yet
     if (scholarshipData && !scholarshipData.hasApplication) {
       return (
-        <Card variant="outlined" sx={{ textAlign: 'center', py: { xs: 4, md: 6 } }}>
-          <CardContent>
-            <SchoolOutlined sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
-            <Typography variant="h6" gutterBottom fontWeight={600}>
-              {t('noApplication')}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 400, mx: 'auto' }}>
-              You need to submit an admission application before applying for a scholarship.
-            </Typography>
-            <Button
-              variant="contained"
-              size="large"
-              component={Link}
-              href="/apply"
-              sx={{ minHeight: 48 }}
-            >
-              {t('applyFirst')}
-            </Button>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={<SchoolOutlined />}
+          title={t('noApplication')}
+          body="You need to submit an admission application before applying for a scholarship."
+          action={<CtaButton href="/apply">{t('applyFirst')}</CtaButton>}
+        />
       );
     }
 
     // Not eligible for scholarship
     if (scholarshipData && !scholarshipData.scholarshipEligible) {
       return (
-        <Card variant="outlined" sx={{ textAlign: 'center', py: { xs: 4, md: 6 } }}>
-          <CardContent>
-            <SchoolOutlined sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
-            <Typography variant="h6" gutterBottom fontWeight={600}>
-              {t('notEligible')}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3, maxWidth: 480, mx: 'auto' }}>
-              {t('notEligibleDesc')}
-            </Typography>
-            <Button
-              variant="outlined"
-              size="large"
-              startIcon={<PhoneOutlined />}
+        <EmptyState
+          icon={<SchoolOutlined />}
+          title={t('notEligible')}
+          body={t('notEligibleDesc')}
+          action={
+            <CtaButton
+              variant="outline"
               href={buildWhatsAppLink({ text: 'Hi, I have a question about the scholarship program' }).href}
-              target="_blank"
-              sx={{ minHeight: 48 }}
+              external
+              startIcon={<PhoneOutlined aria-hidden />}
             >
               {t('contactSupport')}
-            </Button>
-          </CardContent>
-        </Card>
+            </CtaButton>
+          }
+        />
       );
     }
 
@@ -268,42 +225,15 @@ export default function ScholarshipPageContent() {
 
   return (
     <Box>
-      {/* Hero Section */}
-      <Box
-        sx={{
-          bgcolor: 'primary.main',
-          color: 'primary.contrastText',
-          py: { xs: 4, md: 6 },
-        }}
-      >
-        <Container maxWidth="lg">
-          <Typography
-            variant="h3"
-            component="h1"
-            gutterBottom
-            sx={{ fontWeight: 700, fontSize: { xs: '1.75rem', md: '2.5rem' } }}
-          >
-            {t('title')}
-          </Typography>
-          <Typography
-            variant="h6"
-            sx={{
-              maxWidth: '700px',
-              opacity: 0.9,
-              fontSize: { xs: '0.95rem', md: '1.15rem' },
-            }}
-          >
-            {t('subtitle')}
-          </Typography>
-        </Container>
-      </Box>
+      <PageHero
+        title={t('title')}
+        lede={t('subtitle')}
+        blueprint={false}
+      />
 
-      {/* Content */}
-      <Box sx={{ py: { xs: 3, md: 5 }, bgcolor: 'grey.50', minHeight: '50vh' }}>
-        <Container maxWidth="sm">
-          {renderContent()}
-        </Container>
-      </Box>
+      <Section id="scholarship" rule={false} width="legal" sx={{ minHeight: '50vh' }}>
+        {renderContent()}
+      </Section>
 
       {/* Login Modal */}
       <LoginModal

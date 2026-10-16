@@ -1,25 +1,17 @@
 'use client';
 
-import {
-  Box,
-  Typography,
-  Card,
-  CardContent,
-  Button,
-  Chip,
-  Divider,
-} from '@neram/ui';
+import { Box, Typography } from '@neram/ui';
 import {
   ArrowDownwardRounded,
-  CheckCircleOutlined,
   LayersOutlined,
+  NorthEast,
   StarOutlined,
   TrendingUpOutlined,
 } from '@mui/icons-material';
-import Link from 'next/link';
 import type { FeeStructure } from '@neram/database';
 import { useApplicationStatus } from '@/hooks/useApplicationStatus';
 import { useGoToApp } from '@/hooks/useGoToApp';
+import { CheckList, CtaButton, tokens as t } from '@/design-system';
 import { INCLUDED_SECTION_ID } from './IncludedSection';
 
 // The four things a student weighs first. The full list sits under the cards.
@@ -39,16 +31,18 @@ interface FeeCardProps {
   t: (key: string, values?: Record<string, string | number>) => string;
 }
 
+const rupees = (n: number | null | undefined) => `₹${(n ?? 0).toLocaleString('en-IN')}`;
+
+/** A /fees plan card. Highlighted = 3px gold top and the gold Apply button. */
 export default function FeeCard({
   fee,
   paymentMode,
-  locale,
   badgeLabel,
   badgeColor = 'success',
   isHighlighted = false,
   isMultiYear = false,
   extraOverOneYear = 0,
-  t,
+  t: tr,
 }: FeeCardProps) {
   const { status } = useApplicationStatus();
   const { goToApp } = useGoToApp();
@@ -58,200 +52,126 @@ export default function FeeCard({
   const hasInstallments = fee.installment_1_amount && fee.installment_2_amount;
 
   return (
-    <Card
-      variant={isHighlighted ? 'elevation' : 'outlined'}
-      elevation={isHighlighted ? 6 : 0}
+    <Box
+      component="article"
       sx={{
         height: '100%',
+        boxSizing: 'border-box',
         display: 'flex',
         flexDirection: 'column',
-        position: 'relative',
-        borderColor: isHighlighted ? 'primary.main' : 'divider',
-        borderWidth: isHighlighted ? 2 : 1,
-        borderRadius: 1,
-        overflow: 'visible',
-        transition: 'box-shadow 0.2s',
-        '&:hover': { boxShadow: 8 },
-        '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+        gap: 2.25,
+        p: { xs: 2.5, sm: 3 },
+        bgcolor: t.surface,
+        color: t.ink,
+        border: `1px solid ${isHighlighted ? t.ink : t.line}`,
+        borderTop: isHighlighted ? `3px solid ${t.gold500}` : `1px solid ${t.line}`,
+        borderRadius: `${t.radius}px`,
       }}
     >
-      {/* Badge */}
       {badgeLabel && (
-        <Chip
-          label={badgeLabel}
-          color={badgeColor}
-          size="small"
-          icon={badgeColor === 'success' ? <StarOutlined /> : <TrendingUpOutlined />}
+        <Box
+          component="span"
           sx={{
-            position: 'absolute',
-            top: -12,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            fontWeight: 700,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 0.75,
+            width: 'fit-content',
+            px: 1.25,
+            py: 0.5,
+            borderRadius: `${t.radiusPill}px`,
             fontSize: '0.75rem',
-            px: 1,
-            zIndex: 1,
+            fontWeight: 700,
+            ...(badgeColor === 'success'
+              ? { bgcolor: t.navy900, color: t.gold500 }
+              : { border: `1px solid ${t.lineStrong}`, color: t.ink }),
+            '& svg': { fontSize: 16 },
           }}
-        />
+        >
+          {badgeColor === 'success' ? <StarOutlined aria-hidden /> : <TrendingUpOutlined aria-hidden />}
+          {badgeLabel}
+        </Box>
       )}
 
-      <CardContent sx={{ flexGrow: 1, p: { xs: 2.5, sm: 3 }, pt: badgeLabel ? 4 : 3 }}>
-        {/* Course Name */}
-        <Typography
-          variant="h6"
-          fontWeight={700}
-          gutterBottom
-          sx={{ fontSize: { xs: '1.05rem', sm: '1.2rem' } }}
-        >
+      <Box>
+        <Typography component="h2" sx={{ m: 0, fontWeight: 700, fontSize: { xs: '1.125rem', sm: '1.25rem' }, lineHeight: 1.3 }}>
           {fee.display_name}
         </Typography>
+        <Typography sx={{ fontSize: '0.9375rem', color: t.inkMuted, mt: 0.5 }}>{fee.duration}</Typography>
+      </Box>
 
-        {/* Duration */}
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          {fee.duration}
-        </Typography>
-
-        {/* Pricing */}
-        {paymentMode === 'single' ? (
-          <Box sx={{ mb: 2.5 }}>
-            {/* Full Price (strikethrough) */}
+      {paymentMode === 'single' ? (
+        <Box>
+          {hasDiscount && (
+            <Typography sx={{ textDecoration: 'line-through', color: t.inkMuted, fontSize: '0.9375rem' }}>
+              {tr('fullPrice')}: {rupees(fee.fee_amount)}
+            </Typography>
+          )}
+          <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, flexWrap: 'wrap' }}>
+            <Typography component="span" sx={{ fontWeight: 800, fontSize: { xs: '2rem', sm: '2.25rem' }, lineHeight: 1.1 }}>
+              {rupees(hasDiscount ? discountedPrice : fee.fee_amount)}
+            </Typography>
             {hasDiscount && (
-              <Typography
-                variant="body1"
+              <Box
+                component="span"
                 sx={{
-                  textDecoration: 'line-through',
-                  color: 'text.secondary',
-                  fontSize: '0.95rem',
+                  border: `1px solid ${t.success}`,
+                  color: t.success,
+                  borderRadius: `${t.radiusPill}px`,
+                  px: 1,
+                  py: 0.25,
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
                 }}
               >
-                {t('fullPrice')}: {'\u20B9'}{fee.fee_amount.toLocaleString('en-IN')}
-              </Typography>
-            )}
-
-            {/* Discounted / Actual Price */}
-            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
-              <Typography
-                variant="h4"
-                fontWeight={800}
-                color="primary.main"
-                sx={{ fontSize: { xs: '1.75rem', sm: '2rem' } }}
-              >
-                {'\u20B9'}{(hasDiscount ? discountedPrice : fee.fee_amount).toLocaleString('en-IN')}
-              </Typography>
-              {hasDiscount && (
-                <Chip
-                  label={`${t('save')} ${'\u20B9'}${(fee.single_payment_discount || 0).toLocaleString('en-IN')}`}
-                  color="success"
-                  size="small"
-                  sx={{ fontWeight: 600, fontSize: '0.7rem' }}
-                />
-              )}
-            </Box>
-
-            {fee.combo_extra_fee > 0 && (
-              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-                +{'\u20B9'}{fee.combo_extra_fee.toLocaleString('en-IN')} {t('forCombo')}
-              </Typography>
-            )}
-          </Box>
-        ) : (
-          <Box sx={{ mb: 2.5 }}>
-            {hasInstallments ? (
-              <>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                  {t('payInInstallments')}:
-                </Typography>
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  <Box
-                    sx={{
-                      p: 1.5,
-                      bgcolor: 'primary.50',
-                      borderRadius: 0.75,
-                      border: 1,
-                      borderColor: 'primary.100',
-                    }}
-                  >
-                    <Typography variant="caption" color="text.secondary">
-                      {t('installment1')}
-                    </Typography>
-                    <Typography variant="h6" fontWeight={700} color="primary.main">
-                      {'\u20B9'}{fee.installment_1_amount?.toLocaleString('en-IN')}
-                    </Typography>
-                  </Box>
-                  <Box
-                    sx={{
-                      p: 1.5,
-                      bgcolor: 'grey.50',
-                      borderRadius: 0.75,
-                      border: 1,
-                      borderColor: 'grey.200',
-                    }}
-                  >
-                    <Typography variant="caption" color="text.secondary">
-                      {t('installment2')}
-                    </Typography>
-                    <Typography variant="h6" fontWeight={700}>
-                      {'\u20B9'}{fee.installment_2_amount?.toLocaleString('en-IN')}
-                    </Typography>
-                  </Box>
-                </Box>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mt: 1, fontWeight: 500 }}
-                >
-                  {t('total')}: {'\u20B9'}{fee.fee_amount.toLocaleString('en-IN')}
-                </Typography>
-              </>
-            ) : (
-              <Box>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-                  {t('installmentDetailsComingSoon')}
-                </Typography>
-                <Typography
-                  variant="h4"
-                  fontWeight={800}
-                  color="primary.main"
-                  sx={{ fontSize: { xs: '1.75rem', sm: '2rem' } }}
-                >
-                  {'\u20B9'}{fee.fee_amount.toLocaleString('en-IN')}
-                </Typography>
+                {tr('save')} {rupees(fee.single_payment_discount)}
               </Box>
             )}
           </Box>
-        )}
-
-        <Divider sx={{ my: 2 }} />
-
-        {/* Schedule */}
-        {fee.schedule_summary && (
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            {fee.schedule_summary}
+          {fee.combo_extra_fee > 0 && (
+            <Typography sx={{ mt: 0.5, fontSize: '0.8125rem', color: t.inkMuted }}>
+              +{rupees(fee.combo_extra_fee)} {tr('forCombo')}
+            </Typography>
+          )}
+        </Box>
+      ) : hasInstallments ? (
+        <Box>
+          <Typography sx={{ fontSize: '0.9375rem', color: t.inkMuted, mb: 1 }}>{tr('payInInstallments')}:</Typography>
+          <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+            {[
+              { label: tr('installment1'), amount: fee.installment_1_amount },
+              { label: tr('installment2'), amount: fee.installment_2_amount },
+            ].map((part) => (
+              <Box key={part.label} sx={{ p: 1.5, border: `1px solid ${t.line}`, borderRadius: `${t.radius}px`, bgcolor: t.ground }}>
+                <Typography sx={{ fontSize: '0.8125rem', color: t.inkMuted }}>{part.label}</Typography>
+                <Typography sx={{ fontWeight: 800, fontSize: '1.25rem' }}>{rupees(part.amount)}</Typography>
+              </Box>
+            ))}
+          </Box>
+          <Typography sx={{ mt: 1, fontSize: '0.9375rem', fontWeight: 600, color: t.inkMuted }}>
+            {tr('total')}: {rupees(fee.fee_amount)}
           </Typography>
-        )}
+        </Box>
+      ) : (
+        <Box>
+          <Typography sx={{ fontSize: '0.9375rem', color: t.inkMuted, mb: 1 }}>{tr('installmentDetailsComingSoon')}</Typography>
+          <Typography component="span" sx={{ fontWeight: 800, fontSize: { xs: '2rem', sm: '2.25rem' } }}>
+            {rupees(fee.fee_amount)}
+          </Typography>
+        </Box>
+      )}
+
+      <Box sx={{ borderTop: `1px solid ${t.line}`, pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {fee.schedule_summary && <Typography sx={{ fontSize: '0.9375rem', color: t.inkMuted }}>{fee.schedule_summary}</Typography>}
 
         {/* A longer plan is the one-year plan stretched over more years */}
         {isMultiYear && (
-          <Box
-            sx={{
-              display: 'flex',
-              gap: 1.25,
-              p: 1.5,
-              mb: 2,
-              borderRadius: 1,
-              bgcolor: 'grey.50',
-              border: 1,
-              borderColor: 'grey.200',
-            }}
-          >
-            <LayersOutlined aria-hidden sx={{ fontSize: 22, color: 'primary.main', flexShrink: 0, mt: '1px' }} />
+          <Box sx={{ display: 'flex', gap: 1.25, p: 1.5, borderRadius: `${t.radius}px`, bgcolor: t.ground, border: `1px solid ${t.line}` }}>
+            <LayersOutlined aria-hidden sx={{ fontSize: 22, color: t.gold800, flexShrink: 0, mt: '1px' }} />
             <Box>
-              <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', lineHeight: 1.4 }}>
-                {t('included.twoYearIntro')}
-              </Typography>
+              <Typography sx={{ fontWeight: 700, fontSize: '0.9375rem', lineHeight: 1.4 }}>{tr('included.twoYearIntro')}</Typography>
               {extraOverOneYear > 0 && (
-                <Typography sx={{ fontSize: '0.9rem', fontWeight: 600, color: 'success.dark', lineHeight: 1.4, mt: 0.25 }}>
-                  {t('included.twoYearExtra', { amount: `₹${extraOverOneYear.toLocaleString('en-IN')}` })}
+                <Typography sx={{ fontSize: '0.875rem', fontWeight: 600, color: t.success, lineHeight: 1.4, mt: 0.25 }}>
+                  {tr('included.twoYearExtra', { amount: rupees(extraOverOneYear) })}
                 </Typography>
               )}
             </Box>
@@ -259,69 +179,30 @@ export default function FeeCard({
         )}
 
         {/* Plan extras typed in Admin, then what every plan includes */}
-        <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
-          {[...(fee.features ?? []), ...HIGHLIGHT_KEYS.map((key) => t(`included.${key}`))].map((feature, i) => (
-            <Box component="li" key={i} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-              <CheckCircleOutlined
-                aria-hidden
-                sx={{ fontSize: 18, color: 'success.main', mt: '3px', flexShrink: 0 }}
-              />
-              <Typography sx={{ fontSize: '0.95rem', lineHeight: 1.5 }}>
-                {feature}
-              </Typography>
-            </Box>
-          ))}
-        </Box>
+        <CheckList variant="compact" items={[...(fee.features ?? []), ...HIGHLIGHT_KEYS.map((key) => tr(`included.${key}`))]} />
 
-        <Button
-          component="a"
+        <CtaButton
+          variant="link"
+          size="md"
           href={`#${INCLUDED_SECTION_ID}`}
-          size="small"
-          endIcon={<ArrowDownwardRounded sx={{ fontSize: 18 }} />}
-          sx={{ mt: 1.5, ml: -1, minHeight: 44, px: 1, textTransform: 'none', fontWeight: 600 }}
+          endIcon={<ArrowDownwardRounded aria-hidden />}
+          sx={{ alignSelf: 'flex-start', minHeight: 44 }}
         >
-          {t('included.seeAll')}
-        </Button>
-      </CardContent>
+          {tr('included.seeAll')}
+        </CtaButton>
+      </Box>
 
-      {/* CTA Button */}
-      <Box sx={{ p: { xs: 2.5, sm: 3 }, pt: 0 }}>
+      <Box sx={{ mt: 'auto' }}>
         {isEnrolled ? (
-          <Button
-            variant="contained"
-            fullWidth
-            size="large"
-            onClick={goToApp}
-            sx={{
-              minHeight: 48,
-              fontWeight: 600,
-              fontSize: '1rem',
-              borderRadius: 1,
-              bgcolor: '#2E7D32',
-              '&:hover': { bgcolor: '#1B5E20' },
-            }}
-          >
+          <CtaButton variant="success" fullWidth onClick={goToApp} endIcon={<NorthEast aria-hidden />}>
             Go to App
-          </Button>
+          </CtaButton>
         ) : (
-          <Button
-            variant="contained"
-            color={isHighlighted ? 'primary' : 'secondary'}
-            fullWidth
-            size="large"
-            component={Link}
-            href={`/${locale}/apply`}
-            sx={{
-              minHeight: 48,
-              fontWeight: 600,
-              fontSize: '1rem',
-              borderRadius: 1,
-            }}
-          >
-            {t('applyNow')}
-          </Button>
+          <CtaButton variant={isHighlighted ? 'primary' : 'outline'} fullWidth href="/apply">
+            {tr('applyNow')}
+          </CtaButton>
         )}
       </Box>
-    </Card>
+    </Box>
   );
 }

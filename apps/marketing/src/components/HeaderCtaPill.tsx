@@ -5,6 +5,7 @@ import { alpha } from '@mui/material/styles';
 import type { Theme } from '@mui/material/styles';
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
 import { Link } from '@/i18n/routing';
+import { siteTokens } from '@neram/ui/site-tokens';
 import type { AppStatusSummary } from '@/hooks/useApplicationStatus';
 
 type Tone = 'join' | 'success' | 'progress';
@@ -27,7 +28,8 @@ export function ctaTone(status: AppStatusSummary): Tone {
 }
 
 const toneSx: Record<Tone, object> = {
-  join: { bgcolor: 'secondary.main', color: 'secondary.contrastText', '&:hover': { bgcolor: 'secondary.dark' } },
+  // Gold fill = the primary action (design system). Replaced by the header state map in phase 3.
+  join: { bgcolor: siteTokens.gold500, color: siteTokens.navy900, '&:hover': { bgcolor: siteTokens.gold300 } },
   success: { bgcolor: '#2E7D32', color: '#fff', '&:hover': { bgcolor: '#1B5E20' } },
   progress: { bgcolor: 'primary.main', color: 'primary.contrastText', '&:hover': { bgcolor: 'primary.dark' } },
 };

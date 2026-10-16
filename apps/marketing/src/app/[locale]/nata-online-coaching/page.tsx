@@ -21,6 +21,7 @@ import {
 } from '@neram/ui';
 import Link from 'next/link';
 import { JsonLd } from '@/components/seo/JsonLd';
+import { PageHero, FactsCard, CtaBand, CtaButton, tokens } from '@/design-system';
 import {
   generateOrganizationSchema,
   generateCourseSchema,
@@ -432,90 +433,37 @@ export default async function NataOnlineCoachingPage({ params: { locale } }: Pag
 
       <Box>
         {/* Hero Section */}
-        <Box
-          sx={{
-            py: { xs: 8, md: 12 },
-            background: 'linear-gradient(135deg, #1a237e 0%, #0d47a1 100%)',
-            color: 'white',
-          }}
-        >
-          <Container maxWidth="lg">
-            <Grid container spacing={4} alignItems="center">
-              <Grid item xs={12} md={7}>
-                <Chip
-                  label="NATA 2026: Live Online Coaching"
-                  sx={{ bgcolor: 'white', color: 'primary.main', mb: 2, fontWeight: 600 }}
-                />
-                <Typography
-                  variant="h1"
-                  component="h1"
-                  gutterBottom
-                  sx={{ fontWeight: 700, fontSize: { xs: '2.2rem', md: '3.2rem' } }}
-                >
-                  NATA Online Coaching 2026
-                </Typography>
-                <Typography variant="h5" sx={{ mb: 4, opacity: 0.9, lineHeight: 1.6 }}>
-                  Live classes for architecture aspirants since 2009. {PROOF_POINTS.students} taught and{' '}
-                  {PROOF_POINTS.topResult}. Small batches and daily drawing practice.
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                  <Button
-                    variant="contained"
-                    size="large"
-                    component={Link}
-                    href="/demo-class"
-                    sx={{ bgcolor: 'white', color: 'primary.main', fontWeight: 600, px: 4, minHeight: 48 }}
-                  >
-                    Book Free Demo
-                  </Button>
-                  <Button
-                    variant="outlined"
-                    size="large"
-                    component={Link}
-                    href="/apply"
-                    sx={{ borderColor: 'white', color: 'white', fontWeight: 600, px: 4, minHeight: 48 }}
-                  >
-                    Enroll Now
-                  </Button>
-                </Box>
-              </Grid>
-              <Grid item xs={12} md={5}>
-                <Card sx={{ bgcolor: 'rgba(255,255,255,0.1)', backdropFilter: 'blur(10px)' }}>
-                  <CardContent sx={{ p: 4 }}>
-                    <Typography variant="h6" gutterBottom sx={{ color: 'white', fontWeight: 600 }}>
-                      Online Course Highlights
-                    </Typography>
-                    {[
-                      { label: 'Mode', value: '100% Live Online' },
-                      { label: 'Batch Size', value: 'Small Batches' },
-                      { label: 'Duration', value: '3 to 24 Months' },
-                      { label: 'Drawing Practice', value: '2+ Hours Daily' },
-                      { label: 'Mock Tests', value: '100+ (1-Year Program)' },
-                      { label: 'Top Result', value: 'AIR 1, JEE B.Arch 2024' },
-                    ].map((detail, idx) => (
-                      <Box
-                        key={idx}
-                        sx={{
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          py: 1,
-                          borderBottom: '1px solid rgba(255,255,255,0.2)',
-                        }}
-                      >
-                        <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                          {detail.label}
-                        </Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                          {detail.value}
-                        </Typography>
-                      </Box>
-                    ))}
-                  </CardContent>
-                </Card>
-              </Grid>
-            </Grid>
-          </Container>
-        </Box>
+        <PageHero
+          breadcrumb={[{ name: 'Home', href: '/' }, { name: 'NATA Online Coaching' }]}
+          pills={['NATA 2026: Live Online Coaching']}
+          title={
+            <>
+              NATA <em>Online Coaching</em> 2026
+            </>
+          }
+          lede={`Live classes for architecture aspirants since 2009. ${PROOF_POINTS.students} taught and ${PROOF_POINTS.topResult}. Small batches and daily drawing practice.`}
+          actions={
+            <>
+              <CtaButton href="/demo-class">Book Free Demo</CtaButton>
+              <CtaButton variant="outline" href="/apply" endIcon={null}>
+                Enroll Now
+              </CtaButton>
+            </>
+          }
+          aside={
+            <FactsCard
+              title="Online Course Highlights"
+              items={[
+                { label: 'Mode', value: '100% Live Online' },
+                { label: 'Batch Size', value: 'Small Batches' },
+                { label: 'Duration', value: '3 to 24 Months' },
+                { label: 'Drawing Practice', value: '2+ Hours Daily' },
+                { label: 'Mock Tests', value: '100+ (1-Year Program)' },
+                { label: 'Top Result', value: 'AIR 1, JEE B.Arch 2024' },
+              ]}
+            />
+          }
+        />
 
         {/* Trust Strip */}
         <Box sx={{ bgcolor: 'primary.dark', color: 'white', py: { xs: 2, md: 2.5 } }}>
@@ -944,8 +892,8 @@ export default async function NataOnlineCoachingPage({ params: { locale } }: Pag
                     sx={{
                       textAlign: 'center',
                       p: 4,
-                      background: 'linear-gradient(135deg, #1a237e 0%, #0d47a1 100%)',
-                      color: 'white',
+                      bgcolor: tokens.navy900,
+                      color: tokens.paper,
                     }}
                   >
                     <Typography variant="h2" sx={{ fontWeight: 700, mb: 1 }}>
@@ -1312,50 +1260,18 @@ export default async function NataOnlineCoachingPage({ params: { locale } }: Pag
         </Box>
 
         {/* Bottom CTA Section */}
-        <Box
-          sx={{
-            py: { xs: 8, md: 12 },
-            pb: { xs: 14, md: 12 }, // extra bottom padding on mobile so sticky CTA does not overlap
-            background: 'linear-gradient(135deg, #0d47a1 0%, #1565c0 100%)',
-            color: 'white',
-            textAlign: 'center',
-          }}
-        >
-          <Container maxWidth="md">
-            <Typography
-              variant="h3"
-              component="h2"
-              gutterBottom
-              sx={{ fontWeight: 700, fontSize: { xs: '1.8rem', md: '2.5rem' } }}
-            >
-              Start your NATA online coaching journey today
-            </Typography>
-            <Typography variant="h6" sx={{ mb: 4, opacity: 0.9, lineHeight: 1.6 }}>
-              Live NATA classes since 2009, with small batches and daily drawing feedback. Book a free demo
-              or reserve your seat now.
-            </Typography>
-            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <Button
-                variant="contained"
-                size="large"
-                component={Link}
-                href="/apply"
-                sx={{ bgcolor: 'white', color: 'primary.main', fontWeight: 600, px: 4, minHeight: 48 }}
-              >
-                Enroll Now
-              </Button>
-              <Button
-                variant="outlined"
-                size="large"
-                component={Link}
-                href="/demo-class"
-                sx={{ borderColor: 'white', color: 'white', fontWeight: 600, px: 4, minHeight: 48 }}
-              >
+        <CtaBand
+          title="Start your NATA online coaching journey today"
+          lede="Live NATA classes since 2009, with small batches and daily drawing feedback. Book a free demo or reserve your seat now."
+          actions={
+            <>
+              <CtaButton href="/apply">Enroll Now</CtaButton>
+              <CtaButton variant="link" href="/demo-class">
                 Book Free Demo
-              </Button>
-            </Box>
-          </Container>
-        </Box>
+              </CtaButton>
+            </>
+          }
+        />
 
         {/* Sticky Mobile CTA */}
         <Box

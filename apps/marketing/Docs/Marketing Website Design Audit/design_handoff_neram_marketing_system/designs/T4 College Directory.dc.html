@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=block">
+<script src="_ds/modernist-e8c2d95e-abf3-4f3e-86df-2b557a2062d6/_ds_bundle.js"></script>
+<style>h1,h2,h3{font-family:Inter,"Noto Sans Tamil",sans-serif}body{margin:0;background:#FAFBFC;color:#1A2027;font-family:Inter,"Noto Sans Tamil",sans-serif;-webkit-font-smoothing:antialiased}a{color:#0b6bd6;text-decoration:none}a:hover{color:#b67a0c}:focus-visible{outline:2px solid #e8a020;outline-offset:2px}</style>
+</helmet>
+<div style="position:sticky;top:0;z-index:50;background:#201e1d;color:#f3f2f2;display:flex;gap:12px;align-items:center;padding:8px 20px;font:600 13px Archivo,system-ui,sans-serif;flex-wrap:wrap">
+  <span>T4 preview</span>
+  <div style="display:flex;border:2px solid #f3f2f2"><button onClick="{{ goList }}" style="{{ tabList }}">Directory /colleges/[state]</button><button onClick="{{ goDetail }}" style="{{ tabDetail }}">Detail /colleges/[state]/[slug]</button></div>
+  <span style="opacity:0.75;font-weight:400">College names and figures are sample data. Real rows come from the college hub database.</span>
+</div>
+<dc-import name="Site Header" surface="light" state="signedIn" active="colleges" hint-size="100%,64px" style="position:sticky;top:38px;z-index:40;display:block"></dc-import>
+
+<sc-if value="{{ isList }}" hint-placeholder-val="{{ true }}">
+<header style="background:#fff;border-bottom:1px solid #E1E5EB">
+  <div style="max-width:1280px;margin:0 auto;padding:32px 24px 28px;display:flex;flex-direction:column;gap:12px">
+    <span style="font-size:13px;color:#55606c;display:flex;gap:6px;align-items:center"><a href="#" style="color:#55606c">Home</a><span class="material-symbols-outlined" style="font-size:16px">chevron_right</span><a href="#" style="color:#55606c">Colleges</a><span class="material-symbols-outlined" style="font-size:16px">chevron_right</span><span style="color:#1A2027">Tamil Nadu</span></span>
+    <h1 style="margin:0;font-size:clamp(1.75rem,4vw,2.5rem);line-height:1.1;font-weight:800">B.Arch colleges in Tamil Nadu</h1>
+    <p style="margin:0;max-width:760px;font-size:17px;line-height:1.55;color:#55606c">Fees, seats and admission route for every COA-approved college. Admission is through TNEA B.Arch counselling, using NATA or JEE Paper 2.</p>
+  </div>
+</header>
+<div style="max-width:1280px;margin:0 auto;padding:24px;display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">
+  <aside style="flex:0 1 260px;min-width:220px;position:sticky;top:120px;background:#fff;border:1px solid #E1E5EB;border-radius:8px;display:flex;flex-direction:column">
+    <div style="padding:16px;border-bottom:1px solid #E1E5EB;display:flex;justify-content:space-between;align-items:center"><strong>Filters</strong><button style="border:none;background:transparent;font:600 14px Inter,sans-serif;color:#55606c;cursor:pointer;min-height:36px">Clear</button></div>
+    <sc-for list="{{ filters }}" as="f" hint-placeholder-count="4">
+      <div style="padding:14px 16px;border-bottom:1px solid #E1E5EB;display:flex;flex-direction:column;gap:10px">
+        <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.12em;color:#55606c">{{ f.title }}</span>
+        <div style="display:flex;flex-wrap:wrap;gap:6px"><sc-for list="{{ f.opts }}" as="o" hint-placeholder-count="3"><button onClick="{{ o.pick }}" aria-pressed="{{ o.on }}" style="{{ o.style }}">{{ o.label }}</button></sc-for></div>
+      </div>
+    </sc-for>
+  </aside>
+  <main style="flex:1 1 600px;min-width:0;display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap"><span style="font-size:15px"><strong>42 colleges</strong> <span style="color:#55606c">· sorted by NIRF, then ArchIndex</span></span><label style="display:flex;align-items:center;gap:8px;height:44px;padding:0 12px;border:1px solid #c5ccd4;border-radius:8px;background:#fff;font-size:14px">Sort<select style="border:none;background:transparent;font:600 14px Inter,sans-serif;color:#1A2027"><option>Best ranked</option><option>Lowest fee</option><option>Most seats</option></select></label></div>
+    <sc-for list="{{ colleges }}" as="c" hint-placeholder-count="4">
+      <article style="background:#fff;border:1px solid #E1E5EB;border-radius:8px;display:flex;flex-wrap:wrap;overflow:hidden" style-hover="border-color:#e8a020">
+        <div style="flex:0 0 160px;min-height:150px;background:#0b1629;color:rgba(245,240,232,0.25);display:flex;align-items:center;justify-content:center;font-size:44px;font-weight:800;position:relative">{{ c.initial }}<sc-if value="{{ c.featured }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:8px;left:8px;background:#e8a020;color:#060d1f;font-size:11px;font-weight:700;padding:3px 8px;border-radius:100px">Featured</span></sc-if></div>
+        <div style="flex:1 1 300px;min-width:0;padding:18px 20px;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start"><div style="display:flex;flex-direction:column;gap:4px;min-width:0"><a href="#" onClick="{{ goDetail }}" style="color:#1A2027;font-weight:700;font-size:17px;line-height:1.3">{{ c.name }}</a><span style="font-size:14px;color:#55606c;display:flex;align-items:center;gap:4px"><span class="material-symbols-outlined" style="font-size:16px">location_on</span>{{ c.city }} · {{ c.type }}</span></div><button aria-label="Save" style="width:44px;height:44px;border:1px solid #E1E5EB;border-radius:8px;background:#fff;color:#1A2027;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer"><span class="material-symbols-outlined">favorite</span></button></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap"><sc-for list="{{ c.chips }}" as="t" hint-placeholder-count="2"><span style="font-size:12px;font-weight:600;border:1px solid #E1E5EB;border-radius:100px;padding:3px 10px">{{ t }}</span></sc-for></div>
+          <dl style="margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;border-top:1px solid #E1E5EB;padding-top:10px">
+            <div style="display:flex;flex-direction:column;gap:2px"><dt style="font-size:12px;color:#55606c">Annual fee</dt><dd style="margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-weight:700;font-size:15px">{{ c.fee }}</dd></div>
+            <div style="display:flex;flex-direction:column;gap:2px"><dt style="font-size:12px;color:#55606c">B.Arch seats</dt><dd style="margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-weight:700;font-size:15px">{{ c.seats }}</dd></div>
+            <div style="display:flex;flex-direction:column;gap:2px"><dt style="font-size:12px;color:#55606c">Admission</dt><dd style="margin:0;font-weight:700;font-size:15px">{{ c.route }}</dd></div>
+          </dl>
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><a href="#" onClick="{{ goDetail }}" style="display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border-radius:8px;background:#060d1f;color:#f5f0e8;font-weight:600;font-size:14px" style-hover="background:#122040;color:#f5f0e8">View college<span class="material-symbols-outlined" style="font-size:18px">arrow_forward</span></a><button style="display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border:1px solid #c5ccd4;border-radius:8px;background:#fff;font:600 14px Inter,sans-serif;color:#1A2027;cursor:pointer"><span class="material-symbols-outlined" style="font-size:18px">compare_arrows</span>Compare</button></div>
+        </div>
+      </article>
+    </sc-for>
+    <nav aria-label="Pagination" style="display:flex;gap:6px;justify-content:center;padding-top:8px"><span style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:8px;background:#060d1f;color:#f5f0e8;font-weight:700">1</span><a href="#" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:8px;border:1px solid #E1E5EB;color:#1A2027;background:#fff">2</a><a href="#" style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;border-radius:8px;border:1px solid #E1E5EB;color:#1A2027;background:#fff">3</a><a href="#" style="height:44px;padding:0 14px;display:flex;align-items:center;border-radius:8px;border:1px solid #E1E5EB;color:#1A2027;background:#fff;font-weight:600">Next</a></nav>
+  </main>
+</div>
+<div style="position:sticky;bottom:0;background:#060d1f;color:#f5f0e8;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 24px;flex-wrap:wrap"><span style="font-size:14px"><strong>2 colleges</strong> in compare</span><a href="#" style="display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 16px;border-radius:8px;background:#e8a020;color:#060d1f;font-weight:700;font-size:14px">Compare now<span class="material-symbols-outlined" style="font-size:18px">arrow_forward</span></a></div>
+</sc-if>
+
+<sc-if value="{{ isDetail }}" hint-placeholder-val="{{ false }}">
+<header style="background:#fff;border-bottom:1px solid #E1E5EB">
+  <div style="max-width:1280px;margin:0 auto;padding:24px 24px 0;display:flex;flex-direction:column;gap:16px">
+    <span style="font-size:13px;color:#55606c;display:flex;gap:6px;align-items:center;flex-wrap:wrap"><a href="#" style="color:#55606c">Home</a><span class="material-symbols-outlined" style="font-size:16px">chevron_right</span><a href="#" style="color:#55606c">Colleges</a><span class="material-symbols-outlined" style="font-size:16px">chevron_right</span><a href="#" onClick="{{ goList }}" style="color:#55606c">Tamil Nadu</a><span class="material-symbols-outlined" style="font-size:16px">chevron_right</span><span style="color:#1A2027">Sample School of Architecture</span></span>
+    <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start">
+      <span style="width:72px;height:72px;border-radius:8px;background:#0b1629;color:#e8a020;display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:800;flex-shrink:0">S</span>
+      <div style="flex:1 1 420px;min-width:0;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap"><span style="display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;border:1px solid #2E7D32;color:#2E7D32;border-radius:100px;padding:3px 10px"><span class="material-symbols-outlined" style="font-size:14px">verified</span>COA approved</span><span style="font-size:12px;font-weight:700;border:1px solid #E1E5EB;border-radius:100px;padding:3px 10px">NAAC A+</span><span style="font-size:12px;font-weight:700;border:1px solid #E1E5EB;border-radius:100px;padding:3px 10px">Government</span></div>
+        <h1 style="margin:0;font-size:clamp(1.75rem,4vw,2.5rem);line-height:1.1;font-weight:800">Sample School of Architecture, Chennai</h1>
+        <p id="college-summary" style="margin:0;max-width:760px;font-size:16px;line-height:1.6;color:#55606c">A government B.Arch college in Chennai with 80 seats a year, admitting through TNEA B.Arch counselling on NATA or JEE Paper 2 scores.</p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><button style="display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border:1px solid #c5ccd4;border-radius:8px;background:#fff;font:600 14px Inter,sans-serif;color:#1A2027;cursor:pointer"><span class="material-symbols-outlined" style="font-size:18px">favorite</span>Save</button><button style="display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 14px;border:1px solid #c5ccd4;border-radius:8px;background:#fff;font:600 14px Inter,sans-serif;color:#1A2027;cursor:pointer"><span class="material-symbols-outlined" style="font-size:18px">compare_arrows</span>Compare</button><button aria-label="Share" style="width:44px;height:44px;border:1px solid #c5ccd4;border-radius:8px;background:#fff;color:#1A2027;cursor:pointer;display:flex;align-items:center;justify-content:center"><span class="material-symbols-outlined" style="font-size:18px">share</span></button></div>
+    </div>
+    <dl style="margin:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));border:1px solid #E1E5EB;border-radius:8px;overflow:hidden">
+      <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="6"><div style="padding:14px 16px;border-right:1px solid #E1E5EB;display:flex;flex-direction:column;gap:4px"><dt style="font-size:12px;color:#55606c">{{ k.label }}</dt><dd style="margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-weight:700;font-size:18px">{{ k.value }}</dd><span style="font-size:12px;color:#55606c">{{ k.note }}</span></div></sc-for>
+    </dl>
+    <nav aria-label="Sections" style="display:flex;gap:2px;overflow-x:auto;margin:0 -4px;scrollbar-width:none"><sc-for list="{{ sections }}" as="t" hint-placeholder-count="8"><a href="#" style="{{ t.style }}">{{ t.label }}</a></sc-for></nav>
+  </div>
+</header>
+<div style="max-width:1280px;margin:0 auto;padding:24px;display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start">
+  <main style="flex:999 1 640px;min-width:0;display:flex;flex-direction:column;gap:16px">
+    <section style="background:#fff;border:1px solid #E1E5EB;border-radius:8px;padding:24px;display:flex;flex-direction:column;gap:14px">
+      <h2 style="margin:0;font-size:22px;font-weight:800">Admission</h2>
+      <ol style="margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px">
+        <li style="border:1px solid #E1E5EB;border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:4px"><span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;color:#8a5a05">STEP 1</span><strong>Take NATA or JEE Paper 2</strong><span style="font-size:14px;color:#55606c">Either score is accepted</span></li>
+        <li style="border:1px solid #E1E5EB;border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:4px"><span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;color:#8a5a05">STEP 2</span><strong>Register for TNEA B.Arch</strong><span style="font-size:14px;color:#55606c">State counselling, online</span></li>
+        <li style="border:1px solid #E1E5EB;border-radius:8px;padding:14px;display:flex;flex-direction:column;gap:4px"><span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;color:#8a5a05">STEP 3</span><strong>Choice filling and allotment</strong><span style="font-size:14px;color:#55606c">Rank from board + entrance</span></li>
+      </ol>
+    </section>
+    <section style="background:#fff;border:1px solid #E1E5EB;border-radius:8px;padding:24px;display:flex;flex-direction:column;gap:14px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap"><h2 style="margin:0;font-size:22px;font-weight:800">Cutoffs</h2><span style="font-size:13px;color:#55606c">TNEA B.Arch · sample year</span></div>
+      <div style="overflow-x:auto"><table style="width:100%;min-width:480px;border-collapse:collapse;font-size:15px">
+        <thead><tr style="background:#060d1f;color:#f5f0e8;text-align:left"><th style="padding:12px 14px;font-weight:700">Category</th><th style="padding:12px 14px;font-weight:700">Round 1</th><th style="padding:12px 14px;font-weight:700">Round 2</th><th style="padding:12px 14px;font-weight:700">Final</th></tr></thead>
+        <tbody><sc-for list="{{ cutoffs }}" as="r" hint-placeholder-count="5"><tr style="border-bottom:1px solid #E1E5EB"><td style="padding:12px 14px;font-weight:600">{{ r.cat }}</td><td style="padding:12px 14px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">{{ r.r1 }}</td><td style="padding:12px 14px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">{{ r.r2 }}</td><td style="padding:12px 14px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-weight:700">{{ r.fin }}</td></tr></sc-for></tbody>
+      </table></div>
+    </section>
+    <section style="background:#fff;border:1px solid #E1E5EB;border-radius:8px;padding:24px;display:flex;flex-direction:column;gap:14px">
+      <h2 style="margin:0;font-size:22px;font-weight:800">Fees</h2>
+      <dl style="margin:0;display:flex;flex-direction:column;border-top:1px solid #E1E5EB">
+        <div style="display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid #E1E5EB"><dt>Tuition, per year</dt><dd style="margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-weight:700">₹50,000</dd></div>
+        <div style="display:flex;justify-content:space-between;padding:12px 0;border-bottom:1px solid #E1E5EB"><dt>Hostel and mess, per year</dt><dd style="margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-weight:700">₹60,000</dd></div>
+        <div style="display:flex;justify-content:space-between;padding:12px 0"><dt style="font-weight:700">5-year estimate</dt><dd style="margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-weight:800">₹5.5L</dd></div>
+      </dl>
+    </section>
+    <section style="background:#fff;border:1px solid #E1E5EB;border-radius:8px;padding:24px;display:flex;flex-direction:column;gap:12px">
+      <h2 style="margin:0;font-size:22px;font-weight:800">Reviews, Q&amp;A, FAQs, Location</h2>
+      <span style="font-size:15px;color:#55606c">Same section card: white, 1px line, 8px radius, h2 at 22/800. Each existing section component (ReviewSection, CommentSection, CollegeFaqList, LocationContact) goes inside one, unchanged in behaviour.</span>
+    </section>
+  </main>
+  <aside style="flex:1 1 300px;max-width:380px;position:sticky;top:120px;display:flex;flex-direction:column;gap:16px">
+    <div style="background:#060d1f;color:#f5f0e8;border-radius:8px;padding:22px;display:flex;flex-direction:column;gap:12px">
+      <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.15em;color:#e8a020">ADMISSION HELP</span>
+      <strong style="font-size:18px;line-height:1.3">Will your score get you in here?</strong>
+      <span style="font-size:14px;line-height:1.5;color:rgba(245,240,232,0.72)">Our counsellors check your rank against last year's cutoffs. Free.</span>
+      <a href="#" style="display:flex;align-items:center;justify-content:space-between;min-height:48px;padding:0 16px;border-radius:8px;background:#e8a020;color:#060d1f;font-weight:700;font-size:15px">Get a free call back<span class="material-symbols-outlined" style="font-size:20px">arrow_forward</span></a>
+    </div>
+    <nav aria-label="Related pages" style="background:#fff;border:1px solid #E1E5EB;border-radius:8px;display:flex;flex-direction:column">
+      <span style="padding:14px 16px 6px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.12em;color:#55606c">RELATED</span>
+      <a href="#" style="display:flex;justify-content:space-between;align-items:center;min-height:48px;padding:0 16px;color:#1A2027;font-weight:600;font-size:15px;border-top:1px solid #E1E5EB">TNEA B.Arch counselling<span class="material-symbols-outlined" style="font-size:20px;color:#55606c">chevron_right</span></a>
+      <a href="#" style="display:flex;justify-content:space-between;align-items:center;min-height:48px;padding:0 16px;color:#1A2027;font-weight:600;font-size:15px;border-top:1px solid #E1E5EB">NATA coaching in Chennai<span class="material-symbols-outlined" style="font-size:20px;color:#55606c">chevron_right</span></a>
+      <a href="#" style="display:flex;justify-content:space-between;align-items:center;min-height:48px;padding:0 16px;color:#1A2027;font-weight:600;font-size:15px;border-top:1px solid #E1E5EB">College predictor<span class="material-symbols-outlined" style="font-size:20px;color:#55606c">chevron_right</span></a>
+    </nav>
+  </aside>
+</div>
+</sc-if>
+<dc-import name="Site Footer" hint-size="100%,420px"></dc-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;view&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;list&quot;,&quot;detail&quot;],&quot;default&quot;:&quot;list&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Preview&quot;}}">
+class Component extends DCLogic {
+  state = { view: null, f: { type: 'All', exam: 'All' } };
+  renderVals() {
+    const view = this.state.view ?? this.props.view ?? 'list';
+    const tab = (on) => ({ background: on ? '#f3f2f2' : 'transparent', color: on ? '#201e1d' : '#f3f2f2', border: 'none', padding: '6px 12px', font: '600 13px Archivo, system-ui, sans-serif', cursor: 'pointer', whiteSpace: 'nowrap' });
+    const pill = (on) => ({ minHeight: 36, padding: '0 12px', borderRadius: 100, border: '1px solid ' + (on ? '#060d1f' : '#c5ccd4'), background: on ? '#060d1f' : '#fff', color: on ? '#f5f0e8' : '#1A2027', font: '600 13px Inter, sans-serif', cursor: 'pointer' });
+    const mk = (key, title, opts) => ({ title, opts: opts.map(label => ({ label, on: this.state.f[key] === label, style: pill(this.state.f[key] === label), pick: () => this.setState(s => ({ f: { ...s.f, [key]: label } })) })) });
+    const go = (v) => (e) => { e && e.preventDefault && e.preventDefault(); this.setState({ view: v }); window.scrollTo(0, 0); };
+    const sections = ['Overview', 'Admission', 'Cutoffs', 'Fees', 'Placements', 'Reviews', 'Q&A', 'FAQs', 'Location'].map((label, i) => ({ label, style: { whiteSpace: 'nowrap', padding: '12px 14px', fontSize: 14, fontWeight: i === 1 ? 700 : 500, color: i === 1 ? '#1A2027' : '#55606c', boxShadow: i === 1 ? 'inset 0 -2px 0 #e8a020' : 'none', textDecoration: 'none' } }));
+    return {
+      isList: view === 'list', isDetail: view === 'detail', tabList: tab(view === 'list'), tabDetail: tab(view === 'detail'), goList: go('list'), goDetail: go('detail'),
+      filters: [mk('type', 'COLLEGE TYPE', ['All', 'Government', 'Private', 'Deemed']), mk('exam', 'ENTRANCE EXAM', ['All', 'NATA', 'JEE Paper 2']), { title: 'ANNUAL FEE', opts: [{ label: 'Under ₹1L', style: pill(false) }, { label: '₹1–3L', style: pill(false) }, { label: '₹3L+', style: pill(false) }] }, { title: 'CITY', opts: [{ label: 'Chennai', style: pill(false) }, { label: 'Coimbatore', style: pill(false) }, { label: 'Madurai', style: pill(false) }, { label: 'Trichy', style: pill(false) }] }],
+      colleges: [
+        { name: 'Sample School of Architecture, Chennai', initial: 'S', city: 'Chennai', type: 'Government', chips: ['COA approved', 'NAAC A+'], fee: '₹50K/yr', seats: '80', route: 'TNEA', featured: false },
+        { name: 'Sample Institute of Architecture and Design', initial: 'I', city: 'Coimbatore', type: 'Private', chips: ['COA approved', 'NIRF #18'], fee: '₹2.4L/yr', seats: '120', route: 'TNEA · Direct', featured: true },
+        { name: 'Sample College of Architecture', initial: 'C', city: 'Madurai', type: 'Private', chips: ['COA approved'], fee: '₹1.1L/yr', seats: '60', route: 'TNEA', featured: false },
+        { name: 'Sample University Faculty of Architecture', initial: 'U', city: 'Trichy', type: 'Deemed', chips: ['COA approved', 'NAAC A'], fee: 'Not published', seats: '40', route: 'Direct', featured: false },
+      ],
+      kpis: [
+        { label: 'Annual fee', value: '₹50,000', note: 'Approx. tuition' }, { label: '5-year fee', value: '₹2.5L', note: 'Estimate' },
+        { label: 'B.Arch seats', value: '80', note: 'Per year' }, { label: 'Admission via', value: 'TNEA', note: 'State counselling' },
+        { label: 'Entrance exam', value: 'NATA · JEE P2', note: 'Either one' }, { label: 'NIRF rank', value: '#12', note: 'Architecture' },
+      ],
+      sections,
+      cutoffs: [{ cat: 'OC', r1: '172.5', r2: '168.0', fin: '165.5' }, { cat: 'BC', r1: '165.0', r2: '161.5', fin: '158.0' }, { cat: 'MBC', r1: '160.5', r2: '156.0', fin: '152.5' }, { cat: 'SC', r1: '148.0', r2: '143.5', fin: '139.0' }, { cat: 'ST', r1: '132.0', r2: '128.5', fin: '125.0' }],
+    };
+  }
+}
+</script>
+</body>
+</html>

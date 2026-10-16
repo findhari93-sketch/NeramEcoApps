@@ -125,7 +125,7 @@ export default function CtaBanner({ locale }: CtaBannerProps) {
             <Typography
               variant="h2"
               sx={{
-                fontFamily: '"Poppins", "Plus Jakarta Sans", sans-serif',
+                fontFamily: 'inherit',
                 fontWeight: 800,
                 fontSize: { xs: '1.6rem', sm: '2rem', md: '2.6rem' },
                 lineHeight: 1.2,

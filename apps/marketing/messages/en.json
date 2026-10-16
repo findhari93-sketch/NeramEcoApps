@@ -28,6 +28,9 @@
     "title": "About Us",
     "pageTitle": "About Neram Classes",
     "heroSubtitle": "Empowering students with quality education and personalized guidance since 2009",
+    "closing": {
+      "title": "When our students achieve their goals, the world will speak about us."
+    },
     "story": {
       "title": "Our Story",
       "paragraph1": "For bigger exams like JEE and NEET, students have countless platforms, apps, and tools. Architecture entrance preparation had almost none. The field was too niche for anyone to build proper digital infrastructure for it, so we built it ourselves.",

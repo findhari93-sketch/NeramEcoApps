@@ -31,6 +31,7 @@
 export {
   generateGemini,
   generateGeminiText,
+  streamGemini,
   buildManualPrompt,
   AiBlockedError,
   AiBillingError,

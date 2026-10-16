@@ -2,18 +2,19 @@
 @import "tailwindcss/theme";
 @import "tailwindcss/utilities";
 
-/* Theme bridge: CSS variables for Tailwind components */
+/* Theme bridge for components that style with CSS variables (dark surface).
+   Values mirror siteTokens in @neram/ui (packages/ui/src/theme/site-tokens.ts);
+   change them there first. New code uses siteTokens, not these variables. */
 :root {
-  --neram-bg: #060d1f;
-  --neram-card: #0b1629;
-  --neram-card-elevated: #122040;
-  --neram-text: #f5f0e8;
-  --neram-text-muted: rgba(245, 240, 232, 0.55);
-  --neram-gold: #e8a020;
-  --neram-gold-light: #f4bf5a;
-  --neram-blue: #1a8fff;
-  --neram-border: rgba(255, 255, 255, 0.08);
-  --neram-border-gold: rgba(232, 160, 32, 0.2);
+  --neram-bg: #060d1f;                         /* navy900 */
+  --neram-card: #0b1629;                       /* navy800 */
+  --neram-card-elevated: #122040;              /* navy700 */
+  --neram-text: #f5f0e8;                       /* paper */
+  --neram-text-muted: rgba(245, 240, 232, 0.72); /* paperMuted */
+  --neram-gold: #e8a020;                       /* gold500 */
+  --neram-gold-light: #f4bf5a;                 /* gold300 */
+  --neram-border: rgba(255, 255, 255, 0.08);   /* lineDark */
+  --neram-border-gold: rgba(232, 160, 32, 0.35); /* goldTintBorder */
 }
 
 /* Museo font for logo */
@@ -100,13 +101,13 @@ body::-webkit-scrollbar-thumb {
 }
 
 body::-webkit-scrollbar-thumb:hover {
-  background: #8B95A1;
+  background: #c5ccd4;
 }
 
 /* Text selection */
 ::selection {
-  background-color: rgba(21, 101, 192, 0.2);
-  color: #0D47A1;
+  background-color: rgba(232, 160, 32, 0.28);
+  color: #1A2027;
 }
 
 a {
@@ -119,9 +120,9 @@ img {
   height: auto;
 }
 
-/* Focus visible styles for accessibility */
+/* Focus visible styles for accessibility (gold500, the one focus colour) */
 :focus-visible {
-  outline: 2px solid #1976d2;
+  outline: 2px solid #e8a020;
   outline-offset: 2px;
 }
 
@@ -155,8 +156,8 @@ body::after {
   height: 36px;
   margin-top: -18px;
   margin-left: -18px;
-  border: 3px solid #E3F2FD;
-  border-top-color: #1565C0;
+  border: 3px solid rgba(232, 160, 32, 0.25);
+  border-top-color: #060d1f;
   border-radius: 50%;
   z-index: 100000;
   animation: neram-spin 0.8s linear infinite, neram-fade-out 0.3s 0.8s forwards;
@@ -218,61 +219,16 @@ body::after {
 }
 
 /* ============================================
-   aiArchitek 2026 Design System Utilities
+   Marketing design system utilities
+   Tokens: siteTokens in @neram/ui. Components: src/design-system.
    ============================================ */
 
-/* Blueprint grid background (static) */
-.neram-blueprint-bg {
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(rgba(232, 160, 32, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(232, 160, 32, 0.05) 1px, transparent 1px);
-  background-size: 40px 40px, 40px 40px, 200px 200px, 200px 200px;
-}
-
-/* Blueprint grid (static — animation removed for performance) */
-.neram-blueprint-bg-animated {
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-    linear-gradient(rgba(232, 160, 32, 0.06) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(232, 160, 32, 0.06) 1px, transparent 1px);
-  background-size: 40px 40px, 40px 40px, 200px 200px, 200px 200px;
-}
-
-/* Glass card utility */
+/* Card on dark. Formerly a blurred glass card; the design system drops
+   backdrop-filter (costly on low-end Android), so it is now solid navy800. */
 .neram-glass {
-  background: rgba(11, 22, 41, 0.75);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: #0b1629;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 8px;
-}
-
-/* Floating badge animations */
-@keyframes neramFloatA {
-
-  0%,
-  100% {
-    transform: translateY(0px);
-  }
-
-  50% {
-    transform: translateY(-10px);
-  }
-}
-
-@keyframes neramFloatB {
-
-  0%,
-  100% {
-    transform: translateY(0px) translateX(0px);
-  }
-
-  50% {
-    transform: translateY(-8px) translateX(-4px);
-  }
 }
 
 /* Fade up animation for staggered reveals */
@@ -294,41 +250,5 @@ body::after {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
-  }
-}
-
-
-/* Pulse animation for dots/badges */
-@keyframes neramPulse {
-
-  0%,
-  100% {
-    transform: scale(1);
-    opacity: 1;
-  }
-
-  50% {
-    transform: scale(1.5);
-    opacity: 0.6;
-  }
-}
-
-/* Gradient line grow animation */
-@keyframes neramLineGrow {
-  to {
-    transform: scaleX(1);
-  }
-}
-
-/* Smooth opacity blink for AI underline */
-@keyframes neramLineBlink {
-
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0;
   }
 }

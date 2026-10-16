@@ -16,15 +16,26 @@ import {
   ListItemText,
   Divider,
   Tooltip,
-  Chip,
   MenuIcon,
   CloseIcon,
   HelpOutlineIcon,
   useScrollDirection,
   ListItemIcon,
-  Popover,
   Collapse,
 } from '@neram/ui';
+import { ClickAwayListener, Fade, Paper, Popper, useMediaQuery } from '@mui/material';
+import { alpha } from '@mui/material/styles';
+import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
+import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
+import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
+import CalculateOutlinedIcon from '@mui/icons-material/CalculateOutlined';
+import CastForEducationOutlinedIcon from '@mui/icons-material/CastForEducationOutlined';
+import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
+import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
+import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
+import StarBorderRoundedIcon from '@mui/icons-material/StarBorderRounded';
+import WorkOutlineIcon from '@mui/icons-material/WorkOutline';
+import MailOutlineIcon from '@mui/icons-material/MailOutline';
 import HomeRoundedIcon from '@mui/icons-material/HomeRounded';
 import SearchIcon from '@mui/icons-material/Search';
 import CurrencyRupeeIcon from '@mui/icons-material/CurrencyRupee';
@@ -55,6 +66,7 @@ import { useApplicationStatus, type AppStatusSummary } from '@/hooks/useApplicat
 import { useGoToApp } from '@/hooks/useGoToApp';
 import { getDemoCta, readDemoActive, type DemoActiveFlag } from '@/lib/demo-cta';
 import CollegesMegaMenu from '@/components/college-hub/CollegesMegaMenu';
+import MegaMenuPanel, { NavBadge, type NavAside, type NavColumn, type NavFooter, type NavLink } from '@/components/nav/MegaMenuPanel';
 import HeaderCtaPill from './HeaderCtaPill';
 
 // ─── CTA config (unchanged) ────────────────────────────────────────────────
@@ -128,31 +140,24 @@ function getCtaConfig(status: AppStatusSummary, t: ReturnType<typeof useTranslat
 
 // ─── Nav group structure ────────────────────────────────────────────────────
 
-interface NavLink {
-  label: string;
-  href: string;
-  badge?: string;
-}
-
-interface NavColumn {
-  title: string;
-  links: NavLink[];
-}
-
 interface NavGroup {
   key: string;
   labelKey: 'colleges' | 'examHubNav' | 'counselingNav' | 'aboutNav';
   icon: React.ReactNode;
   columns: NavColumn[];
+  aside?: NavAside;
+  footer?: NavFooter;
+  /** 'cards': the desktop panel is a single column of icon cards. */
+  variant?: 'columns' | 'cards';
 }
 
+// Desktop shows each group as one MegaMenuPanel; the phone drawer lists every
+// link of the group (columns, "more" links, side cards and the footer link).
 const NAV_GROUPS: NavGroup[] = [
   {
     key: 'colleges',
     labelKey: 'colleges',
     icon: <SchoolIcon fontSize="small" />,
-    // The desktop Colleges menu (CollegesMegaMenu) shows the first three columns;
-    // the last link of each is its "more" link. The phone drawer shows all four.
     columns: [
       {
         title: 'By state',
@@ -163,8 +168,8 @@ const NAV_GROUPS: NavGroup[] = [
           { label: 'Delhi NCR', href: '/colleges/delhi' },
           { label: 'Kerala', href: '/colleges/kerala' },
           { label: 'Telangana', href: '/colleges/telangana' },
-          { label: 'All states', href: '/colleges#explore' },
         ],
+        more: { label: 'All states', href: '/colleges#explore' },
       },
       {
         title: 'By exam and counselling',
@@ -175,8 +180,8 @@ const NAV_GROUPS: NavGroup[] = [
           { label: 'JoSAA counselling', href: '/colleges/josaa' },
           { label: 'KEAM counselling', href: '/counseling/keam-arch' },
           { label: 'KCET counselling', href: '/colleges/counseling/kcet' },
-          { label: 'All counselling', href: '/colleges#explore' },
         ],
+        more: { label: 'All counselling', href: '/colleges#explore' },
       },
       {
         title: 'Rankings and filters',
@@ -186,20 +191,25 @@ const NAV_GROUPS: NavGroup[] = [
           { label: 'COA approved', href: '/colleges/accreditation/coa-approved' },
           { label: 'Government colleges', href: '/colleges/type/government' },
           { label: 'Private colleges', href: '/colleges/type/private' },
-          { label: 'Fee under \u20B93L', href: '/colleges/fees/below-3-lakhs' },
-          { label: 'All fee ranges', href: '/colleges#explore' },
+          { label: 'Fee under ₹3L', href: '/colleges/fees/below-3-lakhs' },
         ],
-      },
-      {
-        title: 'Your tools',
-        links: [
-          { label: 'Compare colleges', href: '/colleges/compare' },
-          { label: 'Saved colleges', href: '/colleges/saved' },
-          { label: 'Browse by city', href: '/colleges#explore' },
-          { label: 'College predictor', href: '/tools/college-predictor' },
-        ],
+        more: { label: 'All fee ranges', href: '/colleges#explore' },
       },
     ],
+    aside: {
+      title: 'Your tools',
+      cards: [
+        { label: 'Compare colleges', hint: 'Up to 4, side by side', href: '/colleges/compare', Icon: CompareArrowsIcon, tone: 'primary' },
+        { label: 'Saved colleges', hint: 'Your shortlist', href: '/colleges/saved', Icon: FavoriteBorderIcon, tone: 'secondary' },
+        { label: 'Browse by city', hint: 'Colleges near you', href: '/colleges#explore', Icon: PlaceOutlinedIcon, tone: 'success' },
+        { label: 'College predictor', hint: 'Colleges for your score', href: '/tools/college-predictor', Icon: CalculateOutlinedIcon, tone: 'warning' },
+      ],
+    },
+    footer: {
+      lead: 'B.Arch colleges across India',
+      text: 'with fees, seats and admission routes.',
+      cta: { label: 'Browse all colleges', href: '/colleges#browse' },
+    },
   },
   {
     key: 'examHub',
@@ -209,46 +219,58 @@ const NAV_GROUPS: NavGroup[] = [
       {
         title: 'NATA 2026',
         links: [
-          { label: 'NATA Online Coaching', href: '/nata-online-coaching', badge: 'TOP' },
-          { label: 'NATA 2026 Hub', href: '/nata-2026' },
           { label: 'Eligibility', href: '/nata-2026/eligibility' },
           { label: 'Important Dates', href: '/nata-2026/important-dates' },
           { label: 'Syllabus', href: '/nata-2026/syllabus' },
-          { label: 'Free Tools & Mocks', href: '/tools' },
-          { label: 'aiArchitek: AI Tools', href: '/aiarchitek' },
         ],
+        more: { label: 'NATA 2026 Hub', href: '/nata-2026' },
       },
       {
         title: 'JEE Main Paper 2',
         links: [
-          { label: 'JEE B.Arch Hub', href: '/jee-barch-hub' },
           { label: 'Paper 2A: B.Arch', href: '/jee-barch-hub#paper-2a' },
           { label: 'Paper 2B: B.Planning', href: '/jee-barch-hub#paper-2b' },
           { label: 'NITs / SPAs / IIITs', href: '/colleges/josaa' },
           { label: 'JEE Paper 2 Prep', href: '/jee-paper-2-preparation' },
         ],
+        more: { label: 'JEE B.Arch Hub', href: '/jee-barch-hub' },
       },
       {
         title: 'AAT 2026',
+        badge: 'NEW',
         links: [
-          { label: 'AAT 2026 Hub', href: '/aat-2026', badge: 'NEW' },
           { label: 'Eligibility', href: '/aat-2026#eligibility' },
           { label: 'Schedule', href: '/aat-2026#schedule' },
           { label: 'Syllabus (5 sections)', href: '/aat-2026#syllabus' },
           { label: 'Drawing Kit', href: '/aat-2026#drawing-kit' },
         ],
+        more: { label: 'AAT 2026 Hub', href: '/aat-2026' },
       },
       {
         title: 'PGETA 2026',
+        badge: 'NEW',
         links: [
-          { label: 'PGETA 2026 Hub', href: '/pgeta-2026', badge: 'NEW' },
           { label: 'Eligibility', href: '/pgeta-2026#eligibility' },
           { label: '3 Test Dates', href: '/pgeta-2026#schedule' },
           { label: 'Syllabus (4 modules)', href: '/pgeta-2026#exam-pattern' },
           { label: 'Fees + Scholarships', href: '/pgeta-2026#fees' },
         ],
+        more: { label: 'PGETA 2026 Hub', href: '/pgeta-2026' },
       },
     ],
+    aside: {
+      title: 'Prepare',
+      cards: [
+        { label: 'NATA Online Coaching', hint: 'Live classes for NATA and JEE', href: '/nata-online-coaching', Icon: CastForEducationOutlinedIcon, tone: 'primary', badge: 'TOP' },
+        { label: 'Free Tools & Mocks', hint: 'Practice tests and tools', href: '/tools', Icon: QuizOutlinedIcon, tone: 'success' },
+        { label: 'aiArchitek: AI Tools', hint: 'AI help for drawing and design', href: '/aiarchitek', Icon: AutoAwesomeOutlinedIcon, tone: 'secondary' },
+      ],
+    },
+    footer: {
+      lead: 'Every B.Arch entrance exam',
+      text: 'with dates, eligibility and syllabus.',
+      cta: { label: 'NATA vs JEE Paper 2', href: '/counseling/concepts/nata-vs-jee-paper-2' },
+    },
   },
   {
     key: 'counseling',
@@ -284,41 +306,69 @@ const NAV_GROUPS: NavGroup[] = [
           { label: 'AP B.Arch', href: '/counseling/ap-barch' },
           { label: 'TG B.Arch (Telangana)', href: '/counseling/tg-barch' },
           { label: 'UPTAC (Uttar Pradesh)', href: '/counseling/uptac-barch' },
-          { label: 'All 28 counsellings', href: '/counseling' },
         ],
       },
       {
-        title: 'Concepts & Tools',
+        title: 'Concepts',
         links: [
           { label: 'Freeze vs Float vs Slide', href: '/counseling/concepts/freeze-float-slide' },
           { label: 'JoSAA vs CSAB', href: '/counseling/concepts/josaa-vs-csab' },
           { label: 'AAT explained', href: '/counseling/concepts/aat-explained' },
           { label: 'NATA vs JEE Paper 2', href: '/counseling/concepts/nata-vs-jee-paper-2' },
           { label: '45% vs 50% PCM rule', href: '/counseling/concepts/eligibility-45-vs-50-rule' },
-          { label: 'College Predictor', href: '/tools/college-predictor' },
-          { label: 'Cutoff Calculator', href: '/tools/cutoff-calculator' },
         ],
       },
     ],
+    aside: {
+      title: 'Tools',
+      cards: [
+        { label: 'College Predictor', hint: 'Colleges for your score', href: '/tools/college-predictor', Icon: CalculateOutlinedIcon, tone: 'warning' },
+        { label: 'Cutoff Calculator', hint: 'Check where you stand', href: '/tools/cutoff-calculator', Icon: InsightsOutlinedIcon, tone: 'primary' },
+      ],
+    },
+    footer: {
+      lead: '28 B.Arch counsellings',
+      text: 'grouped by the exam they accept.',
+      cta: { label: 'All 28 counsellings', href: '/counseling' },
+    },
   },
   {
     key: 'about',
     labelKey: 'aboutNav',
     icon: <InfoOutlinedIcon fontSize="small" />,
-    columns: [
-      {
-        title: '',
-        links: [
-          { label: 'About Us', href: '/about' },
-          { label: 'Course fees', href: '/fees' },
-          { label: 'Student Reviews', href: '/testimonials' },
-          { label: 'Careers', href: '/careers' },
-          { label: 'Contact', href: '/contact' },
-        ],
-      },
-    ],
+    variant: 'cards',
+    columns: [],
+    aside: {
+      title: 'Neram Classes',
+      cards: [
+        { label: 'About Us', hint: 'Who we are and how we teach', href: '/about', Icon: InfoOutlinedIcon, tone: 'primary' },
+        { label: 'Course fees', hint: 'Plans and what each includes', href: '/fees', Icon: CurrencyRupeeIcon, tone: 'success' },
+        { label: 'Student Reviews', hint: 'What our students say', href: '/testimonials', Icon: StarBorderRoundedIcon, tone: 'secondary' },
+        { label: 'Careers', hint: 'Teach or work with us', href: '/careers', Icon: WorkOutlineIcon, tone: 'info' },
+        { label: 'Contact', hint: 'Talk to our team', href: '/contact', Icon: MailOutlineIcon, tone: 'warning' },
+      ],
+    },
   },
 ];
+
+/** Every link of a group, in reading order, for the phone drawer and the active check. */
+function groupLinks(group: NavGroup): NavLink[] {
+  const all: NavLink[] = [
+    ...group.columns.flatMap((col) => [
+      ...col.links,
+      ...(col.more ? [{ ...col.more, badge: col.more.badge ?? col.badge }] : []),
+    ]),
+    ...(group.aside?.cards ?? []).map(({ label, href, badge }) => ({ label, href, badge })),
+    ...(group.footer ? [group.footer.cta] : []),
+  ];
+  const seen = new Set<string>();
+  return all.filter((l) => {
+    const k = `${l.href}|${l.label}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -406,11 +456,46 @@ export default function Header() {
 
   const toggleMobileMenu = () => setMobileMenuOpen(!mobileMenuOpen);
 
+  // Desktop menus are non-modal: the header stays clickable above the scrim, so
+  // another trigger swaps the open menu in one click.
+  const triggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const focusPanelOnOpen = useRef(false);
+  const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
+
   const handleMenuOpen = (key: string, event: React.MouseEvent<HTMLElement>) => {
+    // detail is 0 when the click came from Enter or Space.
+    focusPanelOnOpen.current = event.detail === 0;
     setOpenMenu({ key, anchorEl: event.currentTarget });
   };
 
   const handleMenuClose = () => setOpenMenu(null);
+
+  const openKey = openMenu?.key ?? null;
+  useEffect(() => {
+    if (!openKey) return;
+    if (focusPanelOnOpen.current) {
+      focusPanelOnOpen.current = false;
+      requestAnimationFrame(() => {
+        document.getElementById(`nav-panel-${openKey}`)?.querySelector<HTMLElement>('a[href], input, button')?.focus();
+      });
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setOpenMenu(null);
+      triggerRefs.current[openKey]?.focus();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [openKey]);
+
+  useEffect(() => setOpenMenu(null), [pathname]);
+
+  const handleClickAway = (event: MouseEvent | TouchEvent) => {
+    // A trigger click is handled by the trigger itself (toggle or swap).
+    const target = event.target as Node;
+    if (Object.values(triggerRefs.current).some((el) => el?.contains(target))) return;
+    setOpenMenu(null);
+  };
 
   const toggleMobileGroup = (key: string) =>
     setExpandedGroup((prev) => (prev === key ? null : key));
@@ -418,12 +503,10 @@ export default function Header() {
   // Check if any link in a group matches the current path
   const isGroupActive = (group: NavGroup) =>
     (group.key === 'colleges' && /^\/colleges(\/|$)/.test(pathname)) ||
-    group.columns.some((col) =>
-      col.links.some(
-        (link) =>
-          pathname === link.href ||
-          (link.href !== '/' && pathname.startsWith(link.href)),
-      ),
+    groupLinks(group).some(
+      (link) =>
+        pathname === link.href ||
+        (link.href !== '/' && pathname.startsWith(link.href)),
     );
 
   return (
@@ -434,7 +517,7 @@ export default function Header() {
         sx={{
           top: 'var(--broadcast-banner-height, 0px)',
           transform:
-            scrollDirection === 'down' && !isAtTop && !mobileMenuOpen
+            scrollDirection === 'down' && !isAtTop && !mobileMenuOpen && !openMenu
               ? 'translateY(-100%)'
               : 'translateY(0)',
           transition:
@@ -501,8 +584,11 @@ export default function Header() {
                 const isActive = isGroupActive(group);
                 const isOpen = openMenu?.key === group.key;
                 return (
+                  <Box key={group.key} sx={{ display: 'contents' }}>
                   <Button
-                    key={group.key}
+                    ref={(el: HTMLButtonElement | null) => { triggerRefs.current[group.key] = el; }}
+                    aria-expanded={isOpen}
+                    aria-controls={`nav-panel-${group.key}`}
                     onClick={(e) => isOpen ? handleMenuClose() : handleMenuOpen(group.key, e)}
                     endIcon={
                       <KeyboardArrowDownIcon
@@ -521,7 +607,7 @@ export default function Header() {
                       py: 1,
                       fontWeight: isActive || isOpen ? 600 : 400,
                       opacity: isActive || isOpen ? 1 : 0.85,
-                      bgcolor: isOpen ? 'rgba(255,255,255,0.12)' : 'transparent',
+                      bgcolor: isOpen ? 'action.selected' : 'transparent',
                       borderRadius: '8px',
                       position: 'relative',
                       overflow: 'visible',
@@ -540,13 +626,71 @@ export default function Header() {
                       },
                       '&:hover': {
                         opacity: 1,
-                        bgcolor: 'rgba(255,255,255,0.1)',
+                        bgcolor: 'action.hover',
                         '&::after': { width: '60%' },
                       },
                     }}
                   >
                     {t(`nav.${group.labelKey}`)}
                   </Button>
+                  {/* Rendered right after its trigger (no portal) so Tab moves from the
+                      trigger into the panel, and the panel sits above the scrim. */}
+                  <Popper
+                    open={isOpen}
+                    anchorEl={isOpen ? openMenu?.anchorEl : null}
+                    placement="bottom-start"
+                    disablePortal
+                    transition
+                    modifiers={[
+                      { name: 'offset', options: { offset: [0, 8] } },
+                      { name: 'preventOverflow', options: { padding: 16 } },
+                      { name: 'flip', enabled: false },
+                    ]}
+                    sx={{ zIndex: 1 }}
+                  >
+                    {({ TransitionProps }) => (
+                      <Fade {...TransitionProps} timeout={reduceMotion ? 0 : 160} easing="cubic-bezier(0, 0, 0.2, 1)">
+                        <div>
+                          <ClickAwayListener onClickAway={handleClickAway}>
+                            <Paper
+                              id={`nav-panel-${group.key}`}
+                              elevation={8}
+                              sx={{
+                                borderRadius: 2,
+                                border: '1px solid',
+                                borderColor: 'divider',
+                                overflowX: 'hidden',
+                                overflowY: 'auto',
+                                maxHeight: 'calc(100vh - var(--broadcast-banner-height, 0px) - 88px)',
+                                maxWidth: '94vw',
+                              }}
+                            >
+                              {group.key === 'colleges' ? (
+                                <CollegesMegaMenu
+                                  columns={group.columns}
+                                  aside={group.aside}
+                                  footer={group.footer}
+                                  pathname={pathname}
+                                  onNavigate={handleMenuClose}
+                                />
+                              ) : (
+                                <MegaMenuPanel
+                                  label={t(`nav.${group.labelKey}`)}
+                                  columns={group.columns}
+                                  aside={group.aside}
+                                  footer={group.footer}
+                                  variant={group.variant}
+                                  pathname={pathname}
+                                  onNavigate={handleMenuClose}
+                                />
+                              )}
+                            </Paper>
+                          </ClickAwayListener>
+                        </div>
+                      </Fade>
+                    )}
+                  </Popper>
+                  </Box>
                 );
               })}
 
@@ -580,7 +724,7 @@ export default function Header() {
                   },
                   '&:hover': {
                     opacity: 1,
-                    bgcolor: 'rgba(255,255,255,0.1)',
+                    bgcolor: 'action.hover',
                     '&::after': { width: '60%' },
                   },
                 }}
@@ -694,123 +838,6 @@ export default function Header() {
           </Toolbar>
         </Box>
 
-        {/* ── Desktop Dropdown Popovers ── */}
-        {NAV_GROUPS.map((group) => (
-          <Popover
-            key={group.key}
-            open={openMenu?.key === group.key}
-            anchorEl={openMenu?.anchorEl ?? null}
-            onClose={handleMenuClose}
-            anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-            transformOrigin={{ vertical: 'top', horizontal: 'left' }}
-            disableScrollLock
-            PaperProps={{
-              elevation: 8,
-              sx: {
-                mt: 1,
-                borderRadius: 2,
-                border: '1px solid',
-                borderColor: 'divider',
-                overflow: 'visible',
-                minWidth: group.key === 'colleges' ? undefined : group.columns.length >= 4 ? 760 : 220,
-                maxWidth: '95vw',
-              },
-            }}
-          >
-            {group.key === 'colleges' ? (
-              <CollegesMegaMenu columns={group.columns} pathname={pathname} onNavigate={handleMenuClose} />
-            ) : (
-            <Box
-              sx={{
-                display: 'flex',
-                gap: 0,
-                p: 1,
-              }}
-            >
-              {group.columns.map((col, ci) => (
-                <Box
-                  key={ci}
-                  sx={{
-                    minWidth: 180,
-                    px: 1,
-                    borderRight: ci < group.columns.length - 1 ? '1px solid' : 'none',
-                    borderColor: 'divider',
-                  }}
-                >
-                  {col.title && (
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        display: 'block',
-                        fontWeight: 700,
-                        letterSpacing: '0.08em',
-                        textTransform: 'uppercase',
-                        color: 'text.disabled',
-                        px: 1.5,
-                        pt: 1,
-                        pb: 0.5,
-                        fontSize: '0.65rem',
-                      }}
-                    >
-                      {col.title}
-                    </Typography>
-                  )}
-                  {col.links.map((link) => {
-                    const isActive =
-                      pathname === link.href ||
-                      (link.href !== '/' && pathname.startsWith(link.href));
-                    return (
-                      <ListItemButton
-                        key={`${link.href}|${link.label}`}
-                        component={Link}
-                        href={link.href as any}
-                        onClick={handleMenuClose}
-                        selected={isActive}
-                        sx={{
-                          borderRadius: 1.5,
-                          py: 0.75,
-                          px: 1.5,
-                          mb: 0.25,
-                          minHeight: 36,
-                          '&.Mui-selected': {
-                            bgcolor: 'primary.50',
-                            color: 'primary.main',
-                            '&:hover': { bgcolor: 'primary.100' },
-                          },
-                        }}
-                      >
-                        <ListItemText
-                          primary={
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                              <Typography variant="body2" sx={{ fontWeight: isActive ? 600 : 400 }}>
-                                {link.label}
-                              </Typography>
-                              {link.badge && (
-                                <Chip
-                                  label={link.badge}
-                                  size="small"
-                                  sx={{
-                                    height: 16,
-                                    fontSize: '0.55rem',
-                                    fontWeight: 800,
-                                    bgcolor: '#FF6B35',
-                                    color: '#fff',
-                                    '& .MuiChip-label': { px: 0.5 },
-                                  }}
-                                />
-                              )}
-                            </Box>
-                          }
-                        />
-                      </ListItemButton>
-                    );
-                  })}
-                </Box>
-              ))}
-            </Box>
-            )}
-          </Popover>
-        ))}
 
         {/* ── Mobile Navigation Drawer ── */}
         <SwipeableDrawer
@@ -868,7 +895,7 @@ export default function Header() {
             {NAV_GROUPS.map((group) => {
               const isOpen = expandedGroup === group.key;
               const isActive = isGroupActive(group);
-              const allLinks = group.columns.flatMap((col) => col.links);
+              const allLinks = groupLinks(group);
 
               return (
                 <Box key={group.key}>
@@ -926,20 +953,7 @@ export default function Header() {
                                   <Typography variant="body2" sx={{ fontWeight: isLinkActive ? 600 : 400 }}>
                                     {link.label}
                                   </Typography>
-                                  {link.badge && (
-                                    <Chip
-                                      label={link.badge}
-                                      size="small"
-                                      sx={{
-                                        height: 16,
-                                        fontSize: '0.55rem',
-                                        fontWeight: 800,
-                                        bgcolor: '#FF6B35',
-                                        color: '#fff',
-                                        '& .MuiChip-label': { px: 0.5 },
-                                      }}
-                                    />
-                                  )}
+                                  {link.badge && <NavBadge label={link.badge} />}
                                 </Box>
                               }
                             />
@@ -1128,6 +1142,28 @@ export default function Header() {
           </Box>
         </SwipeableDrawer>
       </AppBar>
+
+      {/* Laptops: dim and lightly blur the page under an open menu. It starts below
+          the header, so the header stays sharp and another menu is one click away. */}
+      <Fade in={!!openMenu} timeout={reduceMotion ? 0 : { enter: 200, exit: 150 }} unmountOnExit>
+        <Box
+          data-testid="nav-scrim"
+          aria-hidden
+          onClick={handleMenuClose}
+          sx={{
+            display: { xs: 'none', md: 'block' },
+            position: 'fixed',
+            top: 'calc(var(--broadcast-banner-height, 0px) + 64px)',
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: (theme) => theme.zIndex.appBar - 1,
+            bgcolor: (theme) => alpha(theme.palette.grey[900], 0.4),
+            backdropFilter: 'blur(3px)',
+            WebkitBackdropFilter: 'blur(3px)',
+          }}
+        />
+      </Fade>
 
       {/* Spacer */}
       {searchMounted && <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />}

@@ -1,21 +1,14 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
-import {
-  Box,
-  Container,
-  Typography,
-  Grid,
-  Card,
-  CardContent,
-  Button,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Divider,
-} from '@neram/ui';
-import Link from 'next/link';
+import type { ReactNode } from 'react';
+import { Box, Typography } from '@neram/ui';
+import NorthEastIcon from '@mui/icons-material/NorthEast';
+import OndemandVideoOutlinedIcon from '@mui/icons-material/OndemandVideoOutlined';
+import SupportAgentOutlinedIcon from '@mui/icons-material/SupportAgentOutlined';
+import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
+import WorkspacePremiumOutlinedIcon from '@mui/icons-material/WorkspacePremiumOutlined';
+import { PageHero, Section, TopicCard, FeeCard, CtaBand, CtaButton, tokens as t } from '@/design-system';
+import { COURSE_FEES } from '@/lib/fees';
 
 const premiumFeatures = [
   {
@@ -60,251 +53,118 @@ const premiumFeatures = [
   },
 ];
 
-const plans = [
-  {
-    name: 'Crash Course',
-    price: '\u20B915,000',
-    duration: '3 Months',
-    features: [
-      'Intensive NATA revision',
-      '50+ mock tests',
-      'Daily drawing practice',
-      'Doubt clearing sessions',
-      'WhatsApp support',
-    ],
-    popular: false,
-  },
-  {
-    name: '1-Year Program',
-    price: '\u20B925,000',
-    duration: '12 Months',
-    features: [
-      'Complete NATA syllabus',
-      'Daily drawing practice',
-      '100+ mock tests',
-      'Personal mentor assigned',
-      'Recorded lectures',
-      'Performance analytics',
-      'Certificate included',
-    ],
-    popular: true,
-  },
-  {
-    name: '2-Year Program',
-    price: '\u20B930,000',
-    duration: '24 Months',
-    features: [
-      'Everything in 1-Year Program',
-      'Foundation + Advanced prep',
-      'NATA & JEE Paper 2 coverage',
-      '1-on-1 personal mentoring',
-      'All study materials included',
-      'Lifetime access to recordings',
-    ],
-    popular: false,
-  },
-];
+const CATEGORY_ICONS: Record<string, ReactNode> = {
+  'Learning Experience': <OndemandVideoOutlinedIcon />,
+  'Personal Support': <SupportAgentOutlinedIcon />,
+  'Practice & Assessment': <QuizOutlinedIcon />,
+  'Exclusive Benefits': <WorkspacePremiumOutlinedIcon />,
+};
+
+// What each plan lists on this page. Prices come from lib/fees.ts (the one
+// source for fees), so this page can never disagree with /fees or the home page.
+const PLAN_FEATURES: Record<string, string[]> = {
+  'crash-course': ['Intensive NATA revision', '50+ mock tests', 'Daily drawing practice', 'Doubt clearing sessions', 'WhatsApp support'],
+  '1-year-program': [
+    'Complete NATA syllabus',
+    'Daily drawing practice',
+    '100+ mock tests',
+    'Personal mentor assigned',
+    'Recorded lectures',
+    'Performance analytics',
+    'Certificate included',
+  ],
+  '2-year-program': [
+    'Everything in 1-Year Program',
+    'Foundation + Advanced prep',
+    'NATA & JEE Paper 2 coverage',
+    '1-on-1 personal mentoring',
+    'All study materials included',
+    'Lifetime access to recordings',
+  ],
+};
+const POPULAR = '1-year-program';
 
 export default function PremiumPageContent() {
   return (
     <Box>
-      {/* Hero Section */}
-      <Box
-        sx={{
-          py: { xs: 8, md: 12 },
-          background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)',
-          color: 'black',
-        }}
+      <PageHero
+        breadcrumb={[{ name: 'Home', href: '/' }, { name: 'Premium' }]}
+        eyebrow="Neram Classes Premium"
+        title={
+          <>
+            Unlock Your <em>Full Potential</em>
+          </>
+        }
+        lede="Get unlimited access to all courses, personal mentoring, and exclusive features designed to fast-track your success."
+        actions={<CtaButton href="/apply">Get Premium Access</CtaButton>}
+      />
+
+      <Section
+        id="premium-features"
+        rule={false}
+        header={{ eyebrow: "What's included", title: 'Premium Features', lede: 'Everything you need to excel in your exams' }}
       >
-        <Container maxWidth="lg">
-          <Grid container spacing={4} alignItems="center">
-            <Grid item xs={12} md={8}>
-              <Typography variant="overline" sx={{ fontWeight: 600, letterSpacing: 2 }}>
-                NERAM CLASSES PREMIUM
-              </Typography>
-              <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2.5rem', md: '3.5rem' } }}>
-                Unlock Your Full Potential
-              </Typography>
-              <Typography variant="h5" sx={{ mb: 4, opacity: 0.9 }}>
-                Get unlimited access to all courses, personal mentoring, and exclusive features
-                designed to fast-track your success.
-              </Typography>
-              <Button
-                variant="contained"
-                size="large"
-                component={Link}
-                href="/apply"
-                sx={{ bgcolor: 'black', color: 'white', '&:hover': { bgcolor: 'grey.900' } }}
-              >
-                Get Premium Access
-              </Button>
-            </Grid>
-          </Grid>
-        </Container>
-      </Box>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 260px), 1fr))', gap: 2 }}>
+          {premiumFeatures.map((section) => (
+            <TopicCard key={section.category} icon={CATEGORY_ICONS[section.category]} title={section.category} items={section.features} />
+          ))}
+        </Box>
+      </Section>
 
-      {/* Features Grid Section */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
-        <Container maxWidth="lg">
-          <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 2, fontWeight: 700 }}>
-            Premium Features
-          </Typography>
-          <Typography variant="h6" align="center" color="text.secondary" sx={{ mb: 6 }}>
-            Everything you need to excel in your exams
-          </Typography>
-
-          <Grid container spacing={4}>
-            {premiumFeatures.map((section, index) => (
-              <Grid item xs={12} sm={6} md={3} key={index}>
-                <Card sx={{ height: '100%', p: 3 }}>
-                  <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: 'primary.main' }}>
-                    {section.category}
-                  </Typography>
-                  <List dense>
-                    {section.features.map((feature, idx) => (
-                      <ListItem key={idx} sx={{ px: 0 }}>
-                        <ListItemIcon sx={{ minWidth: 28 }}>
-                          <Typography color="success.main">{'\u2713'}</Typography>
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={feature}
-                          primaryTypographyProps={{ variant: 'body2' }}
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        </Container>
-      </Box>
-
-      {/* Pricing Section */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
-        <Container maxWidth="lg">
-          <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 2, fontWeight: 700 }}>
-            Choose Your Plan
-          </Typography>
-          <Typography variant="h6" align="center" color="text.secondary" sx={{ mb: 6 }}>
-            Flexible plans to suit your learning needs
-          </Typography>
-
-          <Grid container spacing={4} justifyContent="center">
-            {plans.map((plan, index) => (
-              <Grid item xs={12} sm={6} md={4} key={index}>
-                <Card
-                  sx={{
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    border: plan.popular ? '2px solid' : '1px solid',
-                    borderColor: plan.popular ? 'primary.main' : 'divider',
-                    transform: plan.popular ? 'scale(1.05)' : 'none',
-                    position: 'relative',
-                    zIndex: plan.popular ? 1 : 0,
-                  }}
-                >
-                  {plan.popular && (
-                    <Box
-                      sx={{
-                        bgcolor: 'primary.main',
-                        color: 'white',
-                        py: 1,
-                        textAlign: 'center',
-                        fontWeight: 600,
-                      }}
-                    >
-                      MOST POPULAR
-                    </Box>
-                  )}
-                  <CardContent sx={{ flexGrow: 1, p: 4, textAlign: 'center' }}>
-                    <Typography variant="h5" gutterBottom sx={{ fontWeight: 600 }}>
-                      {plan.name}
-                    </Typography>
-                    <Typography variant="h3" component="div" sx={{ fontWeight: 700, my: 2 }}>
-                      {plan.price}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                      {plan.duration}
-                    </Typography>
-                    <Divider sx={{ my: 3 }} />
-                    <List dense>
-                      {plan.features.map((feature, idx) => (
-                        <ListItem key={idx} sx={{ px: 0, justifyContent: 'center' }}>
-                          <ListItemIcon sx={{ minWidth: 28 }}>
-                            <Typography color="success.main">{'\u2713'}</Typography>
-                          </ListItemIcon>
-                          <ListItemText
-                            primary={feature}
-                            primaryTypographyProps={{ variant: 'body2' }}
-                          />
-                        </ListItem>
-                      ))}
-                    </List>
-                    <Button
-                      variant={plan.popular ? 'contained' : 'outlined'}
-                      fullWidth
-                      size="large"
-                      component={Link}
-                      href="/apply"
-                      sx={{ mt: 3 }}
-                    >
-                      Get Started
-                    </Button>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        </Container>
-      </Box>
-
-      {/* Testimonial Section */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
-        <Container maxWidth="md">
-          <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 6, fontWeight: 700 }}>
-            What Premium Students Say
-          </Typography>
-          <Card sx={{ p: 4, textAlign: 'center' }}>
-            <Typography variant="h5" sx={{ fontStyle: 'italic', mb: 3 }}>
-              &quot;The premium membership was the best investment I made for my NATA preparation.
-              The personal mentoring and unlimited mock tests helped me score AIR 45.
-              Highly recommended for serious aspirants!&quot;
-            </Typography>
-            <Typography variant="h6" color="primary">
-              - Ananya Sharma, NATA 2024 AIR 45
-            </Typography>
-          </Card>
-        </Container>
-      </Box>
-
-      {/* CTA Section */}
-      <Box
-        sx={{
-          py: { xs: 6, md: 10 },
-          background: 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)',
-          textAlign: 'center',
-        }}
+      <Section
+        id="plans"
+        tone="white"
+        header={{ eyebrow: 'Plans', title: 'Choose Your Plan', lede: 'Flexible plans to suit your learning needs' }}
       >
-        <Container maxWidth="md">
-          <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700 }}>
-            Start Your Premium Journey Today
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 3, alignItems: 'stretch' }}>
+          {COURSE_FEES.map((plan) => (
+            <FeeCard
+              key={plan.slug}
+              component="article"
+              title={plan.name}
+              highlight={plan.slug === POPULAR}
+              badge={plan.slug === POPULAR ? 'Most Popular' : undefined}
+              label={plan.duration}
+              price={`₹${plan.singlePaymentDisplay ?? plan.priceDisplay}`}
+              priceNote={plan.singlePaymentDisplay ? `When paid at once, or ₹${plan.priceDisplay} in two parts` : 'Course fee'}
+              features={PLAN_FEATURES[plan.slug] ?? plan.highlights}
+              actions={
+                <CtaButton variant={plan.slug === POPULAR ? 'primary' : 'outline'} fullWidth href="/apply">
+                  Get Started
+                </CtaButton>
+              }
+            />
+          ))}
+        </Box>
+      </Section>
+
+      <Section id="premium-voice" width="narrow" header={{ eyebrow: 'Student voices', title: 'What Premium Students Say' }}>
+        <Box
+          component="figure"
+          sx={{ m: 0, borderLeft: `3px solid ${t.gold500}`, pl: { xs: 2.5, sm: 4 }, py: 1, display: 'flex', flexDirection: 'column', gap: 2 }}
+        >
+          <Typography component="blockquote" sx={{ m: 0, fontSize: { xs: '1.125rem', sm: '1.375rem' }, lineHeight: 1.5, fontWeight: 500 }}>
+            &quot;The premium membership was the best investment I made for my NATA preparation. The personal mentoring
+            and unlimited mock tests helped me score AIR 45. Highly recommended for serious aspirants!&quot;
           </Typography>
-          <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>
-            Join thousands of successful students who chose Premium
+          <Typography component="figcaption" sx={{ fontWeight: 700, color: t.gold800 }}>
+            Ananya Sharma, NATA 2024 AIR 45
           </Typography>
-          <Button
-            variant="contained"
-            size="large"
-            component={Link}
-            href="/apply"
-            sx={{ bgcolor: 'black', color: 'white', '&:hover': { bgcolor: 'grey.900' } }}
-          >
-            Get Premium Now
-          </Button>
-        </Container>
-      </Box>
+        </Box>
+      </Section>
+
+      <CtaBand
+        title="Start Your Premium Journey Today"
+        lede="Join thousands of successful students who chose Premium"
+        actions={
+          <>
+            <CtaButton href="/apply">Get Premium Now</CtaButton>
+            <CtaButton variant="link" href="/fees" endIcon={<NorthEastIcon aria-hidden />}>
+              See all fees
+            </CtaButton>
+          </>
+        }
+      />
     </Box>
   );
 }

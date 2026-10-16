@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<script src="_ds/modernist-e8c2d95e-abf3-4f3e-86df-2b557a2062d6/_ds_bundle.js"></script>
+<style>body{margin:0;background:#e9ecf0;color:#1A2027;font-family:Inter,sans-serif}a{color:#0b6bd6}a:hover{color:#e8a020}h1,h2,h3{font-family:Inter,sans-serif}</style>
+</helmet>
+<div style="padding:48px;display:flex;flex-direction:column;gap:64px;width:1400px;box-sizing:border-box">
+
+<section style="display:flex;flex-direction:column;gap:16px">
+  <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.2em;color:#8a5a05">SITE HEADER · ONE COMPONENT, EIGHT STATES</span>
+  <h1 style="margin:0;font-size:44px;line-height:1.05;font-weight:800;max-width:900px">Same shape for every visitor. Only the words change.</h1>
+  <p style="margin:0;max-width:820px;font-size:18px;line-height:1.55;color:#55606c">Today the header changes size and colour with each account state: orange Join Now, blue Continue/Track, green Pay and Go to App. The Login button turns into an avatar, and My Enrollment and the bell appear and disappear. The redesign keeps four fixed slots. The primary slot is always one gold button, and the account status is a small dot plus the button's wording.</p>
+</section>
+
+<section style="display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:32px;align-items:start">
+  <div style="display:flex;flex-direction:column;gap:10px">
+    <strong style="font-size:15px">Today (localhost:3010)</strong>
+    <img src="assets/header-today.png" alt="Current header screenshot" style="width:100%;border-radius:8px;border:1px solid #c5ccd4;display:block">
+  </div>
+  <div style="background:#fff;border:1px solid #E1E5EB;border-radius:8px;padding:24px;display:flex;flex-direction:column;gap:12px">
+    <strong style="font-size:17px">What breaks the brand today</strong>
+    <ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:8px;font-size:15px;line-height:1.5">
+      <li>White bar over a navy hero, with a Material-blue banner on top. That's three unrelated surfaces in the first 270px.</li>
+      <li>Orange Join Now (theme <code>secondary</code>) appears nowhere else on the site.</li>
+      <li>The split-pill colour flips to blue or green with application status (<code>HeaderCtaPill.tsx</code>).</li>
+      <li>Login is a plain text link. After sign-in it becomes a 36–40px avatar, and the gold-gradient ring for enrolled students is hard-coded.</li>
+      <li>My Enrollment and the bell arrive only for some states, so the nav reflows when you sign in.</li>
+    </ul>
+  </div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:20px">
+  <h2 style="margin:0;font-size:28px;font-weight:800">Desktop · state matrix</h2>
+  <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;border:1px solid #c5ccd4;border-radius:8px;overflow:hidden;background:#fff;font-size:14px">
+    <div style="padding:14px 16px;border-right:1px solid #E1E5EB"><strong>1 · Brand</strong><br><span style="color:#55606c">Wordmark, never moves</span></div>
+    <div style="padding:14px 16px;border-right:1px solid #E1E5EB"><strong>2 · Nav</strong><br><span style="color:#55606c">Identical for everyone</span></div>
+    <div style="padding:14px 16px;border-right:1px solid #E1E5EB"><strong>3 · Actions</strong><br><span style="color:#55606c">Outline secondary + gold primary</span></div>
+    <div style="padding:14px 16px"><strong>4 · Account</strong><br><span style="color:#55606c">Log in, or bell + 40px avatar</span></div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <sc-for list="{{ rows }}" as="r" hint-placeholder-count="8">
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;gap:12px;align-items:baseline;flex-wrap:wrap"><strong style="font-size:15px">{{ r.title }}</strong><span style="font-size:13px;line-height:1.4;color:#55606c">{{ r.note }}</span></div>
+        <div style="border-radius:8px;overflow:hidden;box-shadow:0 1px 0 #c5ccd4"><dc-import name="Site Header" state="{{ r.state }}" hint-size="100%,64px"></dc-import></div>
+      </div>
+    </sc-for>
+  </div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:14px">
+  <h2 style="margin:0;font-size:28px;font-weight:800">Light surface · pages without a dark hero</h2>
+  <p style="margin:0;font-size:15px;color:#55606c;max-width:820px">Used on articles, college and counselling detail pages, and legal pages. The slots, labels and gold primary are the same, so only the background changes.</p>
+  <div style="display:flex;flex-direction:column;gap:8px"><strong style="font-size:15px">Guest</strong><div style="border-radius:8px;overflow:hidden;box-shadow:0 1px 0 #c5ccd4"><dc-import name="Site Header" surface="light" state="guest" active="examHub" hint-size="100%,64px"></dc-import></div></div>
+  <div style="display:flex;flex-direction:column;gap:8px"><strong style="font-size:15px">Enrolled</strong><div style="border-radius:8px;overflow:hidden;box-shadow:0 1px 0 #c5ccd4"><dc-import name="Site Header" surface="light" state="enrolled" hint-size="100%,64px"></dc-import></div></div>
+  <div style="width:375px;border-radius:8px;overflow:hidden;box-shadow:0 1px 0 #c5ccd4"><dc-import name="Site Header" surface="light" state="draft" viewport="mobile" hint-size="375px,56px"></dc-import></div>
+</section>
+
+<section style="display:grid;grid-template-columns:minmax(0,1fr);gap:20px;align-items:start">
+  <div style="display:flex;flex-direction:column;gap:14px">
+    <h2 style="margin:0;font-size:28px;font-weight:800">Desktop · banner + mega menu open</h2>
+    <div style="position:relative;min-height:520px;background:#060d1f;border-radius:8px;overflow:hidden">
+      <dc-import name="Site Header" state="signedIn" banner="{{ true }}" open-menu="colleges" active="colleges" hint-size="100%,500px"></dc-import>
+    </div>
+  </div>
+  <div style="background:#fff;border:1px solid #E1E5EB;border-radius:8px;padding:20px;display:flex;flex-direction:column;gap:10px;font-size:14px;line-height:1.5;max-width:900px">
+    <strong style="font-size:15px">Changes</strong>
+    <span>Broadcast banner goes gold-on-navy instead of Material blue, and the dismiss target is 40px.</span>
+    <span>Active group: gold 2px underline. Open group: tinted fill and the chevron flips.</span>
+    <span>Mega panel stays white (it holds long lists) with gold.800 eyebrows and navy icon tiles, the same tiles used in ToolCard.</span>
+    <span>Inline search, the Ctrl K shortcut and hide-on-scroll-down behave as today.</span>
+  </div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:20px">
+  <h2 style="margin:0;font-size:28px;font-weight:800">Mobile · 375px</h2>
+  <div style="display:flex;gap:32px;flex-wrap:wrap;align-items:flex-start">
+    <div style="display:flex;flex-direction:column;gap:8px;width:375px"><strong style="font-size:14px">Guest, closed</strong><div style="width:375px;border-radius:8px;overflow:hidden;box-shadow:0 1px 0 #c5ccd4"><dc-import name="Site Header" state="guest" viewport="mobile" banner="{{ true }}" hint-size="375px,110px"></dc-import></div></div>
+    <div style="display:flex;flex-direction:column;gap:8px;width:375px"><strong style="font-size:14px">Guest, drawer open</strong><div style="width:375px;border-radius:8px;overflow:hidden;box-shadow:0 1px 0 #c5ccd4"><dc-import name="Site Header" state="guest" viewport="mobile" drawer-open="{{ true }}" hint-size="375px,560px"></dc-import></div></div>
+    <div style="display:flex;flex-direction:column;gap:8px;width:375px"><strong style="font-size:14px">Draft application, drawer open</strong><div style="width:375px;border-radius:8px;overflow:hidden;box-shadow:0 1px 0 #c5ccd4"><dc-import name="Site Header" state="draft" viewport="mobile" drawer-open="{{ true }}" hint-size="375px,600px"></dc-import></div></div>
+  </div>
+  <div style="display:flex;gap:32px;flex-wrap:wrap;align-items:flex-start">
+    <div style="display:flex;flex-direction:column;gap:8px;width:375px"><strong style="font-size:14px">Approved, closed</strong><div style="width:375px;border-radius:8px;overflow:hidden;box-shadow:0 1px 0 #c5ccd4"><dc-import name="Site Header" state="approved" viewport="mobile" hint-size="375px,56px"></dc-import></div></div>
+    <div style="display:flex;flex-direction:column;gap:8px;width:375px"><strong style="font-size:14px">Enrolled, drawer open</strong><div style="width:375px;border-radius:8px;overflow:hidden;box-shadow:0 1px 0 #c5ccd4"><dc-import name="Site Header" state="enrolled" viewport="mobile" drawer-open="{{ true }}" hint-size="375px,600px"></dc-import></div></div>
+    <div style="background:#fff;border:1px solid #E1E5EB;border-radius:8px;padding:20px;display:flex;flex-direction:column;gap:10px;font-size:14px;line-height:1.5;width:375px;box-sizing:border-box">
+      <strong style="font-size:15px">Phone rules</strong>
+      <span>The bar always shows search, a short primary label (Join, Continue, Track, Pay, App) and the menu button. Every target is at least 44px.</span>
+      <span>The drawer opens with an account card: name, status dot and status sentence, then full-width primary and secondary buttons. The nav comes after.</span>
+      <span>Free demo moves into the drawer on phones, matching today's 1100px rule.</span>
+    </div>
+  </div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:12px;max-width:900px">
+  <h2 style="margin:0;font-size:28px;font-weight:800">Implementation notes</h2>
+  <ul style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:8px;font-size:15px;line-height:1.55">
+    <li><code>getCtaConfig</code> and <code>ctaTone</code> collapse into one map: status → { label, short, href, dot }. Remove <code>toneSx</code> and the hard-coded greens.</li>
+    <li><code>HeaderCtaPill</code> splits into two plain buttons. One shape per job reads clearer than a split pill whose halves differ in colour.</li>
+    <li>The approved pulse goes. The green dot and the "Pay &amp; join" wording carry the urgency, and nothing moves for reduced-motion users.</li>
+    <li>Enrolled avatar: a solid gold.500 ring replaces <code>GOLD_GRADIENT</code>. My Enrollment takes the secondary slot, so the nav never reflows.</li>
+    <li>The account slot reserves 92px while auth loads, so the bar doesn't jump.</li>
+    <li>Below 1100px the secondary button shows its icon only (label in the tooltip), so all five nav groups fit down to 900px. Below 900px the phone bar takes over. Nav links are never clipped.</li>
+  </ul>
+</section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    return { rows: [
+      { state: 'guest', title: 'Guest', note: 'Free demo + Join Now + Log in' },
+      { state: 'signedIn', title: 'Signed in, no application', note: 'Log in becomes bell + avatar. Nothing else moves.' },
+      { state: 'demoBooked', title: 'Demo booked', note: 'Secondary becomes My demo · day' },
+      { state: 'draft', title: 'Application draft', note: 'Primary: Continue application · amber dot' },
+      { state: 'submitted', title: 'Submitted / under review', note: 'Primary: Track application · blue dot' },
+      { state: 'approved', title: 'Approved', note: 'Demo hidden. Primary: Pay & join · green dot' },
+      { state: 'enrolled', title: 'Enrolled', note: 'My enrollment + Go to App · gold avatar ring' },
+      { state: 'applyPage', title: 'On /apply', note: 'Primary becomes an outline Need help?' },
+    ] };
+  }
+}
+</script>
+</body>
+</html>

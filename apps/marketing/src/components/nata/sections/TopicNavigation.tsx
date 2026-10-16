@@ -224,7 +224,7 @@ export default function TopicNavigation({ locale }: TopicNavigationProps) {
             <Typography
               variant="h2"
               sx={{
-                fontFamily: '"Poppins", "Plus Jakarta Sans", sans-serif',
+                fontFamily: 'inherit',
                 fontWeight: 800,
                 fontSize: { xs: '1.6rem', sm: '2rem', md: '2.4rem' },
                 lineHeight: 1.2,

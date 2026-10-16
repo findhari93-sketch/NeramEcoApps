@@ -23,8 +23,6 @@ export {
   createToolsAppTheme,
   createNexusTheme,
   createAdminTheme,
-  marketingLightTheme,
-  marketingDarkTheme,
   toolsAppLightTheme,
   toolsAppDarkTheme,
   nexusLightTheme,
@@ -46,6 +44,16 @@ export type { ThemeMode, ThemeContextType, ThemeProviderProps } from './provider
 export { neramTokens, neramFontFamilies, neramShadows } from './neram-2026';
 export type { NeramTokens, NeramFontFamilies, NeramShadows } from './neram-2026';
 export { neramaiArchitekDarkTheme, neramaiArchitekLightTheme } from './variants-2026';
+
+// Marketing site design system 2026 (one token set, two surfaces)
+export { siteTokens } from './site-tokens';
+export type { SiteTokens } from './site-tokens';
+export {
+  siteLightTheme,
+  siteDarkTheme,
+  siteLightTheme as marketingLightTheme,
+  siteDarkTheme as marketingDarkTheme,
+} from './site-2026';
 
 // Transferable Color Configs
 export { nexusColors } from './brand-2025';

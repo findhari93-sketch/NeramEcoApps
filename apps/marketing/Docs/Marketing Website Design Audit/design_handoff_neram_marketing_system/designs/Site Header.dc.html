@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=block">
+<script src="_ds/modernist-e8c2d95e-abf3-4f3e-86df-2b557a2062d6/_ds_bundle.js"></script>
+<style>
+@font-face{font-family:'Museo';src:url('assets/fonts/Museo300-Regular.woff') format('woff');font-weight:300;font-display:swap}
+@font-face{font-family:'Museo';src:url('assets/fonts/Museo700-Regular.woff') format('woff');font-weight:700;font-display:swap}
+</style>
+</helmet>
+<div ref="{{ rootRef }}" style="position:relative;font-family:Inter,'Noto Sans Tamil',sans-serif;width:100%">
+  <sc-if value="{{ showBanner }}" hint-placeholder-val="{{ false }}">
+    <div style="background:#e8a020;color:#060d1f;display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 48px 10px 16px;position:relative;font-size:14px;font-weight:600;line-height:1.35;text-align:left">
+      <span class="material-symbols-outlined" style="font-size:20px;flex-shrink:0">campaign</span>
+      <span>The official portal for NATA 2026 will be launching soon. <a href="#" style="color:#060d1f;text-decoration:underline;font-weight:700">Official link</a></span>
+      <button aria-label="Dismiss" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);width:40px;height:40px;border:none;background:transparent;color:#060d1f;cursor:pointer;display:flex;align-items:center;justify-content:center"><span class="material-symbols-outlined" style="font-size:20px">close</span></button>
+    </div>
+  </sc-if>
+
+  <header style="{{ hdr }}">
+    <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+      <div style="max-width:1680px;margin:0 auto;padding:0 24px;height:64px;display:flex;align-items:center;gap:8px">
+        <a href="#" style="{{ brandStyle }}">
+          <span style="font-family:Museo,sans-serif;font-size:20px;line-height:1.2"><span style="font-weight:700">neram</span><span style="font-weight:300">Classes</span></span>
+          <span style="display:flex;align-items:center;gap:3px;font-size:9px;line-height:1"><em style="{{ mutedStyle }}">Supported by</em><span style="display:grid;grid-template-columns:4px 4px;gap:1px"><span style="width:4px;height:4px;background:#F25022"></span><span style="width:4px;height:4px;background:#7FBA00"></span><span style="width:4px;height:4px;background:#00A4EF"></span><span style="width:4px;height:4px;background:#FFB900"></span></span><strong style="font-size:9.6px">Microsoft</strong></span>
+        </a>
+        <nav style="flex:1;min-width:0;display:flex;align-items:center;gap:0;height:44px">
+          <sc-for list="{{ groups }}" as="g" hint-placeholder-count="5">
+            <button aria-expanded="{{ g.open }}" style="{{ g.style }}">{{ g.label }}<sc-if value="{{ g.menu }}" hint-placeholder-val="{{ true }}"><span class="material-symbols-outlined" style="{{ g.chev }}">keyboard_arrow_down</span></sc-if></button>
+          </sc-for>
+          <sc-if value="{{ hasMore }}" hint-placeholder-val="{{ false }}"><button style="{{ moreStyle }}">More<span class="material-symbols-outlined" style="font-size:18px">keyboard_arrow_down</span></button></sc-if>
+        </nav>
+        <button aria-label="Search (Ctrl K)" style="{{ iconBtn }}"><span class="material-symbols-outlined">search</span></button>
+        <sc-if value="{{ secondary }}" hint-placeholder-val="{{ true }}">
+          <a href="#" title="{{ secondary.label }}" aria-label="{{ secondary.label }}" style="{{ secondaryStyle }}" style-hover="border-color:#e8a020"><span class="material-symbols-outlined" style="font-size:20px">{{ secondary.icon }}</span><sc-if value="{{ showSecondaryLabel }}" hint-placeholder-val="{{ true }}">{{ secondary.label }}</sc-if></a>
+        </sc-if>
+        <a href="#" style="{{ primaryStyle }}"><sc-if value="{{ primary.dot }}" hint-placeholder-val="{{ false }}"><span style="{{ dotStyle }}"></span></sc-if>{{ primaryDesktopLabel }}<span class="material-symbols-outlined" style="font-size:18px">{{ primary.icon }}</span></a>
+        <sc-if value="{{ signedIn }}" hint-placeholder-val="{{ false }}">
+          <button aria-label="Notifications" style="{{ bellBtn }}"><span class="material-symbols-outlined">notifications</span><sc-if value="{{ hasUnread }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;top:9px;right:10px;width:8px;height:8px;border-radius:4px;background:#e8a020;border:2px solid #060d1f"></span></sc-if></button>
+          <button aria-label="Account" style="{{ avatarRing }}"><span style="width:32px;height:32px;border-radius:16px;background:#122040;color:#f5f0e8;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">P</span></button>
+        </sc-if>
+        <sc-if value="{{ signedOut }}" hint-placeholder-val="{{ true }}">
+          <button style="{{ loginStyle }}">Log in</button>
+        </sc-if>
+      </div>
+    </sc-if>
+
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:0 8px 0 16px;height:56px;display:flex;align-items:center;gap:4px">
+        <a href="#" style="{{ brandStyleM }}">
+          <span style="font-family:Museo,sans-serif;font-size:18px;line-height:1.2"><span style="font-weight:700">neram</span><span style="font-weight:300">Classes</span></span>
+          <span style="display:flex;align-items:center;gap:3px;font-size:8.5px;line-height:1"><em style="{{ mutedStyle }}">Supported by</em><strong>Microsoft</strong></span>
+        </a>
+        <span style="flex:1"></span>
+        <button aria-label="Search" style="{{ iconBtn }}"><span class="material-symbols-outlined">search</span></button>
+        <a href="#" style="{{ primaryStyleMobile }}"><sc-if value="{{ primary.dot }}" hint-placeholder-val="{{ false }}"><span style="{{ dotStyle }}"></span></sc-if>{{ primary.short }}</a>
+        <button aria-label="Menu" aria-expanded="{{ drawerOpen }}" style="{{ iconBtn }}"><span class="material-symbols-outlined">{{ menuIcon }}</span></button>
+      </div>
+    </sc-if>
+  </header>
+
+  <sc-if value="{{ showMega }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;left:24px;right:24px;max-width:1040px;z-index:20;margin-top:8px;background:#fff;color:#1A2027;border:1px solid #E1E5EB;border-radius:8px;box-shadow:0 24px 48px rgba(6,13,31,0.28);overflow:hidden">
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr)) minmax(220px,0.9fr)">
+        <div style="padding:24px;display:flex;flex-direction:column;gap:10px">
+          <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.15em;color:#8a5a05">BY STATE</span>
+          <a href="#" style="text-decoration:none;color:#1A2027;font-size:15px">Tamil Nadu</a><a href="#" style="text-decoration:none;color:#1A2027;font-size:15px">Karnataka</a><a href="#" style="text-decoration:none;color:#1A2027;font-size:15px">Maharashtra</a><a href="#" style="text-decoration:none;color:#1A2027;font-size:15px">Delhi NCR</a><a href="#" style="text-decoration:none;color:#1A2027;font-size:15px">Kerala</a>
+          <a href="#" style="text-decoration:none;color:#1A2027;font-size:14px;font-weight:700;display:flex;align-items:center;gap:4px;margin-top:4px">All states<span class="material-symbols-outlined" style="font-size:16px">arrow_forward</span></a>
+        </div>
+        <div style="padding:24px;display:flex;flex-direction:column;gap:10px;border-left:1px solid #E1E5EB">
+          <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.15em;color:#8a5a05">BY EXAM</span>
+          <a href="#" style="text-decoration:none;color:#1A2027;font-size:15px">NATA colleges</a><a href="#" style="text-decoration:none;color:#1A2027;font-size:15px">JEE Main Paper 2 colleges</a><a href="#" style="text-decoration:none;color:#1A2027;font-size:15px">TNEA counselling</a><a href="#" style="text-decoration:none;color:#1A2027;font-size:15px">JoSAA counselling</a><a href="#" style="text-decoration:none;color:#1A2027;font-size:15px">KEAM counselling</a>
+          <a href="#" style="text-decoration:none;color:#1A2027;font-size:14px;font-weight:700;display:flex;align-items:center;gap:4px;margin-top:4px">All counselling<span class="material-symbols-outlined" style="font-size:16px">arrow_forward</span></a>
+        </div>
+        <div style="padding:24px;display:flex;flex-direction:column;gap:10px;border-left:1px solid #E1E5EB">
+          <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.15em;color:#8a5a05">RANKINGS</span>
+          <a href="#" style="text-decoration:none;color:#1A2027;font-size:15px">NIRF Architecture</a><a href="#" style="text-decoration:none;color:#1A2027;font-size:15px">COA approved</a><a href="#" style="text-decoration:none;color:#1A2027;font-size:15px">Government colleges</a><a href="#" style="text-decoration:none;color:#1A2027;font-size:15px">Private colleges</a><a href="#" style="text-decoration:none;color:#1A2027;font-size:15px">Fee under ₹3L</a>
+          <a href="#" style="text-decoration:none;color:#1A2027;font-size:14px;font-weight:700;display:flex;align-items:center;gap:4px;margin-top:4px">All fee ranges<span class="material-symbols-outlined" style="font-size:16px">arrow_forward</span></a>
+        </div>
+        <div style="padding:20px;background:#FAFBFC;border-left:1px solid #E1E5EB;display:flex;flex-direction:column;gap:8px">
+          <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.15em;color:#55606c">YOUR TOOLS</span>
+          <a href="#" style="text-decoration:none;display:flex;gap:10px;align-items:center;padding:10px;border-radius:8px;color:#1A2027" style-hover="background:#fff;color:#1A2027"><span style="width:36px;height:36px;border-radius:8px;background:#060d1f;color:#e8a020;display:flex;align-items:center;justify-content:center;flex-shrink:0"><span class="material-symbols-outlined" style="font-size:20px">compare_arrows</span></span><span style="display:flex;flex-direction:column"><strong style="font-size:14px">Compare colleges</strong><span style="font-size:12px;color:#55606c">Up to 4, side by side</span></span></a>
+          <a href="#" style="text-decoration:none;display:flex;gap:10px;align-items:center;padding:10px;border-radius:8px;color:#1A2027" style-hover="background:#fff;color:#1A2027"><span style="width:36px;height:36px;border-radius:8px;background:#060d1f;color:#e8a020;display:flex;align-items:center;justify-content:center;flex-shrink:0"><span class="material-symbols-outlined" style="font-size:20px">favorite</span></span><span style="display:flex;flex-direction:column"><strong style="font-size:14px">Saved colleges</strong><span style="font-size:12px;color:#55606c">Your shortlist</span></span></a>
+          <a href="#" style="text-decoration:none;display:flex;gap:10px;align-items:center;padding:10px;border-radius:8px;color:#1A2027" style-hover="background:#fff;color:#1A2027"><span style="width:36px;height:36px;border-radius:8px;background:#060d1f;color:#e8a020;display:flex;align-items:center;justify-content:center;flex-shrink:0"><span class="material-symbols-outlined" style="font-size:20px">calculate</span></span><span style="display:flex;flex-direction:column"><strong style="font-size:14px">College predictor</strong><span style="font-size:12px;color:#55606c">Colleges for your score</span></span></a>
+        </div>
+      </div>
+      <div style="border-top:1px solid #E1E5EB;padding:14px 24px;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:14px;color:#55606c"><span><strong style="color:#1A2027">B.Arch colleges across India</strong> with fees, seats and admission routes.</span><a href="#" style="text-decoration:none;color:#1A2027;font-weight:700">Browse all colleges →</a></div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ showDrawer }}" hint-placeholder-val="{{ false }}">
+    <div style="background:#fff;color:#1A2027;display:flex;flex-direction:column;border-bottom:1px solid #E1E5EB">
+      <div style="padding:16px;display:flex;flex-direction:column;gap:12px;border-bottom:1px solid #E1E5EB;background:#FAFBFC">
+        <sc-if value="{{ signedIn }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;gap:12px"><span style="{{ avatarRing }}"><span style="width:32px;height:32px;border-radius:16px;background:#122040;color:#f5f0e8;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px">P</span></span><span style="display:flex;flex-direction:column;min-width:0"><strong style="font-size:16px">Priya Raman</strong><span style="font-size:13px;color:#55606c;display:flex;align-items:center;gap:6px"><sc-if value="{{ primary.dot }}" hint-placeholder-val="{{ false }}"><span style="{{ dotStyle }}"></span></sc-if>{{ statusText }}</span></span></div>
+        </sc-if>
+        <a href="#" style="{{ primaryStyleBlock }}"><span style="display:flex;align-items:center;gap:8px">{{ primary.label }}</span><span class="material-symbols-outlined" style="font-size:20px">{{ primary.icon }}</span></a>
+        <sc-if value="{{ secondary }}" hint-placeholder-val="{{ true }}">
+          <a href="#" style="text-decoration:none;display:flex;align-items:center;gap:8px;min-height:48px;padding:0 16px;border:1px solid #1A2027;border-radius:8px;color:#1A2027;font-weight:600;font-size:15px;box-sizing:border-box"><span class="material-symbols-outlined" style="font-size:20px">{{ secondary.icon }}</span>{{ secondary.label }}</a>
+        </sc-if>
+        <sc-if value="{{ signedOut }}" hint-placeholder-val="{{ true }}">
+          <button style="min-height:44px;border:none;background:transparent;color:#1A2027;font-weight:600;font-size:15px;text-align:left;padding:0;text-decoration:underline">Log in to see your application</button>
+        </sc-if>
+      </div>
+      <sc-for list="{{ drawerGroups }}" as="g" hint-placeholder-count="5">
+        <button style="display:flex;align-items:center;justify-content:space-between;min-height:52px;padding:0 16px;border:none;border-bottom:1px solid #E1E5EB;background:#fff;color:#1A2027;font-size:16px;font-weight:600;text-align:left"><span style="display:flex;align-items:center;gap:12px"><span class="material-symbols-outlined" style="font-size:20px;color:#55606c">{{ g.icon }}</span>{{ g.label }}</span><span class="material-symbols-outlined" style="font-size:20px;color:#55606c">{{ g.trail }}</span></button>
+      </sc-for>
+      <div style="padding:12px 16px;display:flex;align-items:center;justify-content:space-between;font-size:14px;color:#55606c"><span style="display:flex;align-items:center;gap:8px"><span class="material-symbols-outlined" style="font-size:20px">language</span>English</span><sc-if value="{{ signedIn }}" hint-placeholder-val="{{ false }}"><button style="min-height:44px;border:none;background:transparent;color:#55606c;font-size:14px">Sign out</button></sc-if></div>
+    </div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1280,&quot;height&quot;:120},&quot;surface&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;dark&quot;,&quot;light&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;state&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;guest&quot;,&quot;signedIn&quot;,&quot;demoBooked&quot;,&quot;draft&quot;,&quot;submitted&quot;,&quot;approved&quot;,&quot;enrolled&quot;,&quot;applyPage&quot;],&quot;default&quot;:&quot;guest&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;viewport&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;desktop&quot;,&quot;mobile&quot;],&quot;default&quot;:&quot;desktop&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;active&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;none&quot;,&quot;colleges&quot;,&quot;examHub&quot;,&quot;counseling&quot;,&quot;about&quot;,&quot;tools&quot;],&quot;default&quot;:&quot;none&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;openMenu&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;none&quot;,&quot;colleges&quot;],&quot;default&quot;:&quot;none&quot;,&quot;tsType&quot;:&quot;string&quot;},&quot;banner&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;},&quot;drawerOpen&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { w: 1280 };
+  rootRef = React.createRef();
+  componentDidMount() {
+    const el = this.rootRef.current; if (!el) return;
+    const set = () => { const w = el.getBoundingClientRect().width; if (w && Math.abs(w - this.state.w) > 1) this.setState({ w }); };
+    set(); this.ro = new ResizeObserver(set); this.ro.observe(el);
+  }
+  componentWillUnmount() { this.ro && this.ro.disconnect(); }
+  renderVals() {
+    const p = this.props;
+    const state = p.state ?? 'guest';
+    const w = this.state.w;
+    const mobile = p.viewport === 'mobile' || (p.viewport !== 'desktop' && w < 900) || (p.viewport === undefined && w < 900);
+    const tier = w >= 1240 ? 'full' : w >= 1060 ? 'compact' : 'tight';
+    const active = p.active ?? 'none';
+    const openMenu = p.openMenu ?? 'none';
+    const light = (p.surface ?? 'dark') === 'light';
+    const INK = light ? '#1A2027' : '#f5f0e8';
+    const GREEN = '#3fae5a', BLUE = '#5aa9ff', AMBER = '#f4bf5a';
+    const S = {
+      guest:      { secondary: { label: 'Free demo', icon: 'videocam' }, primary: { label: 'Join Now', short: 'Join', icon: 'arrow_forward' }, signedIn: false, status: '' },
+      signedIn:   { secondary: { label: 'Free demo', icon: 'videocam' }, primary: { label: 'Join Now', short: 'Join', icon: 'arrow_forward' }, signedIn: true, status: 'No application yet' },
+      demoBooked: { secondary: { label: 'My demo · Tue', icon: 'event_available' }, primary: { label: 'Join Now', short: 'Join', icon: 'arrow_forward' }, signedIn: true, status: 'Demo booked for Tuesday' },
+      draft:      { secondary: { label: 'Free demo', icon: 'videocam' }, primary: { label: 'Continue application', short: 'Continue', icon: 'arrow_forward', dot: AMBER }, signedIn: true, status: 'Application draft · step 2 of 4' },
+      submitted:  { secondary: { label: 'Free demo', icon: 'videocam' }, primary: { label: 'Track application', short: 'Track', icon: 'arrow_forward', dot: BLUE }, signedIn: true, status: 'Application under review' },
+      approved:   { secondary: null, primary: { label: 'Pay & join', short: 'Pay', icon: 'arrow_forward', dot: GREEN }, signedIn: true, status: 'Approved · pay to confirm your seat', unread: true },
+      enrolled:   { secondary: { label: 'My enrollment', icon: 'badge' }, primary: { label: 'Go to App', short: 'App', icon: 'north_east', dot: GREEN }, signedIn: true, status: 'Enrolled student', unread: true, gold: true },
+      applyPage:  { secondary: null, primary: { label: 'Need help?', short: 'Help', icon: 'help', ghost: true }, signedIn: true, status: 'Filling your application' },
+    }[state] || {};
+    const prim = S.primary;
+    const ghost = !!prim.ghost;
+    const baseBtn = { display: 'inline-flex', alignItems: 'center', gap: 8, borderRadius: 8, fontWeight: 700, whiteSpace: 'nowrap', flexShrink: 0, boxSizing: 'border-box', textDecoration: 'none', background: ghost ? 'transparent' : '#e8a020', color: ghost ? INK : '#060d1f', border: ghost ? (light ? '1px solid #c5ccd4' : '1px solid rgba(245,240,232,0.24)') : 'none' };
+    const allGroups = [
+      { key: 'colleges', label: 'Colleges', menu: true }, { key: 'examHub', label: 'Exam Hub', menu: true },
+      { key: 'counseling', label: 'Counseling', menu: true }, { key: 'about', label: 'About', menu: true }, { key: 'tools', label: 'Free Tools', menu: false },
+    ].map(g => {
+      const open = openMenu === g.key, on = active === g.key;
+      return { ...g, open, chev: { fontSize: 18, transition: 'transform 200ms', transform: open ? 'rotate(180deg)' : 'none' },
+        style: { display: 'inline-flex', alignItems: 'center', gap: 2, height: 44, padding: '0 10px', border: 'none', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, font: (on || open ? '600' : '500') + ' 15px Inter, sans-serif', color: INK, opacity: on || open ? 1 : 0.82, background: open ? (light ? '#F1F3F6' : 'rgba(255,255,255,0.08)') : 'transparent', boxShadow: on ? 'inset 0 -2px 0 #e8a020' : 'none' } };
+    });
+    const groups = tier === 'tight' ? allGroups.slice(0, 2) : allGroups;
+    const icons = { colleges: 'school', examHub: 'menu_book', counseling: 'trending_up', about: 'info', tools: 'construction' };
+    return {
+      showBanner: p.banner ?? false, rootRef: this.rootRef, primaryDesktopLabel: tier === 'full' ? prim.label : prim.label.replace(' application', ''), showSecondaryLabel: tier === 'full', hasMore: !mobile && tier === 'tight',
+      moreStyle: { display: 'inline-flex', alignItems: 'center', gap: 2, height: 44, padding: '0 10px', border: 'none', borderRadius: 8, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0, font: '500 15px Inter, sans-serif', color: INK, opacity: 0.82, background: 'transparent' }, isDesktop: !mobile, isMobile: mobile,
+      groups, drawerGroups: allGroups.map(g => ({ ...g, icon: icons[g.key], trail: g.menu ? 'expand_more' : 'chevron_right' })),
+      secondary: S.secondary, primary: prim, signedIn: S.signedIn, signedOut: !S.signedIn, hasUnread: !!S.unread, statusText: S.status,
+      primaryStyle: { ...baseBtn, height: 44, padding: '0 16px', fontSize: 14, marginLeft: 8 },
+      primaryStyleMobile: { ...baseBtn, height: 40, padding: '0 14px', fontSize: 14, gap: 6 },
+      primaryStyleBlock: { ...baseBtn, background: ghost ? '#fff' : '#e8a020', color: '#060d1f', border: ghost ? '1px solid #1A2027' : 'none', display: 'flex', justifyContent: 'space-between', minHeight: 52, padding: '0 16px', fontSize: 16 },
+      dotStyle: { width: 8, height: 8, borderRadius: 4, background: prim.dot || 'transparent', boxShadow: '0 0 0 2px rgba(6,13,31,0.35)', flexShrink: 0 },
+      avatarRing: { width: 40, height: 40, borderRadius: 20, border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: S.gold ? '#e8a020' : (light ? '#E1E5EB' : 'rgba(255,255,255,0.16)'), marginLeft: 2 },
+      hdr: { background: light ? '#fff' : '#060d1f', color: INK, borderBottom: light ? '1px solid #E1E5EB' : '1px solid rgba(255,255,255,0.08)' },
+      brandStyle: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', color: INK, flexShrink: 0, marginRight: 16, textDecoration: 'none' },
+      brandStyleM: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', color: INK, flexShrink: 0, textDecoration: 'none' },
+      mutedStyle: { color: light ? '#55606c' : 'rgba(245,240,232,0.62)' },
+      iconBtn: { width: 44, height: 44, borderRadius: 8, border: 'none', background: 'transparent', color: INK, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 },
+      bellBtn: { position: 'relative', width: 44, height: 44, borderRadius: 8, border: 'none', background: 'transparent', color: INK, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0, marginLeft: 4 },
+      loginStyle: { whiteSpace: 'nowrap', height: 44, padding: '0 12px', border: 'none', background: 'transparent', color: INK, fontSize: 14, fontWeight: 600, cursor: 'pointer', flexShrink: 0, borderRadius: 8, marginLeft: 4 },
+      secondaryStyle: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, height: 44, minWidth: 44, padding: tier === 'full' ? '0 14px' : '0 11px', border: light ? '1px solid #c5ccd4' : '1px solid rgba(245,240,232,0.24)', borderRadius: 8, color: INK, fontSize: 14, fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0, boxSizing: 'border-box', textDecoration: 'none' },
+      showMega: !mobile && openMenu === 'colleges',
+      drawerOpen: mobile && !!p.drawerOpen, showDrawer: mobile && !!p.drawerOpen, menuIcon: p.drawerOpen ? 'close' : 'menu',
+    };
+  }
+}
+</script>
+</body>
+</html>

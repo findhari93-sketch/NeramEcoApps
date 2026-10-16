@@ -2,7 +2,7 @@ import { Metadata } from 'next';
 import { NextIntlClientProvider } from 'next-intl';
 import { getMessages, setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
-import { Poppins, Inter, Noto_Sans_Tamil } from 'next/font/google';
+import { Inter, Noto_Sans_Tamil } from 'next/font/google';
 import { ThemeRegistry, marketingLightTheme, marketingDarkTheme } from '@neram/ui';
 import { locales } from '@/i18n';
 import AuthProvider from '@/components/AuthProvider';
@@ -16,17 +16,10 @@ import { generateOrganizationSchema } from '@/lib/seo/schemas';
 import { LAYOUT_CLIENT_MESSAGES, pickMessages } from '@/lib/i18n/client-messages';
 import '@/styles/globals.css';
 
-// Font loading - reduced to 2-3 fonts for faster FCP on 3G
-// Removed: Cormorant_Garamond, DM_Sans (→ Inter), Space_Mono (→ system monospace)
-// Poppins is only reached through var(--font-poppins) (home page headings at
-// 600 and 700); the MUI theme names "Poppins" literally, which never matches the
-// next/font family, so 500 was downloaded and preloaded for nothing.
-const poppins = Poppins({
-  subsets: ['latin'],
-  weight: ['600', '700'],
-  display: 'swap',
-  variable: '--font-poppins',
-});
+// Font loading: Inter + system monospace, plus Noto Sans Tamil for `ta`.
+// The 2026 design system (siteTokens in @neram/ui) uses Inter everywhere and
+// one monospace stack; Museo (globals.css) is for the wordmark only.
+// Removed: Cormorant_Garamond, DM_Sans, Space_Mono, Poppins.
 
 // Inter is a variable font: one file covers every weight, instead of four
 // static weight files that were each preloaded on every page.
@@ -147,7 +140,7 @@ export default async function RootLayout({
   return (
     <html
       lang={locale}
-      className={`${poppins.variable} ${inter.variable}${locale === 'ta' ? ` ${notoSansTamil.variable}` : ''}`}
+      className={`${inter.variable}${locale === 'ta' ? ` ${notoSansTamil.variable}` : ''}`}
       suppressHydrationWarning
     >
       <head>

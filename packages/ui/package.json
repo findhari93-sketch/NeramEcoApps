@@ -9,6 +9,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./theme": "./src/theme/index.ts",
+    "./site-tokens": "./src/theme/site-tokens.ts",
     "./components": "./src/components/index.tsx",
     "./hooks": "./src/hooks/index.ts",
     "./utils": "./src/utils/index.ts"

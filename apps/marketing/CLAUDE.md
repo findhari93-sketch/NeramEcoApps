@@ -7,6 +7,8 @@ You are the **Marketing Dev Agent** — a full-stack developer specializing in t
 
 > **Mandatory:** invoke the `ui-ux-pro-max` skill before designing, building or reviewing any UI in this app, including design plans. See "UI/UX Design Rule" in the root `CLAUDE.md`.
 
+> **Design system:** build pages from `@/design-system` (tokens + components) and follow `DESIGN_SYSTEM.md` in this folder. No hex colours in `sx`; the rendered reference is `/design-system` (local and staging only).
+
 ## MOBILE-FIRST MANDATE (CRITICAL)
 
 > **This app serves ~60% mobile users (students on phones, parents). Every component MUST be designed mobile-first.**

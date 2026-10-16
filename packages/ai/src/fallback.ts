@@ -28,6 +28,7 @@
 
 import type { GeminiContent, GeminiPart, GenerateOptions, GeminiResult } from './gemini';
 import { featureById } from './features';
+import { readSse } from './sse';
 
 interface Provider {
   id: 'groq' | 'openrouter';
@@ -191,10 +192,99 @@ function retryAfterMs(res: Response): number | null {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+interface ReadChoice {
+  text: string;
+  finishReason: string;
+  promptTokens: number;
+  outputTokens: number;
+}
+
+async function readChoice(res: Response): Promise<ReadChoice> {
+  const data = await res.json();
+  const choice = data?.choices?.[0];
+  return {
+    text: String(choice?.message?.content ?? ''),
+    finishReason: finishReasonOf(choice?.finish_reason),
+    promptTokens: data?.usage?.prompt_tokens ?? 0,
+    outputTokens: data?.usage?.completion_tokens ?? 0,
+  };
+}
+
+/**
+ * Reads an OpenAI-style `stream: true` body. Reasoning deltas (gpt-oss sends
+ * them as `delta.reasoning`) are not part of the answer and are skipped.
+ * Usage arrives on the last chunk: as `usage` (OpenRouter, and Groq with
+ * stream_options) or as `x_groq.usage` on older Groq responses.
+ */
+async function readStreamedChoice(res: Response, onText: (delta: string) => void): Promise<ReadChoice> {
+  let text = '';
+  let finishReason = 'UNKNOWN';
+  let promptTokens = 0;
+  let outputTokens = 0;
+
+  try {
+    await readSse(res, (data) => {
+      if (data.trim() === '[DONE]') return;
+      let chunk: {
+        choices?: Array<{ delta?: { content?: string | null }; finish_reason?: string | null }>;
+        usage?: { prompt_tokens?: number; completion_tokens?: number };
+        x_groq?: { usage?: { prompt_tokens?: number; completion_tokens?: number } };
+      };
+      try {
+        chunk = JSON.parse(data);
+      } catch {
+        return;
+      }
+      const choice = chunk?.choices?.[0];
+      const delta = choice?.delta?.content;
+      if (delta) {
+        // Hold back leading whitespace so a model that opens with a newline
+        // does not count as "already answered" when it then sends nothing.
+        if (text || delta.trim()) onText(text ? delta : delta.replace(/^\s+/, ''));
+        text += delta;
+      }
+      if (choice?.finish_reason) finishReason = finishReasonOf(choice.finish_reason);
+      const usage = chunk?.usage ?? chunk?.x_groq?.usage;
+      if (usage) {
+        promptTokens = usage.prompt_tokens ?? promptTokens;
+        outputTokens = usage.completion_tokens ?? outputTokens;
+      }
+    });
+  } catch (err) {
+    if (!text.trim()) throw err;
+    console.error('[ai] backup stream dropped mid-answer:', err);
+    finishReason = 'INTERRUPTED';
+  }
+
+  return { text, finishReason, promptTokens, outputTokens };
+}
+
 export interface BackupAttemptLog {
   provider: string;
   model: string;
   status: number;
+}
+
+interface BackupDeps {
+  sleep?: (ms: number) => Promise<void>;
+  app?: string;
+  /** Stream the answer: each text delta is handed over as it arrives. */
+  onText?: (delta: string) => void;
+}
+
+/**
+ * generateWithBackup, streamed. The same providers in the same order; the only
+ * difference is that the visitor sees the answer as it is written.
+ *
+ * Matters more than it sounds: while Gemini is out of credit (402 since
+ * 2026-10-11) every site chatbot answer comes from here, so without this the
+ * chat would never stream at all.
+ */
+export function streamWithBackup(
+  opts: GenerateOptions,
+  deps: BackupDeps & { onText: (delta: string) => void },
+): Promise<GeminiResult & { attempts: BackupAttemptLog[] }> {
+  return generateWithBackup(opts, deps);
 }
 
 /**
@@ -204,7 +294,7 @@ export interface BackupAttemptLog {
  */
 export async function generateWithBackup(
   opts: GenerateOptions,
-  deps: { sleep?: (ms: number) => Promise<void>; app?: string } = {},
+  deps: BackupDeps = {},
 ): Promise<GeminiResult & { attempts: BackupAttemptLog[] }> {
   const wait = deps.sleep ?? sleep;
   const wantsJson = (opts.responseMimeType ?? 'application/json') !== 'text/plain';
@@ -241,18 +331,17 @@ export async function generateWithBackup(
             max_tokens: Math.max(opts.maxOutputTokens ?? 4096, isReasoner ? 8192 : 0),
             ...(isReasoner ? { reasoning_effort: 'low' } : {}),
             ...(wantsJson ? { response_format: { type: 'json_object' } } : {}),
+            ...(deps.onText ? { stream: true, stream_options: { include_usage: true } } : {}),
           }),
         });
 
         attempts.push({ provider: provider.id, model, status: res.status });
 
         if (res.ok) {
-          const data = await res.json();
-          const choice = data?.choices?.[0];
-          const text = String(choice?.message?.content ?? '').trim();
-          if (!text) break; // try the next model
-          const promptTokens = data?.usage?.prompt_tokens ?? 0;
-          const outputTokens = data?.usage?.completion_tokens ?? 0;
+          const read = deps.onText ? await readStreamedChoice(res, deps.onText) : await readChoice(res);
+          const text = read.text.trim();
+          if (!text) break; // try the next model (nothing reached the visitor yet)
+          const { promptTokens, outputTokens } = read;
           return {
             text,
             model: `${provider.id}/${model}`,
@@ -261,7 +350,7 @@ export async function generateWithBackup(
             keyTier: 'free',
             functionCalls: [],
             modelParts: [{ text }],
-            finishReason: finishReasonOf(choice?.finish_reason),
+            finishReason: read.finishReason,
             attempts,
           };
         }

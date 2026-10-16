@@ -1,8 +1,9 @@
 'use client';
 
-import { useTranslations } from 'next-intl';
-import { Box, Container, Typography, Grid, Chip } from '@neram/ui';
-import CourseCard from '@/components/CourseCard';
+import { useState } from 'react';
+import { Box } from '@neram/ui';
+import NorthEastIcon from '@mui/icons-material/NorthEast';
+import { PageHero, Section, CourseCard, CtaBand, CtaButton, Pill } from '@/design-system';
 
 // Courses offered by Neram Classes
 const courses = [
@@ -66,7 +67,8 @@ const courses = [
     duration: '2 Months',
     level: 'Beginner',
     category: 'Software Training',
-    image: '/images/courses/autocad.jpg',
+    // No artwork yet: the card shows the navy blueprint tile.
+    image: undefined,
     features: [
       '2D Drafting',
       '3D Modeling',
@@ -83,7 +85,8 @@ const courses = [
     duration: '1 Month',
     level: 'Beginner',
     category: 'Software Training',
-    image: '/images/courses/sketchup.jpg',
+    // No artwork yet: the card shows the navy blueprint tile.
+    image: undefined,
     features: [
       '3D Modeling',
       'Rendering',
@@ -100,7 +103,8 @@ const courses = [
     duration: 'Self-paced',
     level: 'All Levels',
     category: 'Digital Learning',
-    image: '/images/courses/nata-app.jpg',
+    // No artwork yet: the card shows the navy blueprint tile.
+    image: undefined,
     features: [
       'AI-Powered',
       'Practice Tests',
@@ -116,87 +120,60 @@ const categories = [
   'Architecture Entrance',
   'Software Training',
   'Digital Learning',
-];
+] as const;
 
 export default function CoursesPageContent() {
-  const t = useTranslations('courses');
+  const [category, setCategory] = useState<(typeof categories)[number]>('All');
+  const shown = category === 'All' ? courses : courses.filter((c) => c.category === category);
 
   return (
     <Box>
-      {/* Hero Section */}
-      <Box
-        sx={{
-          bgcolor: 'primary.main',
-          color: 'primary.contrastText',
-          py: { xs: 6, md: 8 },
-        }}
-      >
-        <Container maxWidth="lg">
-          <Typography
-            variant="h2"
-            component="h1"
-            gutterBottom
-            sx={{ fontWeight: 700 }}
-          >
-            Our Courses
-          </Typography>
-          <Typography variant="h5" sx={{ maxWidth: '700px', opacity: 0.9 }}>
-            Choose from our wide range of courses designed to help you achieve
-            your academic goals
-          </Typography>
-        </Container>
-      </Box>
+      <PageHero
+        breadcrumb={[{ name: 'Home', href: '/' }, { name: 'Courses' }]}
+        eyebrow="Courses"
+        title="Our Courses"
+        lede="Choose from our wide range of courses designed to help you achieve your academic goals"
+      />
 
-      {/* Filter Section */}
-      <Box sx={{ py: 4, bgcolor: 'grey.50', borderBottom: 1, borderColor: 'divider' }}>
-        <Container maxWidth="lg">
-          <Typography variant="h6" gutterBottom sx={{ mb: 2 }}>
-            Filter by Category
-          </Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-            {categories.map((category) => (
-              <Chip
-                key={category}
-                label={category}
-                clickable
-                color={category === 'All' ? 'primary' : 'default'}
-                variant={category === 'All' ? 'filled' : 'outlined'}
-              />
-            ))}
-          </Box>
-        </Container>
-      </Box>
+      <Section id="courses" rule={false} gap={4}>
+        <Box role="group" aria-label="Filter by category" sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+          {categories.map((c) => (
+            <Pill key={c} selected={c === category} onClick={() => setCategory(c)}>
+              {c}
+            </Pill>
+          ))}
+        </Box>
+        <Box
+          aria-live="polite"
+          sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: 3 }}
+        >
+          {shown.map((course) => (
+            <CourseCard
+              key={course.id}
+              title={course.title}
+              description={course.description}
+              image={course.image}
+              badge={course.level}
+              meta={{ label: 'Duration', value: course.duration }}
+              cta={{ label: 'Explore course', href: `/courses/${course.slug}` }}
+            />
+          ))}
+        </Box>
+      </Section>
 
-      {/* Courses Grid */}
-      <Box sx={{ py: { xs: 6, md: 10 } }}>
-        <Container maxWidth="lg">
-          <Grid container spacing={4}>
-            {courses.map((course) => (
-              <Grid item xs={12} sm={6} md={4} key={course.id}>
-                <CourseCard course={course} />
-              </Grid>
-            ))}
-          </Grid>
-        </Container>
-      </Box>
-
-      {/* CTA Section */}
-      <Box
-        sx={{
-          py: { xs: 6, md: 8 },
-          bgcolor: 'grey.50',
-          textAlign: 'center',
-        }}
-      >
-        <Container maxWidth="md">
-          <Typography variant="h4" gutterBottom sx={{ fontWeight: 700 }}>
-            Can't Find What You're Looking For?
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-            Contact us to discuss custom courses tailored to your needs
-          </Typography>
-        </Container>
-      </Box>
+      <CtaBand
+        eyebrow="Talk to us"
+        title="Can't Find What You're Looking For?"
+        lede="Contact us to discuss custom courses tailored to your needs"
+        actions={
+          <>
+            <CtaButton href="/contact">Contact us</CtaButton>
+            <CtaButton variant="link" href="/demo-class" endIcon={<NorthEastIcon aria-hidden />}>
+              Book a free demo
+            </CtaButton>
+          </>
+        }
+      />
     </Box>
   );
 }

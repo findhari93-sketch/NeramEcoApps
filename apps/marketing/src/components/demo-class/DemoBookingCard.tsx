@@ -62,6 +62,8 @@ import {
   type DemoDraft,
 } from './demo-client';
 
+import { tokens } from '@/design-system';
+
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
 
 const WINDOW_ICON: Record<DemoWindowId, typeof WbSunnyOutlinedIcon> = {
@@ -107,7 +109,7 @@ function maskPhone(phone: string | null | undefined): string {
   return `+91 ${d.slice(0, 2)}xxx xx${d.slice(7)}`;
 }
 
-const focusRing = { '&:focus-visible': { outline: '3px solid', outlineColor: 'primary.main', outlineOffset: 2 } };
+const focusRing = { '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } };
 
 /** A selectable pill: 48px tall, text plus a tick, never colour alone. */
 function Pill({
@@ -411,7 +413,7 @@ export default function DemoBookingCard() {
 
   if (!mounted || (authLoading && !checkedExisting)) {
     return (
-      <Paper variant="outlined" sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3 }} aria-busy aria-label="Loading demo booking">
+      <Paper elevation={0} sx={{ p: 0, bgcolor: 'transparent' }} aria-busy aria-label="Loading demo booking">
         <Skeleton variant="text" width="50%" height={36} />
         <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
           {[0, 1, 2, 3].map((i) => (
@@ -477,8 +479,8 @@ export default function DemoBookingCard() {
     <Paper
       component="section"
       aria-labelledby="demo-step-title"
-      variant="outlined"
-      sx={{ p: { xs: 2, sm: 3 }, borderRadius: 3 }}
+      elevation={0}
+      sx={{ p: 0, bgcolor: 'transparent' }}
     >
       {/* Progress */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
@@ -498,7 +500,7 @@ export default function DemoBookingCard() {
       </Box>
       <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(${STEP_TITLES.length}, 1fr)`, gap: 0.5, mb: 2 }} aria-hidden>
         {STEP_TITLES.map((_, i) => (
-          <Box key={i} sx={{ height: 4, borderRadius: 2, bgcolor: i <= step ? 'primary.main' : 'action.disabledBackground' }} />
+          <Box key={i} sx={{ height: 4, borderRadius: '2px', bgcolor: i <= step ? tokens.gold500 : tokens.line }} />
         ))}
       </Box>
       <Typography
@@ -552,7 +554,7 @@ export default function DemoBookingCard() {
                     flex: '0 0 auto',
                     width: 76,
                     minHeight: 68,
-                    borderRadius: 2,
+                    borderRadius: `${tokens.radius}px`,
                     border: 2,
                     borderColor: sel ? 'primary.main' : 'divider',
                     bgcolor: sel ? 'primary.main' : 'background.paper',
@@ -591,7 +593,7 @@ export default function DemoBookingCard() {
                     sx={{
                       minHeight: 56,
                       px: 2,
-                      borderRadius: 2,
+                      borderRadius: `${tokens.radius}px`,
                       border: 2,
                       borderColor: sel ? 'primary.main' : 'divider',
                       bgcolor: sel ? 'primary.main' : 'background.paper',
@@ -629,7 +631,7 @@ export default function DemoBookingCard() {
               width: '100%',
               minHeight: 52,
               px: 2,
-              borderRadius: 2,
+              borderRadius: `${tokens.radius}px`,
               border: 2,
               borderStyle: draft.window === 'anytime' ? 'solid' : 'dashed',
               borderColor: draft.window === 'anytime' ? 'primary.main' : 'divider',
@@ -740,7 +742,7 @@ export default function DemoBookingCard() {
                 sx={{
                   mt: 2,
                   p: 2,
-                  borderRadius: 2,
+                  borderRadius: `${tokens.radius}px`,
                   border: 1,
                   borderColor: phoneVerified ? 'divider' : 'warning.main',
                   bgcolor: phoneVerified ? 'background.paper' : 'action.hover',
@@ -826,7 +828,7 @@ export default function DemoBookingCard() {
                 ))}
               </Box>
 
-              <Box sx={{ mt: 2.5, p: 2, borderRadius: 2, bgcolor: 'action.hover' }}>
+              <Box sx={{ mt: 2.5, p: 2, borderRadius: `${tokens.radius}px`, bgcolor: 'action.hover' }}>
                 <FormControlLabel
                   control={<Switch checked={draft.parentJoining} onChange={(e) => update({ parentJoining: e.target.checked })} />}
                   label={<Typography fontWeight={700}>A parent will join too</Typography>}

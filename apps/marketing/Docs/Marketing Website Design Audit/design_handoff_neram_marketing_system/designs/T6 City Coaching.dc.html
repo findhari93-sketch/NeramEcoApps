@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0&display=block">
+<script src="_ds/modernist-e8c2d95e-abf3-4f3e-86df-2b557a2062d6/_ds_bundle.js"></script>
+<style>h1,h2,h3{font-family:Inter,"Noto Sans Tamil",sans-serif}body{margin:0;background:#FAFBFC;color:#1A2027;font-family:Inter,"Noto Sans Tamil",sans-serif;-webkit-font-smoothing:antialiased}a{color:#0b6bd6;text-decoration:none}a:hover{color:#b67a0c}:focus-visible{outline:2px solid #e8a020;outline-offset:2px}</style>
+</helmet>
+<dc-import name="Site Header" state="guest" hint-size="100%,64px" style="position:sticky;top:0;z-index:40;display:block"></dc-import>
+
+<section style="background-color:#060d1f;background-image:linear-gradient(rgba(255,255,255,0.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.035) 1px,transparent 1px),linear-gradient(rgba(232,160,32,0.06) 1px,transparent 1px),linear-gradient(90deg,rgba(232,160,32,0.06) 1px,transparent 1px);background-size:40px 40px,40px 40px,200px 200px,200px 200px;color:#f5f0e8">
+  <div style="max-width:1200px;margin:0 auto;padding:48px 24px 56px;display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:40px;align-items:start">
+    <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+      <span style="font-size:13px;color:rgba(245,240,232,0.62);display:flex;gap:6px;align-items:center;flex-wrap:wrap"><a href="#" style="color:rgba(245,240,232,0.62)">Home</a><span class="material-symbols-outlined" style="font-size:16px">chevron_right</span><a href="#" style="color:rgba(245,240,232,0.62)">NATA Coaching</a><span class="material-symbols-outlined" style="font-size:16px">chevron_right</span><a href="#" style="color:rgba(245,240,232,0.62)">Tamil Nadu</a><span class="material-symbols-outlined" style="font-size:16px">chevron_right</span><span style="color:#f5f0e8">Chennai</span></span>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><span style="background:rgba(232,160,32,0.12);border:1px solid rgba(232,160,32,0.35);color:#f4bf5a;font-size:13px;font-weight:700;padding:5px 12px;border-radius:100px">Classroom and live online</span></div>
+      <h1 style="margin:0;font-size:clamp(2rem,4.5vw,3.25rem);line-height:1.08;font-weight:800;letter-spacing:-0.01em;text-wrap:balance">NATA coaching in <em style="color:#e8a020">Chennai</em></h1>
+      <p style="margin:0;max-width:560px;font-size:18px;line-height:1.55;color:rgba(245,240,232,0.72);text-wrap:pretty">Neram runs a classroom in Chennai and live online classes, taught by architects. Every class is recorded in Nexus, so a missed class is never lost.</p>
+      <div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:4px"><a href="#" style="display:inline-flex;align-items:center;gap:10px;background:#e8a020;color:#060d1f;font-weight:700;font-size:16px;padding:14px 22px;border-radius:8px" style-hover="background:#f4bf5a;color:#060d1f"><span class="material-symbols-outlined" style="font-size:20px">videocam</span>Book a free demo</a><a href="#" style="display:inline-flex;align-items:center;gap:10px;border:1px solid rgba(245,240,232,0.4);color:#f5f0e8;font-weight:600;font-size:16px;padding:14px 22px;border-radius:8px" style-hover="border-color:#e8a020;color:#e8a020">Visit the classroom</a></div>
+    </div>
+    <div style="aspect-ratio:4/3;border-radius:8px;border:1px dashed rgba(232,160,32,0.4);background:#0b1629;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;letter-spacing:0.1em;color:rgba(245,240,232,0.5);text-align:center;padding:24px;box-sizing:border-box">CENTRE HERO PHOTO<br>(CentreHeroPhoto)</div>
+  </div>
+</section>
+
+<section style="padding:56px 24px">
+  <div style="max-width:1200px;margin:0 auto;display:flex;flex-wrap:wrap;gap:40px;align-items:flex-start">
+    <div style="flex:999 1 600px;min-width:0;display:flex;flex-direction:column;gap:40px">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.2em;color:#8a5a05">CHENNAI AT A GLANCE</span>
+        <dl style="margin:0;display:flex;flex-direction:column;border-top:1px solid #1A2027">
+          <sc-for list="{{ facts }}" as="f" hint-placeholder-count="5"><div style="display:grid;grid-template-columns:minmax(140px,0.6fr) minmax(0,1fr);gap:16px;padding:14px 0;border-bottom:1px solid #E1E5EB"><dt style="font-size:15px;color:#55606c">{{ f.label }}</dt><dd style="margin:0;font-size:16px;font-weight:600">{{ f.value }}</dd></div></sc-for>
+        </dl>
+        <span style="font-size:13px;color:#55606c">Facts are computed per city from location data. The values shown here are samples.</span>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <h2 style="margin:0;font-size:clamp(1.5rem,3vw,2rem);line-height:1.2;font-weight:800">What students in Chennai say</h2>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:16px">
+          <sc-for list="{{ reviews }}" as="r" hint-placeholder-count="2"><figure style="margin:0;background:#fff;border:1px solid #E1E5EB;border-radius:8px;padding:20px;display:flex;flex-direction:column;gap:12px"><span style="color:#e8a020;letter-spacing:2px">★★★★★</span><blockquote style="margin:0;font-size:16px;line-height:1.55">{{ r.text }}</blockquote><figcaption style="display:flex;flex-direction:column;gap:2px"><strong style="font-size:15px">{{ r.name }}</strong><span style="font-size:13px;color:#55606c">{{ r.meta }}</span></figcaption></figure></sc-for>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <h2 style="margin:0;font-size:clamp(1.5rem,3vw,2rem);line-height:1.2;font-weight:800">Questions from Chennai</h2>
+        <div style="display:flex;flex-direction:column;border-top:1px solid #1A2027">
+          <sc-for list="{{ faq }}" as="f" hint-placeholder-count="4"><div style="border-bottom:1px solid #E1E5EB"><button onClick="{{ f.toggle }}" aria-expanded="{{ f.open }}" style="width:100%;display:flex;justify-content:space-between;align-items:center;gap:16px;min-height:60px;padding:12px 0;border:none;background:transparent;text-align:left;cursor:pointer;color:#1A2027;font:700 17px Inter,sans-serif">{{ f.q }}<span class="material-symbols-outlined" style="{{ f.chev }}">expand_more</span></button><sc-if value="{{ f.open }}" hint-placeholder-val="{{ false }}"><p style="margin:0;padding:0 40px 18px 0;font-size:16px;line-height:1.6;color:#55606c">{{ f.a }}</p></sc-if></div></sc-for>
+        </div>
+      </div>
+    </div>
+    <aside style="flex:1 1 300px;max-width:380px;position:sticky;top:88px;background:#fff;border:1px solid #E1E5EB;border-top:3px solid #e8a020;border-radius:8px;padding:22px;display:flex;flex-direction:column;gap:14px">
+      <strong style="font-size:19px">Talk to a Chennai counsellor</strong>
+      <span style="font-size:14px;color:#55606c;line-height:1.5">We call back within 2 working hours.</span>
+      <label style="display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:700">Name<input style="height:48px;border:1px solid #c5ccd4;border-radius:8px;padding:0 14px;font:400 16px Inter,sans-serif"></label>
+      <label style="display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:700">WhatsApp number<input inputmode="tel" style="height:48px;border:1px solid #c5ccd4;border-radius:8px;padding:0 14px;font:400 16px Inter,sans-serif"></label>
+      <button style="display:flex;align-items:center;justify-content:space-between;min-height:52px;padding:0 18px;border:none;border-radius:8px;background:#e8a020;color:#060d1f;font:700 16px Inter,sans-serif;cursor:pointer">Request call back<span class="material-symbols-outlined">arrow_forward</span></button>
+      <a href="#" style="display:flex;align-items:center;gap:8px;min-height:44px;color:#1A2027;font-weight:600;font-size:15px"><span class="material-symbols-outlined" style="font-size:20px;color:#2E7D32">chat</span>Or message us on WhatsApp</a>
+    </aside>
+  </div>
+</section>
+
+<section style="background:#fff;border-top:1px solid #E1E5EB;padding:56px 24px">
+  <div style="max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:16px">
+    <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.2em;color:#8a5a05">NEARBY CITIES</span>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px"><sc-for list="{{ nearby }}" as="n" hint-placeholder-count="8"><a href="#" style="display:flex;justify-content:space-between;align-items:center;min-height:48px;padding:0 14px;border:1px solid #E1E5EB;border-radius:8px;color:#1A2027;font-weight:600;font-size:15px" style-hover="border-color:#e8a020;color:#1A2027">{{ n }}<span class="material-symbols-outlined" style="font-size:18px;color:#55606c">chevron_right</span></a></sc-for></div>
+  </div>
+</section>
+
+<section style="background:#060d1f;color:#f5f0e8;padding:80px 24px;border-top:1px solid rgba(232,160,32,0.15)">
+  <div style="max-width:760px;margin:0 auto;display:flex;flex-direction:column;align-items:center;text-align:center;gap:16px">
+    <span style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:700;letter-spacing:0.2em;color:#e8a020">GET STARTED</span>
+    <h2 style="margin:0;font-size:clamp(1.75rem,3.5vw,2.5rem);line-height:1.15;font-weight:800">Sit in a class before you decide</h2>
+    <div style="display:flex;flex-wrap:wrap;gap:16px;justify-content:center;margin-top:8px"><a href="#" style="display:inline-flex;align-items:center;gap:10px;background:#e8a020;color:#060d1f;font-weight:700;font-size:16px;padding:14px 22px;border-radius:8px">Book your free demo<span class="material-symbols-outlined" style="font-size:20px">arrow_forward</span></a><a href="#" style="display:inline-flex;align-items:center;gap:8px;color:#f5f0e8;font-weight:600;font-size:16px;padding:14px 4px;border-bottom:1px solid rgba(245,240,232,0.3)">Apply now</a></div>
+  </div>
+</section>
+<dc-import name="Site Footer" hint-size="100%,420px"></dc-import>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { faqOpen: 0 };
+  renderVals() {
+    const faqData = [
+      ['Is there a Neram classroom in Chennai?', 'Yes. Students can attend in the classroom or join the same class live online, and every class is recorded in Nexus.'],
+      ['Where is the nearest NATA test centre?', 'Chennai is a NATA test city, so you can take the exam without travelling.'],
+      ['Which counselling do Chennai students use?', 'Tamil Nadu B.Arch seats are filled through TNEA B.Arch. JoSAA covers NITs, SPAs and IITs through JEE Paper 2.'],
+      ['Can I try a class first?', 'Book a free live demo. It runs for about 45 minutes on Teams and parents are welcome.'],
+    ];
+    return {
+      facts: [
+        { label: 'How you learn', value: 'Classroom and live online' }, { label: 'Nearest classroom', value: 'Sample area, Chennai' },
+        { label: 'Nearest NATA 2026 test city', value: 'Chennai (in the city)' }, { label: 'B.Arch colleges listed', value: '28 in and around Chennai, 42 in Tamil Nadu' },
+        { label: 'State counselling', value: 'TNEA B.Arch' },
+      ],
+      reviews: [
+        { text: 'Sample review text. Real reviews come from moderated city or state reviews, the same data as the JSON-LD.', name: 'Student name', meta: 'Chennai · NATA 2025 · College admitted' },
+        { text: 'Sample review text. The section hides itself when a city has fewer than two reviews and falls back to the state.', name: 'Student name', meta: 'Chennai · JEE Paper 2 2025' },
+      ],
+      nearby: ['Chengalpattu', 'Kanchipuram', 'Tiruvallur', 'Vellore', 'Puducherry', 'Tiruvannamalai', 'Villupuram', 'Arakkonam'],
+      faq: faqData.map(([q, a], i) => ({ q, a, open: this.state.faqOpen === i, chev: { transition: 'transform 200ms', transform: this.state.faqOpen === i ? 'rotate(180deg)' : 'none', flexShrink: 0 }, toggle: () => this.setState({ faqOpen: this.state.faqOpen === i ? -1 : i }) })),
+    };
+  }
+}
+</script>
+</body>
+</html>

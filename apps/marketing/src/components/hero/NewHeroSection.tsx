@@ -1,216 +1,215 @@
 'use client';
 
-import { Box, Container, Grid, Typography, Button } from '@neram/ui';
-
-import BlueprintBackground from './BlueprintBackground';
-import ArchitecturalSVG from './ArchitecturalSVG';
+import type { ReactNode } from 'react';
+import { Box, Typography } from '@neram/ui';
+import CalculateOutlinedIcon from '@mui/icons-material/CalculateOutlined';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
+import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
+import { Link } from '@/i18n/routing';
+import { Surface, StatStrip, CtaButton, tokens as t } from '@/design-system';
+import { APP_URL } from '@/lib/seo/constants';
 import ClockCanvas from './ClockCanvas';
-import AnnounceBadge from './AnnounceBadge';
-import TamilTag from './TamilTag';
-import RankBar from './RankBar';
-import FloatingToolBadge from './FloatingToolBadge';
-import AiArchitekPill from './AiNataPill';
-import MicrosoftBadge from './MicrosoftBadge';
-import HeroBottomStrip from './HeroBottomStrip';
 
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
+const STATS = [
+  { value: 'AIR 1', label: 'JEE B.Arch · 2024' },
+  { value: '1,000+', label: 'Students' },
+  { value: '189', label: 'NATA Score' },
+  { value: '10+', label: 'Years' },
+];
+
+/** Tool badges around the clock. Same /tools/* scheme as the Learning Tools cards. */
+const BADGES: Array<{ label: string; href: string; icon: ReactNode; pos: object }> = [
+  { label: 'Cut Off Calculator', href: '/tools/cutoff-calculator', icon: <CalculateOutlinedIcon />, pos: { top: '8%', left: 0 } },
+  { label: 'College Predictor', href: '/tools/college-predictor', icon: <SchoolOutlinedIcon />, pos: { top: '44%', right: 0 } },
+  { label: 'Question Bank', href: '/tools/question-bank', icon: <QuizOutlinedIcon />, pos: { bottom: '6%', left: '8%' } },
+];
+
+const MS_SQUARES = ['#f25022', '#7fba00', '#00a4ef', '#ffb900']; // Microsoft logo colours (brand mark, not theme)
+
+const monoSmall = {
+  fontFamily: t.fontMono,
+  fontSize: '0.6875rem',
+  letterSpacing: '0.1em',
+  color: t.paperSubtle,
+} as const;
 
 /**
- * NewHeroSection — aiArchitek Era hero with scoped dark theme.
- *
- * Wraps itself in a nested ThemeProvider so the rest of the page
- * stays on the existing marketing light theme.
+ * Home hero (PageHero tone="dark", variant home). The clock canvas is
+ * unchanged; everything around it uses the design-system tokens. The h1 and
+ * subhead are never faded in: they are the LCP text.
  */
 export default function NewHeroSection() {
   return (
-    <Box
-      component="section"
-      sx={{
-        position: 'relative',
-        minHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        overflow: 'hidden',
-        bgcolor: 'background.default',
-      }}
-    >
-      {/* Background layers */}
-      <BlueprintBackground />
-      <ArchitecturalSVG />
-
-      {/* aiArchitek pill (top-right, desktop only) */}
-      <AiArchitekPill />
-
-      {/* Main content grid */}
-      <Container
-        maxWidth="lg"
+    <Surface tone="dark" blueprint component="section" aria-labelledby="home-hero-title">
+      <Box
         sx={{
-          position: 'relative',
-          zIndex: 10,
-          pt: { xs: '70px', md: '80px', lg: '50px' },
-          pb: { xs: '60px', md: '80px', lg: '70px' },
+          maxWidth: t.container.page,
+          mx: 'auto',
+          px: { xs: 2, sm: 3 },
+          pt: { xs: 6, md: 9 },
+          pb: { xs: 8, md: 12 },
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))',
+          gap: 5,
+          alignItems: 'center',
+          boxSizing: 'content-box',
         }}
       >
-        <Grid
-          container
-          direction={{ xs: 'column', md: 'row' }}
-          alignItems="center"
-          spacing={{ xs: 3, md: 0 }}
-          sx={{}}
-        >
-          {/* LEFT: Text content */}
-          <Grid item xs={12} md={6}>
-            <Box sx={{ px: { xs: 0, md: 2 }, overflow: 'hidden' }}>
-              <AnnounceBadge />
-              <TamilTag />
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+          <Box
+            component="p"
+            sx={{
+              m: 0,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 1,
+              width: 'fit-content',
+              maxWidth: '100%',
+              bgcolor: t.goldTintBg,
+              border: `1px solid ${t.goldTintBorder}`,
+              borderRadius: `${t.radiusPill}px`,
+              py: 0.625,
+              pl: 0.75,
+              pr: 1.75,
+            }}
+          >
+            <Box
+              component="span"
+              sx={{
+                bgcolor: t.gold500,
+                color: t.navy900,
+                fontFamily: t.fontMono,
+                fontSize: '0.6875rem',
+                fontWeight: 700,
+                px: 1,
+                py: 0.375,
+                borderRadius: `${t.radiusPill}px`,
+                letterSpacing: '0.05em',
+                flexShrink: 0,
+              }}
+            >
+              NEW
+            </Box>
+            <Box component="span" sx={{ fontSize: '0.8125rem', fontWeight: 500, color: t.gold300 }}>
+              India&apos;s First AI-Enabled NATA Learning Platform
+            </Box>
+          </Box>
 
-              {/* Main headline */}
-              <Typography
-                variant="h1"
-                component="h1"
-                sx={{
-                  mb: 1.25,
-                  fontSize: { xs: '2rem', sm: '2.5rem', md: '3.5rem', lg: '3.5rem' },
-                  lineHeight: 1.05,
-                  // No fade on the headline or subhead: they are the LCP text, and
-                  // an element at opacity 0 does not count as painted.
-                  '& em': {
-                    fontStyle: 'italic',
-                    color: 'primary.main',
-                  },
-                  '& .ai-word': {
-                    position: 'relative',
-                    display: 'inline-block',
-                    '&::after': {
-                      content: '""',
-                      position: 'absolute',
-                      bottom: 2,
-                      left: 0,
-                      right: 0,
-                      height: 3,
-                      background: 'linear-gradient(90deg, #1a8fff, #e8a020)',
-                      borderRadius: '2px',
-                      transformOrigin: 'left',
-                      transform: 'scaleX(0)',
-                      animation: 'neramLineGrow 1.2s ease forwards, neramLineBlink 0.8s ease-in-out 2.6s infinite',
-                    },
-                  },
-                }}
-              >
-                Your Time to Crack{' '}
-                <br />
-                <em>NATA & JEE Paper 2</em>{' '}
-                <br />
-                with <span className="ai-word">AI</span>
-              </Typography>
+          <Typography
+            component="p"
+            sx={{ m: 0, fontSize: '0.75rem', letterSpacing: '0.15em', textTransform: 'uppercase', color: t.paperSubtle }}
+          >
+            நேரம் கிளாஸஸ் · Neram = Time · Est. 2009
+          </Typography>
 
-              {/* Subhead */}
-              <Typography
-                variant="subtitle1"
-                component="p"
-                sx={{
-                  color: 'text.secondary',
-                  maxWidth: { xs: '100%', md: 480 },
-                  fontSize: { xs: '13px', md: '16px' },
-                  wordBreak: 'break-word',
-                  mb: { xs: 2, md: 3 },
-                  '& strong': {
-                    color: 'text.primary',
-                    fontWeight: 500,
-                  },
-                }}
-              >
-                Live classes. Intelligent tools. Real results.
-                <br />
-                <strong>Nexus</strong>, an AI-powered NATA prep companion trusted by
-                AIR toppers across JEE Paper 2 &amp; NATA nationwide in India.
-              </Typography>
+          <Typography
+            id="home-hero-title"
+            variant="h1"
+            component="h1"
+            sx={{
+              m: 0,
+              color: t.paper,
+              '& em': { fontStyle: 'italic', color: t.gold500 },
+              '& .ai-word': { borderBottom: `3px solid ${t.gold500}` },
+            }}
+          >
+            Your Time to Crack <em>NATA &amp; JEE Paper 2</em> with <span className="ai-word">AI</span>
+          </Typography>
 
-              {/* Rank proof bar */}
-              <RankBar />
+          <Typography
+            component="p"
+            sx={{
+              m: 0,
+              maxWidth: 480,
+              fontSize: '1.0625rem',
+              lineHeight: 1.55,
+              color: t.paperMuted,
+              textWrap: 'pretty',
+              '& strong': { color: t.paper, fontWeight: 600 },
+            }}
+          >
+            Live classes. Intelligent tools. Real results. <strong>Nexus</strong>, an AI-powered NATA prep
+            companion trusted by AIR toppers across JEE Paper 2 &amp; NATA nationwide in India.
+          </Typography>
 
-              {/* CTAs */}
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 2,
-                  flexWrap: 'wrap',
-                  opacity: 0,
-                  transform: 'translateY(16px)',
-                  animation: 'neramFadeUp 0.9s ease forwards',
-                  animationDelay: '0.3s',
-                }}
-              >
-                <Button
-                  variant="contained"
-                  size="large"
-                  href={`${APP_URL}/tools`}
-                  sx={{
-                    width: { xs: '100%', md: 'auto' },
-                    px: { xs: 2.5, md: 3.5 },
-                    py: { xs: 1.25, md: 1.75 },
-                    fontSize: { xs: '12px', md: '14px' },
-                    fontWeight: 700,
-                    display: 'inline-flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    gap: 1.25,
-                    '& .arrow': {
-                      fontSize: '18px',
-                      transition: 'transform 0.3s',
-                    },
-                    '&:hover .arrow': {
-                      transform: 'translateX(4px)',
-                    },
-                  }}
-                >
-                  Explore aiArchitek Free Tool
-                  <span className="arrow">&rarr;</span>
-                </Button>
+          <StatStrip size="compact" items={STATS} />
 
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, alignItems: 'center', mt: 0.5 }}>
+            <CtaButton href={`${APP_URL}/tools`}>Explore aiArchitek Free Tool</CtaButton>
+            <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1, fontSize: '0.8125rem', color: t.paperSubtle }}>
+              <Box component="span" aria-hidden sx={{ display: 'grid', gridTemplateColumns: '7px 7px', gap: '2px' }}>
+                {MS_SQUARES.map((c) => (
+                  <Box key={c} component="span" sx={{ width: 7, height: 7, bgcolor: c }} />
+                ))}
               </Box>
-
-              {/* Microsoft Education badge */}
-              <MicrosoftBadge />
+              Supported by <Box component="strong" sx={{ color: t.paper, fontWeight: 500 }}>Microsoft Education</Box>
             </Box>
-          </Grid>
+          </Box>
+        </Box>
 
-          {/* RIGHT: Clock + floating badges */}
-          <Grid item xs={12} md={6}>
-            <Box sx={{ position: 'relative' }}>
-              <ClockCanvas />
-
-              {/* Floating tool badges (desktop only) */}
-              <FloatingToolBadge
-                icon="✂️"
-                label="Cut Off Calculator"
-                position="t1"
-                href={`${APP_URL}/tools/nata/cutoff-calculator`}
-                sx={{ display: 'flex' }}
-              />
-              <FloatingToolBadge
-                icon="🎯"
-                label="College Predictor"
-                position="t2"
-                href={`${APP_URL}/tools/nata/college-predictor`}
-                sx={{ display: 'flex' }}
-              />
-              <FloatingToolBadge
-                icon="📚"
-                label="Question Bank"
-                position="t3"
-                href={`${APP_URL}/tools/nata/question-bank`}
-                sx={{ display: 'flex' }}
-              />
+        <Box sx={{ position: 'relative', minWidth: 0, minHeight: { xs: 320, sm: 380 }, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Box sx={{ width: 'min(100%, 460px)' }}>
+            <ClockCanvas />
+          </Box>
+          {BADGES.map((b) => (
+            <Box
+              key={b.href}
+              component={Link}
+              href={b.href}
+              sx={{
+                position: 'absolute',
+                ...b.pos,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                minHeight: 44,
+                boxSizing: 'border-box',
+                bgcolor: t.navy800,
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: `${t.radius}px`,
+                px: 1.75,
+                py: 1.25,
+                color: t.paper,
+                fontSize: { xs: '0.8125rem', sm: '0.875rem' },
+                fontWeight: 500,
+                textDecoration: 'none',
+                whiteSpace: 'nowrap',
+                transition: 'border-color 150ms ease',
+                '& svg': { fontSize: 20, color: t.gold500 },
+                '&:hover': { borderColor: 'rgba(232,160,32,0.5)' },
+                '&:focus-visible': { outline: t.focusOutline, outlineOffset: '2px' },
+              }}
+            >
+              {b.icon}
+              {b.label}
             </Box>
-          </Grid>
-        </Grid>
-      </Container>
+          ))}
+        </Box>
+      </Box>
 
-      {/* Bottom strip */}
-      <HeroBottomStrip />
-    </Box>
+      <Box
+        sx={{
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+          px: 3,
+          py: 2,
+          display: 'flex',
+          justifyContent: 'space-between',
+          gap: 2,
+          flexWrap: 'wrap',
+          ...monoSmall,
+        }}
+      >
+        <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+          <Box component="span" aria-hidden sx={{ width: 40, height: '1px', bgcolor: 'rgba(255,255,255,0.2)' }} />
+          SCROLL TO EXPLORE
+        </Box>
+        <Box component="span">
+          <Box component="span" sx={{ color: t.gold500 }}>
+            neramclasses.com
+          </Box>{' '}
+          · NATA · JEE Paper 2 · B.Arch
+        </Box>
+      </Box>
+    </Surface>
   );
 }

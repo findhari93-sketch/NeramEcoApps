@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/modernist-e8c2d95e-abf3-4f3e-86df-2b557a2062d6/styles.css">
+<script src="_ds/modernist-e8c2d95e-abf3-4f3e-86df-2b557a2062d6/_ds_bundle.js"></script>
+<style>body{margin:0;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body)}a{color:var(--color-accent-700)}a:hover{color:var(--color-accent)}</style>
+</helmet>
+<div style="max-width:1120px;margin:0 auto;padding:48px 32px 96px;display:flex;flex-direction:column;gap:56px">
+
+<header style="display:flex;flex-direction:column;gap:20px;border-bottom:2px solid var(--color-text);padding-bottom:32px">
+  <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:center">
+    <span class="tag tag-accent">Design audit</span>
+    <span style="font-size:14px;color:var(--color-neutral-700)">@neram/marketing · neramclasses.com · 15 Oct 2026</span>
+  </div>
+  <h1 style="margin:0;font-family:var(--font-heading);font-weight:800;font-size:clamp(36px,5vw,64px);line-height:1.02;letter-spacing:-0.02em;text-wrap:balance">One site, five visual languages</h1>
+  <p style="margin:0;max-width:720px;font-size:19px;line-height:1.5;text-wrap:pretty">The homepage is built on a dark "aiArchitek" theme that no other page uses. Every other page falls back to the default light MUI theme, then overrides colours and fonts inline, page by page. This audit lists the gaps file by file, then sets out one token layer and a migration order.</p>
+</header>
+
+<section style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));border-top:2px solid var(--color-text);border-left:2px solid var(--color-text)">
+  <div style="padding:20px;border-right:2px solid var(--color-text);border-bottom:2px solid var(--color-text);display:flex;flex-direction:column;gap:6px"><span style="font-size:48px;font-weight:800;line-height:1">6</span><span style="font-size:14px">theme or palette sources in use</span></div>
+  <div style="padding:20px;border-right:2px solid var(--color-text);border-bottom:2px solid var(--color-text);display:flex;flex-direction:column;gap:6px"><span style="font-size:48px;font-weight:800;line-height:1">5</span><span style="font-size:14px">different hero treatments</span></div>
+  <div style="padding:20px;border-right:2px solid var(--color-text);border-bottom:2px solid var(--color-text);display:flex;flex-direction:column;gap:6px"><span style="font-size:48px;font-weight:800;line-height:1">6</span><span style="font-size:14px">font stacks, 4 of them monospace</span></div>
+  <div style="padding:20px;border-right:2px solid var(--color-text);border-bottom:2px solid var(--color-text);display:flex;flex-direction:column;gap:6px"><span style="font-size:48px;font-weight:800;line-height:1;color:var(--color-accent)">0</span><span style="font-size:14px">shared section-header components</span></div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:20px">
+  <h2 style="margin:0;font-size:28px;font-weight:800">01 — Where each look comes from</h2>
+  <p style="margin:0;max-width:720px;line-height:1.55">The site shell (<code>[locale]/layout.tsx</code>) loads <code>marketingLightTheme</code>. <code>HomePageContent.tsx</code> then wraps the whole homepage in a second <code>ThemeProvider</code> with <code>neramaiArchitekDarkTheme</code>, so the homepage runs on a separate palette and type scale.</p>
+  <div style="overflow-x:auto">
+  <table class="table" style="width:100%;min-width:720px">
+    <thead><tr><th>Source</th><th>Defined in</th><th>Used by</th><th>Character</th></tr></thead>
+    <tbody>
+      <tr><td><strong>marketingLightTheme</strong></td><td><code>@neram/ui</code> via <code>[locale]/layout.tsx</code></td><td>All inner pages</td><td>MUI default feel, #1565C0 blue, #FAFBFC ground</td></tr>
+      <tr><td><strong>neramaiArchitekDarkTheme</strong></td><td><code>HomePageContent.tsx</code> line 141</td><td>Homepage only</td><td>Navy #060d1f, gold #e8a020, blue #1a8fff, glass cards</td></tr>
+      <tr><td><strong>neramaiArchitekLightTheme</strong> + override</td><td><code>apply/shell/ApplicationShell.tsx</code></td><td>Apply flow</td><td>A third variant, extended with createTheme</td></tr>
+      <tr><td><strong>NX palette</strong></td><td><code>apply/showcase/palette.ts</code></td><td>Nexus showcase</td><td>21 hard-coded hexes, serif + mono</td></tr>
+      <tr><td><strong>m3 tonal ramps</strong></td><td><code>m3Primary/Secondary/Tertiary</code></td><td><code>nata/sections/*</code></td><td>Material 3 gradients, Poppins headings</td></tr>
+      <tr><td><strong>--neram-* CSS vars</strong></td><td><code>styles/globals.css</code></td><td>Tailwind components</td><td>Dark values, while body is set light</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:20px">
+  <h2 style="margin:0;font-size:28px;font-weight:800">02 — Colour inventory</h2>
+  <p style="margin:0;max-width:720px;line-height:1.55">Hex values found in the source. Each row is meant to be one colour role, but holds several near-duplicates.</p>
+  <div style="display:flex;flex-direction:column;border-top:2px solid var(--color-text)">
+    <div style="display:grid;grid-template-columns:minmax(120px,180px) minmax(0,1fr);gap:16px;padding:16px 0;border-bottom:2px solid var(--color-divider);align-items:center">
+      <strong>Primary blue</strong>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12px"><div style="width:72px;height:40px;background:#1a8fff"></div>#1a8fff home</div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12px"><div style="width:72px;height:40px;background:#1565C0"></div>#1565C0 spinner</div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12px"><div style="width:72px;height:40px;background:#1976d2"></div>#1976d2 focus</div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12px"><div style="width:72px;height:40px;background:#0d47a1"></div>#0d47a1 coaching</div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12px"><div style="width:72px;height:40px;background:#1a237e"></div>#1a237e coaching</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:minmax(120px,180px) minmax(0,1fr);gap:16px;padding:16px 0;border-bottom:2px solid var(--color-divider);align-items:center">
+      <strong>Gold accent</strong>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12px"><div style="width:72px;height:40px;background:#e8a020"></div>#e8a020 home</div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12px"><div style="width:72px;height:40px;background:#f4bf5a"></div>#f4bf5a light</div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12px"><div style="width:72px;height:40px;background:#f0b040"></div>#f0b040 footer</div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12px"><div style="width:72px;height:40px;background:#F9A825"></div>#F9A825 nata</div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12px"><div style="width:72px;height:40px;background:#F57F17"></div>#F57F17 nata</div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12px"><div style="width:72px;height:40px;background:#b67a0c"></div>#b67a0c NX</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:minmax(120px,180px) minmax(0,1fr);gap:16px;padding:16px 0;border-bottom:2px solid var(--color-divider);align-items:center">
+      <strong>Dark ground</strong>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12px"><div style="width:72px;height:40px;background:#060d1f"></div>#060d1f home</div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12px"><div style="width:72px;height:40px;background:#030812"></div>#030812 footer</div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12px"><div style="width:72px;height:40px;background:#0a1628"></div>#0a1628 NX</div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12px"><div style="width:72px;height:40px;background:#0b1629"></div>#0b1629 card</div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12px"><div style="width:72px;height:40px;background:#0f1d33"></div>#0f1d33 NX</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:minmax(120px,180px) minmax(0,1fr);gap:16px;padding:16px 0;border-bottom:2px solid var(--color-divider);align-items:center">
+      <strong>Light ground / text</strong>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12px"><div style="width:72px;height:40px;background:#FAFBFC;border:1px solid var(--color-neutral-300)"></div>#FAFBFC body</div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12px"><div style="width:72px;height:40px;background:#f5f0e8;border:1px solid var(--color-neutral-300)"></div>#f5f0e8 paper</div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12px"><div style="width:72px;height:40px;background:#f4f3ef;border:1px solid var(--color-neutral-300)"></div>#f4f3ef NX</div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12px"><div style="width:72px;height:40px;background:#1A2027"></div>#1A2027 text</div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12px"><div style="width:72px;height:40px;background:#14161b"></div>#14161b NX ink</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:minmax(120px,180px) minmax(0,1fr);gap:16px;padding:16px 0;border-bottom:2px solid var(--color-divider);align-items:center">
+      <strong>Success / CTA green</strong>
+      <div style="display:flex;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12px"><div style="width:72px;height:40px;background:#2E7D32"></div>#2E7D32 Header, Coaching</div>
+        <div style="display:flex;flex-direction:column;gap:4px;font-size:12px"><div style="width:72px;height:40px;background:#1B5E20"></div>#1B5E20 hover</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:20px">
+  <h2 style="margin:0;font-size:28px;font-weight:800">03 — Hero treatments, page by page</h2>
+  <p style="margin:0;max-width:720px;line-height:1.55">A student going from Home to Coaching to Fees sees a different brand on each page. The hero is the clearest example.</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0;border-top:2px solid var(--color-text);border-left:2px solid var(--color-text)">
+    <div style="border-right:2px solid var(--color-text);border-bottom:2px solid var(--color-text);display:flex;flex-direction:column">
+      <div style="height:96px;background:#060d1f;background-image:linear-gradient(rgba(232,160,32,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(232,160,32,.08) 1px,transparent 1px);background-size:20px 20px;display:flex;align-items:flex-end;padding:12px"><span style="color:#f5f0e8;font-weight:700;font-size:15px">Crack <em style="color:#e8a020">NATA</em></span></div>
+      <div style="padding:14px;display:flex;flex-direction:column;gap:4px;font-size:14px"><strong>Home</strong><span>Dark blueprint, 100vh, clock canvas, emoji badges</span><code style="font-size:12px">hero/NewHeroSection.tsx</code></div>
+    </div>
+    <div style="border-right:2px solid var(--color-text);border-bottom:2px solid var(--color-text);display:flex;flex-direction:column">
+      <div style="height:96px;background:#1565C0;display:flex;align-items:flex-end;padding:12px"><span style="color:#fff;font-weight:700;font-size:15px">About Us</span></div>
+      <div style="padding:14px;display:flex;flex-direction:column;gap:4px;font-size:14px"><strong>About</strong><span>Flat primary.main block, h2 as h1</span><code style="font-size:12px">AboutPageContent.tsx</code></div>
+    </div>
+    <div style="border-right:2px solid var(--color-text);border-bottom:2px solid var(--color-text);display:flex;flex-direction:column">
+      <div style="height:96px;background:linear-gradient(135deg,#1a237e,#0d47a1);display:flex;align-items:flex-end;padding:12px"><span style="color:#fff;font-weight:700;font-size:15px">Transform Your Future</span></div>
+      <div style="padding:14px;display:flex;flex-direction:column;gap:4px;font-size:14px"><strong>Coaching</strong><span>Indigo gradient, white + green buttons</span><code style="font-size:12px">CoachingPageContent.tsx</code></div>
+    </div>
+    <div style="border-right:2px solid var(--color-text);border-bottom:2px solid var(--color-text);display:flex;flex-direction:column">
+      <div style="height:96px;background:linear-gradient(135deg,#00315f,#004a8a);display:flex;align-items:flex-end;padding:12px"><span style="color:#fff;font-weight:700;font-size:15px;font-family:Poppins,sans-serif">NATA 2026</span></div>
+      <div style="padding:14px;display:flex;flex-direction:column;gap:4px;font-size:14px"><strong>NATA hub</strong><span>M3 tonal gradient, stripes, Poppins</span><code style="font-size:12px">nata/sections/HeroSection.tsx</code></div>
+    </div>
+    <div style="border-right:2px solid var(--color-text);border-bottom:2px solid var(--color-text);display:flex;flex-direction:column">
+      <div style="height:96px;background:#FAFBFC;display:flex;align-items:flex-end;justify-content:center;padding:12px"><span style="color:#1A2027;font-weight:800;font-size:15px">Course Fees</span></div>
+      <div style="padding:14px;display:flex;flex-direction:column;gap:4px;font-size:14px"><strong>Fees</strong><span>No hero, centred h3 on light ground</span><code style="font-size:12px">FeesPageContent.tsx</code></div>
+    </div>
+  </div>
+  <p style="margin:0;font-size:13px;color:var(--color-neutral-700)">Schematic thumbnails drawn from each file's background and heading values. They are not screenshots.</p>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:20px">
+  <h2 style="margin:0;font-size:28px;font-weight:800">04 — Findings</h2>
+  <div style="display:flex;flex-direction:column;border-top:2px solid var(--color-text)">
+
+    <div style="display:grid;grid-template-columns:56px minmax(0,1fr);gap:16px;padding:20px 0;border-bottom:2px solid var(--color-divider)">
+      <span style="font-weight:800;font-size:20px">F1</span>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><strong style="font-size:18px">The homepage runs on its own theme</strong><span class="tag tag-accent">High</span></div>
+        <p style="margin:0;line-height:1.55;max-width:760px">A nested <code>ThemeProvider</code> swaps in <code>neramaiArchitekDarkTheme</code>, so <code>primary.main</code>, <code>text.secondary</code> and <code>h2</code> resolve to different values on Home than on every other page. Header and Footer are shared, and the Footer is hard-coded dark navy/gold. Inner pages therefore go light body → dark footer, with no dark section at the top to match it.</p>
+        <sc-if value="{{ showEvidence }}" hint-placeholder-val="{{ true }}"><code style="font-size:13px;color:var(--color-neutral-700)">HomePageContent.tsx:141 · Footer.tsx:107 (bgcolor #030812) · [locale]/layout.tsx:175</code></sc-if>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:56px minmax(0,1fr);gap:16px;padding:20px 0;border-bottom:2px solid var(--color-divider)">
+      <span style="font-weight:800;font-size:20px">F2</span>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><strong style="font-size:18px">Code comments no longer match the theme setup</strong><span class="tag tag-neutral">Medium</span></div>
+        <p style="margin:0;line-height:1.55;max-width:760px"><code>NewHeroSection</code> says it "wraps itself in a nested ThemeProvider so the rest of the page stays on the existing marketing light theme". It doesn't. The wrapper sits in <code>HomePageContent</code> and covers the whole page. Anyone reading the hero code will assume the wrong scope.</p>
+        <sc-if value="{{ showEvidence }}" hint-placeholder-val="{{ true }}"><code style="font-size:13px;color:var(--color-neutral-700)">hero/NewHeroSection.tsx:19–23</code></sc-if>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:56px minmax(0,1fr);gap:16px;padding:20px 0;border-bottom:2px solid var(--color-divider)">
+      <span style="font-weight:800;font-size:20px">F3</span>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><strong style="font-size:18px">Type is set inline, per page</strong><span class="tag tag-accent">High</span></div>
+        <p style="margin:0;line-height:1.55;max-width:760px">Six font stacks are in use: Inter (body), Museo (logo), Poppins/Plus Jakarta Sans (NATA sections), a theme serif (Nexus showcase), and four different monospace strings. The home eyebrow stack <code>"SFMono-Regular", "Cascadia Code"…</code> is pasted in 14 places. The page H1 also changes each time: Home 3.5rem/1.05, Coaching 3.5rem/700, Fees is an <code>h3</code> at 2.5rem/800, About is an <code>h2</code>.</p>
+        <sc-if value="{{ showEvidence }}" hint-placeholder-val="{{ true }}"><code style="font-size:13px;color:var(--color-neutral-700)">HomePageContent.tsx:158,220,341,441 · hero/*.tsx · nata/sections/HeroSection.tsx:205 · apply/showcase/palette.ts:30</code></sc-if>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:56px minmax(0,1fr);gap:16px;padding:20px 0;border-bottom:2px solid var(--color-divider)">
+      <span style="font-weight:800;font-size:20px">F4</span>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><strong style="font-size:18px">Hard-coded colours bypass the theme</strong><span class="tag tag-accent">High</span></div>
+        <p style="margin:0;line-height:1.55;max-width:760px">Five blues, six golds and five navies appear as literals (see 02). The Header's CTA states use hard-coded <code>#2E7D32</code>, <code>#90CAF9</code> and white alpha values. These were written for a dark header and don't adapt to a light one. A palette change in <code>@neram/ui</code> won't reach any of them.</p>
+        <sc-if value="{{ showEvidence }}" hint-placeholder-val="{{ true }}"><code style="font-size:13px;color:var(--color-neutral-700)">Header.tsx:78–132 · CoachingPageContent.tsx:114,134,314 · Footer.tsx:101–428 · AboutPageContent.tsx AVATAR_COLORS</code></sc-if>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:56px minmax(0,1fr);gap:16px;padding:20px 0;border-bottom:2px solid var(--color-divider)">
+      <span style="font-weight:800;font-size:20px">F5</span>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><strong style="font-size:18px">The homepage's section pattern exists only as copied code</strong><span class="tag tag-accent">High</span></div>
+        <p style="margin:0;line-height:1.55;max-width:760px">Each homepage section is built the same way: mono eyebrow, then centred h2, then a lede capped at 480–560px, then a grid. It's written out by hand each time, in HomePageContent, Testimonials, SocialProof and StudentResultsTeaser. Inner pages never picked it up, so the strongest part of the homepage hasn't spread to other pages. <code>SectionDivider</code> (the gold diamond) is also used on Home only.</p>
+        <sc-if value="{{ showEvidence }}" hint-placeholder-val="{{ true }}"><code style="font-size:13px;color:var(--color-neutral-700)">HomePageContent.tsx:155–185, 217–246, 338–366 · SectionDivider.tsx · TestimonialsPageContent.tsx:484,799</code></sc-if>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:56px minmax(0,1fr);gap:16px;padding:20px 0;border-bottom:2px solid var(--color-divider)">
+      <span style="font-weight:800;font-size:20px">F6</span>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><strong style="font-size:18px">Two icon systems</strong><span class="tag tag-neutral">Medium</span></div>
+        <p style="margin:0;line-height:1.55;max-width:760px">Homepage tool cards and floating hero badges use emoji (🧮 🎓 📍 ✂️ 🎯 📚). The Header, Fees and Contact pages use MUI outlined icons. Emoji also render differently on Android, iOS and Windows, and ~60% of traffic is mobile.</p>
+        <sc-if value="{{ showEvidence }}" hint-placeholder-val="{{ true }}"><code style="font-size:13px;color:var(--color-neutral-700)">HomePageContent.tsx:72–90 · hero/NewHeroSection.tsx:181–203 · Header.tsx:28–47</code></sc-if>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:56px minmax(0,1fr);gap:16px;padding:20px 0;border-bottom:2px solid var(--color-divider)">
+      <span style="font-weight:800;font-size:20px">F7</span>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><strong style="font-size:18px">The homepage breaks the team's own mobile rules</strong><span class="tag tag-neutral">Medium</span></div>
+        <p style="margin:0;line-height:1.55;max-width:760px">The project's CLAUDE.md requires a 16px base font. The hero subhead is 13px on phones and the primary CTA label is 12px. The tool cards use <code>backdropFilter: blur(12px)</code> plus radial gradients, which are costly to render on low-end Android against the LCP-under-2.5s-on-3G target.</p>
+        <sc-if value="{{ showEvidence }}" hint-placeholder-val="{{ true }}"><code style="font-size:13px;color:var(--color-neutral-700)">hero/NewHeroSection.tsx:115,151 · HomePageContent.tsx:262–275 · CLAUDE.md "Mobile-first rules"</code></sc-if>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:56px minmax(0,1fr);gap:16px;padding:20px 0;border-bottom:2px solid var(--color-divider)">
+      <span style="font-weight:800;font-size:20px">F8</span>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><strong style="font-size:18px">Global CSS is half light, half dark</strong><span class="tag tag-neutral">Medium</span></div>
+        <p style="margin:0;line-height:1.55;max-width:760px"><code>globals.css</code> sets body to #FAFBFC/#1A2027 and the loading spinner and focus ring to Material blue. In the same file, <code>--neram-*</code> variables and the <code>.neram-glass</code> and <code>.neram-blueprint-bg</code> utilities are dark-only. Home shows a light flash and blue spinner before the dark page paints.</p>
+        <sc-if value="{{ showEvidence }}" hint-placeholder-val="{{ true }}"><code style="font-size:13px;color:var(--color-neutral-700)">styles/globals.css:7–18, 70–76, 118–121, 133–156, 230–260</code></sc-if>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:56px minmax(0,1fr);gap:16px;padding:20px 0;border-bottom:2px solid var(--color-divider)">
+      <span style="font-weight:800;font-size:20px">F9</span>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><strong style="font-size:18px">Small inconsistencies that add up</strong><span class="tag tag-outline">Low</span></div>
+        <p style="margin:0;line-height:1.55;max-width:760px">The same tools link to two URL schemes: <code>/tools/cutoff-calculator</code> in the tool cards and <code>/tools/nata/cutoff-calculator</code> in the hero badges. Leftover <code>.tsx.tmp.*</code> files and <code>HeroLegacy.tsx</code> are still in <code>components/</code>. Section alternation uses <code>grey.50</code> bands on About and gold dividers on Home.</p>
+        <sc-if value="{{ showEvidence }}" hint-placeholder-val="{{ true }}"><code style="font-size:13px;color:var(--color-neutral-700)">HomePageContent.tsx:76,82 vs NewHeroSection.tsx:185,192 · hero/*.tmp.* · HeroLegacy.tsx</code></sc-if>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:20px">
+  <h2 style="margin:0;font-size:28px;font-weight:800">05 — Recommendation: make the homepage the system</h2>
+  <p style="margin:0;max-width:760px;line-height:1.55">The homepage is the most deliberate design on the site, so don't rebuild it. Turn it into the system. Keep one set of brand tokens with two surfaces: a <strong>dark band</strong> for the hero, CTA strip and footer, and a <strong>light body</strong> for long-form SEO content, which reads better light. Every page then opens dark, reads light and closes dark, so it feels like the homepage without forcing 200+ content pages into dark mode.</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));border-top:2px solid var(--color-text);border-left:2px solid var(--color-text)">
+    <div style="padding:20px;border-right:2px solid var(--color-text);border-bottom:2px solid var(--color-text);display:flex;flex-direction:column;gap:10px">
+      <span class="tag tag-outline" style="align-self:flex-start">Tokens</span>
+      <strong>One source: <code>neramTokens</code></strong>
+      <p style="margin:0;font-size:15px;line-height:1.5">navy 900/800/700 (#060d1f, #0b1629, #122040) · paper #f5f0e8 · gold 500/300 · blue 500 for links and focus · success green · neutral ramp for the light body. Remove every other hex.</p>
+    </div>
+    <div style="padding:20px;border-right:2px solid var(--color-text);border-bottom:2px solid var(--color-text);display:flex;flex-direction:column;gap:10px">
+      <span class="tag tag-outline" style="align-self:flex-start">Themes</span>
+      <strong>Two themes built from those tokens</strong>
+      <p style="margin:0;font-size:15px;line-height:1.5">Rebuild <code>marketingLightTheme</code> and <code>neramaiArchitekDarkTheme</code> from the shared tokens and one type scale. Remove the nested provider on Home. Dark becomes a <code>&lt;Surface tone="dark"&gt;</code> wrapper around a section, not a whole-page theme.</p>
+    </div>
+    <div style="padding:20px;border-right:2px solid var(--color-text);border-bottom:2px solid var(--color-text);display:flex;flex-direction:column;gap:10px">
+      <span class="tag tag-outline" style="align-self:flex-start">Type</span>
+      <strong>Inter + one mono + Museo for the logo</strong>
+      <p style="margin:0;font-size:15px;line-height:1.5">Drop Poppins and the serif. Add an <code>eyebrow</code> variant to the theme (mono 11px, 0.2em, 700). One H1 scale on every page: 2 / 2.5 / 3.5rem, line-height 1.05. Body never below 16px on mobile.</p>
+    </div>
+  </div>
+
+  <h3 style="margin:16px 0 0;font-size:20px;font-weight:800">Components to extract into <code>@neram/ui</code></h3>
+  <div style="overflow-x:auto">
+  <table class="table" style="width:100%;min-width:680px">
+    <thead><tr><th>Component</th><th>Extract from</th><th>Replaces</th></tr></thead>
+    <tbody>
+      <tr><td><strong>SectionHeader</strong> eyebrow · title · lede · align</td><td>HomePageContent eyebrow block</td><td>14 pasted mono stacks; ad-hoc h2/h3 on About, Fees, Coaching</td></tr>
+      <tr><td><strong>PageHero</strong> tone="dark" · title · lede · actions · aside</td><td>NewHeroSection minus clock</td><td>About blue block, Coaching gradient, NATA M3 gradient, Fees' no-hero</td></tr>
+      <tr><td><strong>CtaButton</strong> with arrow and status variants</td><td>Hero / tools CTA + Header getCtaConfig</td><td>Inline sx buttons, hard-coded greens</td></tr>
+      <tr><td><strong>ToolCard</strong> / <strong>FeatureCard</strong></td><td>Homepage tool cards</td><td>Emoji cards; switch to MUI outlined icons</td></tr>
+      <tr><td><strong>Surface</strong> tone="dark" | "light" | "paper"</td><td>neram-blueprint-bg, neram-glass</td><td>grey.50 bands, per-page backgrounds</td></tr>
+      <tr><td><strong>SectionDivider</strong></td><td>Exists already</td><td>Use it on every page, or on none</td></tr>
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<section style="display:flex;flex-direction:column;gap:20px">
+  <h2 style="margin:0;font-size:28px;font-weight:800">06 — Rollout order</h2>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));border-top:2px solid var(--color-text);border-left:2px solid var(--color-text)">
+    <div style="padding:20px;border-right:2px solid var(--color-text);border-bottom:2px solid var(--color-text);display:flex;flex-direction:column;gap:8px"><span style="font-size:13px;font-weight:700;color:var(--color-accent-700)">PHASE 1</span><strong>Tokens + globals</strong><p style="margin:0;font-size:15px;line-height:1.5">Consolidate hexes into neramTokens. Retheme globals.css (spinner, focus, selection). Delete the .tmp files. No visual change on Home.</p></div>
+    <div style="padding:20px;border-right:2px solid var(--color-text);border-bottom:2px solid var(--color-text);display:flex;flex-direction:column;gap:8px"><span style="font-size:13px;font-weight:700;color:var(--color-accent-700)">PHASE 2</span><strong>Extract components</strong><p style="margin:0;font-size:15px;line-height:1.5">Extract SectionHeader, PageHero, CtaButton and Surface. Refactor Home to use them, with no visual diff. Header CTA reads from tokens.</p></div>
+    <div style="padding:20px;border-right:2px solid var(--color-text);border-bottom:2px solid var(--color-text);display:flex;flex-direction:column;gap:8px"><span style="font-size:13px;font-weight:700;color:var(--color-accent-700)">PHASE 3</span><strong>Top-traffic pages</strong><p style="margin:0;font-size:15px;line-height:1.5">Coaching, Courses, Fees, About, Apply. Each gets a dark PageHero, light body and the shared SectionHeader.</p></div>
+    <div style="padding:20px;border-right:2px solid var(--color-text);border-bottom:2px solid var(--color-text);display:flex;flex-direction:column;gap:8px"><span style="font-size:13px;font-weight:700;color:var(--color-accent-700)">PHASE 4</span><strong>SEO templates</strong><p style="margin:0;font-size:15px;line-height:1.5">nata-2026/*, counseling/*, colleges/*, aat/pgeta. Fixing the shared layouts updates hundreds of URLs at once. Lint rule: no hex literals in sx.</p></div>
+  </div>
+</section>
+
+<section style="border-top:2px solid var(--color-text);padding-top:20px;display:flex;flex-direction:column;gap:8px">
+  <strong>Scope and limits</strong>
+  <p style="margin:0;max-width:760px;font-size:15px;line-height:1.55;color:var(--color-neutral-800)">Based on the <code>apps/marketing</code> source. The <code>@neram/ui</code> package, where the theme objects and <code>neramTokens</code> are defined, wasn't in the shared folder, so theme internals are inferred from how pages use them. Counts come from source search and don't account for the live rendered site.</p>
+</section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showEvidence&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Display&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    return { showEvidence: this.props.showEvidence ?? true };
+  }
+}
+</script>
+</body>
+</html>

@@ -7,12 +7,17 @@
  * of the answer-quality review, it turns the one-off review report into an
  * ongoing, one-click check for new conversations.
  *
+ * The result is saved on the row (ai_review), so Aintra Inbox shows the note
+ * after a reload and counts a "wrong" or "needs_fix" verdict as Needs review.
+ * A turn with no answer (credits ran out) gets a drafted reply instead of a
+ * grade, grounded in the active knowledge base.
+ *
  * Runs through @neram/ai, which owns the model list, the fallback order and the
  * metering. The hand-rolled two-model loop that used to live here is gone; so is
  * the `@ts-nocheck` that was covering its untyped fetch body.
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@neram/database';
+import { createAdminClient, getActiveAintraKnowledgeBase } from '@neram/database';
 import { AiBlockedError, generateGemini } from '@neram/ai';
 
 const REVIEW_SYSTEM_PROMPT = `You are a meticulous quality reviewer for "Aintra", the AI assistant of Neram Classes, an architecture-entrance coaching institute in India (NATA and JEE Paper 2 / B.Arch admissions).
@@ -31,6 +36,12 @@ Important rules:
 - Never use em dashes. Keep "reasoning" under 60 words and "suggestedCorrection" under 180 words.
 
 verdict must be exactly one of: "correct", "needs_fix", "wrong", "uncertain".`;
+
+const DRAFT_SYSTEM_PROMPT = `You write replies for "Aintra", the AI assistant of Neram Classes, an architecture-entrance coaching institute in India (NATA and JEE Paper 2 / B.Arch).
+
+A student asked a question but no answer was delivered (the assistant was offline). Draft the reply staff can save. Use ONLY the facts in the knowledge base below for Neram-internal details (fees, timings, centres, demo classes). If the knowledge base does not cover it, say a counsellor will confirm and suggest booking a free demo at neramclasses.com.
+
+Return verdict "uncertain", a one-line "reasoning" naming the knowledge base entry you used (or "Not in the knowledge base"), and the reply in "suggestedCorrection". Address the student as "you", keep it under 150 words, and never use em dashes.`;
 
 const RESPONSE_SCHEMA = {
   type: 'OBJECT',
@@ -58,14 +69,25 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ error: 'This turn has no question to review.' }, { status: 400 });
     }
 
-    const userPrompt = `Student's question:\n"${row.user_message}"\n\nAintra's answer:\n"${row.ai_response || '(no answer was generated)'}"\n\nReview this answer and respond with the JSON object.`;
+    const drafting = !row.ai_response?.trim();
+    let systemInstruction = REVIEW_SYSTEM_PROMPT;
+    let userPrompt = `Student's question:\n"${row.user_message}"\n\nAintra's answer:\n"${row.ai_response}"\n\nReview this answer and respond with the JSON object.`;
+    if (drafting) {
+      const kb = await getActiveAintraKnowledgeBase().catch(() => []);
+      const kbText = kb
+        .slice(0, 80)
+        .map((k) => `Q: ${k.question}\nA: ${k.answer}`)
+        .join('\n\n');
+      systemInstruction = `${DRAFT_SYSTEM_PROMPT}\n\nKNOWLEDGE BASE:\n${kbText || '(empty)'}`;
+      userPrompt = `Student's question:\n"${row.user_message}"\n\nDraft the reply and respond with the JSON object.`;
+    }
 
     let raw: string;
     let model: string;
     try {
       const result = await generateGemini({
         feature: 'admin.chat-review',
-        systemInstruction: REVIEW_SYSTEM_PROMPT,
+        systemInstruction,
         parts: [{ text: userPrompt }],
         temperature: 0.2,
         maxOutputTokens: 900,
@@ -94,12 +116,21 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
 
     try {
       const parsed = JSON.parse(raw);
-      return NextResponse.json({
-        verdict: parsed.verdict || 'uncertain',
+      const review = {
+        verdict: ['correct', 'needs_fix', 'wrong', 'uncertain'].includes(parsed.verdict) ? parsed.verdict : 'uncertain',
         reasoning: parsed.reasoning || '',
         suggestedCorrection: (parsed.suggestedCorrection || '').trim(),
         model,
-      });
+        drafted: drafting,
+        reviewedAt: new Date().toISOString(),
+      };
+      // Saving is best effort: the reviewer still gets the result if the column is missing.
+      const { error: saveError } = await (supabase as any)
+        .from('chatbot_conversations')
+        .update({ ai_review: review })
+        .eq('id', row.id);
+      if (saveError) console.warn('[AintraReview] could not save the review:', saveError.message);
+      return NextResponse.json(review);
     } catch {
       return NextResponse.json({ error: 'AI review failed (BAD_JSON).' }, { status: 502 });
     }

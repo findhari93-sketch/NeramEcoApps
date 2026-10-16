@@ -18,7 +18,51 @@
       {
         "selector": "Literal[value=/generativelanguage\\.googleapis\\.com/]",
         "message": "Call Gemini through @neram/ai rather than building the URL by hand, so the call is metered and the budget guard can refuse it."
+      },
+      {
+        "selector": "Literal[value=/Poppins|Plus Jakarta|Cormorant|DM Sans|Space Mono/]",
+        "message": "The design system uses Inter plus one mono stack (siteTokens.fontSans / fontMono in @neram/ui). See apps/marketing/DESIGN_SYSTEM.md."
       }
     ]
-  }
+  },
+  "overrides": [
+    {
+      "files": [
+        "src/design-system/**",
+        "src/app/design-system/**",
+        "src/components/hero/**",
+        "src/components/HomePageContent.tsx",
+        "src/app/[[]locale]/page.tsx",
+        "src/components/CoachingPageContent.tsx",
+        "src/components/PremiumPageContent.tsx",
+        "src/components/ScholarshipPageContent.tsx",
+        "src/components/CoursesPageContent.tsx",
+        "src/components/CourseDetailContent.tsx",
+        "src/components/FeesPageContent.tsx",
+        "src/components/fees/**",
+        "src/components/AboutPageContent.tsx",
+        "src/components/DemoClassPageContent.tsx",
+        "src/components/demo-class/DemoBookingCard.tsx",
+        "src/app/[[]locale]/nata-online-coaching/page.tsx",
+        "src/app/[[]locale]/nata-entrance-exam-coaching/page.tsx"
+      ],
+      "rules": {
+        "no-restricted-syntax": [
+          "error",
+          {
+            "selector": "Literal[value=/generativelanguage\\.googleapis\\.com/]",
+            "message": "Call Gemini through @neram/ai rather than building the URL by hand, so the call is metered and the budget guard can refuse it."
+          },
+          {
+            "selector": "Literal[value=/Poppins|Plus Jakarta|Cormorant|DM Sans|Space Mono/]",
+            "message": "The design system uses Inter plus one mono stack (siteTokens.fontSans / fontMono in @neram/ui). See apps/marketing/DESIGN_SYSTEM.md."
+          },
+          {
+            "selector": "JSXAttribute[name.name=/^(sx|style)$/] Literal[value=/#[0-9a-fA-F]{3,8}\\b/]",
+            "message": "No hex colours in sx or style. Use the design-system tokens (import { tokens } from '@/design-system'). Migrated files are listed in this override; add yours when you move a page onto the design system. See apps/marketing/DESIGN_SYSTEM.md."
+          }
+        ]
+      }
+    }
+  ]
 }

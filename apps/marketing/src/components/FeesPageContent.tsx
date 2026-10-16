@@ -3,15 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { useParams } from 'next/navigation';
-import {
-  Box,
-  Container,
-  Typography,
-  Button,
-  Grid,
-  Skeleton,
-  Alert,
-} from '@neram/ui';
+import { Box, Typography, Skeleton, Alert } from '@neram/ui';
 import { PhoneOutlined } from '@mui/icons-material';
 import type { FeeStructure } from '@neram/database';
 import FeeCard from '@/components/fees/FeeCard';
@@ -19,6 +11,7 @@ import PaymentToggle from '@/components/fees/PaymentToggle';
 import FAQ from '@/components/fees/FAQ';
 import IncludedSection from '@/components/fees/IncludedSection';
 import { getFeePlanBadge } from '@/lib/fee-plan-badge';
+import { PageHero, Section, CtaButton, tokens } from '@/design-system';
 
 const PHONE_HREF = 'tel:+919176137043';
 const PHONE_LABEL = '+91 91761 37043';
@@ -76,32 +69,16 @@ export default function FeesPageContent() {
   const oneYearPlan = feeStructures.find((fee) => getFeePlanBadge(fee) === 'current_year');
 
   return (
-    <Box sx={{ py: { xs: 3, md: 5 } }}>
-      <Container maxWidth="md">
-        {/* Heading */}
-        <Box textAlign="center" mb={{ xs: 3, md: 4 }}>
-          <Typography
-            variant="h3"
-            component="h1"
-            sx={{
-              fontWeight: 800,
-              fontSize: { xs: '1.75rem', sm: '2.25rem', md: '2.5rem' },
-              lineHeight: 1.2,
-              mb: 1,
-            }}
-          >
-            {t('title')}
-          </Typography>
-          <Typography
-            color="text.secondary"
-            sx={{ maxWidth: 520, mx: 'auto', fontSize: { xs: '1rem', sm: '1.1rem' }, lineHeight: 1.5 }}
-          >
-            {t('subtitle')}
-          </Typography>
-        </Box>
+    <Box>
+      <PageHero
+        title={t('title')}
+        lede={t('subtitle')}
+        blueprint={false}
+      />
 
+      <Section id="plans" rule={false} width="narrow" gap={4}>
         {error && (
-          <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
+          <Alert severity="error" onClose={() => setError(null)}>
             {error}
           </Alert>
         )}
@@ -112,39 +89,32 @@ export default function FeesPageContent() {
 
         {/* Fee cards: one per row on phones so no plan is hidden off screen */}
         {loading ? (
-          <Grid container spacing={3} justifyContent="center" data-testid="fee-skeletons">
+          <Box
+            data-testid="fee-skeletons"
+            sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: 3 }}
+          >
             {[1, 2].map((i) => (
-              <Grid item xs={12} md={6} key={i}>
-                <Skeleton variant="rectangular" height={320} sx={{ borderRadius: 1 }} />
-              </Grid>
+              <Skeleton key={i} variant="rectangular" height={320} sx={{ borderRadius: `${tokens.radius}px` }} />
             ))}
-          </Grid>
+          </Box>
         ) : feeStructures.length === 0 ? (
-          <Box textAlign="center" py={6}>
-            <Typography variant="h6" color="text.secondary" gutterBottom>
+          <Box sx={{ textAlign: 'center', py: 6, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5 }}>
+            <Typography component="h2" sx={{ fontSize: '1.25rem', fontWeight: 700 }}>
               {t('noFeeStructures')}
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              {t('contactForFees')}
-            </Typography>
-            <Button
-              variant="contained"
-              component="a"
-              href={PHONE_HREF}
-              startIcon={<PhoneOutlined />}
-              sx={{ minHeight: 48 }}
-            >
+            <Typography sx={{ color: tokens.inkMuted, mb: 1.5 }}>{t('contactForFees')}</Typography>
+            <CtaButton href={PHONE_HREF} startIcon={<PhoneOutlined aria-hidden />} endIcon={null}>
               {t('callUs')}
-            </Button>
+            </CtaButton>
           </Box>
         ) : (
-          <Box sx={{ mb: { xs: 5, md: 7 } }}>
-            <Grid container spacing={3} justifyContent="center">
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 340px), 1fr))', gap: 3 }}>
               {feeStructures.map((fee) => {
                 const badge = getBadge(fee);
                 const isMultiYear = getFeePlanBadge(fee) === 'future_year';
                 return (
-                  <Grid item xs={12} md={6} key={fee.id} data-testid="fee-card">
+                  <Box key={fee.id} data-testid="fee-card">
                     <FeeCard
                       fee={fee}
                       paymentMode={paymentMode}
@@ -153,39 +123,32 @@ export default function FeesPageContent() {
                       badgeColor={badge?.color}
                       isHighlighted={badge?.highlighted}
                       isMultiYear={isMultiYear}
-                      extraOverOneYear={
-                        isMultiYear && oneYearPlan ? priceOf(fee) - priceOf(oneYearPlan) : 0
-                      }
+                      extraOverOneYear={isMultiYear && oneYearPlan ? priceOf(fee) - priceOf(oneYearPlan) : 0}
                       t={t}
                     />
-                  </Grid>
+                  </Box>
                 );
               })}
-            </Grid>
-
-            <Typography variant="body2" color="text.secondary" textAlign="center" sx={{ mt: 3 }}>
-              {t('comboNote')}
-            </Typography>
+            </Box>
+            <Typography sx={{ textAlign: 'center', fontSize: '0.9375rem', color: tokens.inkMuted }}>{t('comboNote')}</Typography>
           </Box>
         )}
+      </Section>
 
-        {/* What the fee buys, shown even before the prices load */}
+      {/* What the fee buys, shown even before the prices load */}
+      <Section id="included-band" tone="white" width="narrow">
         <IncludedSection t={t} />
+      </Section>
 
+      <Section id="fee-faq" width="narrow" gap={4}>
         <FAQ t={t} keys={FEE_FAQ_KEYS} />
-
         {/* One quiet contact line instead of a sales block */}
-        <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
-          <Button
-            component="a"
-            href={PHONE_HREF}
-            startIcon={<PhoneOutlined />}
-            sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}
-          >
+        <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+          <CtaButton variant="link" href={PHONE_HREF} startIcon={<PhoneOutlined aria-hidden />} endIcon={null}>
             {t('questionsCall')} {PHONE_LABEL}
-          </Button>
+          </CtaButton>
         </Box>
-      </Container>
+      </Section>
     </Box>
   );
 }
