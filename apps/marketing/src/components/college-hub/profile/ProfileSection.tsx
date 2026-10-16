@@ -1,4 +1,5 @@
 import { Box, Typography } from '@mui/material';
+import { siteTokens } from '@neram/ui/site-tokens';
 
 interface Props {
   id: string;
@@ -20,10 +21,10 @@ export default function ProfileSection({ id, title, action, children }: Props) {
       aria-labelledby={`${id}-heading`}
       sx={{
         scrollMarginTop: 'calc(var(--broadcast-banner-height, 0px) + 64px)',
-        bgcolor: 'background.paper',
+        bgcolor: siteTokens.surface,
         border: { md: '1px solid' },
-        borderColor: { md: 'divider' },
-        borderRadius: { xs: 0, md: 2 },
+        borderColor: { md: siteTokens.line },
+        borderRadius: { xs: 0, md: 1 },
         px: { xs: 2, md: 3.5 },
         py: { xs: 2.5, md: 3.5 },
         display: 'flex',

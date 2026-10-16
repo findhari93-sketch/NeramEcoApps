@@ -40,14 +40,31 @@ export type SignInFilter = 'any' | 'never' | 'inactive' | 'active_week';
 export type AccountFilter = 'any' | 'no_microsoft' | 'possible_duplicate';
 /** Whether the student's own record holds an application form. */
 export type FormFilter = 'any' | 'missing' | 'linked';
+/** How recently the student joined this classroom, by enrolled_at. */
+export type JoinedFilter = 'any' | 'last_7' | 'last_30';
 
 export interface RosterFilters {
+  joined: JoinedFilter;
   signIn: SignInFilter;
   account: AccountFilter;
   form: FormFilter;
 }
 
-export const DEFAULT_FILTERS: RosterFilters = { signIn: 'any', account: 'any', form: 'any' };
+export const DEFAULT_FILTERS: RosterFilters = { joined: 'any', signIn: 'any', account: 'any', form: 'any' };
+
+export const JOINED_FILTER_LABEL: Record<JoinedFilter, string> = {
+  any: 'Any time',
+  last_7: 'Last 7 days',
+  last_30: 'Last 30 days',
+};
+
+/** The removable chip's words, which have to stand on their own away from the sheet. */
+export const JOINED_CHIP_LABEL: Record<Exclude<JoinedFilter, 'any'>, string> = {
+  last_7: 'Joined in the last 7 days',
+  last_30: 'Joined in the last 30 days',
+};
+
+const JOINED_WITHIN_DAYS: Record<Exclude<JoinedFilter, 'any'>, number> = { last_7: 7, last_30: 30 };
 
 export const SIGN_IN_FILTER_LABEL: Record<SignInFilter, string> = {
   any: 'Any',
@@ -119,6 +136,12 @@ export function activityOf(student: RosterStudent, now: number): StudentActivity
 }
 
 export function matchesFilters(student: RosterStudent, filters: RosterFilters, now: number): boolean {
+  if (filters.joined !== 'any') {
+    // An unknown join date is never "recent": better missing from a short list
+    // than sitting in it for no reason.
+    const joined = timeOf(student.enrolled_at);
+    if (joined === null || now - joined > JOINED_WITHIN_DAYS[filters.joined] * DAY_MS) return false;
+  }
   if (filters.signIn === 'never' && activityOf(student, now) !== 'never_signed_in') return false;
   if (filters.signIn === 'inactive' && activityOf(student, now) !== 'inactive') return false;
   if (filters.signIn === 'active_week') {
@@ -134,6 +157,7 @@ export function matchesFilters(student: RosterStudent, filters: RosterFilters, n
 
 export function activeFilterCount(filters: RosterFilters): number {
   return (
+    (filters.joined !== 'any' ? 1 : 0) +
     (filters.signIn !== 'any' ? 1 : 0) +
     (filters.account !== 'any' ? 1 : 0) +
     (filters.form !== 'any' ? 1 : 0)
@@ -258,6 +282,8 @@ export function parseStoredFilters(raw: string | null): RosterFilters {
   try {
     const value = JSON.parse(raw) as Record<string, unknown> | null;
     return {
+      // Stored before the joined filter existed, so a missing key is the default.
+      joined: ownKey(JOINED_FILTER_LABEL, value?.joined) ? value!.joined as JoinedFilter : 'any',
       signIn: ownKey(SIGN_IN_FILTER_LABEL, value?.signIn) ? value!.signIn as SignInFilter : 'any',
       account: ownKey(ACCOUNT_FILTER_LABEL, value?.account) ? value!.account as AccountFilter : 'any',
       // Stored before the form filter existed, so a missing key is the default.

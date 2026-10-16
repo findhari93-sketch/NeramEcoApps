@@ -2,7 +2,6 @@
 
 import { Alert, Box, Button, CircularProgress, InputAdornment, MenuItem, Stack, TextField, Typography } from '@neram/ui';
 import CheckCircleOutlined from '@mui/icons-material/CheckCircleOutlined';
-import EditOutlined from '@mui/icons-material/EditOutlined';
 import MyLocationOutlined from '@mui/icons-material/MyLocationOutlined';
 import PlaceOutlined from '@mui/icons-material/PlaceOutlined';
 import PublicOutlined from '@mui/icons-material/PublicOutlined';
@@ -11,8 +10,9 @@ import { useFormContext } from '../FormContext';
 import { OTHER_COUNTRY, SUPPORTED_COUNTRIES } from '../countryConfig';
 import { useLocationLookup } from '../steps/useLocationLookup';
 import Field from './Field';
+import { tokens as tk } from '@/design-system';
 
-const linkButtonSx = { minHeight: 44, px: 1, ml: -1, fontWeight: 700, justifyContent: 'flex-start' } as const;
+const linkButtonSx = { minHeight: 44, px: 1, ml: -1, color: tk.ink, fontSize: 14, fontWeight: 600, justifyContent: 'flex-start' } as const;
 
 /**
  * "Where you live". India: a PIN code, and the place it finds shown under it
@@ -48,13 +48,14 @@ export default function PlaceField({ onTouched }: { onTouched?: () => void }) {
       <Typography
         id="apply-place-heading"
         component="h2"
-        sx={{ m: 0, mb: 1.5, fontSize: 16, fontWeight: 700, lineHeight: 1.3, color: 'text.primary' }}
+        sx={{ m: 0, mb: 1.5, fontSize: 17, fontWeight: 700, lineHeight: 1.3, color: tk.ink }}
       >
         {t('aboutYou.location')}
       </Typography>
 
       {inIndia ? (
         <Stack spacing={1.5}>
+          <Box sx={{ maxWidth: 280 }}>
           <Field
             id="apply-pincode"
             label={t('aboutYou.pinCode')}
@@ -86,44 +87,39 @@ export default function PlaceField({ onTouched }: { onTouched?: () => void }) {
                   <InputAdornment position="end">
                     <CircularProgress size={20} aria-label={t('aboutYou.pinLooking')} />
                   </InputAdornment>
-                ) : showPlaceLine && location.locationSource !== 'manual' ? (
-                  <InputAdornment position="end">
-                    <CheckCircleOutlined color="success" aria-hidden />
-                  </InputAdornment>
                 ) : null,
               }}
             />
           </Field>
+          </Box>
 
           <Box aria-live="polite">
             {showPlaceLine && (
               <Box
                 data-testid="apply-place-line"
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 1,
-                  pl: 1.5,
-                  pr: 0.5,
-                  minHeight: 52,
-                  bgcolor: '#f4f3ef',
-                  borderLeft: '3px solid',
-                  borderColor: 'primary.main',
-                }}
+                sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 1, minHeight: 44 }}
               >
-                <PlaceOutlined aria-hidden sx={{ fontSize: 20, color: 'text.secondary', flex: 'none' }} />
-                <Typography sx={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 600, overflowWrap: 'anywhere' }}>
+                <CheckCircleOutlined aria-hidden sx={{ fontSize: 20, color: tk.success, flex: 'none' }} />
+                <Typography sx={{ minWidth: 0, fontSize: 15, fontWeight: 700, color: tk.ink, overflowWrap: 'anywhere' }}>
                   {placeLine}
                 </Typography>
                 <Button
-                  size="small"
                   variant="text"
-                  startIcon={<EditOutlined fontSize="small" />}
                   onClick={() => setIsPlaceEditable(true)}
                   aria-label={t('aboutYou.editPlace')}
-                  sx={{ flex: 'none', minHeight: 44, minWidth: 44, fontWeight: 700 }}
+                  sx={{
+                    flex: 'none',
+                    minHeight: 44,
+                    minWidth: 44,
+                    px: 1,
+                    color: tk.ink,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    textDecoration: 'underline',
+                    '&:hover': { textDecoration: 'underline', bgcolor: 'transparent', color: tk.gold800 },
+                  }}
                 >
-                  {t('review.editShort')}
+                  {t('aboutYou.editPlace')}
                 </Button>
               </Box>
             )}

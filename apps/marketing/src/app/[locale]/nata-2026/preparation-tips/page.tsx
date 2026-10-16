@@ -1,28 +1,13 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import {
-  Box,
-  Container,
-  Typography,
-  Card,
-  CardContent,
-  Button,
-  Chip,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-} from '@neram/ui';
-import Link from 'next/link';
+import { Box } from '@neram/ui';
+import AppsOutlinedIcon from '@mui/icons-material/AppsOutlined';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema, generateFAQSchema, generateHowToSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { APP_URL } from '@/lib/seo/constants';
-import LastUpdatedBadge from '@/components/nata/LastUpdatedBadge';
-import Breadcrumbs from '@/components/seo/Breadcrumbs';
+import { nataGuideNav, nataRelated } from '@/components/nata/guideNav';
+import { ArticleSection, CheckList, CtaBand, CtaButton, DataTable, FaqList, GuideArticle, InfoCard, InlineCta, tokens } from '@/design-system';
 
 
 export async function generateMetadata({
@@ -80,9 +65,9 @@ const faqs = [
 const studyPlanPhases = [
   {
     phase: 'Phase 1',
+    code: '01',
     months: 'Month 1-2',
     title: 'Foundation Building',
-    color: '#1565c0',
     items: [
       'Learn basics of freehand drawing: lines, shapes, proportions',
       'Study fundamental math concepts: algebra, trigonometry basics',
@@ -94,9 +79,9 @@ const studyPlanPhases = [
   },
   {
     phase: 'Phase 2',
+    code: '02',
     months: 'Month 3-4',
     title: 'Practice & Improvement',
-    color: '#2e7d32',
     items: [
       'Practice 2-3 full compositions daily with time limits',
       'Solve advanced math problems: coordinate geometry, mensuration',
@@ -108,9 +93,9 @@ const studyPlanPhases = [
   },
   {
     phase: 'Phase 3',
+    code: '03',
     months: 'Month 5-6',
     title: 'Mock Tests & Revision',
-    color: '#e65100',
     items: [
       'Take 2-3 full-length mock tests per week',
       'Focus on weak areas identified from mock test analysis',
@@ -126,7 +111,6 @@ const sectionStrategies = [
   {
     title: 'Drawing & Composition',
     marks: '80 marks',
-    color: '#1565c0',
     tips: [
       'Practice 2-3 compositions daily on diverse themes (urban, nature, abstract)',
       'Study architectural landmarks: Taj Mahal, Lotus Temple, Fallingwater, Guggenheim',
@@ -139,7 +123,6 @@ const sectionStrategies = [
   {
     title: 'Mathematics',
     marks: '40 marks (Part B)',
-    color: '#2e7d32',
     tips: [
       'Focus on algebra, trigonometry, coordinate geometry, and mensuration',
       'Practice mental math for speed and avoid calculator dependency',
@@ -152,7 +135,6 @@ const sectionStrategies = [
   {
     title: 'General Aptitude',
     marks: '80 marks (Part B)',
-    color: '#7b1fa2',
     tips: [
       'Build general knowledge of Indian and world architecture',
       'Stay updated with current affairs related to design and architecture',
@@ -165,10 +147,10 @@ const sectionStrategies = [
 ];
 
 const dailySchedule = [
-  { time: '6:00 - 7:30 AM', activity: 'Drawing Practice', duration: '1.5 hrs', description: 'Freehand compositions, sketching, perspective drawing', color: '#1565c0' },
-  { time: '8:00 - 9:30 AM', activity: 'Mathematics', duration: '1.5 hrs', description: 'Problem solving, formula practice, previous year questions', color: '#2e7d32' },
-  { time: '4:00 - 5:30 PM', activity: 'General Aptitude & GK', duration: '1.5 hrs', description: 'Reasoning, architecture GK, current affairs, visual perception', color: '#7b1fa2' },
-  { time: '7:00 - 8:00 PM', activity: 'Mock Test / Revision', duration: '1 hr', description: 'Timed mock tests or revision of weak areas', color: '#e65100' },
+  { time: '6:00 - 7:30 AM', activity: 'Drawing Practice', duration: '1.5 hrs', description: 'Freehand compositions, sketching, perspective drawing' },
+  { time: '8:00 - 9:30 AM', activity: 'Mathematics', duration: '1.5 hrs', description: 'Problem solving, formula practice, previous year questions' },
+  { time: '4:00 - 5:30 PM', activity: 'General Aptitude & GK', duration: '1.5 hrs', description: 'Reasoning, architecture GK, current affairs, visual perception' },
+  { time: '7:00 - 8:00 PM', activity: 'Mock Test / Revision', duration: '1 hr', description: 'Timed mock tests or revision of weak areas' },
 ];
 
 const commonMistakes = [
@@ -188,6 +170,7 @@ const howToSteps = [
   { name: 'Practice with Mock Tests', text: 'Start taking section-wise mock tests from Month 3 and full-length mock tests from Month 5. Analyze your performance, identify weak areas, and track improvement over time.' },
   { name: 'Review and Revise', text: 'In the final month, focus on revision of formulas, practice weak areas, and take mock tests under exam conditions. Maintain an error log and review it regularly.' },
 ];
+
 
 export default function PreparationTipsPage({ params: { locale } }: PageProps) {
   setRequestLocale(locale);
@@ -213,218 +196,99 @@ export default function PreparationTipsPage({ params: { locale } }: PageProps) {
         })}
       />
 
-      <Box>
-        {/* Hero */}
-        <Box sx={{ py: { xs: 8, md: 12 }, background: 'linear-gradient(135deg, #1a237e 0%, #0d47a1 100%)', color: 'white' }}>
-          <Container maxWidth="lg">
-            <Breadcrumbs
-              variant="light"
-              items={[
-                { name: 'Home', href: `/${locale}` },
-                { name: 'NATA 2026', href: `/${locale}/nata-2026` },
-                { name: 'Preparation Tips' },
-              ]}
-            />
-            <Chip label="NATA 2026" sx={{ bgcolor: 'white', color: 'primary.main', mb: 2, mt: 2, fontWeight: 600 }} />
-            <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', sm: '2.5rem', md: '3.5rem' } }}>
-              NATA 2026 Preparation Tips
-            </Typography>
-            <Typography variant="h5" sx={{ mb: 2, opacity: 0.9, fontSize: { xs: '1.1rem', md: '1.5rem' } }}>
-              Start your NATA 2026 preparation at least 6 months before the exam. Focus 60% of your time on Drawing &amp; Composition (80 marks) and 40% on Mathematics &amp; General Aptitude (120 marks). Daily practice of 3-4 hours with structured mock tests is the proven strategy for scoring above 140.
-            </Typography>
-            <LastUpdatedBadge date="March 13, 2026" />
-          </Container>
-        </Box>
-
-        {/* Month-wise Study Plan */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
-          <Container maxWidth="md">
-            <Typography variant="h2" component="h2" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>
-              Month-wise NATA 2026 Study Plan
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 4, lineHeight: 1.8 }}>
-              A structured 6-month study plan divided into three phases. Each phase builds on the previous one, gradually increasing difficulty and exam readiness.
-            </Typography>
+      <GuideArticle
+        breadcrumb={[{ name: 'Home', href: '/' }, { name: 'NATA 2026', href: '/nata-2026' }, { name: 'Preparation Tips' }]}
+        eyebrow="NATA 2026 · Exam guide"
+        title="NATA 2026 Preparation Tips"
+        lede="Start your NATA 2026 preparation at least 6 months before the exam. Focus 60% of your time on Drawing & Composition (80 marks) and 40% on Mathematics & General Aptitude (120 marks). Daily practice of 3-4 hours with structured mock tests is the proven strategy for scoring above 140."
+        verified="Updated March 13, 2026 · Source: Official NATA 2026 Brochure V1.0"
+        nav={nataGuideNav('preparation-tips')}
+        related={nataRelated(['drawing-test', 'syllabus', 'exam-pattern', 'scoring-and-results'])}
+        back={{ label: 'Back to NATA 2026 guide', href: '/nata-2026' }}
+      >
+        <ArticleSection
+          id="study-plan"
+          title="Month-wise NATA 2026 Study Plan"
+          intro="A structured 6-month study plan divided into three phases. Each phase builds on the previous one, gradually increasing difficulty and exam readiness."
+        >
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
             {studyPlanPhases.map((phase) => (
-              <Card key={phase.phase} sx={{ mb: 3 }}>
-                <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
-                    <Chip label={phase.phase} sx={{ bgcolor: phase.color, color: 'white', fontWeight: 600 }} />
-                    <Typography variant="subtitle2" color="text.secondary">{phase.months}</Typography>
-                  </Box>
-                  <Typography variant="h6" gutterBottom sx={{ fontWeight: 700 }}>{phase.title}</Typography>
-                  <List>
-                    {phase.items.map((item, idx) => (
-                      <ListItem key={idx} sx={{ px: 0 }}>
-                        <ListItemIcon sx={{ minWidth: 32 }}>
-                          <Typography color="success.main" sx={{ fontWeight: 700 }}>&#x2713;</Typography>
-                        </ListItemIcon>
-                        <ListItemText primary={item} />
-                      </ListItem>
-                    ))}
-                  </List>
-                </CardContent>
-              </Card>
+              <InfoCard key={phase.phase} code={phase.code} title={phase.title} meta={`${phase.phase} · ${phase.months}`}>
+                <Box sx={{ mt: 1, color: tokens.ink }}>
+                  <CheckList variant="compact" items={phase.items} />
+                </Box>
+              </InfoCard>
             ))}
-          </Container>
-        </Box>
+          </Box>
+        </ArticleSection>
 
-        {/* Section-wise Strategy */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
-          <Container maxWidth="md">
-            <Typography variant="h2" component="h2" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>
-              Section-wise Preparation Strategy
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 4, lineHeight: 1.8 }}>
-              NATA 2026 has two parts: Drawing (Part A, 80 marks) and MCQ (Part B, 120 marks). Here is a detailed strategy for each section.
-            </Typography>
+        <ArticleSection
+          id="section-strategy"
+          title="Section-wise Preparation Strategy"
+          intro="NATA 2026 has two parts: Drawing (Part A, 80 marks) and MCQ (Part B, 120 marks). Here is a detailed strategy for each section."
+        >
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
             {sectionStrategies.map((section) => (
-              <Card key={section.title} sx={{ mb: 3 }}>
-                <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
-                    <Typography variant="h6" sx={{ fontWeight: 700 }}>{section.title}</Typography>
-                    <Chip label={section.marks} size="small" sx={{ bgcolor: section.color, color: 'white', fontWeight: 600 }} />
-                  </Box>
-                  <List>
-                    {section.tips.map((tip, idx) => (
-                      <ListItem key={idx} sx={{ px: 0 }}>
-                        <ListItemIcon sx={{ minWidth: 32 }}>
-                          <Typography sx={{ fontWeight: 700, color: section.color }}>&#x2022;</Typography>
-                        </ListItemIcon>
-                        <ListItemText primary={tip} />
-                      </ListItem>
-                    ))}
-                  </List>
-                </CardContent>
-              </Card>
+              <InfoCard key={section.title} title={section.title} meta={section.marks}>
+                <Box sx={{ mt: 1, color: tokens.ink }}>
+                  <CheckList variant="compact" items={section.tips} />
+                </Box>
+              </InfoCard>
             ))}
-          </Container>
-        </Box>
+          </Box>
+        </ArticleSection>
 
-        {/* Daily Schedule */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
-          <Container maxWidth="md">
-            <Typography variant="h2" component="h2" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>
-              Recommended Daily Study Schedule
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 4, lineHeight: 1.8 }}>
-              A balanced daily schedule of 5.5 hours covering all sections. Adjust timings to fit your routine, but maintain the proportions.
-            </Typography>
-            {dailySchedule.map((slot) => (
-              <Card key={slot.time} sx={{ mb: 2 }}>
-                <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
-                  <Box sx={{ display: 'flex', alignItems: { xs: 'flex-start', md: 'center' }, gap: { xs: 1, md: 3 }, flexDirection: { xs: 'column', md: 'row' } }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: { md: 160 } }}>
-                      <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: slot.color, flexShrink: 0 }} />
-                      <Typography variant="subtitle2" sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{slot.time}</Typography>
-                    </Box>
-                    <Box sx={{ flex: 1 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{slot.activity}</Typography>
-                        <Chip label={slot.duration} size="small" variant="outlined" />
-                      </Box>
-                      <Typography variant="body2" color="text.secondary">{slot.description}</Typography>
-                    </Box>
-                  </Box>
-                </CardContent>
-              </Card>
-            ))}
-          </Container>
-        </Box>
+        <ArticleSection
+          id="daily-schedule"
+          title="Recommended Daily Study Schedule"
+          intro="A balanced daily schedule of 5.5 hours covering all sections. Adjust timings to fit your routine, but maintain the proportions."
+        >
+          <DataTable
+            caption="Recommended daily NATA study schedule"
+            hideCaption
+            columns={['Time', 'Activity', 'Duration', 'Focus']}
+            mutedColumn={3}
+            rows={dailySchedule.map((slot) => [slot.time, slot.activity, slot.duration, slot.description])}
+          />
+        </ArticleSection>
 
-        {/* Common Mistakes to Avoid */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
-          <Container maxWidth="md">
-            <Typography variant="h2" component="h2" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>
-              Common Mistakes NATA Aspirants Make
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 3, lineHeight: 1.8 }}>
-              Avoid these common pitfalls that can cost you valuable marks and preparation time.
-            </Typography>
-            <Card>
-              <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-                <List>
-                  {commonMistakes.map((mistake, idx) => (
-                    <ListItem key={idx} sx={{ px: 0 }}>
-                      <ListItemIcon sx={{ minWidth: 32 }}>
-                        <Typography color="error.main" sx={{ fontWeight: 700, fontSize: '1.1rem' }}>&#x2717;</Typography>
-                      </ListItemIcon>
-                      <ListItemText primary={mistake} />
-                    </ListItem>
-                  ))}
-                </List>
-              </CardContent>
-            </Card>
-          </Container>
-        </Box>
+        <ArticleSection
+          id="common-mistakes"
+          title="Common Mistakes NATA Aspirants Make"
+          intro="Avoid these common pitfalls that can cost you valuable marks and preparation time."
+        >
+          <CheckList tone="no" columnMin={1000} items={commonMistakes} />
+        </ArticleSection>
 
-        {/* CTA: Tools */}
-        <Box sx={{ py: { xs: 4, md: 6 }, bgcolor: 'background.default', textAlign: 'center' }}>
-          <Container maxWidth="md">
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 600 }}>
-              Practice with our free NATA tools
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-              Use our free mock tests, drawing practice tools, and score predictor to boost your NATA preparation.
-            </Typography>
-            <Button variant="contained" size="large" component="a" href={`${APP_URL}/tools/nata`} target="_blank" rel="noopener noreferrer">
+        <InlineCta
+          eyebrow="Free tools"
+          icon={<AppsOutlinedIcon />}
+          title="Practice with our free NATA tools"
+          body="Use our free mock tests, drawing practice tools, and score predictor to boost your NATA preparation."
+          action={
+            <CtaButton href={`${APP_URL}/tools/nata`} external>
               Explore NATA Tools (Free)
-            </Button>
-          </Container>
-        </Box>
+            </CtaButton>
+          }
+        />
 
-        {/* Also Read */}
-        <Box sx={{ py: { xs: 6, md: 8 }, bgcolor: 'grey.50' }}>
-          <Container maxWidth="md">
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>Also Read</Typography>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-              {[
-                { title: 'NATA 2026 Drawing Test', slug: 'drawing-test' },
-                { title: 'NATA 2026 Syllabus', slug: 'syllabus' },
-                { title: 'NATA 2026 Exam Pattern', slug: 'exam-pattern' },
-                { title: 'Scoring & Results', slug: 'scoring-and-results' },
-              ].map((item) => (
-                <Link key={item.slug} href={`/${locale}/nata-2026/${item.slug}`} style={{ textDecoration: 'none' }}>
-                  <Card sx={{ p: 2, color: 'inherit', transition: 'box-shadow 0.2s', '&:hover': { boxShadow: 3 } }}>
-                    <Typography variant="subtitle1" color="primary.main" sx={{ fontWeight: 600 }}>{item.title} &rarr;</Typography>
-                  </Card>
-                </Link>
-              ))}
-            </Box>
-          </Container>
-        </Box>
+        <ArticleSection id="faq" title="FAQs: NATA 2026 Preparation">
+          <FaqList items={faqs} defaultOpen={-1} />
+        </ArticleSection>
+      </GuideArticle>
 
-        {/* FAQ */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
-          <Container maxWidth="md">
-            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs: NATA 2026 Preparation</Typography>
-            {faqs.map((faq, index) => (
-              <Accordion key={index} disableGutters sx={{ '&:before': { display: 'none' }, mb: 1, borderRadius: 1, overflow: 'hidden' }}>
-                <AccordionSummary expandIcon={<Typography sx={{ fontSize: '1.2rem', fontWeight: 600 }}>+</Typography>} sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}>
-                  <Typography sx={{ fontWeight: 600 }}>{faq.question}</Typography>
-                </AccordionSummary>
-                <AccordionDetails sx={{ bgcolor: 'white' }}>
-                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>{faq.answer}</Typography>
-                </AccordionDetails>
-              </Accordion>
-            ))}
-          </Container>
-        </Box>
-
-        {/* CTA Banner */}
-        <Box sx={{ py: { xs: 6, md: 10 }, background: 'linear-gradient(135deg, #0d47a1 0%, #1565c0 100%)', color: 'white', textAlign: 'center' }}>
-          <Container maxWidth="md">
-            <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '1.75rem', md: '2.5rem' } }}>
-              Prepare for NATA 2026 with Neram Classes
-            </Typography>
-            <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>Expert coaching, free tools, and personalized guidance.</Typography>
-            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <Button variant="contained" size="large" component={Link} href="/apply" sx={{ background: '#ffffff', color: '#0d47a1', fontWeight: 700, px: 4, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', '&:hover': { background: '#f0f0f0' } }}>Start Free Trial</Button>
-              <Button variant="outlined" size="large" component={Link} href={`/${locale}/nata-2026`} sx={{ borderColor: 'white', color: 'white' }}>Back to NATA 2026 Guide</Button>
-            </Box>
-          </Container>
-        </Box>
-      </Box>
+      <CtaBand
+        title="Prepare for NATA 2026 with Neram Classes"
+        lede="Expert coaching, free tools, and personalized guidance."
+        actions={
+          <>
+            <CtaButton href="/apply">Start Free Trial</CtaButton>
+            <CtaButton variant="link" href="/demo-class">
+              Book a free demo class
+            </CtaButton>
+          </>
+        }
+      />
     </>
   );
 }

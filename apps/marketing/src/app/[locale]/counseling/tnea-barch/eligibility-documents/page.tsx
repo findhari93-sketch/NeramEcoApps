@@ -9,9 +9,10 @@ import {
   Grid,
   Button,
   Divider,
-  Alert,
 } from '@mui/material';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import CheckCircleIcon from '@mui/icons-material/CheckCircleOutlined';
+import { siteTokens as t } from '@neram/ui/site-tokens';
+import { Callout } from '@/design-system';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { generateArticleSchema } from '@/lib/seo/schemas';
 import TneaSpokeShell from '@/components/tnea-barch/TneaSpokeShell';
@@ -78,7 +79,7 @@ export default function EligibilityDocumentsPage({
       </Typography>
       <Paper
         elevation={0}
-        sx={{ p: 2.5, borderRadius: 2, border: '1px solid', borderColor: 'divider', mb: 3 }}
+        sx={{ p: 2.5, borderRadius: 1, border: `1px solid ${t.line}`, mb: 3 }}
       >
         <Typography variant="body1" sx={{ mb: 2 }}>
           {eligibility.academic.qualification}
@@ -110,16 +111,20 @@ export default function EligibilityDocumentsPage({
             <Chip key={s} label={s} size="small" variant="outlined" />
           ))}
         </Stack>
-        <Alert severity="info" sx={{ mt: 2, borderRadius: 1.5 }}>
-          {eligibility.academic.diploma_alternative}
-        </Alert>
+        <Box sx={{ mt: 2 }}>
+          <Callout>
+            <Box component="p" sx={{ m: 0 }}>
+                {eligibility.academic.diploma_alternative}
+            </Box>
+          </Callout>
+        </Box>
       </Paper>
 
       {/* Aptitude */}
       <Typography variant="h5" component="h2" fontWeight={800} sx={{ mb: 2 }}>
         Aptitude test (mandatory)
       </Typography>
-      <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2, border: '1px solid', borderColor: 'divider', mb: 3 }}>
+      <Paper elevation={0} sx={{ p: 2.5, borderRadius: 1, border: `1px solid ${t.line}`, mb: 3 }}>
         <Stack direction="row" gap={1} flexWrap="wrap" sx={{ mb: 1.5 }}>
           {eligibility.aptitude.accepted_exams.map((e) => (
             <Chip key={e} label={e} color="primary" />
@@ -148,10 +153,10 @@ export default function EligibilityDocumentsPage({
           <Paper
             key={rule.id}
             elevation={0}
-            sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+            sx={{ p: 2, borderRadius: 1, border: `1px solid ${t.line}` }}
           >
             <Stack direction="row" gap={1} alignItems="flex-start">
-              <CheckCircleIcon sx={{ color: 'success.main', fontSize: 18, mt: 0.25, flexShrink: 0 }} />
+              <CheckCircleIcon aria-hidden sx={{ color: t.gold800, fontSize: 18, mt: 0.25, flexShrink: 0 }} />
               <Box>
                 <Typography variant="subtitle2" fontWeight={700}>
                   {rule.title}
@@ -173,10 +178,10 @@ export default function EligibilityDocumentsPage({
         elevation={0}
         sx={{
           p: 3,
-          borderRadius: 2,
-          border: '2px solid',
-          borderColor: 'primary.main',
-          bgcolor: '#E3F2FD',
+          borderRadius: 1,
+          border: `1px solid ${t.line}`,
+          borderTop: `3px solid ${t.gold500}`,
+          bgcolor: t.surface,
           mb: 1.5,
         }}
       >
@@ -209,7 +214,7 @@ export default function EligibilityDocumentsPage({
           <Paper
             key={doc.name}
             elevation={0}
-            sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+            sx={{ p: 2, borderRadius: 1, border: `1px solid ${t.line}` }}
           >
             <Typography variant="subtitle2" fontWeight={700}>
               {doc.name}

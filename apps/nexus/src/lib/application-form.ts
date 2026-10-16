@@ -46,6 +46,8 @@ export interface ApplicationForm {
   state?: string | null;
   source?: string | null;
   status?: string | null;
+  /** Set when staff entered or approved the row, which a student's own page never does. */
+  reviewed_by?: string | null;
   created_at: string;
 }
 
@@ -73,6 +75,36 @@ export function pickApplicationForm<T extends ApplicationForm>(rows: readonly T[
     if (!best || new Date(row.created_at).getTime() > new Date(best.created_at).getTime()) best = row;
   }
   return best;
+}
+
+/**
+ * A row the student's own "complete your profile" page in Nexus wrote: source
+ * 'manual', no application number, and no member of staff behind it.
+ *
+ * Its answers are real (class, exam year, father's name), so the class and exam
+ * year fill still reads it through isApplicationForm. What it is not is an
+ * application. Counting it as one hid 14 students on prod who never applied, Rayna
+ * Choudhary among them: she filled in this page on the day she was enrolled and
+ * the roster stopped saying "No application form".
+ *
+ * Admin's "Fill in Admin" also writes source 'manual', and stamps reviewed_by, so
+ * a form staff typed in from a phone call still counts.
+ */
+export function isProfileDetailsOnly(row: ApplicationForm | null | undefined): boolean {
+  if (!row) return false;
+  return row.source === 'manual' && !String(row.application_number ?? '').trim() && !row.reviewed_by;
+}
+
+/** Does this row count as the student having applied: what the roster's form flag asks. */
+export function isSubmittedApplication(row: ApplicationForm | null | undefined): boolean {
+  return isApplicationForm(row) && !isProfileDetailsOnly(row);
+}
+
+/** The newest row that is an application, skipping the profile page's rows. */
+export function pickSubmittedApplication<T extends ApplicationForm>(
+  rows: readonly T[] | null | undefined,
+): T | null {
+  return pickApplicationForm((rows || []).filter((row) => !isProfileDetailsOnly(row)));
 }
 
 const CLASS_LABEL: Record<string, string> = {

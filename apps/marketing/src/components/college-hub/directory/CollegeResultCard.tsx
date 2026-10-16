@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { Box, Button, Typography } from '@mui/material';
-import { alpha } from '@mui/material/styles';
 import CheckIcon from '@mui/icons-material/Check';
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
 import StarRoundedIcon from '@mui/icons-material/StarRounded';
@@ -21,6 +20,7 @@ import {
   hubType,
   statLabelSx,
 } from './hub-styles';
+import { tokens } from '@/design-system';
 
 export interface CompareProps {
   inCompare: boolean;
@@ -45,12 +45,12 @@ export default function CollegeResultCard({ college: c, rank, inCompare, onToggl
       component="article"
       aria-labelledby={`college-${c.id}`}
       sx={{
-        bgcolor: 'background.paper',
+        bgcolor: tokens.surface,
         border: '1px solid',
-        borderColor: inCompare ? 'primary.main' : paid ? (t) => alpha(t.palette.secondary.main, 0.45) : 'divider',
-        borderRadius: 2,
+        borderColor: inCompare ? tokens.navy900 : paid ? tokens.goldTintBorder : tokens.line,
+        borderRadius: 1,
         overflow: 'hidden',
-        boxShadow: '0 1px 2px rgba(15, 27, 45, 0.05)',
+        boxShadow: 'none',
         transition: 'border-color 0.2s',
       }}
     >
@@ -71,12 +71,12 @@ export default function CollegeResultCard({ college: c, rank, inCompare, onToggl
               <Box
                 component={Link}
                 href={href}
-                sx={{ color: 'text.primary', textDecoration: 'none', '&:hover': { color: 'primary.main' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2, borderRadius: 0.5 } }}
+                sx={{ color: tokens.ink, textDecoration: 'none', '&:hover': { color: tokens.navy900 }, '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2, borderRadius: 1 } }}
               >
                 {c.name}
               </Box>
             </Typography>
-            <Typography sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.75, fontSize: hubType.meta, color: 'text.secondary', m: 0 }}>
+            <Typography sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.75, fontSize: hubType.meta, color: tokens.inkMuted, m: 0 }}>
               <PlaceOutlinedIcon aria-hidden sx={{ fontSize: 15 }} />
               <span>
                 {c.city}, {c.state}
@@ -108,11 +108,11 @@ export default function CollegeResultCard({ college: c, rank, inCompare, onToggl
         {rating && (
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: { xs: 'flex-start', sm: 'flex-end' }, gap: 0.25, flex: '0 0 auto' }}>
             <Typography sx={{ m: 0, display: 'flex', alignItems: 'center', gap: 0.75 }}>
-              <StarRoundedIcon aria-hidden sx={{ fontSize: 18, color: 'warning.dark' }} />
+              <StarRoundedIcon aria-hidden sx={{ fontSize: 18, color: tokens.gold800 }} />
               <Box component="span" sx={{ fontSize: 18, fontWeight: 700 }}>{rating}</Box>
-              <Box component="span" sx={{ fontSize: 12.5, color: 'text.secondary' }}>/ 5</Box>
+              <Box component="span" sx={{ fontSize: 12.5, color: tokens.inkMuted }}>/ 5</Box>
             </Typography>
-            <Box component={Link} href={`${href}#reviews`} sx={{ fontSize: 12.5, fontWeight: 500, color: 'primary.dark' }}>
+            <Box component={Link} href={`${href}#reviews`} sx={{ fontSize: 12.5, fontWeight: 500, color: tokens.navy900 }}>
               {c.review_count} student {c.review_count === 1 ? 'review' : 'reviews'}
             </Box>
           </Box>
@@ -122,8 +122,8 @@ export default function CollegeResultCard({ college: c, rank, inCompare, onToggl
       <Box
         sx={{
           borderTop: '1px solid',
-          borderColor: 'divider',
-          bgcolor: (t) => (t.palette.mode === 'light' ? t.palette.grey[50] : 'transparent'),
+          borderColor: tokens.line,
+          bgcolor: tokens.ground,
           px: { xs: 2, md: 2.5 },
           py: 1.25,
           display: 'flex',
@@ -141,7 +141,7 @@ export default function CollegeResultCard({ college: c, rank, inCompare, onToggl
               <Box component="dt" sx={statLabelSx}>{s.label}</Box>
               <Box
                 component="dd"
-                sx={{ m: 0, fontSize: hubType.stat, fontWeight: s.muted ? 500 : 700, color: s.muted ? 'text.secondary' : 'text.primary', fontVariantNumeric: 'tabular-nums' }}
+                sx={{ m: 0, fontSize: hubType.stat, fontWeight: s.muted ? 500 : 700, color: s.muted ? tokens.inkMuted : tokens.ink, fontVariantNumeric: 'tabular-nums' }}
               >
                 {s.value}
               </Box>
@@ -160,13 +160,13 @@ export default function CollegeResultCard({ college: c, rank, inCompare, onToggl
               px: 1.75,
               boxSizing: 'border-box',
               border: '1px solid',
-              borderColor: inCompare ? 'primary.main' : 'grey.400',
-              borderRadius: 1.5,
-              bgcolor: (t) => (inCompare ? alpha(t.palette.primary.main, 0.08) : t.palette.background.paper),
+              borderColor: inCompare ? tokens.navy900 : tokens.lineStrong,
+              borderRadius: 1,
+              bgcolor: inCompare ? tokens.surfaceHover : tokens.surface,
               fontSize: hubType.meta,
               fontWeight: 600,
               cursor: 'pointer',
-              '&:focus-within': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+              '&:focus-within': { outline: tokens.focusOutline, outlineOffset: 2 },
             }}
           >
             <Box
@@ -175,7 +175,7 @@ export default function CollegeResultCard({ college: c, rank, inCompare, onToggl
               checked={inCompare}
               onChange={onToggleCompare}
               aria-label={`Compare ${shortName(c)}`}
-              sx={{ width: 18, height: 18, m: 0, accentColor: (t) => t.palette.primary.main, cursor: 'pointer' }}
+              sx={{ width: 18, height: 18, m: 0, accentColor: tokens.navy900, cursor: 'pointer' }}
             />
             Compare
           </Box>
@@ -184,12 +184,12 @@ export default function CollegeResultCard({ college: c, rank, inCompare, onToggl
               width: 44,
               height: 44,
               border: '1px solid',
-              borderColor: 'grey.400',
-              borderRadius: 1.5,
+              borderColor: tokens.lineStrong,
+              borderRadius: 1,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              bgcolor: 'background.paper',
+              bgcolor: tokens.surface,
               '& .MuiIconButton-root': { width: 42, height: 42 },
             }}
           >
@@ -201,7 +201,7 @@ export default function CollegeResultCard({ college: c, rank, inCompare, onToggl
             variant="contained"
             disableElevation
             endIcon={<ArrowForwardIcon />}
-            sx={{ minHeight: 44, height: 44, px: 2.25, borderRadius: 1.5, fontSize: hubType.meta }}
+            sx={{ minHeight: 44, height: 44, px: 2.25, borderRadius: 1, fontSize: hubType.meta }}
           >
             View details
           </Button>

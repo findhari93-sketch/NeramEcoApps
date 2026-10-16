@@ -16,6 +16,7 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import RelatedContent from '@/components/seo/RelatedContent';
+import { siteTokens as t } from '@neram/ui/site-tokens';
 
 
 export async function generateMetadata({
@@ -190,22 +191,23 @@ export default function BestBooksNataJeePage({ params: { locale } }: PageProps) 
       <Box
         sx={{
           py: { xs: 6, md: 10 },
-          background: 'linear-gradient(135deg, #6a1b9a 0%, #4a148c 100%)',
-          color: 'white',
+          bgcolor: t.navy900,
+          ...t.blueprint,
+          color: t.paper,
         }}
       >
         <Container maxWidth="lg">
           <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', md: '3rem' } }}>
             Best Books for NATA & JEE Paper 2
           </Typography>
-          <Typography variant="h5" sx={{ mb: 3, opacity: 0.9 }}>
+          <Typography variant="h5" sx={{ mb: 3, color: t.paperMuted }}>
             Expert-recommended books for comprehensive preparation
           </Typography>
           <Button
             variant="contained"
             component={Link}
             href="/free-resources"
-            sx={{ bgcolor: 'white', color: 'secondary.main' }}
+            sx={{ minHeight: 48 }}
           >
             Get Free Study Materials
           </Button>
@@ -216,7 +218,7 @@ export default function BestBooksNataJeePage({ params: { locale } }: PageProps) 
       <Box sx={{ py: { xs: 6, md: 10 } }}>
         <Container maxWidth="lg">
           <Typography variant="h2" component="h2" gutterBottom sx={{ fontWeight: 700, mb: 4 }}>
-            📐 Mathematics Books
+            Mathematics Books
           </Typography>
           <Grid container spacing={3}>
             {bookRecommendations.mathematics.map((book, index) => (
@@ -225,9 +227,8 @@ export default function BestBooksNataJeePage({ params: { locale } }: PageProps) 
                   {book.mustHave && (
                     <Chip
                       label="Must Have"
-                      color="error"
                       size="small"
-                      sx={{ position: 'absolute', top: 12, right: 12 }}
+                      sx={{ position: 'absolute', top: 12, right: 12, bgcolor: t.navy900, color: t.gold300, fontWeight: 700 }}
                     />
                   )}
                   <CardContent sx={{ p: 3 }}>
@@ -250,10 +251,10 @@ export default function BestBooksNataJeePage({ params: { locale } }: PageProps) 
       </Box>
 
       {/* Aptitude Books */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
+      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: t.ground }}>
         <Container maxWidth="lg">
           <Typography variant="h2" component="h2" gutterBottom sx={{ fontWeight: 700, mb: 4 }}>
-            🧠 Aptitude Books
+            Aptitude Books
           </Typography>
           <Grid container spacing={3}>
             {bookRecommendations.aptitude.map((book, index) => (
@@ -262,9 +263,8 @@ export default function BestBooksNataJeePage({ params: { locale } }: PageProps) 
                   {book.mustHave && (
                     <Chip
                       label="Must Have"
-                      color="error"
                       size="small"
-                      sx={{ position: 'absolute', top: 12, right: 12 }}
+                      sx={{ position: 'absolute', top: 12, right: 12, bgcolor: t.navy900, color: t.gold300, fontWeight: 700 }}
                     />
                   )}
                   <CardContent sx={{ p: 3 }}>
@@ -290,7 +290,7 @@ export default function BestBooksNataJeePage({ params: { locale } }: PageProps) 
       <Box sx={{ py: { xs: 6, md: 10 } }}>
         <Container maxWidth="lg">
           <Typography variant="h2" component="h2" gutterBottom sx={{ fontWeight: 700, mb: 4 }}>
-            ✏️ Drawing & Sketching Books
+            Drawing & Sketching Books
           </Typography>
           <Grid container spacing={3}>
             {bookRecommendations.drawing.map((book, index) => (
@@ -299,9 +299,8 @@ export default function BestBooksNataJeePage({ params: { locale } }: PageProps) 
                   {book.mustHave && (
                     <Chip
                       label="Must Have"
-                      color="error"
                       size="small"
-                      sx={{ position: 'absolute', top: 12, right: 12 }}
+                      sx={{ position: 'absolute', top: 12, right: 12, bgcolor: t.navy900, color: t.gold300, fontWeight: 700 }}
                     />
                   )}
                   <CardContent sx={{ p: 3 }}>
@@ -324,10 +323,10 @@ export default function BestBooksNataJeePage({ params: { locale } }: PageProps) 
       </Box>
 
       {/* Architecture Awareness Books */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
+      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: t.ground }}>
         <Container maxWidth="lg">
           <Typography variant="h2" component="h2" gutterBottom sx={{ fontWeight: 700, mb: 4 }}>
-            🏛️ Architecture Awareness Books
+            Architecture Awareness Books
           </Typography>
           <Grid container spacing={3}>
             {bookRecommendations.architecture.map((book, index) => (
@@ -336,9 +335,8 @@ export default function BestBooksNataJeePage({ params: { locale } }: PageProps) 
                   {book.mustHave && (
                     <Chip
                       label="Must Have"
-                      color="error"
                       size="small"
-                      sx={{ position: 'absolute', top: 12, right: 12 }}
+                      sx={{ position: 'absolute', top: 12, right: 12, bgcolor: t.navy900, color: t.gold300, fontWeight: 700 }}
                     />
                   )}
                   <CardContent sx={{ p: 3 }}>
@@ -386,12 +384,12 @@ export default function BestBooksNataJeePage({ params: { locale } }: PageProps) 
       </Box>
 
       {/* CTA Section */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'secondary.main', color: 'white', textAlign: 'center' }}>
+      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: t.navy900, color: t.paper, textAlign: 'center' }}>
         <Container maxWidth="md">
           <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700 }}>
             Need Expert Guidance?
           </Typography>
-          <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>
+          <Typography variant="h6" sx={{ mb: 4, color: t.paperMuted }}>
             Books are important, but guided coaching makes the difference
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -400,7 +398,7 @@ export default function BestBooksNataJeePage({ params: { locale } }: PageProps) 
               size="large"
               component={Link}
               href="/apply"
-              sx={{ bgcolor: 'white', color: 'secondary.main' }}
+              sx={{ minHeight: 48 }}
             >
               Join Coaching
             </Button>
@@ -409,7 +407,7 @@ export default function BestBooksNataJeePage({ params: { locale } }: PageProps) 
               size="large"
               component={Link}
               href="/free-resources"
-              sx={{ borderColor: 'white', color: 'white' }}
+              sx={{ minHeight: 48, borderColor: t.outlineDark, color: t.paper, '&:hover': { bgcolor: 'transparent', borderColor: t.gold500, color: t.gold500 } }}
             >
               Free Resources
             </Button>

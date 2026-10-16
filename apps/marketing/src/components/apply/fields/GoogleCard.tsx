@@ -3,6 +3,7 @@
 import { Box, CircularProgress, Typography } from '@neram/ui';
 import ButtonBase from '@mui/material/ButtonBase';
 import ArrowForward from '@mui/icons-material/ArrowForward';
+import { tokens as t } from '@/design-system';
 
 interface GoogleCardProps {
   title: string;
@@ -25,8 +26,9 @@ function GoogleG() {
 }
 
 /**
- * The sign-in card at the top of About you: a full-width 2 px ink box with the
- * Google mark, a title, one line under it and an arrow. It opens the existing
+ * The sign-in card at the top of About you: a full-width white card (1px
+ * lineStrong, gold border on hover) with the Google mark in a 40px tile, a
+ * title, one line under it and an arrow. It opens the existing
  * sign-in dialog (Google or phone OTP), which fills the name and email.
  */
 export default function GoogleCard({ title, body, onClick, busy = false }: GoogleCardProps) {
@@ -38,36 +40,47 @@ export default function GoogleCard({ title, body, onClick, busy = false }: Googl
       focusRipple
       sx={{
         width: '100%',
-        minHeight: 64,
-        px: 2,
-        py: 1.5,
-        gap: 1.75,
+        minHeight: 76,
+        px: 2.5,
+        py: 1.75,
+        gap: 2,
         justifyContent: 'flex-start',
         textAlign: 'left',
-        border: '2px solid',
-        borderColor: 'text.primary',
-        bgcolor: '#fff',
-        transition: 'background-color 150ms',
-        '&:hover': { bgcolor: '#f4f3ef' },
-        '&.Mui-focusVisible': { boxShadow: '0 0 0 3px rgba(232, 160, 32, 0.35)' },
+        borderRadius: `${t.radius}px`,
+        border: `1px solid ${t.lineStrong}`,
+        bgcolor: t.surface,
+        transition: 'border-color 150ms',
+        '&:hover': { borderColor: t.gold500 },
+        '&.Mui-focusVisible': { outline: t.focusOutline, outlineOffset: '2px' },
         '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
       }}
     >
-      <Box sx={{ display: 'flex', flex: 'none' }}>
+      <Box
+        sx={{
+          width: 40,
+          height: 40,
+          flex: 'none',
+          borderRadius: `${t.radius}px`,
+          border: `1px solid ${t.line}`,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
         <GoogleG />
       </Box>
       <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography component="span" sx={{ display: 'block', fontSize: 16, fontWeight: 700, lineHeight: 1.3, color: 'text.primary' }}>
+        <Typography component="span" sx={{ display: 'block', fontSize: 17, fontWeight: 700, lineHeight: 1.3, color: t.ink }}>
           {title}
         </Typography>
-        <Typography component="span" sx={{ display: 'block', fontSize: 13, lineHeight: 1.4, color: 'text.secondary', mt: 0.25 }}>
+        <Typography component="span" sx={{ display: 'block', fontSize: 14, lineHeight: 1.45, color: t.inkMuted, mt: 0.25 }}>
           {body}
         </Typography>
       </Box>
       {busy ? (
-        <CircularProgress size={20} sx={{ flex: 'none', color: 'text.primary' }} aria-hidden />
+        <CircularProgress size={20} sx={{ flex: 'none', color: t.ink }} aria-hidden />
       ) : (
-        <ArrowForward aria-hidden sx={{ flex: 'none', color: 'text.primary', fontSize: 20 }} />
+        <ArrowForward aria-hidden sx={{ flex: 'none', color: t.ink, fontSize: 22 }} />
       )}
     </ButtonBase>
   );

@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { Box, Typography } from '@mui/material';
-import { alpha } from '@mui/material/styles';
 import CheckIcon from '@mui/icons-material/Check';
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
 import StarRoundedIcon from '@mui/icons-material/StarRounded';
@@ -13,6 +12,7 @@ import CollegeLogo from './CollegeLogo';
 import { cardStats, isPaidListing } from './card-stats';
 import { coaChipSx, examChipSx, featuredChipSx, hubType, statLabelSx } from './hub-styles';
 import type { CompareProps } from './CollegeResultCard';
+import { tokens } from '@/design-system';
 
 interface Props extends CompareProps {
   college: ListingCollege;
@@ -41,22 +41,22 @@ export default function CollegeGridTile({ college: c, rank, inCompare, onToggleC
         boxSizing: 'border-box',
         display: 'flex',
         flexDirection: 'column',
-        bgcolor: 'background.paper',
+        bgcolor: tokens.surface,
         border: '1px solid',
-        borderColor: inCompare ? 'primary.main' : 'divider',
-        borderRadius: 2,
+        borderColor: inCompare ? tokens.navy900 : tokens.line,
+        borderRadius: 1,
         overflow: 'hidden',
-        boxShadow: '0 1px 2px rgba(15, 27, 45, 0.05)',
+        boxShadow: 'none',
       }}
     >
       <Box sx={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column', gap: 1.25, p: 2, pb: 1.75, minWidth: 0 }}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1.5, minHeight: 52 }}>
           <CollegeLogo name={c.name} logoUrl={c.logo_url} size={52} rank={rank} />
           {rating ? (
-            <Typography sx={{ m: 0, display: 'flex', alignItems: 'center', gap: 0.5, height: 30, px: 1.25, borderRadius: 4, bgcolor: (t) => alpha(t.palette.warning.main, 0.12), fontSize: '0.8rem' }}>
-              <StarRoundedIcon aria-hidden sx={{ fontSize: 16, color: 'warning.dark' }} />
+            <Typography sx={{ m: 0, display: 'flex', alignItems: 'center', gap: 0.5, height: 30, px: 1.25, borderRadius: `${tokens.radiusPill}px`, bgcolor: tokens.goldTintBg, fontSize: '0.8rem' }}>
+              <StarRoundedIcon aria-hidden sx={{ fontSize: 16, color: tokens.gold800 }} />
               <b>{rating}</b>
-              <Box component="span" sx={{ color: 'text.secondary' }}>({c.review_count})</Box>
+              <Box component="span" sx={{ color: tokens.inkMuted }}>({c.review_count})</Box>
             </Typography>
           ) : isPaidListing(c) ? (
             <Box component="span" sx={featuredChipSx}>Featured · paid</Box>
@@ -78,11 +78,11 @@ export default function CollegeGridTile({ college: c, rank, inCompare, onToggleC
               overflow: 'hidden',
             }}
           >
-            <Box component={Link} href={href} sx={{ color: 'text.primary', textDecoration: 'none', '&:hover': { color: 'primary.main' } }}>
+            <Box component={Link} href={href} sx={{ color: tokens.ink, textDecoration: 'none', '&:hover': { color: tokens.navy900 } }}>
               {c.name}
             </Box>
           </Typography>
-          <Typography sx={{ m: 0, display: 'flex', alignItems: 'center', gap: 0.75, fontSize: hubType.meta, color: 'text.secondary', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          <Typography sx={{ m: 0, display: 'flex', alignItems: 'center', gap: 0.75, fontSize: hubType.meta, color: tokens.inkMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             <PlaceOutlinedIcon aria-hidden sx={{ fontSize: 15 }} />
             {c.city} · {typeLabel(c.type)}
           </Typography>
@@ -102,12 +102,12 @@ export default function CollegeGridTile({ college: c, rank, inCompare, onToggleC
         </Box>
         <Box
           component="dl"
-          sx={{ m: 0, mt: 'auto', pt: 1.5, borderTop: '1px solid', borderColor: 'divider', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px 12px' }}
+          sx={{ m: 0, mt: 'auto', pt: 1.5, borderTop: '1px solid', borderColor: tokens.line, display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '10px 12px' }}
         >
           {stats.map((s) => (
             <Box key={s.key} sx={{ display: 'flex', flexDirection: 'column', gap: 0.125, minWidth: 0 }}>
               <Box component="dt" sx={{ ...statLabelSx, fontSize: 11 }}>{s.label}</Box>
-              <Box component="dd" sx={{ m: 0, fontSize: 14, fontWeight: s.muted ? 500 : 700, color: s.muted ? 'text.secondary' : 'text.primary', fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <Box component="dd" sx={{ m: 0, fontSize: 14, fontWeight: s.muted ? 500 : 700, color: s.muted ? tokens.inkMuted : tokens.ink, fontVariantNumeric: 'tabular-nums', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {s.value}
               </Box>
             </Box>
@@ -124,18 +124,18 @@ export default function CollegeGridTile({ college: c, rank, inCompare, onToggleC
           pl: 1.75,
           pr: 1,
           borderTop: '1px solid',
-          borderColor: 'divider',
-          bgcolor: (t) => (inCompare ? alpha(t.palette.primary.main, 0.08) : t.palette.mode === 'light' ? t.palette.grey[50] : 'transparent'),
+          borderColor: tokens.line,
+          bgcolor: inCompare ? tokens.surfaceHover : tokens.ground,
         }}
       >
-        <Box component="label" sx={{ display: 'flex', alignItems: 'center', gap: 1, height: 44, fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', '&:focus-within': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2, borderRadius: 1 } }}>
+        <Box component="label" sx={{ display: 'flex', alignItems: 'center', gap: 1, height: 44, fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', '&:focus-within': { outline: tokens.focusOutline, outlineOffset: 2, borderRadius: 1 } }}>
           <Box
             component="input"
             type="checkbox"
             checked={inCompare}
             onChange={onToggleCompare}
             aria-label={`Compare ${shortName(c)}`}
-            sx={{ width: 18, height: 18, m: 0, accentColor: (t) => t.palette.primary.main, cursor: 'pointer' }}
+            sx={{ width: 18, height: 18, m: 0, accentColor: tokens.navy900, cursor: 'pointer' }}
           />
           Compare
         </Box>
@@ -143,7 +143,7 @@ export default function CollegeGridTile({ college: c, rank, inCompare, onToggleC
           component={Link}
           href={href}
           aria-label={`Details of ${c.name}`}
-          sx={{ display: 'flex', alignItems: 'center', gap: 0.75, height: 44, px: 1.25, fontSize: '0.875rem', fontWeight: 600, color: 'primary.dark', textDecoration: 'none', borderRadius: 1, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' } }}
+          sx={{ display: 'flex', alignItems: 'center', gap: 0.75, height: 44, px: 1.25, fontSize: '0.875rem', fontWeight: 600, color: tokens.navy900, textDecoration: 'none', borderRadius: 1, '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } }}
         >
           Details
           <ArrowForwardIcon aria-hidden sx={{ fontSize: 16 }} />

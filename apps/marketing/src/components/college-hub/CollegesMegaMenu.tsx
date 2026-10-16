@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { Box, Typography } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import MegaMenuPanel, { type NavAside, type NavColumn, type NavFooter } from '@/components/nav/MegaMenuPanel';
+import { tokens } from '@/design-system';
 
 interface Props {
   columns: NavColumn[];
@@ -29,9 +30,9 @@ export default function CollegesMegaMenu({ columns, aside, footer, pathname, onN
         onNavigate();
         router.push(term ? `/colleges?q=${encodeURIComponent(term)}#browse` : '/colleges#browse');
       }}
-      sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px 20px', px: 3.5, py: 2.25, borderBottom: '1px solid', borderColor: 'divider' }}
+      sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '12px 20px', px: 3.5, py: 2.25, borderBottom: '1px solid', borderColor: tokens.line }}
     >
-      <Box sx={{ flex: '1 1 420px', display: 'flex', alignItems: 'center', gap: 1.25, height: 46, px: 1.75, boxSizing: 'border-box', border: '1.5px solid', borderColor: 'grey.400', borderRadius: 2, color: 'text.secondary', '&:focus-within': { borderColor: 'primary.main' } }}>
+      <Box sx={{ flex: '1 1 420px', display: 'flex', alignItems: 'center', gap: 1.25, height: 46, px: 1.75, boxSizing: 'border-box', border: '1.5px solid', borderColor: tokens.lineStrong, borderRadius: 1, color: tokens.inkMuted, '&:focus-within': { borderColor: tokens.navy900 } }}>
         <SearchIcon aria-hidden sx={{ fontSize: 20 }} />
         <Box component="label" htmlFor="mega-q" sx={{ position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>
           Search colleges
@@ -43,10 +44,10 @@ export default function CollegesMegaMenu({ columns, aside, footer, pathname, onN
           value={q}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQ(e.target.value)}
           placeholder="Search a college or city"
-          sx={{ flex: '1 1 auto', minWidth: 0, border: 0, outline: 'none', font: 'inherit', fontSize: '1rem', color: 'text.primary', bgcolor: 'transparent' }}
+          sx={{ flex: '1 1 auto', minWidth: 0, border: 0, outline: 'none', font: 'inherit', fontSize: '1rem', color: tokens.ink, bgcolor: 'transparent' }}
         />
       </Box>
-      <Typography sx={{ m: 0, fontSize: '0.9rem', color: 'text.secondary' }}>Or browse by one of these</Typography>
+      <Typography sx={{ m: 0, fontSize: '0.9rem', color: tokens.inkMuted }}>Or browse by one of these</Typography>
     </Box>
   );
 

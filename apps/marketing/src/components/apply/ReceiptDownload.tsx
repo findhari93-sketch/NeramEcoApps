@@ -2,7 +2,8 @@
 
 import { useCallback, useState } from 'react';
 import { Button, CircularProgress } from '@neram/ui';
-import DownloadIcon from '@mui/icons-material/Download';
+import DownloadOutlined from '@mui/icons-material/DownloadOutlined';
+import { tokens as t } from '@/design-system';
 
 interface ReceiptData {
   receiptNumber: string;
@@ -182,6 +183,8 @@ export default function ReceiptDownload({
     }
   }, [receiptData, studentName]);
 
+  // On screen: the 48px outline button of the Apply Flow design. The PDF
+  // itself keeps its own print colours above.
   return (
     <Button
       variant={variant}
@@ -189,10 +192,34 @@ export default function ReceiptDownload({
       fullWidth={fullWidth}
       onClick={generateReceipt}
       disabled={generating}
-      startIcon={generating ? <CircularProgress size={16} /> : <DownloadIcon />}
-      sx={{ borderRadius: 1, fontWeight: 600 }}
+      aria-busy={generating || undefined}
+      startIcon={generating ? <CircularProgress size={16} color="inherit" aria-hidden /> : <DownloadOutlined />}
+      sx={
+        variant === 'outlined'
+          ? {
+              minHeight: 48,
+              px: 2,
+              borderRadius: `${t.radius}px`,
+              border: `1px solid ${t.lineStrong}`,
+              bgcolor: t.surface,
+              color: t.ink,
+              fontSize: 15,
+              fontWeight: 700,
+              textTransform: 'none',
+              '&:hover': { bgcolor: t.navy900, color: t.paper, borderColor: t.navy900 },
+              '&.Mui-disabled': { bgcolor: t.surface, color: t.inkMuted, borderColor: t.line },
+              '&.Mui-focusVisible': { outline: t.focusOutline, outlineOffset: '2px' },
+            }
+          : {
+              minHeight: 44,
+              borderRadius: `${t.radius}px`,
+              fontWeight: 700,
+              textTransform: 'none',
+              '&.Mui-focusVisible': { outline: t.focusOutline, outlineOffset: '2px' },
+            }
+      }
     >
-      {generating ? 'Generating...' : 'Download Receipt'}
+      {generating ? 'Generating receipt' : 'Download receipt'}
     </Button>
   );
 }

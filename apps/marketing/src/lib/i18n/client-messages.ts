@@ -18,8 +18,8 @@ import type { AbstractIntlMessages } from 'next-intl';
  * namespace its page or the layout does not pass.
  */
 
-/** Header, mobile nav and the apply/pay/enrol shell (rendered by SiteChrome). */
-export const LAYOUT_CLIENT_MESSAGES = ['header', 'nav', 'apply.shell'] as const;
+/** Header, footer, mobile nav and the apply/pay/enrol shell (rendered by SiteChrome). */
+export const LAYOUT_CLIENT_MESSAGES = ['header', 'footer', 'nav', 'apply.shell'] as const;
 
 type Messages = AbstractIntlMessages;
 

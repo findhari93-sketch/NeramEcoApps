@@ -2,6 +2,7 @@
 
 import { Box, Tooltip, Typography } from '@mui/material';
 import { getArchIndexLabel, getArchIndexColor } from '@/lib/college-hub/archindex';
+import { tokens } from '@/design-system';
 
 interface ArchIndexRingProps {
   score: number;
@@ -44,7 +45,7 @@ export default function ArchIndexRing({
               cy={size / 2}
               r={radius}
               fill="none"
-              stroke="#e2e8f0"
+              stroke={tokens.line}
               strokeWidth={6}
             />
             {/* Progress */}
@@ -85,7 +86,7 @@ export default function ArchIndexRing({
               </Typography>
               <Typography
                 variant="caption"
-                sx={{ fontSize: '0.55rem', color: 'text.secondary', lineHeight: 1 }}
+                sx={{ fontSize: '0.55rem', color: tokens.inkMuted, lineHeight: 1 }}
               >
                 /100
               </Typography>

@@ -8,6 +8,7 @@ import {
   type NIRFInsightItem,
   type NIRFInsights as Insights,
 } from '@/lib/college-hub/nirf-insights';
+import { siteTokens } from '@neram/ui/site-tokens';
 
 /**
  * Written sections under the NIRF table: top 10, IITs, NITs and SPAs, government
@@ -17,14 +18,14 @@ import {
 
 const focusRing = {
   outline: '2px solid',
-  outlineColor: 'primary.main',
+  outlineColor: siteTokens.navy900,
   outlineOffset: '-2px',
 } as const;
 
 const prose = {
   fontSize: '1rem',
   lineHeight: 1.6,
-  color: 'text.primary',
+  color: siteTokens.ink,
   maxWidth: '70ch',
   mb: 2,
 } as const;
@@ -50,11 +51,11 @@ function RankRow({ item, prefix }: { item: NIRFInsightItem; prefix: string }) {
           minWidth: 40,
           height: 40,
           px: 0.75,
-          borderRadius: 1.5,
+          borderRadius: 1,
           display: 'grid',
           placeItems: 'center',
-          bgcolor: item.rank <= 3 ? 'primary.main' : 'action.hover',
-          color: item.rank <= 3 ? 'primary.contrastText' : 'text.primary',
+          bgcolor: item.rank <= 3 ? siteTokens.navy900 : siteTokens.surfaceHover,
+          color: item.rank <= 3 ? siteTokens.paper : siteTokens.ink,
           fontWeight: 800,
           fontSize: '0.95rem',
         }}
@@ -63,13 +64,13 @@ function RankRow({ item, prefix }: { item: NIRFInsightItem; prefix: string }) {
       </Box>
       <Box sx={{ minWidth: 0, flex: 1 }}>
         <Typography sx={{ fontWeight: 600, fontSize: '1rem', lineHeight: 1.35 }}>{item.name}</Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.4 }}>
+        <Typography variant="body2" color={siteTokens.inkMuted} sx={{ lineHeight: 1.4 }}>
           {placeLabel(item)}
         </Typography>
       </Box>
       {item.score !== null && (
         <Box sx={{ flexShrink: 0, textAlign: 'right' }}>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1.2 }}>
+          <Typography variant="caption" color={siteTokens.inkMuted} sx={{ display: 'block', lineHeight: 1.2 }}>
             Score
           </Typography>
           <Typography sx={{ fontWeight: 700, fontSize: '0.95rem' }}>{item.score.toFixed(2)}</Typography>
@@ -87,7 +88,7 @@ function RankRow({ item, prefix }: { item: NIRFInsightItem; prefix: string }) {
   } as const;
 
   return (
-    <Box component="li" sx={{ '& + li': { borderTop: '1px solid', borderColor: 'divider' } }}>
+    <Box component="li" sx={{ '& + li': { borderTop: '1px solid', borderColor: siteTokens.line } }}>
       {item.slug ? (
         <Box
           component={Link}
@@ -98,7 +99,7 @@ function RankRow({ item, prefix }: { item: NIRFInsightItem; prefix: string }) {
             textDecoration: 'none',
             cursor: 'pointer',
             transition: 'background-color 150ms',
-            '&:hover': { bgcolor: 'action.hover' },
+            '&:hover': { bgcolor: siteTokens.surfaceHover },
             '&:focus-visible': focusRing,
           }}
         >
@@ -115,7 +116,7 @@ function RankList({ items, prefix }: { items: NIRFInsightItem[]; prefix: string 
   return (
     <Box
       component="ol"
-      sx={{ listStyle: 'none', p: 0, m: 0, mb: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2, overflow: 'hidden', bgcolor: 'background.paper' }}
+      sx={{ listStyle: 'none', p: 0, m: 0, mb: 2, border: '1px solid', borderColor: siteTokens.line, borderRadius: 1, overflow: 'hidden', bgcolor: siteTokens.surface }}
     >
       {items.map((i) => (
         <RankRow key={`${i.rank}-${i.name}`} item={i} prefix={prefix} />
@@ -215,11 +216,11 @@ export default function NIRFInsights({ insights: n, prefix }: { insights: Insigh
           sx={{ m: 0, display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, minmax(0, 1fr))', lg: 'repeat(3, minmax(0, 1fr))' } }}
         >
           {PARAMETERS.map((p) => (
-            <Box key={p.code} sx={{ p: 2, border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'background.paper' }}>
+            <Box key={p.code} sx={{ p: 2, border: '1px solid', borderColor: siteTokens.line, borderRadius: 1, bgcolor: siteTokens.surface }}>
               <Typography component="dt" sx={{ fontWeight: 700, fontSize: '1rem', mb: 0.5 }}>
                 {p.code}: {p.name}
               </Typography>
-              <Typography component="dd" sx={{ m: 0, fontSize: '0.95rem', lineHeight: 1.55, color: 'text.secondary' }}>
+              <Typography component="dd" sx={{ m: 0, fontSize: '0.95rem', lineHeight: 1.55, color: siteTokens.inkMuted }}>
                 {p.what}
               </Typography>
             </Box>
@@ -249,17 +250,17 @@ export default function NIRFInsights({ insights: n, prefix }: { insights: Insigh
                   height: '100%',
                   p: 2,
                   border: '1px solid',
-                  borderColor: 'divider',
-                  borderRadius: 2,
+                  borderColor: siteTokens.line,
+                  borderRadius: 1,
                   color: 'inherit',
                   textDecoration: 'none',
-                  bgcolor: 'background.paper',
+                  bgcolor: siteTokens.surface,
                   transition: 'border-color 150ms, background-color 150ms',
-                  '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' },
+                  '&:hover': { borderColor: siteTokens.gold500 },
                   '&:focus-visible': focusRing,
                 }}
               >
-                <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: 'primary.main' }}>{r.title}</Typography>
+                <Typography sx={{ fontWeight: 700, fontSize: '1rem', color: siteTokens.navy900 }}>{r.title}</Typography>
                 <Typography sx={{ fontSize: '0.95rem', lineHeight: 1.5 }}>{r.text}</Typography>
               </Box>
             </li>
@@ -270,13 +271,13 @@ export default function NIRFInsights({ insights: n, prefix }: { insights: Insigh
       {/* FAQ */}
       <Box component="section" aria-labelledby="nirf-faq">
         <SectionHeading id="nirf-faq">NIRF Architecture Ranking: Frequently Asked Questions</SectionHeading>
-        <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'background.paper', overflow: 'hidden' }}>
+        <Box sx={{ border: '1px solid', borderColor: siteTokens.line, borderRadius: 1, bgcolor: siteTokens.surface, overflow: 'hidden' }}>
           {n.faqs.map((f) => (
             <Box
               key={f.question}
               component="details"
               sx={{
-                '& + details': { borderTop: '1px solid', borderColor: 'divider' },
+                '& + details': { borderTop: '1px solid', borderColor: siteTokens.line },
                 '& > summary': {
                   listStyle: 'none',
                   cursor: 'pointer',
@@ -291,10 +292,10 @@ export default function NIRFInsights({ insights: n, prefix }: { insights: Insigh
                   fontSize: '1rem',
                   lineHeight: 1.4,
                   '&::-webkit-details-marker': { display: 'none' },
-                  '&:hover': { bgcolor: 'action.hover' },
+                  '&:hover': { bgcolor: siteTokens.surfaceHover },
                   '&:focus-visible': focusRing,
                 },
-                '& .nirf-faq-chevron': { flexShrink: 0, color: 'text.secondary', transition: 'transform 200ms' },
+                '& .nirf-faq-chevron': { flexShrink: 0, color: siteTokens.inkMuted, transition: 'transform 200ms' },
                 '&[open] .nirf-faq-chevron': { transform: 'rotate(180deg)' },
                 '@media (prefers-reduced-motion: reduce)': { '& .nirf-faq-chevron': { transition: 'none' } },
               }}

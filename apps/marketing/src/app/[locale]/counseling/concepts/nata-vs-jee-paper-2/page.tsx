@@ -1,8 +1,9 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import { Box, Typography } from '@mui/material';
 import ConceptArticleLayout from '@/components/counselling/ConceptArticleLayout';
+import { GuideP, GuideStack } from '@/components/exam-hub/sections/GuideBlocks';
 import { buildAlternates } from '@/lib/seo/metadata';
+import { ArticleSection, CheckList, InfoCard, TopicCard } from '@/design-system';
 
 export const revalidate = 604800;
 
@@ -58,6 +59,59 @@ const FAQS = [
   },
 ];
 
+const acceptance = [
+  {
+    title: 'NATA only',
+    items: [
+      <><strong>KEAM (Kerala)</strong>: NATA is the only entrance, JEE Paper 2 not accepted</>,
+      <><strong>HSTES (Haryana)</strong>: NATA mandatory for state quota</>,
+      <><strong>DTE Goa</strong>: NATA only</>,
+      <><strong>CEPT University Ahmedabad</strong>: NATA mandatory, JEE Paper 2 not accepted</>,
+    ],
+  },
+  {
+    title: 'JEE Paper 2 only',
+    items: [
+      <><strong>JoSAA</strong>: JEE Main Paper 2 (NITs/SPAs) or JEE Advanced + AAT (IITs)</>,
+      <><strong>CSAB Special</strong>: JEE Main Paper 2 only</>,
+      <><strong>JAC Delhi</strong>: JEE Main Paper 2 only (NATA not accepted)</>,
+      <><strong>JAC Chandigarh</strong>: JEE Main Paper 2 only (NATA not accepted)</>,
+      <><strong>CSAB-NEUT</strong>: JEE Main Paper 2 plus NE/UT domicile</>,
+    ],
+  },
+  {
+    title: 'Both NATA and JEE Paper 2 accepted',
+    items: [
+      <><strong>TNEA (Tamil Nadu)</strong>: best-of-both</>,
+      <><strong>MHT-CET CAP (Maharashtra)</strong>: separate inter-se merit lists</>,
+      <><strong>KEA (Karnataka)</strong>: best-of-both</>,
+      <><strong>ACPC (Gujarat)</strong>: best-of-both</>,
+      <><strong>AP B.Arch, TG B.Arch</strong>: NATA or JEE Paper 2</>,
+      <><strong>UPTAC (Uttar Pradesh)</strong>: NATA priority, JEE Paper 2 secondary</>,
+      <><strong>WBJEE, OJEE, REAP, DTE-MP, IKGPTU</strong>: NATA or JEE Paper 2</>,
+    ],
+  },
+];
+
+const strategies = [
+  {
+    title: 'If your goal is JoSAA (NIT/IIT/SPA)',
+    body: 'JEE Main Paper 1 + Paper 2 is mandatory. Add JEE Advanced + AAT if IIT B.Arch is on the table. NATA is not strictly needed but useful as a backup if your JEE Paper 2 result disappoints.',
+  },
+  {
+    title: 'If your goal is a state hub like TNEA, MHT-CET, KEA, ACPC, AP, TG, UPTAC',
+    body: 'Take both NATA and JEE Main Paper 2. Most state counsellings use best-of-both. Maharashtra has separate merit lists, so both scores compete in their respective lists independently. Submitting both raises your floor.',
+  },
+  {
+    title: 'If your goal is KEAM Kerala or CEPT University',
+    body: 'NATA is mandatory. JEE Paper 2 alone will not work. Focus on NATA and Class 12 marks. CEPT specifically uses 50:50 NATA + Class 12.',
+  },
+  {
+    title: 'If you do not know yet',
+    body: 'Take both. The cost (registration fees plus prep time) is offset by the optionality. Lock in your top NATA phase for the result, then take JEE Paper 2 in either January or April (or both) sessions.',
+  },
+];
+
 export default function Page({ params: { locale } }: { params: { locale: string } }) {
   setRequestLocale(locale);
 
@@ -72,90 +126,66 @@ export default function Page({ params: { locale } }: { params: { locale: string 
       faqs={FAQS}
       locale={locale}
     >
-      <Typography component="h2">Two exams, two examining bodies</Typography>
-      <Typography component="p">
-        NATA (National Aptitude Test in Architecture) is conducted by the Council of Architecture, the statutory regulator for architecture education in India. JEE Main Paper 2A (B.Arch) is conducted by the National Testing Agency (NTA) under the Ministry of Education. They test similar territory but for different audiences.
-      </Typography>
+      <ArticleSection
+        id="two-exams"
+        title="Two exams, two examining bodies"
+        intro="NATA (National Aptitude Test in Architecture) is conducted by the Council of Architecture, the statutory regulator for architecture education in India. JEE Main Paper 2A (B.Arch) is conducted by the National Testing Agency (NTA) under the Ministry of Education. They test similar territory but for different audiences."
+      />
 
-      <Typography component="h2">Acceptance map: which exam works where</Typography>
+      <ArticleSection id="acceptance-map" title="Acceptance map: which exam works where">
+        <GuideStack>
+          {acceptance.map((group) => (
+            <TopicCard key={group.title} title={group.title} items={group.items} />
+          ))}
+        </GuideStack>
+      </ArticleSection>
 
-      <Typography component="h3">NATA only</Typography>
-      <Typography component="ul">
-        <Box component="li"><strong>KEAM (Kerala)</strong>: NATA is the only entrance, JEE Paper 2 not accepted</Box>
-        <Box component="li"><strong>HSTES (Haryana)</strong>: NATA mandatory for state quota</Box>
-        <Box component="li"><strong>DTE Goa</strong>: NATA only</Box>
-        <Box component="li"><strong>CEPT University Ahmedabad</strong>: NATA mandatory, JEE Paper 2 not accepted</Box>
-      </Typography>
+      <ArticleSection id="format-and-frequency" title="Format and frequency">
+        <GuideStack>
+          <InfoCard
+            code="N"
+            title="NATA"
+            body="Two to three phases per cycle (typically April, June, July). Each phase is a 3-hour computer-based test with a drawing component. Total marks 200, no negative marking. NATA evaluates Mathematics, General Aptitude, Logical Reasoning, and Drawing/Composition."
+          />
+          <InfoCard
+            code="J"
+            title="JEE Main Paper 2A (B.Arch)"
+            body="Two sessions per year (January and April). 3-hour test with three parts: Mathematics (computer-based, 25 questions), Aptitude Test (computer-based, 50 questions), and Drawing Test (pen and paper, 2 questions). Total marks 400. Negative marking on Mathematics and Aptitude (-1 for wrong, +4 for correct)."
+          />
+        </GuideStack>
+      </ArticleSection>
 
-      <Typography component="h3">JEE Paper 2 only</Typography>
-      <Typography component="ul">
-        <Box component="li"><strong>JoSAA</strong>: JEE Main Paper 2 (NITs/SPAs) or JEE Advanced + AAT (IITs)</Box>
-        <Box component="li"><strong>CSAB Special</strong>: JEE Main Paper 2 only</Box>
-        <Box component="li"><strong>JAC Delhi</strong>: JEE Main Paper 2 only (NATA not accepted)</Box>
-        <Box component="li"><strong>JAC Chandigarh</strong>: JEE Main Paper 2 only (NATA not accepted)</Box>
-        <Box component="li"><strong>CSAB-NEUT</strong>: JEE Main Paper 2 plus NE/UT domicile</Box>
-      </Typography>
+      <ArticleSection id="strategy-2026" title="Strategy for 2026 aspirants">
+        <GuideStack>
+          {strategies.map((s, idx) => (
+            <InfoCard key={s.title} code={String(idx + 1).padStart(2, '0')} title={s.title} body={s.body} />
+          ))}
+        </GuideStack>
+      </ArticleSection>
 
-      <Typography component="h3">Both NATA and JEE Paper 2 accepted</Typography>
-      <Typography component="ul">
-        <Box component="li"><strong>TNEA (Tamil Nadu)</strong>: best-of-both</Box>
-        <Box component="li"><strong>MHT-CET CAP (Maharashtra)</strong>: separate inter-se merit lists</Box>
-        <Box component="li"><strong>KEA (Karnataka)</strong>: best-of-both</Box>
-        <Box component="li"><strong>ACPC (Gujarat)</strong>: best-of-both</Box>
-        <Box component="li"><strong>AP B.Arch, TG B.Arch</strong>: NATA or JEE Paper 2</Box>
-        <Box component="li"><strong>UPTAC (Uttar Pradesh)</strong>: NATA priority, JEE Paper 2 secondary</Box>
-        <Box component="li"><strong>WBJEE, OJEE, REAP, DTE-MP, IKGPTU</strong>: NATA or JEE Paper 2</Box>
-      </Typography>
+      <ArticleSection id="validity-rules" title="Validity rules">
+        <CheckList
+          columnMin={600}
+          items={[
+            { title: 'NATA validity:', body: 'Two academic years (NATA 2025 valid for 2025-26 and 2026-27)' },
+            { title: 'JEE Main Paper 2 validity:', body: 'Same admission cycle only (JEE Main 2026 for 2026-27)' },
+            {
+              title: 'Multi-attempt:',
+              body: 'NATA allows multiple phase attempts in a cycle, best score is used. JEE Main allows two sessions per year, better score is used.',
+            },
+          ]}
+        />
+      </ArticleSection>
 
-      <Typography component="h2">Format and frequency</Typography>
-
-      <Typography component="h3">NATA</Typography>
-      <Typography component="p">
-        Two to three phases per cycle (typically April, June, July). Each phase is a 3-hour computer-based test with a drawing component. Total marks 200, no negative marking. NATA evaluates Mathematics, General Aptitude, Logical Reasoning, and Drawing/Composition.
-      </Typography>
-
-      <Typography component="h3">JEE Main Paper 2A (B.Arch)</Typography>
-      <Typography component="p">
-        Two sessions per year (January and April). 3-hour test with three parts: Mathematics (computer-based, 25 questions), Aptitude Test (computer-based, 50 questions), and Drawing Test (pen and paper, 2 questions). Total marks 400. Negative marking on Mathematics and Aptitude (-1 for wrong, +4 for correct).
-      </Typography>
-
-      <Typography component="h2">Strategy for 2026 aspirants</Typography>
-
-      <Typography component="h3">If your goal is JoSAA (NIT/IIT/SPA)</Typography>
-      <Typography component="p">
-        JEE Main Paper 1 + Paper 2 is mandatory. Add JEE Advanced + AAT if IIT B.Arch is on the table. NATA is not strictly needed but useful as a backup if your JEE Paper 2 result disappoints.
-      </Typography>
-
-      <Typography component="h3">If your goal is a state hub like TNEA, MHT-CET, KEA, ACPC, AP, TG, UPTAC</Typography>
-      <Typography component="p">
-        Take both NATA and JEE Main Paper 2. Most state counsellings use best-of-both. Maharashtra has separate merit lists, so both scores compete in their respective lists independently. Submitting both raises your floor.
-      </Typography>
-
-      <Typography component="h3">If your goal is KEAM Kerala or CEPT University</Typography>
-      <Typography component="p">
-        NATA is mandatory. JEE Paper 2 alone will not work. Focus on NATA and Class 12 marks. CEPT specifically uses 50:50 NATA + Class 12.
-      </Typography>
-
-      <Typography component="h3">If you do not know yet</Typography>
-      <Typography component="p">
-        Take both. The cost (registration fees plus prep time) is offset by the optionality. Lock in your top NATA phase for the result, then take JEE Paper 2 in either January or April (or both) sessions.
-      </Typography>
-
-      <Typography component="h2">Validity rules</Typography>
-      <Typography component="ul">
-        <Box component="li"><strong>NATA validity:</strong> Two academic years (NATA 2025 valid for 2025-26 and 2026-27)</Box>
-        <Box component="li"><strong>JEE Main Paper 2 validity:</strong> Same admission cycle only (JEE Main 2026 for 2026-27)</Box>
-        <Box component="li"><strong>Multi-attempt:</strong> NATA allows multiple phase attempts in a cycle, best score is used. JEE Main allows two sessions per year, better score is used.</Box>
-      </Typography>
-
-      <Typography component="h2">Normalisation in merit calculation</Typography>
-      <Typography component="p">
-        Different counsellings normalise NATA and JEE Paper 2 differently. Maharashtra runs separate merit lists (no normalisation needed because they do not compete). Tamil Nadu, Karnataka, Gujarat, AP, TG normalise both to a common scale and use best-of-both. Always read the specific counselling brochure to understand how your scores will be converted.
-      </Typography>
-
-      <Typography component="p">
-        For 2026 cycles, NATA and JEE Main schedules are confirmed. JEE Advanced is on May 17, AAT on June 4. Most NATA phases run April through July. Plan exam attempts and counselling registrations across both windows.
-      </Typography>
+      <ArticleSection
+        id="normalisation"
+        title="Normalisation in merit calculation"
+        intro="Different counsellings normalise NATA and JEE Paper 2 differently. Maharashtra runs separate merit lists (no normalisation needed because they do not compete). Tamil Nadu, Karnataka, Gujarat, AP, TG normalise both to a common scale and use best-of-both. Always read the specific counselling brochure to understand how your scores will be converted."
+      >
+        <GuideP>
+          For 2026 cycles, NATA and JEE Main schedules are confirmed. JEE Advanced is on May 17, AAT on June 4. Most NATA phases run April through July. Plan exam attempts and counselling registrations across both windows.
+        </GuideP>
+      </ArticleSection>
     </ConceptArticleLayout>
   );
 }

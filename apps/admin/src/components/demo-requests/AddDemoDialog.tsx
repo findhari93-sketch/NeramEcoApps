@@ -22,10 +22,12 @@ import {
 import { istDateKey } from '@neram/database/demo-schedule';
 import { STAFF_DEMO_CHANNELS, heldTutorOptions } from '@/lib/demo/staff-add';
 import type { DemoPerson } from '@/app/api/demo-requests/people/route';
+import PlannedDemoFields, { checkPlanned, defaultPlannedValue, plannedPayload, type PlannedValue } from './PlannedDemoFields';
 import HeldDemoFields, { checkHeld, defaultHeldValue, heldPayload, type HeldValue } from './HeldDemoFields';
 import type { DeskSettings } from './types';
 
-type Mode = 'request' | 'agreed' | 'held';
+export type AddMode = 'request' | 'planned' | 'held';
+type Mode = AddMode;
 type Person = DemoPerson;
 
 const TYPE_LABEL: Record<string, string> = { lead: 'Lead', student: 'Student', parent: "Parent's account" };
@@ -34,7 +36,7 @@ const phone10Of = (p: string | null) => (p || '').replace(/\D/g, '').slice(-10);
 
 const MODES: Array<{ id: Mode; title: string; body: string }> = [
   { id: 'request', title: 'Wants a demo', body: 'Goes to New. Call them and confirm a time as usual.' },
-  { id: 'agreed', title: 'Time already agreed', body: 'Next you pick the exact time, the team and the meeting.' },
+  { id: 'planned', title: 'Demo planned', body: 'Time fixed on WhatsApp or a call. The link can come later.' },
   { id: 'held', title: 'Demo already held', body: 'Record a demo done outside the desk, for example on Google Meet.' },
 ];
 
@@ -70,7 +72,8 @@ export default function AddDemoDialog({
   open: boolean;
   settings: DeskSettings;
   onClose: () => void;
-  onAdded: (id: string, mode: Mode) => void;
+  /** needsConfirm: the planned demo was saved but Confirm must be finished on the desk. */
+  onAdded: (id: string, mode: Mode, needsConfirm?: boolean) => void;
   /** Open a request that already exists for the picked person. */
   onOpenExisting: (id: string) => void;
 }) {
@@ -90,6 +93,7 @@ export default function AddDemoDialog({
   const [window, setWindow] = useState('anytime');
   const [sendAck, setSendAck] = useState(true);
   const [held, setHeld] = useState<HeldValue>(defaultHeldValue);
+  const [planned, setPlanned] = useState<PlannedValue>(() => defaultPlannedValue(settings.hosts, settings.defaultTutorUpn));
   const [parentAccount, setParentAccount] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,6 +103,7 @@ export default function AddDemoDialog({
     if (!open) return;
     const today = istDateKey(new Date());
     setHeld(defaultHeldValue());
+    setPlanned(defaultPlannedValue(settings.hosts, settings.defaultTutorUpn));
     setParentAccount(false);
     setPerson(null);
     setQuery('');
@@ -116,6 +121,8 @@ export default function AddDemoDialog({
     setSendAck(true);
     setError(null);
     setTouched({});
+    // Reset only when the dialog opens; the team list is read once per open.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   // Search People as staff type (debounced).
@@ -177,6 +184,7 @@ export default function AddDemoDialog({
   const phoneOk = /^[6-9]\d{9}$/.test(phone10);
   const nameOk = name.trim().length >= 2;
   const heldCheck = checkHeld(held);
+  const plannedCheck = checkPlanned(planned);
   const windows = useMemo(() => settings.schedule.windows, [settings.schedule.windows]);
   const tutors = useMemo(() => heldTutorOptions(settings.hosts), [settings.hosts]);
   const openRequest = person?.open_request ?? null;
@@ -189,7 +197,8 @@ export default function AddDemoDialog({
     !!channel &&
     !blockedByOpen &&
     (mode !== 'request' || window === 'anytime' || !!date) &&
-    (mode !== 'held' || heldCheck.ok);
+    (mode !== 'held' || heldCheck.ok) &&
+    (mode !== 'planned' || (plannedCheck.ok && settings.hosts.length > 0));
 
   const save = async () => {
     setTouched({ name: true, phone: true });
@@ -213,11 +222,12 @@ export default function AddDemoDialog({
           channel,
           ...(mode === 'request' ? { window, date: window === 'anytime' ? null : date, sendAck } : {}),
           ...(mode === 'held' ? heldPayload(held) : {}),
+          ...(mode === 'planned' ? plannedPayload(planned) : {}),
         }),
       });
       const d = await res.json();
       if (!res.ok) throw new Error(d.error || 'Could not add the demo.');
-      onAdded(d.id, mode);
+      onAdded(d.id, mode, !!d.confirmError);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not add the demo.');
     } finally {
@@ -439,10 +449,14 @@ export default function AddDemoDialog({
           </Box>
         )}
 
-        {mode === 'agreed' && (
-          <Alert severity="info" sx={{ mt: 2 }}>
-            After saving, Confirm opens. Pick the time, the team, and a Teams meeting or your own link.
-          </Alert>
+        {mode === 'planned' && (
+          <Box sx={{ mt: 2 }}>
+            {settings.hosts.length ? (
+              <PlannedDemoFields value={planned} onChange={setPlanned} hosts={settings.hosts} />
+            ) : (
+              <Alert severity="warning">Add the demo team in Demo settings first.</Alert>
+            )}
+          </Box>
         )}
 
         {mode === 'held' && (
@@ -468,7 +482,7 @@ export default function AddDemoDialog({
           startIcon={saving ? <CircularProgress size={16} color="inherit" /> : undefined}
           sx={{ minHeight: 44 }}
         >
-          {saving ? 'Saving' : mode === 'agreed' ? 'Save and confirm' : mode === 'held' ? 'Record demo' : 'Add request'}
+          {saving ? 'Saving' : mode === 'planned' ? 'Save planned demo' : mode === 'held' ? 'Record demo' : 'Add request'}
         </Button>
       </DialogActions>
     </Dialog>

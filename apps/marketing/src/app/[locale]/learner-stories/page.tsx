@@ -1,11 +1,10 @@
 import type { Metadata } from 'next';
-import Link from 'next/link';
 import { getTranslations, setRequestLocale } from 'next-intl/server';
-import { Box, Button, Card, CardContent, Chip, Container, Stack, Typography } from '@neram/ui';
-import VerifiedIcon from '@mui/icons-material/Verified';
+import { Box, Typography } from '@neram/ui';
+import VerifiedOutlinedIcon from '@mui/icons-material/VerifiedOutlined';
+import EmojiEventsOutlinedIcon from '@mui/icons-material/EmojiEventsOutlined';
 import { JsonLd } from '@/components/seo/JsonLd';
-import Breadcrumbs from '@/components/seo/Breadcrumbs';
-import { EmptyState, LinkButtons, PersonAvatar, focusRing } from '@/components/reviews/ReviewParts';
+import { CtaBand, CtaButton, EmptyState, PageHero, PersonCard, Section, tokens as t } from '@/design-system';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { BASE_URL } from '@/lib/seo/constants';
@@ -41,69 +40,70 @@ export async function generateMetadata({ params: { locale } }: PageProps): Promi
   };
 }
 
-function OutcomeCard({ outcome, locale, t }: { outcome: PublicOutcome; locale: string; t: (k: string, v?: Record<string, string | number>) => string }) {
+function OutcomeCard({ outcome, t: tl }: { outcome: PublicOutcome; t: (k: string, v?: Record<string, string | number>) => string }) {
   const exam = examLabel(outcome.exam);
   const heading = [exam, outcome.examYear ? String(outcome.examYear) : ''].filter(Boolean).join(' ');
   const facts: string[] = [];
-  if (outcome.score != null && outcome.maxScore != null) facts.push(t('score', { score: outcome.score, max: outcome.maxScore }));
-  else if (outcome.score != null) facts.push(t('scoreOnly', { score: outcome.score }));
-  if (outcome.rank != null) facts.push(t('rank', { rank: outcome.rank }));
+  if (outcome.score != null && outcome.maxScore != null) facts.push(tl('score', { score: outcome.score, max: outcome.maxScore }));
+  else if (outcome.score != null) facts.push(tl('scoreOnly', { score: outcome.score }));
+  if (outcome.rank != null) facts.push(tl('rank', { rank: outcome.rank }));
 
   return (
-    <Card component="article" variant="outlined" sx={{ height: '100%', display: 'flex', flexDirection: 'column', borderRadius: 3 }}>
-      <CardContent sx={{ p: { xs: 2, sm: 2.5 }, display: 'flex', flexDirection: 'column', gap: 1.25, flexGrow: 1, '&:last-child': { pb: { xs: 2, sm: 2.5 } } }}>
-        <Stack direction="row" spacing={1.5} alignItems="center">
-          <PersonAvatar name={outcome.displayName} photo={null} />
-          <Box sx={{ minWidth: 0 }}>
-            <Typography component="h3" sx={{ fontSize: '1rem', fontWeight: 700, lineHeight: 1.3, overflowWrap: 'anywhere' }}>
-              {outcome.displayName}
-            </Typography>
-            {heading && (
-              <Typography variant="body2" color="text.secondary">
-                {heading}
-              </Typography>
-            )}
+    <Box component="article" sx={{ height: '100%' }}>
+      <PersonCard name={outcome.displayName} role={heading || undefined}>
+        {facts.length > 0 && (
+          <Typography component="p" sx={{ m: 0, fontFamily: t.fontMono, fontSize: '0.9375rem', fontWeight: 700 }}>
+            {facts.join(', ')}
+          </Typography>
+        )}
+        {outcome.college && (
+          <Typography component="p" sx={{ m: 0, fontSize: '1rem', lineHeight: 1.5, overflowWrap: 'anywhere' }}>
+            {tl('college', { college: outcome.college })}
+          </Typography>
+        )}
+        <Box
+          sx={{
+            mt: 'auto',
+            pt: 1.5,
+            borderTop: `1px solid ${t.line}`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 1,
+          }}
+        >
+          <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, fontSize: '0.875rem', fontWeight: 600, color: t.success }}>
+            <VerifiedOutlinedIcon aria-hidden sx={{ fontSize: 18 }} />
+            {tl('verified')}
           </Box>
-        </Stack>
-        {facts.length > 0 && <Typography sx={{ fontWeight: 600 }}>{facts.join(', ')}</Typography>}
-        {outcome.college && <Typography sx={{ overflowWrap: 'anywhere' }}>{t('college', { college: outcome.college })}</Typography>}
-        <Box sx={{ flexGrow: 1 }} />
-        <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between" useFlexGap flexWrap="wrap">
-          <Chip
-            size="small"
-            color="success"
-            variant="outlined"
-            icon={<VerifiedIcon aria-hidden="true" />}
-            label={t('verified')}
-          />
           {outcome.slug && (
-            <Button
-              component={Link}
-              href={localePath(locale, `/achievements/${outcome.slug}`)}
-              aria-label={t('viewResultFor', { name: outcome.displayName })}
-              variant="text"
-              sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600, ...focusRing }}
+            <CtaButton
+              variant="link"
+              size="md"
+              href={`/achievements/${outcome.slug}`}
+              aria-label={tl('viewResultFor', { name: outcome.displayName })}
             >
-              {t('viewResult')}
-            </Button>
+              {tl('viewResult')}
+            </CtaButton>
           )}
-        </Stack>
-      </CardContent>
-    </Card>
+        </Box>
+      </PersonCard>
+    </Box>
   );
 }
 
 export default async function LearnerStoriesPage({ params: { locale } }: PageProps) {
   setRequestLocale(locale);
-  const [t, tr] = await Promise.all([
+  const [tl, tr] = await Promise.all([
     getTranslations({ locale, namespace: 'learnerStories' }),
     getTranslations({ locale, namespace: 'reviews' }),
   ]);
   const { outcomes } = await loadLearnerStories();
 
   const crumbs = [
-    { name: tr('breadcrumbHome'), url: abs(locale, '/'), href: localePath(locale, '/') },
-    { name: t('breadcrumb'), url: abs(locale, '/learner-stories'), href: undefined },
+    { name: tr('breadcrumbHome'), url: abs(locale, '/'), href: '/' },
+    { name: tl('breadcrumb'), url: abs(locale, '/learner-stories'), href: undefined },
   ];
   const itemList = buildOutcomesItemListJsonLd(outcomes, (slug) => abs(locale, `/achievements/${slug}`));
 
@@ -112,57 +112,60 @@ export default async function LearnerStoriesPage({ params: { locale } }: PagePro
       <JsonLd data={generateBreadcrumbSchema(crumbs.map(({ name, url }) => ({ name, url })))} />
       {itemList && <JsonLd data={itemList} />}
 
-      <Box sx={{ bgcolor: 'background.default', py: { xs: 3, md: 6 } }}>
-        <Container maxWidth="md" sx={{ px: { xs: 2, sm: 3 } }}>
-          <Breadcrumbs items={crumbs.map(({ name, href }) => ({ name, href }))} />
-          <Typography component="h1" sx={{ fontSize: { xs: '1.75rem', md: '2.25rem' }, fontWeight: 800, lineHeight: 1.2, mb: 1.5 }}>
-            {t('title')}
-          </Typography>
-          <Typography color="text.secondary" sx={{ fontSize: '1rem', lineHeight: 1.6, maxWidth: '65ch', mb: 3 }}>
-            {t('intro')}
-          </Typography>
+      <PageHero
+        breadcrumb={crumbs.map(({ name, href }) => ({ name, href }))}
+        title={tl('title')}
+        lede={tl('intro')}
+        stats={outcomes.length > 0 ? [{ value: outcomes.length, label: tl('listTitle') }] : undefined}
+      />
 
-          {outcomes.length === 0 ? (
-            <EmptyState
-              title={t('emptyTitle')}
-              body={t('emptyBody')}
-              actions={[
-                { href: localePath(locale, '/reviews'), label: tr('ctaAllReviews') },
-                { href: localePath(locale, '/achievements'), label: tr('ctaResults'), primary: true },
-              ]}
-            />
-          ) : (
-            <Box component="section" aria-labelledby="outcomes-title">
-              <Stack direction="row" alignItems="baseline" justifyContent="space-between" useFlexGap flexWrap="wrap" sx={{ mb: 2, gap: 1 }}>
-                <Typography id="outcomes-title" component="h2" sx={{ fontSize: '1.25rem', fontWeight: 700 }}>
-                  {t('listTitle')}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {t('count', { count: outcomes.length })}
-                </Typography>
-              </Stack>
-              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
-                {outcomes.map((o) => (
-                  <OutcomeCard key={o.id} outcome={o} locale={locale} t={t} />
-                ))}
+      {outcomes.length === 0 ? (
+        <Section width="narrow">
+          <EmptyState
+            icon={<EmojiEventsOutlinedIcon />}
+            title={tl('emptyTitle')}
+            body={tl('emptyBody')}
+            action={
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, justifyContent: 'center' }}>
+                <CtaButton href="/achievements">{tr('ctaResults')}</CtaButton>
+                <CtaButton variant="outline" href="/reviews">
+                  {tr('ctaAllReviews')}
+                </CtaButton>
               </Box>
-            </Box>
-          )}
-
-          <Box component="section" aria-labelledby="more-title" sx={{ mt: 4 }}>
-            <Typography id="more-title" component="h2" sx={{ fontSize: '1.125rem', fontWeight: 700, mb: 1.5 }}>
-              {tr('moreTitle')}
-            </Typography>
-            <LinkButtons
-              actions={[
-                { href: localePath(locale, '/reviews'), label: tr('ctaAllReviews') },
-                { href: localePath(locale, '/achievements'), label: tr('ctaResults') },
-                { href: localePath(locale, '/demo-class'), label: tr('ctaDemo'), primary: true },
-              ]}
-            />
+            }
+          />
+        </Section>
+      ) : (
+        <Section id="outcomes" header={{ title: tl('listTitle'), lede: tl('count', { count: outcomes.length }), align: 'start' }}>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))',
+              gap: { xs: 2, md: 2.5 },
+            }}
+          >
+            {outcomes.map((o) => (
+              <OutcomeCard key={o.id} outcome={o} t={tl} />
+            ))}
           </Box>
-        </Container>
-      </Box>
+        </Section>
+      )}
+
+      <CtaBand
+        eyebrow={null}
+        title={tr('moreTitle')}
+        actions={
+          <>
+            <CtaButton href="/demo-class">{tr('ctaDemo')}</CtaButton>
+            <CtaButton variant="link" href="/reviews">
+              {tr('ctaAllReviews')}
+            </CtaButton>
+            <CtaButton variant="link" href="/achievements">
+              {tr('ctaResults')}
+            </CtaButton>
+          </>
+        }
+      />
     </>
   );
 }

@@ -7,10 +7,11 @@ import {
   Stack,
   Chip,
   Button,
-  Alert,
 } from '@mui/material';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import OpenInNewIcon from '@mui/icons-material/OpenInNewOutlined';
+import WarningAmberIcon from '@mui/icons-material/WarningAmberOutlined';
+import { siteTokens as t } from '@neram/ui/site-tokens';
+import { Callout } from '@/design-system';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { generateHowToSchema } from '@/lib/seo/schemas';
 import KeamSpokeShell from '@/components/keam-arch/KeamSpokeShell';
@@ -19,8 +20,6 @@ import { fees, akshaya } from '@/data/keam-arch-2026';
 export const revalidate = 86400;
 
 const SPOKE = 'how-to-apply';
-const PRIMARY_GREEN = '#0d7a4a';
-const PRIMARY_GREEN_DARK = '#0a5a36';
 
 const STEPS = [
   {
@@ -137,11 +136,7 @@ export default function HowToApplyPage({
           target="_blank"
           rel="noopener"
           endIcon={<OpenInNewIcon />}
-          sx={{
-            minHeight: 48,
-            bgcolor: PRIMARY_GREEN,
-            '&:hover': { bgcolor: PRIMARY_GREEN_DARK },
-          }}
+          sx={{ minHeight: 48 }}
         >
           Open cee.kerala.gov.in
         </Button>
@@ -158,29 +153,33 @@ export default function HowToApplyPage({
         </Button>
       </Stack>
 
-      <Alert
-        severity="warning"
-        icon={<WarningAmberIcon />}
-        sx={{ mb: 3, borderRadius: 1.5 }}
-      >
-        Common rejection reasons: name mismatch across certificates, blurry uploads, NATA score not uploaded by the cut-off, wrong income certificate format, community certificate dated after the application close.
-      </Alert>
+      <Box sx={{ mb: 3 }}>
+        <Callout>
+          <Box component="p" sx={{ m: 0, display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+            <WarningAmberIcon aria-hidden sx={{ color: t.gold800, fontSize: 20, mt: '2px', flexShrink: 0 }} />
+            <span>
+              Common rejection reasons: name mismatch across certificates, blurry uploads, NATA score not uploaded by the cut-off, wrong income certificate format, community certificate dated after the application close.
+            </span>
+          </Box>
+        </Callout>
+      </Box>
 
       <Stack spacing={2} sx={{ mb: 4 }}>
         {STEPS.map((step, i) => (
           <Paper
             key={step.title}
             elevation={0}
-            sx={{ p: 2.5, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+            sx={{ p: 2.5, borderRadius: 1, border: `1px solid ${t.line}` }}
           >
             <Stack direction="row" gap={1.5} alignItems="flex-start" sx={{ mb: 1 }}>
               <Box
+                aria-hidden
                 sx={{
                   width: 36,
                   height: 36,
                   borderRadius: '50%',
-                  bgcolor: PRIMARY_GREEN,
-                  color: 'white',
+                  bgcolor: t.navy900,
+                  color: t.gold500,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -210,9 +209,9 @@ export default function HowToApplyPage({
                     py: 0.25,
                     fontSize: '0.75rem',
                   },
-                  bgcolor: '#FFFBEB',
-                  color: '#92400E',
-                  border: '1px solid #FDE68A',
+                  bgcolor: t.ground,
+                  color: t.ink,
+                  border: `1px solid ${t.line}`,
                 }}
               />
             </Box>
@@ -225,10 +224,9 @@ export default function HowToApplyPage({
         elevation={0}
         sx={{
           p: { xs: 2, md: 3 },
-          borderRadius: 2,
-          border: '1px solid',
-          borderColor: 'divider',
-          bgcolor: '#f0fdf4',
+          borderRadius: 1,
+          border: `1px solid ${t.line}`,
+          bgcolor: t.surface,
         }}
       >
         <Typography variant="h6" fontWeight={800} sx={{ mb: 1 }}>
@@ -244,7 +242,6 @@ export default function HowToApplyPage({
           target="_blank"
           rel="noopener"
           endIcon={<OpenInNewIcon />}
-          sx={{ borderColor: PRIMARY_GREEN, color: PRIMARY_GREEN }}
         >
           Find your nearest Akshaya Centre
         </Button>

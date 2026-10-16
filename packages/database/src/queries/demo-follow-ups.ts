@@ -29,11 +29,13 @@ export interface DemoFollowUpRow {
   assigned_to: string | null;
   demo_registration_id: string | null;
   notes: string | null;
+  /** The last outcome's reason and note, e.g. "Reason: fees". */
+  call_notes: string | null;
 }
 
 const OPEN = ['pending', 'scheduled', 'attempted'];
 const COLS =
-  'id, user_id, status, query_type, scheduled_callback_at, interest_level, flags, call_outcome, completed_at, assigned_to, demo_registration_id, notes';
+  'id, user_id, status, query_type, scheduled_callback_at, interest_level, flags, call_outcome, completed_at, assigned_to, demo_registration_id, notes, call_notes';
 
 export async function resolveDemoFollowUpOwner(userId: string, client?: TypedSupabaseClient): Promise<string | null> {
   const supabase = client || getSupabaseAdminClient();

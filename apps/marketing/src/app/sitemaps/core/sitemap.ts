@@ -112,6 +112,8 @@ const staticPages: Array<{ path: string; lastModified: string; i18n?: boolean }>
   { path: '/privacy', lastModified: '2025-12-01' },
   { path: '/terms', lastModified: '2025-12-01' },
   { path: '/refund-policy', lastModified: '2025-12-01' },
+  // NATA 2027 hub (English-only). Its guides are the 2026 spokes until the 2027 brochure is out.
+  { path: '/nata-2027', lastModified: '2026-10-16' },
   // NATA 2026 hub + spoke pages (English-only content)
   { path: '/nata-2026', lastModified: '2026-03-08' },
   { path: '/nata-2026/how-to-apply', lastModified: '2026-03-05' },

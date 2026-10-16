@@ -43,6 +43,14 @@ export default function Breadcrumb({ items }: { items: BreadcrumbItem[] }) {
                     component={Link}
                     href={item.href}
                     sx={{
+                      // 44px hit area without growing the 24px line: padding out, margin back in.
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      minWidth: 44,
+                      minHeight: 44,
+                      my: '-10px',
+                      boxSizing: 'border-box',
                       color: 'inherit',
                       textDecoration: 'none',
                       '&:hover': { textDecoration: 'underline' },

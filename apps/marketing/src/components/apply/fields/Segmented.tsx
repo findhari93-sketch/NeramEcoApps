@@ -1,6 +1,7 @@
 'use client';
 
 import { Box, ToggleButton, ToggleButtonGroup, Typography } from '@neram/ui';
+import { tokens as t } from '@/design-system';
 
 export interface SegmentedOption<T extends string> {
   value: T;
@@ -18,8 +19,9 @@ interface SegmentedProps<T extends string> {
 }
 
 /**
- * One row of square cells with an ink selected state, the design's control
- * for short single-choice answers ("I'm currently in", Gender).
+ * Separate 48px pills on an auto-fit grid (min 120px), navy fill when
+ * selected: the design's control for short single-choice answers ("I'm
+ * currently in", Gender). The pill look comes from the apply theme.
  */
 export default function Segmented<T extends string>({
   id,
@@ -32,13 +34,13 @@ export default function Segmented<T extends string>({
   const labelId = `${id}-label`;
   return (
     <Box>
-      <Typography id={labelId} component="p" sx={{ m: 0, mb: 1, fontSize: 13, fontWeight: 700, lineHeight: 1.3 }}>
+      <Typography id={labelId} component="p" sx={{ m: 0, mb: 1, fontSize: 15, fontWeight: 600, lineHeight: 1.35, color: t.ink }}>
         {label}
       </Typography>
       <ToggleButtonGroup
         exclusive
-        fullWidth
         aria-labelledby={labelId}
+        sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 1 }}
         value={value || null}
         onChange={(_, next: T | null) => {
           if (next === null && required) return;
@@ -46,7 +48,7 @@ export default function Segmented<T extends string>({
         }}
       >
         {options.map((option) => (
-          <ToggleButton key={option.value} value={option.value} sx={{ px: 1, lineHeight: 1.2 }}>
+          <ToggleButton key={option.value} value={option.value} sx={{ px: 1.5 }}>
             {option.label}
           </ToggleButton>
         ))}

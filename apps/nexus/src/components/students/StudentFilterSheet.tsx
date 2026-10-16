@@ -20,10 +20,13 @@ import {
   ACCOUNT_FILTER_LABEL,
   DEFAULT_FILTERS,
   FORM_FILTER_LABEL,
+  JOINED_CHIP_LABEL,
+  JOINED_FILTER_LABEL,
   SIGN_IN_FILTER_LABEL,
   activeFilterCount,
   type AccountFilter,
   type FormFilter,
+  type JoinedFilter,
   type RosterFilters,
   type SignInFilter,
 } from '@/lib/student-roster-view';
@@ -175,6 +178,14 @@ export default function StudentFilterSheet(props: StudentFilterSheetProps) {
 
           <Divider />
 
+          {/* First, because "who is new" is the commonest reason to open this. */}
+          <FilterRadios<JoinedFilter>
+            title="Joined"
+            name="joined"
+            value={filters.joined}
+            labels={JOINED_FILTER_LABEL}
+            onChange={(joined) => onFiltersChange({ ...filters, joined })}
+          />
           <FilterRadios<SignInFilter>
             title="Sign-in"
             name="sign-in"
@@ -282,6 +293,13 @@ export function ActiveFilterChips(props: Omit<StudentFilterSheetProps, 'examBatc
           ? 'Unassigned section'
           : batches.find((b) => b.id === batchFilter)?.name ?? 'Section',
       onDelete: () => onBatchFilterChange(null),
+    });
+  }
+  if (filters.joined !== 'any') {
+    chips.push({
+      key: 'joined',
+      label: JOINED_CHIP_LABEL[filters.joined],
+      onDelete: () => onFiltersChange({ ...filters, joined: 'any' }),
     });
   }
   if (filters.signIn !== 'any') {

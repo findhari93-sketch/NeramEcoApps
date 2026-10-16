@@ -39,6 +39,8 @@ import { openFocusWindow, onFocusWindowClosed, focusChannelName } from './openFo
 import QuizModal from '@/components/foundation/QuizModal';
 import type { VideoGateMode } from '@/lib/video-gate';
 import { coveredWithin } from '@/lib/played-ranges';
+import { describeTrimSaving, type TrimSaving } from '@/lib/recap-trim-saving';
+import ContentCutRoundedIcon from '@mui/icons-material/ContentCutRounded';
 
 export interface RecapSection {
   id: string;
@@ -102,6 +104,7 @@ export default function RecapWatch({
   const authFetch = useAuthFetch();
 
   const [recap, setRecap] = useState<Recap | null>(null);
+  const [trimSaving, setTrimSaving] = useState<TrimSaving | null>(null);
   /**
    * Starts strict and is only ever relaxed by the server's answer. A render
    * between mount and the fetch landing therefore gates, which is the safe way
@@ -139,6 +142,7 @@ export default function RecapWatch({
       const res = await authFetch(`/api/student/class-recaps/${recapId}`);
       const r = res.recap as Recap;
       setRecap(r);
+      setTrimSaving(describeTrimSaving(r.video_duration_seconds, res.trim_removed_seconds));
       // Anything the server did not say is 'gated'. There is no client default
       // that opens the gate.
       const mode: VideoGateMode = res.watch_mode === 'revision' ? 'revision' : 'gated';
@@ -384,6 +388,24 @@ export default function RecapWatch({
           the player and a fullscreen student cannot see any of it. */}
 
       {session.stale && <RecordingUpdatedNotice />}
+
+      {/* The player only shows the trimmed length, so without this the saving
+          is invisible and the trim looks like it never happened. */}
+      {trimSaving && (
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start', mb: 1.5 }}>
+          <ContentCutRoundedIcon
+            aria-hidden
+            sx={{ fontSize: 18, color: 'success.main', mt: '2px', flexShrink: 0 }}
+          />
+          <Typography variant="body2" color="text.secondary">
+            <Box component="span" sx={{ fontWeight: 700, color: 'text.primary' }}>
+              Trimmed for you: {trimSaving.watch} instead of {trimSaving.original}.
+            </Box>{' '}
+            We cut {trimSaving.savedMinutes} {trimSaving.savedMinutes === 1 ? 'minute' : 'minutes'}{' '}
+            of waiting and silence, so you only watch the teaching.
+          </Typography>
+        </Box>
+      )}
 
       <Box
         sx={{

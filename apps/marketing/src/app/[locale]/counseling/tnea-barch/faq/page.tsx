@@ -9,7 +9,8 @@ import {
   AccordionSummary,
   Stack,
 } from '@mui/material';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMoreOutlined';
+import { siteTokens as t } from '@neram/ui/site-tokens';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { generateFAQSchema } from '@/lib/seo/schemas';
 import TneaSpokeShell from '@/components/tnea-barch/TneaSpokeShell';
@@ -97,7 +98,7 @@ export default function FaqPage({ params: { locale } }: { params: { locale: stri
       {/* Topic anchors */}
       <Paper
         elevation={0}
-        sx={{ p: 1.5, mb: 3, borderRadius: 2, bgcolor: 'grey.50', border: '1px solid', borderColor: 'divider' }}
+        sx={{ p: 1.5, mb: 3, borderRadius: 1, bgcolor: t.ground, border: `1px solid ${t.line}` }}
       >
         <Typography variant="caption" color="text.secondary" fontWeight={600} sx={{ display: 'block', mb: 0.75 }}>
           On this page
@@ -109,17 +110,20 @@ export default function FaqPage({ params: { locale } }: { params: { locale: stri
               component="a"
               href={`#${c}`}
               sx={{
-                px: 1.25,
-                py: 0.5,
-                borderRadius: 999,
-                fontSize: '0.75rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                minHeight: 44,
+                px: 1.5,
+                borderRadius: `${t.radiusPill}px`,
+                fontSize: '0.8125rem',
                 fontWeight: 600,
                 textDecoration: 'none',
-                bgcolor: 'background.paper',
-                border: '1px solid',
-                borderColor: 'divider',
-                color: 'text.primary',
-                '&:hover': { borderColor: 'primary.main', color: 'primary.main' },
+                bgcolor: t.surface,
+                border: `1px solid ${t.line}`,
+                color: t.ink,
+                transition: 'border-color 150ms ease',
+                '&:hover': { borderColor: t.gold500 },
+                '&:focus-visible': { outline: t.focusOutline, outlineOffset: '2px' },
               }}
             >
               {CATEGORY_LABELS[c]} ({grouped[c].length})
@@ -140,9 +144,8 @@ export default function FaqPage({ params: { locale } }: { params: { locale: stri
               disableGutters
               sx={{
                 mb: 1,
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: '8px !important',
+                border: `1px solid ${t.line}`,
+                borderRadius: `${t.radius}px !important`,
                 '&:before': { display: 'none' },
                 overflow: 'hidden',
               }}

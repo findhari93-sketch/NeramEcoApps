@@ -2,24 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
-import {
-  Box,
-  Container,
-  Typography,
-  TextField,
-  Button,
-  Paper,
-  Chip,
-  CircularProgress,
-  Alert,
-  Divider,
-  Stack,
-} from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
-import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import { Box, Typography, TextField, Alert, CircularProgress } from '@neram/ui';
+import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
+import AccessTimeOutlinedIcon from '@mui/icons-material/AccessTimeOutlined';
+import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
+import HourglassEmptyOutlinedIcon from '@mui/icons-material/HourglassEmptyOutlined';
+import ErrorOutlineOutlinedIcon from '@mui/icons-material/ErrorOutlineOutlined';
+import { DocHeader, Section, FactsCard, CtaButton, tokens as t } from '@/design-system';
 
 interface TicketData {
   ticket_number: string;
@@ -34,11 +23,11 @@ interface TicketData {
   comments: Array<{ content: string; created_at: string }>;
 }
 
-const STATUS_CONFIG: Record<string, { label: string; color: 'warning' | 'info' | 'success' | 'default'; icon: React.ReactNode }> = {
-  open: { label: 'Open', color: 'warning', icon: <ErrorOutlineIcon fontSize="small" /> },
-  in_progress: { label: 'In Progress', color: 'info', icon: <HourglassEmptyIcon fontSize="small" /> },
-  resolved: { label: 'Resolved', color: 'success', icon: <CheckCircleIcon fontSize="small" /> },
-  closed: { label: 'Closed', color: 'default', icon: <CheckCircleIcon fontSize="small" /> },
+const STATUS_CONFIG: Record<string, { label: string; iconColor: string; icon: React.ReactNode }> = {
+  open: { label: 'Open', iconColor: t.gold800, icon: <ErrorOutlineOutlinedIcon aria-hidden /> },
+  in_progress: { label: 'In Progress', iconColor: t.inkMuted, icon: <HourglassEmptyOutlinedIcon aria-hidden /> },
+  resolved: { label: 'Resolved', iconColor: t.success, icon: <CheckCircleOutlinedIcon aria-hidden /> },
+  closed: { label: 'Closed', iconColor: t.inkMuted, icon: <CheckCircleOutlinedIcon aria-hidden /> },
 };
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -60,6 +49,14 @@ function formatDate(dateStr: string): string {
   });
 }
 
+const cardSx = {
+  bgcolor: t.surface,
+  border: `1px solid ${t.line}`,
+  borderRadius: `${t.radius}px`,
+  color: t.ink,
+} as const;
+
+/** Utility page: light DocHeader, then the lookup card and the ticket on the ground band. */
 export default function TicketTrackContent() {
   const searchParams = useSearchParams();
   const [ticketNumber, setTicketNumber] = useState('');
@@ -69,10 +66,10 @@ export default function TicketTrackContent() {
 
   // Auto-lookup if ticket number is in URL
   useEffect(() => {
-    const t = searchParams.get('ticket');
-    if (t) {
-      setTicketNumber(t);
-      lookupTicket(t);
+    const fromUrl = searchParams.get('ticket');
+    if (fromUrl) {
+      setTicketNumber(fromUrl);
+      lookupTicket(fromUrl);
     }
   }, [searchParams]);
 
@@ -107,119 +104,157 @@ export default function TicketTrackContent() {
   const statusConfig = ticket ? STATUS_CONFIG[ticket.status] || STATUS_CONFIG.open : null;
 
   return (
-    <Container maxWidth="sm" sx={{ py: { xs: 4, md: 6 } }}>
-      <Typography variant="h4" fontWeight={700} textAlign="center" gutterBottom>
-        Track Your Ticket
-      </Typography>
-      <Typography variant="body1" color="text.secondary" textAlign="center" sx={{ mb: 4 }}>
-        Enter your ticket number to check the status
-      </Typography>
+    <Box>
+      <DocHeader
+        width="legal"
+        breadcrumb={[{ name: 'Home', href: '/' }, { name: 'Track Ticket' }]}
+        title="Track Your Ticket"
+        lede="Enter your ticket number to check the status"
+      />
 
-      {/* Search Form */}
-      <Paper elevation={0} sx={{ p: 3, border: '1px solid', borderColor: 'divider', borderRadius: 2, mb: 3 }}>
-        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5}>
+      <Section width="legal" rule={false} gap={3} py={{ xs: 5, md: 7 }} sx={{ minHeight: { xs: '50vh', md: '55vh' } }}>
+        {/* Search form */}
+        <Box
+          component="form"
+          role="search"
+          onSubmit={(e: React.FormEvent) => {
+            e.preventDefault();
+            lookupTicket();
+          }}
+          sx={{ ...cardSx, p: { xs: 2.5, sm: 3 }, display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5, alignItems: { sm: 'flex-start' } }}
+        >
           <TextField
             fullWidth
+            label="Ticket number"
             placeholder="NERAM-TKT-00001"
             value={ticketNumber}
             onChange={(e) => setTicketNumber(e.target.value.toUpperCase())}
-            onKeyDown={(e) => e.key === 'Enter' && lookupTicket()}
-            size="small"
-            inputProps={{ style: { fontFamily: 'monospace', letterSpacing: 1 } }}
+            inputProps={{ style: { fontFamily: t.fontMono, letterSpacing: 1 }, autoCapitalize: 'characters', spellCheck: false }}
           />
-          <Button
-            variant="contained"
-            onClick={() => lookupTicket()}
+          <CtaButton
+            type="submit"
             disabled={loading}
-            startIcon={loading ? <CircularProgress size={18} /> : <SearchIcon />}
-            sx={{ minWidth: 120, whiteSpace: 'nowrap' }}
+            startIcon={loading ? <CircularProgress size={18} color="inherit" aria-hidden /> : <SearchOutlinedIcon aria-hidden />}
+            endIcon={null}
+            sx={{ minWidth: 140, minHeight: 56, whiteSpace: 'nowrap' }}
           >
             {loading ? 'Searching...' : 'Track'}
-          </Button>
-        </Stack>
-      </Paper>
+          </CtaButton>
+        </Box>
 
-      {/* Error */}
-      {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
+        {/* Error */}
+        {error && <Alert severity="error" role="alert">{error}</Alert>}
 
-      {/* Ticket Result */}
-      {ticket && statusConfig && (
-        <Paper elevation={0} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
-          {/* Header */}
-          <Box sx={{ p: 3, bgcolor: 'grey.50' }}>
-            <Stack direction="row" justifyContent="space-between" alignItems="flex-start" flexWrap="wrap" gap={1}>
-              <Box>
-                <Typography variant="caption" color="text.secondary" fontFamily="monospace">
+        {/* Ticket result */}
+        {ticket && statusConfig && (
+          <Box component="article" aria-live="polite" sx={{ ...cardSx, overflow: 'hidden' }}>
+            <Box
+              sx={{
+                p: { xs: 2.5, sm: 3 },
+                bgcolor: t.ground,
+                borderBottom: `1px solid ${t.line}`,
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'flex-start',
+                flexWrap: 'wrap',
+                gap: 1.5,
+              }}
+            >
+              <Box sx={{ minWidth: 0 }}>
+                <Typography component="p" sx={{ m: 0, fontFamily: t.fontMono, fontSize: '0.8125rem', color: t.inkMuted, wordBreak: 'break-all' }}>
                   {ticket.ticket_number}
                 </Typography>
-                <Typography variant="h6" fontWeight={600} sx={{ mt: 0.5 }}>
+                <Typography component="h2" sx={{ m: 0, mt: 0.5, fontSize: '1.25rem', fontWeight: 700, lineHeight: 1.3 }}>
                   {ticket.subject}
                 </Typography>
               </Box>
-              <Chip
-                icon={statusConfig.icon as React.ReactElement}
-                label={statusConfig.label}
-                color={statusConfig.color}
-                size="small"
-              />
-            </Stack>
-          </Box>
+              <Box
+                component="span"
+                sx={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 0.75,
+                  border: `1px solid ${t.line}`,
+                  borderRadius: `${t.radiusPill}px`,
+                  bgcolor: t.surface,
+                  px: 1.5,
+                  py: 0.5,
+                  fontSize: '0.875rem',
+                  fontWeight: 700,
+                  color: t.ink,
+                  '& svg': { fontSize: 18, color: statusConfig.iconColor },
+                }}
+              >
+                {statusConfig.icon}
+                {statusConfig.label}
+              </Box>
+            </Box>
 
-          <Divider />
+            <Box sx={{ p: { xs: 2, sm: 2.5 }, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+              <Box sx={{ '& > div': { border: 0, p: 0.5 } }}>
+                <FactsCard
+                  items={[
+                    { label: 'Category', value: CATEGORY_LABELS[ticket.category] || ticket.category },
+                    { label: 'Created', value: formatDate(ticket.created_at) },
+                    { label: 'Last Updated', value: formatDate(ticket.updated_at) },
+                    ...(ticket.resolved_at ? [{ label: 'Resolved', value: formatDate(ticket.resolved_at) }] : []),
+                  ]}
+                />
+              </Box>
 
-          {/* Details */}
-          <Box sx={{ p: 3 }}>
-            <Stack spacing={2}>
-              <Stack direction="row" justifyContent="space-between">
-                <Typography variant="body2" color="text.secondary">Category</Typography>
-                <Typography variant="body2" fontWeight={500}>
-                  {CATEGORY_LABELS[ticket.category] || ticket.category}
-                </Typography>
-              </Stack>
-              <Stack direction="row" justifyContent="space-between">
-                <Typography variant="body2" color="text.secondary">Created</Typography>
-                <Typography variant="body2">{formatDate(ticket.created_at)}</Typography>
-              </Stack>
-              <Stack direction="row" justifyContent="space-between">
-                <Typography variant="body2" color="text.secondary">Last Updated</Typography>
-                <Typography variant="body2">{formatDate(ticket.updated_at)}</Typography>
-              </Stack>
-              {ticket.resolved_at && (
-                <Stack direction="row" justifyContent="space-between">
-                  <Typography variant="body2" color="text.secondary">Resolved</Typography>
-                  <Typography variant="body2">{formatDate(ticket.resolved_at)}</Typography>
-                </Stack>
+              {/* Resolution notes */}
+              {ticket.resolution_notes && (
+                <Box
+                  sx={{
+                    border: `1px solid ${t.line}`,
+                    borderLeft: 'none',
+                    boxShadow: `inset 3px 0 0 ${t.success}`,
+                    borderRadius: `${t.radius}px`,
+                    p: 2,
+                    pl: 2.5,
+                    display: 'flex',
+                    gap: 1.25,
+                    alignItems: 'flex-start',
+                  }}
+                >
+                  <CheckCircleOutlinedIcon aria-hidden sx={{ fontSize: 20, color: t.success, flexShrink: 0, mt: '2px' }} />
+                  <Box>
+                    <Typography component="h3" sx={{ m: 0, mb: 0.5, fontSize: '1rem', fontWeight: 700 }}>
+                      Resolution
+                    </Typography>
+                    <Typography component="p" sx={{ m: 0, fontSize: '1rem', lineHeight: 1.55, color: t.inkMuted }}>
+                      {ticket.resolution_notes}
+                    </Typography>
+                  </Box>
+                </Box>
               )}
-            </Stack>
 
-            {/* Resolution Notes */}
-            {ticket.resolution_notes && (
-              <Alert severity="success" sx={{ mt: 3 }} icon={<CheckCircleIcon />}>
-                <Typography variant="body2" fontWeight={600} gutterBottom>Resolution</Typography>
-                <Typography variant="body2">{ticket.resolution_notes}</Typography>
-              </Alert>
-            )}
-
-            {/* Admin Replies */}
-            {ticket.comments.length > 0 && (
-              <Box sx={{ mt: 3 }}>
-                <Typography variant="subtitle2" gutterBottom>Updates from our team</Typography>
-                <Stack spacing={1.5}>
+              {/* Team replies */}
+              {ticket.comments.length > 0 && (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                  <Typography component="h3" sx={{ m: 0, fontSize: '1rem', fontWeight: 700 }}>
+                    Updates from our team
+                  </Typography>
                   {ticket.comments.map((comment, i) => (
-                    <Paper key={i} variant="outlined" sx={{ p: 2, bgcolor: 'grey.50' }}>
-                      <Typography variant="body2">{comment.content}</Typography>
-                      <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                        <AccessTimeIcon sx={{ fontSize: 12, mr: 0.5, verticalAlign: 'middle' }} />
+                    <Box key={i} sx={{ border: `1px solid ${t.line}`, borderRadius: `${t.radius}px`, bgcolor: t.ground, p: 2 }}>
+                      <Typography component="p" sx={{ m: 0, fontSize: '1rem', lineHeight: 1.55 }}>
+                        {comment.content}
+                      </Typography>
+                      <Typography
+                        component="p"
+                        sx={{ m: 0, mt: 1, display: 'flex', alignItems: 'center', gap: 0.5, fontSize: '0.8125rem', color: t.inkMuted }}
+                      >
+                        <AccessTimeOutlinedIcon aria-hidden sx={{ fontSize: 14 }} />
                         {formatDate(comment.created_at)}
                       </Typography>
-                    </Paper>
+                    </Box>
                   ))}
-                </Stack>
-              </Box>
-            )}
+                </Box>
+              )}
+            </Box>
           </Box>
-        </Paper>
-      )}
-    </Container>
+        )}
+      </Section>
+    </Box>
   );
 }

@@ -1,11 +1,26 @@
 import { Metadata } from 'next';
+import { siteTokens as t } from '@neram/ui/site-tokens';
 import { NOT_FOUND_LINKS } from '@/lib/not-found-links';
+
+// The Inter variable is not defined when this renders outside [locale]/layout, and an
+// undefined var() voids the whole font stack (serif). Give it a fallback.
+const fontFamily = t.fontSans.replace('var(--font-inter)', 'var(--font-inter, "Inter")');
 
 export const metadata: Metadata = {
   title: 'Page Not Found | Neram Classes',
   description: 'The page you are looking for does not exist. Browse our courses, coaching centers, or apply for NATA/JEE Paper 2 preparation.',
   robots: { index: false, follow: true },
 };
+
+// This page has no MUI theme or global CSS, so hover and focus states live in
+// one small stylesheet built from the site tokens.
+const css = `
+.nf-link{transition:border-color 150ms ease}
+.nf-link:hover{border-color:${t.gold500}}
+.nf-primary{transition:background-color 150ms ease}
+.nf-primary:hover{background-color:${t.gold300}}
+a:focus-visible{outline:${t.focusOutline};outline-offset:2px}
+`;
 
 // The root layout is a pass-through (html and body live in [locale]/layout.tsx),
 // so this page renders its own. It is the 404 for every URL that matches no
@@ -15,106 +30,88 @@ export const metadata: Metadata = {
 export default function NotFound() {
   return (
     <html lang="en">
-      <body style={{ margin: 0 }}>
-        {/* Visible keyboard focus; this page has no MUI theme or global CSS. */}
-        <style>{`a:focus-visible{outline:3px solid #e8a020;outline-offset:3px}`}</style>
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: '#060d1f',
-        fontFamily:
-          '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-        color: '#ffffff',
-      }}
-    >
-      <div style={{ textAlign: 'center', padding: '24px', maxWidth: '520px' }}>
+      <body style={{ margin: 0, backgroundColor: t.ground }}>
+        <style>{css}</style>
         <div
           style={{
-            fontSize: '72px',
-            fontWeight: 800,
-            margin: '0 0 8px',
-            color: '#e8a020',
-            lineHeight: 1,
-          }}
-        >
-          404
-        </div>
-        <h1
-          style={{
-            fontSize: '22px',
-            fontWeight: 600,
-            margin: '0 0 12px',
-            color: '#ffffff',
-          }}
-        >
-          Page Not Found
-        </h1>
-        <p
-          style={{
-            fontSize: '15px',
-            lineHeight: 1.6,
-            margin: '0 0 32px',
-            color: 'rgba(255, 255, 255, 0.7)',
-          }}
-        >
-          Sorry, the page you&apos;re looking for doesn&apos;t exist or has been moved.
-          Try one of these popular pages:
-        </p>
-        <div
-          style={{
+            minHeight: '100vh',
             display: 'flex',
-            flexDirection: 'column',
-            gap: '10px',
-            marginBottom: '32px',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: t.ground,
+            fontFamily,
+            color: t.ink,
           }}
         >
-          {NOT_FOUND_LINKS.map((link) => (
-            <a
-              key={link.href}
-              href={link.href}
+          <main style={{ boxSizing: 'border-box', width: '100%', maxWidth: '520px', padding: '48px 16px', textAlign: 'center' }}>
+            <p
               style={{
-                display: 'block',
-                boxSizing: 'border-box',
-                minHeight: '48px',
-                padding: '13px 20px',
-                fontSize: '16px',
-                fontWeight: 500,
-                border: '1px solid rgba(255,255,255,0.15)',
-                borderRadius: '8px',
-                color: '#ffffff',
-                textDecoration: 'none',
-                transition: 'all 0.2s',
+                fontFamily: t.fontMono,
+                fontSize: '12px',
+                fontWeight: 700,
+                letterSpacing: '0.2em',
+                textTransform: 'uppercase',
+                color: t.gold800,
+                margin: '0 0 12px',
               }}
             >
-              {link.label}
+              Error 404
+            </p>
+            <h1 style={{ fontSize: '28px', fontWeight: 700, lineHeight: 1.25, margin: '0 0 12px', color: t.ink }}>
+              Page Not Found
+            </h1>
+            <p style={{ fontSize: '16px', lineHeight: 1.6, margin: '0 0 32px', color: t.inkMuted }}>
+              Sorry, the page you&apos;re looking for doesn&apos;t exist or has been moved.
+              Try one of these popular pages:
+            </p>
+            <nav aria-label="Popular pages" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '32px' }}>
+              {NOT_FOUND_LINKS.map((link) => (
+                <a
+                  key={link.href}
+                  href={link.href}
+                  className="nf-link"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    boxSizing: 'border-box',
+                    minHeight: '48px',
+                    padding: '12px 20px',
+                    fontSize: '16px',
+                    fontWeight: 500,
+                    textAlign: 'left',
+                    backgroundColor: t.surface,
+                    border: `1px solid ${t.line}`,
+                    borderRadius: `${t.radius}px`,
+                    color: t.ink,
+                    textDecoration: 'none',
+                  }}
+                >
+                  {link.label}
+                </a>
+              ))}
+            </nav>
+            <a
+              href="/"
+              className="nf-primary"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxSizing: 'border-box',
+                minHeight: '48px',
+                padding: '12px 32px',
+                fontSize: '16px',
+                fontWeight: 700,
+                borderRadius: `${t.radius}px`,
+                backgroundColor: t.gold500,
+                color: t.navy900,
+                textDecoration: 'none',
+              }}
+            >
+              Go to Homepage
             </a>
-          ))}
+          </main>
         </div>
-        <a
-          href="/"
-          style={{
-            padding: '12px 32px',
-            minHeight: '48px',
-            boxSizing: 'border-box',
-            lineHeight: '24px',
-            fontSize: '16px',
-            fontWeight: 600,
-            border: 'none',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            backgroundColor: '#e8a020',
-            color: '#060d1f',
-            textDecoration: 'none',
-            display: 'inline-block',
-          }}
-        >
-          Go to Homepage
-        </a>
-      </div>
-    </div>
       </body>
     </html>
   );

@@ -1,25 +1,14 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import Link from 'next/link';
-import {
-  Box,
-  Container,
-  Typography,
-  Paper,
-  Button,
-  Chip,
-  Grid,
-  Stack,
-  Divider,
-} from '@mui/material';
-import HomeIcon from '@mui/icons-material/Home';
-import ScienceIcon from '@mui/icons-material/Science';
-import DrawIcon from '@mui/icons-material/Draw';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import type { ReactNode } from 'react';
+import { Box, Typography } from '@neram/ui';
+import { siteTokens as t } from '@neram/ui/site-tokens';
+import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
+import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
+import ScienceOutlinedIcon from '@mui/icons-material/ScienceOutlined';
+import DrawOutlinedIcon from '@mui/icons-material/DrawOutlined';
+import TaskAltOutlinedIcon from '@mui/icons-material/TaskAltOutlined';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 
 import { buildAlternates } from '@/lib/seo/metadata';
 import { JsonLd } from '@/components/seo/JsonLd';
@@ -29,11 +18,22 @@ import {
   getJEEOnlyHubs,
   getNataOnlyHubs,
   getBothAcceptedHubs,
-  getByTier,
   TOTAL_HUBS,
   type HubSummary,
 } from '@/data/counselling-2026';
-import type { Status, Region } from '@/data/counselling-2026/schema';
+import type { ExamRoute, Status, Region } from '@/data/counselling-2026/schema';
+import {
+  CtaBand,
+  CtaButton,
+  FaqList,
+  HubCard,
+  HubIndex,
+  NavCard,
+  Section,
+  StatusBanner,
+  iconTileSx,
+  type HubGroup,
+} from '@/design-system';
 
 export const revalidate = 86400;
 
@@ -65,10 +65,10 @@ interface PageProps {
   params: { locale: string };
 }
 
-const STATUS_CHIP: Record<Status, { label: string; color: 'success' | 'warning' | 'default' }> = {
-  live: { label: 'Live', color: 'success' },
-  tbd: { label: '2026 TBD', color: 'warning' },
-  'coming-soon': { label: 'Coming Soon', color: 'default' },
+const STATUS_BADGE: Record<Status, string> = {
+  live: 'Live',
+  tbd: 'Schedule TBD',
+  'coming-soon': 'Coming soon',
 };
 
 const REGION_LABEL: Record<Region, string> = {
@@ -78,6 +78,14 @@ const REGION_LABEL: Record<Region, string> = {
   east: 'East India',
   west: 'West India',
   central: 'Central India',
+};
+
+const REGION_ORDER: Region[] = ['national', 'south', 'west', 'north', 'east', 'central'];
+
+const ROUTE_LABEL: Record<ExamRoute, string> = {
+  NATA: 'NATA',
+  JEE_P2: 'JEE P2',
+  JEE_ADV_AAT: 'JEE Adv + AAT',
 };
 
 const CONCEPTS = [
@@ -161,68 +169,47 @@ const CROSS_FAQS = [
   },
 ];
 
-function HubCard({ hub, locale }: { hub: HubSummary; locale: string }) {
-  const localePrefix = locale === 'en' ? '' : `/${locale}`;
-  const status = STATUS_CHIP[hub.status];
+const hubHref = (h: HubSummary) => `/counseling/${h.slug}`;
 
-  const cardSx = {
-    p: 2,
-    height: '100%',
-    borderRadius: 2,
-    border: '1px solid',
-    borderColor: hub.available ? 'grey.300' : 'grey.200',
-    bgcolor: hub.available ? 'background.paper' : 'grey.50',
-    display: 'flex',
-    flexDirection: 'column' as const,
-    transition: 'all 0.2s',
-    textDecoration: 'none',
-    color: 'inherit',
-    ...(hub.available && {
-      '&:hover': { borderColor: 'primary.main', boxShadow: 1 },
-    }),
-  };
-
-  const inner = (
-    <>
-      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" spacing={1} sx={{ mb: 1 }}>
-        <Typography variant="subtitle1" fontWeight={700} sx={{ fontSize: '1rem', lineHeight: 1.25 }}>
-          {hub.shortName}
+/** One column of the "which counselling do I qualify for" picker. */
+function RouteColumn({
+  icon,
+  title,
+  caption,
+  hubs,
+  footnote,
+}: {
+  icon: ReactNode;
+  title: string;
+  caption: string;
+  hubs: HubSummary[];
+  footnote?: string;
+}) {
+  const routed = hubs.filter((h) => h.available);
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, minWidth: 0 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+        <Box aria-hidden sx={iconTileSx}>
+          {icon}
+        </Box>
+        <Typography component="h3" sx={{ m: 0, fontSize: '1.125rem', fontWeight: 700, lineHeight: 1.3, color: t.ink }}>
+          {title}
         </Typography>
-        <Chip label={status.label} size="small" color={status.color} />
-      </Stack>
-      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
-        {hub.authority} · {REGION_LABEL[hub.region]}
+      </Box>
+      <Typography component="p" sx={{ m: 0, fontSize: '1rem', lineHeight: 1.5, color: t.inkMuted }}>
+        {caption}
       </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ flex: 1, fontSize: '0.85rem', lineHeight: 1.5 }}>
-        {hub.blurb}
-      </Typography>
-      <Stack direction="row" spacing={0.5} sx={{ mt: 1.25 }} flexWrap="wrap" useFlexGap>
-        {hub.examRoutes.map((r) => (
-          <Chip
-            key={r}
-            label={r === 'NATA' ? 'NATA' : r === 'JEE_P2' ? 'JEE P2' : 'JEE Adv + AAT'}
-            size="small"
-            variant="outlined"
-            sx={{ fontSize: '0.7rem', height: 20 }}
-          />
-        ))}
-      </Stack>
-      {!hub.available && (
-        <Typography variant="caption" color="text.disabled" sx={{ mt: 1, fontStyle: 'italic' }}>
-          Hub launching in this iteration
+      <NavCard
+        title={`${routed.length} counsellings`}
+        ariaLabel={`${title} counsellings`}
+        links={routed.map((h) => ({ label: h.shortName, href: hubHref(h) }))}
+      />
+      {footnote && (
+        <Typography component="p" sx={{ m: 0, fontSize: '0.875rem', lineHeight: 1.5, color: t.inkMuted }}>
+          {footnote}
         </Typography>
       )}
-    </>
-  );
-
-  if (!hub.available) {
-    return <Paper elevation={0} sx={cardSx}>{inner}</Paper>;
-  }
-
-  return (
-    <Paper component={Link} href={`${localePrefix}/counseling/${hub.slug}`} elevation={0} sx={cardSx}>
-      {inner}
-    </Paper>
+    </Box>
   );
 }
 
@@ -249,12 +236,26 @@ export default function CounselingHubPage({ params: { locale } }: PageProps) {
   const jeeOnly = getJEEOnlyHubs();
   const nataOnly = getNataOnlyHubs();
   const both = getBothAcceptedHubs();
-  const tier1 = getByTier(1);
-  const tier2 = getByTier(2);
-  const tier3 = getByTier(3);
 
   const liveCount = HUB_REGISTRY.filter((h) => h.status === 'live').length;
   const tbdCount = HUB_REGISTRY.filter((h) => h.status === 'tbd').length;
+
+  // Every counselling with a route, grouped by region. Each card links to its hub.
+  const groups: HubGroup[] = REGION_ORDER.map((region) => ({
+    key: region,
+    label: REGION_LABEL[region],
+    items: HUB_REGISTRY.filter((h) => h.region === region && h.available).map((h) => {
+      const routes = h.examRoutes.map((r) => ROUTE_LABEL[r]).join(', ');
+      return {
+        href: hubHref(h),
+        title: h.shortName,
+        desc: `Accepts ${routes}. ${h.blurb}`,
+        icon: region === 'national' ? <AccountBalanceOutlinedIcon /> : <PlaceOutlinedIcon />,
+        badge: STATUS_BADGE[h.status],
+        keywords: `${h.title} ${h.authority} ${REGION_LABEL[h.region]} ${routes} tier ${h.tier}`,
+      };
+    }),
+  })).filter((g) => g.items.length > 0);
 
   return (
     <>
@@ -262,305 +263,107 @@ export default function CounselingHubPage({ params: { locale } }: PageProps) {
       <JsonLd data={articleSchema} />
       <JsonLd data={faqSchema} />
 
-      <Container maxWidth="lg" sx={{ py: { xs: 3, md: 5 }, pb: { xs: 12, md: 6 } }}>
-        {/* Breadcrumb */}
-        <Stack direction="row" gap={0.75} sx={{ mb: 2 }} flexWrap="wrap">
-          <Link href={`/${locale === 'en' ? '' : locale}`} style={{ display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }}>
-            <HomeIcon sx={{ fontSize: 14, mr: 0.5, color: 'text.secondary' }} />
-            <Typography variant="body2" color="text.secondary">Home</Typography>
-          </Link>
-          <Typography variant="body2" color="text.secondary">/</Typography>
-          <Typography variant="body2" color="primary" fontWeight={600}>Counselling</Typography>
-        </Stack>
-
-        {/* Hero */}
-        <Box sx={{ textAlign: { xs: 'left', md: 'center' }, mb: { xs: 4, md: 5 } }}>
-          <Typography
-            variant="h1"
-            sx={{ fontWeight: 800, fontSize: { xs: '1.75rem', md: '2.5rem' }, lineHeight: 1.15, mb: 1.5 }}
-          >
-            B.Arch Counselling 2026
+      <HubIndex
+        breadcrumb={[{ name: 'Home', href: '/' }, { name: 'Counselling' }]}
+        eyebrow="B.Arch counselling"
+        heading={`All ${TOTAL_HUBS} B.Arch counsellings in India`}
+        title="B.Arch Counselling 2026"
+        lede={`Every B.Arch admission counselling in India (${TOTAL_HUBS} in total). Eligibility, dates, cutoffs, and decision-tree guidance for picking the right one for you.`}
+        intro={
+          <Typography component="p" sx={{ m: 0, fontFamily: t.fontMono, fontSize: '0.8125rem', lineHeight: 1.6, color: t.paperSubtle }}>
+            {liveCount} live now · {tbdCount} awaiting 2026 brochure · Updated 8 May 2026
           </Typography>
-          <Typography variant="h2" sx={{ fontSize: { xs: '1rem', md: '1.15rem' }, fontWeight: 500, color: 'text.secondary', mb: 2, maxWidth: 720, mx: { xs: 0, md: 'auto' } }}>
-            Every B.Arch admission counselling in India ({TOTAL_HUBS} in total). Eligibility, dates, cutoffs, and decision-tree guidance for picking the right one for you.
-          </Typography>
-          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap justifyContent={{ xs: 'flex-start', md: 'center' }}>
-            <Chip label={`${liveCount} live now`} size="small" color="success" />
-            <Chip label={`${tbdCount} awaiting 2026 brochure`} size="small" color="warning" />
-            <Chip label="Updated 8 May 2026" size="small" variant="outlined" />
-          </Stack>
-        </Box>
+        }
+        searchPlaceholder="Find a counselling, e.g. TNEA, JoSAA, KEAM"
+        allLabel="All counsellings"
+        countNoun="counsellings"
+        cardCta="Read guide"
+        groups={groups}
+      >
+        <Section id="cycle-status" tone="white" py={{ xs: 4, md: 5 }}>
+          <StatusBanner
+            status="tbd"
+            tag="2026 cycle"
+            label="2026 cycle is starting now."
+            detail="JEE Advanced is on May 17, AAT on June 4. Most state counsellings open from June through August. Pages flagged “Schedule TBD” are based on 2025 cycle data and will be refreshed when official 2026 brochures release."
+            note="Information curated from official counselling brochures and verified against state DTE portals. Always cross-check on the official portal before submitting any application."
+          />
+        </Section>
 
-        {/* Status banner */}
-        <Paper
-          elevation={0}
-          sx={{
-            p: { xs: 2, md: 2.5 },
-            mb: 4,
-            borderRadius: 2,
-            bgcolor: '#FFF8E1',
-            border: '1px solid #F57C00',
+        <Section
+          id="which-counselling"
+          tone="light"
+          header={{
+            title: 'Which counselling do I qualify for?',
+            lede: 'Pick the entrance route you have. Counsellings are grouped by what they accept.',
+            align: 'start',
+            size: 'article',
           }}
         >
-          <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} alignItems={{ md: 'center' }}>
-            <Typography variant="subtitle1" fontWeight={700}>2026 cycle is starting now.</Typography>
-            <Typography variant="body2" color="text.secondary">
-              JEE Advanced is on May 17, AAT on June 4. Most state counsellings open from June through August. Pages flagged &ldquo;2026 TBD&rdquo; are based on 2025 cycle data and will be refreshed when official 2026 brochures release.
-            </Typography>
-          </Stack>
-        </Paper>
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 300px), 1fr))', gap: { xs: 4, md: 3 }, alignItems: 'start' }}>
+            <RouteColumn
+              icon={<ScienceOutlinedIcon />}
+              title="JEE Main Paper 2 only"
+              caption="No NATA score? You can still apply to:"
+              hubs={jeeOnly}
+            />
+            <RouteColumn
+              icon={<DrawOutlinedIcon />}
+              title="NATA only"
+              caption="Have NATA but not JEE Paper 2:"
+              hubs={nataOnly}
+              footnote="Plus CEPT University (NATA-only premium private)."
+            />
+            <RouteColumn
+              icon={<TaskAltOutlinedIcon />}
+              title="NATA + JEE Paper 2"
+              caption={`Both scores give you full access. ${both.length} counsellings accept either:`}
+              hubs={both.slice(0, 8)}
+              footnote={both.length > 8 ? `And ${both.length - 8} more state counsellings.` : undefined}
+            />
+          </Box>
+        </Section>
 
-        {/* Decision tree */}
-        <Box component="section" sx={{ mb: 5 }}>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2.5 }}>
-            <LightbulbOutlinedIcon sx={{ color: 'primary.main' }} />
-            <Typography variant="h2" sx={{ fontSize: { xs: '1.25rem', md: '1.5rem' }, fontWeight: 700 }}>
-              Which counselling do I qualify for?
-            </Typography>
-          </Stack>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-            Pick the entrance route you have. Counsellings are grouped by what they accept.
-          </Typography>
-
-          <Grid container spacing={2}>
-            <Grid item xs={12} md={4}>
-              <Paper elevation={0} sx={{ p: 2, height: '100%', borderRadius: 2, border: '2px solid #1565C0', bgcolor: '#E3F2FD' }}>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-                  <ScienceIcon sx={{ color: '#1565C0' }} />
-                  <Typography variant="subtitle1" fontWeight={700}>JEE Main Paper 2 only</Typography>
-                </Stack>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-                  No NATA score? You can still apply to:
-                </Typography>
-                <Stack spacing={0.5}>
-                  {jeeOnly.map((h) => (
-                    <Typography key={h.slug} variant="body2" component={h.available ? Link : 'span'} href={h.available ? `${localePrefix}/counseling/${h.slug}` : undefined} sx={{ color: h.available ? 'primary.main' : 'text.secondary', textDecoration: h.available ? 'none' : 'none', '&:hover': h.available ? { textDecoration: 'underline' } : undefined }}>
-                      {h.shortName}{!h.available && ' (soon)'}
-                    </Typography>
-                  ))}
-                </Stack>
-              </Paper>
-            </Grid>
-
-            <Grid item xs={12} md={4}>
-              <Paper elevation={0} sx={{ p: 2, height: '100%', borderRadius: 2, border: '2px solid #6A1B9A', bgcolor: '#F3E5F5' }}>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-                  <DrawIcon sx={{ color: '#6A1B9A' }} />
-                  <Typography variant="subtitle1" fontWeight={700}>NATA only</Typography>
-                </Stack>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-                  Have NATA but not JEE Paper 2:
-                </Typography>
-                <Stack spacing={0.5}>
-                  {nataOnly.map((h) => (
-                    <Typography key={h.slug} variant="body2" component={h.available ? Link : 'span'} href={h.available ? `${localePrefix}/counseling/${h.slug}` : undefined} sx={{ color: h.available ? 'primary.main' : 'text.secondary', textDecoration: 'none', '&:hover': h.available ? { textDecoration: 'underline' } : undefined }}>
-                      {h.shortName}{!h.available && ' (soon)'}
-                    </Typography>
-                  ))}
-                  <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-                    Plus CEPT University (NATA-only premium private).
-                  </Typography>
-                </Stack>
-              </Paper>
-            </Grid>
-
-            <Grid item xs={12} md={4}>
-              <Paper elevation={0} sx={{ p: 2, height: '100%', borderRadius: 2, border: '2px solid #2E7D32', bgcolor: '#E8F5E9' }}>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 1 }}>
-                  <CheckCircleIcon sx={{ color: '#2E7D32' }} />
-                  <Typography variant="subtitle1" fontWeight={700}>NATA + JEE Paper 2</Typography>
-                </Stack>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-                  Both scores give you full access. {both.length} counsellings accept either:
-                </Typography>
-                <Stack spacing={0.5}>
-                  {both.slice(0, 8).map((h) => (
-                    <Typography key={h.slug} variant="body2" component={h.available ? Link : 'span'} href={h.available ? `${localePrefix}/counseling/${h.slug}` : undefined} sx={{ color: h.available ? 'primary.main' : 'text.secondary', textDecoration: 'none', '&:hover': h.available ? { textDecoration: 'underline' } : undefined }}>
-                      {h.shortName}{!h.available && ' (soon)'}
-                    </Typography>
-                  ))}
-                  {both.length > 8 && (
-                    <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5 }}>
-                      And {both.length - 8} more state counsellings.
-                    </Typography>
-                  )}
-                </Stack>
-              </Paper>
-            </Grid>
-          </Grid>
-        </Box>
-
-        {/* Concept cards */}
-        <Box component="section" sx={{ mb: 5 }}>
-          <Typography variant="h2" sx={{ fontSize: { xs: '1.25rem', md: '1.5rem' }, fontWeight: 700, mb: 2.5 }}>
-            Counselling concepts every aspirant should know
-          </Typography>
-          <Grid container spacing={2}>
-            {CONCEPTS.map((c) => (
-              <Grid item xs={12} sm={6} md={4} key={c.slug}>
-                <Paper
-                  component={Link}
-                  href={`${localePrefix}/counseling/concepts/${c.slug}`}
-                  elevation={0}
-                  sx={{
-                    p: 2,
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    borderRadius: 2,
-                    border: '1px solid',
-                    borderColor: 'grey.200',
-                    textDecoration: 'none',
-                    color: 'inherit',
-                    transition: 'all 0.2s',
-                    '&:hover': { borderColor: 'primary.main', boxShadow: 1 },
-                  }}
-                >
-                  <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 0.75 }}>
-                    {c.title}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ flex: 1, fontSize: '0.85rem', lineHeight: 1.5 }}>
-                    {c.summary}
-                  </Typography>
-                  <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mt: 1.25 }}>
-                    <Typography variant="caption" color="primary" fontWeight={600}>Read explainer</Typography>
-                    <ArrowForwardIcon sx={{ fontSize: 14, color: 'primary.main' }} />
-                  </Stack>
-                </Paper>
-              </Grid>
-            ))}
-          </Grid>
-        </Box>
-
-        {/* Tier-grouped state grid */}
-        <Box component="section" sx={{ mb: 5 }}>
-          <Typography variant="h2" sx={{ fontSize: { xs: '1.25rem', md: '1.5rem' }, fontWeight: 700, mb: 2.5 }}>
-            All {TOTAL_HUBS} B.Arch counsellings in India
-          </Typography>
-
-          <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 1.5, fontWeight: 700 }}>
-            Tier 1: National + flagship state counsellings ({tier1.length})
-          </Typography>
-          <Grid container spacing={1.5} sx={{ mb: 3 }}>
-            {tier1.map((h) => (
-              <Grid item xs={12} sm={6} md={4} key={h.slug}>
-                <HubCard hub={h} locale={locale} />
-              </Grid>
-            ))}
-          </Grid>
-
-          <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 1.5, fontWeight: 700 }}>
-            Tier 2: Other state counsellings with notable B.Arch pools ({tier2.length})
-          </Typography>
-          <Grid container spacing={1.5} sx={{ mb: 3 }}>
-            {tier2.map((h) => (
-              <Grid item xs={12} sm={6} md={4} key={h.slug}>
-                <HubCard hub={h} locale={locale} />
-              </Grid>
-            ))}
-          </Grid>
-
-          <Typography variant="overline" color="text.secondary" sx={{ display: 'block', mb: 1.5, fontWeight: 700 }}>
-            Tier 3: Thin pools, JoSAA is usually the better route ({tier3.length})
-          </Typography>
-          <Grid container spacing={1.5} sx={{ mb: 2 }}>
-            {tier3.map((h) => (
-              <Grid item xs={12} sm={6} md={4} key={h.slug}>
-                <HubCard hub={h} locale={locale} />
-              </Grid>
-            ))}
-          </Grid>
-        </Box>
-
-        {/* FAQs */}
-        <Box component="section" sx={{ mb: 5 }}>
-          <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2.5 }}>
-            <HelpOutlineIcon sx={{ color: 'text.secondary' }} />
-            <Typography variant="h2" sx={{ fontSize: { xs: '1.25rem', md: '1.5rem' }, fontWeight: 700 }}>
-              Cross-counselling FAQs
-            </Typography>
-          </Stack>
-          <Stack spacing={1}>
-            {CROSS_FAQS.map((f, idx) => (
-              <Paper
-                key={`${f.question}-${idx}`}
-                elevation={0}
-                component="details"
-                sx={{
-                  borderRadius: 2,
-                  border: '1px solid',
-                  borderColor: 'grey.200',
-                  '& summary': {
-                    listStyle: 'none',
-                    cursor: 'pointer',
-                    p: 1.75,
-                    fontWeight: 600,
-                    fontSize: '0.95rem',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: 1,
-                  },
-                  '& summary::-webkit-details-marker': { display: 'none' },
-                  '& summary::after': {
-                    content: '"+"',
-                    fontSize: '1.25rem',
-                    color: 'primary.main',
-                    flexShrink: 0,
-                  },
-                  '&[open] summary::after': { content: '"−"' },
-                }}
-              >
-                <Box component="summary">{f.question}</Box>
-                <Box sx={{ p: 1.75, pt: 0, color: 'text.secondary', fontSize: '0.9rem', lineHeight: 1.6 }}>
-                  {f.answer}
-                </Box>
-              </Paper>
-            ))}
-          </Stack>
-        </Box>
-
-        {/* Tools CTA */}
-        <Paper
-          elevation={0}
-          sx={{ p: { xs: 3, md: 4 }, borderRadius: 2, bgcolor: '#E3F2FD', border: '1px solid #1565C0', textAlign: 'center' }}
+        <Section
+          id="concepts"
+          tone="white"
+          gap={3}
+          header={{ title: 'Counselling concepts every aspirant should know', align: 'start', size: 'article' }}
         >
-          <Typography variant="h3" sx={{ fontSize: '1.25rem', fontWeight: 700, mb: 1 }}>
-            Predict your B.Arch admission chances
-          </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2.5, maxWidth: 600, mx: 'auto' }}>
-            Use the free Neram tools to calculate your cutoff score, predict your rank, and find colleges across all 28 counsellings you can get into.
-          </Typography>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} justifyContent="center">
-            <Button
-              component="a"
-              href="https://app.neramclasses.com/tools/nata/cutoff-calculator"
-              target="_blank"
-              rel="noopener noreferrer"
-              variant="contained"
-              endIcon={<OpenInNewIcon sx={{ fontSize: 16 }} />}
-              sx={{ bgcolor: '#1565C0', '&:hover': { bgcolor: '#0D47A1' } }}
-            >
-              Cutoff Calculator
-            </Button>
-            <Button
-              component="a"
-              href="https://app.neramclasses.com/tools/counseling/college-predictor"
-              target="_blank"
-              rel="noopener noreferrer"
-              variant="outlined"
-              endIcon={<OpenInNewIcon sx={{ fontSize: 16 }} />}
-            >
-              College Predictor
-            </Button>
-          </Stack>
-        </Paper>
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))', gap: { xs: 2, md: 2.5 } }}>
+            {CONCEPTS.map((c) => (
+              <HubCard
+                key={c.slug}
+                href={`/counseling/concepts/${c.slug}`}
+                title={c.title}
+                desc={c.summary}
+                icon={<LightbulbOutlinedIcon />}
+                cta="Read explainer"
+              />
+            ))}
+          </Box>
+        </Section>
 
-        <Divider sx={{ my: 4 }} />
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', textAlign: 'center' }}>
-          Information curated from official counselling brochures and verified against state DTE portals. Always cross-check on the official portal before submitting any application.
-        </Typography>
-      </Container>
+        <Section id="faq" tone="light" width="narrow" header={{ eyebrow: 'Questions', title: 'Cross-counselling FAQs' }}>
+          <FaqList items={CROSS_FAQS} />
+        </Section>
+
+        <CtaBand
+          eyebrow="Free tools"
+          title="Predict your B.Arch admission chances"
+          lede="Use the free Neram tools to calculate your cutoff score, predict your rank, and find colleges across all 28 counsellings you can get into."
+          actions={
+            <>
+              <CtaButton href="https://app.neramclasses.com/tools/nata/cutoff-calculator" external>
+                Cutoff Calculator
+              </CtaButton>
+              <CtaButton variant="link" href="https://app.neramclasses.com/tools/counseling/college-predictor" external>
+                College Predictor
+              </CtaButton>
+            </>
+          }
+        />
+      </HubIndex>
     </>
   );
 }

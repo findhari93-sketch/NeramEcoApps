@@ -1,38 +1,30 @@
-import { neramFontFamilies, neramTokens } from '@neram/ui';
-
 /**
- * The showcase paints a dark product demo, so it carries its own surface
- * colours. Brand colours come from the shared tokens.
+ * Showcase-only values that have no design-system token. Every other colour
+ * comes from `tokens` in '@/design-system'. Keep hex literals here, never in sx.
  */
-export const NX = {
-  navy: '#0a1628',
-  surface: '#0f1d33',
-  rule: '#2a3b5a',
-  muted: '#a9b4c8',
-  dim: '#7d8aa3',
-  done: '#5d6b85',
-  gold: neramTokens.gold[500],
-  goldDark: '#b67a0c',
-  ink: '#14161b',
-  inkMuted: '#55524c',
-  orange: '#f26b1d',
-  red: '#e5302a',
-  paper: '#f4f3ef',
-  border: '#d9d6cf',
-  line: '#e4e1da',
-  tint: '#fff8e8',
+export const SHOWCASE_COLORS = {
+  /** Microsoft Teams brand tile in the window chrome. */
   teams: '#5b5fc7',
-  live: '#e5484d',
-  white: '#ffffff',
-  text: '#dfe5ef',
+  /** Bars for the chapters outside the top three (Predict). */
+  greyBar: '#8792a0',
+  /** Paper text at 0.55: inactive tabs and tour labels. */
+  paperDim: 'rgba(245,240,232,0.55)',
+  /** Paper at 0.2: future tour segments. */
+  paperTrack: 'rgba(245,240,232,0.2)',
+  /** Outline of the 44px tour buttons. */
+  outline: 'rgba(245,240,232,0.24)',
+  /** Border of the app window. */
+  windowBorder: 'rgba(255,255,255,0.12)',
+  /** Stat strip cells over the blueprint grid. */
+  statCell: 'rgba(11,22,41,0.6)',
 } as const;
 
-export const mono = 'ui-monospace, Menlo, Consolas, monospace';
-export const serif = neramFontFamilies.serif;
+/** gold500 at a variable alpha (the Predict highlight fades in). */
+export const goldTint = (alpha: number): string => `rgba(232,160,32,${alpha})`;
 
 export const img = (name: string): string => `/images/apply/nexus/${name}.webp`;
 
-/** Every showcase image, so the component can warm the cache after the page settles. */
+/** Every image the scenes use, so the component can warm the cache after the page settles. */
 export const SHOWCASE_IMAGES = [
   'drawing-1215',
   'drawing-680',
@@ -44,11 +36,8 @@ export const SHOWCASE_IMAGES = [
   'lib-4',
   'lib-5',
   'lib-6',
-  'lib-7',
   'insp-1',
   'insp-2',
   'insp-3',
   'insp-4',
-  'insp-5',
-  'insp-6',
 ].map(img);

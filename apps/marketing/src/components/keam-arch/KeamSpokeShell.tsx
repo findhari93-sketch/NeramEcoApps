@@ -2,8 +2,6 @@ import CounsellingSpokeShell from '@/components/counselling/CounsellingSpokeShel
 
 const HUB_PATH = '/counseling/keam-arch';
 const HUB_LABEL = 'KEAM B.Arch 2026';
-const PRIMARY_GREEN = '#0d7a4a';
-const PRIMARY_GREEN_DARK = '#0a5a36';
 
 export interface KeamSpokeShellProps {
   locale: string;
@@ -70,8 +68,6 @@ export default function KeamSpokeShell({
         subtitle: 'Your KEAM B.Arch counselling guide',
         greeting: `Hi! I'm Aintra. Ask me about ${topicTitle.toLowerCase()}, or anything else about KEAM B.Arch 2026.`,
         suggestions: aintraSuggestions,
-        primaryColor: PRIMARY_GREEN,
-        primaryColorDark: PRIMARY_GREEN_DARK,
         disclaimerSource: 'cee.kerala.gov.in',
       }}
     >

@@ -20,6 +20,11 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import RelatedContent from '@/components/seo/RelatedContent';
+import { siteTokens as t } from '@neram/ui/site-tokens';
+import { admissionYear } from '@/lib/college-hub/constants';
+
+// The JEE Main cycle students search for (2027 from July 2026).
+const YEAR = admissionYear();
 
 
 export async function generateMetadata({
@@ -28,8 +33,8 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'JEE Paper 2 Preparation Guide 2026 - B.Arch & B.Planning',
-    description: 'Complete JEE Main Paper 2 (B.Arch/B.Planning) 2026 preparation guide. Learn about exam pattern, syllabus, preparation strategy, and tips to crack JEE Paper 2.',
+    title: `JEE Paper 2 Preparation Guide ${YEAR}: B.Arch & B.Planning`,
+    description: `Complete JEE Main Paper 2 (B.Arch/B.Planning) ${YEAR} preparation guide. Learn about exam pattern, syllabus, preparation strategy, and tips to crack JEE Paper 2.`,
     keywords: 'JEE Paper 2 preparation, JEE B.Arch, JEE B.Planning, JEE Paper 2 syllabus, JEE Paper 2 tips',
     alternates: buildAlternates(locale, '/jee-paper-2-preparation'),
   };
@@ -143,15 +148,16 @@ export default function JeePaper2PreparationPage({ params: { locale } }: PagePro
       <Box
         sx={{
           py: { xs: 6, md: 10 },
-          background: 'linear-gradient(135deg, #1565c0 0%, #0d47a1 100%)',
-          color: 'white',
+          bgcolor: t.navy900,
+          ...t.blueprint,
+          color: t.paper,
         }}
       >
         <Container maxWidth="lg">
           <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', md: '3rem' } }}>
-            JEE Paper 2 Preparation Guide 2026
+            JEE Paper 2 Preparation Guide {YEAR}
           </Typography>
-          <Typography variant="h5" sx={{ mb: 3, opacity: 0.9 }}>
+          <Typography variant="h5" sx={{ mb: 3, color: t.paperMuted }}>
             Your complete guide to crack JEE Main Paper 2 for B.Arch & B.Planning
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
@@ -159,7 +165,7 @@ export default function JeePaper2PreparationPage({ params: { locale } }: PagePro
               variant="contained"
               component={Link}
               href="/apply"
-              sx={{ bgcolor: 'white', color: 'primary.main' }}
+              sx={{ minHeight: 48 }}
             >
               Start Preparation
             </Button>
@@ -167,7 +173,7 @@ export default function JeePaper2PreparationPage({ params: { locale } }: PagePro
               variant="outlined"
               component={Link}
               href="/courses/architecture-entrance-year-long"
-              sx={{ borderColor: 'white', color: 'white' }}
+              sx={{ minHeight: 48, borderColor: t.outlineDark, color: t.paper, '&:hover': { bgcolor: 'transparent', borderColor: t.gold500, color: t.gold500 } }}
             >
               View Course
             </Button>
@@ -176,10 +182,10 @@ export default function JeePaper2PreparationPage({ params: { locale } }: PagePro
       </Box>
 
       {/* Exam Pattern */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
+      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: t.ground }}>
         <Container maxWidth="lg">
           <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ fontWeight: 700, mb: 6 }}>
-            JEE Paper 2 Exam Pattern 2026
+            JEE Paper 2 Exam Pattern {YEAR} (expected)
           </Typography>
 
           <Grid container spacing={4}>
@@ -187,15 +193,15 @@ export default function JeePaper2PreparationPage({ params: { locale } }: PagePro
               <Grid item xs={12} md={6} key={key}>
                 <Card>
                   <CardContent sx={{ p: 4 }}>
-                    <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, color: 'primary.main' }}>
+                    <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, color: t.navy900 }}>
                       {pattern.title}
                     </Typography>
                     <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
-                      <Paper sx={{ p: 1.5, textAlign: 'center', flex: 1 }}>
+                      <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center', flex: 1 }}>
                         <Typography variant="h4" color="primary">{pattern.total}</Typography>
                         <Typography variant="caption">Total Marks</Typography>
                       </Paper>
-                      <Paper sx={{ p: 1.5, textAlign: 'center', flex: 1 }}>
+                      <Paper variant="outlined" sx={{ p: 1.5, textAlign: 'center', flex: 1 }}>
                         <Typography variant="h4" color="primary">{pattern.duration}</Typography>
                         <Typography variant="caption">Duration</Typography>
                       </Paper>
@@ -229,7 +235,7 @@ export default function JeePaper2PreparationPage({ params: { locale } }: PagePro
               <Grid item xs={12} md={4} key={index}>
                 <Card sx={{ height: '100%' }}>
                   <CardContent sx={{ p: 4 }}>
-                    <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, color: 'primary.main' }}>
+                    <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, color: t.navy900 }}>
                       {section.category}
                     </Typography>
                     <List>
@@ -251,7 +257,7 @@ export default function JeePaper2PreparationPage({ params: { locale } }: PagePro
       </Box>
 
       {/* Top Colleges */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
+      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: t.ground }}>
         <Container maxWidth="lg">
           <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ fontWeight: 700, mb: 6 }}>
             Top Colleges Through JEE Paper 2
@@ -290,7 +296,7 @@ export default function JeePaper2PreparationPage({ params: { locale } }: PagePro
 
           <Grid container spacing={4}>
             <Grid item xs={12} md={6}>
-              <Card sx={{ height: '100%', borderTop: 4, borderColor: 'primary.main' }}>
+              <Card sx={{ height: '100%', borderTop: 4, borderColor: t.gold500 }}>
                 <CardContent sx={{ p: 4 }}>
                   <Typography variant="h5" gutterBottom sx={{ fontWeight: 600 }}>JEE Paper 2</Typography>
                   <List dense>
@@ -304,7 +310,7 @@ export default function JeePaper2PreparationPage({ params: { locale } }: PagePro
               </Card>
             </Grid>
             <Grid item xs={12} md={6}>
-              <Card sx={{ height: '100%', borderTop: 4, borderColor: 'secondary.main' }}>
+              <Card sx={{ height: '100%', borderTop: 4, borderColor: t.gold500 }}>
                 <CardContent sx={{ p: 4 }}>
                   <Typography variant="h5" gutterBottom sx={{ fontWeight: 600 }}>NATA</Typography>
                   <List dense>
@@ -334,12 +340,12 @@ export default function JeePaper2PreparationPage({ params: { locale } }: PagePro
       />
 
       {/* CTA Section */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'primary.main', color: 'white', textAlign: 'center' }}>
+      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: t.navy900, color: t.paper, textAlign: 'center' }}>
         <Container maxWidth="md">
           <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700 }}>
             Ready to Crack JEE Paper 2?
           </Typography>
-          <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>
+          <Typography variant="h6" sx={{ mb: 4, color: t.paperMuted }}>
             Join Neram Classes for expert coaching and guaranteed results
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -348,7 +354,7 @@ export default function JeePaper2PreparationPage({ params: { locale } }: PagePro
               size="large"
               component={Link}
               href="/apply"
-              sx={{ bgcolor: 'white', color: 'primary.main' }}
+              sx={{ minHeight: 48 }}
             >
               Enroll Now
             </Button>
@@ -357,7 +363,7 @@ export default function JeePaper2PreparationPage({ params: { locale } }: PagePro
               size="large"
               component={Link}
               href="/contact"
-              sx={{ borderColor: 'white', color: 'white' }}
+              sx={{ minHeight: 48, borderColor: t.outlineDark, color: t.paper, '&:hover': { bgcolor: 'transparent', borderColor: t.gold500, color: t.gold500 } }}
             >
               Free Demo Class
             </Button>

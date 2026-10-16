@@ -14,6 +14,7 @@ import {
 import { useState } from 'react';
 import { FEE_CATEGORY_LABELS } from '@/lib/college-hub/constants';
 import type { CollegeFee } from '@/lib/college-hub/types';
+import { siteTokens } from '@neram/ui/site-tokens';
 
 interface FeeBreakdownProps {
   fees: CollegeFee[];
@@ -50,7 +51,7 @@ export default function FeeBreakdown({ fees }: FeeBreakdownProps) {
   if (fees.length === 0) {
     return (
       <Box sx={{ py: 4, textAlign: 'center' }}>
-        <Typography color="text.secondary">Fee details not yet available for this college.</Typography>
+        <Typography color={siteTokens.inkMuted}>Fee details not yet available for this college.</Typography>
       </Box>
     );
   }
@@ -66,7 +67,7 @@ export default function FeeBreakdown({ fees }: FeeBreakdownProps) {
       {/* Year selector */}
       {years.length > 1 && (
         <Box sx={{ mb: 2 }}>
-          <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+          <Typography variant="caption" color={siteTokens.inkMuted} sx={{ mb: 0.5, display: 'block' }}>
             Academic Year
           </Typography>
           <ToggleButtonGroup
@@ -87,7 +88,7 @@ export default function FeeBreakdown({ fees }: FeeBreakdownProps) {
       {/* Category selector */}
       {categories.length > 1 && (
         <Box sx={{ mb: 2 }}>
-          <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+          <Typography variant="caption" color={siteTokens.inkMuted} sx={{ mb: 0.5, display: 'block' }}>
             Category
           </Typography>
           <ToggleButtonGroup
@@ -106,10 +107,10 @@ export default function FeeBreakdown({ fees }: FeeBreakdownProps) {
         </Box>
       )}
 
-      <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 2 }}>
+      <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: 1 }}>
         <Table size="small">
           <TableHead>
-            <TableRow sx={{ bgcolor: '#f8fafc' }}>
+            <TableRow sx={{ bgcolor: siteTokens.ground }}>
               <TableCell sx={{ fontWeight: 700, fontSize: '0.8rem' }}>Year</TableCell>
               <TableCell align="right" sx={{ fontWeight: 700, fontSize: '0.8rem' }}>Tuition</TableCell>
               <TableCell align="right" sx={{ fontWeight: 700, fontSize: '0.8rem', display: { xs: 'none', sm: 'table-cell' } }}>Hostel</TableCell>
@@ -121,7 +122,7 @@ export default function FeeBreakdown({ fees }: FeeBreakdownProps) {
             {filtered.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} align="center">
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" color={siteTokens.inkMuted}>
                     No fee data for this combination.
                   </Typography>
                 </TableCell>
@@ -144,12 +145,12 @@ export default function FeeBreakdown({ fees }: FeeBreakdownProps) {
               ))
             )}
             {filtered.length > 1 && (
-              <TableRow sx={{ bgcolor: '#f0fdf4' }}>
+              <TableRow sx={{ bgcolor: siteTokens.surface, boxShadow: `inset 3px 0 0 ${siteTokens.success}` }}>
                 <TableCell sx={{ fontWeight: 700, fontSize: '0.85rem' }} colSpan={3}>
                   5-Year Total
                 </TableCell>
                 <TableCell align="right" sx={{ fontWeight: 700, fontSize: '0.9rem', display: { xs: 'none', md: 'table-cell' } }} />
-                <TableCell align="right" sx={{ fontWeight: 800, fontSize: '0.9rem', color: 'success.dark' }}>
+                <TableCell align="right" sx={{ fontWeight: 800, fontSize: '0.9rem', color: siteTokens.success }}>
                   {formatFee(grandTotal)}
                 </TableCell>
               </TableRow>

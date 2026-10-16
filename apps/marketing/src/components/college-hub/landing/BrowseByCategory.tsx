@@ -8,6 +8,7 @@ import AttachMoneyIcon from '@mui/icons-material/AttachMoney';
 import AccountBalanceIcon from '@mui/icons-material/AccountBalance';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import Link from 'next/link';
+import { tokens } from '@/design-system';
 
 interface BrowseByCategoryProps {
   stateData: { state_slug: string; state: string; count: number }[];
@@ -71,7 +72,7 @@ export default function BrowseByCategory({ stateData, counselingData, typeData, 
   const typeCountMap = new Map(typeData.map((t) => [t.type, t.count]));
 
   return (
-    <Box sx={{ py: { xs: 5, sm: 6, md: 8 }, bgcolor: '#f8fafc' }}>
+    <Box sx={{ py: { xs: 5, sm: 6, md: 8 }, bgcolor: tokens.ground }}>
       <Container maxWidth="lg">
         {/* Header */}
         <Box sx={{ textAlign: 'center', mb: { xs: 3, sm: 4 } }}>
@@ -80,13 +81,13 @@ export default function BrowseByCategory({ stateData, counselingData, typeData, 
             sx={{
               fontSize: { xs: '1.35rem', sm: '1.75rem' },
               fontWeight: 800,
-              color: '#0f172a',
+              color: tokens.ink,
               mb: 1,
             }}
           >
             Browse colleges your way
           </Typography>
-          <Typography variant="body1" sx={{ color: '#64748b', fontSize: '0.95rem' }}>
+          <Typography variant="body1" sx={{ color: tokens.inkMuted, fontSize: '0.95rem' }}>
             Find the right college by state, admission system, fee range, or type
           </Typography>
         </Box>
@@ -204,25 +205,25 @@ function CategoryCard({
       variant="outlined"
       sx={{
         p: 2,
-        borderRadius: 2,
+        borderRadius: 1,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         opacity: muted ? 0.55 : 1,
         cursor: href ? 'pointer' : 'default',
-        transition: 'border-color 0.2s, box-shadow 0.2s',
-        '&:hover': href ? { borderColor: 'primary.main', boxShadow: 1 } : {},
+        transition: 'border-color 0.2s',
+        '&:hover': href ? { borderColor: tokens.gold500 } : {},
       }}
     >
       <Box>
-        <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#0f172a', fontSize: '0.85rem' }}>
+        <Typography variant="subtitle2" sx={{ fontWeight: 700, color: tokens.ink, fontSize: '0.85rem' }}>
           {title}
         </Typography>
-        <Typography variant="caption" sx={{ color: '#64748b' }}>
+        <Typography variant="caption" sx={{ color: tokens.inkMuted }}>
           {subtitle}
         </Typography>
       </Box>
-      {href && <ArrowForwardIcon sx={{ fontSize: 16, color: '#94a3b8' }} />}
+      {href && <ArrowForwardIcon sx={{ fontSize: 16, color: tokens.statusIdle }} />}
     </Paper>
   );
 

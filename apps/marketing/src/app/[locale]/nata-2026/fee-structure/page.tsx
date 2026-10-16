@@ -1,23 +1,13 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import {
-  Box,
-  Container,
-  Typography,
-  Card,
-  CardContent,
-  Button,
-  Chip,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-} from '@neram/ui';
-import Link from 'next/link';
+import { Box, Typography } from '@neram/ui';
+import CalculateOutlinedIcon from '@mui/icons-material/CalculateOutlined';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { APP_URL } from '@/lib/seo/constants';
-import LastUpdatedBadge from '@/components/nata/LastUpdatedBadge';
+import { nataGuideNav, nataRelated } from '@/components/nata/guideNav';
+import { ArticleSection, Callout, CtaBand, CtaButton, DataTable, FaqList, GuideArticle, InlineCta, tokens } from '@/design-system';
 
 
 export async function generateMetadata({
@@ -44,6 +34,14 @@ const feeData = [
   { category: 'SC / ST / EWS / PwD', fee: '1,250', highlight: false },
   { category: 'Transgender', fee: '1,000', highlight: false },
   { category: 'Candidates from Outside India', fee: '15,000', highlight: true },
+];
+
+const feeNotes = [
+  'Fee is per test. Maximum 2 tests in Phase 1 or 1 test in Phase 2.',
+  'Fee is non-refundable in all cases.',
+  'Payment: Electronic Payment Gateway (EPG): Debit Card, Credit Card, Net Banking.',
+  'Candidates initially opting for a single test may later opt for an additional test (not exceeding 2).',
+  'Multiple applications by the same candidate with changed credentials will be rejected without refund.',
 ];
 
 const faqs = [
@@ -79,123 +77,65 @@ export default function FeeStructurePage({ params: { locale } }: PageProps) {
       <JsonLd data={generateBreadcrumbSchema([{ name: 'Home', url: localeUrl('') }, { name: 'NATA 2026', url: localeUrl('/nata-2026') }, { name: 'Fee Structure' }])} />
       <JsonLd data={generateFAQSchema(faqs)} />
 
-      <Box>
-        {/* Hero */}
-        <Box sx={{ py: { xs: 8, md: 12 }, background: 'linear-gradient(135deg, #1a237e 0%, #0d47a1 100%)', color: 'white' }}>
-          <Container maxWidth="lg">
-            <Chip label="NATA 2026" sx={{ bgcolor: 'white', color: 'primary.main', mb: 2, fontWeight: 600 }} />
-            <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', sm: '2.5rem', md: '3.5rem' } }}>
-              NATA 2026 Application Fee
-            </Typography>
-            <Typography variant="h5" sx={{ mb: 2, opacity: 0.9, fontSize: { xs: '1.1rem', md: '1.5rem' } }}>
-              The NATA 2026 application fee is Rs 1,750 for General/OBC (NCL), Rs 1,250 for SC/ST/EWS/PwD, Rs 1,000 for Transgender, and Rs 15,000 for outside India. Fee is per test, non-refundable.
-            </Typography>
-            <LastUpdatedBadge date="March 13, 2026" />
-          </Container>
-        </Box>
+      <GuideArticle
+        breadcrumb={[{ name: 'Home', href: '/' }, { name: 'NATA 2026', href: '/nata-2026' }, { name: 'Fee Structure' }]}
+        eyebrow="NATA 2026 · Exam guide"
+        title="NATA 2026 Application Fee"
+        lede="The NATA 2026 application fee is Rs 1,750 for General/OBC (NCL), Rs 1,250 for SC/ST/EWS/PwD, Rs 1,000 for Transgender, and Rs 15,000 for outside India. Fee is per test, non-refundable."
+        verified="Updated March 13, 2026 · Source: Official NATA 2026 Brochure V1.0"
+        nav={nataGuideNav('fee-structure')}
+        related={nataRelated(['how-to-apply', 'eligibility', 'important-dates', 'exam-pattern'])}
+        back={{ label: 'Back to NATA 2026 guide', href: '/nata-2026' }}
+      >
+        <ArticleSection id="category-wise-fee" title="Category-Wise Fee Details">
+          <DataTable
+            caption="NATA 2026 application fee by category"
+            hideCaption
+            columns={['Category', 'Fee per Attempt (INR)']}
+            rows={feeData.map((row) => [row.category, <strong key={row.category}>Rs {row.fee}</strong>])}
+          />
 
-        {/* Fee Table */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
-          <Container maxWidth="md">
-            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 6, fontWeight: 700 }}>
-              Category-Wise Fee Details
+          <Callout>
+            <Typography component="h3" sx={{ m: 0, mb: 1, fontSize: '1.0625rem', fontWeight: 700 }}>
+              Important Notes
             </Typography>
-
-            <Card sx={{ overflow: 'hidden' }}>
-              {/* Header */}
-              <Box sx={{ display: 'grid', gridTemplateColumns: '2fr 1fr', bgcolor: 'primary.main', color: 'white', p: 2 }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>Category</Typography>
-                <Typography variant="subtitle2" sx={{ fontWeight: 700, textAlign: 'right' }}>Fee per Attempt (INR)</Typography>
-              </Box>
-              {/* Rows */}
-              {feeData.map((row, index) => (
-                <Box key={index} sx={{ display: 'grid', gridTemplateColumns: '2fr 1fr', p: 2, borderBottom: '1px solid', borderColor: 'divider', bgcolor: index % 2 === 0 ? 'grey.50' : 'white' }}>
-                  <Typography variant="body1" sx={{ fontWeight: row.highlight ? 600 : 400 }}>{row.category}</Typography>
-                  <Typography variant="body1" sx={{ textAlign: 'right', fontWeight: 700, color: 'primary.main' }}>
-                    Rs {row.fee}
-                  </Typography>
-                </Box>
+            <Box component="ul" sx={{ m: 0, pl: 2.5, display: 'flex', flexDirection: 'column', gap: 0.75, fontSize: '1rem', lineHeight: 1.6, color: tokens.inkMuted }}>
+              {feeNotes.map((note) => (
+                <li key={note}>{note}</li>
               ))}
-            </Card>
+            </Box>
+          </Callout>
+        </ArticleSection>
 
-            <Card sx={{ mt: 4, p: { xs: 3, md: 4 } }}>
-              <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>Important Notes</Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>
-                {'\u2022'} Fee is per test. Maximum 2 tests in Phase 1 or 1 test in Phase 2.{'\n'}
-                {'\u2022'} Fee is non-refundable in all cases.{'\n'}
-                {'\u2022'} Payment: Electronic Payment Gateway (EPG): Debit Card, Credit Card, Net Banking.{'\n'}
-                {'\u2022'} Candidates initially opting for a single test may later opt for an additional test (not exceeding 2).{'\n'}
-                {'\u2022'} Multiple applications by the same candidate with changed credentials will be rejected without refund.
-              </Typography>
-            </Card>
-          </Container>
-        </Box>
-
-        {/* CTA: Cost Calculator */}
-        <Box sx={{ py: { xs: 4, md: 6 }, bgcolor: 'grey.50', textAlign: 'center' }}>
-          <Container maxWidth="md">
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 600 }}>Calculate Your Total NATA Cost</Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-              Plan your budget with our free Cost Calculator. It covers application fee, coaching, and college admission costs.
-            </Typography>
-            <Button variant="contained" size="large" component="a" href={`${APP_URL}/tools/nata/cost-calculator`} target="_blank" rel="noopener noreferrer">
+        <InlineCta
+          eyebrow="Free tool"
+          icon={<CalculateOutlinedIcon />}
+          title="Calculate Your Total NATA Cost"
+          body="Plan your budget with our free Cost Calculator. It covers application fee, coaching, and college admission costs."
+          action={
+            <CtaButton href={`${APP_URL}/tools/nata/cost-calculator`} external>
               Open Cost Calculator (Free)
-            </Button>
-          </Container>
-        </Box>
+            </CtaButton>
+          }
+        />
 
-        {/* Also Read */}
-        <Box sx={{ py: { xs: 6, md: 8 }, bgcolor: 'background.default' }}>
-          <Container maxWidth="md">
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>Also Read</Typography>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-              {[
-                { title: 'How to Apply for NATA 2026', slug: 'how-to-apply' },
-                { title: 'NATA 2026 Eligibility', slug: 'eligibility' },
-                { title: 'Important Dates', slug: 'important-dates' },
-                { title: 'Exam Pattern', slug: 'exam-pattern' },
-              ].map((item) => (
-                <Link key={item.slug} href={`/${locale}/nata-2026/${item.slug}`} style={{ textDecoration: 'none' }}>
-                  <Card sx={{ p: 2, color: 'inherit', transition: 'box-shadow 0.2s', '&:hover': { boxShadow: 3 } }}>
-                    <Typography variant="subtitle1" color="primary.main" sx={{ fontWeight: 600 }}>{item.title} &rarr;</Typography>
-                  </Card>
-                </Link>
-              ))}
-            </Box>
-          </Container>
-        </Box>
+        <ArticleSection id="faq" title="FAQs: NATA 2026 Fee">
+          <FaqList items={faqs} defaultOpen={-1} />
+        </ArticleSection>
+      </GuideArticle>
 
-        {/* FAQ */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
-          <Container maxWidth="md">
-            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs: NATA 2026 Fee</Typography>
-            {faqs.map((faq, index) => (
-              <Accordion key={index} disableGutters sx={{ '&:before': { display: 'none' }, mb: 1, borderRadius: 1, overflow: 'hidden' }}>
-                <AccordionSummary expandIcon={<Typography sx={{ fontSize: '1.2rem', fontWeight: 600 }}>+</Typography>} sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}>
-                  <Typography sx={{ fontWeight: 600 }}>{faq.question}</Typography>
-                </AccordionSummary>
-                <AccordionDetails sx={{ bgcolor: 'white' }}>
-                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>{faq.answer}</Typography>
-                </AccordionDetails>
-              </Accordion>
-            ))}
-          </Container>
-        </Box>
-
-        {/* CTA Banner */}
-        <Box sx={{ py: { xs: 6, md: 10 }, background: 'linear-gradient(135deg, #0d47a1 0%, #1565c0 100%)', color: 'white', textAlign: 'center' }}>
-          <Container maxWidth="md">
-            <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '1.75rem', md: '2.5rem' } }}>
-              Prepare for NATA 2026 with Neram Classes
-            </Typography>
-            <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>Affordable coaching with free tools and personalized guidance.</Typography>
-            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <Button variant="contained" size="large" component={Link} href="/apply" sx={{ background: '#ffffff', color: '#0d47a1', fontWeight: 700, px: 4, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', '&:hover': { background: '#f0f0f0' } }}>Start Free Trial</Button>
-              <Button variant="outlined" size="large" component={Link} href={`/${locale}/nata-2026`} sx={{ borderColor: 'white', color: 'white' }}>Back to NATA 2026 Guide</Button>
-            </Box>
-          </Container>
-        </Box>
-      </Box>
+      <CtaBand
+        title="Prepare for NATA 2026 with Neram Classes"
+        lede="Affordable coaching with free tools and personalized guidance."
+        actions={
+          <>
+            <CtaButton href="/apply">Start Free Trial</CtaButton>
+            <CtaButton variant="link" href="/nata-2026">
+              Back to NATA 2026 Guide
+            </CtaButton>
+          </>
+        }
+      />
     </>
   );
 }

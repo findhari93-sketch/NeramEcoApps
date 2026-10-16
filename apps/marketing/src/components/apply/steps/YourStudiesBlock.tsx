@@ -1,34 +1,23 @@
 'use client';
 
+import { useId, useState } from 'react';
 import {
-  Box,
-  TextField,
-  Grid,
-  Typography,
-  FormControl,
-  FormLabel,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
-  Select,
-  MenuItem,
-  InputLabel,
-  Card,
-  CardActionArea,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
   Alert,
+  Box,
+  MenuItem,
+  Select,
+  TextField,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
 } from '@neram/ui';
-import SchoolOutlined from '@mui/icons-material/SchoolOutlined';
-import BusinessOutlined from '@mui/icons-material/BusinessOutlined';
-import WorkOutlined from '@mui/icons-material/WorkOutlined';
-import EngineeringOutlined from '@mui/icons-material/EngineeringOutlined';
+import ButtonBase from '@mui/material/ButtonBase';
 import ExpandMoreOutlined from '@mui/icons-material/ExpandMoreOutlined';
 import InfoOutlined from '@mui/icons-material/InfoOutlined';
 import { useTranslations } from 'next-intl';
+import { tokens as t } from '@/design-system';
 import { useFormContext } from '../FormContext';
-import { selectedCardSx } from '../styles';
+import Field from '../fields/Field';
 import {
   CLASS_OPTIONS,
   YEAR_OF_STUDY_OPTIONS,
@@ -49,23 +38,101 @@ import {
   type WorkingProfessionalAcademicData,
 } from '@neram/database';
 
-// Category icons
-const categoryIcons: Record<ApplicantCategory, React.ReactNode> = {
-  school_student: <SchoolOutlined sx={{ fontSize: 40 }} />,
-  diploma_student: <EngineeringOutlined sx={{ fontSize: 40 }} />,
-  college_student: <BusinessOutlined sx={{ fontSize: 40 }} />,
-  working_professional: <WorkOutlined sx={{ fontSize: 40 }} />,
-};
+/** Two fields side by side from about 500px, one per row on a phone. */
+const fieldGridSx = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))',
+  gap: '20px 16px',
+} as const;
+
+const questionSx = { m: 0, mb: 1.5, fontSize: 17, fontWeight: 700, lineHeight: 1.35, color: t.ink } as const;
+
+interface SelectFieldProps {
+  id: string;
+  label: string;
+  value: string | number;
+  options: readonly { value: string | number; label: string }[];
+  onChange: (value: string) => void;
+  name?: string;
+  required?: boolean;
+}
+
+/** A Select at the 48px input spec with its label above (Field), never a floating label. */
+function SelectField({ id, label, value, options, onChange, name, required }: SelectFieldProps) {
+  return (
+    <Field id={id} label={label}>
+      <Select
+        id={id}
+        labelId={`${id}-label`}
+        fullWidth
+        displayEmpty
+        value={value}
+        onChange={(e) => onChange(String(e.target.value))}
+        inputProps={{ name, 'aria-required': required || undefined }}
+        renderValue={(selected) => {
+          const match = options.find((o) => String(o.value) === String(selected));
+          return match ? match.label : <Box component="span" sx={{ color: t.inkMuted }}>Select</Box>;
+        }}
+      >
+        {options.map((option) => (
+          <MenuItem key={option.value} value={option.value} sx={{ minHeight: 48 }}>
+            {option.label}
+          </MenuItem>
+        ))}
+      </Select>
+    </Field>
+  );
+}
+
+interface InputFieldProps {
+  id: string;
+  label: string;
+  value: string | number;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  helper?: string;
+  type?: string;
+  required?: boolean;
+  multiline?: boolean;
+  inputProps?: Record<string, unknown>;
+}
+
+/** A TextField with its label above (Field). */
+function InputField({ id, label, value, onChange, placeholder, helper, type, required, multiline, inputProps }: InputFieldProps) {
+  return (
+    <Field id={id} label={label} helper={helper}>
+      <TextField
+        id={id}
+        fullWidth
+        hiddenLabel
+        type={type}
+        multiline={multiline}
+        minRows={multiline ? 2 : undefined}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        inputProps={{
+          ...inputProps,
+          'aria-required': required || undefined,
+          'aria-describedby': helper ? `${id}-helper` : undefined,
+        }}
+      />
+    </Field>
+  );
+}
 
 /**
- * "Your studies", inside the Your course step: which best describes you, the
- * two or three fields that category needs, and the exam year. Caste category
- * and school type are optional and folded under More details.
+ * "Your studies", inside the Your course step: which best describes you (pills),
+ * the two or three fields that category needs, and the exam year (pills).
+ * Caste category and school type are optional and folded under More details.
  */
 export default function YourStudiesBlock() {
-  const t = useTranslations('apply');
+  const tr = useTranslations('apply');
   const { formData, updateFormData } = useFormContext();
   const { academic } = formData;
+  const uid = useId().replace(/:/g, '');
+  const moreId = `${uid}-more-details`;
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const handleCategoryChange = (category: ApplicantCategory) => {
     // Reset category-specific data when changing category
@@ -159,399 +226,288 @@ export default function YourStudiesBlock() {
     });
   };
 
-  return (
-    <Box>
-      <Typography variant="h6" component="h2" gutterBottom fontWeight={600}>
-        {t('yourCourse.studiesTitle')}
-      </Typography>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-        {t('yourCourse.studiesSubtitle')}
-      </Typography>
+  const percentage = (v: string) => (v ? Number(v) : undefined);
 
-      {/* Category Selection */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-          {t('yourCourse.categoryQuestion')}
+  return (
+    <Box component="section" aria-labelledby="apply-studies-title" sx={{ display: 'flex', flexDirection: 'column', gap: 3.5 }}>
+      <Box>
+        <Typography id="apply-studies-title" component="h2" sx={{ m: 0, fontSize: 22, fontWeight: 800, lineHeight: 1.25, color: t.ink }}>
+          {tr('yourCourse.studiesTitle')}
         </Typography>
-        <Grid container spacing={2}>
-          {APPLICANT_CATEGORY_OPTIONS.map((option) => (
-            <Grid item xs={6} sm={3} key={option.value}>
-              <Card
-                variant="outlined"
-                sx={selectedCardSx(academic.applicantCategory === option.value, { height: '100%' })}
-              >
-                <CardActionArea
-                  onClick={() => handleCategoryChange(option.value)}
-                  sx={{ height: '100%', minHeight: 48, p: 2, textAlign: 'center' }}
-                >
-                  <Box
-                    sx={{
-                      color:
-                        academic.applicantCategory === option.value
-                          ? 'text.primary'
-                          : 'text.secondary',
-                      mb: 1,
-                    }}
-                  >
-                    {categoryIcons[option.value]}
-                  </Box>
-                  <Typography
-                    variant="subtitle2"
-                    fontWeight={academic.applicantCategory === option.value ? 700 : 500}
-                  >
-                    {option.label}
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary">
-                    {option.description}
-                  </Typography>
-                </CardActionArea>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
+        <Typography component="p" sx={{ m: 0, mt: 0.75, fontSize: 15, lineHeight: 1.5, color: t.inkMuted }}>
+          {tr('yourCourse.studiesSubtitle')}
+        </Typography>
       </Box>
 
-      {/* Category-Specific Fields */}
-      {academic.applicantCategory && (
-        <Box sx={{ mb: 4 }}>
-          {/* School Student Fields */}
-          {academic.applicantCategory === 'school_student' && (
-            <Grid container spacing={3}>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth required>
-                  <InputLabel>Current Class</InputLabel>
-                  <Select
-                    value={academic.schoolStudentData?.current_class || ''}
-                    onChange={(e) => updateSchoolData({ current_class: e.target.value })}
-                    label="Current Class"
-                  >
-                    {CLASS_OPTIONS.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
+      {/* Which best describes you: separate pills, navy when selected */}
+      <Box>
+        <Typography id="apply-category-label" component="h3" sx={questionSx}>
+          {tr('yourCourse.categoryQuestion')}
+        </Typography>
+        <ToggleButtonGroup
+          exclusive
+          aria-labelledby="apply-category-label"
+          value={academic.applicantCategory || null}
+          onChange={(_, next: ApplicantCategory | null) => {
+            // Tapping the chosen pill again keeps it (and the answers under it).
+            if (next) handleCategoryChange(next);
+          }}
+          sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 1 }}
+        >
+          {APPLICANT_CATEGORY_OPTIONS.map((option) => (
+            <ToggleButton key={option.value} value={option.value} title={option.description}>
+              {option.label}
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+      </Box>
 
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth required>
-                  <InputLabel>Board</InputLabel>
-                  <Select
-                    value={academic.schoolStudentData?.board || ''}
-                    onChange={(e) => updateSchoolData({ board: e.target.value })}
-                    label="Board"
-                  >
-                    {EDUCATION_BOARD_OPTIONS.map((option) => (
-                      <MenuItem key={option.code} value={option.code}>
-                        {option.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="School Name"
-                  required
-                  value={academic.schoolStudentData?.school_name || ''}
-                  onChange={(e) => updateSchoolData({ school_name: e.target.value })}
-                  placeholder="Enter your school name"
-                  helperText="Start typing to search for your school"
-                />
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Previous Year Percentage (Optional)"
-                  type="number"
-                  value={academic.schoolStudentData?.previous_percentage || ''}
-                  onChange={(e) =>
-                    updateSchoolData({
-                      previous_percentage: e.target.value ? Number(e.target.value) : undefined,
-                    })
-                  }
-                  inputProps={{ min: 0, max: 100 }}
-                  helperText="Your last academic year percentage"
-                />
-              </Grid>
-            </Grid>
-          )}
-
-          {/* Diploma Student Fields */}
-          {academic.applicantCategory === 'diploma_student' && (
-            <Grid container spacing={3}>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth required>
-                  <InputLabel>Completed Before Diploma</InputLabel>
-                  <Select
-                    value={academic.diplomaStudentData?.completed_grade || '10th'}
-                    onChange={(e) =>
-                      updateDiplomaData({ completed_grade: e.target.value as '10th' | '12th' })
-                    }
-                    label="Completed Before Diploma"
-                  >
-                    {COMPLETED_GRADE_OPTIONS.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Department"
-                  required
-                  value={academic.diplomaStudentData?.department || ''}
-                  onChange={(e) => updateDiplomaData({ department: e.target.value })}
-                  placeholder="e.g., Civil Engineering, Architecture"
-                />
-              </Grid>
-
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="College Name"
-                  required
-                  value={academic.diplomaStudentData?.college_name || ''}
-                  onChange={(e) => updateDiplomaData({ college_name: e.target.value })}
-                  placeholder="Enter your polytechnic/diploma college name"
-                />
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Marks/Percentage (Optional)"
-                  type="number"
-                  value={academic.diplomaStudentData?.marks || ''}
-                  onChange={(e) =>
-                    updateDiplomaData({
-                      marks: e.target.value ? Number(e.target.value) : undefined,
-                    })
-                  }
-                  inputProps={{ min: 0, max: 100 }}
-                />
-              </Grid>
-            </Grid>
-          )}
-
-          {/* College Student Fields */}
-          {academic.applicantCategory === 'college_student' && (
-            <Grid container spacing={3}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="College Name"
-                  required
-                  value={academic.collegeStudentData?.college_name || ''}
-                  onChange={(e) => updateCollegeData({ college_name: e.target.value })}
-                  placeholder="Enter your college name"
-                />
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Department"
-                  required
-                  value={academic.collegeStudentData?.department || ''}
-                  onChange={(e) => updateCollegeData({ department: e.target.value })}
-                  placeholder="e.g., Computer Science, Mechanical"
-                />
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth required>
-                  <InputLabel>Year of Study</InputLabel>
-                  <Select
-                    value={academic.collegeStudentData?.year_of_study || ''}
-                    onChange={(e) => updateCollegeData({ year_of_study: Number(e.target.value) })}
-                    label="Year of Study"
-                  >
-                    {YEAR_OF_STUDY_OPTIONS.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth required>
-                  <InputLabel>12th Completed In</InputLabel>
-                  <Select
-                    value={academic.collegeStudentData?.twelfth_year || ''}
-                    onChange={(e) => updateCollegeData({ twelfth_year: Number(e.target.value) })}
-                    label="12th Completed In"
-                  >
-                    {get12thYearOptions().map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="12th Percentage (Optional)"
-                  type="number"
-                  value={academic.collegeStudentData?.twelfth_percentage || ''}
-                  onChange={(e) =>
-                    updateCollegeData({
-                      twelfth_percentage: e.target.value ? Number(e.target.value) : undefined,
-                    })
-                  }
-                  inputProps={{ min: 0, max: 100 }}
-                />
-              </Grid>
-
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Why do you want to write the entrance exam? (Optional)"
-                  multiline
-                  rows={2}
-                  value={academic.collegeStudentData?.reason_for_exam || ''}
-                  onChange={(e) => updateCollegeData({ reason_for_exam: e.target.value })}
-                  placeholder="e.g., Career change, interested in architecture"
-                />
-              </Grid>
-            </Grid>
-          )}
-
-          {/* Working Professional Fields */}
-          {academic.applicantCategory === 'working_professional' && (
-            <Grid container spacing={3}>
-              <Grid item xs={12} sm={6}>
-                <FormControl fullWidth required>
-                  <InputLabel>12th Completed In</InputLabel>
-                  <Select
-                    value={academic.workingProfessionalData?.twelfth_year || ''}
-                    onChange={(e) => updateWorkingData({ twelfth_year: Number(e.target.value) })}
-                    label="12th Completed In"
-                  >
-                    {get12thYearOptions().map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Current Occupation (Optional)"
-                  value={academic.workingProfessionalData?.occupation || ''}
-                  onChange={(e) => updateWorkingData({ occupation: e.target.value })}
-                  placeholder="e.g., Software Engineer, Teacher"
-                />
-              </Grid>
-
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  fullWidth
-                  label="Company/Organization (Optional)"
-                  value={academic.workingProfessionalData?.company || ''}
-                  onChange={(e) => updateWorkingData({ company: e.target.value })}
-                />
-              </Grid>
-            </Grid>
-          )}
+      {/* Category-specific fields */}
+      {academic.applicantCategory === 'school_student' && (
+        <Box sx={fieldGridSx}>
+          <InputField
+            id={`${uid}-school`}
+            label="School name"
+            required
+            value={academic.schoolStudentData?.school_name || ''}
+            onChange={(v) => updateSchoolData({ school_name: v })}
+            placeholder="Enter your school name"
+          />
+          <SelectField
+            id={`${uid}-board`}
+            label="Board"
+            required
+            value={academic.schoolStudentData?.board || ''}
+            options={EDUCATION_BOARD_OPTIONS.map((o) => ({ value: o.code, label: o.name }))}
+            onChange={(v) => updateSchoolData({ board: v })}
+          />
+          <SelectField
+            id={`${uid}-class`}
+            label="Current class"
+            required
+            value={academic.schoolStudentData?.current_class || ''}
+            options={CLASS_OPTIONS}
+            onChange={(v) => updateSchoolData({ current_class: v })}
+          />
+          <InputField
+            id={`${uid}-prev-pct`}
+            label="Previous year percentage (optional)"
+            type="number"
+            value={academic.schoolStudentData?.previous_percentage || ''}
+            onChange={(v) => updateSchoolData({ previous_percentage: percentage(v) })}
+            inputProps={{ min: 0, max: 100, inputMode: 'decimal' }}
+          />
         </Box>
       )}
 
-      {/* Exam year: always */}
-      <Box sx={{ mt: 3 }}>
-        <FormControl fullWidth required>
-          <InputLabel>{t('yourCourse.examYear')}</InputLabel>
-          <Select
-            value={academic.targetExamYear || ''}
-            onChange={(e) => updateFormData('academic', { targetExamYear: e.target.value as string })}
-            label={t('yourCourse.examYear')}
-            inputProps={{ name: 'targetExamYear' }}
-          >
-            {getExamYearOptions().map((option) => (
-              <MenuItem key={option.value} value={option.value}>
-                {option.label}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+      {academic.applicantCategory === 'diploma_student' && (
+        <Box sx={fieldGridSx}>
+          <InputField
+            id={`${uid}-diploma-college`}
+            label="College name"
+            required
+            value={academic.diplomaStudentData?.college_name || ''}
+            onChange={(v) => updateDiplomaData({ college_name: v })}
+            placeholder="Your polytechnic or diploma college"
+          />
+          <InputField
+            id={`${uid}-diploma-dept`}
+            label="Department"
+            required
+            value={academic.diplomaStudentData?.department || ''}
+            onChange={(v) => updateDiplomaData({ department: v })}
+            placeholder="e.g., Civil Engineering, Architecture"
+          />
+          <SelectField
+            id={`${uid}-diploma-grade`}
+            label="Completed before diploma"
+            required
+            value={academic.diplomaStudentData?.completed_grade || '10th'}
+            options={COMPLETED_GRADE_OPTIONS}
+            onChange={(v) => updateDiplomaData({ completed_grade: v as '10th' | '12th' })}
+          />
+          <InputField
+            id={`${uid}-diploma-marks`}
+            label="Marks or percentage (optional)"
+            type="number"
+            value={academic.diplomaStudentData?.marks || ''}
+            onChange={(v) => updateDiplomaData({ marks: percentage(v) })}
+            inputProps={{ min: 0, max: 100, inputMode: 'decimal' }}
+          />
+        </Box>
+      )}
+
+      {academic.applicantCategory === 'college_student' && (
+        <Box sx={fieldGridSx}>
+          <InputField
+            id={`${uid}-college`}
+            label="College name"
+            required
+            value={academic.collegeStudentData?.college_name || ''}
+            onChange={(v) => updateCollegeData({ college_name: v })}
+            placeholder="Enter your college name"
+          />
+          <InputField
+            id={`${uid}-college-dept`}
+            label="Department"
+            required
+            value={academic.collegeStudentData?.department || ''}
+            onChange={(v) => updateCollegeData({ department: v })}
+            placeholder="e.g., Computer Science, Mechanical"
+          />
+          <SelectField
+            id={`${uid}-college-year`}
+            label="Year of study"
+            required
+            value={academic.collegeStudentData?.year_of_study || ''}
+            options={YEAR_OF_STUDY_OPTIONS}
+            onChange={(v) => updateCollegeData({ year_of_study: Number(v) })}
+          />
+          <SelectField
+            id={`${uid}-college-12th`}
+            label="12th completed in"
+            required
+            value={academic.collegeStudentData?.twelfth_year || ''}
+            options={get12thYearOptions()}
+            onChange={(v) => updateCollegeData({ twelfth_year: Number(v) })}
+          />
+          <InputField
+            id={`${uid}-college-12th-pct`}
+            label="12th percentage (optional)"
+            type="number"
+            value={academic.collegeStudentData?.twelfth_percentage || ''}
+            onChange={(v) => updateCollegeData({ twelfth_percentage: percentage(v) })}
+            inputProps={{ min: 0, max: 100, inputMode: 'decimal' }}
+          />
+          <Box sx={{ gridColumn: '1 / -1' }}>
+            <InputField
+              id={`${uid}-college-reason`}
+              label="Why do you want to write the entrance exam? (optional)"
+              multiline
+              value={academic.collegeStudentData?.reason_for_exam || ''}
+              onChange={(v) => updateCollegeData({ reason_for_exam: v })}
+              placeholder="e.g., Career change, interested in architecture"
+            />
+          </Box>
+        </Box>
+      )}
+
+      {academic.applicantCategory === 'working_professional' && (
+        <Box sx={fieldGridSx}>
+          <SelectField
+            id={`${uid}-work-12th`}
+            label="12th completed in"
+            required
+            value={academic.workingProfessionalData?.twelfth_year || ''}
+            options={get12thYearOptions()}
+            onChange={(v) => updateWorkingData({ twelfth_year: Number(v) })}
+          />
+          <InputField
+            id={`${uid}-work-occupation`}
+            label="Current occupation (optional)"
+            value={academic.workingProfessionalData?.occupation || ''}
+            onChange={(v) => updateWorkingData({ occupation: v })}
+            placeholder="e.g., Software Engineer, Teacher"
+          />
+          <InputField
+            id={`${uid}-work-company`}
+            label="Company or organisation (optional)"
+            value={academic.workingProfessionalData?.company || ''}
+            onChange={(v) => updateWorkingData({ company: v })}
+          />
+        </Box>
+      )}
+
+      {/* Exam year: always, as pills */}
+      <Box>
+        <Typography id="apply-exam-year-label" component="p" sx={{ m: 0, mb: 1, fontSize: 15, fontWeight: 600, lineHeight: 1.35, color: t.ink }}>
+          {tr('yourCourse.examYear')}
+        </Typography>
+        <ToggleButtonGroup
+          exclusive
+          aria-labelledby="apply-exam-year-label"
+          value={academic.targetExamYear || null}
+          onChange={(_, next: string | null) => {
+            if (next) updateFormData('academic', { targetExamYear: next });
+          }}
+          sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}
+        >
+          {getExamYearOptions().map((option) => (
+            <ToggleButton key={option.value} value={option.value} sx={{ minWidth: 96 }}>
+              {option.label}
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+        <input type="hidden" name="targetExamYear" value={academic.targetExamYear || ''} />
       </Box>
 
       {/* Caste category and school type: optional, folded away */}
-      <Accordion
-        disableGutters
-        elevation={0}
-        TransitionProps={{ unmountOnExit: true }}
-        sx={{ mt: 2, border: 1, borderColor: 'divider', borderRadius: 1, '&:before': { display: 'none' } }}
-      >
-        <AccordionSummary expandIcon={<ExpandMoreOutlined />} sx={{ minHeight: 48 }}>
-          <Typography variant="subtitle2">{t('yourCourse.moreDetails')}</Typography>
-        </AccordionSummary>
-        <AccordionDetails>
-          <Grid container spacing={2}>
-            <Grid item xs={12}>
-              <FormControl fullWidth>
-                <InputLabel>{t('yourCourse.casteCategory')}</InputLabel>
-                <Select
-                  value={academic.casteCategory || ''}
-                  onChange={(e) =>
-                    updateFormData('academic', { casteCategory: (e.target.value || null) as typeof academic.casteCategory })
-                  }
-                  label={t('yourCourse.casteCategory')}
-                  inputProps={{ name: 'casteCategory' }}
-                >
-                  {CASTE_CATEGORY_OPTIONS.map((option) => (
-                    <MenuItem key={option.value} value={option.value}>
-                      {option.label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-            {academic.applicantCategory === 'school_student' && (
-              <Grid item xs={12}>
-                <FormControl fullWidth>
-                  <InputLabel>{t('yourCourse.schoolType')}</InputLabel>
-                  <Select
-                    value={academic.schoolType || ''}
-                    onChange={(e) => updateFormData('academic', { schoolType: (e.target.value || null) as SchoolType | null })}
-                    label={t('yourCourse.schoolType')}
-                    inputProps={{ name: 'schoolType' }}
-                  >
-                    {SCHOOL_TYPE_OPTIONS.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Grid>
-            )}
+      <Box>
+        <ButtonBase
+          aria-expanded={moreOpen}
+          aria-controls={moreId}
+          onClick={() => setMoreOpen((open) => !open)}
+          sx={{
+            width: '100%',
+            minHeight: 56,
+            display: 'flex',
+            justifyContent: 'space-between',
+            gap: 2,
+            px: 0.5,
+            borderTop: `1px solid ${t.line}`,
+            borderBottom: `1px solid ${t.line}`,
+            fontFamily: 'inherit',
+            fontSize: 15,
+            fontWeight: 600,
+            color: t.ink,
+            textAlign: 'left',
+            '&:hover': { bgcolor: t.ground },
+            '&.Mui-focusVisible': { outline: t.focusOutline, outlineOffset: '2px' },
+          }}
+        >
+          <span>{tr('yourCourse.moreDetails')}</span>
+          <ExpandMoreOutlined
+            aria-hidden
+            sx={{
+              color: t.inkMuted,
+              transition: 'transform 200ms ease',
+              transform: moreOpen ? 'rotate(180deg)' : 'none',
+              '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+            }}
+          />
+        </ButtonBase>
+        {moreOpen && (
+          <Box id={moreId} sx={{ pt: 2.5, pb: 0.5, display: 'flex', flexDirection: 'column', gap: 2.5 }}>
+            <Box sx={fieldGridSx}>
+              <SelectField
+                id={`${uid}-caste`}
+                name="casteCategory"
+                label={tr('yourCourse.casteCategory')}
+                value={academic.casteCategory || ''}
+                options={CASTE_CATEGORY_OPTIONS}
+                onChange={(v) =>
+                  updateFormData('academic', { casteCategory: (v || null) as typeof academic.casteCategory })
+                }
+              />
+              {academic.applicantCategory === 'school_student' && (
+                <SelectField
+                  id={`${uid}-school-type`}
+                  name="schoolType"
+                  label={tr('yourCourse.schoolType')}
+                  value={academic.schoolType || ''}
+                  options={SCHOOL_TYPE_OPTIONS}
+                  onChange={(v) => updateFormData('academic', { schoolType: (v || null) as SchoolType | null })}
+                />
+              )}
+            </Box>
             {academic.applicantCategory === 'school_student' && academic.schoolType === 'government_school' && (
-              <Grid item xs={12}>
-                <Alert severity="info" icon={<InfoOutlined />}>
-                  {t('yourCourse.scholarship')}
-                </Alert>
-              </Grid>
+              <Alert severity="info" icon={<InfoOutlined />}>
+                {tr('yourCourse.scholarship')}
+              </Alert>
             )}
-          </Grid>
-        </AccordionDetails>
-      </Accordion>
+          </Box>
+        )}
+      </Box>
     </Box>
   );
 }

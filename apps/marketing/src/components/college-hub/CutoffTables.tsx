@@ -4,6 +4,7 @@ import { Box, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, 
 import CutoffSparkline from './CutoffSparkline';
 import { CUTOFF_TYPE_LABELS, type CutoffTable } from '@/lib/college-hub/detail-content';
 import type { CollegeCutoff } from '@/lib/college-hub/types';
+import { tokens } from '@/design-system';
 
 interface CutoffTablesProps {
   tables: CutoffTable[];
@@ -23,7 +24,7 @@ export default function CutoffTables({ tables, cutoffs }: CutoffTablesProps) {
           <Typography component="h3" sx={{ fontSize: '1rem', fontWeight: 700, mb: 1 }}>
             {t.label} {CUTOFF_TYPE_LABELS[t.cutoffType]?.toLowerCase() ?? 'cutoff'}
           </Typography>
-          <TableContainer sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, overflowX: 'auto' }}>
+          <TableContainer sx={{ border: '1px solid', borderColor: tokens.line, borderRadius: 1, overflowX: 'auto' }}>
             <Table size="small" aria-label={`${t.label} cutoffs by category and year`}>
               <TableHead>
                 <TableRow>

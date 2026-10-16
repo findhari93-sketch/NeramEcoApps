@@ -6,9 +6,10 @@ import {
   Typography,
   Stack,
   Chip,
-  Alert,
   Divider,
 } from '@mui/material';
+import { siteTokens as t } from '@neram/ui/site-tokens';
+import { Callout } from '@/design-system';
 import { buildAlternates } from '@/lib/seo/metadata';
 import KeamSpokeShell from '@/components/keam-arch/KeamSpokeShell';
 import { reservation, fees } from '@/data/keam-arch-2026';
@@ -16,7 +17,6 @@ import { reservation, fees } from '@/data/keam-arch-2026';
 export const revalidate = 86400;
 
 const SPOKE = 'reservation-fee-concession';
-const PRIMARY_GREEN = '#0d7a4a';
 
 export async function generateMetadata({
   params: { locale },
@@ -60,9 +60,13 @@ export default function ReservationFeePage({
       ]}
       prefillCallbackNotes="Need help understanding KEAM reservation and fee concessions"
     >
-      <Alert severity="info" sx={{ mb: 3, borderRadius: 1.5 }}>
-        Tuition fees for B.Arch colleges are <strong>not specified in the 2026 prospectus</strong>. CEE will publish the fee structure separately before CAP-2026 starts. (Clause 12.1)
-      </Alert>
+      <Box sx={{ mb: 3 }}>
+        <Callout>
+          <Box component="p" sx={{ m: 0 }}>
+              Tuition fees for B.Arch colleges are <strong>not specified in the 2026 prospectus</strong>. CEE will publish the fee structure separately before CAP-2026 starts. (Clause 12.1)
+          </Box>
+        </Callout>
+      </Box>
 
       <Typography variant="h6" component="h2" fontWeight={800} sx={{ mb: 1.5 }}>
         General reservation
@@ -72,13 +76,13 @@ export default function ReservationFeePage({
           <Paper
             key={c.code}
             elevation={0}
-            sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+            sx={{ p: 2, borderRadius: 1, border: `1px solid ${t.line}` }}
           >
             <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 0.5 }}>
               <Chip
                 label={c.code}
                 size="small"
-                sx={{ bgcolor: PRIMARY_GREEN, color: 'white', fontWeight: 700 }}
+                sx={{ bgcolor: t.navy900, color: t.paper, fontWeight: 700 }}
               />
               <Typography variant="subtitle2" fontWeight={700}>
                 {c.name}
@@ -97,7 +101,7 @@ export default function ReservationFeePage({
       </Typography>
       <Paper
         elevation={0}
-        sx={{ p: 2, mb: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+        sx={{ p: 2, mb: 3, borderRadius: 1, border: `1px solid ${t.line}` }}
       >
         <Box sx={{ overflowX: 'auto' }}>
           <Box
@@ -105,7 +109,7 @@ export default function ReservationFeePage({
             sx={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}
           >
             <Box component="thead">
-              <Box component="tr" sx={{ borderBottom: '2px solid', borderColor: 'divider' }}>
+              <Box component="tr" sx={{ borderBottom: `1px solid ${t.ink}` }}>
                 <Box component="th" sx={{ textAlign: 'left', p: 1, fontWeight: 700 }}>
                   Code
                 </Box>
@@ -122,9 +126,9 @@ export default function ReservationFeePage({
                 <Box
                   key={s.code}
                   component="tr"
-                  sx={{ borderBottom: '1px solid', borderColor: 'divider' }}
+                  sx={{ borderBottom: `1px solid ${t.line}` }}
                 >
-                  <Box component="td" sx={{ p: 1, fontWeight: 700, color: PRIMARY_GREEN }}>
+                  <Box component="td" sx={{ p: 1, fontWeight: 700, color: t.gold800 }}>
                     {s.code}
                   </Box>
                   <Box component="td" sx={{ p: 1 }}>
@@ -147,25 +151,25 @@ export default function ReservationFeePage({
         EWS, PD, and special quotas
       </Typography>
       <Stack spacing={1.5} sx={{ mb: 3 }}>
-        <Paper elevation={0} sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+        <Paper elevation={0} sx={{ p: 2, borderRadius: 1, border: `1px solid ${t.line}` }}>
           <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 0.5 }}>
             EWS reservation (General category)
           </Typography>
           <Typography variant="body2" color="text.secondary">
             {reservation.ews.description}
           </Typography>
-          <Typography variant="caption" sx={{ color: PRIMARY_GREEN, fontWeight: 600, mt: 0.5, display: 'block' }}>
+          <Typography variant="caption" sx={{ color: t.gold800, fontWeight: 600, mt: 0.5, display: 'block' }}>
             {reservation.ews.clause_ref}
           </Typography>
         </Paper>
-        <Paper elevation={0} sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+        <Paper elevation={0} sx={{ p: 2, borderRadius: 1, border: `1px solid ${t.line}` }}>
           <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 0.5 }}>
             Persons with Disabilities (PD): {reservation.pwd.percent}%
           </Typography>
           <Typography variant="body2" color="text.secondary">
             Minimum {reservation.pwd.minimum_disability_percent}% benchmark disability. Document required: {reservation.pwd.document}.
           </Typography>
-          <Typography variant="caption" sx={{ color: PRIMARY_GREEN, fontWeight: 600, mt: 0.5, display: 'block' }}>
+          <Typography variant="caption" sx={{ color: t.gold800, fontWeight: 600, mt: 0.5, display: 'block' }}>
             {reservation.pwd.clause_ref}
           </Typography>
         </Paper>
@@ -173,7 +177,7 @@ export default function ReservationFeePage({
           <Paper
             key={s.category}
             elevation={0}
-            sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+            sx={{ p: 2, borderRadius: 1, border: `1px solid ${t.line}` }}
           >
             <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 0.5 }}>
               <Typography variant="subtitle2" fontWeight={700}>
@@ -185,7 +189,7 @@ export default function ReservationFeePage({
               {s.notes}
             </Typography>
             {s.clause_ref && (
-              <Typography variant="caption" sx={{ color: PRIMARY_GREEN, fontWeight: 600, mt: 0.5, display: 'block' }}>
+              <Typography variant="caption" sx={{ color: t.gold800, fontWeight: 600, mt: 0.5, display: 'block' }}>
                 {s.clause_ref}
               </Typography>
             )}
@@ -193,9 +197,13 @@ export default function ReservationFeePage({
         ))}
       </Stack>
 
-      <Alert severity="info" sx={{ mb: 4, borderRadius: 1.5 }}>
-        <strong>Sports / NCC bonus is unique to B.Arch.</strong> {reservation.sports_ncc_additive.description}
-      </Alert>
+      <Box sx={{ mb: 4 }}>
+        <Callout>
+          <Box component="p" sx={{ m: 0 }}>
+              <strong>Sports / NCC bonus is unique to B.Arch.</strong> {reservation.sports_ncc_additive.description}
+          </Box>
+        </Callout>
+      </Box>
 
       {/* Application fee */}
       <Typography variant="h6" component="h2" fontWeight={800} sx={{ mb: 1.5 }}>
@@ -203,10 +211,10 @@ export default function ReservationFeePage({
       </Typography>
       <Paper
         elevation={0}
-        sx={{ p: 2, mb: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+        sx={{ p: 2, mb: 3, borderRadius: 1, border: `1px solid ${t.line}` }}
       >
         <Stack direction={{ xs: 'column', sm: 'row' }} gap={1.5} sx={{ mb: 1 }}>
-          <Chip label={`General: Rs. ${fees.application_fee.general}`} sx={{ bgcolor: PRIMARY_GREEN, color: 'white' }} />
+          <Chip label={`General: Rs. ${fees.application_fee.general}`} sx={{ bgcolor: t.navy900, color: t.paper }} />
           <Chip label={`SC: Rs. ${fees.application_fee.sc}`} variant="outlined" />
           <Chip label="ST: Free" variant="outlined" />
         </Stack>
@@ -222,12 +230,12 @@ export default function ReservationFeePage({
       </Typography>
       <Paper
         elevation={0}
-        sx={{ p: 2, mb: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+        sx={{ p: 2, mb: 3, borderRadius: 1, border: `1px solid ${t.line}` }}
       >
         <Typography variant="body2">{fees.tuition_fee.note}</Typography>
         <Typography variant="caption" sx={{ display: 'block', mt: 1 }}>
           Watch{' '}
-          <Box component="a" href={fees.tuition_fee.notification_url} target="_blank" rel="noopener" sx={{ color: PRIMARY_GREEN, fontWeight: 600 }}>
+          <Box component="a" href={fees.tuition_fee.notification_url} target="_blank" rel="noopener" sx={{ color: t.gold800, fontWeight: 600 }}>
             cee.kerala.gov.in
           </Box>{' '}
           for the official notification.
@@ -243,7 +251,7 @@ export default function ReservationFeePage({
           <Paper
             key={c.name}
             elevation={0}
-            sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+            sx={{ p: 2, borderRadius: 1, border: `1px solid ${t.line}` }}
           >
             <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 0.5 }}>
               <Typography variant="subtitle2" fontWeight={700}>
@@ -252,7 +260,7 @@ export default function ReservationFeePage({
               <Chip
                 label={c.benefit}
                 size="small"
-                sx={{ bgcolor: '#dcfce7', color: '#15803d', fontWeight: 600, ml: 'auto' }}
+                sx={{ bgcolor: 'transparent', color: t.gold800, border: `1px solid ${t.goldTintBorder}`, fontWeight: 700, ml: 'auto' }}
               />
             </Stack>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
@@ -262,7 +270,7 @@ export default function ReservationFeePage({
               Eligibility: {c.eligibility.join('; ')}
             </Typography>
             {c.clause_ref && (
-              <Typography variant="caption" sx={{ color: PRIMARY_GREEN, fontWeight: 600, mt: 0.5, display: 'block' }}>
+              <Typography variant="caption" sx={{ color: t.gold800, fontWeight: 600, mt: 0.5, display: 'block' }}>
                 {c.clause_ref}
               </Typography>
             )}
@@ -275,7 +283,7 @@ export default function ReservationFeePage({
       </Typography>
       <Paper
         elevation={0}
-        sx={{ p: 2.5, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+        sx={{ p: 2.5, borderRadius: 1, border: `1px solid ${t.line}` }}
       >
         <Stack spacing={1.5}>
           {fees.refund_rules.map((r, i) => (
@@ -289,7 +297,7 @@ export default function ReservationFeePage({
               {r.clause_ref && (
                 <Typography
                   variant="caption"
-                  sx={{ color: PRIMARY_GREEN, fontWeight: 600, mt: 0.25, display: 'block' }}
+                  sx={{ color: t.gold800, fontWeight: 600, mt: 0.25, display: 'block' }}
                 >
                   {r.clause_ref}
                 </Typography>

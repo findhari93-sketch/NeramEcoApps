@@ -72,6 +72,20 @@ export const hoverGoldBorder = {
   '&:hover': { borderColor: t.gold500 },
 } as const;
 
+/**
+ * Tamil, Hindi, Kannada and Malayalam break apart under letter-spacing and the
+ * mono stack has no glyphs for them, so tracked mono labels fall back to plain
+ * Inter / Noto at a readable size on those pages. Spread it after the label's
+ * own styles.
+ */
+export const indicLabelSx = {
+  '&:lang(ta), &:lang(hi), &:lang(kn), &:lang(ml)': {
+    fontFamily: t.fontSans,
+    fontSize: '0.8125rem',
+    letterSpacing: 'normal',
+  },
+} as const;
+
 export const eyebrowSx = {
   fontFamily: t.fontMono,
   fontSize: '0.75rem',
@@ -81,6 +95,7 @@ export const eyebrowSx = {
   textTransform: 'uppercase',
   color: v.eyebrow,
   m: 0,
+  ...indicLabelSx,
 } as const;
 
 /** 48px navy tile with a gold glyph (FeatureCard, ToolCard, mega menu). */

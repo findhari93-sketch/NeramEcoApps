@@ -19,7 +19,45 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import { useRouter, usePathname } from 'next/navigation';
 import Image from 'next/image';
+import { tokens as t } from '@/design-system/tokens';
 import { useDismiss } from './useDismiss';
+
+/** Score chip: gold tint with gold800 text (readable on white). */
+const scoreChipSx = {
+  bgcolor: t.goldTintBg,
+  color: t.gold800,
+  fontWeight: 600,
+  '& .MuiChip-icon': { color: t.gold800 },
+} as const;
+
+/** Initials when there is no photo: paper on navy700, like PersonCard. */
+const initialsTileSx = {
+  width: '100%',
+  height: '100%',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  bgcolor: t.navy700,
+} as const;
+
+/** Close control over a photo: 44px target, dark scrim so the glyph reads on any image. */
+const overlayCloseSx = {
+  position: 'absolute',
+  zIndex: 10,
+  width: 44,
+  height: 44,
+  bgcolor: 'rgba(6,13,31,0.6)',
+  color: t.paper,
+  '&:hover': { bgcolor: 'rgba(6,13,31,0.8)' },
+  '&:focus-visible': { outline: t.focusOutline, outlineOffset: '2px' },
+} as const;
+
+const navButtonSx = {
+  width: 44,
+  height: 44,
+  color: t.ink,
+  '&:focus-visible': { outline: t.focusOutline, outlineOffset: '2px' },
+} as const;
 
 /** Pages where Tawk.to chat lives — hide widget to avoid overlap */
 const HIDDEN_PATHS = ['/contact', '/enroll'];
@@ -91,9 +129,9 @@ function PhotoBanner({
         position: 'relative',
         width: '100%',
         height,
-        borderRadius: roundedTop ? '12px 12px 0 0' : 0,
+        borderRadius: roundedTop ? `${t.radius}px ${t.radius}px 0 0` : 0,
         overflow: 'hidden',
-        bgcolor: 'warning.light',
+        bgcolor: t.navy700,
       }}
     >
       {imageUrl ? (
@@ -105,21 +143,12 @@ function PhotoBanner({
           style={{ objectFit: 'cover' }}
         />
       ) : (
-        <Box
-          sx={{
-            width: '100%',
-            height: '100%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'linear-gradient(135deg, #F9A825 0%, #FFD54F 50%, #F9A825 100%)',
-          }}
-        >
+        <Box sx={initialsTileSx}>
           <Typography
             sx={{
               fontSize: height * 0.35,
               fontWeight: 800,
-              color: 'rgba(255,255,255,0.85)',
+              color: t.paper,
               letterSpacing: 2,
             }}
           >
@@ -136,10 +165,10 @@ function PhotoBanner({
           right: 0,
           px: 2,
           py: 1.5,
-          background: 'linear-gradient(transparent, rgba(0,0,0,0.7))',
+          background: 'linear-gradient(transparent, rgba(6,13,31,0.8))',
         }}
       >
-        <Typography variant="h6" sx={{ color: '#fff', fontWeight: 700, lineHeight: 1.2 }}>
+        <Typography variant="h6" sx={{ color: t.paper, fontWeight: 700, lineHeight: 1.2 }}>
           {name}
         </Typography>
       </Box>
@@ -170,12 +199,7 @@ function AchievementDetail({
             icon={<EmojiEventsIcon sx={{ fontSize: 16 }} />}
             label={scoreLabel}
             size="small"
-            sx={{
-              bgcolor: 'warning.50',
-              color: 'warning.dark',
-              fontWeight: 600,
-              '& .MuiChip-icon': { color: 'warning.main' },
-            }}
+            sx={scoreChipSx}
           />
         )}
         {meta.academic_year && (
@@ -205,8 +229,7 @@ function AchievementDetail({
           sx={{
             fontStyle: 'italic',
             pl: 2,
-            borderLeft: '3px solid',
-            borderColor: 'warning.main',
+            borderLeft: `3px solid ${t.gold500}`,
             mt: 1,
           }}
         >
@@ -236,18 +259,19 @@ function ItemNavigation({
   if (count <= 1) return null;
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-      <IconButton size="small" onClick={onPrev}>
+      <IconButton onClick={onPrev} aria-label="Previous achievement" sx={navButtonSx}>
         <ChevronLeftIcon fontSize="small" />
       </IconButton>
       {Array.from({ length: count }).map((_, i) => (
         <Box
           key={i}
+          aria-hidden
           sx={{
             width: dotSize,
             height: dotSize,
             borderRadius: '50%',
-            bgcolor: i === activeIndex ? 'warning.main' : 'grey.300',
-            transition: 'background-color 0.2s',
+            bgcolor: i === activeIndex ? t.gold500 : t.lineStrong,
+            transition: 'background-color 150ms ease',
             cursor: 'pointer',
           }}
           onClick={(e) => {
@@ -256,7 +280,7 @@ function ItemNavigation({
           }}
         />
       ))}
-      <IconButton size="small" onClick={onNext}>
+      <IconButton onClick={onNext} aria-label="Next achievement" sx={navButtonSx}>
         <ChevronRightIcon fontSize="small" />
       </IconButton>
     </Box>
@@ -273,6 +297,8 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
 
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('md'));
+  const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
+  const slideTimeout = reduceMotion ? 0 : undefined;
   const router = useRouter();
   const pathname = usePathname();
 
@@ -358,7 +384,7 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
   if (isDesktop) {
     return (
       <>
-        <Slide direction="up" in={visible} mountOnEnter unmountOnExit>
+        <Slide direction="up" in={visible} timeout={slideTimeout} mountOnEnter unmountOnExit>
           <Box
             sx={{
               position: 'fixed',
@@ -366,46 +392,55 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
               right: 24,
               zIndex: 1050,
               width: 360,
-              borderRadius: 3,
+              borderRadius: `${t.radius}px`,
               overflow: 'hidden',
-              bgcolor: 'background.paper',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.18)',
-              border: '2px solid',
-              borderColor: 'warning.main',
-              animation: 'goldBorderPulse 3s ease-in-out 1',
-              transition: 'box-shadow 0.2s ease',
-              '&:hover': { boxShadow: '0 12px 40px rgba(0,0,0,0.22)' },
+              bgcolor: t.surface,
+              color: t.ink,
+              boxShadow: t.shadowMegaMenu,
+              border: `1px solid ${t.line}`,
+              borderTop: `3px solid ${t.gold500}`,
+              transition: 'border-color 150ms ease',
+              '&:hover': { borderColor: t.gold500 },
             }}
           >
             {/* Dismiss button */}
             <IconButton
-              size="small"
               onClick={handleDismiss}
               aria-label="Dismiss achievement"
               sx={{
                 position: 'absolute',
-                top: 6,
-                right: 6,
+                top: 0,
+                right: 0,
                 zIndex: 10,
-                bgcolor: 'rgba(0,0,0,0.5)',
-                color: '#fff',
-                '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
-                width: 28,
-                height: 28,
+                width: 44,
+                height: 44,
+                color: t.inkMuted,
+                '&:hover': { color: t.ink, bgcolor: t.surfaceHover },
+                '&:focus-visible': { outline: t.focusOutline, outlineOffset: '-2px' },
               }}
             >
-              <CloseIcon sx={{ fontSize: 16 }} />
+              <CloseIcon sx={{ fontSize: 18 }} />
             </IconButton>
 
             {/* Compact card — click to open detail dialog */}
             <Box
+              component="button"
+              type="button"
               onClick={() => setDialogOpen(true)}
+              aria-haspopup="dialog"
               sx={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: 2,
                 p: 1.5,
+                width: '100%',
+                border: 0,
+                bgcolor: 'transparent',
+                color: 'inherit',
+                font: 'inherit',
+                textAlign: 'left',
                 cursor: 'pointer',
+                '&:focus-visible': { outline: t.focusOutline, outlineOffset: '-2px' },
               }}
             >
               {/* Student photo thumbnail — use square crop if available */}
@@ -413,10 +448,10 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
                 sx={{
                   width: 80,
                   height: 80,
-                  borderRadius: 2,
+                  borderRadius: `${t.radius}px`,
                   overflow: 'hidden',
                   flexShrink: 0,
-                  bgcolor: 'warning.light',
+                  bgcolor: t.navy700,
                   position: 'relative',
                 }}
               >
@@ -429,21 +464,12 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
                     style={{ objectFit: 'cover' }}
                   />
                 ) : (
-                  <Box
-                    sx={{
-                      width: '100%',
-                      height: '100%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      background: 'linear-gradient(135deg, #F9A825 0%, #FFD54F 100%)',
-                    }}
-                  >
+                  <Box sx={initialsTileSx}>
                     <Typography
                       sx={{
                         fontSize: 24,
                         fontWeight: 800,
-                        color: 'rgba(255,255,255,0.85)',
+                        color: t.paper,
                       }}
                     >
                       {getInitials(meta.student_name)}
@@ -453,22 +479,17 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
               </Box>
 
               {/* Text */}
-              <Box sx={{ minWidth: 0, flex: 1, pr: 3 }}>
+              <Box sx={{ minWidth: 0, flex: 1, pr: 4 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
-                  <EmojiEventsIcon
-                    sx={{
-                      color: 'warning.main',
-                      fontSize: 20,
-                      animation: 'trophyBounce 1s ease-in-out 1',
-                    }}
-                  />
+                  <EmojiEventsIcon aria-hidden sx={{ color: t.gold800, fontSize: 20 }} />
                   <Typography
                     variant="caption"
                     sx={{
-                      color: 'warning.dark',
+                      fontFamily: t.fontMono,
+                      color: t.gold800,
                       fontWeight: 700,
                       textTransform: 'uppercase',
-                      letterSpacing: 0.5,
+                      letterSpacing: '0.2em',
                     }}
                   >
                     Achievement
@@ -500,10 +521,10 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
           fullWidth
           PaperProps={{
             sx: {
-              borderRadius: 3,
+              borderRadius: `${t.radius}px`,
               overflow: 'hidden',
-              border: '2px solid',
-              borderColor: 'warning.main',
+              border: `1px solid ${t.line}`,
+              borderTop: `3px solid ${t.gold500}`,
             },
           }}
         >
@@ -511,15 +532,7 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
           <IconButton
             onClick={() => setDialogOpen(false)}
             aria-label="Close achievement details"
-            sx={{
-              position: 'absolute',
-              top: 8,
-              right: 8,
-              zIndex: 10,
-              bgcolor: 'rgba(0,0,0,0.5)',
-              color: '#fff',
-              '&:hover': { bgcolor: 'rgba(0,0,0,0.7)' },
-            }}
+            sx={{ ...overlayCloseSx, top: 8, right: 8 }}
           >
             <CloseIcon />
           </IconButton>
@@ -559,7 +572,7 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
                 setDialogOpen(false);
                 handleViewAll();
               }}
-              sx={{ textTransform: 'none', fontWeight: 600 }}
+              sx={{ textTransform: 'none', fontWeight: 600, minHeight: 44 }}
             >
               View All
             </Button>
@@ -572,9 +585,8 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
   // ─── MOBILE ────────────────────────────────────────
   return (
     <>
-      <Slide direction="up" in={visible} mountOnEnter unmountOnExit>
+      <Slide direction="up" in={visible} timeout={slideTimeout} mountOnEnter unmountOnExit>
         <Box
-          onClick={() => setMobileOpen(true)}
           sx={{
             position: 'fixed',
             bottom: 0,
@@ -583,89 +595,102 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
             zIndex: 1050,
             display: 'flex',
             alignItems: 'center',
-            gap: 1.5,
-            px: 2,
-            py: 1.5,
-            bgcolor: 'background.paper',
-            boxShadow: '0 -4px 20px rgba(0,0,0,0.12)',
-            borderTop: '2px solid',
-            borderColor: 'warning.main',
-            animation: 'goldBorderPulse 3s ease-in-out 1',
-            cursor: 'pointer',
+            gap: 0.5,
+            pl: 2,
+            pr: 1,
+            py: 1,
+            bgcolor: t.surface,
+            color: t.ink,
+            boxShadow: '0 -4px 20px rgba(6,13,31,0.12)',
+            borderTop: `3px solid ${t.gold500}`,
           }}
         >
-          {/* Photo thumbnail — use square crop if available */}
+          {/* The whole row opens the details sheet; dismiss is a separate button. */}
           <Box
-            sx={{
-              width: 48,
-              height: 48,
-              borderRadius: 1.5,
-              overflow: 'hidden',
-              flexShrink: 0,
-              bgcolor: 'warning.light',
-              position: 'relative',
-            }}
-          >
-            {(meta.image_crops?.square || current.image_url) ? (
-              <Image
-                src={meta.image_crops?.square || current.image_url!}
-                alt={meta.student_name}
-                fill
-                sizes="48px"
-                style={{ objectFit: 'cover' }}
-              />
-            ) : (
-              <Box
-                sx={{
-                  width: '100%',
-                  height: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  background: 'linear-gradient(135deg, #F9A825 0%, #FFD54F 100%)',
-                }}
-              >
-                <Typography
-                  sx={{
-                    fontSize: 16,
-                    fontWeight: 800,
-                    color: 'rgba(255,255,255,0.85)',
-                  }}
-                >
-                  {getInitials(meta.student_name)}
-                </Typography>
-              </Box>
-            )}
-          </Box>
-
-          {/* Trophy + text */}
-          <EmojiEventsIcon
-            sx={{
-              color: 'warning.main',
-              fontSize: 22,
-              animation: 'trophyBounce 1s ease-in-out 1',
-              flexShrink: 0,
-            }}
-          />
-          <Typography
-            variant="body2"
-            fontWeight={600}
+            component="button"
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            aria-haspopup="dialog"
             sx={{
               flex: 1,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
+              minWidth: 0,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1.5,
+              p: 0.5,
+              border: 0,
+              bgcolor: 'transparent',
+              color: 'inherit',
+              font: 'inherit',
+              textAlign: 'left',
+              cursor: 'pointer',
+              borderRadius: `${t.radius}px`,
+              '&:focus-visible': { outline: t.focusOutline, outlineOffset: '2px' },
             }}
           >
-            {getCompactText(meta)}
-          </Typography>
+            {/* Photo thumbnail — use square crop if available */}
+            <Box
+              sx={{
+                width: 48,
+                height: 48,
+                borderRadius: `${t.radius}px`,
+                overflow: 'hidden',
+                flexShrink: 0,
+                bgcolor: t.navy700,
+                position: 'relative',
+              }}
+            >
+              {(meta.image_crops?.square || current.image_url) ? (
+                <Image
+                  src={meta.image_crops?.square || current.image_url!}
+                  alt={meta.student_name}
+                  fill
+                  sizes="48px"
+                  style={{ objectFit: 'cover' }}
+                />
+              ) : (
+                <Box sx={initialsTileSx}>
+                  <Typography
+                    sx={{
+                      fontSize: 16,
+                      fontWeight: 800,
+                      color: t.paper,
+                    }}
+                  >
+                    {getInitials(meta.student_name)}
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+
+            {/* Trophy + text */}
+            <EmojiEventsIcon aria-hidden sx={{ color: t.gold800, fontSize: 22, flexShrink: 0 }} />
+            <Typography
+              variant="body2"
+              fontWeight={600}
+              sx={{
+                flex: 1,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {getCompactText(meta)}
+            </Typography>
+          </Box>
 
           {/* Dismiss */}
           <IconButton
-            size="small"
             onClick={handleDismiss}
             aria-label="Dismiss achievement"
-            sx={{ flexShrink: 0, ml: 0.5 }}
+            sx={{
+              flexShrink: 0,
+              ml: 0.5,
+              width: 44,
+              height: 44,
+              color: t.inkMuted,
+              '&:focus-visible': { outline: t.focusOutline, outlineOffset: '2px' },
+            }}
           >
             <CloseIcon sx={{ fontSize: 18 }} />
           </IconButton>
@@ -679,7 +704,7 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
         onClose={() => setMobileOpen(false)}
         PaperProps={{
           sx: {
-            borderRadius: '16px 16px 0 0',
+            borderRadius: `${t.radius}px ${t.radius}px 0 0`,
             maxHeight: '80vh',
             overflow: 'auto',
           },
@@ -691,8 +716,8 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
             sx={{
               width: 40,
               height: 4,
-              borderRadius: 2,
-              bgcolor: 'grey.300',
+              borderRadius: `${t.radiusPill}px`,
+              bgcolor: t.lineStrong,
             }}
           />
         </Box>
@@ -701,7 +726,7 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
         <IconButton
           onClick={() => setMobileOpen(false)}
           aria-label="Close achievement details"
-          sx={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}
+          sx={{ ...overlayCloseSx, top: 8, right: 8 }}
         >
           <CloseIcon />
         </IconButton>
@@ -747,9 +772,8 @@ export default function StickyAchievementWidget({ locale = 'en' }: { locale?: st
               textTransform: 'none',
               fontWeight: 600,
               py: 1.5,
-              borderColor: 'warning.main',
-              color: 'warning.dark',
-              '&:hover': { borderColor: 'warning.dark', bgcolor: 'warning.50' },
+              minHeight: 48,
+              borderRadius: `${t.radius}px`,
             }}
           >
             View All Achievements

@@ -4,6 +4,7 @@ import { Alert, Box, Typography } from '@mui/material';
 import SchoolIcon from '@mui/icons-material/School';
 import { useCollegeLead } from '../useCollegeLead';
 import { ctaButtonSx } from '../directory/hub-styles';
+import { tokens } from '@/design-system';
 
 interface Props {
   collegeId: string;
@@ -17,13 +18,13 @@ const inputSx = {
   boxSizing: 'border-box' as const,
   width: '100%',
   border: '1px solid',
-  borderColor: 'grey.400',
-  borderRadius: 1.5,
+  borderColor: tokens.lineStrong,
+  borderRadius: 1,
   font: 'inherit',
   fontSize: '1rem',
-  color: 'text.primary',
-  bgcolor: 'background.paper',
-  '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 0 },
+  color: tokens.ink,
+  bgcolor: tokens.surface,
+  '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 0 },
 };
 
 /**
@@ -45,11 +46,11 @@ export default function AdmissionHelpCard({ collegeId, collegeName, shortName }:
         flexDirection: 'column',
         gap: 1.75,
         p: { xs: 2, md: 3 },
-        bgcolor: 'background.paper',
+        bgcolor: tokens.surface,
         border: { md: '1px solid' },
-        borderColor: { md: 'divider' },
-        borderRadius: { xs: 0, md: 2 },
-        boxShadow: { md: '0 8px 24px rgba(15, 27, 45, 0.06)' },
+        borderColor: { md: tokens.line },
+        borderRadius: { xs: 0, md: 1 },
+        boxShadow: 'none',
       }}
     >
       <Typography id="admission-help-heading" variant="h2" sx={{ m: 0, fontSize: { xs: '1.15rem', md: 18 }, fontWeight: 700, lineHeight: 1.3 }}>
@@ -69,17 +70,17 @@ export default function AdmissionHelpCard({ collegeId, collegeName, shortName }:
           }}
           sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}
         >
-          <Typography sx={{ m: 0, fontSize: '0.9rem', lineHeight: 1.5, color: 'text.secondary' }}>
+          <Typography sx={{ m: 0, fontSize: '0.9rem', lineHeight: 1.5, color: tokens.inkMuted }}>
             Share your name and number and the college&apos;s admissions team will call you about fees, seats and documents. Free.
           </Typography>
-          <Box component="label" sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, fontSize: '0.84rem', fontWeight: 600, color: 'text.secondary' }}>
+          <Box component="label" sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, fontSize: '0.84rem', fontWeight: 600, color: tokens.inkMuted }}>
             Your name
             <Box component="input" type="text" autoComplete="name" value={lead.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => lead.setName(e.target.value)} sx={inputSx} />
           </Box>
-          <Box component="label" sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, fontSize: '0.84rem', fontWeight: 600, color: 'text.secondary' }}>
+          <Box component="label" sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, fontSize: '0.84rem', fontWeight: 600, color: tokens.inkMuted }}>
             Mobile number
-            <Box sx={{ display: 'flex', height: 48, border: '1px solid', borderColor: 'grey.400', borderRadius: 1.5, overflow: 'hidden', '&:focus-within': { outline: '2px solid', outlineColor: 'primary.main' } }}>
-              <Box component="span" aria-hidden sx={{ display: 'flex', alignItems: 'center', px: 1.25, bgcolor: 'action.hover', borderRight: '1px solid', borderColor: 'grey.400', fontSize: '1rem', fontWeight: 400, color: 'text.secondary' }}>
+            <Box sx={{ display: 'flex', height: 48, border: '1px solid', borderColor: tokens.lineStrong, borderRadius: 1, overflow: 'hidden', '&:focus-within': { outline: tokens.focusOutline, outlineOffset: 2 } }}>
+              <Box component="span" aria-hidden sx={{ display: 'flex', alignItems: 'center', px: 1.25, bgcolor: tokens.surfaceHover, borderRight: '1px solid', borderColor: tokens.lineStrong, fontSize: '1rem', fontWeight: 400, color: tokens.inkMuted }}>
                 +91
               </Box>
               <Box
@@ -90,14 +91,14 @@ export default function AdmissionHelpCard({ collegeId, collegeName, shortName }:
                 aria-describedby="lead-phone-hint"
                 value={lead.phone}
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => lead.setPhone(e.target.value)}
-                sx={{ flex: '1 1 auto', minWidth: 0, border: 0, px: 1.5, font: 'inherit', fontSize: '1rem', color: 'text.primary', outline: 'none', bgcolor: 'background.paper' }}
+                sx={{ flex: '1 1 auto', minWidth: 0, border: 0, px: 1.5, font: 'inherit', fontSize: '1rem', color: tokens.ink, outline: 'none', bgcolor: tokens.surface }}
               />
             </Box>
             <Box component="span" id="lead-phone-hint" sx={{ fontWeight: 400, fontSize: '0.78rem' }}>
               10-digit Indian mobile number
             </Box>
           </Box>
-          <Box component="label" sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, fontSize: '0.84rem', fontWeight: 600, color: 'text.secondary' }}>
+          <Box component="label" sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, fontSize: '0.84rem', fontWeight: 600, color: tokens.inkMuted }}>
             Parent&apos;s mobile (optional)
             <Box
               component="input"
@@ -113,13 +114,13 @@ export default function AdmissionHelpCard({ collegeId, collegeName, shortName }:
               Under 18? The college can talk to your parent too.
             </Box>
           </Box>
-          <Box component="label" sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25, fontSize: '0.84rem', lineHeight: 1.45, color: 'text.secondary', cursor: 'pointer' }}>
+          <Box component="label" sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25, fontSize: '0.84rem', lineHeight: 1.45, color: tokens.inkMuted, cursor: 'pointer' }}>
             <Box
               component="input"
               type="checkbox"
               checked={lead.consent}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => lead.setConsent(e.target.checked)}
-              sx={{ width: 20, height: 20, m: 0, mt: '1px', flex: '0 0 auto', accentColor: (t) => t.palette.primary.main }}
+              sx={{ width: 20, height: 20, m: 0, mt: '1px', flex: '0 0 auto', accentColor: tokens.navy900 }}
             />
             I agree to share my details with {collegeName} so their admissions team can contact me.
           </Box>
@@ -133,11 +134,11 @@ export default function AdmissionHelpCard({ collegeId, collegeName, shortName }:
             type="submit"
             disabled={lead.submitting}
             aria-busy={lead.submitting}
-            sx={{ ...ctaButtonSx, height: 48, border: 0, borderRadius: 1.5, font: 'inherit', fontSize: '1rem', cursor: lead.submitting ? 'progress' : 'pointer', opacity: lead.submitting ? 0.75 : 1, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
+            sx={{ ...ctaButtonSx, height: 48, border: 0, borderRadius: 1, font: 'inherit', fontSize: '1rem', cursor: lead.submitting ? 'progress' : 'pointer', opacity: lead.submitting ? 0.75 : 1, '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } }}
           >
             {lead.submitting ? 'Sending' : 'Request a call back'}
           </Box>
-          <Typography sx={{ m: 0, fontSize: '0.8rem', color: 'text.secondary' }}>Used only for admission enquiries. No spam.</Typography>
+          <Typography sx={{ m: 0, fontSize: '0.8rem', color: tokens.inkMuted }}>Used only for admission enquiries. No spam.</Typography>
         </Box>
       )}
     </Box>

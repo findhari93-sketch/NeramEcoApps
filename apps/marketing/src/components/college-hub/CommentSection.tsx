@@ -8,6 +8,7 @@ import {
 import ReplyIcon from '@mui/icons-material/Reply';
 import QuestionAnswerIcon from '@mui/icons-material/QuestionAnswer';
 import type { CollegeComment } from '@/lib/college-hub/types';
+import { tokens } from '@/design-system';
 
 interface CommentItemProps {
   comment: CollegeComment & { replies?: CollegeComment[] };
@@ -23,7 +24,8 @@ function CommentItem({ comment, onReply }: CommentItemProps) {
             width: 36,
             height: 36,
             fontSize: '0.875rem',
-            bgcolor: comment.is_ambassador ? '#7c3aed' : '#64748b',
+            bgcolor: comment.is_ambassador ? tokens.gold500 : tokens.navy700,
+            color: comment.is_ambassador ? tokens.navy900 : tokens.paper,
           }}
         >
           {comment.author_name.charAt(0).toUpperCase()}
@@ -41,7 +43,7 @@ function CommentItem({ comment, onReply }: CommentItemProps) {
                 sx={{ height: 18, fontSize: '0.65rem' }}
               />
             )}
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" color={tokens.inkMuted}>
               {new Date(comment.created_at).toLocaleDateString('en-IN', {
                 month: 'short',
                 day: 'numeric',
@@ -56,14 +58,14 @@ function CommentItem({ comment, onReply }: CommentItemProps) {
             size="small"
             startIcon={<ReplyIcon sx={{ fontSize: 14 }} />}
             onClick={() => onReply(comment.id, comment.author_name)}
-            sx={{ mt: 0.5, fontSize: '0.75rem', color: 'text.secondary', p: 0, minWidth: 'auto' }}
+            sx={{ mt: 0.5, fontSize: '0.75rem', color: tokens.inkMuted, p: 0, minWidth: 'auto' }}
           >
             Reply
           </Button>
 
           {/* Replies */}
           {comment.replies && comment.replies.length > 0 && (
-            <Box sx={{ ml: 3, mt: 1.5, borderLeft: '2px solid', borderColor: 'divider', pl: 2 }}>
+            <Box sx={{ ml: 3, mt: 1.5, borderLeft: '2px solid', borderColor: tokens.line, pl: 2 }}>
               {comment.replies.map((reply) => (
                 <Box key={reply.id} sx={{ mb: 1.5 }}>
                   <Stack direction="row" gap={1} alignItems="flex-start">
@@ -72,7 +74,8 @@ function CommentItem({ comment, onReply }: CommentItemProps) {
                         width: 28,
                         height: 28,
                         fontSize: '0.75rem',
-                        bgcolor: reply.is_ambassador ? '#7c3aed' : '#94a3b8',
+                        bgcolor: reply.is_ambassador ? tokens.gold500 : tokens.navy700,
+                        color: reply.is_ambassador ? tokens.navy900 : tokens.paper,
                       }}
                     >
                       {reply.author_name.charAt(0).toUpperCase()}
@@ -172,9 +175,9 @@ export default function CommentSection({ collegeId, collegeName, initialComments
   return (
     <Box>
       <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 2 }}>
-        <QuestionAnswerIcon sx={{ color: 'primary.main' }} />
+        <QuestionAnswerIcon sx={{ color: tokens.navy900 }} />
         <Typography variant="h6" component="h2" fontWeight={700}>Questions and Answers</Typography>
-        <Typography variant="body2" color="text.secondary">({comments.length})</Typography>
+        <Typography variant="body2" color={tokens.inkMuted}>({comments.length})</Typography>
       </Stack>
 
       {/* Post form */}
@@ -182,10 +185,10 @@ export default function CommentSection({ collegeId, collegeName, initialComments
         sx={{
           mb: 3,
           p: 2,
-          bgcolor: '#f8fafc',
-          borderRadius: 2,
+          bgcolor: tokens.ground,
+          borderRadius: 1,
           border: '1px solid',
-          borderColor: 'divider',
+          borderColor: tokens.line,
         }}
       >
         {replyTo && (
@@ -195,7 +198,7 @@ export default function CommentSection({ collegeId, collegeName, initialComments
             justifyContent="space-between"
             sx={{ mb: 1 }}
           >
-            <Typography variant="caption" color="primary.main" fontWeight={600}>
+            <Typography variant="caption" color={tokens.navy900} fontWeight={600}>
               Replying to {replyTo.author}
             </Typography>
             <Button size="small" onClick={() => setReplyTo(null)} sx={{ fontSize: '0.7rem' }}>
@@ -249,7 +252,7 @@ export default function CommentSection({ collegeId, collegeName, initialComments
       {loading && <CircularProgress size={24} />}
 
       {!loading && comments.length === 0 && (
-        <Typography color="text.secondary" variant="body2">
+        <Typography color={tokens.inkMuted} variant="body2">
           No questions yet. Ask the first question about {collegeName}.
         </Typography>
       )}

@@ -22,8 +22,10 @@ import {
 } from '@neram/database';
 import { getRequestAdminId } from '@/lib/request-admin';
 import { loadDemoSettings, demoMarketingOrigin, sendDueDemoMessages } from '@/lib/demo/server';
-import { STAFF_DEMO_CHANNELS, STAFF_DEMO_PAGE_CODE } from '@/lib/demo/staff-add';
+import { DEFAULT_HELD_TUTOR, STAFF_DEMO_CHANNELS, STAFF_DEMO_PAGE_CODE } from '@/lib/demo/staff-add';
+import { DemoTeamsError } from '@/lib/demo/teams';
 import { HeldDemoError, parseHeldDemoWithSettings, recordHeldDemo } from '@/lib/demo/record-held';
+import { ConfirmError, confirmDemo, meetingUrl, parseMeetingKind, type ConfirmInput } from '@/lib/demo/confirm';
 
 /**
  * GET /api/demo-requests
@@ -75,6 +77,10 @@ export async function GET() {
     const kpis = {
       newRequests: requests.filter((r) => r.status === 'pending').length,
       today: requests.filter((r) => r.status === 'approved' && r.scheduled_start && istDateKey(new Date(r.scheduled_start)) === today).length,
+      // After-demo follow-ups due by the end of today (IST), overdue included.
+      followUpsDue: Object.values(followUps).filter(
+        (f) => ['pending', 'scheduled', 'attempted'].includes(f.status) && !!f.scheduled_callback_at && istDateKey(new Date(f.scheduled_callback_at)) <= today,
+      ).length,
       confirmedNext7: requests.filter((r) => {
         const t = startOf(r.scheduled_start);
         return r.status === 'approved' && t !== null && t >= now - 60 * 60 * 1000 && t <= in7;
@@ -145,6 +151,37 @@ async function updatePickedPerson(
   }
 }
 
+/**
+ * Add demo, "Demo planned": validated before anything is written. The team is
+ * everyone in Demo settings; the tutor defaults to Haribabu when he is on it.
+ */
+async function parsePlanned(body: Record<string, unknown>, supabase: TypedSupabaseClient) {
+  const settings = await loadDemoSettings(supabase);
+  if (!settings.hosts.length) throw new AddError('Add the demo team in Demo settings first.');
+  const start = new Date(str(body.start, 40));
+  if (Number.isNaN(start.getTime())) throw new AddError('Pick the date and time of the demo.');
+  if (start.getTime() < Date.now() - 5 * 60_000) throw new AddError('That time has passed. Use "Demo already held" instead.');
+  const meeting = parseMeetingKind(body.meeting);
+  const joinUrl = meeting === 'own_link' ? meetingUrl(body.joinUrl) : null;
+  if (meeting === 'own_link' && !joinUrl) throw new AddError('Paste the full meeting link, starting with https://');
+  const hostUpns = settings.hosts.map((h) => h.upn.toLowerCase());
+  const picked = str(body.tutorUpn, 200).toLowerCase();
+  const tutorUpn = picked || (hostUpns.includes(DEFAULT_HELD_TUTOR.upn) ? DEFAULT_HELD_TUTOR.upn : settings.defaultTutorUpn || hostUpns[0]);
+  if (!hostUpns.includes(tutorUpn)) throw new AddError('Pick who takes the demo from the demo team.');
+  const input: ConfirmInput = {
+    start,
+    minutes: settings.schedule.durationMinutes,
+    reason: null,
+    teamUpns: [],
+    tutorUpn,
+    organizerUpn: '',
+    meeting,
+    joinUrl,
+    conflictNote: str(body.conflictNote, 500) || null,
+  };
+  return { settings, input };
+}
+
 const WINDOWS = new Set(['morning', 'afternoon', 'evening', 'anytime']);
 const CLASSES = new Set(['10th', '11th', '12th', '12th-pass', 'other']);
 
@@ -153,7 +190,9 @@ const CLASSES = new Set(['10th', '11th', '12th', '12th-pass', 'other']);
  * the website (WhatsApp to the office, a call, a walk-in).
  *
  *   mode 'request': they want a demo; a New request (WhatsApp acknowledgement optional).
- *   mode 'agreed':  a time is already agreed; a Called request the desk then confirms.
+ *   mode 'planned': a demo planned on WhatsApp or a call: date, time, tutor and how they
+ *                   meet (Teams, own link, link later, in person). Confirmed in one go.
+ *   mode 'agreed':  older clients: a Called request the desk then confirms.
  *   mode 'held':    the demo already happened (e.g. on Google Meet); recorded as
  *                   attended / no-show. An open request of theirs is closed out instead.
  *
@@ -173,13 +212,14 @@ export async function POST(req: Request) {
   try {
     const supabase = getSupabaseAdminClient();
     const mode = body.mode;
-    if (mode !== 'request' && mode !== 'agreed' && mode !== 'held') throw new AddError('Pick what happened.');
+    if (mode !== 'request' && mode !== 'agreed' && mode !== 'held' && mode !== 'planned') throw new AddError('Pick what happened.');
     const channel = str(body.channel, 40);
     const channelDef = STAFF_DEMO_CHANNELS.find((c) => c.id === channel);
     if (!channelDef) throw new AddError('Pick where they came from.');
 
     // Validate the held-demo fields before anything is written (incl. a new person).
     const heldParsed = mode === 'held' ? await parseHeldDemoWithSettings(body, supabase) : null;
+    const planned = mode === 'planned' ? await parsePlanned(body, supabase) : null;
 
     // ---- Who
     const phone = demoPhone10(str(body.phone, 20));
@@ -276,6 +316,39 @@ export async function POST(req: Request) {
       });
       row = res.row;
       sendNow = res.queued;
+    } else if (planned) {
+      try {
+        row = await createDemoRequestWithRef(
+          { ...base, preferred_date: istDateKey(planned.input.start), preferred_window: 'anytime', status: 'contacted' },
+          supabase,
+        );
+      } catch (err) {
+        if (!(err instanceof DemoActiveRequestError)) throw err;
+        const open = await getActiveDemoRequestForUser(userId, supabase);
+        throw new AddError(
+          `${name} already has an open request${open?.ref_code ? ` (${open.ref_code})` : ''}. Open it from the desk instead.`,
+          409,
+          { existingId: open?.id ?? null },
+        );
+      }
+      await logDemoRequestEvent(
+        {
+          registration_id: row.id,
+          kind: 'status',
+          outcome: 'contacted',
+          note: `Planned by staff from ${channelDef.label}${who}.${accountHolder === 'parent' ? " Linked to the parent's account." : ''}`,
+          actor_id: actorId,
+        },
+        supabase,
+      );
+      try {
+        const res = await confirmDemo({ supabase, actorId, r: row, settings: planned.settings, input: planned.input, origin: demoMarketingOrigin(req.url) });
+        sendNow = res.sendNow;
+      } catch (err) {
+        // The person and request are saved; staff finish Confirm from the desk.
+        if (!(err instanceof ConfirmError) && !(err instanceof DemoTeamsError)) throw err;
+        return NextResponse.json({ id: row.id, ref: row.ref_code, createdPerson, confirmError: err.message });
+      }
     } else {
       const window = (mode === 'agreed' ? 'anytime' : str(body.window, 20)) as DemoWindow;
       if (!WINDOWS.has(window)) throw new AddError('Pick a time of day, or Any time.');
@@ -321,7 +394,7 @@ export async function POST(req: Request) {
     if (error instanceof AddError) {
       return NextResponse.json({ error: error.message, ...error.extra }, { status: error.status });
     }
-    if (error instanceof HeldDemoError) {
+    if (error instanceof HeldDemoError || error instanceof ConfirmError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error('demo add failed:', error);

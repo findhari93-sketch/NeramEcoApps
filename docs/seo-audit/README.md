@@ -70,11 +70,32 @@ The **Ask Google to index today** card on the SEO Health page lists up to 10 sit
 - **Copy URL** and **Copy all URLs** are for when the Search Console account is signed in to another browser: open Search Console there and paste. If both accounts are signed in to the same browser, set `GSC_ACCOUNT_EMAIL` on the admin app so **Open Search Console** opens as that account (`authuser`). Simplest of all: add the admin browser's Google account as a Full user under Search Console > Settings > Users and permissions.
 - **Mark asked** records it (`seo_url_status.index_requested_at`), so the page leaves the list for 14 days and is re-inspected the next morning.
 
+## Fixing issues with Claude Code
+
+Every issue has a **Who fixes it** label on the Issues tab (`ruleOwner` in `lib/seo-audit/rule-guide.ts`):
+
+| Label | Meaning | What to do |
+|---|---|---|
+| **Claude Code** | A change in the repo clears it (rules with `autofix: true`) | Use `/seo-fix`, below |
+| **Google** | Nothing to change in code (I4 not indexed, I8 noindex still in search) | Nothing. Ask Google sends these every morning, and they close once Google indexes the page |
+| **You** | A judgement call (server error, pages that compete, thin page, clicks dropped) | Open the row for what to decide |
+
+The routine for Claude Code issues:
+1. On the Issues tab, filter **Who fixes it > Claude Code** and click **Copy for Claude Code**. This copies a command such as `/seo-fix S1 P1 P2`. Each issue's drawer also has its own button, which copies `/seo-fix <finding id>`.
+2. Paste it into Claude Code in the repo folder. The `/seo-fix` skill (`.claude/skills/seo-fix/SKILL.md`):
+   - reads those open findings from the prod database (read only);
+   - fixes them following `docs/seo-audit/fix-guide.md`;
+   - runs the type-check and tests, and stops. It never commits or deploys.
+3. Say **deploy**.
+4. Run **Check my fixes**, and the issues move to Fixed.
+
+The twice-weekly autofix PR (next section) follows the same `fix-guide.md`. Use one or the other for a given issue, not both.
+
 ## Claude Code fixes, twice a week (`.github/workflows/seo-autofix.yml`)
 
 Mondays and Thursdays at 10:30 IST, a GitHub Action reads up to 40 open findings from `/api/cron/seo-audit/findings?limit=40` (protected by `SEO_EXPORT_TOKEN`). The order is: most severe first, then the pages with the most search impressions, then hub pages. Each rule is capped at 10, so one rule cannot fill the PR.
 
-Claude Code then fixes the ones marked `autofix` in `lib/seo-audit/rule-guide.ts` and opens **one pull request**. Info items are included only for long titles (O1) and answer-first copy (A4). The PR has these sections:
+Claude Code then fixes the ones marked `autofix` in `lib/seo-audit/rule-guide.ts`, following `docs/seo-audit/fix-guide.md`, and opens **one pull request**. Info items are included only for long titles (O1) and answer-first copy (A4). The PR has these sections:
 - what was fixed;
 - "Needs your review": city texts drafted with `reviewed: false`, and new season pages;
 - what was skipped and why;

@@ -7,13 +7,14 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import { Box, Typography } from '@neram/ui';
+import { siteTokens as t } from '@neram/ui/site-tokens';
 import PlayArrowRoundedIcon from '@mui/icons-material/PlayArrowRounded';
 
 export function ClassVideo({ youtubeId, title }: { youtubeId: string; title: string }) {
   const [playing, setPlaying] = useState(false);
   return (
     <Box>
-      <Box sx={{ position: 'relative', aspectRatio: '16 / 9', borderRadius: 2, overflow: 'hidden', bgcolor: 'grey.900' }}>
+      <Box sx={{ position: 'relative', aspectRatio: '16 / 9', borderRadius: `${t.radius}px`, overflow: 'hidden', bgcolor: t.navy900 }}>
         {playing ? (
           <Box
             component="iframe"
@@ -36,7 +37,7 @@ export function ClassVideo({ youtubeId, title }: { youtubeId: string; title: str
               border: 0,
               cursor: 'pointer',
               bgcolor: 'transparent',
-              '&:focus-visible': { outline: '3px solid', outlineColor: 'primary.main', outlineOffset: -3 },
+              '&:focus-visible': { outline: t.focusOutline, outlineOffset: '-3px' },
             }}
           >
             <Image src={`https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`} alt="" fill sizes="(max-width: 900px) 100vw, 420px" style={{ objectFit: 'cover' }} />
@@ -50,8 +51,8 @@ export function ClassVideo({ youtubeId, title }: { youtubeId: string; title: str
                 width: 64,
                 height: 64,
                 borderRadius: '50%',
-                bgcolor: 'rgba(0,0,0,0.7)',
-                color: '#fff',
+                bgcolor: t.navy900,
+                color: t.gold500,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',

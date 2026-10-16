@@ -3,6 +3,7 @@ import LockIcon from '@mui/icons-material/Lock';
 import Link from 'next/link';
 import { TIER_CONFIG } from '@/lib/college-hub/constants';
 import type { CollegeTier } from '@/lib/college-hub/types';
+import { siteTokens } from '@neram/ui/site-tokens';
 
 const TIER_ORDER: Record<CollegeTier, number> = { free: 0, silver: 1, gold: 2, platinum: 3 };
 
@@ -49,7 +50,7 @@ export default function TierGate({
       variant="outlined"
       sx={{
         p: { xs: 3, sm: 4 },
-        borderRadius: 2,
+        borderRadius: 1,
         bgcolor: config.bgColor,
         borderColor: config.borderColor,
         textAlign: 'center',
@@ -72,7 +73,7 @@ export default function TierGate({
         <Typography variant="subtitle1" fontWeight={700} sx={{ color: config.color }}>
           {featureName} is a {config.label} Feature
         </Typography>
-        <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 360 }}>
+        <Typography variant="body2" color={siteTokens.inkMuted} sx={{ maxWidth: 360 }}>
           Upgrade to the {config.label} plan to unlock {featureName.toLowerCase()} on your profile.
         </Typography>
         <Button

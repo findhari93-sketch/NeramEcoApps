@@ -2,10 +2,11 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { Box, Typography, Divider, Dialog, DialogTitle, DialogContent, SwipeableDrawer, IconButton } from '@neram/ui';
-import { CloseIcon } from '@neram/ui';
+import { Box, Typography, Dialog, DialogTitle, DialogContent, SwipeableDrawer, IconButton } from '@neram/ui';
+import CloseOutlined from '@mui/icons-material/CloseOutlined';
 import { useIsMobile } from '@neram/ui/hooks';
-import PaymentPanel from './PaymentPanel';
+import { tokens as t } from '@/design-system';
+import PaymentPanel, { type PaymentPanelState } from './PaymentPanel';
 
 interface PaymentDialogProps {
   open: boolean;
@@ -14,6 +15,14 @@ interface PaymentDialogProps {
   onPaymentComplete?: () => void;
 }
 
+const closeSx = {
+  width: 44,
+  height: 44,
+  color: t.ink,
+  '&.Mui-focusVisible, &:focus-visible': { outline: t.focusOutline, outlineOffset: '2px' },
+} as const;
+const titleSx = { m: 0, fontSize: '1.25rem', fontWeight: 800, color: t.ink } as const;
+
 /**
  * The returning-user "Pay" door from the applications dashboard: the same
  * PaymentPanel the Pay and enrol step renders inline, wrapped in a bottom
@@ -21,16 +30,22 @@ interface PaymentDialogProps {
  */
 export default function PaymentDialog({ open, leadId, onClose, onPaymentComplete }: PaymentDialogProps) {
   const isMobile = useIsMobile();
-  const [state, setState] = useState({ paymentSuccess: false, isProcessing: false });
+  const [state, setState] = useState<PaymentPanelState>({ paymentSuccess: false, isProcessing: false, enrolled: false });
 
   const handleClose = useCallback(() => {
     if (state.paymentSuccess) onPaymentComplete?.();
     onClose();
   }, [state.paymentSuccess, onPaymentComplete, onClose]);
 
-  const title = state.paymentSuccess ? 'Payment complete' : 'Complete payment';
+  const title = state.paymentSuccess || state.enrolled ? 'Payment complete' : 'Complete payment';
   const panel = (
-    <PaymentPanel leadId={leadId} active={open} onPaymentComplete={onPaymentComplete} onStateChange={setState} />
+    <PaymentPanel
+      leadId={leadId}
+      active={open}
+      variant="dialog"
+      onPaymentComplete={onPaymentComplete}
+      onStateChange={setState}
+    />
   );
 
   if (isMobile) {
@@ -41,19 +56,37 @@ export default function PaymentDialog({ open, leadId, onClose, onPaymentComplete
         onClose={handleClose}
         onOpen={() => {}}
         disableSwipeToOpen
-        PaperProps={{ sx: { maxHeight: '92vh', borderTopLeftRadius: 16, borderTopRightRadius: 16, overflow: 'hidden' } }}
+        PaperProps={{
+          sx: {
+            maxHeight: '92vh',
+            borderTopLeftRadius: t.radius,
+            borderTopRightRadius: t.radius,
+            overflow: 'hidden',
+            bgcolor: t.surface,
+          },
+          'aria-labelledby': 'payment-dialog-title',
+        }}
       >
-        <Box sx={{ display: 'flex', justifyContent: 'center', pt: 1, pb: 0.5 }}>
-          <Box sx={{ width: 36, height: 4, borderRadius: 1, bgcolor: 'grey.300' }} />
+        <Box sx={{ display: 'flex', justifyContent: 'center', pt: 1 }} aria-hidden>
+          <Box sx={{ width: 40, height: 4, borderRadius: '2px', bgcolor: t.lineStrong }} />
         </Box>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', px: 2, pb: 1 }}>
-          <Typography variant="subtitle1" fontWeight={700}>{title}</Typography>
-          <IconButton size="small" onClick={handleClose} aria-label="Close" sx={{ minWidth: 44, minHeight: 44 }}>
-            <CloseIcon fontSize="small" />
+        <Box
+          sx={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            pl: 2,
+            pr: 1,
+            py: 0.5,
+            borderBottom: `1px solid ${t.line}`,
+          }}
+        >
+          <Typography component="h2" id="payment-dialog-title" sx={titleSx}>{title}</Typography>
+          <IconButton onClick={handleClose} disabled={state.isProcessing} aria-label="Close" sx={closeSx}>
+            <CloseOutlined />
           </IconButton>
         </Box>
-        <Divider />
-        <Box sx={{ overflow: 'auto', px: 2, pt: 2, pb: 3 }}>{panel}</Box>
+        <Box sx={{ overflow: 'auto', px: 2, pt: 2.5, pb: 3 }}>{panel}</Box>
       </SwipeableDrawer>
     );
   }
@@ -65,16 +98,26 @@ export default function PaymentDialog({ open, leadId, onClose, onPaymentComplete
       maxWidth="sm"
       fullWidth
       scroll="paper"
-      PaperProps={{ sx: { borderRadius: 1.5, maxHeight: '90vh' } }}
+      aria-labelledby="payment-dialog-title"
+      PaperProps={{ sx: { maxHeight: '90vh' } }}
     >
-      <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 1 }}>
-        <Typography variant="h6" component="span" fontWeight={700}>{title}</Typography>
-        <IconButton size="small" onClick={handleClose} disabled={state.isProcessing} aria-label="Close">
-          <CloseIcon />
+      <DialogTitle
+        component="div"
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          gap: 2,
+          pr: 1.5,
+          borderBottom: `1px solid ${t.line}`,
+        }}
+      >
+        <Typography component="h2" id="payment-dialog-title" sx={titleSx}>{title}</Typography>
+        <IconButton onClick={handleClose} disabled={state.isProcessing} aria-label="Close" sx={closeSx}>
+          <CloseOutlined />
         </IconButton>
       </DialogTitle>
-      <Divider />
-      <DialogContent sx={{ pt: 2.5 }}>{panel}</DialogContent>
+      <DialogContent sx={{ pt: '24px !important', pb: 3 }}>{panel}</DialogContent>
     </Dialog>
   );
 }

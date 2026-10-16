@@ -8,6 +8,7 @@ import {
 import SchoolIcon from '@mui/icons-material/School';
 import PincodeField from './PincodeField';
 import { useCollegeLead } from './useCollegeLead';
+import { tokens } from '@/design-system';
 
 interface LeadCaptureButtonProps {
   collegeId: string;
@@ -49,9 +50,10 @@ export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptur
         startIcon={<SchoolIcon />}
         onClick={() => setOpen(true)}
         sx={{
-          bgcolor: '#16a34a',
-          '&:hover': { bgcolor: '#15803d' },
-          borderRadius: 2,
+          bgcolor: tokens.navy900,
+          color: tokens.paper,
+          '&:hover': { bgcolor: tokens.navy700 },
+          borderRadius: 1,
           px: 3,
           fontWeight: 700,
           minHeight: 48,
@@ -72,7 +74,7 @@ export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptur
           <Typography variant="h6" fontWeight={700} component="div">
             Apply to {collegeName}
           </Typography>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" color={tokens.inkMuted}>
             Share your details and the college will contact you.
           </Typography>
         </DialogTitle>
@@ -156,7 +158,7 @@ export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptur
               }
             />
             {user && (
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" color={tokens.inkMuted}>
                 Submitting as <strong>{user.email || user.name}</strong>. You can edit any field above.
               </Typography>
             )}
@@ -169,7 +171,7 @@ export default function LeadCaptureButton({ collegeId, collegeName }: LeadCaptur
             variant="contained"
             onClick={handleSubmit}
             disabled={submitting || !consent}
-            sx={{ bgcolor: '#16a34a', minHeight: 40, '&:hover': { bgcolor: '#15803d' } }}
+            sx={{ bgcolor: tokens.navy900, color: tokens.paper, minHeight: 40, '&:hover': { bgcolor: tokens.navy700 } }}
           >
             {submitting ? <CircularProgress size={16} color="inherit" /> : 'Submit'}
           </Button>

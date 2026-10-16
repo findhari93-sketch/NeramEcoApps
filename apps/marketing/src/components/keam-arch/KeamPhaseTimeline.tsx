@@ -5,15 +5,28 @@ import {
   Stack,
   Chip,
 } from '@mui/material';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
-import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutlined';
+import HourglassEmptyIcon from '@mui/icons-material/HourglassEmptyOutlined';
+import { siteTokens as t } from '@neram/ui/site-tokens';
 import type { AllotmentPhase } from '@/data/keam-arch-2026/schema';
 
 interface KeamPhaseTimelineProps {
   phases: AllotmentPhase[];
 }
 
-const PRIMARY_GREEN = '#0d7a4a';
+/** Status pill: outlined, readable on white (green confirmed, gold800 tentative). */
+function pillSx(confirmed: boolean) {
+  const c = confirmed ? t.success : t.gold800;
+  return {
+    height: 'auto',
+    py: '2px',
+    bgcolor: 'transparent',
+    color: c,
+    border: `1px solid ${c}`,
+    fontWeight: 700,
+    fontSize: '0.75rem',
+  } as const;
+}
 
 export default function KeamPhaseTimeline({ phases }: KeamPhaseTimelineProps) {
   return (
@@ -25,19 +38,20 @@ export default function KeamPhaseTimeline({ phases }: KeamPhaseTimelineProps) {
           <Box key={phase.id} sx={{ display: 'flex', gap: 2, position: 'relative' }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               <Box
+                aria-hidden
                 sx={{
                   width: 36,
                   height: 36,
                   borderRadius: '50%',
-                  bgcolor: isConfirmed ? PRIMARY_GREEN : '#fef3c7',
-                  color: isConfirmed ? 'white' : '#92400e',
+                  bgcolor: isConfirmed ? t.success : t.surface,
+                  color: isConfirmed ? t.surface : t.gold800,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontWeight: 800,
                   flexShrink: 0,
                   border: '2px solid',
-                  borderColor: isConfirmed ? PRIMARY_GREEN : '#fde68a',
+                  borderColor: isConfirmed ? t.success : t.lineStrong,
                 }}
               >
                 {isConfirmed ? (
@@ -52,7 +66,7 @@ export default function KeamPhaseTimeline({ phases }: KeamPhaseTimelineProps) {
                     width: 2,
                     flex: 1,
                     minHeight: 24,
-                    bgcolor: 'divider',
+                    bgcolor: t.line,
                     my: 0.5,
                   }}
                 />
@@ -65,9 +79,9 @@ export default function KeamPhaseTimeline({ phases }: KeamPhaseTimelineProps) {
                 flex: 1,
                 p: 2,
                 mb: isLast ? 0 : 2,
-                borderRadius: 2,
-                border: '1px solid',
-                borderColor: 'divider',
+                borderRadius: `${t.radius}px`,
+                border: `1px solid ${t.line}`,
+                bgcolor: t.surface,
               }}
             >
               <Stack direction="row" alignItems="center" gap={1} flexWrap="wrap" sx={{ mb: 0.5 }}>
@@ -77,11 +91,7 @@ export default function KeamPhaseTimeline({ phases }: KeamPhaseTimelineProps) {
                 <Chip
                   label={isConfirmed ? 'Confirmed' : 'Tentative'}
                   size="small"
-                  sx={{
-                    bgcolor: isConfirmed ? '#dcfce7' : '#fef3c7',
-                    color: isConfirmed ? '#15803d' : '#92400e',
-                    fontWeight: 600,
-                  }}
+                  sx={pillSx(isConfirmed)}
                 />
               </Stack>
               <Typography variant="body2" color="text.secondary">

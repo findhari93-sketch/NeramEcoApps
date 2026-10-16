@@ -21,6 +21,11 @@ import {
   generateFAQSchema,
 } from '@/lib/seo/schemas';
 import { BASE_URL } from '@/lib/seo/constants';
+import { siteTokens as t } from '@neram/ui/site-tokens';
+import { admissionYear } from '@/lib/college-hub/constants';
+
+// The cycle students search for (NATA 2027 from July 2026).
+const YEAR = admissionYear();
 
 /**
  * Native Tamil landing page for NATA online coaching.
@@ -51,9 +56,9 @@ export default function NataOnlineCoachingTamil() {
         'ஆம். சென்னை, கோயம்புத்தூர், மதுரை, திருச்சி, சேலம், வேலூர், திருப்பூர், புதுக்கோட்டை, காஞ்சிபுரம் உள்ளிட்ட தமிழ்நாட்டின் அனைத்து மாவட்டங்களிலும் உள்ள மாணவர்கள் நேராம் கிளாஸஸ் ஆன்லைன் வகுப்புகளில் சேரலாம். நிலையான இணைய இணைப்பும் ஒரு லேப்டாப் அல்லது டேப்லெட்டும் மட்டுமே தேவை. நேரில் படிக்க விரும்பினால் சென்னை (அசோக் நகர், தாம்பரம்), காஞ்சிபுரம், கோயம்புத்தூர், திருப்பூர், திருச்சி, மதுரை, புதுக்கோட்டை ஆகிய இடங்களில் எங்கள் வகுப்பறைகள் உள்ளன.',
     },
     {
-      question: 'NATA தேர்வு முறை 2026 எப்படி இருக்கும்?',
+      question: `NATA தேர்வு முறை ${YEAR} எப்படி இருக்கும்?`,
       answer:
-        'NATA 2026 ஆன்லைனில் நடத்தப்படும். மொத்தம் 200 மதிப்பெண்களுக்கு 125 கேள்விகள் 3 மணி நேரத்தில். மூன்று பிரிவுகள்: Diagrammatic Reasoning, Numerical & Verbal Reasoning, Inductive & Situational Reasoning (வரைபடம் உட்பட). எதிர்மறை மதிப்பெண்கள் இல்லை.',
+        `NATA 2026 ஆன்லைனில் நடத்தப்பட்டது. மொத்தம் 200 மதிப்பெண்களுக்கு 125 கேள்விகள் 3 மணி நேரத்தில். மூன்று பிரிவுகள்: Diagrammatic Reasoning, Numerical & Verbal Reasoning, Inductive & Situational Reasoning (வரைபடம் உட்பட). எதிர்மறை மதிப்பெண்கள் இல்லை. NATA ${YEAR} முறையும் இதே போல இருக்கும் என எதிர்பார்க்கப்படுகிறது (அதிகாரப்பூர்வ அறிவிப்பு வரவில்லை).`,
     },
     {
       question: 'நேராம் கிளாஸஸ் தமிழில் கற்பிக்கப்படுமா?',
@@ -78,7 +83,7 @@ export default function NataOnlineCoachingTamil() {
       <JsonLd
         data={{
           ...generateCourseSchema({
-            name: 'NATA ஆன்லைன் கோச்சிங் 2026: நேரடி வகுப்புகள், வரைபடப் பயிற்சி',
+            name: `NATA ஆன்லைன் கோச்சிங் ${YEAR}: நேரடி வகுப்புகள், வரைபடப் பயிற்சி`,
             description:
               '2009 முதல் நேராம் கிளாஸஸ் நடத்தும் NATA ஆன்லைன் கோச்சிங். 1,000+ மாணவர்கள், JEE B.Arch 2024 இல் AIR 1. நேரடி வகுப்புகள், தினசரி வரைபடப் பயிற்சி, 1 வருட திட்டத்தில் 100+ மாதிரித் தேர்வுகள்.',
             url: pageUrl,
@@ -101,14 +106,15 @@ export default function NataOnlineCoachingTamil() {
         <Box
           sx={{
             py: { xs: 8, md: 12 },
-            background: 'linear-gradient(135deg, #1a237e 0%, #0d47a1 100%)',
-            color: 'white',
+            bgcolor: t.navy900,
+            ...t.blueprint,
+            color: t.paper,
           }}
         >
           <Container maxWidth="lg">
             <Chip
-              label="NATA 2026: நேரடி ஆன்லைன் கோச்சிங்"
-              sx={{ bgcolor: 'white', color: 'primary.main', mb: 2, fontWeight: 600 }}
+              label={`NATA ${YEAR}: நேரடி ஆன்லைன் கோச்சிங்`}
+              sx={{ bgcolor: t.goldTintBg, color: t.gold300, border: `1px solid ${t.goldTintBorder}`, mb: 2, fontWeight: 600 }}
             />
             <Typography
               variant="h1"
@@ -116,9 +122,9 @@ export default function NataOnlineCoachingTamil() {
               gutterBottom
               sx={{ fontWeight: 700, fontSize: { xs: '2rem', md: '3rem' }, lineHeight: 1.3 }}
             >
-              NATA ஆன்லைன் கோச்சிங் 2026
+              NATA ஆன்லைன் கோச்சிங் {YEAR}
             </Typography>
-            <Typography variant="h5" sx={{ mb: 4, opacity: 0.92, lineHeight: 1.7, maxWidth: 820 }}>
+            <Typography variant="h5" sx={{ mb: 4, color: t.paperMuted, lineHeight: 1.7, maxWidth: 820 }}>
               கட்டிடக்கலை மாணவர்களுக்கு 2009 முதல் நேரடி வகுப்புகள். 1,000+ மாணவர்கள் பயின்றுள்ளனர்,
               JEE B.Arch 2024 இல் AIR 1. சிறிய பேட்ச்கள், தினசரி வரைபடப் பயிற்சி.
             </Typography>
@@ -128,7 +134,7 @@ export default function NataOnlineCoachingTamil() {
                 size="large"
                 component={Link}
                 href="/ta/demo-class"
-                sx={{ bgcolor: 'white', color: 'primary.main', fontWeight: 600, px: 4, minHeight: 48 }}
+                sx={{ fontWeight: 600, px: 4, minHeight: 48 }}
               >
                 இலவச டெமோ வகுப்பு
               </Button>
@@ -137,7 +143,7 @@ export default function NataOnlineCoachingTamil() {
                 size="large"
                 component={Link}
                 href="/ta/apply"
-                sx={{ borderColor: 'white', color: 'white', fontWeight: 600, px: 4, minHeight: 48 }}
+                sx={{ fontWeight: 600, px: 4, minHeight: 48, borderColor: t.outlineDark, color: t.paper, '&:hover': { bgcolor: 'transparent', borderColor: t.gold500, color: t.gold500 } }}
               >
                 இப்போதே சேருங்கள்
               </Button>
@@ -173,7 +179,7 @@ export default function NataOnlineCoachingTamil() {
         </Box>
 
         {/* Why us, in Tamil */}
-        <Box sx={{ py: { xs: 6, md: 9 }, bgcolor: 'grey.50' }}>
+        <Box sx={{ py: { xs: 6, md: 9 }, bgcolor: t.ground }}>
           <Container maxWidth="lg">
             <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ fontWeight: 700, mb: 5 }}>
               ஏன் தமிழ்நாட்டு மாணவர்கள் நேராம் கிளாஸஸைத் தேர்வு செய்கிறார்கள்
@@ -223,13 +229,13 @@ export default function NataOnlineCoachingTamil() {
                       height: '100%',
                       p: 3,
                       border: course.highlight ? '2px solid' : '1px solid',
-                      borderColor: course.highlight ? 'primary.main' : 'grey.300',
+                      borderColor: course.highlight ? t.gold500 : t.line,
                     }}
                   >
                     <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
                       {course.name}
                     </Typography>
-                    <Typography variant="h3" sx={{ fontWeight: 700, color: 'primary.main', mb: 1 }}>
+                    <Typography variant="h3" sx={{ fontWeight: 700, color: t.navy900, mb: 1 }}>
                       ரூ. {course.price}
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
@@ -253,7 +259,7 @@ export default function NataOnlineCoachingTamil() {
         </Box>
 
         {/* FAQ in Tamil */}
-        <Box sx={{ py: { xs: 6, md: 9 }, bgcolor: 'grey.50' }}>
+        <Box sx={{ py: { xs: 6, md: 9 }, bgcolor: t.ground }}>
           <Container maxWidth="md">
             <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ fontWeight: 700, mb: 5 }}>
               அடிக்கடி கேட்கப்படும் கேள்விகள்
@@ -271,11 +277,11 @@ export default function NataOnlineCoachingTamil() {
               >
                 <AccordionSummary
                   expandIcon={<Typography sx={{ fontSize: '1.2rem', fontWeight: 600 }}>+</Typography>}
-                  sx={{ bgcolor: 'white', minHeight: 48 }}
+                  sx={{ bgcolor: t.surface, minHeight: 48 }}
                 >
                   <Typography sx={{ fontWeight: 600 }}>{faq.question}</Typography>
                 </AccordionSummary>
-                <AccordionDetails sx={{ bgcolor: 'white' }}>
+                <AccordionDetails sx={{ bgcolor: t.surface }}>
                   <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.9 }}>
                     {faq.answer}
                   </Typography>
@@ -290,8 +296,8 @@ export default function NataOnlineCoachingTamil() {
           sx={{
             py: { xs: 8, md: 12 },
             pb: { xs: 14, md: 12 },
-            background: 'linear-gradient(135deg, #0d47a1 0%, #1565c0 100%)',
-            color: 'white',
+            bgcolor: t.navy900,
+            color: t.paper,
             textAlign: 'center',
           }}
         >
@@ -299,7 +305,7 @@ export default function NataOnlineCoachingTamil() {
             <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700 }}>
               உங்கள் NATA பயணத்தை இன்றே தொடங்குங்கள்
             </Typography>
-            <Typography variant="h6" sx={{ mb: 4, opacity: 0.9, lineHeight: 1.7 }}>
+            <Typography variant="h6" sx={{ mb: 4, color: t.paperMuted, lineHeight: 1.7 }}>
               பேட்ச்கள் சிறியவை. இலவச டெமோ வகுப்பில் கலந்துகொண்டு பாருங்கள், அல்லது உங்கள் இடத்தை இப்போதே பதிவு செய்யுங்கள்.
             </Typography>
             <Stack direction="row" spacing={2} justifyContent="center" flexWrap="wrap" useFlexGap>
@@ -308,7 +314,7 @@ export default function NataOnlineCoachingTamil() {
                 size="large"
                 component={Link}
                 href="/ta/apply"
-                sx={{ bgcolor: 'white', color: 'primary.main', fontWeight: 600, px: 4, minHeight: 48 }}
+                sx={{ fontWeight: 600, px: 4, minHeight: 48 }}
               >
                 இப்போதே சேருங்கள்
               </Button>
@@ -317,7 +323,7 @@ export default function NataOnlineCoachingTamil() {
                 size="large"
                 component={Link}
                 href="/ta/demo-class"
-                sx={{ borderColor: 'white', color: 'white', fontWeight: 600, px: 4, minHeight: 48 }}
+                sx={{ fontWeight: 600, px: 4, minHeight: 48, borderColor: t.outlineDark, color: t.paper, '&:hover': { bgcolor: 'transparent', borderColor: t.gold500, color: t.gold500 } }}
               >
                 இலவச டெமோ
               </Button>

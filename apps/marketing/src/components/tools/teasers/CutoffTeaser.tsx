@@ -1,136 +1,87 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  Box,
-  Button,
-  Paper,
-  TextField,
-  Typography,
-} from '@neram/ui';
-import Link from 'next/link';
+import { Box, TextField } from '@neram/ui';
+import { CtaButton, QuickCheck, QuickCheckResult } from '@/design-system';
 
-const PERCENTILE_MAP: Array<{ minScore: number; percentile: number }> = [
-  { minScore: 180, percentile: 1 },
-  { minScore: 170, percentile: 3 },
-  { minScore: 160, percentile: 5 },
-  { minScore: 150, percentile: 10 },
-  { minScore: 140, percentile: 15 },
-  { minScore: 130, percentile: 25 },
-  { minScore: 120, percentile: 35 },
-  { minScore: 110, percentile: 45 },
-  { minScore: 100, percentile: 55 },
-  { minScore: 90, percentile: 65 },
-  { minScore: 80, percentile: 75 },
-  { minScore: 70, percentile: 85 },
-  { minScore: 60, percentile: 92 },
-  { minScore: 50, percentile: 96 },
-  { minScore: 0, percentile: 99 },
-];
+const FULL_TOOL = 'https://app.neramclasses.com/tools/nata/cutoff-calculator';
 
-function getPercentile(score: number): number {
-  const entry = PERCENTILE_MAP.find((e) => score >= e.minScore);
-  return entry ? entry.percentile : 99;
+/** College tier for a NATA score out of 200 (same bands as the full calculator's copy). */
+export function cutoffTier(nata: number): string {
+  if (nata >= 150) return 'IITs and SPAs range (150+)';
+  if (nata >= 130) return 'NITs range (130 to 150)';
+  if (nata >= 110) return 'Top state colleges (110 to 130)';
+  return 'Private colleges (below 110)';
 }
 
-export default function CutoffTeaser() {
-  const [score, setScore] = useState('');
-  const [result, setResult] = useState<{ score: number; percentile: number } | null>(null);
-  const [error, setError] = useState('');
+/** Board % converted to /200 plus the NATA score /200 gives the cutoff /400. */
+export function cutoffScore(boardPct: number, partA: number, partB: number): number {
+  return Math.round(boardPct * 2 + partA + partB);
+}
 
-  function handleCheck() {
-    const parsed = Number(score);
-    if (!score || isNaN(parsed) || parsed < 0 || parsed > 200) {
-      setError('Please enter a valid score between 0 and 200.');
-      setResult(null);
-      return;
-    }
-    setError('');
-    const percentile = getPercentile(parsed);
-    setResult({ score: parsed, percentile });
-  }
+function parse(raw: string, max: number): number | null {
+  if (raw.trim() === '') return null;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 && n <= max ? n : null;
+}
+
+const fieldSx = { '& .MuiInputBase-root': { minHeight: 48 }, '& input': { fontSize: '1rem' } } as const;
+
+export default function CutoffTeaser() {
+  const [board, setBoard] = useState('');
+  const [partA, setPartA] = useState('');
+  const [partB, setPartB] = useState('');
+
+  const b = parse(board, 100);
+  const a = parse(partA, 80);
+  const p = parse(partB, 120);
+  const ready = b !== null && a !== null && p !== null;
 
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: { xs: 3, sm: 4 },
-        border: '1px solid #E0E0E0',
-        borderRadius: 2,
-      }}
-    >
-      <Typography
-        component="h2"
-        sx={{ fontWeight: 700, fontSize: { xs: '1.25rem', sm: '1.5rem' }, mb: 2 }}
-      >
-        Quick Score Check
-      </Typography>
-
+    <QuickCheck title="Quick check" headingId="cutoff-quick-check">
       <TextField
-        label="Your NATA Score (0 to 200)"
+        label="Board PCM percentage"
         type="number"
-        value={score}
-        onChange={(e) => {
-          setScore(e.target.value);
-          setError('');
-          setResult(null);
-        }}
-        inputProps={{ min: 0, max: 200 }}
+        value={board}
+        onChange={(e) => setBoard(e.target.value)}
+        inputProps={{ min: 0, max: 100, step: 0.1, inputMode: 'decimal' }}
+        error={board !== '' && b === null}
+        helperText={board !== '' && b === null ? 'Enter a percentage from 0 to 100.' : undefined}
         fullWidth
-        error={!!error}
-        helperText={error}
-        sx={{
-          mb: 2,
-          '& .MuiInputBase-root': { minHeight: 48 },
-        }}
+        sx={fieldSx}
       />
+      <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1.5 }}>
+        <TextField
+          label="Part A"
+          type="number"
+          value={partA}
+          onChange={(e) => setPartA(e.target.value)}
+          inputProps={{ min: 0, max: 80, inputMode: 'numeric' }}
+          error={partA !== '' && a === null}
+          helperText={partA !== '' && a === null ? 'Enter 0 to 80' : 'Out of 80'}
+          sx={{ ...fieldSx, minWidth: 0 }}
+        />
+        <TextField
+          label="Part B"
+          type="number"
+          value={partB}
+          onChange={(e) => setPartB(e.target.value)}
+          inputProps={{ min: 0, max: 120, inputMode: 'numeric' }}
+          error={partB !== '' && p === null}
+          helperText={partB !== '' && p === null ? 'Enter 0 to 120' : 'Out of 120'}
+          sx={{ ...fieldSx, minWidth: 0 }}
+        />
+      </Box>
 
-      <Button
-        variant="contained"
-        fullWidth
-        onClick={handleCheck}
-        sx={{
-          minHeight: 48,
-          fontWeight: 700,
-          fontSize: '1rem',
-          mb: result ? 3 : 0,
-        }}
-      >
-        Check
-      </Button>
-
-      {result && (
-        <Box>
-          <Typography
-            sx={{
-              fontSize: { xs: '1rem', sm: '1.1rem' },
-              fontWeight: 600,
-              color: 'text.primary',
-              mb: 2,
-              p: 2,
-              bgcolor: '#E8F5E9',
-              borderRadius: 1,
-              lineHeight: 1.6,
-            }}
-          >
-            Your score of {result.score} puts you in the top {result.percentile}% of NATA applicants.
-          </Typography>
-
-          <Button
-            component={Link}
-            href="https://app.neramclasses.com/tools/nata/cutoff-calculator"
-            variant="outlined"
-            fullWidth
-            sx={{
-              minHeight: 48,
-              fontWeight: 700,
-              fontSize: '0.95rem',
-            }}
-          >
-            See college matches and full analysis
-          </Button>
-        </Box>
+      {ready ? (
+        <QuickCheckResult value={cutoffScore(b, a, p)} label="Cutoff score out of 400" summary={cutoffTier(a + p)} />
+      ) : (
+        <QuickCheckResult label="Your cutoff score out of 400" summary="Enter all three marks to see it" />
       )}
-    </Paper>
+
+      <CtaButton href={FULL_TOOL} external fullWidth>
+        See matching colleges
+      </CtaButton>
+    </QuickCheck>
   );
 }

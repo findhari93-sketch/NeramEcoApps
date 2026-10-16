@@ -1,8 +1,11 @@
 import { Box, Typography } from '@neram/ui';
+import { siteTokens } from '@neram/ui/site-tokens';
 
 interface BrandWordmarkProps {
   /** 20 px in the app bar, 18 px in tighter spots like the mobile drawer. */
   size?: 'md' | 'sm';
+  /** Header surface. Without it the lockup takes the theme's text colours. */
+  tone?: 'dark' | 'light';
 }
 
 const MS_SQUARES = [
@@ -17,9 +20,11 @@ const MS_SQUARES = [
  * its drawer and the focused apply shell all render this, so the brand reads
  * the same on every page. Purely visual: wrap it in a Link where it navigates.
  */
-export default function BrandWordmark({ size = 'md' }: BrandWordmarkProps) {
+export default function BrandWordmark({ size = 'md', tone }: BrandWordmarkProps) {
+  const color = tone === 'light' ? siteTokens.ink : tone === 'dark' ? siteTokens.paper : 'text.primary';
+  const muted = tone === 'light' ? siteTokens.inkMuted : tone === 'dark' ? siteTokens.paperSubtle : 'text.secondary';
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', color: 'text.primary' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', color }}>
       <Typography
         component="span"
         sx={{ fontFamily: '"Museo", sans-serif', fontSize: size === 'md' ? '20px' : '18px', lineHeight: 1.2, color: 'inherit' }}
@@ -30,7 +35,7 @@ export default function BrandWordmark({ size = 'md' }: BrandWordmarkProps) {
       <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
         <Typography
           component="span"
-          sx={{ fontSize: '9px', fontStyle: 'italic', fontWeight: 400, color: 'rgb(81 81 81)', letterSpacing: '0.19px', lineHeight: 1 }}
+          sx={{ fontSize: '9px', fontStyle: 'italic', fontWeight: 400, color: muted, letterSpacing: '0.19px', lineHeight: 1 }}
         >
           Supported by
         </Typography>

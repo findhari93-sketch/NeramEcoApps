@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Box, Card, CardActionArea, Skeleton, Stack, Typography, Alert } from '@neram/ui';
-import { selectedCardSx } from './styles';
-import CheckCircleOutlined from '@mui/icons-material/CheckCircleOutlined';
+import { Box, Skeleton, Stack, Typography, Alert } from '@neram/ui';
+import ButtonBase from '@mui/material/ButtonBase';
 import { useTranslations } from 'next-intl';
+import { tokens as t } from '@/design-system';
+import { inkRuleTopSx } from './styles';
 
 export interface ProgrammeRow {
   id: string;
@@ -78,72 +79,126 @@ interface ProgrammePickerProps {
   onChange: (pick: ProgrammePick | null) => void;
 }
 
+/** Screen-reader only text (1px, never `width: 1`, which MUI reads as 100%). */
+const srOnlySx = {
+  position: 'absolute',
+  width: '1px',
+  height: '1px',
+  p: 0,
+  m: '-1px',
+  overflow: 'hidden',
+  clip: 'rect(0 0 0 0)',
+  whiteSpace: 'nowrap',
+  border: 0,
+} as const;
+
+/** One ruled row of the programme list: ground fill and a gold left rail when selected. */
+function rowSx(selected: boolean) {
+  return {
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '14px',
+    width: '100%',
+    minHeight: 64,
+    py: '12px',
+    pr: '4px',
+    pl: selected ? '14px' : '4px',
+    textAlign: 'left',
+    fontFamily: 'inherit',
+    color: t.ink,
+    borderBottom: `1px solid ${t.line}`,
+    bgcolor: selected ? t.ground : 'transparent',
+    boxShadow: selected ? `inset 3px 0 0 ${t.gold500}` : 'none',
+    transition: 'background-color 150ms, padding-left 150ms',
+    '&:hover': { bgcolor: t.ground },
+    '&.Mui-focusVisible': { outline: t.focusOutline, outlineOffset: '2px', zIndex: 1 },
+    '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+  } as const;
+}
+
 /**
- * "Choose your programme": one card per open programme for the chosen course,
- * with the duration and the standard fee on the card, so the exact fee is
- * visible two steps before payment. Radio semantics so a screen reader hears
- * one group with one selection.
+ * "Choose your programme": a ruled radio list (1px ink rule on top), one row
+ * per open programme for the chosen course with its duration and standard fee,
+ * so the exact fee is visible two steps before payment. Radio semantics so a
+ * screen reader hears one group with one selection.
  */
 export default function ProgrammePicker({ courseType, value, onChange }: ProgrammePickerProps) {
-  const t = useTranslations('apply');
+  const tr = useTranslations('apply');
   const { rows, loading, failed } = useProgrammes(courseType);
 
   if (!courseType || courseType === 'not_sure') return null;
 
   if (loading) {
     return (
-      <Stack spacing={1.5} aria-busy="true" aria-label={t('yourCourse.programmeLoading')}>
-        <Skeleton variant="rectangular" height={84} sx={{ borderRadius: 1 }} />
-        <Skeleton variant="rectangular" height={84} sx={{ borderRadius: 1 }} />
+      <Stack spacing={1} aria-busy="true" aria-label={tr('yourCourse.programmeLoading')}>
+        <Skeleton variant="rectangular" height={64} sx={{ borderRadius: `${t.radius}px` }} />
+        <Skeleton variant="rectangular" height={64} sx={{ borderRadius: `${t.radius}px` }} />
       </Stack>
     );
   }
 
   if (failed || rows.length === 0) {
-    return <Alert severity="info">{t('yourCourse.programmeEmpty')}</Alert>;
+    return <Alert severity="info">{tr('yourCourse.programmeEmpty')}</Alert>;
   }
 
   return (
-    <Stack spacing={1.5} role="radiogroup" aria-label={t('yourCourse.programmeQuestion')}>
+    <Box role="radiogroup" aria-label={tr('yourCourse.programmeQuestion')} sx={inkRuleTopSx}>
       {rows.map((row) => {
         const selected = value === row.id;
+        const fee = formatRupees(Number(row.fee_amount));
         return (
-          <Card
+          <ButtonBase
             key={row.id}
-            variant="outlined"
-            sx={selectedCardSx(selected)}
+            role="radio"
+            aria-checked={selected}
+            onClick={() =>
+              onChange({
+                id: row.id,
+                label: row.display_name,
+                programType: row.program_type,
+                feeAmount: Number(row.fee_amount),
+                comboExtraFee: Number(row.combo_extra_fee) || 0,
+              })
+            }
+            sx={rowSx(selected)}
           >
-            <CardActionArea
-              role="radio"
-              aria-checked={selected}
-              onClick={() =>
-                onChange({
-                  id: row.id,
-                  label: row.display_name,
-                  programType: row.program_type,
-                  feeAmount: Number(row.fee_amount),
-                  comboExtraFee: Number(row.combo_extra_fee) || 0,
-                })
-              }
-              sx={{ p: 2, minHeight: 84, display: 'flex', alignItems: 'center', gap: 2, justifyContent: 'space-between' }}
+            <Box
+              component="span"
+              aria-hidden
+              sx={{
+                flexShrink: 0,
+                width: 20,
+                height: 20,
+                boxSizing: 'border-box',
+                borderRadius: '50%',
+                border: `2px solid ${selected ? t.navy900 : t.lineStrong}`,
+                bgcolor: t.surface,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
             >
-              <Box sx={{ minWidth: 0 }}>
-                <Typography variant="subtitle1" fontWeight={600}>
-                  {row.display_name}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {row.duration}
-                  {row.schedule_summary ? ` · ${row.schedule_summary}` : ''}
-                </Typography>
-                <Typography variant="body2" fontWeight={600} sx={{ mt: 0.5 }}>
-                  {t('yourCourse.standardFee', { amount: formatRupees(Number(row.fee_amount)) })}
-                </Typography>
-              </Box>
-              {selected && <CheckCircleOutlined aria-hidden sx={{ color: 'text.primary' }} />}
-            </CardActionArea>
-          </Card>
+              {selected && <Box component="span" sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: t.navy900 }} />}
+            </Box>
+            <Box component="span" sx={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: '2px' }}>
+              <Typography component="span" sx={{ fontSize: 16, fontWeight: 700, lineHeight: 1.35, color: t.ink }}>
+                {row.display_name}
+              </Typography>
+              <Typography component="span" sx={{ fontSize: 14, lineHeight: 1.45, color: t.inkMuted }}>
+                {row.duration}
+                {row.schedule_summary ? ` · ${row.schedule_summary}` : ''}
+              </Typography>
+            </Box>
+            <Typography component="span" aria-hidden sx={{ flexShrink: 0, fontSize: 15, fontWeight: 700, color: t.ink, whiteSpace: 'nowrap' }}>
+              ₹{fee}
+            </Typography>
+            <Box component="span" sx={srOnlySx}>
+              {tr('yourCourse.standardFee', { amount: fee })}
+            </Box>
+          </ButtonBase>
         );
       })}
-    </Stack>
+    </Box>
   );
 }

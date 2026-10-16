@@ -58,6 +58,7 @@ const BROWSER_ONLY = new Set<string>([
   'apps/nexus/src/components/inspiration/inspiration-api.ts',
   'apps/nexus/src/components/sketchbook/sketchbook-api.ts',
   'apps/nexus/src/components/study-materials/recordings/recordings-api.ts',
+  'apps/nexus/src/components/timetable/prewatch/prewatch-client.ts',
   'apps/nexus/src/lib/upload-base64-images.ts',
   // callMsGraph uses the MSAL browser token cache (getAccessToken).
   'packages/auth/src/microsoft.ts',

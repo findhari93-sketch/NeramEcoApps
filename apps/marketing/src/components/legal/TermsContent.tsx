@@ -2,28 +2,9 @@
 
 import { useTranslations } from 'next-intl';
 import { Box, Typography, Divider } from '@neram/ui';
+import { TERMS_SECTION_KEYS } from './sections';
 
-const SECTION_KEYS = [
-  'acceptance',
-  'definitions',
-  'eligibility',
-  'enrollment',
-  'payment',
-  'refundSummary',
-  'dataUsage',
-  'communication',
-  'intellectualProperty',
-  'userObligations',
-  'prohibitedConduct',
-  'scholarship',
-  'limitation',
-  'indemnification',
-  'dispute',
-  'modifications',
-  'termination',
-  'governingLaw',
-  'contact',
-] as const;
+const SECTION_KEYS = TERMS_SECTION_KEYS;
 
 interface TermsContentProps {
   /** If true, renders compact for drawer. If false, renders full page with title. */

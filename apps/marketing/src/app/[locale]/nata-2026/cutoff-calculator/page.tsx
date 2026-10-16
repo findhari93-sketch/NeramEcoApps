@@ -1,24 +1,13 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import {
-  Box,
-  Container,
-  Typography,
-  Grid,
-  Card,
-  CardContent,
-  Button,
-  Chip,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-} from '@neram/ui';
-import Link from 'next/link';
+import { Box, Typography } from '@neram/ui';
+import CalculateOutlinedIcon from '@mui/icons-material/CalculateOutlined';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { APP_URL } from '@/lib/seo/constants';
-import LastUpdatedBadge from '@/components/nata/LastUpdatedBadge';
+import { nataGuideNav, nataRelated } from '@/components/nata/guideNav';
+import { ArticleSection, CtaBand, CtaButton, FactGrid, FaqList, GuideArticle, InfoCard, InlineCta, tokens } from '@/design-system';
 
 
 export async function generateMetadata({
@@ -39,6 +28,19 @@ export async function generateMetadata({
 interface PageProps {
   params: { locale: string };
 }
+
+const qualifying = [
+  { label: 'Part A (Drawing)', min: '20 marks', total: 'out of 80' },
+  { label: 'Part B (MCQ/NCQ)', min: '20 marks', total: 'out of 120' },
+  { label: 'Overall', min: '60 marks', total: 'out of 200' },
+];
+
+const scoreRanges = [
+  { range: '150 - 200', label: 'Excellent', desc: 'Top government colleges (SPA, NITs, IITs). State-rank holders. Best scholarships available.' },
+  { range: '120 - 149', label: 'Very Good', desc: 'Good government colleges, top private colleges. Multiple options across states.' },
+  { range: '100 - 119', label: 'Good', desc: 'Many private and aided colleges. Some government college options depending on category and state.' },
+  { range: '60 - 99', label: 'Qualifying', desc: 'Qualified for admission. Private college options available. Consider retaking for better options.' },
+];
 
 const faqs = [
   {
@@ -63,6 +65,8 @@ const faqs = [
   },
 ];
 
+const bodySx = { m: 0, fontSize: '1.0625rem', lineHeight: 1.7, color: tokens.ink } as const;
+
 export default function CutoffCalculatorPage({ params: { locale } }: PageProps) {
   setRequestLocale(locale);
   const baseUrl = 'https://neramclasses.com';
@@ -73,155 +77,77 @@ export default function CutoffCalculatorPage({ params: { locale } }: PageProps) 
       <JsonLd data={generateBreadcrumbSchema([{ name: 'Home', url: localeUrl('') }, { name: 'NATA 2026', url: localeUrl('/nata-2026') }, { name: 'Cutoff Calculator' }])} />
       <JsonLd data={generateFAQSchema(faqs)} />
 
-      <Box>
-        {/* Hero */}
-        <Box sx={{ py: { xs: 8, md: 12 }, background: 'linear-gradient(135deg, #1a237e 0%, #0d47a1 100%)', color: 'white' }}>
-          <Container maxWidth="lg">
-            <Chip label="NATA 2026" sx={{ bgcolor: 'white', color: 'primary.main', mb: 2, fontWeight: 600 }} />
-            <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', sm: '2.5rem', md: '3.5rem' } }}>
-              NATA 2026 Cutoff Calculator
-            </Typography>
-            <Typography variant="h5" sx={{ mb: 2, opacity: 0.9, fontSize: { xs: '1.1rem', md: '1.5rem' } }}>
-              Enter your expected NATA 2026 score to see which architecture colleges you can get into. Our free cutoff calculator uses published cutoffs from 2019 to 2025.
-            </Typography>
-            <LastUpdatedBadge date="March 13, 2026" />
-          </Container>
-        </Box>
-
-        {/* Qualification Check */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
-          <Container maxWidth="md">
-            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 2, fontWeight: 700 }}>
-              Quick Qualification Check
-            </Typography>
-            <Typography variant="body1" align="center" color="text.secondary" sx={{ mb: 6, lineHeight: 1.8 }}>
-              Before using the cutoff calculator, make sure you meet the minimum qualifying criteria for NATA 2026:
-            </Typography>
-
-            <Grid container spacing={3} sx={{ mb: 4 }}>
-              {[
-                { label: 'Part A (Drawing)', min: '20 marks', total: 'out of 80' },
-                { label: 'Part B (MCQ/NCQ)', min: '20 marks', total: 'out of 120' },
-                { label: 'Overall', min: '60 marks', total: 'out of 200' },
-              ].map((item) => (
-                <Grid item xs={12} sm={4} key={item.label}>
-                  <Card sx={{ textAlign: 'center', p: 3 }}>
-                    <Typography variant="body2" color="text.secondary">{item.label}</Typography>
-                    <Typography variant="h4" sx={{ fontWeight: 800, color: 'primary.main', my: 1 }}>{item.min}</Typography>
-                    <Typography variant="caption" color="text.secondary">{item.total}</Typography>
-                  </Card>
-                </Grid>
-              ))}
-            </Grid>
-
-            <Typography variant="body1" color="text.secondary" sx={{ textAlign: 'center', lineHeight: 1.8, mb: 4 }}>
-              If you meet all three criteria, you are qualified! Now use the cutoff calculator to find colleges matching your score.
-            </Typography>
-          </Container>
-        </Box>
-
-        {/* CTA: Cutoff Calculator Tool */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
-          <Container maxWidth="md" sx={{ textAlign: 'center' }}>
-            <Typography variant="h4" sx={{ mb: 1 }}>🧮</Typography>
-            <Typography variant="h3" gutterBottom sx={{ fontWeight: 700 }}>
-              Use the Free Cutoff Calculator
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 4, maxWidth: 600, mx: 'auto', lineHeight: 1.8 }}>
-              Enter your NATA score, category, and preferred state to get a personalized list of colleges you can apply to. Data from published counselling cutoffs.
-            </Typography>
-            <Button
-              variant="contained"
-              size="large"
-              component="a"
-              href={`${APP_URL}/tools/nata/cutoff-calculator`}
-              target="_blank"
-              rel="noopener noreferrer"
-              sx={{ px: 6, py: 1.5, fontSize: '1.1rem' }}
-            >
-              Open Cutoff Calculator (Free)
-            </Button>
-          </Container>
-        </Box>
-
-        {/* Score Ranges */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
-          <Container maxWidth="md">
-            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 6, fontWeight: 700 }}>
-              What Can You Expect at Different Scores?
-            </Typography>
-
-            {[
-              { range: '150 - 200', label: 'Excellent', desc: 'Top government colleges (SPA, NITs, IITs). State-rank holders. Best scholarships available.', color: 'success.main' },
-              { range: '120 - 149', label: 'Very Good', desc: 'Good government colleges, top private colleges. Multiple options across states.', color: 'info.main' },
-              { range: '100 - 119', label: 'Good', desc: 'Many private and aided colleges. Some government college options depending on category and state.', color: 'primary.main' },
-              { range: '60 - 99', label: 'Qualifying', desc: 'Qualified for admission. Private college options available. Consider retaking for better options.', color: 'warning.main' },
-            ].map((item) => (
-              <Card key={item.range} sx={{ mb: 2, borderLeft: '4px solid', borderColor: item.color }}>
-                <CardContent sx={{ p: { xs: 2, md: 3 }, display: 'flex', gap: 3, alignItems: 'center', flexWrap: { xs: 'wrap', sm: 'nowrap' } }}>
-                  <Box sx={{ minWidth: 100 }}>
-                    <Typography variant="h6" sx={{ fontWeight: 700, color: item.color }}>{item.range}</Typography>
-                    <Chip label={item.label} size="small" sx={{ bgcolor: item.color, color: 'white', fontWeight: 600 }} />
+      <GuideArticle
+        breadcrumb={[{ name: 'Home', href: '/' }, { name: 'NATA 2026', href: '/nata-2026' }, { name: 'Cutoff Calculator' }]}
+        eyebrow="NATA 2026 · Exam guide"
+        title="NATA 2026 Cutoff Calculator"
+        lede="Enter your expected NATA 2026 score to see which architecture colleges you can get into. Our free cutoff calculator uses published cutoffs from 2019 to 2025."
+        verified="Updated March 13, 2026 · Source: Official NATA 2026 Brochure V1.0"
+        nav={nataGuideNav('cutoff-calculator')}
+        related={nataRelated(['scoring-and-results', 'exam-pattern', 'eligibility', 'fee-structure'])}
+        back={{ label: 'Back to NATA 2026 guide', href: '/nata-2026' }}
+      >
+        <ArticleSection
+          id="qualification-check"
+          title="Quick Qualification Check"
+          intro="Before using the cutoff calculator, make sure you meet the minimum qualifying criteria for NATA 2026:"
+        >
+          <FactGrid
+            cellMin={180}
+            items={qualifying.map((item) => ({
+              label: item.label,
+              value: (
+                <>
+                  {item.min}{' '}
+                  <Box component="span" sx={{ fontWeight: 400, fontSize: '0.875rem', color: tokens.inkMuted }}>
+                    {item.total}
                   </Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>{item.desc}</Typography>
-                </CardContent>
-              </Card>
+                </>
+              ),
+            }))}
+          />
+          <Typography component="p" sx={bodySx}>
+            If you meet all three criteria, you are qualified! Now use the cutoff calculator to find colleges matching your score.
+          </Typography>
+        </ArticleSection>
+
+        <InlineCta
+          eyebrow="Free tool"
+          icon={<CalculateOutlinedIcon />}
+          title="Use the Free Cutoff Calculator"
+          body="Enter your NATA score, category, and preferred state to get a personalized list of colleges you can apply to. Data from published counselling cutoffs."
+          action={
+            <CtaButton href={`${APP_URL}/tools/nata/cutoff-calculator`} external>
+              Open Cutoff Calculator (Free)
+            </CtaButton>
+          }
+        />
+
+        <ArticleSection id="score-ranges" title="What Can You Expect at Different Scores?">
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {scoreRanges.map((item) => (
+              <InfoCard key={item.range} title={item.range} meta={item.label} body={item.desc} />
             ))}
-          </Container>
-        </Box>
+          </Box>
+        </ArticleSection>
 
-        {/* Also Read */}
-        <Box sx={{ py: { xs: 6, md: 8 }, bgcolor: 'grey.50' }}>
-          <Container maxWidth="md">
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>Also Read</Typography>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-              {[
-                { title: 'Scoring & Results', slug: 'scoring-and-results' },
-                { title: 'NATA 2026 Exam Pattern', slug: 'exam-pattern' },
-                { title: 'NATA 2026 Eligibility', slug: 'eligibility' },
-                { title: 'NATA 2026 Fee Structure', slug: 'fee-structure' },
-              ].map((item) => (
-                <Link key={item.slug} href={`/${locale}/nata-2026/${item.slug}`} style={{ textDecoration: 'none' }}>
-                  <Card sx={{ p: 2, color: 'inherit', transition: 'box-shadow 0.2s', '&:hover': { boxShadow: 3 } }}>
-                    <Typography variant="subtitle1" color="primary.main" sx={{ fontWeight: 600 }}>{item.title} &rarr;</Typography>
-                  </Card>
-                </Link>
-              ))}
-            </Box>
-          </Container>
-        </Box>
+        <ArticleSection id="faq" title="FAQs: NATA 2026 Cutoffs">
+          <FaqList items={faqs} defaultOpen={-1} />
+        </ArticleSection>
+      </GuideArticle>
 
-        {/* FAQ */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
-          <Container maxWidth="md">
-            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs: NATA 2026 Cutoffs</Typography>
-            {faqs.map((faq, index) => (
-              <Accordion key={index} disableGutters sx={{ '&:before': { display: 'none' }, mb: 1, borderRadius: 1, overflow: 'hidden' }}>
-                <AccordionSummary expandIcon={<Typography sx={{ fontSize: '1.2rem', fontWeight: 600 }}>+</Typography>} sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}>
-                  <Typography sx={{ fontWeight: 600 }}>{faq.question}</Typography>
-                </AccordionSummary>
-                <AccordionDetails sx={{ bgcolor: 'white' }}>
-                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>{faq.answer}</Typography>
-                </AccordionDetails>
-              </Accordion>
-            ))}
-          </Container>
-        </Box>
-
-        {/* CTA Banner */}
-        <Box sx={{ py: { xs: 6, md: 10 }, background: 'linear-gradient(135deg, #0d47a1 0%, #1565c0 100%)', color: 'white', textAlign: 'center' }}>
-          <Container maxWidth="md">
-            <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '1.75rem', md: '2.5rem' } }}>
-              Prepare for NATA 2026 with Neram Classes
-            </Typography>
-            <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>Score higher with expert coaching and reach your dream college.</Typography>
-            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <Button variant="contained" size="large" component={Link} href="/apply" sx={{ background: '#ffffff', color: '#0d47a1', fontWeight: 700, px: 4, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', '&:hover': { background: '#f0f0f0' } }}>Start Free Trial</Button>
-              <Button variant="outlined" size="large" component={Link} href={`/${locale}/nata-2026`} sx={{ borderColor: 'white', color: 'white' }}>Back to NATA 2026 Guide</Button>
-            </Box>
-          </Container>
-        </Box>
-      </Box>
+      <CtaBand
+        title="Prepare for NATA 2026 with Neram Classes"
+        lede="Score higher with expert coaching and reach your dream college."
+        actions={
+          <>
+            <CtaButton href="/apply">Start Free Trial</CtaButton>
+            <CtaButton variant="link" href="/demo-class">
+              Book a free demo class
+            </CtaButton>
+          </>
+        }
+      />
     </>
   );
 }

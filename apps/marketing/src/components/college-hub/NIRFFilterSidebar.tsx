@@ -23,12 +23,14 @@ import {
   hasActiveFilters,
   type NIRFFilters,
 } from '@/lib/college-hub/nirf-filters';
+import { tokens } from '@/design-system';
+import { alpha } from '@mui/material/styles';
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <Typography
       variant="caption"
-      color="text.secondary"
+      color={tokens.inkMuted}
       fontWeight={600}
       sx={{
         mb: 0.75,
@@ -148,7 +150,7 @@ function FilterBody({
             );
           })}
         </Stack>
-        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.75, display: 'block' }}>
+        <Typography variant="caption" color={tokens.inkMuted} sx={{ mt: 0.75, display: 'block' }}>
           {filters.years.length === 0 ? 'All years' : `${filters.years.length} year(s) selected`}
         </Typography>
       </Box>
@@ -276,7 +278,7 @@ function FilterBody({
         </FormControl>
       </Box>
 
-      <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+      <Typography variant="caption" color={tokens.inkMuted} sx={{ mt: 1, display: 'block' }}>
         {totalCount.toLocaleString()} rankings match
       </Typography>
     </Box>
@@ -307,9 +309,9 @@ export default function NIRFFilterSidebar(props: Props) {
         <Box
           sx={{
             border: 1,
-            borderColor: 'divider',
-            borderRadius: 2,
-            bgcolor: 'background.paper',
+            borderColor: tokens.line,
+            borderRadius: 1,
+            bgcolor: tokens.surface,
           }}
         >
           <FilterBody {...props} />
@@ -332,12 +334,12 @@ export default function NIRFFilterSidebar(props: Props) {
           onClick={() => setOpen(true)}
           startIcon={<FilterListIcon />}
           sx={{
-            borderRadius: 6,
+            borderRadius: `${tokens.radiusPill}px`,
             px: 2.5,
             py: 1.2,
             fontWeight: 600,
             fontSize: '0.85rem',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.2)',
+            boxShadow: `0 4px 16px ${alpha(tokens.navy900, 0.2)}`,
             textTransform: 'none',
             minHeight: 48,
           }}
@@ -348,8 +350,8 @@ export default function NIRFFilterSidebar(props: Props) {
               component="span"
               sx={{
                 ml: 0.75,
-                bgcolor: '#ef4444',
-                color: 'white',
+                bgcolor: tokens.gold500,
+                color: tokens.navy900,
                 fontSize: '0.65rem',
                 width: 20,
                 height: 20,

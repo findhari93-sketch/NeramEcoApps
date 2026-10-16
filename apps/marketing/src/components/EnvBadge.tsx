@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { siteTokens as t } from '@neram/ui/site-tokens';
+import { errorColor } from '@/design-system/brand-colors';
 
 /**
  * Dev-only badge showing which database this locally-running instance is
@@ -37,7 +39,7 @@ export default function EnvBadge() {
     : isStaging
       ? 'LOCAL / STAGING DB'
       : 'LOCAL / UNKNOWN DB';
-  const background = isProd ? '#dc2626' : isStaging ? '#16a34a' : '#6b7280';
+  const background = isProd ? errorColor : isStaging ? t.success : t.inkMuted;
 
   return (
     <div
@@ -53,10 +55,10 @@ export default function EnvBadge() {
         fontSize: 11,
         fontWeight: 700,
         letterSpacing: 0.4,
-        color: '#ffffff',
+        color: t.surface,
         background,
         boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
-        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
+        fontFamily: t.fontMono,
         userSelect: 'none',
       }}
     >

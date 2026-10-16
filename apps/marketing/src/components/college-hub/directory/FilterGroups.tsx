@@ -15,6 +15,7 @@ import {
 import type { FacetCounts } from '@/lib/college-hub/listing-filter';
 import { formatRupees } from '@/lib/college-hub/format';
 import { toggleIn, type FilterDraft, type SortKey } from './filter-model';
+import { tokens } from '@/design-system';
 
 export interface GroupProps {
   draft: FilterDraft;
@@ -48,13 +49,13 @@ export function OptionRow({ type, name, label, checked, count, onChange, touch }
         minHeight: touch ? 48 : 40,
         px: touch ? 2 : 0,
         borderBottom: touch ? '1px solid' : 0,
-        borderColor: 'divider',
-        bgcolor: (t) => (touch && checked ? alpha(t.palette.primary.main, 0.06) : 'transparent'),
+        borderColor: tokens.line,
+        bgcolor: touch && checked ? tokens.surfaceHover : 'transparent',
         fontSize: touch ? 15 : 14,
         fontWeight: checked ? 600 : 400,
-        color: disabled ? 'text.disabled' : 'text.primary',
+        color: disabled ? tokens.statusIdle : tokens.ink,
         cursor: disabled ? 'not-allowed' : 'pointer',
-        '&:focus-within': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2, borderRadius: 1 },
+        '&:focus-within': { outline: tokens.focusOutline, outlineOffset: -2, borderRadius: 1 },
       }}
     >
       <Box
@@ -64,13 +65,13 @@ export function OptionRow({ type, name, label, checked, count, onChange, touch }
         checked={checked}
         disabled={disabled}
         onChange={onChange}
-        sx={{ flex: '0 0 auto', width: 18, height: 18, m: 0, accentColor: (t) => t.palette.primary.main, cursor: 'inherit' }}
+        sx={{ flex: '0 0 auto', width: 18, height: 18, m: 0, accentColor: tokens.navy900, cursor: 'inherit' }}
       />
       <Box component="span" sx={{ flex: '1 1 auto', minWidth: 0, display: 'flex', alignItems: 'center', gap: 0.5 }}>
         {label}
       </Box>
       {count != null && (
-        <Box component="span" sx={{ fontSize: 12.5, color: disabled ? 'text.disabled' : 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>
+        <Box component="span" sx={{ fontSize: 12.5, color: disabled ? tokens.statusIdle : tokens.inkMuted, fontVariantNumeric: 'tabular-nums' }}>
           {count}
         </Box>
       )}
@@ -88,7 +89,7 @@ export function CoaSwitch({ draft, onChange, touch }: GroupProps) {
         <Box component="span" id="coa-switch-label" sx={{ fontSize: 14.5, fontWeight: 600 }}>
           COA approved only
         </Box>
-        <Box component="span" sx={{ fontSize: 12.5, color: 'text.secondary', lineHeight: 1.4 }}>
+        <Box component="span" sx={{ fontSize: 12.5, color: tokens.inkMuted, lineHeight: 1.4 }}>
           Recognised by the Council of Architecture
         </Box>
       </Box>
@@ -107,11 +108,11 @@ export function CoaSwitch({ draft, onChange, touch }: GroupProps) {
           mt: 0.25,
           p: 0,
           border: 0,
-          borderRadius: 14,
-          bgcolor: on ? 'primary.main' : 'grey.400',
+          borderRadius: `${tokens.radiusPill}px`,
+          bgcolor: on ? tokens.navy900 : tokens.lineStrong,
           cursor: 'pointer',
           transition: 'background-color 0.2s',
-          '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+          '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 },
           // Bigger hit area than the visual switch.
           '&::before': { content: '""', position: 'absolute', inset: -8 },
           '@media (prefers-reduced-motion: reduce)': { transition: 'none', '& span': { transition: 'none' } },
@@ -126,8 +127,8 @@ export function CoaSwitch({ draft, onChange, touch }: GroupProps) {
             width: 22,
             height: 22,
             borderRadius: '50%',
-            bgcolor: 'common.white',
-            boxShadow: '0 1px 2px rgba(0,0,0,0.25)',
+            bgcolor: tokens.surface,
+            boxShadow: `0 1px 2px ${alpha(tokens.navy900, 0.25)}`,
             transition: 'left 0.2s',
           }}
         />
@@ -200,20 +201,20 @@ export function NaacGroup({ draft, onChange, facets, touch }: GroupProps) {
               sx={{
                 height: 44,
                 border: '1px solid',
-                borderColor: on ? 'primary.main' : disabled ? 'divider' : 'grey.400',
-                borderRadius: 1.5,
-                bgcolor: (t) => (on ? alpha(t.palette.primary.main, 0.1) : disabled ? t.palette.action.hover : t.palette.background.paper),
-                color: on ? 'primary.dark' : disabled ? 'text.disabled' : 'text.primary',
+                borderColor: on ? tokens.navy900 : disabled ? tokens.line : tokens.lineStrong,
+                borderRadius: 1,
+                bgcolor: on || disabled ? tokens.surfaceHover : tokens.surface,
+                color: on ? tokens.navy900 : disabled ? tokens.statusIdle : tokens.ink,
                 font: 'inherit',
                 fontSize: 13.5,
                 fontWeight: 700,
                 cursor: disabled ? 'not-allowed' : 'pointer',
-                '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+                '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 },
               }}
             >
               {g}
               {count != null && (
-                <Box component="span" sx={{ ml: 0.5, fontWeight: 400, color: disabled ? 'text.disabled' : 'text.secondary' }}>
+                <Box component="span" sx={{ ml: 0.5, fontWeight: 400, color: disabled ? tokens.statusIdle : tokens.inkMuted }}>
                   {count}
                 </Box>
               )}
@@ -231,7 +232,7 @@ export function NaacGroup({ draft, onChange, facets, touch }: GroupProps) {
         />
       )}
       {picked.length === 0 && facets && (facets.naac.none ?? 0) > 0 && (
-        <Typography sx={{ m: 0, fontSize: '0.8rem', color: 'text.secondary', lineHeight: 1.45 }}>
+        <Typography sx={{ m: 0, fontSize: '0.8rem', color: tokens.inkMuted, lineHeight: 1.45 }}>
           {facets.naac.none} colleges have no NAAC grade yet.
         </Typography>
       )}
@@ -252,7 +253,7 @@ function FeeInput({ label, value, placeholder, onCommit }: { label: string; valu
     onCommit(Number.isFinite(n) && n > 0 ? n : undefined);
   };
   return (
-    <Box component="label" sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, fontSize: '0.78rem', color: 'text.secondary', fontWeight: 600 }}>
+    <Box component="label" sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, fontSize: '0.78rem', color: tokens.inkMuted, fontWeight: 600 }}>
       {label}
       <Box
         component="input"
@@ -271,14 +272,14 @@ function FeeInput({ label, value, placeholder, onCommit }: { label: string; valu
           boxSizing: 'border-box',
           width: '100%',
           border: '1px solid',
-          borderColor: 'grey.400',
-          borderRadius: 1.5,
+          borderColor: tokens.lineStrong,
+          borderRadius: 1,
           font: 'inherit',
           fontSize: '1rem',
           fontWeight: 400,
-          color: 'text.primary',
-          bgcolor: 'background.paper',
-          '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 0 },
+          color: tokens.ink,
+          bgcolor: tokens.surface,
+          '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 0 },
         }}
       />
     </Box>
@@ -298,7 +299,7 @@ export function FeeGroup({ draft, onChange, histogram, touch }: FeeGroupProps) {
                 flex: '1 1 0',
                 height: `${Math.max(4, Math.round((n / max) * 100))}%`,
                 borderRadius: '3px 3px 0 0',
-                bgcolor: (t) => alpha(t.palette.primary.main, n ? 0.45 : 0.15),
+                bgcolor: n ? tokens.statusIdle : tokens.line,
               }}
             />
           ))}
@@ -322,15 +323,15 @@ export function FeeGroup({ draft, onChange, histogram, touch }: FeeGroupProps) {
                 minHeight: 36,
                 px: 1.5,
                 border: '1px solid',
-                borderColor: on ? 'primary.main' : 'grey.400',
-                borderRadius: 18,
-                bgcolor: (t) => (on ? alpha(t.palette.primary.main, 0.1) : t.palette.background.paper),
-                color: on ? 'primary.dark' : 'text.primary',
+                borderColor: on ? tokens.navy900 : tokens.lineStrong,
+                borderRadius: `${tokens.radiusPill}px`,
+                bgcolor: on ? tokens.surfaceHover : tokens.surface,
+                color: on ? tokens.navy900 : tokens.ink,
                 font: 'inherit',
                 fontSize: 13,
                 fontWeight: on ? 700 : 500,
                 cursor: 'pointer',
-                '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+                '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 },
               }}
             >
               {p.label}
@@ -339,7 +340,7 @@ export function FeeGroup({ draft, onChange, histogram, touch }: FeeGroupProps) {
         })}
       </Box>
       {(draft.minFee || draft.maxFee) && (
-        <Typography sx={{ m: 0, fontSize: '0.8rem', color: 'text.secondary' }}>
+        <Typography sx={{ m: 0, fontSize: '0.8rem', color: tokens.inkMuted }}>
           {draft.minFee ? formatRupees(draft.minFee) : '₹0'} to {draft.maxFee ? formatRupees(draft.maxFee) : 'any amount'} a year
         </Typography>
       )}
@@ -376,7 +377,7 @@ export function CityGroup({ draft, onChange, facets, touch, cities, initial = 6 
           component="button"
           type="button"
           onClick={() => setAll((v) => !v)}
-          sx={{ alignSelf: 'flex-start', minHeight: 40, px: touch ? 2 : 0, border: 0, bgcolor: 'transparent', color: 'primary.dark', font: 'inherit', fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer', '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' } }}
+          sx={{ alignSelf: 'flex-start', minHeight: 40, px: touch ? 2 : 0, border: 0, bgcolor: 'transparent', color: tokens.navy900, font: 'inherit', fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer', '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } }}
         >
           {all ? 'Show fewer cities' : `Show all ${cities.length} cities`}
         </Box>
@@ -400,7 +401,7 @@ export function StateGroup({ draft, onChange, facets, touch, states, initial = 6
   return (
     <>
       {states.length > initial && (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, height: 44, px: 1.25, mx: touch ? 2 : 0, my: touch ? 1 : 0, mb: 0.75, boxSizing: 'border-box', border: '1px solid', borderColor: 'grey.400', borderRadius: 1.5, color: 'text.secondary', '&:focus-within': { outline: '2px solid', outlineColor: 'primary.main' } }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, height: 44, px: 1.25, mx: touch ? 2 : 0, my: touch ? 1 : 0, mb: 0.75, boxSizing: 'border-box', border: '1px solid', borderColor: tokens.lineStrong, borderRadius: 1, color: tokens.inkMuted, '&:focus-within': { outline: tokens.focusOutline, outlineOffset: 2 } }}>
           <Box component="label" htmlFor={touch ? 'state-find-sheet' : 'state-find'} sx={{ position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>
             Find a state
           </Box>
@@ -411,7 +412,7 @@ export function StateGroup({ draft, onChange, facets, touch, states, initial = 6
             value={find}
             placeholder="Find a state"
             onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFind(e.target.value)}
-            sx={{ flex: '1 1 auto', minWidth: 0, border: 0, outline: 'none', font: 'inherit', fontSize: '1rem', color: 'text.primary', bgcolor: 'transparent' }}
+            sx={{ flex: '1 1 auto', minWidth: 0, border: 0, outline: 'none', font: 'inherit', fontSize: '1rem', color: tokens.ink, bgcolor: 'transparent' }}
           />
         </Box>
       )}
@@ -429,14 +430,14 @@ export function StateGroup({ draft, onChange, facets, touch, states, initial = 6
         />
       ))}
       {needle && matched.length === 0 && (
-        <Typography sx={{ m: 0, px: touch ? 2 : 0, py: 1, fontSize: '0.88rem', color: 'text.secondary' }}>No state named &ldquo;{find.trim()}&rdquo;.</Typography>
+        <Typography sx={{ m: 0, px: touch ? 2 : 0, py: 1, fontSize: '0.88rem', color: tokens.inkMuted }}>No state named &ldquo;{find.trim()}&rdquo;.</Typography>
       )}
       {!needle && states.length > initial && (
         <Box
           component="button"
           type="button"
           onClick={() => setAll((v) => !v)}
-          sx={{ alignSelf: 'flex-start', minHeight: 40, px: touch ? 2 : 0, border: 0, bgcolor: 'transparent', color: 'primary.dark', font: 'inherit', fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer', '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' } }}
+          sx={{ alignSelf: 'flex-start', minHeight: 40, px: touch ? 2 : 0, border: 0, bgcolor: 'transparent', color: tokens.navy900, font: 'inherit', fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer', '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } }}
         >
           {all ? 'Show fewer states' : `Show all ${states.length} states`}
         </Box>
@@ -456,7 +457,7 @@ export function RatingGroup({ draft, onChange, facets, touch }: GroupProps) {
           label={
             <>
               {r.toFixed(1)}
-              <StarRoundedIcon aria-hidden sx={{ fontSize: 16, color: 'warning.dark' }} />
+              <StarRoundedIcon aria-hidden sx={{ fontSize: 16, color: tokens.gold800 }} />
               and above
             </>
           }

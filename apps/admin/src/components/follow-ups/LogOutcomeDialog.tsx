@@ -22,11 +22,15 @@ const CHIP_SX = {
   },
 } as const;
 
+/** Quick reasons for stopping a follow-up; a tap fills the reason box. */
+const STOP_REASONS = ['Joined another institute', 'Fees', 'Next year', 'Not reachable', 'Other'];
+
 export default function LogOutcomeDialog({
   open,
   name,
   callbackId,
   interest: currentInterest,
+  stopMode = false,
   onClose,
   onSaved,
 }: {
@@ -34,6 +38,8 @@ export default function LogOutcomeDialog({
   name: string;
   callbackId: string;
   interest: InterestLevel | null;
+  /** "Stop follow-up": only the not-interested outcome, with quick reasons. */
+  stopMode?: boolean;
   onClose: () => void;
   onSaved: () => void;
 }) {
@@ -48,14 +54,14 @@ export default function LogOutcomeDialog({
 
   useEffect(() => {
     if (!open) return;
-    setOutcome(null);
+    setOutcome(stopMode ? 'not_interested' : null);
     setInterest(currentInterest);
     setDate(istDateKey(new Date(Date.now() + 2 * 86_400_000)));
     setTime('11:00');
     setNote('');
     setReason('');
     setError(null);
-  }, [open, currentInterest]);
+  }, [open, currentInterest, stopMode]);
 
   const needsDate = outcome === 'thinking' || outcome === 'will_join';
   const next = needsDate && date && /^\d{2}:\d{2}$/.test(time) ? istDateTime(date, time) : null;
@@ -86,9 +92,14 @@ export default function LogOutcomeDialog({
 
   return (
     <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm" aria-labelledby="outcome-title">
-      <DialogTitle id="outcome-title">Call with {name}</DialogTitle>
+      <DialogTitle id="outcome-title">{stopMode ? `Stop following up ${name}?` : `Call with ${name}`}</DialogTitle>
       <DialogContent dividers sx={{ display: 'grid', gap: 2 }}>
-        <Box>
+        {stopMode && (
+          <Typography variant="body2" color="text.secondary">
+            They move to Closed with this reason. You can restart the follow-up later.
+          </Typography>
+        )}
+        <Box sx={{ display: stopMode ? 'none' : 'block' }}>
           <Typography variant="body2" id="outcome-label" sx={{ mb: 1 }}>How did it go?</Typography>
           <ToggleButtonGroup exclusive value={outcome} onChange={(_, v) => setOutcome(v)} aria-labelledby="outcome-label" sx={CHIP_SX}>
             {(Object.keys(FOLLOW_UP_OUTCOME_LABELS) as FollowUpOutcome[]).map((o) => (
@@ -110,7 +121,23 @@ export default function LogOutcomeDialog({
           <Typography variant="body2" color="text.secondary">We will remind you to try again in 2 days.</Typography>
         )}
         {outcome === 'not_interested' && (
-          <TextField label="Why not? (required)" value={reason} onChange={(e) => setReason(e.target.value)} inputProps={{ maxLength: 300 }} required />
+          <Box sx={{ display: 'grid', gap: 1.5 }}>
+            <Box>
+              <Typography variant="body2" id="stop-reason-label" sx={{ mb: 1 }}>Reason</Typography>
+              <ToggleButtonGroup
+                exclusive
+                value={STOP_REASONS.includes(reason) ? reason : null}
+                onChange={(_, v) => v && setReason(v === 'Other' ? '' : v)}
+                aria-labelledby="stop-reason-label"
+                sx={CHIP_SX}
+              >
+                {STOP_REASONS.map((r) => (
+                  <ToggleButton key={r} value={r}>{r}</ToggleButton>
+                ))}
+              </ToggleButtonGroup>
+            </Box>
+            <TextField label="Why not? (required)" value={reason} onChange={(e) => setReason(e.target.value)} inputProps={{ maxLength: 300 }} required />
+          </Box>
         )}
         {outcome && outcome !== 'not_interested' && (
           <Box>
@@ -127,8 +154,8 @@ export default function LogOutcomeDialog({
       </DialogContent>
       <DialogActions sx={{ px: 3, py: 2 }}>
         <Button onClick={onClose} disabled={busy} sx={{ minHeight: 44 }}>Back</Button>
-        <Button variant="contained" onClick={save} disabled={!ok || busy} startIcon={busy ? <CircularProgress size={16} color="inherit" /> : undefined} sx={{ minHeight: 44 }}>
-          {busy ? 'Saving' : 'Save'}
+        <Button variant="contained" color={stopMode ? 'error' : 'primary'} onClick={save} disabled={!ok || busy} startIcon={busy ? <CircularProgress size={16} color="inherit" /> : undefined} sx={{ minHeight: 44 }}>
+          {busy ? 'Saving' : stopMode ? 'Stop follow-up' : 'Save'}
         </Button>
       </DialogActions>
     </Dialog>

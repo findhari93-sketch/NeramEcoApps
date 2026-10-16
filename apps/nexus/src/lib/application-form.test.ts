@@ -4,9 +4,12 @@ import {
   formClassLabel,
   formExamYear,
   isApplicationForm,
+  isProfileDetailsOnly,
+  isSubmittedApplication,
   maskEmail,
   maskPhone,
   pickApplicationForm,
+  pickSubmittedApplication,
   planApplicationFill,
   type ApplicationForm,
   type FillInput,
@@ -72,6 +75,43 @@ describe('isApplicationForm and pickApplicationForm', () => {
     expect(pickApplicationForm([blank, real])?.id).toBe('real');
     expect(pickApplicationForm([blank])).toBeNull();
     expect(pickApplicationForm(null)).toBeNull();
+  });
+});
+
+describe('isSubmittedApplication and pickSubmittedApplication', () => {
+  // Rayna Choudhary's row on prod: the Nexus profile page, filled in on enrolment day.
+  const profilePage = form({
+    id: 'profile',
+    source: 'manual',
+    application_number: null,
+    academic_data: null,
+    applicant_category: 'college_student',
+    reviewed_by: null,
+    created_at: '2026-10-06T13:17:59Z',
+  });
+
+  it('does not count a row the student wrote on the Nexus profile page', () => {
+    expect(isApplicationForm(profilePage)).toBe(true);
+    expect(isProfileDetailsOnly(profilePage)).toBe(true);
+    expect(isSubmittedApplication(profilePage)).toBe(false);
+  });
+
+  it('counts a manual row with an application number, or one staff entered', () => {
+    expect(isSubmittedApplication({ ...profilePage, application_number: 'NRM-2610-00118' })).toBe(true);
+    expect(isSubmittedApplication({ ...profilePage, reviewed_by: 'admin-1' })).toBe(true);
+  });
+
+  it('counts apply-form and direct-link rows as before', () => {
+    expect(isSubmittedApplication(form({ source: 'website_form', application_number: null }))).toBe(true);
+    expect(isSubmittedApplication(form({ source: 'direct_link' }))).toBe(true);
+    expect(isSubmittedApplication(null)).toBe(false);
+  });
+
+  it('picks an older real form over a newer profile-page row', () => {
+    const real = form({ id: 'real', source: 'direct_link', created_at: '2026-09-01T00:00:00Z' });
+    expect(pickSubmittedApplication([profilePage, real])?.id).toBe('real');
+    expect(pickSubmittedApplication([profilePage])).toBeNull();
+    expect(pickSubmittedApplication(undefined)).toBeNull();
   });
 });
 

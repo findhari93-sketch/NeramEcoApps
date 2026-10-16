@@ -21,6 +21,7 @@ import {
 } from '@neram/ui';
 import Link from 'next/link';
 import { JsonLd } from '@/components/seo/JsonLd';
+import { admissionYear } from '@/lib/college-hub/constants';
 import { PageHero, FactsCard, CtaBand, CtaButton, tokens } from '@/design-system';
 import {
   generateOrganizationSchema,
@@ -41,16 +42,19 @@ import NataOnlineCoachingHindi from '@/components/nata-coaching/localized/NataOn
 
 export const revalidate = 86400;
 
+// The cycle students search for (NATA 2027 from July 2026), so titles never fall a year behind.
+const YEAR = admissionYear();
+
 // Locale-specific title and description for the canonical NATA Online Coaching landing page.
 // Tamil and Hindi serve native script through dedicated localized components further below.
 const localizedMeta: Record<string, { title: string; description: string }> = {
   ta: {
-    title: 'NATA ஆன்லைன் கோச்சிங் 2026 | நேரடி வகுப்புகள், மாதிரி தேர்வுகள்',
+    title: `NATA ஆன்லைன் கோச்சிங் ${YEAR} | நேரடி வகுப்புகள், மாதிரி தேர்வுகள்`,
     description:
       '2009 முதல் NATA பயிற்சி. 1,000+ மாணவர்கள், JEE B.Arch 2024 இல் AIR 1. இந்தியா முழுவதும் வளைகுடா நாடுகளிலும் நேரடி ஆன்லைன் வகுப்புகள், தினசரி வரைபடப் பயிற்சி, இலவச டெமோ. கட்டணம் ரூ. 15,000 முதல்.',
   },
   hi: {
-    title: 'NATA ऑनलाइन कोचिंग 2026 | लाइव कक्षाएँ, मॉक टेस्ट',
+    title: `NATA ऑनलाइन कोचिंग ${YEAR} | लाइव कक्षाएँ, मॉक टेस्ट`,
     description:
       '2009 से NATA की तैयारी। 1,000+ छात्र, JEE B.Arch 2024 में AIR 1। पूरे भारत और खाड़ी देशों के लिए लाइव ऑनलाइन कक्षाएँ, रोज़ ड्रॉइंग अभ्यास, मुफ्त डेमो। शुल्क रु. 15,000 से।',
   },
@@ -65,7 +69,7 @@ export async function generateMetadata({
   const title =
     localized?.title ??
     // The [locale] layout template appends " | Neram Classes".
-    'NATA Online Coaching 2026 | Live Classes, Mock Tests, Drawing';
+    `NATA Online Coaching ${YEAR} | Live Classes, Mock Tests, Drawing`;
   const description =
     localized?.description ??
     `NATA online coaching since 2009: ${PROOF_POINTS.students}, ${PROOF_POINTS.topResult}. Live classes across India and the Gulf, daily drawing practice, 100+ mock tests in the 1-Year program, free demo. Fees from ₹15,000.`;
@@ -74,25 +78,25 @@ export async function generateMetadata({
     title,
     description,
     keywords:
-      'NATA online coaching, NATA online coaching in India, NATA online coaching 2026, NATA online classes, best NATA online coaching, NATA online preparation, online NATA coaching fees, NATA coaching online with mock test, NATA coaching online live classes, online NATA drawing coaching, NATA coaching from home, NATA coaching app, NATA coaching online Chennai, NATA coaching online Tamil Nadu',
+      `NATA online coaching, NATA online coaching in India, NATA online coaching ${YEAR}, NATA online classes, best NATA online coaching, NATA online preparation, online NATA coaching fees, NATA coaching online with mock test, NATA coaching online live classes, online NATA drawing coaching, NATA coaching from home, NATA coaching app, NATA coaching online Chennai, NATA coaching online Tamil Nadu`,
     alternates: buildAlternates(locale, '/nata-online-coaching'),
     openGraph: {
-      title: 'NATA Online Coaching 2026',
+      title: `NATA Online Coaching ${YEAR}`,
       description,
       type: 'website',
       url: `${BASE_URL}/nata-online-coaching`,
       images: [
         {
-          url: buildOgImage('NATA Online Coaching 2026', `Since 2009 | ${PROOF_POINTS.students} | ${PROOF_POINTS.topResult}`, 'coaching'),
+          url: buildOgImage(`NATA Online Coaching ${YEAR}`, `Since 2009 | ${PROOF_POINTS.students} | ${PROOF_POINTS.topResult}`, 'coaching'),
           width: 1200,
           height: 630,
-          alt: 'NATA Online Coaching 2026, Neram Classes',
+          alt: `NATA Online Coaching ${YEAR}, Neram Classes`,
         },
       ],
     },
     twitter: {
       card: 'summary_large_image',
-      title: 'NATA Online Coaching 2026',
+      title: `NATA Online Coaching ${YEAR}`,
       description,
     },
   };
@@ -342,9 +346,9 @@ export default async function NataOnlineCoachingPage({ params: { locale } }: Pag
         'Neram Classes runs a free study app at app.neramclasses.com. It includes a NATA cutoff calculator, a B.Arch college predictor, an exam centre finder and a question bank preview. Anyone can use it, enrolled or not.',
     },
     {
-      question: 'How is the NATA exam pattern in 2026?',
+      question: `How is the NATA exam pattern in ${YEAR}?`,
       answer:
-        'NATA 2026 has 125 questions for 200 marks, conducted online. It covers three sections: Diagrammatic Reasoning, Numerical & Verbal Reasoning, and Inductive & Situational Reasoning, including drawing-based questions. Total duration is 3 hours. Our online coaching covers every section with section-wise mock tests.',
+        `NATA 2026 had 125 questions for 200 marks, conducted online, in three sections: Diagrammatic Reasoning, Numerical & Verbal Reasoning, and Inductive & Situational Reasoning, including drawing-based questions. Total duration was 3 hours. The NATA ${YEAR} pattern is expected to stay similar (official notice awaited). Our online coaching covers every section with section-wise mock tests.`,
     },
     {
       question: 'How many mock tests are included in NATA online coaching?',
@@ -410,7 +414,7 @@ export default async function NataOnlineCoachingPage({ params: { locale } }: Pag
       <JsonLd
         data={{
           ...generateCourseSchema({
-            name: 'NATA Online Coaching 2026, Live Classes by NIT/IIT Faculty',
+            name: `NATA Online Coaching ${YEAR}, Live Classes by NIT/IIT Faculty`,
             description:
               `NATA online coaching by Neram Classes, teaching since 2009 (${PROOF_POINTS.students}, ${PROOF_POINTS.topResult}). Live interactive classes, daily drawing practice, small batches and 100+ mock tests in the 1-Year program. Available across India and the Gulf.`,
             url: pageUrl,
@@ -435,10 +439,10 @@ export default async function NataOnlineCoachingPage({ params: { locale } }: Pag
         {/* Hero Section */}
         <PageHero
           breadcrumb={[{ name: 'Home', href: '/' }, { name: 'NATA Online Coaching' }]}
-          pills={['NATA 2026: Live Online Coaching']}
+          pills={[`NATA ${YEAR}: Live Online Coaching`]}
           title={
             <>
-              NATA <em>Online Coaching</em> 2026
+              NATA <em>Online Coaching</em> {YEAR}
             </>
           }
           lede={`Live classes for architecture aspirants since 2009. ${PROOF_POINTS.students} taught and ${PROOF_POINTS.topResult}. Small batches and daily drawing practice.`}

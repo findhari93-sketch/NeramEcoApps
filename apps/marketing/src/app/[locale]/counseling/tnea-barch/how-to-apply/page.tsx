@@ -7,10 +7,11 @@ import {
   Stack,
   Chip,
   Button,
-  Alert,
 } from '@mui/material';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
-import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import OpenInNewIcon from '@mui/icons-material/OpenInNewOutlined';
+import WarningAmberIcon from '@mui/icons-material/WarningAmberOutlined';
+import { siteTokens as t } from '@neram/ui/site-tokens';
+import { Callout } from '@/design-system';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { generateHowToSchema } from '@/lib/seo/schemas';
 import TneaSpokeShell from '@/components/tnea-barch/TneaSpokeShell';
@@ -150,29 +151,33 @@ export default function HowToApplyPage({
         </Button>
       </Stack>
 
-      <Alert
-        severity="warning"
-        icon={<WarningAmberIcon />}
-        sx={{ mb: 3, borderRadius: 1.5 }}
-      >
-        Common rejection reasons: name mismatch across certificates, wrong nativity certificate format (only e-Certificate accepted), blurry uploads, community certificate dated after registration close.
-      </Alert>
+      <Box sx={{ mb: 3 }}>
+        <Callout>
+          <Box component="p" sx={{ m: 0, display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+            <WarningAmberIcon aria-hidden sx={{ color: t.gold800, fontSize: 20, mt: '2px', flexShrink: 0 }} />
+            <span>
+              Common rejection reasons: name mismatch across certificates, wrong nativity certificate format (only e-Certificate accepted), blurry uploads, community certificate dated after registration close.
+            </span>
+          </Box>
+        </Callout>
+      </Box>
 
       <Stack spacing={2}>
         {STEPS.map((step, i) => (
           <Paper
             key={step.title}
             elevation={0}
-            sx={{ p: 2.5, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+            sx={{ p: 2.5, borderRadius: 1, border: `1px solid ${t.line}` }}
           >
             <Stack direction="row" gap={1.5} alignItems="flex-start" sx={{ mb: 1 }}>
               <Box
+                aria-hidden
                 sx={{
                   width: 36,
                   height: 36,
                   borderRadius: '50%',
-                  bgcolor: 'primary.main',
-                  color: 'primary.contrastText',
+                  bgcolor: t.navy900,
+                  color: t.gold500,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -202,9 +207,9 @@ export default function HowToApplyPage({
                     py: 0.25,
                     fontSize: '0.75rem',
                   },
-                  bgcolor: '#FFFBEB',
-                  color: '#92400E',
-                  border: '1px solid #FDE68A',
+                  bgcolor: t.ground,
+                  color: t.ink,
+                  border: `1px solid ${t.line}`,
                 }}
               />
             </Box>

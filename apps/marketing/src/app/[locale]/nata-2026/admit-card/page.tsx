@@ -1,28 +1,10 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import {
-  Box,
-  Container,
-  Typography,
-  Card,
-  CardContent,
-  Button,
-  Chip,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-} from '@neram/ui';
-import Link from 'next/link';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
-import { APP_URL } from '@/lib/seo/constants';
-import LastUpdatedBadge from '@/components/nata/LastUpdatedBadge';
-import Breadcrumbs from '@/components/seo/Breadcrumbs';
+import { nataGuideNav, nataRelated } from '@/components/nata/guideNav';
+import { ArticleSection, CheckList, CtaBand, CtaButton, DataTable, FaqList, GuideArticle, StepList } from '@/design-system';
 
 
 export async function generateMetadata({
@@ -51,7 +33,7 @@ const downloadSteps = [
   'Complete the CAPTCHA verification if prompted.',
   'Verify all details displayed on the admit card carefully.',
   'Download and save the admit card as a PDF file.',
-  'Take 2–3 color printouts on A4-size paper. Keep one copy at home as backup.',
+  'Take 2-3 color printouts on A4-size paper. Keep one copy at home as backup.',
 ];
 
 const admitCardDetails = [
@@ -149,209 +131,79 @@ export default function AdmitCardPage({ params: { locale } }: PageProps) {
       <JsonLd data={generateBreadcrumbSchema([{ name: 'Home', url: localeUrl('') }, { name: 'NATA 2026', url: localeUrl('/nata-2026') }, { name: 'Admit Card' }])} />
       <JsonLd data={generateFAQSchema(faqs)} />
 
-      <Box>
-        {/* Hero */}
-        <Box sx={{ py: { xs: 8, md: 12 }, background: 'linear-gradient(135deg, #1a237e 0%, #0d47a1 100%)', color: 'white' }}>
-          <Container maxWidth="lg">
-            <Breadcrumbs
-              variant="light"
-              items={[
-                { name: 'Home', href: `/${locale}` },
-                { name: 'NATA 2026', href: `/${locale}/nata-2026` },
-                { name: 'Admit Card' },
-              ]}
-            />
-            <Chip label="NATA 2026" sx={{ bgcolor: 'white', color: 'primary.main', mb: 2, fontWeight: 600 }} />
-            <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', sm: '2.5rem', md: '3.5rem' } }}>
-              NATA 2026 Admit Card
-            </Typography>
-            <Typography variant="h5" sx={{ mb: 2, opacity: 0.9, fontSize: { xs: '1.1rem', md: '1.5rem' } }}>
-              NATA 2026 admit cards will be available for download from nata.in approximately 15 days before each exam date. You need your NATA application number and date of birth to download. The admit card is mandatory for entry to the exam center. No candidate will be allowed without it.
-            </Typography>
-            <LastUpdatedBadge date="March 13, 2026" />
-          </Container>
-        </Box>
+      <GuideArticle
+        breadcrumb={[{ name: 'Home', href: '/' }, { name: 'NATA 2026', href: '/nata-2026' }, { name: 'Admit Card' }]}
+        eyebrow="NATA 2026 · Exam guide"
+        title="NATA 2026 Admit Card"
+        lede="NATA 2026 admit cards will be available for download from nata.in approximately 15 days before each exam date. You need your NATA application number and date of birth to download. The admit card is mandatory for entry to the exam center. No candidate will be allowed without it."
+        verified="Updated March 13, 2026 · Source: Official NATA 2026 Brochure V1.0"
+        nav={nataGuideNav('admit-card')}
+        related={nataRelated(['dos-and-donts', 'important-dates', 'exam-centers', 'how-to-apply'])}
+        back={{ label: 'Back to NATA 2026 guide', href: '/nata-2026' }}
+      >
+        <ArticleSection
+          id="how-to-download"
+          title="How to Download NATA 2026 Admit Card"
+          intro="Follow these steps to download your NATA 2026 admit card from the official website."
+        >
+          <StepList items={downloadSteps.map((step) => ({ title: step }))} columnMin={220} />
+        </ArticleSection>
 
-        {/* How to Download */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
-          <Container maxWidth="md">
-            <Typography variant="h2" component="h2" gutterBottom sx={{ mb: 2, fontWeight: 700 }}>
-              How to Download NATA 2026 Admit Card
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 4, lineHeight: 1.8 }}>
-              Follow these steps to download your NATA 2026 admit card from the official website.
-            </Typography>
+        <ArticleSection
+          id="admit-card-details"
+          title="Details on the Admit Card"
+          intro="Your NATA admit card contains the following important information. Verify every detail carefully after downloading."
+        >
+          <CheckList items={admitCardDetails} />
+        </ArticleSection>
 
-            <Card>
-              <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-                <List>
-                  {downloadSteps.map((step, idx) => (
-                    <ListItem key={idx} sx={{ px: 0 }}>
-                      <ListItemIcon sx={{ minWidth: 36 }}>
-                        <Chip label={idx + 1} size="small" color="primary" sx={{ fontWeight: 700, minWidth: 28 }} />
-                      </ListItemIcon>
-                      <ListItemText primary={step} />
-                    </ListItem>
-                  ))}
-                </List>
-              </CardContent>
-            </Card>
-          </Container>
-        </Box>
+        <ArticleSection
+          id="documents-to-carry"
+          title="Documents to Carry on Exam Day"
+          intro="Make sure you carry all required documents and materials to the exam center. Missing any of these may prevent you from taking the exam."
+        >
+          <CheckList items={documentsToCarry.map((doc) => ({ title: doc.item, body: doc.note }))} columnMin={600} />
+        </ArticleSection>
 
-        {/* Details on the Admit Card */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
-          <Container maxWidth="md">
-            <Typography variant="h2" component="h2" gutterBottom sx={{ mb: 2, fontWeight: 700 }}>
-              Details on the Admit Card
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 4, lineHeight: 1.8 }}>
-              Your NATA admit card contains the following important information. Verify every detail carefully after downloading.
-            </Typography>
+        <ArticleSection
+          id="errors"
+          title="What to Do If There Are Errors"
+          intro="If you find any incorrect details on your admit card (wrong name, photo, center, etc.), take immediate action."
+        >
+          <StepList items={correctionSteps.map((step) => ({ title: step }))} columnMin={220} />
+        </ArticleSection>
 
-            <Card>
-              <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-                <List dense>
-                  {admitCardDetails.map((detail, idx) => (
-                    <ListItem key={idx} sx={{ px: 0 }}>
-                      <ListItemIcon sx={{ minWidth: 28 }}>
-                        <Typography color="primary.main" sx={{ fontWeight: 700 }}>&#x2713;</Typography>
-                      </ListItemIcon>
-                      <ListItemText primary={detail} />
-                    </ListItem>
-                  ))}
-                </List>
-              </CardContent>
-            </Card>
-          </Container>
-        </Box>
+        <ArticleSection
+          id="important-dates"
+          title="Important Dates for Admit Card Download"
+          intro="NATA 2026 is conducted in two phases. Admit cards are released separately for each phase."
+        >
+          <DataTable
+            caption="NATA 2026 admit card release by phase"
+            hideCaption
+            columns={['Phase', 'Exam Date', 'Admit Card Release']}
+            mutedColumn={2}
+            rows={importantDates.map((d) => [d.phase, d.examDate, d.admitCardRelease])}
+          />
+        </ArticleSection>
 
-        {/* Documents to Carry on Exam Day */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
-          <Container maxWidth="md">
-            <Typography variant="h2" component="h2" gutterBottom sx={{ mb: 2, fontWeight: 700 }}>
-              Documents to Carry on Exam Day
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 4, lineHeight: 1.8 }}>
-              Make sure you carry all required documents and materials to the exam center. Missing any of these may prevent you from taking the exam.
-            </Typography>
+        <ArticleSection id="faq" title="FAQs: NATA 2026 Admit Card">
+          <FaqList items={faqs} defaultOpen={-1} />
+        </ArticleSection>
+      </GuideArticle>
 
-            {documentsToCarry.map((doc, idx) => (
-              <Card key={idx} sx={{ mb: 2 }}>
-                <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-                  <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>{doc.item}</Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>{doc.note}</Typography>
-                </CardContent>
-              </Card>
-            ))}
-          </Container>
-        </Box>
-
-        {/* What to Do If There Are Errors */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
-          <Container maxWidth="md">
-            <Typography variant="h2" component="h2" gutterBottom sx={{ mb: 2, fontWeight: 700 }}>
-              What to Do If There Are Errors
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 4, lineHeight: 1.8 }}>
-              If you find any incorrect details on your admit card (wrong name, photo, center, etc.), take immediate action.
-            </Typography>
-
-            <Card>
-              <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-                <List>
-                  {correctionSteps.map((step, idx) => (
-                    <ListItem key={idx} sx={{ px: 0 }}>
-                      <ListItemIcon sx={{ minWidth: 36 }}>
-                        <Chip label={idx + 1} size="small" color="warning" sx={{ fontWeight: 700, minWidth: 28 }} />
-                      </ListItemIcon>
-                      <ListItemText primary={step} />
-                    </ListItem>
-                  ))}
-                </List>
-              </CardContent>
-            </Card>
-          </Container>
-        </Box>
-
-        {/* Important Dates for Admit Card Download */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
-          <Container maxWidth="md">
-            <Typography variant="h2" component="h2" gutterBottom sx={{ mb: 2, fontWeight: 700 }}>
-              Important Dates for Admit Card Download
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 4, lineHeight: 1.8 }}>
-              NATA 2026 is conducted in two phases. Admit cards are released separately for each phase.
-            </Typography>
-
-            {importantDates.map((date, idx) => (
-              <Card key={idx} sx={{ mb: 2 }}>
-                <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-                  <Typography variant="h5" sx={{ fontWeight: 700, color: 'primary.main', mb: 1 }}>{date.phase}</Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5, lineHeight: 1.8 }}>
-                    <strong>Exam Date:</strong> {date.examDate}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>
-                    <strong>Admit Card Release:</strong> {date.admitCardRelease}
-                  </Typography>
-                </CardContent>
-              </Card>
-            ))}
-          </Container>
-        </Box>
-
-        {/* Also Read */}
-        <Box sx={{ py: { xs: 6, md: 8 }, bgcolor: 'grey.50' }}>
-          <Container maxWidth="md">
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>Also Read</Typography>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-              {[
-                { title: "Do's & Don'ts", slug: 'dos-and-donts' },
-                { title: 'Important Dates', slug: 'important-dates' },
-                { title: 'Exam Centers', slug: 'exam-centers' },
-                { title: 'How to Apply', slug: 'how-to-apply' },
-              ].map((item) => (
-                <Link key={item.slug} href={`/${locale}/nata-2026/${item.slug}`} style={{ textDecoration: 'none' }}>
-                  <Card sx={{ p: 2, color: 'inherit', transition: 'box-shadow 0.2s', '&:hover': { boxShadow: 3 } }}>
-                    <Typography variant="subtitle1" color="primary.main" sx={{ fontWeight: 600 }}>{item.title} &rarr;</Typography>
-                  </Card>
-                </Link>
-              ))}
-            </Box>
-          </Container>
-        </Box>
-
-        {/* FAQ */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
-          <Container maxWidth="md">
-            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs: NATA 2026 Admit Card</Typography>
-            {faqs.map((faq, index) => (
-              <Accordion key={index} disableGutters sx={{ '&:before': { display: 'none' }, mb: 1, borderRadius: 1, overflow: 'hidden' }}>
-                <AccordionSummary expandIcon={<Typography sx={{ fontSize: '1.2rem', fontWeight: 600 }}>+</Typography>} sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}>
-                  <Typography sx={{ fontWeight: 600 }}>{faq.question}</Typography>
-                </AccordionSummary>
-                <AccordionDetails sx={{ bgcolor: 'white' }}>
-                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>{faq.answer}</Typography>
-                </AccordionDetails>
-              </Accordion>
-            ))}
-          </Container>
-        </Box>
-
-        {/* CTA Banner */}
-        <Box sx={{ py: { xs: 6, md: 10 }, background: 'linear-gradient(135deg, #0d47a1 0%, #1565c0 100%)', color: 'white', textAlign: 'center' }}>
-          <Container maxWidth="md">
-            <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '1.75rem', md: '2.5rem' } }}>
-              Prepare for NATA 2026 with Neram Classes
-            </Typography>
-            <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>Be exam-ready with expert coaching and complete preparation support.</Typography>
-            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <Button variant="contained" size="large" component={Link} href="/apply" sx={{ background: '#ffffff', color: '#0d47a1', fontWeight: 700, px: 4, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', '&:hover': { background: '#f0f0f0' } }}>Start Free Trial</Button>
-              <Button variant="outlined" size="large" component={Link} href={`/${locale}/nata-2026`} sx={{ borderColor: 'white', color: 'white' }}>Back to NATA 2026 Guide</Button>
-            </Box>
-          </Container>
-        </Box>
-      </Box>
+      <CtaBand
+        title="Prepare for NATA 2026 with Neram Classes"
+        lede="Be exam-ready with expert coaching and complete preparation support."
+        actions={
+          <>
+            <CtaButton href="/apply">Start Free Trial</CtaButton>
+            <CtaButton variant="link" href="/demo-class">
+              Book a free demo class
+            </CtaButton>
+          </>
+        }
+      />
     </>
   );
 }

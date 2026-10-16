@@ -5,6 +5,20 @@ import { useSearchParams } from 'next/navigation';
 import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import { Box, Typography, CircularProgress } from '@neram/ui';
 import { safeSsoRedirect } from '@/lib/sso-redirect';
+import { siteTokens as t } from '@neram/ui/site-tokens';
+
+// Utility screen: a quiet spinner on the site ground colour while the token exchange runs.
+const screenSx = {
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'center',
+  alignItems: 'center',
+  minHeight: '100dvh',
+  gap: 2,
+  m: 0,
+  bgcolor: t.ground,
+  px: 2,
+} as const;
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
 
@@ -62,18 +76,9 @@ function SSOInner() {
   }, [user, loading, searchParams]);
 
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'center',
-        alignItems: 'center',
-        minHeight: '100vh',
-        gap: 2,
-      }}
-    >
-      <CircularProgress />
-      <Typography>Authenticating...</Typography>
+    <Box sx={screenSx} role="status" aria-live="polite">
+      <CircularProgress size={32} sx={{ color: t.navy900 }} aria-hidden />
+      <Typography sx={{ m: 0, fontFamily: t.fontSans, fontSize: '1rem', color: t.inkMuted }}>Authenticating...</Typography>
     </Box>
   );
 }
@@ -82,15 +87,8 @@ export default function SSOPage() {
   return (
     <Suspense
       fallback={
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            minHeight: '100vh',
-          }}
-        >
-          <CircularProgress />
+        <Box sx={screenSx}>
+          <CircularProgress size={32} sx={{ color: t.navy900 }} aria-label="Loading" />
         </Box>
       }
     >

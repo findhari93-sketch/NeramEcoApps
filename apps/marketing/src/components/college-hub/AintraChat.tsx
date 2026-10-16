@@ -21,6 +21,7 @@ import SmartToyIcon from '@mui/icons-material/SmartToy';
 import PersonIcon from '@mui/icons-material/Person';
 import HumanHelpBar from '@/components/aintra/HumanHelpBar';
 import VoiceInputButton from '@/components/aintra/VoiceInputButton';
+import { tokens } from '@/design-system';
 
 interface Message {
   role: 'user' | 'assistant';
@@ -133,10 +134,10 @@ export default function AintraChat({ collegeId, collegeName }: AintraChatProps) 
           bottom: { xs: 24, md: 32 },
           right: { xs: 16, md: 32 },
           zIndex: 1300,
-          bgcolor: '#be185d',
-          color: 'white',
-          '&:hover': { bgcolor: '#9d174d' },
-          boxShadow: '0 4px 20px rgba(190,24,93,0.4)',
+          bgcolor: tokens.navy900,
+          color: tokens.gold500,
+          '&:hover': { bgcolor: tokens.navy700 },
+          boxShadow: tokens.shadowMegaMenu,
           width: 56,
           height: 56,
         }}
@@ -160,13 +161,13 @@ export default function AintraChat({ collegeId, collegeName }: AintraChatProps) 
           <Paper
             elevation={8}
             sx={{
-              borderRadius: { xs: '16px 16px 0 0', md: 3 },
+              borderRadius: { xs: '16px 16px 0 0', md: 1 },
               overflow: 'hidden',
               display: 'flex',
               flexDirection: 'column',
               height: { xs: '70vh', md: 480 },
               maxHeight: { xs: '70vh', md: 480 },
-              bgcolor: 'background.paper',
+              bgcolor: tokens.surface,
             }}
           >
             {/* Header */}
@@ -174,8 +175,8 @@ export default function AintraChat({ collegeId, collegeName }: AintraChatProps) 
               sx={{
                 px: 2,
                 py: 1.5,
-                background: 'linear-gradient(135deg, #be185d 0%, #9d174d 100%)',
-                color: 'white',
+                background: tokens.navy900,
+                color: tokens.paper,
                 flexShrink: 0,
               }}
             >
@@ -192,7 +193,7 @@ export default function AintraChat({ collegeId, collegeName }: AintraChatProps) 
                 <IconButton
                   size="small"
                   onClick={() => setOpen(false)}
-                  sx={{ color: 'white', p: 0.5 }}
+                  sx={{ color: tokens.paper, p: 0.5 }}
                   aria-label="Close chat"
                 >
                   <CloseIcon fontSize="small" />
@@ -226,7 +227,7 @@ export default function AintraChat({ collegeId, collegeName }: AintraChatProps) 
                         width: 24,
                         height: 24,
                         borderRadius: '50%',
-                        bgcolor: '#fce7f3',
+                        bgcolor: tokens.goldTintBg,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -234,7 +235,7 @@ export default function AintraChat({ collegeId, collegeName }: AintraChatProps) 
                         mb: 0.25,
                       }}
                     >
-                      <SmartToyIcon sx={{ fontSize: 14, color: '#be185d' }} />
+                      <SmartToyIcon sx={{ fontSize: 14, color: tokens.gold800 }} />
                     </Box>
                   )}
                   <Box
@@ -246,9 +247,9 @@ export default function AintraChat({ collegeId, collegeName }: AintraChatProps) 
                         msg.role === 'user'
                           ? '12px 12px 4px 12px'
                           : '12px 12px 12px 4px',
-                      bgcolor: msg.role === 'user' ? '#1d4ed8' : '#f8fafc',
-                      color: msg.role === 'user' ? 'white' : 'text.primary',
-                      border: msg.role === 'assistant' ? '1px solid #e2e8f0' : 'none',
+                      bgcolor: msg.role === 'user' ? tokens.navy900 : tokens.ground,
+                      color: msg.role === 'user' ? tokens.paper : tokens.ink,
+                      border: msg.role === 'assistant' ? `1px solid ${tokens.line}` : 'none',
                     }}
                   >
                     <Typography variant="body2" sx={{ lineHeight: 1.5, fontSize: '0.8125rem' }}>
@@ -261,7 +262,7 @@ export default function AintraChat({ collegeId, collegeName }: AintraChatProps) 
                         width: 24,
                         height: 24,
                         borderRadius: '50%',
-                        bgcolor: '#dbeafe',
+                        bgcolor: tokens.surfaceHover,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -269,7 +270,7 @@ export default function AintraChat({ collegeId, collegeName }: AintraChatProps) 
                         mb: 0.25,
                       }}
                     >
-                      <PersonIcon sx={{ fontSize: 14, color: '#1d4ed8' }} />
+                      <PersonIcon sx={{ fontSize: 14, color: tokens.navy900 }} />
                     </Box>
                   )}
                 </Stack>
@@ -283,29 +284,29 @@ export default function AintraChat({ collegeId, collegeName }: AintraChatProps) 
                       width: 24,
                       height: 24,
                       borderRadius: '50%',
-                      bgcolor: '#fce7f3',
+                      bgcolor: tokens.goldTintBg,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       flexShrink: 0,
                     }}
                   >
-                    <SmartToyIcon sx={{ fontSize: 14, color: '#be185d' }} />
+                    <SmartToyIcon sx={{ fontSize: 14, color: tokens.gold800 }} />
                   </Box>
                   <Box
                     sx={{
                       px: 1.5,
                       py: 1,
                       borderRadius: '12px 12px 12px 4px',
-                      bgcolor: '#f8fafc',
-                      border: '1px solid #e2e8f0',
+                      bgcolor: tokens.ground,
+                      border: `1px solid ${tokens.line}`,
                       display: 'flex',
                       alignItems: 'center',
                       gap: 0.5,
                     }}
                   >
-                    <CircularProgress size={10} sx={{ color: '#be185d' }} />
-                    <Typography variant="caption" color="text.secondary">
+                    <CircularProgress size={10} sx={{ color: tokens.gold800 }} />
+                    <Typography variant="caption" color={tokens.inkMuted}>
                       Aintra is thinking...
                     </Typography>
                   </Box>
@@ -328,10 +329,10 @@ export default function AintraChat({ collegeId, collegeName }: AintraChatProps) 
                       fontSize: '0.6875rem',
                       height: 26,
                       cursor: 'pointer',
-                      bgcolor: '#fce7f3',
-                      color: '#9d174d',
-                      border: '1px solid #fbcfe8',
-                      '&:hover': { bgcolor: '#fbcfe8' },
+                      bgcolor: tokens.goldTintBg,
+                      color: tokens.gold800,
+                      border: `1px solid ${tokens.goldTintBorder}`,
+                      '&:hover': { bgcolor: tokens.goldTintBg, borderColor: tokens.gold500 },
                     }}
                   />
                 ))}
@@ -362,7 +363,7 @@ export default function AintraChat({ collegeId, collegeName }: AintraChatProps) 
                 maxRows={3}
                 sx={{
                   '& .MuiOutlinedInput-root': {
-                    borderRadius: 3,
+                    borderRadius: 1,
                     fontSize: '0.8125rem',
                   },
                 }}
@@ -371,7 +372,7 @@ export default function AintraChat({ collegeId, collegeName }: AintraChatProps) 
                 value={input}
                 onChange={setInput}
                 disabled={loading}
-                color="#be185d"
+                color={tokens.gold800}
                 size={40}
               />
               <IconButton
@@ -379,13 +380,13 @@ export default function AintraChat({ collegeId, collegeName }: AintraChatProps) 
                 disabled={loading || !input.trim()}
                 aria-label="Send message"
                 sx={{
-                  bgcolor: '#be185d',
-                  color: 'white',
+                  bgcolor: tokens.gold500,
+                  color: tokens.navy900,
                   width: 40,
                   height: 40,
                   flexShrink: 0,
-                  '&:hover': { bgcolor: '#9d174d' },
-                  '&.Mui-disabled': { bgcolor: '#e2e8f0', color: '#94a3b8' },
+                  '&:hover': { bgcolor: tokens.gold300 },
+                  '&.Mui-disabled': { bgcolor: tokens.line, color: tokens.statusIdle },
                 }}
               >
                 <SendIcon sx={{ fontSize: 18 }} />
@@ -394,7 +395,7 @@ export default function AintraChat({ collegeId, collegeName }: AintraChatProps) 
 
             {/* Disclaimer */}
             <Box sx={{ px: 1.5, pb: 1, flexShrink: 0 }}>
-              <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.625rem', lineHeight: 1.3 }}>
+              <Typography variant="caption" sx={{ color: tokens.inkMuted, fontSize: '0.625rem', lineHeight: 1.3 }}>
                 Aintra is an AI assistant. Verify important information with the college directly.
               </Typography>
             </Box>

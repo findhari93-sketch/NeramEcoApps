@@ -16,6 +16,7 @@ import LetterJump from '../directory/LetterJump';
 import DirectoryResults, { DirectoryEmpty } from '../directory/DirectoryResults';
 import { activeFilterCount, readDraft } from '../directory/filter-model';
 import { useDirectoryNav } from '../directory/useListingParams';
+import { tokens } from '@/design-system';
 
 interface BrowseAllSectionProps {
   /** The default first page (ArchIndex order), rendered on the server. */
@@ -110,7 +111,7 @@ function BrowseBody({ initialColleges, initialCount, cityCounts = [], params }: 
               <Typography component="h2" sx={{ m: 0, fontSize: 20, fontWeight: 800, lineHeight: 1.2 }}>
                 Browse all colleges
               </Typography>
-              <Typography sx={{ m: 0, mt: 0.25, fontSize: 14, color: 'text.secondary' }}>
+              <Typography sx={{ m: 0, mt: 0.25, fontSize: 14, color: tokens.inkMuted }}>
                 {totalCount.toLocaleString('en-IN')} B.Arch colleges across India
               </Typography>
             </Box>
@@ -158,7 +159,7 @@ function BrowseBody({ initialColleges, initialCount, cityCounts = [], params }: 
             </Stack>
           ) : failed ? (
             <Box sx={{ textAlign: 'center', py: 8 }} role="alert">
-              <Typography variant="h6" component="p" color="text.secondary">
+              <Typography variant="h6" component="p" color={tokens.inkMuted}>
                 Could not load colleges.
               </Typography>
               <Button variant="outlined" onClick={() => setAttempt((n) => n + 1)} sx={{ mt: 2, minHeight: 48, textTransform: 'none' }}>

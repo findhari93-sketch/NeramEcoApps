@@ -1,6 +1,7 @@
 import { Box } from '@mui/material';
 import VerifiedOutlinedIcon from '@mui/icons-material/VerifiedOutlined';
 import type { CollegeContentSection, CollegeDetail } from '@/lib/college-hub/types';
+import { siteTokens } from '@neram/ui/site-tokens';
 
 function day(iso: string): string {
   const d = new Date(iso);
@@ -19,7 +20,7 @@ export default function ProvidedByCollege({ college, section }: { college: Colle
   return (
     <Box
       component="p"
-      sx={{ m: 0, display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '0.8rem', fontWeight: 600, color: 'success.dark' }}
+      sx={{ m: 0, display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: '0.8rem', fontWeight: 600, color: siteTokens.success }}
     >
       <VerifiedOutlinedIcon aria-hidden sx={{ fontSize: 16 }} />
       Provided by the college{when ? `, updated ${when}` : ''}

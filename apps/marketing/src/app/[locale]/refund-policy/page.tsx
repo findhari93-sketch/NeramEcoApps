@@ -1,10 +1,9 @@
 import { Metadata } from 'next';
-import { setRequestLocale } from 'next-intl/server';
-import { Box, Container, Paper } from '@neram/ui';
-import RefundPolicyContent from '../../../components/legal/RefundPolicyContent';
+import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { buildAlternates } from '@/lib/seo/metadata';
-import ClientIntl from '@/components/i18n/ClientIntl';
-
+import { LegalPage } from '@/design-system';
+import { REFUND_SECTION_KEYS } from '@/components/legal/sections';
+import { legalPolicies } from '@/components/legal/policies';
 
 export async function generateMetadata({
   params: { locale },
@@ -22,16 +21,21 @@ interface PageProps {
   params: { locale: string };
 }
 
-export default function RefundPolicyPage({ params: { locale } }: PageProps) {
+export default async function RefundPolicyPage({ params: { locale } }: PageProps) {
   setRequestLocale(locale);
+  const t = await getTranslations({ locale, namespace: 'refundPolicy' });
 
   return (
-    <Box sx={{ py: { xs: 4, md: 8 }, bgcolor: 'background.default', minHeight: '80vh' }}>
-      <Container maxWidth="md">
-        <Paper sx={{ p: { xs: 3, md: 6 } }}>
-          <ClientIntl locale={locale} namespaces={['refundPolicy']}><RefundPolicyContent /></ClientIntl>
-        </Paper>
-      </Container>
-    </Box>
+    <LegalPage
+      title={t('pageTitle')}
+      updated={t('lastUpdated')}
+      policies={await legalPolicies(locale, 'refund')}
+      railLabel={t('pageTitle')}
+      sections={REFUND_SECTION_KEYS.map((key) => ({
+        id: key,
+        title: t(`sections.${key}.title`),
+        body: <p>{t(`sections.${key}.content`)}</p>,
+      }))}
+    />
   );
 }

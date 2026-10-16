@@ -11,49 +11,25 @@ import {
   enqueueDemoMessages,
   enqueueDemoStaffMessages,
   staffUserIdsByUpn,
-  staffReminderPlan,
   cancelPendingDemoMessages,
   demoReminderPlan,
   thanksSendAfter,
-  isOutsidePreference,
   formatDemoDateTime,
-  drawingWhatsAppLink,
-  pickDemoRoles,
-  isOwnLinkDemo,
   openDemoFollowUp,
   getOpenDemoFollowUp,
+  listDemoFollowUpsByDemo,
   rebookFollowUpAt,
   type InterestLevel,
   type DemoRequest,
 } from '@neram/database';
 import { getRequestAdminId } from '@/lib/request-admin';
 import { loadDemoSettings, demoMarketingOrigin, sendDueDemoMessages, cancelledEventMarker } from '@/lib/demo/server';
-import { buildDemoInviteHtml, demoEventSubject } from '@/lib/demo/messages';
+import { ConfirmError, confirmDemo, enqueueStaffPlan, meetingUrl, parseMeetingKind } from '@/lib/demo/confirm';
+import { studentGetsDemoWhatsApp } from '@/lib/demo/meeting';
 import { HeldDemoError, parseHeldDemoWithSettings, recordHeldDemo } from '@/lib/demo/record-held';
-import {
-  createDemoEvent,
-  rescheduleDemoEvent,
-  cancelDemoEvent,
-  getTeamBusy,
-  overlapping,
-  isDemoTeamsDryRun,
-  DemoTeamsError,
-} from '@/lib/demo/teams';
+import { rescheduleDemoEvent, cancelDemoEvent, DemoTeamsError } from '@/lib/demo/teams';
 
 type Params = { params: { id: string } };
-
-async function enqueueStaffPlan(
-  registrationId: string,
-  start: Date,
-  team: string[],
-  tutorUpn: string | null,
-  ids: Record<string, string>,
-): Promise<void> {
-  const rows = staffReminderPlan(start, new Date(), team, tutorUpn)
-    .filter((p) => ids[p.upn])
-    .map((p) => ({ userId: ids[p.upn], kind: p.kind, sendAfter: p.sendAfter }));
-  await enqueueDemoStaffMessages(registrationId, rows, getSupabaseAdminClient());
-}
 
 class ActionError extends Error {
   constructor(
@@ -79,8 +55,12 @@ async function detail(id: string) {
     const { data } = await (supabase as any).from('users').select('id, name').in('id', actorIds);
     actors = Object.fromEntries((data ?? []).map((u: { id: string; name: string }) => [u.id, u.name]));
   }
-  const followUp = request.user_id ? await getOpenDemoFollowUp(request.user_id, supabase) : null;
-  return { request, events, messages, actors, followUp };
+  const [followUp, latest] = await Promise.all([
+    request.user_id ? getOpenDemoFollowUp(request.user_id, supabase) : Promise.resolve(null),
+    listDemoFollowUpsByDemo([id], supabase),
+  ]);
+  // The newest follow-up of this demo even when it is closed (stopped or joined).
+  return { request, events, messages, actors, followUp, lastFollowUp: latest[id] ?? null };
 }
 
 /** GET /api/demo-requests/[id]: the request, its activity log and its WhatsApp queue. */
@@ -111,17 +91,6 @@ function text(v: unknown, max = 500): string {
   return typeof v === 'string' ? v.trim().slice(0, max) : '';
 }
 
-/** A pasted meeting link (Google Meet, Zoom, Teams): https only. */
-function meetingUrl(v: unknown): string | null {
-  const s = text(v, 500);
-  try {
-    const u = new URL(s);
-    return u.protocol === 'https:' && u.hostname.includes('.') ? u.toString() : null;
-  } catch {
-    return null;
-  }
-}
-
 function email(v: unknown): string | null {
   const s = text(v, 200).toLowerCase();
   return /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s) ? s : null;
@@ -130,7 +99,7 @@ function email(v: unknown): string | null {
 /**
  * POST /api/demo-requests/[id]  { action, ...fields }
  *
- * log_call | note | confirm | reschedule | cancel | attendance | held | drawing | resend | reopen
+ * log_call | note | confirm | set_link | reschedule | cancel | attendance | held | follow_up | drawing | resend | reopen
  * Every action writes the activity log and returns the refreshed detail.
  */
 export async function POST(req: Request, { params }: Params) {
@@ -197,109 +166,40 @@ export async function POST(req: Request, { params }: Params) {
       }
 
       case 'confirm': {
-        if (!['pending', 'contacted'].includes(r.status)) throw new ActionError('Only a new or called request can be confirmed.');
         const settings = await loadDemoSettings(supabase);
-        const start = parseStart(body.start);
-        const minutes = parseMinutes(body.minutes, settings.schedule.durationMinutes);
-        const reason = text(body.reason) || null;
-        if (isOutsidePreference(start, { date: r.preferred_date, window: r.preferred_window }, settings.schedule) && !reason) {
-          throw new ActionError('This time is outside what the student asked for. Add the reason (it goes in their message).');
-        }
-        if (!settings.hosts.length) throw new ActionError('Add the demo team in Demo settings first.');
-
-        // The team for this demo: any of the configured members, at least one.
-        const known = new Map(settings.hosts.map((h) => [h.upn, h]));
         const requested = Array.isArray(body.teamUpns) ? (body.teamUpns as unknown[]).map((u) => text(u, 200).toLowerCase()) : [];
-        const team = (requested.length ? requested : settings.hosts.map((h) => h.upn)).filter((u) => known.has(u));
-        if (!team.length) throw new ActionError('Pick at least one person from the demo team.');
-        const pickedTutor = text(body.tutorUpn, 200).toLowerCase();
-        const pickedOrganizer = text(body.organizerUpn, 200).toLowerCase();
-        if (pickedTutor && !team.includes(pickedTutor)) throw new ActionError('The tutor must be one of the people on this demo.');
-        if (pickedOrganizer && !team.includes(pickedOrganizer)) throw new ActionError('The organizer must be one of the people on this demo.');
-        const roles = pickDemoRoles(settings, team, { tutor: pickedTutor, organizer: pickedOrganizer || r.organizer_upn });
-        const tutorUpn = roles.tutor!;
-        const organizerUpn = roles.organizer!;
-        const tutor = known.get(tutorUpn)!;
-        // 'link': staff already shared their own meeting (Google Meet etc.), so no Teams event.
-        const ownLink = body.meeting === 'link' ? meetingUrl(body.joinUrl) : null;
-        if (body.meeting === 'link' && !ownLink) throw new ActionError('Paste the full meeting link, starting with https://');
-
-        // The tutor's calendar decides. A clash needs an internal note (never sent to the student).
-        const conflictNote = text(body.conflictNote) || null;
-        if (!isDemoTeamsDryRun()) {
-          const busy = await getTeamBusy([tutorUpn], start, new Date(start.getTime() + minutes * 60_000));
-          const clash = overlapping(busy[tutorUpn] ?? [], start, minutes);
-          if (clash.length && !conflictNote) {
-            throw new ActionError(
-              `${tutor.name} is busy at that time in Outlook. Pick another time, or add a note saying why it is fine.`,
-              409,
-            );
-          }
-        }
-        const parentEmail = body.parentEmail === undefined ? r.parent_email : email(body.parentEmail);
-
-        const attendees: Array<{ email: string; name: string }> = [];
-        if (r.email) attendees.push({ email: r.email, name: r.name });
-        if (parentEmail && parentEmail !== r.email) attendees.push({ email: parentEmail, name: r.parent_name || 'Parent' });
-        for (const upn of team) if (upn !== organizerUpn) attendees.push({ email: upn, name: known.get(upn)!.name });
-
-        const myDemoUrl = `${origin}/d/${r.join_token}`;
-        const event = ownLink
-          ? { joinUrl: ownLink, eventId: null }
-          : await createDemoEvent(
-              {
-                organizerUpn,
-                subject: demoEventSubject(r),
-                bodyHtml: buildDemoInviteHtml({
-                  studentName: r.name,
-                  hostName: tutor.name,
-                  ref: r.ref_code || '',
-                  myDemoUrl,
-                  drawingLink: drawingWhatsAppLink(settings.drawingWhatsApp, r.ref_code),
-                }),
-                start,
-                minutes,
-                attendees,
-              },
-              r.ref_code || r.id,
-            );
-
-        const staffIds = await staffUserIdsByUpn(team, supabase);
-        await updateDemoRequest(
-          r.id,
-          {
-            status: 'approved',
-            scheduled_start: start.toISOString(),
-            scheduled_minutes: minutes,
-            schedule_change_reason: reason,
-            organizer_upn: organizerUpn,
-            tutor_upn: tutorUpn,
-            staff_upns: team,
-            host_user_id: staffIds[tutorUpn] ?? null,
-            teams_join_url: event.joinUrl,
-            graph_event_id: event.eventId,
-            parent_email: parentEmail,
-            approved_by: actorId,
-            approved_at: new Date().toISOString(),
-            next_contact_at: null,
-          },
+        const meeting = parseMeetingKind(body.meeting);
+        const res = await confirmDemo({
           supabase,
-        );
-        await cancelPendingDemoMessages(r.id, undefined, supabase);
-        // The approved templates promise a Microsoft Teams class, so an own-link
-        // demo sends the student nothing; staff share the link themselves.
-        if (!ownLink) await enqueueDemoMessages(r, demoReminderPlan(start, new Date(), 'confirmed'), supabase);
-        await enqueueStaffPlan(r.id, start, team, tutorUpn, staffIds);
-        const names = team.map((u) => known.get(u)!.name).join(', ');
-        await log(
-          'schedule',
-          'confirmed',
-          `${formatDemoDateTime(start)}. Tutor ${tutor.name}, ` +
-            (ownLink ? `own meeting link ${ownLink}` : `organizer ${known.get(organizerUpn)!.name}`) +
-            `, team ${names}` +
-            `${reason ? `. Reason: ${reason}` : ''}${conflictNote ? `. Calendar clash note: ${conflictNote}` : ''}`,
-        );
-        sendNow = !ownLink;
+          actorId,
+          r,
+          settings,
+          origin,
+          input: {
+            start: parseStart(body.start),
+            minutes: parseMinutes(body.minutes, settings.schedule.durationMinutes),
+            reason: text(body.reason) || null,
+            teamUpns: requested,
+            tutorUpn: text(body.tutorUpn, 200).toLowerCase(),
+            organizerUpn: text(body.organizerUpn, 200).toLowerCase(),
+            meeting,
+            joinUrl: meeting === 'own_link' ? meetingUrl(body.joinUrl) : null,
+            conflictNote: text(body.conflictNote) || null,
+            parentEmail: body.parentEmail === undefined ? undefined : email(body.parentEmail),
+          },
+        });
+        sendNow = res.sendNow;
+        break;
+      }
+
+      case 'set_link': {
+        // A demo confirmed with "Link later" (or an own-link demo whose link changed).
+        if (r.status !== 'approved') throw new ActionError('Add a link to a scheduled demo.');
+        if (r.graph_event_id) throw new ActionError('This demo has a Teams meeting already.');
+        const link = meetingUrl(body.joinUrl);
+        if (!link) throw new ActionError('Paste the full meeting link, starting with https://');
+        await updateDemoRequest(r.id, { teams_join_url: link, meeting_kind: 'own_link' }, supabase);
+        await log('schedule', 'link_added', link);
         break;
       }
 
@@ -316,10 +216,10 @@ export async function POST(req: Request, { params }: Params) {
           supabase,
         );
         await cancelPendingDemoMessages(r.id, undefined, supabase);
-        if (!isOwnLinkDemo(r)) await enqueueDemoMessages(r, demoReminderPlan(start, new Date(), 'rescheduled'), supabase);
-        await enqueueStaffPlan(r.id, start, r.staff_upns ?? [], r.tutor_upn, await staffUserIdsByUpn(r.staff_upns ?? [], supabase));
+        if (studentGetsDemoWhatsApp(r)) await enqueueDemoMessages(r, demoReminderPlan(start, new Date(), 'rescheduled'), supabase);
+        await enqueueStaffPlan(r.id, start, r.staff_upns ?? [], r.tutor_upn, await staffUserIdsByUpn(r.staff_upns ?? [], supabase), supabase);
         await log('schedule', 'rescheduled', `${formatDemoDateTime(new Date(r.scheduled_start))} moved to ${formatDemoDateTime(start)}. Reason: ${reason}`);
-        sendNow = !isOwnLinkDemo(r);
+        sendNow = studentGetsDemoWhatsApp(r);
         break;
       }
 
@@ -427,8 +327,8 @@ export async function POST(req: Request, { params }: Params) {
       }
 
       case 'resend': {
-        if (r.status === 'approved' && isOwnLinkDemo(r)) {
-          throw new ActionError('This demo uses your own meeting link. Send it to the student yourself on WhatsApp.');
+        if (r.status === 'approved' && !studentGetsDemoWhatsApp(r)) {
+          throw new ActionError('This demo is not on Teams, so there is no automatic message. Send the details to the student yourself on WhatsApp.');
         }
         if (r.status === 'approved') {
           await enqueueDemoMessages(r, [{ kind: 'confirmed', sendAfter: new Date() }], supabase);
@@ -486,7 +386,7 @@ export async function POST(req: Request, { params }: Params) {
 
     return NextResponse.json({ ...(await detail(r.id)), send });
   } catch (error) {
-    if (error instanceof ActionError || error instanceof DemoTeamsError || error instanceof HeldDemoError) {
+    if (error instanceof ActionError || error instanceof DemoTeamsError || error instanceof HeldDemoError || error instanceof ConfirmError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
     console.error('demo-request action failed:', error);

@@ -17,6 +17,7 @@ import { annualFee } from '@/lib/college-hub/detail-content';
 import SaveCollegeButton from '../SaveCollegeButton';
 import CollegeLogo from '../directory/CollegeLogo';
 import { coaChipSx, ctaButtonSx, naacChipSx, statLabelSx } from '../directory/hub-styles';
+import { tokens } from '@/design-system';
 
 interface Props {
   college: CollegeDetail;
@@ -65,7 +66,7 @@ const chip = {
   gap: 0.5,
   height: 30,
   px: 1.5,
-  borderRadius: 2,
+  borderRadius: `${tokens.radiusPill}px`,
   fontSize: '0.84rem',
   fontWeight: 700,
   whiteSpace: 'nowrap' as const,
@@ -78,15 +79,15 @@ const outlineButton = {
   height: 44,
   px: 1.75,
   border: '1px solid',
-  borderColor: 'grey.400',
-  borderRadius: 1.5,
-  bgcolor: 'background.paper',
-  color: 'text.primary',
+  borderColor: tokens.lineStrong,
+  borderRadius: 1,
+  bgcolor: tokens.surface,
+  color: tokens.ink,
   font: 'inherit',
   fontSize: '0.88rem',
   fontWeight: 600,
   cursor: 'pointer',
-  '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+  '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 },
 };
 
 /** Header band of the college page (canvas: Desktop · College page, top). */
@@ -119,19 +120,19 @@ export default function ProfileHero({ college: c, summary, updated, sources }: P
   };
 
   return (
-    <Box component="section" aria-labelledby="college-name" sx={{ bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider' }}>
+    <Box component="section" aria-labelledby="college-name" sx={{ bgcolor: tokens.surface, borderBottom: '1px solid', borderColor: tokens.line }}>
       <Box sx={{ maxWidth: 1360, mx: 'auto', px: { xs: 2, md: 4 }, pt: { xs: 1.5, md: 2.5 }, pb: { xs: 2.5, md: 3 }, display: 'flex', flexDirection: 'column', gap: { xs: 2, md: 2.5 } }}>
         {c.hero_image_url && (
-          <Box sx={{ position: 'relative', width: '100%', height: { xs: 168, sm: 220, md: 260 }, borderRadius: 2, overflow: 'hidden', bgcolor: 'grey.900' }}>
+          <Box sx={{ position: 'relative', width: '100%', height: { xs: 168, sm: 220, md: 260 }, borderRadius: 1, overflow: 'hidden', bgcolor: tokens.navy900 }}>
             <Image src={c.hero_image_url} alt={`${c.name} campus`} fill priority sizes="(max-width: 1360px) 100vw, 1360px" style={{ objectFit: 'cover' }} />
             {credit && (
               <Typography
                 component="p"
-                sx={{ position: 'absolute', right: 0, bottom: 0, m: 0, px: 1, py: 0.25, maxWidth: '100%', fontSize: '0.75rem', lineHeight: 1.6, color: '#fff', bgcolor: 'rgba(15, 23, 42, 0.72)', borderTopLeftRadius: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                sx={{ position: 'absolute', right: 0, bottom: 0, m: 0, px: 1, py: 0.25, maxWidth: '100%', fontSize: '0.75rem', lineHeight: 1.6, color: tokens.paper, bgcolor: alpha(tokens.navy900, 0.72), borderTopLeftRadius: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
               >
                 Photo:{' '}
                 {creditHref ? (
-                  <MuiLink href={creditHref} target="_blank" rel="nofollow noopener" sx={{ color: 'inherit', textDecorationColor: 'rgba(255,255,255,0.7)', display: 'inline-block', py: 0.5, '&:focus-visible': { outline: '2px solid #fff', outlineOffset: 2 } }}>
+                  <MuiLink href={creditHref} target="_blank" rel="nofollow noopener" sx={{ color: 'inherit', textDecorationColor: tokens.paperMuted, display: 'inline-block', py: 0.5, '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } }}>
                     {credit}
                   </MuiLink>
                 ) : (
@@ -153,9 +154,9 @@ export default function ProfileHero({ college: c, summary, updated, sources }: P
             <Box sx={{ flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
               <Typography id="college-name" variant="h1" sx={{ m: 0, fontSize: { xs: '1.35rem', md: 30 }, lineHeight: 1.2, fontWeight: 800, letterSpacing: '-0.02em', textWrap: 'balance' }}>
                 {c.name}
-                {c.verified && <VerifiedIcon titleAccess="Verified by Neram" sx={{ ml: 1, fontSize: { xs: 18, md: 22 }, color: 'primary.main', verticalAlign: 'middle' }} />}
+                {c.verified && <VerifiedIcon titleAccess="Verified by Neram" sx={{ ml: 1, fontSize: { xs: 18, md: 22 }, color: tokens.navy900, verticalAlign: 'middle' }} />}
               </Typography>
-              <Typography component="p" sx={{ m: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 10px', fontSize: { xs: '0.88rem', md: '0.95rem' }, color: 'text.secondary' }}>
+              <Typography component="p" sx={{ m: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 10px', fontSize: { xs: '0.88rem', md: '0.95rem' }, color: tokens.inkMuted }}>
                 <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
                   <PlaceOutlinedIcon aria-hidden sx={{ fontSize: 17 }} />
                   {[c.city, c.district && c.district !== c.city ? c.district : null, c.state].filter(Boolean).join(', ')}
@@ -177,11 +178,11 @@ export default function ProfileHero({ college: c, summary, updated, sources }: P
                 {c.naac_grade && <Box component="li" sx={{ ...naacChipSx, ...chip }}>NAAC {c.naac_grade}</Box>}
                 {c.nba_accredited && <Box component="li" sx={{ ...naacChipSx, ...chip }}>NBA accredited</Box>}
                 {c.partnership_page_status === 'approved' && (
-                  <Box component="li" sx={{ ...chip, bgcolor: (t) => alpha(t.palette.primary.main, 0.1), color: 'primary.dark' }}>Neram partner</Box>
+                  <Box component="li" sx={{ ...chip, bgcolor: tokens.surfaceHover, color: tokens.navy900 }}>Neram partner</Box>
                 )}
-                <Box component="li" sx={{ ...chip, bgcolor: 'action.hover', color: 'text.secondary', fontWeight: 600 }}>{typeLabel(c.type)}</Box>
+                <Box component="li" sx={{ ...chip, bgcolor: tokens.surfaceHover, color: tokens.inkMuted, fontWeight: 600 }}>{typeLabel(c.type)}</Box>
                 {affiliation && (
-                  <Box component="li" sx={{ ...chip, bgcolor: 'action.hover', color: 'text.secondary', fontWeight: 600, whiteSpace: 'normal', height: 'auto', minHeight: 30, py: 0.5 }}>
+                  <Box component="li" sx={{ ...chip, bgcolor: tokens.surfaceHover, color: tokens.inkMuted, fontWeight: 600, whiteSpace: 'normal', height: 'auto', minHeight: 30, py: 0.5 }}>
                     Affiliated to {affiliation}
                   </Box>
                 )}
@@ -200,9 +201,9 @@ export default function ProfileHero({ college: c, summary, updated, sources }: P
               onClick={toggleCompare}
               sx={{
                 ...outlineButton,
-                borderColor: inCompare ? 'primary.main' : 'grey.400',
-                bgcolor: (t) => (inCompare ? alpha(t.palette.primary.main, 0.08) : t.palette.background.paper),
-                color: inCompare ? 'primary.dark' : 'text.primary',
+                borderColor: inCompare ? tokens.navy900 : tokens.lineStrong,
+                bgcolor: inCompare ? tokens.surfaceHover : tokens.surface,
+                color: inCompare ? tokens.navy900 : tokens.ink,
               }}
             >
               {inCompare ? <CheckIcon aria-hidden sx={{ fontSize: 18 }} /> : <CompareArrowsIcon aria-hidden sx={{ fontSize: 18 }} />}
@@ -214,7 +215,7 @@ export default function ProfileHero({ college: c, summary, updated, sources }: P
             <Box
               component="a"
               href="#admission-help"
-              sx={{ ...ctaButtonSx, display: { xs: 'none', md: 'flex' }, alignItems: 'center', height: 44, px: 2.5, borderRadius: 1.5, fontSize: '0.95rem', textDecoration: 'none', '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
+              sx={{ ...ctaButtonSx, display: { xs: 'none', md: 'flex' }, alignItems: 'center', height: 44, px: 2.5, borderRadius: 1, fontSize: '0.95rem', textDecoration: 'none', '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } }}
             >
               Get admission help
             </Box>
@@ -222,7 +223,7 @@ export default function ProfileHero({ college: c, summary, updated, sources }: P
         </Box>
 
         {/* Answer-first summary (server-rendered facts); the speakable target. */}
-        <Typography id="college-summary" component="p" sx={{ m: 0, fontSize: '1rem', lineHeight: 1.65, color: 'text.primary', maxWidth: 820 }}>
+        <Typography id="college-summary" component="p" sx={{ m: 0, fontSize: '1rem', lineHeight: 1.65, color: tokens.ink, maxWidth: 820 }}>
           {summary}
         </Typography>
 
@@ -235,10 +236,10 @@ export default function ProfileHero({ college: c, summary, updated, sources }: P
             gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', md: 'repeat(auto-fit, minmax(min(160px, 100%), 1fr))' },
             gap: { xs: 1, md: 0 },
             border: { md: '1px solid' },
-            borderColor: { md: 'divider' },
-            borderRadius: 2,
+            borderColor: { md: tokens.line },
+            borderRadius: 1,
             overflow: 'hidden',
-            bgcolor: { xs: 'transparent', md: 'action.hover' },
+            bgcolor: { xs: 'transparent', md: tokens.surfaceHover },
           }}
         >
           {kpis.map((k) => (
@@ -250,20 +251,20 @@ export default function ProfileHero({ college: c, summary, updated, sources }: P
                 gap: 0.25,
                 px: { xs: 1.75, md: 2.5 },
                 py: { xs: 1.5, md: 2 },
-                borderRadius: { xs: 1.5, md: 0 },
-                bgcolor: { xs: 'action.hover', md: 'transparent' },
+                borderRadius: { xs: 1, md: 0 },
+                bgcolor: { xs: tokens.surfaceHover, md: 'transparent' },
                 borderRight: { md: '1px solid' },
-                borderColor: { md: 'divider' },
+                borderColor: { md: tokens.line },
                 '&:last-of-type': { borderRight: 0 },
                 minWidth: 0,
               }}
             >
               <Box component="dt" sx={statLabelSx}>{k.label}</Box>
-              <Box component="dd" sx={{ m: 0, fontSize: { xs: '1.1rem', md: '1.35rem' }, fontWeight: 700, color: k.muted ? 'text.secondary' : 'text.primary', fontVariantNumeric: 'tabular-nums', overflowWrap: 'anywhere' }}>
+              <Box component="dd" sx={{ m: 0, fontSize: { xs: '1.1rem', md: '1.35rem' }, fontWeight: 700, color: k.muted ? tokens.inkMuted : tokens.ink, fontVariantNumeric: 'tabular-nums', overflowWrap: 'anywhere' }}>
                 {k.value}
               </Box>
               {k.note && (
-                <Box component="dd" sx={{ m: 0, fontSize: '0.8rem', color: 'text.secondary' }}>
+                <Box component="dd" sx={{ m: 0, fontSize: '0.8rem', color: tokens.inkMuted }}>
                   {k.note}
                 </Box>
               )}
@@ -271,8 +272,8 @@ export default function ProfileHero({ college: c, summary, updated, sources }: P
           ))}
         </Box>
 
-        <Typography component="p" sx={{ m: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 10px', fontSize: '0.84rem', color: 'text.secondary', lineHeight: 1.5 }}>
-          <VerifiedUserOutlinedIcon aria-hidden sx={{ fontSize: 17, color: 'success.dark' }} />
+        <Typography component="p" sx={{ m: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '4px 10px', fontSize: '0.84rem', color: tokens.inkMuted, lineHeight: 1.5 }}>
+          <VerifiedUserOutlinedIcon aria-hidden sx={{ fontSize: 17, color: tokens.success }} />
           <span>
             {sources.length > 0 ? `Checked against ${sources.join(', ')}.` : 'From the college and public records.'}
             {updated && (
@@ -283,7 +284,7 @@ export default function ProfileHero({ college: c, summary, updated, sources }: P
           </span>
           <MuiLink
             href={`mailto:info@neramclasses.com?subject=${encodeURIComponent(`Correction: ${c.name}`)}`}
-            sx={{ fontWeight: 600, color: 'primary.dark', textDecoration: 'none', minHeight: 32, display: 'inline-flex', alignItems: 'center', '&:hover': { textDecoration: 'underline' } }}
+            sx={{ fontWeight: 600, color: tokens.navy900, textDecoration: 'none', minHeight: 32, display: 'inline-flex', alignItems: 'center', '&:hover': { textDecoration: 'underline' } }}
           >
             Report a correction
           </MuiLink>

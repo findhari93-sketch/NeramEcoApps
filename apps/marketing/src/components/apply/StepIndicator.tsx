@@ -2,6 +2,7 @@
 
 import { Box, Typography } from '@neram/ui';
 import { useTranslations } from 'next-intl';
+import { tokens as tk } from '@/design-system';
 import { STEP_COUNT, STEP_KEYS, type FormStep } from './types';
 
 interface StepIndicatorProps {
@@ -11,7 +12,7 @@ interface StepIndicatorProps {
 }
 
 /**
- * Four columns, one per step: a 4 px bar (gold now, ink done, pale to come)
+ * Four columns, one per step: a 4 px bar (gold done and current, line to come)
  * over "01 About you", every label shown even on a phone. Done steps are
  * buttons so an applicant can go back to fix something; nothing is clickable
  * on the pay step, where the application
@@ -25,7 +26,7 @@ export default function StepIndicator({ step, onStepClick }: StepIndicatorProps)
     <Box
       component="ol"
       aria-label={t('progress', { current: step + 1, total: STEP_COUNT })}
-      sx={{ listStyle: 'none', m: 0, p: 0, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', columnGap: 1 }}
+      sx={{ listStyle: 'none', m: 0, p: 0, display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', columnGap: { xs: 0.75, sm: 1 } }}
     >
       {STEP_KEYS.map((key, index) => {
         const done = index < step;
@@ -49,15 +50,16 @@ export default function StepIndicator({ step, onStepClick }: StepIndicatorProps)
                 minHeight: 44,
                 pt: 0.5,
                 cursor: clickable ? 'pointer' : 'default',
-                color: active || done ? 'text.primary' : 'text.secondary',
-                '&:hover': clickable ? { color: 'primary.dark' } : undefined,
-                '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+                color: active || done ? tk.ink : tk.inkMuted,
+                '&:hover': clickable ? { color: tk.gold800 } : undefined,
+                '&:focus-visible': { outline: tk.focusOutline, outlineOffset: '2px' },
               }}
             >
               <Box
                 sx={{
                   height: 4,
-                  bgcolor: active ? 'primary.main' : done ? 'text.primary' : '#e4e1da',
+                  borderRadius: '2px',
+                  bgcolor: active || done ? tk.gold500 : tk.line,
                   transition: 'background-color 200ms',
                   '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
                 }}
@@ -68,15 +70,15 @@ export default function StepIndicator({ step, onStepClick }: StepIndicatorProps)
                   display: 'flex',
                   gap: 0.75,
                   alignItems: 'baseline',
-                  fontSize: 12,
-                  fontWeight: 700,
+                  fontSize: { xs: 13, sm: 14 },
+                  fontWeight: active ? 700 : 600,
                   lineHeight: 1.2,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                 }}
               >
-                <Box component="span" sx={{ fontFamily: 'ui-monospace, Menlo, Consolas, monospace', flexShrink: 0 }}>
+                <Box component="span" sx={{ fontFamily: tk.fontMono, fontSize: 12, fontWeight: 700, flexShrink: 0 }}>
                   {`0${index + 1}`}
                 </Box>
                 <Box component="span" sx={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>

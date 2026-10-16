@@ -6,6 +6,7 @@ import ArrowForward from '@mui/icons-material/ArrowForward';
 import { useTranslations } from 'next-intl';
 import type { FormStep } from './types';
 import StepIndicator from './StepIndicator';
+import { tokens as tk, eyebrowSx } from '@/design-system';
 
 export interface StepActions {
   primaryLabel: string;
@@ -43,29 +44,18 @@ export default function StepShell({ step, children, actions, onStepClick, aside 
     <Box
       sx={{
         width: '100%',
-        maxWidth: 696,
+        maxWidth: 720,
         boxSizing: 'border-box',
-        px: { xs: 2, md: 6 },
-        pt: { xs: 3.5, md: 6 },
+        px: 'clamp(16px, 4vw, 48px)',
+        pt: { xs: 4, md: 6 },
         pb: { xs: 5, md: 7 },
         display: 'flex',
         flexDirection: 'column',
-        gap: { xs: 3, md: 3.5 },
+        gap: 3.5,
       }}
     >
-      <Box component="header" sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-        <Typography
-          component="p"
-          sx={{
-            m: 0,
-            fontFamily: 'ui-monospace, Menlo, Consolas, monospace',
-            fontSize: 12,
-            fontWeight: 600,
-            letterSpacing: '0.12em',
-            textTransform: 'uppercase',
-            color: 'text.secondary',
-          }}
-        >
+      <Box component="header" sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Typography component="p" sx={{ ...eyebrowSx, color: tk.gold800 }}>
           {t('eyebrow')}
         </Typography>
         <StepIndicator step={step} onStepClick={onStepClick} />
@@ -74,9 +64,10 @@ export default function StepShell({ step, children, actions, onStepClick, aside 
       <Box>{children}</Box>
 
       {actions && (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25, borderTop: `1px solid ${tk.line}`, pt: 3 }}>
           <Button
             variant="contained"
+            color="primary"
             fullWidth
             onClick={actions.onPrimary}
             disabled={actions.busy}
@@ -85,9 +76,15 @@ export default function StepShell({ step, children, actions, onStepClick, aside 
               minHeight: 56,
               px: 2.5,
               justifyContent: 'space-between',
+              borderRadius: `${tk.radius}px`,
+              bgcolor: tk.gold500,
+              color: tk.navy900,
               fontSize: 16,
               fontWeight: 800,
               textTransform: 'none',
+              '&:hover': { bgcolor: tk.gold300 },
+              '&.Mui-disabled': { bgcolor: tk.gold500, color: tk.navy900, opacity: 0.6 },
+              '&.Mui-focusVisible': { outline: tk.focusOutline, outlineOffset: '2px' },
               '& .MuiButton-endIcon': { ml: 2 },
             }}
           >
@@ -107,17 +104,16 @@ export default function StepShell({ step, children, actions, onStepClick, aside 
               {actions.onBack && (
                 <Button
                   variant="text"
-                  color="inherit"
                   startIcon={<ArrowBack />}
                   onClick={actions.onBack}
                   disabled={actions.backDisabled}
-                  sx={{ minHeight: 44, ml: -1, fontWeight: 700, textTransform: 'none' }}
+                  sx={{ minHeight: 44, ml: -1, px: 1, color: tk.ink, fontSize: 15, fontWeight: 700, textTransform: 'none' }}
                 >
                   {t('actions.back')}
                 </Button>
               )}
               {actions.note && (
-                <Typography variant="body2" color="text.secondary" sx={{ fontSize: 13, textAlign: actions.onBack ? 'right' : 'left' }}>
+                <Typography component="p" sx={{ m: 0, ml: 'auto', fontSize: 13, color: tk.inkMuted, textAlign: actions.onBack ? 'right' : 'left' }}>
                   {actions.note}
                 </Typography>
               )}

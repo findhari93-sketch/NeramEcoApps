@@ -7,7 +7,8 @@ import {
   Stack,
   Chip,
 } from '@mui/material';
-import EventIcon from '@mui/icons-material/Event';
+import EventIcon from '@mui/icons-material/EventOutlined';
+import { siteTokens as t } from '@neram/ui/site-tokens';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { generateEventSchema } from '@/lib/seo/schemas';
 import KeamSpokeShell from '@/components/keam-arch/KeamSpokeShell';
@@ -16,7 +17,6 @@ import { importantDates } from '@/data/keam-arch-2026';
 export const revalidate = 86400;
 
 const SPOKE = 'important-dates';
-const PRIMARY_GREEN = '#0d7a4a';
 const baseUrl = 'https://neramclasses.com';
 
 const KEAM_PORTAL = { name: 'CEE Kerala Portal', url: 'https://cee.kerala.gov.in/keam2026/' };
@@ -89,20 +89,21 @@ export default function ImportantDatesPage({
             elevation={0}
             sx={{
               p: 2.25,
-              borderRadius: 2,
-              border: '1px solid',
-              borderColor: d.status === 'confirmed' ? PRIMARY_GREEN : 'divider',
-              bgcolor: d.status === 'confirmed' ? '#f0fdf4' : 'background.paper',
+              borderRadius: 1,
+              border: `1px solid ${t.line}`,
+              bgcolor: t.surface,
             }}
           >
             <Stack direction="row" gap={1.5} alignItems="flex-start">
               <Box
+                aria-hidden
                 sx={{
                   width: 40,
                   height: 40,
                   borderRadius: '50%',
-                  bgcolor: d.status === 'confirmed' ? PRIMARY_GREEN : '#fef3c7',
-                  color: d.status === 'confirmed' ? 'white' : '#92400e',
+                  bgcolor: d.status === 'confirmed' ? t.navy900 : t.surface,
+                  color: d.status === 'confirmed' ? t.gold500 : t.gold800,
+                  border: d.status === 'confirmed' ? 'none' : `2px solid ${t.lineStrong}`,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -126,9 +127,10 @@ export default function ImportantDatesPage({
                     label={d.status === 'confirmed' ? 'Confirmed' : 'Tentative'}
                     size="small"
                     sx={{
-                      bgcolor: d.status === 'confirmed' ? '#dcfce7' : '#fef3c7',
-                      color: d.status === 'confirmed' ? '#15803d' : '#92400e',
-                      fontWeight: 600,
+                      bgcolor: 'transparent',
+                      color: d.status === 'confirmed' ? t.success : t.gold800,
+                      border: `1px solid ${d.status === 'confirmed' ? t.success : t.gold800}`,
+                      fontWeight: 700,
                     }}
                   />
                   <Chip
@@ -149,7 +151,7 @@ export default function ImportantDatesPage({
                 {d.clause_ref && (
                   <Typography
                     variant="caption"
-                    sx={{ color: PRIMARY_GREEN, fontWeight: 600, mt: 0.5, display: 'block' }}
+                    sx={{ color: t.gold800, fontWeight: 600, mt: 0.5, display: 'block' }}
                   >
                     Source: {d.clause_ref}
                   </Typography>

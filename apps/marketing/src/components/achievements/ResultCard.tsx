@@ -1,51 +1,45 @@
 'use client';
 
-import { Box, Typography, Chip, Avatar } from '@neram/ui';
-import LocationOnIcon from '@mui/icons-material/LocationOn';
-import Link from 'next/link';
 import Image from 'next/image';
+import { Box, Typography } from '@neram/ui';
+import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
+import { Link } from '@/i18n/routing';
+import { tokens as t, focusRing, hoverGoldBorder } from '@/design-system';
+import { initials } from '@/design-system/PersonCard';
 
-interface ResultCardProps {
-  result: {
-    slug: string;
-    student_name: string;
-    photo_url: string | null;
-    scorecard_watermarked_url: string | null;
-    exam_type: string;
-    exam_year: number;
-    score: number | null;
-    max_score: number | null;
-    rank: number | null;
-    college_name: string | null;
-    college_city: string | null;
-  };
+export interface ResultCardData {
+  slug: string;
+  student_name: string;
+  photo_url: string | null;
+  scorecard_watermarked_url?: string | null;
+  exam_type: string;
+  exam_year: number;
+  score: number | null;
+  max_score: number | null;
+  rank: number | null;
+  college_name: string | null;
+  college_city?: string | null;
 }
 
-const EXAM_CHIP_COLORS: Record<string, string> = {
-  nata: '#1a8fff',
-  jee_paper2: '#4caf50',
-  tnea: '#ff9800',
-  other: '#9e9e9e',
-};
+interface ResultCardProps {
+  result: ResultCardData;
+  /** Featured strip: fixed width for the horizontal scroller. */
+  compact?: boolean;
+}
 
-const EXAM_LABELS: Record<string, string> = {
+export const EXAM_LABELS: Record<string, string> = {
   nata: 'NATA',
   jee_paper2: 'JEE Paper 2',
   tnea: 'TNEA',
   other: 'Other',
 };
 
-function getInitials(name: string): string {
-  return name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
-}
-
-export default function ResultCard({ result }: ResultCardProps) {
-  const chipColor = EXAM_CHIP_COLORS[result.exam_type] || '#9e9e9e';
+/**
+ * One published result: avatar (photo or initials on navy700), name, a mono
+ * exam tag, the score in mono ink, rank and college. The whole card links to
+ * the result page; hover turns the border gold.
+ */
+export default function ResultCard({ result, compact = false }: ResultCardProps) {
   const examLabel = EXAM_LABELS[result.exam_type] || result.exam_type;
 
   const scoreDisplay =
@@ -54,191 +48,114 @@ export default function ResultCard({ result }: ResultCardProps) {
       : result.score != null
         ? `${result.score}`
         : null;
-
   const rankDisplay = result.rank != null ? `Rank #${result.rank}` : null;
 
-  // Show score prominently, rank as secondary. If no score, show rank prominently.
+  // Score prominently, rank as secondary. Without a score, rank leads.
   const primaryDisplay = scoreDisplay || rankDisplay;
   const secondaryDisplay = scoreDisplay && rankDisplay ? rankDisplay : null;
 
-  const collegeLine = [result.college_name, result.college_city]
-    .filter(Boolean)
-    .join(', ');
+  const collegeLine = [result.college_name, result.college_city].filter(Boolean).join(', ');
 
   return (
     <Box
       component={Link}
       href={`/achievements/${result.slug}`}
       sx={{
-        display: 'block',
-        textDecoration: 'none',
-        cursor: 'pointer',
         position: 'relative',
-        pt: 5, // space for avatar overlap
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1.5,
+        height: '100%',
+        boxSizing: 'border-box',
+        p: 2.5,
+        bgcolor: t.surface,
+        border: `1px solid ${t.line}`,
+        borderRadius: `${t.radius}px`,
+        color: t.ink,
+        textDecoration: 'none',
+        ...(compact && { width: 260, flexShrink: 0, scrollSnapAlign: 'start' }),
+        ...hoverGoldBorder,
+        ...focusRing,
       }}
     >
-      <Box
-        sx={{
-          bgcolor: 'rgba(11,22,41,0.75)',
-          backdropFilter: 'blur(12px)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          borderRadius: '16px',
-          p: { xs: 2, sm: 2.5 },
-          pt: { xs: 6, sm: 6.5 },
-          position: 'relative',
-          height: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          textAlign: 'center',
-          transition: 'all 0.3s ease',
-          '&:hover': {
-            transform: 'translateY(-4px)',
-            boxShadow: '0 12px 40px rgba(232,160,32,0.12)',
-            borderColor: 'rgba(232,160,32,0.3)',
-          },
-        }}
-      >
-        {/* Avatar overlapping top */}
-        <Avatar
-          src={result.photo_url || undefined}
-          alt={result.student_name}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
+        <Box
+          aria-hidden
           sx={{
-            width: 80,
-            height: 80,
-            position: 'absolute',
-            top: -40,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            fontSize: 24,
+            width: 52,
+            height: 52,
+            borderRadius: '50%',
+            overflow: 'hidden',
+            position: 'relative',
+            flexShrink: 0,
+            bgcolor: t.navy700,
+            color: t.paper,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             fontWeight: 700,
-            bgcolor: 'rgba(232,160,32,0.15)',
-            color: '#e8a020',
-            border: '3px solid rgba(232,160,32,0.3)',
-            boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
           }}
         >
-          {getInitials(result.student_name)}
-        </Avatar>
-
-        {/* Student name */}
-        <Typography
-          variant="h6"
-          component="div"
-          fontWeight={700}
-          noWrap
-          sx={{
-            color: '#f5f0e8',
-            maxWidth: '100%',
-            fontSize: { xs: '0.95rem', sm: '1.1rem' },
-          }}
-        >
-          {result.student_name}
-        </Typography>
-
-        {/* Exam badge + year */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mt: 1 }}>
-          <Chip
-            label={examLabel}
-            size="small"
-            sx={{
-              bgcolor: `${chipColor}20`,
-              color: chipColor,
-              border: `1px solid ${chipColor}40`,
-              fontWeight: 600,
-              fontSize: '0.7rem',
-              height: 24,
-            }}
-          />
+          {result.photo_url ? (
+            <Image src={result.photo_url} alt="" fill sizes="52px" style={{ objectFit: 'cover' }} />
+          ) : (
+            initials(result.student_name)
+          )}
+        </Box>
+        <Box sx={{ minWidth: 0 }}>
           <Typography
-            variant="caption"
-            sx={{ color: 'rgba(245,240,232,0.4)' }}
+            component="h3"
+            sx={{ m: 0, fontSize: '1rem', fontWeight: 700, lineHeight: 1.3, overflowWrap: 'anywhere' }}
           >
-            {result.exam_year}
+            {result.student_name}
+          </Typography>
+          <Typography
+            component="span"
+            sx={{ fontFamily: t.fontMono, fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.04em', color: t.gold800 }}
+          >
+            {examLabel} {result.exam_year}
           </Typography>
         </Box>
+      </Box>
 
-        {/* Score display */}
-        {primaryDisplay && (
-          <Typography
-            variant="h5"
-            fontWeight={800}
-            sx={{
-              color: '#e8a020',
-              mt: 1.5,
-              fontSize: { xs: '1.25rem', sm: '1.4rem' },
-              lineHeight: 1.2,
-            }}
-          >
+      {primaryDisplay && (
+        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, flexWrap: 'wrap' }}>
+          <Typography component="span" sx={{ fontFamily: t.fontMono, fontSize: '1.375rem', fontWeight: 700, lineHeight: 1.2 }}>
             {primaryDisplay}
           </Typography>
-        )}
-
-        {/* Secondary display (rank when score is shown) */}
-        {secondaryDisplay && (
-          <Typography
-            variant="caption"
-            sx={{
-              color: 'rgba(245,240,232,0.5)',
-              mt: 0.25,
-              fontWeight: 500,
-            }}
-          >
-            {secondaryDisplay}
-          </Typography>
-        )}
-
-        {/* College */}
-        {collegeLine && (
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 0.5,
-              mt: 1.5,
-              maxWidth: '100%',
-            }}
-          >
-            <LocationOnIcon
-              sx={{ fontSize: 14, color: 'rgba(245,240,232,0.4)', flexShrink: 0 }}
-            />
-            <Typography
-              variant="caption"
-              noWrap
-              sx={{ color: 'rgba(245,240,232,0.5)' }}
-            >
-              {collegeLine}
+          {secondaryDisplay && (
+            <Typography component="span" sx={{ fontSize: '0.875rem', fontWeight: 600, color: t.inkMuted }}>
+              {secondaryDisplay}
             </Typography>
-          </Box>
-        )}
+          )}
+        </Box>
+      )}
 
-        {/* Watermarked scorecard thumbnail */}
-        {result.scorecard_watermarked_url && (
-          <Box
-            sx={{
-              position: 'absolute',
-              bottom: 8,
-              right: 8,
-              width: 40,
-              height: 40,
-              borderRadius: '8px',
-              overflow: 'hidden',
-              border: '1px solid rgba(255,255,255,0.1)',
-              opacity: 0.7,
-              transition: 'opacity 0.2s ease',
-              '&:hover': { opacity: 1 },
-            }}
-          >
-            <Image
-              src={result.scorecard_watermarked_url}
-              alt="Scorecard"
-              fill
-              sizes="40px"
-              style={{ objectFit: 'cover' }}
-            />
-          </Box>
-        )}
-      </Box>
+      {collegeLine && (
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 0.5, color: t.inkMuted, mt: 'auto', pr: result.scorecard_watermarked_url ? 6 : 0 }}>
+          <LocationOnOutlinedIcon aria-hidden sx={{ fontSize: 18, mt: '2px', flexShrink: 0 }} />
+          <Typography component="span" sx={{ fontSize: '0.875rem', lineHeight: 1.45, overflowWrap: 'anywhere' }}>
+            {collegeLine}
+          </Typography>
+        </Box>
+      )}
+
+      {result.scorecard_watermarked_url && (
+        <Box
+          sx={{
+            position: 'absolute',
+            bottom: 12,
+            right: 12,
+            width: 40,
+            height: 40,
+            borderRadius: `${t.radius}px`,
+            overflow: 'hidden',
+            border: `1px solid ${t.line}`,
+          }}
+        >
+          <Image src={result.scorecard_watermarked_url} alt="Scorecard" fill sizes="40px" style={{ objectFit: 'cover' }} />
+        </Box>
+      )}
     </Box>
   );
 }

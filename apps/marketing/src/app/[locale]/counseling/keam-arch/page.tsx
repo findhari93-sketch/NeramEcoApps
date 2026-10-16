@@ -11,22 +11,22 @@ import {
   Grid,
   Stack,
   Divider,
-  Alert,
 } from '@mui/material';
-import HomeIcon from '@mui/icons-material/Home';
-import ScheduleIcon from '@mui/icons-material/Schedule';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import CalculateIcon from '@mui/icons-material/Calculate';
-import TrendingUpIcon from '@mui/icons-material/TrendingUp';
-import LocationOnIcon from '@mui/icons-material/LocationOn';
-import GroupsIcon from '@mui/icons-material/Groups';
-import GavelIcon from '@mui/icons-material/Gavel';
-import RouteIcon from '@mui/icons-material/Route';
-import SchoolIcon from '@mui/icons-material/School';
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import HomeIcon from '@mui/icons-material/HomeOutlined';
+import ScheduleIcon from '@mui/icons-material/ScheduleOutlined';
+import CheckCircleIcon from '@mui/icons-material/CheckCircleOutlined';
+import CalculateIcon from '@mui/icons-material/CalculateOutlined';
+import TrendingUpIcon from '@mui/icons-material/TrendingUpOutlined';
+import LocationOnIcon from '@mui/icons-material/LocationOnOutlined';
+import GroupsIcon from '@mui/icons-material/GroupsOutlined';
+import GavelIcon from '@mui/icons-material/GavelOutlined';
+import RouteIcon from '@mui/icons-material/RouteOutlined';
+import SchoolIcon from '@mui/icons-material/SchoolOutlined';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutlineOutlined';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForwardOutlined';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import OpenInNewIcon from '@mui/icons-material/OpenInNewOutlined';
+import { siteTokens as t } from '@neram/ui/site-tokens';
 
 import { buildAlternates } from '@/lib/seo/metadata';
 import { JsonLd } from '@/components/seo/JsonLd';
@@ -49,13 +49,19 @@ import {
 import AintraTopicChat from '@/components/aintra/AintraTopicChat';
 import CallbackDrawer from '@/components/counselling/CallbackDrawer';
 import NataMeritCalculator from '@/components/keam-arch/NataMeritCalculator';
+import { Callout, FactGrid, hoverGoldBorder, iconTileSx } from '@/design-system';
 
 export const revalidate = 86400;
 
 const baseUrl = 'https://neramclasses.com';
 const HUB_PATH = '/counseling/keam-arch';
-const PRIMARY_GREEN = '#0d7a4a';
-const PRIMARY_GREEN_DARK = '#0a5a36';
+const RADIUS = `${t.radius}px`;
+/** Light card: white, 1px line border, 8px radius, no shadow. */
+const cardSx = {
+  borderRadius: RADIUS,
+  border: `1px solid ${t.line}`,
+  bgcolor: t.surface,
+} as const;
 
 const KEAM_CALLBACK_PROPS = {
   context: 'KEAM B.Arch 2026',
@@ -164,7 +170,7 @@ function HubBreadcrumb({ locale }: { locale: string }) {
         </Typography>
       </Link>
       <Typography variant="body2" color="text.secondary">/</Typography>
-      <Typography variant="body2" sx={{ color: PRIMARY_GREEN, fontWeight: 600 }}>
+      <Typography variant="body2" aria-current="page" sx={{ color: t.ink, fontWeight: 600 }}>
         KEAM B.Arch 2026
       </Typography>
     </Stack>
@@ -217,7 +223,7 @@ export default function KeamArchHubPage({ params: { locale } }: PageProps) {
             <Chip
               label="Kerala"
               size="small"
-              sx={{ bgcolor: PRIMARY_GREEN, color: 'white', fontWeight: 700 }}
+              sx={{ bgcolor: t.navy900, color: t.paper, fontWeight: 700 }}
             />
             <Chip label="CEE Kerala" size="small" variant="outlined" />
             <Chip label="2026 Admissions" size="small" variant="outlined" />
@@ -236,51 +242,17 @@ export default function KeamArchHubPage({ params: { locale } }: PageProps) {
           <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 720, mb: 2 }}>
             Everything you need for B.Arch admission in Kerala through cee.kerala.gov.in. NATA + 12th merit formula, 22 colleges across Kerala, CAP allotment phases, full reservation matrix, fee concessions, and free tools to estimate your rank index.
           </Typography>
-          <Grid container spacing={1.5}>
-            {stats.map((s) => (
-              <Grid item xs={6} md={3} key={s.label}>
-                <Paper
-                  elevation={0}
-                  sx={{
-                    p: 1.5,
-                    borderRadius: 2,
-                    bgcolor: 'grey.50',
-                    border: '1px solid',
-                    borderColor: 'divider',
-                  }}
-                >
-                  <Typography variant="caption" color="text.secondary">
-                    {s.label}
-                  </Typography>
-                  <Typography variant="body2" fontWeight={700}>
-                    {s.value}
-                  </Typography>
-                </Paper>
-              </Grid>
-            ))}
-          </Grid>
+          <FactGrid items={stats} cellMin={160} />
         </Box>
 
         {/* NATA-only banner */}
-        <Alert
-          severity="info"
-          icon={<InfoOutlinedIcon />}
-          sx={{
-            mb: 4,
-            borderRadius: 2,
-            bgcolor: '#f0fdf4',
-            color: '#064e3b',
-            border: `1px solid ${PRIMARY_GREEN}`,
-            '& .MuiAlert-icon': { color: PRIMARY_GREEN },
-          }}
-        >
-          <Typography variant="body2" fontWeight={700} sx={{ mb: 0.5 }}>
-            KEAM does not conduct an architecture entrance exam.
-          </Typography>
-          <Typography variant="body2">
-            For B.Arch admission, you need a valid <strong>NATA 2025 or 2026 score</strong>. KEAM only handles centralised allotment. Your rank = NATA (out of 200) + 12th marks (out of 200), totalling 400. (Clause 9.7.4(c))
-          </Typography>
-        </Alert>
+        <Box sx={{ mb: 4 }}>
+          <Callout title="KEAM does not conduct an architecture entrance exam." titleAs="strong">
+            <Typography variant="body2" sx={{ m: 0 }}>
+              For B.Arch admission, you need a valid <strong>NATA 2025 or 2026 score</strong>. KEAM only handles centralised allotment. Your rank = NATA (out of 200) + 12th marks (out of 200), totalling 400. (Clause 9.7.4(c))
+            </Typography>
+          </Callout>
+        </Box>
 
         {/* Next deadline banner */}
         {next && (
@@ -289,17 +261,16 @@ export default function KeamArchHubPage({ params: { locale } }: PageProps) {
             sx={{
               p: 2,
               mb: 4,
-              borderRadius: 2,
-              border: '1px solid',
-              borderColor: 'warning.light',
-              bgcolor: '#FFFBEB',
+              ...cardSx,
+              borderLeft: 'none',
+              boxShadow: `inset 3px 0 0 ${t.gold500}`,
               display: 'flex',
               alignItems: 'center',
               gap: 1.5,
               flexWrap: 'wrap',
             }}
           >
-            <ScheduleIcon sx={{ color: 'warning.dark' }} />
+            <ScheduleIcon aria-hidden sx={{ color: t.gold800 }} />
             <Box flex={1} sx={{ minWidth: 0 }}>
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                 Next milestone ({next.status === 'confirmed' ? 'confirmed' : 'tentative'})
@@ -333,34 +304,18 @@ export default function KeamArchHubPage({ params: { locale } }: PageProps) {
                 elevation={0}
                 sx={{
                   display: 'block',
+                  height: '100%',
                   p: 2,
-                  borderRadius: 2,
-                  border: '1px solid',
-                  borderColor: 'divider',
+                  ...cardSx,
                   textDecoration: 'none',
                   color: 'inherit',
-                  transition: 'all 0.15s ease',
-                  '&:hover': {
-                    borderColor: PRIMARY_GREEN,
-                    transform: 'translateY(-2px)',
-                    boxShadow: '0 8px 24px rgba(13,122,74,0.10)',
-                  },
+                  ...hoverGoldBorder,
+                  '&:focus-visible': { outline: t.focusOutline, outlineOffset: '2px' },
                 }}
               >
                 <Stack direction="row" gap={1.5} alignItems="flex-start">
-                  <Box
-                    sx={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 1.5,
-                      bgcolor: '#dcfce7',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <Icon sx={{ color: PRIMARY_GREEN, fontSize: 22 }} />
+                  <Box aria-hidden sx={iconTileSx}>
+                    <Icon />
                   </Box>
                   <Box>
                     <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 0.25 }}>
@@ -417,15 +372,13 @@ export default function KeamArchHubPage({ params: { locale } }: PageProps) {
                 elevation={0}
                 sx={{
                   p: 2,
-                  borderRadius: 2,
-                  border: '1px solid',
-                  borderColor: 'divider',
+                  ...cardSx,
                   height: '100%',
                   display: 'flex',
                   flexDirection: 'column',
                 }}
               >
-                <Icon sx={{ color: PRIMARY_GREEN, mb: 1 }} />
+                <Icon aria-hidden sx={{ color: t.gold800, mb: 1 }} />
                 <Typography variant="subtitle1" fontWeight={700}>
                   {title}
                 </Typography>
@@ -439,13 +392,7 @@ export default function KeamArchHubPage({ params: { locale } }: PageProps) {
                   target="_blank"
                   rel="noopener"
                   endIcon={<ArrowForwardIcon />}
-                  sx={{
-                    alignSelf: 'flex-start',
-                    minHeight: 40,
-                    color: PRIMARY_GREEN,
-                    borderColor: PRIMARY_GREEN,
-                    '&:hover': { borderColor: PRIMARY_GREEN_DARK, bgcolor: '#f0fdf4' },
-                  }}
+                  sx={{ alignSelf: 'flex-start' }}
                 >
                   {cta}
                 </Button>
@@ -464,9 +411,7 @@ export default function KeamArchHubPage({ params: { locale } }: PageProps) {
               elevation={0}
               sx={{
                 p: 2,
-                borderRadius: 2,
-                border: '1px solid',
-                borderColor: 'divider',
+                ...cardSx,
                 height: '100%',
               }}
             >
@@ -491,7 +436,7 @@ export default function KeamArchHubPage({ params: { locale } }: PageProps) {
                 component={Link}
                 href={`${localePrefix}${HUB_PATH}/eligibility-documents`}
                 size="small"
-                sx={{ mt: 1.5, color: PRIMARY_GREEN }}
+                sx={{ mt: 1.5 }}
                 endIcon={<ArrowForwardIcon />}
               >
                 Full eligibility & documents
@@ -503,9 +448,7 @@ export default function KeamArchHubPage({ params: { locale } }: PageProps) {
               elevation={0}
               sx={{
                 p: 2,
-                borderRadius: 2,
-                border: '1px solid',
-                borderColor: 'divider',
+                ...cardSx,
                 height: '100%',
               }}
             >
@@ -529,7 +472,7 @@ export default function KeamArchHubPage({ params: { locale } }: PageProps) {
                 component={Link}
                 href={`${localePrefix}${HUB_PATH}/reservation-fee-concession`}
                 size="small"
-                sx={{ mt: 1, color: PRIMARY_GREEN }}
+                sx={{ mt: 1 }}
                 endIcon={<ArrowForwardIcon />}
               >
                 Reservation & fee concession
@@ -544,13 +487,11 @@ export default function KeamArchHubPage({ params: { locale } }: PageProps) {
           sx={{
             p: { xs: 2, md: 3 },
             mb: 4,
-            borderRadius: 2,
-            border: `1px solid ${PRIMARY_GREEN}`,
-            bgcolor: '#f0fdf4',
+            ...cardSx,
           }}
         >
           <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 1 }}>
-            <LocationOnIcon sx={{ color: PRIMARY_GREEN }} />
+            <LocationOnIcon aria-hidden sx={{ color: t.gold800 }} />
             <Typography variant="h6" fontWeight={800}>
               {colleges.length} B.Arch Colleges in Kerala
             </Typography>
@@ -564,10 +505,6 @@ export default function KeamArchHubPage({ params: { locale } }: PageProps) {
             variant="contained"
             size="large"
             startIcon={<LocationOnIcon />}
-            sx={{
-              bgcolor: PRIMARY_GREEN,
-              '&:hover': { bgcolor: PRIMARY_GREEN_DARK },
-            }}
           >
             Open colleges list
           </Button>
@@ -579,14 +516,12 @@ export default function KeamArchHubPage({ params: { locale } }: PageProps) {
           sx={{
             p: { xs: 2, md: 3 },
             mb: 5,
-            borderRadius: 2,
-            border: '1px solid',
-            borderColor: 'divider',
-            bgcolor: 'grey.50',
+            ...cardSx,
+            bgcolor: t.ground,
           }}
         >
           <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 1 }}>
-            <InfoOutlinedIcon sx={{ color: 'text.secondary' }} />
+            <InfoOutlinedIcon aria-hidden sx={{ color: t.inkMuted }} />
             <Typography variant="subtitle1" fontWeight={800}>
               Need help filling the form?
             </Typography>
@@ -628,9 +563,7 @@ export default function KeamArchHubPage({ params: { locale } }: PageProps) {
               elevation={0}
               sx={{
                 p: 2,
-                borderRadius: 2,
-                border: '1px solid',
-                borderColor: 'divider',
+                ...cardSx,
               }}
             >
               <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 0.5 }}>
@@ -642,7 +575,7 @@ export default function KeamArchHubPage({ params: { locale } }: PageProps) {
               {faq.clause_ref && (
                 <Typography
                   variant="caption"
-                  sx={{ color: PRIMARY_GREEN, fontWeight: 600, display: 'block', mt: 0.5 }}
+                  sx={{ color: t.gold800, fontWeight: 600, display: 'block', mt: 0.5 }}
                 >
                   Source: {faq.clause_ref}
                 </Typography>
@@ -655,7 +588,7 @@ export default function KeamArchHubPage({ params: { locale } }: PageProps) {
           href={`${localePrefix}${HUB_PATH}/faq`}
           variant="outlined"
           endIcon={<ArrowForwardIcon />}
-          sx={{ mb: 5, color: PRIMARY_GREEN, borderColor: PRIMARY_GREEN }}
+          sx={{ mb: 5 }}
         >
           See all FAQs
         </Button>
@@ -665,9 +598,7 @@ export default function KeamArchHubPage({ params: { locale } }: PageProps) {
           elevation={0}
           sx={{
             p: { xs: 3, md: 4 },
-            borderRadius: 2,
-            border: `1px solid ${PRIMARY_GREEN}`,
-            bgcolor: '#f0fdf4',
+            ...cardSx,
             textAlign: 'center',
           }}
         >
@@ -712,8 +643,8 @@ export default function KeamArchHubPage({ params: { locale } }: PageProps) {
           'Which colleges are in Kerala?',
           'How is the rank calculated?',
         ]}
-        primaryColor={PRIMARY_GREEN}
-        primaryColorDark={PRIMARY_GREEN_DARK}
+        primaryColor={t.navy900}
+        primaryColorDark={t.navy700}
         disclaimerSource="cee.kerala.gov.in"
       />
     </>

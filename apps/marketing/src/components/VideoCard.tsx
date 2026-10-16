@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { Box, Card, CardContent, Typography, CardActionArea } from '@neram/ui';
+import { tokens as t, v } from '@/design-system/tokens';
+import { brandColors } from '@/design-system/brand-colors';
 
 interface VideoCardProps {
   video: {
@@ -13,6 +15,7 @@ interface VideoCardProps {
   };
 }
 
+/** A YouTube video tile. Sits on the dark Home band; reads surface variables so it also works on light. */
 export default function VideoCard({ video }: VideoCardProps) {
   const [playing, setPlaying] = useState(false);
   const isMockVideo = video.id.startsWith('mock');
@@ -25,19 +28,19 @@ export default function VideoCard({ video }: VideoCardProps) {
 
   return (
     <Card
+      elevation={0}
       sx={{
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        bgcolor: 'rgba(11,22,41,0.75)',
-        backdropFilter: 'blur(12px)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        transition: 'all 0.3s ease',
-        '&:hover': {
-          transform: 'translateY(-4px)',
-          boxShadow: '0 12px 40px rgba(26,143,255,0.12)',
-          borderColor: 'rgba(26,143,255,0.2)',
-        },
+        bgcolor: v.card,
+        color: v.fg,
+        backgroundImage: 'none',
+        border: `1px solid ${v.line}`,
+        borderRadius: `${t.radius}px`,
+        boxShadow: 'none',
+        transition: 'border-color 150ms ease',
+        '&:hover': { borderColor: t.gold500 },
       }}
     >
       {/* Video Thumbnail or Embed */}
@@ -45,7 +48,7 @@ export default function VideoCard({ video }: VideoCardProps) {
         sx={{
           position: 'relative',
           paddingTop: '56.25%', // 16:9 aspect ratio
-          bgcolor: 'grey.900',
+          bgcolor: t.navy700,
           overflow: 'hidden',
         }}
       >
@@ -67,12 +70,14 @@ export default function VideoCard({ video }: VideoCardProps) {
         ) : (
           <CardActionArea
             onClick={handlePlay}
+            aria-label={`Play video: ${video.title}`}
             sx={{
               position: 'absolute',
               top: 0,
               left: 0,
               width: '100%',
               height: '100%',
+              '&:focus-visible': { outline: t.focusOutline, outlineOffset: '-2px' },
             }}
           >
             {/* Thumbnail Image */}
@@ -80,7 +85,8 @@ export default function VideoCard({ video }: VideoCardProps) {
               <Box
                 component="img"
                 src={video.thumbnail}
-                alt={video.title}
+                alt=""
+                loading="lazy"
                 sx={{
                   position: 'absolute',
                   top: 0,
@@ -98,13 +104,14 @@ export default function VideoCard({ video }: VideoCardProps) {
                   left: 0,
                   width: '100%',
                   height: '100%',
-                  bgcolor: 'grey.800',
+                  bgcolor: t.navy700,
                 }}
               />
             )}
 
             {/* Play Button Overlay */}
             <Box
+              aria-hidden
               sx={{
                 position: 'absolute',
                 top: '50%',
@@ -112,16 +119,14 @@ export default function VideoCard({ video }: VideoCardProps) {
                 transform: 'translate(-50%, -50%)',
                 width: 64,
                 height: 44,
-                bgcolor: 'rgba(255, 0, 0, 0.85)',
-                borderRadius: '8px',
+                bgcolor: brandColors.youtube,
+                opacity: 0.9,
+                borderRadius: `${t.radius}px`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                transition: 'all 0.2s ease',
-                '&:hover': {
-                  bgcolor: '#FF0000',
-                  transform: 'translate(-50%, -50%) scale(1.1)',
-                },
+                transition: 'opacity 150ms ease',
+                '.MuiCardActionArea-root:hover &': { opacity: 1 },
               }}
             >
               <Box
@@ -130,7 +135,7 @@ export default function VideoCard({ video }: VideoCardProps) {
                   height: 0,
                   borderTop: '10px solid transparent',
                   borderBottom: '10px solid transparent',
-                  borderLeft: '16px solid white',
+                  borderLeft: `16px solid ${t.surface}`,
                   ml: '3px',
                 }}
               />
@@ -146,6 +151,7 @@ export default function VideoCard({ video }: VideoCardProps) {
           component="h3"
           sx={{
             fontWeight: 600,
+            color: v.fg,
             display: '-webkit-box',
             WebkitLineClamp: 2,
             WebkitBoxOrient: 'vertical',
@@ -156,7 +162,7 @@ export default function VideoCard({ video }: VideoCardProps) {
         >
           {video.title}
         </Typography>
-        <Typography variant="body2" color="text.secondary">
+        <Typography variant="body2" sx={{ color: v.muted }}>
           {video.viewCount} views
         </Typography>
       </CardContent>

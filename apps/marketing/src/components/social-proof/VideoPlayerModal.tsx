@@ -3,6 +3,7 @@
 import { Box, Dialog, IconButton, Typography } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
 import type { SocialProof } from '@neram/database';
+import { tokens } from '@/design-system';
 
 interface VideoPlayerModalProps {
   open: boolean;
@@ -59,7 +60,7 @@ export default function VideoPlayerModal({
       </IconButton>
 
       {/* Video iframe - 16:9 */}
-      <Box sx={{ position: 'relative', paddingTop: '56.25%', bgcolor: '#000' }}>
+      <Box sx={{ position: 'relative', paddingTop: '56.25%', bgcolor: tokens.navy900 }}>
         <iframe
           src={`https://www.youtube.com/embed/${video.youtube_id}?autoplay=1&rel=0`}
           title={`${video.speaker_name} testimonial`}

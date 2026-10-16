@@ -1,33 +1,32 @@
 'use client';
 
+/**
+ * /testimonials on the T8 social-proof template: a dark PageHero with real
+ * counts, a sticky white FilterBar, a masonry ReviewWall on the light ground
+ * with "Load more", and the closing CtaBand. All data comes from
+ * /api/testimonials; nothing on this page is a guessed number.
+ */
+
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { ThemeProvider } from '@mui/material/styles';
-import {
-  Box,
-  Container,
-  Typography,
-  Grid,
-  Card,
-  CardContent,
-  Button,
-  Chip,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
-  Skeleton,
-  Avatar,
-} from '@neram/ui';
-import { neramaiArchitekDarkTheme } from '@neram/ui';
-import StarIcon from '@mui/icons-material/Star';
-import NorthEastIcon from '@mui/icons-material/NorthEast';
-import FilterListIcon from '@mui/icons-material/FilterList';
-import PlayCircleOutlineIcon from '@mui/icons-material/PlayCircleOutline';
-import type { SelectChangeEvent } from '@mui/material';
+import { Box, Typography } from '@neram/ui';
+import PlayCircleOutlinedIcon from '@mui/icons-material/PlayCircleOutlined';
+import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
 import type { Testimonial, TestimonialLearningMode } from '@neram/database';
-import { Link } from '@/i18n/routing';
+import {
+  CtaBand,
+  CtaButton,
+  EmptyState,
+  FilterBar,
+  FilterSelect,
+  PageHero,
+  ReviewCard,
+  ReviewWall,
+  tokens as tk,
+  type StatItem,
+} from '@/design-system';
+import { isOptimizableImage } from '@/lib/reviews/rules';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -54,9 +53,10 @@ interface Filters {
   exam_type: string;
 }
 
+const EMPTY_FILTERS: Filters = { year: '', city: '', course_name: '', learning_mode: '', exam_type: '' };
 const ITEMS_PER_PAGE = 12;
 
-// ─── Helper: format exam type for display ───────────────────────────────────
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 function formatExamType(examType: string): string {
   switch (examType) {
@@ -76,219 +76,92 @@ function formatLearningMode(mode: string): string {
   }
 }
 
-// ─── Render Star Rating ─────────────────────────────────────────────────────
-
-function StarRating({ rating }: { rating: number | null }) {
-  if (!rating) return null;
-  return (
-    <Box sx={{ display: 'flex', gap: 0.25, mb: 1.5 }}>
-      {[1, 2, 3, 4, 5].map((star) => (
-        <StarIcon
-          key={star}
-          sx={{
-            fontSize: 16,
-            color: star <= rating ? 'primary.main' : 'rgba(255,255,255,0.15)',
-          }}
-        />
-      ))}
-    </Box>
-  );
-}
-
 // ─── Testimonial Card ───────────────────────────────────────────────────────
 
 function TestimonialCard({ testimonial }: { testimonial: Testimonial }) {
   const content = testimonial.content?.en || testimonial.content?.ta || Object.values(testimonial.content || {})[0] || '';
+  const tag = [formatExamType(testimonial.exam_type), testimonial.year].filter(Boolean).join(' ');
+  const meta = [
+    testimonial.rank ? `AIR ${testimonial.rank}` : '',
+    testimonial.city,
+    testimonial.learning_mode ? formatLearningMode(testimonial.learning_mode) : '',
+    testimonial.college_admitted,
+  ]
+    .filter(Boolean)
+    .join(' · ');
 
   return (
-    <Card
-      sx={{
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        bgcolor: 'rgba(11,22,41,0.75)',
-        backdropFilter: 'blur(12px)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        borderLeft: testimonial.is_featured ? '3px solid' : '1px solid rgba(255,255,255,0.08)',
-        borderLeftColor: testimonial.is_featured ? 'primary.main' : undefined,
-        borderRadius: '16px',
-        transition: 'transform 0.3s ease, box-shadow 0.3s ease',
-        '&:hover': {
-          transform: 'translateY(-4px)',
-          boxShadow: '0 12px 40px rgba(232,160,32,0.1)',
-          borderColor: 'rgba(232,160,32,0.2)',
-        },
-      }}
+    <ReviewCard
+      quote={content}
+      name={testimonial.student_name}
+      meta={meta || undefined}
+      tag={tag || undefined}
+      rating={testimonial.rating}
+      // next/image only takes our own storage URLs; anything else shows initials.
+      photo={isOptimizableImage(testimonial.student_photo) ? testimonial.student_photo : null}
     >
-      <CardContent sx={{ flexGrow: 1, p: { xs: 2.5, sm: 3 }, display: 'flex', flexDirection: 'column' }}>
-        {/* Rating */}
-        <StarRating rating={testimonial.rating} />
-
-        {/* Quote */}
-        <Typography
-          variant="body2"
+      {testimonial.video_url && (
+        <Box
+          component="a"
+          href={testimonial.video_url}
+          target="_blank"
+          rel="noopener noreferrer"
           sx={{
-            color: 'rgba(255,255,255,0.75)',
-            lineHeight: 1.7,
-            mb: 2.5,
-            flexGrow: 1,
-            fontSize: { xs: '0.85rem', sm: '0.875rem' },
+            alignSelf: 'flex-start',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 0.75,
+            minHeight: 44,
+            fontSize: '0.9375rem',
+            fontWeight: 600,
+            color: tk.gold800,
+            textDecoration: 'underline',
+            textUnderlineOffset: '2px',
+            '&:hover': { color: tk.ink },
+            '&:focus-visible': { outline: tk.focusOutline, outlineOffset: '2px' },
+            '& svg': { fontSize: 22, color: tk.gold800 },
           }}
         >
-          &ldquo;{content}&rdquo;
-        </Typography>
-
-        {/* Student Info */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Avatar
-            src={testimonial.student_photo || undefined}
-            alt={testimonial.student_name}
-            sx={{
-              width: 44,
-              height: 44,
-              border: '2px solid',
-              borderColor: 'primary.main',
-              fontSize: '1rem',
-              bgcolor: 'rgba(232,160,32,0.2)',
-              color: 'primary.main',
-            }}
-          >
-            {testimonial.student_name?.charAt(0)?.toUpperCase()}
-          </Avatar>
-          <Box sx={{ minWidth: 0 }}>
-            <Typography
-              variant="subtitle2"
-              sx={{
-                fontWeight: 600,
-                color: 'text.primary',
-                lineHeight: 1.3,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              {testimonial.student_name}
-            </Typography>
-            <Typography
-              variant="caption"
-              sx={{
-                color: 'primary.main',
-                opacity: 0.85,
-                lineHeight: 1.3,
-                display: 'block',
-              }}
-            >
-              {formatExamType(testimonial.exam_type)} {testimonial.year}
-              {testimonial.rank ? ` \u2022 AIR ${testimonial.rank}` : ''}
-            </Typography>
-            <Typography
-              variant="caption"
-              sx={{
-                color: 'rgba(255,255,255,0.5)',
-                lineHeight: 1.3,
-                display: 'block',
-              }}
-            >
-              {testimonial.city} · {formatLearningMode(testimonial.learning_mode)}
-              {testimonial.college_admitted ? ` · ${testimonial.college_admitted}` : ''}
-            </Typography>
-          </Box>
+          <PlayCircleOutlinedIcon aria-hidden />
+          Watch the video review
         </Box>
-
-        {/* Video link */}
-        {testimonial.video_url && (
-          <Button
-            component="a"
-            href={testimonial.video_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            size="small"
-            startIcon={<PlayCircleOutlineIcon />}
-            sx={{
-              mt: 1.5,
-              color: 'primary.main',
-              textTransform: 'none',
-              fontSize: '0.75rem',
-              p: 0,
-              justifyContent: 'flex-start',
-              '&:hover': { bgcolor: 'transparent', textDecoration: 'underline' },
-            }}
-          >
-            Watch Video Review
-          </Button>
-        )}
-      </CardContent>
-    </Card>
+      )}
+    </ReviewCard>
   );
 }
 
-// ─── Testimonial Skeleton ───────────────────────────────────────────────────
+// ─── Skeleton Card ──────────────────────────────────────────────────────────
 
 function TestimonialSkeleton() {
-  return (
-    <Card
-      sx={{
-        height: 260,
-        bgcolor: 'rgba(11,22,41,0.75)',
-        border: '1px solid rgba(255,255,255,0.08)',
-        borderRadius: '16px',
-      }}
-    >
-      <CardContent sx={{ p: 3 }}>
-        <Box sx={{ display: 'flex', gap: 0.5, mb: 2 }}>
-          {[1, 2, 3, 4, 5].map((i) => (
-            <Skeleton key={i} variant="circular" width={16} height={16} sx={{ bgcolor: 'rgba(255,255,255,0.08)' }} />
-          ))}
-        </Box>
-        <Skeleton variant="text" sx={{ bgcolor: 'rgba(255,255,255,0.08)', mb: 0.5 }} />
-        <Skeleton variant="text" sx={{ bgcolor: 'rgba(255,255,255,0.08)', mb: 0.5 }} />
-        <Skeleton variant="text" width="70%" sx={{ bgcolor: 'rgba(255,255,255,0.08)', mb: 3 }} />
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <Skeleton variant="circular" width={44} height={44} sx={{ bgcolor: 'rgba(255,255,255,0.08)' }} />
-          <Box>
-            <Skeleton variant="text" width={120} sx={{ bgcolor: 'rgba(255,255,255,0.08)' }} />
-            <Skeleton variant="text" width={80} sx={{ bgcolor: 'rgba(255,255,255,0.08)' }} />
-          </Box>
-        </Box>
-      </CardContent>
-    </Card>
+  const bar = (width: string, height = 12) => (
+    <Box sx={{ height, width, borderRadius: `${tk.radius}px`, bgcolor: tk.line }} />
   );
-}
-
-// ─── Stat Box ───────────────────────────────────────────────────────────────
-
-function StatBox({ value, label }: { value: string; label: string }) {
   return (
     <Box
+      aria-hidden
       sx={{
-        textAlign: 'center',
-        px: { xs: 2, sm: 3 },
-        py: 1.5,
+        breakInside: 'avoid',
+        mb: 2.5,
+        p: 2.75,
+        bgcolor: tk.surface,
+        border: `1px solid ${tk.line}`,
+        borderRadius: `${tk.radius}px`,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1.25,
       }}
     >
-      <Typography
-        variant="h4"
-        sx={{
-          fontWeight: 700,
-          color: 'primary.main',
-          lineHeight: 1.2,
-          fontSize: { xs: '1.5rem', sm: '2rem' },
-        }}
-      >
-        {value}
-      </Typography>
-      <Typography
-        variant="caption"
-        sx={{
-          color: 'rgba(255,255,255,0.6)',
-          fontWeight: 500,
-          textTransform: 'uppercase',
-          letterSpacing: '0.1em',
-          fontSize: { xs: '0.65rem', sm: '0.7rem' },
-        }}
-      >
-        {label}
-      </Typography>
+      {bar('40%', 14)}
+      {bar('100%')}
+      {bar('92%')}
+      {bar('70%')}
+      <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center', pt: 1.75, borderTop: `1px solid ${tk.line}` }}>
+        <Box sx={{ width: 44, height: 44, borderRadius: '50%', bgcolor: tk.line, flexShrink: 0 }} />
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+          {bar('50%')}
+          {bar('35%', 10)}
+        </Box>
+      </Box>
     </Box>
   );
 }
@@ -311,8 +184,9 @@ export default function TestimonialsPageContent({
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [stats, setStats] = useState<TestimonialStats | null>(null);
+  const [statsFailed, setStatsFailed] = useState(false);
   const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
-  const [filters, setFilters] = useState<Filters>({ year: '', city: '', course_name: '', learning_mode: '', exam_type: '' });
+  const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   // Filters from a shared link are read after mount, not with useSearchParams:
   // that hook made this whole page render in the browser only, so search
   // engines got an empty page with no H1.
@@ -371,7 +245,7 @@ export default function TestimonialsPageContent({
         setTotalCount(json.count || 0);
       }
     } catch {
-      // Silently fail — keeps current data
+      // Silently fail, keeps current data
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -385,9 +259,11 @@ export default function TestimonialsPageContent({
       fetch('/api/testimonials?filters=true').then((r) => r.json()),
     ]).then(([statsJson, filtersJson]) => {
       if (statsJson.success) setStats(statsJson.data);
+      else setStatsFailed(true);
       if (filtersJson.success) setFilterOptions(filtersJson.data);
     }).catch(() => {
-      // Silently fail
+      // No numbers is better than a guessed one: the stat strip is dropped.
+      setStatsFailed(true);
     });
   }, []);
 
@@ -398,478 +274,131 @@ export default function TestimonialsPageContent({
     updateUrl(filters);
   }, [urlRead, filters, fetchTestimonials, updateUrl]);
 
-  // Handle filter change
-  const handleFilterChange = (key: keyof Filters) => (event: SelectChangeEvent<string>) => {
-    setFilters((prev) => ({ ...prev, [key]: event.target.value }));
+  const setFilter = (key: keyof Filters) => (value: string) => {
+    setFilters((prev) => ({ ...prev, [key]: value }));
   };
 
-  // Clear all filters
-  const clearFilters = () => {
-    setFilters({ year: '', city: '', course_name: '', learning_mode: '', exam_type: '' });
-  };
+  const clearFilters = () => setFilters(EMPTY_FILTERS);
 
-  // Load more
   const handleLoadMore = () => {
     fetchTestimonials(filters, testimonials.length, true);
   };
 
-  // Active filter count
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
 
-  // Active filter chips data
-  const activeFilters: { key: keyof Filters; label: string }[] = [];
-  if (filters.year) activeFilters.push({ key: 'year', label: filters.year });
-  if (filters.city) activeFilters.push({ key: 'city', label: filters.city });
-  if (filters.course_name) activeFilters.push({ key: 'course_name', label: filters.course_name });
-  if (filters.learning_mode) activeFilters.push({ key: 'learning_mode', label: formatLearningMode(filters.learning_mode) });
-  if (filters.exam_type) activeFilters.push({ key: 'exam_type', label: formatExamType(filters.exam_type) });
+  // Only numbers read from published reviews; nothing is shown as a guess.
+  // value: null renders a skeleton while the stats load.
+  const statItems: StatItem[] | undefined = statsFailed
+    ? undefined
+    : [
+        { value: stats ? stats.total.toLocaleString() : null, label: t('students') },
+        { value: stats ? String(stats.citiesCount) : null, label: t('cities') },
+        ...(averageRating != null ? [{ value: averageRating.toFixed(1), label: t('avgRating') }] : []),
+      ];
 
-  // Select styling
-  const selectSx = {
-    color: 'text.primary',
-    '.MuiOutlinedInput-notchedOutline': {
-      borderColor: 'rgba(255,255,255,0.15)',
-    },
-    '&:hover .MuiOutlinedInput-notchedOutline': {
-      borderColor: 'rgba(255,255,255,0.3)',
-    },
-    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-      borderColor: 'primary.main',
-    },
-    '.MuiSelect-icon': {
-      color: 'rgba(255,255,255,0.5)',
-    },
-    fontSize: '0.875rem',
-  };
-
-  const menuProps = {
-    PaperProps: {
-      sx: {
-        bgcolor: 'rgba(11,22,41,0.95)',
-        backdropFilter: 'blur(12px)',
-        border: '1px solid rgba(255,255,255,0.1)',
-        '& .MuiMenuItem-root': {
-          fontSize: '0.875rem',
-          '&:hover': { bgcolor: 'rgba(232,160,32,0.1)' },
-          '&.Mui-selected': { bgcolor: 'rgba(232,160,32,0.15)' },
-        },
-      },
-    },
-  };
+  const showing = !loading && testimonials.length > 0 ? t('showing', { shown: testimonials.length, total: totalCount }) : '';
 
   return (
-    <ThemeProvider theme={neramaiArchitekDarkTheme}>
-      <Box sx={{ bgcolor: 'background.default', color: 'text.primary', minHeight: '100vh' }}>
+    <>
+      <PageHero eyebrow="Student voices" title={t('title')} lede={t('subtitle')} stats={statItems} />
 
-        {/* ─── Hero Section ─── */}
-        <Box
-          sx={{
-            pt: { xs: 8, md: 12 },
-            pb: { xs: 4, md: 6 },
-            position: 'relative',
-            textAlign: 'center',
-            '&::before': {
-              content: '""',
-              position: 'absolute',
-              inset: 0,
-              background:
-                'radial-gradient(ellipse at 50% 30%, rgba(232,160,32,0.06) 0%, transparent 60%)',
-              pointerEvents: 'none',
-            },
-          }}
-        >
-          <Container maxWidth="md" sx={{ position: 'relative' }}>
-            <Typography
-              sx={{
-                fontFamily: '"SFMono-Regular", "Cascadia Code", "Consolas", monospace',
-                fontSize: '11px',
-                fontWeight: 700,
-                letterSpacing: '0.2em',
-                color: 'primary.main',
-                mb: 1.5,
-              }}
-            >
-              STUDENT VOICES
-            </Typography>
-            <Typography
-              variant="h2"
-              component="h1"
-              sx={{
-                fontWeight: 700,
-                mb: 2,
-                fontSize: { xs: '1.75rem', sm: '2.25rem', md: '2.75rem' },
-              }}
-            >
-              {t('title')}
-            </Typography>
-            <Typography
-              variant="body1"
-              color="text.secondary"
-              sx={{ mb: 4, maxWidth: 560, mx: 'auto', lineHeight: 1.6 }}
-            >
-              {t('subtitle')}
-            </Typography>
+      <FilterBar
+        onClear={activeFilterCount > 0 ? clearFilters : undefined}
+        summary={
+          <Box component="span" role="status" aria-live="polite">
+            {showing}
+          </Box>
+        }
+      >
+        <FilterSelect
+          label={t('filterYear')}
+          allLabel={t('allYears')}
+          value={filters.year}
+          onChange={setFilter('year')}
+          options={(filterOptions?.years ?? []).map((y) => ({ value: String(y), label: String(y) }))}
+        />
+        <FilterSelect
+          label={t('filterCourse')}
+          allLabel={t('allCourses')}
+          value={filters.course_name}
+          onChange={setFilter('course_name')}
+          options={(filterOptions?.courses ?? []).map((c) => ({ value: c, label: c }))}
+        />
+        <FilterSelect
+          label={t('filterCity')}
+          allLabel={t('allCities')}
+          value={filters.city}
+          onChange={setFilter('city')}
+          options={(filterOptions?.cities ?? []).map((c) => ({ value: c, label: c }))}
+        />
+        <FilterSelect
+          label={t('filterMode')}
+          allLabel={t('allModes')}
+          value={filters.learning_mode}
+          onChange={setFilter('learning_mode')}
+          options={(filterOptions?.modes ?? []).map((m) => ({ value: m, label: formatLearningMode(m) }))}
+        />
+      </FilterBar>
 
-            {/* Stats Ribbon */}
-            <Box
-              sx={{
-                display: 'flex',
-                justifyContent: 'center',
-                flexWrap: 'wrap',
-                gap: { xs: 0, sm: 1 },
-                bgcolor: 'rgba(11,22,41,0.6)',
-                backdropFilter: 'blur(8px)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: '16px',
-                py: 1,
-                px: 2,
-                mx: 'auto',
-                maxWidth: 600,
-              }}
-            >
-              {/* Only numbers read from published reviews; nothing is shown as a guess. */}
-              {stats ? (
-                <>
-                  <StatBox value={stats.total.toLocaleString()} label={t('students')} />
-                  <StatBox value={String(stats.citiesCount)} label={t('cities')} />
-                  {averageRating != null && <StatBox value={averageRating.toFixed(1)} label={t('avgRating')} />}
-                </>
-              ) : (
-                <>
-                  <Skeleton variant="rounded" width={88} height={52} sx={{ bgcolor: 'rgba(255,255,255,0.08)', m: 1 }} />
-                  <Skeleton variant="rounded" width={88} height={52} sx={{ bgcolor: 'rgba(255,255,255,0.08)', m: 1 }} />
-                </>
-              )}
-            </Box>
-          </Container>
-        </Box>
-
-        {/* ─── Filter Bar ─── */}
-        <Box
-          sx={{
-            position: 'sticky',
-            top: { xs: 56, md: 64 },
-            zIndex: 10,
-            bgcolor: 'rgba(5,12,26,0.9)',
-            backdropFilter: 'blur(16px)',
-            borderBottom: '1px solid rgba(255,255,255,0.06)',
-            py: 2,
-          }}
-        >
-          <Container maxWidth="lg">
-            <Box
-              sx={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: 1.5,
-                alignItems: 'center',
-              }}
-            >
-              <FilterListIcon sx={{ color: 'rgba(255,255,255,0.4)', fontSize: 20, display: { xs: 'none', sm: 'block' } }} />
-
-              {/* Year */}
-              <FormControl size="small" sx={{ minWidth: { xs: 'calc(50% - 6px)', sm: 130 } }}>
-                <InputLabel sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem' }}>{t('filterYear')}</InputLabel>
-                <Select
-                  value={filters.year}
-                  label={t('filterYear')}
-                  onChange={handleFilterChange('year')}
-                  sx={selectSx}
-                  MenuProps={menuProps}
-                >
-                  <MenuItem value="">{t('allYears')}</MenuItem>
-                  {filterOptions?.years.map((y) => (
-                    <MenuItem key={y} value={String(y)}>{y}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-
-              {/* Course */}
-              <FormControl size="small" sx={{ minWidth: { xs: 'calc(50% - 6px)', sm: 160 } }}>
-                <InputLabel sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem' }}>{t('filterCourse')}</InputLabel>
-                <Select
-                  value={filters.course_name}
-                  label={t('filterCourse')}
-                  onChange={handleFilterChange('course_name')}
-                  sx={selectSx}
-                  MenuProps={menuProps}
-                >
-                  <MenuItem value="">{t('allCourses')}</MenuItem>
-                  {filterOptions?.courses.map((c) => (
-                    <MenuItem key={c} value={c}>{c}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-
-              {/* City */}
-              <FormControl size="small" sx={{ minWidth: { xs: 'calc(50% - 6px)', sm: 140 } }}>
-                <InputLabel sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem' }}>{t('filterCity')}</InputLabel>
-                <Select
-                  value={filters.city}
-                  label={t('filterCity')}
-                  onChange={handleFilterChange('city')}
-                  sx={selectSx}
-                  MenuProps={menuProps}
-                >
-                  <MenuItem value="">{t('allCities')}</MenuItem>
-                  {filterOptions?.cities.map((c) => (
-                    <MenuItem key={c} value={c}>{c}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-
-              {/* Learning Mode */}
-              <FormControl size="small" sx={{ minWidth: { xs: 'calc(50% - 6px)', sm: 150 } }}>
-                <InputLabel sx={{ color: 'rgba(255,255,255,0.5)', fontSize: '0.85rem' }}>{t('filterMode')}</InputLabel>
-                <Select
-                  value={filters.learning_mode}
-                  label={t('filterMode')}
-                  onChange={handleFilterChange('learning_mode')}
-                  sx={selectSx}
-                  MenuProps={menuProps}
-                >
-                  <MenuItem value="">{t('allModes')}</MenuItem>
-                  {filterOptions?.modes.map((m) => (
-                    <MenuItem key={m} value={m}>{formatLearningMode(m)}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-
-              {/* Clear All */}
-              {activeFilterCount > 0 && (
-                <Button
-                  size="small"
-                  onClick={clearFilters}
-                  sx={{
-                    color: 'primary.main',
-                    textTransform: 'none',
-                    fontWeight: 600,
-                    fontSize: '0.8rem',
-                    ml: { xs: 0, sm: 'auto' },
-                  }}
-                >
-                  {t('clearAll')}
-                </Button>
-              )}
-            </Box>
-
-            {/* Active filter chips */}
-            {activeFilters.length > 0 && (
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1.5 }}>
-                {activeFilters.map((f) => (
-                  <Chip
-                    key={f.key}
-                    label={f.label}
-                    size="small"
-                    onDelete={() => setFilters((prev) => ({ ...prev, [f.key]: '' }))}
-                    sx={{
-                      bgcolor: 'rgba(232,160,32,0.15)',
-                      color: 'primary.main',
-                      borderColor: 'rgba(232,160,32,0.3)',
-                      '& .MuiChip-deleteIcon': {
-                        color: 'rgba(232,160,32,0.6)',
-                        '&:hover': { color: 'primary.main' },
-                      },
-                      fontSize: '0.75rem',
-                    }}
-                    variant="outlined"
-                  />
-                ))}
-              </Box>
-            )}
-          </Container>
-        </Box>
-
-        {/* ─── Testimonials Grid ─── */}
-        <Box sx={{ py: { xs: 4, md: 6 } }}>
-          <Container maxWidth="lg">
-            {loading ? (
-              <Grid container spacing={3}>
+      {/* ─── Review wall ─── */}
+      <Box component="section" aria-label={t('title')} sx={{ bgcolor: tk.ground, color: tk.ink }}>
+        <Box sx={{ maxWidth: tk.container.page, mx: 'auto', px: { xs: 2, sm: 3 }, py: { xs: 5, md: 7 }, boxSizing: 'content-box' }}>
+          {loading ? (
+            <Box aria-busy="true">
+              <ReviewWall>
                 {Array.from({ length: 6 }).map((_, i) => (
-                  <Grid item xs={12} sm={6} lg={4} key={i}>
-                    <TestimonialSkeleton />
-                  </Grid>
+                  <TestimonialSkeleton key={i} />
                 ))}
-              </Grid>
-            ) : testimonials.length === 0 ? (
-              <Box sx={{ textAlign: 'center', py: 10 }}>
-                <Typography
-                  variant="h6"
-                  sx={{ color: 'rgba(255,255,255,0.5)', mb: 2 }}
-                >
-                  {t('noResults')}
-                </Typography>
-                <Button
-                  onClick={clearFilters}
-                  variant="outlined"
-                  sx={{
-                    color: 'primary.main',
-                    borderColor: 'primary.main',
-                    textTransform: 'none',
-                  }}
-                >
-                  {t('clearAll')}
-                </Button>
-              </Box>
-            ) : (
-              <>
-                <Grid container spacing={3}>
-                  {testimonials.map((testimonial) => (
-                    <Grid item xs={12} sm={6} lg={4} key={testimonial.id}>
-                      <TestimonialCard testimonial={testimonial} />
-                    </Grid>
-                  ))}
-                </Grid>
-
-                {/* Load More / Count */}
-                <Box sx={{ textAlign: 'center', mt: 5 }}>
-                  <Typography
-                    variant="body2"
-                    sx={{ color: 'rgba(255,255,255,0.4)', mb: 2 }}
-                  >
-                    {t('showing', { shown: testimonials.length, total: totalCount })}
-                  </Typography>
-                  {testimonials.length < totalCount && (
-                    <Button
-                      variant="outlined"
-                      onClick={handleLoadMore}
-                      disabled={loadingMore}
-                      sx={{
-                        color: 'primary.main',
-                        borderColor: 'rgba(232,160,32,0.4)',
-                        textTransform: 'none',
-                        fontWeight: 600,
-                        px: 4,
-                        py: 1.25,
-                        borderRadius: '12px',
-                        '&:hover': {
-                          borderColor: 'primary.main',
-                          bgcolor: 'rgba(232,160,32,0.08)',
-                        },
-                      }}
-                    >
-                      {loadingMore ? (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Box
-                            sx={{
-                              width: 16,
-                              height: 16,
-                              border: '2px solid rgba(232,160,32,0.3)',
-                              borderTopColor: 'primary.main',
-                              borderRadius: '50%',
-                              animation: 'spin 0.8s linear infinite',
-                              '@keyframes spin': {
-                                to: { transform: 'rotate(360deg)' },
-                              },
-                            }}
-                          />
-                          Loading...
-                        </Box>
-                      ) : (
-                        t('loadMore')
-                      )}
-                    </Button>
-                  )}
-                </Box>
-              </>
-            )}
-          </Container>
-        </Box>
-
-        {/* ─── CTA Section ─── */}
-        <Box
-          sx={{
-            py: { xs: 8, md: 10 },
-            textAlign: 'center',
-            position: 'relative',
-            '&::before': {
-              content: '""',
-              position: 'absolute',
-              inset: 0,
-              background:
-                'radial-gradient(ellipse at 50% 50%, rgba(232,160,32,0.06) 0%, transparent 60%)',
-              pointerEvents: 'none',
-            },
-            borderTop: '1px solid rgba(232,160,32,0.08)',
-          }}
-        >
-          <Container maxWidth="sm" sx={{ position: 'relative' }}>
-            <Typography
-              sx={{
-                fontFamily: '"SFMono-Regular", "Cascadia Code", "Consolas", monospace',
-                fontSize: '11px',
-                fontWeight: 700,
-                letterSpacing: '0.2em',
-                color: 'primary.main',
-                mb: 2,
-              }}
-            >
-              GET STARTED
-            </Typography>
-            <Typography
-              variant="h4"
-              component="h2"
-              sx={{ mb: 2, fontWeight: 700, fontSize: { xs: '1.5rem', md: '2rem' } }}
-            >
-              {t('cta')}
-            </Typography>
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 2,
-                flexWrap: 'wrap',
-                mt: 4,
-              }}
-            >
-              <Button
-                component={Link}
-                href="/apply"
-                variant="contained"
-                size="large"
-                sx={{
-                  px: 4,
-                  py: 1.5,
-                  fontSize: '14px',
-                  fontWeight: 700,
-                  borderRadius: '10px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 1.25,
-                  '& .arrow': { fontSize: '18px', transition: 'transform 0.3s' },
-                  '&:hover .arrow': { transform: 'translateX(4px)' },
-                }}
-              >
-                Apply Now
-                <span className="arrow">&rarr;</span>
-              </Button>
-              <Button
-                endIcon={<NorthEastIcon fontSize="small" aria-hidden />}
-                component={Link}
-                href="/demo-class"
-                variant="text"
-                size="large"
-                sx={{
-                  color: 'text.primary',
-                  px: 0.5,
-                  py: 1.5,
-                  borderBottom: '1px solid rgba(255,255,255,0.2)',
-                  borderRadius: 0,
-                  textTransform: 'none',
-                  '&:hover': {
-                    color: 'primary.main',
-                    borderBottomColor: 'primary.main',
-                    bgcolor: 'transparent',
-                  },
-                }}
-              >
-                Book Demo Class
-              </Button>
+              </ReviewWall>
             </Box>
-          </Container>
+          ) : testimonials.length === 0 ? (
+            <EmptyState
+              icon={<RateReviewOutlinedIcon />}
+              title={t('noResults')}
+              action={
+                activeFilterCount > 0 ? (
+                  <CtaButton variant="outline" size="md" endIcon={null} onClick={clearFilters}>
+                    {t('clearAll')}
+                  </CtaButton>
+                ) : undefined
+              }
+            />
+          ) : (
+            <>
+              <ReviewWall>
+                {testimonials.map((testimonial) => (
+                  <TestimonialCard key={testimonial.id} testimonial={testimonial} />
+                ))}
+                {loadingMore && [0, 1, 2].map((i) => <TestimonialSkeleton key={`more-${i}`} />)}
+              </ReviewWall>
+
+              {/* Load more / count */}
+              <Box sx={{ mt: 3, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                <Typography component="p" sx={{ m: 0, fontSize: '0.9375rem', color: tk.inkMuted }}>
+                  {t('showing', { shown: testimonials.length, total: totalCount })}
+                </Typography>
+                {testimonials.length < totalCount && (
+                  <CtaButton variant="outline" endIcon={null} onClick={handleLoadMore} disabled={loadingMore}>
+                    {t('loadMore')}
+                  </CtaButton>
+                )}
+              </Box>
+            </>
+          )}
         </Box>
       </Box>
-    </ThemeProvider>
+
+      <CtaBand
+        title={t('cta')}
+        actions={
+          <>
+            <CtaButton href="/apply">Apply Now</CtaButton>
+            <CtaButton variant="link" href="/demo-class">
+              Book Demo Class
+            </CtaButton>
+          </>
+        }
+      />
+    </>
   );
 }

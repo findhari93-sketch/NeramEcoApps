@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
+import { siteTokens as t } from '@neram/ui/site-tokens';
 
 
 export async function generateMetadata({
@@ -144,22 +145,23 @@ export default function NataImportantQuestionsPage({ params: { locale } }: PageP
       <Box
         sx={{
           py: { xs: 6, md: 10 },
-          background: 'linear-gradient(135deg, #e65100 0%, #bf360c 100%)',
-          color: 'white',
+          bgcolor: t.navy900,
+          ...t.blueprint,
+          color: t.paper,
         }}
       >
         <Container maxWidth="lg">
           <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', md: '3rem' } }}>
             NATA Important Questions 2026
           </Typography>
-          <Typography variant="h5" sx={{ mb: 3, opacity: 0.9 }}>
+          <Typography variant="h5" sx={{ mb: 3, color: t.paperMuted }}>
             Practice with the most important and frequently asked questions
           </Typography>
           <Button
             variant="contained"
             component={Link}
             href="/apply"
-            sx={{ bgcolor: 'white', color: 'warning.dark' }}
+            sx={{ minHeight: 48 }}
           >
             Get Full Question Bank
           </Button>
@@ -167,7 +169,7 @@ export default function NataImportantQuestionsPage({ params: { locale } }: PageP
       </Box>
 
       {/* Topic Distribution */}
-      <Box sx={{ py: { xs: 4, md: 6 }, bgcolor: 'grey.50' }}>
+      <Box sx={{ py: { xs: 4, md: 6 }, bgcolor: t.ground }}>
         <Container maxWidth="lg">
           <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ fontWeight: 700, mb: 4 }}>
             Expected Question Distribution
@@ -175,13 +177,13 @@ export default function NataImportantQuestionsPage({ params: { locale } }: PageP
           <Grid container spacing={2}>
             {topicDistribution.map((item, index) => (
               <Grid item xs={6} sm={4} md={3} key={index}>
-                <Paper sx={{ p: 2, textAlign: 'center', height: '100%' }}>
+                <Paper variant="outlined" sx={{ p: 2, textAlign: 'center', height: '100%' }}>
                   <Typography variant="h6" sx={{ fontWeight: 600 }}>{item.topic}</Typography>
                   <Typography variant="body2" color="text.secondary">{item.questions} questions</Typography>
                   <Typography
                     variant="caption"
                     sx={{
-                      color: item.priority === 'High' ? 'error.main' : 'warning.main',
+                      color: item.priority === 'High' ? t.gold800 : t.inkMuted,
                       fontWeight: 600,
                     }}
                   >
@@ -198,7 +200,7 @@ export default function NataImportantQuestionsPage({ params: { locale } }: PageP
       <Box sx={{ py: { xs: 6, md: 10 } }}>
         <Container maxWidth="lg">
           <Typography variant="h2" component="h2" gutterBottom sx={{ fontWeight: 700, mb: 4 }}>
-            📐 Mathematics Sample Questions
+            Mathematics Sample Questions
           </Typography>
           <Grid container spacing={3}>
             {sampleQuestions.mathematics.map((q, index) => (
@@ -231,10 +233,10 @@ export default function NataImportantQuestionsPage({ params: { locale } }: PageP
       </Box>
 
       {/* Aptitude Questions */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
+      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: t.ground }}>
         <Container maxWidth="lg">
           <Typography variant="h2" component="h2" gutterBottom sx={{ fontWeight: 700, mb: 4 }}>
-            🧠 General Aptitude Sample Questions
+            General Aptitude Sample Questions
           </Typography>
           <Grid container spacing={3}>
             {sampleQuestions.aptitude.map((q, index) => (
@@ -270,12 +272,12 @@ export default function NataImportantQuestionsPage({ params: { locale } }: PageP
       <Box sx={{ py: { xs: 6, md: 10 } }}>
         <Container maxWidth="lg">
           <Typography variant="h2" component="h2" gutterBottom sx={{ fontWeight: 700, mb: 4 }}>
-            ✏️ Drawing Test Sample Questions
+            Drawing Test Sample Questions
           </Typography>
           <Grid container spacing={3}>
             {sampleQuestions.drawing.map((q, index) => (
               <Grid item xs={12} md={4} key={index}>
-                <Card sx={{ height: '100%', bgcolor: 'primary.50' }}>
+                <Card sx={{ height: '100%', bgcolor: t.surface }}>
                   <CardContent sx={{ p: 3 }}>
                     <Typography variant="caption" color="primary" sx={{ fontWeight: 600 }}>
                       {q.type}
@@ -296,12 +298,12 @@ export default function NataImportantQuestionsPage({ params: { locale } }: PageP
       </Box>
 
       {/* CTA Section */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'warning.dark', color: 'white', textAlign: 'center' }}>
+      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: t.navy900, color: t.paper, textAlign: 'center' }}>
         <Container maxWidth="md">
           <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700 }}>
             Want 5000+ Practice Questions?
           </Typography>
-          <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>
+          <Typography variant="h6" sx={{ mb: 4, color: t.paperMuted }}>
             Join Neram Classes and get access to our complete question bank with solutions
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -310,7 +312,7 @@ export default function NataImportantQuestionsPage({ params: { locale } }: PageP
               size="large"
               component={Link}
               href="/apply"
-              sx={{ bgcolor: 'white', color: 'warning.dark' }}
+              sx={{ minHeight: 48 }}
             >
               Get Question Bank
             </Button>
@@ -319,7 +321,7 @@ export default function NataImportantQuestionsPage({ params: { locale } }: PageP
               size="large"
               component={Link}
               href="/previous-year-papers"
-              sx={{ borderColor: 'white', color: 'white' }}
+              sx={{ minHeight: 48, borderColor: t.outlineDark, color: t.paper, '&:hover': { bgcolor: 'transparent', borderColor: t.gold500, color: t.gold500 } }}
             >
               Previous Year Papers
             </Button>

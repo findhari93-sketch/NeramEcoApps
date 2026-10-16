@@ -10,6 +10,7 @@ import AintraRichText from './rich/AintraRichText';
 import SuggestionChips from './rich/SuggestionChips';
 import TypingIndicator from './rich/TypingIndicator';
 import CopyButton from './rich/CopyButton';
+import { tokens, brandColors } from '@/design-system';
 import BotAvatar from './BotAvatar';
 import type { CanvasDoc } from './canvas/AintraCanvas';
 
@@ -82,15 +83,16 @@ function AssistantMessage({ msg, isLatest, busy, onOpenCanvas, onSuggest, onWhat
           onClick={onWhatsApp}
           variant="contained"
           disableElevation
-          startIcon={<WhatsAppIcon />}
+          startIcon={<WhatsAppIcon sx={{ color: brandColors.whatsapp }} />}
           sx={{
             alignSelf: 'flex-start',
             minHeight: 48,
             textTransform: 'none',
             fontWeight: 700,
-            borderRadius: 2,
-            bgcolor: '#0F7A3D',
-            '&:hover': { bgcolor: '#0B6331' },
+            borderRadius: `${tokens.radius}px`,
+            bgcolor: tokens.navy900,
+            color: tokens.paper,
+            '&:hover': { bgcolor: tokens.navy700 },
           }}
         >
           Chat on WhatsApp

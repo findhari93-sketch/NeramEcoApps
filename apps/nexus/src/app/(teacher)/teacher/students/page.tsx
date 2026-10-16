@@ -35,6 +35,7 @@ import PersonRemoveOutlinedIcon from '@mui/icons-material/PersonRemoveOutlined';
 import LockResetOutlinedIcon from '@mui/icons-material/LockResetOutlined';
 import ManageAccountsOutlinedIcon from '@mui/icons-material/ManageAccountsOutlined';
 import AssignmentLateOutlinedIcon from '@mui/icons-material/AssignmentLateOutlined';
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import NotificationsActiveOutlinedIcon from '@mui/icons-material/NotificationsActiveOutlined';
 import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
 import PeopleSearchField from '@/components/PeopleSearchField';
@@ -83,6 +84,7 @@ import {
 import {
   DEFAULT_FILTERS,
   DEFAULT_SORT,
+  JOINED_FILTER_LABEL,
   FILTERS_STORAGE_KEY,
   SORT_STORAGE_KEY,
   activeFilterCount,
@@ -384,14 +386,23 @@ export default function TeacherStudents() {
     }
   }, []);
 
-  const handleFiltersChange = useCallback((next: RosterFilters) => {
-    setFilters(next);
-    try {
-      localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      /* non-fatal */
-    }
-  }, []);
+  const handleFiltersChange = useCallback(
+    (next: RosterFilters) => {
+      // Asking "who joined recently" wants the newest at the top, and a list still
+      // in name order buries them. Only from the default sort: a sort the teacher
+      // chose is theirs to keep.
+      if (next.joined !== 'any' && filters.joined === 'any' && sort === DEFAULT_SORT) {
+        handleSortChange('joined_newest');
+      }
+      setFilters(next);
+      try {
+        localStorage.setItem(FILTERS_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        /* non-fatal */
+      }
+    },
+    [filters.joined, sort, handleSortChange],
+  );
 
   // Load the exam-year batch list once (for the filter sheet).
   useEffect(() => {
@@ -950,13 +961,13 @@ export default function TeacherStudents() {
         case 'show_never_signed_in':
           setMismatchOnly(false);
           handleSegmentChange('all_active');
-          handleFiltersChange({ signIn: 'never', account: 'any', form: 'any' });
+          handleFiltersChange({ ...DEFAULT_FILTERS, signIn: 'never' });
           break;
         case 'review_duplicates':
           setMismatchOnly(false);
           setExamBatchFilter('all');
           handleSegmentChange('all_active');
-          handleFiltersChange({ signIn: 'any', account: 'possible_duplicate', form: 'any' });
+          handleFiltersChange({ ...DEFAULT_FILTERS, account: 'possible_duplicate' });
           break;
         case 'review_not_started':
         case 'review_back_in_nexus':
@@ -1102,6 +1113,17 @@ export default function TeacherStudents() {
               },
         );
       }
+      // Straight to the form on their profile, which otherwise sits a scroll away
+      // and, on a phone, inside a collapsed section.
+      if (student.has_application_form === true) {
+        items.push({
+          key: 'view-application-form',
+          label: 'View application form',
+          icon: <DescriptionOutlinedIcon fontSize="small" />,
+          onClick: () => router.push(`/teacher/students/${student.id}#profile-application`),
+          dividerBefore: true,
+        });
+      }
       // Their form sits on another record, or they never filled one in. Anyone can
       // look; the sheet offers linking only to someone allowed to do it.
       if (student.has_application_form === false) {
@@ -1146,7 +1168,9 @@ export default function TeacherStudents() {
   const emptyTitle = trimmedQuery
     ? `No student matches "${trimmedQuery}"`
     : narrowingActive
-      ? 'No students match these filters'
+      ? filters.joined !== 'any'
+        ? `Nobody in this group joined in the ${JOINED_FILTER_LABEL[filters.joined].toLowerCase()}`
+        : 'No students match these filters'
       : segment === 'dormant'
         ? dormantView === 'not_started_long'
           ? `Nobody has been waiting over ${waitPeriodLabel(decisionDays)}`

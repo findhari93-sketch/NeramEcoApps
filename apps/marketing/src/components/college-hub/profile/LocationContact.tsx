@@ -7,6 +7,7 @@ import FlightOutlinedIcon from '@mui/icons-material/FlightOutlined';
 import type { CollegeDetail } from '@/lib/college-hub/types';
 import { statLabelSx } from '../directory/hub-styles';
 import CollegeMap from './CollegeMap';
+import { siteTokens } from '@neram/ui/site-tokens';
 
 export function fullAddress(c: CollegeDetail): string {
   const parts = [c.address, c.city, c.district && c.district !== c.city ? `${c.district} District` : null, c.state].filter(Boolean) as string[];
@@ -33,11 +34,11 @@ const button = {
   gap: 1,
   minHeight: 46,
   px: 2,
-  borderRadius: 1.5,
+  borderRadius: 1,
   fontSize: '0.9rem',
   fontWeight: 600,
   textDecoration: 'none',
-  '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+  '&:focus-visible': { outline: siteTokens.focusOutline, outlineOffset: 2 },
 };
 
 /**
@@ -72,7 +73,7 @@ export default function LocationContact({ college: c }: { college: CollegeDetail
           <Box>
             <Box component="dt" sx={statLabelSx}>Admissions phone</Box>
             <Box component="dd" sx={{ m: 0, mt: 0.25 }}>
-              <Box component="a" href={`tel:${phone.replace(/\s/g, '')}`} sx={{ fontSize: '0.95rem', fontWeight: 600, color: 'primary.dark', textDecoration: 'none', display: 'inline-flex', minHeight: 32, alignItems: 'center' }}>
+              <Box component="a" href={`tel:${phone.replace(/\s/g, '')}`} sx={{ fontSize: '0.95rem', fontWeight: 600, color: siteTokens.navy900, textDecoration: 'none', display: 'inline-flex', minHeight: 32, alignItems: 'center' }}>
                 {phone}
               </Box>
             </Box>
@@ -82,7 +83,7 @@ export default function LocationContact({ college: c }: { college: CollegeDetail
           <Box>
             <Box component="dt" sx={statLabelSx}>Email</Box>
             <Box component="dd" sx={{ m: 0, mt: 0.25, overflowWrap: 'anywhere' }}>
-              <Box component="a" href={`mailto:${email}`} sx={{ fontSize: '0.95rem', fontWeight: 600, color: 'primary.dark', textDecoration: 'none', display: 'inline-flex', minHeight: 32, alignItems: 'center' }}>
+              <Box component="a" href={`mailto:${email}`} sx={{ fontSize: '0.95rem', fontWeight: 600, color: siteTokens.navy900, textDecoration: 'none', display: 'inline-flex', minHeight: 32, alignItems: 'center' }}>
                 {email}
               </Box>
             </Box>
@@ -101,24 +102,24 @@ export default function LocationContact({ college: c }: { college: CollegeDetail
 
       <Box sx={{ flex: '1 1 240px', display: 'flex', flexDirection: 'column', gap: 1.25, justifyContent: 'flex-start' }}>
         <Box sx={{ display: 'grid', gridTemplateColumns: phone ? 'repeat(2, minmax(0, 1fr))' : '1fr', gap: 1 }}>
-          <Box component="a" href={directionsUrl(c)} target="_blank" rel="noopener noreferrer" sx={{ ...button, bgcolor: 'grey.900', color: 'common.white', '&:hover': { bgcolor: 'grey.800' } }}>
+          <Box component="a" href={directionsUrl(c)} target="_blank" rel="noopener noreferrer" sx={{ ...button, bgcolor: siteTokens.navy900, color: siteTokens.paper, '&:hover': { bgcolor: siteTokens.navy700 } }}>
             <DirectionsOutlinedIcon aria-hidden sx={{ fontSize: 18 }} />
             Directions
           </Box>
           {phone && (
-            <Box component="a" href={`tel:${phone.replace(/\s/g, '')}`} sx={{ ...button, border: '1px solid', borderColor: 'grey.400', color: 'text.primary', '&:hover': { bgcolor: 'action.hover' } }}>
+            <Box component="a" href={`tel:${phone.replace(/\s/g, '')}`} sx={{ ...button, border: '1px solid', borderColor: siteTokens.lineStrong, color: siteTokens.ink, '&:hover': { bgcolor: siteTokens.surfaceHover } }}>
               <PhoneOutlinedIcon aria-hidden sx={{ fontSize: 18 }} />
               Call admissions
             </Box>
           )}
         </Box>
         {c.website && (
-          <Box component="a" href={c.website} target="_blank" rel="noopener noreferrer" sx={{ ...button, justifyContent: 'flex-start', px: 0, color: 'primary.dark' }}>
+          <Box component="a" href={c.website} target="_blank" rel="noopener noreferrer" sx={{ ...button, justifyContent: 'flex-start', px: 0, color: siteTokens.navy900 }}>
             Visit official website
             <OpenInNewIcon aria-hidden sx={{ fontSize: 16 }} />
           </Box>
         )}
-        <Typography sx={{ m: 0, fontSize: '0.82rem', color: 'text.secondary', lineHeight: 1.5 }}>
+        <Typography sx={{ m: 0, fontSize: '0.82rem', color: siteTokens.inkMuted, lineHeight: 1.5 }}>
           Opening hours and visit rules vary. Call before you travel.
         </Typography>
       </Box>

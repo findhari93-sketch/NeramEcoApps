@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Box, Typography, IconButton } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
-import CampaignIcon from '@mui/icons-material/Campaign';
+import CampaignOutlinedIcon from '@mui/icons-material/CampaignOutlined';
+import { tokens as t } from '@/design-system';
 import { useDismiss } from './useDismiss';
 
 interface BroadcastItem {
@@ -16,13 +17,6 @@ interface BroadcastItem {
     style?: 'info' | 'success' | 'warning' | 'urgent';
   };
 }
-
-const styleColors: Record<string, string> = {
-  info: 'primary.main',
-  success: 'success.main',
-  warning: 'warning.main',
-  urgent: 'error.main',
-};
 
 const CSS_VAR = '--broadcast-banner-height';
 
@@ -86,24 +80,27 @@ export default function BroadcastBanner({ locale = 'en' }: { locale?: string }) 
   if (!loaded || !broadcast || dismissed) return null;
 
   const title = broadcast.title?.[locale] || broadcast.title?.en || '';
-  const style = broadcast.metadata?.style || 'info';
-  const bgcolor = styleColors[style] || styleColors.info;
   const linkUrl = broadcast.metadata?.link_url;
   const linkText = broadcast.metadata?.link_text || 'Learn more';
 
+  // Design handoff: one gold banner for every broadcast (navy text on gold500 is 8.6:1).
   return (
     <Box
       ref={bannerRef}
+      role="region"
+      aria-label="Announcement"
       sx={{
-        bgcolor,
-        color: 'white',
-        py: { xs: 1, sm: 1.5 },
-        px: 2,
+        bgcolor: t.gold500,
+        color: t.navy900,
+        minHeight: 44,
+        py: 1.25,
+        pl: 2,
+        pr: 6,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: { xs: 1, sm: 2 },
-        flexWrap: 'wrap',
+        gap: 1.25,
+        boxSizing: 'border-box',
         position: 'fixed',
         top: 0,
         left: 0,
@@ -111,16 +108,9 @@ export default function BroadcastBanner({ locale = 'en' }: { locale?: string }) 
         zIndex: 1400,
       }}
     >
-      <CampaignIcon sx={{ fontSize: 20, display: { xs: 'none', sm: 'block' } }} />
+      <CampaignOutlinedIcon aria-hidden sx={{ fontSize: 20, flexShrink: 0 }} />
 
-      <Typography
-        variant="body2"
-        fontWeight={600}
-        sx={{
-          textAlign: 'center',
-          maxWidth: { xs: 'calc(100% - 48px)', sm: 'none' },
-        }}
-      >
+      <Typography sx={{ m: 0, fontSize: 14, fontWeight: 600, lineHeight: 1.35, color: 'inherit' }}>
         {title}
         {linkUrl && (
           <>
@@ -131,10 +121,11 @@ export default function BroadcastBanner({ locale = 'en' }: { locale?: string }) 
               target="_blank"
               rel="noopener noreferrer"
               sx={{
-                color: 'white',
+                color: 'inherit',
                 fontWeight: 700,
                 textDecoration: 'underline',
-                '&:hover': { opacity: 0.85 },
+                textUnderlineOffset: '2px',
+                '&:focus-visible': { outline: `2px solid ${t.navy900}`, outlineOffset: 2 },
               }}
             >
               {linkText}
@@ -144,21 +135,22 @@ export default function BroadcastBanner({ locale = 'en' }: { locale?: string }) 
       </Typography>
 
       <IconButton
-        size="small"
         onClick={handleDismiss}
         aria-label="Dismiss banner"
         sx={{
-          color: 'white',
-          position: { xs: 'absolute', sm: 'static' },
-          right: 8,
+          position: 'absolute',
+          right: 4,
           top: '50%',
-          transform: { xs: 'translateY(-50%)', sm: 'none' },
-          '&:hover': { bgcolor: 'rgba(255,255,255,0.15)' },
-          minWidth: 48,
-          minHeight: 48,
+          transform: 'translateY(-50%)',
+          width: 40,
+          height: 40,
+          color: 'inherit',
+          borderRadius: `${t.radius}px`,
+          '&:hover': { bgcolor: 'rgba(6,13,31,0.08)' },
+          '&.Mui-focusVisible': { outline: `2px solid ${t.navy900}` },
         }}
       >
-        <CloseIcon sx={{ fontSize: 18 }} />
+        <CloseIcon sx={{ fontSize: 20 }} />
       </IconButton>
     </Box>
   );

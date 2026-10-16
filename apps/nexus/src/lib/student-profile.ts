@@ -31,9 +31,11 @@ import {
   STUDENT_PROFILE_PUBLIC_COLUMNS,
   selectColumns,
 } from './student-finance';
+import { isProfileDetailsOnly, pickSubmittedApplication } from './application-form';
 import { maskAadhaar } from './student-profile-fields';
 import { participationEventTitle } from './not-started';
 import type {
+  ProfileApplication,
   ProfileChecklistItem,
   ProfileDocument,
   ProfileGuardian,
@@ -49,6 +51,10 @@ const CHECKLIST_ITEM_CAP = 60;
 const TIMELINE_CAP = 40;
 /** Enough to tell "tried twice and stopped at the photo step" from "never tried". */
 const SIGN_IN_CAP = 20;
+/** Form rows per student. Real students hold one to three. */
+const LEAD_ROW_CAP = 10;
+/** Read only to tell the profile page's row from a real application. Never sent to the client. */
+const LEAD_ORIGIN_COLUMNS = ['source', 'reviewed_by'] as const;
 
 export class StudentNotInClassroomError extends Error {
   constructor(message: string) {
@@ -123,15 +129,16 @@ export async function loadStudentProfileCore(
     currentBatchRow,
     signInResult,
   ] = await Promise.all([
-    // Latest non-deleted application. Filtered and ordered in SQL, never in JS.
+    // Every live form row, newest first. Filtered and ordered in SQL. A student
+    // holds a handful at most (a draft, the real form, the Nexus profile page's
+    // row), and the Application section has to choose between them.
     supabase
       .from('lead_profiles')
-      .select(selectColumns(LEAD_PROFILE_KEY_COLUMNS, LEAD_PROFILE_PUBLIC_COLUMNS))
+      .select(selectColumns(LEAD_PROFILE_KEY_COLUMNS, LEAD_PROFILE_PUBLIC_COLUMNS, LEAD_ORIGIN_COLUMNS))
       .eq('user_id', studentId)
       .is('deleted_at', null)
       .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+      .limit(LEAD_ROW_CAP),
 
     supabase
       .from('student_profiles')
@@ -227,7 +234,13 @@ export async function loadStudentProfileCore(
       .limit(SIGN_IN_CAP),
   ]);
 
-  const lead = (leadResult.data as any) ?? null;
+  const leadRows = ((leadResult.data as any[]) || []);
+  // The newest row still feeds the guardian card and the timeline, as before.
+  const lead = leadRows[0] ?? null;
+  // The Application section shows a real application only. A row from the
+  // student's own Nexus profile page is shown apart, as what they told us.
+  const applicationRow = pickSubmittedApplication(leadRows);
+  const detailsRow = applicationRow ? null : (leadRows.find((row) => isProfileDetailsOnly(row)) ?? null);
   const record = (recordResult.data as any) ?? null;
   const postEnrol = (postEnrolResult.data as any) ?? null;
 
@@ -368,33 +381,8 @@ export async function loadStudentProfileCore(
       id: classroomId,
       name: (classroomResult.data as any)?.name ?? null,
     },
-    application: lead
-      ? {
-          application_number: lead.application_number ?? null,
-          status: lead.status ?? null,
-          form_step_completed: lead.form_step_completed ?? null,
-          form_completed_at: lead.form_completed_at ?? null,
-          created_at: lead.created_at ?? null,
-          applicant_category: lead.applicant_category ?? null,
-          target_exam_year: lead.target_exam_year ?? null,
-          school_type: lead.school_type ?? null,
-          learning_mode: lead.learning_mode ?? null,
-          interest_course: lead.interest_course ?? null,
-          hybrid_learning_accepted: lead.hybrid_learning_accepted ?? null,
-          phone_verified: lead.phone_verified ?? null,
-          phone_verified_at: lead.phone_verified_at ?? null,
-          academic_data: lead.academic_data ?? null,
-          country: lead.country ?? null,
-          state: lead.state ?? null,
-          district: lead.district ?? null,
-          city: lead.city ?? null,
-          pincode: lead.pincode ?? null,
-          address: lead.address ?? null,
-          latitude: lead.latitude ?? null,
-          longitude: lead.longitude ?? null,
-          location_source: lead.location_source ?? null,
-        }
-      : null,
+    application: toProfileApplication(applicationRow),
+    profileDetails: toProfileApplication(detailsRow),
     guardian,
     parentAccess,
     documents,
@@ -419,6 +407,36 @@ export async function loadStudentProfileCore(
     currentBatch: currentBatchRow?.code ?? null,
     // Overwritten by the route, which knows the caller. Defaults closed.
     capabilities: { finance: false },
+  };
+}
+
+/** The fields the Application section reads, from one lead_profiles row. */
+function toProfileApplication(row: any | null): ProfileApplication | null {
+  if (!row) return null;
+  return {
+    application_number: row.application_number ?? null,
+    status: row.status ?? null,
+    form_step_completed: row.form_step_completed ?? null,
+    form_completed_at: row.form_completed_at ?? null,
+    created_at: row.created_at ?? null,
+    applicant_category: row.applicant_category ?? null,
+    target_exam_year: row.target_exam_year ?? null,
+    school_type: row.school_type ?? null,
+    learning_mode: row.learning_mode ?? null,
+    interest_course: row.interest_course ?? null,
+    hybrid_learning_accepted: row.hybrid_learning_accepted ?? null,
+    phone_verified: row.phone_verified ?? null,
+    phone_verified_at: row.phone_verified_at ?? null,
+    academic_data: row.academic_data ?? null,
+    country: row.country ?? null,
+    state: row.state ?? null,
+    district: row.district ?? null,
+    city: row.city ?? null,
+    pincode: row.pincode ?? null,
+    address: row.address ?? null,
+    latitude: row.latitude ?? null,
+    longitude: row.longitude ?? null,
+    location_source: row.location_source ?? null,
   };
 }
 

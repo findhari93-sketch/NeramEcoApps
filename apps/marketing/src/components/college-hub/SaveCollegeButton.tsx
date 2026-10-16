@@ -5,6 +5,7 @@ import { IconButton, Tooltip } from '@mui/material';
 import FavoriteIcon from '@mui/icons-material/Favorite';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
+import { tokens } from '@/design-system';
 
 const STORAGE_KEY = 'neram_saved_colleges';
 
@@ -120,8 +121,8 @@ export default function SaveCollegeButton({
         disabled={loading}
         aria-label={saved ? 'Remove from saved' : 'Save college'}
         sx={{
-          color: saved ? '#ef4444' : 'text.secondary',
-          '&:hover': { color: '#ef4444' },
+          color: saved ? tokens.gold800 : tokens.inkMuted,
+          '&:hover': { color: tokens.gold800 },
         }}
       >
         {saved ? (

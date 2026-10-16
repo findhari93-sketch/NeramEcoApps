@@ -44,6 +44,7 @@ import {
   type ApplicationAnswers,
   type FieldError,
 } from '@neram/database';
+import { eyebrowSx, tokens as tk } from '@/design-system/tokens';
 
 const STEP_TITLES = ['About you', 'Your studies', 'Where you live'] as const;
 const TOTAL_STEPS = STEP_TITLES.length;
@@ -227,7 +228,7 @@ export default function DetailRequestForm({ token }: { token: string }) {
     return (
       <Shell>
         <Stack spacing={2} alignItems="center" sx={{ textAlign: 'center', py: 4 }}>
-          <ErrorOutlineIcon aria-hidden sx={{ fontSize: 48, color: 'warning.main' }} />
+          <ErrorOutlineIcon aria-hidden sx={{ fontSize: 48, color: tk.gold800 }} />
           <Typography variant="h6" component="h1" sx={{ fontWeight: 700 }}>
             This link cannot be opened
           </Typography>
@@ -241,7 +242,7 @@ export default function DetailRequestForm({ token }: { token: string }) {
     return (
       <Shell>
         <Stack spacing={2} alignItems="center" sx={{ textAlign: 'center', py: 4 }} role="status">
-          <CheckCircleOutlineIcon aria-hidden sx={{ fontSize: 48, color: 'success.main' }} />
+          <CheckCircleOutlineIcon aria-hidden sx={{ fontSize: 48, color: tk.success }} />
           <Typography variant="h6" component="h1" sx={{ fontWeight: 700 }}>
             Thank you, that is saved
           </Typography>
@@ -518,21 +519,33 @@ async function lookupPincode(
 }
 
 function Shell({ children }: { children: React.ReactNode }) {
+  // Utility pattern: a white card on the ground colour, mono brand eyebrow above it.
   return (
-    <Container
-      maxWidth="sm"
-      // 16px gutters and a capped width: no horizontal scroll at 375px, and the
-      // line length stays readable on a laptop.
-      sx={{ px: 2, py: { xs: 3, sm: 5 }, maxWidth: 560 }}
-    >
-      <Paper
-        elevation={0}
-        variant="outlined"
-        sx={{ p: { xs: 2, sm: 3 }, borderRadius: 2, overflowWrap: 'anywhere' }}
+    <Box sx={{ minHeight: '100dvh', bgcolor: tk.ground, color: tk.ink }}>
+      <Container
+        maxWidth="sm"
+        // 16px gutters and a capped width: no horizontal scroll at 375px, and the
+        // line length stays readable on a laptop.
+        sx={{ px: 2, py: { xs: 3, sm: 5 }, maxWidth: 560 }}
       >
-        {children}
-      </Paper>
-    </Container>
+        <Typography component="p" sx={{ ...eyebrowSx, mb: 2 }}>
+          Neram Classes
+        </Typography>
+        <Paper
+          elevation={0}
+          variant="outlined"
+          sx={{
+            p: { xs: 2, sm: 3 },
+            bgcolor: tk.surface,
+            borderColor: tk.line,
+            borderRadius: `${tk.radius}px`,
+            overflowWrap: 'anywhere',
+          }}
+        >
+          {children}
+        </Paper>
+      </Container>
+    </Box>
   );
 }
 

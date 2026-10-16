@@ -1,17 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  Box,
-  Button,
-  Paper,
-  Typography,
-  MenuItem,
-  Select,
-  FormControl,
-  InputLabel,
-} from '@neram/ui';
-import Link from 'next/link';
+import { FormControl, InputLabel, MenuItem, Select } from '@neram/ui';
+import { CtaButton, QuickCheck, QuickCheckResult } from '@/design-system';
 
 const QUESTIONS_BY_SUBJECT: Record<string, number> = {
   'Mathematics': 450,
@@ -29,29 +20,15 @@ export default function QuestionBankTeaser() {
   const questionCount = subject ? QUESTIONS_BY_SUBJECT[subject] : null;
 
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: { xs: 3, sm: 4 },
-        border: '1px solid #E0E0E0',
-        borderRadius: 2,
-      }}
-    >
-      <Typography
-        component="h2"
-        sx={{ fontWeight: 700, fontSize: { xs: '1.25rem', sm: '1.5rem' }, mb: 2 }}
-      >
-        Quick Subject Check
-      </Typography>
-
-      <FormControl fullWidth sx={{ mb: 2 }}>
-        <InputLabel id="subject-label">Select a subject</InputLabel>
+    <QuickCheck title="Quick subject check" headingId="question-bank-quick-check">
+      <FormControl fullWidth>
+        <InputLabel id="question-bank-subject-label">Select a subject</InputLabel>
         <Select
-          labelId="subject-label"
+          labelId="question-bank-subject-label"
           value={subject}
           label="Select a subject"
           onChange={(e) => setSubject(e.target.value as string)}
-          sx={{ minHeight: 48 }}
+          sx={{ minHeight: 48, fontSize: '1rem' }}
         >
           {Object.keys(QUESTIONS_BY_SUBJECT).map((s) => (
             <MenuItem key={s} value={s}>
@@ -61,38 +38,15 @@ export default function QuestionBankTeaser() {
         </Select>
       </FormControl>
 
-      {questionCount !== null && (
-        <Box>
-          <Typography
-            sx={{
-              fontSize: { xs: '1rem', sm: '1.1rem' },
-              fontWeight: 600,
-              color: 'text.primary',
-              mb: 2,
-              p: 2,
-              bgcolor: '#F3E5F5',
-              borderRadius: 1,
-              lineHeight: 1.6,
-            }}
-          >
-            {questionCount} practice questions available in {subject}.
-          </Typography>
-
-          <Button
-            component={Link}
-            href={APP_URL}
-            variant="outlined"
-            fullWidth
-            sx={{
-              minHeight: 48,
-              fontWeight: 700,
-              fontSize: '0.95rem',
-            }}
-          >
-            Start practicing with detailed solutions
-          </Button>
-        </Box>
+      {questionCount !== null ? (
+        <QuickCheckResult value={questionCount} label="Practice questions" summary={`Available in ${subject}`} />
+      ) : (
+        <QuickCheckResult label="Practice questions" summary="Pick a subject to see the count" />
       )}
-    </Paper>
+
+      <CtaButton href={APP_URL} external fullWidth>
+        Start practicing with detailed solutions
+      </CtaButton>
+    </QuickCheck>
   );
 }

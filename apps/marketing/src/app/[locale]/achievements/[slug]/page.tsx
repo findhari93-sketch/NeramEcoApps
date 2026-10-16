@@ -6,7 +6,7 @@ import type { StudentResult, StudentResultExamType } from '@neram/database';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { BASE_URL, ORG_NAME } from '@/lib/seo/constants';
-import StudentDetailContent from '@/components/achievements/StudentDetailContent';
+import StudentDetailContent, { type PublicStudentResult } from '@/components/achievements/StudentDetailContent';
 
 // Public result pages change rarely. ISR daily, generated on first request: the
 // empty list registers the route for on-demand ISR without adding build files.
@@ -177,10 +177,28 @@ export default async function StudentDetailPage({ params: { locale, slug } }: Pa
 
   const jsonLdData = generateStudentResultJsonLd(result);
 
+  // Only the public fields reach the page (the unwatermarked scorecard stays on the server).
+  const publicResult: PublicStudentResult = {
+    slug: result.slug,
+    student_name: result.student_name,
+    photo_url: result.photo_url,
+    scorecard_watermarked_url: result.scorecard_watermarked_url,
+    exam_type: result.exam_type,
+    exam_year: result.exam_year,
+    score: result.score,
+    max_score: result.max_score,
+    rank: result.rank,
+    percentile: result.percentile,
+    college_name: result.college_name,
+    college_city: result.college_city,
+    course_name: result.course_name,
+    student_quote: result.student_quote,
+  };
+
   return (
     <>
       <JsonLd data={jsonLdData} />
-      <StudentDetailContent slug={slug} locale={locale} />
+      <StudentDetailContent result={publicResult} />
     </>
   );
 }

@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { Box, Typography } from '@mui/material';
-import { alpha } from '@mui/material/styles';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
@@ -22,6 +21,7 @@ import {
   typeLabel,
 } from '@/lib/college-hub/format';
 import CollegeLogo from './CollegeLogo';
+import { tokens } from '@/design-system';
 
 type Sort = NonNullable<CollegeFilters['sortBy']>;
 
@@ -45,7 +45,7 @@ interface Props {
   onToggleCompare: (c: ListingCollege) => void;
 }
 
-const muted = { color: 'text.secondary', fontWeight: 500 } as const;
+const muted = { color: tokens.inkMuted, fontWeight: 500 } as const;
 
 /** Table view (canvas: Desktop · Table view). Scrolls sideways inside its own box. */
 export default function CollegeTable({ colleges, startRank, sort, onSort, isInCompare, onToggleCompare }: Props) {
@@ -61,7 +61,7 @@ export default function CollegeTable({ colleges, startRank, sort, onSort, isInCo
       width: '84px',
       sorts: ['naac_grade'],
       render: (c) => (
-        <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', height: 24, px: 1, borderRadius: 1, border: '1px solid', borderColor: 'grey.400', fontSize: '0.78rem', fontWeight: 700, color: c.naac_grade ? 'text.primary' : 'text.secondary' }}>
+        <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', height: 24, px: 1, borderRadius: 1, border: '1px solid', borderColor: tokens.lineStrong, fontSize: '0.78rem', fontWeight: 700, color: c.naac_grade ? tokens.ink : tokens.inkMuted }}>
           {c.naac_grade ?? 'None'}
         </Box>
       ),
@@ -71,7 +71,7 @@ export default function CollegeTable({ colleges, startRank, sort, onSort, isInCo
       label: 'Exams',
       align: 'left',
       width: 'minmax(120px, 1fr)',
-      render: (c) => <Box component="span" sx={{ fontSize: '0.82rem', color: 'text.secondary' }}>{examList(c.accepted_exams, 'short').join(' · ') || 'Check with college'}</Box>,
+      render: (c) => <Box component="span" sx={{ fontSize: '0.82rem', color: tokens.inkMuted }}>{examList(c.accepted_exams, 'short').join(' · ') || 'Check with college'}</Box>,
     },
     {
       key: 'fee',
@@ -125,9 +125,9 @@ export default function CollegeTable({ colleges, startRank, sort, onSort, isInCo
             if (!r) return <Box component="span" sx={muted}>No reviews</Box>;
             return (
               <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
-                <StarRoundedIcon aria-hidden sx={{ fontSize: 15, color: 'warning.dark' }} />
+                <StarRoundedIcon aria-hidden sx={{ fontSize: 15, color: tokens.gold800 }} />
                 <b>{r}</b>
-                <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>({c.review_count})</Box>
+                <Box component="span" sx={{ fontSize: '0.75rem', color: tokens.inkMuted }}>({c.review_count})</Box>
               </Box>
             );
           },
@@ -160,10 +160,10 @@ export default function CollegeTable({ colleges, startRank, sort, onSort, isInCo
           font: 'inherit',
           letterSpacing: 'inherit',
           textTransform: 'inherit',
-          color: active ? 'primary.dark' : 'text.secondary',
+          color: active ? tokens.navy900 : tokens.inkMuted,
           cursor: 'pointer',
           borderRadius: 1,
-          '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' },
+          '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 },
         }}
       >
         {col.label}
@@ -184,14 +184,14 @@ export default function CollegeTable({ colleges, startRank, sort, onSort, isInCo
   const rowSx = { display: 'grid', gridTemplateColumns: template, alignItems: 'center' } as const;
 
   return (
-    <Box sx={{ bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
+    <Box sx={{ bgcolor: tokens.surface, border: '1px solid', borderColor: tokens.line, borderRadius: 1, overflow: 'hidden' }}>
       <Box sx={{ overflowX: 'auto' }}>
         <Box component="table" role="table" aria-label="Colleges" sx={{ minWidth, width: '100%', borderCollapse: 'collapse', display: 'block' }}>
           <Box component="thead" role="rowgroup" sx={{ display: 'block' }}>
             <Box
               component="tr"
                   role="row"
-              sx={{ ...rowSx, minHeight: 48, bgcolor: (t) => (t.palette.mode === 'light' ? t.palette.grey[100] : t.palette.background.default), borderBottom: '1px solid', borderColor: 'divider', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: 'text.secondary', whiteSpace: 'nowrap' }}
+              sx={{ ...rowSx, minHeight: 48, bgcolor: tokens.surfaceHover, borderBottom: '1px solid', borderColor: tokens.line, fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', color: tokens.inkMuted, whiteSpace: 'nowrap' }}
             >
               <Box component="th" role="columnheader" scope="col" sx={{ pl: 2, textAlign: 'left', fontWeight: 'inherit' }}>
                 <Box component="span" sx={{ position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>Compare</Box>
@@ -218,7 +218,7 @@ export default function CollegeTable({ colleges, startRank, sort, onSort, isInCo
                   component="tr"
                   role="row"
                   key={c.id}
-                  sx={{ ...rowSx, minHeight: 64, borderBottom: '1px solid', borderColor: 'divider', bgcolor: (t) => (on ? alpha(t.palette.primary.main, 0.06) : 'transparent'), fontSize: '0.875rem' }}
+                  sx={{ ...rowSx, minHeight: 64, borderBottom: '1px solid', borderColor: tokens.line, bgcolor: on ? tokens.surfaceHover : 'transparent', fontSize: '0.875rem' }}
                 >
                   <Box component="td" role="cell" sx={{ pl: 2 }}>
                     <Box
@@ -227,17 +227,17 @@ export default function CollegeTable({ colleges, startRank, sort, onSort, isInCo
                       checked={on}
                       onChange={() => onToggleCompare(c)}
                       aria-label={`Compare ${shortName(c)}`}
-                      sx={{ width: 18, height: 18, m: 0, accentColor: (t) => t.palette.primary.main, cursor: 'pointer' }}
+                      sx={{ width: 18, height: 18, m: 0, accentColor: tokens.navy900, cursor: 'pointer' }}
                     />
                   </Box>
-                  <Box component="td" role="cell" sx={{ fontSize: '0.8rem', color: 'text.secondary', fontVariantNumeric: 'tabular-nums' }}>{startRank + i}</Box>
+                  <Box component="td" role="cell" sx={{ fontSize: '0.8rem', color: tokens.inkMuted, fontVariantNumeric: 'tabular-nums' }}>{startRank + i}</Box>
                   <Box component="td" role="cell" sx={{ display: 'flex', alignItems: 'center', gap: 1.5, pr: 2, minWidth: 0, py: 1 }}>
                     <CollegeLogo name={c.name} logoUrl={c.logo_url} size={36} radius={1} />
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.125, minWidth: 0 }}>
-                      <Box component={Link} href={collegeHref(c)} sx={{ color: 'text.primary', textDecoration: 'none', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', '&:hover': { color: 'primary.main' } }}>
+                      <Box component={Link} href={collegeHref(c)} sx={{ color: tokens.ink, textDecoration: 'none', fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', '&:hover': { color: tokens.navy900 } }}>
                         {c.name}
                       </Box>
-                      <Typography component="span" sx={{ fontSize: '0.78rem', color: 'text.secondary' }}>
+                      <Typography component="span" sx={{ fontSize: '0.78rem', color: tokens.inkMuted }}>
                         {c.city} · {typeLabel(c.type)}
                       </Typography>
                     </Box>
@@ -252,7 +252,7 @@ export default function CollegeTable({ colleges, startRank, sort, onSort, isInCo
                       component={Link}
                       href={collegeHref(c)}
                       aria-label={`Open ${c.name}`}
-                      sx={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'text.secondary', borderRadius: 1, '&:hover': { color: 'primary.main' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' } }}
+                      sx={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.inkMuted, borderRadius: 1, '&:hover': { color: tokens.navy900 }, '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } }}
                     >
                       <ChevronRightIcon aria-hidden />
                     </Box>

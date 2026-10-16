@@ -307,7 +307,7 @@ export default function PaymentPage() {
   if (!applicationNumber) {
     return (
       <Container maxWidth="sm" sx={{ py: { xs: 3, sm: 5 } }}>
-        <Paper sx={{ p: { xs: 3, sm: 4 }, textAlign: 'center' }}>
+        <Paper variant="outlined" sx={{ p: { xs: 3, sm: 4 }, textAlign: 'center' }}>
           <PaymentIcon sx={{ fontSize: 56, color: 'text.secondary', mb: 2 }} />
           <Typography variant="h5" fontWeight={600} gutterBottom>
             Payment Link Required
@@ -344,7 +344,7 @@ export default function PaymentPage() {
 
     return (
       <Container maxWidth="sm" sx={{ py: { xs: 3, sm: 5 } }}>
-        <Paper sx={{ p: { xs: 3, sm: 4 }, textAlign: 'center' }}>
+        <Paper variant="outlined" sx={{ p: { xs: 3, sm: 4 }, textAlign: 'center' }}>
           {isAlreadyPaid ? (
             <>
               <CheckCircleIcon sx={{ fontSize: 56, color: 'success.main', mb: 2 }} />
@@ -376,7 +376,7 @@ export default function PaymentPage() {
   if (paymentSuccess) {
     return (
       <Container maxWidth="sm" sx={{ py: { xs: 3, sm: 5 } }}>
-        <Paper sx={{ p: { xs: 3, sm: 4 }, textAlign: 'center' }}>
+        <Paper variant="outlined" sx={{ p: { xs: 3, sm: 4 }, textAlign: 'center' }}>
           <CheckCircleIcon sx={{ fontSize: 64, color: 'success.main', mb: 2 }} />
           <Typography variant="h5" fontWeight={700} gutterBottom>
             Payment Successful!
@@ -490,7 +490,7 @@ export default function PaymentPage() {
         )}
 
         {/* Fee Summary */}
-        <Paper sx={{ p: { xs: 2.5, sm: 3 } }}>
+        <Paper variant="outlined" sx={{ p: { xs: 2.5, sm: 3 } }}>
           <Typography variant="subtitle1" fontWeight={600} gutterBottom>
             Fee Summary
           </Typography>
@@ -538,7 +538,7 @@ export default function PaymentPage() {
 
         {/* Payment Scheme Selection */}
         {details.allowedPaymentModes === 'full_and_installment' && (
-          <Paper sx={{ p: { xs: 2.5, sm: 3 } }}>
+          <Paper variant="outlined" sx={{ p: { xs: 2.5, sm: 3 } }}>
             <FormControl component="fieldset" sx={{ width: '100%' }}>
               <FormLabel component="legend" sx={{ mb: 1, fontWeight: 600, fontSize: '0.95rem' }}>
                 Payment Option
@@ -620,7 +620,7 @@ export default function PaymentPage() {
 
         {/* Coupon */}
         {details.couponCode && !couponApplied && (
-          <Paper sx={{ p: { xs: 2.5, sm: 3 } }}>
+          <Paper variant="outlined" sx={{ p: { xs: 2.5, sm: 3 } }}>
             <Typography variant="subtitle2" gutterBottom>
               Coupon Code
             </Typography>
@@ -657,7 +657,7 @@ export default function PaymentPage() {
         )}
 
         {/* Payer Information */}
-        <Paper sx={{ p: { xs: 2.5, sm: 3 } }}>
+        <Paper variant="outlined" sx={{ p: { xs: 2.5, sm: 3 } }}>
           <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
             <PersonIcon fontSize="small" color="action" />
             <Typography variant="subtitle1" fontWeight={600}>
@@ -700,7 +700,7 @@ export default function PaymentPage() {
         </Paper>
 
         {/* Pay Now */}
-        <Paper sx={{ p: { xs: 2.5, sm: 3 } }}>
+        <Paper variant="outlined" sx={{ p: { xs: 2.5, sm: 3 } }}>
           <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
             <Typography variant="body2" color="text.secondary">Amount to Pay</Typography>
             <Typography variant="h5" fontWeight={700} color="primary.main">

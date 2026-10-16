@@ -7,7 +7,7 @@ import { canUser } from '@/lib/staff-capabilities';
 import {
   formClassLabel,
   formExamYear,
-  isApplicationForm,
+  isSubmittedApplication,
   pickApplicationForm,
   type ApplicationForm,
   type FormCandidateView,
@@ -36,7 +36,7 @@ export const dynamic = 'force-dynamic';
 
 const FORM_FIELDS =
   'id, user_id, application_number, academic_data, applicant_category, target_exam_year, ' +
-  'father_name, first_name, city, district, state, source, status, created_at';
+  'father_name, first_name, city, district, state, source, status, reviewed_by, created_at';
 const USER_FIELDS = 'id, name, first_name, last_name, email, personal_email, phone, ms_oid, user_type, staff_role';
 const MAX_CANDIDATES = 3;
 /** PostgREST puts `.in()` values in the URL, so long id lists go in slices. */
@@ -117,7 +117,7 @@ export async function GET(request: NextRequest) {
       roster.map((row) => row.user_id),
       true,
     );
-    const hasForm = new Set(ownForms.filter((row) => isApplicationForm(row)).map((row) => row.user_id));
+    const hasForm = new Set(ownForms.filter((row) => isSubmittedApplication(row)).map((row) => row.user_id));
     const missing = roster.filter((row) => !hasForm.has(row.user_id));
     if (!missing.length) return NextResponse.json({ students: [], canLink });
     const missingIds = missing.map((row) => row.user_id as string);

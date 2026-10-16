@@ -16,6 +16,7 @@ import Link from 'next/link';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
+import { siteTokens as t } from '@neram/ui/site-tokens';
 
 
 export async function generateMetadata({
@@ -98,29 +99,30 @@ export default function PreviousYearPapersPage({ params: { locale } }: PageProps
       <Box
         sx={{
           py: { xs: 6, md: 10 },
-          background: 'linear-gradient(135deg, #5c6bc0 0%, #3949ab 100%)',
-          color: 'white',
+          bgcolor: t.navy900,
+          ...t.blueprint,
+          color: t.paper,
         }}
       >
         <Container maxWidth="lg">
           <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', md: '3rem' } }}>
             Previous Year Papers
           </Typography>
-          <Typography variant="h5" sx={{ mb: 3, opacity: 0.9 }}>
+          <Typography variant="h5" sx={{ mb: 3, color: t.paperMuted }}>
             10 years of NATA & JEE Paper 2 question papers with solutions
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
             <Button
               variant="contained"
               href="#nata-papers"
-              sx={{ bgcolor: 'white', color: 'primary.main' }}
+              sx={{ minHeight: 48 }}
             >
               NATA Papers
             </Button>
             <Button
               variant="outlined"
               href="#jee-papers"
-              sx={{ borderColor: 'white', color: 'white' }}
+              sx={{ minHeight: 48, borderColor: t.outlineDark, color: t.paper, '&:hover': { bgcolor: 'transparent', borderColor: t.gold500, color: t.gold500 } }}
             >
               JEE Paper 2
             </Button>
@@ -129,7 +131,7 @@ export default function PreviousYearPapersPage({ params: { locale } }: PageProps
       </Box>
 
       {/* Stats */}
-      <Box sx={{ py: 4, bgcolor: 'grey.50' }}>
+      <Box sx={{ py: 4, bgcolor: t.ground }}>
         <Container maxWidth="lg">
           <Grid container spacing={3}>
             {[
@@ -139,7 +141,7 @@ export default function PreviousYearPapersPage({ params: { locale } }: PageProps
               { value: 'Free', label: 'Download' },
             ].map((stat, index) => (
               <Grid item xs={6} md={3} key={index}>
-                <Paper sx={{ p: 2, textAlign: 'center' }}>
+                <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
                   <Typography variant="h4" color="primary" sx={{ fontWeight: 700 }}>{stat.value}</Typography>
                   <Typography variant="body2" color="text.secondary">{stat.label}</Typography>
                 </Paper>
@@ -165,7 +167,7 @@ export default function PreviousYearPapersPage({ params: { locale } }: PageProps
                         {paper.year}
                       </Typography>
                       {paper.hasKeys && (
-                        <Chip label="With Solutions" size="small" color="success" />
+                        <Chip label="With Solutions" size="small" variant="outlined" sx={{ color: t.success, borderColor: t.success, fontWeight: 700 }} />
                       )}
                     </Box>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -192,7 +194,7 @@ export default function PreviousYearPapersPage({ params: { locale } }: PageProps
       </Box>
 
       {/* JEE Papers */}
-      <Box id="jee-papers" sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
+      <Box id="jee-papers" sx={{ py: { xs: 6, md: 10 }, bgcolor: t.ground }}>
         <Container maxWidth="lg">
           <Typography variant="h2" component="h2" gutterBottom sx={{ fontWeight: 700, mb: 4 }}>
             JEE Paper 2 Previous Year Papers (2017-2024)
@@ -207,7 +209,7 @@ export default function PreviousYearPapersPage({ params: { locale } }: PageProps
                         {paper.year}
                       </Typography>
                       {paper.hasKeys && (
-                        <Chip label="With Solutions" size="small" color="success" />
+                        <Chip label="With Solutions" size="small" variant="outlined" sx={{ color: t.success, borderColor: t.success, fontWeight: 700 }} />
                       )}
                     </Box>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -254,8 +256,8 @@ export default function PreviousYearPapersPage({ params: { locale } }: PageProps
                       width: 60,
                       height: 60,
                       borderRadius: '50%',
-                      bgcolor: 'primary.main',
-                      color: 'white',
+                      bgcolor: t.navy900,
+                      color: t.gold500,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -275,12 +277,12 @@ export default function PreviousYearPapersPage({ params: { locale } }: PageProps
       </Box>
 
       {/* CTA Section */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'primary.main', color: 'white', textAlign: 'center' }}>
+      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: t.navy900, color: t.paper, textAlign: 'center' }}>
         <Container maxWidth="md">
           <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700 }}>
             Need Expert Analysis of Your Attempts?
           </Typography>
-          <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>
+          <Typography variant="h6" sx={{ mb: 4, color: t.paperMuted }}>
             Join Neram Classes for detailed paper analysis and personalized feedback
           </Typography>
           <Button
@@ -288,7 +290,7 @@ export default function PreviousYearPapersPage({ params: { locale } }: PageProps
             size="large"
             component={Link}
             href="/apply"
-            sx={{ bgcolor: 'white', color: 'primary.main' }}
+            sx={{ minHeight: 48 }}
           >
             Join Now
           </Button>

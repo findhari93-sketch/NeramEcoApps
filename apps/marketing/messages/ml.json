@@ -114,7 +114,7 @@
     "shell": {
       "bookDemo": "സൗജന്യ ഡെമോ ക്ലാസ് ബുക്ക് ചെയ്യുക",
       "home": "Neram Classes home",
-      "help": "Help",
+      "help": "Need help?",
       "secure": "Secure application",
       "callUs": "Call us",
       "contactPage": "Contact page",
@@ -122,6 +122,7 @@
       "privacy": "Privacy",
       "refund": "Refund policy",
       "haveAccount": "Have an account?",
+      "legalNav": "Legal",
       "logIn": "Log in",
       "copyright": "© Neram Classes"
     },
@@ -148,51 +149,59 @@
       "nextPayment": "Next: fees and payment options"
     },
     "showcase": {
-      "eyebrow": "Inside the Nexus app",
-      "headline": "India's largest AI-enabled learning platform for",
-      "headlineAccent": "architecture entrance.",
-      "windowAlt": "A short tour of the Nexus app: drawing review, revision scores, question prediction, the AI tutor, the class library, the sketchbook and a live class.",
-      "pause": "Pause the tour",
-      "play": "Play the tour",
-      "previous": "Previous scene",
-      "next": "Next scene",
+      "eyebrow": "Nexus ആപ്പിനുള്ളിൽ",
+      "headline": "ഇന്ത്യയിലെ ഏറ്റവും വലിയ AI അധിഷ്ഠിത പഠന പ്ലാറ്റ്ഫോം,",
+      "headlineAccent": "ആർക്കിടെക്ചർ പ്രവേശന പരീക്ഷയ്ക്കായി.",
+      "windowAlt": "Nexus ആപ്പിന്റെ ഒരു ചെറു പര്യടനം: ഡ്രോയിംഗ് റിവ്യൂ, റിവിഷൻ സ്കോറുകൾ, ചോദ്യ പ്രവചനം, AI ട്യൂട്ടർ, ക്ലാസ് ലൈബ്രറി, സ്കെച്ച്ബുക്ക്, ഒരു ലൈവ് ക്ലാസ്.",
+      "pause": "ടൂർ നിർത്തുക",
+      "play": "ടൂർ പ്ലേ ചെയ്യുക",
+      "previous": "മുമ്പത്തെ രംഗം",
+      "next": "അടുത്ത രംഗം",
+      "tour": "Nexus ടൂർ",
       "scenes": {
         "review": {
-          "label": "Review",
-          "caption": "Your teacher sketches on your drawing and talks you through it."
+          "label": "റിവ്യൂ",
+          "caption": "നിങ്ങളുടെ അധ്യാപകൻ ഡ്രോയിംഗിൽ തിരുത്തലുകൾ അടയാളപ്പെടുത്തി ഓരോന്നും വിശദീകരിക്കുന്നു.",
+          "alt": "ഒരു വിദ്യാർത്ഥിയുടെ പെർസ്പെക്റ്റീവ് ഡ്രോയിംഗിൽ അധ്യാപകൻ നമ്പറിട്ട തിരുത്തലുകൾ വരയ്ക്കുന്നു."
         },
         "revise": {
-          "label": "Revise",
-          "caption": "Fix it, resubmit, watch the score climb."
+          "label": "തിരുത്ത്",
+          "caption": "തിരുത്തുക, വീണ്ടും സമർപ്പിക്കുക, സ്കോർ ഉയരുന്നത് കാണുക.",
+          "alt": "വീണ്ടും സമർപ്പിച്ച ഡ്രോയിംഗിന് 5-ൽ 5 സ്കോർ ലഭിക്കുന്നു."
         },
         "predict": {
-          "label": "Predict",
-          "caption": "AI predicts this year's questions from 17 years of chapter weightage."
+          "label": "പ്രവചനം",
+          "caption": "ഈ വർഷം വരാൻ ഏറ്റവും സാധ്യതയുള്ള അധ്യായങ്ങൾ AI റാങ്ക് ചെയ്യുന്നു.",
+          "alt": "17 വർഷത്തിനിടെ എത്ര തവണ ചോദിച്ചു എന്നതനുസരിച്ച് റാങ്ക് ചെയ്ത അധ്യായങ്ങളുടെ പട്ടിക."
         },
         "tutor": {
-          "label": "AI tutor",
-          "caption": "Every question solved: video, image, and a tutor you can ask anything."
+          "label": "AI ട്യൂട്ടർ",
+          "caption": "ഒരു ചോദ്യത്തിൽ കുടുങ്ങിയോ? ട്യൂട്ടറോട് ഘട്ടം ഘട്ടമായി ചോദിക്കൂ.",
+          "alt": "പരിഹരിച്ച ഒരു ചോദ്യത്തെക്കുറിച്ച് വിദ്യാർത്ഥി AI ട്യൂട്ടറുമായി ചാറ്റ് ചെയ്യുന്നു."
         },
         "library": {
-          "label": "Library",
-          "caption": "3,000+ recorded classes for NATA and JEE Paper 2."
+          "label": "ലൈബ്രറി",
+          "caption": "3,000+ റെക്കോർഡ് ചെയ്ത ക്ലാസുകൾ, വിഷയം അനുസരിച്ച് തിരയാം.",
+          "alt": "ക്ലാസ് ലൈബ്രറിയിൽ 3D geometry തിരയുന്നു."
         },
         "sketchbook": {
-          "label": "Sketchbook",
-          "caption": "Your digital sketchbook, plus inspiration from every drawing question."
+          "label": "സ്കെച്ച്ബുക്ക്",
+          "caption": "ഡിജിറ്റലായി സ്കെച്ച് ചെയ്യൂ, ഓരോ ഡ്രോയിംഗ് ചോദ്യത്തിനും പ്രചോദനത്തോടെ.",
+          "alt": "പ്രചോദന ചിത്രങ്ങൾക്ക് അരികിൽ ഒരു ഡിജിറ്റൽ സ്കെച്ച്."
         },
         "live": {
-          "label": "Live",
-          "caption": "Live classes with answer pads, inside Microsoft Teams."
+          "label": "ലൈവ്",
+          "caption": "Microsoft Teams-ൽ ലൈവ് ക്ലാസുകൾ, ആൻസർ പാഡുകളോടെ.",
+          "alt": "വിദ്യാർത്ഥികൾ ആൻസർ പാഡിൽ ഉത്തരം നൽകുന്ന ഒരു ലൈവ് ക്ലാസ്."
         }
       },
       "stats": {
         "rank": "AIR 1",
         "rankNote": "JEE B.Arch 2024",
         "questions": "10,000+",
-        "questionsNote": "solved questions",
-        "global": "Global",
-        "globalNote": "students across the world"
+        "questionsNote": "പരിഹരിച്ച ചോദ്യങ്ങൾ",
+        "global": "ആഗോളം",
+        "globalNote": "ലോകമെമ്പാടുമുള്ള വിദ്യാർത്ഥികൾ"
       }
     },
     "aboutYou": {
@@ -373,7 +382,55 @@
     "quickLinks": "ക്വിക്ക് ലിങ്കുകൾ",
     "contact": "ബന്ധപ്പെടുക",
     "followUs": "ഞങ്ങളെ പിന്തുടരുക",
-    "copyright": "© {year} നേരം ക്ലാസുകൾ. എല്ലാ അവകാശങ്ങളും സംരക്ഷിതം."
+    "copyright": "© {year} Neram Classes. എല്ലാ അവകാശങ്ങളും സംരക്ഷിതം.",
+    "about": "2009 മുതൽ NATA, JEE Paper 2 പരിശീലനം. ഇന്ത്യയിലും ഗൾഫ് രാജ്യങ്ങളിലും ഉടനീളം ലൈവ് ഓൺലൈൻ ക്ലാസുകൾ, തമിഴ്നാട്ടിലും ബെംഗളൂരുവിലും ക്ലാസ് മുറികൾ.",
+    "location": "ബെംഗളൂരു, കർണാടക, ഇന്ത്യ",
+    "phone": "ഫോൺ: {number}",
+    "email": "ഇമെയിൽ: {address}",
+    "supportedBy": "Microsoft പിന്തുണയോടെ",
+    "resources": "പഠന വിഭവങ്ങൾ",
+    "topCities": "പ്രധാന നഗരങ്ങൾ",
+    "topStates": "പ്രധാന സംസ്ഥാനങ്ങൾ",
+    "counselling": "B.Arch കൗൺസലിംഗ്",
+    "goToApp": "ആപ്പിലേക്ക് പോകുക",
+    "nexusBody": "ആർക്കിടെക്റ്റുകൾ രൂപകൽപ്പന ചെയ്ത, ഇന്ത്യയിലെ ആദ്യത്തെ NATA-മാത്ര പഠന പ്ലാറ്റ്ഫോം. ലൈവ്, റെക്കോർഡ് ചെയ്ത ക്ലാസുകൾ, AI പഠന ഉപകരണങ്ങൾ, രക്ഷിതാക്കളുടെ നിരീക്ഷണം എന്നിവയുള്ള സമ്പൂർണ്ണ സ്വയം പഠന സഹായി.",
+    "nexusNote": "സൗജന്യ ടൂളുകൾ എല്ലാവർക്കും ലഭ്യമാണ്. Nexus പ്രീമിയം സൗകര്യങ്ങൾ ചേർന്ന വിദ്യാർത്ഥികൾക്ക് മാത്രം.",
+    "tryFreeTools": "സൗജന്യ ടൂളുകൾ പരീക്ഷിക്കൂ",
+    "exploreNexus": "Nexus കാണുക",
+    "legal": "നിയമപരം",
+    "socialLabel": "{network}-ൽ Neram Classes",
+    "links": {
+      "home": "ഹോം",
+      "about": "ഞങ്ങളെക്കുറിച്ച്",
+      "courses": "കോഴ്സുകൾ",
+      "colleges": "ആർക്കിടെക്ചർ കോളേജുകൾ",
+      "compareColleges": "കോളേജുകൾ താരതമ്യം ചെയ്യുക",
+      "coaching": "പരിശീലനം",
+      "demoClass": "സൗജന്യ ഡെമോ ക്ലാസ്",
+      "apply": "ഇപ്പോൾ അപേക്ഷിക്കുക",
+      "contact": "ബന്ധപ്പെടുക",
+      "fees": "ഫീസ്",
+      "scholarships": "സ്കോളർഷിപ്പുകൾ",
+      "careers": "കരിയർ",
+      "freeTools": "സൗജന്യ ടൂളുകൾ",
+      "nataSyllabus": "NATA സിലബസ് 2026",
+      "nataCoaching": "NATA പ്രവേശന പരീക്ഷാ പരിശീലനം",
+      "nataGuide": "NATA തയ്യാറെടുപ്പ് ഗൈഡ്",
+      "score150": "NATA-യിൽ 150+ മാർക്ക് എങ്ങനെ നേടാം",
+      "importantQuestions": "പ്രധാന ചോദ്യങ്ങൾ",
+      "bestBooks": "NATA, JEE-ക്കുള്ള മികച്ച പുസ്തകങ്ങൾ",
+      "previousPapers": "മുൻവർഷ ചോദ്യപേപ്പറുകൾ",
+      "cutoffCalculator": "കട്ട്ഓഫ് കാൽക്കുലേറ്റർ",
+      "nataApp": "സൗജന്യ NATA ആപ്പ്",
+      "aiarchitek": "aiArchitek AI പ്ലാറ്റ്ഫോം",
+      "nexusLms": "Nexus LMS (വിദ്യാർത്ഥികൾ)",
+      "nataOnline": "NATA ഓൺലൈൻ പരിശീലനം",
+      "blog": "ബ്ലോഗ്",
+      "allCounsellings": "എല്ലാ 28 കൗൺസലിംഗുകളും",
+      "privacy": "സ്വകാര്യതാ നയം",
+      "terms": "നിബന്ധനകളും വ്യവസ്ഥകളും",
+      "refund": "റീഫണ്ട് നയം"
+    }
   },
   "common": {
     "loading": "ലോഡ് ചെയ്യുന്നു...",
@@ -421,14 +478,36 @@
     "closeMenu": "മെനു അടയ്ക്കുക",
     "continueApplication": "അപേക്ഷ തുടരുക",
     "trackApplication": "അപേക്ഷ ട്രാക്ക് ചെയ്യുക",
-    "payAndJoin": "പേ ചെയ്ത് ചേരുക",
+    "payAndJoin": "പണമടച്ച് ചേരുക",
     "goToApp": "ആപ്പിലേക്ക് പോകുക",
     "joinNow": "ഇപ്പോൾ ചേരുക",
     "viewFees": "ഫീസ് കാണുക",
     "fees": "ഫീസ്",
     "freeDemo": "സൗജന്യ ഡെമോ",
     "freeDemoClass": "സൗജന്യ ഡെമോ ക്ലാസ്",
-    "myDemo": "എന്റെ ഡെമോ"
+    "myDemo": "എന്റെ ഡെമോ",
+    "joinShort": "ചേരൂ",
+    "continueShort": "തുടരൂ",
+    "trackShort": "നില",
+    "payShort": "പണമടയ്ക്കൂ",
+    "appShort": "ആപ്പ്",
+    "helpShort": "സഹായം",
+    "myEnrollment": "എന്റെ എൻറോൾമെന്റ്",
+    "logIn": "ലോഗിൻ",
+    "logInToSee": "നിങ്ങളുടെ അപേക്ഷ കാണാൻ ലോഗിൻ ചെയ്യൂ",
+    "more": "കൂടുതൽ",
+    "search": "തിരയുക",
+    "notifications": "അറിയിപ്പുകൾ",
+    "account": "അക്കൗണ്ട്",
+    "signOut": "സൈൻ ഔട്ട്",
+    "statusNoApplication": "ഇതുവരെ അപേക്ഷയില്ല",
+    "statusDemoBooked": "ഡെമോ ക്ലാസ് ബുക്ക് ചെയ്തു",
+    "statusDraft": "അപേക്ഷ ഡ്രാഫ്റ്റ്",
+    "statusReview": "അപേക്ഷ പരിശോധനയിലാണ്",
+    "statusApproved": "അംഗീകരിച്ചു, സീറ്റ് ഉറപ്പാക്കാൻ പണമടയ്ക്കൂ",
+    "statusEnrolled": "എൻറോൾ ചെയ്ത വിദ്യാർത്ഥി",
+    "statusApplying": "അപേക്ഷ പൂരിപ്പിക്കുന്നു",
+    "freeTools": "സൗജന്യ ടൂളുകൾ"
   },
   "centers": {
     "title": "ഞങ്ങളുടെ പഠന കേന്ദ്രങ്ങൾ സന്ദർശിക്കുക",

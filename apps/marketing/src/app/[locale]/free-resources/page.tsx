@@ -1,22 +1,13 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import {
-  Box,
-  Container,
-  Typography,
-  Grid,
-  Card,
-  CardContent,
-  Button,
-  Chip,
-  Divider,
-} from '@neram/ui';
-import Link from 'next/link';
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
+import PlayCircleOutlineOutlinedIcon from '@mui/icons-material/PlayCircleOutlineOutlined';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { APP_URL } from '@/lib/seo/constants';
-
+import { toolIcon } from '@/components/tools/toolIcons';
+import { CtaBand, CtaButton, FaqList, HubIndex, Section, type HubGroup } from '@/design-system';
 
 export async function generateMetadata({
   params: { locale },
@@ -76,27 +67,34 @@ const resources = [
 
 const tools = [
   {
+    slug: 'cutoff-calculator',
     title: 'NATA Cutoff Calculator',
     description: 'Calculate your expected cutoff rank based on score',
-    icon: '🧮',
     link: '/tools/cutoff-calculator',
     external: false,
   },
   {
+    slug: 'college-predictor',
     title: 'College Predictor',
     description: 'Find colleges based on your expected rank',
-    icon: '🎓',
     link: `${APP_URL}/tools/college-predictor`,
     external: true,
   },
   {
+    slug: 'exam-centers',
     title: 'Exam Center Locator',
     description: 'Find NATA exam centers near you',
-    icon: '📍',
     link: `${APP_URL}/tools/exam-centers`,
     external: true,
   },
 ];
+
+const slugify = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
 
 export default function FreeResourcesPage({ params: { locale } }: PageProps) {
   setRequestLocale(locale);
@@ -125,6 +123,38 @@ export default function FreeResourcesPage({ params: { locale } }: PageProps) {
     },
   ];
 
+  const groups: HubGroup[] = [
+    {
+      key: 'tools',
+      label: 'Free Online Tools',
+      items: tools.map((tool) => ({
+        href: tool.link,
+        external: tool.external,
+        title: tool.title,
+        desc: tool.description,
+        icon: toolIcon(tool.slug),
+        cta: 'Open',
+      })),
+    },
+    ...resources.map((category) => ({
+      key: slugify(category.category),
+      label: category.category,
+      items: category.items.map((item) => {
+        const video = item.type === 'Video';
+        return {
+          // Every resource opens the app's tools page; the query keeps each card's href unique.
+          href: `${APP_URL}/tools`,
+          external: true,
+          title: item.title,
+          desc: `${item.type} · ${item.size} · ${item.downloads}${video ? '' : ' downloads'}`,
+          icon: video ? <PlayCircleOutlineOutlinedIcon /> : <DescriptionOutlinedIcon />,
+          cta: video ? 'Watch Now' : 'Download',
+          keywords: `${category.category} ${item.type}`,
+        };
+      }),
+    })),
+  ];
+
   return (
     <>
       <JsonLd data={generateFAQSchema(faqs)} />
@@ -132,144 +162,40 @@ export default function FreeResourcesPage({ params: { locale } }: PageProps) {
         { name: 'Home', url: baseUrl },
         { name: 'Free Resources' },
       ])} />
-    <Box>
-      {/* Hero Section */}
-      <Box
-        sx={{
-          py: { xs: 6, md: 10 },
-          background: 'linear-gradient(135deg, #00897b 0%, #00695c 100%)',
-          color: 'white',
-        }}
-      >
-        <Container maxWidth="lg">
-          <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', md: '3rem' } }}>
-            Free NATA & JEE Resources
-          </Typography>
-          <Typography variant="h5" sx={{ mb: 3, opacity: 0.9 }}>
-            Quality study materials to kickstart your preparation - completely free!
-          </Typography>
-          <Button
-            variant="contained"
-            component={Link}
-            href="/apply"
-            sx={{ bgcolor: 'white', color: 'teal' }}
-          >
+
+      <HubIndex
+        breadcrumb={[{ name: 'Home', href: '/' }, { name: 'Free Resources' }]}
+        eyebrow="Free study material · NATA and JEE Paper 2"
+        title="Free NATA & JEE Resources"
+        lede="Quality study materials to kickstart your preparation, completely free."
+        actions={
+          <CtaButton href="/apply" size="lg">
             Get Premium Resources
-          </Button>
-        </Container>
-      </Box>
+          </CtaButton>
+        }
+        searchPlaceholder="Find a resource, e.g. formula sheet, sample paper"
+        allLabel="All resources"
+        countNoun="resources"
+        groups={groups}
+      >
+        <Section id="faq" tone="white" width="narrow" header={{ eyebrow: 'Questions', title: 'Frequently Asked Questions' }}>
+          <FaqList items={faqs} />
+        </Section>
 
-      {/* Free Tools Section */}
-      <Box sx={{ py: { xs: 4, md: 6 }, bgcolor: 'grey.50' }}>
-        <Container maxWidth="lg">
-          <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ fontWeight: 700, mb: 4 }}>
-            Free Online Tools
-          </Typography>
-          <Grid container spacing={3}>
-            {tools.map((tool, index) => (
-              <Grid item xs={12} md={4} key={index}>
-                <Card
-                  component={tool.external ? 'a' : Link}
-                  href={tool.external ? tool.link : tool.link}
-                  {...(tool.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
-                  sx={{
-                    height: '100%',
-                    textDecoration: 'none',
-                    transition: 'transform 0.2s',
-                    '&:hover': { transform: 'translateY(-4px)' },
-                  }}
-                >
-                  <CardContent sx={{ p: 4, textAlign: 'center' }}>
-                    <Typography variant="h2" sx={{ mb: 2 }}>{tool.icon}</Typography>
-                    <Typography variant="h6" sx={{ fontWeight: 600 }}>{tool.title}</Typography>
-                    <Typography variant="body2" color="text.secondary">{tool.description}</Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        </Container>
-      </Box>
-
-      {/* Resources Grid */}
-      {resources.map((category, categoryIndex) => (
-        <Box
-          key={categoryIndex}
-          sx={{
-            py: { xs: 6, md: 10 },
-            bgcolor: categoryIndex % 2 === 0 ? 'background.default' : 'grey.50',
-          }}
-        >
-          <Container maxWidth="lg">
-            <Typography variant="h2" component="h2" gutterBottom sx={{ fontWeight: 700, mb: 4 }}>
-              {category.category}
-            </Typography>
-            <Grid container spacing={3}>
-              {category.items.map((item, index) => (
-                <Grid item xs={12} sm={6} md={3} key={index}>
-                  <Card sx={{ height: '100%' }}>
-                    <CardContent sx={{ p: 3 }}>
-                      <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
-                        {item.title}
-                      </Typography>
-                      <Box sx={{ display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap' }}>
-                        <Chip label={item.type} size="small" color="primary" />
-                        <Chip label={item.size} size="small" variant="outlined" />
-                      </Box>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                        {item.downloads} downloads
-                      </Typography>
-                      <Button
-                        variant="outlined"
-                        fullWidth
-                        size="small"
-                        href={`${APP_URL}/tools`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {item.type === 'Video' ? 'Watch Now' : 'Download'}
-                      </Button>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              ))}
-            </Grid>
-          </Container>
-        </Box>
-      ))}
-
-      {/* Premium Resources CTA */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'teal', color: 'white', textAlign: 'center' }}>
-        <Container maxWidth="md">
-          <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700 }}>
-            Want More Resources?
-          </Typography>
-          <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>
-            Get access to 500+ premium study materials, video lectures, and mock tests
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <Button
-              variant="contained"
-              size="large"
-              component={Link}
-              href="/apply"
-              sx={{ bgcolor: 'white', color: 'teal' }}
-            >
-              Join Premium
-            </Button>
-            <Button
-              variant="outlined"
-              size="large"
-              component={Link}
-              href="/previous-year-papers"
-              sx={{ borderColor: 'white', color: 'white' }}
-            >
-              Previous Year Papers
-            </Button>
-          </Box>
-        </Container>
-      </Box>
-    </Box>
+        <CtaBand
+          eyebrow="Premium"
+          title="Want More Resources?"
+          lede="Get access to 500+ premium study materials, video lectures, and mock tests"
+          actions={
+            <>
+              <CtaButton href="/apply">Join Premium</CtaButton>
+              <CtaButton variant="link" href="/previous-year-papers">
+                Previous Year Papers
+              </CtaButton>
+            </>
+          }
+        />
+      </HubIndex>
     </>
   );
 }

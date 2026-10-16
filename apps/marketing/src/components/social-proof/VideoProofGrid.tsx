@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import type { SocialProof } from '@neram/database';
 import VideoPlayerModal from './VideoPlayerModal';
+import { tokens } from '@/design-system';
 
 interface VideoProofGridProps {
   videos: SocialProof[];
@@ -121,19 +122,19 @@ export default function VideoProofGrid({ videos }: VideoProofGridProps) {
                     width: 56,
                     height: 56,
                     borderRadius: '50%',
-                    bgcolor: 'rgba(0,0,0,0.6)',
+                    bgcolor: 'rgba(6,13,31,0.72)',
+                    color: tokens.paper,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    backdropFilter: 'blur(4px)',
-                    transition: 'all 0.25s ease',
+                    transition: 'background-color 150ms ease, color 150ms ease',
                     '&:hover': {
-                      bgcolor: 'rgba(232,160,32,0.85)',
-                      transform: 'translate(-50%, -50%) scale(1.1)',
+                      bgcolor: tokens.gold500,
+                      color: tokens.navy900,
                     },
                   }}
                 >
-                  <PlayArrowIcon sx={{ color: '#fff', fontSize: 32 }} />
+                  <PlayArrowIcon sx={{ color: 'inherit', fontSize: 32 }} />
                 </Box>
                 {/* Language chip */}
                 <Chip

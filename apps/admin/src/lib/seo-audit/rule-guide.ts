@@ -36,3 +36,19 @@ export const RULES: Record<string, { name: string; fix: string; autofix: boolean
   A3: { name: 'Structured data', fix: 'Add the structured data this kind of page should carry so search and AI answers can read it.', autofix: true },
   A4: { name: 'Answer first', fix: 'Add a short paragraph (under 60 words) right under the H1 that answers the page’s main question. AI answers quote these.', autofix: true },
 };
+
+/**
+ * Who clears a finding, shown as "Who fixes it" on the Issues tab.
+ * - code: a change in the repo; `/seo-fix` in Claude Code (or the autofix PR) does it.
+ * - google: nothing to change; Google has to crawl or drop the page (Ask Google runs every morning).
+ * - you: a judgement call (merge pages, write content, check a server error).
+ */
+export type RuleOwner = 'code' | 'google' | 'you';
+const GOOGLE_SIDE = new Set(['I4', 'I8']);
+
+export function ruleOwner(ruleId: string): RuleOwner {
+  if (RULES[ruleId]?.autofix) return 'code';
+  return GOOGLE_SIDE.has(ruleId) ? 'google' : 'you';
+}
+
+export const OWNER_LABEL: Record<RuleOwner, string> = { code: 'Claude Code', google: 'Google', you: 'You' };

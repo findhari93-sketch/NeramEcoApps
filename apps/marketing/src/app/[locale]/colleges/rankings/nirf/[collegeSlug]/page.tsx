@@ -25,6 +25,7 @@ import {
   getNIRFRankingByCollege,
 } from '@/lib/college-hub/queries';
 import Breadcrumbs from '@/components/seo/Breadcrumbs';
+import { siteTokens } from '@neram/ui/site-tokens';
 
 // Render on-demand with 24h ISR cache. We don't pre-generate every college
 // slug because the marketing build is close to Vercel's 15k-file deploy cap.
@@ -140,7 +141,7 @@ export default async function NIRFCollegeHistoryPage({ params }: PageProps) {
         >
           {college.name}
         </Typography>
-        <Typography color="text.secondary" variant="body2">
+        <Typography color={siteTokens.inkMuted} variant="body2">
           {college.city}, {college.state}
         </Typography>
 
@@ -148,18 +149,18 @@ export default async function NIRFCollegeHistoryPage({ params }: PageProps) {
           {best !== null && (
             <Paper
               variant="outlined"
-              sx={{ p: 1.5, borderRadius: 2, minWidth: 120 }}
+              sx={{ p: 1.5, borderRadius: 1, minWidth: 120 }}
             >
-              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+              <Typography variant="caption" color={siteTokens.inkMuted} sx={{ display: 'block' }}>
                 Best rank
               </Typography>
-              <Typography variant="h5" fontWeight={800} color="primary.main">
+              <Typography variant="h5" fontWeight={800} color={siteTokens.navy900}>
                 #{best}
               </Typography>
             </Paper>
           )}
-          <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, minWidth: 120 }}>
-            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+          <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 1, minWidth: 120 }}>
+            <Typography variant="caption" color={siteTokens.inkMuted} sx={{ display: 'block' }}>
               Years ranked
             </Typography>
             <Typography variant="h5" fontWeight={800}>
@@ -184,14 +185,14 @@ export default async function NIRFCollegeHistoryPage({ params }: PageProps) {
                   <Typography variant="body2" fontWeight={600}>
                     {r.year}
                   </Typography>
-                  <Typography variant="body2" fontWeight={700} color="primary.main">
+                  <Typography variant="body2" fontWeight={700} color={siteTokens.navy900}>
                     #{r.rank} {r.score !== null && `(score ${r.score.toFixed(2)})`}
                   </Typography>
                 </Stack>
                 <LinearProgress
                   variant="determinate"
                   value={pct}
-                  sx={{ height: 10, borderRadius: 4 }}
+                  sx={{ height: 10, borderRadius: `${siteTokens.radiusPill}px` }}
                 />
               </Box>
             );
@@ -200,9 +201,9 @@ export default async function NIRFCollegeHistoryPage({ params }: PageProps) {
       </Box>
 
       {/* Yearly breakdown table */}
-      <Paper variant="outlined" sx={{ borderRadius: 2, overflowX: 'auto', mb: 3 }}>
+      <Paper variant="outlined" sx={{ borderRadius: 1, overflowX: 'auto', mb: 3 }}>
         <Table size="small" sx={{ minWidth: 560 }}>
-          <TableHead sx={{ bgcolor: '#f8fafc' }}>
+          <TableHead sx={{ bgcolor: siteTokens.ground }}>
             <TableRow>
               <TableCell sx={{ fontWeight: 700 }}>Year</TableCell>
               <TableCell sx={{ fontWeight: 700 }} align="right">Rank</TableCell>
@@ -223,7 +224,7 @@ export default async function NIRFCollegeHistoryPage({ params }: PageProps) {
                   </Typography>
                 </TableCell>
                 <TableCell align="right">
-                  <Typography variant="body2" fontWeight={700} color="primary.main">
+                  <Typography variant="body2" fontWeight={700} color={siteTokens.navy900}>
                     #{r.rank}
                   </Typography>
                 </TableCell>

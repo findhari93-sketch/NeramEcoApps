@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import { Alert } from '@mui/material';
+import { Box } from '@mui/material';
+import { Callout } from '@/design-system';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { generateItemListSchema } from '@/lib/seo/schemas';
 import KeamSpokeShell from '@/components/keam-arch/KeamSpokeShell';
@@ -80,9 +81,13 @@ export default function CollegesInKeralaPage({
       ]}
       prefillCallbackNotes="Need help shortlisting B.Arch colleges in Kerala"
     >
-      <Alert severity="info" sx={{ mb: 3, borderRadius: 1.5 }}>
-        This list is based on the 2026 prospectus (Annexure II(1)(a)). The final college list, seat matrix, and tuition fee structure are notified by CEE before CAP-2026 begins.
-      </Alert>
+      <Box sx={{ mb: 3 }}>
+        <Callout>
+          <Box component="p" sx={{ m: 0 }}>
+              This list is based on the 2026 prospectus (Annexure II(1)(a)). The final college list, seat matrix, and tuition fee structure are notified by CEE before CAP-2026 begins.
+          </Box>
+        </Callout>
+      </Box>
 
       <CollegesLocator colleges={colleges} districts={districts} universities={universities} />
     </KeamSpokeShell>

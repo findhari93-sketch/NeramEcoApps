@@ -124,7 +124,7 @@
     "shell": {
       "bookDemo": "Book a free demo class",
       "home": "Neram Classes home",
-      "help": "Help",
+      "help": "Need help?",
       "secure": "Secure application",
       "callUs": "Call us",
       "contactPage": "Contact page",
@@ -132,6 +132,7 @@
       "privacy": "Privacy",
       "refund": "Refund policy",
       "haveAccount": "Have an account?",
+      "legalNav": "Legal",
       "logIn": "Log in",
       "copyright": "© Neram Classes"
     },
@@ -166,43 +167,51 @@
       "play": "Play the tour",
       "previous": "Previous scene",
       "next": "Next scene",
+      "tour": "Nexus tour",
       "scenes": {
         "review": {
           "label": "Review",
-          "caption": "Your teacher sketches on your drawing and talks you through it."
+          "caption": "Your teacher marks up your drawing and explains each fix.",
+          "alt": "A teacher draws numbered corrections on a student perspective drawing."
         },
         "revise": {
           "label": "Revise",
-          "caption": "Fix it, resubmit, watch the score climb."
+          "caption": "Fix it, resubmit, and watch your score climb.",
+          "alt": "A resubmitted drawing scores 5 out of 5."
         },
         "predict": {
           "label": "Predict",
-          "caption": "AI predicts this year's questions from 17 years of chapter weightage."
+          "caption": "AI ranks the chapters most likely to appear this year.",
+          "alt": "A ranked list of chapters by how often they were asked in 17 years."
         },
         "tutor": {
           "label": "AI tutor",
-          "caption": "Every question solved: video, image, and a tutor you can ask anything."
+          "caption": "Stuck on a question? Ask the tutor, step by step.",
+          "alt": "A student chats with the AI tutor about a solved question."
         },
         "library": {
           "label": "Library",
-          "caption": "3,000+ recorded classes for NATA and JEE Paper 2."
+          "caption": "3,000+ recorded classes, searchable by topic.",
+          "alt": "Searching the class library for 3D geometry."
         },
         "sketchbook": {
           "label": "Sketchbook",
-          "caption": "Your digital sketchbook, plus inspiration from every drawing question."
+          "caption": "Sketch digitally, with inspiration for every drawing question.",
+          "alt": "A digital sketch next to inspiration images."
         },
         "live": {
           "label": "Live",
-          "caption": "Live classes with answer pads, inside Microsoft Teams."
+          "caption": "Live classes in Microsoft Teams, with answer pads.",
+          "alt": "A live class where students answer on an answer pad."
         }
       },
       "stats": {
         "rank": "AIR 1",
         "rankNote": "JEE B.Arch 2024",
         "questions": "10,000+",
-        "questionsNote": "solved questions",
+        "questionsNote": "Solved questions",
         "global": "Global",
-        "globalNote": "students across the world"
+        "globalNote": "Students worldwide"
       }
     },
     "aboutYou": {
@@ -383,7 +392,55 @@
     "quickLinks": "Quick Links",
     "contact": "Contact",
     "followUs": "Follow Us",
-    "copyright": "© {year} Neram Classes. All rights reserved."
+    "copyright": "© {year} Neram Classes. All rights reserved.",
+    "about": "NATA & JEE Paper 2 coaching since 2009. Live online classes across India and the Gulf, classrooms in Tamil Nadu and Bangalore.",
+    "location": "Bangalore, Karnataka, India",
+    "phone": "Phone: {number}",
+    "email": "Email: {address}",
+    "supportedBy": "Supported by Microsoft",
+    "resources": "Resources",
+    "topCities": "Top Cities",
+    "topStates": "Top States",
+    "counselling": "B.Arch Counselling",
+    "goToApp": "Go to App",
+    "nexusBody": "India's first NATA-exclusive learning platform, designed by architects. A complete self-learning assistant with live and recorded classes, AI-powered study tools, and parent monitoring.",
+    "nexusNote": "Free tools available to everyone. Nexus premium features exclusive to enrolled students.",
+    "tryFreeTools": "Try Free Tools",
+    "exploreNexus": "Explore Nexus",
+    "legal": "Legal",
+    "socialLabel": "Neram Classes on {network}",
+    "links": {
+      "home": "Home",
+      "about": "About Us",
+      "courses": "Courses",
+      "colleges": "Architecture Colleges",
+      "compareColleges": "Compare Colleges",
+      "coaching": "Coaching",
+      "demoClass": "Free Demo Class",
+      "apply": "Apply Now",
+      "contact": "Contact",
+      "fees": "Fees",
+      "scholarships": "Scholarships",
+      "careers": "Careers",
+      "freeTools": "Free Tools",
+      "nataSyllabus": "NATA Syllabus 2026",
+      "nataCoaching": "NATA Entrance Exam Coaching",
+      "nataGuide": "NATA Preparation Guide",
+      "score150": "How to Score 150+ in NATA",
+      "importantQuestions": "Important Questions",
+      "bestBooks": "Best Books for NATA & JEE",
+      "previousPapers": "Previous Year Papers",
+      "cutoffCalculator": "Cutoff Calculator",
+      "nataApp": "Free NATA App",
+      "aiarchitek": "aiArchitek AI Platform",
+      "nexusLms": "Nexus LMS (Students)",
+      "nataOnline": "NATA Online Coaching",
+      "blog": "Blog",
+      "allCounsellings": "All 28 counsellings",
+      "privacy": "Privacy Policy",
+      "terms": "Terms & Conditions",
+      "refund": "Refund Policy"
+    }
   },
   "common": {
     "loading": "Loading...",
@@ -496,21 +553,43 @@
   },
   "header": {
     "applyNow": "Apply Now",
-    "needHelp": "Need Help?",
+    "needHelp": "Need help?",
     "language": "Language",
     "changeLanguage": "Change language",
     "openMenu": "Open menu",
     "closeMenu": "Close menu",
-    "continueApplication": "Continue Application",
-    "trackApplication": "Track Application",
-    "payAndJoin": "Pay & Join Now",
+    "continueApplication": "Continue application",
+    "trackApplication": "Track application",
+    "payAndJoin": "Pay & join",
     "goToApp": "Go to App",
     "joinNow": "Join Now",
     "viewFees": "View fees",
     "fees": "Fees",
     "freeDemo": "Free demo",
     "freeDemoClass": "Free demo class",
-    "myDemo": "My demo"
+    "myDemo": "My demo",
+    "joinShort": "Join",
+    "continueShort": "Continue",
+    "trackShort": "Track",
+    "payShort": "Pay",
+    "appShort": "App",
+    "helpShort": "Help",
+    "myEnrollment": "My enrollment",
+    "logIn": "Log in",
+    "logInToSee": "Log in to see your application",
+    "more": "More",
+    "search": "Search",
+    "notifications": "Notifications",
+    "account": "Account",
+    "signOut": "Sign out",
+    "statusNoApplication": "No application yet",
+    "statusDemoBooked": "Demo class booked",
+    "statusDraft": "Application draft",
+    "statusReview": "Application under review",
+    "statusApproved": "Approved, pay to confirm your seat",
+    "statusEnrolled": "Enrolled student",
+    "statusApplying": "Filling your application",
+    "freeTools": "Free Tools"
   },
   "centers": {
     "title": "Visit Our Learning Centers",

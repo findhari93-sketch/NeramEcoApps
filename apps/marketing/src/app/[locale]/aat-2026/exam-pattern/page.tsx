@@ -1,8 +1,9 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import { Typography, Box, Stack, Paper, Grid } from '@neram/ui';
 import ExamSpokeLayout from '@/components/exam-hub/sections/ExamSpokeLayout';
+import { GuideNote, GuideP } from '@/components/exam-hub/sections/GuideBlocks';
 import { buildAlternates } from '@/lib/seo/metadata';
+import { ArticleSection, CheckList, FactGrid } from '@/design-system';
 
 export const revalidate = 86400;
 
@@ -38,6 +39,7 @@ export default function AatExamPatternPage({ params: { locale } }: { params: { l
       examName="AAT 2026"
       examShortName="AAT 2026"
       examHubHref="/aat-2026"
+      spokeSlug="exam-pattern"
       topicTitle="AAT 2026 exam pattern"
       topicSubtitle="The short answer: one offline pen-and-paper test of 3 hours, English only, Pass/Fail result. No marks, percentile, or AAT rank is published."
       related={[
@@ -46,56 +48,34 @@ export default function AatExamPatternPage({ params: { locale } }: { params: { l
         { label: 'Schedule', href: '/aat-2026/schedule' },
       ]}
     >
-      <Stack spacing={3}>
-        <Box>
-          <Typography variant="h5" component="h2" sx={{ fontWeight: 700, mb: 1.5 }}>
-            Exam at a glance
-          </Typography>
-          <Grid container spacing={2}>
-            {facts.map((f) => (
-              <Grid item xs={12} sm={6} key={f.label}>
-                <Paper elevation={0} sx={{ p: 2.25, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
-                  <Typography variant="caption" sx={{ textTransform: 'uppercase', letterSpacing: 1, color: 'text.secondary', fontWeight: 600 }}>
-                    {f.label}
-                  </Typography>
-                  <Typography sx={{ fontWeight: 600, mt: 0.5 }}>{f.value}</Typography>
-                </Paper>
-              </Grid>
-            ))}
-          </Grid>
-        </Box>
+      <ArticleSection id="at-a-glance" title="Exam at a glance">
+        <FactGrid items={facts} cellMin={240} />
+      </ArticleSection>
 
-        <Box>
-          <Typography variant="h5" component="h2" sx={{ fontWeight: 700, mb: 1.5 }}>
-            How AAT is evaluated
-          </Typography>
-          <Typography sx={{ lineHeight: 1.8, color: 'text.primary' }}>
-            AAT is a qualitative test. JEE (Advanced) does not publish a numerical marking scheme or sectional weights. After the test, the Joint Implementation Committee evaluates each candidate's overall performance across the five syllabus areas and decides a Pass/Fail status. There is no AAT marksheet, no percentile, and no separate rank.
-          </Typography>
-        </Box>
+      <ArticleSection
+        id="evaluation"
+        title="How AAT is evaluated"
+        intro="AAT is a qualitative test. JEE (Advanced) does not publish a numerical marking scheme or sectional weights. After the test, the Joint Implementation Committee evaluates each candidate's overall performance across the five syllabus areas and decides a Pass/Fail status. There is no AAT marksheet, no percentile, and no separate rank."
+      />
 
-        <Box>
-          <Typography variant="h5" component="h2" sx={{ fontWeight: 700, mb: 1.5 }}>
-            What this means in practice
-          </Typography>
-          <Box component="ul" sx={{ pl: 3, m: 0, '& li': { mb: 1, lineHeight: 1.7 } }}>
-            <li>You cannot trade strength in one section against weakness in another. Demonstrate competence across all five areas.</li>
-            <li>Speed matters: 3 hours for a typical 16-question paper means roughly 11 minutes per question. Sketch quickly, refine selectively.</li>
-            <li>Sketch quality matters less than spatial accuracy and design judgment. Photorealism is not the goal.</li>
-            <li>Architectural awareness, often under-prepared, can be the deciding signal between two evenly-skilled candidates.</li>
-            <li>If you Pass, your B.Arch seat at IIT Roorkee, IIT Kharagpur, or IIT (BHU) Varanasi depends on JEE (Advanced) 2026 All India Rank. If you Fail, no IIT B.Arch seat is allotted that year.</li>
-          </Box>
-        </Box>
+      <ArticleSection id="in-practice" title="What this means in practice">
+        <CheckList
+          columnMin={600}
+          items={[
+            'You cannot trade strength in one section against weakness in another. Demonstrate competence across all five areas.',
+            'Speed matters: 3 hours for a typical 16-question paper means roughly 11 minutes per question. Sketch quickly, refine selectively.',
+            'Sketch quality matters less than spatial accuracy and design judgment. Photorealism is not the goal.',
+            'Architectural awareness, often under-prepared, can be the deciding signal between two evenly-skilled candidates.',
+            'If you Pass, your B.Arch seat at IIT Roorkee, IIT Kharagpur, or IIT (BHU) Varanasi depends on JEE (Advanced) 2026 All India Rank. If you Fail, no IIT B.Arch seat is allotted that year.',
+          ]}
+        />
+      </ArticleSection>
 
-        <Paper variant="outlined" sx={{ p: 3, borderRadius: 2, bgcolor: 'rgba(33, 150, 243, 0.04)' }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
-            Compared to NATA
-          </Typography>
-          <Typography sx={{ lineHeight: 1.7 }}>
-            NATA is partly online (MCQ/NCQ) and partly offline (Drawing), publishes per-section marks, and gives a percentile. AAT is fully offline, has no published marking scheme, and gives only a Pass/Fail. Both end up testing similar drawing and design fundamentals; AAT additionally weights architectural awareness, while NATA leans more on aptitude reasoning.
-          </Typography>
-        </Paper>
-      </Stack>
+      <GuideNote title="Compared to NATA">
+        <GuideP muted>
+          NATA is partly online (MCQ/NCQ) and partly offline (Drawing), publishes per-section marks, and gives a percentile. AAT is fully offline, has no published marking scheme, and gives only a Pass/Fail. Both end up testing similar drawing and design fundamentals; AAT additionally weights architectural awareness, while NATA leans more on aptitude reasoning.
+        </GuideP>
+      </GuideNote>
     </ExamSpokeLayout>
   );
 }

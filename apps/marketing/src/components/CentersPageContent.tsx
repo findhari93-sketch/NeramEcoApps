@@ -1,17 +1,20 @@
 'use client';
 
+/**
+ * /centers: every classroom with a city filter, directions and a visit booking.
+ * Dark PageHero, a light body (online-classes InlineCta, filter pills, centre
+ * cards), and a phone bar on phones. Translated page: visible labels come from
+ * the `centers` namespace.
+ *
+ * Journey: entered from the header, footer or contact page. Each card goes to
+ * /apply (with the centre pre-selected), Google Maps, or the visit dialog.
+ */
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
-import { useParams, useRouter } from 'next/navigation';
 import {
   Box,
-  Container,
   Typography,
-  Card,
-  CardContent,
   Button,
-  Grid,
-  Chip,
   Skeleton,
   Alert,
   Dialog,
@@ -40,35 +43,52 @@ import {
   SchoolOutlined,
 } from '@mui/icons-material';
 import type { OfflineCenter } from '@neram/database';
-import Link from 'next/link';
 import { photoUrl } from '@/lib/seo/centre-photos';
+import { CtaButton, EmptyState, InlineCta, PageHero, Pill, tokens as t } from '@/design-system';
 
 // Facility icons mapping
 const facilityIcons: Record<string, React.ReactElement> = {
-  AC: <AcUnitOutlined fontSize="small" />,
-  WiFi: <WifiOutlined fontSize="small" />,
-  Parking: <LocalParkingOutlined fontSize="small" />,
+  AC: <AcUnitOutlined aria-hidden />,
+  WiFi: <WifiOutlined aria-hidden />,
+  Parking: <LocalParkingOutlined aria-hidden />,
 };
 
-// City gradient colors for placeholder images
-const cityGradients: Record<string, string> = {
-  Pudukkottai: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-  Tiruchirapalli: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-  Coimbatore: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-  Chennai: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
-  Madurai: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
-  Tiruppur: 'linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%)',
-};
+/** Height of the phone bar; the page pads its bottom by this on phones. */
+const PHONE_BAR_HEIGHT = 64;
 
-const defaultGradient = 'linear-gradient(135deg, #a18cd1 0%, #fbc2eb 100%)';
+const cardSx = {
+  bgcolor: t.surface,
+  border: `1px solid ${t.line}`,
+  borderRadius: `${t.radius}px`,
+  overflow: 'hidden',
+  display: 'flex',
+  flexDirection: 'column',
+  height: '100%',
+  boxSizing: 'border-box',
+  color: t.ink,
+  transition: 'border-color 150ms ease',
+  '&:hover': { borderColor: t.gold500 },
+  '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+} as const;
+
+const gridSx = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 300px), 1fr))',
+  gap: 3,
+} as const;
+
+function directionsUrl(center: OfflineCenter) {
+  if (center.google_maps_url) return center.google_maps_url;
+  if (center.latitude && center.longitude) {
+    return `https://www.google.com/maps/dir/?api=1&destination=${center.latitude},${center.longitude}`;
+  }
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${center.name}, ${center.address}, ${center.city}`)}`;
+}
 
 export default function CentersPageContent() {
-  const t = useTranslations('centers');
+  const t9n = useTranslations('centers');
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const params = useParams();
-  const router = useRouter();
-  const locale = (params?.locale as string) || 'en';
 
   const [centers, setCenters] = useState<OfflineCenter[]>([]);
   const [loading, setLoading] = useState(true);
@@ -170,24 +190,6 @@ export default function CentersPageContent() {
     }
   };
 
-  const handleGetDirections = (center: OfflineCenter) => {
-    if (center.google_maps_url) {
-      window.open(center.google_maps_url, '_blank');
-    } else if (center.latitude && center.longitude) {
-      window.open(
-        `https://www.google.com/maps/dir/?api=1&destination=${center.latitude},${center.longitude}`,
-        '_blank'
-      );
-    } else {
-      window.open(
-        `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(
-          `${center.name}, ${center.address}, ${center.city}`
-        )}`,
-        '_blank'
-      );
-    }
-  };
-
   // Get minimum date for booking (tomorrow)
   const getMinDate = () => {
     const tomorrow = new Date();
@@ -196,236 +198,132 @@ export default function CentersPageContent() {
   };
 
   return (
-    <Box sx={{ py: 4, pb: isMobile ? 10 : 4 }}>
-      <Container maxWidth="lg">
-        {/* Hero Section */}
-        <Box textAlign="center" mb={4}>
-          <Typography
-            variant="h3"
-            component="h1"
-            gutterBottom
-            sx={{ fontWeight: 700, fontSize: { xs: '1.75rem', sm: '2.5rem', md: '3rem' } }}
-          >
-            {t('title') || 'Visit Our Learning Centers'}
+    <Box sx={{ pb: { xs: `${PHONE_BAR_HEIGHT}px`, sm: 0 } }}>
+      <PageHero
+        title={t9n('title') || 'Visit Our Learning Centers'}
+        lede={
+          t9n('subtitle') ||
+          'Experience our hybrid learning environment. Visit any of our centers to explore facilities and meet our faculty.'
+        }
+      >
+        {/* Customer Care Number */}
+        <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+          <PhoneOutlined aria-hidden fontSize="small" sx={{ color: t.gold500, mt: '3px' }} />
+          <Typography component="p" sx={{ m: 0, lineHeight: 1.55, color: t.paperMuted }}>
+            {t9n('customerCare') || 'Customer Care:'}{' '}
+            <Box
+              component="a"
+              href="tel:+919176137043"
+              sx={{ color: t.paper, fontWeight: 700, textDecoration: 'underline', textUnderlineOffset: '3px' }}
+            >
+              +91 91761 37043 / 88074 37399
+            </Box>
           </Typography>
-          <Typography
-            variant="h6"
-            color="text.secondary"
-            sx={{
-              maxWidth: 600,
-              mx: 'auto',
-              mb: 3,
-              fontSize: { xs: '0.95rem', sm: '1.1rem' },
-            }}
-          >
-            {t('subtitle') ||
-              'Experience our hybrid learning environment. Visit any of our centers to explore facilities and meet our faculty.'}
-          </Typography>
-
-          {/* Customer Care Number */}
-          <Box
-            sx={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 1,
-              bgcolor: 'primary.main',
-              color: 'primary.contrastText',
-              px: 3,
-              py: 1.5,
-              borderRadius: 1,
-            }}
-          >
-            <PhoneOutlined />
-            <Typography variant="body1" component="span" fontWeight={600}>
-              {t('customerCare') || 'Customer Care:'}{' '}
-              <Box
-                component="a"
-                href="tel:+919176137043"
-                sx={{ color: 'inherit', fontWeight: 700, textDecoration: 'none' }}
-              >
-                +91 91761 37043 / 88074 37399
-              </Box>
-            </Typography>
-          </Box>
         </Box>
+      </PageHero>
 
-        {/* Online Classes Banner */}
-        <Card
-          variant="outlined"
+      <Box sx={{ bgcolor: t.ground }}>
+        <Box
           sx={{
-            mb: 4,
-            borderColor: 'success.main',
-            bgcolor: 'success.50',
-            borderRadius: 1,
+            maxWidth: t.container.page,
+            mx: 'auto',
+            px: { xs: 2, sm: 3 },
+            pt: { xs: 5, md: 7 },
+            pb: { xs: 8, md: 10 },
+            display: 'flex',
+            flexDirection: 'column',
+            gap: { xs: 3, md: 4 },
+            boxSizing: 'content-box',
           }}
         >
-          <CardContent
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              flexDirection: { xs: 'column', sm: 'row' },
-              gap: 2,
-              py: { xs: 2, sm: 2.5 },
-              '&:last-child': { pb: { xs: 2, sm: 2.5 } },
-            }}
-          >
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <LaptopOutlined sx={{ fontSize: 36, color: 'success.main' }} />
-              <Box>
-                <Typography variant="subtitle1" fontWeight={600}>
-                  {t('preferOnline') || 'Prefer 100% Online Classes?'}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {t('onlineDescription') ||
-                    'No need to visit a center. Learn from anywhere with live online classes.'}
-                </Typography>
-              </Box>
+          {/* Online Classes Banner */}
+          <InlineCta
+            icon={<LaptopOutlined />}
+            title={t9n('preferOnline') || 'Prefer 100% Online Classes?'}
+            body={t9n('onlineDescription') || 'No need to visit a center. Learn from anywhere with live online classes.'}
+            action={<CtaButton href="/apply?mode=online">{t9n('applyOnline') || 'Apply for Online Classes'}</CtaButton>}
+          />
+
+          {/* Error Alert */}
+          {error && (
+            <Alert severity="error" onClose={() => setError(null)}>
+              {error}
+            </Alert>
+          )}
+
+          {/* City Filter Pills */}
+          {!loading && centers.length > 0 && (
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+              {cities.map((city) => (
+                <Pill key={city} selected={selectedCity === city} onClick={() => setSelectedCity(city)}>
+                  {city}
+                </Pill>
+              ))}
             </Box>
-            <Button
-              variant="contained"
-              color="success"
-              component={Link}
-              href={locale === 'en' ? '/apply' : `/${locale}/apply`}
-              onClick={(e: React.MouseEvent) => {
-                e.preventDefault();
-                router.push(`${locale === 'en' ? '' : '/' + locale}/apply?mode=online`);
-              }}
-              sx={{ minHeight: 48, minWidth: 180, whiteSpace: 'nowrap' }}
-            >
-              {t('applyOnline') || 'Apply for Online Classes'}
-            </Button>
-          </CardContent>
-        </Card>
+          )}
 
-        {/* Error Alert */}
-        {error && (
-          <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
-            {error}
-          </Alert>
-        )}
-
-        {/* City Filter Chips */}
-        {!loading && centers.length > 0 && (
-          <Box
-            sx={{
-              display: 'flex',
-              gap: 1,
-              overflowX: 'auto',
-              pb: 1,
-              mb: 3,
-              '&::-webkit-scrollbar': { display: 'none' },
-              msOverflowStyle: 'none',
-              scrollbarWidth: 'none',
-            }}
-          >
-            {cities.map((city) => (
-              <Chip
-                key={city}
-                label={city}
-                onClick={() => setSelectedCity(city)}
-                color={selectedCity === city ? 'primary' : 'default'}
-                variant={selectedCity === city ? 'filled' : 'outlined'}
-                sx={{
-                  minHeight: 40,
-                  minWidth: 80,
-                  fontWeight: selectedCity === city ? 600 : 400,
-                  flexShrink: 0,
-                }}
-              />
-            ))}
-          </Box>
-        )}
-
-        {/* Centers Grid */}
-        {loading ? (
-          <Grid container spacing={3}>
-            {[1, 2, 3].map((i) => (
-              <Grid item xs={12} sm={6} lg={4} key={i}>
-                <Card>
-                  <Skeleton variant="rectangular" height={200} />
-                  <CardContent>
+          {/* Centers Grid */}
+          {loading ? (
+            <Box sx={gridSx} aria-busy="true">
+              {[1, 2, 3].map((i) => (
+                <Box key={i} sx={cardSx}>
+                  <Skeleton variant="rectangular" height={180} />
+                  <Box sx={{ p: 2.5 }}>
                     <Skeleton variant="text" width="60%" height={32} />
                     <Skeleton variant="text" width="100%" />
                     <Skeleton variant="text" width="80%" />
-                    <Box display="flex" gap={1} mt={2}>
-                      <Skeleton variant="rectangular" width={100} height={36} />
-                      <Skeleton variant="rectangular" width={100} height={36} />
-                    </Box>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        ) : centers.length === 0 ? (
-          <Box textAlign="center" py={8}>
-            <BusinessOutlined sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-            <Typography variant="h6" color="text.secondary">
-              {t('noCenters') || 'No centers available at the moment'}
-            </Typography>
-          </Box>
-        ) : (
-          <Grid container spacing={3}>
-            {filteredCenters.map((center) => (
-              <Grid item xs={12} sm={6} lg={4} key={center.id}>
-                <Card
-                  sx={{
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    transition: 'transform 0.2s, box-shadow 0.2s',
-                    '&:hover': {
-                      transform: 'translateY(-4px)',
-                      boxShadow: 6,
-                    },
-                  }}
-                >
+                    <Skeleton variant="rectangular" height={48} sx={{ mt: 2, borderRadius: `${t.radius}px` }} />
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+          ) : centers.length === 0 ? (
+            <EmptyState icon={<BusinessOutlined />} title={t9n('noCenters') || 'No centers available at the moment'} />
+          ) : (
+            <Box sx={gridSx}>
+              {filteredCenters.map((center) => (
+                <Box component="article" key={center.id} sx={cardSx}>
                   {/* Center Image / Placeholder */}
                   {center.photos && center.photos.length > 0 && photoUrl(center.photos[0]) ? (
                     <Box
                       component="img"
                       src={photoUrl(center.photos[0])!}
                       alt={center.name}
-                      sx={{
-                        height: 180,
-                        width: '100%',
-                        objectFit: 'cover',
-                      }}
+                      loading="lazy"
+                      sx={{ height: 180, width: '100%', objectFit: 'cover', display: 'block' }}
                     />
                   ) : (
                     <Box
+                      aria-hidden
                       sx={{
                         height: 180,
-                        background: cityGradients[center.city] || defaultGradient,
+                        bgcolor: t.navy900,
+                        ...t.blueprint,
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        color: 'white',
-                        position: 'relative',
+                        gap: 1,
+                        color: t.paper,
                       }}
                     >
-                      <BusinessOutlined sx={{ fontSize: 48, opacity: 0.8, mb: 1 }} />
-                      <Typography variant="h6" fontWeight={600} sx={{ opacity: 0.9 }}>
+                      <BusinessOutlined sx={{ fontSize: 44, color: t.gold500 }} />
+                      <Typography component="span" sx={{ fontSize: '1.125rem', fontWeight: 700 }}>
                         {center.city}
                       </Typography>
                     </Box>
                   )}
 
-                  <CardContent sx={{ flexGrow: 1 }}>
+                  <Box sx={{ p: 2.5, flexGrow: 1, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                     {/* Center Name */}
-                    <Typography variant="h6" gutterBottom fontWeight={700} sx={{ fontSize: '1.05rem' }}>
+                    <Typography component="h2" sx={{ m: 0, fontSize: '1.125rem', fontWeight: 700, lineHeight: 1.3 }}>
                       {center.name}
                     </Typography>
 
                     {/* Address */}
-                    <Box display="flex" alignItems="flex-start" gap={1} mb={1.5}>
-                      <LocationOnOutlined
-                        fontSize="small"
-                        color="action"
-                        sx={{ mt: 0.3 }}
-                      />
-                      <Typography variant="body2" color="text.secondary">
+                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                      <LocationOnOutlined aria-hidden fontSize="small" sx={{ color: t.inkMuted, mt: '2px' }} />
+                      <Typography sx={{ m: 0, fontSize: '0.9375rem', lineHeight: 1.5, color: t.inkMuted }}>
                         {center.address}
                         <br />
                         {center.city}, {center.state} {center.pincode}
@@ -434,342 +332,265 @@ export default function CentersPageContent() {
 
                     {/* Operating Hours */}
                     {center.preferred_visit_times && center.preferred_visit_times.length > 0 && (
-                      <Box display="flex" alignItems="center" gap={1} mb={1.5}>
-                        <ScheduleOutlined fontSize="small" color="action" />
-                        <Typography variant="body2" color="text.secondary">
-                          {t('visitingHours') || 'Visiting Hours:'}{' '}
-                          {center.preferred_visit_times.join(', ')}
+                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                        <ScheduleOutlined aria-hidden fontSize="small" sx={{ color: t.inkMuted, mt: '2px' }} />
+                        <Typography sx={{ m: 0, fontSize: '0.9375rem', lineHeight: 1.5, color: t.inkMuted }}>
+                          {t9n('visitingHours') || 'Visiting Hours:'} {center.preferred_visit_times.join(', ')}
                         </Typography>
                       </Box>
                     )}
 
                     {/* Facilities */}
                     {center.facilities && center.facilities.length > 0 && (
-                      <Box display="flex" flexWrap="wrap" gap={0.5} mb={1.5}>
+                      <Box component="ul" sx={{ m: 0, p: 0, listStyle: 'none', display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
                         {center.facilities.map((facility) => (
-                          <Chip
+                          <Box
+                            component="li"
                             key={facility}
-                            label={facility}
-                            size="small"
-                            icon={facilityIcons[facility]}
-                            variant="outlined"
-                          />
+                            sx={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 0.5,
+                              px: 1.25,
+                              py: 0.5,
+                              border: `1px solid ${t.line}`,
+                              borderRadius: `${t.radiusPill}px`,
+                              fontSize: '0.8125rem',
+                              fontWeight: 500,
+                              '& svg': { fontSize: 16, color: t.gold800 },
+                            }}
+                          >
+                            {facilityIcons[facility]}
+                            {facility}
+                          </Box>
                         ))}
                       </Box>
                     )}
 
                     {/* Contact Phone */}
                     {center.contact_phone && (
-                      <Box display="flex" alignItems="center" gap={1}>
-                        <PhoneOutlined fontSize="small" color="action" />
-                        <Typography
-                          variant="body2"
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <PhoneOutlined aria-hidden fontSize="small" sx={{ color: t.inkMuted }} />
+                        <Box
                           component="a"
                           href={`tel:${center.contact_phone}`}
-                          sx={{ color: 'primary.main', textDecoration: 'none' }}
+                          sx={{
+                            color: t.ink,
+                            fontWeight: 600,
+                            fontSize: '0.9375rem',
+                            textDecoration: 'underline',
+                            textDecorationColor: t.lineStrong,
+                            textUnderlineOffset: '3px',
+                            '&:hover': { textDecorationColor: t.gold500 },
+                          }}
                         >
                           {center.contact_phone}
-                        </Typography>
+                        </Box>
                       </Box>
                     )}
-                  </CardContent>
-
-                  {/* Action Buttons */}
-                  <Box
-                    sx={{
-                      p: 2,
-                      pt: 0,
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 1,
-                    }}
-                  >
-                    {/* Apply with this Center - Primary CTA */}
-                    <Button
-                      variant="contained"
-                      color="secondary"
-                      startIcon={<SchoolOutlined />}
-                      component={Link}
-                      href={locale === 'en' ? '/apply' : `/${locale}/apply`}
-                      onClick={(e: React.MouseEvent) => {
-                        e.preventDefault();
-                        router.push(`${locale === 'en' ? '' : '/' + locale}/apply?center=${center.slug}`);
-                      }}
-                      fullWidth
-                      sx={{ minHeight: 48 }}
-                    >
-                      {t('applyWithCenter') || 'Apply with this Center'}
-                    </Button>
-
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        gap: 1,
-                        flexDirection: isMobile ? 'column' : 'row',
-                      }}
-                    >
-                      <Button
-                        variant="outlined"
-                        startIcon={<DirectionsOutlined />}
-                        onClick={() => handleGetDirections(center)}
-                        fullWidth
-                        sx={{ minHeight: 44 }}
-                      >
-                        {t('getDirections') || 'Get Directions'}
-                      </Button>
-                      <Button
-                        variant="text"
-                        onClick={() => handleBookVisit(center)}
-                        fullWidth
-                        sx={{ minHeight: 44 }}
-                      >
-                        {t('bookVisit') || 'Book a Visit'}
-                      </Button>
-                    </Box>
                   </Box>
 
-                  {/* Google Business Link */}
-                  {center.google_business_url && (
-                    <Box px={2} pb={2}>
-                      <Button
-                        variant="text"
-                        size="small"
-                        href={center.google_business_url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        sx={{ fontSize: '0.75rem' }}
+                  {/* Action Buttons */}
+                  <Box sx={{ px: 2.5, pb: 2.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                    {/* Apply with this Center - Primary CTA */}
+                    <CtaButton href={`/apply?center=${center.slug}`} startIcon={<SchoolOutlined aria-hidden />} endIcon={null} fullWidth size="md">
+                      {t9n('applyWithCenter') || 'Apply with this Center'}
+                    </CtaButton>
+
+                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                      <CtaButton
+                        variant="outline"
+                        href={directionsUrl(center)}
+                        external
+                        startIcon={<DirectionsOutlined aria-hidden />}
+                        endIcon={null}
+                        size="md"
+                        sx={{ flex: '1 1 140px' }}
                       >
-                        {t('viewOnGoogle') || 'View on Google Maps'}
-                      </Button>
+                        {t9n('getDirections') || 'Get Directions'}
+                      </CtaButton>
+                      <CtaButton variant="outline" onClick={() => handleBookVisit(center)} endIcon={null} size="md" sx={{ flex: '1 1 140px' }}>
+                        {t9n('bookVisit') || 'Book a Visit'}
+                      </CtaButton>
                     </Box>
-                  )}
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        )}
 
-        {/* Book Visit Dialog */}
-        <Dialog
-          open={bookingOpen}
-          onClose={() => setBookingOpen(false)}
-          maxWidth="sm"
-          fullWidth
-          fullScreen={isMobile}
-        >
-          <DialogTitle>
-            {bookingSuccess
-              ? t('visitBooked') || 'Visit Booked!'
-              : t('bookVisitTitle') || 'Book a Center Visit'}
-          </DialogTitle>
-          <DialogContent>
-            {bookingSuccess ? (
-              <Box textAlign="center" py={4}>
-                <CheckCircleOutlined
-                  sx={{ fontSize: 64, color: 'success.main', mb: 2 }}
+                    {/* Google Business Link */}
+                    {center.google_business_url && (
+                      <Box>
+                        <CtaButton variant="link" href={center.google_business_url} external size="md">
+                          {t9n('viewOnGoogle') || 'View on Google Maps'}
+                        </CtaButton>
+                      </Box>
+                    )}
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+          )}
+        </Box>
+      </Box>
+
+      {/* Book Visit Dialog (full screen on phones) */}
+      <Dialog open={bookingOpen} onClose={() => setBookingOpen(false)} maxWidth="sm" fullWidth fullScreen={isMobile}>
+        <DialogTitle sx={{ fontWeight: 700 }}>
+          {bookingSuccess ? t9n('visitBooked') || 'Visit Booked!' : t9n('bookVisitTitle') || 'Book a Center Visit'}
+        </DialogTitle>
+        <DialogContent>
+          {bookingSuccess ? (
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <CheckCircleOutlined aria-hidden sx={{ fontSize: 64, color: t.success, mb: 2 }} />
+              <Typography component="p" sx={{ m: 0, mb: 1, fontSize: '1.25rem', fontWeight: 700 }}>
+                {t9n('visitConfirmed') || 'Your visit has been scheduled!'}
+              </Typography>
+              <Typography sx={{ m: 0, color: t.inkMuted }}>
+                {t9n('visitConfirmationMessage') || 'Our team will contact you to confirm the visit details.'}
+              </Typography>
+            </Box>
+          ) : (
+            <Box component="form" sx={{ mt: 2 }}>
+              <Typography sx={{ m: 0, mb: 2, fontSize: '0.9375rem', color: t.inkMuted }}>
+                {t9n('bookVisitSubtitle') || `Schedule a visit to ${selectedCenter?.name}`}
+              </Typography>
+
+              <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
+                <TextField
+                  fullWidth
+                  label={t9n('yourName') || 'Your Name'}
+                  value={bookingForm.name}
+                  onChange={(e) => setBookingForm({ ...bookingForm, name: e.target.value })}
+                  required
+                  inputProps={{ minLength: 2 }}
+                  sx={{ gridColumn: '1 / -1' }}
                 />
-                <Typography variant="h6" gutterBottom>
-                  {t('visitConfirmed') || 'Your visit has been scheduled!'}
-                </Typography>
-                <Typography color="text.secondary">
-                  {t('visitConfirmationMessage') ||
-                    'Our team will contact you to confirm the visit details.'}
-                </Typography>
+                <TextField
+                  fullWidth
+                  label={t9n('phoneNumber') || 'Phone Number'}
+                  value={bookingForm.phone}
+                  onChange={(e) => setBookingForm({ ...bookingForm, phone: e.target.value })}
+                  required
+                  inputProps={{
+                    inputMode: 'numeric',
+                    pattern: '[0-9]*',
+                    maxLength: 10,
+                  }}
+                  placeholder="9876543210"
+                />
+                <TextField
+                  fullWidth
+                  label={t9n('email') || 'Email (Optional)'}
+                  type="email"
+                  value={bookingForm.email}
+                  onChange={(e) => setBookingForm({ ...bookingForm, email: e.target.value })}
+                />
+                <TextField
+                  fullWidth
+                  label={t9n('preferredDate') || 'Preferred Date'}
+                  type="date"
+                  value={bookingForm.visitDate}
+                  onChange={(e) => setBookingForm({ ...bookingForm, visitDate: e.target.value })}
+                  required
+                  InputLabelProps={{ shrink: true }}
+                  inputProps={{ min: getMinDate() }}
+                />
+                <FormControl fullWidth required>
+                  <InputLabel>{t9n('preferredTime') || 'Preferred Time'}</InputLabel>
+                  <Select
+                    value={bookingForm.visitTimeSlot}
+                    onChange={(e) => setBookingForm({ ...bookingForm, visitTimeSlot: e.target.value as string })}
+                    label={t9n('preferredTime') || 'Preferred Time'}
+                  >
+                    {selectedCenter?.preferred_visit_times?.map((slot) => (
+                      <MenuItem key={slot} value={slot}>
+                        {slot}
+                      </MenuItem>
+                    )) || (
+                      <>
+                        <MenuItem value="10:00 AM - 12:00 PM">10:00 AM - 12:00 PM</MenuItem>
+                        <MenuItem value="2:00 PM - 5:00 PM">2:00 PM - 5:00 PM</MenuItem>
+                      </>
+                    )}
+                  </Select>
+                </FormControl>
+                <FormControl fullWidth sx={{ gridColumn: '1 / -1' }}>
+                  <InputLabel>{t9n('purpose') || 'Purpose of Visit'}</InputLabel>
+                  <Select
+                    value={bookingForm.purpose}
+                    onChange={(e) => setBookingForm({ ...bookingForm, purpose: e.target.value as string })}
+                    label={t9n('purpose') || 'Purpose of Visit'}
+                  >
+                    <MenuItem value="Tour">{t9n('purposeTour') || 'Center Tour'}</MenuItem>
+                    <MenuItem value="Demo Class">{t9n('purposeDemo') || 'Demo Class'}</MenuItem>
+                    <MenuItem value="Fee Discussion">{t9n('purposeFee') || 'Fee Discussion'}</MenuItem>
+                    <MenuItem value="Other">{t9n('purposeOther') || 'Other'}</MenuItem>
+                  </Select>
+                </FormControl>
               </Box>
-            ) : (
-              <Box component="form" sx={{ mt: 2 }}>
-                <Typography variant="body2" color="text.secondary" mb={2}>
-                  {t('bookVisitSubtitle') ||
-                    `Schedule a visit to ${selectedCenter?.name}`}
-                </Typography>
-
-                <Grid container spacing={2}>
-                  <Grid item xs={12}>
-                    <TextField
-                      fullWidth
-                      label={t('yourName') || 'Your Name'}
-                      value={bookingForm.name}
-                      onChange={(e) =>
-                        setBookingForm({ ...bookingForm, name: e.target.value })
-                      }
-                      required
-                      inputProps={{ minLength: 2 }}
-                    />
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      fullWidth
-                      label={t('phoneNumber') || 'Phone Number'}
-                      value={bookingForm.phone}
-                      onChange={(e) =>
-                        setBookingForm({ ...bookingForm, phone: e.target.value })
-                      }
-                      required
-                      inputProps={{
-                        inputMode: 'numeric',
-                        pattern: '[0-9]*',
-                        maxLength: 10,
-                      }}
-                      placeholder="9876543210"
-                    />
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      fullWidth
-                      label={t('email') || 'Email (Optional)'}
-                      type="email"
-                      value={bookingForm.email}
-                      onChange={(e) =>
-                        setBookingForm({ ...bookingForm, email: e.target.value })
-                      }
-                    />
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      fullWidth
-                      label={t('preferredDate') || 'Preferred Date'}
-                      type="date"
-                      value={bookingForm.visitDate}
-                      onChange={(e) =>
-                        setBookingForm({
-                          ...bookingForm,
-                          visitDate: e.target.value,
-                        })
-                      }
-                      required
-                      InputLabelProps={{ shrink: true }}
-                      inputProps={{ min: getMinDate() }}
-                    />
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <FormControl fullWidth required>
-                      <InputLabel>{t('preferredTime') || 'Preferred Time'}</InputLabel>
-                      <Select
-                        value={bookingForm.visitTimeSlot}
-                        onChange={(e) =>
-                          setBookingForm({
-                            ...bookingForm,
-                            visitTimeSlot: e.target.value as string,
-                          })
-                        }
-                        label={t('preferredTime') || 'Preferred Time'}
-                      >
-                        {selectedCenter?.preferred_visit_times?.map((slot) => (
-                          <MenuItem key={slot} value={slot}>
-                            {slot}
-                          </MenuItem>
-                        )) || (
-                          <>
-                            <MenuItem value="10:00 AM - 12:00 PM">
-                              10:00 AM - 12:00 PM
-                            </MenuItem>
-                            <MenuItem value="2:00 PM - 5:00 PM">
-                              2:00 PM - 5:00 PM
-                            </MenuItem>
-                          </>
-                        )}
-                      </Select>
-                    </FormControl>
-                  </Grid>
-                  <Grid item xs={12}>
-                    <FormControl fullWidth>
-                      <InputLabel>{t('purpose') || 'Purpose of Visit'}</InputLabel>
-                      <Select
-                        value={bookingForm.purpose}
-                        onChange={(e) =>
-                          setBookingForm({
-                            ...bookingForm,
-                            purpose: e.target.value as string,
-                          })
-                        }
-                        label={t('purpose') || 'Purpose of Visit'}
-                      >
-                        <MenuItem value="Tour">
-                          {t('purposeTour') || 'Center Tour'}
-                        </MenuItem>
-                        <MenuItem value="Demo Class">
-                          {t('purposeDemo') || 'Demo Class'}
-                        </MenuItem>
-                        <MenuItem value="Fee Discussion">
-                          {t('purposeFee') || 'Fee Discussion'}
-                        </MenuItem>
-                        <MenuItem value="Other">
-                          {t('purposeOther') || 'Other'}
-                        </MenuItem>
-                      </Select>
-                    </FormControl>
-                  </Grid>
-                </Grid>
-              </Box>
-            )}
-          </DialogContent>
-          <DialogActions sx={{ px: 3, pb: 3 }}>
-            {bookingSuccess ? (
-              <Button
-                variant="contained"
-                onClick={() => setBookingOpen(false)}
-                fullWidth={isMobile}
-              >
-                {t('close') || 'Close'}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3, gap: 1, flexWrap: 'wrap' }}>
+          {bookingSuccess ? (
+            <CtaButton onClick={() => setBookingOpen(false)} endIcon={null} size="md" fullWidth={isMobile}>
+              {t9n('close') || 'Close'}
+            </CtaButton>
+          ) : (
+            <>
+              <Button onClick={() => setBookingOpen(false)} sx={{ minHeight: 44, color: t.ink }}>
+                {t9n('cancel') || 'Cancel'}
               </Button>
-            ) : (
-              <>
-                <Button onClick={() => setBookingOpen(false)}>
-                  {t('cancel') || 'Cancel'}
-                </Button>
-                <Button
-                  variant="contained"
-                  onClick={handleBookingSubmit}
-                  disabled={
-                    bookingSubmitting ||
-                    !bookingForm.name ||
-                    !bookingForm.phone ||
-                    !bookingForm.visitDate ||
-                    !bookingForm.visitTimeSlot
-                  }
-                >
-                  {bookingSubmitting
-                    ? t('booking') || 'Booking...'
-                    : t('confirmBooking') || 'Confirm Booking'}
-                </Button>
-              </>
-            )}
-          </DialogActions>
-        </Dialog>
-      </Container>
+              <CtaButton
+                onClick={handleBookingSubmit}
+                endIcon={null}
+                size="md"
+                disabled={
+                  bookingSubmitting || !bookingForm.name || !bookingForm.phone || !bookingForm.visitDate || !bookingForm.visitTimeSlot
+                }
+              >
+                {bookingSubmitting ? t9n('booking') || 'Booking...' : t9n('confirmBooking') || 'Confirm Booking'}
+              </CtaButton>
+            </>
+          )}
+        </DialogActions>
+      </Dialog>
 
-      {/* Sticky Mobile Phone Bar */}
-      {isMobile && (
+      {/* Sticky phone bar (phones only) */}
+      <Box
+        sx={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 1100,
+          display: { xs: 'flex', sm: 'none' },
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: PHONE_BAR_HEIGHT,
+          px: 2,
+          pb: 'env(safe-area-inset-bottom)',
+          boxSizing: 'border-box',
+          bgcolor: t.navy900,
+          borderTop: `1px solid ${t.lineDark}`,
+        }}
+      >
         <Box
+          component="a"
+          href="tel:+919176137043"
           sx={{
-            position: 'fixed',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            zIndex: 1100,
-            bgcolor: 'primary.main',
-            color: 'primary.contrastText',
-            display: 'flex',
+            display: 'inline-flex',
             alignItems: 'center',
-            justifyContent: 'center',
             gap: 1,
-            py: 1.5,
-            px: 2,
-            boxShadow: '0 -2px 10px rgba(0,0,0,0.15)',
+            minHeight: 48,
+            color: t.paper,
+            fontWeight: 600,
+            textDecoration: 'none',
+            '& svg': { color: t.gold500 },
+            '&:focus-visible': { outline: t.focusOutline, outlineOffset: '2px' },
           }}
         >
-          <PhoneOutlined />
-          <Typography variant="body1" fontWeight={600}>
-            <Box
-              component="a"
-              href="tel:+919176137043"
-              sx={{ color: 'inherit', textDecoration: 'none' }}
-            >
-              {t('customerCare') || 'Customer Care:'} +91 91761 37043
-            </Box>
-          </Typography>
+          <PhoneOutlined aria-hidden />
+          {t9n('customerCare') || 'Customer Care:'} +91 91761 37043
         </Box>
-      )}
+      </Box>
     </Box>
   );
 }

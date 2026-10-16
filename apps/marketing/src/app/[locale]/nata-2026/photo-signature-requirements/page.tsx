@@ -1,24 +1,12 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import {
-  Box,
-  Container,
-  Typography,
-  Grid,
-  Card,
-  CardContent,
-  Button,
-  Chip,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-} from '@neram/ui';
-import Link from 'next/link';
+import CropOutlinedIcon from '@mui/icons-material/CropOutlined';
+import { nataGuideNav, nataRelated } from '@/components/nata/guideNav';
+import { ArticleSection, CtaBand, CtaButton, FactGrid, FaqList, GuideArticle, InlineCta } from '@/design-system';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { APP_URL } from '@/lib/seo/constants';
-import LastUpdatedBadge from '@/components/nata/LastUpdatedBadge';
 
 
 export async function generateMetadata({
@@ -92,125 +80,53 @@ export default function PhotoSignaturePage({ params: { locale } }: PageProps) {
       <JsonLd data={generateBreadcrumbSchema([{ name: 'Home', url: localeUrl('') }, { name: 'NATA 2026', url: localeUrl('/nata-2026') }, { name: 'Photo & Signature Requirements' }])} />
       <JsonLd data={generateFAQSchema(faqs)} />
 
-      <Box>
-        {/* Hero */}
-        <Box sx={{ py: { xs: 8, md: 12 }, background: 'linear-gradient(135deg, #1a237e 0%, #0d47a1 100%)', color: 'white' }}>
-          <Container maxWidth="lg">
-            <Chip label="NATA 2026" sx={{ bgcolor: 'white', color: 'primary.main', mb: 2, fontWeight: 600 }} />
-            <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', sm: '2.5rem', md: '3.5rem' } }}>
-              NATA 2026 Photo & Signature Requirements
-            </Typography>
-            <Typography variant="h5" sx={{ mb: 2, opacity: 0.9, fontSize: { xs: '1.1rem', md: '1.5rem' } }}>
-              Your NATA 2026 application requires a passport-size photo (3.5x4.5 cm, 4-100 KB, JPG) and a signature scan (3.5x1.5 cm, 1-30 KB, JPG). Both must be on white background.
-            </Typography>
-            <LastUpdatedBadge date="March 13, 2026" />
-          </Container>
-        </Box>
+      <GuideArticle
+        breadcrumb={[{ name: 'Home', href: '/' }, { name: 'NATA 2026', href: '/nata-2026' }, { name: 'Photo & Signature Requirements' }]}
+        eyebrow="NATA 2026 · Exam guide"
+        title="NATA 2026 Photo & Signature Requirements"
+        lede="Your NATA 2026 application requires a passport-size photo (3.5x4.5 cm, 4-100 KB, JPG) and a signature scan (3.5x1.5 cm, 1-30 KB, JPG). Both must be on white background."
+        verified="Updated March 13, 2026 · Source: Official NATA 2026 Brochure V1.0"
+        nav={nataGuideNav('photo-signature-requirements')}
+        related={nataRelated(['how-to-apply', 'eligibility', 'fee-structure', 'dos-and-donts'])}
+        back={{ label: 'Back to NATA 2026 guide', href: '/nata-2026' }}
+      >
+        <ArticleSection id="photo-specifications" title="Photograph Specifications">
+          <FactGrid items={photoSpecs} />
+        </ArticleSection>
 
-        {/* Specifications */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
-          <Container maxWidth="lg">
-            <Grid container spacing={4}>
-              {/* Photo */}
-              <Grid item xs={12} md={6}>
-                <Card sx={{ height: '100%' }}>
-                  <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-                    <Typography variant="h4" sx={{ mb: 1 }}>📷</Typography>
-                    <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>Photograph Specifications</Typography>
-                    {photoSpecs.map((row, idx) => (
-                      <Box key={idx} sx={{ display: 'flex', justifyContent: 'space-between', py: 1.5, borderBottom: idx < photoSpecs.length - 1 ? '1px solid' : 'none', borderColor: 'divider' }}>
-                        <Typography variant="body2" color="text.secondary">{row.label}</Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>{row.value}</Typography>
-                      </Box>
-                    ))}
-                  </CardContent>
-                </Card>
-              </Grid>
+        <ArticleSection id="signature-specifications" title="Signature Specifications">
+          <FactGrid items={signatureSpecs} />
+        </ArticleSection>
 
-              {/* Signature */}
-              <Grid item xs={12} md={6}>
-                <Card sx={{ height: '100%' }}>
-                  <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-                    <Typography variant="h4" sx={{ mb: 1 }}>✍️</Typography>
-                    <Typography variant="h5" sx={{ fontWeight: 700, mb: 3 }}>Signature Specifications</Typography>
-                    {signatureSpecs.map((row, idx) => (
-                      <Box key={idx} sx={{ display: 'flex', justifyContent: 'space-between', py: 1.5, borderBottom: idx < signatureSpecs.length - 1 ? '1px solid' : 'none', borderColor: 'divider' }}>
-                        <Typography variant="body2" color="text.secondary">{row.label}</Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 600 }}>{row.value}</Typography>
-                      </Box>
-                    ))}
-                  </CardContent>
-                </Card>
-              </Grid>
-            </Grid>
-          </Container>
-        </Box>
-
-        {/* CTA: Image Crop Tool */}
-        <Box sx={{ py: { xs: 4, md: 6 }, bgcolor: 'grey.50', textAlign: 'center' }}>
-          <Container maxWidth="md">
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 600 }}>Crop & Resize Your Photo and Signature</Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-              Use our free Image Crop tool to resize your photo and signature to exact NATA specifications. No software needed.
-            </Typography>
-            <Button variant="contained" size="large" component="a" href={`${APP_URL}/tools/nata/image-crop`} target="_blank" rel="noopener noreferrer">
+        <InlineCta
+          eyebrow="Free tool"
+          icon={<CropOutlinedIcon />}
+          title="Crop & Resize Your Photo and Signature"
+          body="Use our free Image Crop tool to resize your photo and signature to exact NATA specifications. No software needed."
+          action={
+            <CtaButton href={`${APP_URL}/tools/nata/image-crop`} external>
               Open Image Crop Tool (Free)
-            </Button>
-          </Container>
-        </Box>
+            </CtaButton>
+          }
+        />
 
-        {/* Also Read */}
-        <Box sx={{ py: { xs: 6, md: 8 }, bgcolor: 'background.default' }}>
-          <Container maxWidth="md">
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>Also Read</Typography>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-              {[
-                { title: 'How to Apply for NATA 2026', slug: 'how-to-apply' },
-                { title: 'NATA 2026 Eligibility', slug: 'eligibility' },
-                { title: 'NATA 2026 Fee Structure', slug: 'fee-structure' },
-                { title: "Do's & Don'ts", slug: 'dos-and-donts' },
-              ].map((item) => (
-                <Link key={item.slug} href={`/${locale}/nata-2026/${item.slug}`} style={{ textDecoration: 'none' }}>
-                  <Card sx={{ p: 2, color: 'inherit', transition: 'box-shadow 0.2s', '&:hover': { boxShadow: 3 } }}>
-                    <Typography variant="subtitle1" color="primary.main" sx={{ fontWeight: 600 }}>{item.title} &rarr;</Typography>
-                  </Card>
-                </Link>
-              ))}
-            </Box>
-          </Container>
-        </Box>
+        <ArticleSection id="faq" title="FAQs: Photo & Signature">
+          <FaqList items={faqs} defaultOpen={-1} />
+        </ArticleSection>
+      </GuideArticle>
 
-        {/* FAQ */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
-          <Container maxWidth="md">
-            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs: Photo & Signature</Typography>
-            {faqs.map((faq, index) => (
-              <Accordion key={index} disableGutters sx={{ '&:before': { display: 'none' }, mb: 1, borderRadius: 1, overflow: 'hidden' }}>
-                <AccordionSummary expandIcon={<Typography sx={{ fontSize: '1.2rem', fontWeight: 600 }}>+</Typography>} sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}>
-                  <Typography sx={{ fontWeight: 600 }}>{faq.question}</Typography>
-                </AccordionSummary>
-                <AccordionDetails sx={{ bgcolor: 'white' }}>
-                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>{faq.answer}</Typography>
-                </AccordionDetails>
-              </Accordion>
-            ))}
-          </Container>
-        </Box>
-
-        {/* CTA Banner */}
-        <Box sx={{ py: { xs: 6, md: 10 }, background: 'linear-gradient(135deg, #0d47a1 0%, #1565c0 100%)', color: 'white', textAlign: 'center' }}>
-          <Container maxWidth="md">
-            <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '1.75rem', md: '2.5rem' } }}>
-              Prepare for NATA 2026 with Neram Classes
-            </Typography>
-            <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>Expert coaching, free tools, and personalized guidance.</Typography>
-            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <Button variant="contained" size="large" component={Link} href="/apply" sx={{ background: '#ffffff', color: '#0d47a1', fontWeight: 700, px: 4, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', '&:hover': { background: '#f0f0f0' } }}>Start Free Trial</Button>
-              <Button variant="outlined" size="large" component={Link} href={`/${locale}/nata-2026`} sx={{ borderColor: 'white', color: 'white' }}>Back to NATA 2026 Guide</Button>
-            </Box>
-          </Container>
-        </Box>
-      </Box>
+      <CtaBand
+        title="Prepare for NATA 2026 with Neram Classes"
+        lede="Expert coaching, free tools, and personalized guidance."
+        actions={
+          <>
+            <CtaButton href="/apply">Start Free Trial</CtaButton>
+            <CtaButton variant="link" href="/nata-2026">
+              Back to NATA 2026 Guide
+            </CtaButton>
+          </>
+        }
+      />
     </>
   );
 }

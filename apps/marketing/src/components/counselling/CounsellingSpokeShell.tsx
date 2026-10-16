@@ -1,19 +1,10 @@
-import Link from 'next/link';
-import {
-  Box,
-  Container,
-  Typography,
-  Stack,
-  Chip,
-  Paper,
-  Button,
-} from '@mui/material';
-import HomeIcon from '@mui/icons-material/Home';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import { Box, Typography } from '@neram/ui';
+import { siteTokens as t } from '@neram/ui/site-tokens';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import AintraTopicChat from '@/components/aintra/AintraTopicChat';
+import { toolIcon } from '@/components/tools/toolIcons';
+import { CtaButton, DocHeader, DocLayout, LinkTile, NavCard } from '@/design-system';
 import CallbackDrawer, { type CallbackDrawerProps } from './CallbackDrawer';
 
 const baseUrl = 'https://neramclasses.com';
@@ -50,13 +41,16 @@ export interface CounsellingSpokeShellProps {
     subtitle: string;
     greeting: string;
     suggestions: string[];
-    primaryColor: string;
-    primaryColorDark: string;
     disclaimerSource?: string;
   };
   children: React.ReactNode;
 }
 
+/**
+ * T5 shell for the TNEA and KEAM spoke pages (eligibility, dates, how to
+ * apply...): light DocHeader, the article beside a rail of the hub's other
+ * guides and two free tools, the call-back box, and the Aintra panel.
+ */
 export default function CounsellingSpokeShell({
   locale,
   hubPath,
@@ -83,11 +77,26 @@ export default function CounsellingSpokeShell({
     { name: topicTitle, url: spokeUrl },
   ]);
 
-  const jsonLdArray = jsonLd
-    ? Array.isArray(jsonLd)
-      ? [breadcrumbSchema, ...jsonLd]
-      : [breadcrumbSchema, jsonLd]
-    : [breadcrumbSchema];
+  const jsonLdArray = jsonLd ? (Array.isArray(jsonLd) ? [breadcrumbSchema, ...jsonLd] : [breadcrumbSchema, jsonLd]) : [breadcrumbSchema];
+
+  const rail = (
+    <>
+      <NavCard
+        title={`${hubLabel} guides`}
+        links={[
+          { label: `${hubLabel} overview`, href: hubPath },
+          ...related.map((r) => ({ label: r.label, href: `${hubPath}/${r.href}`, current: r.href === spokeSlug })),
+        ]}
+      />
+      <Box sx={{ bgcolor: t.surface, border: `1px solid ${t.line}`, borderRadius: `${t.radius}px`, p: 2, display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+        <Typography component="span" sx={{ fontFamily: t.fontMono, fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.12em', textTransform: 'uppercase', color: t.inkMuted }}>
+          Free tools
+        </Typography>
+        <LinkTile href="/tools/college-predictor" icon={toolIcon('college-predictor')} title="College Predictor" />
+        <LinkTile href="/tools/cutoff-calculator" icon={toolIcon('cutoff-calculator')} title="Cutoff Calculator" />
+      </Box>
+    </>
+  );
 
   return (
     <>
@@ -95,112 +104,43 @@ export default function CounsellingSpokeShell({
         <JsonLd key={idx} data={data} />
       ))}
 
-      <Container maxWidth="md" sx={{ py: { xs: 3, md: 5 }, pb: { xs: 12, md: 5 } }}>
-        {/* Breadcrumb */}
-        <Stack direction="row" gap={0.75} sx={{ mb: 2 }} flexWrap="wrap">
-          <Link
-            href={`/${locale}`}
-            style={{ display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }}
-          >
-            <HomeIcon sx={{ fontSize: 14, mr: 0.5, color: 'text.secondary' }} />
-            <Typography variant="body2" color="text.secondary">
-              Home
-            </Typography>
-          </Link>
-          <Typography variant="body2" color="text.secondary">
-            /
-          </Typography>
-          <Link href={`${localePrefix}${hubPath}`} style={{ textDecoration: 'none' }}>
-            <Typography variant="body2" color="text.secondary">
-              {hubLabel}
-            </Typography>
-          </Link>
-          <Typography variant="body2" color="text.secondary">
-            /
-          </Typography>
-          <Typography variant="body2" color="primary" fontWeight={600}>
-            {spokeChip || topicTitle}
-          </Typography>
-        </Stack>
+      <DocHeader
+        breadcrumb={[
+          { name: 'Home', href: '/' },
+          { name: 'Counseling', href: '/counseling' },
+          { name: hubLabel, href: hubPath },
+          { name: spokeChip || topicTitle },
+        ]}
+        eyebrow={spokeChip}
+        title={topicTitle}
+        lede={topicSubtitle}
+      />
 
-        {/* Hero */}
-        <Box sx={{ mb: 4 }}>
-          {spokeChip && <Chip label={spokeChip} size="small" color="primary" sx={{ mb: 1.5 }} />}
-          <Typography
-            variant="h1"
-            sx={{
-              fontWeight: 800,
-              fontSize: { xs: '1.625rem', md: '2.125rem' },
-              lineHeight: 1.2,
-              mb: 1.25,
+      <Box sx={{ bgcolor: t.ground, pb: { xs: 10, md: 0 } }}>
+        <DocLayout aside={rail}>
+          <Box sx={{ minWidth: 0 }}>{children}</Box>
+
+          <CallbackDrawer
+            variant="sticky"
+            card={{
+              title: 'Not sure which colleges to fill first?',
+              body: 'A counsellor calls you back with a choice list for your rank. Free, no obligation.',
             }}
-          >
-            {topicTitle}
-          </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 720 }}>
-            {topicSubtitle}
-          </Typography>
-        </Box>
+            {...callback}
+          />
 
-        {/* Body */}
-        <Box component="article">{children}</Box>
-
-        {/* Related */}
-        {related.length > 0 && (
-          <Box sx={{ mt: 5 }}>
-            <Typography variant="h6" fontWeight={800} sx={{ mb: 2 }}>
-              Related {hubLabel} pages
-            </Typography>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} flexWrap="wrap" useFlexGap>
-              {related.map((r) => (
-                <Paper
-                  key={r.href}
-                  component={Link}
-                  href={`${localePrefix}${hubPath}/${r.href}`}
-                  elevation={0}
-                  sx={{
-                    p: 1.5,
-                    px: 2,
-                    borderRadius: 2,
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    textDecoration: 'none',
-                    color: 'text.primary',
-                    fontWeight: 600,
-                    transition: 'all 0.2s ease',
-                    '&:hover': { borderColor: 'primary.main', color: 'primary.main' },
-                  }}
-                >
-                  {r.label} →
-                </Paper>
-              ))}
-            </Stack>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1.5 }}>
+            <CtaButton variant="outline" href={hubPath} size="md" endIcon={null}>
+              Back to {hubLabel} hub
+            </CtaButton>
+            {ctaSecondary && (
+              <CtaButton variant="link" href={`${hubPath}/${ctaSecondary.href}`} size="md">
+                {ctaSecondary.label}
+              </CtaButton>
+            )}
           </Box>
-        )}
-
-        <Box sx={{ mt: 4, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
-          <Button
-            component={Link}
-            href={`${localePrefix}${hubPath}`}
-            variant="outlined"
-            startIcon={<ArrowBackIcon />}
-          >
-            Back to {hubLabel} hub
-          </Button>
-          {ctaSecondary && (
-            <Button
-              component={Link}
-              href={`${localePrefix}${hubPath}/${ctaSecondary.href}`}
-              variant="text"
-              endIcon={<ArrowForwardIcon />}
-            >
-              {ctaSecondary.label}
-            </Button>
-          )}
-        </Box>
-      </Container>
-
-      <CallbackDrawer variant="sticky" {...callback} />
+        </DocLayout>
+      </Box>
 
       <AintraTopicChat
         topic={aintra.topic}
@@ -209,8 +149,8 @@ export default function CounsellingSpokeShell({
         subtitle={aintra.subtitle}
         greeting={aintra.greeting}
         suggestions={aintra.suggestions}
-        primaryColor={aintra.primaryColor}
-        primaryColorDark={aintra.primaryColorDark}
+        primaryColor={t.navy900}
+        primaryColorDark={t.navy700}
         disclaimerSource={aintra.disclaimerSource}
       />
     </>

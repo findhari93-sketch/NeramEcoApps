@@ -3,7 +3,7 @@ import { assertNoHorizontalOverflow } from '../utils/mobile-helpers';
 
 /**
  * Header menus (laptop): every group opens the same panel design, the page
- * behind dims and blurs below the header, and the header stays clickable so
+ * behind dims below the header, and the header stays clickable so
  * another menu is one click away.
  */
 
@@ -53,7 +53,8 @@ test.describe('Header menus (laptop)', () => {
           return Math.abs((s?.y ?? 0) - ((header?.y ?? 0) + (header?.height ?? 0)));
         })
         .toBeLessThanOrEqual(1);
-      expect(await scrim.evaluate((el) => getComputedStyle(el).backdropFilter)).toContain('blur');
+      // Design system: a navy dim, no blur (no backdropFilter anywhere).
+      expect(await scrim.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe('rgba(6, 13, 31, 0.4)');
 
       await page.keyboard.press('Escape');
       await expect(page.getByRole('region', { name: m.region })).toBeHidden();
@@ -118,7 +119,9 @@ test.describe('Header menus (laptop)', () => {
   for (const width of [900, 1024, 1440]) {
     test(`every panel fits the viewport at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 800 });
-      for (const m of MENUS) {
+      // Below 1060px Counseling and About live in the More menu.
+      const menus = width < 1060 ? [...MENUS.slice(0, 2), { trigger: 'More', region: 'More menu' }] : MENUS;
+      for (const m of menus) {
         const panel = await openMenu(page, m.trigger, m.region);
         const box = await panel.boundingBox();
         expect(box?.x ?? -1).toBeGreaterThanOrEqual(0);
@@ -129,6 +132,14 @@ test.describe('Header menus (laptop)', () => {
       }
     });
   }
+
+  test('More (1024px) lists Counseling, About and Free Tools links', async ({ page }) => {
+    await page.setViewportSize({ width: 1024, height: 800 });
+    const panel = await openMenu(page, 'More', 'More menu');
+    await expect(panel.getByRole('link', { name: 'All 28 counsellings' })).toBeVisible();
+    await expect(panel.getByRole('link', { name: 'Course fees' })).toBeVisible();
+    await expect(panel.getByRole('link', { name: 'Free Tools' })).toBeVisible();
+  });
 });
 
 test.describe('Header menus (phone drawer)', () => {

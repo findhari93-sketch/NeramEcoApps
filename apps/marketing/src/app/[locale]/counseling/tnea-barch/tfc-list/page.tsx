@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import { Alert } from '@mui/material';
+import { Box } from '@mui/material';
+import { Callout } from '@/design-system';
 import { buildAlternates } from '@/lib/seo/metadata';
 import {
   generateItemListSchema,
@@ -77,9 +78,13 @@ export default function TfcListPage({
       ]}
       prefillCallbackNotes="Need help finding the nearest TFC for TNEA B.Arch"
     >
-      <Alert severity="info" sx={{ mb: 3, borderRadius: 1.5 }}>
-        Visiting a TFC is optional. You can register and upload certificates from anywhere at <strong>tneaonline.org</strong>. TFCs help with verification and provide assistance to candidates who need it.
-      </Alert>
+      <Box sx={{ mb: 3 }}>
+        <Callout>
+          <Box component="p" sx={{ m: 0 }}>
+              Visiting a TFC is optional. You can register and upload certificates from anywhere at <strong>tneaonline.org</strong>. TFCs help with verification and provide assistance to candidates who need it.
+          </Box>
+        </Callout>
+      </Box>
 
       <TfcLocator tfcs={tfcs} districts={districts} />
     </TneaSpokeShell>

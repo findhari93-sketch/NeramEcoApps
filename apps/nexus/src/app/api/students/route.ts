@@ -7,7 +7,7 @@ import { pickClassroomEmail } from '@/lib/classroom-email';
 import { isAwaitingMicrosoft } from '@/lib/microsoft-account';
 import { findRosterDuplicates } from '@/lib/roster-duplicates';
 import { activityOf } from '@/lib/student-roster-view';
-import { isApplicationForm } from '@/lib/application-form';
+import { isSubmittedApplication } from '@/lib/application-form';
 import { pickStudentPlace } from '@/lib/student-place';
 import { backInNexus, isNotStarted, needsDecision } from '@/lib/not-started';
 import { readNotStartedSchedule } from '@/lib/lifecycle-schedule';
@@ -266,7 +266,7 @@ export async function GET(request: NextRequest) {
       // lead_profiles is the only place a student's location is stored.
       supabase
         .from('lead_profiles')
-        .select('user_id, application_number, academic_data, applicant_category, father_name, created_at, city, state')
+        .select('user_id, application_number, academic_data, applicant_category, father_name, source, reviewed_by, created_at, city, state')
         .in('user_id', studentIds)
         .is('deleted_at', null),
 
@@ -316,7 +316,7 @@ export async function GET(request: NextRequest) {
     );
 
     const usersWithForm = new Set<string>(
-      (formResult.data || []).filter((row: any) => isApplicationForm(row)).map((row: any) => row.user_id),
+      (formResult.data || []).filter((row: any) => isSubmittedApplication(row)).map((row: any) => row.user_id),
     );
 
     // Where each student lives. A student can hold several lead_profiles rows that

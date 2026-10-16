@@ -34,9 +34,13 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import LightbulbOutlinedIcon from '@mui/icons-material/LightbulbOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import AutoFixHighOutlinedIcon from '@mui/icons-material/AutoFixHighOutlined';
+import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
+import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import { OpsSkeleton, StatusChip, TARGET_44, type Tone } from '@/components/ops/OpsUi';
 import { api, num, when } from '@/components/marketing-ai/format';
-import { RULES } from '@/lib/seo-audit/rule-guide';
+import { OWNER_LABEL, RULES, ruleOwner, type RuleOwner } from '@/lib/seo-audit/rule-guide';
 
 export const SEVERITY: Record<string, { label: string; tone: Tone; icon: ElementType }> = {
   critical: { label: 'Critical', tone: 'error', icon: ErrorIcon },
@@ -57,6 +61,37 @@ export { RULES };
 export function SeverityChip({ severity }: { severity: string }) {
   const s = SEVERITY[severity] ?? SEVERITY.info;
   return <StatusChip icon={s.icon} tone={s.tone} label={s.label} />;
+}
+
+const OWNER_STYLE: Record<RuleOwner, { tone: Tone; icon: ElementType }> = {
+  code: { tone: 'info', icon: AutoFixHighOutlinedIcon },
+  google: { tone: 'neutral', icon: HourglassEmptyIcon },
+  you: { tone: 'warning', icon: PersonOutlineIcon },
+};
+
+/** Who clears a finding: a code change (Claude Code), Google, or the owner. */
+export function OwnerChip({ owner }: { owner: RuleOwner }) {
+  const o = OWNER_STYLE[owner];
+  return <StatusChip icon={o.icon} tone={o.tone} label={OWNER_LABEL[owner]} />;
+}
+
+export const PASTE_IN_CLAUDE = 'Paste it into Claude Code in the NeramEcosystem folder.';
+
+/** The `/seo-fix` command for a set of findings: their code-fixable rule ids, most common first. */
+export function seoFixCommand(findings: { rule_id: string }[]): string | null {
+  const count = new Map<string, number>();
+  for (const f of findings) if (ruleOwner(f.rule_id) === 'code') count.set(f.rule_id, (count.get(f.rule_id) ?? 0) + 1);
+  if (!count.size) return null;
+  return `/seo-fix ${[...count.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([id]) => id).join(' ')}`;
+}
+
+export async function copyText(text: string, ok: string, toast: (m: string) => void) {
+  try {
+    await navigator.clipboard.writeText(text);
+    toast(ok);
+  } catch {
+    toast(`Could not copy. Type this into Claude Code: ${text}`);
+  }
 }
 
 export const VERDICT: Record<string, { label: string; tone: Tone; icon: ElementType }> = {
@@ -106,7 +141,17 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 /** Everything about one URL. Opened from a finding or a URL row; Close returns to the table. */
-export function UrlDrawer({ url, onClose, onIgnore }: { url: string | null; onClose: () => void; onIgnore: (finding: { id: string; title: string }) => void }) {
+export function UrlDrawer({
+  url,
+  onClose,
+  onIgnore,
+  setToast,
+}: {
+  url: string | null;
+  onClose: () => void;
+  onIgnore: (finding: { id: string; title: string }) => void;
+  setToast: (m: string) => void;
+}) {
   const [data, setData] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -177,6 +222,27 @@ export function UrlDrawer({ url, onClose, onIgnore }: { url: string | null; onCl
                     <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                       {RULES[f.rule_id]?.fix}
                     </Typography>
+                    {f.status === 'open' && (
+                      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', mt: 1 }}>
+                        <OwnerChip owner={ruleOwner(f.rule_id)} />
+                        {ruleOwner(f.rule_id) === 'code' ? (
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            startIcon={<ContentCopyIcon />}
+                            onClick={() => copyText(`/seo-fix ${f.id}`, `Copied. ${PASTE_IN_CLAUDE}`, setToast)}
+                            aria-label={`Copy for Claude Code: ${f.title}`}
+                            sx={TARGET_44}
+                          >
+                            Copy for Claude Code
+                          </Button>
+                        ) : (
+                          <Typography variant="caption" color="text.secondary">
+                            {ruleOwner(f.rule_id) === 'google' ? 'Nothing to change in code. Ask Google runs every morning.' : 'Needs your decision, not a code change.'}
+                          </Typography>
+                        )}
+                      </Box>
+                    )}
                   </Paper>
                 ))}
               </Box>

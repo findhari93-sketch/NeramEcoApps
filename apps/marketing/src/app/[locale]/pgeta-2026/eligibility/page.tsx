@@ -1,8 +1,9 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import { Typography, Box, Stack, Paper } from '@neram/ui';
 import ExamSpokeLayout from '@/components/exam-hub/sections/ExamSpokeLayout';
+import { GuideNote } from '@/components/exam-hub/sections/GuideBlocks';
 import { buildAlternates } from '@/lib/seo/metadata';
+import { ArticleSection, CheckList } from '@/design-system';
 
 export const revalidate = 86400;
 
@@ -29,7 +30,7 @@ export default function PgetaEligibilityPage({ params: { locale } }: { params: {
       examName="PGETA 2026"
       examShortName="PGETA 2026"
       examHubHref="/pgeta-2026"
-      examColor="secondary"
+      spokeSlug="eligibility"
       topicTitle="PGETA 2026 eligibility (also known as PGEAT)"
       topicSubtitle="The short answer: a B.Arch from a COA-approved institute with at least 50% aggregate marks. Final-year students may apply, contingent on passing their B.Arch."
       related={[
@@ -38,49 +39,41 @@ export default function PgetaEligibilityPage({ params: { locale } }: { params: {
         { label: 'Fees + scholarship', href: '/pgeta-2026/fees' },
       ]}
     >
-      <Stack spacing={3}>
-        <Box>
-          <Typography variant="h5" component="h2" sx={{ fontWeight: 700, mb: 1.5 }}>
-            Core eligibility rules
-          </Typography>
-          <Box component="ul" sx={{ pl: 3, m: 0, '& li': { mb: 1, lineHeight: 1.7 } }}>
-            <li>Must hold a Bachelor of Architecture (B.Arch) degree from a COA-approved institution.</li>
-            <li>Minimum 50% aggregate marks (or equivalent CGPA).</li>
-            <li>Final-year B.Arch students are eligible to apply, with admission contingent on passing their B.Arch.</li>
-            <li>No upper age limit.</li>
-            <li>COA registration is recommended for practising architects but not strictly required to attempt PGETA.</li>
-          </Box>
-        </Box>
+      <ArticleSection id="core-eligibility" title="Core eligibility rules">
+        <CheckList
+          columnMin={600}
+          items={[
+            'Must hold a Bachelor of Architecture (B.Arch) degree from a COA-approved institution.',
+            'Minimum 50% aggregate marks (or equivalent CGPA).',
+            'Final-year B.Arch students are eligible to apply, with admission contingent on passing their B.Arch.',
+            'No upper age limit.',
+            'COA registration is recommended for practising architects but not strictly required to attempt PGETA.',
+          ]}
+        />
+      </ArticleSection>
 
-        <Paper variant="outlined" sx={{ p: 3, borderRadius: 2 }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
-            How to verify your B.Arch is COA-approved
-          </Typography>
-          <Box component="ul" sx={{ pl: 3, m: 0, '& li': { mb: 0.75, lineHeight: 1.7 } }}>
-            <li>Check the COA approved-institutions list at coa.gov.in.</li>
-            <li>If your college is listed and the program ran while you were enrolled, you are covered.</li>
-            <li>Programs that lost approval mid-batch are typically grandfathered for already-enrolled students; contact COA for clarification.</li>
-          </Box>
-        </Paper>
+      <GuideNote title="How to verify your B.Arch is COA-approved">
+        <CheckList
+          variant="compact"
+          items={[
+            'Check the COA approved-institutions list at coa.gov.in.',
+            'If your college is listed and the program ran while you were enrolled, you are covered.',
+            'Programs that lost approval mid-batch are typically grandfathered for already-enrolled students; contact COA for clarification.',
+          ]}
+        />
+      </GuideNote>
 
-        <Box>
-          <Typography variant="h5" component="h2" sx={{ fontWeight: 700, mb: 1.5 }}>
-            Final-year applicant rules
-          </Typography>
-          <Typography sx={{ lineHeight: 1.8, color: 'text.primary' }}>
-            If you are in the final year of B.Arch (typically 5th year, 9th and 10th semesters), you may register and appear for PGETA 2026. The score is held provisionally; admission to your chosen M.Arch program activates only after you produce your B.Arch degree certificate (or final-year mark sheet meeting the 50% threshold) by the institutional deadline. Failing to graduate by the cut-off forfeits the seat.
-          </Typography>
-        </Box>
+      <ArticleSection
+        id="final-year-applicants"
+        title="Final-year applicant rules"
+        intro="If you are in the final year of B.Arch (typically 5th year, 9th and 10th semesters), you may register and appear for PGETA 2026. The score is held provisionally; admission to your chosen M.Arch program activates only after you produce your B.Arch degree certificate (or final-year mark sheet meeting the 50% threshold) by the institutional deadline. Failing to graduate by the cut-off forfeits the seat."
+      />
 
-        <Box>
-          <Typography variant="h5" component="h2" sx={{ fontWeight: 700, mb: 1.5 }}>
-            What if your B.Arch percentage is below 50%?
-          </Typography>
-          <Typography sx={{ lineHeight: 1.8, color: 'text.primary' }}>
-            You are not eligible for PGETA 2026. A small number of institutions accept M.Arch candidates with lower B.Arch percentages via management quota or institution-specific tests, but the centralised PGETA route is closed below 50%. Some candidates retake one or two B.Arch papers to push their aggregate above the threshold; check your university's improvement-exam rules.
-          </Typography>
-        </Box>
-      </Stack>
+      <ArticleSection
+        id="below-50-percent"
+        title="What if your B.Arch percentage is below 50%?"
+        intro="You are not eligible for PGETA 2026. A small number of institutions accept M.Arch candidates with lower B.Arch percentages via management quota or institution-specific tests, but the centralised PGETA route is closed below 50%. Some candidates retake one or two B.Arch papers to push their aggregate above the threshold; check your university's improvement-exam rules."
+      />
     </ExamSpokeLayout>
   );
 }

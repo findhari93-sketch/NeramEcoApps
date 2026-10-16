@@ -1,23 +1,25 @@
 'use client';
 
 import { useTranslations } from 'next-intl';
+import { Box, Typography } from '@neram/ui';
+import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
 import {
-  Box,
-  Container,
-  Typography,
-  Grid,
-  Chip,
-  Button,
-} from '@neram/ui';
-import Link from 'next/link';
-import { ReviewCard } from '@/components/reviews/ReviewParts';
+  CtaBand,
+  CtaButton,
+  PageHero,
+  ReviewCard,
+  ReviewWall,
+  Section,
+  tokens as t,
+} from '@/design-system';
+import { examLabel } from '@/lib/reviews/rules';
 import type { PublicReview } from '@/lib/reviews/json-ld';
 
+// Founder-confirmed proof points only (lib/seo/facts.ts PROOF_POINTS).
 const stats = [
   { value: '1,000+', label: 'Students Taught' },
   { value: 'AIR 1', label: 'JEE B.Arch 2024' },
   { value: '10+', label: 'Years' },
-  { value: '189', label: 'Top NATA Score' },
 ];
 
 const topColleges = [
@@ -39,153 +41,112 @@ const topColleges = [
  * Stories come from published reviews that name the college the student joined
  * (consent and moderation already passed). The block is hidden when there are none.
  */
-export default function AlumniPageContent({ stories = [], reviewsHref = '/reviews' }: { stories?: PublicReview[]; reviewsHref?: string }) {
-  const t = useTranslations('alumniStories');
+export default function AlumniPageContent({ stories = [] }: { stories?: PublicReview[]; reviewsHref?: string }) {
+  const tStories = useTranslations('alumniStories');
   const tr = useTranslations('reviews');
-  const cardLabels = {
-    stars: (rating: number) => tr('starsLabel', { rating }),
-    joined: (college: string) => tr('joined', { college }),
-    featured: tr('featured'),
-  };
   return (
-    <Box>
-      {/* Hero Section */}
-      <Box
-        sx={{
-          py: { xs: 8, md: 12 },
-          background: 'linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%)',
-          color: 'white',
-        }}
-      >
-        <Container maxWidth="lg">
-          <Typography variant="h1" component="h1" align="center" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2.5rem', md: '3.5rem' } }}>
-            Our Success Stories
-          </Typography>
-          <Typography variant="h5" align="center" sx={{ mb: 4, opacity: 0.9, maxWidth: 800, mx: 'auto' }}>
-            Meet the achievers who turned their dreams into reality with Neram Classes.
-            Our alumni are now shaping the future of architecture across India and beyond.
-          </Typography>
-        </Container>
-      </Box>
+    <>
+      <PageHero
+        breadcrumb={[{ name: 'Home', href: '/' }, { name: 'Alumni' }]}
+        eyebrow="Student voices"
+        title="Our Success Stories"
+        lede="Meet the achievers who turned their dreams into reality with Neram Classes. Our alumni are now shaping the future of architecture across India and beyond."
+        stats={stats}
+      />
 
-      {/* Stats Section */}
-      <Box sx={{ py: 6, bgcolor: 'grey.100' }}>
-        <Container maxWidth="lg">
-          <Grid container spacing={4}>
-            {stats.map((stat, index) => (
-              <Grid item xs={6} md={3} key={index}>
-                <Box sx={{ textAlign: 'center' }}>
-                  <Typography variant="h3" component="div" sx={{ fontWeight: 700, color: 'success.main' }}>
-                    {stat.value}
-                  </Typography>
-                  <Typography variant="body1" color="text.secondary">
-                    {stat.label}
-                  </Typography>
-                </Box>
-              </Grid>
-            ))}
-          </Grid>
-        </Container>
-      </Box>
-
-      {/* Success Stories Section: published data only */}
+      {/* Success stories: published data only */}
       {stories.length > 0 && (
-        <Box component="section" aria-labelledby="alumni-stories-title" sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
-          <Container maxWidth="lg">
-            <Typography id="alumni-stories-title" variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 2, fontWeight: 700, fontSize: { xs: '1.75rem', md: '2.5rem' } }}>
-              {t('title')}
-            </Typography>
-            <Typography variant="h6" component="p" align="center" color="text.secondary" sx={{ mb: { xs: 4, md: 6 }, fontSize: { xs: '1rem', md: '1.25rem' } }}>
-              {t('subtitle')}
-            </Typography>
-
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr', lg: '1fr 1fr 1fr' }, gap: { xs: 2, md: 3 } }}>
-              {stories.map((story) => (
-                <ReviewCard key={story.id} review={story} labels={cardLabels} />
-              ))}
-            </Box>
-
-            <Box sx={{ textAlign: 'center', mt: 4 }}>
-              <Button
-                variant="outlined"
-                component={Link}
-                href={reviewsHref}
-                sx={{ minHeight: 48, px: 3, textTransform: 'none', fontWeight: 600 }}
-              >
-                {t('readAll')}
-              </Button>
-            </Box>
-          </Container>
-        </Box>
+        <Section
+          id="alumni-stories"
+          header={{ title: tStories('title'), lede: tStories('subtitle') }}
+        >
+          <ReviewWall>
+            {stories.map((story) => {
+              const exam = [examLabel(story.examType), story.year ? String(story.year) : ''].filter(Boolean).join(' ');
+              const meta = [story.city, story.collegeAdmitted ? tr('joined', { college: story.collegeAdmitted }) : null]
+                .filter(Boolean)
+                .join(' · ');
+              return (
+                <ReviewCard
+                  key={story.id}
+                  quote={story.body}
+                  name={story.displayName}
+                  rating={story.rating}
+                  tag={exam || undefined}
+                  meta={meta || undefined}
+                  photo={story.photo}
+                />
+              );
+            })}
+          </ReviewWall>
+          <Box sx={{ display: 'flex', justifyContent: 'center' }}>
+            <CtaButton variant="outline" href="/reviews">
+              {tStories('readAll')}
+            </CtaButton>
+          </Box>
+        </Section>
       )}
 
-      {/* Top Colleges Section */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
-        <Container maxWidth="lg">
-          <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 2, fontWeight: 700 }}>
-            Where Our Students Go
-          </Typography>
-          <Typography variant="h6" align="center" color="text.secondary" sx={{ mb: 6 }}>
-            Top architecture colleges where our alumni are studying
-          </Typography>
-
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 2 }}>
-            {topColleges.map((college, index) => (
-              <Chip
-                key={index}
-                label={college}
-                sx={{
-                  fontSize: '1rem',
-                  py: 2.5,
-                  px: 1,
-                  bgcolor: 'white',
-                  border: '1px solid',
-                  borderColor: 'divider',
-                }}
-              />
-            ))}
-          </Box>
-        </Container>
-      </Box>
-
-      {/* Join the Legacy Section */}
-      <Box
-        sx={{
-          py: { xs: 6, md: 10 },
-          background: 'linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%)',
-          color: 'white',
-          textAlign: 'center',
+      {/* Top colleges */}
+      <Section
+        tone="white"
+        id="top-colleges"
+        header={{
+          eyebrow: 'Colleges',
+          title: 'Where Our Students Go',
+          lede: 'Top architecture colleges where our alumni are studying',
         }}
       >
-        <Container maxWidth="md">
-          <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700 }}>
-            Ready to Write Your Success Story?
-          </Typography>
-          <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>
-            Join the Neram Classes family and become part of our growing alumni network.
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
-            <Button
-              variant="contained"
-              size="large"
-              component={Link}
-              href="/apply"
-              sx={{ bgcolor: 'white', color: 'success.main', '&:hover': { bgcolor: 'grey.100' } }}
+        <Box
+          component="ul"
+          sx={{
+            m: 0,
+            p: 0,
+            listStyle: 'none',
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 220px), 1fr))',
+            gap: 1.5,
+          }}
+        >
+          {topColleges.map((college) => (
+            <Box
+              component="li"
+              key={college}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.5,
+                minHeight: 56,
+                px: 2,
+                py: 1.25,
+                boxSizing: 'border-box',
+                bgcolor: t.ground,
+                border: `1px solid ${t.line}`,
+                borderRadius: `${t.radius}px`,
+              }}
             >
-              Start Your Journey
-            </Button>
-            <Button
-              variant="outlined"
-              size="large"
-              component={Link}
-              href="/contact"
-              sx={{ borderColor: 'white', color: 'white' }}
-            >
+              <AccountBalanceOutlinedIcon aria-hidden sx={{ fontSize: 22, color: t.gold800, flexShrink: 0 }} />
+              <Typography component="span" sx={{ fontSize: '1rem', fontWeight: 600, lineHeight: 1.35 }}>
+                {college}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      </Section>
+
+      <CtaBand
+        eyebrow="Your turn"
+        title="Ready to Write Your Success Story?"
+        lede="Join the Neram Classes family and become part of our growing alumni network."
+        actions={
+          <>
+            <CtaButton href="/apply">Start Your Journey</CtaButton>
+            <CtaButton variant="link" href="/contact">
               Connect with Alumni
-            </Button>
-          </Box>
-        </Container>
-      </Box>
-    </Box>
+            </CtaButton>
+          </>
+        }
+      />
+    </>
   );
 }

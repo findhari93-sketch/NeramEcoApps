@@ -11,6 +11,7 @@ import CollegeGridTile from './CollegeGridTile';
 import CollegeTable from './CollegeTable';
 import MobileCollegeRow from './MobileCollegeRow';
 import type { SortKey } from './filter-model';
+import { tokens } from '@/design-system';
 
 interface Props {
   colleges: ListingCollege[];
@@ -30,7 +31,7 @@ export default function DirectoryResults({ colleges, view, startRank, sort, onSo
   return (
     <>
       {/* Phone */}
-      <Box component="ol" aria-label="Colleges" sx={{ display: { xs: 'block', md: 'none' }, listStyle: 'none', m: 0, mx: -2, p: 0, borderTop: '1px solid', borderColor: 'divider' }}>
+      <Box component="ol" aria-label="Colleges" sx={{ display: { xs: 'block', md: 'none' }, listStyle: 'none', m: 0, mx: -2, p: 0, borderTop: '1px solid', borderColor: tokens.line }}>
         {colleges.map((c) => (
           <MobileCollegeRow key={c.id} college={c} inCompare={compare.has(c.slug)} onToggleCompare={() => toggle(c)} />
         ))}
@@ -69,12 +70,12 @@ export default function DirectoryResults({ colleges, view, startRank, sort, onSo
 export function DirectoryEmpty({ query, onClear, allStatesHref }: { query?: string; onClear: () => void; allStatesHref?: string }) {
   const searchMiss = Boolean(query?.trim());
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1, p: { xs: 2.5, md: 3.5 }, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-      <SearchOffIcon aria-hidden sx={{ fontSize: 32, color: 'text.secondary' }} />
+    <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1, p: { xs: 2.5, md: 3.5 }, bgcolor: tokens.surface, border: '1px solid', borderColor: tokens.line, borderRadius: 1 }}>
+      <SearchOffIcon aria-hidden sx={{ fontSize: 32, color: tokens.inkMuted }} />
       <Typography component="p" sx={{ m: 0, fontSize: '1.1rem', fontWeight: 700 }}>
         {searchMiss ? `No college named "${query!.trim()}"` : 'No colleges match these filters'}
       </Typography>
-      <Typography sx={{ m: 0, fontSize: '0.95rem', color: 'text.secondary' }}>
+      <Typography sx={{ m: 0, fontSize: '0.95rem', color: tokens.inkMuted }}>
         {searchMiss ? 'Check the spelling, or search all states.' : 'Try removing a filter or widening the fee range.'}
       </Typography>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
@@ -82,7 +83,7 @@ export function DirectoryEmpty({ query, onClear, allStatesHref }: { query?: stri
           component="button"
           type="button"
           onClick={onClear}
-          sx={{ minHeight: 44, px: 2, border: '1px solid', borderColor: 'primary.main', borderRadius: 1.5, bgcolor: 'background.paper', color: 'primary.dark', font: 'inherit', fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer', '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
+          sx={{ minHeight: 44, px: 2, border: '1px solid', borderColor: tokens.navy900, borderRadius: 1, bgcolor: tokens.surface, color: tokens.navy900, font: 'inherit', fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer', '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } }}
         >
           Clear all filters
         </Box>
@@ -90,7 +91,7 @@ export function DirectoryEmpty({ query, onClear, allStatesHref }: { query?: stri
           <Box
             component="a"
             href={`${allStatesHref}?q=${encodeURIComponent(query!.trim())}#browse`}
-            sx={{ minHeight: 44, display: 'flex', alignItems: 'center', px: 2, borderRadius: 1.5, color: 'primary.dark', fontSize: '0.9rem', fontWeight: 700, textDecoration: 'none', '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' } }}
+            sx={{ minHeight: 44, display: 'flex', alignItems: 'center', px: 2, borderRadius: 1, color: tokens.navy900, fontSize: '0.9rem', fontWeight: 700, textDecoration: 'none', '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } }}
           >
             Search all states
           </Box>

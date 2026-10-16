@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Box, Typography } from '@neram/ui';
 import type { AskSeniorsCollege } from '@neram/database';
+import { tokens } from '@/design-system';
 
 interface CollegeScrollStripProps {
   colleges: AskSeniorsCollege[];
@@ -55,6 +56,7 @@ export default function CollegeScrollStrip({
           '&:hover': {
             animationPlayState: 'paused',
           },
+          '@media (prefers-reduced-motion: reduce)': { animation: 'none' },
           py: '6px',
           // Prevent layout shift while animation loads
           willChange: 'transform',
@@ -81,17 +83,13 @@ export default function CollegeScrollStrip({
                 px: '12px',
                 py: '8px',
                 borderRadius: '50px',
-                border: '1px solid rgba(255,255,255,0.07)',
-                background: 'rgba(255,255,255,0.03)',
-                backdropFilter: 'blur(4px)',
-                transition: 'border-color 0.25s, background 0.25s, transform 0.2s, box-shadow 0.25s',
+                border: `1px solid ${tokens.lineDark}`,
+                bgcolor: tokens.navy800,
+                transition: 'border-color 150ms ease',
                 cursor: 'pointer',
                 '&:hover': {
-                  borderColor: 'rgba(232,160,32,0.5)',
-                  background: 'rgba(232,160,32,0.08)',
-                  transform: 'translateY(-3px)',
-                  boxShadow: '0 8px 24px rgba(232,160,32,0.12)',
-                  '& .chip-name': { color: '#e8a020' },
+                  borderColor: tokens.gold500,
+                  '& .chip-name': { color: tokens.gold500 },
                 },
               }}
             >
@@ -101,14 +99,13 @@ export default function CollegeScrollStrip({
                   width: 34,
                   height: 34,
                   borderRadius: '50%',
-                  bgcolor: '#fff',
+                  bgcolor: tokens.surface,
                   flexShrink: 0,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   overflow: 'hidden',
                   p: '3px',
-                  boxShadow: '0 1px 4px rgba(0,0,0,0.3)',
                 }}
               >
                 {college.logo_url ? (
@@ -124,7 +121,7 @@ export default function CollegeScrollStrip({
                     sx={{
                       fontSize: '10px',
                       fontWeight: 700,
-                      color: '#1a3060',
+                      color: tokens.navy900,
                       lineHeight: 1,
                       letterSpacing: '-0.5px',
                       userSelect: 'none',
@@ -142,7 +139,7 @@ export default function CollegeScrollStrip({
                   sx={{
                     fontSize: '13px',
                     fontWeight: 600,
-                    color: 'rgba(245,240,232,0.9)',
+                    color: tokens.paper,
                     lineHeight: 1.2,
                     whiteSpace: 'nowrap',
                     transition: 'color 0.2s ease',
@@ -153,7 +150,7 @@ export default function CollegeScrollStrip({
                 <Typography
                   sx={{
                     fontSize: '11px',
-                    color: 'rgba(245,240,232,0.45)',
+                    color: tokens.paperSubtle,
                     lineHeight: 1.2,
                     whiteSpace: 'nowrap',
                   }}

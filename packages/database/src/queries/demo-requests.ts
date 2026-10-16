@@ -20,6 +20,8 @@ import {
   type DemoWindow,
 } from '../utils/demo-schedule';
 
+export type DemoMeetingKind = 'teams' | 'own_link' | 'later' | 'in_person';
+
 export interface DemoRequest {
   id: string;
   user_id: string | null;
@@ -52,6 +54,8 @@ export interface DemoRequest {
   tutor_upn: string | null;
   teams_join_url: string | null;
   graph_event_id: string | null;
+  /** How a confirmed demo meets; null on rows confirmed before 2026-12 (derive it). */
+  meeting_kind?: DemoMeetingKind | null;
   next_contact_at: string | null;
   last_call_outcome: 'interested' | 'no_answer' | 'call_back' | 'not_interested' | null;
   drawing_received_at: string | null;

@@ -2,6 +2,7 @@ import { Box, Chip, Grid, Paper, Stack, Typography } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import CancelIcon from '@mui/icons-material/Cancel';
 import type { CollegeInfrastructure } from '@/lib/college-hub/types';
+import { siteTokens } from '@neram/ui/site-tokens';
 
 interface InfrastructureSectionProps {
   infrastructure: CollegeInfrastructure | null;
@@ -20,11 +21,11 @@ function InfraItem({
   return (
     <Stack direction="row" alignItems="center" gap={0.75}>
       {value ? (
-        <CheckCircleIcon sx={{ fontSize: 16, color: 'success.main' }} />
+        <CheckCircleIcon sx={{ fontSize: 16, color: siteTokens.success }} />
       ) : (
-        <CancelIcon sx={{ fontSize: 16, color: 'text.disabled' }} />
+        <CancelIcon sx={{ fontSize: 16, color: siteTokens.statusIdle }} />
       )}
-      <Typography variant="body2" color={value ? 'text.primary' : 'text.disabled'}>
+      <Typography variant="body2" color={value ? siteTokens.ink : siteTokens.inkMuted}>
         {label}
       </Typography>
     </Stack>
@@ -35,7 +36,7 @@ export default function InfrastructureSection({ infrastructure: infra }: Infrast
   if (!infra) {
     return (
       <Box sx={{ py: 4, textAlign: 'center' }}>
-        <Typography color="text.secondary" variant="body2">
+        <Typography color={siteTokens.inkMuted} variant="body2">
           Infrastructure details not yet available.
         </Typography>
       </Box>
@@ -47,7 +48,7 @@ export default function InfrastructureSection({ infrastructure: infra }: Infrast
       <Grid container spacing={2}>
         {/* Studio */}
         <Grid item xs={12} sm={6}>
-          <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+          <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
               Design Studios
             </Typography>
@@ -64,7 +65,7 @@ export default function InfrastructureSection({ infrastructure: infra }: Infrast
             </Stack>
             {infra.software_available && infra.software_available.length > 0 && (
               <Box sx={{ mt: 1.5 }}>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                <Typography variant="caption" color={siteTokens.inkMuted} sx={{ display: 'block', mb: 0.5 }}>
                   Software Available
                 </Typography>
                 <Stack direction="row" flexWrap="wrap" gap={0.5}>
@@ -76,7 +77,7 @@ export default function InfrastructureSection({ infrastructure: infra }: Infrast
             )}
             {infra.workshops && infra.workshops.length > 0 && (
               <Box sx={{ mt: 1.5 }}>
-                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                <Typography variant="caption" color={siteTokens.inkMuted} sx={{ display: 'block', mb: 0.5 }}>
                   Workshop Facilities
                 </Typography>
                 <Stack direction="row" flexWrap="wrap" gap={0.5}>
@@ -91,7 +92,7 @@ export default function InfrastructureSection({ infrastructure: infra }: Infrast
 
         {/* Amenities */}
         <Grid item xs={12} sm={6}>
-          <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+          <Paper variant="outlined" sx={{ p: 2, borderRadius: 1 }}>
             <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 1.5 }}>
               Campus Amenities
             </Typography>

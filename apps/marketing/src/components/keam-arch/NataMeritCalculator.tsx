@@ -9,11 +9,15 @@ import {
   TextField,
   Slider,
   Chip,
-  Alert,
 } from '@mui/material';
-import CalculateIcon from '@mui/icons-material/Calculate';
+import CalculateIcon from '@mui/icons-material/CalculateOutlined';
+import { siteTokens as t } from '@neram/ui/site-tokens';
+import Callout from '@/design-system/Callout';
+import { errorColor } from '@/design-system/brand-colors';
 
-const PRIMARY_GREEN = '#0d7a4a';
+const RADIUS = `${t.radius}px`;
+const valueChipSx = { bgcolor: t.navy900, color: t.paper, fontWeight: 700 } as const;
+const numberFieldSx = { width: 90, '& .MuiInputBase-root': { minHeight: 44 } } as const;
 
 function clamp(n: number, min: number, max: number) {
   if (Number.isNaN(n)) return min;
@@ -38,26 +42,25 @@ export default function NataMeritCalculator() {
 
   const band =
     result.total >= 320
-      ? { label: 'Strong', color: '#15803d' }
+      ? { label: 'Strong', color: t.success }
       : result.total >= 260
-        ? { label: 'Competitive', color: '#0d7a4a' }
+        ? { label: 'Competitive', color: t.navy900 }
         : result.total >= 200
-          ? { label: 'Borderline', color: '#a16207' }
-          : { label: 'Below average', color: '#b91c1c' };
+          ? { label: 'Borderline', color: t.gold800 }
+          : { label: 'Below average', color: errorColor };
 
   return (
     <Paper
       elevation={0}
       sx={{
         p: { xs: 2, md: 2.5 },
-        borderRadius: 2,
-        border: '1px solid',
-        borderColor: 'divider',
-        bgcolor: '#f0fdf4',
+        borderRadius: RADIUS,
+        border: `1px solid ${t.line}`,
+        bgcolor: t.surface,
       }}
     >
       <Stack direction="row" gap={1} alignItems="center" sx={{ mb: 1.5 }}>
-        <CalculateIcon sx={{ color: PRIMARY_GREEN }} />
+        <CalculateIcon aria-hidden sx={{ color: t.gold800 }} />
         <Typography variant="subtitle1" fontWeight={800}>
           KEAM B.Arch Merit Calculator
         </Typography>
@@ -75,7 +78,7 @@ export default function NataMeritCalculator() {
             <Chip
               label={`${result.nata} / 200`}
               size="small"
-              sx={{ bgcolor: PRIMARY_GREEN, color: 'white', fontWeight: 700 }}
+              sx={valueChipSx}
             />
           </Stack>
           <Stack direction="row" gap={2} alignItems="center">
@@ -85,15 +88,16 @@ export default function NataMeritCalculator() {
               min={0}
               max={200}
               step={1}
-              sx={{ color: PRIMARY_GREEN, flex: 1 }}
+              aria-label="NATA score out of 200"
+              sx={{ color: t.navy900, flex: 1 }}
             />
             <TextField
               type="number"
               value={Number.isFinite(nataRaw) ? nataRaw : 0}
               onChange={(e) => setNataRaw(parseFloat(e.target.value))}
               size="small"
-              sx={{ width: 90 }}
-              inputProps={{ min: 0, max: 200, step: 1, inputMode: 'numeric' }}
+              sx={numberFieldSx}
+              inputProps={{ min: 0, max: 200, step: 1, inputMode: 'numeric', 'aria-label': 'NATA score' }}
             />
           </Stack>
         </Box>
@@ -106,7 +110,7 @@ export default function NataMeritCalculator() {
             <Chip
               label={`${qualifyingPercent}% → ${result.qualifyingScaled} / 200`}
               size="small"
-              sx={{ bgcolor: PRIMARY_GREEN, color: 'white', fontWeight: 700 }}
+              sx={valueChipSx}
             />
           </Stack>
           <Stack direction="row" gap={2} alignItems="center">
@@ -116,15 +120,16 @@ export default function NataMeritCalculator() {
               min={0}
               max={100}
               step={1}
-              sx={{ color: PRIMARY_GREEN, flex: 1 }}
+              aria-label="10+2 percentage"
+              sx={{ color: t.navy900, flex: 1 }}
             />
             <TextField
               type="number"
               value={Number.isFinite(qualifyingPercent) ? qualifyingPercent : 0}
               onChange={(e) => setQualifyingPercent(parseFloat(e.target.value))}
               size="small"
-              sx={{ width: 90 }}
-              inputProps={{ min: 0, max: 100, step: 1, inputMode: 'decimal' }}
+              sx={numberFieldSx}
+              inputProps={{ min: 0, max: 100, step: 1, inputMode: 'decimal', 'aria-label': '10+2 percentage' }}
             />
           </Stack>
         </Box>
@@ -134,16 +139,19 @@ export default function NataMeritCalculator() {
         sx={{
           mt: 2.5,
           p: 2,
-          borderRadius: 2,
-          bgcolor: 'background.paper',
-          border: `2px solid ${PRIMARY_GREEN}`,
+          borderRadius: RADIUS,
+          bgcolor: t.ground,
+          border: `1px solid ${t.lineStrong}`,
+          borderLeft: 'none',
+          boxShadow: `inset 3px 0 0 ${t.gold500}`,
         }}
+        aria-live="polite"
       >
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
           Your KEAM B.Arch rank index
         </Typography>
         <Stack direction="row" alignItems="baseline" gap={1} flexWrap="wrap">
-          <Typography variant="h4" fontWeight={900} sx={{ color: PRIMARY_GREEN }}>
+          <Typography variant="h4" fontWeight={800} sx={{ color: t.navy900, fontFamily: t.fontMono }}>
             {result.total}
           </Typography>
           <Typography variant="body1" color="text.secondary">
@@ -152,7 +160,7 @@ export default function NataMeritCalculator() {
           <Chip
             label={band.label}
             size="small"
-            sx={{ bgcolor: band.color, color: 'white', fontWeight: 700, ml: 'auto' }}
+            sx={{ bgcolor: band.color, color: t.surface, fontWeight: 700, ml: 'auto' }}
           />
         </Stack>
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
@@ -160,9 +168,13 @@ export default function NataMeritCalculator() {
         </Typography>
       </Box>
 
-      <Alert severity="info" sx={{ mt: 2, borderRadius: 1.5 }}>
-        This is an indicative score, not your actual rank. CEE publishes the official B.Arch rank list separately at cee.kerala.gov.in. (Clause 9.7.4(c))
-      </Alert>
+      <Box sx={{ mt: 2 }}>
+        <Callout>
+          <Typography variant="body2" sx={{ m: 0 }}>
+            This is an indicative score, not your actual rank. CEE publishes the official B.Arch rank list separately at cee.kerala.gov.in. (Clause 9.7.4(c))
+          </Typography>
+        </Callout>
+      </Box>
     </Paper>
   );
 }

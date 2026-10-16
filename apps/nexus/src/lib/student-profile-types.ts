@@ -206,7 +206,13 @@ export interface StudentProfileCore {
   signIns: ProfileSignIn[];
   record: ProfileStudentRecord | null;
   classroom: { id: string; name: string | null };
+  /** A real application only: never the row the student's own Nexus profile page wrote. */
   application: ProfileApplication | null;
+  /**
+   * When there is no application: what the student typed on the Nexus profile
+   * page, if anything. Shown as their answers, not as a form.
+   */
+  profileDetails?: ProfileApplication | null;
   guardian: ProfileGuardian;
   parentAccess: ProfileParentAccess;
   documents: ProfileDocument[];

@@ -73,18 +73,36 @@ export async function GET(
     // backlog and there is no absence row to read. It stays gated: failing
     // closed leaves content that has always been quizzed exactly as it was.
     let obligation: { caught_up_at: string | null; excused_at: string | null } | null = null;
+    // How much the trim took out, so the screen can say "53:51 instead of
+    // 1:05:45". Only while the class is actually playing the trimmed copy.
+    let trimRemovedSeconds: number | null = null;
     if (recap.scheduled_class_id) {
-      const { data } = await supabase
-        .from('nexus_class_absences')
-        .select('caught_up_at, excused_at')
-        .eq('scheduled_class_id', recap.scheduled_class_id)
-        .eq('student_id', user.id)
-        .maybeSingle();
+      const [{ data }, { data: cls }] = await Promise.all([
+        supabase
+          .from('nexus_class_absences')
+          .select('caught_up_at, excused_at')
+          .eq('scheduled_class_id', recap.scheduled_class_id)
+          .eq('student_id', user.id)
+          .maybeSingle(),
+        supabase
+          .from('nexus_scheduled_classes')
+          .select('recording_trim_state, recording_trim_removed_seconds')
+          .eq('id', recap.scheduled_class_id)
+          .maybeSingle(),
+      ]);
       obligation = data ?? null;
+      if (cls?.recording_trim_state === 'applied') {
+        trimRemovedSeconds = Number(cls.recording_trim_removed_seconds) || null;
+      }
     }
     const watchMode = recap.scheduled_class_id ? watchModeFor(obligation) : 'gated';
 
-    return NextResponse.json({ recap, resources: resources || [], watch_mode: watchMode });
+    return NextResponse.json({
+      recap,
+      resources: resources || [],
+      watch_mode: watchMode,
+      trim_removed_seconds: trimRemovedSeconds,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load recap';
     return NextResponse.json({ error: message }, { status: 401 });

@@ -5,36 +5,20 @@ import { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
-  Paper,
-  Chip,
   Button,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  Divider,
   Skeleton,
-  Alert,
-  Stack,
   IconButton,
   useMediaQuery,
   useTheme,
 } from '@neram/ui';
-import {
-  PersonOutlined,
-  SchoolOutlined,
-  LocalOfferOutlined,
-  CardGiftcardOutlined,
-  ShareOutlined,
-  ScheduleOutlined,
-  CloseOutlined,
-  CheckCircleOutlined,
-  HourglassEmptyOutlined,
-  CancelOutlined,
-  PendingOutlined,
-  DeleteOutlined,
-  PaymentOutlined,
-} from '@mui/icons-material';
+import CloseOutlined from '@mui/icons-material/CloseOutlined';
+import { tokens as t } from '@/design-system';
+import { railCardSx } from './styles';
+import { APPLY_ERROR } from './shell/applyTheme';
 import { useFirebaseAuth } from '@neram/auth';
 
 // ============================================
@@ -131,17 +115,49 @@ const displayMappings: Record<string, Record<string, string>> = {
   },
 };
 
-const STATUS_CONFIG: Record<string, { label: string; color: 'default' | 'primary' | 'success' | 'warning' | 'error' | 'info'; icon: React.ReactElement }> = {
-  draft: { label: 'Draft', color: 'default', icon: <PendingOutlined fontSize="small" /> },
-  pending_verification: { label: 'Pending Verification', color: 'warning', icon: <HourglassEmptyOutlined fontSize="small" /> },
-  submitted: { label: 'Submitted', color: 'info', icon: <PendingOutlined fontSize="small" /> },
-  under_review: { label: 'Under Review', color: 'primary', icon: <HourglassEmptyOutlined fontSize="small" /> },
-  approved: { label: 'Approved', color: 'success', icon: <CheckCircleOutlined fontSize="small" /> },
-  rejected: { label: 'Rejected', color: 'error', icon: <CancelOutlined fontSize="small" /> },
-  deleted: { label: 'Deleted', color: 'default', icon: <DeleteOutlined fontSize="small" /> },
-  enrolled: { label: 'Enrolled', color: 'success', icon: <CheckCircleOutlined fontSize="small" /> },
-  partial_payment: { label: 'Partial Payment', color: 'warning', icon: <PaymentOutlined fontSize="small" /> },
+/** Status dot colours, shared with the dashboard's status pill. */
+export const STATUS_PILL: Record<string, { label: string; dot: string }> = {
+  draft: { label: 'Draft', dot: t.statusDraft },
+  pending_verification: { label: 'Pending verification', dot: t.statusReview },
+  submitted: { label: 'Submitted', dot: t.statusReview },
+  under_review: { label: 'Under review', dot: t.statusReview },
+  approved: { label: 'Approved', dot: t.statusDone },
+  rejected: { label: 'Rejected', dot: APPLY_ERROR },
+  deleted: { label: 'Deleted', dot: t.statusIdle },
+  enrolled: { label: 'Enrolled', dot: t.statusDone },
+  partial_payment: { label: 'Partial payment', dot: t.statusDraft },
 };
+
+/** Status pill: ground fill, 1px line, 100px radius, 13px/700 with an 8px dot. */
+export function ApplicationStatusPill({ status }: { status: string }) {
+  const config = STATUS_PILL[status] || STATUS_PILL.submitted;
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 1,
+        px: 1.5,
+        py: '5px',
+        flexShrink: 0,
+        borderRadius: `${t.radiusPill}px`,
+        border: `1px solid ${t.line}`,
+        bgcolor: t.ground,
+        fontSize: 13,
+        fontWeight: 700,
+        lineHeight: 1.3,
+        color: t.ink,
+        whiteSpace: 'nowrap',
+      }}
+    >
+      <Box component="span" aria-hidden sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: config.dot, flexShrink: 0 }} />
+      {config.label}
+    </Box>
+  );
+}
+
+const inr = (n: number | string | null | undefined) => `₹${Number(n || 0).toLocaleString('en-IN')}`;
 
 // ============================================
 // HELPERS
@@ -174,55 +190,48 @@ function formatPhone(phone: string | null | undefined): string | null {
 // SUB-COMPONENTS
 // ============================================
 
-function Section({ title, icon, children }: {
-  title: string;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-}) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  // A ruled group, as on the Review step: 1px ink rule, h3 17px/700, a <dl>.
   return (
-    <Paper variant="outlined" sx={{ p: { xs: 2, sm: 2.5 }, mb: 2 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
-        {icon}
-        <Typography variant="subtitle2" fontWeight={600} sx={{ fontSize: { xs: '0.875rem', sm: '0.9375rem' } }}>
-          {title}
-        </Typography>
-      </Box>
-      {children}
-    </Paper>
+    <Box component="section" sx={{ borderTop: `1px solid ${t.ink}`, pt: 2, pb: 2.5 }}>
+      <Typography component="h3" sx={{ m: 0, mb: 1, fontSize: 17, fontWeight: 700, color: t.ink }}>
+        {title}
+      </Typography>
+      <Box component="dl" sx={{ m: 0 }}>{children}</Box>
+    </Box>
   );
 }
 
 function InfoRow({ label, value }: { label: string; value: string | number | null | undefined }) {
   if (value == null || value === '') return null;
   return (
-    <Box sx={{ display: 'flex', py: 0.5 }}>
-      <Typography
-        variant="body2"
-        color="text.secondary"
-        sx={{ width: { xs: '40%', sm: '35%' }, flexShrink: 0, fontSize: '0.8125rem' }}
-      >
-        {label}
-      </Typography>
-      <Typography
-        variant="body2"
-        fontWeight={500}
-        sx={{ flex: 1, fontSize: '0.8125rem', wordBreak: 'break-word' }}
-      >
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: { xs: '1fr', sm: 'minmax(0, 38%) minmax(0, 1fr)' },
+        columnGap: 2,
+        rowGap: 0.25,
+        py: 1,
+        borderBottom: `1px solid ${t.line}`,
+      }}
+    >
+      <Box component="dt" sx={{ m: 0, fontSize: 13, lineHeight: 1.5, color: t.inkMuted }}>{label}</Box>
+      <Box component="dd" sx={{ m: 0, fontSize: 15, fontWeight: 600, lineHeight: 1.5, color: t.ink, overflowWrap: 'anywhere' }}>
         {value}
-      </Typography>
+      </Box>
     </Box>
   );
 }
 
 function SectionSkeleton() {
   return (
-    <Paper variant="outlined" sx={{ p: { xs: 2, sm: 2.5 }, mb: 2 }}>
-      <Skeleton variant="text" width="40%" height={24} sx={{ mb: 1.5 }} />
-      <Skeleton variant="text" width="100%" height={20} sx={{ mb: 0.5 }} />
-      <Skeleton variant="text" width="80%" height={20} sx={{ mb: 0.5 }} />
-      <Skeleton variant="text" width="90%" height={20} sx={{ mb: 0.5 }} />
-      <Skeleton variant="text" width="70%" height={20} />
-    </Paper>
+    <Box sx={{ borderTop: `1px solid ${t.line}`, pt: 2, pb: 2.5 }}>
+      <Skeleton variant="text" width="40%" height={26} sx={{ mb: 1 }} />
+      <Skeleton variant="text" width="100%" height={22} />
+      <Skeleton variant="text" width="80%" height={22} />
+      <Skeleton variant="text" width="90%" height={22} />
+      <Skeleton variant="text" width="70%" height={22} />
+    </Box>
   );
 }
 
@@ -325,7 +334,7 @@ export default function ViewApplicationDialog({
   }, [open]);
 
   const app = details?.application;
-  const statusConfig = status ? STATUS_CONFIG[status] : null;
+  const focusSx = { '&.Mui-focusVisible, &:focus-visible': { outline: t.focusOutline, outlineOffset: '2px' } } as const;
 
   return (
     <Dialog
@@ -334,222 +343,169 @@ export default function ViewApplicationDialog({
       maxWidth="sm"
       fullWidth
       fullScreen={fullScreen}
+      aria-labelledby="view-application-title"
       PaperProps={{
-        sx: fullScreen ? {} : { maxHeight: '90vh' },
+        sx: fullScreen ? { borderRadius: 0 } : { maxHeight: '90vh' },
       }}
     >
-      {/* Header */}
       <DialogTitle
         component="div"
-        sx={{ pb: 1, pr: 6 }}
+        sx={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 2,
+          pr: 1.5,
+          borderBottom: `1px solid ${t.line}`,
+        }}
       >
-        <Typography variant="h6" fontWeight={600} sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }}>
-          Application Details
-        </Typography>
-        {applicationNumber && (
-          <Typography variant="body2" color="text.secondary" sx={{ fontFamily: 'monospace', mt: 0.25 }}>
-            {applicationNumber}
+        <Box sx={{ minWidth: 0 }}>
+          <Typography component="h2" id="view-application-title" sx={{ m: 0, fontSize: '1.25rem', fontWeight: 800, color: t.ink }}>
+            Application details
           </Typography>
-        )}
-        <IconButton
-          onClick={onClose}
-          sx={{ position: 'absolute', right: 8, top: 8 }}
-          aria-label="close"
-        >
+          {(applicationNumber || status) && (
+            <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1.25, mt: 0.75 }}>
+              {applicationNumber && (
+                <Typography component="span" sx={{ fontFamily: t.fontMono, fontSize: 14, fontWeight: 700, color: t.inkMuted }}>
+                  {applicationNumber}
+                </Typography>
+              )}
+              {status && <ApplicationStatusPill status={status} />}
+            </Box>
+          )}
+        </Box>
+        <IconButton onClick={onClose} aria-label="Close" sx={{ width: 44, height: 44, flexShrink: 0, color: t.ink, ...focusSx }}>
           <CloseOutlined />
         </IconButton>
       </DialogTitle>
 
-      <DialogContent dividers sx={{ p: { xs: 2, sm: 3 } }}>
-        {/* Error state */}
+      <DialogContent sx={{ px: { xs: 2, sm: 3 }, pt: '20px !important', pb: 1 }}>
         {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
+          <Box role="alert" sx={{ ...railCardSx(APPLY_ERROR), mb: 2, fontSize: 14, color: t.ink }}>
             {error}
-          </Alert>
+          </Box>
         )}
 
-        {/* Loading state */}
         {loading && (
-          <Box>
+          <Box aria-busy="true" aria-label="Loading application details">
             <SectionSkeleton />
             <SectionSkeleton />
             <SectionSkeleton />
           </Box>
         )}
 
-        {/* Content */}
         {!loading && details && app && (
           <Box>
-            {/* Status Bar */}
-            {statusConfig && (
-              <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="body2" color="text.secondary">Status:</Typography>
-                <Chip
-                  size="small"
-                  icon={statusConfig.icon}
-                  label={statusConfig.label}
-                  color={statusConfig.color}
-                />
-              </Box>
-            )}
-
-            {/* Section 1: Personal Details */}
-            <Section title="Personal Details" icon={<PersonOutlined color="primary" fontSize="small" />}>
-              <InfoRow label="Full Name" value={app.full_name} />
+            <Section title="Personal details">
+              <InfoRow label="Full name" value={app.full_name} />
               <InfoRow label="Email" value={app.email} />
               <InfoRow label="Phone" value={formatPhone(app.phone)} />
-              <InfoRow label="Date of Birth" value={formatDate(app.date_of_birth)} />
+              <InfoRow label="Date of birth" value={formatDate(app.date_of_birth)} />
               <InfoRow label="Gender" value={getDisplayValue('gender', app.gender)} />
-              {(app.address || app.city || app.state || app.pincode) && (
-                <>
-                  <Divider sx={{ my: 1 }} />
-                  <InfoRow label="Address" value={app.address} />
-                  <InfoRow label="City" value={app.city} />
-                  <InfoRow label="State" value={app.state} />
-                  <InfoRow label="Pincode" value={app.pincode} />
-                </>
-              )}
+              <InfoRow label="Address" value={app.address} />
+              <InfoRow label="City" value={app.city} />
+              <InfoRow label="State" value={app.state} />
+              <InfoRow label="Pincode" value={app.pincode} />
             </Section>
 
-            {/* Section 2: Education */}
-            <Section title="Education" icon={<SchoolOutlined color="primary" fontSize="small" />}>
+            <Section title="Education">
               <InfoRow label="Category" value={getDisplayValue('applicantCategory', app.applicant_category)} />
-              <InfoRow label="School Name" value={app.school_name} />
+              <InfoRow label="School name" value={app.school_name} />
               <InfoRow label="Board" value={getDisplayValue('board', app.board)} />
               <InfoRow label="Class" value={getDisplayValue('currentClass', app.current_class)} />
               <InfoRow label="Stream" value={app.stream ? app.stream.charAt(0).toUpperCase() + app.stream.slice(1) : null} />
-              <Divider sx={{ my: 1 }} />
-              <InfoRow label="Course Interest" value={getDisplayValue('courseInterest', app.course_interest || app.interest_course)} />
-              <InfoRow label="Batch Preference" value={getDisplayValue('batchPreference', app.batch_preference)} />
-              <InfoRow label="Learning Mode" value={getDisplayValue('learningMode', app.learning_mode)} />
-              <InfoRow label="Target Exam Year" value={app.target_exam_year} />
-              <InfoRow label="School Type" value={getDisplayValue('schoolType', app.school_type)} />
-              <InfoRow label="Caste Category" value={getDisplayValue('casteCategory', app.caste_category)} />
+              <InfoRow label="Course interest" value={getDisplayValue('courseInterest', app.course_interest || app.interest_course)} />
+              <InfoRow label="Batch preference" value={getDisplayValue('batchPreference', app.batch_preference)} />
+              <InfoRow label="Learning mode" value={getDisplayValue('learningMode', app.learning_mode)} />
+              <InfoRow label="Target exam year" value={app.target_exam_year} />
+              <InfoRow label="School type" value={getDisplayValue('schoolType', app.school_type)} />
+              <InfoRow label="Caste category" value={getDisplayValue('casteCategory', app.caste_category)} />
             </Section>
 
-            {/* Section 3: Scholarship (conditional) */}
             {(details.scholarship || app.scholarship_eligible) && (
-              <Section title="Scholarship" icon={<LocalOfferOutlined color="success" fontSize="small" />}>
+              <Section title="Scholarship">
                 {details.scholarship ? (
                   <>
                     {details.scholarship.scholarship_percentage > 0 && (
-                      <Alert severity="success" sx={{ mb: 1.5, py: 0.5 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <Typography variant="body2">
-                            Eligible for {details.scholarship.scholarship_percentage}% scholarship
-                          </Typography>
-                          <Chip
-                            label={`${details.scholarship.scholarship_percentage}% OFF`}
-                            color="success"
-                            size="small"
-                            sx={{ fontWeight: 600, ml: 1 }}
-                          />
-                        </Box>
-                      </Alert>
+                      <InfoRow label="Eligible for" value={`${details.scholarship.scholarship_percentage}% scholarship`} />
                     )}
-                    <InfoRow label="Government School" value={details.scholarship.is_government_school ? 'Yes' : 'No'} />
-                    <InfoRow label="Years in Govt School" value={details.scholarship.government_school_years || null} />
-                    <InfoRow label="Low Income" value={details.scholarship.is_low_income ? 'Yes' : 'No'} />
-                    <InfoRow label="School ID Card" value={details.scholarship.school_id_card_url ? 'Uploaded' : 'Not uploaded'} />
+                    <InfoRow label="Government school" value={details.scholarship.is_government_school ? 'Yes' : 'No'} />
+                    <InfoRow label="Years in govt school" value={details.scholarship.government_school_years || null} />
+                    <InfoRow label="Low income" value={details.scholarship.is_low_income ? 'Yes' : 'No'} />
+                    <InfoRow label="School ID card" value={details.scholarship.school_id_card_url ? 'Uploaded' : 'Not uploaded'} />
                     {details.scholarship.is_low_income && (
-                      <InfoRow label="Income Certificate" value={details.scholarship.income_certificate_url ? 'Uploaded' : 'Not uploaded'} />
+                      <InfoRow label="Income certificate" value={details.scholarship.income_certificate_url ? 'Uploaded' : 'Not uploaded'} />
                     )}
-                    <Divider sx={{ my: 1 }} />
-                    <InfoRow label="Scholarship Status" value={getDisplayValue('scholarshipStatus', details.scholarship.scholarship_status)} />
+                    <InfoRow label="Scholarship status" value={getDisplayValue('scholarshipStatus', details.scholarship.scholarship_status)} />
                     {details.scholarship.approved_fee != null && (
-                      <InfoRow label="Approved Fee" value={`Rs. ${Number(details.scholarship.approved_fee).toLocaleString('en-IN')}`} />
+                      <InfoRow label="Approved fee" value={inr(details.scholarship.approved_fee)} />
                     )}
                   </>
                 ) : (
-                  <Typography variant="body2" color="text.secondary">
-                    You are eligible for scholarship. Submit your documents to apply.
-                  </Typography>
+                  <InfoRow label="Status" value="You are eligible for scholarship. Submit your documents to apply." />
                 )}
               </Section>
             )}
 
-            {/* Section 4: Cashback Offers (conditional) */}
             {(details.cashbackClaims.length > 0 || app.total_cashback_eligible > 0) && (
-              <Section title="Cashback Offers" icon={<CardGiftcardOutlined color="primary" fontSize="small" />}>
-                {details.cashbackClaims.length > 0 ? (
-                  <Stack spacing={1}>
-                    {details.cashbackClaims.map((claim: Record<string, any>, index: number) => (
-                      <Box key={index} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <Box>
-                          <Typography variant="body2" sx={{ fontSize: '0.8125rem' }}>
-                            {getDisplayValue('cashbackType', claim.cashback_type) || claim.cashback_type}
-                          </Typography>
-                          {claim.instagram_username && (
-                            <Typography variant="caption" color="text.secondary">
-                              @{claim.instagram_username}
-                            </Typography>
-                          )}
-                        </Box>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Chip
-                            label={`Rs. ${claim.amount}`}
-                            size="small"
-                            color={claim.status === 'processed' ? 'success' : claim.status === 'verified' ? 'info' : 'default'}
-                            sx={{ fontWeight: 600, fontSize: '0.75rem' }}
-                          />
-                          <Chip
-                            label={getDisplayValue('cashbackStatus', claim.status) || claim.status}
-                            size="small"
-                            variant="outlined"
-                            sx={{ fontSize: '0.65rem', height: 22 }}
-                          />
-                        </Box>
-                      </Box>
-                    ))}
-                    <Divider />
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Typography variant="body2" fontWeight={600} sx={{ fontSize: '0.8125rem' }}>
-                        Total Cashback Eligible
-                      </Typography>
-                      <Chip label={`Rs. ${app.total_cashback_eligible || 0}`} color="primary" size="small" />
-                    </Box>
-                  </Stack>
-                ) : (
-                  <InfoRow label="Total Cashback" value={`Rs. ${app.total_cashback_eligible || 0}`} />
-                )}
+              <Section title="Cashback offers">
+                {details.cashbackClaims.map((claim: Record<string, any>, index: number) => (
+                  <InfoRow
+                    key={index}
+                    label={`${getDisplayValue('cashbackType', claim.cashback_type) || claim.cashback_type}${claim.instagram_username ? ` (@${claim.instagram_username})` : ''}`}
+                    value={`${inr(claim.amount)} · ${getDisplayValue('cashbackStatus', claim.status) || claim.status}`}
+                  />
+                ))}
+                <InfoRow label="Total cashback eligible" value={inr(app.total_cashback_eligible)} />
               </Section>
             )}
 
-            {/* Section 5: How You Found Us */}
             {details.sourceTracking && (
-              <Section title="How You Found Us" icon={<ShareOutlined color="action" fontSize="small" />}>
+              <Section title="How you found us">
                 <InfoRow label="Source" value={getDisplayValue('sourceCategory', details.sourceTracking.source_category)} />
                 <InfoRow label="Details" value={details.sourceTracking.source_detail} />
                 {details.sourceTracking.source_category === 'friend_referral' && (
                   <>
-                    <InfoRow label="Referred By" value={details.sourceTracking.friend_referral_name} />
-                    <InfoRow label="Referral Phone" value={formatPhone(details.sourceTracking.friend_referral_phone)} />
+                    <InfoRow label="Referred by" value={details.sourceTracking.friend_referral_name} />
+                    <InfoRow label="Referral phone" value={formatPhone(details.sourceTracking.friend_referral_phone)} />
                   </>
                 )}
               </Section>
             )}
 
-            {/* Section 6: Application Timeline */}
-            <Section title="Application Timeline" icon={<ScheduleOutlined color="action" fontSize="small" />}>
+            <Section title="Application timeline">
               <InfoRow label="Created" value={formatDate(app.created_at)} />
               <InfoRow label="Submitted" value={formatDate(app.form_completed_at)} />
-              <InfoRow label="Form Progress" value={app.form_step_completed ? `${app.form_step_completed} / 6 steps completed` : null} />
-              {app.final_fee != null && (
-                <>
-                  <Divider sx={{ my: 1 }} />
-                  <InfoRow label="Assigned Fee" value={`Rs. ${Number(app.final_fee).toLocaleString('en-IN')}`} />
-                  {app.full_payment_discount != null && Number(app.full_payment_discount) > 0 && (
-                    <InfoRow label="Full Payment Discount" value={`Rs. ${Number(app.full_payment_discount).toLocaleString('en-IN')}`} />
-                  )}
-                </>
+              <InfoRow label="Form progress" value={app.form_step_completed ? `${app.form_step_completed} of 6 steps completed` : null} />
+              {app.final_fee != null && <InfoRow label="Assigned fee" value={inr(app.final_fee)} />}
+              {app.final_fee != null && app.full_payment_discount != null && Number(app.full_payment_discount) > 0 && (
+                <InfoRow label="Full payment discount" value={inr(app.full_payment_discount)} />
               )}
             </Section>
           </Box>
         )}
       </DialogContent>
 
-      <DialogActions sx={{ px: { xs: 2, sm: 3 }, py: 1.5 }}>
-        <Button onClick={onClose} sx={{ minHeight: 40 }}>Close</Button>
+      <DialogActions sx={{ px: { xs: 2, sm: 3 }, py: 1.5, borderTop: `1px solid ${t.line}` }}>
+        <Button
+          variant="outlined"
+          onClick={onClose}
+          sx={{
+            minHeight: 44,
+            px: 2.5,
+            borderRadius: `${t.radius}px`,
+            border: `1px solid ${t.lineStrong}`,
+            bgcolor: t.surface,
+            color: t.ink,
+            fontSize: 15,
+            fontWeight: 700,
+            textTransform: 'none',
+            '&:hover': { bgcolor: t.navy900, color: t.paper, borderColor: t.navy900 },
+            ...focusSx,
+          }}
+        >
+          Close
+        </Button>
       </DialogActions>
     </Dialog>
   );

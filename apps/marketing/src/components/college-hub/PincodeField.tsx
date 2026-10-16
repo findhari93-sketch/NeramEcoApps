@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Box, Chip, CircularProgress, Stack, TextField, Typography } from '@mui/material';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
+import { tokens } from '@/design-system';
 
 interface PincodeFieldProps {
   value: string;
@@ -101,7 +102,7 @@ export default function PincodeField({
       {status === 'loading' && (
         <Stack direction="row" gap={1} alignItems="center" sx={{ pl: 0.5 }}>
           <CircularProgress size={14} />
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" color={tokens.inkMuted}>
             Looking up pincode...
           </Typography>
         </Stack>
@@ -118,7 +119,7 @@ export default function PincodeField({
       )}
       {status === 'error' && error && (
         <Box>
-          <Typography variant="caption" color="warning.main" sx={{ display: 'block', mb: 0.75 }}>
+          <Typography variant="caption" sx={{ color: tokens.gold800, display: 'block', mb: 0.75 }}>
             {error}
           </Typography>
           {onManualCityChange && (

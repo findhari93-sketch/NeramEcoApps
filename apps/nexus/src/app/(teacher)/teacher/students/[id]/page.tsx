@@ -453,6 +453,7 @@ export default function StudentProfilePage() {
 
       <ApplicationSection
         application={core.application}
+        profileDetails={core.profileDetails ?? null}
         ask={{
           studentId: core.student.id,
           studentName: core.student.name ?? null,

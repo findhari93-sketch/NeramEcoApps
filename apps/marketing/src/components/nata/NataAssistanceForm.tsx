@@ -19,6 +19,8 @@ interface NataAssistanceFormProps {
   defaultDistrict?: string;
   /** Identifies which page the form was submitted from (e.g. 'nata-coaching/chennai'). */
   source?: string;
+  /** Drop the Card chrome when the form already sits inside a card (T6 lead card). */
+  bare?: boolean;
 }
 
 const categories = [
@@ -31,7 +33,7 @@ const categories = [
   { value: 'transgender', label: 'Transgender' },
 ];
 
-export function NataAssistanceForm({ locale, defaultDistrict, source }: NataAssistanceFormProps) {
+export function NataAssistanceForm({ locale, defaultDistrict, source, bare = false }: NataAssistanceFormProps) {
   const [formData, setFormData] = useState({
     student_name: '',
     phone: '',
@@ -108,82 +110,85 @@ export function NataAssistanceForm({ locale, defaultDistrict, source }: NataAssi
     );
   }
 
+  const form = (
+    <Box component="form" onSubmit={handleSubmit}>
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+
+      <TextField
+        fullWidth
+        required
+        label="Student Name"
+        name="student_name"
+        value={formData.student_name}
+        onChange={handleChange}
+        sx={{ mb: 2 }}
+        inputProps={{ minLength: 2 }}
+      />
+      <TextField
+        fullWidth
+        required
+        label="Phone Number"
+        name="phone"
+        value={formData.phone}
+        onChange={handleChange}
+        placeholder="9876543210"
+        type="tel"
+        sx={{ mb: 2 }}
+        inputProps={{ maxLength: 10 }}
+      />
+      <TextField
+        fullWidth
+        label="District"
+        name="district"
+        value={formData.district}
+        onChange={handleChange}
+        sx={{ mb: 2 }}
+      />
+      <TextField
+        fullWidth
+        label="School Name"
+        name="school_name"
+        value={formData.school_name}
+        onChange={handleChange}
+        sx={{ mb: 2 }}
+      />
+      <TextField
+        fullWidth
+        select
+        label="Category"
+        name="category"
+        value={formData.category}
+        onChange={handleChange}
+        sx={{ mb: 3 }}
+      >
+        {categories.map((cat) => (
+          <MenuItem key={cat.value} value={cat.value}>
+            {cat.label}
+          </MenuItem>
+        ))}
+      </TextField>
+
+      <Button
+        type="submit"
+        variant="contained"
+        fullWidth
+        size="large"
+        disabled={submitting}
+        sx={{ fontWeight: 600 }}
+      >
+        {submitting ? 'Submitting...' : 'Get Help with NATA Application'}
+      </Button>
+    </Box>
+  );
+
+  if (bare) return form;
   return (
     <Card>
-      <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-        <Box component="form" onSubmit={handleSubmit}>
-          {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
-              {error}
-            </Alert>
-          )}
-
-          <TextField
-            fullWidth
-            required
-            label="Student Name"
-            name="student_name"
-            value={formData.student_name}
-            onChange={handleChange}
-            sx={{ mb: 2 }}
-            inputProps={{ minLength: 2 }}
-          />
-          <TextField
-            fullWidth
-            required
-            label="Phone Number"
-            name="phone"
-            value={formData.phone}
-            onChange={handleChange}
-            placeholder="9876543210"
-            type="tel"
-            sx={{ mb: 2 }}
-            inputProps={{ maxLength: 10 }}
-          />
-          <TextField
-            fullWidth
-            label="District"
-            name="district"
-            value={formData.district}
-            onChange={handleChange}
-            sx={{ mb: 2 }}
-          />
-          <TextField
-            fullWidth
-            label="School Name"
-            name="school_name"
-            value={formData.school_name}
-            onChange={handleChange}
-            sx={{ mb: 2 }}
-          />
-          <TextField
-            fullWidth
-            select
-            label="Category"
-            name="category"
-            value={formData.category}
-            onChange={handleChange}
-            sx={{ mb: 3 }}
-          >
-            {categories.map((cat) => (
-              <MenuItem key={cat.value} value={cat.value}>
-                {cat.label}
-              </MenuItem>
-            ))}
-          </TextField>
-
-          <Button
-            type="submit"
-            variant="contained"
-            fullWidth
-            size="large"
-            disabled={submitting}
-            sx={{ fontWeight: 600 }}
-          >
-            {submitting ? 'Submitting...' : 'Get Help with NATA Application'}
-          </Button>
-        </Box>
-      </CardContent>
+      <CardContent sx={{ p: { xs: 3, md: 4 } }}>{form}</CardContent>
     </Card>
   );
 }

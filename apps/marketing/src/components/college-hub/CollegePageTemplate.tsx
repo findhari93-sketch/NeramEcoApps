@@ -3,7 +3,6 @@
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { Box, Grid, Paper, Stack, Typography } from '@mui/material';
-import { alpha } from '@mui/material/styles';
 import CheckIcon from '@mui/icons-material/Check';
 import PeopleIcon from '@mui/icons-material/People';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
@@ -41,6 +40,7 @@ import type {
   CollegeReview,
   CollegeTier,
 } from '@/lib/college-hub/types';
+import { tokens } from '@/design-system';
 
 const AintraChat = dynamic(() => import('./AintraChat'), { ssr: false });
 const VirtualTour = dynamic(() => import('./VirtualTour'), { ssr: false });
@@ -76,8 +76,8 @@ interface CollegePageTemplateProps {
 
 function RelatedLinks({ links, title }: { links: InternalLink[]; title: string }) {
   return (
-    <Paper variant="outlined" component="nav" aria-label="Related pages" sx={{ borderRadius: { xs: 0, md: 2 }, borderLeft: { xs: 0, md: '1px solid' }, borderRight: { xs: 0, md: '1px solid' }, borderColor: 'divider', overflow: 'hidden' }}>
-      <Typography component="p" sx={{ m: 0, px: 2.5, pt: 2, pb: 1, fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'text.secondary' }}>
+    <Paper variant="outlined" component="nav" aria-label="Related pages" sx={{ borderRadius: { xs: 0, md: 1 }, borderLeft: { xs: 0, md: '1px solid' }, borderRight: { xs: 0, md: '1px solid' }, borderColor: tokens.line, overflow: 'hidden' }}>
+      <Typography component="p" sx={{ m: 0, px: 2.5, pt: 2, pb: 1, fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: tokens.inkMuted }}>
         {title}
       </Typography>
       <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, pb: 0.5 }}>
@@ -95,18 +95,18 @@ function RelatedLinks({ links, title }: { links: InternalLink[]; title: string }
                 minHeight: 48,
                 px: 2.5,
                 py: 1,
-                color: 'primary.dark',
+                color: tokens.navy900,
                 textDecoration: 'none',
                 fontSize: '0.94rem',
                 fontWeight: 600,
                 lineHeight: 1.4,
                 transition: 'background-color 150ms',
-                '&:hover': { bgcolor: 'action.hover' },
-                '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 },
+                '&:hover': { bgcolor: tokens.surfaceHover },
+                '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: -2 },
               }}
             >
               <span>{l.label}</span>
-              <ChevronRightIcon sx={{ fontSize: 20, color: 'text.secondary', flexShrink: 0 }} aria-hidden />
+              <ChevronRightIcon sx={{ fontSize: 20, color: tokens.inkMuted, flexShrink: 0 }} aria-hidden />
             </Box>
           </Box>
         ))}
@@ -168,9 +168,9 @@ export default function CollegePageTemplate({ college, similarColleges, content 
   ].filter(Boolean) as SectionTab[];
 
   return (
-    <Box sx={{ bgcolor: (t) => (t.palette.mode === 'light' ? t.palette.grey[50] : t.palette.background.default) }}>
+    <Box sx={{ bgcolor: tokens.ground }}>
       {/* Breadcrumbs: the same list as the BreadcrumbList JSON-LD */}
-      <Box sx={{ bgcolor: 'background.paper' }}>
+      <Box sx={{ bgcolor: tokens.surface }}>
         <Box sx={{ maxWidth: 1360, mx: 'auto', px: { xs: 2, md: 4 }, pt: { xs: 1.5, md: 2 } }}>
           <Breadcrumbs items={content.breadcrumbs} />
         </Box>
@@ -198,7 +198,7 @@ export default function CollegePageTemplate({ college, similarColleges, content 
           {hasAbout && (
             <ProfileSection id="overview" title="Overview" action={<ProvidedByCollege college={college} section="profile" />}>
               {college.about && (
-                <Typography sx={{ m: 0, fontSize: '1rem', lineHeight: 1.7, color: 'text.secondary', maxWidth: 780, textWrap: 'pretty' }}>{college.about}</Typography>
+                <Typography sx={{ m: 0, fontSize: '1rem', lineHeight: 1.7, color: tokens.inkMuted, maxWidth: 780, textWrap: 'pretty' }}>{college.about}</Typography>
               )}
               {highlights.length > 0 && (
                 <>
@@ -208,7 +208,7 @@ export default function CollegePageTemplate({ college, similarColleges, content 
                   <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(300px, 100%), 1fr))', gap: '10px 24px' }}>
                     {highlights.map((h, i) => (
                       <Box component="li" key={i} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.25, fontSize: '0.95rem', lineHeight: 1.5 }}>
-                        <Box aria-hidden sx={{ flex: '0 0 22px', width: 22, height: 22, mt: '1px', borderRadius: '50%', bgcolor: 'success.light', color: 'success.dark', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <Box aria-hidden sx={{ flex: '0 0 22px', width: 22, height: 22, mt: '1px', borderRadius: '50%', bgcolor: tokens.surface, boxShadow: `inset 0 0 0 1px ${tokens.success}`, color: tokens.success, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <CheckIcon sx={{ fontSize: 14 }} />
                         </Box>
                         <span>{h}</span>
@@ -226,23 +226,23 @@ export default function CollegePageTemplate({ college, similarColleges, content 
             <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap: 1.75 }}>
               <EligibilityCard exams={exams} />
               {hasCutoffs ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, p: { xs: 1.75, md: 2.25 }, borderRadius: 2, bgcolor: (t) => alpha(t.palette.success.main, 0.08) }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, p: { xs: 1.75, md: 2.25 }, borderRadius: 1, bgcolor: tokens.surface, boxShadow: `inset 3px 0 0 ${tokens.success}, inset 0 0 0 1px ${tokens.line}` }}>
                   <Typography component="h3" sx={{ m: 0, fontSize: '1rem', fontWeight: 700 }}>
                     Cutoff {content.cutoffYear ?? ''}
                   </Typography>
-                  <Typography sx={{ m: 0, fontSize: '0.92rem', lineHeight: 1.5, color: 'text.secondary' }}>
+                  <Typography sx={{ m: 0, fontSize: '0.92rem', lineHeight: 1.5, color: tokens.inkMuted }}>
                     Closing ranks and scores by category, from {joinOr(content.cutoffTables.map((t) => t.label))}.
                   </Typography>
-                  <Box component="a" href="#cutoffs" sx={{ alignSelf: 'flex-start', minHeight: 40, display: 'flex', alignItems: 'center', fontSize: '0.9rem', fontWeight: 700, color: 'primary.dark', textDecoration: 'none' }}>
+                  <Box component="a" href="#cutoffs" sx={{ alignSelf: 'flex-start', minHeight: 40, display: 'flex', alignItems: 'center', fontSize: '0.9rem', fontWeight: 700, color: tokens.navy900, textDecoration: 'none' }}>
                     See the cutoffs
                   </Box>
                 </Box>
               ) : (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, p: { xs: 1.75, md: 2.25 }, borderRadius: 2, border: '1px solid', borderColor: (t) => alpha(t.palette.secondary.main, 0.35), bgcolor: (t) => alpha(t.palette.secondary.main, 0.06) }}>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, p: { xs: 1.75, md: 2.25 }, borderRadius: 1, border: '1px solid', borderColor: tokens.goldTintBorder, bgcolor: tokens.goldTintBg }}>
                   <Typography component="h3" sx={{ m: 0, fontSize: '1rem', fontWeight: 700 }}>
                     {systems[0] ? `${systems[0]} cutoff` : 'Cutoff'}
                   </Typography>
-                  <Typography sx={{ m: 0, fontSize: '0.92rem', lineHeight: 1.5, color: 'text.secondary' }}>
+                  <Typography sx={{ m: 0, fontSize: '0.92rem', lineHeight: 1.5, color: tokens.inkMuted }}>
                     Not published for this college yet. We add it once {systems[0] ?? 'the counselling authority'} releases the allotment list.
                   </Typography>
                 </Box>
@@ -273,8 +273,8 @@ export default function CollegePageTemplate({ college, similarColleges, content 
                   ]
                     .filter((r) => !!r.value)
                     .map((r) => (
-                      <Box key={r.label} sx={{ p: 2, borderRadius: 2, bgcolor: 'action.hover' }}>
-                        <Typography component="dt" sx={{ fontSize: '0.85rem', color: 'text.secondary' }}>{r.label}</Typography>
+                      <Box key={r.label} sx={{ p: 2, borderRadius: 1, bgcolor: tokens.surfaceHover }}>
+                        <Typography component="dt" sx={{ fontSize: '0.85rem', color: tokens.inkMuted }}>{r.label}</Typography>
                         <Typography component="dd" sx={{ m: 0, fontWeight: 700, fontSize: '1.25rem' }}>{feeText(r.value as number)} a year</Typography>
                       </Box>
                     ))}
@@ -307,15 +307,15 @@ export default function CollegePageTemplate({ college, similarColleges, content 
               <Grid container spacing={1.5}>
                 {college.faculty.map((f) => (
                   <Grid key={f.id} item xs={12} sm={6}>
-                    <Stack direction="row" gap={1.5} alignItems="center" sx={{ p: 1.5, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
-                      <Box sx={{ width: 40, height: 40, borderRadius: '50%', bgcolor: 'action.hover', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <PeopleIcon aria-hidden sx={{ fontSize: 20, color: 'text.secondary' }} />
+                    <Stack direction="row" gap={1.5} alignItems="center" sx={{ p: 1.5, borderRadius: 1, border: '1px solid', borderColor: tokens.line }}>
+                      <Box sx={{ width: 40, height: 40, borderRadius: '50%', bgcolor: tokens.surfaceHover, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <PeopleIcon aria-hidden sx={{ fontSize: 20, color: tokens.inkMuted }} />
                       </Box>
                       <Box>
                         <Typography sx={{ fontSize: '0.92rem', fontWeight: 600 }}>{f.name}</Typography>
-                        <Typography sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>{[f.designation, f.specialization].filter(Boolean).join(' · ')}</Typography>
+                        <Typography sx={{ fontSize: '0.8rem', color: tokens.inkMuted }}>{[f.designation, f.specialization].filter(Boolean).join(' · ')}</Typography>
                         {f.is_practicing_architect && (
-                          <Typography sx={{ fontSize: '0.8rem', color: 'success.dark', fontWeight: 600 }}>Practising architect</Typography>
+                          <Typography sx={{ fontSize: '0.8rem', color: tokens.success, fontWeight: 600 }}>Practising architect</Typography>
                         )}
                       </Box>
                     </Stack>
@@ -346,7 +346,7 @@ export default function CollegePageTemplate({ college, similarColleges, content 
             component="section"
             id="qa"
             aria-label="Questions and answers"
-            sx={{ scrollMarginTop: 'calc(var(--broadcast-banner-height, 0px) + 64px)', bgcolor: 'background.paper', border: { md: '1px solid' }, borderColor: { md: 'divider' }, borderRadius: { xs: 0, md: 2 }, px: { xs: 2, md: 3.5 }, py: { xs: 2.5, md: 3.5 } }}
+            sx={{ scrollMarginTop: 'calc(var(--broadcast-banner-height, 0px) + 64px)', bgcolor: tokens.surface, border: { md: '1px solid' }, borderColor: { md: tokens.line }, borderRadius: { xs: 0, md: 1 }, px: { xs: 2, md: 3.5 }, py: { xs: 2.5, md: 3.5 } }}
           >
             <CommentSection collegeId={college.id} collegeName={college.name} initialComments={content.initialComments} />
           </Box>
@@ -371,12 +371,12 @@ export default function CollegePageTemplate({ college, similarColleges, content 
             <Box
               component="aside"
               aria-label="Claim this profile"
-              sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px 20px', px: { xs: 2, md: 2.75 }, py: 2.25, bgcolor: 'background.paper', border: { md: '1px solid' }, borderColor: { md: 'divider' }, borderRadius: { xs: 0, md: 2 } }}
+              sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '12px 20px', px: { xs: 2, md: 2.75 }, py: 2.25, bgcolor: tokens.surface, border: { md: '1px solid' }, borderColor: { md: tokens.line }, borderRadius: { xs: 0, md: 1 } }}
             >
-              <Typography sx={{ m: 0, fontSize: '0.94rem', color: 'text.secondary' }}>
-                <Box component="b" sx={{ color: 'text.primary' }}>Work at {short}?</Box> Claim this profile to update details and answer student questions.
+              <Typography sx={{ m: 0, fontSize: '0.94rem', color: tokens.inkMuted }}>
+                <Box component="b" sx={{ color: tokens.ink }}>Work at {short}?</Box> Claim this profile to update details and answer student questions.
               </Typography>
-              <Box component="a" href="/college-dashboard/login?request=1" sx={{ display: 'flex', alignItems: 'center', minHeight: 44, px: 2, border: '1px solid', borderColor: 'grey.400', borderRadius: 1.5, color: 'text.primary', fontSize: '0.9rem', fontWeight: 600, textDecoration: 'none', '&:hover': { bgcolor: 'action.hover' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}>
+              <Box component="a" href="/college-dashboard/login?request=1" sx={{ display: 'flex', alignItems: 'center', minHeight: 44, px: 2, border: '1px solid', borderColor: tokens.lineStrong, borderRadius: 1, color: tokens.ink, fontSize: '0.9rem', fontWeight: 600, textDecoration: 'none', '&:hover': { bgcolor: tokens.surfaceHover }, '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } }}>
                 Claim profile
               </Box>
             </Box>

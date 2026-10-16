@@ -1,14 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  Box,
-  Button,
-  Paper,
-  TextField,
-  Typography,
-} from '@neram/ui';
-import Link from 'next/link';
+import { TextField } from '@neram/ui';
+import { CtaButton, QuickCheck, QuickCheckResult } from '@/design-system';
+
+const FULL_TOOL = 'https://app.neramclasses.com/tools/counseling/rank-predictor';
 
 const RANK_RANGES: Array<{ minScore: number; rankLow: number; rankHigh: number }> = [
   { minScore: 180, rankLow: 1, rankHigh: 50 },
@@ -31,6 +27,8 @@ function getRankRange(score: number): { rankLow: number; rankHigh: number } {
   return entry ? { rankLow: entry.rankLow, rankHigh: entry.rankHigh } : { rankLow: 45000, rankHigh: 70000 };
 }
 
+const fieldSx = { '& .MuiInputBase-root': { minHeight: 48 }, '& input': { fontSize: '1rem' } } as const;
+
 export default function RankPredictorTeaser() {
   const [score, setScore] = useState('');
   const [result, setResult] = useState<{ score: number; rankLow: number; rankHigh: number } | null>(null);
@@ -49,21 +47,7 @@ export default function RankPredictorTeaser() {
   }
 
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: { xs: 3, sm: 4 },
-        border: '1px solid #E0E0E0',
-        borderRadius: 2,
-      }}
-    >
-      <Typography
-        component="h2"
-        sx={{ fontWeight: 700, fontSize: { xs: '1.25rem', sm: '1.5rem' }, mb: 2 }}
-      >
-        Quick Rank Estimate
-      </Typography>
-
+    <QuickCheck title="Quick rank estimate" headingId="rank-predictor-quick-check">
       <TextField
         label="Your NATA Score (0 to 200)"
         type="number"
@@ -73,62 +57,29 @@ export default function RankPredictorTeaser() {
           setError('');
           setResult(null);
         }}
-        inputProps={{ min: 0, max: 200 }}
+        inputProps={{ min: 0, max: 200, inputMode: 'numeric' }}
         fullWidth
         error={!!error}
         helperText={error}
-        sx={{
-          mb: 2,
-          '& .MuiInputBase-root': { minHeight: 48 },
-        }}
+        sx={fieldSx}
       />
 
-      <Button
-        variant="contained"
-        fullWidth
-        onClick={handlePredict}
-        sx={{
-          minHeight: 48,
-          fontWeight: 700,
-          fontSize: '1rem',
-          mb: result ? 3 : 0,
-        }}
-      >
+      <CtaButton variant="navy" fullWidth onClick={handlePredict} endIcon={null}>
         Predict Rank
-      </Button>
+      </CtaButton>
 
-      {result && (
-        <Box>
-          <Typography
-            sx={{
-              fontSize: { xs: '1rem', sm: '1.1rem' },
-              fontWeight: 600,
-              color: 'text.primary',
-              mb: 2,
-              p: 2,
-              bgcolor: '#E8F5E9',
-              borderRadius: 1,
-              lineHeight: 1.6,
-            }}
-          >
-            Estimated rank: {result.rankLow.toLocaleString()} to {result.rankHigh.toLocaleString()} for a score of {result.score}.
-          </Typography>
-
-          <Button
-            component={Link}
-            href="https://app.neramclasses.com/tools/counseling/rank-predictor"
-            variant="outlined"
-            fullWidth
-            sx={{
-              minHeight: 48,
-              fontWeight: 700,
-              fontSize: '0.95rem',
-            }}
-          >
-            Get detailed rank analysis with trends
-          </Button>
-        </Box>
+      {result ? (
+        <QuickCheckResult
+          label="Estimated rank"
+          summary={`${result.rankLow.toLocaleString()} to ${result.rankHigh.toLocaleString()} for a score of ${result.score}.`}
+        />
+      ) : (
+        <QuickCheckResult label="Estimated rank" summary="Enter your score and tap Predict Rank" />
       )}
-    </Paper>
+
+      <CtaButton href={FULL_TOOL} external fullWidth>
+        Get detailed rank analysis with trends
+      </CtaButton>
+    </QuickCheck>
   );
 }

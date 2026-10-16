@@ -1,22 +1,11 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import {
-  Box,
-  Container,
-  Typography,
-  Card,
-  CardContent,
-  Button,
-  Chip,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-} from '@neram/ui';
-import Link from 'next/link';
+import { Box } from '@neram/ui';
+import { nataGuideNav, nataRelated } from '@/components/nata/guideNav';
+import { ArticleSection, Callout, CtaBand, CtaButton, FaqList, GuideArticle, Timeline, type TimelineState, tokens } from '@/design-system';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
-import LastUpdatedBadge from '@/components/nata/LastUpdatedBadge';
 
 
 export async function generateMetadata({
@@ -51,6 +40,14 @@ const dateEvents = [
   { event: 'Admission Against Vacant Seats', date: 'August–September 2026', status: 'upcoming' },
 ];
 
+/** Brochure status to a Timeline dot: completed = done, active = now, confirmed and upcoming = next. */
+const timelineState: Record<string, TimelineState> = {
+  completed: 'done',
+  active: 'now',
+  confirmed: 'next',
+  upcoming: 'next',
+};
+
 const faqs = [
   {
     question: 'When is NATA 2026 exam date?',
@@ -84,101 +81,47 @@ export default function ImportantDatesPage({ params: { locale } }: PageProps) {
       <JsonLd data={generateBreadcrumbSchema([{ name: 'Home', url: localeUrl('') }, { name: 'NATA 2026', url: localeUrl('/nata-2026') }, { name: 'Important Dates' }])} />
       <JsonLd data={generateFAQSchema(faqs)} />
 
-      <Box>
-        {/* Hero */}
-        <Box sx={{ py: { xs: 8, md: 12 }, background: 'linear-gradient(135deg, #1a237e 0%, #0d47a1 100%)', color: 'white' }}>
-          <Container maxWidth="lg">
-            <Chip label="NATA 2026" sx={{ bgcolor: 'white', color: 'primary.main', mb: 2, fontWeight: 600 }} />
-            <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', sm: '2.5rem', md: '3.5rem' } }}>
-              NATA 2026 Important Dates
-            </Typography>
-            <Typography variant="h5" sx={{ mb: 2, opacity: 0.9, fontSize: { xs: '1.1rem', md: '1.5rem' } }}>
-              NATA 2026 registration opened March 9, 2026. Phase 1 exams run April 4 – June 13, 2026 on Fridays & Saturdays. Phase 2 is on August 7 & 8, 2026 for vacant seats.
-            </Typography>
-            <LastUpdatedBadge date="March 13, 2026" />
-          </Container>
-        </Box>
+      <GuideArticle
+        breadcrumb={[{ name: 'Home', href: '/' }, { name: 'NATA 2026', href: '/nata-2026' }, { name: 'Important Dates' }]}
+        eyebrow="NATA 2026 · Exam guide"
+        title="NATA 2026 Important Dates"
+        lede="NATA 2026 registration opened March 9, 2026. Phase 1 exams run April 4 – June 13, 2026 on Fridays & Saturdays. Phase 2 is on August 7 & 8, 2026 for vacant seats."
+        verified="Updated March 13, 2026 · Source: Official NATA 2026 Brochure V1.0"
+        nav={nataGuideNav('important-dates')}
+        related={nataRelated(['how-to-apply', 'fee-structure', 'exam-centers', 'scoring-and-results'])}
+        back={{ label: 'Back to NATA 2026 guide', href: '/nata-2026' }}
+      >
+        <ArticleSection id="schedule" title="NATA 2026 Schedule">
+          <Callout>
+            These dates are confirmed from the official NATA 2026 Brochure V1.0 (released March 8, 2026). Session-wise schedule will be published on www.nata.in.
+          </Callout>
+          <Timeline
+            items={dateEvents.map((event) => ({
+              label: event.event,
+              date: event.date,
+              state: timelineState[event.status] ?? 'next',
+              note: event.status === 'confirmed' ? 'Confirmed' : undefined,
+            }))}
+          />
+        </ArticleSection>
 
-        {/* Timeline */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
-          <Container maxWidth="md">
-            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 6, fontWeight: 700 }}>
-              NATA 2026 Schedule
-            </Typography>
+        <ArticleSection id="faq" title="FAQs: NATA 2026 Dates">
+          <FaqList items={faqs} defaultOpen={-1} />
+        </ArticleSection>
+      </GuideArticle>
 
-            <Card sx={{ bgcolor: 'success.light', mb: 4, p: 2 }}>
-              <Typography variant="body2" sx={{ fontWeight: 600, textAlign: 'center' }}>
-                These dates are confirmed from the official NATA 2026 Brochure V1.0 (released March 8, 2026). Session-wise schedule will be published on www.nata.in.
-              </Typography>
-            </Card>
-
-            {dateEvents.map((event, index) => (
-              <Box key={index} sx={{ display: 'flex', gap: 3, py: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
-                <Box sx={{ width: 40, height: 40, borderRadius: '50%', bgcolor: 'primary.light', color: 'primary.contrastText', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.8rem', flexShrink: 0 }}>
-                  {index + 1}
-                </Box>
-                <Box sx={{ flex: 1 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>{event.event}</Typography>
-                  <Typography variant="body2" color="text.secondary">{event.date}</Typography>
-                </Box>
-                <Chip label={event.status === 'completed' ? 'Done' : event.status === 'active' ? 'Live' : event.status === 'confirmed' ? 'Confirmed' : 'Upcoming'} size="small" color={event.status === 'completed' ? 'success' : event.status === 'active' ? 'warning' : event.status === 'confirmed' ? 'primary' : 'default'} variant={event.status === 'upcoming' ? 'outlined' : 'filled'} sx={{ alignSelf: 'center' }} />
-              </Box>
-            ))}
-          </Container>
-        </Box>
-
-        {/* Also Read */}
-        <Box sx={{ py: { xs: 6, md: 8 }, bgcolor: 'grey.50' }}>
-          <Container maxWidth="md">
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>Also Read</Typography>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-              {[
-                { title: 'How to Apply for NATA 2026', slug: 'how-to-apply' },
-                { title: 'NATA 2026 Fee Structure', slug: 'fee-structure' },
-                { title: 'Exam Centers', slug: 'exam-centers' },
-                { title: 'Scoring & Results', slug: 'scoring-and-results' },
-              ].map((item) => (
-                <Link key={item.slug} href={`/${locale}/nata-2026/${item.slug}`} style={{ textDecoration: 'none' }}>
-                  <Card sx={{ p: 2, color: 'inherit', transition: 'box-shadow 0.2s', '&:hover': { boxShadow: 3 } }}>
-                    <Typography variant="subtitle1" color="primary.main" sx={{ fontWeight: 600 }}>{item.title} &rarr;</Typography>
-                  </Card>
-                </Link>
-              ))}
-            </Box>
-          </Container>
-        </Box>
-
-        {/* FAQ */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
-          <Container maxWidth="md">
-            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs: NATA 2026 Dates</Typography>
-            {faqs.map((faq, index) => (
-              <Accordion key={index} disableGutters sx={{ '&:before': { display: 'none' }, mb: 1, borderRadius: 1, overflow: 'hidden' }}>
-                <AccordionSummary expandIcon={<Typography sx={{ fontSize: '1.2rem', fontWeight: 600 }}>+</Typography>} sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}>
-                  <Typography sx={{ fontWeight: 600 }}>{faq.question}</Typography>
-                </AccordionSummary>
-                <AccordionDetails sx={{ bgcolor: 'white' }}>
-                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>{faq.answer}</Typography>
-                </AccordionDetails>
-              </Accordion>
-            ))}
-          </Container>
-        </Box>
-
-        {/* CTA Banner */}
-        <Box sx={{ py: { xs: 6, md: 10 }, background: 'linear-gradient(135deg, #0d47a1 0%, #1565c0 100%)', color: 'white', textAlign: 'center' }}>
-          <Container maxWidth="md">
-            <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '1.75rem', md: '2.5rem' } }}>
-              Prepare for NATA 2026 with Neram Classes
-            </Typography>
-            <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>Start early. Expert coaching for all 3 attempts.</Typography>
-            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <Button variant="contained" size="large" component={Link} href="/apply" sx={{ background: '#ffffff', color: '#0d47a1', fontWeight: 700, px: 4, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', '&:hover': { background: '#f0f0f0' } }}>Start Free Trial</Button>
-              <Button variant="outlined" size="large" component={Link} href={`/${locale}/nata-2026`} sx={{ borderColor: 'white', color: 'white' }}>Back to NATA 2026 Guide</Button>
-            </Box>
-          </Container>
-        </Box>
-      </Box>
+      <CtaBand
+        title="Prepare for NATA 2026 with Neram Classes"
+        lede="Start early. Expert coaching for all 3 attempts."
+        actions={
+          <>
+            <CtaButton href="/apply">Start Free Trial</CtaButton>
+            <CtaButton variant="link" href="/nata-2026">
+              Back to NATA 2026 Guide
+            </CtaButton>
+          </>
+        }
+      />
     </>
   );
 }

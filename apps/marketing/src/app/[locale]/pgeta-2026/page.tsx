@@ -1,17 +1,8 @@
+import type { ReactNode } from 'react';
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import {
-  Box,
-  Container,
-  Typography,
-  Grid,
-  Chip,
-  Button,
-  Divider,
-  Stack,
-  Paper,
-} from '@mui/material';
-import Link from 'next/link';
+import { Box } from '@neram/ui';
+import WorkspacePremiumOutlinedIcon from '@mui/icons-material/WorkspacePremiumOutlined';
 import { JsonLd } from '@/components/seo/JsonLd';
 import {
   generateBreadcrumbSchema,
@@ -20,6 +11,7 @@ import {
 import { buildAlternates } from '@/lib/seo/metadata';
 import { getActivePgetaFaqs } from '@neram/database';
 import ExamFaqSection from '@/components/exam-hub/sections/ExamFaqSection';
+import { getExamGuide, scheduleTimeline } from '@/components/exam-hub/examGuides';
 import {
   PGETA_QUICK_FACTS,
   PGETA_SCHEDULE,
@@ -30,6 +22,55 @@ import {
   PGETA_NOTABLE_INSTITUTES,
   PGETA_DEFAULT_FAQS,
 } from '@/components/pgeta/data/pgetaContent';
+import {
+  CheckList,
+  CtaBand,
+  CtaButton,
+  FactGrid,
+  FactsCard,
+  HubCard,
+  InfoCard,
+  LinkTile,
+  PageHero,
+  Section,
+  Timeline,
+  tokens as t,
+} from '@/design-system';
+
+/** Keeps prose, lists and timelines at a readable line length inside page-width bands. */
+function Readable({ children }: { children: ReactNode }) {
+  return <Box sx={{ maxWidth: t.container.article, width: '100%' }}>{children}</Box>;
+}
+
+/** Auto-fit card grid: one column on phones. */
+function CardGrid({ min = 280, children }: { min?: number; children: ReactNode }) {
+  return (
+    <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${min}px), 1fr))`, gap: { xs: 2, md: 2.5 } }}>
+      {children}
+    </Box>
+  );
+}
+
+/** Plain name tiles (centres, cities): white, 1px line, radius 8. */
+function NameTiles({ items, min = 160, label }: { items: readonly string[]; min?: number; label: string }) {
+  return (
+    <Box
+      component="ul"
+      aria-label={label}
+      sx={{ m: 0, p: 0, listStyle: 'none', display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${min}px), 1fr))`, gap: 1.5 }}
+    >
+      {items.map((name) => (
+        <Box
+          component="li"
+          key={name}
+          sx={{ bgcolor: t.surface, border: `1px solid ${t.line}`, borderRadius: `${t.radius}px`, px: 2, py: 1.75, fontWeight: 600, fontSize: '1rem', lineHeight: 1.4, color: t.ink }}
+        >
+          {name}
+        </Box>
+      ))}
+    </Box>
+  );
+}
 
 export const revalidate = 86400;
 
@@ -125,6 +166,8 @@ export default async function Pgeta2026HubPage({ params: { locale } }: PageProps
     timeOfDay: '10:00 to 12:00 IST',
   };
 
+  const guide = getExamGuide('/pgeta-2026');
+
   return (
     <>
       <JsonLd data={breadcrumbSchema} />
@@ -134,475 +177,236 @@ export default async function Pgeta2026HubPage({ params: { locale } }: PageProps
       ))}
       <JsonLd data={programSchema} />
 
-      <Box>
-        {/* ───────────── HERO ───────────── */}
-        <Box
-          component="section"
-          sx={{
-            bgcolor: 'secondary.main',
-            color: 'secondary.contrastText',
-            pt: { xs: 6, md: 9 },
-            pb: { xs: 7, md: 10 },
-          }}
-        >
-          <Container maxWidth="lg">
-            <Stack spacing={2} alignItems="flex-start">
-              <Chip
-                label="NEW · M.Arch Entrance"
-                size="small"
-                sx={{
-                  bgcolor: 'rgba(255,255,255,0.18)',
-                  color: '#fff',
-                  fontWeight: 600,
-                  letterSpacing: 0.4,
-                }}
-              />
-              <Typography
-                variant="h2"
-                component="h1"
-                sx={{
-                  fontWeight: 800,
-                  lineHeight: 1.15,
-                  fontSize: { xs: '2rem', sm: '2.5rem', md: '3.25rem' },
-                  maxWidth: 900,
-                }}
-              >
-                PGETA 2026: The COA M.Arch Entrance, Decoded
-              </Typography>
-              <Typography
-                variant="h6"
-                component="p"
-                sx={{
-                  fontWeight: 400,
-                  opacity: 0.95,
-                  maxWidth: 760,
-                  fontSize: { xs: '1rem', md: '1.15rem' },
-                }}
-              >
-                PGETA, also commonly searched as PGEAT, is the unified national-level entrance test for Master of Architecture (M.Arch) programs in India. Conducted by the Council of Architecture (COA), with three test dates and best-score-retained policy. Below: dates, eligibility, exam pattern, fees, scholarships, and accepting institutes.
-              </Typography>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ pt: 1.5 }}>
-                <Button
-                  component={Link}
-                  href="/apply"
-                  variant="contained"
-                  size="large"
-                  sx={{
-                    bgcolor: '#fff',
-                    color: 'secondary.main',
-                    fontWeight: 700,
-                    minHeight: 48,
-                    '&:hover': { bgcolor: '#f5f5f5' },
-                  }}
-                >
-                  Talk to a counsellor
-                </Button>
-                <Button
-                  component="a"
-                  href="https://www.pgeta.in/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  variant="outlined"
-                  size="large"
-                  sx={{
-                    color: '#fff',
-                    borderColor: 'rgba(255,255,255,0.7)',
-                    fontWeight: 600,
-                    minHeight: 48,
-                    '&:hover': {
-                      borderColor: '#fff',
-                      bgcolor: 'rgba(255,255,255,0.08)',
-                    },
-                  }}
-                >
-                  Official PGETA portal
-                </Button>
-              </Stack>
-            </Stack>
-          </Container>
-        </Box>
+      <PageHero
+        breadcrumb={[{ name: 'Home', href: '/' }, { name: 'PGETA 2026' }]}
+        pills={['NEW']}
+        eyebrow="M.Arch Entrance"
+        title="PGETA 2026: The COA M.Arch Entrance, Decoded"
+        lede="PGETA, also commonly searched as PGEAT, is the unified national-level entrance test for Master of Architecture (M.Arch) programs in India. Conducted by the Council of Architecture (COA), with three test dates and best-score-retained policy. Below: dates, eligibility, exam pattern, fees, scholarships, and accepting institutes."
+        actions={
+          <>
+            <CtaButton href="/apply">Talk to a counsellor</CtaButton>
+            <CtaButton variant="outline" href="https://www.pgeta.in/" external>
+              Official PGETA portal
+            </CtaButton>
+          </>
+        }
+      />
 
-        {/* ───────────── AT-A-GLANCE ───────────── */}
-        <Box component="section" id="at-a-glance" sx={{ bgcolor: 'background.paper', py: { xs: 5, md: 7 } }}>
-          <Container maxWidth="lg">
-            <Typography variant="h4" component="h2" sx={{ fontWeight: 700, mb: 3 }}>
-              PGETA 2026 at a glance
-            </Typography>
-            <Typography sx={{ mb: 4, color: 'text.secondary', maxWidth: 760 }}>
-              The short answer first: PGETA 2026 is a 2-hour CBT with three attempt windows in May and June 2026. Eligibility is a B.Arch with at least 50% marks. The best score across attempts is retained for admission.
-            </Typography>
-            <Grid container spacing={2}>
-              {PGETA_QUICK_FACTS.map((fact) => (
-                <Grid item xs={12} sm={6} md={3} key={fact.label}>
-                  <Paper
-                    elevation={0}
-                    sx={{
-                      p: 2.5,
-                      height: '100%',
-                      borderRadius: 2,
-                      border: '1px solid',
-                      borderColor: 'divider',
-                    }}
-                  >
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        textTransform: 'uppercase',
-                        letterSpacing: 1,
-                        color: 'text.secondary',
-                        fontWeight: 600,
-                      }}
-                    >
-                      {fact.label}
-                    </Typography>
-                    <Typography variant="body1" sx={{ fontWeight: 600, mt: 0.5 }}>
-                      {fact.value}
-                    </Typography>
-                  </Paper>
-                </Grid>
-              ))}
-            </Grid>
-          </Container>
-        </Box>
+      {guide && (
+        <Section id="guide" tone="light" header={{ eyebrow: 'PGETA 2026 guide', title: 'Explore the PGETA 2026 guide', align: 'start' }}>
+          <CardGrid min={260}>
+            {guide.spokes.map(({ slug, label, Icon }) => (
+              <HubCard key={slug} href={`/pgeta-2026/${slug}`} title={label} icon={<Icon />} cta="Read guide" />
+            ))}
+          </CardGrid>
+        </Section>
+      )}
 
-        {/* ───────────── ELIGIBILITY ───────────── */}
-        <Box component="section" id="eligibility" sx={{ bgcolor: 'grey.50', py: { xs: 5, md: 7 } }}>
-          <Container maxWidth="md">
-            <Typography variant="h4" component="h2" sx={{ fontWeight: 700, mb: 2 }}>
-              Eligibility for PGETA 2026
-            </Typography>
-            <Typography sx={{ mb: 3, color: 'text.secondary', fontSize: '1.05rem' }}>
-              You need a Bachelor of Architecture (B.Arch) from a COA-approved institution with at least 50% aggregate marks.
-            </Typography>
-            <Box component="ul" sx={{ pl: 3, m: 0, color: 'text.primary', '& li': { mb: 1.25, lineHeight: 1.7 } }}>
-              <li>B.Arch degree from a COA-approved institution.</li>
-              <li>Minimum 50% aggregate marks (or equivalent CGPA).</li>
-              <li>Final-year B.Arch students may apply, subject to passing their B.Arch.</li>
-              <li>No upper age limit.</li>
-              <li>COA registration is recommended for practising architects but not strictly required to attempt PGETA.</li>
+      <Section
+        id="at-a-glance"
+        tone="white"
+        header={{
+          title: 'PGETA 2026 at a glance',
+          lede: 'The short answer first: PGETA 2026 is a 2-hour CBT with three attempt windows in May and June 2026. Eligibility is a B.Arch with at least 50% marks. The best score across attempts is retained for admission.',
+          align: 'start',
+          ledeWidth: 760,
+        }}
+      >
+        <FactGrid items={PGETA_QUICK_FACTS.map((fact) => ({ label: fact.label, value: fact.value }))} cellMin={240} />
+      </Section>
+
+      <Section
+        id="eligibility"
+        tone="light"
+        header={{
+          title: 'Eligibility for PGETA 2026',
+          lede: 'You need a Bachelor of Architecture (B.Arch) from a COA-approved institution with at least 50% aggregate marks.',
+          align: 'start',
+          ledeWidth: 760,
+        }}
+      >
+        <Readable>
+          <CheckList
+            columnMin={700}
+            items={[
+              'B.Arch degree from a COA-approved institution.',
+              'Minimum 50% aggregate marks (or equivalent CGPA).',
+              'Final-year B.Arch students may apply, subject to passing their B.Arch.',
+              'No upper age limit.',
+              'COA registration is recommended for practising architects but not strictly required to attempt PGETA.',
+            ]}
+          />
+        </Readable>
+      </Section>
+
+      <Section
+        id="schedule"
+        tone="white"
+        header={{
+          title: 'PGETA 2026 schedule, three attempts',
+          lede: 'You may attempt all three tests. The best score is automatically retained for admission. Each attempt requires a separate registration fee.',
+          align: 'start',
+          ledeWidth: 760,
+        }}
+      >
+        <Readable>
+          <Timeline items={scheduleTimeline(PGETA_SCHEDULE)} />
+        </Readable>
+      </Section>
+
+      <Section
+        id="exam-pattern"
+        tone="light"
+        header={{
+          title: 'PGETA 2026 exam pattern, 4 modules across 100 questions',
+          lede: 'CBT format, 2 hours, 100 questions in English. Architecture and Design carries the largest weight; the rest cover engineering bridges, electives, and research aptitude.',
+          align: 'start',
+          ledeWidth: 760,
+        }}
+      >
+        <CardGrid min={340}>
+          {PGETA_MODULES.map((mod, idx) => (
+            <InfoCard
+              key={mod.title}
+              code={String(idx + 1).padStart(2, '0')}
+              title={mod.title}
+              meta={`${mod.questions} Q`}
+              body={mod.summary}
+            />
+          ))}
+        </CardGrid>
+      </Section>
+
+      <Section
+        id="fees"
+        tone="white"
+        header={{
+          title: 'Fees and scholarships',
+          lede: 'Per attempt fees vary by category. The COA also funds a top-100 scholarship.',
+          align: 'start',
+        }}
+      >
+        <CardGrid min={340}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <FactsCard
+              title="Registration fees, per attempt"
+              titleAs="h3"
+              items={PGETA_FEES.map((fee) => ({ label: fee.category, value: fee.amount }))}
+            />
+            <Box component="p" sx={{ m: 0, fontSize: '0.9375rem', lineHeight: 1.5, color: t.inkMuted }}>
+              Payment online via debit card, credit card, or net banking.
             </Box>
-          </Container>
-        </Box>
+          </Box>
+          <InfoCard icon={<WorkspacePremiumOutlinedIcon />} title={PGETA_SCHOLARSHIP.title}>
+            <Box sx={{ mt: 0.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              <Box component="p" sx={{ m: 0, fontSize: '1.125rem', fontWeight: 800, lineHeight: 1.4, color: t.ink }}>
+                {PGETA_SCHOLARSHIP.amount}
+              </Box>
+              <CheckList variant="compact" items={PGETA_SCHOLARSHIP.conditions} />
+            </Box>
+          </InfoCard>
+        </CardGrid>
+      </Section>
 
-        {/* ───────────── SCHEDULE ───────────── */}
-        <Box component="section" id="schedule" sx={{ bgcolor: 'background.paper', py: { xs: 5, md: 7 } }}>
-          <Container maxWidth="md">
-            <Typography variant="h4" component="h2" sx={{ fontWeight: 700, mb: 1.5 }}>
-              PGETA 2026 schedule, three attempts
-            </Typography>
-            <Typography sx={{ mb: 4, color: 'text.secondary' }}>
-              You may attempt all three tests. The best score is automatically retained for admission. Each attempt requires a separate registration fee.
-            </Typography>
-            <Stack spacing={1.5}>
-              {PGETA_SCHEDULE.map((row) => (
-                <Paper
-                  key={row.label}
-                  elevation={0}
-                  sx={{
-                    p: 2.25,
-                    borderRadius: 2,
-                    border: '1px solid',
-                    borderColor: row.highlight ? 'secondary.main' : 'divider',
-                    bgcolor: row.highlight ? 'rgba(220, 0, 78, 0.04)' : 'background.paper',
-                    display: 'flex',
-                    flexDirection: { xs: 'column', sm: 'row' },
-                    gap: { xs: 0.5, sm: 2 },
-                    alignItems: { xs: 'flex-start', sm: 'center' },
-                  }}
-                >
-                  <Typography
-                    sx={{
-                      fontWeight: row.highlight ? 700 : 600,
-                      flex: 1,
-                      color: row.highlight ? 'secondary.main' : 'text.primary',
-                    }}
-                  >
-                    {row.label}
-                  </Typography>
-                  <Typography sx={{ fontWeight: 600, minWidth: { sm: 220 } }}>{row.date}</Typography>
-                  <Typography sx={{ color: 'text.secondary', fontSize: '0.95rem' }}>{row.time}</Typography>
-                </Paper>
-              ))}
-            </Stack>
-          </Container>
-        </Box>
+      <Section
+        id="centres"
+        tone="light"
+        header={{
+          title: 'Where is PGETA 2026 conducted?',
+          lede: 'PGETA 2026 is held at designated CBT centres across major Indian cities. PGETA is not a from-home online test. You select preferred cities during registration; the final centre is allocated by the conducting body.',
+          align: 'start',
+          ledeWidth: 760,
+        }}
+      >
+        <NameTiles items={PGETA_TEST_CITIES} label="PGETA 2026 test cities" />
+      </Section>
 
-        {/* ───────────── EXAM PATTERN, 4 modules ───────────── */}
-        <Box component="section" id="exam-pattern" sx={{ bgcolor: 'grey.50', py: { xs: 5, md: 7 } }}>
-          <Container maxWidth="lg">
-            <Typography variant="h4" component="h2" sx={{ fontWeight: 700, mb: 1.5 }}>
-              PGETA 2026 exam pattern, 4 modules across 100 questions
-            </Typography>
-            <Typography sx={{ mb: 4, color: 'text.secondary', maxWidth: 760 }}>
-              CBT format, 2 hours, 100 questions in English. Architecture and Design carries the largest weight; the rest cover engineering bridges, electives, and research aptitude.
-            </Typography>
-            <Grid container spacing={2}>
-              {PGETA_MODULES.map((mod, idx) => (
-                <Grid item xs={12} md={6} key={mod.title}>
-                  <Paper
-                    elevation={0}
-                    sx={{
-                      p: 3,
-                      height: '100%',
-                      borderRadius: 2,
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      borderTop: '4px solid',
-                      borderTopColor: 'secondary.main',
-                    }}
-                  >
-                    <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
-                      <Typography variant="overline" sx={{ color: 'secondary.main', fontWeight: 700 }}>
-                        Module {idx + 1}
-                      </Typography>
-                      <Chip label={`${mod.questions} Q`} size="small" sx={{ fontWeight: 700 }} />
-                    </Stack>
-                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
-                      {mod.title}
-                    </Typography>
-                    <Typography sx={{ color: 'text.secondary', lineHeight: 1.7 }}>
-                      {mod.summary}
-                    </Typography>
-                  </Paper>
-                </Grid>
-              ))}
-            </Grid>
-          </Container>
+      <Section
+        id="participating-institutes"
+        tone="white"
+        header={{
+          title: 'Participating M.Arch institutes',
+          lede: 'COA lists approximately 132 approved Master of Architecture programs (as of 2022-23). The full list is on the COA approved-institutions page. Notable accepting institutions include:',
+          align: 'start',
+          ledeWidth: 760,
+        }}
+      >
+        <NameTiles items={PGETA_NOTABLE_INSTITUTES} min={300} label="Notable PGETA accepting institutions" />
+        <Box>
+          <CtaButton variant="outline" size="md" href="https://www.coa.gov.in/pgInstitutionStatus.php" external>
+            View full COA-approved list
+          </CtaButton>
         </Box>
+      </Section>
 
-        {/* ───────────── FEES + SCHOLARSHIP ───────────── */}
-        <Box component="section" id="fees" sx={{ bgcolor: 'background.paper', py: { xs: 5, md: 7 } }}>
-          <Container maxWidth="lg">
-            <Typography variant="h4" component="h2" sx={{ fontWeight: 700, mb: 1.5 }}>
-              Fees and scholarships
-            </Typography>
-            <Typography sx={{ mb: 4, color: 'text.secondary' }}>
-              Per attempt fees vary by category. The COA also funds a top-100 scholarship.
-            </Typography>
-            <Grid container spacing={3}>
-              <Grid item xs={12} md={6}>
-                <Paper elevation={0} sx={{ p: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider', height: '100%' }}>
-                  <Typography variant="h6" sx={{ fontWeight: 700, mb: 1.5 }}>
-                    Registration fees, per attempt
-                  </Typography>
-                  <Stack spacing={1.5}>
-                    {PGETA_FEES.map((fee) => (
-                      <Box key={fee.category} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid', borderColor: 'divider', pb: 1 }}>
-                        <Typography sx={{ color: 'text.secondary', flex: 1, pr: 2 }}>
-                          {fee.category}
-                        </Typography>
-                        <Typography sx={{ fontWeight: 700 }}>{fee.amount}</Typography>
-                      </Box>
-                    ))}
-                  </Stack>
-                  <Typography variant="caption" sx={{ display: 'block', mt: 2, color: 'text.secondary' }}>
-                    Payment online via debit card, credit card, or net banking.
-                  </Typography>
-                </Paper>
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <Paper elevation={0} sx={{ p: 3, borderRadius: 2, bgcolor: 'rgba(46, 125, 50, 0.06)', border: '1px solid', borderColor: 'success.light', height: '100%' }}>
-                  <Typography variant="h6" sx={{ fontWeight: 700, mb: 1, color: 'success.dark' }}>
-                    {PGETA_SCHOLARSHIP.title}
-                  </Typography>
-                  <Typography variant="h5" sx={{ fontWeight: 800, color: 'success.dark', mb: 1.5 }}>
-                    {PGETA_SCHOLARSHIP.amount}
-                  </Typography>
-                  <Box component="ul" sx={{ pl: 2.5, m: 0, '& li': { mb: 0.75, lineHeight: 1.7 } }}>
-                    {PGETA_SCHOLARSHIP.conditions.map((c) => (
-                      <li key={c}>{c}</li>
-                    ))}
-                  </Box>
-                </Paper>
-              </Grid>
-            </Grid>
-          </Container>
-        </Box>
+      <Section
+        id="pgeta-vs-nata"
+        tone="light"
+        header={{
+          title: 'PGETA vs NATA, what is the difference?',
+          lede: 'Both are COA exams but at different levels. NATA is for B.Arch (undergraduate). PGETA is for M.Arch (postgraduate).',
+          align: 'start',
+          ledeWidth: 760,
+        }}
+      >
+        <CardGrid min={320}>
+          <InfoCard title="PGETA 2026">
+            <Box sx={{ mt: 1 }}>
+              <CheckList
+                variant="compact"
+                items={[
+                  'Postgraduate (M.Arch, 2 years)',
+                  'Eligibility: B.Arch with 50% minimum',
+                  '2-hour CBT, 100 questions, 4 modules',
+                  'Architectural theory, building science, research aptitude',
+                  'Up to 3 attempts per year, best score',
+                ]}
+              />
+            </Box>
+          </InfoCard>
+          <InfoCard title="NATA 2026">
+            <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column', gap: 1.5, alignItems: 'flex-start' }}>
+              <CheckList
+                variant="compact"
+                items={[
+                  'Undergraduate (B.Arch, 5 years)',
+                  'Eligibility: 12th pass with Mathematics',
+                  'Drawing offline + MCQ/NCQ online, 3 hours',
+                  'Drawing aptitude and design reasoning',
+                  'Up to 2 attempts in Phase 1, 1 in Phase 2',
+                ]}
+              />
+              <CtaButton variant="link" size="md" href="/nata-2026">
+                See NATA 2026 hub
+              </CtaButton>
+            </Box>
+          </InfoCard>
+        </CardGrid>
+      </Section>
 
-        {/* ───────────── TEST CITIES ───────────── */}
-        <Box component="section" id="centres" sx={{ bgcolor: 'grey.50', py: { xs: 5, md: 7 } }}>
-          <Container maxWidth="md">
-            <Typography variant="h4" component="h2" sx={{ fontWeight: 700, mb: 1.5 }}>
-              Where is PGETA 2026 conducted?
-            </Typography>
-            <Typography sx={{ mb: 3, color: 'text.secondary', fontSize: '1.05rem' }}>
-              PGETA 2026 is held at designated CBT centres across major Indian cities. PGETA is not a from-home online test. You select preferred cities during registration; the final centre is allocated by the conducting body.
-            </Typography>
-            <Grid container spacing={1.25}>
-              {PGETA_TEST_CITIES.map((city) => (
-                <Grid item xs={6} sm={4} key={city}>
-                  <Paper
-                    elevation={0}
-                    sx={{
-                      p: 1.5,
-                      borderRadius: 2,
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      textAlign: 'center',
-                      fontWeight: 600,
-                      fontSize: '0.95rem',
-                    }}
-                  >
-                    {city}
-                  </Paper>
-                </Grid>
-              ))}
-            </Grid>
-          </Container>
-        </Box>
+      <ExamFaqSection faqs={faqs} subtitle="Common questions about PGETA 2026 (also known as PGEAT)" tone="white" />
 
-        {/* ───────────── PARTICIPATING INSTITUTES ───────────── */}
-        <Box component="section" id="participating-institutes" sx={{ bgcolor: 'background.paper', py: { xs: 5, md: 7 } }}>
-          <Container maxWidth="md">
-            <Typography variant="h4" component="h2" sx={{ fontWeight: 700, mb: 1.5 }}>
-              Participating M.Arch institutes
-            </Typography>
-            <Typography sx={{ mb: 3, color: 'text.secondary', fontSize: '1.05rem' }}>
-              COA lists approximately 132 approved Master of Architecture programs (as of 2022-23). The full list is on the COA approved-institutions page. Notable accepting institutions include:
-            </Typography>
-            <Grid container spacing={1.25}>
-              {PGETA_NOTABLE_INSTITUTES.map((institute) => (
-                <Grid item xs={12} sm={6} key={institute}>
-                  <Paper
-                    elevation={0}
-                    sx={{
-                      p: 2,
-                      borderRadius: 2,
-                      border: '1px solid',
-                      borderColor: 'divider',
-                      fontWeight: 600,
-                    }}
-                  >
-                    {institute}
-                  </Paper>
-                </Grid>
-              ))}
-            </Grid>
-            <Button
-              component="a"
-              href="https://www.coa.gov.in/pgInstitutionStatus.php"
-              target="_blank"
-              rel="noopener noreferrer"
-              variant="outlined"
-              sx={{ mt: 3, fontWeight: 600 }}
-            >
-              View full COA-approved list →
-            </Button>
-          </Container>
-        </Box>
+      <Section id="related" tone="light" header={{ eyebrow: 'Related', title: 'Other exam hubs', align: 'start', size: 'article' }}>
+        <CardGrid min={240}>
+          <LinkTile href="/nata-2026" title="NATA 2026 hub" />
+          <LinkTile href="/jee-barch-hub" title="JEE B.Arch hub" />
+          <LinkTile href="/aat-2026" title="AAT 2026 hub" />
+        </CardGrid>
+      </Section>
 
-        {/* ───────────── PGETA vs NATA ───────────── */}
-        <Box component="section" id="pgeta-vs-nata" sx={{ bgcolor: 'grey.50', py: { xs: 5, md: 7 } }}>
-          <Container maxWidth="md">
-            <Typography variant="h4" component="h2" sx={{ fontWeight: 700, mb: 1.5 }}>
-              PGETA vs NATA, what is the difference?
-            </Typography>
-            <Typography sx={{ mb: 3, color: 'text.secondary' }}>
-              Both are COA exams but at different levels. NATA is for B.Arch (undergraduate). PGETA is for M.Arch (postgraduate).
-            </Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={12} md={6}>
-                <Paper elevation={0} sx={{ p: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
-                  <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>PGETA 2026</Typography>
-                  <Box component="ul" sx={{ pl: 2.5, m: 0, '& li': { mb: 0.75, lineHeight: 1.7 } }}>
-                    <li>Postgraduate (M.Arch, 2 years)</li>
-                    <li>Eligibility: B.Arch with 50% minimum</li>
-                    <li>2-hour CBT, 100 questions, 4 modules</li>
-                    <li>Architectural theory, building science, research aptitude</li>
-                    <li>Up to 3 attempts per year, best score</li>
-                  </Box>
-                </Paper>
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <Paper elevation={0} sx={{ p: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
-                  <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>NATA 2026</Typography>
-                  <Box component="ul" sx={{ pl: 2.5, m: 0, '& li': { mb: 0.75, lineHeight: 1.7 } }}>
-                    <li>Undergraduate (B.Arch, 5 years)</li>
-                    <li>Eligibility: 12th pass with Mathematics</li>
-                    <li>Drawing offline + MCQ/NCQ online, 3 hours</li>
-                    <li>Drawing aptitude and design reasoning</li>
-                    <li>Up to 2 attempts in Phase 1, 1 in Phase 2</li>
-                  </Box>
-                  <Button
-                    component={Link}
-                    href="/nata-2026"
-                    size="small"
-                    sx={{ mt: 1.5, fontWeight: 600 }}
-                  >
-                    See NATA 2026 hub →
-                  </Button>
-                </Paper>
-              </Grid>
-            </Grid>
-          </Container>
-        </Box>
-
-        {/* ───────────── FAQ ───────────── */}
-        <ExamFaqSection
-          faqs={faqs}
-          subtitle="Common questions about PGETA 2026 (also known as PGEAT)"
-        />
-
-        {/* ───────────── FINAL CTA ───────────── */}
-        <Box
-          component="section"
-          sx={{
-            bgcolor: 'secondary.main',
-            color: 'secondary.contrastText',
-            py: { xs: 6, md: 8 },
-          }}
-        >
-          <Container maxWidth="md" sx={{ textAlign: 'center' }}>
-            <Typography variant="h4" sx={{ fontWeight: 800, mb: 1.5 }}>
-              Planning your M.Arch journey?
-            </Typography>
-            <Typography sx={{ mb: 3, opacity: 0.95, fontSize: '1.05rem' }}>
-              Talk to a counsellor about preparing for PGETA, choosing a specialisation, and shortlisting M.Arch institutes.
-            </Typography>
-            <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center">
-              <Button
-                component={Link}
-                href="/apply"
-                variant="contained"
-                size="large"
-                sx={{
-                  bgcolor: '#fff',
-                  color: 'secondary.main',
-                  fontWeight: 700,
-                  minHeight: 48,
-                  '&:hover': { bgcolor: '#f5f5f5' },
-                }}
-              >
-                Talk to a counsellor
-              </Button>
-              <Button
-                component="a"
-                href="https://www.pgeta.in/"
-                target="_blank"
-                rel="noopener noreferrer"
-                variant="outlined"
-                size="large"
-                sx={{
-                  color: '#fff',
-                  borderColor: 'rgba(255,255,255,0.7)',
-                  fontWeight: 600,
-                  minHeight: 48,
-                  '&:hover': {
-                    borderColor: '#fff',
-                    bgcolor: 'rgba(255,255,255,0.08)',
-                  },
-                }}
-              >
-                Register on PGETA portal
-              </Button>
-            </Stack>
-            <Divider sx={{ my: 4, borderColor: 'rgba(255,255,255,0.2)' }} />
-            <Typography variant="body2" sx={{ opacity: 0.85 }}>
-              Related: <Link href="/nata-2026" style={{ color: '#fff', textDecoration: 'underline' }}>NATA 2026 hub</Link> · <Link href="/jee-barch-hub" style={{ color: '#fff', textDecoration: 'underline' }}>JEE B.Arch hub</Link> · <Link href="/aat-2026" style={{ color: '#fff', textDecoration: 'underline' }}>AAT 2026 hub</Link>
-            </Typography>
-          </Container>
-        </Box>
-      </Box>
+      <CtaBand
+        title="Planning your M.Arch journey?"
+        lede="Talk to a counsellor about preparing for PGETA, choosing a specialisation, and shortlisting M.Arch institutes."
+        actions={
+          <>
+            <CtaButton href="/apply">Talk to a counsellor</CtaButton>
+            <CtaButton variant="link" href="https://www.pgeta.in/" external>
+              Register on PGETA portal
+            </CtaButton>
+          </>
+        }
+      />
     </>
   );
 }

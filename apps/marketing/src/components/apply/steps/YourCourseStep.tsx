@@ -4,17 +4,9 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Box,
   Typography,
-  Grid,
-  Card,
-  CardContent,
-  CardActionArea,
   Button,
-  Chip,
   Skeleton,
   Alert,
-  Divider,
-  FormControl,
-  InputLabel,
   Select,
   MenuItem,
   Dialog,
@@ -24,16 +16,22 @@ import {
   IconButton,
   TextField,
   Stack,
+  ToggleButton,
+  ToggleButtonGroup,
   CircularProgress,
   useMediaQuery,
   useTheme,
 } from '@neram/ui';
+import ButtonBase from '@mui/material/ButtonBase';
 import ArchitectureOutlined from '@mui/icons-material/ArchitectureOutlined';
 import SchoolOutlined from '@mui/icons-material/SchoolOutlined';
+import JoinInnerOutlined from '@mui/icons-material/JoinInnerOutlined';
 import CheckCircleOutlined from '@mui/icons-material/CheckCircleOutlined';
+import CheckOutlined from '@mui/icons-material/CheckOutlined';
 import LocationOnOutlined from '@mui/icons-material/LocationOnOutlined';
 import PhoneCallbackOutlined from '@mui/icons-material/PhoneCallbackOutlined';
 import LaptopOutlined from '@mui/icons-material/LaptopOutlined';
+import GroupsOutlined from '@mui/icons-material/GroupsOutlined';
 import HelpOutlineOutlined from '@mui/icons-material/HelpOutlineOutlined';
 import CloseOutlined from '@mui/icons-material/CloseOutlined';
 import DirectionsOutlined from '@mui/icons-material/DirectionsOutlined';
@@ -41,10 +39,12 @@ import PhoneOutlined from '@mui/icons-material/PhoneOutlined';
 import ScheduleOutlined from '@mui/icons-material/ScheduleOutlined';
 import AccessTimeOutlined from '@mui/icons-material/AccessTimeOutlined';
 import { useTranslations } from 'next-intl';
+import { tokens as tk } from '@/design-system';
 import StepHeading from '../StepHeading';
 import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import { useFormContext } from '../FormContext';
-import { selectedCardSx } from '../styles';
+import { iconTile40Sx, outlineButtonSx, railCardSx, selectedCardSx } from '../styles';
+import Field from '../fields/Field';
 import type { CourseType, OfflineCenter } from '@neram/database';
 import { leadAttribution } from '@/lib/attribution';
 import { trackTaxonomyEvent } from '@/lib/funnel-tracker';
@@ -54,38 +54,93 @@ import YourStudiesBlock from './YourStudiesBlock';
 
 // Course options
 const COURSE_OPTIONS: { value: CourseType; labelKey: string; bodyKey: string; icon: React.ReactNode }[] = [
-  {
-    value: 'nata',
-    labelKey: 'yourCourse.nata',
-    bodyKey: 'yourCourse.nataBody',
-    icon: <ArchitectureOutlined sx={{ fontSize: 32 }} />,
-  },
-  {
-    value: 'jee_paper2',
-    labelKey: 'yourCourse.jee',
-    bodyKey: 'yourCourse.jeeBody',
-    icon: <SchoolOutlined sx={{ fontSize: 32 }} />,
-  },
-  {
-    value: 'both',
-    labelKey: 'yourCourse.both',
-    bodyKey: 'yourCourse.bothBody',
-    icon: (
-      <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'center' }}>
-        <ArchitectureOutlined sx={{ fontSize: 28 }} />
-        <SchoolOutlined sx={{ fontSize: 28 }} />
-      </Box>
-    ),
-  },
-  {
-    value: 'not_sure',
-    labelKey: 'yourCourse.notSure',
-    bodyKey: 'yourCourse.notSureBody',
-    icon: <HelpOutlineOutlined sx={{ fontSize: 32 }} />,
-  },
+  { value: 'nata', labelKey: 'yourCourse.nata', bodyKey: 'yourCourse.nataBody', icon: <ArchitectureOutlined /> },
+  { value: 'jee_paper2', labelKey: 'yourCourse.jee', bodyKey: 'yourCourse.jeeBody', icon: <SchoolOutlined /> },
+  { value: 'both', labelKey: 'yourCourse.both', bodyKey: 'yourCourse.bothBody', icon: <JoinInnerOutlined /> },
+  { value: 'not_sure', labelKey: 'yourCourse.notSure', bodyKey: 'yourCourse.notSureBody', icon: <HelpOutlineOutlined /> },
 ];
 
 type TimeSlot = 'morning' | 'afternoon' | 'evening';
+
+/** Step 2 sections sit under a 1px line with 28px above the content. */
+const sectionSx = { borderTop: `1px solid ${tk.line}`, pt: 3.5 } as const;
+
+/** Question headings (h2): 17px bold ink. */
+const questionSx = { m: 0, mb: 1.5, fontSize: 17, fontWeight: 700, lineHeight: 1.35, color: tk.ink } as const;
+
+/** Layout of a choice card (the look comes from selectedCardSx). */
+const cardLayout = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'flex-start',
+  justifyContent: 'flex-start',
+  gap: '8px',
+  padding: '16px 18px',
+  width: '100%',
+  height: '100%',
+  fontFamily: 'inherit',
+} as const;
+
+const centreGridSx = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))',
+  gap: 1,
+} as const;
+
+/** Underlined 14px/600 text button, 44px tall. */
+const textLinkSx = {
+  minHeight: 44,
+  px: 0,
+  color: tk.ink,
+  fontSize: 14,
+  fontWeight: 600,
+  textDecoration: 'underline',
+  textUnderlineOffset: '3px',
+  '&:hover': { bgcolor: 'transparent', textDecoration: 'underline', color: tk.gold800 },
+  '&.Mui-focusVisible': { outline: tk.focusOutline, outlineOffset: '2px' },
+} as const;
+
+const dialogTitleSx = { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, pr: 1.5 } as const;
+const closeButtonSx = {
+  width: 44,
+  height: 44,
+  color: tk.ink,
+  borderRadius: `${tk.radius}px`,
+  '&.Mui-focusVisible': { outline: tk.focusOutline, outlineOffset: '2px' },
+} as const;
+const dialogRowSx = { display: 'flex', alignItems: 'flex-start', gap: 1 } as const;
+const dialogIconSx = { fontSize: 18, color: tk.inkMuted, mt: '1px' } as const;
+const dialogTextSx = { m: 0, fontSize: 14, lineHeight: 1.5, color: tk.inkMuted } as const;
+
+interface ChoiceCardProps {
+  selected: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+  body: string;
+  /** 13px on the exam cards, 14px on the learning-mode cards. */
+  bodySize?: number;
+}
+
+/** Exam and learning-mode card: navy icon tile, check when selected, label, short body. */
+function ChoiceCard({ selected, onClick, icon, label, body, bodySize = 13 }: ChoiceCardProps) {
+  return (
+    <ButtonBase aria-pressed={selected} onClick={onClick} sx={selectedCardSx(selected, cardLayout)}>
+      <Box component="span" sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', width: '100%' }}>
+        <Box component="span" sx={iconTile40Sx} aria-hidden>
+          {icon}
+        </Box>
+        {selected && <CheckCircleOutlined aria-hidden sx={{ fontSize: 22, color: tk.navy900 }} />}
+      </Box>
+      <Typography component="span" sx={{ fontSize: 17, fontWeight: 700, lineHeight: 1.3, color: tk.ink }}>
+        {label}
+      </Typography>
+      <Typography component="span" sx={{ fontSize: bodySize, lineHeight: 1.45, color: tk.inkMuted }}>
+        {body}
+      </Typography>
+    </ButtonBase>
+  );
+}
 
 /**
  * Step 2, Your course: the exam, the programme (with its standard fee on the
@@ -292,328 +347,249 @@ export default function YourCourseStep() {
 
   const isPhoneVerified = formData.personal.phoneVerified;
 
+  const openCallback = () => {
+    setCallbackError(null);
+    setCallbackSuccess(false);
+    setCallbackDialogOpen(true);
+  };
+
   return (
     <Box>
       <StepHeading title={t('yourCourse.title')} subtitle={t('yourCourse.subtitle')} />
 
-      {/* Course Selection */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-          {t('yourCourse.courseQuestion')}
-        </Typography>
-        <Grid container spacing={2}>
-          {COURSE_OPTIONS.map((option) => (
-            <Grid item xs={6} md={3} key={option.value}>
-              <Card
-                variant="outlined"
-                sx={selectedCardSx(course.interestCourse === option.value, { height: '100%', position: 'relative' })}
-              >
-                {course.interestCourse === option.value && (
-                  <CheckCircleOutlined sx={{ position: 'absolute', top: 10, right: 8, color: 'text.primary' }} aria-hidden />
-                )}
-                <CardActionArea
-                  onClick={() => handleCourseSelect(option.value)}
-                  sx={{ height: '100%', minHeight: 48, p: 2, textAlign: 'center' }}
-                >
-                  <Box
-                    sx={{
-                      color:
-                        course.interestCourse === option.value ? 'text.primary' : 'text.secondary',
-                      mb: 1,
-                    }}
-                  >
-                    {option.icon}
-                  </Box>
-                  <Typography
-                    variant="subtitle1"
-                    fontWeight={course.interestCourse === option.value ? 700 : 600}
-                  >
-                    {t(option.labelKey)}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {t(option.bodyKey)}
-                  </Typography>
-                </CardActionArea>
-              </Card>
-            </Grid>
-          ))}
-        </Grid>
-      </Box>
-
-      {course.interestCourse && course.interestCourse !== 'not_sure' && (
-        <Box sx={{ mb: 4 }}>
-          <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-            {t('yourCourse.programmeQuestion')} *
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3.5 }}>
+        {/* Which exam, then the programme (or the not-sure notice) */}
+        <Box component="section" aria-labelledby="apply-course-q">
+          <Typography id="apply-course-q" component="h2" sx={questionSx}>
+            {t('yourCourse.courseQuestion')}
           </Typography>
-          <ProgrammePicker courseType={course.interestCourse} value={course.feeStructureId} onChange={handleProgrammePick} />
-        </Box>
-      )}
+          <Box
+            role="group"
+            aria-labelledby="apply-course-q"
+            sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 140px), 1fr))', gap: 1 }}
+          >
+            {COURSE_OPTIONS.map((option) => (
+              <ChoiceCard
+                key={option.value}
+                selected={course.interestCourse === option.value}
+                onClick={() => handleCourseSelect(option.value)}
+                icon={option.icon}
+                label={t(option.labelKey)}
+                body={t(option.bodyKey)}
+              />
+            ))}
+          </Box>
 
-      {course.interestCourse === 'not_sure' && (
-        <Alert
-          severity="info"
-          sx={{ mb: 4 }}
-          action={
-            <Button
-              color="inherit"
-              size="small"
-              onClick={() => {
-                setCallbackError(null);
-                setCallbackSuccess(false);
-                setCallbackDialogOpen(true);
+          {course.interestCourse && course.interestCourse !== 'not_sure' && (
+            <Box sx={{ mt: 3.5 }}>
+              <Typography component="h2" sx={questionSx}>
+                {t('yourCourse.programmeQuestion')}
+              </Typography>
+              <ProgrammePicker courseType={course.interestCourse} value={course.feeStructureId} onChange={handleProgrammePick} />
+            </Box>
+          )}
+
+          {course.interestCourse === 'not_sure' && (
+            <Box
+              sx={{
+                ...railCardSx(tk.gold500),
+                mt: 2.5,
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 2,
               }}
-              sx={{ minHeight: 44 }}
             >
-              {t('yourCourse.askUsToCall')}
-            </Button>
-          }
-        >
-          {t('yourCourse.notSureFee')}
-        </Alert>
-      )}
+              <Typography component="p" sx={{ m: 0, flex: '1 1 220px', fontSize: 15, lineHeight: 1.5, color: tk.ink }}>
+                {t('yourCourse.notSureFee')}
+              </Typography>
+              <Button variant="outlined" startIcon={<PhoneCallbackOutlined />} onClick={openCallback} sx={outlineButtonSx}>
+                {t('yourCourse.askUsToCall')}
+              </Button>
+            </Box>
+          )}
+        </Box>
 
-      <Divider sx={{ my: 4 }} />
-
-      {/* Learning Mode Toggle */}
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-          {t('yourCourse.modeQuestion')}
-        </Typography>
-
-        <Grid container spacing={2}>
-          {/* Hybrid Option */}
-          <Grid item xs={12} sm={6}>
-            <Card
-              variant="outlined"
-              sx={selectedCardSx(course.learningMode === 'hybrid', { height: '100%', cursor: 'pointer', position: 'relative' })}
+        {/* How to learn */}
+        <Box component="section" aria-labelledby="apply-mode-q" sx={sectionSx}>
+          <Typography id="apply-mode-q" component="h2" sx={questionSx}>
+            {t('yourCourse.modeQuestion')}
+          </Typography>
+          <Box
+            role="group"
+            aria-labelledby="apply-mode-q"
+            sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 220px), 1fr))', gap: 1 }}
+          >
+            <ChoiceCard
+              selected={course.learningMode === 'hybrid'}
               onClick={() => handleLearningModeSelect('hybrid')}
-            >
-              {course.learningMode === 'hybrid' && (
-                <CheckCircleOutlined sx={{ position: 'absolute', top: 10, right: 8, color: 'text.primary' }} aria-hidden />
-              )}
-              <CardContent sx={{ textAlign: 'center', py: 3 }}>
-                <SchoolOutlined
-                  sx={{
-                    fontSize: 40,
-                    color: course.learningMode === 'hybrid' ? 'text.primary' : 'text.secondary',
-                  }}
-                />
-                <Typography variant="subtitle1" fontWeight={600} mt={1}>
-                  {t('yourCourse.hybrid')}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {t('yourCourse.hybridBody')}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-
-          {/* Online Only Option */}
-          <Grid item xs={12} sm={6}>
-            <Card
-              variant="outlined"
-              sx={selectedCardSx(course.learningMode === 'online_only', { height: '100%', cursor: 'pointer', position: 'relative' })}
+              icon={<GroupsOutlined />}
+              label={t('yourCourse.hybrid')}
+              body={t('yourCourse.hybridBody')}
+              bodySize={14}
+            />
+            <ChoiceCard
+              selected={course.learningMode === 'online_only'}
               onClick={() => handleLearningModeSelect('online_only')}
-            >
-              {course.learningMode === 'online_only' && (
-                <CheckCircleOutlined sx={{ position: 'absolute', top: 10, right: 8, color: 'text.primary' }} aria-hidden />
-              )}
-              <CardContent sx={{ textAlign: 'center', py: 3 }}>
-                <LaptopOutlined
-                  sx={{
-                    fontSize: 40,
-                    color:
-                      course.learningMode === 'online_only' ? 'text.primary' : 'text.secondary',
-                  }}
-                />
-                <Typography variant="subtitle1" fontWeight={600} mt={1}>
-                  {t('yourCourse.online')}
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {t('yourCourse.onlineBody')}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
+              icon={<LaptopOutlined />}
+              label={t('yourCourse.online')}
+              body={t('yourCourse.onlineBody')}
+              bodySize={14}
+            />
+          </Box>
+        </Box>
 
-      </Box>
-
-      {/* Center Selection (only for hybrid mode) */}
-      {course.learningMode === 'hybrid' && (
-        <>
-          <Divider sx={{ my: 4 }} />
-
-          <Box sx={{ mb: 4 }}>
-            <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-              Select Your Preferred Center (Optional)
+        {/* Centre (hybrid only, optional) */}
+        {course.learningMode === 'hybrid' && (
+          <Box component="section" aria-labelledby="apply-centre-q" sx={sectionSx}>
+            <Typography id="apply-centre-q" component="h2" sx={{ ...questionSx, mb: 0.5 }}>
+              Choose your preferred centre (optional)
             </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-              Choose a center near you for offline classes. You can also select later.
+            <Typography component="p" sx={{ m: 0, mb: 2, fontSize: 14, lineHeight: 1.5, color: tk.inkMuted }}>
+              Pick a centre near you for offline classes. You can also choose later.
             </Typography>
 
             {centersLoading ? (
-              <Box>
-                <Skeleton variant="rectangular" height={56} sx={{ borderRadius: 0.75, mb: 2 }} />
-                <Grid container spacing={2}>
-                  {[1, 2, 3].map((i) => (
-                    <Grid item xs={12} sm={6} key={i}>
-                      <Skeleton variant="rectangular" height={120} sx={{ borderRadius: 0.75 }} />
-                    </Grid>
-                  ))}
-                </Grid>
+              <Box sx={centreGridSx} aria-busy="true">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} variant="rectangular" height={88} sx={{ borderRadius: `${tk.radius}px` }} />
+                ))}
               </Box>
             ) : centers.length === 0 ? (
               <Alert severity="info">
-                No offline centers available at the moment. You can still proceed with online
-                classes.
+                No offline centres are open at the moment. You can still go ahead with online classes.
               </Alert>
             ) : (
               <>
-                {/* City Dropdown Filter */}
-                <FormControl fullWidth sx={{ mb: 2 }} size="small">
-                  <InputLabel>Filter by City</InputLabel>
-                  <Select
-                    value={centerCityFilter}
-                    onChange={(e) => setCenterCityFilter(e.target.value as string)}
-                    label="Filter by City"
-                  >
-                    <MenuItem value="all">All Cities</MenuItem>
-                    {uniqueCities.map((city) => (
-                      <MenuItem key={city} value={city}>
-                        {city}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-
-                {/* Center Cards Grid */}
-                <Grid container spacing={2}>
-                  {filteredCenters.map((center) => (
-                    <Grid item xs={12} sm={6} key={center.id}>
-                      <Card
-                        variant="outlined"
-                        sx={selectedCardSx(course.selectedCenterId === center.id, { height: '100%', cursor: 'pointer' })}
-                        onClick={() => handleCenterSelect(center)}
+                {uniqueCities.length > 1 && (
+                  <Box sx={{ mb: 2, maxWidth: 320 }}>
+                    <Field id="apply-centre-city" label="Filter by city">
+                      <Select
+                        id="apply-centre-city"
+                        labelId="apply-centre-city-label"
+                        fullWidth
+                        value={centerCityFilter}
+                        onChange={(e) => setCenterCityFilter(e.target.value as string)}
                       >
-                        <CardContent>
-                          <Box
-                            display="flex"
-                            alignItems="flex-start"
-                            justifyContent="space-between"
-                          >
-                            <Box flex={1}>
-                              <Typography variant="subtitle2" fontWeight={600}>
-                                {center.name}
-                              </Typography>
-                              <Box display="flex" alignItems="center" gap={0.5} mt={0.5}>
-                                <LocationOnOutlined fontSize="small" color="action" />
-                                <Typography variant="body2" color="text.secondary">
-                                  {center.city}, {center.state}
-                                </Typography>
-                              </Box>
-                              {center.address && (
-                                <Typography
-                                  variant="caption"
-                                  color="text.secondary"
-                                  sx={{ display: 'block', mt: 0.5 }}
-                                >
-                                  {center.address}
-                                </Typography>
-                              )}
-                            </Box>
-                            {course.selectedCenterId === center.id && (
-                              <CheckCircleOutlined sx={{ color: 'text.primary' }} aria-hidden />
-                            )}
-                          </Box>
-                          {center.facilities && center.facilities.length > 0 && (
-                            <Box display="flex" flexWrap="wrap" gap={0.5} mt={1.5}>
-                              {center.facilities.slice(0, 4).map((facility) => (
-                                <Chip
-                                  key={facility}
-                                  label={facility}
-                                  size="small"
-                                  variant="outlined"
-                                />
-                              ))}
-                            </Box>
-                          )}
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  ))}
-                </Grid>
+                        <MenuItem value="all" sx={{ minHeight: 48 }}>All cities</MenuItem>
+                        {uniqueCities.map((city) => (
+                          <MenuItem key={city} value={city} sx={{ minHeight: 48 }}>
+                            {city}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </Field>
+                  </Box>
+                )}
+
+                <Box role="group" aria-labelledby="apply-centre-q" sx={centreGridSx}>
+                  {filteredCenters.map((center) => {
+                    const selected = course.selectedCenterId === center.id;
+                    return (
+                      <ButtonBase
+                        key={center.id}
+                        aria-pressed={selected}
+                        onClick={() => handleCenterSelect(center)}
+                        sx={selectedCardSx(selected, cardLayout)}
+                      >
+                        <Box component="span" sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1, width: '100%' }}>
+                          <Typography component="span" sx={{ fontSize: 16, fontWeight: 700, lineHeight: 1.35, color: tk.ink }}>
+                            {center.name}
+                          </Typography>
+                          {selected && <CheckCircleOutlined aria-hidden sx={{ fontSize: 22, color: tk.navy900, flexShrink: 0 }} />}
+                        </Box>
+                        <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                          <LocationOnOutlined aria-hidden sx={{ fontSize: 16, color: tk.inkMuted }} />
+                          <Typography component="span" sx={{ fontSize: 14, lineHeight: 1.45, color: tk.inkMuted }}>
+                            {center.city}
+                            {center.state ? `, ${center.state}` : ''}
+                          </Typography>
+                        </Box>
+                      </ButtonBase>
+                    );
+                  })}
+                </Box>
               </>
             )}
 
-            <Box mt={2}>
-              <Button
-                variant="text"
-                startIcon={<LocationOnOutlined />}
-                onClick={() => setCentersDialogOpen(true)}
-              >
-                View all centers with details
-              </Button>
-            </Box>
+            <Button
+              variant="text"
+              onClick={() => setCentersDialogOpen(true)}
+              sx={{ ...textLinkSx, mt: 1.5 }}
+            >
+              View all centres with directions
+            </Button>
           </Box>
-        </>
-      )}
+        )}
 
-      <Divider sx={{ my: 4 }} />
-      <YourStudiesBlock />
-
-      {course.feeStructureLabel && (
-        <Box sx={{ mt: 4 }}>
-          <FeeSummaryCard
-            label={course.feeStructureLabel}
-            feeAmount={pickedFee?.amount ?? null}
-            comboExtraFee={course.interestCourse === 'both' ? pickedFee?.combo ?? 0 : 0}
-            scholarship={
-              formData.academic.applicantCategory === 'school_student' &&
-              formData.academic.schoolType === 'government_school'
-            }
-          />
+        {/* Your studies */}
+        <Box sx={sectionSx}>
+          <YourStudiesBlock />
         </Box>
-      )}
 
-      <Divider sx={{ my: 4 }} />
+        {/* The fee, then the callback band */}
+        <Box sx={{ ...sectionSx, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {course.feeStructureLabel && (
+            <FeeSummaryCard
+              label={course.feeStructureLabel}
+              feeAmount={pickedFee?.amount ?? null}
+              comboExtraFee={course.interestCourse === 'both' ? pickedFee?.combo ?? 0 : 0}
+              scholarship={
+                formData.academic.applicantCategory === 'school_student' &&
+                formData.academic.schoolType === 'government_school'
+              }
+            />
+          )}
 
-      {/* Callback Request Option */}
-      <Box
-        sx={{
-          p: 3,
-          bgcolor: 'grey.50',
-          borderRadius: 1,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: 2,
-        }}
-      >
-        <Box>
-          <Typography variant="subtitle1" fontWeight={600}>
-            Need more information?
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Our counselors can help you choose the right course and answer your questions.
-          </Typography>
+          <Box
+            component="aside"
+            aria-labelledby="apply-callback-title"
+            sx={{
+              bgcolor: tk.navy900,
+              borderRadius: `${tk.radius}px`,
+              px: 3,
+              py: 2.5,
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: 2,
+            }}
+          >
+            <Box sx={{ flex: '1 1 260px' }}>
+              <Typography id="apply-callback-title" component="h2" sx={{ m: 0, fontSize: 17, fontWeight: 700, lineHeight: 1.35, color: tk.paper }}>
+                Need more information?
+              </Typography>
+              <Typography component="p" sx={{ m: 0, mt: 0.5, fontSize: 14, lineHeight: 1.5, color: tk.paperMuted }}>
+                Our counsellors can help you choose the right course and answer your questions.
+              </Typography>
+            </Box>
+            <Button
+              variant="outlined"
+              startIcon={<PhoneCallbackOutlined />}
+              onClick={openCallback}
+              sx={{
+                minHeight: 48,
+                px: 2,
+                borderRadius: `${tk.radius}px`,
+                border: `1px solid ${tk.outlineDark}`,
+                bgcolor: 'transparent',
+                color: tk.paper,
+                fontSize: 15,
+                fontWeight: 600,
+                '&:hover': { bgcolor: 'transparent', borderColor: tk.gold500 },
+                '&.Mui-focusVisible': { outline: tk.focusOutline, outlineOffset: '2px' },
+              }}
+            >
+              {t('yourCourse.askUsToCall')}
+            </Button>
+          </Box>
         </Box>
-        <Button
-          variant="outlined"
-          startIcon={<PhoneCallbackOutlined />}
-          onClick={() => {
-            setCallbackError(null);
-            setCallbackSuccess(false);
-            setCallbackDialogOpen(true);
-          }}
-        >
-          {t('yourCourse.askUsToCall')}
-        </Button>
       </Box>
 
       {/* ============================================ */}
-      {/* CENTERS DETAIL DIALOG */}
+      {/* CENTRES DETAIL DIALOG */}
       {/* ============================================ */}
       <Dialog
         open={centersDialogOpen}
@@ -621,170 +597,127 @@ export default function YourCourseStep() {
         fullScreen={isMobile}
         maxWidth="md"
         fullWidth
+        aria-labelledby="apply-centres-dialog-title"
+        PaperProps={{ sx: { borderRadius: isMobile ? 0 : `${tk.radius}px` } }}
       >
-        <DialogTitle
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            pr: 1,
-          }}
-        >
-          <Typography variant="h6" fontWeight={700}>
-            Our Learning Centers
-          </Typography>
-          <IconButton onClick={() => setCentersDialogOpen(false)} edge="end">
+        <DialogTitle id="apply-centres-dialog-title" sx={dialogTitleSx}>
+          Our learning centres
+          <IconButton onClick={() => setCentersDialogOpen(false)} aria-label="Close" sx={closeButtonSx}>
             <CloseOutlined />
           </IconButton>
         </DialogTitle>
-        <DialogContent dividers>
-          {/* City filter chips */}
-          <Box
-            sx={{
-              display: 'flex',
-              gap: 1,
-              overflowX: 'auto',
-              pb: 1,
-              mb: 2,
-              '&::-webkit-scrollbar': { display: 'none' },
-              msOverflowStyle: 'none',
-              scrollbarWidth: 'none',
-            }}
+        <DialogContent dividers sx={{ borderColor: tk.line }}>
+          {/* City filter pills */}
+          <ToggleButtonGroup
+            exclusive
+            aria-label="Filter by city"
+            value={centerCityFilter}
+            onChange={(_, next: string | null) => next && setCenterCityFilter(next)}
+            sx={{ flexWrap: 'nowrap', overflowX: 'auto', pb: 1, mb: 2, scrollbarWidth: 'none', '&::-webkit-scrollbar': { display: 'none' } }}
           >
-            <Chip
-              label="All Cities"
-              onClick={() => setCenterCityFilter('all')}
-              color={centerCityFilter === 'all' ? 'primary' : 'default'}
-              variant={centerCityFilter === 'all' ? 'filled' : 'outlined'}
-              sx={{ minHeight: 40, flexShrink: 0 }}
-            />
+            <ToggleButton value="all" sx={{ flexShrink: 0, minHeight: 44 }}>
+              All cities
+            </ToggleButton>
             {uniqueCities.map((city) => (
-              <Chip
-                key={city}
-                label={city}
-                onClick={() => setCenterCityFilter(city)}
-                color={centerCityFilter === city ? 'primary' : 'default'}
-                variant={centerCityFilter === city ? 'filled' : 'outlined'}
-                sx={{ minHeight: 40, flexShrink: 0 }}
-              />
+              <ToggleButton key={city} value={city} sx={{ flexShrink: 0, minHeight: 44 }}>
+                {city}
+              </ToggleButton>
             ))}
-          </Box>
+          </ToggleButtonGroup>
 
-          {/* Center cards */}
-          <Grid container spacing={2}>
-            {filteredCenters.map((center) => (
-              <Grid item xs={12} sm={6} key={center.id}>
-                <Card
-                  variant={course.selectedCenterId === center.id ? 'elevation' : 'outlined'}
-                  sx={{
-                    height: '100%',
-                    borderColor:
-                      course.selectedCenterId === center.id ? 'primary.main' : 'divider',
-                    borderWidth: course.selectedCenterId === center.id ? 2 : 1,
-                    transition: 'border-color 0.2s, box-shadow 0.2s',
-                  }}
+          {/* Centre cards */}
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: 2 }}>
+            {filteredCenters.map((center) => {
+              const selected = course.selectedCenterId === center.id;
+              return (
+                <Box
+                  key={center.id}
+                  sx={selectedCardSx(selected, { display: 'flex', flexDirection: 'column', gap: '8px', padding: '16px 18px', height: '100%' })}
                 >
-                  <CardContent>
-                    {/* Center Name */}
-                    <Box
-                      display="flex"
-                      alignItems="flex-start"
-                      justifyContent="space-between"
-                    >
-                      <Typography variant="subtitle1" fontWeight={700}>
-                        {center.name}
+                  <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
+                    <Typography component="h3" sx={{ m: 0, fontSize: 16, fontWeight: 700, lineHeight: 1.35, color: tk.ink }}>
+                      {center.name}
+                    </Typography>
+                    {selected && <CheckCircleOutlined aria-hidden sx={{ fontSize: 22, color: tk.navy900, flexShrink: 0 }} />}
+                  </Box>
+
+                  <Box sx={dialogRowSx}>
+                    <LocationOnOutlined aria-hidden sx={dialogIconSx} />
+                    <Typography component="p" sx={dialogTextSx}>
+                      {center.address}
+                      <br />
+                      {center.city}, {center.state} {center.pincode}
+                    </Typography>
+                  </Box>
+
+                  {center.preferred_visit_times && center.preferred_visit_times.length > 0 && (
+                    <Box sx={dialogRowSx}>
+                      <ScheduleOutlined aria-hidden sx={dialogIconSx} />
+                      <Typography component="p" sx={dialogTextSx}>
+                        Visiting: {center.preferred_visit_times.join(', ')}
                       </Typography>
-                      {course.selectedCenterId === center.id && (
-                        <CheckCircleOutlined color="primary" />
-                      )}
                     </Box>
+                  )}
 
-                    {/* Address */}
-                    <Box display="flex" alignItems="flex-start" gap={1} mt={1}>
-                      <LocationOnOutlined fontSize="small" color="action" sx={{ mt: 0.3 }} />
-                      <Typography variant="body2" color="text.secondary">
-                        {center.address}
-                        <br />
-                        {center.city}, {center.state} {center.pincode}
-                      </Typography>
+                  {center.contact_phone && (
+                    <Box sx={dialogRowSx}>
+                      <PhoneOutlined aria-hidden sx={dialogIconSx} />
+                      <Box
+                        component="a"
+                        href={`tel:${center.contact_phone}`}
+                        sx={{ fontSize: 14, fontWeight: 600, color: tk.ink, textDecoration: 'underline', '&:focus-visible': { outline: tk.focusOutline, outlineOffset: '2px' } }}
+                      >
+                        {center.contact_phone}
+                      </Box>
                     </Box>
+                  )}
 
-                    {/* Visiting Hours */}
-                    {center.preferred_visit_times &&
-                      center.preferred_visit_times.length > 0 && (
-                        <Box display="flex" alignItems="center" gap={1} mt={1}>
-                          <ScheduleOutlined fontSize="small" color="action" />
-                          <Typography variant="body2" color="text.secondary">
-                            Visiting: {center.preferred_visit_times.join(', ')}
-                          </Typography>
-                        </Box>
-                      )}
-
-                    {/* Contact Phone */}
-                    {center.contact_phone && (
-                      <Box display="flex" alignItems="center" gap={1} mt={1}>
-                        <PhoneOutlined fontSize="small" color="action" />
-                        <Typography
-                          variant="body2"
-                          component="a"
-                          href={`tel:${center.contact_phone}`}
-                          sx={{ color: 'text.primary', fontWeight: 600 }}
+                  {center.facilities && center.facilities.length > 0 && (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                      {center.facilities.map((facility) => (
+                        <Box
+                          key={facility}
+                          component="span"
+                          sx={{ px: 1, py: 0.25, borderRadius: '4px', border: `1px solid ${tk.line}`, bgcolor: tk.ground, fontSize: 12, fontWeight: 600, color: tk.inkMuted }}
                         >
-                          {center.contact_phone}
-                        </Typography>
-                      </Box>
-                    )}
+                          {facility}
+                        </Box>
+                      ))}
+                    </Box>
+                  )}
 
-                    {/* Facilities */}
-                    {center.facilities && center.facilities.length > 0 && (
-                      <Box display="flex" flexWrap="wrap" gap={0.5} mt={1.5}>
-                        {center.facilities.map((facility) => (
-                          <Chip
-                            key={facility}
-                            label={facility}
-                            size="small"
-                            variant="outlined"
-                          />
-                        ))}
-                      </Box>
+                  <Box sx={{ mt: 'auto', pt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                    {selected ? (
+                      <Button variant="contained" onClick={() => handleSelectCenterFromDialog(center)} sx={{ minHeight: 44 }}>
+                        Selected
+                      </Button>
+                    ) : (
+                      <Button variant="outlined" onClick={() => handleSelectCenterFromDialog(center)} sx={outlineButtonSx}>
+                        Select this centre
+                      </Button>
                     )}
-                  </CardContent>
-
-                  {/* Action Buttons */}
-                  <Box sx={{ px: 2, pb: 2, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                    <Button
-                      variant={course.selectedCenterId === center.id ? 'contained' : 'outlined'}
-                      size="small"
-                      onClick={() => handleSelectCenterFromDialog(center)}
-                      sx={{ minHeight: 40 }}
-                    >
-                      {course.selectedCenterId === center.id ? 'Selected' : 'Select this Center'}
-                    </Button>
                     <Button
                       variant="text"
-                      size="small"
                       startIcon={<DirectionsOutlined />}
                       onClick={() => handleGetDirections(center)}
-                      sx={{ minHeight: 40 }}
+                      sx={{ ...textLinkSx, px: 1 }}
                     >
                       Directions
                     </Button>
                   </Box>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
+                </Box>
+              );
+            })}
+          </Box>
 
           {filteredCenters.length === 0 && (
-            <Box textAlign="center" py={4}>
-              <Typography variant="body1" color="text.secondary">
-                No centers found in this city.
-              </Typography>
-            </Box>
+            <Typography component="p" sx={{ m: 0, py: 4, fontSize: 15, color: tk.inkMuted }}>
+              No centres found in this city.
+            </Typography>
           )}
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
-          <Button onClick={() => setCentersDialogOpen(false)} variant="contained">
+          <Button onClick={() => setCentersDialogOpen(false)} variant="contained" sx={{ minHeight: 48, px: 3 }}>
             Done
           </Button>
         </DialogActions>
@@ -799,73 +732,51 @@ export default function YourCourseStep() {
         maxWidth="sm"
         fullWidth
         fullScreen={isMobile}
+        aria-labelledby="apply-callback-dialog-title"
+        PaperProps={{ sx: { borderRadius: isMobile ? 0 : `${tk.radius}px` } }}
       >
-        <DialogTitle
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            pr: 1,
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <PhoneCallbackOutlined color="primary" />
-            <Typography variant="h6" fontWeight={700}>
-              Request a Callback
-            </Typography>
+        <DialogTitle id="apply-callback-dialog-title" sx={dialogTitleSx}>
+          <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Box component="span" sx={iconTile40Sx}>
+              <PhoneCallbackOutlined aria-hidden />
+            </Box>
+            Request a callback
           </Box>
-          <IconButton onClick={() => setCallbackDialogOpen(false)} edge="end">
+          <IconButton onClick={() => setCallbackDialogOpen(false)} aria-label="Close" sx={closeButtonSx}>
             <CloseOutlined />
           </IconButton>
         </DialogTitle>
-        <DialogContent dividers>
-          {/* Success State */}
+        <DialogContent dividers sx={{ borderColor: tk.line }}>
           {callbackSuccess ? (
-            <Box textAlign="center" py={4}>
-              <CheckCircleOutlined sx={{ fontSize: 64, color: 'success.main', mb: 2 }} />
-              <Typography variant="h6" gutterBottom fontWeight={600}>
-                Callback Requested!
+            <Box sx={{ py: 3, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1.5 }} role="status">
+              <Box component="span" sx={{ ...iconTile40Sx, width: 56, height: 56, '& svg': { fontSize: 30 } }}>
+                <CheckOutlined aria-hidden />
+              </Box>
+              <Typography component="h3" sx={{ m: 0, fontSize: 20, fontWeight: 800, color: tk.ink }}>
+                Callback requested
               </Typography>
-              <Typography variant="body1" color="text.secondary" sx={{ mb: 1 }}>
-                Our counselors will call you soon to help with your queries.
+              <Typography component="p" sx={{ m: 0, fontSize: 15, lineHeight: 1.5, color: tk.inkMuted }}>
+                Our counsellors will call you soon to help with your questions.
               </Typography>
-              <Box display="flex" alignItems="center" justifyContent="center" gap={1} mt={2}>
-                <AccessTimeOutlined sx={{ fontSize: 18, color: 'text.secondary' }} />
-                <Typography variant="body2" color="text.secondary">
-                  Usually within 2-4 hours during business hours
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <AccessTimeOutlined aria-hidden sx={{ fontSize: 18, color: tk.inkMuted }} />
+                <Typography component="p" sx={{ m: 0, fontSize: 14, color: tk.inkMuted }}>
+                  Usually within 2 to 4 hours during business hours
                 </Typography>
               </Box>
             </Box>
-          ) : !user ? (
-            /* Not Authenticated */
-            <Box textAlign="center" py={3}>
-              <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
-                Please complete the login and phone verification in the application form first, then request a callback.
+          ) : !user || !isPhoneVerified ? (
+            <Box sx={{ py: 2, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 2 }}>
+              <Typography component="p" sx={{ m: 0, fontSize: 15, lineHeight: 1.5, color: tk.ink }}>
+                {!user
+                  ? 'Please complete the login and phone verification in the application form first, then request a callback.'
+                  : 'Please verify your phone number in Step 1 (About you) first. We need a verified phone number to call you back.'}
               </Typography>
-              <Button
-                variant="contained"
-                onClick={() => setCallbackDialogOpen(false)}
-                sx={{ minHeight: 48 }}
-              >
-                Go Back to Form
-              </Button>
-            </Box>
-          ) : !isPhoneVerified ? (
-            /* Phone Not Verified */
-            <Box textAlign="center" py={3}>
-              <Typography variant="body1" color="text.secondary" sx={{ mb: 2 }}>
-                Please verify your phone number in Step 1 (Personal Information) first. We need a verified phone number to call you back.
-              </Typography>
-              <Button
-                variant="contained"
-                onClick={() => setCallbackDialogOpen(false)}
-                sx={{ minHeight: 48 }}
-              >
-                Go Back to Form
+              <Button variant="contained" onClick={() => setCallbackDialogOpen(false)} sx={{ minHeight: 48, px: 3 }}>
+                Go back to the form
               </Button>
             </Box>
           ) : (
-            /* Phone Verified - Show Callback Form */
             <Stack spacing={3} sx={{ mt: 1 }}>
               {callbackError && (
                 <Alert severity="error" onClose={() => setCallbackError(null)}>
@@ -873,73 +784,76 @@ export default function YourCourseStep() {
                 </Alert>
               )}
 
-              {/* Pre-filled info */}
-              <Stack spacing={2}>
-                <TextField
-                  label="Your Name"
-                  value={formData.personal.firstName || ''}
-                  InputProps={{ readOnly: true }}
-                  fullWidth
-                  size="medium"
-                />
-                <TextField
-                  label="Your Phone"
-                  value={formData.personal.phone?.replace(/^\+91/, '') || ''}
-                  InputProps={{ readOnly: true }}
-                  fullWidth
-                  size="medium"
-                />
-              </Stack>
-
-              {/* Preferred Time Slot */}
-              <Box>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                  Preferred time for callback (optional)
-                </Typography>
-                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                  {(['morning', 'afternoon', 'evening'] as TimeSlot[]).map((slot) => (
-                    <Chip
-                      key={slot}
-                      label={slot.charAt(0).toUpperCase() + slot.slice(1)}
-                      onClick={() => setCallbackSlot(callbackSlot === slot ? null : slot)}
-                      color={callbackSlot === slot ? 'primary' : 'default'}
-                      variant={callbackSlot === slot ? 'filled' : 'outlined'}
-                      sx={{ minHeight: 40 }}
-                    />
-                  ))}
-                </Stack>
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 200px), 1fr))', gap: '20px 16px' }}>
+                <Field id="apply-callback-name" label="Your name">
+                  <TextField
+                    id="apply-callback-name"
+                    hiddenLabel
+                    fullWidth
+                    value={formData.personal.firstName || ''}
+                    InputProps={{ readOnly: true }}
+                  />
+                </Field>
+                <Field id="apply-callback-phone" label="Your phone">
+                  <TextField
+                    id="apply-callback-phone"
+                    hiddenLabel
+                    fullWidth
+                    value={formData.personal.phone?.replace(/^\+91/, '') || ''}
+                    InputProps={{ readOnly: true }}
+                  />
+                </Field>
               </Box>
 
-              {/* Notes */}
-              <TextField
-                label="Any specific questions? (optional)"
-                placeholder="E.g., fee structure, batch timings, center facilities..."
-                value={callbackNotes}
-                onChange={(e) => setCallbackNotes(e.target.value)}
-                multiline
-                rows={3}
-                fullWidth
-              />
+              <Box>
+                <Typography id="apply-callback-slot" component="p" sx={{ m: 0, mb: 1, fontSize: 15, fontWeight: 600, color: tk.ink }}>
+                  Preferred time for the call (optional)
+                </Typography>
+                <ToggleButtonGroup
+                  exclusive
+                  aria-labelledby="apply-callback-slot"
+                  value={callbackSlot}
+                  onChange={(_, next: TimeSlot | null) => setCallbackSlot(next)}
+                  sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 1 }}
+                >
+                  {(['morning', 'afternoon', 'evening'] as TimeSlot[]).map((slot) => (
+                    <ToggleButton key={slot} value={slot}>
+                      {slot.charAt(0).toUpperCase() + slot.slice(1)}
+                    </ToggleButton>
+                  ))}
+                </ToggleButtonGroup>
+              </Box>
+
+              <Field id="apply-callback-notes" label="Any specific questions? (optional)">
+                <TextField
+                  id="apply-callback-notes"
+                  hiddenLabel
+                  placeholder="E.g., fee structure, batch timings, centre facilities"
+                  value={callbackNotes}
+                  onChange={(e) => setCallbackNotes(e.target.value)}
+                  multiline
+                  minRows={3}
+                  fullWidth
+                />
+              </Field>
             </Stack>
           )}
         </DialogContent>
         {!callbackSuccess && user && isPhoneVerified && (
-          <DialogActions sx={{ px: 3, py: 2 }}>
-            <Button onClick={() => setCallbackDialogOpen(false)}>Cancel</Button>
+          <DialogActions sx={{ px: 3, py: 2, gap: 1 }}>
+            <Button onClick={() => setCallbackDialogOpen(false)} sx={{ minHeight: 48, px: 2, color: tk.ink }}>
+              Cancel
+            </Button>
             <Button
               variant="contained"
               onClick={handleCallbackSubmit}
               disabled={callbackSubmitting}
               startIcon={
-                callbackSubmitting ? (
-                  <CircularProgress size={20} color="inherit" />
-                ) : (
-                  <PhoneCallbackOutlined />
-                )
+                callbackSubmitting ? <CircularProgress size={20} color="inherit" /> : <PhoneCallbackOutlined />
               }
-              sx={{ minHeight: 48 }}
+              sx={{ minHeight: 48, px: 3 }}
             >
-              {callbackSubmitting ? 'Submitting...' : 'Request Callback'}
+              {callbackSubmitting ? 'Submitting' : 'Request callback'}
             </Button>
           </DialogActions>
         )}

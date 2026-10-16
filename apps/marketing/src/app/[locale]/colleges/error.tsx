@@ -1,6 +1,7 @@
 'use client';
 
 import { Box, Container, Typography, Button } from '@mui/material';
+import { tokens } from '@/design-system';
 
 export default function CollegesError({
   error,
@@ -16,9 +17,10 @@ export default function CollegesError({
       </Typography>
       <Box
         sx={{
-          bgcolor: '#fef2f2',
-          border: '1px solid #fecaca',
-          borderRadius: 2,
+          bgcolor: tokens.surface,
+          border: '1px solid',
+          borderColor: 'error.main',
+          borderRadius: 1,
           p: 3,
           mb: 3,
           textAlign: 'left',
@@ -28,7 +30,7 @@ export default function CollegesError({
           {error.name}: {error.message}
         </Typography>
         {error.digest && (
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" color={tokens.inkMuted}>
             Digest: {error.digest}
           </Typography>
         )}

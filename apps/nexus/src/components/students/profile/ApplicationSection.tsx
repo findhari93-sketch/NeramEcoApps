@@ -48,9 +48,15 @@ function hasVisibleGaps(a: ProfileApplication): boolean {
 
 export default function ApplicationSection({
   application,
+  profileDetails = null,
   ask,
 }: {
   application: ProfileApplication | null;
+  /**
+   * What the student typed on their own Nexus profile page, when there is no
+   * application. Shown as their answers, never as a form.
+   */
+  profileDetails?: ProfileApplication | null;
   /** Omit to render the section read-only, as the parent portal does. */
   ask?: {
     studentId: string;
@@ -65,9 +71,10 @@ export default function ApplicationSection({
       <ProfileSection
         id="profile-application"
         title="Application form"
-        headline="No application on file"
+        headline={profileDetails ? 'No application form, profile details only' : 'No application on file'}
       >
         <EmptyNote>{EMPTY_SENTENCE.application}</EmptyNote>
+        {profileDetails && <ProfileDetailsBlock details={profileDetails} />}
         {/* The whole point of naming the absence is being able to fix it. Without
             this the section was a dead end, and staff went looking for the button
             on a different screen. */}
@@ -212,5 +219,45 @@ export default function ApplicationSection({
         </>
       )}
     </ProfileSection>
+  );
+}
+
+/**
+ * The few answers a student gave on the Nexus profile page, with the date.
+ *
+ * Shown so staff are not left guessing, and labelled plainly as not being an
+ * application, because the page asks a handful of questions and none of the ones
+ * an application carries: phone verification, address, the fee choices.
+ */
+function ProfileDetailsBlock({ details }: { details: ProfileApplication }) {
+  return (
+    <Box sx={{ mt: 2 }}>
+      <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+        What they told us in Nexus
+      </Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+        Filled in on their Nexus profile on {formatDateIN(details.created_at)}. This is not an application.
+      </Typography>
+      <FieldGrid>
+        <Field
+          label="Applicant category"
+          value={labelFor(APPLICANT_CATEGORY_LABEL, details.applicant_category)}
+        />
+        <Field label="Target exam year" value={details.target_exam_year} />
+        <Field
+          label="School type"
+          value={details.school_type ? labelFor(SCHOOL_TYPE_LABEL, details.school_type) : null}
+        />
+        <Field
+          label="Learning mode"
+          value={details.learning_mode ? labelFor(LEARNING_MODE_LABEL, details.learning_mode) : null}
+        />
+        <Field
+          label="Course of interest"
+          value={details.interest_course ? humanise(details.interest_course) : null}
+        />
+        <Field label="City" value={details.city} />
+      </FieldGrid>
+    </Box>
   );
 }

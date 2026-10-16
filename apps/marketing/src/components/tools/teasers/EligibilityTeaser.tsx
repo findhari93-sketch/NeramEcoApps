@@ -1,20 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  Box,
-  Button,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Paper,
-  Select,
-  TextField,
-  Typography,
-} from '@neram/ui';
-import Link from 'next/link';
+import { FormControl, InputLabel, MenuItem, Select, TextField } from '@neram/ui';
+import { CtaButton, QuickCheck, QuickCheckResult } from '@/design-system';
+
+const FULL_TOOL = 'https://app.neramclasses.com/tools/nata/eligibility-checker';
 
 const BOARDS = ['CBSE', 'ICSE', 'State Board'];
+
+const fieldSx = { '& .MuiInputBase-root': { minHeight: 48 }, '& input': { fontSize: '1rem' } } as const;
 
 export default function EligibilityTeaser() {
   const [board, setBoard] = useState('');
@@ -39,24 +33,11 @@ export default function EligibilityTeaser() {
   }
 
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: { xs: 3, sm: 4 },
-        border: '1px solid #E0E0E0',
-        borderRadius: 2,
-      }}
-    >
-      <Typography
-        component="h2"
-        sx={{ fontWeight: 700, fontSize: { xs: '1.25rem', sm: '1.5rem' }, mb: 2 }}
-      >
-        Quick Eligibility Check
-      </Typography>
-
-      <FormControl fullWidth sx={{ mb: 2 }}>
-        <InputLabel>Your Board</InputLabel>
+    <QuickCheck title="Quick eligibility check" headingId="eligibility-quick-check">
+      <FormControl fullWidth>
+        <InputLabel id="eligibility-board-label">Your Board</InputLabel>
         <Select
+          labelId="eligibility-board-label"
           value={board}
           label="Your Board"
           onChange={(e) => {
@@ -64,7 +45,7 @@ export default function EligibilityTeaser() {
             setError('');
             setResult(null);
           }}
-          sx={{ minHeight: 48 }}
+          sx={{ minHeight: 48, fontSize: '1rem' }}
         >
           {BOARDS.map((b) => (
             <MenuItem key={b} value={b}>
@@ -83,64 +64,33 @@ export default function EligibilityTeaser() {
           setError('');
           setResult(null);
         }}
-        inputProps={{ min: 0, max: 100, step: 0.1 }}
+        inputProps={{ min: 0, max: 100, step: 0.1, inputMode: 'decimal' }}
         fullWidth
         error={!!error}
         helperText={error || 'Enter your Physics, Chemistry, Maths combined percentage'}
-        sx={{
-          mb: 2,
-          '& .MuiInputBase-root': { minHeight: 48 },
-        }}
+        sx={fieldSx}
       />
 
-      <Button
-        variant="contained"
-        fullWidth
-        onClick={handleCheck}
-        sx={{
-          minHeight: 48,
-          fontWeight: 700,
-          fontSize: '1rem',
-          mb: result ? 3 : 0,
-        }}
-      >
+      <CtaButton variant="navy" fullWidth onClick={handleCheck} endIcon={null}>
         Check Eligibility
-      </Button>
+      </CtaButton>
 
-      {result && (
-        <Box>
-          <Typography
-            sx={{
-              fontSize: { xs: '1rem', sm: '1.1rem' },
-              fontWeight: 600,
-              color: result === 'eligible' ? 'success.dark' : 'warning.dark',
-              mb: 2,
-              p: 2,
-              bgcolor: result === 'eligible' ? '#E8F5E9' : '#FFF8E1',
-              borderRadius: 1,
-              lineHeight: 1.6,
-            }}
-          >
-            {result === 'eligible'
+      {result ? (
+        <QuickCheckResult
+          label="NATA 2026 eligibility"
+          summary={
+            result === 'eligible'
               ? 'You are eligible for NATA 2026 based on the minimum 50% PCM criteria for General category.'
-              : 'You may not meet the minimum criteria. General category requires 50% in PCM. SC/ST candidates need 45%.'}
-          </Typography>
-
-          <Button
-            component={Link}
-            href="https://app.neramclasses.com/tools/nata/eligibility-checker"
-            variant="outlined"
-            fullWidth
-            sx={{
-              minHeight: 48,
-              fontWeight: 700,
-              fontSize: '0.95rem',
-            }}
-          >
-            Check complete eligibility with all criteria
-          </Button>
-        </Box>
+              : 'You may not meet the minimum criteria. General category requires 50% in PCM. SC/ST candidates need 45%.'
+          }
+        />
+      ) : (
+        <QuickCheckResult label="NATA 2026 eligibility" summary="Enter your board and PCM percentage to check" />
       )}
-    </Paper>
+
+      <CtaButton href={FULL_TOOL} external fullWidth>
+        Check complete eligibility with all criteria
+      </CtaButton>
+    </QuickCheck>
   );
 }

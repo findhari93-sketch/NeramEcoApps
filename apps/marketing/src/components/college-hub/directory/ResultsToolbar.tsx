@@ -2,7 +2,6 @@
 
 import Link from 'next/link';
 import { Box, Typography } from '@mui/material';
-import { alpha } from '@mui/material/styles';
 import CloseIcon from '@mui/icons-material/Close';
 import ViewAgendaOutlinedIcon from '@mui/icons-material/ViewAgendaOutlined';
 import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
@@ -13,6 +12,7 @@ import type { ViewMode } from '../view-mode';
 import type { FilterDraft, SortKey } from './filter-model';
 import HubSelect from './HubSelect';
 import { hubType } from './hub-styles';
+import { tokens } from '@/design-system';
 
 interface Props {
   shown: number;
@@ -73,13 +73,13 @@ export default function ResultsToolbar({ shown, total, draft, onChange, onClear,
   return (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '10px 16px', mb: 1.75 }}>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px 10px', minWidth: 0, flex: '1 1 320px' }}>
-        <Typography role="status" sx={{ m: 0, fontSize: hubType.body, color: 'text.secondary', whiteSpace: 'nowrap' }}>
-          Showing <Box component="b" sx={{ color: 'text.primary' }}>{shown.toLocaleString('en-IN')}</Box> of{' '}
-          <Box component="b" sx={{ color: 'text.primary' }}>{total.toLocaleString('en-IN')}</Box> {total === 1 ? 'college' : 'colleges'}
+        <Typography role="status" sx={{ m: 0, fontSize: hubType.body, color: tokens.inkMuted, whiteSpace: 'nowrap' }}>
+          Showing <Box component="b" sx={{ color: tokens.ink }}>{shown.toLocaleString('en-IN')}</Box> of{' '}
+          <Box component="b" sx={{ color: tokens.ink }}>{total.toLocaleString('en-IN')}</Box> {total === 1 ? 'college' : 'colleges'}
         </Typography>
         {chips.length > 0 && (
           <>
-            <Box aria-hidden sx={{ width: '1px', height: 20, bgcolor: 'divider', display: { xs: 'none', sm: 'block' } }} />
+            <Box aria-hidden sx={{ width: '1px', height: 20, bgcolor: tokens.line, display: { xs: 'none', sm: 'block' } }} />
             <Box component="ul" aria-label="Active filters" sx={{ listStyle: 'none', m: 0, p: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.75 }}>
               {chips.map((c) => (
                 <li key={c.key}>
@@ -88,7 +88,7 @@ export default function ResultsToolbar({ shown, total, draft, onChange, onClear,
                     type="button"
                     onClick={() => onChange(c.remove(draft))}
                     aria-label={`Remove filter: ${c.label}`}
-                    sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minHeight: 36, pl: 1.5, pr: 1, border: '1px solid', borderColor: (t) => alpha(t.palette.primary.main, 0.35), borderRadius: 16, bgcolor: (t) => alpha(t.palette.primary.main, 0.08), color: 'primary.dark', font: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
+                    sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minHeight: 36, pl: 1.5, pr: 1, border: '1px solid', borderColor: tokens.lineStrong, borderRadius: `${tokens.radiusPill}px`, bgcolor: tokens.surfaceHover, color: tokens.navy900, font: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer', '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } }}
                   >
                     {c.label}
                     <CloseIcon aria-hidden sx={{ fontSize: 14 }} />
@@ -100,7 +100,7 @@ export default function ResultsToolbar({ shown, total, draft, onChange, onClear,
                   component="button"
                   type="button"
                   onClick={onClear}
-                  sx={{ minHeight: 36, px: 0.75, border: 0, bgcolor: 'transparent', color: 'primary.dark', font: 'inherit', fontSize: 13, fontWeight: 700, cursor: 'pointer', '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' } }}
+                  sx={{ minHeight: 36, px: 0.75, border: 0, bgcolor: 'transparent', color: tokens.navy900, font: 'inherit', fontSize: 13, fontWeight: 700, cursor: 'pointer', '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } }}
                 >
                   Clear all
                 </Box>
@@ -110,7 +110,7 @@ export default function ResultsToolbar({ shown, total, draft, onChange, onClear,
         )}
       </Box>
       <Box sx={{ display: { xs: 'none', md: 'flex' }, flexWrap: 'wrap', alignItems: 'center', gap: 1.5 }}>
-        <Box component="label" htmlFor="results-sort" sx={{ fontSize: hubType.meta, color: 'text.secondary' }}>
+        <Box component="label" htmlFor="results-sort" sx={{ fontSize: hubType.meta, color: tokens.inkMuted }}>
           Sort by
         </Box>
         <HubSelect id="results-sort" value={draft.sort} onChange={(e) => onChange({ ...draft, sort: e.target.value as SortKey })} fontSize={13.5} sx={{ minWidth: 190 }}>
@@ -120,7 +120,7 @@ export default function ResultsToolbar({ shown, total, draft, onChange, onClear,
             </option>
           ))}
         </HubSelect>
-        <Box component="nav" aria-label="Result view" sx={{ display: 'flex', border: '1px solid', borderColor: 'grey.400', borderRadius: 1.5, overflow: 'hidden', bgcolor: 'background.paper' }}>
+        <Box component="nav" aria-label="Result view" sx={{ display: 'flex', border: '1px solid', borderColor: tokens.lineStrong, borderRadius: 1, overflow: 'hidden', bgcolor: tokens.surface }}>
           {VIEWS.map(({ id, label, Icon }, i) => {
             const on = view === id;
             return (
@@ -130,7 +130,7 @@ export default function ResultsToolbar({ shown, total, draft, onChange, onClear,
                 href={viewHref(id)}
                 scroll={false}
                 aria-current={on ? 'page' : undefined}
-                sx={{ display: 'flex', alignItems: 'center', gap: 0.75, height: 42, px: 1.5, borderLeft: i ? '1px solid' : 0, borderColor: 'grey.400', bgcolor: on ? 'primary.main' : 'transparent', color: on ? 'primary.contrastText' : 'text.secondary', fontSize: 13.5, fontWeight: 600, textDecoration: 'none', '&:hover': { color: on ? 'primary.contrastText' : 'text.primary' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.dark', outlineOffset: -3 } }}
+                sx={{ display: 'flex', alignItems: 'center', gap: 0.75, height: 42, px: 1.5, borderLeft: i ? '1px solid' : 0, borderColor: tokens.lineStrong, bgcolor: on ? tokens.navy900 : 'transparent', color: on ? tokens.paper : tokens.inkMuted, fontSize: 13.5, fontWeight: 600, textDecoration: 'none', '&:hover': { color: on ? tokens.paper : tokens.ink }, '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: -3 } }}
               >
                 <Icon aria-hidden sx={{ fontSize: 17 }} />
                 {label}

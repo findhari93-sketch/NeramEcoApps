@@ -8,6 +8,7 @@ import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import RateReviewIcon from '@mui/icons-material/RateReview';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import { Link } from '@/i18n/routing';
+import { tokens } from '@/design-system';
 
 const FEATURES = [
   {
@@ -15,40 +16,40 @@ const FEATURES = [
     title: 'Rankings',
     description: 'NIRF and ArchIndex rankings for B.Arch colleges',
     href: '/colleges/rankings/nirf',
-    color: '#2563eb',
-    bg: '#eff6ff',
+    color: tokens.gold500,
+    bg: tokens.navy900,
   },
   {
     icon: <CompareArrowsIcon />,
     title: 'Compare',
     description: 'Side-by-side comparison of up to 3 colleges',
     href: '/colleges/compare',
-    color: '#059669',
-    bg: '#ecfdf5',
+    color: tokens.gold500,
+    bg: tokens.navy900,
   },
   {
     icon: <TrendingUpIcon />,
     title: 'Cutoff Data',
     description: 'TNEA and JoSAA cutoff trends across years',
     href: '/colleges/tnea',
-    color: '#d97706',
-    bg: '#fffbeb',
+    color: tokens.gold500,
+    bg: tokens.navy900,
   },
   {
     icon: <AccountBalanceWalletIcon />,
     title: 'Fee Explorer',
     description: 'Filter colleges by annual fee range',
     href: '/colleges/fees/below-2-lakhs',
-    color: '#dc2626',
-    bg: '#fef2f2',
+    color: tokens.gold500,
+    bg: tokens.navy900,
   },
   {
     icon: <RateReviewIcon />,
     title: 'Student Reviews',
     description: 'Read verified reviews from architecture students',
     href: null,
-    color: '#64748b',
-    bg: '#f8fafc',
+    color: tokens.inkMuted,
+    bg: tokens.surfaceHover,
     comingSoon: true,
   },
   {
@@ -56,8 +57,8 @@ const FEATURES = [
     title: 'AI College Chat',
     description: 'Ask anything about a college, get instant answers',
     href: null,
-    color: '#64748b',
-    bg: '#f8fafc',
+    color: tokens.inkMuted,
+    bg: tokens.surfaceHover,
     comingSoon: true,
   },
 ];
@@ -73,7 +74,7 @@ export default function PlatformFeatures() {
             sx={{
               fontSize: { xs: '1.35rem', sm: '1.75rem' },
               fontWeight: 800,
-              color: '#0f172a',
+              color: tokens.ink,
               mb: 1,
             }}
           >
@@ -81,7 +82,7 @@ export default function PlatformFeatures() {
           </Typography>
           <Typography
             variant="body1"
-            sx={{ color: '#64748b', maxWidth: 540, mx: 'auto', fontSize: '0.95rem' }}
+            sx={{ color: tokens.inkMuted, maxWidth: 540, mx: 'auto', fontSize: '0.95rem' }}
           >
             Research, compare, and decide with data, not guesswork
           </Typography>
@@ -101,7 +102,7 @@ export default function PlatformFeatures() {
                 variant="outlined"
                 sx={{
                   p: { xs: 2.5, sm: 3 },
-                  borderRadius: 2.5,
+                  borderRadius: 1,
                   height: '100%',
                   display: 'flex',
                   flexDirection: 'column',
@@ -111,7 +112,7 @@ export default function PlatformFeatures() {
                   opacity: feature.comingSoon ? 0.65 : 1,
                   transition: 'border-color 0.2s, box-shadow 0.2s',
                   '&:hover': feature.href
-                    ? { borderColor: feature.color, boxShadow: `0 4px 16px ${feature.color}15` }
+                    ? { borderColor: tokens.gold500 }
                     : {},
                 }}
               >
@@ -120,7 +121,7 @@ export default function PlatformFeatures() {
                   sx={{
                     width: 44,
                     height: 44,
-                    borderRadius: 2,
+                    borderRadius: 1,
                     bgcolor: feature.bg,
                     color: feature.color,
                     display: 'flex',
@@ -132,7 +133,7 @@ export default function PlatformFeatures() {
                 </Box>
 
                 <Stack direction="row" alignItems="center" gap={1}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 700, color: '#0f172a' }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 700, color: tokens.ink }}>
                     {feature.title}
                   </Typography>
                   {feature.comingSoon && (
@@ -143,14 +144,14 @@ export default function PlatformFeatures() {
                         height: 20,
                         fontSize: '0.65rem',
                         fontWeight: 700,
-                        bgcolor: '#f1f5f9',
-                        color: '#64748b',
+                        bgcolor: tokens.surfaceHover,
+                        color: tokens.inkMuted,
                       }}
                     />
                   )}
                 </Stack>
 
-                <Typography variant="body2" sx={{ color: '#64748b', lineHeight: 1.55 }}>
+                <Typography variant="body2" sx={{ color: tokens.inkMuted, lineHeight: 1.55 }}>
                   {feature.description}
                 </Typography>
               </Paper>

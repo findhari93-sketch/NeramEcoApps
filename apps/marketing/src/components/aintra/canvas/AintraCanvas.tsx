@@ -9,6 +9,7 @@ import { parseAintraAnswer } from '@/lib/aintra/rich/parse';
 import { answerToPlainText } from '@/lib/aintra/rich/plain';
 import AintraRichText from '../rich/AintraRichText';
 import CopyButton from '../rich/CopyButton';
+import { brandColors } from '@/design-system';
 
 export interface CanvasDoc {
   /** The message this canvas shows, so re-opening the same one is a no-op. */
@@ -73,7 +74,7 @@ export default function AintraCanvas({ doc, mode, onClose }: Props) {
         </Box>
         <CopyButton getText={plain} label="Copy answer" />
         <Tooltip title="Share on WhatsApp">
-          <IconButton aria-label="Share on WhatsApp" onClick={share} sx={{ width: 44, height: 44, color: '#0F7A3D' }}>
+          <IconButton aria-label="Share on WhatsApp" onClick={share} sx={{ width: 44, height: 44, color: brandColors.whatsappDark }}>
             <WhatsAppIcon sx={{ fontSize: 20 }} />
           </IconButton>
         </Tooltip>

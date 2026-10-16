@@ -25,6 +25,7 @@ import {
   Google,
 } from '@mui/icons-material';
 import { useFirebaseAuth } from '@neram/auth';
+import { tokens, brandColors } from '@/design-system';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'https://app.neramclasses.com';
 
@@ -64,10 +65,10 @@ interface EnrollmentData {
 
 function getOnboardingIcon(iconName: string | null) {
   switch (iconName) {
-    case 'WhatsApp': return <WhatsApp sx={{ color: '#25D366' }} />;
-    case 'Laptop': return <Laptop sx={{ color: '#0078D4' }} />;
-    case 'Groups': return <Groups sx={{ color: '#0078D4' }} />;
-    case 'Person': return <Person sx={{ color: '#1976d2' }} />;
+    case 'WhatsApp': return <WhatsApp sx={{ color: brandColors.whatsappDark }} />;
+    case 'Laptop': return <Laptop sx={{ color: tokens.navy900 }} />;
+    case 'Groups': return <Groups sx={{ color: tokens.navy900 }} />;
+    case 'Person': return <Person sx={{ color: tokens.navy900 }} />;
     default: return null;
   }
 }

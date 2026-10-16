@@ -1,18 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  Box,
-  Button,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Paper,
-  Select,
-  TextField,
-  Typography,
-} from '@neram/ui';
-import Link from 'next/link';
+import { FormControl, InputLabel, MenuItem, Select, TextField } from '@neram/ui';
+import { CtaButton, QuickCheck, QuickCheckResult } from '@/design-system';
+
+const FULL_TOOL = 'https://app.neramclasses.com/tools/counseling/college-predictor';
 
 const STATES = [
   'All India',
@@ -57,6 +49,8 @@ function getCollegeCount(score: number, state: string): number {
   return count;
 }
 
+const fieldSx = { '& .MuiInputBase-root': { minHeight: 48 }, '& input': { fontSize: '1rem' } } as const;
+
 export default function CollegePredictorTeaser() {
   const [score, setScore] = useState('');
   const [state, setState] = useState('All India');
@@ -76,21 +70,7 @@ export default function CollegePredictorTeaser() {
   }
 
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: { xs: 3, sm: 4 },
-        border: '1px solid #E0E0E0',
-        borderRadius: 2,
-      }}
-    >
-      <Typography
-        component="h2"
-        sx={{ fontWeight: 700, fontSize: { xs: '1.25rem', sm: '1.5rem' }, mb: 2 }}
-      >
-        Quick College Check
-      </Typography>
-
+    <QuickCheck title="Quick college check" headingId="college-predictor-quick-check">
       <TextField
         label="Your NATA Score (0 to 200)"
         type="number"
@@ -100,27 +80,24 @@ export default function CollegePredictorTeaser() {
           setError('');
           setResult(null);
         }}
-        inputProps={{ min: 0, max: 200 }}
+        inputProps={{ min: 0, max: 200, inputMode: 'numeric' }}
         fullWidth
         error={!!error}
         helperText={error}
-        sx={{
-          mb: 2,
-          '& .MuiInputBase-root': { minHeight: 48 },
-        }}
+        sx={fieldSx}
       />
 
-      <FormControl fullWidth sx={{ mb: 2 }}>
-        <InputLabel id="state-select-label">State</InputLabel>
+      <FormControl fullWidth>
+        <InputLabel id="college-predictor-state-label">State</InputLabel>
         <Select
-          labelId="state-select-label"
+          labelId="college-predictor-state-label"
           value={state}
           label="State"
           onChange={(e) => {
             setState(e.target.value as string);
             setResult(null);
           }}
-          sx={{ minHeight: 48 }}
+          sx={{ minHeight: 48, fontSize: '1rem' }}
         >
           {STATES.map((s) => (
             <MenuItem key={s} value={s}>
@@ -130,52 +107,19 @@ export default function CollegePredictorTeaser() {
         </Select>
       </FormControl>
 
-      <Button
-        variant="contained"
-        fullWidth
-        onClick={handleCheck}
-        sx={{
-          minHeight: 48,
-          fontWeight: 700,
-          fontSize: '1rem',
-          mb: result ? 3 : 0,
-        }}
-      >
+      <CtaButton variant="navy" fullWidth onClick={handleCheck} endIcon={null}>
         Check
-      </Button>
+      </CtaButton>
 
-      {result && (
-        <Box>
-          <Typography
-            sx={{
-              fontSize: { xs: '1rem', sm: '1.1rem' },
-              fontWeight: 600,
-              color: 'text.primary',
-              mb: 2,
-              p: 2,
-              bgcolor: '#E8F5E9',
-              borderRadius: 1,
-              lineHeight: 1.6,
-            }}
-          >
-            {result.count} colleges match your score in {result.state}.
-          </Typography>
-
-          <Button
-            component={Link}
-            href="https://app.neramclasses.com/tools/counseling/college-predictor"
-            variant="outlined"
-            fullWidth
-            sx={{
-              minHeight: 48,
-              fontWeight: 700,
-              fontSize: '0.95rem',
-            }}
-          >
-            View full college list with fees and cutoffs
-          </Button>
-        </Box>
+      {result ? (
+        <QuickCheckResult value={result.count} label="Colleges match your score" summary={`In ${result.state}`} />
+      ) : (
+        <QuickCheckResult label="Colleges that match your score" summary="Enter your score and tap Check" />
       )}
-    </Paper>
+
+      <CtaButton href={FULL_TOOL} external fullWidth>
+        View full college list with fees and cutoffs
+      </CtaButton>
+    </QuickCheck>
   );
 }

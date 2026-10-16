@@ -5,6 +5,7 @@ import Script from 'next/script';
 import { Box, Typography, Stack, Chip } from '@mui/material';
 import TourIcon from '@mui/icons-material/Tour';
 import type { VirtualTourScene } from '@/lib/college-hub/types';
+import { tokens } from '@/design-system';
 
 // Extend window for Pannellum
 declare global {
@@ -135,9 +136,9 @@ export default function VirtualTour({ scenes, collegeName }: VirtualTourProps) {
           sx={{
             width: '100%',
             height: { xs: 280, sm: 400, md: 500 },
-            borderRadius: 2,
+            borderRadius: 1,
             overflow: 'hidden',
-            bgcolor: '#0f172a',
+            bgcolor: tokens.ink,
           }}
         />
 
@@ -151,13 +152,13 @@ export default function VirtualTour({ scenes, collegeName }: VirtualTourProps) {
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              bgcolor: '#0f172a',
-              borderRadius: 2,
+              bgcolor: tokens.ink,
+              borderRadius: 1,
               gap: 1,
             }}
           >
-            <TourIcon sx={{ fontSize: 40, color: '#475569' }} />
-            <Typography variant="caption" sx={{ color: '#64748b' }}>
+            <TourIcon sx={{ fontSize: 40, color: tokens.inkMuted }} />
+            <Typography variant="caption" sx={{ color: tokens.inkMuted }}>
               Loading 360° tour of {collegeName}...
             </Typography>
           </Box>
@@ -167,7 +168,7 @@ export default function VirtualTour({ scenes, collegeName }: VirtualTourProps) {
       {/* Usage hint */}
       <Typography
         variant="caption"
-        color="text.secondary"
+        color={tokens.inkMuted}
         sx={{ display: 'block', mt: 1, textAlign: 'center' }}
       >
         Click and drag to explore. Scroll to zoom. Tap hotspots for details.

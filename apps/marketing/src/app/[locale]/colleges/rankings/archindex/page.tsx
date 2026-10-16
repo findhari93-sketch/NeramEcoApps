@@ -9,6 +9,7 @@ import { setRequestLocale } from 'next-intl/server';
 import { getArchIndexRankedColleges } from '@/lib/college-hub/queries';
 import ArchIndexRing from '@/components/college-hub/ArchIndexRing';
 import Breadcrumbs from '@/components/seo/Breadcrumbs';
+import { siteTokens } from '@neram/ui/site-tokens';
 
 export const revalidate = 86400;
 
@@ -35,25 +36,25 @@ export default async function ArchIndexRankingsPage({ params: { locale } }: { pa
         <Typography variant="h1" sx={{ fontSize: { xs: '1.5rem', sm: '2rem' }, fontWeight: 900, mb: 1 }}>
           ArchIndex Rankings: Best B.Arch Colleges
         </Typography>
-        <Typography color="text.secondary" variant="body2" sx={{ maxWidth: 600 }}>
+        <Typography color={siteTokens.inkMuted} variant="body2" sx={{ maxWidth: 600 }}>
           ArchIndex is Neram&apos;s proprietary 0-100 score for B.Arch colleges, combining studio quality (25%),
           faculty (20%), placements (20%), infrastructure (15%), student satisfaction (10%), and alumni network (10%).
           It goes deeper than NIRF by measuring what matters to architecture students.
         </Typography>
       </Box>
 
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 3, p: 2, bgcolor: '#eff6ff', borderRadius: 2 }}>
-        <InfoOutlinedIcon sx={{ color: '#2563eb', fontSize: 18, mt: 0.25, flexShrink: 0 }} />
-        <Typography variant="caption" color="#1e40af">
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 3, p: 2, bgcolor: siteTokens.ground, border: `1px solid ${siteTokens.line}`, borderRadius: 1 }}>
+        <InfoOutlinedIcon sx={{ color: siteTokens.inkMuted, fontSize: 18, mt: 0.25, flexShrink: 0 }} />
+        <Typography variant="caption" color={siteTokens.ink}>
           ArchIndex scores are calculated from verified placement data, student surveys, faculty credentials,
           infrastructure audits, and alumni success outcomes. Colleges can provide verified data via their college
           dashboard to improve their score accuracy.
         </Typography>
       </Box>
 
-      <Paper variant="outlined" sx={{ overflow: 'auto', borderRadius: 2 }}>
+      <Paper variant="outlined" sx={{ overflow: 'auto', borderRadius: 1 }}>
         <Table size="small">
-          <TableHead sx={{ bgcolor: '#f8fafc' }}>
+          <TableHead sx={{ bgcolor: siteTokens.ground }}>
             <TableRow>
               <TableCell sx={{ fontWeight: 700, width: 80 }}>Rank</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>College</TableCell>
@@ -78,14 +79,14 @@ export default async function ArchIndexRankingsPage({ params: { locale } }: { pa
                   <Typography
                     variant="body2"
                     fontWeight={700}
-                    color={i < 3 ? 'warning.main' : 'text.primary'}
+                    color={i < 3 ? siteTokens.gold800 : siteTokens.ink}
                   >
                     #{i + 1}
                   </Typography>
                 </TableCell>
                 <TableCell>
                   <Typography variant="body2" fontWeight={600}>{college.name}</Typography>
-                  <Typography variant="caption" color="text.secondary">{college.type}</Typography>
+                  <Typography variant="caption" color={siteTokens.inkMuted}>{college.type}</Typography>
                 </TableCell>
                 <TableCell>
                   <Typography variant="body2">{college.city}</Typography>
@@ -123,7 +124,7 @@ export default async function ArchIndexRankingsPage({ params: { locale } }: { pa
 
       {colleges.length === 0 && (
         <Box sx={{ textAlign: 'center', py: 6 }}>
-          <Typography color="text.secondary">
+          <Typography color={siteTokens.inkMuted}>
             ArchIndex scores are being calculated. Data coming soon.
           </Typography>
         </Box>

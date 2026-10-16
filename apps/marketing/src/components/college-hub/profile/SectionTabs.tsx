@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Box } from '@mui/material';
+import { tokens } from '@/design-system';
 
 export interface SectionTab {
   id: string;
@@ -59,9 +60,9 @@ export default function SectionTabs({ tabs }: { tabs: SectionTab[] }) {
         position: 'sticky',
         top: 'var(--broadcast-banner-height, 0px)',
         zIndex: 10,
-        bgcolor: 'background.paper',
+        bgcolor: tokens.surface,
         borderBottom: '1px solid',
-        borderColor: 'divider',
+        borderColor: tokens.line,
       }}
     >
       <Box
@@ -98,14 +99,14 @@ export default function SectionTabs({ tabs }: { tabs: SectionTab[] }) {
                   px: { xs: 1.5, md: 1.75 },
                   boxSizing: 'border-box',
                   borderBottom: '3px solid',
-                  borderBottomColor: on ? 'primary.main' : 'transparent',
-                  color: on ? 'text.primary' : 'text.secondary',
+                  borderBottomColor: on ? tokens.navy900 : 'transparent',
+                  color: on ? tokens.ink : tokens.inkMuted,
                   textDecoration: 'none',
                   fontSize: '0.92rem',
                   fontWeight: on ? 700 : 500,
                   transition: 'color 150ms, border-color 150ms',
-                  '&:hover': { color: 'text.primary' },
-                  '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -3 },
+                  '&:hover': { color: tokens.ink },
+                  '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: -3 },
                 }}
               >
                 {t.label}

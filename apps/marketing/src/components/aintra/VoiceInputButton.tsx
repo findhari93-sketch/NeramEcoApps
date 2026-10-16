@@ -19,6 +19,7 @@ import { Box, IconButton, Menu, MenuItem, Tooltip, Typography } from '@mui/mater
 import MicIcon from '@mui/icons-material/Mic';
 import StopIcon from '@mui/icons-material/Stop';
 import MicOffIcon from '@mui/icons-material/MicOff';
+import { tokens, errorColor } from '@/design-system';
 import {
   SPEECH_LANGS,
   useSpeechToText,
@@ -26,7 +27,7 @@ import {
 } from '@/lib/aintra/useSpeechToText';
 
 const LANG_STORAGE_KEY = 'aintra_speech_lang';
-const LISTENING_COLOR = '#ef4444';
+const LISTENING_COLOR = errorColor;
 
 function loadInitialLang(preferred?: string): string {
   if (typeof window !== 'undefined') {
@@ -61,7 +62,7 @@ export default function VoiceInputButton({
   value,
   onChange,
   disabled = false,
-  color = '#1d4ed8',
+  color = tokens.navy900,
   size = 40,
   maxLength = 500,
   defaultLang,
@@ -192,11 +193,11 @@ export default function VoiceInputButton({
               width: size,
               height: size,
               flexShrink: 0,
-              color: isListening ? '#fff' : error === 'denied' ? LISTENING_COLOR : color,
+              color: isListening ? tokens.surface : error === 'denied' ? LISTENING_COLOR : color,
               bgcolor: isListening ? LISTENING_COLOR : 'transparent',
               transition: 'background-color 200ms ease, color 200ms ease',
               '&:hover': {
-                bgcolor: isListening ? '#dc2626' : `${color}14`,
+                bgcolor: isListening ? LISTENING_COLOR : `${color}14`,
               },
               ...(isListening && {
                 animation: 'aintraMicPulse 1.6s ease-out infinite',

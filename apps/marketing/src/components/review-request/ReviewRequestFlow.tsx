@@ -53,6 +53,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import CheckIcon from '@mui/icons-material/Check';
 import type { PublicReviewView } from '@/lib/review-request-view';
 import { buildWhatsAppLink } from '@/lib/whatsapp';
+import { eyebrowSx, tokens as tk } from '@/design-system/tokens';
 
 const RECORD_CAP_MS = 120_000;
 const MIN_TEXT = 20;
@@ -80,23 +81,25 @@ const PLATFORM_LABEL = { justdial: 'Justdial', sulekha: 'Sulekha' } as const;
  * so colour is never the only signal.
  */
 function selectChipSx(on: boolean) {
-  const bg = on ? 'primary.main' : 'background.paper';
-  const fg = on ? 'primary.contrastText' : 'text.primary';
+  // The design-system Pill: selected = navy900 fill with paper text, unselected = white with a 2px line border.
+  const bg = on ? tk.navy900 : tk.surface;
+  const fg = on ? tk.paper : tk.ink;
   // '&&' doubles the class specificity: the theme's own hover, focus and active
   // rules otherwise win on a chip just tapped and turn it white on white.
   return {
     '&&': {
       minHeight: 44,
       fontWeight: 600,
-      border: '1px solid',
-      borderColor: on ? 'primary.main' : 'grey.400',
+      borderRadius: `${tk.radiusPill}px`,
+      border: '2px solid',
+      borderColor: on ? tk.navy900 : tk.line,
       bgcolor: bg,
       color: fg,
       '& .MuiChip-icon': { color: 'inherit' },
-      '&:hover': { bgcolor: on ? 'primary.dark' : 'grey.100', color: fg },
-      '&:focus, &:active, &.Mui-focusVisible': { bgcolor: on ? 'primary.main' : 'background.paper', color: fg },
-      '&.Mui-focusVisible': { outline: '3px solid', outlineColor: 'primary.light', outlineOffset: 2 },
-      '@media (hover: none)': { '&:hover': { bgcolor: bg } },
+      '&:hover': { bgcolor: on ? tk.navy700 : tk.surface, borderColor: on ? tk.navy700 : tk.ink, color: fg },
+      '&:focus, &:active, &.Mui-focusVisible': { bgcolor: bg, color: fg },
+      '&.Mui-focusVisible': { outline: tk.focusOutline, outlineOffset: 2 },
+      '@media (hover: none)': { '&:hover': { bgcolor: bg, borderColor: on ? tk.navy900 : tk.line } },
     },
   } as const;
 }
@@ -718,7 +721,7 @@ function Heading({ children, refEl }: { children: React.ReactNode; refEl: React.
 function FactsCard({ view, photoUrl, name }: { view: PublicReviewView; photoUrl: string | null; name: string }) {
   const result = view.airRank ? `AIR ${view.airRank}` : view.percentile != null ? `${view.percentile} percentile` : null;
   return (
-    <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
+    <Paper variant="outlined" sx={{ p: 2, borderRadius: `${tk.radius}px`, borderColor: tk.line, display: 'flex', gap: 2, alignItems: 'center' }}>
       <Avatar
         src={photoUrl || undefined}
         alt={name}
@@ -728,10 +731,10 @@ function FactsCard({ view, photoUrl, name }: { view: PublicReviewView; photoUrl:
           flexShrink: 0,
           fontSize: 28,
           fontWeight: 700,
-          bgcolor: 'primary.main',
-          color: 'common.white',
+          bgcolor: tk.navy700,
+          color: tk.paper,
           // The avatar ring the public card uses, so the student sees how they will look.
-          boxShadow: (t) => `0 0 0 3px ${t.palette.background.paper}, 0 0 0 5px ${t.palette.warning.main}`,
+          boxShadow: `0 0 0 3px ${tk.surface}, 0 0 0 5px ${tk.gold500}`,
         }}
       >
         {name.trim()[0]?.toUpperCase()}
@@ -1025,9 +1028,8 @@ function ActionBar({ children }: { children: React.ReactNode }) {
         px: { xs: 2, sm: 0 },
         py: { xs: 1.5, sm: 0 },
         pb: { xs: 'max(12px, env(safe-area-inset-bottom))', sm: 0 },
-        bgcolor: 'background.paper',
-        borderTop: { xs: 1, sm: 0 },
-        borderColor: 'grey.200',
+        bgcolor: tk.surface,
+        borderTop: { xs: `1px solid ${tk.line}`, sm: 0 },
         display: 'flex',
         gap: 1,
         zIndex: 10,
@@ -1040,23 +1042,23 @@ function ActionBar({ children }: { children: React.ReactNode }) {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <Box sx={{ minHeight: '100dvh', bgcolor: { xs: 'background.paper', sm: 'grey.50' } }}>
+    <Box sx={{ minHeight: '100dvh', bgcolor: { xs: tk.surface, sm: tk.ground }, color: tk.ink }}>
       <Container sx={{ px: { xs: 2, sm: 3 }, py: { xs: 2, sm: 5 }, maxWidth: 560 }} maxWidth={false}>
         <Box
           component="header"
           sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 2 }}
         >
-          <Typography sx={{ fontWeight: 800, letterSpacing: 0.2 }}>
-            neram<Box component="span" sx={{ color: 'primary.main' }}>Classes</Box>
+          <Typography component="p" sx={eyebrowSx}>
+            Neram Classes
           </Typography>
         </Box>
         <Paper
           elevation={0}
           sx={{
             p: { xs: 0, sm: 3 },
-            borderRadius: { xs: 0, sm: 2 },
-            border: { xs: 0, sm: 1 },
-            borderColor: 'grey.200',
+            bgcolor: tk.surface,
+            borderRadius: { xs: 0, sm: `${tk.radius}px` },
+            border: { xs: 0, sm: `1px solid ${tk.line}` },
             overflowWrap: 'anywhere',
           }}
         >

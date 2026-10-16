@@ -1,85 +1,91 @@
 'use client';
 
 import { Box } from '@neram/ui';
-import CheckRounded from '@mui/icons-material/CheckRounded';
-import FavoriteRounded from '@mui/icons-material/FavoriteRounded';
-import { NX, img } from '../palette';
-import { drift, pop, rise } from '../keyframes';
+import { tokens } from '@/design-system';
+import { NARROW, motion, type SceneProps } from '../motion';
+import { img } from '../palette';
+import { splitRule } from './shared';
 
-const COLUMNS = [
-  { delay: 0, items: [{ src: 'insp-1', tag: 'Featured', delay: 0.2 }, { src: 'insp-4', tag: 'Reference', delay: 1.0 }] },
-  { delay: 0.2, items: [{ src: 'insp-3', tag: "Teacher's pick", delay: 0.4, liked: true }, { src: 'insp-5', tag: '2D composition', delay: 1.2 }] },
-  { delay: 0.4, items: [{ src: 'insp-2', tag: 'Featured', delay: 0.6 }, { src: 'insp-6', tag: '3D composition', delay: 1.4 }] },
-];
+const INSPIRATION = ['insp-1', 'insp-2', 'insp-3', 'insp-4'];
 
-/** Scene 6: the sketchbook grid of drawings and references, one of them saved. */
-export default function SketchbookScene() {
+/** 06 Sketchbook: a two-point perspective block draws itself, then inspiration for the question appears. */
+export default function SketchbookScene(props: SceneProps) {
+  const { appear, draw } = motion(props);
+  const line = { fill: 'none', strokeLinecap: 'round', strokeLinejoin: 'round', pathLength: 1 } as const;
+
   return (
-    <Box
-      sx={{
-        position: 'absolute',
-        inset: 0,
-        p: 1.5,
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-        gap: 1,
-        alignItems: 'start',
-        overflow: 'hidden',
-      }}
-    >
-      {COLUMNS.map((col, ci) => (
+    <Box sx={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1.1fr) minmax(0, 1fr)' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, p: 1.5, borderRight: splitRule, minWidth: 0, [NARROW]: { p: 1 } }}>
+        <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1, fontSize: 12 }}>
+          <Box component="strong" sx={{ fontWeight: 700, whiteSpace: 'nowrap' }}>
+            Your sketchbook
+          </Box>
+          <Box component="span" sx={{ fontSize: 11, fontWeight: 600, color: tokens.inkMuted, whiteSpace: 'nowrap' }}>
+            Page 12
+          </Box>
+        </Box>
         <Box
-          key={ci}
-          sx={{ display: 'flex', flexDirection: 'column', gap: 1, animation: `${drift} 6s ease-out both`, animationDelay: `${col.delay}s` }}
+          sx={{
+            flex: 1,
+            minHeight: 0,
+            borderRadius: '6px',
+            bgcolor: tokens.ground,
+            backgroundImage: `radial-gradient(${tokens.lineStrong} 1px, transparent 1px)`,
+            backgroundSize: '14px 14px',
+          }}
         >
-          {col.items.map((it) => (
-            <Box key={it.src} sx={{ position: 'relative', bgcolor: NX.white, animation: `${pop} .45s ease ${it.delay}s both` }}>
-              <Box component="img" src={img(it.src)} alt="" loading="lazy" decoding="async" sx={{ display: 'block', width: '100%', height: 'auto' }} />
+          <Box component="svg" viewBox="0 0 300 200" preserveAspectRatio="xMidYMid meet" sx={{ display: 'block', width: '100%', height: '100%' }}>
+            <path d="M20 60 L280 60" stroke={tokens.lineStrong} strokeWidth={1} strokeDasharray="4 4" fill="none" />
+            <path
+              d="M150 50 L150 150 M150 50 L95 70 L95 140 L150 150 L215 138 L215 72 L150 50"
+              stroke={tokens.ink}
+              strokeWidth={2.2}
+              {...line}
+              style={draw(0.3, 1.6)}
+            />
+            <path d="M95 70 L20 60 M215 72 L280 60" stroke={tokens.gold500} strokeWidth={1.6} {...line} style={draw(2.0, 0.8)} />
+            <path
+              d="M110 140 L110 100 L135 96 L135 145 M170 146 L170 100 L198 104 L198 141"
+              stroke={tokens.ink}
+              strokeWidth={1.6}
+              {...line}
+              style={draw(2.8, 1.0)}
+            />
+          </Box>
+        </Box>
+      </Box>
+
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, p: 1.5, minWidth: 0, [NARROW]: { p: 1 } }}>
+        <Box component="strong" sx={{ fontSize: 12, fontWeight: 700, lineHeight: 1.3 }}>
+          Inspiration for this question
+        </Box>
+        <Box
+          sx={{
+            flex: 1,
+            minHeight: 0,
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            gridTemplateRows: 'repeat(2, minmax(0, 1fr))',
+            gap: 0.75,
+          }}
+        >
+          {INSPIRATION.map((name, i) => (
+            <Box
+              key={name}
+              style={appear(3.4 + i * 0.3, 0.45, 6)}
+              sx={{ position: 'relative', minHeight: 0, borderRadius: '6px', overflow: 'hidden', bgcolor: tokens.navy800 }}
+            >
               <Box
-                component="span"
-                sx={{ position: 'absolute', left: 6, top: 6, px: 0.75, py: 0.25, bgcolor: NX.navy, color: NX.white, fontSize: 9, fontWeight: 700 }}
-              >
-                {it.tag}
-              </Box>
-              <Box
-                component="span"
-                sx={{
-                  position: 'absolute',
-                  right: 6,
-                  top: 6,
-                  width: 20,
-                  height: 20,
-                  display: 'grid',
-                  placeItems: 'center',
-                  bgcolor: it.liked ? NX.live : NX.white,
-                  color: it.liked ? NX.white : NX.ink,
-                }}
-              >
-                <FavoriteRounded sx={{ fontSize: 12 }} />
-              </Box>
+                component="img"
+                src={img(name)}
+                alt=""
+                loading="lazy"
+                decoding="async"
+                sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+              />
             </Box>
           ))}
         </Box>
-      ))}
-      <Box
-        sx={{
-          position: 'absolute',
-          left: 12,
-          bottom: 12,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 0.75,
-          px: 1.5,
-          py: 1,
-          bgcolor: NX.gold,
-          color: NX.navy,
-          fontSize: 12,
-          fontWeight: 800,
-          animation: `${rise} .4s ease 3s both`,
-        }}
-      >
-        <CheckRounded sx={{ fontSize: 16 }} />
-        Saved to your sketchbook
       </Box>
     </Box>
   );

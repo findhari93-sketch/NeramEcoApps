@@ -1,8 +1,9 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import { Typography, Box, Stack, Paper } from '@neram/ui';
 import ExamSpokeLayout from '@/components/exam-hub/sections/ExamSpokeLayout';
+import { GuideNote, GuideP } from '@/components/exam-hub/sections/GuideBlocks';
 import { buildAlternates } from '@/lib/seo/metadata';
+import { ArticleSection } from '@/design-system';
 
 export const revalidate = 86400;
 
@@ -20,6 +21,12 @@ export async function generateMetadata({
     alternates: buildAlternates(locale, '/pgeta-2026/syllabus'),
   };
 }
+
+const slugify = (s: string) =>
+  s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
 
 export default function PgetaSyllabusPage({ params: { locale } }: { params: { locale: string } }) {
   setRequestLocale(locale);
@@ -62,7 +69,7 @@ export default function PgetaSyllabusPage({ params: { locale } }: { params: { lo
       examName="PGETA 2026"
       examShortName="PGETA 2026"
       examHubHref="/pgeta-2026"
-      examColor="secondary"
+      spokeSlug="syllabus"
       topicTitle="PGETA 2026 syllabus, broad areas"
       topicSubtitle="Six broad areas, mapped to the 4-module exam pattern. The detailed topic list is published in the official PGETA Information Brochure on the COA portal. Always verify against the latest brochure."
       related={[
@@ -71,38 +78,15 @@ export default function PgetaSyllabusPage({ params: { locale } }: { params: { lo
         { label: 'Eligibility', href: '/pgeta-2026/eligibility' },
       ]}
     >
-      <Stack spacing={2}>
-        {sections.map((s, idx) => (
-          <Paper
-            key={s.title}
-            elevation={0}
-            sx={{
-              p: 3,
-              borderRadius: 2,
-              border: '1px solid',
-              borderColor: 'divider',
-              borderLeft: '4px solid',
-              borderLeftColor: 'secondary.main',
-            }}
-          >
-            <Typography variant="overline" sx={{ color: 'secondary.main', fontWeight: 700 }}>
-              Area {idx + 1}
-            </Typography>
-            <Typography variant="h6" component="h2" sx={{ fontWeight: 700, mb: 1 }}>
-              {s.title}
-            </Typography>
-            <Typography sx={{ lineHeight: 1.8, color: 'text.primary' }}>{s.summary}</Typography>
-          </Paper>
-        ))}
-        <Paper variant="outlined" sx={{ p: 3, borderRadius: 2, bgcolor: 'rgba(220, 0, 78, 0.04)' }}>
-          <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
-            Cross-reference with the brochure
-          </Typography>
-          <Typography sx={{ lineHeight: 1.7 }}>
-            COA publishes the authoritative syllabus in the PGETA 2026 Information Brochure. Download it from coa.gov.in or pgeta.in and verify each topic before exam day. The brochure also lists recommended texts and reference materials.
-          </Typography>
-        </Paper>
-      </Stack>
+      {sections.map((s, idx) => (
+        <ArticleSection key={s.title} id={slugify(s.title)} eyebrow={`Area ${idx + 1}`} title={s.title} intro={s.summary} />
+      ))}
+
+      <GuideNote title="Cross-reference with the brochure">
+        <GuideP muted>
+          COA publishes the authoritative syllabus in the PGETA 2026 Information Brochure. Download it from coa.gov.in or pgeta.in and verify each topic before exam day. The brochure also lists recommended texts and reference materials.
+        </GuideP>
+      </GuideNote>
     </ExamSpokeLayout>
   );
 }

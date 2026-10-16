@@ -1,28 +1,23 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import {
-  Box,
-  Container,
-  Typography,
-  Card,
-  CardContent,
-  Button,
-  Chip,
-  List,
-  ListItem,
-  ListItemIcon,
-  ListItemText,
-  Accordion,
-  AccordionSummary,
-  AccordionDetails,
-} from '@neram/ui';
-import Link from 'next/link';
+import { Box, Typography } from '@neram/ui';
+import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { APP_URL } from '@/lib/seo/constants';
-import LastUpdatedBadge from '@/components/nata/LastUpdatedBadge';
-import Breadcrumbs from '@/components/seo/Breadcrumbs';
+import { nataGuideNav, nataRelated } from '@/components/nata/guideNav';
+import {
+  ArticleSection,
+  CheckList,
+  CtaBand,
+  CtaButton,
+  DataTable,
+  FaqList,
+  GuideArticle,
+  InfoCard,
+  InlineCta,
+} from '@/design-system';
 
 
 export async function generateMetadata({
@@ -138,177 +133,86 @@ export default function PreviousYearPapersPage({ params: { locale } }: PageProps
       <JsonLd data={generateBreadcrumbSchema([{ name: 'Home', url: localeUrl('') }, { name: 'NATA 2026', url: localeUrl('/nata-2026') }, { name: 'Previous Year Papers' }])} />
       <JsonLd data={generateFAQSchema(faqs)} />
 
-      <Box>
-        {/* Hero */}
-        <Box sx={{ py: { xs: 8, md: 12 }, background: 'linear-gradient(135deg, #1a237e 0%, #0d47a1 100%)', color: 'white' }}>
-          <Container maxWidth="lg">
-            <Breadcrumbs
-              variant="light"
-              items={[
-                { name: 'Home', href: `/${locale}` },
-                { name: 'NATA 2026', href: `/${locale}/nata-2026` },
-                { name: 'Previous Year Papers' },
-              ]}
-            />
-            <Chip label="NATA 2026" sx={{ bgcolor: 'white', color: 'primary.main', mb: 2, fontWeight: 600 }} />
-            <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', sm: '2.5rem', md: '3.5rem' } }}>
-              NATA Previous Year Question Papers (2020–2025)
-            </Typography>
-            <Typography variant="h5" sx={{ mb: 2, opacity: 0.9, fontSize: { xs: '1.1rem', md: '1.5rem' } }}>
-              NATA previous year question papers from 2020–2025 are essential for understanding the exam pattern and difficulty level. While CoA does not officially release full question papers, solved sample papers and reconstructed questions from past exams are available through coaching platforms like Neram Classes.
-            </Typography>
-            <LastUpdatedBadge date="March 13, 2026" />
-          </Container>
-        </Box>
-
-        {/* Year-wise Paper Analysis */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
-          <Container maxWidth="md">
-            <Typography variant="h2" component="h2" gutterBottom sx={{ mb: 2, fontWeight: 700 }}>
-              Year-wise Paper Analysis (2020–2025)
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 4, lineHeight: 1.8 }}>
-              Here is a comprehensive analysis of how the NATA exam has evolved over the past six years, including format changes, difficulty levels, and major updates.
-            </Typography>
-
-            {yearWiseData.map((item, idx) => (
-              <Card key={idx} sx={{ mb: 2 }}>
-                <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1, flexWrap: 'wrap' }}>
-                    <Typography variant="h5" sx={{ fontWeight: 700, color: 'primary.main' }}>NATA {item.year}</Typography>
-                    <Chip label={item.difficulty} size="small" color={item.difficulty.includes('High') ? 'warning' : 'default'} />
-                  </Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5, lineHeight: 1.8 }}>
-                    <strong>Mode:</strong> {item.mode}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>
-                    <strong>Key Changes:</strong> {item.changes}
-                  </Typography>
-                </CardContent>
-              </Card>
+      <GuideArticle
+        breadcrumb={[{ name: 'Home', href: '/' }, { name: 'NATA 2026', href: '/nata-2026' }, { name: 'Previous Year Papers' }]}
+        eyebrow="NATA 2026 · Exam guide"
+        title="NATA Previous Year Question Papers (2020-2025)"
+        lede="NATA previous year question papers from 2020-2025 are essential for understanding the exam pattern and difficulty level. While CoA does not officially release full question papers, solved sample papers and reconstructed questions from past exams are available through coaching platforms like Neram Classes."
+        verified="Updated March 13, 2026 · Source: Official NATA 2026 Brochure V1.0"
+        nav={nataGuideNav('previous-year-papers')}
+        related={nataRelated(['exam-pattern', 'syllabus', 'preparation-tips', 'drawing-test'])}
+        back={{ label: 'Back to NATA 2026 guide', href: '/nata-2026' }}
+      >
+        <ArticleSection
+          id="year-wise-analysis"
+          title="Year-wise Paper Analysis (2020-2025)"
+          intro="Here is a comprehensive analysis of how the NATA exam has evolved over the past six years, including format changes, difficulty levels, and major updates."
+        >
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            {yearWiseData.map((item) => (
+              <InfoCard key={item.year} code={item.year} title={`NATA ${item.year}`} meta={item.difficulty}>
+                <Typography component="p" sx={{ m: 0, fontSize: 'inherit', lineHeight: 'inherit', color: 'inherit' }}>
+                  <strong>Mode:</strong> {item.mode}
+                </Typography>
+                <Typography component="p" sx={{ m: 0, fontSize: 'inherit', lineHeight: 'inherit', color: 'inherit' }}>
+                  <strong>Key Changes:</strong> {item.changes}
+                </Typography>
+              </InfoCard>
             ))}
-          </Container>
-        </Box>
+          </Box>
+        </ArticleSection>
 
-        {/* Topic-wise Weightage Trends */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
-          <Container maxWidth="md">
-            <Typography variant="h2" component="h2" gutterBottom sx={{ mb: 2, fontWeight: 700 }}>
-              Topic-wise Weightage Trends
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 4, lineHeight: 1.8 }}>
-              Based on analysis of previous years, here is the approximate topic-wise weightage in NATA.
-            </Typography>
+        <ArticleSection
+          id="topic-weightage"
+          title="Topic-wise Weightage Trends"
+          intro="Based on analysis of previous years, here is the approximate topic-wise weightage in NATA."
+        >
+          <DataTable
+            caption="Approximate topic-wise weightage in NATA"
+            hideCaption
+            columns={['Topic', 'Weightage', 'Marks', 'Trend']}
+            mutedColumn={3}
+            rows={topicWeightage.map((item) => [item.topic, item.weightage, item.marks, item.trend])}
+          />
+        </ArticleSection>
 
-            {topicWeightage.map((item, idx) => (
-              <Card key={idx} sx={{ mb: 2 }}>
-                <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1, flexWrap: 'wrap' }}>
-                    <Typography variant="h6" sx={{ fontWeight: 600 }}>{item.topic}</Typography>
-                    <Chip label={item.weightage} size="small" color="primary" />
-                    <Chip label={item.marks} size="small" variant="outlined" />
-                  </Box>
-                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>
-                    <strong>Trend:</strong> {item.trend}
-                  </Typography>
-                </CardContent>
-              </Card>
-            ))}
-          </Container>
-        </Box>
+        <ArticleSection
+          id="how-to-use-pyqs"
+          title="How to Use PYQs Effectively"
+          intro="Practicing previous year questions is one of the best strategies for NATA preparation. Here is how to make the most of them."
+        >
+          <CheckList items={pyqTips} columnMin={600} />
+        </ArticleSection>
 
-        {/* How to Use PYQs Effectively */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
-          <Container maxWidth="md">
-            <Typography variant="h2" component="h2" gutterBottom sx={{ mb: 2, fontWeight: 700 }}>
-              How to Use PYQs Effectively
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 4, lineHeight: 1.8 }}>
-              Practicing previous year questions is one of the best strategies for NATA preparation. Here is how to make the most of them.
-            </Typography>
-
-            <Card>
-              <CardContent sx={{ p: { xs: 3, md: 4 } }}>
-                <List>
-                  {pyqTips.map((tip, idx) => (
-                    <ListItem key={idx} sx={{ px: 0 }}>
-                      <ListItemIcon sx={{ minWidth: 28 }}>
-                        <Typography color="primary.main" sx={{ fontWeight: 700 }}>{idx + 1}.</Typography>
-                      </ListItemIcon>
-                      <ListItemText primary={tip} />
-                    </ListItem>
-                  ))}
-                </List>
-              </CardContent>
-            </Card>
-          </Container>
-        </Box>
-
-        {/* Free Practice Resources CTA */}
-        <Box sx={{ py: { xs: 4, md: 6 }, bgcolor: 'grey.50', textAlign: 'center' }}>
-          <Container maxWidth="md">
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 600 }}>Free NATA Practice Resources</Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
-              Access our free NATA question bank with topic-wise practice questions based on previous year patterns.
-            </Typography>
-            <Button variant="contained" size="large" component="a" href={`${APP_URL}/tools/nata/question-bank`} target="_blank" rel="noopener noreferrer">
+        <InlineCta
+          eyebrow="Free practice"
+          icon={<QuizOutlinedIcon />}
+          title="Free NATA Practice Resources"
+          body="Access our free NATA question bank with topic-wise practice questions based on previous year patterns."
+          action={
+            <CtaButton href={`${APP_URL}/tools/nata/question-bank`} external>
               Open Question Bank (Free)
-            </Button>
-          </Container>
-        </Box>
+            </CtaButton>
+          }
+        />
 
-        {/* Also Read */}
-        <Box sx={{ py: { xs: 6, md: 8 }, bgcolor: 'background.default' }}>
-          <Container maxWidth="md">
-            <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, mb: 3 }}>Also Read</Typography>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2 }}>
-              {[
-                { title: 'NATA 2026 Exam Pattern', slug: 'exam-pattern' },
-                { title: 'NATA 2026 Syllabus', slug: 'syllabus' },
-                { title: 'Preparation Tips', slug: 'preparation-tips' },
-                { title: 'Drawing Test Guide', slug: 'drawing-test' },
-              ].map((item) => (
-                <Link key={item.slug} href={`/${locale}/nata-2026/${item.slug}`} style={{ textDecoration: 'none' }}>
-                  <Card sx={{ p: 2, color: 'inherit', transition: 'box-shadow 0.2s', '&:hover': { boxShadow: 3 } }}>
-                    <Typography variant="subtitle1" color="primary.main" sx={{ fontWeight: 600 }}>{item.title} &rarr;</Typography>
-                  </Card>
-                </Link>
-              ))}
-            </Box>
-          </Container>
-        </Box>
+        <ArticleSection id="faq" title="FAQs: NATA Previous Year Papers">
+          <FaqList items={faqs} defaultOpen={-1} />
+        </ArticleSection>
+      </GuideArticle>
 
-        {/* FAQ */}
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
-          <Container maxWidth="md">
-            <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 4, fontWeight: 700 }}>FAQs: NATA Previous Year Papers</Typography>
-            {faqs.map((faq, index) => (
-              <Accordion key={index} disableGutters sx={{ '&:before': { display: 'none' }, mb: 1, borderRadius: 1, overflow: 'hidden' }}>
-                <AccordionSummary expandIcon={<Typography sx={{ fontSize: '1.2rem', fontWeight: 600 }}>+</Typography>} sx={{ bgcolor: 'white', '&:hover': { bgcolor: 'grey.100' } }}>
-                  <Typography sx={{ fontWeight: 600 }}>{faq.question}</Typography>
-                </AccordionSummary>
-                <AccordionDetails sx={{ bgcolor: 'white' }}>
-                  <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.8 }}>{faq.answer}</Typography>
-                </AccordionDetails>
-              </Accordion>
-            ))}
-          </Container>
-        </Box>
-
-        {/* CTA Banner */}
-        <Box sx={{ py: { xs: 6, md: 10 }, background: 'linear-gradient(135deg, #0d47a1 0%, #1565c0 100%)', color: 'white', textAlign: 'center' }}>
-          <Container maxWidth="md">
-            <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '1.75rem', md: '2.5rem' } }}>
-              Prepare for NATA 2026 with Neram Classes
-            </Typography>
-            <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>Practice with curated question banks based on previous year patterns.</Typography>
-            <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
-              <Button variant="contained" size="large" component={Link} href="/apply" sx={{ background: '#ffffff', color: '#0d47a1', fontWeight: 700, px: 4, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', '&:hover': { background: '#f0f0f0' } }}>Start Free Trial</Button>
-              <Button variant="outlined" size="large" component={Link} href={`/${locale}/nata-2026`} sx={{ borderColor: 'white', color: 'white' }}>Back to NATA 2026 Guide</Button>
-            </Box>
-          </Container>
-        </Box>
-      </Box>
+      <CtaBand
+        title="Prepare for NATA 2026 with Neram Classes"
+        lede="Practice with curated question banks based on previous year patterns."
+        actions={
+          <>
+            <CtaButton href="/apply">Start Free Trial</CtaButton>
+            <CtaButton variant="link" href="/demo-class">
+              Book a free demo class
+            </CtaButton>
+          </>
+        }
+      />
     </>
   );
 }

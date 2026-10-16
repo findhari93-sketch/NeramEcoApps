@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { Box, Typography, Button } from '@neram/ui';
 import type { AskSeniorsEvent, AskSeniorsCollege } from '@neram/database';
+import { tokens } from '@/design-system';
 import CollegeScrollStrip from './CollegeScrollStrip';
 
 interface AskSeniorsSectionProps {
@@ -23,36 +24,11 @@ export default function AskSeniorsSection({ colleges }: AskSeniorsSectionProps) 
         overflow: 'hidden',
         py: { xs: 7, md: 10 },
         textAlign: 'center',
-        // Deep dark base with a subtle top/bottom border glow
-        background: 'linear-gradient(180deg, #080c14 0%, #0b1020 50%, #080c14 100%)',
-        borderTop: '1px solid rgba(255,255,255,0.05)',
-        borderBottom: '1px solid rgba(255,255,255,0.05)',
-
-        // Central radial glow
-        '&::before': {
-          content: '""',
-          position: 'absolute',
-          top: '30%',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          width: { xs: '100%', md: '800px' },
-          height: '400px',
-          background:
-            'radial-gradient(ellipse at center, rgba(232,160,32,0.09) 0%, transparent 65%)',
-          pointerEvents: 'none',
-          zIndex: 0,
-        },
-        // Subtle grid overlay
-        '&::after': {
-          content: '""',
-          position: 'absolute',
-          inset: 0,
-          backgroundImage:
-            'linear-gradient(rgba(255,255,255,0.015) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.015) 1px, transparent 1px)',
-          backgroundSize: '48px 48px',
-          pointerEvents: 'none',
-          zIndex: 0,
-        },
+        // Navy band with the blueprint grid, ruled top and bottom
+        bgcolor: tokens.navy900,
+        ...tokens.blueprint,
+        borderTop: `1px solid ${tokens.lineDark}`,
+        borderBottom: `1px solid ${tokens.lineDark}`,
       }}
     >
       <Box sx={{ position: 'relative', zIndex: 1 }}>
@@ -66,10 +42,9 @@ export default function AskSeniorsSection({ colleges }: AskSeniorsSectionProps) 
             px: 2,
             py: 0.75,
             mb: 3,
-            borderRadius: 20,
-            background: 'linear-gradient(135deg, rgba(232,160,32,0.15), rgba(251,191,36,0.08))',
-            border: '1px solid rgba(232,160,32,0.3)',
-            backdropFilter: 'blur(8px)',
+            borderRadius: `${tokens.radiusPill}px`,
+            bgcolor: tokens.goldTintBg,
+            border: `1px solid ${tokens.goldTintBorder}`,
           }}
         >
           <Box
@@ -77,18 +52,14 @@ export default function AskSeniorsSection({ colleges }: AskSeniorsSectionProps) 
               width: 7,
               height: 7,
               borderRadius: '50%',
-              bgcolor: '#22c55e',
-              '@keyframes livePulse': {
-                '0%, 100%': { opacity: 1, transform: 'scale(1)' },
-                '50%': { opacity: 0.5, transform: 'scale(0.85)' },
-              },
-              animation: 'livePulse 2s ease-in-out infinite',
+              bgcolor: tokens.statusDone,
             }}
           />
           <Typography
             sx={{
-              color: '#e8a020',
-              fontSize: '0.7rem',
+              color: tokens.gold300,
+              fontFamily: tokens.fontMono,
+              fontSize: '0.75rem',
               fontWeight: 700,
               letterSpacing: 2,
               textTransform: 'uppercase',
@@ -106,10 +77,7 @@ export default function AskSeniorsSection({ colleges }: AskSeniorsSectionProps) 
             fontSize: { xs: '2.25rem', sm: '2.75rem', md: '3.5rem' },
             lineHeight: 1.05,
             mb: 2,
-            background: 'linear-gradient(135deg, #fbbf24 0%, #e8a020 40%, #f59e0b 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
+            color: tokens.gold500,
             letterSpacing: '-0.5px',
           }}
         >
@@ -119,7 +87,7 @@ export default function AskSeniorsSection({ colleges }: AskSeniorsSectionProps) 
         {/* Tagline */}
         <Typography
           sx={{
-            color: 'rgba(255,255,255,0.55)',
+            color: tokens.paperMuted,
             maxWidth: 420,
             mx: 'auto',
             lineHeight: 1.65,
@@ -129,13 +97,13 @@ export default function AskSeniorsSection({ colleges }: AskSeniorsSectionProps) 
           }}
         >
           Current B.Arch students from{' '}
-          <Box component="strong" sx={{ color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>
+          <Box component="strong" sx={{ color: tokens.paper, fontWeight: 600 }}>
             Tamil Nadu&apos;s top colleges
           </Box>{' '}
           answer your questions. Before TNEA counselling.
         </Typography>
 
-        {/* Stats row — pill cards */}
+        {/* Stats row: small cards */}
         <Box
           sx={{
             display: 'flex',
@@ -156,16 +124,15 @@ export default function AskSeniorsSection({ colleges }: AskSeniorsSectionProps) 
               sx={{
                 px: { xs: 2.5, md: 3 },
                 py: 1.5,
-                borderRadius: 3,
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                backdropFilter: 'blur(4px)',
+                borderRadius: `${tokens.radius}px`,
+                bgcolor: tokens.navy800,
+                border: `1px solid ${tokens.lineDark}`,
                 minWidth: 90,
               }}
             >
               <Typography
                 sx={{
-                  color: '#e8a020',
+                  color: tokens.gold500,
                   fontSize: { xs: '1.35rem', md: '1.5rem' },
                   fontWeight: 900,
                   lineHeight: 1.1,
@@ -175,8 +142,8 @@ export default function AskSeniorsSection({ colleges }: AskSeniorsSectionProps) 
               </Typography>
               <Typography
                 sx={{
-                  color: 'rgba(255,255,255,0.35)',
-                  fontSize: '0.7rem',
+                  color: tokens.paperSubtle,
+                  fontSize: '0.75rem',
                   letterSpacing: 1,
                   textTransform: 'uppercase',
                   mt: 0.25,
@@ -215,22 +182,18 @@ export default function AskSeniorsSection({ colleges }: AskSeniorsSectionProps) 
             fullWidth={false}
             sx={{
               width: { xs: '100%', sm: 'auto' },
-              background: 'linear-gradient(135deg, #f59e0b 0%, #e8a020 100%)',
-              color: '#000',
+              bgcolor: tokens.gold500,
+              color: tokens.navy900,
               fontWeight: 800,
               fontSize: '0.95rem',
               px: { xs: 0, sm: 4 },
               py: 1.5,
-              borderRadius: 2.5,
+              borderRadius: `${tokens.radius}px`,
               textTransform: 'none',
-              boxShadow: '0 4px 20px rgba(232,160,32,0.3)',
+              boxShadow: 'none',
               minHeight: 48,
-              '&:hover': {
-                background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
-                boxShadow: '0 8px 32px rgba(232,160,32,0.45)',
-                transform: 'translateY(-2px)',
-              },
-              transition: 'all 0.25s ease',
+              '&:hover': { bgcolor: tokens.gold300, boxShadow: 'none' },
+              transition: 'background-color 150ms ease',
             }}
           >
             Register for Free →
@@ -244,21 +207,21 @@ export default function AskSeniorsSection({ colleges }: AskSeniorsSectionProps) 
             fullWidth={false}
             sx={{
               width: { xs: '100%', sm: 'auto' },
-              borderColor: 'rgba(232,160,32,0.35)',
-              color: '#e8a020',
+              borderColor: tokens.outlineDark,
+              color: tokens.paper,
               fontWeight: 600,
               fontSize: '0.95rem',
               px: { xs: 0, sm: 3.5 },
               py: 1.5,
-              borderRadius: 2.5,
+              borderRadius: `${tokens.radius}px`,
               textTransform: 'none',
               minHeight: 48,
               '&:hover': {
-                borderColor: '#e8a020',
-                bgcolor: 'rgba(232,160,32,0.07)',
-                transform: 'translateY(-2px)',
+                borderColor: tokens.gold500,
+                color: tokens.gold500,
+                bgcolor: 'transparent',
               },
-              transition: 'all 0.25s ease',
+              transition: 'border-color 150ms ease, color 150ms ease',
             }}
           >
             See All Colleges
@@ -280,15 +243,10 @@ export default function AskSeniorsSection({ colleges }: AskSeniorsSectionProps) 
               width: 6,
               height: 6,
               borderRadius: '50%',
-              bgcolor: '#22c55e',
-              '@keyframes softPulse': {
-                '0%, 100%': { opacity: 1 },
-                '50%': { opacity: 0.35 },
-              },
-              animation: 'softPulse 2.5s ease-in-out infinite',
+              bgcolor: tokens.statusDone,
             }}
           />
-          <Typography sx={{ color: 'rgba(255,255,255,0.3)', fontSize: '0.8rem' }}>
+          <Typography sx={{ color: tokens.paperSubtle, fontSize: '0.875rem' }}>
             No payment. No signup required.
           </Typography>
         </Box>

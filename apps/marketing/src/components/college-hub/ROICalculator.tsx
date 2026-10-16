@@ -6,6 +6,7 @@ import {
   DEFAULT_LIVING_COST,
   MATERIALS_TRAVEL_COST,
 } from '@/lib/college-hub/constants';
+import { siteTokens } from '@neram/ui/site-tokens';
 
 interface ROICalculatorProps {
   annualFee: number;
@@ -43,31 +44,31 @@ export default function ROICalculator({ annualFee, avgSalary, minSalary, maxSala
         <Grid item xs={12} sm={6}>
           <Paper
             variant="outlined"
-            sx={{ p: 2.5, borderRadius: 2.5, bgcolor: '#fef2f2', borderColor: '#fecaca' }}
+            sx={{ p: 2.5, borderRadius: 1, bgcolor: siteTokens.surface, borderColor: siteTokens.line }}
           >
-            <Typography variant="caption" sx={{ fontWeight: 700, color: '#991b1b', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <Typography variant="caption" sx={{ fontWeight: 700, color: siteTokens.ink, textTransform: 'uppercase', letterSpacing: 0.5 }}>
               Total Investment ({COURSE_DURATION_YEARS} years)
             </Typography>
             <Stack gap={0.75} sx={{ mt: 1.5 }}>
               <Stack direction="row" justifyContent="space-between">
-                <Typography variant="body2" color="text.secondary">Tuition Fees</Typography>
+                <Typography variant="body2" color={siteTokens.inkMuted}>Tuition Fees</Typography>
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>{formatLakhs(tuitionTotal)}</Typography>
               </Stack>
               <Stack direction="row" justifyContent="space-between">
-                <Typography variant="body2" color="text.secondary">Hostel + Living</Typography>
+                <Typography variant="body2" color={siteTokens.inkMuted}>Hostel + Living</Typography>
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>{formatLakhs(livingTotal)}</Typography>
               </Stack>
               <Stack direction="row" justifyContent="space-between">
-                <Typography variant="body2" color="text.secondary">Materials & Travel</Typography>
+                <Typography variant="body2" color={siteTokens.inkMuted}>Materials & Travel</Typography>
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>{formatLakhs(materialsTotal)}</Typography>
               </Stack>
               <Stack
                 direction="row"
                 justifyContent="space-between"
-                sx={{ borderTop: '1px solid #fecaca', pt: 1, mt: 0.5 }}
+                sx={{ borderTop: `1px solid ${siteTokens.line}`, pt: 1, mt: 0.5 }}
               >
-                <Typography variant="body2" sx={{ fontWeight: 700, color: '#dc2626' }}>Total</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 700, color: '#dc2626' }}>{formatLakhs(totalCost)}</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700, color: siteTokens.ink }}>Total</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700, color: siteTokens.ink }}>{formatLakhs(totalCost)}</Typography>
               </Stack>
             </Stack>
           </Paper>
@@ -77,35 +78,35 @@ export default function ROICalculator({ annualFee, avgSalary, minSalary, maxSala
         <Grid item xs={12} sm={6}>
           <Paper
             variant="outlined"
-            sx={{ p: 2.5, borderRadius: 2.5, bgcolor: '#f0fdf4', borderColor: '#bbf7d0' }}
+            sx={{ p: 2.5, borderRadius: 1, bgcolor: siteTokens.surface, borderColor: siteTokens.line, boxShadow: `inset 3px 0 0 ${siteTokens.success}` }}
           >
-            <Typography variant="caption" sx={{ fontWeight: 700, color: '#166534', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <Typography variant="caption" sx={{ fontWeight: 700, color: siteTokens.success, textTransform: 'uppercase', letterSpacing: 0.5 }}>
               Expected Returns
             </Typography>
             <Stack gap={0.75} sx={{ mt: 1.5 }}>
               {minSalary && (
                 <Stack direction="row" justifyContent="space-between">
-                  <Typography variant="body2" color="text.secondary">Min Package</Typography>
+                  <Typography variant="body2" color={siteTokens.inkMuted}>Min Package</Typography>
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>{formatLakhs(minSalary)}/yr</Typography>
                 </Stack>
               )}
               <Stack direction="row" justifyContent="space-between">
-                <Typography variant="body2" color="text.secondary">Avg Package</Typography>
+                <Typography variant="body2" color={siteTokens.inkMuted}>Avg Package</Typography>
                 <Typography variant="body2" sx={{ fontWeight: 600 }}>{formatLakhs(avgSalary)}/yr</Typography>
               </Stack>
               {maxSalary && (
                 <Stack direction="row" justifyContent="space-between">
-                  <Typography variant="body2" color="text.secondary">Max Package</Typography>
+                  <Typography variant="body2" color={siteTokens.inkMuted}>Max Package</Typography>
                   <Typography variant="body2" sx={{ fontWeight: 600 }}>{formatLakhs(maxSalary)}/yr</Typography>
                 </Stack>
               )}
               <Stack
                 direction="row"
                 justifyContent="space-between"
-                sx={{ borderTop: '1px solid #bbf7d0', pt: 1, mt: 0.5 }}
+                sx={{ borderTop: `1px solid ${siteTokens.line}`, pt: 1, mt: 0.5 }}
               >
-                <Typography variant="body2" sx={{ fontWeight: 700, color: '#16a34a' }}>Payback Period</Typography>
-                <Typography variant="body2" sx={{ fontWeight: 700, color: '#16a34a' }}>~{paybackYears} years</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700, color: siteTokens.success }}>Payback Period</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700, color: siteTokens.success }}>~{paybackYears} years</Typography>
               </Stack>
             </Stack>
           </Paper>
@@ -113,10 +114,10 @@ export default function ROICalculator({ annualFee, avgSalary, minSalary, maxSala
       </Grid>
 
       {/* Disclaimer */}
-      <Box sx={{ mt: 1.5, p: 1.5, bgcolor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 1.5 }}>
+      <Box sx={{ mt: 1.5, p: 1.5, bgcolor: siteTokens.ground, border: `1px solid ${siteTokens.line}`, borderRadius: 1 }}>
         <Stack direction="row" gap={0.75} alignItems="flex-start">
-          <InfoIcon sx={{ fontSize: 16, color: '#1e40af', mt: 0.25 }} />
-          <Typography variant="caption" sx={{ color: '#1e40af' }}>
+          <InfoIcon sx={{ fontSize: 16, color: siteTokens.inkMuted, mt: 0.25 }} />
+          <Typography variant="caption" sx={{ color: siteTokens.ink }}>
             Living costs estimated for {getCityTierLabel(citySlug)} city ({city}). Actual costs may vary. Placement data from latest available batch.
           </Typography>
         </Stack>

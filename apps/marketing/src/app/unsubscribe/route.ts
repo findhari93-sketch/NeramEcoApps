@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
+import { siteTokens } from '@neram/ui/site-tokens';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -73,7 +74,22 @@ async function suppressByToken(token: string | null, source: string): Promise<Su
   return { ok: true, collegeName: c.name, alreadyDone: Boolean(c.unsubscribed_at) };
 }
 
+/** The college name comes from the database; escape it before it goes into HTML. */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// Utility pattern from the marketing design system (DESIGN_SYSTEM.md): a centred
+// white card on the ground colour, 8px radius, one gold primary action. Colours
+// come from siteTokens; this is a raw HTML response, so they are inlined.
 function htmlPage(heading: string, message: string): string {
+  const t = siteTokens;
+  const font = `Inter,'Noto Sans Tamil',system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -81,17 +97,19 @@ function htmlPage(heading: string, message: string): string {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex">
 <title>${heading} | Neram Classes</title>
+<style>a:focus-visible{outline:${t.focusOutline};outline-offset:2px}.cta:hover{background:${t.gold300}}@media (prefers-reduced-motion:reduce){*{transition:none!important}}</style>
 </head>
-<body style="margin:0;background:#eef2f7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">
-<div style="max-width:520px;margin:0 auto;padding:64px 20px">
-<div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:16px;padding:36px 32px;text-align:center">
-<div style="font-size:22px;line-height:1;color:#0f172a;font-weight:300;margin-bottom:24px"><span style="font-weight:700">neram</span>Classes</div>
-<h1 style="margin:0 0 12px;font-size:20px;color:#0f172a">${heading}</h1>
-<p style="margin:0;font-size:15px;line-height:1.65;color:#334155">${message}</p>
-<p style="margin:28px 0 0;font-size:13px;color:#64748b">Questions? Email <a href="mailto:info@neramclasses.com" style="color:#0369a1;text-decoration:none">info@neramclasses.com</a></p>
+<body style="margin:0;background:${t.ground};color:${t.ink};font-family:${font};-webkit-font-smoothing:antialiased">
+<main style="max-width:520px;margin:0 auto;padding:56px 16px">
+<p style="margin:0 0 20px;text-align:center;font-family:${t.fontMono};font-size:12px;font-weight:700;letter-spacing:0.2em;text-transform:uppercase;color:${t.gold800}">Neram Classes</p>
+<div style="background:${t.surface};border:1px solid ${t.line};border-radius:${t.radius}px;padding:36px 24px;text-align:center">
+<h1 style="margin:0 0 12px;font-size:24px;line-height:1.25;font-weight:800;color:${t.ink}">${heading}</h1>
+<p style="margin:0;font-size:16px;line-height:1.6;color:${t.inkMuted}">${message}</p>
+<p style="margin:28px 0 0"><a class="cta" href="https://neramclasses.com" style="display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:0 22px;box-sizing:border-box;border-radius:${t.radius}px;background:${t.gold500};color:${t.navy900};font-size:16px;font-weight:700;text-decoration:none;transition:background-color 150ms ease">Go to neramclasses.com</a></p>
+<p style="margin:24px 0 0;font-size:15px;line-height:1.6;color:${t.inkMuted}">Questions? Email <a href="mailto:info@neramclasses.com" style="color:${t.ink};text-decoration:underline;text-underline-offset:3px">info@neramclasses.com</a></p>
 </div>
-<p style="text-align:center;margin:18px 0 0;font-size:12px;color:#94a3b8">Neram Classes, India's first architecture college hub</p>
-</div>
+<p style="text-align:center;margin:18px 0 0;font-size:13px;color:${t.inkMuted}">Neram Classes, India's first architecture college hub</p>
+</main>
 </body>
 </html>`;
 }
@@ -103,7 +121,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const body = result.ok
     ? htmlPage(
         'You have been unsubscribed',
-        `${result.collegeName ?? 'This college'} will no longer receive outreach emails from us. If this was a mistake, just reply to our last email and we will add you back.`,
+        `${escapeHtml(result.collegeName ?? 'This college')} will no longer receive outreach emails from us. If this was a mistake, just reply to our last email and we will add you back.`,
       )
     : htmlPage(
         'Unsubscribe',

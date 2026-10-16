@@ -3,7 +3,8 @@
  * Rendered reference: /design-system (dev and staging only).
  */
 
-export { tokens, surfaceVars, v, focusRing, hoverGoldBorder, eyebrowSx, iconTileSx, sectionPaddingY } from './tokens';
+export { tokens, surfaceVars, v, focusRing, hoverGoldBorder, eyebrowSx, indicLabelSx, iconTileSx, sectionPaddingY } from './tokens';
+export { brandColors, errorColor } from './brand-colors';
 
 export { default as Surface } from './surface/Surface';
 export type { SurfaceProps, SurfaceTone } from './surface/Surface';
@@ -37,7 +38,7 @@ export { default as FaqList } from './FaqList';
 export type { FaqItem, FaqListProps } from './FaqList';
 
 export { default as CheckList } from './CheckList';
-export type { CheckListProps } from './CheckList';
+export type { CheckListProps, CheckListDetail } from './CheckList';
 export { default as TopicCard } from './TopicCard';
 export type { TopicCardProps } from './TopicCard';
 export { default as PersonCard } from './PersonCard';
@@ -56,3 +57,41 @@ export { default as InlineCta } from './InlineCta';
 export type { InlineCtaProps } from './InlineCta';
 export { default as FactsCard } from './FactsCard';
 export type { FactsCardProps } from './FactsCard';
+export { default as QuickCheck, QuickCheckResult } from './QuickCheck';
+export type { QuickCheckProps, QuickCheckResultProps } from './QuickCheck';
+export { default as StepList } from './StepList';
+export type { StepItem, StepListProps } from './StepList';
+export { default as LinkTile } from './LinkTile';
+export type { LinkTileProps } from './LinkTile';
+export { default as StatusBanner } from './StatusBanner';
+export type { StatusBannerProps, BannerStatus } from './StatusBanner';
+export { default as Timeline } from './Timeline';
+export type { TimelineItem, TimelineState } from './Timeline';
+export { default as FactGrid } from './FactGrid';
+export type { FactGridProps } from './FactGrid';
+export { default as NavCard } from './NavCard';
+export type { NavCardProps, NavCardLink } from './NavCard';
+export { default as DocLayout } from './templates/DocLayout';
+export type { DocLayoutProps } from './templates/DocLayout';
+export { default as DataTable } from './DataTable';
+export type { DataTableProps } from './DataTable';
+export { default as GuideNav } from './GuideNav';
+export type { GuideNavProps, GuideNavItem } from './GuideNav';
+export { default as ArticleSection } from './ArticleSection';
+export type { ArticleSectionProps } from './ArticleSection';
+export { default as InfoCard } from './InfoCard';
+export type { InfoCardProps } from './InfoCard';
+export { default as GuideArticle } from './templates/GuideArticle';
+export type { GuideArticleProps } from './templates/GuideArticle';
+export { default as Callout } from './Callout';
+export type { CalloutProps } from './Callout';
+export { default as HubCard } from './HubCard';
+export type { HubCardProps } from './HubCard';
+export { default as HubIndex } from './templates/HubIndex';
+export type { HubIndexProps, HubGroup, HubItem } from './templates/HubIndex';
+export { default as ReviewCard, ReviewWall } from './ReviewCard';
+export type { ReviewCardProps } from './ReviewCard';
+export { default as FilterBar, FilterSelect } from './FilterBar';
+export type { FilterBarProps, FilterSelectProps } from './FilterBar';
+export { default as LegalPage } from './templates/LegalPage';
+export type { LegalPageProps, LegalSection } from './templates/LegalPage';

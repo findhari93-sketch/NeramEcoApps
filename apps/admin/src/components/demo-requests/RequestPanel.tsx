@@ -53,6 +53,8 @@ import { useAdminProfile } from '@/contexts/AdminProfileContext';
 import AttendedDialog from './AttendedDialog';
 import HeldDemoDialog from './HeldDemoDialog';
 import { heldTutorOptions } from '@/lib/demo/staff-add';
+import { meetingKindOf } from '@/lib/demo/meeting';
+import { closedReason } from './journey';
 import ScheduleDialog, { type ScheduleSubmit } from './ScheduleDialog';
 import type { DeskDetail, DeskSettings, DemoRequest } from './types';
 import { ago, classLabel, prettyPhone, telHref, waHref } from './format';
@@ -128,6 +130,9 @@ export default function RequestPanel({
   now,
   onAction,
   onClose,
+  onOpenRequest,
+  related = [],
+  currentId = null,
   openConfirm = false,
 }: {
   detail: DeskDetail | null;
@@ -136,6 +141,12 @@ export default function RequestPanel({
   now: Date;
   onAction: (body: Record<string, unknown>) => Promise<string | null>;
   onClose: () => void;
+  /** Open another request of the same student. */
+  onOpenRequest?: (id: string) => void;
+  /** The student's other requests (earlier ones, or the current one when an old one is open). */
+  related?: DemoRequest[];
+  /** The request the desk works on for this student. */
+  currentId?: string | null;
   /** Open Confirm straight away (a staff-added request with a time already agreed). */
   openConfirm?: boolean;
 }) {
@@ -152,6 +163,8 @@ export default function RequestPanel({
   const [attendedOpen, setAttendedOpen] = useState(false);
   const [heldOpen, setHeldOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
+  const [stopOpen, setStopOpen] = useState(false);
+  const [linkInput, setLinkInput] = useState('');
   const [linkOpen, setLinkOpen] = useState(false);
   const { supabaseUserId } = useAdminProfile();
   const linkReq = detail?.request;
@@ -182,11 +195,15 @@ export default function RequestPanel({
   if (!detail) return null;
 
   const r = detail.request;
-  const nameOf = (upn: string | null) => (upn ? settings.hosts.find((h) => h.upn === upn.toLowerCase())?.name || upn : 'someone');
+  const nameOf = (upn: string | null) => (upn ? settings.hosts.find((h) => h.upn.toLowerCase() === upn.toLowerCase())?.name || upn : 'someone');
   const start = r.scheduled_start ? new Date(r.scheduled_start) : null;
   const joinOpen = start ? isJoinOpen(start, r.scheduled_minutes, now) : false;
   const canMarkAttendance = start ? now.getTime() >= start.getTime() - 15 * 60_000 : false;
   const ownLink = isOwnLinkDemo(r);
+  const meetingKind = meetingKindOf(r);
+  const lastFollowUp = detail.lastFollowUp ?? null;
+  const followUpStopped = !detail.followUp && lastFollowUp?.status === 'completed';
+  const linkOk = /^https:\/\/\S+\.\S+/.test(linkInput.trim());
   // Confirm always sets an organizer; a demo recorded as held outside the desk has none.
   const heldOutside = !r.organizer_upn;
   const parentAccount = r.account_holder === 'parent';
@@ -255,6 +272,22 @@ export default function RequestPanel({
         </IconButton>
       </Box>
 
+      {currentId && currentId !== r.id && (
+        <Alert
+          severity="info"
+          sx={{ mt: 2 }}
+          action={
+            onOpenRequest && (
+              <Button color="inherit" onClick={() => onOpenRequest(currentId)} sx={{ minHeight: 44 }}>
+                Open current
+              </Button>
+            )
+          }
+        >
+          This is an earlier request. The desk works on their newest one.
+        </Alert>
+      )}
+
       {/* Confirmed demo */}
       {start && ['approved', 'attended', 'no_show'].includes(r.status) && (
         <Paper
@@ -271,16 +304,52 @@ export default function RequestPanel({
             ) : (
               <>
                 {r.scheduled_minutes} min. Tutor {nameOf(r.tutor_upn || r.organizer_upn)}
-                {ownLink ? ', on your own meeting link' : `, on ${nameOf(r.organizer_upn)}'s calendar`}
+                {meetingKind === 'teams'
+                  ? `, on ${nameOf(r.organizer_upn)}'s calendar`
+                  : meetingKind === 'own_link'
+                    ? ', on your own meeting link'
+                    : meetingKind === 'later'
+                      ? ', meeting link not added yet'
+                      : ', in person'}
                 {r.staff_upns?.length ? `. Team: ${r.staff_upns.map(nameOf).join(', ')}` : ''}
                 {r.schedule_change_reason ? `. Told the student: ${r.schedule_change_reason}` : ''}
               </>
             )}
           </Typography>
-          {r.status === 'approved' && ownLink && (
-            <Alert severity="info" sx={{ mt: 1.5 }}>
-              Own meeting link: the student gets no automatic WhatsApp. Send them the link and time yourself.
+          {r.status === 'approved' && meetingKind !== 'teams' && (
+            <Alert severity={meetingKind === 'later' ? 'warning' : 'info'} sx={{ mt: 1.5 }}>
+              {meetingKind === 'later'
+                ? 'No meeting link yet. Add it below when you have it, then send it to the student.'
+                : meetingKind === 'in_person'
+                  ? 'In person, no link needed. The student gets no automatic WhatsApp, so confirm the time and place yourself.'
+                  : 'Own meeting link: the student gets no automatic WhatsApp. Send them the link and time yourself.'}
             </Alert>
+          )}
+          {r.status === 'approved' && (meetingKind === 'later' || meetingKind === 'own_link') && (
+            <Box sx={{ display: 'flex', gap: 1, mt: 1.5, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <TextField
+                label={meetingKind === 'later' ? 'Meeting link' : 'Change meeting link'}
+                value={linkInput}
+                onChange={(e) => setLinkInput(e.target.value)}
+                placeholder="https://meet.google.com/..."
+                size="small"
+                type="url"
+                error={!!linkInput.trim() && !linkOk}
+                helperText={linkInput.trim() && !linkOk ? 'Paste the full link, starting with https://' : ' '}
+                sx={{ flex: 1, minWidth: 220 }}
+              />
+              <Button
+                variant="outlined"
+                disabled={!linkOk || !!busy}
+                onClick={async () => {
+                  const err = await run('set_link', { action: 'set_link', joinUrl: linkInput.trim() });
+                  if (!err) setLinkInput('');
+                }}
+                sx={{ minHeight: 40 }}
+              >
+                {busy === 'set_link' ? 'Saving' : 'Save link'}
+              </Button>
+            </Box>
           )}
           {r.status === 'approved' && r.teams_join_url && (
             <Box sx={{ display: 'flex', gap: 1, mt: 1.5, flexWrap: 'wrap' }}>
@@ -305,19 +374,20 @@ export default function RequestPanel({
               <Button onClick={() => setSchedule('reschedule')} disabled={!!busy} sx={{ minHeight: 44 }}>
                 Move
               </Button>
-              {ownLink ? (
+              {meetingKind !== 'teams' ? (
                 <Button
                   color="success"
                   startIcon={<WhatsAppIcon />}
                   href={waHref(
                     r.phone,
-                    `Hi ${r.name.split(' ')[0]}, your free Neram demo class is on ${start ? formatDemoDateTime(start) : ''}. Join here: ${r.teams_join_url}`,
+                    `Hi ${r.name.split(' ')[0]}, your free Neram demo class is on ${start ? formatDemoDateTime(start) : ''}.` +
+                      (r.teams_join_url ? ` Join here: ${r.teams_join_url}` : meetingKind === 'in_person' ? ' See you at the centre.' : ' We will send the link before the class.'),
                   )}
                   target="_blank"
                   rel="noopener noreferrer"
                   sx={{ minHeight: 44 }}
                 >
-                  Send link on WhatsApp
+                  {r.teams_join_url ? 'Send link on WhatsApp' : 'Send details on WhatsApp'}
                 </Button>
               ) : (
                 <Button onClick={() => run('resend', { action: 'resend' })} disabled={!!busy} startIcon={<SendIcon />} sx={{ minHeight: 44 }}>
@@ -476,9 +546,19 @@ export default function RequestPanel({
           {r.status === 'rejected' && r.rejection_reason && <Typography variant="body2">Reason: {r.rejection_reason}</Typography>}
           {r.status === 'cancelled' && r.cancel_reason && <Typography variant="body2">Reason: {r.cancel_reason}</Typography>}
           {['attended', 'no_show'].includes(r.status) && !detail.followUp && (
-            <Button variant="outlined" onClick={() => setAttendedOpen(true)} disabled={!!busy} sx={{ mt: 1, mr: 1, minHeight: 44 }}>
-              Start follow-up again
-            </Button>
+            <>
+              <SectionTitle>After the demo</SectionTitle>
+              <Typography variant="body2" color="text.secondary">
+                {followUpStopped
+                  ? lastFollowUp?.call_outcome === 'joined'
+                    ? 'Follow-up closed: they joined.'
+                    : `${closedReason(r, lastFollowUp)}.`
+                  : 'No follow-up yet. Start one so this student is called until they join or say no.'}
+              </Typography>
+              <Button variant={followUpStopped ? 'outlined' : 'contained'} onClick={() => setAttendedOpen(true)} disabled={!!busy} sx={{ mt: 1, mr: 1, minHeight: 44 }}>
+                {followUpStopped ? 'Restart follow-up' : 'Start follow-up'}
+              </Button>
+            </>
           )}
           {['rejected', 'cancelled', 'no_show'].includes(r.status) && (
             <Button startIcon={<ReplayIcon />} onClick={() => run('reopen', { action: 'reopen' })} disabled={!!busy} sx={{ mt: 1, minHeight: 44 }}>
@@ -513,6 +593,9 @@ export default function RequestPanel({
             <Button variant="outlined" onClick={() => setLogOpen(true)} sx={{ minHeight: 44 }}>
               Log outcome
             </Button>
+            <Button color="error" onClick={() => setStopOpen(true)} sx={{ minHeight: 44 }}>
+              Stop follow-up
+            </Button>
             {r.user_id && (
             <Button variant="contained" startIcon={<SchoolIcon />} onClick={() => setLinkOpen(true)} disabled={!supabaseUserId} sx={{ minHeight: 44 }}>
               Send enrolment link
@@ -530,6 +613,18 @@ export default function RequestPanel({
               await onAction({ action: 'note', note: 'Follow-up call logged' });
             }}
           />
+          <LogOutcomeDialog
+            open={stopOpen}
+            name={r.name}
+            callbackId={detail.followUp.id}
+            interest={detail.followUp.interest_level}
+            stopMode
+            onClose={() => setStopOpen(false)}
+            onSaved={async () => {
+              setStopOpen(false);
+              await onAction({ action: 'note', note: 'Follow-up stopped' });
+            }}
+          />
         </Box>
       )}
 
@@ -537,6 +632,31 @@ export default function RequestPanel({
         <Alert severity="error" sx={{ mt: 2 }} onClose={() => setError(null)}>
           {error}
         </Alert>
+      )}
+
+      {related.length > 0 && (
+        <>
+          <SectionTitle>{currentId && currentId !== r.id ? 'Other requests' : 'Earlier requests'}</SectionTitle>
+          <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0 }}>
+            {related.map((o) => (
+              <Box component="li" key={o.id} sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap', py: 0.25 }}>
+                <Button
+                  size="small"
+                  onClick={() => onOpenRequest?.(o.id)}
+                  sx={{ minHeight: 40, px: 1, fontWeight: 700, ...FOCUS_RING }}
+                  aria-label={`Open ${o.ref_code}`}
+                >
+                  {o.ref_code}
+                </Button>
+                <Typography variant="body2" color="text.secondary" sx={{ flex: 1, minWidth: 0 }}>
+                  {[DEMO_STATUS_LABELS[o.status], closedReason(o, null) || null, `asked ${ago(o.created_at, now)}`]
+                    .filter((x, i, a) => x && a.indexOf(x) === i)
+                    .join(' · ')}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        </>
       )}
 
       <SectionTitle>Contact</SectionTitle>

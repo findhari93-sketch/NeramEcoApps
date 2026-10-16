@@ -1,4 +1,5 @@
 import { ImageResponse } from 'next/og';
+import { siteTokens as t } from '@neram/ui/site-tokens';
 
 export const runtime = 'edge';
 export const alt = 'NATA 2026 Complete Guide by Neram Classes';
@@ -10,7 +11,7 @@ export default async function Image() {
     (
       <div
         style={{
-          background: 'linear-gradient(135deg, #1a237e 0%, #0d47a1 50%, #1565c0 100%)',
+          background: t.navy900,
           width: '100%',
           height: '100%',
           display: 'flex',
@@ -22,17 +23,17 @@ export default async function Image() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <div
             style={{
-              background: 'rgba(255,255,255,0.15)',
+              background: t.goldTintBg,
               borderRadius: 8,
               padding: '8px 16px',
               fontSize: 20,
-              color: '#90caf9',
+              color: t.gold500,
               fontWeight: 600,
             }}
           >
             NATA 2026
           </div>
-          <div style={{ fontSize: 20, color: 'rgba(255,255,255,0.6)' }}>
+          <div style={{ fontSize: 20, color: t.paperSubtle }}>
             NERAM CLASSES
           </div>
         </div>
@@ -42,7 +43,7 @@ export default async function Image() {
             style={{
               fontSize: 56,
               fontWeight: 800,
-              color: 'white',
+              color: t.paper,
               lineHeight: 1.2,
               maxWidth: '90%',
             }}
@@ -52,7 +53,7 @@ export default async function Image() {
           <div
             style={{
               fontSize: 28,
-              color: '#90caf9',
+              color: t.paperMuted,
               marginTop: 16,
             }}
           >
@@ -71,7 +72,7 @@ export default async function Image() {
             style={{
               display: 'flex',
               gap: 32,
-              color: 'white',
+              color: t.paper,
               fontSize: 18,
             }}
           >
@@ -79,7 +80,7 @@ export default async function Image() {
             <span>3 Hours</span>
             <span>April–June 2026</span>
           </div>
-          <div style={{ fontSize: 16, color: '#bbdefb' }}>neramclasses.com</div>
+          <div style={{ fontSize: 16, color: t.paperSubtle }}>neramclasses.com</div>
         </div>
       </div>
     ),

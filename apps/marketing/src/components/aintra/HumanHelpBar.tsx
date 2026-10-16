@@ -6,6 +6,7 @@ import SupportAgentIcon from '@mui/icons-material/SupportAgent';
 import { openTawkChat } from '@/lib/tawk';
 import { buildWhatsAppLink } from '@/lib/whatsapp';
 import { trackWhatsAppClick } from '@/lib/whatsapp-track';
+import { tokens, brandColors } from '@/design-system';
 
 /**
  * Compact "talk to a human" bar shown inside the embedded Aintra chats.
@@ -37,9 +38,8 @@ export default function HumanHelpBar({ label = 'Need human help?' }: { label?: s
     <Box
       sx={{
         px: 1.5,
-        py: 0.75,
-        bgcolor: '#f1f5f9',
-        borderTop: '1px solid #e2e8f0',
+        bgcolor: tokens.ground,
+        borderTop: `1px solid ${tokens.line}`,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -51,7 +51,7 @@ export default function HumanHelpBar({ label = 'Need human help?' }: { label?: s
       <Typography
         variant="caption"
         color="text.secondary"
-        sx={{ fontSize: '0.7rem', lineHeight: 1, whiteSpace: 'nowrap' }}
+        sx={{ fontSize: '0.75rem', lineHeight: 1, whiteSpace: 'nowrap' }}
       >
         {label}
       </Typography>
@@ -69,14 +69,14 @@ export default function HumanHelpBar({ label = 'Need human help?' }: { label?: s
           gap: '4px',
           cursor: 'pointer',
           px: 1,
-          py: 0.5,
           borderRadius: 1,
-          minHeight: 28,
-          '&:hover': { bgcolor: '#e2e8f0' },
+          minHeight: 44,
+          '&:hover': { bgcolor: tokens.surfaceHover },
+          '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 },
         }}
       >
-        <WhatsAppIcon sx={{ fontSize: 15, color: '#25D366', display: 'block' }} />
-        <Typography component="span" sx={{ fontSize: '0.7rem', fontWeight: 600, color: '#25D366', lineHeight: 1 }}>
+        <WhatsAppIcon sx={{ fontSize: 16, color: brandColors.whatsappDark, display: 'block' }} />
+        <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 600, color: tokens.ink, lineHeight: 1 }}>
           WhatsApp
         </Typography>
       </Box>
@@ -94,14 +94,14 @@ export default function HumanHelpBar({ label = 'Need human help?' }: { label?: s
           gap: '4px',
           cursor: 'pointer',
           px: 1,
-          py: 0.5,
           borderRadius: 1,
-          minHeight: 28,
-          '&:hover': { bgcolor: '#e2e8f0' },
+          minHeight: 44,
+          '&:hover': { bgcolor: tokens.surfaceHover },
+          '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 },
         }}
       >
-        <SupportAgentIcon sx={{ fontSize: 15, color: '#1976d2', display: 'block' }} />
-        <Typography component="span" sx={{ fontSize: '0.7rem', fontWeight: 600, color: '#1976d2', lineHeight: 1 }}>
+        <SupportAgentIcon sx={{ fontSize: 16, color: tokens.navy900, display: 'block' }} />
+        <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 600, color: tokens.ink, lineHeight: 1 }}>
           Live Chat
         </Typography>
       </Box>

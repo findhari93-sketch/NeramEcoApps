@@ -1,4 +1,5 @@
 import { ImageResponse } from 'next/og';
+import { siteTokens as t } from '@neram/ui/site-tokens';
 
 export const runtime = 'edge';
 export const alt = 'Neram Classes Course';
@@ -14,7 +15,7 @@ export default async function Image({ params }: { params: { slug: string } }) {
     (
       <div
         style={{
-          background: 'linear-gradient(135deg, #004d40 0%, #00695c 50%, #00897b 100%)',
+          background: t.navy900,
           width: '100%',
           height: '100%',
           display: 'flex',
@@ -27,7 +28,7 @@ export default async function Image({ params }: { params: { slug: string } }) {
         <div
           style={{
             fontSize: 24,
-            color: '#b2dfdb',
+            color: t.gold500,
             textTransform: 'uppercase',
             letterSpacing: 3,
             marginBottom: 16,
@@ -39,7 +40,7 @@ export default async function Image({ params }: { params: { slug: string } }) {
           style={{
             fontSize: 52,
             fontWeight: 800,
-            color: 'white',
+            color: t.paper,
             textAlign: 'center',
             lineHeight: 1.2,
             maxWidth: '80%',
@@ -52,7 +53,7 @@ export default async function Image({ params }: { params: { slug: string } }) {
             display: 'flex',
             gap: 30,
             marginTop: 40,
-            color: '#e0f2f1',
+            color: t.paperMuted,
             fontSize: 22,
           }}
         >
@@ -63,7 +64,7 @@ export default async function Image({ params }: { params: { slug: string } }) {
         <div
           style={{
             fontSize: 18,
-            color: '#b2dfdb',
+            color: t.paperSubtle,
             marginTop: 24,
           }}
         >

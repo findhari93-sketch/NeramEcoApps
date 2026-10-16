@@ -1,6 +1,7 @@
 import { Box, Button, Paper, Stack, Typography } from '@mui/material';
 import PlayCircleIcon from '@mui/icons-material/PlayCircle';
 import OpenInNewIcon from '@mui/icons-material/OpenInNew';
+import { siteTokens } from '@neram/ui/site-tokens';
 
 interface CollegeYouTubeProps {
   youtubeChannelUrl: string;
@@ -51,10 +52,10 @@ export default function CollegeYouTube({ youtubeChannelUrl }: CollegeYouTubeProp
     <Paper
       variant="outlined"
       sx={{
-        borderRadius: 2,
+        borderRadius: 1,
         overflow: 'hidden',
-        borderColor: '#fee2e2',
-        background: 'linear-gradient(135deg, #fff7f7 0%, #fff 100%)',
+        borderColor: siteTokens.line,
+        background: siteTokens.surface,
       }}
     >
       <Stack
@@ -68,15 +69,15 @@ export default function CollegeYouTube({ youtubeChannelUrl }: CollegeYouTubeProp
           sx={{
             width: { xs: 56, sm: 64 },
             height: { xs: 56, sm: 64 },
-            borderRadius: 2,
-            bgcolor: '#ff0000',
+            borderRadius: 1,
+            bgcolor: siteTokens.navy900,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0,
           }}
         >
-          <PlayCircleIcon sx={{ fontSize: { xs: 32, sm: 36 }, color: 'white' }} />
+          <PlayCircleIcon sx={{ fontSize: { xs: 32, sm: 36 }, color: siteTokens.gold500 }} />
         </Box>
 
         {/* Text content */}
@@ -87,7 +88,7 @@ export default function CollegeYouTube({ youtubeChannelUrl }: CollegeYouTubeProp
           >
             {channelLabel}
           </Typography>
-          <Typography variant="body2" color="text.secondary" sx={{ lineHeight: 1.5, mb: 1.5 }}>
+          <Typography variant="body2" color={siteTokens.inkMuted} sx={{ lineHeight: 1.5, mb: 1.5 }}>
             Follow this college's official YouTube channel for campus tours, events, student life videos, and academic content.
           </Typography>
           <Button
@@ -98,9 +99,10 @@ export default function CollegeYouTube({ youtubeChannelUrl }: CollegeYouTubeProp
             rel="noopener noreferrer"
             endIcon={<OpenInNewIcon sx={{ fontSize: 14 }} />}
             sx={{
-              bgcolor: '#ff0000',
-              '&:hover': { bgcolor: '#cc0000' },
-              borderRadius: 2,
+              bgcolor: siteTokens.navy900,
+              color: siteTokens.paper,
+              '&:hover': { bgcolor: siteTokens.navy700 },
+              borderRadius: 1,
               textTransform: 'none',
               fontWeight: 600,
               fontSize: '0.8125rem',
@@ -119,11 +121,11 @@ export default function CollegeYouTube({ youtubeChannelUrl }: CollegeYouTubeProp
         sx={{
           px: { xs: 2, sm: 2.5 },
           py: 1,
-          bgcolor: '#fff1f2',
-          borderTop: '1px solid #fee2e2',
+          bgcolor: siteTokens.ground,
+          borderTop: `1px solid ${siteTokens.line}`,
         }}
       >
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" color={siteTokens.inkMuted}>
           Subscribe to stay updated on admissions, workshops, and student events from this college.
         </Typography>
       </Box>

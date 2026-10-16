@@ -68,6 +68,10 @@ async function createApplication(userId: string, updates: Record<string, unknown
       source: 'manual',
       // An enrolled student is past the review stage; anyone else starts at submitted.
       status: user.user_type === 'student' ? 'enrolled' : 'submitted',
+      // Marks this as staff-entered. Nexus treats a 'manual' row with no reviewer
+      // and no application number as the student's own profile page, not a form.
+      reviewed_by: adminId,
+      reviewed_at: new Date().toISOString(),
     })
     .select()
     .single();

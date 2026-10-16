@@ -29,6 +29,7 @@ import {
   NIRF_SORT_OPTIONS,
   type NIRFFilters,
 } from '@/lib/college-hub/nirf-filters';
+import { tokens } from '@/design-system';
 
 interface Props {
   filters: NIRFFilters;
@@ -158,10 +159,10 @@ export default function NIRFFilterBar({
             spacing={0.5}
             sx={{
               border: '1px solid',
-              borderColor: 'divider',
-              borderRadius: 6,
+              borderColor: tokens.line,
+              borderRadius: `${tokens.radiusPill}px`,
               p: 0.5,
-              bgcolor: 'background.paper',
+              bgcolor: tokens.surface,
             }}
           >
             {yearPills.map((y) => {
@@ -176,14 +177,14 @@ export default function NIRFFilterBar({
                     cursor: 'pointer',
                     px: 1.75,
                     py: 0.75,
-                    borderRadius: 5,
+                    borderRadius: `${tokens.radiusPill}px`,
                     minHeight: 32,
                     fontWeight: 600,
                     fontSize: '0.85rem',
-                    bgcolor: active ? '#1a1612' : 'transparent',
-                    color: active ? '#fff' : 'text.primary',
+                    bgcolor: active ? tokens.navy900 : 'transparent',
+                    color: active ? tokens.paper : tokens.ink,
                     transition: 'background-color 120ms ease',
-                    '&:hover': { bgcolor: active ? '#1a1612' : 'action.hover' },
+                    '&:hover': { bgcolor: active ? tokens.navy900 : tokens.surfaceHover },
                   }}
                 >
                   {y.label}
@@ -204,14 +205,14 @@ export default function NIRFFilterBar({
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
-                    <SearchIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                    <SearchIcon fontSize="small" sx={{ color: tokens.inkMuted }} />
                   </InputAdornment>
                 ),
               }}
               sx={{
                 '& .MuiOutlinedInput-root': {
-                  borderRadius: 5,
-                  bgcolor: 'background.paper',
+                  borderRadius: `${tokens.radiusPill}px`,
+                  bgcolor: tokens.surface,
                   fontSize: '0.9rem',
                 },
               }}
@@ -225,9 +226,9 @@ export default function NIRFFilterBar({
               value={filters.state ?? ''}
               onChange={(e) => setParam('state', e.target.value || undefined)}
               sx={{
-                borderRadius: 5,
+                borderRadius: `${tokens.radiusPill}px`,
                 fontSize: '0.85rem',
-                bgcolor: 'background.paper',
+                bgcolor: tokens.surface,
               }}
               renderValue={(v) => {
                 if (!v) return <Typography sx={{ fontSize: '0.85rem' }}>State</Typography>;
@@ -251,9 +252,9 @@ export default function NIRFFilterBar({
               value={filters.city ?? ''}
               onChange={(e) => setParam('city', e.target.value || undefined)}
               sx={{
-                borderRadius: 5,
+                borderRadius: `${tokens.radiusPill}px`,
                 fontSize: '0.85rem',
-                bgcolor: 'background.paper',
+                bgcolor: tokens.surface,
               }}
               renderValue={(v) => {
                 if (!v) return <Typography sx={{ fontSize: '0.85rem' }}>City</Typography>;
@@ -276,9 +277,9 @@ export default function NIRFFilterBar({
               value={filters.type ?? ''}
               onChange={(e) => setParam('type', e.target.value || undefined)}
               sx={{
-                borderRadius: 5,
+                borderRadius: `${tokens.radiusPill}px`,
                 fontSize: '0.85rem',
-                bgcolor: 'background.paper',
+                bgcolor: tokens.surface,
               }}
               renderValue={(v) => {
                 if (!v) return <Typography sx={{ fontSize: '0.85rem' }}>Type</Typography>;
@@ -312,12 +313,12 @@ export default function NIRFFilterBar({
               alignItems: 'center',
               gap: 0.75,
               border: '1px solid',
-              borderColor: top10Active ? '#1a1612' : 'divider',
-              bgcolor: top10Active ? '#1a1612' : 'background.paper',
-              color: top10Active ? '#fff' : 'text.primary',
+              borderColor: top10Active ? tokens.navy900 : tokens.line,
+              bgcolor: top10Active ? tokens.navy900 : tokens.surface,
+              color: top10Active ? tokens.paper : tokens.ink,
               px: 1.5,
               py: 0.6,
-              borderRadius: 5,
+              borderRadius: `${tokens.radiusPill}px`,
               fontSize: '0.8rem',
               fontWeight: 600,
               minHeight: 32,
@@ -333,12 +334,12 @@ export default function NIRFFilterBar({
               label={p.label}
               size="small"
               onDelete={p.clear}
-              sx={{ borderRadius: 5, fontSize: '0.75rem' }}
+              sx={{ borderRadius: `${tokens.radiusPill}px`, fontSize: '0.75rem' }}
             />
           ))}
 
           <Box sx={{ ml: 'auto' }}>
-            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
+            <Typography variant="body2" color={tokens.inkMuted} sx={{ fontSize: '0.8rem' }}>
               {totalCount.toLocaleString()} results
             </Typography>
           </Box>
@@ -359,14 +360,14 @@ export default function NIRFFilterBar({
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <SearchIcon fontSize="small" sx={{ color: 'text.secondary' }} />
+                  <SearchIcon fontSize="small" sx={{ color: tokens.inkMuted }} />
                 </InputAdornment>
               ),
             }}
             sx={{
               '& .MuiOutlinedInput-root': {
-                borderRadius: 2,
-                bgcolor: '#f1efe9',
+                borderRadius: 1,
+                bgcolor: tokens.surfaceHover,
                 fontSize: '0.9rem',
                 minHeight: 44,
               },
@@ -396,13 +397,13 @@ export default function NIRFFilterBar({
                 onClick={() => selectYear(y.value)}
                 sx={{
                   border: '1px solid',
-                  borderColor: active ? '#1a1612' : 'divider',
-                  bgcolor: active ? '#1a1612' : 'background.paper',
-                  color: active ? '#fff' : 'text.primary',
+                  borderColor: active ? tokens.navy900 : tokens.line,
+                  bgcolor: active ? tokens.navy900 : tokens.surface,
+                  color: active ? tokens.paper : tokens.ink,
                   cursor: 'pointer',
                   px: 2,
                   py: 0.75,
-                  borderRadius: 5,
+                  borderRadius: `${tokens.radiusPill}px`,
                   minHeight: 36,
                   fontWeight: 600,
                   fontSize: '0.85rem',
@@ -421,11 +422,11 @@ export default function NIRFFilterBar({
             onClick={() => setDrawerOpen(true)}
             startIcon={<TuneIcon sx={{ fontSize: 18 }} />}
             sx={{
-              borderRadius: 5,
+              borderRadius: `${tokens.radiusPill}px`,
               border: '1px solid',
-              borderColor: 'divider',
-              bgcolor: 'background.paper',
-              color: 'text.primary',
+              borderColor: tokens.line,
+              bgcolor: tokens.surface,
+              color: tokens.ink,
               px: 1.75,
               py: 0.75,
               minHeight: 40,
@@ -440,11 +441,11 @@ export default function NIRFFilterBar({
             onClick={() => setSortOpen(true)}
             startIcon={<SwapVertIcon sx={{ fontSize: 18 }} />}
             sx={{
-              borderRadius: 5,
+              borderRadius: `${tokens.radiusPill}px`,
               border: '1px solid',
-              borderColor: 'divider',
-              bgcolor: 'background.paper',
-              color: 'text.primary',
+              borderColor: tokens.line,
+              bgcolor: tokens.surface,
+              color: tokens.ink,
               px: 1.75,
               py: 0.75,
               minHeight: 40,
@@ -456,7 +457,7 @@ export default function NIRFFilterBar({
             {filters.sort === 'score_desc' ? 'Score' : filters.sort === 'name_asc' ? 'A to Z' : 'Rank'}
           </Button>
           <Box sx={{ ml: 'auto' }}>
-            <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>
+            <Typography variant="body2" color={tokens.inkMuted} sx={{ fontSize: '0.8rem' }}>
               {totalCount.toLocaleString()} results
             </Typography>
           </Box>
@@ -475,7 +476,7 @@ export default function NIRFFilterBar({
                 label={p.label}
                 size="small"
                 onDelete={p.clear}
-                sx={{ borderRadius: 5, fontSize: '0.7rem' }}
+                sx={{ borderRadius: `${tokens.radiusPill}px`, fontSize: '0.7rem' }}
               />
             ))}
             {top10Active && (
@@ -483,7 +484,7 @@ export default function NIRFFilterBar({
                 label="Top 10"
                 size="small"
                 onDelete={toggleTop10}
-                sx={{ borderRadius: 5, fontSize: '0.7rem' }}
+                sx={{ borderRadius: `${tokens.radiusPill}px`, fontSize: '0.7rem' }}
               />
             )}
           </Stack>
@@ -615,7 +616,7 @@ export default function NIRFFilterBar({
             fullWidth
             variant="contained"
             onClick={() => setDrawerOpen(false)}
-            sx={{ borderRadius: 5, minHeight: 48, mt: 1, textTransform: 'none' }}
+            sx={{ borderRadius: `${tokens.radiusPill}px`, minHeight: 48, mt: 1, textTransform: 'none' }}
           >
             Show {totalCount} results
           </Button>
@@ -652,11 +653,11 @@ export default function NIRFFilterBar({
                   sx={{
                     justifyContent: 'flex-start',
                     minHeight: 48,
-                    borderRadius: 2,
+                    borderRadius: 1,
                     border: '1px solid',
-                    borderColor: active ? 'primary.main' : 'divider',
-                    bgcolor: active ? 'action.selected' : 'background.paper',
-                    color: 'text.primary',
+                    borderColor: active ? tokens.navy900 : tokens.line,
+                    bgcolor: active ? tokens.surfaceHover : tokens.surface,
+                    color: tokens.ink,
                     fontWeight: active ? 700 : 500,
                     textTransform: 'none',
                   }}
@@ -676,7 +677,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <Typography
       variant="caption"
-      color="text.secondary"
+      color={tokens.inkMuted}
       fontWeight={600}
       sx={{
         mb: 0.75,

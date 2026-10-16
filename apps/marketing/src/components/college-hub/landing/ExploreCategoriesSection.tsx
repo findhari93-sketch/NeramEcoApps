@@ -2,6 +2,7 @@ import { Box, Container, Grid, Paper, Stack, Typography } from '@mui/material';
 import Link from 'next/link';
 import { COUNSELING_LABELS, COLLEGE_TYPE_SLUGS, ACCREDITATION_FILTERS } from '@/lib/college-hub/constants';
 import { FEE_RANGES } from '@/lib/college-hub/queries';
+import { siteTokens } from '@neram/ui/site-tokens';
 
 interface ExploreCategoriesSectionProps {
   stateData: Array<{ state_slug: string; state: string; count: number }>;
@@ -21,10 +22,10 @@ function CategoryColumn({
   viewAllLabel?: string;
 }) {
   return (
-    <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 2.5, height: '100%' }}>
+    <Paper variant="outlined" sx={{ p: 2.5, borderRadius: 1, height: '100%' }}>
       <Typography
         variant="caption"
-        sx={{ fontWeight: 700, color: 'text.secondary', textTransform: 'uppercase', letterSpacing: 1, mb: 1.5, display: 'block' }}
+        sx={{ fontWeight: 700, color: siteTokens.inkMuted, textTransform: 'uppercase', letterSpacing: 1, mb: 1.5, display: 'block' }}
       >
         {title}
       </Typography>
@@ -34,14 +35,14 @@ function CategoryColumn({
             <Typography
               variant="body2"
               sx={{
-                color: 'text.primary',
-                '&:hover': { color: 'primary.main', textDecoration: 'underline' },
+                color: siteTokens.ink,
+                '&:hover': { color: siteTokens.navy900, textDecoration: 'underline' },
                 py: 0.25,
               }}
             >
               {item.label}
               {item.count != null && (
-                <Typography component="span" variant="caption" sx={{ color: 'text.disabled', ml: 0.75 }}>
+                <Typography component="span" variant="caption" sx={{ color: siteTokens.inkMuted, ml: 0.75 }}>
                   ({item.count})
                 </Typography>
               )}
@@ -50,7 +51,7 @@ function CategoryColumn({
         ))}
         {viewAllHref && (
           <Link href={viewAllHref} style={{ textDecoration: 'none' }}>
-            <Typography variant="body2" sx={{ color: 'primary.main', mt: 1, fontSize: '0.8rem' }}>
+            <Typography variant="body2" sx={{ color: siteTokens.navy900, mt: 1, fontSize: '0.8rem' }}>
               {viewAllLabel ?? 'View all'} →
             </Typography>
           </Link>
@@ -101,13 +102,13 @@ export default function ExploreCategoriesSection({ stateData, counselingData, ci
   }));
 
   return (
-    <Box id="explore" component="section" aria-labelledby="explore-heading" sx={{ py: { xs: 4, sm: 6 }, bgcolor: '#f8fafc', scrollMarginTop: 72 }}>
+    <Box id="explore" component="section" aria-labelledby="explore-heading" sx={{ py: { xs: 4, sm: 6 }, bgcolor: siteTokens.ground, scrollMarginTop: 72 }}>
       <Container maxWidth="lg">
         <Box sx={{ textAlign: 'center', mb: { xs: 3, sm: 4 } }}>
           <Typography id="explore-heading" variant="h2" sx={{ fontSize: { xs: '1.4rem', sm: '1.75rem' }, fontWeight: 800 }}>
             Explore Architecture Colleges
           </Typography>
-          <Typography variant="body1" color="text.secondary" sx={{ mt: 0.75 }}>
+          <Typography variant="body1" color={siteTokens.inkMuted} sx={{ mt: 0.75 }}>
             Browse by state, counseling, rankings, fees, and more
           </Typography>
         </Box>

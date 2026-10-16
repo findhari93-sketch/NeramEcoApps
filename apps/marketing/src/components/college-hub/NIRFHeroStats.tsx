@@ -1,4 +1,5 @@
 import { Box, Typography, Stack } from '@mui/material';
+import { siteTokens } from '@neram/ui/site-tokens';
 
 interface StatProps {
   label: string;
@@ -15,7 +16,7 @@ function StatCell({ label, value, caption }: StatProps) {
         px: { xs: 2, md: 3 },
         py: { xs: 1.75, md: 2 },
         borderLeft: { md: '1px solid' },
-        borderColor: { md: 'divider' },
+        borderColor: { md: siteTokens.line },
         '&:first-of-type': { borderLeft: 'none' },
       }}
     >
@@ -27,7 +28,7 @@ function StatCell({ label, value, caption }: StatProps) {
           letterSpacing: 0.6,
           fontSize: '0.68rem',
           fontWeight: 600,
-          color: 'text.secondary',
+          color: siteTokens.inkMuted,
           mb: 0.5,
         }}
       >
@@ -46,7 +47,7 @@ function StatCell({ label, value, caption }: StatProps) {
       {caption && (
         <Typography
           variant="caption"
-          color="text.secondary"
+          color={siteTokens.inkMuted}
           sx={{ display: 'block', fontSize: '0.72rem', mt: 0.5 }}
         >
           {caption}
@@ -77,9 +78,9 @@ export default function NIRFHeroStats({
     <Box
       sx={{
         border: '1px solid',
-        borderColor: 'divider',
-        borderRadius: 1.5,
-        bgcolor: 'background.paper',
+        borderColor: siteTokens.line,
+        borderRadius: 1,
+        bgcolor: siteTokens.surface,
         overflow: 'hidden',
         mb: { xs: 2, md: 3 },
       }}
@@ -91,7 +92,7 @@ export default function NIRFHeroStats({
             sx={{
               display: { xs: 'block', md: 'none' },
               borderTop: '1px solid',
-              borderColor: 'divider',
+              borderColor: siteTokens.line,
             }}
           />
         }

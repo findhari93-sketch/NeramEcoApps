@@ -1,6 +1,7 @@
 'use client';
 
 import { Box, Card, Chip, Stack, Typography, IconButton, Button, Tooltip } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import Image from 'next/image';
 import Link from 'next/link';
 import LocationOnIcon from '@mui/icons-material/LocationOn';
@@ -9,6 +10,7 @@ import DescriptionIcon from '@mui/icons-material/Description';
 import SaveCollegeButton from './SaveCollegeButton';
 import CompareButton from './CompareButton';
 import type { ListingCollege } from '@/lib/college-hub/listing-filter';
+import { tokens } from '@/design-system';
 
 interface FeaturedCollegeCardProps {
   college: ListingCollege;
@@ -43,10 +45,10 @@ export default function FeaturedCollegeCard({ college, rank, variant = 'landscap
     <Card
       variant="outlined"
       sx={{
-        borderRadius: 4,
+        borderRadius: 1,
         overflow: 'hidden',
-        transition: 'box-shadow 0.2s, border-color 0.2s',
-        '&:hover': { boxShadow: 4, borderColor: 'primary.light' },
+        transition: 'border-color 0.2s',
+        '&:hover': { borderColor: tokens.gold500 },
         mb: 2,
       }}
     >
@@ -65,23 +67,23 @@ export default function FeaturedCollegeCard({ college, rank, variant = 'landscap
           <Box
             sx={{
               width: '100%', height: '100%',
-              background: 'linear-gradient(135deg, #1e3a5f, #2d5a87)',
+              background: tokens.navy900,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
           >
-            <Typography sx={{ color: 'rgba(255,255,255,0.15)', fontWeight: 800, fontSize: '5rem' }}>
+            <Typography sx={{ color: alpha(tokens.paper, 0.15), fontWeight: 800, fontSize: '5rem' }}>
               {(college.short_name ?? college.name).charAt(0)}
             </Typography>
           </Box>
         )}
-        <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, background: 'linear-gradient(transparent, rgba(0,0,0,0.4))' }} />
+        <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 80, background: `linear-gradient(transparent, ${alpha(tokens.navy900, 0.4)})` }} />
         {isPremium && (
           <Chip
             label="⭐ Featured"
             size="small"
             sx={{
               position: 'absolute', top: 12, left: 12, zIndex: 2,
-              background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: 'white',
+              background: tokens.gold500, color: tokens.navy900,
               fontWeight: 600, fontSize: '0.65rem', height: 24,
             }}
           />
@@ -90,10 +92,10 @@ export default function FeaturedCollegeCard({ college, rank, variant = 'landscap
           <Box
             sx={{
               position: 'absolute', top: 12, right: 12, zIndex: 2,
-              width: 40, height: 40, borderRadius: '50%', bgcolor: 'white',
+              width: 40, height: 40, borderRadius: '50%', bgcolor: tokens.surface,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontWeight: 700, fontSize: 16, color: 'primary.main',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+              fontWeight: 700, fontSize: 16, color: tokens.navy900,
+              boxShadow: `0 2px 8px ${alpha(tokens.navy900, 0.15)}`,
             }}
           >
             #{rank}
@@ -102,15 +104,15 @@ export default function FeaturedCollegeCard({ college, rank, variant = 'landscap
         <Box
           sx={{
             position: 'absolute', bottom: -20, left: 16, zIndex: 3,
-            width: 48, height: 48, borderRadius: 2, bgcolor: 'white', border: '2px solid white',
+            width: 48, height: 48, borderRadius: 1, bgcolor: tokens.surface, border: `2px solid ${tokens.surface}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)', overflow: 'hidden',
+            boxShadow: `0 2px 8px ${alpha(tokens.navy900, 0.15)}`, overflow: 'hidden',
           }}
         >
           {college.logo_url ? (
             <Image src={college.logo_url} alt="" width={40} height={40} style={{ objectFit: 'contain' }} />
           ) : (
-            <Typography sx={{ fontWeight: 700, color: 'primary.main', fontSize: 20 }}>
+            <Typography sx={{ fontWeight: 700, color: tokens.navy900, fontSize: 20 }}>
               {(college.short_name ?? college.name).charAt(0)}
             </Typography>
           )}
@@ -121,64 +123,64 @@ export default function FeaturedCollegeCard({ college, rank, variant = 'landscap
         <Link href={href} style={{ textDecoration: 'none', color: 'inherit' }}>
           <Typography
             variant="h6"
-            sx={{ fontWeight: 700, fontSize: { xs: '1rem', sm: '1.1rem' }, lineHeight: 1.3, '&:hover': { color: 'primary.main' } }}
+            sx={{ fontWeight: 700, fontSize: { xs: '1rem', sm: '1.1rem' }, lineHeight: 1.3, '&:hover': { color: tokens.navy900 } }}
           >
             {college.name}
           </Typography>
         </Link>
         <Stack direction="row" alignItems="center" gap={0.5} sx={{ mt: 0.5 }}>
-          <LocationOnIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-          <Typography variant="caption" color="text.secondary">
+          <LocationOnIcon sx={{ fontSize: 14, color: tokens.inkMuted }} />
+          <Typography variant="caption" color={tokens.inkMuted}>
             {college.city}, {college.state}{college.type ? ` · ${college.type}` : ''}
           </Typography>
         </Stack>
 
         <Stack direction="row" gap={0.5} flexWrap="wrap" sx={{ mt: 1.5 }}>
           {college.coa_approved && (
-            <Chip label="✓ COA" size="small" sx={{ bgcolor: '#dcfce7', color: '#166534', fontSize: '0.65rem', height: 22, fontWeight: 500 }} />
+            <Chip label="✓ COA" size="small" sx={{ bgcolor: tokens.surface, color: tokens.success, border: `1px solid ${tokens.success}`, fontSize: '0.65rem', height: 22, fontWeight: 500 }} />
           )}
           {college.naac_grade && (
-            <Chip label={`NAAC ${college.naac_grade}`} size="small" sx={{ bgcolor: '#fef3c7', color: '#92400e', fontSize: '0.65rem', height: 22, fontWeight: 500 }} />
+            <Chip label={`NAAC ${college.naac_grade}`} size="small" sx={{ bgcolor: tokens.goldTintBg, color: tokens.gold800, fontSize: '0.65rem', height: 22, fontWeight: 500 }} />
           )}
           {college.accepted_exams?.slice(0, 2).map((exam) => (
-            <Chip key={exam} label={exam} size="small" sx={{ bgcolor: '#dbeafe', color: '#1e40af', fontSize: '0.65rem', height: 22, fontWeight: 500 }} />
+            <Chip key={exam} label={exam} size="small" sx={{ bgcolor: tokens.surface, color: tokens.ink, border: `1px solid ${tokens.line}`, fontSize: '0.65rem', height: 22, fontWeight: 500 }} />
           ))}
           {college.counseling_systems?.slice(0, 2).map((sys) => (
-            <Chip key={sys} label={sys} size="small" sx={{ bgcolor: '#f3e8ff', color: '#6b21a8', fontSize: '0.65rem', height: 22, fontWeight: 500 }} />
+            <Chip key={sys} label={sys} size="small" sx={{ bgcolor: tokens.surfaceHover, color: tokens.ink, fontSize: '0.65rem', height: 22, fontWeight: 500 }} />
           ))}
         </Stack>
 
         <Box
           sx={{
-            mt: 2, pt: 1.5, borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider', pb: 1.5,
+            mt: 2, pt: 1.5, borderTop: '1px solid', borderBottom: '1px solid', borderColor: tokens.line, pb: 1.5,
             display: 'grid',
             gridTemplateColumns: { xs: 'repeat(3, 1fr)', sm: 'repeat(4, 1fr)' },
             gap: 1, textAlign: 'center',
           }}
         >
           <Box>
-            <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', color: '#059669' }}>
+            <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', color: tokens.success }}>
               {formatFee(college.annual_fee_approx, college.annual_fee_min)}
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>Annual Fee</Typography>
+            <Typography variant="caption" color={tokens.inkMuted} sx={{ fontSize: '0.65rem' }}>Annual Fee</Typography>
           </Box>
           <Box>
             <Typography sx={{ fontWeight: 700, fontSize: '0.95rem' }}>
               {college.total_barch_seats ?? 'N/A'}
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>B.Arch Seats</Typography>
+            <Typography variant="caption" color={tokens.inkMuted} sx={{ fontSize: '0.65rem' }}>B.Arch Seats</Typography>
           </Box>
           <Box>
-            <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', color: 'primary.main' }}>
+            <Typography sx={{ fontWeight: 700, fontSize: '0.95rem', color: tokens.navy900 }}>
               {formatSalary(college.avg_placement_salary)}
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>Avg Package</Typography>
+            <Typography variant="caption" color={tokens.inkMuted} sx={{ fontSize: '0.65rem' }}>Avg Package</Typography>
           </Box>
           <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
             <Typography sx={{ fontWeight: 700, fontSize: '0.95rem' }}>
               {college.highlights?.[0] ?? 'N/A'}
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>Highlight</Typography>
+            <Typography variant="caption" color={tokens.inkMuted} sx={{ fontSize: '0.65rem' }}>Highlight</Typography>
           </Box>
         </Box>
 
@@ -188,14 +190,14 @@ export default function FeaturedCollegeCard({ college, rank, variant = 'landscap
             href={href}
             variant="contained"
             size="small"
-            sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.8rem', px: 3, borderRadius: 2 }}
+            sx={{ textTransform: 'none', fontWeight: 600, fontSize: '0.8rem', px: 3, borderRadius: 1 }}
           >
             View Details
           </Button>
           <CompareButton slug={college.slug} collegeName={college.name} />
           {college.brochure_url && (
             <Tooltip title="Download Brochure">
-              <IconButton component="a" href={college.brochure_url} target="_blank" rel="noopener noreferrer" size="small" sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+              <IconButton component="a" href={college.brochure_url} target="_blank" rel="noopener noreferrer" size="small" sx={{ border: '1px solid', borderColor: tokens.line, borderRadius: 1 }}>
                 <DescriptionIcon sx={{ fontSize: 18 }} />
               </IconButton>
             </Tooltip>
@@ -203,7 +205,7 @@ export default function FeaturedCollegeCard({ college, rank, variant = 'landscap
           <SaveCollegeButton slug={college.slug} collegeId={college.id} collegeName={college.name} size="small" />
           {college.admissions_phone && (
             <Tooltip title={`Call ${college.admissions_phone}`}>
-              <IconButton component="a" href={`tel:${college.admissions_phone}`} size="small" sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+              <IconButton component="a" href={`tel:${college.admissions_phone}`} size="small" sx={{ border: '1px solid', borderColor: tokens.line, borderRadius: 1 }}>
                 <PhoneIcon sx={{ fontSize: 18 }} />
               </IconButton>
             </Tooltip>
@@ -228,10 +230,10 @@ function PortraitCard({
     <Card
       variant="outlined"
       sx={{
-        borderRadius: 3,
+        borderRadius: 1,
         overflow: 'hidden',
-        transition: 'box-shadow 0.2s, border-color 0.2s',
-        '&:hover': { boxShadow: 4, borderColor: 'primary.light' },
+        transition: 'border-color 0.2s',
+        '&:hover': { borderColor: tokens.gold500 },
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
@@ -251,23 +253,23 @@ function PortraitCard({
           <Box
             sx={{
               width: '100%', height: '100%',
-              background: 'linear-gradient(135deg, #1e3a5f, #2d5a87)',
+              background: tokens.navy900,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}
           >
-            <Typography sx={{ color: 'rgba(255,255,255,0.2)', fontWeight: 800, fontSize: '4rem' }}>
+            <Typography sx={{ color: alpha(tokens.paper, 0.2), fontWeight: 800, fontSize: '4rem' }}>
               {(college.short_name ?? college.name).charAt(0)}
             </Typography>
           </Box>
         )}
-        <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 60, background: 'linear-gradient(transparent, rgba(0,0,0,0.35))' }} />
+        <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 60, background: `linear-gradient(transparent, ${alpha(tokens.navy900, 0.35)})` }} />
         {isPremium && (
           <Chip
             label="⭐ Featured"
             size="small"
             sx={{
               position: 'absolute', top: 10, left: 10, zIndex: 2,
-              background: 'linear-gradient(135deg, #f59e0b, #d97706)', color: 'white',
+              background: tokens.gold500, color: tokens.navy900,
               fontWeight: 600, fontSize: '0.6rem', height: 22,
             }}
           />
@@ -276,15 +278,15 @@ function PortraitCard({
         <Box
           sx={{
             position: 'absolute', bottom: -18, left: 14, zIndex: 3,
-            width: 40, height: 40, borderRadius: 1.5, bgcolor: 'white', border: '2px solid white',
+            width: 40, height: 40, borderRadius: 1, bgcolor: tokens.surface, border: `2px solid ${tokens.surface}`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 2px 6px rgba(0,0,0,0.15)', overflow: 'hidden',
+            boxShadow: `0 2px 6px ${alpha(tokens.navy900, 0.15)}`, overflow: 'hidden',
           }}
         >
           {college.logo_url ? (
             <Image src={college.logo_url} alt="" width={32} height={32} style={{ objectFit: 'contain' }} />
           ) : (
-            <Typography sx={{ fontWeight: 700, color: 'primary.main', fontSize: 16 }}>
+            <Typography sx={{ fontWeight: 700, color: tokens.navy900, fontSize: 16 }}>
               {(college.short_name ?? college.name).charAt(0)}
             </Typography>
           )}
@@ -298,15 +300,15 @@ function PortraitCard({
             sx={{
               fontWeight: 700, fontSize: '0.9rem', lineHeight: 1.3,
               display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
-              '&:hover': { color: 'primary.main' },
+              '&:hover': { color: tokens.navy900 },
             }}
           >
             {college.name}
           </Typography>
         </Link>
         <Stack direction="row" alignItems="center" gap={0.4} sx={{ mt: 0.5 }}>
-          <LocationOnIcon sx={{ fontSize: 13, color: 'text.secondary' }} />
-          <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+          <LocationOnIcon sx={{ fontSize: 13, color: tokens.inkMuted }} />
+          <Typography variant="caption" color={tokens.inkMuted} sx={{ fontSize: '0.7rem' }}>
             {college.city}, {college.state}{college.type ? ` · ${college.type}` : ''}
           </Typography>
         </Stack>
@@ -314,13 +316,13 @@ function PortraitCard({
         {/* Badges */}
         <Stack direction="row" gap={0.4} flexWrap="wrap" sx={{ mt: 1.25 }}>
           {college.coa_approved && (
-            <Chip label="✓ COA" size="small" sx={{ bgcolor: '#dcfce7', color: '#166534', fontSize: '0.6rem', height: 20, fontWeight: 500 }} />
+            <Chip label="✓ COA" size="small" sx={{ bgcolor: tokens.surface, color: tokens.success, border: `1px solid ${tokens.success}`, fontSize: '0.6rem', height: 20, fontWeight: 500 }} />
           )}
           {college.naac_grade && (
-            <Chip label={`NAAC ${college.naac_grade}`} size="small" sx={{ bgcolor: '#fef3c7', color: '#92400e', fontSize: '0.6rem', height: 20, fontWeight: 500 }} />
+            <Chip label={`NAAC ${college.naac_grade}`} size="small" sx={{ bgcolor: tokens.goldTintBg, color: tokens.gold800, fontSize: '0.6rem', height: 20, fontWeight: 500 }} />
           )}
           {college.accepted_exams?.slice(0, 1).map((exam) => (
-            <Chip key={exam} label={exam} size="small" sx={{ bgcolor: '#dbeafe', color: '#1e40af', fontSize: '0.6rem', height: 20, fontWeight: 500 }} />
+            <Chip key={exam} label={exam} size="small" sx={{ bgcolor: tokens.surface, color: tokens.ink, border: `1px solid ${tokens.line}`, fontSize: '0.6rem', height: 20, fontWeight: 500 }} />
           ))}
         </Stack>
 
@@ -328,25 +330,25 @@ function PortraitCard({
         <Stack
           direction="row"
           justifyContent="space-between"
-          sx={{ mt: 'auto', pt: 1.5, borderTop: '1px solid', borderColor: 'divider' }}
+          sx={{ mt: 'auto', pt: 1.5, borderTop: '1px solid', borderColor: tokens.line }}
         >
           <Box>
-            <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', color: '#059669' }}>
+            <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', color: tokens.success }}>
               {formatFee(college.annual_fee_approx, college.annual_fee_min)}
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem' }}>Fee/yr</Typography>
+            <Typography variant="caption" color={tokens.inkMuted} sx={{ fontSize: '0.6rem' }}>Fee/yr</Typography>
           </Box>
           <Box sx={{ textAlign: 'center' }}>
             <Typography sx={{ fontWeight: 700, fontSize: '0.85rem' }}>
               {college.total_barch_seats ?? '-'}
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem' }}>Seats</Typography>
+            <Typography variant="caption" color={tokens.inkMuted} sx={{ fontSize: '0.6rem' }}>Seats</Typography>
           </Box>
           <Box sx={{ textAlign: 'right' }}>
-            <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', color: 'primary.main' }}>
+            <Typography sx={{ fontWeight: 700, fontSize: '0.85rem', color: tokens.navy900 }}>
               {formatSalary(college.avg_placement_salary)}
             </Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.6rem' }}>Avg Pkg</Typography>
+            <Typography variant="caption" color={tokens.inkMuted} sx={{ fontSize: '0.6rem' }}>Avg Pkg</Typography>
           </Box>
         </Stack>
 
@@ -357,7 +359,7 @@ function PortraitCard({
           variant="contained"
           size="small"
           fullWidth
-          sx={{ mt: 1.5, textTransform: 'none', fontWeight: 600, fontSize: '0.8rem', borderRadius: 2, py: 0.8 }}
+          sx={{ mt: 1.5, textTransform: 'none', fontWeight: 600, fontSize: '0.8rem', borderRadius: 1, py: 0.8 }}
         >
           View Details
         </Button>

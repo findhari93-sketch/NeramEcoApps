@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Image from 'next/image';
 import { Box } from '@neram/ui';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
+import { tokens } from '@/design-system';
 
 const ASSISTANT_IMG = '/images/nata-ai-assistant2.jpg';
 
@@ -17,14 +18,14 @@ export default function BotAvatar({ size = 40 }: { size?: number }) {
           width: size,
           height: size,
           borderRadius: '50%',
-          bgcolor: '#1a237e',
+          bgcolor: tokens.navy700,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           flexShrink: 0,
         }}
       >
-        <SmartToyIcon sx={{ fontSize: size * 0.55, color: 'white' }} />
+        <SmartToyIcon sx={{ fontSize: size * 0.55, color: tokens.paper }} />
       </Box>
     );
   }

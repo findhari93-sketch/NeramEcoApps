@@ -3,6 +3,7 @@ import { localePrefix } from '@/lib/college-hub/detail-content';
 import { Box, Paper, Typography, Stack, Divider } from '@mui/material';
 import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
 import type { NIRFRankingWithCollege } from '@neram/database';
+import { siteTokens } from '@neram/ui/site-tokens';
 
 interface Props {
   row: NIRFRankingWithCollege;
@@ -10,17 +11,17 @@ interface Props {
   showYear?: boolean;
 }
 
-const TYPE_COLORS: Record<string, { bg: string; fg: string }> = {
-  government: { bg: '#dcfce7', fg: '#15803d' },
-  private: { bg: '#fef3c7', fg: '#92400e' },
-  deemed: { bg: '#e0e7ff', fg: '#3730a3' },
-  autonomous: { bg: '#fce7f3', fg: '#9f1239' },
+const TYPE_COLORS: Record<string, { bg: string; fg: string; ring?: string }> = {
+  government: { bg: siteTokens.surface, fg: siteTokens.success, ring: siteTokens.success },
+  private: { bg: siteTokens.goldTintBg, fg: siteTokens.gold800 },
+  deemed: { bg: siteTokens.surfaceHover, fg: siteTokens.ink },
+  autonomous: { bg: siteTokens.surface, fg: siteTokens.navy900, ring: siteTokens.lineStrong },
 };
 
 function typeChip(type?: string | null) {
   if (!type) return null;
   const key = type.toLowerCase();
-  const c = TYPE_COLORS[key] ?? { bg: '#f3f4f6', fg: '#374151' };
+  const c = TYPE_COLORS[key] ?? { bg: siteTokens.surfaceHover, fg: siteTokens.ink };
   const label = type.charAt(0).toUpperCase() + type.slice(1);
   return (
     <Box
@@ -28,6 +29,7 @@ function typeChip(type?: string | null) {
         display: 'inline-block',
         bgcolor: c.bg,
         color: c.fg,
+        boxShadow: 'ring' in c && c.ring ? `inset 0 0 0 1px ${c.ring}` : 'none',
         fontSize: '0.68rem',
         fontWeight: 600,
         px: 0.875,
@@ -50,15 +52,15 @@ export default function NIRFRankingCard({ row, locale, showYear = false }: Props
       sx={{
         px: { xs: 1.75, sm: 2 },
         py: { xs: 1.5, sm: 1.75 },
-        borderRadius: 1.5,
+        borderRadius: 1,
         border: '1px solid',
-        borderColor: 'divider',
-        bgcolor: 'background.paper',
+        borderColor: siteTokens.line,
+        bgcolor: siteTokens.surface,
         transition: 'border-color 120ms ease, box-shadow 120ms ease',
         '&:hover': detailHref
           ? {
-              borderColor: 'text.primary',
-              boxShadow: '0 1px 6px rgba(0,0,0,0.06)',
+              borderColor: siteTokens.gold500,
+              boxShadow: 'none',
             }
           : undefined,
       }}
@@ -70,8 +72,8 @@ export default function NIRFRankingCard({ row, locale, showYear = false }: Props
             minWidth: 42,
             height: 42,
             borderRadius: 1,
-            bgcolor: '#1a1612',
-            color: '#fff',
+            bgcolor: siteTokens.navy900,
+            color: siteTokens.paper,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -89,7 +91,7 @@ export default function NIRFRankingCard({ row, locale, showYear = false }: Props
               fontWeight: 700,
               fontSize: { xs: '0.95rem', sm: '1rem' },
               lineHeight: 1.25,
-              color: 'text.primary',
+              color: siteTokens.ink,
             }}
           >
             {c?.name ?? row.source_name}
@@ -101,11 +103,11 @@ export default function NIRFRankingCard({ row, locale, showYear = false }: Props
             sx={{ mt: 0.4, flexWrap: 'wrap', gap: 0.5 }}
           >
             <LocationOnOutlinedIcon
-              sx={{ fontSize: 13, color: 'text.secondary' }}
+              sx={{ fontSize: 13, color: siteTokens.inkMuted }}
             />
             <Typography
               variant="caption"
-              color="text.secondary"
+              color={siteTokens.inkMuted}
               sx={{ fontSize: '0.75rem' }}
             >
               {c?.city ?? row.source_city ?? ''}
@@ -113,7 +115,7 @@ export default function NIRFRankingCard({ row, locale, showYear = false }: Props
             </Typography>
             <Typography
               component="span"
-              sx={{ color: 'text.disabled', fontSize: '0.75rem', mx: 0.25 }}
+              sx={{ color: siteTokens.inkMuted, fontSize: '0.75rem', mx: 0.25 }}
             >
               ·
             </Typography>
@@ -134,7 +136,7 @@ export default function NIRFRankingCard({ row, locale, showYear = false }: Props
           </Typography>
           <Typography
             variant="caption"
-            color="text.secondary"
+            color={siteTokens.inkMuted}
             sx={{
               display: 'block',
               fontSize: '0.65rem',
@@ -186,7 +188,7 @@ function MetricCell({ label, value }: { label: string; value: number | null }) {
         sx={{
           fontWeight: 600,
           fontSize: '0.85rem',
-          color: 'text.primary',
+          color: siteTokens.ink,
           lineHeight: 1.2,
         }}
       >
@@ -194,7 +196,7 @@ function MetricCell({ label, value }: { label: string; value: number | null }) {
       </Typography>
       <Typography
         variant="caption"
-        color="text.secondary"
+        color={siteTokens.inkMuted}
         sx={{
           fontSize: '0.62rem',
           fontWeight: 600,

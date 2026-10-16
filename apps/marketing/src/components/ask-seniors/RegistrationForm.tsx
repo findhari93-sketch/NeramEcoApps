@@ -2,19 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
-import {
-  Box,
-  Typography,
-  TextField,
-  Button,
-  Chip,
-  ToggleButtonGroup,
-  ToggleButton,
-  CircularProgress,
-  InputAdornment,
-  CheckCircleIcon,
-} from '@neram/ui';
+import { Box, Typography, TextField, CircularProgress, InputAdornment } from '@neram/ui';
+import CheckCircleOutlineOutlinedIcon from '@mui/icons-material/CheckCircleOutlineOutlined';
+import ErrorOutlineOutlinedIcon from '@mui/icons-material/ErrorOutlineOutlined';
 import { useFirebaseAuth } from '@neram/auth';
+import { CtaButton, EmptyState, Pill, tokens as t } from '@/design-system';
 
 interface AskSeniorsEvent {
   id: string;
@@ -168,47 +160,17 @@ export default function RegistrationForm({ event, colleges }: RegistrationFormPr
   // Success state
   if (success) {
     return (
-      <Box
-        id="register"
-        sx={{
-          maxWidth: 560,
-          mx: 'auto',
-          px: { xs: 2, md: 0 },
-          py: 6,
-          textAlign: 'center',
-        }}
-      >
-        <CheckCircleIcon sx={{ fontSize: 72, color: '#4caf50', mb: 2 }} />
-        <Typography
-          variant="h5"
-          sx={{ fontWeight: 800, color: '#fff', mb: 1.5 }}
-        >
-          You're registered!
-        </Typography>
-        <Typography sx={{ color: '#9ca3af', lineHeight: 1.7 }}>
-          Check your email for confirmation and event details.
-        </Typography>
+      <Box id="register" role="status" sx={{ maxWidth: 560, mx: 'auto', width: '100%' }}>
+        <EmptyState
+          icon={<CheckCircleOutlineOutlinedIcon />}
+          title="You're registered!"
+          body="Check your email for confirmation and event details."
+        />
       </Box>
     );
   }
 
-  // Step progress bars
-  const StepIndicator = () => (
-    <Box sx={{ display: 'flex', gap: 1, mb: 3 }}>
-      {([1, 2, 3] as const).map((s) => (
-        <Box
-          key={s}
-          sx={{
-            width: 32,
-            height: 4,
-            borderRadius: 2,
-            bgcolor: s <= step ? '#e8a020' : 'rgba(255,255,255,0.1)',
-            transition: 'background-color 0.3s',
-          }}
-        />
-      ))}
-    </Box>
-  );
+  const stepTitles = ['Your NATA Scores', 'Which colleges interest you?', 'Your Details'];
 
   return (
     <Box
@@ -216,59 +178,54 @@ export default function RegistrationForm({ event, colleges }: RegistrationFormPr
       sx={{
         maxWidth: 560,
         mx: 'auto',
-        px: { xs: 2, md: 0 },
+        width: '100%',
+        boxSizing: 'border-box',
+        bgcolor: t.surface,
+        border: `1px solid ${t.line}`,
+        borderRadius: `${t.radius}px`,
+        p: { xs: 2.5, sm: 4 },
+        scrollMarginTop: 80,
       }}
     >
-      <StepIndicator />
+      {/* Step progress */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
+        <Box sx={{ display: 'flex', gap: 0.75 }} aria-hidden>
+          {([1, 2, 3] as const).map((s) => (
+            <Box
+              key={s}
+              sx={{ width: 32, height: 4, borderRadius: 2, bgcolor: s <= step ? t.gold500 : t.line, transition: 'background-color 200ms ease' }}
+            />
+          ))}
+        </Box>
+        <Typography component="p" sx={{ m: 0, fontFamily: t.fontMono, fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.08em', color: t.inkMuted }}>
+          STEP {step} OF 3
+        </Typography>
+      </Box>
+
+      <Typography component="h3" sx={{ m: 0, mb: step === 2 ? 1 : 3, fontSize: '1.25rem', fontWeight: 700, color: t.ink }}>
+        {stepTitles[step - 1]}
+      </Typography>
 
       {/* Step 1: NATA Scores */}
       {step === 1 && (
         <Box>
-          <Typography
-            variant="h6"
-            sx={{ fontWeight: 800, color: '#fff', mb: 3 }}
-          >
-            Your NATA Scores
-          </Typography>
-
-          {/* Attempts toggle */}
+          {/* Attempts */}
           <Box sx={{ mb: 3 }}>
-            <Typography
-              sx={{ color: '#9ca3af', fontSize: 13, mb: 1 }}
-            >
+            <Typography id="nata-attempts-label" component="p" sx={{ m: 0, mb: 1, fontSize: '0.9375rem', color: t.inkMuted }}>
               How many times did you appear for NATA?
             </Typography>
-            <ToggleButtonGroup
-              exclusive
-              value={form.nata_attempts}
-              onChange={(_e, val) => {
-                if (val !== null) {
-                  setForm((prev) => ({ ...prev, nata_attempts: val as 1 | 2 }));
-                }
-              }}
-              sx={{
-                '& .MuiToggleButton-root': {
-                  color: '#9ca3af',
-                  borderColor: 'rgba(255,255,255,0.15)',
-                  px: 3,
-                  py: 1,
-                  '&.Mui-selected': {
-                    color: '#e8a020',
-                    borderColor: '#e8a020',
-                    bgcolor: 'rgba(232,160,32,0.12)',
-                    '&:hover': {
-                      bgcolor: 'rgba(232,160,32,0.18)',
-                    },
-                  },
-                  '&:hover': {
-                    bgcolor: 'rgba(255,255,255,0.05)',
-                  },
-                },
-              }}
-            >
-              <ToggleButton value={1}>1 Attempt</ToggleButton>
-              <ToggleButton value={2}>2 Attempts</ToggleButton>
-            </ToggleButtonGroup>
+            <Box role="radiogroup" aria-labelledby="nata-attempts-label" sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+              {([1, 2] as const).map((n) => (
+                <Pill
+                  key={n}
+                  role="radio"
+                  selected={form.nata_attempts === n}
+                  onClick={() => setForm((prev) => ({ ...prev, nata_attempts: n }))}
+                >
+                  {n === 1 ? '1 Attempt' : '2 Attempts'}
+                </Pill>
+              ))}
+            </Box>
           </Box>
 
           {/* NATA Score 1 */}
@@ -279,7 +236,7 @@ export default function RegistrationForm({ event, colleges }: RegistrationFormPr
             required
             value={form.nata_score_1}
             onChange={(e) => setForm((prev) => ({ ...prev, nata_score_1: e.target.value }))}
-            inputProps={{ min: 0, max: 200, step: 0.5 }}
+            inputProps={{ min: 0, max: 200, step: 0.5, inputMode: 'decimal' }}
             sx={textFieldSx}
           />
 
@@ -291,7 +248,7 @@ export default function RegistrationForm({ event, colleges }: RegistrationFormPr
               type="number"
               value={form.nata_score_2}
               onChange={(e) => setForm((prev) => ({ ...prev, nata_score_2: e.target.value }))}
-              inputProps={{ min: 0, max: 200, step: 0.5 }}
+              inputProps={{ min: 0, max: 200, step: 0.5, inputMode: 'decimal' }}
               sx={textFieldSx}
             />
           )}
@@ -304,151 +261,84 @@ export default function RegistrationForm({ event, colleges }: RegistrationFormPr
             required
             value={form.board_score}
             onChange={(e) => setForm((prev) => ({ ...prev, board_score: e.target.value }))}
-            inputProps={{ min: 0, max: 100, step: 0.01 }}
+            inputProps={{ min: 0, max: 100, step: 0.01, inputMode: 'decimal' }}
             sx={textFieldSx}
           />
 
           {/* Live cutoff display */}
           {finalCutoff > 0 && (
             <Box
+              aria-live="polite"
               sx={{
-                bgcolor: 'rgba(232,160,32,0.08)',
-                border: '1px solid rgba(232,160,32,0.3)',
-                borderRadius: 2,
+                bgcolor: t.navy900,
+                borderRadius: `${t.radius}px`,
                 p: 2.5,
                 mb: 3,
                 textAlign: 'center',
               }}
             >
               <Typography
-                sx={{
-                  color: '#e8a020',
-                  fontSize: 11,
-                  fontWeight: 700,
-                  letterSpacing: 2,
-                  textTransform: 'uppercase',
-                  mb: 0.5,
-                }}
+                component="p"
+                sx={{ m: 0, mb: 0.5, fontFamily: t.fontMono, fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.2em', textTransform: 'uppercase', color: t.paperSubtle }}
               >
                 Your Best NATA Score
               </Typography>
-              <Typography
-                variant="h4"
-                sx={{ fontWeight: 800, color: '#e8a020' }}
-              >
+              <Typography component="p" sx={{ m: 0, fontFamily: t.fontMono, fontSize: '2rem', fontWeight: 700, color: t.gold500 }}>
                 {finalCutoff % 1 === 0 ? finalCutoff.toFixed(0) : finalCutoff}
               </Typography>
             </Box>
           )}
 
-          <Button
-            fullWidth
-            variant="contained"
-            size="large"
-            disabled={!form.nata_score_1 || !form.board_score}
-            onClick={() => setStep(2)}
-            sx={primaryButtonSx}
-          >
+          <CtaButton fullWidth disabled={!form.nata_score_1 || !form.board_score} onClick={() => setStep(2)}>
             Next: College Preferences
-          </Button>
+          </CtaButton>
         </Box>
       )}
 
       {/* Step 2: College Preferences */}
       {step === 2 && (
         <Box>
-          <Typography
-            variant="h6"
-            sx={{ fontWeight: 800, color: '#fff', mb: 1 }}
-          >
-            Which colleges interest you?
-          </Typography>
-          <Typography
-            sx={{ color: '#9ca3af', fontSize: 14, mb: 3 }}
-          >
+          <Typography component="p" sx={{ m: 0, mb: 3, fontSize: '0.9375rem', color: t.inkMuted }}>
             Select all the colleges you want to know more about. You can pick multiple.
           </Typography>
 
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 4 }}>
+          <Box role="group" aria-label="College preferences" sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 4 }}>
             {colleges.map((college) => {
               const selected = form.college_preferences.includes(college.id);
               return (
-                <Chip
-                  key={college.id}
-                  label={college.short_name}
-                  onClick={() => toggleCollegePreference(college.id)}
-                  avatar={
-                    college.logo_url ? (
-                      <Box
-                        sx={{
-                          width: 24,
-                          height: 24,
-                          borderRadius: '50%',
-                          bgcolor: '#fff',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          overflow: 'hidden',
-                          flexShrink: 0,
-                        }}
-                      >
-                        <Image
-                          src={college.logo_url}
-                          alt={college.short_name}
-                          width={20}
-                          height={20}
-                          style={{ objectFit: 'contain' }}
-                          unoptimized
-                        />
-                      </Box>
-                    ) : undefined
-                  }
-                  sx={{
-                    border: selected
-                      ? '1px solid #e8a020'
-                      : '1px solid rgba(255,255,255,0.15)',
-                    bgcolor: selected
-                      ? 'rgba(232,160,32,0.15)'
-                      : 'transparent',
-                    color: selected ? '#e8a020' : '#9ca3af',
-                    cursor: 'pointer',
-                    fontWeight: selected ? 600 : 400,
-                    transition: 'all 0.2s',
-                    '&:hover': {
-                      bgcolor: selected
-                        ? 'rgba(232,160,32,0.22)'
-                        : 'rgba(255,255,255,0.05)',
-                      borderColor: selected ? '#e8a020' : 'rgba(255,255,255,0.3)',
-                    },
-                    '& .MuiChip-avatar': {
-                      ml: 0.5,
-                      mr: -0.5,
-                    },
-                  }}
-                />
+                <Pill key={college.id} selected={selected} onClick={() => toggleCollegePreference(college.id)}>
+                  {college.logo_url && (
+                    <Box
+                      component="span"
+                      sx={{
+                        width: 24,
+                        height: 24,
+                        borderRadius: '50%',
+                        bgcolor: t.surface,
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        overflow: 'hidden',
+                        flexShrink: 0,
+                        ml: -0.75,
+                      }}
+                    >
+                      <Image src={college.logo_url} alt="" width={20} height={20} style={{ objectFit: 'contain' }} unoptimized />
+                    </Box>
+                  )}
+                  {college.short_name}
+                </Pill>
               );
             })}
           </Box>
 
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <Button
-              variant="outlined"
-              size="large"
-              onClick={() => setStep(1)}
-              sx={secondaryButtonSx}
-            >
+          <Box sx={{ display: 'flex', gap: 1.5 }}>
+            <CtaButton variant="outline" endIcon={null} onClick={() => setStep(1)}>
               Back
-            </Button>
-            <Button
-              fullWidth
-              variant="contained"
-              size="large"
-              disabled={form.college_preferences.length === 0}
-              onClick={() => setStep(3)}
-              sx={primaryButtonSx}
-            >
+            </CtaButton>
+            <CtaButton fullWidth disabled={form.college_preferences.length === 0} onClick={() => setStep(3)}>
               Next: Your Details
-            </Button>
+            </CtaButton>
           </Box>
         </Box>
       )}
@@ -456,35 +346,29 @@ export default function RegistrationForm({ event, colleges }: RegistrationFormPr
       {/* Step 3: Personal Details */}
       {step === 3 && (
         <Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-            <Typography variant="h6" sx={{ fontWeight: 800, color: '#fff' }}>
-              Your Details
-            </Typography>
-            {autoFilled && (
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 0.5,
-                  px: 1.5,
-                  py: 0.5,
-                  borderRadius: 20,
-                  bgcolor: 'rgba(34,197,94,0.1)',
-                  border: '1px solid rgba(34,197,94,0.3)',
-                }}
-              >
-                <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: '#22c55e' }} />
-                <Typography sx={{ color: '#4ade80', fontSize: 11, fontWeight: 600 }}>
-                  Auto-filled
-                </Typography>
-              </Box>
-            )}
-          </Box>
+          {autoFilled && (
+            <Box
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 0.75,
+                mt: -1.5,
+                mb: 2.5,
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                color: t.success,
+              }}
+            >
+              <CheckCircleOutlineOutlinedIcon aria-hidden sx={{ fontSize: 18 }} />
+              Auto-filled
+            </Box>
+          )}
 
           <TextField
             fullWidth
             label="Full Name"
             required
+            autoComplete="name"
             value={form.name}
             onChange={(e) => setForm((prev) => ({ ...prev, name: e.target.value }))}
             sx={textFieldSx}
@@ -495,13 +379,14 @@ export default function RegistrationForm({ event, colleges }: RegistrationFormPr
             label="Phone Number"
             required
             type="tel"
+            autoComplete="tel-national"
             value={form.phone}
             onChange={(e) => setForm((prev) => ({ ...prev, phone: e.target.value }))}
-            inputProps={{ maxLength: 10 }}
+            inputProps={{ maxLength: 10, inputMode: 'numeric' }}
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <Typography sx={{ color: '#9ca3af', fontSize: 14 }}>+91</Typography>
+                  <Typography component="span" sx={{ color: t.inkMuted, fontSize: '1rem' }}>+91</Typography>
                 </InputAdornment>
               ),
             }}
@@ -513,6 +398,7 @@ export default function RegistrationForm({ event, colleges }: RegistrationFormPr
             label="Email Address"
             type="email"
             required
+            autoComplete="email"
             value={form.email}
             onChange={(e) => setForm((prev) => ({ ...prev, email: e.target.value }))}
             sx={textFieldSx}
@@ -521,6 +407,7 @@ export default function RegistrationForm({ event, colleges }: RegistrationFormPr
           <TextField
             fullWidth
             label="City (optional)"
+            autoComplete="address-level2"
             value={form.city}
             onChange={(e) => setForm((prev) => ({ ...prev, city: e.target.value }))}
             sx={textFieldSx}
@@ -533,72 +420,52 @@ export default function RegistrationForm({ event, colleges }: RegistrationFormPr
             value={form.state}
             onChange={(e) => setForm((prev) => ({ ...prev, state: e.target.value }))}
             sx={textFieldSx}
-            SelectProps={{
-              MenuProps: {
-                PaperProps: {
-                  sx: {
-                    bgcolor: '#1a1a2e',
-                    border: '1px solid rgba(255,255,255,0.15)',
-                    '& .MuiMenuItem-root': {
-                      color: '#e5e7eb',
-                      '&:hover': { bgcolor: 'rgba(232,160,32,0.1)' },
-                      '&.Mui-selected': {
-                        bgcolor: 'rgba(232,160,32,0.15)',
-                        color: '#e8a020',
-                      },
-                    },
-                  },
-                },
-              },
-            }}
+            SelectProps={{ native: true }}
+            InputLabelProps={{ shrink: true }}
           >
-            <option value="" disabled style={{ display: 'none' }} />
+            <option value="">Select a state</option>
             {INDIAN_STATES.map((state) => (
-              <option key={state} value={state} style={{ background: '#1a1a2e', color: '#e5e7eb' }}>
+              <option key={state} value={state}>
                 {state}
               </option>
             ))}
           </TextField>
 
           {error && (
-            <Typography
+            <Box
+              role="alert"
               sx={{
-                color: '#f87171',
-                fontSize: 13,
-                mb: 2,
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 1,
+                mb: 2.5,
                 p: 1.5,
-                bgcolor: 'rgba(248,113,113,0.08)',
-                borderRadius: 1,
-                border: '1px solid rgba(248,113,113,0.2)',
+                bgcolor: t.surface,
+                border: `1px solid ${t.line}`,
+                borderRadius: `${t.radius}px`,
+                boxShadow: `inset 3px 0 0 ${t.gold500}`,
+                fontSize: '0.9375rem',
+                color: t.ink,
               }}
             >
+              <ErrorOutlineOutlinedIcon aria-hidden sx={{ fontSize: 20, color: t.gold800, mt: '1px' }} />
               {error}
-            </Typography>
+            </Box>
           )}
 
-          <Box sx={{ display: 'flex', gap: 2 }}>
-            <Button
-              variant="outlined"
-              size="large"
-              onClick={() => setStep(2)}
-              disabled={submitting}
-              sx={secondaryButtonSx}
-            >
+          <Box sx={{ display: 'flex', gap: 1.5 }}>
+            <CtaButton variant="outline" endIcon={null} onClick={() => setStep(2)} disabled={submitting}>
               Back
-            </Button>
-            <Button
+            </CtaButton>
+            <CtaButton
               fullWidth
-              variant="contained"
-              size="large"
               disabled={submitting || !form.name || !form.phone || !form.email}
               onClick={handleSubmit}
-              sx={primaryButtonSx}
-              startIcon={
-                submitting ? <CircularProgress size={20} sx={{ color: '#000' }} /> : undefined
-              }
+              startIcon={submitting ? <CircularProgress size={20} sx={{ color: t.navy900 }} aria-hidden /> : undefined}
+              endIcon={submitting ? null : undefined}
             >
               {submitting ? 'Registering...' : 'Register Free'}
-            </Button>
+            </CtaButton>
           </Box>
         </Box>
       )}
@@ -610,61 +477,10 @@ export default function RegistrationForm({ event, colleges }: RegistrationFormPr
 const textFieldSx = {
   mb: 2.5,
   '& .MuiOutlinedInput-root': {
-    color: '#e5e7eb',
     minHeight: 48,
-    '& fieldset': {
-      borderColor: 'rgba(255,255,255,0.15)',
-    },
-    '&:hover fieldset': {
-      borderColor: 'rgba(232,160,32,0.5)',
-    },
-    '&.Mui-focused fieldset': {
-      borderColor: '#e8a020',
-    },
+    borderRadius: `${t.radius}px`,
+    bgcolor: t.surface,
   },
-  '& .MuiInputLabel-root': {
-    color: '#9ca3af',
-    '&.Mui-focused': {
-      color: '#e8a020',
-    },
-  },
-  '& .MuiInputBase-input': {
-    color: '#e5e7eb',
-  },
-  '& .MuiSelect-icon': {
-    color: '#9ca3af',
-  },
-} as const;
-
-const primaryButtonSx = {
-  background: 'linear-gradient(135deg, #f59e0b 0%, #e8a020 100%)',
-  color: '#000',
-  fontWeight: 700,
-  fontSize: '1rem',
-  py: 1.5,
-  borderRadius: 2,
-  textTransform: 'none',
-  minHeight: 48,
-  '&:hover': {
-    background: 'linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%)',
-  },
-  '&.Mui-disabled': {
-    background: 'rgba(232,160,32,0.25)',
-    color: 'rgba(0,0,0,0.4)',
-  },
-} as const;
-
-const secondaryButtonSx = {
-  color: '#9ca3af',
-  borderColor: 'rgba(255,255,255,0.2)',
-  fontWeight: 600,
-  py: 1.5,
-  borderRadius: 2,
-  textTransform: 'none',
-  minHeight: 48,
-  flexShrink: 0,
-  '&:hover': {
-    borderColor: 'rgba(255,255,255,0.4)',
-    bgcolor: 'rgba(255,255,255,0.05)',
-  },
+  // 16px stops iOS zooming into the field.
+  '& .MuiInputBase-input': { fontSize: '1rem' },
 } as const;

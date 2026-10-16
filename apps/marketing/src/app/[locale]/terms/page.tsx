@@ -1,10 +1,9 @@
 import { Metadata } from 'next';
-import { setRequestLocale } from 'next-intl/server';
-import { Box, Container, Paper } from '@neram/ui';
-import TermsContent from '../../../components/legal/TermsContent';
+import { getTranslations, setRequestLocale } from 'next-intl/server';
 import { buildAlternates } from '@/lib/seo/metadata';
-import ClientIntl from '@/components/i18n/ClientIntl';
-
+import { LegalPage } from '@/design-system';
+import { TERMS_SECTION_KEYS } from '@/components/legal/sections';
+import { legalPolicies } from '@/components/legal/policies';
 
 export async function generateMetadata({
   params: { locale },
@@ -22,16 +21,21 @@ interface PageProps {
   params: { locale: string };
 }
 
-export default function TermsPage({ params: { locale } }: PageProps) {
+export default async function TermsPage({ params: { locale } }: PageProps) {
   setRequestLocale(locale);
+  const t = await getTranslations({ locale, namespace: 'terms' });
 
   return (
-    <Box sx={{ py: { xs: 4, md: 8 }, bgcolor: 'background.default', minHeight: '80vh' }}>
-      <Container maxWidth="md">
-        <Paper sx={{ p: { xs: 3, md: 6 } }}>
-          <ClientIntl locale={locale} namespaces={['terms']}><TermsContent /></ClientIntl>
-        </Paper>
-      </Container>
-    </Box>
+    <LegalPage
+      title={t('pageTitle')}
+      updated={t('lastUpdated')}
+      policies={await legalPolicies(locale, 'terms')}
+      railLabel={t('pageTitle')}
+      sections={TERMS_SECTION_KEYS.map((key) => ({
+        id: key,
+        title: t(`sections.${key}.title`),
+        body: <p>{t(`sections.${key}.content`)}</p>,
+      }))}
+    />
   );
 }

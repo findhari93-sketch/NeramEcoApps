@@ -1,8 +1,8 @@
 import { Box, Typography } from '@mui/material';
-import { alpha } from '@mui/material/styles';
 import type { CollegeDetail } from '@/lib/college-hub/types';
 import { joinOr } from '@/lib/college-hub/detail-content';
 import { admissionSystems, examList, shortName } from '@/lib/college-hub/format';
+import { siteTokens } from '@neram/ui/site-tokens';
 
 interface Step {
   title: string;
@@ -52,20 +52,20 @@ export default function AdmissionPath({ college }: { college: CollegeDetail }) {
             gap: { xs: 1.75, md: 1 },
             p: { xs: 0, md: 2.25 },
             pb: { xs: i === steps.length - 1 ? 0 : 2, md: 2.25 },
-            borderRadius: 2,
-            bgcolor: { xs: 'transparent', md: 'action.hover' },
+            borderRadius: 1,
+            bgcolor: { xs: 'transparent', md: siteTokens.surfaceHover },
             position: 'relative',
           }}
         >
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: '0 0 auto' }}>
             <Box
               aria-hidden
-              sx={{ width: { xs: 28, md: 32 }, height: { xs: 28, md: 32 }, borderRadius: '50%', bgcolor: 'primary.main', color: 'primary.contrastText', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', fontWeight: 700 }}
+              sx={{ width: { xs: 28, md: 32 }, height: { xs: 28, md: 32 }, borderRadius: '50%', bgcolor: siteTokens.navy900, color: siteTokens.paper, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.9rem', fontWeight: 700 }}
             >
               {i + 1}
             </Box>
             {i < steps.length - 1 && (
-              <Box aria-hidden sx={{ display: { xs: 'block', md: 'none' }, flex: '1 1 auto', width: 2, mt: 0.5, minHeight: 14, bgcolor: (t) => alpha(t.palette.primary.main, 0.2) }} />
+              <Box aria-hidden sx={{ display: { xs: 'block', md: 'none' }, flex: '1 1 auto', width: 2, mt: 0.5, minHeight: 14, bgcolor: siteTokens.line }} />
             )}
           </Box>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, pt: { xs: 0.25, md: 0 } }}>
@@ -75,7 +75,7 @@ export default function AdmissionPath({ college }: { college: CollegeDetail }) {
               </Box>
               {s.title}
             </Typography>
-            <Typography sx={{ m: 0, fontSize: '0.9rem', lineHeight: 1.5, color: 'text.secondary' }}>{s.detail}</Typography>
+            <Typography sx={{ m: 0, fontSize: '0.9rem', lineHeight: 1.5, color: siteTokens.inkMuted }}>{s.detail}</Typography>
           </Box>
         </Box>
       ))}
@@ -87,11 +87,11 @@ export default function AdmissionPath({ college }: { college: CollegeDetail }) {
 export function EligibilityCard({ exams }: { exams: string[] }) {
   const examText = exams.length ? joinOr(exams) : 'NATA or JEE Main Paper 2';
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, p: { xs: 1.75, md: 2.25 }, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, p: { xs: 1.75, md: 2.25 }, border: '1px solid', borderColor: siteTokens.line, borderRadius: 1 }}>
       <Typography component="h3" sx={{ m: 0, fontSize: '1rem', fontWeight: 700 }}>
         Eligibility
       </Typography>
-      <Box component="ul" sx={{ m: 0, pl: 2.25, display: 'flex', flexDirection: 'column', gap: 0.75, fontSize: '0.92rem', lineHeight: 1.5, color: 'text.secondary' }}>
+      <Box component="ul" sx={{ m: 0, pl: 2.25, display: 'flex', flexDirection: 'column', gap: 0.75, fontSize: '0.92rem', lineHeight: 1.5, color: siteTokens.inkMuted }}>
         <li>Class 12 with Physics, Chemistry and Maths</li>
         <li>At least 50% aggregate in Class 12, as per COA norms</li>
         <li>A valid {examText} score</li>

@@ -114,7 +114,7 @@
     "shell": {
       "bookDemo": "ಉಚಿತ ಡೆಮೊ ತರಗತಿ ಬುಕ್ ಮಾಡಿ",
       "home": "Neram Classes home",
-      "help": "Help",
+      "help": "Need help?",
       "secure": "Secure application",
       "callUs": "Call us",
       "contactPage": "Contact page",
@@ -122,6 +122,7 @@
       "privacy": "Privacy",
       "refund": "Refund policy",
       "haveAccount": "Have an account?",
+      "legalNav": "Legal",
       "logIn": "Log in",
       "copyright": "© Neram Classes"
     },
@@ -148,51 +149,59 @@
       "nextPayment": "Next: fees and payment options"
     },
     "showcase": {
-      "eyebrow": "Inside the Nexus app",
-      "headline": "India's largest AI-enabled learning platform for",
-      "headlineAccent": "architecture entrance.",
-      "windowAlt": "A short tour of the Nexus app: drawing review, revision scores, question prediction, the AI tutor, the class library, the sketchbook and a live class.",
-      "pause": "Pause the tour",
-      "play": "Play the tour",
-      "previous": "Previous scene",
-      "next": "Next scene",
+      "eyebrow": "Nexus ಆ್ಯಪ್‌ನ ಒಳಗೆ",
+      "headline": "ಭಾರತದ ಅತಿದೊಡ್ಡ AI ಆಧಾರಿತ ಕಲಿಕಾ ವೇದಿಕೆ,",
+      "headlineAccent": "ಆರ್ಕಿಟೆಕ್ಚರ್ ಪ್ರವೇಶ ಪರೀಕ್ಷೆಗಾಗಿ.",
+      "windowAlt": "Nexus ಆ್ಯಪ್‌ನ ಕಿರು ಪ್ರವಾಸ: ಡ್ರಾಯಿಂಗ್ ವಿಮರ್ಶೆ, ಪರಿಷ್ಕರಣೆ ಅಂಕಗಳು, ಪ್ರಶ್ನೆ ಮುನ್ಸೂಚನೆ, AI ಟ್ಯೂಟರ್, ತರಗತಿ ಗ್ರಂಥಾಲಯ, ಸ್ಕೆಚ್‌ಬುಕ್ ಮತ್ತು ಲೈವ್ ತರಗತಿ.",
+      "pause": "ಪ್ರವಾಸವನ್ನು ವಿರಾಮಗೊಳಿಸಿ",
+      "play": "ಪ್ರವಾಸವನ್ನು ಪ್ಲೇ ಮಾಡಿ",
+      "previous": "ಹಿಂದಿನ ದೃಶ್ಯ",
+      "next": "ಮುಂದಿನ ದೃಶ್ಯ",
+      "tour": "Nexus ಪ್ರವಾಸ",
       "scenes": {
         "review": {
-          "label": "Review",
-          "caption": "Your teacher sketches on your drawing and talks you through it."
+          "label": "ವಿಮರ್ಶೆ",
+          "caption": "ನಿಮ್ಮ ಶಿಕ್ಷಕರು ನಿಮ್ಮ ಡ್ರಾಯಿಂಗ್ ಮೇಲೆ ತಿದ್ದುಪಡಿಗಳನ್ನು ಗುರುತಿಸಿ, ಪ್ರತಿಯೊಂದನ್ನೂ ವಿವರಿಸುತ್ತಾರೆ.",
+          "alt": "ವಿದ್ಯಾರ್ಥಿಯ ಪರ್ಸ್ಪೆಕ್ಟಿವ್ ಡ್ರಾಯಿಂಗ್ ಮೇಲೆ ಶಿಕ್ಷಕರು ಸಂಖ್ಯೆಯ ತಿದ್ದುಪಡಿಗಳನ್ನು ಬರೆಯುತ್ತಾರೆ."
         },
         "revise": {
-          "label": "Revise",
-          "caption": "Fix it, resubmit, watch the score climb."
+          "label": "ಪರಿಷ್ಕರಣೆ",
+          "caption": "ಸರಿಪಡಿಸಿ, ಮತ್ತೆ ಸಲ್ಲಿಸಿ, ನಿಮ್ಮ ಅಂಕ ಏರುವುದನ್ನು ನೋಡಿ.",
+          "alt": "ಮತ್ತೆ ಸಲ್ಲಿಸಿದ ಡ್ರಾಯಿಂಗ್ 5 ರಲ್ಲಿ 5 ಅಂಕ ಪಡೆಯುತ್ತದೆ."
         },
         "predict": {
-          "label": "Predict",
-          "caption": "AI predicts this year's questions from 17 years of chapter weightage."
+          "label": "ಮುನ್ಸೂಚನೆ",
+          "caption": "ಈ ವರ್ಷ ಬರುವ ಸಾಧ್ಯತೆ ಹೆಚ್ಚಿರುವ ಅಧ್ಯಾಯಗಳನ್ನು AI ಶ್ರೇಣೀಕರಿಸುತ್ತದೆ.",
+          "alt": "17 ವರ್ಷಗಳಲ್ಲಿ ಎಷ್ಟು ಬಾರಿ ಕೇಳಲಾಗಿದೆ ಎಂಬುದರ ಆಧಾರದ ಮೇಲೆ ಶ್ರೇಣೀಕರಿಸಿದ ಅಧ್ಯಾಯಗಳ ಪಟ್ಟಿ."
         },
         "tutor": {
-          "label": "AI tutor",
-          "caption": "Every question solved: video, image, and a tutor you can ask anything."
+          "label": "AI ಟ್ಯೂಟರ್",
+          "caption": "ಪ್ರಶ್ನೆಯಲ್ಲಿ ಸಿಲುಕಿದ್ದೀರಾ? ಟ್ಯೂಟರ್‌ನನ್ನು ಹಂತ ಹಂತವಾಗಿ ಕೇಳಿ.",
+          "alt": "ಪರಿಹರಿಸಿದ ಪ್ರಶ್ನೆಯ ಬಗ್ಗೆ ವಿದ್ಯಾರ್ಥಿ AI ಟ್ಯೂಟರ್ ಜೊತೆ ಚಾಟ್ ಮಾಡುತ್ತಾರೆ."
         },
         "library": {
-          "label": "Library",
-          "caption": "3,000+ recorded classes for NATA and JEE Paper 2."
+          "label": "ಗ್ರಂಥಾಲಯ",
+          "caption": "3,000+ ರೆಕಾರ್ಡ್ ಮಾಡಿದ ತರಗತಿಗಳು, ವಿಷಯದ ಪ್ರಕಾರ ಹುಡುಕಬಹುದು.",
+          "alt": "ತರಗತಿ ಗ್ರಂಥಾಲಯದಲ್ಲಿ 3D geometry ಹುಡುಕಲಾಗುತ್ತಿದೆ."
         },
         "sketchbook": {
-          "label": "Sketchbook",
-          "caption": "Your digital sketchbook, plus inspiration from every drawing question."
+          "label": "ಸ್ಕೆಚ್‌ಬುಕ್",
+          "caption": "ಡಿಜಿಟಲ್ ಆಗಿ ಸ್ಕೆಚ್ ಮಾಡಿ, ಪ್ರತಿ ಡ್ರಾಯಿಂಗ್ ಪ್ರಶ್ನೆಗೂ ಸ್ಫೂರ್ತಿಯೊಂದಿಗೆ.",
+          "alt": "ಸ್ಫೂರ್ತಿ ಚಿತ್ರಗಳ ಪಕ್ಕದಲ್ಲಿ ಒಂದು ಡಿಜಿಟಲ್ ಸ್ಕೆಚ್."
         },
         "live": {
-          "label": "Live",
-          "caption": "Live classes with answer pads, inside Microsoft Teams."
+          "label": "ಲೈವ್",
+          "caption": "Microsoft Teams ನಲ್ಲಿ ಲೈವ್ ತರಗತಿಗಳು, ಆನ್ಸರ್ ಪ್ಯಾಡ್‌ಗಳೊಂದಿಗೆ.",
+          "alt": "ವಿದ್ಯಾರ್ಥಿಗಳು ಆನ್ಸರ್ ಪ್ಯಾಡ್‌ನಲ್ಲಿ ಉತ್ತರಿಸುವ ಲೈವ್ ತರಗತಿ."
         }
       },
       "stats": {
         "rank": "AIR 1",
         "rankNote": "JEE B.Arch 2024",
         "questions": "10,000+",
-        "questionsNote": "solved questions",
-        "global": "Global",
-        "globalNote": "students across the world"
+        "questionsNote": "ಪರಿಹರಿಸಿದ ಪ್ರಶ್ನೆಗಳು",
+        "global": "ಜಾಗತಿಕ",
+        "globalNote": "ವಿಶ್ವದಾದ್ಯಂತ ವಿದ್ಯಾರ್ಥಿಗಳು"
       }
     },
     "aboutYou": {
@@ -373,7 +382,55 @@
     "quickLinks": "ತ್ವರಿತ ಲಿಂಕ್‌ಗಳು",
     "contact": "ಸಂಪರ್ಕ",
     "followUs": "ನಮ್ಮನ್ನು ಅನುಸರಿಸಿ",
-    "copyright": "© {year} ನೇರಂ ತರಗತಿಗಳು. ಎಲ್ಲಾ ಹಕ್ಕುಗಳನ್ನು ಕಾಯ್ದಿರಿಸಲಾಗಿದೆ."
+    "copyright": "© {year} Neram Classes. ಎಲ್ಲಾ ಹಕ್ಕುಗಳನ್ನು ಕಾಯ್ದಿರಿಸಲಾಗಿದೆ.",
+    "about": "2009 ರಿಂದ NATA ಮತ್ತು JEE Paper 2 ತರಬೇತಿ. ಭಾರತ ಮತ್ತು ಗಲ್ಫ್ ದೇಶಗಳಾದ್ಯಂತ ಲೈವ್ ಆನ್‌ಲೈನ್ ತರಗತಿಗಳು, ತಮಿಳುನಾಡು ಮತ್ತು ಬೆಂಗಳೂರಿನಲ್ಲಿ ತರಗತಿ ಕೊಠಡಿಗಳು.",
+    "location": "ಬೆಂಗಳೂರು, ಕರ್ನಾಟಕ, ಭಾರತ",
+    "phone": "ಫೋನ್: {number}",
+    "email": "ಇಮೇಲ್: {address}",
+    "supportedBy": "Microsoft ಬೆಂಬಲಿತ",
+    "resources": "ಸಂಪನ್ಮೂಲಗಳು",
+    "topCities": "ಪ್ರಮುಖ ನಗರಗಳು",
+    "topStates": "ಪ್ರಮುಖ ರಾಜ್ಯಗಳು",
+    "counselling": "B.Arch ಕೌನ್ಸೆಲಿಂಗ್",
+    "goToApp": "ಆ್ಯಪ್‌ಗೆ ಹೋಗಿ",
+    "nexusBody": "ವಾಸ್ತುಶಿಲ್ಪಿಗಳು ವಿನ್ಯಾಸಗೊಳಿಸಿದ, ಭಾರತದ ಮೊದಲ NATA-ವಿಶೇಷ ಕಲಿಕಾ ವೇದಿಕೆ. ಲೈವ್ ಮತ್ತು ರೆಕಾರ್ಡ್ ಮಾಡಿದ ತರಗತಿಗಳು, AI ಅಧ್ಯಯನ ಸಾಧನಗಳು ಮತ್ತು ಪೋಷಕರ ಮೇಲ್ವಿಚಾರಣೆಯೊಂದಿಗೆ ಸಂಪೂರ್ಣ ಸ್ವ-ಕಲಿಕಾ ಸಹಾಯಕ.",
+    "nexusNote": "ಉಚಿತ ಪರಿಕರಗಳು ಎಲ್ಲರಿಗೂ ಲಭ್ಯ. Nexus ಪ್ರೀಮಿಯಂ ವೈಶಿಷ್ಟ್ಯಗಳು ದಾಖಲಾದ ವಿದ್ಯಾರ್ಥಿಗಳಿಗೆ ಮಾತ್ರ.",
+    "tryFreeTools": "ಉಚಿತ ಪರಿಕರಗಳನ್ನು ಪ್ರಯತ್ನಿಸಿ",
+    "exploreNexus": "Nexus ನೋಡಿ",
+    "legal": "ಕಾನೂನು",
+    "socialLabel": "{network} ನಲ್ಲಿ Neram Classes",
+    "links": {
+      "home": "ಮುಖಪುಟ",
+      "about": "ನಮ್ಮ ಬಗ್ಗೆ",
+      "courses": "ಕೋರ್ಸ್‌ಗಳು",
+      "colleges": "ವಾಸ್ತುಶಿಲ್ಪ ಕಾಲೇಜುಗಳು",
+      "compareColleges": "ಕಾಲೇಜುಗಳನ್ನು ಹೋಲಿಸಿ",
+      "coaching": "ತರಬೇತಿ",
+      "demoClass": "ಉಚಿತ ಡೆಮೊ ತರಗತಿ",
+      "apply": "ಈಗಲೇ ಅರ್ಜಿ ಸಲ್ಲಿಸಿ",
+      "contact": "ಸಂಪರ್ಕ",
+      "fees": "ಶುಲ್ಕಗಳು",
+      "scholarships": "ವಿದ್ಯಾರ್ಥಿವೇತನಗಳು",
+      "careers": "ಉದ್ಯೋಗಾವಕಾಶಗಳು",
+      "freeTools": "ಉಚಿತ ಪರಿಕರಗಳು",
+      "nataSyllabus": "NATA ಪಠ್ಯಕ್ರಮ 2026",
+      "nataCoaching": "NATA ಪ್ರವೇಶ ಪರೀಕ್ಷೆ ತರಬೇತಿ",
+      "nataGuide": "NATA ತಯಾರಿ ಮಾರ್ಗದರ್ಶಿ",
+      "score150": "NATA ನಲ್ಲಿ 150+ ಅಂಕ ಗಳಿಸುವುದು ಹೇಗೆ",
+      "importantQuestions": "ಪ್ರಮುಖ ಪ್ರಶ್ನೆಗಳು",
+      "bestBooks": "NATA ಮತ್ತು JEE ಗೆ ಅತ್ಯುತ್ತಮ ಪುಸ್ತಕಗಳು",
+      "previousPapers": "ಹಿಂದಿನ ವರ್ಷದ ಪ್ರಶ್ನೆಪತ್ರಿಕೆಗಳು",
+      "cutoffCalculator": "ಕಟ್‌ಆಫ್ ಕ್ಯಾಲ್ಕುಲೇಟರ್",
+      "nataApp": "ಉಚಿತ NATA ಆ್ಯಪ್",
+      "aiarchitek": "aiArchitek AI ವೇದಿಕೆ",
+      "nexusLms": "Nexus LMS (ವಿದ್ಯಾರ್ಥಿಗಳು)",
+      "nataOnline": "NATA ಆನ್‌ಲೈನ್ ತರಬೇತಿ",
+      "blog": "ಬ್ಲಾಗ್",
+      "allCounsellings": "ಎಲ್ಲಾ 28 ಕೌನ್ಸೆಲಿಂಗ್‌ಗಳು",
+      "privacy": "ಗೌಪ್ಯತಾ ನೀತಿ",
+      "terms": "ನಿಯಮಗಳು ಮತ್ತು ಷರತ್ತುಗಳು",
+      "refund": "ಮರುಪಾವತಿ ನೀತಿ"
+    }
   },
   "common": {
     "loading": "ಲೋಡ್ ಆಗುತ್ತಿದೆ...",
@@ -428,7 +485,29 @@
     "fees": "ಶುಲ್ಕ",
     "freeDemo": "ಉಚಿತ ಡೆಮೊ",
     "freeDemoClass": "ಉಚಿತ ಡೆಮೊ ತರಗತಿ",
-    "myDemo": "ನನ್ನ ಡೆಮೊ"
+    "myDemo": "ನನ್ನ ಡೆಮೊ",
+    "joinShort": "ಸೇರಿ",
+    "continueShort": "ಮುಂದುವರಿಸಿ",
+    "trackShort": "ಸ್ಥಿತಿ",
+    "payShort": "ಪಾವತಿ",
+    "appShort": "ಆ್ಯಪ್",
+    "helpShort": "ಸಹಾಯ",
+    "myEnrollment": "ನನ್ನ ದಾಖಲಾತಿ",
+    "logIn": "ಲಾಗ್ ಇನ್",
+    "logInToSee": "ನಿಮ್ಮ ಅರ್ಜಿಯನ್ನು ನೋಡಲು ಲಾಗ್ ಇನ್ ಮಾಡಿ",
+    "more": "ಇನ್ನಷ್ಟು",
+    "search": "ಹುಡುಕಿ",
+    "notifications": "ಅಧಿಸೂಚನೆಗಳು",
+    "account": "ಖಾತೆ",
+    "signOut": "ಸೈನ್ ಔಟ್",
+    "statusNoApplication": "ಇನ್ನೂ ಅರ್ಜಿ ಇಲ್ಲ",
+    "statusDemoBooked": "ಡೆಮೊ ತರಗತಿ ಬುಕ್ ಆಗಿದೆ",
+    "statusDraft": "ಅರ್ಜಿ ಕರಡು",
+    "statusReview": "ಅರ್ಜಿ ಪರಿಶೀಲನೆಯಲ್ಲಿದೆ",
+    "statusApproved": "ಅನುಮೋದಿಸಲಾಗಿದೆ, ಸೀಟು ಖಚಿತಪಡಿಸಲು ಪಾವತಿಸಿ",
+    "statusEnrolled": "ದಾಖಲಾದ ವಿದ್ಯಾರ್ಥಿ",
+    "statusApplying": "ಅರ್ಜಿ ತುಂಬುತ್ತಿದ್ದೀರಿ",
+    "freeTools": "ಉಚಿತ ಪರಿಕರಗಳು"
   },
   "centers": {
     "title": "ನಮ್ಮ ಕಲಿಕಾ ಕೇಂದ್ರಗಳನ್ನು ಭೇಟಿ ಮಾಡಿ",

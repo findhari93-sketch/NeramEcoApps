@@ -4,6 +4,8 @@ import { Fab } from '@neram/ui';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { buildWhatsAppLink } from '@/lib/whatsapp';
 import { trackWhatsAppClick } from '@/lib/whatsapp-track';
+import { brandColors } from '@/design-system/brand-colors';
+import { tokens as t } from '@/design-system/tokens';
 
 
 export default function WhatsAppChatBubble({ centreCity, centreSlug }: { centreCity?: string; centreSlug?: string } = {}) {
@@ -22,10 +24,12 @@ export default function WhatsAppChatBubble({ centreCity, centreSlug }: { centreC
         position: 'fixed',
         bottom: 20,
         left: 20,
-        backgroundColor: '#25D366',
+        backgroundColor: brandColors.whatsapp,
+        color: t.surface,
         width: 56,
         height: 56,
-        '&:hover': { backgroundColor: '#128C7E' },
+        '&:hover': { backgroundColor: brandColors.whatsappDark },
+        '&:focus-visible': { outline: t.focusOutline, outlineOffset: '2px' },
         zIndex: 1200,
         '@media (max-width: 768px)': {
           width: 48,

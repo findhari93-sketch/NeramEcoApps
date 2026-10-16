@@ -1,19 +1,15 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import Link from 'next/link';
+import { Typography } from '@neram/ui';
+import { siteTokens as t } from '@neram/ui/site-tokens';
+import { Link } from '@/i18n/routing';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema, generateFAQSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { ALL_TOOLS } from '@/lib/tools/configs';
 import type { ToolConfig } from '@/lib/tools/types';
-import {
-  Box,
-  Container,
-  Typography,
-  Button,
-  Grid,
-  Paper,
-} from '@neram/ui';
+import { toolIcon } from '@/components/tools/toolIcons';
+import { CheckList, CtaBand, CtaButton, FaqList, HubIndex, Section } from '@/design-system';
 
 const baseUrl = 'https://neramclasses.com';
 
@@ -107,328 +103,66 @@ export default function ToolsHubPage({
     { name: 'Home', url: baseUrl },
     { name: 'Free Tools', url: `${baseUrl}/tools` },
   ]);
-
   const faqSchema = generateFAQSchema(HUB_FAQS);
+
+  const groups = CATEGORIES.map(({ label, key }) => ({
+    key,
+    label,
+    items: ALL_TOOLS.filter((tool) => tool.category === key).map((tool) => ({
+      href: `/tools/${tool.slug}`,
+      title: tool.title,
+      desc: tool.metaDescription,
+      icon: toolIcon(tool.slug),
+      badge: 'Free',
+      keywords: tool.keywords.join(' '),
+    })),
+  })).filter((g) => g.items.length > 0);
 
   return (
     <>
       <JsonLd data={[breadcrumbSchema, faqSchema]} />
 
-      {/* Hero */}
-      <Box
-        sx={{
-          background: 'linear-gradient(135deg, #1565C0 0%, #0D47A1 100%)',
-          color: 'white',
-          py: { xs: 6, md: 10 },
-        }}
-      >
-        <Container maxWidth="md">
-          <Typography
-            component="h1"
-            sx={{
-              fontSize: { xs: '1.75rem', sm: '2.25rem', md: '3rem' },
-              fontWeight: 800,
-              lineHeight: 1.2,
-              mb: 2,
-            }}
-          >
-            Free NATA and B.Arch Admission Tools 2026
-          </Typography>
-          <Typography
-            sx={{
-              fontSize: { xs: '1rem', md: '1.2rem' },
-              opacity: 0.9,
-              lineHeight: 1.7,
-              maxWidth: 680,
-            }}
-          >
-            Everything you need for your architecture entrance journey, from score calculation to
-            college selection.
-          </Typography>
-          <Typography sx={{ fontSize: { xs: '1rem', md: '1.1rem' }, opacity: 0.95, lineHeight: 1.7, mt: 1.5, maxWidth: 680 }}>
+      <HubIndex
+        breadcrumb={[{ name: 'Home', href: '/' }, { name: 'Free Tools' }]}
+        eyebrow="Free tools · Part of aiArchitek"
+        title="Free NATA and B.Arch Admission Tools 2026"
+        lede="Everything you need for your architecture entrance journey, from score calculation to college selection."
+        intro={
+          <Typography component="p" sx={{ m: 0, fontSize: '0.9375rem', lineHeight: 1.6, color: t.paperSubtle }}>
             These tools are part of{' '}
-            <Box
-              component={Link}
-              href="/aiarchitek"
-              sx={{ color: '#FFFFFF', fontWeight: 700, textUnderlineOffset: '3px', '&:focus-visible': { outline: '2px solid #FFFFFF', outlineOffset: 2 } }}
-            >
+            <Link href="/aiarchitek" style={{ color: t.paper, fontWeight: 700, textDecoration: 'underline', textUnderlineOffset: '3px' }}>
               aiArchitek
-            </Box>
+            </Link>
             , our AI-powered NATA preparation platform.
           </Typography>
-        </Container>
-      </Box>
-
-      {/* Tool Categories */}
-      <Box sx={{ py: { xs: 5, md: 8 } }}>
-        <Container maxWidth="lg">
-          {CATEGORIES.map(({ label, key }) => {
-            const tools = ALL_TOOLS.filter((t) => t.category === key);
-            if (tools.length === 0) return null;
-            return (
-              <Box key={key} sx={{ mb: { xs: 5, md: 7 } }}>
-                <Typography
-                  component="h2"
-                  sx={{
-                    fontSize: { xs: '1.25rem', md: '1.6rem' },
-                    fontWeight: 700,
-                    mb: 3,
-                    pb: 1.5,
-                    borderBottom: '2px solid #1565C0',
-                    display: 'inline-block',
-                  }}
-                >
-                  {label}
-                </Typography>
-                <Grid container spacing={3}>
-                  {tools.map((tool) => (
-                    <Grid item xs={12} sm={6} md={4} key={tool.slug}>
-                      <Paper
-                        elevation={0}
-                        sx={{
-                          border: '1px solid #E0E0E0',
-                          p: 3,
-                          borderRadius: 2,
-                          height: '100%',
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: 1.5,
-                          transition: 'border-color 0.2s, box-shadow 0.2s',
-                          '&:hover': {
-                            borderColor: '#1565C0',
-                            boxShadow: '0 2px 12px rgba(21,101,192,0.10)',
-                          },
-                        }}
-                      >
-                        <Typography
-                          component="h3"
-                          sx={{
-                            fontWeight: 700,
-                            fontSize: '1rem',
-                            lineHeight: 1.4,
-                          }}
-                        >
-                          {tool.title}
-                        </Typography>
-                        <Typography
-                          sx={{
-                            color: 'text.secondary',
-                            fontSize: '0.95rem',
-                            lineHeight: 1.5,
-                            flexGrow: 1,
-                            display: '-webkit-box',
-                            WebkitLineClamp: 2,
-                            WebkitBoxOrient: 'vertical',
-                            overflow: 'hidden',
-                          }}
-                        >
-                          {tool.metaDescription}
-                        </Typography>
-                        <Box>
-                          <Link
-                            href={`/tools/${tool.slug}`}
-                            style={{ textDecoration: 'none' }}
-                          >
-                            <Typography
-                              component="span"
-                              sx={{
-                                color: 'primary.main',
-                                fontWeight: 600,
-                                fontSize: '0.9rem',
-                                cursor: 'pointer',
-                                '&:hover': { textDecoration: 'underline' },
-                              }}
-                            >
-                              Try Now
-                            </Typography>
-                          </Link>
-                        </Box>
-                      </Paper>
-                    </Grid>
-                  ))}
-                </Grid>
-              </Box>
-            );
-          })}
-        </Container>
-      </Box>
-
-      {/* Why Use Our Tools */}
-      <Box sx={{ py: { xs: 5, md: 8 }, bgcolor: '#FAFAFA' }}>
-        <Container maxWidth="lg">
-          <Typography
-            component="h2"
-            sx={{
-              fontSize: { xs: '1.4rem', md: '1.8rem' },
-              fontWeight: 700,
-              textAlign: 'center',
-              mb: 4,
-            }}
-          >
-            Why Use Our Tools
-          </Typography>
-          <Grid container spacing={3}>
-            {TRUST_POINTS.map(({ label, desc }) => (
-              <Grid item xs={6} sm={3} key={label}>
-                <Paper
-                  elevation={0}
-                  sx={{
-                    border: '1px solid #E0E0E0',
-                    p: { xs: 2, md: 3 },
-                    borderRadius: 2,
-                    textAlign: 'center',
-                    height: '100%',
-                  }}
-                >
-                  <Typography
-                    sx={{
-                      fontWeight: 700,
-                      fontSize: { xs: '1rem', md: '1.1rem' },
-                      color: 'primary.main',
-                      mb: 1,
-                    }}
-                  >
-                    {label}
-                  </Typography>
-                  <Typography
-                    sx={{
-                      color: 'text.secondary',
-                      fontSize: { xs: '0.82rem', md: '0.9rem' },
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    {desc}
-                  </Typography>
-                </Paper>
-              </Grid>
-            ))}
-          </Grid>
-        </Container>
-      </Box>
-
-      {/* FAQ */}
-      <Box sx={{ py: { xs: 5, md: 8 } }}>
-        <Container maxWidth="md">
-          <Typography
-            component="h2"
-            sx={{
-              fontSize: { xs: '1.4rem', md: '1.8rem' },
-              fontWeight: 700,
-              textAlign: 'center',
-              mb: 4,
-            }}
-          >
-            Frequently Asked Questions
-          </Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {HUB_FAQS.map((faq, index) => (
-              <Paper
-                key={index}
-                elevation={0}
-                sx={{
-                  border: '1px solid #E0E0E0',
-                  borderRadius: 2,
-                  p: { xs: 2.5, md: 3 },
-                }}
-              >
-                <Typography
-                  component="h3"
-                  sx={{
-                    fontWeight: 700,
-                    fontSize: '1rem',
-                    mb: 1,
-                    lineHeight: 1.4,
-                  }}
-                >
-                  {faq.question}
-                </Typography>
-                <Typography
-                  sx={{
-                    color: 'text.secondary',
-                    lineHeight: 1.7,
-                    fontSize: '0.95rem',
-                  }}
-                >
-                  {faq.answer}
-                </Typography>
-              </Paper>
-            ))}
-          </Box>
-        </Container>
-      </Box>
-
-      {/* CTA */}
-      <Box
-        sx={{
-          bgcolor: 'primary.main',
-          py: { xs: 6, md: 8 },
-          textAlign: 'center',
-        }}
+        }
+        searchPlaceholder="Find a tool, e.g. cutoff, predictor, resizer"
+        allLabel="All tools"
+        countNoun="tools"
+        cardCta="Try now"
+        groups={groups}
       >
-        <Container maxWidth="sm">
-          <Typography
-            component="h2"
-            sx={{
-              fontSize: { xs: '1.5rem', md: '2rem' },
-              fontWeight: 700,
-              color: 'white',
-              mb: 2,
-            }}
-          >
-            Start Your Architecture Journey
-          </Typography>
-          <Typography
-            sx={{
-              color: 'rgba(255,255,255,0.85)',
-              mb: 4,
-              fontSize: '1.05rem',
-              lineHeight: 1.6,
-            }}
-          >
-            Use our tools to plan your path and join thousands of students who
-            qualified their dream architecture college.
-          </Typography>
-          <Box
-            sx={{
-              display: 'flex',
-              gap: 2,
-              justifyContent: 'center',
-              flexWrap: 'wrap',
-            }}
-          >
-            <Button
-              component={Link}
-              href="/apply"
-              variant="contained"
-              size="large"
-              sx={{
-                bgcolor: 'white',
-                color: 'primary.main',
-                fontWeight: 700,
-                px: 4,
-                '&:hover': { bgcolor: '#F5F5F5' },
-              }}
-            >
-              Apply for Coaching
-            </Button>
-            <Button
-              component={Link}
-              href="/courses"
-              variant="outlined"
-              size="large"
-              sx={{
-                borderColor: 'white',
-                color: 'white',
-                fontWeight: 700,
-                px: 4,
-                '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
-              }}
-            >
-              Explore Courses
-            </Button>
-          </Box>
-        </Container>
-      </Box>
+        <Section id="why-tools" tone="white" py={{ xs: 7, md: 8 }} gap={3} header={{ title: 'Why Use Our Tools', align: 'start', size: 'article' }}>
+          <CheckList variant="ruled" columnMin={240} items={TRUST_POINTS.map(({ label, desc }) => ({ title: label, body: desc }))} />
+        </Section>
+
+        <Section id="faq" tone="light" width="narrow" header={{ eyebrow: 'Questions', title: 'Frequently Asked Questions' }}>
+          <FaqList items={HUB_FAQS} />
+        </Section>
+
+        <CtaBand
+          title="Start Your Architecture Journey"
+          lede="Use our tools to plan your path and join thousands of students who qualified their dream architecture college."
+          actions={
+            <>
+              <CtaButton href="/apply">Apply for Coaching</CtaButton>
+              <CtaButton variant="link" href="/courses">
+                Explore Courses
+              </CtaButton>
+            </>
+          }
+        />
+      </HubIndex>
     </>
   );
 }

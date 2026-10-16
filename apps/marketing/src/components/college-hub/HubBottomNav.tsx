@@ -8,6 +8,7 @@ import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
 import { compareHref, useCompareList } from '@/lib/college-hub/compare-store';
+import { tokens } from '@/design-system';
 
 /**
  * Phone bottom nav for the College Hub (canvas: Mobile · Results). Only on
@@ -42,9 +43,9 @@ export default function HubBottomNav() {
           height: 'calc(64px + env(safe-area-inset-bottom))',
           pb: 'env(safe-area-inset-bottom)',
           boxSizing: 'border-box',
-          bgcolor: 'background.paper',
+          bgcolor: tokens.surface,
           borderTop: '1px solid',
-          borderColor: 'divider',
+          borderColor: tokens.line,
         }}
       >
         {items.map(({ href, label, Icon, current, badge }) => (
@@ -60,17 +61,17 @@ export default function HubBottomNav() {
               alignItems: 'center',
               justifyContent: 'center',
               gap: 0.375,
-              color: current ? 'primary.dark' : 'text.secondary',
+              color: current ? tokens.navy900 : tokens.inkMuted,
               textDecoration: 'none',
               fontSize: '0.72rem',
               fontWeight: current ? 700 : 600,
-              '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -4 },
+              '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: -4 },
             }}
           >
             <Icon aria-hidden sx={{ fontSize: 24 }} />
             {label}
             {badge ? (
-              <Box component="span" aria-label={`${badge} added`} sx={{ position: 'absolute', top: 8, left: 'calc(50% + 6px)', minWidth: 18, height: 18, px: 0.5, boxSizing: 'border-box', borderRadius: 9, bgcolor: 'primary.main', color: 'primary.contrastText', fontSize: '0.66rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Box component="span" aria-label={`${badge} added`} sx={{ position: 'absolute', top: 8, left: 'calc(50% + 6px)', minWidth: 18, height: 18, px: 0.5, boxSizing: 'border-box', borderRadius: `${tokens.radiusPill}px`, bgcolor: tokens.navy900, color: tokens.paper, fontSize: '0.66rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 {badge}
               </Box>
             ) : null}

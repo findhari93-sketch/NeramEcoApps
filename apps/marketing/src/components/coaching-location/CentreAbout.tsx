@@ -11,6 +11,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { Box, Chip, Typography } from '@neram/ui';
+import { siteTokens as t } from '@neram/ui/site-tokens';
 import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import type { ClassroomCentre } from '@/lib/seo/facts';
@@ -32,7 +33,7 @@ export function CentreHeroPhoto({ photo }: { photo: CentrePhoto }) {
   return (
     <Box
       component="figure"
-      sx={{ m: 0, position: 'relative', aspectRatio: '16 / 9', borderRadius: 2, overflow: 'hidden', bgcolor: 'grey.200' }}
+      sx={{ m: 0, position: 'relative', aspectRatio: '16 / 9', borderRadius: `${t.radius}px`, overflow: 'hidden', bgcolor: t.navy800 }}
     >
       <Image
         src={photo.url}
@@ -56,10 +57,10 @@ function Gallery({ photos }: { photos: CentrePhoto[] }) {
       {photos.map((p) => (
         <Box component="li" key={p.url}>
           <Box component="figure" sx={{ m: 0 }}>
-            <Box sx={{ position: 'relative', aspectRatio: '4 / 3', borderRadius: 1.5, overflow: 'hidden', bgcolor: 'grey.200' }}>
+            <Box sx={{ position: 'relative', aspectRatio: '4 / 3', borderRadius: `${t.radius}px`, overflow: 'hidden', bgcolor: t.line }}>
               <Image src={p.url} alt={p.alt} fill loading="lazy" sizes="(max-width: 900px) 50vw, 220px" style={{ objectFit: 'cover' }} />
             </Box>
-            <Typography component="figcaption" sx={{ mt: 0.75, fontSize: '0.875rem', lineHeight: 1.45, color: 'text.secondary' }}>
+            <Typography component="figcaption" sx={{ mt: 0.75, fontSize: '0.875rem', lineHeight: 1.45, color: t.inkMuted }}>
               {p.alt}
             </Typography>
           </Box>
@@ -87,6 +88,8 @@ export function CentreAbout({
   const years = centres.map((c) => c.establishedYear).filter((y): y is number => !!y);
   const facilities = Array.from(new Set(centres.flatMap((c) => c.facilities ?? []))).slice(0, 8);
   const described = centres.filter((c) => c.description);
+  // Nothing to say beyond the hero photo: no heading on its own.
+  if (!described.length && !years.length && !facilities.length && !travelFrom.length && !photos.length) return null;
 
   return (
     <Section id="centre" title={many ? `Our ${placeName} centres` : `Our ${placeName} centre`}>
@@ -109,7 +112,7 @@ export function CentreAbout({
         <Box component="ul" aria-label="About the centre" sx={{ listStyle: 'none', p: 0, m: 0, mb: 2.5, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
           {years.length > 0 && (
             <li>
-              <Chip icon={<EventAvailableOutlinedIcon aria-hidden />} label={`Teaching here since ${Math.min(...years)}`} color="primary" variant="outlined" />
+              <Chip icon={<EventAvailableOutlinedIcon aria-hidden />} label={`Teaching here since ${Math.min(...years)}`} variant="outlined" sx={{ borderColor: t.lineStrong, color: t.ink, '& .MuiChip-icon': { color: t.gold800 } }} />
             </li>
           )}
           {facilities.map((f) => (

@@ -1,6 +1,7 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
 import AchievementsPageWrapper from '@/components/achievements/AchievementsPageWrapper';
+import { CtaBand, CtaButton } from '@/design-system';
 
 const baseUrl = 'https://neramclasses.com';
 
@@ -17,5 +18,21 @@ export async function generateMetadata({ params: { locale } }: { params: { local
 
 export default function AchievementsPage({ params: { locale } }: { params: { locale: string } }) {
   setRequestLocale(locale);
-  return <AchievementsPageWrapper locale={locale} />;
+  return (
+    <>
+      <AchievementsPageWrapper locale={locale} />
+      <CtaBand
+        eyebrow="Your turn"
+        title="Ready to write your own success story?"
+        actions={
+          <>
+            <CtaButton href="/demo-class">Book your free demo</CtaButton>
+            <CtaButton variant="link" href="/reviews">
+              Read student reviews
+            </CtaButton>
+          </>
+        }
+      />
+    </>
+  );
 }

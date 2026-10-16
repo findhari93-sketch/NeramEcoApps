@@ -9,7 +9,8 @@ import {
   AccordionSummary,
   Stack,
 } from '@mui/material';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMoreOutlined';
+import { siteTokens as t } from '@neram/ui/site-tokens';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { generateFAQSchema } from '@/lib/seo/schemas';
 import KeamSpokeShell from '@/components/keam-arch/KeamSpokeShell';
@@ -18,7 +19,6 @@ import { faqs, type FaqCategory } from '@/data/keam-arch-2026';
 export const revalidate = 86400;
 
 const SPOKE = 'faq';
-const PRIMARY_GREEN = '#0d7a4a';
 
 const CATEGORY_LABELS: Record<FaqCategory, string> = {
   general: 'General',
@@ -106,10 +106,9 @@ export default function FaqPage({ params: { locale } }: { params: { locale: stri
         sx={{
           p: 1.5,
           mb: 3,
-          borderRadius: 2,
-          bgcolor: 'grey.50',
-          border: '1px solid',
-          borderColor: 'divider',
+          borderRadius: 1,
+          bgcolor: t.ground,
+          border: `1px solid ${t.line}`,
         }}
       >
         <Typography
@@ -127,17 +126,20 @@ export default function FaqPage({ params: { locale } }: { params: { locale: stri
               component="a"
               href={`#${c}`}
               sx={{
-                px: 1.25,
-                py: 0.5,
-                borderRadius: 999,
-                fontSize: '0.75rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                minHeight: 44,
+                px: 1.5,
+                borderRadius: `${t.radiusPill}px`,
+                fontSize: '0.8125rem',
                 fontWeight: 600,
                 textDecoration: 'none',
-                bgcolor: 'background.paper',
-                border: '1px solid',
-                borderColor: 'divider',
-                color: 'text.primary',
-                '&:hover': { borderColor: PRIMARY_GREEN, color: PRIMARY_GREEN },
+                bgcolor: t.surface,
+                border: `1px solid ${t.line}`,
+                color: t.ink,
+                transition: 'border-color 150ms ease',
+                '&:hover': { borderColor: t.gold500 },
+                '&:focus-visible': { outline: t.focusOutline, outlineOffset: '2px' },
               }}
             >
               {CATEGORY_LABELS[c]} ({grouped[c].length})
@@ -158,9 +160,8 @@ export default function FaqPage({ params: { locale } }: { params: { locale: stri
               disableGutters
               sx={{
                 mb: 1,
-                border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: '8px !important',
+                border: `1px solid ${t.line}`,
+                borderRadius: `${t.radius}px !important`,
                 '&:before': { display: 'none' },
                 overflow: 'hidden',
               }}
@@ -178,7 +179,7 @@ export default function FaqPage({ params: { locale } }: { params: { locale: stri
                   <Typography
                     variant="caption"
                     sx={{
-                      color: PRIMARY_GREEN,
+                      color: t.gold800,
                       fontWeight: 600,
                       mt: 1,
                       display: 'block',

@@ -91,6 +91,22 @@ describe('matchesFilters', () => {
     expect(names({ account: 'possible_duplicate', form: 'missing' })).toEqual([]);
   });
 
+  it('narrows by join date, edges included, and never matches an unknown date', () => {
+    const joined = [
+      student({ name: 'Today', enrolled_at: iso(NOW - 2 * HOUR) }),
+      student({ name: 'Seven', enrolled_at: iso(NOW - 7 * DAY) }),
+      student({ name: 'Eight', enrolled_at: iso(NOW - 8 * DAY) }),
+      student({ name: 'Thirty', enrolled_at: iso(NOW - 30 * DAY) }),
+      student({ name: 'Old', enrolled_at: iso(NOW - 31 * DAY) }),
+      student({ name: 'Unknown', enrolled_at: null }),
+    ];
+    const pick = (value: RosterFilters['joined']) =>
+      joined.filter((s) => matchesFilters(s, { ...DEFAULT_FILTERS, joined: value }, NOW)).map((s) => s.name);
+    expect(pick('last_7')).toEqual(['Today', 'Seven']);
+    expect(pick('last_30')).toEqual(['Today', 'Seven', 'Eight', 'Thirty']);
+    expect(pick('any')).toHaveLength(6);
+  });
+
   it('never matches a form filter for a payload without the form check', () => {
     const old = student({ has_application_form: undefined });
     expect(matchesFilters(old, { ...DEFAULT_FILTERS, form: 'missing' }, NOW)).toBe(false);
@@ -226,7 +242,8 @@ describe('stored preferences', () => {
     expect(parseStoredSort('joined_newest')).toBe('joined_newest');
     expect(parseStoredSort('bogus')).toBe('name');
     expect(parseStoredSort(null)).toBe('name');
-    expect(parseStoredFilters('{"signIn":"never","account":"no_microsoft","form":"missing"}')).toEqual({
+    expect(parseStoredFilters('{"joined":"last_7","signIn":"never","account":"no_microsoft","form":"missing"}')).toEqual({
+      joined: 'last_7',
       signIn: 'never',
       account: 'no_microsoft',
       form: 'missing',
@@ -241,6 +258,7 @@ describe('stored preferences', () => {
 
   it('reads filters saved before the form filter existed', () => {
     expect(parseStoredFilters('{"signIn":"never","account":"any"}')).toEqual({
+      joined: 'any',
       signIn: 'never',
       account: 'any',
       form: 'any',
@@ -249,6 +267,7 @@ describe('stored preferences', () => {
 
   it('counts only the facets that narrow', () => {
     expect(activeFilterCount(DEFAULT_FILTERS)).toBe(0);
-    expect(activeFilterCount({ signIn: 'never', account: 'no_microsoft', form: 'missing' })).toBe(3);
+    expect(activeFilterCount({ joined: 'any', signIn: 'never', account: 'no_microsoft', form: 'missing' })).toBe(3);
+    expect(activeFilterCount({ ...DEFAULT_FILTERS, joined: 'last_30' })).toBe(1);
   });
 });

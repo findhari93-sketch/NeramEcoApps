@@ -28,6 +28,7 @@ import LetterJump from './LetterJump';
 import DirectoryResults, { DirectoryEmpty } from './DirectoryResults';
 import { activeFilterCount, draftToFilters, readDraft, type FilterDraft } from './filter-model';
 import { useDirectoryNav } from './useListingParams';
+import { tokens } from '@/design-system';
 
 /** Colleges rendered before "Show N more colleges". */
 export const DIRECTORY_PAGE_SIZE = 24;
@@ -203,10 +204,10 @@ function ListingBody(props: DirectoryListingProps & { params: Params }) {
         <LetterJump available={letters} current={draft.letter} onPick={(letter) => nav.applyDraft({ ...draft, letter })} />
 
         {colleges.length === 0 ? (
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1, p: { xs: 2.5, md: 3.5 }, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1, p: { xs: 2.5, md: 3.5 }, bgcolor: tokens.surface, border: '1px solid', borderColor: tokens.line, borderRadius: 1 }}>
             <Typography sx={{ m: 0, fontSize: '1.1rem', fontWeight: 700 }}>No colleges in this list yet</Typography>
-            <Typography sx={{ m: 0, fontSize: '0.95rem', color: 'text.secondary' }}>We add colleges as their details are confirmed. Browse every college in the meantime.</Typography>
-            <Box component="a" href="/colleges#browse" sx={{ mt: 1, minHeight: 44, display: 'inline-flex', alignItems: 'center', px: 2, border: '1px solid', borderColor: 'primary.main', borderRadius: 1.5, color: 'primary.dark', fontWeight: 700, textDecoration: 'none' }}>
+            <Typography sx={{ m: 0, fontSize: '0.95rem', color: tokens.inkMuted }}>We add colleges as their details are confirmed. Browse every college in the meantime.</Typography>
+            <Box component="a" href="/colleges#browse" sx={{ mt: 1, minHeight: 44, display: 'inline-flex', alignItems: 'center', px: 2, border: '1px solid', borderColor: tokens.navy900, borderRadius: 1, color: tokens.navy900, fontWeight: 700, textDecoration: 'none' }}>
               Browse all colleges
             </Box>
           </Box>
@@ -221,11 +222,11 @@ function ListingBody(props: DirectoryListingProps & { params: Params }) {
                   component="button"
                   type="button"
                   onClick={() => setLimit((n) => n + DIRECTORY_PAGE_SIZE)}
-                  sx={{ minHeight: 48, px: 3, border: '1px solid', borderColor: 'primary.main', borderRadius: 1.5, bgcolor: 'background.paper', color: 'primary.dark', font: 'inherit', fontSize: '0.95rem', fontWeight: 600, cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
+                  sx={{ minHeight: 48, px: 3, border: '1px solid', borderColor: tokens.navy900, borderRadius: 1, bgcolor: tokens.surface, color: tokens.navy900, font: 'inherit', fontSize: '0.95rem', fontWeight: 600, cursor: 'pointer', '&:hover': { bgcolor: tokens.surfaceHover }, '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } }}
                 >
                   Show {Math.min(more, DIRECTORY_PAGE_SIZE)} more {Math.min(more, DIRECTORY_PAGE_SIZE) === 1 ? 'college' : 'colleges'}
                 </Box>
-                <Typography sx={{ m: 0, fontSize: '0.84rem', color: 'text.secondary' }}>
+                <Typography sx={{ m: 0, fontSize: '0.84rem', color: tokens.inkMuted }}>
                   Showing {shown.length} of {results.length}
                 </Typography>
               </Box>

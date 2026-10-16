@@ -13,12 +13,13 @@ import {
   IconButton,
   InputAdornment,
 } from '@mui/material';
-import SearchIcon from '@mui/icons-material/Search';
-import CallIcon from '@mui/icons-material/Call';
-import MapIcon from '@mui/icons-material/Map';
-import ClearIcon from '@mui/icons-material/Clear';
-import LocationOnIcon from '@mui/icons-material/LocationOn';
-import SchoolIcon from '@mui/icons-material/School';
+import SearchIcon from '@mui/icons-material/SearchOutlined';
+import CallIcon from '@mui/icons-material/CallOutlined';
+import MapIcon from '@mui/icons-material/MapOutlined';
+import ClearIcon from '@mui/icons-material/ClearOutlined';
+import LocationOnIcon from '@mui/icons-material/LocationOnOutlined';
+import SchoolIcon from '@mui/icons-material/SchoolOutlined';
+import { siteTokens as t } from '@neram/ui/site-tokens';
 import type { KeralaCollege } from '@/data/keam-arch-2026';
 
 interface CollegesLocatorProps {
@@ -32,7 +33,12 @@ function buildMapsHref(college: KeralaCollege): string {
   return `https://www.google.com/maps/search/?api=1&query=${query}`;
 }
 
-const PRIMARY_GREEN = '#0d7a4a';
+/** Light card: white, 1px line border, 8px radius, no shadow. */
+const cardSx = {
+  borderRadius: `${t.radius}px`,
+  border: `1px solid ${t.line}`,
+  bgcolor: t.surface,
+} as const;
 
 export default function CollegesLocator({ colleges, districts, universities }: CollegesLocatorProps) {
   const [query, setQuery] = useState('');
@@ -59,13 +65,10 @@ export default function CollegesLocator({ colleges, districts, universities }: C
         sx={{
           p: { xs: 1.5, md: 2 },
           mb: 2.5,
-          borderRadius: 2,
-          border: '1px solid',
-          borderColor: 'divider',
+          ...cardSx,
           position: 'sticky',
           top: 0,
           zIndex: 10,
-          bgcolor: 'background.paper',
         }}
       >
         <Stack
@@ -82,12 +85,17 @@ export default function CollegesLocator({ colleges, districts, universities }: C
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
-                  <SearchIcon sx={{ color: 'text.secondary' }} />
+                  <SearchIcon sx={{ color: t.inkMuted }} />
                 </InputAdornment>
               ),
               endAdornment: query ? (
                 <InputAdornment position="end">
-                  <IconButton size="small" onClick={() => setQuery('')} aria-label="Clear">
+                  <IconButton
+                    size="small"
+                    onClick={() => setQuery('')}
+                    aria-label="Clear search"
+                    sx={{ width: 44, height: 44 }}
+                  >
                     <ClearIcon fontSize="small" />
                   </IconButton>
                 </InputAdornment>
@@ -137,13 +145,11 @@ export default function CollegesLocator({ colleges, districts, universities }: C
           elevation={0}
           sx={{
             p: 4,
-            borderRadius: 2,
-            border: '1px solid',
-            borderColor: 'divider',
+            ...cardSx,
             textAlign: 'center',
           }}
         >
-          <LocationOnIcon sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
+          <LocationOnIcon aria-hidden sx={{ fontSize: 40, color: t.statusIdle, mb: 1 }} />
           <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 0.5 }}>
             No colleges match your filters
           </Typography>
@@ -160,9 +166,7 @@ export default function CollegesLocator({ colleges, districts, universities }: C
               elevation={0}
               sx={{
                 p: { xs: 1.5, md: 2 },
-                borderRadius: 2,
-                border: '1px solid',
-                borderColor: 'divider',
+                ...cardSx,
               }}
             >
               <Stack
@@ -178,7 +182,7 @@ export default function CollegesLocator({ colleges, districts, universities }: C
                     <Chip
                       label={c.code}
                       size="small"
-                      sx={{ bgcolor: PRIMARY_GREEN, color: 'white', fontWeight: 700 }}
+                      sx={{ bgcolor: t.navy900, color: t.paper, fontWeight: 700 }}
                     />
                     <Chip label={c.district} size="small" variant="outlined" />
                     <Chip label={c.university} size="small" variant="outlined" icon={<SchoolIcon />} />
@@ -203,9 +207,10 @@ export default function CollegesLocator({ colleges, districts, universities }: C
                     href={`tel:${phone}`}
                     startIcon={<CallIcon />}
                     sx={{
-                      minHeight: 40,
-                      bgcolor: PRIMARY_GREEN,
-                      '&:hover': { bgcolor: '#0a5a36' },
+                      minHeight: 44,
+                      bgcolor: t.navy900,
+                      color: t.paper,
+                      '&:hover': { bgcolor: t.navy700, color: t.paper },
                     }}
                   >
                     {phone}
@@ -219,7 +224,7 @@ export default function CollegesLocator({ colleges, districts, universities }: C
                   target="_blank"
                   rel="noopener"
                   startIcon={<MapIcon />}
-                  sx={{ minHeight: 40 }}
+                  sx={{ minHeight: 44 }}
                 >
                   Map
                 </Button>

@@ -8,6 +8,7 @@ import { Box } from '@mui/material';
 import DirectoryListing from '@/components/college-hub/directory/DirectoryListing';
 import { toListingCollege } from '@/lib/college-hub/listing-filter';
 import { CATEGORY_INDEX_HREF, relatedCategories } from '@/lib/college-hub/categories';
+import { siteTokens } from '@neram/ui/site-tokens';
 
 export const revalidate = 86400;
 
@@ -35,8 +36,8 @@ export default async function JoSAACollegesPage({ params: { locale } }: Props) {
         <JsonLd data={breadcrumb} />
         <Box sx={{ maxWidth: 720, mx: 'auto', px: 2, py: 8, textAlign: 'center' }}>
           <Box component="h1" sx={{ m: 0, fontSize: '1.75rem', fontWeight: 800 }}>JoSAA B.Arch Colleges 2026: NITs and IITs</Box>
-          <Box component="p" sx={{ color: 'text.secondary' }}>No JoSAA colleges are listed yet. Browse every college in the meantime.</Box>
-          <Box component="a" href="/colleges#browse" sx={{ display: 'inline-flex', alignItems: 'center', minHeight: 48, px: 3, borderRadius: 1.5, bgcolor: 'primary.main', color: 'primary.contrastText', fontWeight: 700, textDecoration: 'none' }}>
+          <Box component="p" sx={{ color: siteTokens.inkMuted }}>No JoSAA colleges are listed yet. Browse every college in the meantime.</Box>
+          <Box component="a" href="/colleges#browse" sx={{ display: 'inline-flex', alignItems: 'center', minHeight: 48, px: 3, borderRadius: 1, bgcolor: siteTokens.navy900, color: siteTokens.paper, fontWeight: 700, textDecoration: 'none' }}>
             Browse all colleges
           </Box>
         </Box>

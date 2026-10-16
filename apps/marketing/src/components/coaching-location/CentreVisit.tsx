@@ -7,6 +7,7 @@
  */
 import Link from 'next/link';
 import { Box, Button, Typography } from '@neram/ui';
+import { siteTokens as t } from '@neram/ui/site-tokens';
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
 import ScheduleOutlinedIcon from '@mui/icons-material/ScheduleOutlined';
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
@@ -32,7 +33,7 @@ export function formatIndianPhone(tel: string): string {
 function Line({ icon, children }: { icon: ReactNode; children: ReactNode }) {
   return (
     <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
-      <Box aria-hidden sx={{ color: 'text.secondary', mt: '2px', display: 'flex' }}>
+      <Box aria-hidden sx={{ color: t.inkMuted, mt: '2px', display: 'flex' }}>
         {icon}
       </Box>
       <Box sx={{ minWidth: 0, lineHeight: 1.6 }}>{children}</Box>
@@ -51,9 +52,9 @@ function CentreCard({ centre }: { centre: ClassroomCentre }) {
     <Box
       component="article"
       aria-labelledby={`centre-${centre.slug}`}
-      sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, bgcolor: 'background.paper', overflow: 'hidden' }}
+      sx={{ border: `1px solid ${t.line}`, borderRadius: `${t.radius}px`, bgcolor: t.surface, overflow: 'hidden' }}
     >
-      <Box sx={{ position: 'relative', aspectRatio: { xs: '4 / 3', sm: '16 / 9' }, bgcolor: 'grey.100' }}>
+      <Box sx={{ position: 'relative', aspectRatio: { xs: '4 / 3', sm: '16 / 9' }, bgcolor: t.line }}>
         <Box
           component="iframe"
           src={mapEmbedUrl(centre)}
@@ -77,7 +78,7 @@ function CentreCard({ centre }: { centre: ClassroomCentre }) {
             {centre.pincode ? ` ${centre.pincode}` : ''}
           </Typography>
           {centre.landmark && (
-            <Typography component="span" sx={{ display: 'block', color: 'text.secondary' }}>
+            <Typography component="span" sx={{ display: 'block', color: t.inkMuted }}>
               {centre.landmark}
             </Typography>
           )}
@@ -93,7 +94,7 @@ function CentreCard({ centre }: { centre: ClassroomCentre }) {
         )}
         {tel && (
           <Line icon={<PhoneOutlinedIcon fontSize="small" />}>
-            <Box component="a" href={`tel:${tel}`} sx={{ color: 'primary.main', display: 'inline-flex', alignItems: 'center', minHeight: 44 }}>
+            <Box component="a" href={`tel:${tel}`} sx={{ color: t.ink, fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: '3px', display: 'inline-flex', alignItems: 'center', minHeight: 44 }}>
               {formatIndianPhone(tel)}
             </Box>
           </Line>
@@ -101,7 +102,7 @@ function CentreCard({ centre }: { centre: ClassroomCentre }) {
         {rating && (
           <Line icon={<StarOutlineRoundedIcon fontSize="small" />}>
             {centre.googleRating?.url ? (
-              <Box component="a" href={centre.googleRating.url} target="_blank" rel="noopener noreferrer" sx={{ color: 'primary.main', display: 'inline-flex', alignItems: 'center', minHeight: 44 }}>
+              <Box component="a" href={centre.googleRating.url} target="_blank" rel="noopener noreferrer" sx={{ color: t.ink, fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: '3px', display: 'inline-flex', alignItems: 'center', minHeight: 44 }}>
                 {rating}
               </Box>
             ) : (
@@ -156,7 +157,7 @@ export function CentreVisit({
   const title = centres.length > 1 ? `Visit our ${placeName} classrooms` : `Visit our ${placeName} classroom`;
   return (
     <Section id="visit" title={title} muted={muted}>
-      <Typography sx={{ color: 'text.secondary', mb: 2 }}>
+      <Typography sx={{ m: 0, color: t.inkMuted }}>
         Visit before you join. See the classroom and talk to a tutor about batches and fees.
       </Typography>
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

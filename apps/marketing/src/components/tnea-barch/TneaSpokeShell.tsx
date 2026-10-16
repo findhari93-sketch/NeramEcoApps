@@ -68,8 +68,6 @@ export default function TneaSpokeShell({
         subtitle: 'Your TNEA B.Arch counselling guide',
         greeting: `Hi! I'm Aintra. Ask me about ${topicTitle.toLowerCase()}, or anything else about TNEA B.Arch 2026.`,
         suggestions: aintraSuggestions,
-        primaryColor: '#1d4ed8',
-        primaryColorDark: '#1e3a8a',
         disclaimerSource: 'tneaonline.org',
       }}
     >

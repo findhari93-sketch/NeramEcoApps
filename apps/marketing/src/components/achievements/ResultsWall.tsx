@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Box, Container, Typography, Grid, Button, Skeleton } from '@neram/ui';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import SearchOffIcon from '@mui/icons-material/SearchOff';
-import ClearAllIcon from '@mui/icons-material/ClearAll';
-import StatsBar from './StatsBar';
+import { Box, Typography, Skeleton } from '@neram/ui';
+import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
+import SearchOffOutlinedIcon from '@mui/icons-material/SearchOffOutlined';
+import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
+import ExpandMoreOutlinedIcon from '@mui/icons-material/ExpandMoreOutlined';
+import { CtaButton, EmptyState, FilterBar, FilterSelect, Pill, tokens as t } from '@/design-system';
 import FeaturedCarousel from './FeaturedCarousel';
-import FilterBar from './FilterBar';
 import ResultCard from './ResultCard';
 import type { StudentResult } from '@neram/database';
 
@@ -26,6 +26,39 @@ interface FilterOptions {
   colleges: string[];
   exam_types: string[];
 }
+
+const EXAM_PILLS = [
+  { value: '', label: 'All' },
+  { value: 'nata', label: 'NATA' },
+  { value: 'jee_paper2', label: 'JEE Paper 2' },
+  { value: 'tnea', label: 'TNEA' },
+  { value: 'other', label: 'Placements' },
+];
+
+// 'newest' is the default, shown as the select's empty option.
+const SORT_OPTIONS = [
+  { value: 'score_desc', label: 'Highest Score' },
+  { value: 'rank_asc', label: 'Best Rank' },
+  { value: 'name_asc', label: 'Name (A-Z)' },
+];
+
+const cardGridSx = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 250px), 1fr))',
+  gap: { xs: 2, md: 2.5 },
+} as const;
+
+const visuallyHidden = {
+  position: 'absolute',
+  width: '1px',
+  height: '1px',
+  p: 0,
+  m: '-1px',
+  overflow: 'hidden',
+  clip: 'rect(0 0 0 0)',
+  whiteSpace: 'nowrap',
+  border: 0,
+} as const;
 
 const DEFAULT_FILTERS: Filters = {
   search: '',
@@ -194,194 +227,182 @@ export default function ResultsWall() {
     filters.sort !== 'newest';
 
   const hasMore = results.length < total;
+  const examPills = EXAM_PILLS.filter((p) => p.value === '' || filterOptions.exam_types.includes(p.value));
 
   return (
-    <Box
-      sx={{
-        py: { xs: 4, md: 6 },
-        bgcolor: '#060d1f',
-        minHeight: '100vh',
-      }}
-    >
-      <Container maxWidth="lg">
-        {/* Stats Bar */}
-        <Box sx={{ mb: { xs: 4, md: 5 } }}>
-          <StatsBar />
+    <>
+      <FilterBar
+        onClear={hasActiveFilters ? handleClearFilters : undefined}
+        summary={!loading && total > 0 ? `${total} ${total === 1 ? 'result' : 'results'}` : undefined}
+      >
+        <Box
+          component="label"
+          sx={{
+            position: 'relative',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 0.75,
+            height: 44,
+            px: 1.5,
+            boxSizing: 'border-box',
+            flex: { xs: '1 1 100%', sm: '0 1 260px' },
+            minWidth: 0,
+            border: `1px solid ${t.lineStrong}`,
+            borderRadius: `${t.radius}px`,
+            bgcolor: t.surface,
+            color: t.inkMuted,
+            '&:focus-within': { outline: t.focusOutline, outlineOffset: '2px' },
+          }}
+        >
+          <SearchOutlinedIcon aria-hidden sx={{ fontSize: 20 }} />
+          <Box component="span" sx={visuallyHidden}>
+            Search students
+          </Box>
+          <Box
+            component="input"
+            type="search"
+            placeholder="Search students..."
+            value={filters.search}
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleFilterChange('search', e.target.value)}
+            sx={{
+              flex: 1,
+              minWidth: 0,
+              border: 0,
+              outline: 'none',
+              bgcolor: 'transparent',
+              font: 'inherit',
+              // 16px stops iOS zooming into the field.
+              fontSize: '1rem',
+              color: t.ink,
+              '&::placeholder': { color: t.inkMuted, opacity: 1 },
+              '&::-webkit-search-cancel-button': { display: 'none' },
+            }}
+          />
+          {filters.search && (
+            <Box
+              component="button"
+              type="button"
+              aria-label="Clear search"
+              onClick={() => handleFilterChange('search', '')}
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 32,
+                height: 32,
+                mr: -0.75,
+                border: 0,
+                borderRadius: '50%',
+                bgcolor: 'transparent',
+                color: t.inkMuted,
+                cursor: 'pointer',
+                '&:hover': { color: t.ink },
+                '&:focus-visible': { outline: t.focusOutline, outlineOffset: '2px' },
+              }}
+            >
+              <CloseOutlinedIcon aria-hidden sx={{ fontSize: 18 }} />
+            </Box>
+          )}
         </Box>
+        <Box role="group" aria-label="Exam" sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+          {examPills.map((p) => (
+            <Pill key={p.value || 'all'} selected={filters.exam_type === p.value} onClick={() => handleFilterChange('exam_type', p.value)}>
+              {p.label}
+            </Pill>
+          ))}
+        </Box>
+        {filterOptions.years.length > 0 && (
+          <FilterSelect
+            label="Year"
+            value={filters.year}
+            allLabel="All years"
+            options={filterOptions.years.map((y) => ({ value: String(y), label: String(y) }))}
+            onChange={(v) => handleFilterChange('year', v)}
+          />
+        )}
+        <FilterSelect
+          label="Sort"
+          value={filters.sort === 'newest' ? '' : filters.sort}
+          allLabel="Newest First"
+          options={SORT_OPTIONS}
+          onChange={(v) => handleFilterChange('sort', v || 'newest')}
+        />
+      </FilterBar>
 
-        {/* Featured Carousel */}
+      <Box
+        sx={{
+          maxWidth: t.container.page,
+          mx: 'auto',
+          px: { xs: 2, sm: 3 },
+          py: { xs: 5, md: 7 },
+          boxSizing: 'content-box',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: { xs: 5, md: 6 },
+        }}
+      >
         <FeaturedCarousel />
 
-        {/* Filter Bar */}
-        <FilterBar
-          filters={filters}
-          onFilterChange={handleFilterChange}
-          onClearFilters={handleClearFilters}
-          filterOptions={filterOptions}
-          hasActiveFilters={hasActiveFilters}
-        />
-
-        {/* Result count */}
-        {!loading && total > 0 && (
-          <Typography
-            variant="body2"
-            sx={{
-              color: 'rgba(245,240,232,0.5)',
-              mb: 2,
-              fontSize: '0.85rem',
-            }}
-          >
-            Showing {results.length} of {total} results
-          </Typography>
-        )}
-
-        {/* Results Grid */}
-        <Grid container spacing={{ xs: 2, sm: 2.5, md: 3 }}>
-          {loading
-            ? Array.from({ length: 6 }).map((_, i) => (
-                <Grid item xs={12} sm={6} md={4} lg={3} key={`skel-${i}`}>
-                  <Box sx={{ pt: 5 }}>
-                    <Box
-                      sx={{
-                        bgcolor: 'rgba(11,22,41,0.75)',
-                        borderRadius: '16px',
-                        border: '1px solid rgba(255,255,255,0.08)',
-                        p: 2.5,
-                        pt: 6.5,
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        position: 'relative',
-                      }}
-                    >
-                      <Skeleton
-                        variant="circular"
-                        width={80}
-                        height={80}
-                        sx={{
-                          position: 'absolute',
-                          top: -40,
-                          bgcolor: 'rgba(255,255,255,0.06)',
-                        }}
-                      />
-                      <Skeleton
-                        variant="text"
-                        width={120}
-                        height={28}
-                        sx={{ bgcolor: 'rgba(255,255,255,0.06)' }}
-                      />
-                      <Skeleton
-                        variant="rounded"
-                        width={70}
-                        height={24}
-                        sx={{ mt: 1, bgcolor: 'rgba(255,255,255,0.06)' }}
-                      />
-                      <Skeleton
-                        variant="text"
-                        width={80}
-                        height={36}
-                        sx={{ mt: 1, bgcolor: 'rgba(255,255,255,0.06)' }}
-                      />
-                      <Skeleton
-                        variant="text"
-                        width={100}
-                        height={18}
-                        sx={{ mt: 1, bgcolor: 'rgba(255,255,255,0.06)' }}
-                      />
+        <Box component="section" aria-label="All results" aria-busy={loading} sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          {loading ? (
+            <Box sx={cardGridSx} aria-hidden>
+              {Array.from({ length: 6 }).map((_, i) => (
+                <Box
+                  key={`skel-${i}`}
+                  sx={{ p: 2.5, bgcolor: t.surface, border: `1px solid ${t.line}`, borderRadius: `${t.radius}px` }}
+                >
+                  <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+                    <Skeleton variant="circular" width={52} height={52} />
+                    <Box sx={{ flex: 1 }}>
+                      <Skeleton variant="text" width="80%" />
+                      <Skeleton variant="text" width="45%" />
                     </Box>
                   </Box>
-                </Grid>
-              ))
-            : results.map((result) => (
-                <Grid item xs={12} sm={6} md={4} lg={3} key={result.id}>
-                  <ResultCard result={result} />
-                </Grid>
+                  <Skeleton variant="text" width={100} height={36} sx={{ mt: 1 }} />
+                  <Skeleton variant="text" width="70%" />
+                </Box>
               ))}
-        </Grid>
-
-        {/* Empty state */}
-        {!loading && results.length === 0 && (
-          <Box
-            sx={{
-              textAlign: 'center',
-              py: { xs: 6, md: 10 },
-            }}
-          >
-            <SearchOffIcon
-              sx={{
-                fontSize: 56,
-                color: 'rgba(245,240,232,0.2)',
-                mb: 2,
-              }}
+            </Box>
+          ) : results.length > 0 ? (
+            <Box sx={cardGridSx}>
+              {results.map((result) => (
+                <ResultCard key={result.id} result={result} />
+              ))}
+            </Box>
+          ) : (
+            <EmptyState
+              icon={<SearchOffOutlinedIcon />}
+              title="No results match your filters"
+              body="Try adjusting your search or filter criteria"
+              action={
+                hasActiveFilters ? (
+                  <CtaButton variant="outline" size="md" endIcon={null} onClick={handleClearFilters}>
+                    Clear All Filters
+                  </CtaButton>
+                ) : undefined
+              }
             />
-            <Typography
-              variant="h6"
-              sx={{ color: 'rgba(245,240,232,0.5)', mb: 1 }}
-            >
-              No results match your filters
-            </Typography>
-            <Typography
-              variant="body2"
-              sx={{ color: 'rgba(245,240,232,0.3)', mb: 3 }}
-            >
-              Try adjusting your search or filter criteria
-            </Typography>
-            {hasActiveFilters && (
-              <Button
-                variant="outlined"
-                startIcon={<ClearAllIcon />}
-                onClick={handleClearFilters}
-                sx={{
-                  textTransform: 'none',
-                  color: '#e8a020',
-                  borderColor: 'rgba(232,160,32,0.3)',
-                  '&:hover': {
-                    borderColor: '#e8a020',
-                    bgcolor: 'rgba(232,160,32,0.08)',
-                  },
-                }}
-              >
-                Clear All Filters
-              </Button>
-            )}
-          </Box>
-        )}
+          )}
 
-        {/* Load More */}
-        {!loading && hasMore && (
-          <Box sx={{ textAlign: 'center', mt: { xs: 4, md: 5 } }}>
-            <Button
-              variant="outlined"
-              size="large"
-              onClick={handleLoadMore}
-              disabled={loadingMore}
-              endIcon={<ExpandMoreIcon />}
-              sx={{
-                textTransform: 'none',
-                px: 4,
-                py: 1.5,
-                color: '#e8a020',
-                borderColor: 'rgba(232,160,32,0.3)',
-                borderRadius: '12px',
-                fontSize: '0.95rem',
-                fontWeight: 600,
-                transition: 'all 0.3s ease',
-                '&:hover': {
-                  borderColor: '#e8a020',
-                  bgcolor: 'rgba(232,160,32,0.08)',
-                  transform: 'translateY(-2px)',
-                },
-                '&:disabled': {
-                  color: 'rgba(245,240,232,0.3)',
-                  borderColor: 'rgba(255,255,255,0.06)',
-                },
-              }}
-            >
-              {loadingMore ? 'Loading...' : 'Load More Results'}
-            </Button>
-          </Box>
-        )}
-      </Container>
-    </Box>
+          {!loading && results.length > 0 && (
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5, mt: 1 }}>
+              <Typography component="p" aria-live="polite" sx={{ m: 0, fontSize: '0.875rem', color: t.inkMuted }}>
+                Showing {results.length} of {total} results
+              </Typography>
+              {hasMore && (
+                <CtaButton
+                  variant="outline"
+                  onClick={handleLoadMore}
+                  disabled={loadingMore}
+                  endIcon={<ExpandMoreOutlinedIcon aria-hidden />}
+                >
+                  {loadingMore ? 'Loading...' : 'Load More Results'}
+                </CtaButton>
+              )}
+            </Box>
+          )}
+        </Box>
+      </Box>
+    </>
   );
 }

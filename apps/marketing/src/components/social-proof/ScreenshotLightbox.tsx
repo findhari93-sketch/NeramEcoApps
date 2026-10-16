@@ -7,6 +7,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { SocialProof } from '@neram/database';
+import { tokens } from '@/design-system';
 
 interface ScreenshotLightboxProps {
   screenshots: SocialProof[];
@@ -115,7 +116,7 @@ function LightboxContent({
           top: { xs: 12, md: 20 },
           right: { xs: 12, md: 20 },
           zIndex: 10,
-          color: '#fff',
+          color: tokens.paper,
           bgcolor: 'rgba(255,255,255,0.1)',
           '&:hover': { bgcolor: 'rgba(255,255,255,0.2)' },
         }}
@@ -137,11 +138,11 @@ function LightboxContent({
             top: '50%',
             transform: 'translateY(-50%)',
             zIndex: 10,
-            color: '#fff',
+            color: tokens.paper,
             bgcolor: 'rgba(255,255,255,0.1)',
             '&:hover': { bgcolor: 'rgba(255,255,255,0.2)' },
-            width: { xs: 40, md: 48 },
-            height: { xs: 40, md: 48 },
+            width: { xs: 44, md: 48 },
+            height: { xs: 44, md: 48 },
           }}
         >
           <ChevronLeftIcon sx={{ fontSize: { xs: 24, md: 32 } }} />
@@ -162,11 +163,11 @@ function LightboxContent({
             top: '50%',
             transform: 'translateY(-50%)',
             zIndex: 10,
-            color: '#fff',
+            color: tokens.paper,
             bgcolor: 'rgba(255,255,255,0.1)',
             '&:hover': { bgcolor: 'rgba(255,255,255,0.2)' },
-            width: { xs: 40, md: 48 },
-            height: { xs: 40, md: 48 },
+            width: { xs: 44, md: 48 },
+            height: { xs: 44, md: 48 },
           }}
         >
           <ChevronRightIcon sx={{ fontSize: { xs: 24, md: 32 } }} />

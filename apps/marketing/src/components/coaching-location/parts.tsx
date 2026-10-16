@@ -1,21 +1,28 @@
 /**
- * Building blocks shared by the city, state and directory coaching pages.
+ * Building blocks shared by the city, state and directory coaching pages (T6).
  * Server components; the only client JS is the lead form, the visit form and the WhatsApp button.
  * Mobile first: 48px touch targets, 8px gaps, 16px body text, no fixed widths.
+ * Colours come from the design-system tokens (apps/marketing/DESIGN_SYSTEM.md).
  */
 import type { ReactNode } from 'react';
 import Link from 'next/link';
-import { Box, Container, Typography, Button } from '@neram/ui';
+import { Box, Typography } from '@neram/ui';
+import { siteTokens as t } from '@neram/ui/site-tokens';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import type { Faq } from '@/lib/seo/location-copy';
 import { WhatsAppLinkButton } from '@/components/WhatsAppLinkButton';
+import { Breadcrumb, CtaButton } from '@/design-system';
 
+/**
+ * One block of the page body: an article-size h2 and its content. Pages stack
+ * these inside their own layout (AsideLayout main column, or a Section band).
+ * `muted` is kept for callers but no longer paints a band.
+ */
 export function Section({
   id,
   title,
   children,
-  muted = false,
 }: {
   id?: string;
   title?: string;
@@ -28,20 +35,18 @@ export function Section({
       id={id}
       aria-labelledby={title && id ? `${id}-title` : undefined}
       // In-page links (#visit, #centre) land with the heading clear of the fixed header and announcement bar.
-      sx={{ py: { xs: 4, md: 6 }, scrollMarginTop: { xs: 96, md: 88 }, bgcolor: muted ? 'grey.50' : 'background.default' }}
+      sx={{ scrollMarginTop: { xs: 96, md: 88 }, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, color: t.ink }}
     >
-      <Container maxWidth="md">
-        {title && (
-          <Typography
-            id={id ? `${id}-title` : undefined}
-            variant="h2"
-            sx={{ fontSize: { xs: '1.375rem', md: '1.75rem' }, fontWeight: 700, mb: 2, lineHeight: 1.3 }}
-          >
-            {title}
-          </Typography>
-        )}
-        {children}
-      </Container>
+      {title && (
+        <Typography
+          id={id ? `${id}-title` : undefined}
+          component="h2"
+          sx={{ m: 0, fontSize: 'clamp(1.5rem, 3vw, 2rem)', fontWeight: 800, lineHeight: 1.2 }}
+        >
+          {title}
+        </Typography>
+      )}
+      {children}
     </Box>
   );
 }
@@ -51,46 +56,9 @@ export interface Crumb {
   href?: string;
 }
 
+/** The design-system breadcrumb (it reads the surface colours, so it works on the dark hero). */
 export function Breadcrumbs({ items }: { items: Crumb[] }) {
-  return (
-    <Box component="nav" aria-label="Breadcrumb" sx={{ mb: 2 }}>
-      <Box
-        component="ol"
-        sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.5, listStyle: 'none', p: 0, m: 0 }}
-      >
-        {items.map((c, i) => {
-          const last = i === items.length - 1;
-          return (
-            <Box component="li" key={c.name} sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-              {c.href && !last ? (
-                <Box
-                  component={Link}
-                  href={c.href}
-                  sx={{
-                    color: 'primary.main',
-                    fontSize: '0.875rem',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    minHeight: 44,
-                    textDecoration: 'underline',
-                    textUnderlineOffset: '3px',
-                    '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
-                  }}
-                >
-                  {c.name}
-                </Box>
-              ) : (
-                <Typography component="span" aria-current={last ? 'page' : undefined} sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>
-                  {c.name}
-                </Typography>
-              )}
-              {!last && <ChevronRightIcon aria-hidden fontSize="small" sx={{ color: 'text.secondary' }} />}
-            </Box>
-          );
-        })}
-      </Box>
-    </Box>
-  );
+  return <Breadcrumb items={items} />;
 }
 
 export interface FactRow {
@@ -98,7 +66,10 @@ export interface FactRow {
   value: ReactNode;
 }
 
-/** A two-column definition list; reads as a table to AI parsers and screen readers. */
+/**
+ * Facts as a ruled two-column table (T6 "at a glance"): ink top rule, a
+ * hairline per row, muted labels. Reads as a table to AI parsers and screen readers.
+ */
 export function FactTable({ rows, caption }: { rows: FactRow[]; caption: string }) {
   return (
     <Box
@@ -106,11 +77,15 @@ export function FactTable({ rows, caption }: { rows: FactRow[]; caption: string 
       sx={{
         width: '100%',
         borderCollapse: 'collapse',
+        borderTop: `1px solid ${t.ink}`,
         fontSize: '1rem',
-        '& caption': { textAlign: 'left', fontWeight: 600, mb: 1, color: 'text.secondary', fontSize: '0.875rem' },
-        '& th, & td': { textAlign: 'left', verticalAlign: 'top', py: 1.5, borderBottom: '1px solid', borderColor: 'divider' },
-        '& th': { width: { xs: '42%', sm: '35%' }, pr: 2, fontWeight: 600, color: 'text.primary' },
-        '& td': { color: 'text.primary', overflowWrap: 'anywhere' },
+        // The section heading already says this; keep the caption for assistive tech only.
+        '& caption': { position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' },
+        '& th, & td': { textAlign: 'left', verticalAlign: 'top', py: 1.75, borderBottom: `1px solid ${t.line}` },
+        '& th': { width: { xs: '42%', sm: '36%' }, pr: 2, fontWeight: 400, fontSize: '0.9375rem', color: t.inkMuted },
+        '& td': { fontWeight: 600, color: t.ink, overflowWrap: 'anywhere' },
+        '& td a': { color: t.ink, textDecoration: 'underline', textDecorationColor: t.lineStrong, textUnderlineOffset: '3px' },
+        '& td a:hover': { textDecorationColor: t.gold500 },
       }}
     >
       <caption>{caption}</caption>
@@ -126,19 +101,19 @@ export function FactTable({ rows, caption }: { rows: FactRow[]; caption: string 
   );
 }
 
-/** Native details/summary: works without JS, keyboard accessible, indexable text. */
+/**
+ * The FAQ as rules, not boxes (same look as the design-system FaqList), on
+ * native details/summary: works without JS, keyboard accessible, indexable text.
+ */
 export function FaqList({ faqs }: { faqs: Faq[] }) {
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', borderTop: `1px solid ${t.ink}` }}>
       {faqs.map((f) => (
         <Box
           key={f.question}
           component="details"
           sx={{
-            border: '1px solid',
-            borderColor: 'divider',
-            borderRadius: 2,
-            bgcolor: 'background.paper',
+            borderBottom: `1px solid ${t.line}`,
             '&[open] summary svg': { transform: 'rotate(180deg)' },
             '& summary::-webkit-details-marker': { display: 'none' },
           }}
@@ -151,23 +126,21 @@ export function FaqList({ faqs }: { faqs: Faq[] }) {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              gap: 1,
-              minHeight: 48,
-              px: 2,
+              gap: 2,
+              minHeight: 60,
               py: 1.5,
-              fontWeight: 600,
-              fontSize: '1rem',
-              '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2, borderRadius: 2 },
-              '& svg': { transition: 'transform 200ms ease', flexShrink: 0 },
+              color: t.ink,
+              '&:focus-visible': { outline: t.focusOutline, outlineOffset: '2px' },
+              '& svg': { transition: 'transform 200ms ease', flexShrink: 0, color: t.inkMuted },
               '@media (prefers-reduced-motion: reduce)': { '& svg': { transition: 'none' } },
             }}
           >
-            <Box component="h3" sx={{ fontSize: 'inherit', fontWeight: 'inherit', m: 0 }}>
+            <Box component="h3" sx={{ fontSize: '1.0625rem', fontWeight: 700, lineHeight: 1.4, m: 0 }}>
               {f.question}
             </Box>
             <ExpandMoreIcon aria-hidden />
           </Box>
-          <Typography sx={{ px: 2, pb: 2, lineHeight: 1.6, color: 'text.secondary' }}>{f.answer}</Typography>
+          <Typography sx={{ pr: 5, pb: 2.25, fontSize: '1rem', lineHeight: 1.6, color: t.inkMuted }}>{f.answer}</Typography>
         </Box>
       ))}
     </Box>
@@ -180,8 +153,8 @@ export interface LinkItem {
   hint?: string;
 }
 
-/** A wrap of large, tappable links (nearby cities, related pages). */
-export function LinkGrid({ items }: { items: LinkItem[] }) {
+/** A wrap of large, tappable links (nearby cities, related pages). Hover = gold border. */
+export function LinkGrid({ items, columnMin = 220 }: { items: LinkItem[]; columnMin?: number }) {
   return (
     <Box
       component="ul"
@@ -190,7 +163,7 @@ export function LinkGrid({ items }: { items: LinkItem[] }) {
         p: 0,
         m: 0,
         display: 'grid',
-        gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr', md: '1fr 1fr 1fr' },
+        gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${columnMin}px), 1fr))`,
         gap: 1,
       }}
     >
@@ -204,32 +177,33 @@ export function LinkGrid({ items }: { items: LinkItem[] }) {
               alignItems: 'center',
               justifyContent: 'space-between',
               gap: 1,
+              height: '100%',
+              boxSizing: 'border-box',
               minHeight: 48,
-              px: 2,
+              px: 1.75,
               py: 1,
-              border: '1px solid',
-              borderColor: 'divider',
-              borderRadius: 2,
-              color: 'text.primary',
+              border: `1px solid ${t.line}`,
+              borderRadius: `${t.radius}px`,
+              color: t.ink,
               textDecoration: 'none',
-              bgcolor: 'background.paper',
-              transition: 'border-color 150ms ease, background-color 150ms ease',
-              '&:hover': { borderColor: 'primary.main', bgcolor: 'action.hover' },
-              '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+              bgcolor: t.surface,
+              transition: 'border-color 150ms ease',
+              '&:hover': { borderColor: t.gold500, color: t.ink },
+              '&:focus-visible': { outline: t.focusOutline, outlineOffset: '2px' },
               '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
             }}
           >
             <Box sx={{ minWidth: 0 }}>
-              <Typography component="span" sx={{ fontWeight: 600, display: 'block' }}>
+              <Typography component="span" sx={{ fontWeight: 600, fontSize: '0.9375rem', display: 'block' }}>
                 {it.label}
               </Typography>
               {it.hint && (
-                <Typography component="span" sx={{ fontSize: '0.875rem', color: 'text.secondary', display: 'block' }}>
+                <Typography component="span" sx={{ fontSize: '0.8125rem', color: t.inkMuted, display: 'block' }}>
                   {it.hint}
                 </Typography>
               )}
             </Box>
-            <ChevronRightIcon aria-hidden sx={{ color: 'text.secondary', flexShrink: 0 }} />
+            <ChevronRightIcon aria-hidden sx={{ fontSize: 18, color: t.inkMuted, flexShrink: 0 }} />
           </Box>
         </Box>
       ))}
@@ -261,35 +235,62 @@ export function StickyCta({
         gap: 1,
         p: 1.5,
         pb: 'calc(12px + env(safe-area-inset-bottom))',
-        bgcolor: 'background.paper',
-        borderTop: '1px solid',
-        borderColor: 'divider',
+        bgcolor: t.surface,
+        borderTop: `1px solid ${t.line}`,
         zIndex: 1100,
-        boxShadow: '0 -2px 8px rgba(0,0,0,0.08)',
       }}
     >
-      <Button variant="outlined" component={Link} href={demoHref} sx={{ flex: 1, minHeight: 48, fontWeight: 600 }}>
+      <CtaButton variant="outline" href={demoHref} size="md" endIcon={null} sx={{ flex: 1 }}>
         Free demo class
-      </Button>
+      </CtaButton>
       {whatsapp ? (
         <WhatsAppLinkButton city={whatsapp.city} citySlug={whatsapp.citySlug} label="WhatsApp" sx={{ flex: 1 }} />
       ) : (
-        <Button variant="contained" component={Link} href={applyHref} sx={{ flex: 1, minHeight: 48, fontWeight: 600 }}>
+        <CtaButton href={applyHref} size="md" endIcon={null} sx={{ flex: 1 }}>
           Apply now
-        </Button>
+        </CtaButton>
       )}
     </Box>
   );
 }
 
-/** "Last updated 3 October 2026. Sources: ..." Shown under the answer on location pages. */
+/** "Last updated 3 October 2026. Sources: ..." Shown under the answer on location pages (dark hero or light body). */
 export function UpdatedLine({ iso, sources }: { iso: string; sources: string[] }) {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return null;
   const label = d.toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Asia/Kolkata' });
   return (
-    <Typography sx={{ mt: 1, fontSize: '0.875rem', color: 'text.secondary' }}>
+    <Typography sx={{ m: 0, fontSize: '0.875rem', lineHeight: 1.5, color: `var(--ds-muted, ${t.inkMuted})` }}>
       Last updated <time dateTime={d.toISOString().slice(0, 10)}>{label}</time>.{sources.length ? ` Sources: ${sources.join(', ')}.` : ''}
     </Typography>
+  );
+}
+
+/** The sticky lead card in the T6 aside: 3px gold top, title, one line, then the form. */
+export function LeadCard({ id, title, body, children }: { id?: string; title: string; body?: string; children: ReactNode }) {
+  return (
+    <Box
+      component="section"
+      id={id}
+      aria-labelledby={id ? `${id}-title` : undefined}
+      sx={{
+        scrollMarginTop: { xs: 96, md: 88 },
+        bgcolor: t.surface,
+        border: `1px solid ${t.line}`,
+        borderTop: `3px solid ${t.gold500}`,
+        borderRadius: `${t.radius}px`,
+        p: { xs: 2.5, sm: 3 },
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1.5,
+        color: t.ink,
+      }}
+    >
+      <Typography id={id ? `${id}-title` : undefined} component="h2" sx={{ m: 0, fontSize: '1.1875rem', fontWeight: 700, lineHeight: 1.3 }}>
+        {title}
+      </Typography>
+      {body && <Typography sx={{ m: 0, fontSize: '0.875rem', lineHeight: 1.5, color: t.inkMuted }}>{body}</Typography>}
+      {children}
+    </Box>
   );
 }

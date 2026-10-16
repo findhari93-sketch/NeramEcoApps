@@ -1,17 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  Box,
-  Button,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Paper,
-  Select,
-  Typography,
-} from '@neram/ui';
-import Link from 'next/link';
+import { FormControl, FormHelperText, InputLabel, MenuItem, Select } from '@neram/ui';
+import { CtaButton, QuickCheck, QuickCheckResult } from '@/design-system';
+
+const FULL_TOOL = 'https://app.neramclasses.com/tools/nata/cost-calculator';
 
 const FEE_BY_TYPE: Record<string, string> = {
   'Government': '₹20,000 to ₹1,50,000 per year',
@@ -38,24 +31,11 @@ export default function CostCalculatorTeaser() {
   }
 
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: { xs: 3, sm: 4 },
-        border: '1px solid #E0E0E0',
-        borderRadius: 2,
-      }}
-    >
-      <Typography
-        component="h2"
-        sx={{ fontWeight: 700, fontSize: { xs: '1.25rem', sm: '1.5rem' }, mb: 2 }}
-      >
-        Quick Fee Estimate
-      </Typography>
-
-      <FormControl fullWidth sx={{ mb: 2 }} error={!!error}>
-        <InputLabel>College Type</InputLabel>
+    <QuickCheck title="Quick fee estimate" headingId="cost-calculator-quick-check">
+      <FormControl fullWidth error={!!error}>
+        <InputLabel id="cost-calculator-type-label">College Type</InputLabel>
         <Select
+          labelId="cost-calculator-type-label"
           value={collegeType}
           label="College Type"
           onChange={(e) => {
@@ -63,7 +43,7 @@ export default function CostCalculatorTeaser() {
             setError('');
             setResult(null);
           }}
-          sx={{ minHeight: 48 }}
+          sx={{ minHeight: 48, fontSize: '1rem' }}
         >
           {COLLEGE_TYPES.map((type) => (
             <MenuItem key={type} value={type}>
@@ -71,59 +51,22 @@ export default function CostCalculatorTeaser() {
             </MenuItem>
           ))}
         </Select>
-        {error && (
-          <Typography sx={{ fontSize: '0.75rem', color: 'error.main', mt: 0.5, ml: 1.75 }}>
-            {error}
-          </Typography>
-        )}
+        {error && <FormHelperText>{error}</FormHelperText>}
       </FormControl>
 
-      <Button
-        variant="contained"
-        fullWidth
-        onClick={handleCalculate}
-        sx={{
-          minHeight: 48,
-          fontWeight: 700,
-          fontSize: '1rem',
-          mb: result ? 3 : 0,
-        }}
-      >
+      <CtaButton variant="navy" fullWidth onClick={handleCalculate} endIcon={null}>
         Show Fee Range
-      </Button>
+      </CtaButton>
 
-      {result && (
-        <Box>
-          <Typography
-            sx={{
-              fontSize: { xs: '1rem', sm: '1.1rem' },
-              fontWeight: 600,
-              color: 'text.primary',
-              mb: 2,
-              p: 2,
-              bgcolor: '#E8F5E9',
-              borderRadius: 1,
-              lineHeight: 1.6,
-            }}
-          >
-            Average annual fee for {collegeType}: {result}
-          </Typography>
-
-          <Button
-            component={Link}
-            href="https://app.neramclasses.com/tools/nata/cost-calculator"
-            variant="outlined"
-            fullWidth
-            sx={{
-              minHeight: 48,
-              fontWeight: 700,
-              fontSize: '0.95rem',
-            }}
-          >
-            Calculate total 5-year education cost
-          </Button>
-        </Box>
+      {result ? (
+        <QuickCheckResult label={`Average annual fee for ${collegeType}`} summary={result} />
+      ) : (
+        <QuickCheckResult label="Average annual fee" summary="Pick a college type to see the range" />
       )}
-    </Paper>
+
+      <CtaButton href={FULL_TOOL} external fullWidth>
+        Calculate total 5-year education cost
+      </CtaButton>
+    </QuickCheck>
   );
 }

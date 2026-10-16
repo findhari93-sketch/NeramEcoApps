@@ -19,6 +19,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import SmartToyIcon from '@mui/icons-material/SmartToy';
 import PersonIcon from '@mui/icons-material/Person';
 import ChatIcon from '@mui/icons-material/Chat';
+import { tokens } from '@/design-system';
 import HumanHelpBar from '@/components/aintra/HumanHelpBar';
 import VoiceInputButton from '@/components/aintra/VoiceInputButton';
 
@@ -44,8 +45,8 @@ export interface AintraTopicChatProps {
   disclaimerSource?: string;
 }
 
-const DEFAULT_PRIMARY = '#1d4ed8';
-const DEFAULT_PRIMARY_DARK = '#1e40af';
+const DEFAULT_PRIMARY = tokens.navy900;
+const DEFAULT_PRIMARY_DARK = tokens.navy700;
 
 export default function AintraTopicChat({
   topic,
@@ -58,7 +59,7 @@ export default function AintraTopicChat({
   primaryColor = DEFAULT_PRIMARY,
   primaryColorDark = DEFAULT_PRIMARY_DARK,
   bubbleBgUser,
-  bubbleBgAssistant = '#f8fafc',
+  bubbleBgAssistant = tokens.ground,
   iconBgAssistant,
   storageKey,
   disclaimerSource = 'tneaonline.org',
@@ -150,7 +151,7 @@ export default function AintraTopicChat({
           bgcolor: primaryColor,
           color: 'white',
           '&:hover': { bgcolor: primaryColorDark },
-          boxShadow: `0 4px 20px ${primaryColor}66`,
+          boxShadow: '0 4px 12px rgba(6,13,31,0.24)',
           width: 56,
           height: 56,
         }}
@@ -259,7 +260,7 @@ export default function AintraTopicChat({
                           : '12px 12px 12px 4px',
                       bgcolor: msg.role === 'user' ? userBubbleBg : bubbleBgAssistant,
                       color: msg.role === 'user' ? 'white' : 'text.primary',
-                      border: msg.role === 'assistant' ? '1px solid #e2e8f0' : 'none',
+                      border: msg.role === 'assistant' ? `1px solid ${tokens.line}` : 'none',
                     }}
                   >
                     <Typography
@@ -275,7 +276,7 @@ export default function AintraTopicChat({
                         width: 24,
                         height: 24,
                         borderRadius: '50%',
-                        bgcolor: '#dbeafe',
+                        bgcolor: tokens.surfaceHover,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -311,7 +312,7 @@ export default function AintraTopicChat({
                       py: 1,
                       borderRadius: '12px 12px 12px 4px',
                       bgcolor: bubbleBgAssistant,
-                      border: '1px solid #e2e8f0',
+                      border: `1px solid ${tokens.line}`,
                       display: 'flex',
                       alignItems: 'center',
                       gap: 0.5,
@@ -396,7 +397,7 @@ export default function AintraTopicChat({
                   height: 40,
                   flexShrink: 0,
                   '&:hover': { bgcolor: primaryColorDark },
-                  '&.Mui-disabled': { bgcolor: '#e2e8f0', color: '#94a3b8' },
+                  '&.Mui-disabled': { bgcolor: tokens.line, color: tokens.inkMuted },
                 }}
               >
                 <SendIcon sx={{ fontSize: 18 }} />

@@ -3,16 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
-import {
-  Box,
-  Container,
-  Typography,
-  Grid,
-  Button,
-  Chip,
-  CircularProgress,
-  Alert,
-} from '@neram/ui';
+import { Box, Container, Typography, Grid, Skeleton, Alert } from '@neram/ui';
+import { CtaButton, brandColors, tokens as t, v } from '@/design-system';
 import VideoCard from './VideoCard';
 import YouTubeSubscribeModal from './YouTubeSubscribeModal';
 
@@ -34,8 +26,22 @@ interface ChannelStats {
 
 const YOUTUBE_CHANNEL_URL = 'https://www.youtube.com/@neramclassesnata';
 
+const YOUTUBE_PATH =
+  'M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z';
+
+/** Stat pill on the dark band: 100px radius, gold tint, never a glow. */
+const pillSx = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  minHeight: 36,
+  px: 2,
+  borderRadius: `${t.radiusPill}px`,
+  fontSize: '1rem',
+  fontWeight: 600,
+} as const;
+
 export default function YouTubeSection() {
-  const t = useTranslations('youtube');
+  const tr = useTranslations('youtube');
   const router = useRouter();
 
   const [stats, setStats] = useState<ChannelStats | null>(null);
@@ -70,16 +76,17 @@ export default function YouTubeSection() {
 
   if (loading) {
     return (
-      <Box
-        sx={{
-          py: { xs: 6, md: 10 },
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          minHeight: 400,
-        }}
-      >
-        <CircularProgress sx={{ color: 'primary.main' }} />
+      <Box sx={{ py: { xs: 6, md: 10 }, minHeight: 400 }} aria-busy="true" aria-label="Loading YouTube videos">
+        <Container maxWidth="lg">
+          <Skeleton variant="rounded" width={280} height={40} sx={{ mx: 'auto', mb: 6, borderRadius: `${t.radius}px` }} />
+          <Grid container spacing={3}>
+            {[1, 2, 3].map((i) => (
+              <Grid item xs={12} sm={6} md={4} key={i}>
+                <Skeleton variant="rounded" height={240} sx={{ borderRadius: `${t.radius}px` }} />
+              </Grid>
+            ))}
+          </Grid>
+        </Container>
       </Box>
     );
   }
@@ -99,14 +106,6 @@ export default function YouTubeSection() {
       sx={{
         py: { xs: 6, md: 10 },
         position: 'relative',
-        '&::before': {
-          content: '""',
-          position: 'absolute',
-          inset: 0,
-          background:
-            'radial-gradient(ellipse at 80% 20%, rgba(26,143,255,0.05) 0%, transparent 50%)',
-          pointerEvents: 'none',
-        },
       }}
     >
       <Container maxWidth="lg" sx={{ position: 'relative' }}>
@@ -124,9 +123,10 @@ export default function YouTubeSection() {
             <Box
               component="svg"
               viewBox="0 0 24 24"
-              sx={{ width: 48, height: 48, fill: '#FF0000' }}
+              aria-hidden
+              sx={{ width: 48, height: 48, fill: brandColors.youtube }}
             >
-              <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+              <path d={YOUTUBE_PATH} />
             </Box>
           </Box>
 
@@ -134,45 +134,33 @@ export default function YouTubeSection() {
             variant="h2"
             component="h2"
             gutterBottom
-            sx={{ fontWeight: 700 }}
+            sx={{ fontWeight: 700, color: v.fg }}
           >
-            {t('title')}
+            {tr('title')}
           </Typography>
 
           <Typography
             variant="body1"
-            color="text.secondary"
-            sx={{ mb: 3, maxWidth: 600, mx: 'auto' }}
+            sx={{ mb: 3, maxWidth: 600, mx: 'auto', color: v.muted }}
           >
-            {t('subtitle')}
+            {tr('subtitle')}
           </Typography>
 
           {/* Channel Stats Badges */}
           {stats && (
             <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, flexWrap: 'wrap', mb: 4 }}>
-              <Chip
-                label={`${stats.subscriberCount} ${t('subscribers')}`}
-                sx={{
-                  fontSize: '1rem',
-                  py: 2.5,
-                  px: 1,
-                  fontWeight: 600,
-                  bgcolor: 'rgba(255,0,0,0.15)',
-                  color: '#FF4444',
-                  border: '1px solid rgba(255,0,0,0.3)',
-                }}
-              />
-              <Chip
-                label={`${stats.videoCount}+ ${t('videos')}`}
-                variant="outlined"
-                sx={{
-                  fontSize: '1rem',
-                  py: 2.5,
-                  px: 1,
-                  borderColor: 'rgba(232,160,32,0.4)',
-                  color: '#e8a020',
-                }}
-              />
+              <Box component="span" sx={{ ...pillSx, gap: 1, color: v.fg, border: `1px solid ${v.line}` }}>
+                <Box component="svg" viewBox="0 0 24 24" aria-hidden sx={{ width: 20, height: 20, fill: brandColors.youtube }}>
+                  <path d={YOUTUBE_PATH} />
+                </Box>
+                {`${stats.subscriberCount} ${tr('subscribers')}`}
+              </Box>
+              <Box
+                component="span"
+                sx={{ ...pillSx, color: t.gold300, bgcolor: t.goldTintBg, border: `1px solid ${t.goldTintBorder}` }}
+              >
+                {`${stats.videoCount}+ ${tr('videos')}`}
+              </Box>
             </Box>
           )}
         </Box>
@@ -193,71 +181,41 @@ export default function YouTubeSection() {
           sx={{
             textAlign: 'center',
             p: { xs: 3, md: 4 },
-            borderRadius: 2,
-            bgcolor: 'rgba(11,22,41,0.75)',
-            backdropFilter: 'blur(12px)',
-            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: `${t.radius}px`,
+            bgcolor: v.card,
+            border: `1px solid ${v.line}`,
           }}
         >
-          <Typography variant="h5" component="h3" gutterBottom sx={{ fontWeight: 600 }}>
-            {t('ctaTitle')}
+          <Typography variant="h5" component="h3" gutterBottom sx={{ fontWeight: 600, color: v.fg }}>
+            {tr('ctaTitle')}
           </Typography>
-          <Typography color="text.secondary" sx={{ mb: 3 }}>
-            {t('ctaDescription')}
+          <Typography sx={{ mb: 3, color: v.muted }}>
+            {tr('ctaDescription')}
           </Typography>
 
-          <Button
-            variant="contained"
-            color="error"
-            size="large"
+          <CtaButton
+            variant="primary"
             onClick={() => setSubscribeModalOpen(true)}
-            sx={{
-              px: 4,
-              py: 1.5,
-              fontSize: '1.1rem',
-              fontWeight: 600,
-              borderRadius: 1,
-              textTransform: 'none',
-              bgcolor: '#CC0000',
-              boxShadow: '0 4px 14px rgba(255, 0, 0, 0.3)',
-              '&:hover': {
-                bgcolor: '#FF0000',
-                boxShadow: '0 6px 20px rgba(255, 0, 0, 0.4)',
-              },
-            }}
+            endIcon={null}
             startIcon={
-              <Box
-                component="svg"
-                viewBox="0 0 24 24"
-                sx={{ width: 24, height: 24, fill: 'currentColor' }}
-              >
-                <path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z" />
+              <Box component="svg" viewBox="0 0 24 24" aria-hidden sx={{ width: 24, height: 24, fill: 'currentColor' }}>
+                <path d={YOUTUBE_PATH} />
               </Box>
             }
           >
-            {t('subscribeButton')}
-          </Button>
+            {tr('subscribeButton')}
+          </CtaButton>
 
-          <Typography
-            variant="body2"
-            color="text.secondary"
-            sx={{ mt: 2, fontStyle: 'italic' }}
-          >
-            {t('rewardNote')}
+          <Typography variant="body2" sx={{ mt: 2, color: v.muted }}>
+            {tr('rewardNote')}
           </Typography>
         </Box>
 
         {/* View Channel Link */}
         <Box sx={{ textAlign: 'center', mt: 4 }}>
-          <Button
-            variant="text"
-            href={YOUTUBE_CHANNEL_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            sx={{ textTransform: 'none', color: 'primary.main' }}
-          >
-            {t('viewChannel')}
-          </Button>
+          <CtaButton variant="link" href={YOUTUBE_CHANNEL_URL} external size="md">
+            {tr('viewChannel')}
+          </CtaButton>
         </Box>
       </Container>
 

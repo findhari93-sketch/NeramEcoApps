@@ -1,6 +1,7 @@
 'use client';
 
 import { Box, Container, Typography, Button, Stack, Paper } from '@mui/material';
+import { alpha } from '@mui/material/styles';
 import SearchIcon from '@mui/icons-material/Search';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import SchoolIcon from '@mui/icons-material/School';
@@ -8,6 +9,7 @@ import PublicIcon from '@mui/icons-material/Public';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import LockOpenIcon from '@mui/icons-material/LockOpen';
 import { Link } from '@/i18n/routing';
+import { tokens } from '@/design-system';
 
 interface CollegeHubHeroProps {
   stats: {
@@ -30,13 +32,13 @@ export default function CollegeHubHero({ stats }: CollegeHubHeroProps) {
       sx={{
         position: 'relative',
         overflow: 'hidden',
-        bgcolor: '#f8fafc',
+        bgcolor: tokens.ground,
         borderBottom: '1px solid',
-        borderColor: 'divider',
+        borderColor: tokens.line,
         // Subtle grid pattern
         backgroundImage: `
-          linear-gradient(rgba(148, 163, 184, 0.06) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(148, 163, 184, 0.06) 1px, transparent 1px)
+          linear-gradient(${alpha(tokens.ink, 0.04)} 1px, transparent 1px),
+          linear-gradient(90deg, ${alpha(tokens.ink, 0.04)} 1px, transparent 1px)
         `,
         backgroundSize: '32px 32px',
       }}
@@ -60,11 +62,11 @@ export default function CollegeHubHero({ stats }: CollegeHubHeroProps) {
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 0.75,
-                bgcolor: '#ede9fe',
-                color: '#6d28d9',
+                bgcolor: tokens.goldTintBg,
+                color: tokens.gold800,
                 px: 1.5,
                 py: 0.5,
-                borderRadius: '20px',
+                borderRadius: `${tokens.radiusPill}px`,
                 fontSize: '0.75rem',
                 fontWeight: 700,
                 letterSpacing: '0.02em',
@@ -82,7 +84,7 @@ export default function CollegeHubHero({ stats }: CollegeHubHeroProps) {
                 fontWeight: 800,
                 lineHeight: 1.15,
                 letterSpacing: '-0.02em',
-                color: '#0f172a',
+                color: tokens.ink,
                 mb: 2,
               }}
             >
@@ -90,11 +92,7 @@ export default function CollegeHubHero({ stats }: CollegeHubHeroProps) {
               <br />
               <Box
                 component="span"
-                sx={{
-                  background: 'linear-gradient(135deg, #2563eb, #7c3aed)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                }}
+                sx={{ color: tokens.gold800 }}
               >
                 College Discovery Platform
               </Box>
@@ -103,7 +101,7 @@ export default function CollegeHubHero({ stats }: CollegeHubHeroProps) {
             <Typography
               variant="body1"
               sx={{
-                color: '#475569',
+                color: tokens.inkMuted,
                 fontSize: { xs: '0.95rem', sm: '1.05rem' },
                 lineHeight: 1.65,
                 maxWidth: 520,
@@ -123,14 +121,14 @@ export default function CollegeHubHero({ stats }: CollegeHubHeroProps) {
                 size="large"
                 startIcon={<SearchIcon />}
                 sx={{
-                  borderRadius: '10px',
+                  borderRadius: 1,
                   textTransform: 'none',
                   fontWeight: 700,
                   fontSize: '0.95rem',
                   px: 3,
                   py: 1.25,
-                  boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)',
-                  '&:hover': { boxShadow: '0 6px 20px rgba(37, 99, 235, 0.4)' },
+                  boxShadow: 'none',
+                  '&:hover': { boxShadow: 'none' },
                 }}
               >
                 Explore Colleges
@@ -142,15 +140,15 @@ export default function CollegeHubHero({ stats }: CollegeHubHeroProps) {
                 size="large"
                 startIcon={<CompareArrowsIcon />}
                 sx={{
-                  borderRadius: '10px',
+                  borderRadius: 1,
                   textTransform: 'none',
                   fontWeight: 600,
                   fontSize: '0.95rem',
                   px: 3,
                   py: 1.25,
-                  borderColor: '#cbd5e1',
-                  color: '#334155',
-                  '&:hover': { borderColor: '#94a3b8', bgcolor: 'rgba(0,0,0,0.02)' },
+                  borderColor: tokens.lineStrong,
+                  color: tokens.ink,
+                  '&:hover': { borderColor: tokens.navy900, bgcolor: tokens.navy900, color: tokens.paper },
                 }}
               >
                 Compare Colleges
@@ -173,11 +171,11 @@ export default function CollegeHubHero({ stats }: CollegeHubHeroProps) {
                     display: 'flex',
                     alignItems: 'center',
                     gap: 0.75,
-                    color: '#64748b',
+                    color: tokens.inkMuted,
                   }}
                 >
-                  <Box sx={{ color: '#2563eb', display: 'flex' }}>{item.icon}</Box>
-                  <Typography variant="body2" sx={{ fontWeight: 600, color: '#334155', fontSize: '0.8rem' }}>
+                  <Box sx={{ color: tokens.gold800, display: 'flex' }}>{item.icon}</Box>
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: tokens.ink, fontSize: '0.8rem' }}>
                     {item.getLabel(stats)}
                   </Typography>
                 </Box>
@@ -200,8 +198,8 @@ export default function CollegeHubHero({ stats }: CollegeHubHeroProps) {
                 width: 300,
                 height: 300,
                 borderRadius: '50%',
-                bgcolor: '#eef2ff',
-                border: '2px dashed #c7d2fe',
+                bgcolor: tokens.surface,
+                border: `2px dashed ${tokens.lineStrong}`,
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
@@ -209,11 +207,11 @@ export default function CollegeHubHero({ stats }: CollegeHubHeroProps) {
                 gap: 1,
               }}
             >
-              <SchoolIcon sx={{ fontSize: 64, color: '#818cf8' }} />
-              <Typography variant="h6" sx={{ color: '#4f46e5', fontWeight: 700, fontSize: '1rem' }}>
+              <SchoolIcon sx={{ fontSize: 64, color: tokens.gold800 }} />
+              <Typography variant="h6" sx={{ color: tokens.ink, fontWeight: 700, fontSize: '1rem' }}>
                 {stats.totalColleges} Colleges
               </Typography>
-              <Typography variant="caption" sx={{ color: '#6366f1' }}>
+              <Typography variant="caption" sx={{ color: tokens.inkMuted }}>
                 Architecture &amp; Design
               </Typography>
             </Paper>

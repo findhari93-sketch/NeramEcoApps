@@ -56,7 +56,7 @@ export default function Page({ params: { locale } }: { params: { locale: string 
         { name: `NATA Coaching ${neighborhood.name}` },
       ])} />
       <JsonLd data={generateFAQSchema(faqs)} />
-      <ChennaiNeighborhoodPage neighborhood={neighborhood} />
+      <ChennaiNeighborhoodPage neighborhood={neighborhood} faqs={faqs} />
     </>
   );
 }

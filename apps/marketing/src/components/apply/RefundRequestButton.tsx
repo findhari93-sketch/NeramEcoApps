@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Button, CircularProgress } from '@neram/ui';
+import { Box, Typography } from '@neram/ui';
+import { tokens as t } from '@/design-system';
 import { useFirebaseAuth } from '@neram/auth';
 import RefundRequestDialog from './RefundRequestDialog';
 import type { RefundRequest } from '@neram/database';
@@ -17,6 +18,8 @@ interface RefundRequestButtonProps {
   leadProfileId: string;
   /** Called when refund request is successfully submitted */
   onRequestSubmitted?: () => void;
+  /** The quiet sentence before the link. */
+  lead?: string;
 }
 
 export default function RefundRequestButton({
@@ -25,6 +28,7 @@ export default function RefundRequestButton({
   paymentAmount,
   leadProfileId,
   onRequestSubmitted,
+  lead = 'Changed your mind? Refunds can be requested within 24 hours of payment.',
 }: RefundRequestButtonProps) {
   const { user } = useFirebaseAuth();
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -56,7 +60,7 @@ export default function RefundRequestButton({
           }
         }
       } catch {
-        // Ignore errors — just show the button
+        // Ignore errors, just show the button
       } finally {
         setLoading(false);
       }
@@ -70,17 +74,47 @@ export default function RefundRequestButton({
   if (!isWithinWindow) return null;
   if (existingRequest) return null;
 
+  // A 13px muted line with an underlined text link, never a red button.
   return (
     <>
-      <Button
-        variant="outlined"
-        color="error"
-        size="small"
-        onClick={() => setDialogOpen(true)}
-        sx={{ mt: 1, fontWeight: 600 }}
+      <Typography
+        component="p"
+        sx={{
+          m: 0,
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          columnGap: 0.75,
+          fontSize: 13,
+          lineHeight: 1.45,
+          color: t.inkMuted,
+        }}
       >
-        Request Refund
-      </Button>
+        <span>{lead}</span>
+        <Box
+          component="button"
+          type="button"
+          onClick={() => setDialogOpen(true)}
+          aria-haspopup="dialog"
+          sx={{
+            minHeight: 44,
+            p: 0,
+            border: 0,
+            bgcolor: 'transparent',
+            font: 'inherit',
+            fontSize: 13,
+            fontWeight: 600,
+            color: t.ink,
+            textDecoration: 'underline',
+            textUnderlineOffset: '2px',
+            cursor: 'pointer',
+            '&:hover': { color: t.navy900 },
+            '&:focus-visible': { outline: t.focusOutline, outlineOffset: '2px' },
+          }}
+        >
+          Request a refund
+        </Box>
+      </Typography>
 
       <RefundRequestDialog
         open={dialogOpen}

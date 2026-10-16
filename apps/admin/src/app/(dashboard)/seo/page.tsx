@@ -45,7 +45,8 @@ import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip as
 import { EmptyState, OpsPageHeader, OpsSkeleton, StatusChip, TARGET_44, type Tone } from '@/components/ops/OpsUi';
 import { AdminOnly, KpiCard } from '@/components/marketing-ai/Parts';
 import { api, num, shortDate, when } from '@/components/marketing-ai/format';
-import { CATEGORY_LABEL, IgnoreDialog, ImportDialog, RULES, SeverityChip, StatCard, UrlDrawer, VerdictChip, shortUrl } from '@/components/seo-audit/Parts';
+import { CATEGORY_LABEL, IgnoreDialog, ImportDialog, OwnerChip, PASTE_IN_CLAUDE, RULES, SeverityChip, StatCard, UrlDrawer, VerdictChip, copyText, seoFixCommand, shortUrl } from '@/components/seo-audit/Parts';
+import { OWNER_LABEL, ruleOwner, type RuleOwner } from '@/lib/seo-audit/rule-guide';
 
 const TABS = ['issues', 'search', 'urls', 'runs'] as const;
 type TabKey = (typeof TABS)[number];
@@ -300,7 +301,7 @@ export default function SeoHealthPage() {
         </Box>
       </Paper>
 
-      <UrlDrawer url={drawerUrl} onClose={() => setDrawerUrl(null)} onIgnore={setIgnoring} />
+      <UrlDrawer url={drawerUrl} onClose={() => setDrawerUrl(null)} onIgnore={setIgnoring} setToast={setToast} />
       <IgnoreDialog
         finding={ignoring}
         onClose={() => setIgnoring(null)}
@@ -519,6 +520,8 @@ function IssuesTab({
   const [category, setCategory] = useState('');
   // Info items (long titles, thin pages) are content work, so they sit behind the filter.
   const [severity, setSeverity] = useState('issues');
+  // Who clears it: a code change, Google, or a decision. Filtered here; the rows are already loaded.
+  const [owner, setOwner] = useState<'' | RuleOwner>('');
   const [rows, setRows] = useState<any[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -537,6 +540,10 @@ function IssuesTab({
     };
   }, [status, category, severity, reload]);
 
+  const visible = useMemo(() => (rows && owner ? rows.filter((r) => ruleOwner(r.rule_id) === owner) : rows), [rows, owner]);
+  const fixCommand = status === 'open' && visible ? seoFixCommand(visible) : null;
+  const codeCount = visible ? visible.filter((r) => ruleOwner(r.rule_id) === 'code').length : 0;
+
   const reopen = async (id: string) => {
     try {
       await api('/api/seo-audit/findings', { method: 'PATCH', body: JSON.stringify({ id, action: 'reopen' }) });
@@ -551,6 +558,7 @@ function IssuesTab({
     () => [
       { field: 'severity', headerName: 'Severity', width: 120, sortComparator: (a, b) => ['critical', 'high', 'medium', 'info'].indexOf(a) - ['critical', 'high', 'medium', 'info'].indexOf(b), renderCell: (p) => <SeverityChip severity={p.value} /> },
       { field: 'rule_id', headerName: 'Check', width: 170, valueGetter: (p) => `${p.row.rule_id} ${RULES[p.row.rule_id]?.name ?? ''}` },
+      { field: 'owner', headerName: 'Who fixes it', width: 150, valueGetter: (p) => OWNER_LABEL[ruleOwner(p.row.rule_id)], renderCell: (p) => <OwnerChip owner={ruleOwner(p.row.rule_id)} /> },
       { field: 'title', headerName: 'Issue', flex: 1, minWidth: 260 },
       {
         field: 'url',
@@ -639,13 +647,48 @@ function IssuesTab({
             <MenuItem value="info">Info</MenuItem>
           </Select>
         </FormControl>
+        <FormControl size="small" sx={{ minWidth: 170 }}>
+          <InputLabel id="seo-owner">Who fixes it</InputLabel>
+          <Select labelId="seo-owner" label="Who fixes it" value={owner} onChange={(e) => setOwner(e.target.value as '' | RuleOwner)}>
+            <MenuItem value="">Everyone</MenuItem>
+            <MenuItem value="code">Claude Code</MenuItem>
+            <MenuItem value="google">Google</MenuItem>
+            <MenuItem value="you">You</MenuItem>
+          </Select>
+        </FormControl>
+        {fixCommand && (
+          <Button
+            variant="contained"
+            startIcon={<ContentCopyIcon />}
+            onClick={() => copyText(fixCommand, `Copied "${fixCommand}". ${PASTE_IN_CLAUDE}`, setToast)}
+            sx={TARGET_44}
+          >
+            Copy for Claude Code ({codeCount})
+          </Button>
+        )}
         <Typography variant="body2" color="text.secondary" sx={{ ml: 'auto' }}>
           Click a row for the page details and how to fix it.
         </Typography>
       </Box>
 
+      {status === 'open' && owner === 'google' && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Nothing to change in code. Google has to crawl these pages, and Ask Google sends them every morning. They close by themselves once Google indexes them.
+        </Alert>
+      )}
+      {status === 'open' && owner === 'you' && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          These need a decision (which page to keep, what to write, a server error to check). Click a row for what to do.
+        </Alert>
+      )}
+      {status === 'open' && owner === 'code' && fixCommand && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Copy for Claude Code, paste it into Claude Code, then say deploy. After it is live, run Check my fixes and these move to Fixed.
+        </Alert>
+      )}
+
       {error && <Alert severity="error">{error}</Alert>}
-      {rows && rows.length === 0 && !error ? (
+      {visible && visible.length === 0 && !error ? (
         <EmptyState
           icon={CheckCircleOutlineIcon}
           title={status === 'open' ? 'Nothing to fix' : status === 'waiting' ? 'Nothing waiting on Google' : status === 'ignored' ? 'No ignored issues' : 'Nothing fixed yet'}
@@ -660,7 +703,7 @@ function IssuesTab({
       ) : (
         <Box sx={{ height: 640 }}>
           <DataGrid
-            rows={rows ?? []}
+            rows={visible ?? []}
             columns={columns}
             loading={!rows && !error}
             density="compact"

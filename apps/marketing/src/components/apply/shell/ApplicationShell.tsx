@@ -2,303 +2,277 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import { Link } from '@/i18n/routing';
-import { Box, Button, Container, Menu, MenuItem, Typography, neramTokens, neramaiArchitekLightTheme } from '@neram/ui';
-import { ThemeProvider, createTheme } from '@mui/material/styles';
+import { Box, Button, Menu, MenuItem, Typography, siteDarkTheme } from '@neram/ui';
+import { ThemeProvider } from '@mui/material/styles';
+import { useFirebaseAuth } from '@neram/auth';
 import HelpOutline from '@mui/icons-material/HelpOutline';
 import PhoneOutlined from '@mui/icons-material/PhoneOutlined';
 import MailOutline from '@mui/icons-material/MailOutline';
 import VideocamOutlined from '@mui/icons-material/VideocamOutlined';
 import LockOutlined from '@mui/icons-material/LockOutlined';
 import BrandWordmark from '@/components/brand/BrandWordmark';
+import { tokens as t } from '@/design-system';
 import { trackTaxonomyEvent } from '@/lib/funnel-tracker';
 import { useTranslations } from 'next-intl';
 import { SHELL_HEADER_HEIGHT } from './constants';
 import { ShellActionsProvider, type LoginHandler } from './ShellActionsContext';
+import { applyTheme } from './applyTheme';
 
 const OFFICE_PHONE = '+91 91761 37043';
 const OFFICE_TEL = 'tel:+919176137043';
 
-/** Inline text links, but still a 44 px target on a phone. */
-const legalLinkStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', minHeight: 44, minWidth: 44, padding: '0 8px' };
+const menuItemSx = {
+  minHeight: 52,
+  gap: 1.5,
+  px: 2,
+  fontSize: 15,
+  color: t.ink,
+  '&:not(:last-of-type)': { borderBottom: `1px solid ${t.line}` },
+  '&:hover': { bgcolor: t.ground },
+  '& svg': { fontSize: 20, color: t.inkMuted },
+} as const;
 
-const INK = '#14161b';
-const GOLD_RING = '0 0 0 3px rgba(232, 160, 32, 0.35)';
-
-/**
- * The 2026 brand theme (navy, gold, serif headings) that the homepage already
- * uses, made flat the way the Neram Apply design is: square corners, 2 px ink
- * inputs with a gold focus ring, ink segmented buttons, shadowless cards, and
- * helper text in the body face (the theme's caption is mono capitals). Also
- * ink text on the gold button (the theme's white on gold fails contrast) and
- * the `primary.50` tint the step cards reference.
- */
-const shellTheme = createTheme(neramaiArchitekLightTheme, {
-  shape: { borderRadius: 0 },
-  // The 2026 caption is mono capitals; in a form it shouts. Mono stays for eyebrows only.
-  typography: {
-    caption: {
-      fontFamily: neramaiArchitekLightTheme.typography.fontFamily,
-      fontSize: '12px',
-      lineHeight: 1.45,
-      letterSpacing: 0,
-      textTransform: 'none',
-    },
-  },
-  palette: { primary: { 50: '#fff8e8', 100: '#fdebc4' }, success: { 50: '#edf9f0' } },
-  components: {
-    MuiButton: {
-      styleOverrides: {
-        root: { borderRadius: 0 },
-        containedPrimary: {
-          color: neramTokens.navy[900],
-          boxShadow: 'none',
-          '&:hover': { background: neramTokens.gold[600], color: neramTokens.navy[900], boxShadow: 'none' },
-        },
-        // Gold text on white is 2.3:1. Text and outlined buttons stay ink; gold is for fills only.
-        textPrimary: { color: INK, '&:hover': { backgroundColor: '#f4f3ef' } },
-        outlinedPrimary: { color: INK, borderColor: INK, '&:hover': { borderColor: INK, backgroundColor: '#f4f3ef' } },
-      },
-    },
-    MuiChip: {
-      styleOverrides: { outlinedPrimary: { color: INK, borderColor: INK } },
-    },
-    MuiCheckbox: {
-      styleOverrides: { colorPrimary: { '&.Mui-checked': { color: INK } } },
-    },
-    MuiRadio: {
-      styleOverrides: { colorPrimary: { '&.Mui-checked': { color: INK } } },
-    },
-    MuiOutlinedInput: {
-      styleOverrides: {
-        root: {
-          borderRadius: 0,
-          backgroundColor: '#fff',
-          '& .MuiOutlinedInput-notchedOutline': { borderWidth: 2, borderColor: INK },
-          '&:hover:not(.Mui-disabled) .MuiOutlinedInput-notchedOutline': { borderColor: INK },
-          '&.Mui-focused': { boxShadow: GOLD_RING },
-          '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderWidth: 2, borderColor: INK },
-          '&.Mui-error .MuiOutlinedInput-notchedOutline': { borderColor: '#c62828' },
-          '&.Mui-disabled': { backgroundColor: '#f4f3ef' },
-          '&.Mui-disabled .MuiOutlinedInput-notchedOutline': { borderColor: '#d9d6cf' },
-        },
-        input: {
-          fontSize: 16,
-          padding: '12.5px 14px',
-          '&::placeholder': { color: '#6b6b6b', opacity: 1 },
-        },
-        multiline: { padding: 0 },
-      },
-    },
-    MuiFormHelperText: {
-      styleOverrides: {
-        root: {
-          fontFamily: 'inherit',
-          fontSize: 13,
-          lineHeight: 1.45,
-          letterSpacing: 0,
-          textTransform: 'none',
-          marginLeft: 0,
-          marginRight: 0,
-          marginTop: 6,
-        },
-      },
-    },
-    MuiToggleButtonGroup: {
-      styleOverrides: {
-        root: { borderRadius: 0 },
-        grouped: {
-          borderRadius: 0,
-          border: `2px solid ${INK}`,
-          '&:not(:first-of-type)': { marginLeft: -2, borderLeft: `2px solid ${INK}` },
-        },
-      },
-    },
-    MuiToggleButton: {
-      styleOverrides: {
-        root: {
-          minHeight: 48,
-          borderRadius: 0,
-          textTransform: 'none',
-          fontSize: 15,
-          fontWeight: 600,
-          color: INK,
-          backgroundColor: '#fff',
-          '&:hover': { backgroundColor: '#f4f3ef' },
-          '&.Mui-selected, &.Mui-selected:hover': { backgroundColor: INK, color: '#fff' },
-          '&.Mui-focusVisible': { boxShadow: GOLD_RING, zIndex: 1 },
-        },
-      },
-    },
-    MuiCard: {
-      styleOverrides: { root: { borderRadius: 0, boxShadow: 'none' } },
-    },
-    MuiPaper: {
-      styleOverrides: { outlined: { borderWidth: 2, borderColor: '#d9d6cf' } },
-    },
-  },
-});
-
-interface ApplicationShellProps {
-  children: React.ReactNode;
-  /** Reserved for the Nera sheet (sub-project D-B). When set, Help opens it instead of the menu. */
-  onHelp?: () => void;
-}
+const legalLinkSx = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  minHeight: 44,
+  px: 1,
+  color: t.inkMuted,
+  '&:hover': { color: t.ink },
+  '&:focus-visible': { outline: t.focusOutline, outlineOffset: '2px' },
+} as const;
 
 /**
- * The focused shell for /apply, /pay and /enroll, built like a checkout: the
- * same brand wordmark, bar height and container width as the site Header (so
- * the logo does not jump when a student taps Join Now), a quiet "Secure
- * application" cue from tablet up, one Help button, a Log in button whenever
- * the page registers one (see useShellLogin), the page, and a one-line legal
- * strip. No navigation, no footer, nothing floating. Step titles and progress
- * live inside the form (StepShell), so this component holds no form state.
- * The logo can safely leave the flow: FormContext keeps the draft.
+ * The focused shell for /apply, /pay and /enroll, built like a checkout on the
+ * site's navy header: the same wordmark, 64px bar and 1680px width as the Site
+ * Header (so the logo does not jump when a student taps Join Now), a quiet
+ * "Secure application" cue from tablet up, one "Need help?" menu, a Log in
+ * button whenever the page registers one (see useShellLogin) or the signed-in
+ * initial, the page, and a one-line legal strip. No navigation, nothing
+ * floating. The logo can safely leave the flow: FormContext keeps the draft.
  */
-export default function ApplicationShell({ children, onHelp }: ApplicationShellProps) {
-  const t = useTranslations('apply');
+export default function ApplicationShell({ children, onHelp }: { children: React.ReactNode; onHelp?: () => void }) {
+  const tr = useTranslations('apply');
+  const { user } = useFirebaseAuth();
   const [anchor, setAnchor] = useState<null | HTMLElement>(null);
   const [login, setLogin] = useState<LoginHandler | null>(null);
   const registerLogin = useCallback((handler: LoginHandler | null) => setLogin(() => handler), []);
   const shellActions = useMemo(() => ({ login, registerLogin }), [login, registerLogin]);
+  const initial = (user?.name || user?.email || '').trim().charAt(0).toUpperCase();
 
   return (
-    <ThemeProvider theme={shellTheme}>
+    <ThemeProvider theme={applyTheme}>
       <ShellActionsProvider value={shellActions}>
-        <Box sx={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default', color: 'text.primary' }}>
-          <Box
-            component="header"
-            role="banner"
-            sx={{
-              position: 'sticky',
-              top: 0,
-              zIndex: 20,
-              bgcolor: 'background.paper',
-              borderBottom: 1,
-              borderColor: 'divider',
-            }}
-          >
-            <Container maxWidth="lg">
-              <Box sx={{ height: SHELL_HEADER_HEIGHT, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2 }}>
-                <Link
+        <Box sx={{ minHeight: '100dvh', display: 'flex', flexDirection: 'column', bgcolor: t.ground, color: t.ink }}>
+          <ThemeProvider theme={siteDarkTheme}>
+            <Box
+              component="header"
+              role="banner"
+              sx={{ position: 'sticky', top: 0, zIndex: 40, bgcolor: t.navy900, color: t.paper, borderBottom: `1px solid ${t.lineDark}` }}
+            >
+              <Box
+                sx={{
+                  maxWidth: 1680,
+                  mx: 'auto',
+                  px: { xs: 2, md: 3 },
+                  boxSizing: 'border-box',
+                  height: SHELL_HEADER_HEIGHT,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                }}
+              >
+                <Box
+                  component={Link}
                   href="/"
-                  aria-label={t('shell.home')}
-                  style={{ display: 'inline-flex', alignItems: 'center', minHeight: 48, textDecoration: 'none', color: 'inherit' }}
+                  aria-label={tr('shell.home')}
+                  sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    minHeight: 48,
+                    flexShrink: 0,
+                    textDecoration: 'none',
+                    color: 'inherit',
+                    '&:focus-visible': { outline: t.focusOutline, outlineOffset: '2px' },
+                  }}
                 >
                   <BrandWordmark />
-                </Link>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0.5, sm: 1 } }}>
-                  <Box
-                    sx={{
-                      display: { xs: 'none', sm: 'flex' },
-                      alignItems: 'center',
-                      gap: 0.75,
-                      pr: 1.5,
-                      mr: 0.5,
-                      borderRight: 1,
-                      borderColor: 'divider',
-                      color: 'text.secondary',
-                    }}
-                  >
-                    <LockOutlined sx={{ fontSize: 18 }} aria-hidden />
-                    <Typography variant="body2" component="span" color="inherit">
-                      {t('shell.secure')}
-                    </Typography>
+                </Box>
+                <Box sx={{ flex: 1 }} />
+                <Box
+                  sx={{
+                    display: { xs: 'none', sm: 'flex' },
+                    alignItems: 'center',
+                    gap: 0.75,
+                    pr: 1.75,
+                    mr: 0.5,
+                    borderRight: '1px solid rgba(255,255,255,0.12)',
+                    color: t.paperMuted,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <LockOutlined sx={{ fontSize: 18 }} aria-hidden />
+                  <Typography component="span" sx={{ fontSize: 14, color: 'inherit' }}>
+                    {tr('shell.secure')}
+                  </Typography>
+                </Box>
+                <Button
+                  variant="outlined"
+                  startIcon={<HelpOutline />}
+                  onClick={(e) => (onHelp ? onHelp() : setAnchor(e.currentTarget))}
+                  aria-haspopup={onHelp ? undefined : 'menu'}
+                  aria-expanded={onHelp ? undefined : !!anchor}
+                  aria-label={tr('shell.help')}
+                  sx={{
+                    minHeight: 44,
+                    minWidth: 44,
+                    px: { xs: 1.25, sm: 1.75 },
+                    borderRadius: `${t.radius}px`,
+                    border: '1px solid rgba(245,240,232,0.24)',
+                    color: t.paper,
+                    bgcolor: 'transparent',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                    '&:hover': { borderColor: t.gold500, bgcolor: 'transparent', color: t.paper },
+                    '&.Mui-focusVisible': { outline: t.focusOutline, outlineOffset: '2px' },
+                    // A phone shows the icon only, so Log in still fits in Tamil and Malayalam.
+                    '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 }, ml: { xs: 0, sm: -0.5 }, '& svg': { fontSize: 20 } },
+                  }}
+                >
+                  <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                    {tr('shell.help')}
                   </Box>
+                </Button>
+                {login ? (
                   <Button
                     variant="text"
-                    color="inherit"
-                    startIcon={<HelpOutline />}
-                    onClick={(e) => (onHelp ? onHelp() : setAnchor(e.currentTarget))}
-                    aria-haspopup={onHelp ? undefined : 'menu'}
-                    aria-label={t('shell.help')}
+                    onClick={login}
                     sx={{
-                      minHeight: 48,
-                      minWidth: 48,
-                      px: { xs: 1, sm: 1.5 },
+                      minHeight: 44,
+                      px: 1.5,
+                      ml: 0.5,
+                      borderRadius: `${t.radius}px`,
+                      color: t.paper,
+                      fontSize: 14,
                       fontWeight: 600,
-                      // A phone shows the icon only, so Log in still fits in Tamil and Malayalam.
-                      '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 }, ml: { xs: 0, sm: -0.5 } },
+                      whiteSpace: 'nowrap',
+                      '&:hover': { bgcolor: t.lineDark, color: t.paper },
+                      '&.Mui-focusVisible': { outline: t.focusOutline, outlineOffset: '2px' },
                     }}
                   >
-                    <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
-                      {t('shell.help')}
-                    </Box>
+                    {tr('shell.logIn')}
                   </Button>
-                  <Menu anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)}>
-                    <MenuItem component="a" href={OFFICE_TEL} onClick={() => setAnchor(null)} sx={{ minHeight: 48 }}>
-                      <PhoneOutlined fontSize="small" sx={{ mr: 1.5 }} />
-                      {t('shell.callUs')} {OFFICE_PHONE}
-                    </MenuItem>
-                    <MenuItem
-                      component={Link}
-                      href="/demo-class?from=apply_help"
-                      onClick={() => {
-                        setAnchor(null);
-                        trackTaxonomyEvent('demo_entry_clicked', { from: 'apply_help' });
+                ) : (
+                  user &&
+                  initial && (
+                    <Box
+                      aria-hidden
+                      sx={{
+                        width: 40,
+                        height: 40,
+                        ml: 0.5,
+                        flexShrink: 0,
+                        borderRadius: '50%',
+                        bgcolor: 'rgba(255,255,255,0.16)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
                       }}
-                      sx={{ minHeight: 48 }}
                     >
-                      <VideocamOutlined fontSize="small" sx={{ mr: 1.5 }} />
-                      {t('shell.bookDemo')}
-                    </MenuItem>
-                    <MenuItem component={Link} href="/contact" onClick={() => setAnchor(null)} sx={{ minHeight: 48 }}>
-                      <MailOutline fontSize="small" sx={{ mr: 1.5 }} />
-                      {t('shell.contactPage')}
-                    </MenuItem>
-                  </Menu>
-                  {login && (
-                    <>
-                      <Typography
-                        variant="body2"
-                        component="span"
-                        color="text.secondary"
-                        sx={{ display: { xs: 'none', md: 'inline' }, ml: 1 }}
-                      >
-                        {t('shell.haveAccount')}
-                      </Typography>
-                      <Button
-                        variant="outlined"
-                        color="inherit"
-                        onClick={login}
+                      <Box
                         sx={{
-                          minHeight: 44,
-                          px: 2,
-                          ml: { xs: 0.5, md: 0 },
-                          borderWidth: 2,
-                          borderColor: 'text.primary',
+                          width: 32,
+                          height: 32,
+                          borderRadius: '50%',
+                          bgcolor: t.navy700,
+                          color: t.paper,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontSize: 14,
                           fontWeight: 700,
-                          '&:hover': { borderWidth: 2, borderColor: 'text.primary', bgcolor: 'text.primary', color: 'background.paper' },
                         }}
                       >
-                        {t('shell.logIn')}
-                      </Button>
-                    </>
-                  )}
-                </Box>
+                        {initial}
+                      </Box>
+                    </Box>
+                  )
+                )}
               </Box>
-            </Container>
-          </Box>
+            </Box>
+          </ThemeProvider>
+
+          <Menu
+            anchorEl={anchor}
+            open={!!anchor}
+            onClose={() => setAnchor(null)}
+            anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+            transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+            slotProps={{
+              paper: {
+                sx: {
+                  mt: 1,
+                  width: 280,
+                  maxWidth: 'calc(100vw - 32px)',
+                  borderRadius: `${t.radius}px`,
+                  border: `1px solid ${t.line}`,
+                  boxShadow: t.shadowMegaMenu,
+                },
+              },
+            }}
+            MenuListProps={{ sx: { py: 0 } }}
+          >
+            <MenuItem component="a" href={OFFICE_TEL} onClick={() => setAnchor(null)} sx={menuItemSx}>
+              <PhoneOutlined aria-hidden />
+              {tr('shell.callUs')} {OFFICE_PHONE}
+            </MenuItem>
+            <MenuItem
+              component={Link}
+              href="/demo-class?from=apply_help"
+              onClick={() => {
+                setAnchor(null);
+                trackTaxonomyEvent('demo_entry_clicked', { from: 'apply_help' });
+              }}
+              sx={menuItemSx}
+            >
+              <VideocamOutlined aria-hidden />
+              {tr('shell.bookDemo')}
+            </MenuItem>
+            <MenuItem component={Link} href="/contact" onClick={() => setAnchor(null)} sx={menuItemSx}>
+              <MailOutline aria-hidden />
+              {tr('shell.contactPage')}
+            </MenuItem>
+          </Menu>
 
           <Box component="main" sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
             {children}
           </Box>
 
-          <Box component="footer" sx={{ py: 2, px: 2, bgcolor: 'background.paper', borderTop: 1, borderColor: 'divider' }}>
-            <Container maxWidth="lg" sx={{ px: { xs: 0, sm: 1 } }}>
-              <Typography
-                variant="body2"
-                color="text.secondary"
-                component="div"
-                sx={{ display: 'flex', alignItems: 'center', columnGap: 1, flexWrap: 'wrap', justifyContent: 'space-between' }}
-              >
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', ml: -1 }}>
-                  <Link href="/terms" style={legalLinkStyle}>{t('shell.terms')}</Link>
-                  <Link href="/privacy" style={legalLinkStyle}>{t('shell.privacy')}</Link>
-                  <Link href="/refund-policy" style={legalLinkStyle}>{t('shell.refund')}</Link>
-                </Box>
-                <Box component="span">{t('shell.copyright')}</Box>
-              </Typography>
-            </Container>
+          <Box component="footer" sx={{ bgcolor: t.surface, borderTop: `1px solid ${t.line}` }}>
+            <Box
+              sx={{
+                maxWidth: 1680,
+                mx: 'auto',
+                px: { xs: 2, md: 3 },
+                py: 1,
+                boxSizing: 'border-box',
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                columnGap: 2,
+                fontSize: 14,
+                color: t.inkMuted,
+              }}
+            >
+              <Box component="nav" aria-label={tr('shell.legalNav')} sx={{ display: 'flex', flexWrap: 'wrap', ml: -1 }}>
+                <Box component={Link} href="/terms" sx={legalLinkSx}>{tr('shell.terms')}</Box>
+                <Box component={Link} href="/privacy" sx={legalLinkSx}>{tr('shell.privacy')}</Box>
+                <Box component={Link} href="/refund-policy" sx={legalLinkSx}>{tr('shell.refund')}</Box>
+              </Box>
+              <Box component="span">{tr('shell.copyright')}</Box>
+            </Box>
           </Box>
         </Box>
       </ShellActionsProvider>

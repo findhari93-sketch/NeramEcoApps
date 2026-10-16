@@ -15,6 +15,8 @@ import {
   DEFAULT_LIVING_COST,
   MATERIALS_TRAVEL_COST,
 } from '@/lib/college-hub/constants';
+import { tokens } from '@/design-system';
+import { alpha } from '@mui/material/styles';
 
 interface CollegeListingCardProps {
   college: CollegeListItem;
@@ -59,10 +61,10 @@ export default function CollegeListingCard({ college, compact }: CollegeListingC
     <Card
       variant="outlined"
       sx={{
-        borderRadius: 2.5,
+        borderRadius: 1,
         overflow: 'hidden',
-        transition: 'box-shadow 0.2s, border-color 0.2s',
-        '&:hover': { boxShadow: 3, borderColor: 'primary.light' },
+        transition: 'border-color 0.2s',
+        '&:hover': { borderColor: tokens.gold500 },
       }}
     >
       <Stack direction={{ xs: 'column', sm: compact ? 'column' : 'row' }}>
@@ -74,7 +76,7 @@ export default function CollegeListingCard({ college, compact }: CollegeListingC
               width: { xs: '100%', sm: 180 },
               height: { xs: 140, sm: 'auto' },
               minHeight: { sm: 200 },
-              bgcolor: '#1e293b',
+              bgcolor: tokens.ink,
               flexShrink: 0,
             }}
           >
@@ -88,7 +90,7 @@ export default function CollegeListingCard({ college, compact }: CollegeListingC
               />
             ) : (
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-                <Typography variant="h3" sx={{ color: 'rgba(255,255,255,0.2)', fontWeight: 800 }}>
+                <Typography variant="h3" sx={{ color: alpha(tokens.paper, 0.2), fontWeight: 800 }}>
                   {(college.short_name ?? college.name).charAt(0)}
                 </Typography>
               </Box>
@@ -102,8 +104,8 @@ export default function CollegeListingCard({ college, compact }: CollegeListingC
                   left: 8,
                   width: 40,
                   height: 40,
-                  bgcolor: 'white',
-                  borderRadius: 1.5,
+                  bgcolor: tokens.surface,
+                  borderRadius: 1,
                   overflow: 'hidden',
                   display: 'flex',
                   alignItems: 'center',
@@ -122,8 +124,8 @@ export default function CollegeListingCard({ college, compact }: CollegeListingC
                   position: 'absolute',
                   top: 8,
                   right: 8,
-                  bgcolor: '#f97316',
-                  color: 'white',
+                  bgcolor: tokens.gold500,
+                  color: tokens.navy900,
                   fontWeight: 600,
                   fontSize: '0.65rem',
                   height: 22,
@@ -147,15 +149,15 @@ export default function CollegeListingCard({ college, compact }: CollegeListingC
                 WebkitLineClamp: 2,
                 WebkitBoxOrient: 'vertical',
                 overflow: 'hidden',
-                '&:hover': { color: 'primary.main' },
+                '&:hover': { color: tokens.navy900 },
               }}
             >
               {college.name}
             </Typography>
           </Link>
           <Stack direction="row" alignItems="center" gap={0.5} sx={{ mt: 0.5 }}>
-            <LocationOnIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
-            <Typography variant="caption" color="text.secondary">
+            <LocationOnIcon sx={{ fontSize: 14, color: tokens.inkMuted }} />
+            <Typography variant="caption" color={tokens.inkMuted}>
               {college.city}, {college.state}
               {college.type ? ` · ${college.type}` : ''}
             </Typography>
@@ -164,16 +166,16 @@ export default function CollegeListingCard({ college, compact }: CollegeListingC
           {/* Badges */}
           <Stack direction="row" gap={0.5} flexWrap="wrap" sx={{ mt: 1 }}>
             {college.coa_approved && (
-              <Chip label="COA ✓" size="small" sx={{ bgcolor: '#dcfce7', color: '#166534', fontSize: '0.65rem', height: 22, fontWeight: 500 }} />
+              <Chip label="COA ✓" size="small" sx={{ bgcolor: tokens.surface, color: tokens.success, border: `1px solid ${tokens.success}`, fontSize: '0.65rem', height: 22, fontWeight: 500 }} />
             )}
             {college.naac_grade && (
-              <Chip label={`NAAC ${college.naac_grade}`} size="small" sx={{ bgcolor: '#fef3c7', color: '#92400e', fontSize: '0.65rem', height: 22, fontWeight: 500 }} />
+              <Chip label={`NAAC ${college.naac_grade}`} size="small" sx={{ bgcolor: tokens.goldTintBg, color: tokens.gold800, fontSize: '0.65rem', height: 22, fontWeight: 500 }} />
             )}
             {college.accepted_exams?.slice(0, 2).map((exam) => (
-              <Chip key={exam} label={exam} size="small" sx={{ bgcolor: '#dbeafe', color: '#1e40af', fontSize: '0.65rem', height: 22, fontWeight: 500 }} />
+              <Chip key={exam} label={exam} size="small" sx={{ bgcolor: tokens.surface, color: tokens.ink, border: `1px solid ${tokens.line}`, fontSize: '0.65rem', height: 22, fontWeight: 500 }} />
             ))}
             {college.counseling_systems?.slice(0, 2).map((sys) => (
-              <Chip key={sys} label={sys} size="small" sx={{ bgcolor: '#f3e8ff', color: '#6b21a8', fontSize: '0.65rem', height: 22, fontWeight: 500 }} />
+              <Chip key={sys} label={sys} size="small" sx={{ bgcolor: tokens.surfaceHover, color: tokens.ink, fontSize: '0.65rem', height: 22, fontWeight: 500 }} />
             ))}
           </Stack>
 
@@ -183,30 +185,31 @@ export default function CollegeListingCard({ college, compact }: CollegeListingC
               sx={{
                 mt: 1.5,
                 p: 1,
-                bgcolor: '#f0fdf4',
+                bgcolor: tokens.surface,
                 border: '1px solid',
-                borderColor: '#bbf7d0',
-                borderRadius: 1.5,
+                borderColor: tokens.line,
+                boxShadow: `inset 3px 0 0 ${tokens.success}`,
+                borderRadius: 1,
               }}
             >
               <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1}>
                 <Box>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>Total {COURSE_DURATION_YEARS}yr Cost</Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 700, color: '#dc2626', fontSize: '0.8rem' }}>
+                  <Typography variant="caption" color={tokens.inkMuted} sx={{ fontSize: '0.65rem' }}>Total {COURSE_DURATION_YEARS}yr Cost</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: tokens.ink, fontSize: '0.8rem' }}>
                     {formatLakhs(roi.totalCost)}
                   </Typography>
                 </Box>
-                <Typography color="text.disabled" sx={{ fontSize: '0.8rem' }}>→</Typography>
+                <Typography sx={{ color: tokens.inkMuted, fontSize: '0.8rem' }}>→</Typography>
                 <Box>
-                  <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.65rem' }}>Avg Package</Typography>
-                  <Typography variant="body2" sx={{ fontWeight: 700, color: '#16a34a', fontSize: '0.8rem' }}>
+                  <Typography variant="caption" color={tokens.inkMuted} sx={{ fontSize: '0.65rem' }}>Avg Package</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: tokens.success, fontSize: '0.8rem' }}>
                     {formatLakhs(roi.avgPkg)}/yr
                   </Typography>
                 </Box>
                 <Chip
                   label={`~${roi.paybackYears}yr payback`}
                   size="small"
-                  sx={{ bgcolor: '#1e40af', color: 'white', fontWeight: 600, fontSize: '0.65rem', height: 24 }}
+                  sx={{ bgcolor: tokens.navy900, color: tokens.paper, fontWeight: 600, fontSize: '0.65rem', height: 24 }}
                 />
               </Stack>
             </Box>
@@ -214,7 +217,7 @@ export default function CollegeListingCard({ college, compact }: CollegeListingC
 
           {/* Fee display for compact mode or when no ROI */}
           {(!roi || compact) && (
-            <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: 'primary.main' }}>
+            <Typography variant="body2" sx={{ mt: 1, fontWeight: 600, color: tokens.navy900 }}>
               {formatFee(college.annual_fee_min, college.annual_fee_max, college.annual_fee_approx)}
               {college.total_barch_seats ? ` · ${college.total_barch_seats} seats` : ''}
             </Typography>
@@ -238,7 +241,7 @@ export default function CollegeListingCard({ college, compact }: CollegeListingC
                     component="a"
                     href={`tel:${college.admissions_phone}`}
                     size="small"
-                    sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5 }}
+                    sx={{ border: '1px solid', borderColor: tokens.line, borderRadius: 1 }}
                   >
                     <PhoneIcon sx={{ fontSize: 18 }} />
                   </IconButton>
@@ -252,7 +255,7 @@ export default function CollegeListingCard({ college, compact }: CollegeListingC
                     target="_blank"
                     rel="noopener noreferrer"
                     size="small"
-                    sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5 }}
+                    sx={{ border: '1px solid', borderColor: tokens.line, borderRadius: 1 }}
                   >
                     <DescriptionIcon sx={{ fontSize: 18 }} />
                   </IconButton>

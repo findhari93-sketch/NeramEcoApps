@@ -13,6 +13,7 @@ import {
 } from '@mui/material';
 import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
 import type { NIRFRankingWithCollege } from '@neram/database';
+import { siteTokens } from '@neram/ui/site-tokens';
 
 interface Props {
   rows: NIRFRankingWithCollege[];
@@ -20,17 +21,17 @@ interface Props {
   locale: string;
 }
 
-const TYPE_COLORS: Record<string, { bg: string; fg: string }> = {
-  government: { bg: '#dcfce7', fg: '#15803d' },
-  private: { bg: '#fef3c7', fg: '#92400e' },
-  deemed: { bg: '#e0e7ff', fg: '#3730a3' },
-  autonomous: { bg: '#fce7f3', fg: '#9f1239' },
+const TYPE_COLORS: Record<string, { bg: string; fg: string; ring?: string }> = {
+  government: { bg: siteTokens.surface, fg: siteTokens.success, ring: siteTokens.success },
+  private: { bg: siteTokens.goldTintBg, fg: siteTokens.gold800 },
+  deemed: { bg: siteTokens.surfaceHover, fg: siteTokens.ink },
+  autonomous: { bg: siteTokens.surface, fg: siteTokens.navy900, ring: siteTokens.lineStrong },
 };
 
 function typeChip(type?: string | null) {
   if (!type) return null;
   const key = type.toLowerCase();
-  const c = TYPE_COLORS[key] ?? { bg: '#f3f4f6', fg: '#374151' };
+  const c = TYPE_COLORS[key] ?? { bg: siteTokens.surfaceHover, fg: siteTokens.ink };
   const label = type.charAt(0).toUpperCase() + type.slice(1);
   return (
     <Box
@@ -39,11 +40,12 @@ function typeChip(type?: string | null) {
         display: 'inline-block',
         bgcolor: c.bg,
         color: c.fg,
+        boxShadow: 'ring' in c && c.ring ? `inset 0 0 0 1px ${c.ring}` : 'none',
         fontSize: '0.65rem',
         fontWeight: 600,
         px: 0.75,
         py: 0.125,
-        borderRadius: 0.75,
+        borderRadius: 1,
         lineHeight: 1.4,
       }}
     >
@@ -57,14 +59,14 @@ export default function NIRFRankingTable({ rows, showYear = false, locale }: Pro
     <Paper
       variant="outlined"
       sx={{
-        borderRadius: 1.5,
+        borderRadius: 1,
         overflowX: 'auto',
         border: '1px solid',
-        borderColor: 'divider',
+        borderColor: siteTokens.line,
       }}
     >
       <Table size="small" sx={{ minWidth: 880 }}>
-        <TableHead sx={{ bgcolor: '#faf9f6' }}>
+        <TableHead sx={{ bgcolor: siteTokens.ground }}>
           <TableRow>
             <HCell width={64}>Rank</HCell>
             {showYear && <HCell width={64}>Year</HCell>}
@@ -101,7 +103,7 @@ export default function NIRFRankingTable({ rows, showYear = false, locale }: Pro
               <TableRow
                 key={r.id}
                 hover
-                sx={{ '& td': { borderColor: 'divider', py: 1.25 } }}
+                sx={{ '& td': { borderColor: siteTokens.line, py: 1.25 } }}
               >
                 <TableCell>
                   <Box
@@ -113,8 +115,8 @@ export default function NIRFRankingTable({ rows, showYear = false, locale }: Pro
                       height: 36,
                       px: 0.75,
                       borderRadius: 1,
-                      bgcolor: '#1a1612',
-                      color: '#fff',
+                      bgcolor: siteTokens.navy900,
+                      color: siteTokens.paper,
                       fontWeight: 700,
                       fontSize: '0.78rem',
                     }}
@@ -148,7 +150,7 @@ export default function NIRFRankingTable({ rows, showYear = false, locale }: Pro
                       {college?.naac_grade && (
                         <Typography
                           variant="caption"
-                          color="text.secondary"
+                          color={siteTokens.inkMuted}
                           sx={{ fontSize: '0.68rem' }}
                         >
                           NAAC {college.naac_grade}
@@ -160,7 +162,7 @@ export default function NIRFRankingTable({ rows, showYear = false, locale }: Pro
                 <TableCell>
                   <Stack direction="row" spacing={0.5} alignItems="center">
                     <LocationOnOutlinedIcon
-                      sx={{ fontSize: 14, color: 'text.secondary' }}
+                      sx={{ fontSize: 14, color: siteTokens.inkMuted }}
                     />
                     <Typography variant="body2" sx={{ fontSize: '0.82rem' }}>
                       {college?.city ?? r.source_city ?? '.'}
@@ -168,7 +170,7 @@ export default function NIRFRankingTable({ rows, showYear = false, locale }: Pro
                         <Typography
                           component="span"
                           variant="caption"
-                          color="text.secondary"
+                          color={siteTokens.inkMuted}
                           sx={{ ml: 0.5, fontSize: '0.72rem' }}
                         >
                           {college?.state ?? r.source_state}
@@ -200,7 +202,7 @@ export default function NIRFRankingTable({ rows, showYear = false, locale }: Pro
                       style={{
                         fontSize: '0.75rem',
                         whiteSpace: 'nowrap',
-                        color: '#1a1612',
+                        color: siteTokens.ink,
                         fontWeight: 600,
                         textDecoration: 'none',
                       }}
@@ -237,8 +239,8 @@ function HCell({
         fontWeight: 700,
         textTransform: 'uppercase',
         letterSpacing: 0.5,
-        color: 'text.secondary',
-        borderColor: 'divider',
+        color: siteTokens.inkMuted,
+        borderColor: siteTokens.line,
       }}
     >
       {children}
@@ -249,7 +251,7 @@ function HCell({
 function fmt(n: number | null) {
   if (n === null) {
     return (
-      <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.78rem' }}>
+      <Typography variant="caption" color={siteTokens.inkMuted} sx={{ fontSize: '0.78rem' }}>
         .
       </Typography>
     );

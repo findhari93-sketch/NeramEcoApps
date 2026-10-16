@@ -3,6 +3,7 @@
 import { Box, Typography, Chip, Stack } from '@mui/material';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import type { CollegeCutoff } from '@/lib/college-hub/types';
+import { tokens } from '@/design-system';
 
 interface CutoffSparklineProps {
   cutoffs: CollegeCutoff[];
@@ -18,7 +19,7 @@ export default function CutoffSparkline({
   if (cutoffs.length === 0) {
     return (
       <Box sx={{ py: 4, textAlign: 'center' }}>
-        <Typography color="text.secondary" variant="body2">
+        <Typography color={tokens.inkMuted} variant="body2">
           Cutoff data not yet available.
         </Typography>
       </Box>
@@ -33,7 +34,7 @@ export default function CutoffSparkline({
   if (filtered.length === 0) {
     return (
       <Box sx={{ py: 4, textAlign: 'center' }}>
-        <Typography color="text.secondary" variant="body2">
+        <Typography color={tokens.inkMuted} variant="body2">
           No {counselingSystem} {category.toUpperCase()} cutoff data.
         </Typography>
       </Box>
@@ -61,7 +62,7 @@ export default function CutoffSparkline({
       <Stack direction="row" gap={2} alignItems="center" sx={{ mb: 2, flexWrap: 'wrap' }}>
         {latest.cutoff_value !== null && (
           <Box>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" color={tokens.inkMuted}>
               {latest.academic_year} Cutoff ({category.toUpperCase()})
             </Typography>
             <Typography variant="h5" sx={{ fontWeight: 800, lineHeight: 1 }}>
@@ -77,15 +78,16 @@ export default function CutoffSparkline({
             label={`${trendGood ? '' : '+'}${isRankBased ? Math.round(trend) : trend.toFixed(1)} vs prev year`}
             size="small"
             sx={{
-              bgcolor: trendGood ? '#dcfce7' : '#fef2f2',
-              color: trendGood ? '#166534' : '#991b1b',
+              bgcolor: tokens.surface,
+              color: trendGood ? tokens.success : tokens.gold800,
+              border: `1px solid ${trendGood ? tokens.success : tokens.gold800}`,
               fontWeight: 600,
             }}
           />
         )}
 
         {latest.total_seats !== null && (
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" color={tokens.inkMuted}>
             {latest.total_seats} seats
           </Typography>
         )}
@@ -98,19 +100,19 @@ export default function CutoffSparkline({
             <LineChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
               <XAxis
                 dataKey="year"
-                tick={{ fontSize: 11, fill: '#64748b' }}
+                tick={{ fontSize: 11, fill: tokens.inkMuted }}
                 tickLine={false}
                 axisLine={false}
               />
               <YAxis
                 reversed={isRankBased}
-                tick={{ fontSize: 11, fill: '#64748b' }}
+                tick={{ fontSize: 11, fill: tokens.inkMuted }}
                 tickLine={false}
                 axisLine={false}
                 tickFormatter={(v) => isRankBased ? `#${v.toLocaleString()}` : `${v}%`}
               />
               <Tooltip
-                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: `1px solid ${tokens.line}` }}
                 formatter={((value: number) =>
                   isRankBased
                     ? `Rank #${Math.round(value).toLocaleString()}`
@@ -119,9 +121,9 @@ export default function CutoffSparkline({
               <Line
                 type="monotone"
                 dataKey="cutoff"
-                stroke="#2563eb"
+                stroke={tokens.navy900}
                 strokeWidth={2.5}
-                dot={{ fill: '#2563eb', r: 4 }}
+                dot={{ fill: tokens.navy900, r: 4 }}
                 activeDot={{ r: 6 }}
               />
             </LineChart>
@@ -130,7 +132,7 @@ export default function CutoffSparkline({
       )}
 
       {chartData.length === 1 && (
-        <Typography variant="caption" color="text.secondary">
+        <Typography variant="caption" color={tokens.inkMuted}>
           Only one year of data available. Trend chart will appear as more data is collected.
         </Typography>
       )}

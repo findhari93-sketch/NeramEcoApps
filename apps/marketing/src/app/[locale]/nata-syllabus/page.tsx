@@ -20,6 +20,7 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import RelatedContent from '@/components/seo/RelatedContent';
+import { siteTokens as t } from '@neram/ui/site-tokens';
 
 
 export async function generateMetadata({
@@ -115,15 +116,16 @@ export default function NataSyllabusPage({ params: { locale } }: PageProps) {
       <Box
         sx={{
           py: { xs: 6, md: 10 },
-          background: 'linear-gradient(135deg, #1a237e 0%, #0d47a1 100%)',
-          color: 'white',
+          bgcolor: t.navy900,
+          ...t.blueprint,
+          color: t.paper,
         }}
       >
         <Container maxWidth="lg">
           <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', md: '3rem' } }}>
             NATA Syllabus 2026
           </Typography>
-          <Typography variant="h5" sx={{ mb: 3, opacity: 0.9 }}>
+          <Typography variant="h5" sx={{ mb: 3, color: t.paperMuted }}>
             Complete subject-wise syllabus for National Aptitude Test in Architecture
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
@@ -131,7 +133,7 @@ export default function NataSyllabusPage({ params: { locale } }: PageProps) {
               variant="contained"
               component={Link}
               href="/apply"
-              sx={{ bgcolor: 'white', color: 'primary.main' }}
+              sx={{ minHeight: 48 }}
             >
               Start Preparation
             </Button>
@@ -139,7 +141,7 @@ export default function NataSyllabusPage({ params: { locale } }: PageProps) {
               variant="outlined"
               component={Link}
               href="/nata-preparation-guide"
-              sx={{ borderColor: 'white', color: 'white' }}
+              sx={{ minHeight: 48, borderColor: t.outlineDark, color: t.paper, '&:hover': { bgcolor: 'transparent', borderColor: t.gold500, color: t.gold500 } }}
             >
               Preparation Guide
             </Button>
@@ -148,26 +150,26 @@ export default function NataSyllabusPage({ params: { locale } }: PageProps) {
       </Box>
 
       {/* Exam Pattern Overview */}
-      <Box sx={{ py: { xs: 4, md: 6 }, bgcolor: 'grey.50' }}>
+      <Box sx={{ py: { xs: 4, md: 6 }, bgcolor: t.ground }}>
         <Container maxWidth="lg">
           <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ fontWeight: 700, mb: 4 }}>
             NATA 2026 Exam Pattern
           </Typography>
           <Grid container spacing={3}>
             <Grid item xs={12} md={4}>
-              <Paper sx={{ p: 3, textAlign: 'center', height: '100%' }}>
+              <Paper variant="outlined" sx={{ p: 3, textAlign: 'center', height: '100%' }}>
                 <Typography variant="h3" color="primary" sx={{ fontWeight: 700 }}>200</Typography>
                 <Typography variant="h6">Total Marks</Typography>
               </Paper>
             </Grid>
             <Grid item xs={12} md={4}>
-              <Paper sx={{ p: 3, textAlign: 'center', height: '100%' }}>
+              <Paper variant="outlined" sx={{ p: 3, textAlign: 'center', height: '100%' }}>
                 <Typography variant="h3" color="primary" sx={{ fontWeight: 700 }}>3 Hours</Typography>
                 <Typography variant="h6">Duration</Typography>
               </Paper>
             </Grid>
             <Grid item xs={12} md={4}>
-              <Paper sx={{ p: 3, textAlign: 'center', height: '100%' }}>
+              <Paper variant="outlined" sx={{ p: 3, textAlign: 'center', height: '100%' }}>
                 <Typography variant="h3" color="primary" sx={{ fontWeight: 700 }}>3 Sections</Typography>
                 <Typography variant="h6">Parts</Typography>
               </Paper>
@@ -199,8 +201,8 @@ export default function NataSyllabusPage({ params: { locale } }: PageProps) {
                   <Grid container spacing={3}>
                     {section.topics.map((topic, index) => (
                       <Grid item xs={12} sm={6} md={4} key={index}>
-                        <Box sx={{ bgcolor: 'grey.50', p: 2, borderRadius: 1, height: '100%' }}>
-                          <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: 'primary.main' }}>
+                        <Box sx={{ bgcolor: t.ground, p: 2, borderRadius: 1, height: '100%' }}>
+                          <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: t.navy900 }}>
                             {topic.name}
                           </Typography>
                           <List dense>
@@ -228,7 +230,7 @@ export default function NataSyllabusPage({ params: { locale } }: PageProps) {
       </Box>
 
       {/* Tips Section */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
+      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: t.ground }}>
         <Container maxWidth="lg">
           <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ fontWeight: 700, mb: 6 }}>
             Preparation Tips
@@ -252,12 +254,12 @@ export default function NataSyllabusPage({ params: { locale } }: PageProps) {
       </Box>
 
       {/* CTA Section */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'primary.main', color: 'white', textAlign: 'center' }}>
+      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: t.navy900, color: t.paper, textAlign: 'center' }}>
         <Container maxWidth="md">
           <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700 }}>
             Start Your NATA Preparation Today
           </Typography>
-          <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>
+          <Typography variant="h6" sx={{ mb: 4, color: t.paperMuted }}>
             Join Neram Classes for comprehensive NATA coaching with expert faculty
           </Typography>
           <Button
@@ -265,7 +267,7 @@ export default function NataSyllabusPage({ params: { locale } }: PageProps) {
             size="large"
             component={Link}
             href="/apply"
-            sx={{ bgcolor: 'white', color: 'primary.main' }}
+            sx={{ minHeight: 48 }}
           >
             Enroll Now
           </Button>

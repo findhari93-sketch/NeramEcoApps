@@ -3,6 +3,7 @@
 import { Box, Typography, Chip, Card, CardContent } from '@neram/ui';
 import EmojiEventsIcon from '@mui/icons-material/EmojiEvents';
 import Image from 'next/image';
+import { tokens as t } from '@/design-system/tokens';
 
 interface AchievementCardProps {
   title: string;
@@ -40,24 +41,23 @@ export default function AchievementCard({ title, description, imageUrl, metadata
 
   return (
     <Card
+      elevation={0}
       sx={{
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
         position: 'relative',
-        overflow: 'visible',
-        transition: 'transform 0.2s',
-        '&:hover': { transform: 'translateY(-4px)', boxShadow: 4 },
+        bgcolor: t.surface,
+        color: t.ink,
+        border: `1px solid ${t.line}`,
+        // Gold accent top, as on a highlighted ProgramCard.
+        borderTop: `3px solid ${t.gold500}`,
+        borderRadius: `${t.radius}px`,
+        boxShadow: 'none',
+        transition: 'border-color 150ms ease',
+        '&:hover': { borderColor: t.gold500 },
       }}
     >
-      {/* Gold accent top border */}
-      <Box
-        sx={{
-          height: 4,
-          background: 'linear-gradient(90deg, #F9A825, #FFD54F)',
-          borderRadius: '4px 4px 0 0',
-        }}
-      />
       <CardContent sx={{ flexGrow: 1, p: { xs: 2.5, sm: 3 } }}>
         {/* Header: Avatar + Name + Score */}
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
@@ -68,7 +68,7 @@ export default function AchievementCard({ title, description, imageUrl, metadata
               mr: 2,
               borderRadius: '50%',
               overflow: 'hidden',
-              bgcolor: 'warning.light',
+              bgcolor: t.navy700,
               position: 'relative',
               flexShrink: 0,
               display: 'flex',
@@ -85,7 +85,7 @@ export default function AchievementCard({ title, description, imageUrl, metadata
                 style={{ objectFit: 'cover' }}
               />
             ) : (
-              <Typography sx={{ fontSize: 18, fontWeight: 700, color: 'warning.contrastText' }}>
+              <Typography sx={{ fontSize: 18, fontWeight: 700, color: t.paper }}>
                 {initials}
               </Typography>
             )}
@@ -107,10 +107,10 @@ export default function AchievementCard({ title, description, imageUrl, metadata
                   label={scoreLabel}
                   size="small"
                   sx={{
-                    bgcolor: 'warning.50',
-                    color: 'warning.dark',
+                    bgcolor: t.goldTintBg,
+                    color: t.gold800,
                     fontWeight: 600,
-                    '& .MuiChip-icon': { color: 'warning.main' },
+                    '& .MuiChip-icon': { color: t.gold800 },
                   }}
                 />
               )}
@@ -141,8 +141,7 @@ export default function AchievementCard({ title, description, imageUrl, metadata
               fontStyle: 'italic',
               mt: 1,
               pl: 2,
-              borderLeft: '3px solid',
-              borderColor: 'warning.main',
+              borderLeft: `3px solid ${t.gold500}`,
             }}
           >
             &ldquo;{metadata.student_quote}&rdquo;

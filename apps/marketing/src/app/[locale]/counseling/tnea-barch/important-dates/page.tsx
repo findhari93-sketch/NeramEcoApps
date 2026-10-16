@@ -6,11 +6,12 @@ import {
   Typography,
   Stack,
   Chip,
-  Alert,
 } from '@mui/material';
-import EventIcon from '@mui/icons-material/Event';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
+import EventIcon from '@mui/icons-material/EventOutlined';
+import CheckCircleIcon from '@mui/icons-material/CheckCircleOutlined';
+import HourglassEmptyIcon from '@mui/icons-material/HourglassEmptyOutlined';
+import { siteTokens as t } from '@neram/ui/site-tokens';
+import { Callout } from '@/design-system';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { generateEventSchema } from '@/lib/seo/schemas';
 import TneaSpokeShell from '@/components/tnea-barch/TneaSpokeShell';
@@ -79,9 +80,13 @@ export default function ImportantDatesPage({
         'When will the rank list come out?',
       ]}
     >
-      <Alert severity="warning" sx={{ mb: 3, borderRadius: 1.5 }}>
-        Most 2026 dates are tentative until the official notification is issued by the Directorate of Technical Education. Confirmed dates will be marked here.
-      </Alert>
+      <Box sx={{ mb: 3 }}>
+        <Callout>
+          <Box component="p" sx={{ m: 0 }}>
+              Most 2026 dates are tentative until the official notification is issued by the Directorate of Technical Education. Confirmed dates will be marked here.
+          </Box>
+        </Callout>
+      </Box>
 
       <Box
         sx={{
@@ -94,7 +99,7 @@ export default function ImportantDatesPage({
             top: 0,
             bottom: 0,
             width: 2,
-            bgcolor: 'divider',
+            bgcolor: t.line,
           },
         }}
       >
@@ -104,6 +109,7 @@ export default function ImportantDatesPage({
             return (
               <Box key={d.id} sx={{ position: 'relative' }}>
                 <Box
+                  aria-hidden
                   sx={{
                     position: 'absolute',
                     left: { xs: -22, md: -28 },
@@ -111,20 +117,19 @@ export default function ImportantDatesPage({
                     width: 18,
                     height: 18,
                     borderRadius: '50%',
-                    bgcolor: past ? 'success.main' : d.status === 'confirmed' ? 'primary.main' : 'warning.light',
+                    bgcolor: past ? t.success : d.status === 'confirmed' ? t.navy900 : t.gold500,
                     border: '3px solid',
-                    borderColor: 'background.paper',
+                    borderColor: t.surface,
                     boxShadow: '0 0 0 2px',
-                    color: past ? 'success.main' : d.status === 'confirmed' ? 'primary.main' : 'warning.light',
+                    color: past ? t.success : d.status === 'confirmed' ? t.navy900 : t.gold500,
                   }}
                 />
                 <Paper
                   elevation={0}
                   sx={{
                     p: 2,
-                    borderRadius: 2,
-                    border: '1px solid',
-                    borderColor: 'divider',
+                    borderRadius: 1,
+                    border: `1px solid ${t.line}`,
                   }}
                 >
                   <Stack direction="row" justifyContent="space-between" alignItems="flex-start" gap={1} flexWrap="wrap">
@@ -133,7 +138,7 @@ export default function ImportantDatesPage({
                         {d.label}
                       </Typography>
                       <Stack direction="row" gap={0.75} alignItems="center" sx={{ mt: 0.5 }}>
-                        <EventIcon sx={{ fontSize: 14, color: 'text.secondary' }} />
+                        <EventIcon aria-hidden sx={{ fontSize: 14, color: t.inkMuted }} />
                         <Typography variant="body2" color="text.secondary">
                           {d.display_date}
                         </Typography>
@@ -154,8 +159,8 @@ export default function ImportantDatesPage({
                         size="small"
                         icon={<HourglassEmptyIcon sx={{ fontSize: 14 }} />}
                         label="Tentative"
-                        color="warning"
                         variant="outlined"
+                        sx={{ color: t.gold800, borderColor: t.gold800, '& .MuiChip-icon': { color: t.gold800 } }}
                       />
                     )}
                   </Stack>

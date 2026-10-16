@@ -17,6 +17,8 @@ function collectConsoleErrors(page: Page): string[] {
 }
 
 const showcase = (page: Page) => page.getByRole('region', { name: /inside the nexus app/i });
+/** The tour segment for a scene; the current one is aria-selected. */
+const scene = (panel: ReturnType<typeof showcase>, name: string) => panel.getByRole('tab', { name, exact: true });
 
 test.describe('Apply showcase on desktop', () => {
   test.use({ viewport: { width: 1280, height: 900 } });
@@ -26,7 +28,8 @@ test.describe('Apply showcase on desktop', () => {
     await page.goto(`${MARKETING_URL}/apply`);
     const panel = showcase(page);
     await expect(panel).toBeVisible();
-    await expect(panel.getByText(/01 \/ review/i)).toBeVisible();
+    await expect(scene(panel, 'Review')).toHaveAttribute('aria-selected', 'true');
+    await expect(panel.getByText('Your teacher marks up your drawing and explains each fix.')).toBeVisible();
     await expect(page.getByRole('heading', { name: /about you/i })).toBeVisible();
 
     // The showcase sits to the left of the form.
@@ -35,12 +38,16 @@ test.describe('Apply showcase on desktop', () => {
     expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(headingBox.x + 1);
 
     await panel.getByRole('button', { name: /next scene/i }).click();
-    await expect(panel.getByText(/02 \/ revise/i)).toBeVisible();
+    await expect(scene(panel, 'Revise')).toHaveAttribute('aria-selected', 'true');
 
-    await panel.getByRole('button', { name: /pause the tour/i }).click();
-    await expect(panel.getByRole('button', { name: /play the tour/i })).toBeVisible();
-    await page.waitForTimeout(7000);
-    await expect(panel.getByText(/02 \/ revise/i)).toBeVisible();
+    await panel.getByRole('button', { name: /pause the tour/i }).first().click();
+    await expect(panel.getByRole('button', { name: /play the tour/i }).first()).toBeVisible();
+    await page.waitForTimeout(8000);
+    await expect(scene(panel, 'Revise')).toHaveAttribute('aria-selected', 'true');
+
+    // A segment jumps straight to its scene.
+    await scene(panel, 'Library').click();
+    await expect(scene(panel, 'Library')).toHaveAttribute('aria-selected', 'true');
 
     expect(errors, 'no console errors').toEqual([]);
   });
@@ -48,17 +55,18 @@ test.describe('Apply showcase on desktop', () => {
   test('advances on its own after the scene duration', async ({ page }) => {
     await page.goto(`${MARKETING_URL}/apply`);
     const panel = showcase(page);
-    await expect(panel.getByText(/01 \/ review/i)).toBeVisible();
-    await expect(panel.getByText(/02 \/ revise/i)).toBeVisible({ timeout: 9000 });
+    await expect(scene(panel, 'Review')).toHaveAttribute('aria-selected', 'true');
+    // 7s per scene plus a 0.6s hold
+    await expect(scene(panel, 'Revise')).toHaveAttribute('aria-selected', 'true', { timeout: 12000 });
   });
 
   test('stays still under prefers-reduced-motion', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto(`${MARKETING_URL}/apply`);
     const panel = showcase(page);
-    await expect(panel.getByText(/01 \/ review/i)).toBeVisible();
-    await page.waitForTimeout(7500);
-    await expect(panel.getByText(/01 \/ review/i)).toBeVisible();
+    await expect(scene(panel, 'Review')).toHaveAttribute('aria-selected', 'true');
+    await page.waitForTimeout(8500);
+    await expect(scene(panel, 'Review')).toHaveAttribute('aria-selected', 'true');
     await expect(panel).toHaveAttribute('data-motion', 'off');
   });
 

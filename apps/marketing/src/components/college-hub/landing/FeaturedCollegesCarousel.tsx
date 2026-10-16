@@ -6,6 +6,7 @@ import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import FeaturedCollegeCard from '../FeaturedCollegeCard';
 import type { CollegeListItem } from '@/lib/college-hub/types';
+import { tokens } from '@/design-system';
 
 interface FeaturedCollegesCarouselProps {
   colleges: CollegeListItem[];
@@ -41,12 +42,12 @@ export default function FeaturedCollegesCarousel({ colleges }: FeaturedCollegesC
               sx={{
                 fontSize: { xs: '1.35rem', sm: '1.5rem' },
                 fontWeight: 800,
-                color: '#0f172a',
+                color: tokens.ink,
               }}
             >
               Featured Colleges
             </Typography>
-            <Typography variant="body2" sx={{ color: '#64748b', mt: 0.5 }}>
+            <Typography variant="body2" sx={{ color: tokens.inkMuted, mt: 0.5 }}>
               Explore top architecture colleges in India
             </Typography>
           </Box>
@@ -58,9 +59,9 @@ export default function FeaturedCollegesCarousel({ colleges }: FeaturedCollegesC
               size="small"
               sx={{
                 border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 1.5,
-                '&:hover': { bgcolor: '#f1f5f9' },
+                borderColor: tokens.line,
+                borderRadius: 1,
+                '&:hover': { bgcolor: tokens.surfaceHover },
               }}
             >
               <ChevronLeftIcon />
@@ -70,9 +71,9 @@ export default function FeaturedCollegesCarousel({ colleges }: FeaturedCollegesC
               size="small"
               sx={{
                 border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 1.5,
-                '&:hover': { bgcolor: '#f1f5f9' },
+                borderColor: tokens.line,
+                borderRadius: 1,
+                '&:hover': { bgcolor: tokens.surfaceHover },
               }}
             >
               <ChevronRightIcon />

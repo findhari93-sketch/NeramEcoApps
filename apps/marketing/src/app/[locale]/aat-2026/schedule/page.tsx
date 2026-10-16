@@ -1,10 +1,12 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import { Typography, Box, Stack, Paper } from '@neram/ui';
 import ExamSpokeLayout from '@/components/exam-hub/sections/ExamSpokeLayout';
+import { GuideNote } from '@/components/exam-hub/sections/GuideBlocks';
+import { scheduleTimeline } from '@/components/exam-hub/examGuides';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { AAT_SCHEDULE } from '@/components/aat/data/aatContent';
+import { ArticleSection, CheckList, Timeline } from '@/design-system';
 
 export const revalidate = 86400;
 
@@ -53,6 +55,7 @@ export default function AatSchedulePage({ params: { locale } }: { params: { loca
         examName="AAT 2026"
         examShortName="AAT 2026"
         examHubHref="/aat-2026"
+        spokeSlug="schedule"
         topicTitle="AAT 2026 schedule and important dates"
         topicSubtitle="The short answer: AAT 2026 is on Thursday, June 4, 2026 from 09:00 to 12:00 IST. Registration is a 48-hour window after JEE Advanced results."
         related={[
@@ -61,67 +64,33 @@ export default function AatSchedulePage({ params: { locale } }: { params: { loca
           { label: 'Drawing kit checklist', href: '/aat-2026/drawing-kit' },
         ]}
       >
-        <Stack spacing={3}>
-          <Box>
-            <Typography variant="h5" component="h2" sx={{ fontWeight: 700, mb: 1.5 }}>
-              Date-by-date timeline
-            </Typography>
-            <Stack spacing={1.5}>
-              {AAT_SCHEDULE.map((row) => (
-                <Paper
-                  key={row.label}
-                  elevation={0}
-                  sx={{
-                    p: 2.25,
-                    borderRadius: 2,
-                    border: '1px solid',
-                    borderColor: row.highlight ? 'primary.main' : 'divider',
-                    bgcolor: row.highlight ? 'primary.50' : 'background.paper',
-                    display: 'flex',
-                    flexDirection: { xs: 'column', sm: 'row' },
-                    gap: { xs: 0.5, sm: 2 },
-                  }}
-                >
-                  <Typography sx={{ fontWeight: row.highlight ? 700 : 600, flex: 1, color: row.highlight ? 'primary.main' : 'text.primary' }}>
-                    {row.label}
-                  </Typography>
-                  <Typography sx={{ fontWeight: 600, minWidth: { sm: 220 } }}>{row.date}</Typography>
-                  <Typography sx={{ color: 'text.secondary' }}>{row.time}</Typography>
-                </Paper>
-              ))}
-            </Stack>
-          </Box>
+        <ArticleSection id="timeline" title="Date-by-date timeline">
+          <Timeline items={scheduleTimeline(AAT_SCHEDULE)} />
+        </ArticleSection>
 
-          <Box>
-            <Typography variant="h5" component="h2" sx={{ fontWeight: 700, mb: 1.5 }}>
-              Why the registration window is so short
-            </Typography>
-            <Typography sx={{ lineHeight: 1.8, color: 'text.primary' }}>
-              JEE (Advanced) 2026 results are declared on June 1, 2026, the same day AAT registration opens. The 48-hour window ensures only serious B.Arch aspirants register, while keeping the schedule tight enough to fit the AAT exam two days later. Plan ahead: keep your JEE (Advanced) credentials, photo, and signature uploads ready before results day so you do not lose minutes hunting for files.
-            </Typography>
-          </Box>
+        <ArticleSection
+          id="registration-window"
+          title="Why the registration window is so short"
+          intro="JEE (Advanced) 2026 results are declared on June 1, 2026, the same day AAT registration opens. The 48-hour window ensures only serious B.Arch aspirants register, while keeping the schedule tight enough to fit the AAT exam two days later. Plan ahead: keep your JEE (Advanced) credentials, photo, and signature uploads ready before results day so you do not lose minutes hunting for files."
+        />
 
-          <Paper variant="outlined" sx={{ p: 3, borderRadius: 2 }}>
-            <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
-              Day-of-exam timing
-            </Typography>
-            <Box component="ul" sx={{ pl: 3, m: 0, '& li': { mb: 0.75, lineHeight: 1.7 } }}>
-              <li>Reach the examination centre by 08:00 IST.</li>
-              <li>Test starts at 09:00 IST sharp.</li>
-              <li>Test ends at 12:00 IST. PwD candidates with eligible accommodation get one extra hour.</li>
-              <li>Carry the printed JEE (Advanced) 2026 admit card and an original government photo ID.</li>
-            </Box>
-          </Paper>
+        <GuideNote title="Day-of-exam timing">
+          <CheckList
+            variant="compact"
+            items={[
+              'Reach the examination centre by 08:00 IST.',
+              'Test starts at 09:00 IST sharp.',
+              'Test ends at 12:00 IST. PwD candidates with eligible accommodation get one extra hour.',
+              'Carry the printed JEE (Advanced) 2026 admit card and an original government photo ID.',
+            ]}
+          />
+        </GuideNote>
 
-          <Box>
-            <Typography variant="h5" component="h2" sx={{ fontWeight: 700, mb: 1.5 }}>
-              Result format and what comes next
-            </Typography>
-            <Typography sx={{ lineHeight: 1.8, color: 'text.primary' }}>
-              On Sunday, June 7, 2026 at 17:00 IST, results are published as a Pass or Fail status only. No marks, percentile, or AAT rank is declared. From there, JoSAA counselling considers your JEE (Advanced) 2026 All India Rank for B.Arch seat allotment at IIT Roorkee, IIT Kharagpur, and IIT (BHU) Varanasi, conditional on AAT Pass.
-            </Typography>
-          </Box>
-        </Stack>
+        <ArticleSection
+          id="result-format"
+          title="Result format and what comes next"
+          intro="On Sunday, June 7, 2026 at 17:00 IST, results are published as a Pass or Fail status only. No marks, percentile, or AAT rank is declared. From there, JoSAA counselling considers your JEE (Advanced) 2026 All India Rank for B.Arch seat allotment at IIT Roorkee, IIT Kharagpur, and IIT (BHU) Varanasi, conditional on AAT Pass."
+        />
       </ExamSpokeLayout>
     </>
   );

@@ -6,10 +6,11 @@ import {
   Typography,
   Stack,
   Chip,
-  Alert,
   Divider,
 } from '@mui/material';
-import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownwardOutlined';
+import { siteTokens as t } from '@neram/ui/site-tokens';
+import { Callout } from '@/design-system';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { generateHowToSchema } from '@/lib/seo/schemas';
 import TneaSpokeShell from '@/components/tnea-barch/TneaSpokeShell';
@@ -70,9 +71,13 @@ export default function CounsellingProcedurePage({
         'How many days for confirmation?',
       ]}
     >
-      <Alert severity="info" sx={{ mb: 3, borderRadius: 1.5 }}>
-        Special-category counselling (Differently Abled, Ex-Servicemen wards, Eminent Sports Persons) happens first. The general academic round and 7.5% Government School round run in parallel afterward.
-      </Alert>
+      <Box sx={{ mb: 3 }}>
+        <Callout>
+          <Box component="p" sx={{ m: 0 }}>
+              Special-category counselling (Differently Abled, Ex-Servicemen wards, Eminent Sports Persons) happens first. The general academic round and 7.5% Government School round run in parallel afterward.
+          </Box>
+        </Callout>
+      </Box>
 
       {/* Stages flow */}
       <Typography variant="h5" component="h2" fontWeight={800} sx={{ mb: 2 }}>
@@ -85,20 +90,20 @@ export default function CounsellingProcedurePage({
               elevation={0}
               sx={{
                 p: 2,
-                borderRadius: 2,
-                border: '1px solid',
-                borderColor: 'divider',
+                borderRadius: 1,
+                border: `1px solid ${t.line}`,
                 position: 'relative',
               }}
             >
               <Stack direction="row" gap={1.5} alignItems="flex-start">
                 <Box
+                  aria-hidden
                   sx={{
                     width: 32,
                     height: 32,
                     borderRadius: '50%',
-                    bgcolor: 'primary.main',
-                    color: 'primary.contrastText',
+                    bgcolor: t.navy900,
+                    color: t.gold500,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -123,7 +128,7 @@ export default function CounsellingProcedurePage({
             </Paper>
             {i < counselling.stages_per_round.length - 1 && (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 0.25 }}>
-                <ArrowDownwardIcon sx={{ color: 'text.disabled', fontSize: 18 }} />
+                <ArrowDownwardIcon aria-hidden sx={{ color: t.statusIdle, fontSize: 18 }} />
               </Box>
             )}
           </Box>
@@ -136,10 +141,11 @@ export default function CounsellingProcedurePage({
         sx={{
           p: 2.5,
           mb: 4,
-          borderRadius: 2,
-          border: '2px solid',
-          borderColor: 'primary.main',
-          bgcolor: '#E3F2FD',
+          borderRadius: 1,
+          border: `1px solid ${t.line}`,
+          borderLeft: 'none',
+          boxShadow: `inset 3px 0 0 ${t.gold500}`,
+          bgcolor: t.surface,
         }}
       >
         <Typography variant="h6" fontWeight={800} sx={{ mb: 1 }}>
@@ -162,16 +168,17 @@ export default function CounsellingProcedurePage({
           <Paper
             key={opt.id}
             elevation={0}
-            sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+            sx={{ p: 2, borderRadius: 1, border: `1px solid ${t.line}` }}
           >
             <Stack direction="row" gap={1.5} alignItems="flex-start">
               <Box
+                aria-hidden
                 sx={{
                   width: 28,
                   height: 28,
                   borderRadius: '50%',
-                  bgcolor: 'grey.100',
-                  color: 'text.primary',
+                  bgcolor: t.surfaceHover,
+                  color: t.ink,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -186,7 +193,7 @@ export default function CounsellingProcedurePage({
                 <Typography variant="subtitle2" fontWeight={700}>
                   {opt.title}
                 </Typography>
-                <Typography variant="caption" color="primary.main" sx={{ display: 'block', mb: 0.5 }}>
+                <Typography variant="caption" sx={{ display: 'block', mb: 0.5, color: t.gold800, fontWeight: 600 }}>
                   {opt.short}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -202,7 +209,7 @@ export default function CounsellingProcedurePage({
       <Typography variant="h5" component="h2" fontWeight={800} sx={{ mb: 2 }}>
         Important notes
       </Typography>
-      <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}>
+      <Paper elevation={0} sx={{ p: 2.5, borderRadius: 1, border: `1px solid ${t.line}` }}>
         <Stack component="ul" sx={{ pl: 2.5, m: 0 }} spacing={1}>
           {counselling.notes.map((n) => (
             <li key={n}>

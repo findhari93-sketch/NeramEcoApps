@@ -76,6 +76,20 @@ export default function ProfileSection({
     onFirstOpen?.();
   }, [visible, onFirstOpen]);
 
+  // Arriving at /teacher/students/<id>#<this id> (the roster's "View application
+  // form") means "show me this section". The browser's own jump has already
+  // missed, because the page was a skeleton when it looked, so open it on a phone
+  // and scroll once it has painted.
+  useEffect(() => {
+    if (typeof window === 'undefined' || window.location.hash !== `#${id}`) return;
+    setExpanded(true);
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [id]);
+
   if (isDesktop) {
     return (
       <Paper id={id} sx={{ p: 3, mb: 2, scrollMarginTop: 96 }}>

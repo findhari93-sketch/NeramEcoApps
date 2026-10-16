@@ -1,8 +1,9 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import { Box, Typography } from '@mui/material';
 import ConceptArticleLayout from '@/components/counselling/ConceptArticleLayout';
+import { GuideNote, GuideP } from '@/components/exam-hub/sections/GuideBlocks';
 import { buildAlternates } from '@/lib/seo/metadata';
+import { ArticleSection, CheckList, DataTable, StepList } from '@/design-system';
 
 export const revalidate = 604800;
 
@@ -72,83 +73,106 @@ export default function Page({ params: { locale } }: { params: { locale: string 
       faqs={FAQS}
       locale={locale}
     >
-      <Typography component="h2">The three-stage pipeline for IIT B.Arch</Typography>
-      <Typography component="p">
-        Getting into IIT B.Arch is a three-stage process. Skipping any stage closes off the IIT B.Arch route, even if you cleared the others.
-      </Typography>
-      <Box component="ol">
-        <Box component="li">
-          <strong>Stage 1: JEE Main Paper 1.</strong> You need to qualify JEE Main Paper 1 to be eligible for JEE Advanced. The cutoff varies year to year, typically requires being in the top 2.5 lakh candidates.
-        </Box>
-        <Box component="li">
-          <strong>Stage 2: JEE Advanced.</strong> You need to clear JEE Advanced subject and aggregate cutoffs. For 2025, this was 35% aggregate for Open category, 31.5% for OBC and EWS, 17.5% for SC, ST, and PwD.
-        </Box>
-        <Box component="li">
-          <strong>Stage 3: AAT.</strong> Register for AAT, appear, get a Pass result. The actual allotment in JoSAA uses your JEE Advanced AIR.
-        </Box>
-      </Box>
-
-      <Typography component="h2">What AAT actually tests</Typography>
-      <Typography component="p">
-        AAT is a 3-hour pen-and-paper test. It assesses architectural aptitude across:
-      </Typography>
-      <Typography component="ul">
-        <Box component="li"><strong>Freehand drawing:</strong> Quick observational sketches from imagination or memory</Box>
-        <Box component="li"><strong>Geometrical drawing:</strong> Precise drafting of 2D and 3D forms</Box>
-        <Box component="li"><strong>Three-dimensional perception:</strong> Visualisation of forms from given views</Box>
-        <Box component="li"><strong>Imagination and aesthetic sensitivity:</strong> Composition, harmony, contrast tests</Box>
-        <Box component="li"><strong>Architectural awareness:</strong> Recognition of significant structures across history</Box>
-      </Typography>
-
-      <Typography component="p">
-        The exam is conducted physically at IIT Roorkee, Kharagpur, BHU, and Guwahati centres. Bring your own drawing instruments. The format has not changed materially in recent years.
-      </Typography>
-
-      <Typography component="h2">Pass or Fail, that is it</Typography>
-      <Typography component="p">
-        This is what trips up most aspirants. AAT is a qualifying test. There is no AAT score that helps your JoSAA rank. Either you clear AAT (and become eligible for IIT B.Arch through your JEE Advanced AIR) or you do not (and you cannot get any IIT B.Arch seat regardless of your Advanced rank).
-      </Typography>
-      <Box
-        component="blockquote"
-        sx={{ p: 2, borderRadius: 2, bgcolor: '#E3F2FD', border: '1px solid #1565C0', my: 2 }}
+      <ArticleSection
+        id="three-stage-pipeline"
+        title="The three-stage pipeline for IIT B.Arch"
+        intro="Getting into IIT B.Arch is a three-stage process. Skipping any stage closes off the IIT B.Arch route, even if you cleared the others."
       >
-        <Typography component="p" sx={{ mb: 0, fontWeight: 600 }}>
-          Two candidates with the same JEE Advanced AIR who both Pass AAT have identical chances at IIT B.Arch. The AAT score itself does not differentiate them.
-        </Typography>
-      </Box>
+        <StepList
+          columnMin={220}
+          items={[
+            {
+              title: 'Stage 1: JEE Main Paper 1.',
+              body: 'You need to qualify JEE Main Paper 1 to be eligible for JEE Advanced. The cutoff varies year to year, typically requires being in the top 2.5 lakh candidates.',
+            },
+            {
+              title: 'Stage 2: JEE Advanced.',
+              body: 'You need to clear JEE Advanced subject and aggregate cutoffs. For 2025, this was 35% aggregate for Open category, 31.5% for OBC and EWS, 17.5% for SC, ST, and PwD.',
+            },
+            {
+              title: 'Stage 3: AAT.',
+              body: 'Register for AAT, appear, get a Pass result. The actual allotment in JoSAA uses your JEE Advanced AIR.',
+            },
+          ]}
+        />
+      </ArticleSection>
 
-      <Typography component="h2">Why this matters strategically</Typography>
-      <Typography component="p">
-        Because AAT is Pass or Fail, every candidate cleared for JEE Advanced who has any interest in IIT B.Arch should attempt AAT. The downside is a few hours and one trip to a centre. The upside is keeping the IIT B.Arch route open. Skipping AAT to focus only on B.Tech is a one-way door, you cannot come back to IIT B.Arch later.
-      </Typography>
+      <ArticleSection
+        id="what-aat-tests"
+        title="What AAT actually tests"
+        intro="AAT is a 3-hour pen-and-paper test. It assesses architectural aptitude across:"
+      >
+        <CheckList
+          items={[
+            { title: 'Freehand drawing:', body: 'Quick observational sketches from imagination or memory' },
+            { title: 'Geometrical drawing:', body: 'Precise drafting of 2D and 3D forms' },
+            { title: 'Three-dimensional perception:', body: 'Visualisation of forms from given views' },
+            { title: 'Imagination and aesthetic sensitivity:', body: 'Composition, harmony, contrast tests' },
+            { title: 'Architectural awareness:', body: 'Recognition of significant structures across history' },
+          ]}
+        />
+        <GuideP>
+          The exam is conducted physically at IIT Roorkee, Kharagpur, BHU, and Guwahati centres. Bring your own drawing instruments. The format has not changed materially in recent years.
+        </GuideP>
+      </ArticleSection>
 
-      <Typography component="h2">2026 AAT timeline</Typography>
-      <Typography component="ul">
-        <Box component="li"><strong>JEE Advanced 2026:</strong> May 17, 2026</Box>
-        <Box component="li"><strong>JEE Advanced result:</strong> June 2, 2026 (expected)</Box>
-        <Box component="li"><strong>AAT registration:</strong> June 2 to 3, 2026 (window of 24 to 48 hours)</Box>
-        <Box component="li"><strong>AAT 2026 exam:</strong> June 4, 2026</Box>
-        <Box component="li"><strong>AAT result:</strong> June 7, 2026</Box>
-        <Box component="li"><strong>JoSAA Round 1 starts:</strong> Mid June 2026</Box>
-      </Typography>
+      <ArticleSection
+        id="pass-or-fail"
+        title="Pass or Fail, that is it"
+        intro="This is what trips up most aspirants. AAT is a qualifying test. There is no AAT score that helps your JoSAA rank. Either you clear AAT (and become eligible for IIT B.Arch through your JEE Advanced AIR) or you do not (and you cannot get any IIT B.Arch seat regardless of your Advanced rank)."
+      >
+        <GuideNote>
+          <GuideP>
+            <strong>
+              Two candidates with the same JEE Advanced AIR who both Pass AAT have identical chances at IIT B.Arch. The AAT score itself does not differentiate them.
+            </strong>
+          </GuideP>
+        </GuideNote>
+      </ArticleSection>
 
-      <Typography component="p">
-        The AAT registration window is short. If you cleared JEE Advanced, decide quickly whether to register. The default for any architecture-curious candidate should be: register, take the exam, do not foreclose the option.
-      </Typography>
+      <ArticleSection
+        id="why-it-matters"
+        title="Why this matters strategically"
+        intro="Because AAT is Pass or Fail, every candidate cleared for JEE Advanced who has any interest in IIT B.Arch should attempt AAT. The downside is a few hours and one trip to a centre. The upside is keeping the IIT B.Arch route open. Skipping AAT to focus only on B.Tech is a one-way door, you cannot come back to IIT B.Arch later."
+      />
 
-      <Typography component="h2">IITs that offer B.Arch through AAT</Typography>
-      <Typography component="ul">
-        <Box component="li"><strong>IIT Roorkee:</strong> JEE Advanced AIR roughly 17,600 to 20,800 (Open, Gender-Neutral, 2023 to 2025)</Box>
-        <Box component="li"><strong>IIT Kharagpur:</strong> JEE Advanced AIR roughly 19,000 to 23,400 (Open, Gender-Neutral, 2023 to 2025)</Box>
-        <Box component="li"><strong>IIT (BHU) Varanasi:</strong> JEE Advanced AIR roughly 20,700 to 24,700 (Open, Gender-Neutral, 2023 to 2025)</Box>
-      </Typography>
-      <Typography component="p" sx={{ fontSize: 14, color: 'text.secondary' }}>
-        These are JEE Advanced ranks (not JEE Main Paper 2A ranks). Reserved-category closing ranks are lower. Check the live JoSAA B.Arch predictor for current cutoffs.
-      </Typography>
+      <ArticleSection id="aat-2026-timeline" title="2026 AAT timeline">
+        <DataTable
+          caption="2026 AAT timeline"
+          hideCaption
+          columns={['Milestone', 'Date']}
+          rows={[
+            ['JEE Advanced 2026', 'May 17, 2026'],
+            ['JEE Advanced result', 'June 2, 2026 (expected)'],
+            ['AAT registration', 'June 2 to 3, 2026 (window of 24 to 48 hours)'],
+            ['AAT 2026 exam', 'June 4, 2026'],
+            ['AAT result', 'June 7, 2026'],
+            ['JoSAA Round 1 starts', 'Mid June 2026'],
+          ]}
+        />
+        <GuideP>
+          The AAT registration window is short. If you cleared JEE Advanced, decide quickly whether to register. The default for any architecture-curious candidate should be: register, take the exam, do not foreclose the option.
+        </GuideP>
+      </ArticleSection>
 
-      <Typography component="p">
-        Other IITs (Delhi, Bombay, Madras, Kanpur, Guwahati, Hyderabad, Mandi, Indore, etc.) do not offer B.Arch. The only path to B.Arch at any IIT is the JEE Advanced plus AAT route at one of the three IITs above.
-      </Typography>
+      <ArticleSection id="iits-offering-barch" title="IITs that offer B.Arch through AAT">
+        <DataTable
+          caption="JEE Advanced closing ranks for IIT B.Arch"
+          hideCaption
+          columns={['IIT', 'JEE Advanced AIR (Open, Gender-Neutral, 2023 to 2025)']}
+          rows={[
+            ['IIT Roorkee', 'Roughly 17,600 to 20,800'],
+            ['IIT Kharagpur', 'Roughly 19,000 to 23,400'],
+            ['IIT (BHU) Varanasi', 'Roughly 20,700 to 24,700'],
+          ]}
+        />
+        <GuideP muted>
+          These are JEE Advanced ranks (not JEE Main Paper 2A ranks). Reserved-category closing ranks are lower. Check the live JoSAA B.Arch predictor for current cutoffs.
+        </GuideP>
+        <GuideP>
+          Other IITs (Delhi, Bombay, Madras, Kanpur, Guwahati, Hyderabad, Mandi, Indore, etc.) do not offer B.Arch. The only path to B.Arch at any IIT is the JEE Advanced plus AAT route at one of the three IITs above.
+        </GuideP>
+      </ArticleSection>
     </ConceptArticleLayout>
   );
 }

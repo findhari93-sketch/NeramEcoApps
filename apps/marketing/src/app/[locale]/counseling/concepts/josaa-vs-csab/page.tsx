@@ -1,8 +1,9 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import { Box, Typography } from '@mui/material';
 import ConceptArticleLayout from '@/components/counselling/ConceptArticleLayout';
+import { GuideList, GuideNote, GuideP, GuideStack } from '@/components/exam-hub/sections/GuideBlocks';
 import { buildAlternates } from '@/lib/seo/metadata';
+import { ArticleSection, DataTable, InfoCard } from '@/design-system';
 
 export const revalidate = 604800;
 
@@ -72,81 +73,105 @@ export default function Page({ params: { locale } }: { params: { locale: string 
       faqs={FAQS}
       locale={locale}
     >
-      <Typography component="h2">Two systems, one seat at a time</Typography>
-      <Typography component="p">
-        JoSAA (Joint Seat Allocation Authority) is the central counselling for B.Arch and B.Tech seats at IITs, NITs, IIEST Shibpur, SPAs, IIITs, and GFTIs. It runs six rounds, typically June through July.
-      </Typography>
-      <Typography component="p">
-        CSAB (Central Seat Allocation Board) runs after JoSAA closes. It fills the seats that became vacant during JoSAA (because candidates withdrew, did not report, or did not pay the acceptance fee). CSAB does not cover IITs.
-      </Typography>
-
-      <Typography component="h2">Three CSAB verticals (commonly confused)</Typography>
-
-      <Typography component="h3">CSAB Special</Typography>
-      <Typography component="p">
-        Three rounds, after JoSAA Round 6. Fills vacancies at NITs, IIEST Shibpur, IIITs, SPAs, and GFTIs. Open to all India candidates with a valid JEE Main Paper 2 B.Arch rank. Fees: ₹40,000 Enrolment + ₹35,000 IAF-II for General (₹19,000 + ₹16,000 for SC/ST/PwD).
-      </Typography>
-
-      <Typography component="h3">CSAB-NEUT</Typography>
-      <Typography component="p">
-        For 8 Northeast states (Arunachal, Assam, Manipur, Meghalaya, Mizoram, Nagaland, Sikkim, Tripura) and 5 Union Territories (A&N, DNH&DD, Lakshadweep, Ladakh). Allocates AICTE-approved seats outside the home state. About 3,000 total seats annually across courses, B.Arch is a small share.
-      </Typography>
-
-      <Typography component="h3">CSAB-Supernumerary</Typography>
-      <Typography component="p">
-        For UTs that lack their own NIT (A&N, Lakshadweep, Daman and Diu, Dadra and Nagar Haveli). Provides supernumerary seats at NIT Calicut, NIT Durgapur, and SVNIT Surat for these UT candidates.
-      </Typography>
-
-      <Typography component="h2">The cancellation rule that catches people out</Typography>
-      <Typography component="p">
-        This is the single most important rule and the one most aspirants miss:
-      </Typography>
-      <Box
-        component="blockquote"
-        sx={{ p: 2, borderRadius: 2, bgcolor: '#FFF3E0', border: '1px solid #FB8C00', my: 2 }}
+      <ArticleSection
+        id="two-systems"
+        title="Two systems, one seat at a time"
+        intro="JoSAA (Joint Seat Allocation Authority) is the central counselling for B.Arch and B.Tech seats at IITs, NITs, IIEST Shibpur, SPAs, IIITs, and GFTIs. It runs six rounds, typically June through July."
       >
-        <Typography component="p" sx={{ mb: 0, fontWeight: 600 }}>
-          If you currently hold a JoSAA seat and accept ANY CSAB Special allotment, your JoSAA seat is automatically cancelled. The cancellation cannot be reverted.
-        </Typography>
-      </Box>
-      <Typography component="p">
-        Concretely: if you locked in NIT Trichy B.Arch through JoSAA Round 5 and then registered for CSAB hoping for SPA Delhi, getting any CSAB allotment (including a worse college than NIT Trichy) automatically removes you from NIT Trichy. There is no undo.
-      </Typography>
+        <GuideP>
+          CSAB (Central Seat Allocation Board) runs after JoSAA closes. It fills the seats that became vacant during JoSAA (because candidates withdrew, did not report, or did not pay the acceptance fee). CSAB does not cover IITs.
+        </GuideP>
+      </ArticleSection>
 
-      <Typography component="h2">Decision rule for CSAB Special</Typography>
-      <Box component="ol">
-        <Box component="li">
-          <strong>If your JoSAA seat is your final answer,</strong> do not register for CSAB Special. The risk of accidental cancellation is not worth it.
-        </Box>
-        <Box component="li">
-          <strong>If your JoSAA seat is acceptable but you would upgrade to specific institutes,</strong> register for CSAB but only choose those upgrade institutes in your CSAB preference list. If CSAB allots one of them, you upgrade. If not, no allotment, no cancellation.
-        </Box>
-        <Box component="li">
-          <strong>If you have no JoSAA seat,</strong> CSAB is a clean second chance. Register and choose freely from the institutes you would attend.
-        </Box>
-        <Box component="li">
-          <strong>If you have a JoSAA seat you do not want,</strong> CSAB is the right move. You are willing to give up the JoSAA seat for any reasonable upgrade.
-        </Box>
-      </Box>
+      <ArticleSection id="csab-verticals" title="Three CSAB verticals (commonly confused)">
+        <GuideStack>
+          <InfoCard
+            code="01"
+            title="CSAB Special"
+            body="Three rounds, after JoSAA Round 6. Fills vacancies at NITs, IIEST Shibpur, IIITs, SPAs, and GFTIs. Open to all India candidates with a valid JEE Main Paper 2 B.Arch rank. Fees: ₹40,000 Enrolment + ₹35,000 IAF-II for General (₹19,000 + ₹16,000 for SC/ST/PwD)."
+          />
+          <InfoCard
+            code="02"
+            title="CSAB-NEUT"
+            body="For 8 Northeast states (Arunachal, Assam, Manipur, Meghalaya, Mizoram, Nagaland, Sikkim, Tripura) and 5 Union Territories (A&N, DNH&DD, Lakshadweep, Ladakh). Allocates AICTE-approved seats outside the home state. About 3,000 total seats annually across courses, B.Arch is a small share."
+          />
+          <InfoCard
+            code="03"
+            title="CSAB-Supernumerary"
+            body="For UTs that lack their own NIT (A&N, Lakshadweep, Daman and Diu, Dadra and Nagar Haveli). Provides supernumerary seats at NIT Calicut, NIT Durgapur, and SVNIT Surat for these UT candidates."
+          />
+        </GuideStack>
+      </ArticleSection>
 
-      <Typography component="h2">Timing for 2026</Typography>
-      <Typography component="ul">
-        <Box component="li">JoSAA Round 1: mid-June 2026 (TBD)</Box>
-        <Box component="li">JoSAA Round 6 (final): around July 20, 2026</Box>
-        <Box component="li">CSAB Special starts: late July 2026</Box>
-        <Box component="li">CSAB Special closes: late August 2026</Box>
-      </Typography>
+      <ArticleSection
+        id="cancellation-rule"
+        title="The cancellation rule that catches people out"
+        intro="This is the single most important rule and the one most aspirants miss:"
+      >
+        <GuideNote>
+          <GuideP>
+            <strong>
+              If you currently hold a JoSAA seat and accept ANY CSAB Special allotment, your JoSAA seat is automatically cancelled. The cancellation cannot be reverted.
+            </strong>
+          </GuideP>
+        </GuideNote>
+        <GuideP>
+          Concretely: if you locked in NIT Trichy B.Arch through JoSAA Round 5 and then registered for CSAB hoping for SPA Delhi, getting any CSAB allotment (including a worse college than NIT Trichy) automatically removes you from NIT Trichy. There is no undo.
+        </GuideP>
+      </ArticleSection>
 
-      <Typography component="h2">What CSAB does NOT include</Typography>
-      <Typography component="ul">
-        <Box component="li"><strong>IITs:</strong> JoSAA-only, IITs never participate in CSAB</Box>
-        <Box component="li"><strong>State counsellings:</strong> TNEA, MHT-CET, KEAM, etc. are separate from CSAB</Box>
-        <Box component="li"><strong>NATA-only colleges:</strong> CEPT University, KEAM Kerala, HSTES Haryana use NATA, CSAB uses JEE Paper 2</Box>
-      </Typography>
+      <ArticleSection id="decision-rule" title="Decision rule for CSAB Special">
+        <GuideList
+          ordered
+          items={[
+            <>
+              <strong>If your JoSAA seat is your final answer,</strong> do not register for CSAB Special. The risk of accidental cancellation is not worth it.
+            </>,
+            <>
+              <strong>If your JoSAA seat is acceptable but you would upgrade to specific institutes,</strong> register for CSAB but only choose those upgrade institutes in your CSAB preference list. If CSAB allots one of them, you upgrade. If not, no allotment, no cancellation.
+            </>,
+            <>
+              <strong>If you have no JoSAA seat,</strong> CSAB is a clean second chance. Register and choose freely from the institutes you would attend.
+            </>,
+            <>
+              <strong>If you have a JoSAA seat you do not want,</strong> CSAB is the right move. You are willing to give up the JoSAA seat for any reasonable upgrade.
+            </>,
+          ]}
+        />
+      </ArticleSection>
 
-      <Typography component="p">
-        For the full list of CSAB Special participating institutes and the live 2026 schedule, refer to csab.nic.in. The CSAB-NEUT page at csab.nic.in/csab-neut covers Northeast and UTs.
-      </Typography>
+      <ArticleSection id="timing-2026" title="Timing for 2026">
+        <DataTable
+          caption="JoSAA and CSAB Special timing for 2026"
+          hideCaption
+          columns={['Milestone', 'Timing']}
+          rows={[
+            ['JoSAA Round 1', 'mid-June 2026 (TBD)'],
+            ['JoSAA Round 6 (final)', 'around July 20, 2026'],
+            ['CSAB Special starts', 'late July 2026'],
+            ['CSAB Special closes', 'late August 2026'],
+          ]}
+        />
+      </ArticleSection>
+
+      <ArticleSection id="what-csab-excludes" title="What CSAB does NOT include">
+        <GuideList
+          items={[
+            <>
+              <strong>IITs:</strong> JoSAA-only, IITs never participate in CSAB
+            </>,
+            <>
+              <strong>State counsellings:</strong> TNEA, MHT-CET, KEAM, etc. are separate from CSAB
+            </>,
+            <>
+              <strong>NATA-only colleges:</strong> CEPT University, KEAM Kerala, HSTES Haryana use NATA, CSAB uses JEE Paper 2
+            </>,
+          ]}
+        />
+        <GuideP>
+          For the full list of CSAB Special participating institutes and the live 2026 schedule, refer to csab.nic.in. The CSAB-NEUT page at csab.nic.in/csab-neut covers Northeast and UTs.
+        </GuideP>
+      </ArticleSection>
     </ConceptArticleLayout>
   );
 }

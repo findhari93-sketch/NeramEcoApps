@@ -19,7 +19,6 @@ import {
   Typography,
 } from '@neram/ui';
 import {
-  isOwnLinkDemo,
   pickDemoRoles,
   defaultStartFor,
   formatDemoDateTime,
@@ -29,6 +28,7 @@ import {
   istDateKey,
   istDateTime,
 } from '@neram/database/demo-schedule';
+import { studentGetsDemoWhatsApp } from '@/lib/demo/meeting';
 import AvailabilityTimeline, { clashesFor, type Availability } from './AvailabilityTimeline';
 import type { DemoRequest, DeskSettings } from './types';
 
@@ -41,9 +41,18 @@ export interface ScheduleSubmit {
   organizerUpn?: string;
   conflictNote?: string;
   parentEmail?: string;
-  meeting?: 'teams' | 'link';
+  meeting?: MeetingChoice;
   joinUrl?: string;
 }
+
+export type MeetingChoice = 'teams' | 'own_link' | 'later' | 'in_person';
+
+export const MEETING_CHOICES: Array<{ id: MeetingChoice; label: string }> = [
+  { id: 'teams', label: 'Create a Teams meeting' },
+  { id: 'own_link', label: 'My own link (Google Meet etc.)' },
+  { id: 'later', label: 'Link later' },
+  { id: 'in_person', label: 'In person' },
+];
 
 function istTime(d: Date): string {
   return new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
@@ -103,7 +112,7 @@ export default function ScheduleDialog({
   const [team, setTeam] = useState<string[]>(initialTeam);
   const [tutorUpn, setTutorUpn] = useState(initialRoles.tutor ?? '');
   const [organizerUpn, setOrganizerUpn] = useState(initialRoles.organizer ?? '');
-  const [meeting, setMeeting] = useState<'teams' | 'link'>('teams');
+  const [meeting, setMeeting] = useState<MeetingChoice>('teams');
   const [joinUrl, setJoinUrl] = useState('');
   const [parentEmail, setParentEmail] = useState(request.parent_email || '');
   const [reason, setReason] = useState('');
@@ -129,7 +138,8 @@ export default function ScheduleDialog({
     if (roles.organizer && roles.organizer !== organizerUpn) setOrganizerUpn(roles.organizer);
   }, [team, tutorUpn, organizerUpn, settings]);
 
-  const ownLink = mode === 'confirm' && meeting === 'link';
+  const ownLink = mode === 'confirm' && meeting === 'own_link';
+  const notTeams = mode === 'confirm' && meeting !== 'teams';
   const linkOk = /^https:\/\/[^\s/]+\.[^\s]+/.test(joinUrl.trim());
 
   const nameOf = (upn: string) => people.find((p) => p.upn === upn)?.name ?? upn;
@@ -163,11 +173,11 @@ export default function ScheduleDialog({
         <Typography variant="body2" color="text.secondary">
           {request.name} asked for <b>{formatDemoPreference(request.preferred_date, request.preferred_window, settings.schedule)}</b>.
           {mode === 'reschedule'
-            ? isOwnLinkDemo(request)
-              ? ' This demo uses your own meeting link, so tell the student the new time yourself. The team still gets Neram Assistant reminders.'
+            ? !studentGetsDemoWhatsApp(request)
+              ? ' This demo is not on Teams, so tell the student the new time yourself. The team still gets Neram Assistant reminders.'
               : ' Moving updates the same Teams meeting; everyone’s calendar gets the change and WhatsApp tells the student why.'
-            : ownLink
-              ? ' With your own link, nothing is sent to the student: share the link yourself on WhatsApp. The team still gets Neram Assistant reminders.'
+            : notTeams
+              ? ' Without a Teams meeting, nothing is sent to the student: share the time (and link) yourself on WhatsApp. The team still gets Neram Assistant reminders.'
               : ' Confirming creates the Teams meeting on the organizer’s calendar, invites the team and the student’s Gmail, and sends the WhatsApp confirmation.'}
         </Typography>
 
@@ -177,12 +187,18 @@ export default function ScheduleDialog({
             <RadioGroup
               row
               value={meeting}
-              onChange={(e) => setMeeting(e.target.value as 'teams' | 'link')}
+              onChange={(e) => setMeeting(e.target.value as MeetingChoice)}
               aria-label="Meeting"
             >
-              <FormControlLabel value="teams" control={<Radio />} label="Create a Teams meeting" sx={{ minHeight: 44, mr: 3 }} />
-              <FormControlLabel value="link" control={<Radio />} label="Use my own link (Google Meet etc.)" sx={{ minHeight: 44 }} />
+              {MEETING_CHOICES.map((m) => (
+                <FormControlLabel key={m.id} value={m.id} control={<Radio />} label={m.label} sx={{ minHeight: 44, mr: 3 }} />
+              ))}
             </RadioGroup>
+            {meeting === 'later' && (
+              <Typography variant="body2" color="text.secondary">
+                Add the link from the demo when you have it.
+              </Typography>
+            )}
             {ownLink && (
               <TextField
                 label="Meeting link"
@@ -240,8 +256,8 @@ export default function ScheduleDialog({
                     label="Organizer (whose calendar)"
                     value={team.includes(organizerUpn) ? organizerUpn : ''}
                     onChange={(e) => setOrganizerUpn(e.target.value)}
-                    helperText={ownLink ? 'Not used with your own link' : 'The meeting lives on this calendar'}
-                    disabled={!team.length || ownLink}
+                    helperText={notTeams ? 'Only used for a Teams meeting' : 'The meeting lives on this calendar'}
+                    disabled={!team.length || notTeams}
                   >
                     {team.map((u) => (
                       <MenuItem key={u} value={u}>
@@ -403,7 +419,7 @@ export default function ScheduleDialog({
             })
           }
         >
-          {busy ? 'Saving' : mode === 'confirm' ? (ownLink ? 'Confirm' : 'Confirm and send') : 'Move and notify'}
+          {busy ? 'Saving' : mode === 'confirm' ? (notTeams ? 'Confirm' : 'Confirm and send') : studentGetsDemoWhatsApp(request) ? 'Move and notify' : 'Move'}
         </Button>
       </DialogActions>
     </Dialog>

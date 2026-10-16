@@ -2,20 +2,9 @@
 
 import { useTranslations } from 'next-intl';
 import { Box, Typography, Divider } from '@neram/ui';
+import { REFUND_SECTION_KEYS } from './sections';
 
-const SECTION_KEYS = [
-  'overview',
-  'eligibility',
-  'processingFee',
-  'adminDiscretion',
-  'howToRequest',
-  'requiredInfo',
-  'reviewProcess',
-  'refundMethod',
-  'installmentPayments',
-  'exceptions',
-  'contact',
-] as const;
+const SECTION_KEYS = REFUND_SECTION_KEYS;
 
 interface RefundPolicyContentProps {
   compact?: boolean;

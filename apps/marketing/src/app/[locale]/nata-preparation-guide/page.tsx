@@ -20,6 +20,10 @@ import { JsonLd } from '@/components/seo/JsonLd';
 import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import RelatedContent from '@/components/seo/RelatedContent';
+import { siteTokens as t } from '@neram/ui/site-tokens';
+import { errorColor } from '@/design-system/brand-colors';
+import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
+import CheckCircleOutlinedIcon from '@mui/icons-material/CheckCircleOutlined';
 
 
 export async function generateMetadata({
@@ -161,15 +165,16 @@ export default function NataPreparationGuidePage({ params: { locale } }: PagePro
       <Box
         sx={{
           py: { xs: 6, md: 10 },
-          background: 'linear-gradient(135deg, #2e7d32 0%, #1b5e20 100%)',
-          color: 'white',
+          bgcolor: t.navy900,
+          ...t.blueprint,
+          color: t.paper,
         }}
       >
         <Container maxWidth="lg">
           <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', md: '3rem' } }}>
             NATA Preparation Guide 2026
           </Typography>
-          <Typography variant="h5" sx={{ mb: 3, opacity: 0.9 }}>
+          <Typography variant="h5" sx={{ mb: 3, color: t.paperMuted }}>
             Your complete roadmap to cracking NATA with a top rank
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
@@ -177,7 +182,7 @@ export default function NataPreparationGuidePage({ params: { locale } }: PagePro
               variant="contained"
               component={Link}
               href="/apply"
-              sx={{ bgcolor: 'white', color: 'success.main' }}
+              sx={{ minHeight: 48 }}
             >
               Join NATA Coaching
             </Button>
@@ -185,7 +190,7 @@ export default function NataPreparationGuidePage({ params: { locale } }: PagePro
               variant="outlined"
               component={Link}
               href="/nata-syllabus"
-              sx={{ borderColor: 'white', color: 'white' }}
+              sx={{ minHeight: 48, borderColor: t.outlineDark, color: t.paper, '&:hover': { bgcolor: 'transparent', borderColor: t.gold500, color: t.gold500 } }}
             >
               View Syllabus
             </Button>
@@ -194,7 +199,7 @@ export default function NataPreparationGuidePage({ params: { locale } }: PagePro
       </Box>
 
       {/* Quick Overview */}
-      <Box sx={{ py: 4, bgcolor: 'grey.50' }}>
+      <Box sx={{ py: 4, bgcolor: t.ground }}>
         <Container maxWidth="lg">
           <Grid container spacing={3}>
             {[
@@ -204,7 +209,7 @@ export default function NataPreparationGuidePage({ params: { locale } }: PagePro
               { label: 'Drawing Practice', value: '2+ Hours/Day' },
             ].map((item, index) => (
               <Grid item xs={6} md={3} key={index}>
-                <Paper sx={{ p: 2, textAlign: 'center' }}>
+                <Paper variant="outlined" sx={{ p: 2, textAlign: 'center' }}>
                   <Typography variant="h5" color="primary" sx={{ fontWeight: 700 }}>
                     {item.value}
                   </Typography>
@@ -230,7 +235,7 @@ export default function NataPreparationGuidePage({ params: { locale } }: PagePro
               <Grid item xs={12} md={6} key={index}>
                 <Card sx={{ height: '100%' }}>
                   <CardContent sx={{ p: 4 }}>
-                    <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, color: 'primary.main' }}>
+                    <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, color: t.navy900 }}>
                       {phase.phase}
                     </Typography>
                     <Typography variant="subtitle1" color="text.secondary" sx={{ mb: 2 }}>
@@ -255,7 +260,7 @@ export default function NataPreparationGuidePage({ params: { locale } }: PagePro
       </Box>
 
       {/* Subject-wise Strategy */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
+      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: t.ground }}>
         <Container maxWidth="lg">
           <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ fontWeight: 700, mb: 6 }}>
             Subject-wise Strategy
@@ -311,13 +316,15 @@ export default function NataPreparationGuidePage({ params: { locale } }: PagePro
               { mistake: 'Not Revising Regularly', fix: 'Schedule weekly revision sessions.' },
             ].map((item, index) => (
               <Grid item xs={12} sm={6} md={4} key={index}>
-                <Card sx={{ height: '100%', borderLeft: 4, borderColor: 'error.main' }}>
+                <Card sx={{ height: '100%' }}>
                   <CardContent>
-                    <Typography variant="h6" color="error" gutterBottom sx={{ fontWeight: 600 }}>
-                      ❌ {item.mistake}
+                    <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: t.ink, display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                      <CancelOutlinedIcon aria-hidden sx={{ color: errorColor, fontSize: 22, mt: '3px', flexShrink: 0 }} />
+                      {item.mistake}
                     </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      ✅ {item.fix}
+                    <Typography variant="body2" color="text.secondary" sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                      <CheckCircleOutlinedIcon aria-hidden sx={{ color: t.success, fontSize: 18, mt: '2px', flexShrink: 0 }} />
+                      {item.fix}
                     </Typography>
                   </CardContent>
                 </Card>
@@ -328,12 +335,12 @@ export default function NataPreparationGuidePage({ params: { locale } }: PagePro
       </Box>
 
       {/* CTA Section */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'success.main', color: 'white', textAlign: 'center' }}>
+      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: t.navy900, color: t.paper, textAlign: 'center' }}>
         <Container maxWidth="md">
           <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700 }}>
             Need Expert Guidance?
           </Typography>
-          <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>
+          <Typography variant="h6" sx={{ mb: 4, color: t.paperMuted }}>
             Join Neram Classes for structured NATA preparation with personalized mentoring
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -342,7 +349,7 @@ export default function NataPreparationGuidePage({ params: { locale } }: PagePro
               size="large"
               component={Link}
               href="/apply"
-              sx={{ bgcolor: 'white', color: 'success.main' }}
+              sx={{ minHeight: 48 }}
             >
               Enroll Now
             </Button>
@@ -351,7 +358,7 @@ export default function NataPreparationGuidePage({ params: { locale } }: PagePro
               size="large"
               component={Link}
               href="/contact"
-              sx={{ borderColor: 'white', color: 'white' }}
+              sx={{ minHeight: 48, borderColor: t.outlineDark, color: t.paper, '&:hover': { bgcolor: 'transparent', borderColor: t.gold500, color: t.gold500 } }}
             >
               Free Counseling
             </Button>

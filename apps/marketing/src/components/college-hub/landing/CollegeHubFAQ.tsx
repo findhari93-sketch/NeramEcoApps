@@ -3,6 +3,7 @@
 import { Box, Container, Typography, Accordion, AccordionSummary, AccordionDetails } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import { JsonLd } from '@/components/seo/JsonLd';
+import { tokens } from '@/design-system';
 
 const FAQ_ITEMS = [
   {
@@ -52,7 +53,7 @@ function generateFAQSchema() {
 
 export default function CollegeHubFAQ() {
   return (
-    <Box sx={{ py: { xs: 5, sm: 6, md: 8 }, bgcolor: '#f8fafc' }}>
+    <Box sx={{ py: { xs: 5, sm: 6, md: 8 }, bgcolor: tokens.ground }}>
       <JsonLd data={generateFAQSchema()} />
       <Container maxWidth="md">
         <Typography
@@ -60,7 +61,7 @@ export default function CollegeHubFAQ() {
           sx={{
             fontSize: { xs: '1.35rem', sm: '1.5rem' },
             fontWeight: 800,
-            color: '#0f172a',
+            color: tokens.ink,
             textAlign: 'center',
             mb: { xs: 3, sm: 4 },
           }}
@@ -78,7 +79,7 @@ export default function CollegeHubFAQ() {
                 bgcolor: 'transparent',
                 '&:before': { display: 'none' },
                 borderBottom: '1px solid',
-                borderColor: 'divider',
+                borderColor: tokens.line,
               }}
             >
               <AccordionSummary
@@ -89,12 +90,12 @@ export default function CollegeHubFAQ() {
                   '& .MuiAccordionSummary-content': { my: 1.5 },
                 }}
               >
-                <Typography variant="subtitle1" sx={{ fontWeight: 600, color: '#0f172a', fontSize: '0.95rem' }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, color: tokens.ink, fontSize: '0.95rem' }}>
                   {item.q}
                 </Typography>
               </AccordionSummary>
               <AccordionDetails sx={{ px: 0, pb: 2.5 }}>
-                <Typography variant="body2" sx={{ color: '#475569', lineHeight: 1.7 }}>
+                <Typography variant="body2" sx={{ color: tokens.inkMuted, lineHeight: 1.7 }}>
                   {item.a}
                 </Typography>
               </AccordionDetails>

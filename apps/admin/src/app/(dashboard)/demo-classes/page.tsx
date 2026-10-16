@@ -15,15 +15,21 @@ import RequestPanel from '@/components/demo-requests/RequestPanel';
 import DemoSettingsDialog from '@/components/demo-requests/DemoSettingsDialog';
 import WhatsAppHealthDialog from '@/components/demo-requests/WhatsAppHealthDialog';
 import AddDemoDialog from '@/components/demo-requests/AddDemoDialog';
-import { DESK_TABS, sortForTab, tabOf, type DeskDetail, type DeskList, type DeskTab } from '@/components/demo-requests/types';
+import type { DemoFollowUpRow, DemoRequest } from '@neram/database';
+import type { DeskDetail, DeskList } from '@/components/demo-requests/types';
+import { DESK_STAGES, groupByPerson, sortPeople, stageOf, type DeskPerson, type DeskStage } from '@/components/demo-requests/journey';
 
-const EMPTY: Record<DeskTab, { title: string; body: string }> = {
-  new: { title: 'No new requests', body: 'New demo requests from the website land here. Call them within 2 hours.' },
-  followup: { title: 'Nobody waiting on a call back', body: 'Requests you have called but not confirmed show here.' },
-  upcoming: { title: 'No confirmed demos', body: 'Confirm a request to create its Teams meeting.' },
-  done: { title: 'No finished demos yet', body: 'Mark attendance after each demo to send the thank-you.' },
-  closed: { title: 'Nothing closed', body: 'Not interested and cancelled requests are kept here.' },
+const EMPTY: Record<DeskStage, { title: string; body: string }> = {
+  to_call: { title: 'Nobody to call', body: 'New website requests land here. Call them within 2 hours. Add demo covers WhatsApp and phone enquiries.' },
+  scheduled: { title: 'No demos scheduled', body: 'Confirm a request, or use Add demo > Demo planned for one fixed on WhatsApp.' },
+  after_demo: { title: 'No follow-ups running', body: 'After a demo, students stay here until they join or say no.' },
+  joined: { title: 'Nobody has joined after a demo yet', body: 'Students who enrol after their demo show here.' },
+  closed: { title: 'Nothing closed', body: 'Not interested, cancelled and stopped follow-ups are kept here with the reason.' },
 };
+
+function stageOfRequest(r: DemoRequest, followUp: DemoFollowUpRow | null | undefined, joinedAt: Record<string, string>): DeskStage {
+  return stageOf(r, followUp, r.user_id && r.user_id in joinedAt ? joinedAt[r.user_id] : undefined);
+}
 
 function Kpi({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
   return (
@@ -50,7 +56,7 @@ function DemoDesk() {
 
   const [list, setList] = useState<DeskList | null>(null);
   const [listError, setListError] = useState<string | null>(null);
-  const [tab, setTab] = useState<DeskTab>('new');
+  const [tab, setTab] = useState<DeskStage>('to_call');
   const [detail, setDetail] = useState<DeskDetail | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -104,9 +110,21 @@ function DemoDesk() {
     };
   }, [selectedId]);
 
-  // Opening a request from a link (bell, Telegram) jumps to its tab once.
+  const people = useMemo(() => (list ? groupByPerson(list.requests) : []), [list]);
+  const stageOfPerson = useCallback(
+    (p: DeskPerson): DeskStage => stageOfRequest(p.current, list?.followUps?.[p.current.id], list?.joinedAt ?? {}),
+    [list],
+  );
+  const personOf = useCallback(
+    (id: string | null) => (id ? people.find((p) => p.current.id === id || p.history.some((h) => h.id === id)) ?? null : null),
+    [people],
+  );
+
+  // Opening a request from a link (bell, Telegram) jumps to its student's tab once.
   useEffect(() => {
-    if (detail && detail.request.id === selectedId) setTab(tabOf(detail.request));
+    if (!detail || detail.request.id !== selectedId) return;
+    const p = personOf(selectedId);
+    setTab(p ? stageOfPerson(p) : stageOfRequest(detail.request, detail.lastFollowUp, list?.joinedAt ?? {}));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detail?.request.id]);
 
@@ -126,8 +144,8 @@ function DemoDesk() {
       const d = await res.json();
       if (!res.ok) return d.error || 'Something went wrong';
       setDetail(d);
-      // Recorded as held: follow the request to Done so the follow-up box stays in view.
-      if (body.action === 'held') setTab(tabOf(d.request));
+      // Follow the student to their new tab (confirmed, held, attended, stopped), so the panel stays in view.
+      setTab(stageOfRequest(d.request, d.lastFollowUp, list?.joinedAt ?? {}));
       setList((prev) =>
         prev ? { ...prev, requests: prev.requests.map((r) => (r.id === d.request.id ? d.request : r)) } : prev,
       );
@@ -139,15 +157,16 @@ function DemoDesk() {
   };
 
   const counts = useMemo(() => {
-    const c: Record<DeskTab, number> = { new: 0, followup: 0, upcoming: 0, done: 0, closed: 0 };
-    list?.requests.forEach((r) => c[tabOf(r)]++);
+    const c: Record<DeskStage, number> = { to_call: 0, scheduled: 0, after_demo: 0, joined: 0, closed: 0 };
+    people.forEach((p) => c[stageOfPerson(p)]++);
     return c;
-  }, [list]);
+  }, [people, stageOfPerson]);
 
   const rows = useMemo(
-    () => (list ? sortForTab(tab, list.requests.filter((r) => tabOf(r) === tab)) : []),
-    [list, tab],
+    () => (list ? sortPeople(tab, people.filter((p) => stageOfPerson(p) === tab), list.followUps ?? {}, list.joinedAt ?? {}) : []),
+    [list, people, tab, stageOfPerson],
   );
+  const selectedPerson = personOf(selectedId);
 
   const k = list?.kpis;
 
@@ -156,7 +175,7 @@ function DemoDesk() {
       <OpsPageHeader
         icon={VideocamIcon}
         title="Demo classes"
-        subtitle="Students pick a day and time on the website, or staff add them with Add demo. Call them, confirm a time, and the Teams meeting, Gmail invite and WhatsApp reminders go out by themselves."
+        subtitle="One row per student, from first call to joining. Website requests land in To call; Add demo covers WhatsApp and phone enquiries, planned demos and demos already held. After the demo, students stay in After demo until they join or say no."
         actions={
           <>
             <Button variant="contained" startIcon={<AddIcon />} onClick={() => setAddOpen(true)} disabled={!list} sx={{ minHeight: 44 }}>
@@ -198,7 +217,7 @@ function DemoDesk() {
         {k ? (
           <>
             <Kpi label="New, needs a call" value={k.newRequests} />
-            <Kpi label="Demos today" value={k.today} />
+            <Kpi label="Follow-ups due today" value={k.followUpsDue ?? 0} hint={k.today ? `${k.today} demo${k.today === 1 ? '' : 's'} today` : undefined} />
             <Kpi label="Confirmed, next 7 days" value={k.confirmedNext7} />
             <Kpi label="Attendance, 30 days" value={k.attendanceRate30 === null ? 'No data' : `${k.attendanceRate30}%`} />
             <Kpi label="Enrolled after demo" value={k.enrolled30} hint={`of ${k.requests30} who asked in 30 days`} />
@@ -213,10 +232,10 @@ function DemoDesk() {
         onChange={(_, v) => setTab(v)}
         variant="scrollable"
         allowScrollButtonsMobile
-        aria-label="Demo request stages"
+        aria-label="Where students are"
         sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}
       >
-        {DESK_TABS.map((t) => (
+        {DESK_STAGES.map((t) => (
           <Tab key={t.id} value={t.id} label={`${t.label} (${counts[t.id]})`} title={t.hint} sx={{ minHeight: 48 }} />
         ))}
       </Tabs>
@@ -236,11 +255,12 @@ function DemoDesk() {
             <EmptyState icon={InboxIcon} title={EMPTY[tab].title} body={EMPTY[tab].body} />
           ) : (
             <RequestList
-              rows={rows}
-              tab={tab}
+              people={rows}
+              stage={tab}
               selectedId={selectedId}
               onSelect={(id) => select(id)}
               schedule={list.settings.schedule}
+              hosts={list.settings.hosts}
               now={now}
               followUps={list.followUps ?? {}}
               joinedAt={list.joinedAt ?? {}}
@@ -257,6 +277,9 @@ function DemoDesk() {
               now={now}
               onAction={onAction}
               onClose={() => select(null)}
+              onOpenRequest={(id) => select(id)}
+              related={selectedPerson ? [selectedPerson.current, ...selectedPerson.history].filter((r) => r.id !== selectedId) : []}
+              currentId={selectedPerson?.current.id ?? null}
               openConfirm={confirmFor === selectedId}
             />
           </Box>
@@ -270,17 +293,17 @@ function DemoDesk() {
           open={addOpen}
           settings={list.settings}
           onClose={() => setAddOpen(false)}
-          onAdded={(id, mode) => {
+          onAdded={(id, mode, needsConfirm) => {
             setAddOpen(false);
-            setTab(mode === 'held' ? 'done' : mode === 'agreed' ? 'followup' : 'new');
+            setTab(mode === 'held' ? 'after_demo' : mode === 'planned' && !needsConfirm ? 'scheduled' : 'to_call');
             loadList();
             select(id);
-            if (mode === 'agreed') setConfirmFor(id);
+            if (needsConfirm) setConfirmFor(id);
           }}
           onOpenExisting={(id) => {
             setAddOpen(false);
-            const existing = list.requests.find((r) => r.id === id);
-            if (existing) setTab(tabOf(existing));
+            const p = personOf(id);
+            if (p) setTab(stageOfPerson(p));
             select(id);
           }}
         />

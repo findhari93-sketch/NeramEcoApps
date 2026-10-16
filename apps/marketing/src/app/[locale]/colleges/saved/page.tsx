@@ -6,6 +6,7 @@ import BookmarkIcon from '@mui/icons-material/Bookmark';
 import Link from 'next/link';
 import { getSavedColleges } from '@/components/college-hub/SaveCollegeButton';
 import Breadcrumbs from '@/components/seo/Breadcrumbs';
+import { tokens } from '@/design-system';
 
 export default function SavedCollegesPage() {
   const [savedSlugs, setSavedSlugs] = useState<string[]>([]);
@@ -26,13 +27,13 @@ export default function SavedCollegesPage() {
       </Box>
       {savedSlugs.length === 0 ? (
         <Box sx={{ textAlign: 'center', py: 8 }}>
-          <Typography color="text.secondary">No saved colleges yet.</Typography>
+          <Typography color={tokens.inkMuted}>No saved colleges yet.</Typography>
           <Button component={Link} href="/colleges" variant="contained" sx={{ mt: 2 }}>
             Browse Colleges
           </Button>
         </Box>
       ) : (
-        <Typography color="text.secondary" variant="body2" sx={{ mb: 2 }}>
+        <Typography color={tokens.inkMuted} variant="body2" sx={{ mb: 2 }}>
           You have {savedSlugs.length} saved college{savedSlugs.length !== 1 ? 's' : ''}. Visit each page to view details.
         </Typography>
       )}
@@ -46,11 +47,11 @@ export default function SavedCollegesPage() {
                 display: 'block',
                 p: 2,
                 border: '1px solid',
-                borderColor: 'divider',
-                borderRadius: 2,
+                borderColor: tokens.line,
+                borderRadius: 1,
                 textDecoration: 'none',
                 color: 'inherit',
-                '&:hover': { borderColor: 'primary.main', bgcolor: '#f0f9ff' },
+                '&:hover': { borderColor: tokens.gold500, bgcolor: tokens.surface },
               }}
             >
               <Typography variant="subtitle2" fontWeight={700}>
@@ -58,7 +59,7 @@ export default function SavedCollegesPage() {
                   .replace(/-/g, ' ')
                   .replace(/\b\w/g, (c) => c.toUpperCase())}
               </Typography>
-              <Typography variant="caption" color="text.secondary">
+              <Typography variant="caption" color={tokens.inkMuted}>
                 Click to view details
               </Typography>
             </Box>

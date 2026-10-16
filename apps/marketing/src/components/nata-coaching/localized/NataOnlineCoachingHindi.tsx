@@ -21,6 +21,11 @@ import {
   generateFAQSchema,
 } from '@/lib/seo/schemas';
 import { BASE_URL } from '@/lib/seo/constants';
+import { siteTokens as t } from '@neram/ui/site-tokens';
+import { admissionYear } from '@/lib/college-hub/constants';
+
+// The cycle students search for (NATA 2027 from July 2026).
+const YEAR = admissionYear();
 
 /**
  * Native Hindi landing page for NATA online coaching.
@@ -48,9 +53,9 @@ export default function NataOnlineCoachingHindi() {
         'हाँ। दिल्ली NCR, मुंबई, बैंगलोर, हैदराबाद, अहमदाबाद, कोलकाता, पुणे, कोची या भारत के किसी भी शहर से, और खाड़ी देशों से भी, आप नेरम क्लासेस की ऑनलाइन कक्षाओं में शामिल हो सकते हैं। बस एक स्थिर इंटरनेट कनेक्शन और लैपटॉप या टैबलेट चाहिए।',
     },
     {
-      question: 'NATA परीक्षा पैटर्न 2026 कैसा है?',
+      question: `NATA परीक्षा पैटर्न ${YEAR} कैसा है?`,
       answer:
-        'NATA 2026 ऑनलाइन आयोजित होगा। 3 घंटे में कुल 125 प्रश्न, 200 अंकों के लिए। तीन खंड हैं: Diagrammatic Reasoning, Numerical & Verbal Reasoning, और Inductive & Situational Reasoning (ड्रॉइंग सहित)। कोई नकारात्मक अंकन नहीं है।',
+        `NATA 2026 ऑनलाइन आयोजित हुआ था। 3 घंटे में कुल 125 प्रश्न, 200 अंकों के लिए। तीन खंड थे: Diagrammatic Reasoning, Numerical & Verbal Reasoning, और Inductive & Situational Reasoning (ड्रॉइंग सहित)। कोई नकारात्मक अंकन नहीं था। NATA ${YEAR} का पैटर्न भी ऐसा ही रहने की उम्मीद है (आधिकारिक सूचना की प्रतीक्षा है)।`,
     },
     {
       question: 'क्या नेरम क्लासेस हिंदी में पढ़ाई जाती है?',
@@ -75,7 +80,7 @@ export default function NataOnlineCoachingHindi() {
       <JsonLd
         data={{
           ...generateCourseSchema({
-            name: 'NATA ऑनलाइन कोचिंग 2026: लाइव कक्षाएँ, ड्रॉइंग अभ्यास',
+            name: `NATA ऑनलाइन कोचिंग ${YEAR}: लाइव कक्षाएँ, ड्रॉइंग अभ्यास`,
             description:
               '2009 से नेरम क्लासेस की NATA ऑनलाइन कोचिंग। 1,000+ छात्र, JEE B.Arch 2024 में AIR 1। लाइव कक्षाएँ, रोज़ ड्रॉइंग अभ्यास, 1 साल के कार्यक्रम में 100+ मॉक टेस्ट।',
             url: pageUrl,
@@ -98,14 +103,15 @@ export default function NataOnlineCoachingHindi() {
         <Box
           sx={{
             py: { xs: 8, md: 12 },
-            background: 'linear-gradient(135deg, #1a237e 0%, #0d47a1 100%)',
-            color: 'white',
+            bgcolor: t.navy900,
+            ...t.blueprint,
+            color: t.paper,
           }}
         >
           <Container maxWidth="lg">
             <Chip
-              label="NATA 2026: लाइव ऑनलाइन कोचिंग"
-              sx={{ bgcolor: 'white', color: 'primary.main', mb: 2, fontWeight: 600 }}
+              label={`NATA ${YEAR}: लाइव ऑनलाइन कोचिंग`}
+              sx={{ bgcolor: t.goldTintBg, color: t.gold300, border: `1px solid ${t.goldTintBorder}`, mb: 2, fontWeight: 600 }}
             />
             <Typography
               variant="h1"
@@ -113,9 +119,9 @@ export default function NataOnlineCoachingHindi() {
               gutterBottom
               sx={{ fontWeight: 700, fontSize: { xs: '2rem', md: '3rem' }, lineHeight: 1.3 }}
             >
-              NATA ऑनलाइन कोचिंग 2026
+              NATA ऑनलाइन कोचिंग {YEAR}
             </Typography>
-            <Typography variant="h5" sx={{ mb: 4, opacity: 0.92, lineHeight: 1.7, maxWidth: 820 }}>
+            <Typography variant="h5" sx={{ mb: 4, color: t.paperMuted, lineHeight: 1.7, maxWidth: 820 }}>
               आर्किटेक्चर की तैयारी के लिए 2009 से लाइव कक्षाएँ। 1,000+ छात्र पढ़ चुके हैं,
               JEE B.Arch 2024 में AIR 1। छोटे बैच, रोज़ ड्रॉइंग अभ्यास।
             </Typography>
@@ -125,7 +131,7 @@ export default function NataOnlineCoachingHindi() {
                 size="large"
                 component={Link}
                 href="/hi/demo-class"
-                sx={{ bgcolor: 'white', color: 'primary.main', fontWeight: 600, px: 4, minHeight: 48 }}
+                sx={{ fontWeight: 600, px: 4, minHeight: 48 }}
               >
                 मुफ्त डेमो कक्षा
               </Button>
@@ -134,7 +140,7 @@ export default function NataOnlineCoachingHindi() {
                 size="large"
                 component={Link}
                 href="/hi/apply"
-                sx={{ borderColor: 'white', color: 'white', fontWeight: 600, px: 4, minHeight: 48 }}
+                sx={{ fontWeight: 600, px: 4, minHeight: 48, borderColor: t.outlineDark, color: t.paper, '&:hover': { bgcolor: 'transparent', borderColor: t.gold500, color: t.gold500 } }}
               >
                 अभी नामांकन करें
               </Button>
@@ -170,7 +176,7 @@ export default function NataOnlineCoachingHindi() {
         </Box>
 
         {/* Why us, in Hindi */}
-        <Box sx={{ py: { xs: 6, md: 9 }, bgcolor: 'grey.50' }}>
+        <Box sx={{ py: { xs: 6, md: 9 }, bgcolor: t.ground }}>
           <Container maxWidth="lg">
             <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ fontWeight: 700, mb: 5 }}>
               हिंदी भाषी छात्र नेरम क्लासेस क्यों चुनते हैं
@@ -220,13 +226,13 @@ export default function NataOnlineCoachingHindi() {
                       height: '100%',
                       p: 3,
                       border: course.highlight ? '2px solid' : '1px solid',
-                      borderColor: course.highlight ? 'primary.main' : 'grey.300',
+                      borderColor: course.highlight ? t.gold500 : t.line,
                     }}
                   >
                     <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
                       {course.name}
                     </Typography>
-                    <Typography variant="h3" sx={{ fontWeight: 700, color: 'primary.main', mb: 1 }}>
+                    <Typography variant="h3" sx={{ fontWeight: 700, color: t.navy900, mb: 1 }}>
                       रु. {course.price}
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
@@ -250,7 +256,7 @@ export default function NataOnlineCoachingHindi() {
         </Box>
 
         {/* FAQ in Hindi */}
-        <Box sx={{ py: { xs: 6, md: 9 }, bgcolor: 'grey.50' }}>
+        <Box sx={{ py: { xs: 6, md: 9 }, bgcolor: t.ground }}>
           <Container maxWidth="md">
             <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ fontWeight: 700, mb: 5 }}>
               अक्सर पूछे जाने वाले प्रश्न
@@ -268,11 +274,11 @@ export default function NataOnlineCoachingHindi() {
               >
                 <AccordionSummary
                   expandIcon={<Typography sx={{ fontSize: '1.2rem', fontWeight: 600 }}>+</Typography>}
-                  sx={{ bgcolor: 'white', minHeight: 48 }}
+                  sx={{ bgcolor: t.surface, minHeight: 48 }}
                 >
                   <Typography sx={{ fontWeight: 600 }}>{faq.question}</Typography>
                 </AccordionSummary>
-                <AccordionDetails sx={{ bgcolor: 'white' }}>
+                <AccordionDetails sx={{ bgcolor: t.surface }}>
                   <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.9 }}>
                     {faq.answer}
                   </Typography>
@@ -287,8 +293,8 @@ export default function NataOnlineCoachingHindi() {
           sx={{
             py: { xs: 8, md: 12 },
             pb: { xs: 14, md: 12 },
-            background: 'linear-gradient(135deg, #0d47a1 0%, #1565c0 100%)',
-            color: 'white',
+            bgcolor: t.navy900,
+            color: t.paper,
             textAlign: 'center',
           }}
         >
@@ -296,7 +302,7 @@ export default function NataOnlineCoachingHindi() {
             <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700 }}>
               अपनी NATA यात्रा आज ही शुरू करें
             </Typography>
-            <Typography variant="h6" sx={{ mb: 4, opacity: 0.9, lineHeight: 1.7 }}>
+            <Typography variant="h6" sx={{ mb: 4, color: t.paperMuted, lineHeight: 1.7 }}>
               बैच छोटे हैं। मुफ्त डेमो क्लास देखें या अभी अपनी सीट सुरक्षित करें।
             </Typography>
             <Stack direction="row" spacing={2} justifyContent="center" flexWrap="wrap" useFlexGap>
@@ -305,7 +311,7 @@ export default function NataOnlineCoachingHindi() {
                 size="large"
                 component={Link}
                 href="/hi/apply"
-                sx={{ bgcolor: 'white', color: 'primary.main', fontWeight: 600, px: 4, minHeight: 48 }}
+                sx={{ fontWeight: 600, px: 4, minHeight: 48 }}
               >
                 अभी नामांकन करें
               </Button>
@@ -314,7 +320,7 @@ export default function NataOnlineCoachingHindi() {
                 size="large"
                 component={Link}
                 href="/hi/demo-class"
-                sx={{ borderColor: 'white', color: 'white', fontWeight: 600, px: 4, minHeight: 48 }}
+                sx={{ fontWeight: 600, px: 4, minHeight: 48, borderColor: t.outlineDark, color: t.paper, '&:hover': { bgcolor: 'transparent', borderColor: t.gold500, color: t.gold500 } }}
               >
                 मुफ्त डेमो
               </Button>

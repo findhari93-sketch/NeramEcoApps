@@ -12,20 +12,22 @@ import {
   Stack,
   Divider,
 } from '@mui/material';
-import HomeIcon from '@mui/icons-material/Home';
-import ScheduleIcon from '@mui/icons-material/Schedule';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import CalculateIcon from '@mui/icons-material/Calculate';
-import TrendingUpIcon from '@mui/icons-material/TrendingUp';
-import LocationOnIcon from '@mui/icons-material/LocationOn';
-import GroupsIcon from '@mui/icons-material/Groups';
-import DescriptionIcon from '@mui/icons-material/Description';
-import GavelIcon from '@mui/icons-material/Gavel';
-import RouteIcon from '@mui/icons-material/Route';
-import SchoolIcon from '@mui/icons-material/School';
-import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import HomeIcon from '@mui/icons-material/HomeOutlined';
+import ScheduleIcon from '@mui/icons-material/ScheduleOutlined';
+import CheckCircleIcon from '@mui/icons-material/CheckCircleOutlined';
+import CalculateIcon from '@mui/icons-material/CalculateOutlined';
+import TrendingUpIcon from '@mui/icons-material/TrendingUpOutlined';
+import LocationOnIcon from '@mui/icons-material/LocationOnOutlined';
+import GroupsIcon from '@mui/icons-material/GroupsOutlined';
+import DescriptionIcon from '@mui/icons-material/DescriptionOutlined';
+import GavelIcon from '@mui/icons-material/GavelOutlined';
+import RouteIcon from '@mui/icons-material/RouteOutlined';
+import SchoolIcon from '@mui/icons-material/SchoolOutlined';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutlineOutlined';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForwardOutlined';
 
+import { siteTokens as t } from '@neram/ui/site-tokens';
+import { FactGrid, hoverGoldBorder, iconTileSx } from '@/design-system';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { JsonLd } from '@/components/seo/JsonLd';
 import {
@@ -154,7 +156,7 @@ function HubBreadcrumb({ locale }: { locale: string }) {
         </Typography>
       </Link>
       <Typography variant="body2" color="text.secondary">/</Typography>
-      <Typography variant="body2" color="primary" fontWeight={600}>
+      <Typography variant="body2" aria-current="page" sx={{ color: t.ink, fontWeight: 600 }}>
         TNEA B.Arch 2026
       </Typography>
     </Stack>
@@ -202,7 +204,7 @@ export default function TneaBarchHubPage({ params: { locale } }: PageProps) {
         {/* Hero */}
         <Box sx={{ mb: 4 }}>
           <Stack direction="row" gap={1} flexWrap="wrap" sx={{ mb: 1.5 }}>
-            <Chip label="Tamil Nadu" size="small" color="primary" />
+            <Chip label="Tamil Nadu" size="small" sx={{ bgcolor: t.navy900, color: t.paper, fontWeight: 700 }} />
             <Chip label="Anna University" size="small" variant="outlined" />
             <Chip label="2026 Admissions" size="small" variant="outlined" />
           </Stack>
@@ -220,20 +222,7 @@ export default function TneaBarchHubPage({ params: { locale } }: PageProps) {
           <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 720, mb: 2 }}>
             Everything you need for Tamil Nadu B.Arch admission through tneaonline.org. Eligibility, document checklist, 110+ TFCs across all 38 districts, 3-round counselling procedure, and free tools to estimate your cutoff and match colleges.
           </Typography>
-          <Grid container spacing={1.5}>
-            {stats.map((s) => (
-              <Grid item xs={6} md={3} key={s.label}>
-                <Paper elevation={0} sx={{ p: 1.5, borderRadius: 2, bgcolor: 'grey.50', border: '1px solid', borderColor: 'divider' }}>
-                  <Typography variant="caption" color="text.secondary">
-                    {s.label}
-                  </Typography>
-                  <Typography variant="body2" fontWeight={700}>
-                    {s.value}
-                  </Typography>
-                </Paper>
-              </Grid>
-            ))}
-          </Grid>
+          <FactGrid items={stats} cellMin={160} />
         </Box>
 
         {/* Next deadline banner */}
@@ -243,17 +232,19 @@ export default function TneaBarchHubPage({ params: { locale } }: PageProps) {
             sx={{
               p: 2,
               mb: 4,
-              borderRadius: 2,
-              border: '1px solid',
-              borderColor: 'warning.light',
-              bgcolor: '#FFFBEB',
+              borderRadius: 1,
+              border: `1px solid ${t.line}`,
+              borderLeft: 'none',
+              boxShadow: `inset 3px 0 0 ${t.gold500}`,
+              bgcolor: t.surface,
               display: 'flex',
               alignItems: 'center',
               gap: 1.5,
+              flexWrap: 'wrap',
             }}
           >
-            <ScheduleIcon sx={{ color: 'warning.dark' }} />
-            <Box flex={1}>
+            <ScheduleIcon aria-hidden sx={{ color: t.gold800 }} />
+            <Box flex={1} sx={{ minWidth: 0 }}>
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                 Next milestone (tentative)
               </Typography>
@@ -286,34 +277,20 @@ export default function TneaBarchHubPage({ params: { locale } }: PageProps) {
                 elevation={0}
                 sx={{
                   display: 'block',
+                  height: '100%',
                   p: 2,
-                  borderRadius: 2,
-                  border: '1px solid',
-                  borderColor: 'divider',
+                  borderRadius: 1,
+                  border: `1px solid ${t.line}`,
+                  bgcolor: t.surface,
                   textDecoration: 'none',
                   color: 'inherit',
-                  transition: 'all 0.15s ease',
-                  '&:hover': {
-                    borderColor: 'primary.main',
-                    transform: 'translateY(-2px)',
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.06)',
-                  },
+                  ...hoverGoldBorder,
+                  '&:focus-visible': { outline: t.focusOutline, outlineOffset: '2px' },
                 }}
               >
                 <Stack direction="row" gap={1.5} alignItems="flex-start">
-                  <Box
-                    sx={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 1.5,
-                      bgcolor: 'primary.50',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                    }}
-                  >
-                    <Icon sx={{ color: 'primary.main', fontSize: 22 }} />
+                  <Box aria-hidden sx={iconTileSx}>
+                    <Icon />
                   </Box>
                   <Box>
                     <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 0.25 }}>
@@ -362,15 +339,14 @@ export default function TneaBarchHubPage({ params: { locale } }: PageProps) {
                 elevation={0}
                 sx={{
                   p: 2,
-                  borderRadius: 2,
-                  border: '1px solid',
-                  borderColor: 'divider',
+                  borderRadius: 1,
+                  border: `1px solid ${t.line}`,
                   height: '100%',
                   display: 'flex',
                   flexDirection: 'column',
                 }}
               >
-                <Icon sx={{ color: 'primary.main', mb: 1 }} />
+                <Icon aria-hidden sx={{ color: t.gold800, mb: 1 }} />
                 <Typography variant="subtitle1" fontWeight={700}>
                   {title}
                 </Typography>
@@ -384,7 +360,7 @@ export default function TneaBarchHubPage({ params: { locale } }: PageProps) {
                   target="_blank"
                   rel="noopener"
                   endIcon={<ArrowForwardIcon />}
-                  sx={{ alignSelf: 'flex-start', minHeight: 40 }}
+                  sx={{ alignSelf: 'flex-start', minHeight: 44 }}
                 >
                   {cta}
                 </Button>
@@ -399,7 +375,7 @@ export default function TneaBarchHubPage({ params: { locale } }: PageProps) {
         </Typography>
         <Grid container spacing={1.5} sx={{ mb: 5 }}>
           <Grid item xs={12} md={6}>
-            <Paper elevation={0} sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider', height: '100%' }}>
+            <Paper elevation={0} sx={{ p: 2, borderRadius: 1, border: `1px solid ${t.line}`, height: '100%' }}>
               <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
                 Who is eligible
               </Typography>
@@ -421,7 +397,7 @@ export default function TneaBarchHubPage({ params: { locale } }: PageProps) {
             </Paper>
           </Grid>
           <Grid item xs={12} md={6}>
-            <Paper elevation={0} sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider', height: '100%' }}>
+            <Paper elevation={0} sx={{ p: 2, borderRadius: 1, border: `1px solid ${t.line}`, height: '100%' }}>
               <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1 }}>
                 Reservation
               </Typography>
@@ -452,14 +428,13 @@ export default function TneaBarchHubPage({ params: { locale } }: PageProps) {
           sx={{
             p: { xs: 2, md: 3 },
             mb: 5,
-            borderRadius: 2,
-            border: '1px solid',
-            borderColor: 'divider',
-            bgcolor: 'primary.50',
+            borderRadius: 1,
+            border: `1px solid ${t.line}`,
+            bgcolor: t.surface,
           }}
         >
           <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 1 }}>
-            <LocationOnIcon sx={{ color: 'primary.main' }} />
+            <LocationOnIcon aria-hidden sx={{ color: t.gold800 }} />
             <Typography variant="h6" fontWeight={800}>
               Find Your Nearest TFC
             </Typography>
@@ -489,9 +464,8 @@ export default function TneaBarchHubPage({ params: { locale } }: PageProps) {
               elevation={0}
               sx={{
                 p: 2,
-                borderRadius: 2,
-                border: '1px solid',
-                borderColor: 'divider',
+                borderRadius: 1,
+                border: `1px solid ${t.line}`,
               }}
             >
               <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 0.5 }}>
@@ -518,10 +492,9 @@ export default function TneaBarchHubPage({ params: { locale } }: PageProps) {
           elevation={0}
           sx={{
             p: { xs: 3, md: 4 },
-            borderRadius: 2,
-            border: '1px solid',
-            borderColor: 'success.light',
-            bgcolor: '#E8F5E9',
+            borderRadius: 1,
+            border: `1px solid ${t.line}`,
+            bgcolor: t.surface,
             textAlign: 'center',
           }}
         >
@@ -562,8 +535,8 @@ export default function TneaBarchHubPage({ params: { locale } }: PageProps) {
           'How many counselling rounds?',
           'TFC near my district?',
         ]}
-        primaryColor="#1d4ed8"
-        primaryColorDark="#1e3a8a"
+        primaryColor={t.navy900}
+        primaryColorDark={t.navy700}
       />
     </>
   );

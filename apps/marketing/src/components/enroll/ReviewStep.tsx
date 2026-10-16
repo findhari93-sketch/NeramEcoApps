@@ -15,6 +15,7 @@ import {
 } from '@neram/ui';
 import { VerifiedUser, School, Person, LocationOn, Payment, PictureAsPdf, Image as ImageIcon } from '@mui/icons-material';
 import type { ApplicationFormData } from '@/components/apply/types';
+import { tokens } from '@/design-system';
 
 const COURSE_LABELS: Record<string, string> = {
   nata: 'NATA',
@@ -256,7 +257,7 @@ export default function ReviewStep({
         label={
           <Typography variant="body2">
             I confirm that the information provided is correct and I agree to the{' '}
-            <a href="/en/terms" target="_blank" rel="noopener noreferrer" style={{ color: '#1976d2', textDecoration: 'underline' }}>
+            <a href="/en/terms" target="_blank" rel="noopener noreferrer" style={{ color: tokens.navy900, textDecoration: 'underline', fontWeight: 600 }}>
               Terms & Conditions
             </a>
             .

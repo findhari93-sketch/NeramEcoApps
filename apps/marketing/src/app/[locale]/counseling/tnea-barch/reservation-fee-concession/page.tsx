@@ -8,10 +8,11 @@ import {
   Chip,
   Grid,
   Divider,
-  Alert,
   LinearProgress,
 } from '@mui/material';
-import LocalAtmIcon from '@mui/icons-material/LocalAtm';
+import LocalAtmIcon from '@mui/icons-material/LocalAtmOutlined';
+import { siteTokens as t } from '@neram/ui/site-tokens';
+import { Callout } from '@/design-system';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { generateArticleSchema } from '@/lib/seo/schemas';
 import TneaSpokeShell from '@/components/tnea-barch/TneaSpokeShell';
@@ -83,7 +84,7 @@ export default function ReservationFeeConcessionPage({
           <Paper
             key={c.code}
             elevation={0}
-            sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+            sx={{ p: 2, borderRadius: 1, border: `1px solid ${t.line}` }}
           >
             <Stack direction="row" alignItems="center" gap={1} sx={{ mb: 0.5 }}>
               <Chip label={c.code} size="small" color="primary" />
@@ -91,14 +92,21 @@ export default function ReservationFeeConcessionPage({
                 {c.name}
               </Typography>
               <Box flex={1} />
-              <Typography variant="subtitle2" fontWeight={800} color="primary.main">
+              <Typography variant="subtitle2" fontWeight={800} sx={{ color: t.navy900, fontFamily: t.fontMono }}>
                 {c.percent}%
               </Typography>
             </Stack>
             <LinearProgress
               variant="determinate"
               value={Math.min(100, c.percent * 3)}
-              sx={{ height: 6, borderRadius: 1, bgcolor: 'grey.100', mb: 1 }}
+              aria-hidden
+              sx={{
+                height: 6,
+                borderRadius: `${t.radiusPill}px`,
+                bgcolor: t.surfaceHover,
+                mb: 1,
+                '& .MuiLinearProgress-bar': { bgcolor: t.navy900, borderRadius: `${t.radiusPill}px` },
+              }}
             />
             <Typography variant="body2" color="text.secondary">
               {c.description}
@@ -112,10 +120,11 @@ export default function ReservationFeeConcessionPage({
         elevation={0}
         sx={{
           p: 2.5,
-          borderRadius: 2,
-          border: '2px solid',
-          borderColor: 'success.main',
-          bgcolor: '#E8F5E9',
+          borderRadius: 1,
+          border: `1px solid ${t.line}`,
+          borderLeft: 'none',
+          boxShadow: `inset 3px 0 0 ${t.gold500}`,
+          bgcolor: t.surface,
           mb: 4,
         }}
       >
@@ -141,7 +150,7 @@ export default function ReservationFeeConcessionPage({
           <Paper
             key={s.category}
             elevation={0}
-            sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+            sx={{ p: 2, borderRadius: 1, border: `1px solid ${t.line}` }}
           >
             <Stack direction="row" justifyContent="space-between" gap={1} flexWrap="wrap" alignItems="center">
               <Typography variant="subtitle2" fontWeight={700}>
@@ -175,7 +184,7 @@ export default function ReservationFeeConcessionPage({
       <Typography variant="h5" component="h2" fontWeight={800} sx={{ mb: 2 }}>
         Registration fee
       </Typography>
-      <Paper elevation={0} sx={{ p: 2.5, borderRadius: 2, border: '1px solid', borderColor: 'divider', mb: 4 }}>
+      <Paper elevation={0} sx={{ p: 2.5, borderRadius: 1, border: `1px solid ${t.line}`, mb: 4 }}>
         <Grid container spacing={2}>
           <Grid item xs={6}>
             <Typography variant="caption" color="text.secondary">
@@ -213,10 +222,10 @@ export default function ReservationFeeConcessionPage({
           <Paper
             key={f.name}
             elevation={0}
-            sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+            sx={{ p: 2, borderRadius: 1, border: `1px solid ${t.line}` }}
           >
             <Stack direction="row" gap={1} alignItems="flex-start" sx={{ mb: 1 }}>
-              <LocalAtmIcon sx={{ color: 'success.main', fontSize: 20 }} />
+              <LocalAtmIcon aria-hidden sx={{ color: t.gold800, fontSize: 20 }} />
               <Box>
                 <Typography variant="subtitle2" fontWeight={700}>
                   {f.name}
@@ -238,14 +247,21 @@ export default function ReservationFeeConcessionPage({
                 </li>
               ))}
             </Stack>
-            <Chip label={f.benefit} size="small" color="success" variant="outlined" />
+            <Chip
+              label={f.benefit}
+              size="small"
+              variant="outlined"
+              sx={{ color: t.gold800, borderColor: t.goldTintBorder, fontWeight: 700 }}
+            />
           </Paper>
         ))}
       </Stack>
 
-      <Alert severity="info" sx={{ borderRadius: 1.5 }}>
-        Scholarship-eligible candidates (7.5% quota, First Graduate, PMSS) must report to the college and TFC but do not pay fees during reporting.
-      </Alert>
+      <Callout>
+        <Box component="p" sx={{ m: 0 }}>
+            Scholarship-eligible candidates (7.5% quota, First Graduate, PMSS) must report to the college and TFC but do not pay fees during reporting.
+        </Box>
+      </Callout>
     </TneaSpokeShell>
   );
 }

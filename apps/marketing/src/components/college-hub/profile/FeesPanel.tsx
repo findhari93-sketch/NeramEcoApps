@@ -5,6 +5,8 @@ import { annualFee } from '@/lib/college-hub/detail-content';
 import { formatRupees, formatRupeesFull, shortName } from '@/lib/college-hub/format';
 import { ctaBg } from '../directory/hub-styles';
 import FeeBreakdown from '../FeeBreakdown';
+import { siteTokens } from '@neram/ui/site-tokens';
+import { alpha } from '@mui/material/styles';
 
 export interface FeePosition {
   low: number;
@@ -54,14 +56,14 @@ export default function FeesPanel({ college, similar, stateName }: { college: Co
           {college.fees.length > 0 ? (
             <FeeBreakdown fees={college.fees} />
           ) : (
-            <Box component="dl" sx={{ m: 0, border: '1px solid', borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
+            <Box component="dl" sx={{ m: 0, border: '1px solid', borderColor: siteTokens.line, borderRadius: 1, overflow: 'hidden' }}>
               {rows.map((r, i) => (
-                <Box key={r.item} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, px: 2.25, py: 1.75, borderTop: i ? '1px solid' : 0, borderColor: 'divider' }}>
-                  <Box component="dt" sx={{ fontSize: '0.92rem', color: 'text.secondary' }}>{r.item}</Box>
-                  <Box component="dd" sx={{ m: 0, display: 'flex', alignItems: 'center', gap: 1, fontSize: '1rem', fontWeight: r.missing ? 500 : 700, color: r.missing ? 'text.secondary' : 'text.primary', fontVariantNumeric: 'tabular-nums' }}>
+                <Box key={r.item} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1.5, px: 2.25, py: 1.75, borderTop: i ? '1px solid' : 0, borderColor: siteTokens.line }}>
+                  <Box component="dt" sx={{ fontSize: '0.92rem', color: siteTokens.inkMuted }}>{r.item}</Box>
+                  <Box component="dd" sx={{ m: 0, display: 'flex', alignItems: 'center', gap: 1, fontSize: '1rem', fontWeight: r.missing ? 500 : 700, color: r.missing ? siteTokens.inkMuted : siteTokens.ink, fontVariantNumeric: 'tabular-nums' }}>
                     {r.value}
                     {r.tag && (
-                      <Box component="span" sx={{ fontSize: '0.72rem', fontWeight: 600, px: 0.75, py: 0.25, borderRadius: 0.75, bgcolor: 'action.hover', color: 'text.secondary' }}>
+                      <Box component="span" sx={{ fontSize: '0.72rem', fontWeight: 600, px: 0.75, py: 0.25, borderRadius: 1, bgcolor: siteTokens.surfaceHover, color: siteTokens.inkMuted }}>
                         {r.tag}
                       </Box>
                     )}
@@ -73,25 +75,25 @@ export default function FeesPanel({ college, similar, stateName }: { college: Co
         </Box>
 
         {pos && fee && (
-          <Box sx={{ flex: '1 1 260px', display: 'flex', flexDirection: 'column', gap: 1.5, p: 2.25, borderRadius: 2, bgcolor: 'action.hover' }}>
+          <Box sx={{ flex: '1 1 260px', display: 'flex', flexDirection: 'column', gap: 1.5, p: 2.25, borderRadius: 1, bgcolor: siteTokens.surfaceHover }}>
             <Typography component="h3" sx={{ m: 0, fontSize: '1rem', fontWeight: 700 }}>
               Against similar colleges
             </Typography>
-            <Typography sx={{ m: 0, fontSize: '0.9rem', lineHeight: 1.5, color: 'text.secondary' }}>
+            <Typography sx={{ m: 0, fontSize: '0.9rem', lineHeight: 1.5, color: siteTokens.inkMuted }}>
               Similar {stateName} colleges charge {formatRupees(pos.low)} to {formatRupees(pos.high)} a year. {name} {WHERE_TEXT[pos.where]}.
             </Typography>
             <Box aria-hidden sx={{ position: 'relative', height: 44, mx: 1, mt: 0.5 }}>
-              <Box sx={{ position: 'absolute', left: 0, right: 0, top: 12, height: 8, borderRadius: 4, bgcolor: 'primary.light' }} />
+              <Box sx={{ position: 'absolute', left: 0, right: 0, top: 12, height: 8, borderRadius: `${siteTokens.radiusPill}px`, bgcolor: siteTokens.navy700 }} />
               <Box
-                sx={{ position: 'absolute', left: `calc(${pos.at * 100}% - 8px)`, top: 8, width: 16, height: 16, borderRadius: '50%', bgcolor: ctaBg, border: '3px solid', borderColor: 'background.paper', boxSizing: 'border-box', boxShadow: '0 1px 3px rgba(15,27,45,0.3)' }}
+                sx={{ position: 'absolute', left: `calc(${pos.at * 100}% - 8px)`, top: 8, width: 16, height: 16, borderRadius: '50%', bgcolor: ctaBg, border: '3px solid', borderColor: siteTokens.surface, boxSizing: 'border-box', boxShadow: `0 1px 3px ${alpha(siteTokens.navy900, 0.3)}` }}
               />
-              <Box component="span" sx={{ position: 'absolute', left: 0, top: 28, fontSize: '0.75rem', color: 'text.secondary' }}>{formatRupees(pos.low)}</Box>
-              <Box component="span" sx={{ position: 'absolute', right: 0, top: 28, fontSize: '0.75rem', color: 'text.secondary' }}>{formatRupees(pos.high)}</Box>
+              <Box component="span" sx={{ position: 'absolute', left: 0, top: 28, fontSize: '0.75rem', color: siteTokens.inkMuted }}>{formatRupees(pos.low)}</Box>
+              <Box component="span" sx={{ position: 'absolute', right: 0, top: 28, fontSize: '0.75rem', color: siteTokens.inkMuted }}>{formatRupees(pos.high)}</Box>
             </Box>
           </Box>
         )}
       </Box>
-      <Typography sx={{ m: 0, display: 'flex', gap: 1, fontSize: '0.86rem', lineHeight: 1.5, color: 'text.secondary' }}>
+      <Typography sx={{ m: 0, display: 'flex', gap: 1, fontSize: '0.86rem', lineHeight: 1.5, color: siteTokens.inkMuted }}>
         <InfoOutlinedIcon aria-hidden sx={{ fontSize: 17, mt: '2px', flex: '0 0 auto' }} />
         Fees can differ by quota and category. Confirm the current amount with the college before you pay.
       </Typography>

@@ -11,6 +11,8 @@ import { COMPARE_LIMIT_EVENT, compareHref, useCompareList } from '@/lib/college-
 import { initials } from '@/lib/college-hub/format';
 import { ctaButtonSx, traySx } from './directory/hub-styles';
 import { isHubRoute } from './hub-routes';
+import { tokens } from '@/design-system';
+import { alpha } from '@mui/material/styles';
 
 /**
  * Compare tray, mounted once by SiteChrome (canvas: compare tray in the list
@@ -117,38 +119,38 @@ export default function ComparisonTray() {
           py: 0.75,
           pr: 0.75,
           pl: open ? 2.5 : 1.25,
-          borderRadius: open ? 2 : 28,
+          borderRadius: open ? 1 : `${tokens.radiusPill}px`,
           opacity: open ? 1 : 0.65,
-          boxShadow: open ? '0 12px 32px rgba(15, 27, 45, 0.28)' : '0 6px 16px rgba(15, 27, 45, 0.18)',
+          boxShadow: open ? `0 12px 32px ${alpha(tokens.navy900, 0.28)}` : `0 6px 16px ${alpha(tokens.navy900, 0.18)}`,
           transition: 'opacity 200ms ease, box-shadow 200ms ease',
           '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
         }}
       >
         {open ? (
           <>
-          <Typography sx={{ m: 0, fontSize: '0.88rem', color: 'grey.300' }}>
-            <Box component="b" sx={{ fontSize: '1rem', color: 'common.white' }}>
+          <Typography sx={{ m: 0, fontSize: '0.88rem', color: tokens.paperMuted }}>
+            <Box component="b" sx={{ fontSize: '1rem', color: tokens.paper }}>
               {count} of {COMPARE_MAX}
             </Box>{' '}
             added
           </Typography>
           <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, display: 'flex', flexWrap: 'wrap', gap: 1, flex: '1 1 360px', animation: 'trayIn 160ms ease-out', '@keyframes trayIn': { from: { opacity: 0 }, to: { opacity: 1 } }, '@media (prefers-reduced-motion: reduce)': { animation: 'none' } }}>
             {list.map((e) => (
-              <Box component="li" key={e.slug} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, height: 40, pl: 1.5, pr: 0.5, borderRadius: 20, bgcolor: 'grey.800', fontSize: '0.84rem', fontWeight: 600 }}>
+              <Box component="li" key={e.slug} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, height: 40, pl: 1.5, pr: 0.5, borderRadius: `${tokens.radiusPill}px`, bgcolor: tokens.navy800, fontSize: '0.84rem', fontWeight: 600 }}>
                 {e.shortName}
                 <Box
                   component="button"
                   type="button"
                   aria-label={`Remove ${e.shortName} from compare`}
                   onClick={() => remove(e.slug)}
-                  sx={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 0, borderRadius: '50%', bgcolor: 'transparent', color: 'grey.300', cursor: 'pointer', '&:hover': { bgcolor: 'grey.700' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'common.white' } }}
+                  sx={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 0, borderRadius: '50%', bgcolor: 'transparent', color: tokens.paperMuted, cursor: 'pointer', '&:hover': { bgcolor: tokens.navy700 }, '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } }}
                 >
                   <CloseIcon aria-hidden sx={{ fontSize: 16 }} />
                 </Box>
               </Box>
             ))}
             {Array.from({ length: COMPARE_MAX - count }).map((_, i) => (
-              <Box component="li" key={`slot-${i}`} sx={{ display: 'flex', alignItems: 'center', height: 40, px: 1.75, boxSizing: 'border-box', borderRadius: 20, border: '1px dashed', borderColor: 'grey.600', fontSize: '0.84rem', color: 'grey.400' }}>
+              <Box component="li" key={`slot-${i}`} sx={{ display: 'flex', alignItems: 'center', height: 40, px: 1.75, boxSizing: 'border-box', borderRadius: `${tokens.radiusPill}px`, border: '1px dashed', borderColor: tokens.outlineDark, fontSize: '0.84rem', color: tokens.paperSubtle }}>
                 Add a college
               </Box>
             ))}
@@ -157,7 +159,7 @@ export default function ComparisonTray() {
             component="button"
             type="button"
             onClick={clear}
-            sx={{ height: 44, px: 1.75, border: 0, bgcolor: 'transparent', color: 'grey.300', font: 'inherit', fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer', borderRadius: 1, '&:hover': { color: 'common.white' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'common.white' } }}
+            sx={{ height: 44, px: 1.75, border: 0, bgcolor: 'transparent', color: tokens.paperMuted, font: 'inherit', fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer', borderRadius: 1, '&:hover': { color: tokens.paper }, '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } }}
           >
             Clear
           </Box>
@@ -166,12 +168,12 @@ export default function ComparisonTray() {
           <>
             <Box component="ul" aria-hidden sx={{ listStyle: 'none', m: 0, p: 0, pl: 0.75, display: 'flex' }}>
               {list.map((e) => (
-                <Box component="li" key={e.slug} sx={{ width: 30, height: 30, ml: -0.75, boxSizing: 'border-box', borderRadius: '50%', border: '2px solid', borderColor: 'grey.900', bgcolor: 'primary.light', color: 'primary.dark', fontSize: '0.66rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Box component="li" key={e.slug} sx={{ width: 30, height: 30, ml: -0.75, boxSizing: 'border-box', borderRadius: '50%', border: '2px solid', borderColor: tokens.navy900, bgcolor: tokens.navy700, color: tokens.paper, fontSize: '0.66rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {initials(e.shortName)}
                 </Box>
               ))}
             </Box>
-            <Box component="span" sx={{ fontSize: '0.88rem', fontWeight: 600, color: 'common.white', whiteSpace: 'nowrap' }}>
+            <Box component="span" sx={{ fontSize: '0.88rem', fontWeight: 600, color: tokens.paper, whiteSpace: 'nowrap' }}>
               {count} of {COMPARE_MAX} added
             </Box>
           </>
@@ -198,13 +200,13 @@ export default function ComparisonTray() {
           pl: 1.25,
           pr: 0.75,
           boxSizing: 'border-box',
-          borderRadius: 2.5,
-          boxShadow: '0 10px 28px rgba(15, 27, 45, 0.32)',
+          borderRadius: 1,
+          boxShadow: `0 10px 28px ${alpha(tokens.navy900, 0.32)}`,
         }}
       >
         <Box component="ul" aria-hidden sx={{ listStyle: 'none', m: 0, p: 0, pl: 0.75, display: 'flex' }}>
           {list.map((e) => (
-            <Box component="li" key={e.slug} sx={{ width: 30, height: 30, ml: -0.75, boxSizing: 'border-box', borderRadius: '50%', border: '2px solid', borderColor: 'grey.900', bgcolor: 'primary.light', color: 'primary.dark', fontSize: '0.66rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Box component="li" key={e.slug} sx={{ width: 30, height: 30, ml: -0.75, boxSizing: 'border-box', borderRadius: '50%', border: '2px solid', borderColor: tokens.navy900, bgcolor: tokens.navy700, color: tokens.paper, fontSize: '0.66rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {initials(e.shortName)}
             </Box>
           ))}
@@ -217,7 +219,7 @@ export default function ComparisonTray() {
           type="button"
           onClick={clear}
           aria-label="Clear compare list"
-          sx={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 0, bgcolor: 'transparent', color: 'grey.300', cursor: 'pointer', borderRadius: '50%', '&:focus-visible': { outline: '2px solid', outlineColor: 'common.white' } }}
+          sx={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 0, bgcolor: 'transparent', color: tokens.paperMuted, cursor: 'pointer', borderRadius: '50%', '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } }}
         >
           <CloseIcon aria-hidden sx={{ fontSize: 20 }} />
         </Box>
@@ -235,15 +237,15 @@ function CompareCta({ href, enabled, label, compact }: { href: string; enabled: 
     gap: 1,
     height: 44,
     px: compact ? 2 : 2.5,
-    borderRadius: 1.5,
+    borderRadius: 1,
     fontSize: '0.94rem',
     textDecoration: 'none',
     whiteSpace: 'nowrap' as const,
-    '&:focus-visible': { outline: '2px solid', outlineColor: 'common.white', outlineOffset: 2 },
+    '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 },
   };
   if (!enabled) {
     return (
-      <Box component="span" aria-disabled="true" sx={{ ...sx, bgcolor: 'grey.700', color: 'grey.300', cursor: 'default', '&:hover': undefined }}>
+      <Box component="span" aria-disabled="true" sx={{ ...sx, bgcolor: tokens.navy700, color: tokens.paperMuted, cursor: 'default', '&:hover': undefined }}>
         {label}
       </Box>
     );

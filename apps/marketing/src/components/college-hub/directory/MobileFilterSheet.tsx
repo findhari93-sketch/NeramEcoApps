@@ -2,12 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Box, SwipeableDrawer, Typography } from '@mui/material';
-import { alpha } from '@mui/material/styles';
 import CloseIcon from '@mui/icons-material/Close';
 import type { FacetCounts } from '@/lib/college-hub/listing-filter';
 import { EMPTY_DRAFT, type FilterDraft } from './filter-model';
 import { CityGroup, CoaSwitch, ExamGroup, FeeGroup, NaacGroup, RatingGroup, SortGroup, StateGroup, TypeGroup } from './FilterGroups';
 import type { HideableGroup } from './FilterRail';
+import { tokens } from '@/design-system';
 
 export type SheetCategory = 'sort' | 'coa' | 'state' | 'exam' | 'type' | 'naac' | 'fee' | 'city' | 'rating';
 
@@ -129,7 +129,7 @@ export default function MobileFilterSheet({
         return cities.length > 0 ? (
           <CityGroup {...props} cities={cities} initial={50} />
         ) : (
-          <Typography sx={{ m: 0, px: 2, py: 1.5, fontSize: '0.92rem', color: 'text.secondary' }}>{cityHint}</Typography>
+          <Typography sx={{ m: 0, px: 2, py: 1.5, fontSize: '0.92rem', color: tokens.inkMuted }}>{cityHint}</Typography>
         );
       case 'rating':
         return <RatingGroup {...props} />;
@@ -154,14 +154,14 @@ export default function MobileFilterSheet({
       ModalProps={{ keepMounted: false }}
     >
       <Box aria-hidden sx={{ display: 'flex', justifyContent: 'center', pt: 1 }}>
-        <Box sx={{ width: 36, height: 4, borderRadius: 2, bgcolor: 'grey.400' }} />
+        <Box sx={{ width: 36, height: 4, borderRadius: `${tokens.radiusPill}px`, bgcolor: tokens.lineStrong }} />
       </Box>
 
-      <Box sx={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, height: 52, pl: 2, pr: 0.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+      <Box sx={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, height: 52, pl: 2, pr: 0.5, borderBottom: '1px solid', borderColor: tokens.line }}>
         <Typography id="filter-sheet-title" component="h2" sx={{ m: 0, display: 'flex', alignItems: 'center', gap: 1, fontSize: '1.1rem', fontWeight: 700 }}>
           Filters
           {total > 0 && (
-            <Box component="span" sx={{ minWidth: 20, height: 20, px: 0.75, boxSizing: 'border-box', borderRadius: 10, bgcolor: 'primary.main', color: 'primary.contrastText', fontSize: '0.72rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Box component="span" sx={{ minWidth: 20, height: 20, px: 0.75, boxSizing: 'border-box', borderRadius: `${tokens.radiusPill}px`, bgcolor: tokens.navy900, color: tokens.paper, fontSize: '0.72rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {total}
             </Box>
           )}
@@ -171,7 +171,7 @@ export default function MobileFilterSheet({
             component="button"
             type="button"
             onClick={() => setDraft({ ...EMPTY_DRAFT, q: draft.q })}
-            sx={{ height: 44, px: 1.25, border: 0, bgcolor: 'transparent', color: 'primary.dark', font: 'inherit', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer', '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' } }}
+            sx={{ height: 44, px: 1.25, border: 0, bgcolor: 'transparent', color: tokens.navy900, font: 'inherit', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer', '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } }}
           >
             Clear all
           </Box>
@@ -180,7 +180,7 @@ export default function MobileFilterSheet({
             type="button"
             aria-label="Close filters"
             onClick={onClose}
-            sx={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 0, bgcolor: 'transparent', color: 'text.secondary', cursor: 'pointer', borderRadius: '50%', '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' } }}
+            sx={{ width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 0, bgcolor: 'transparent', color: tokens.inkMuted, cursor: 'pointer', borderRadius: '50%', '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } }}
           >
             <CloseIcon aria-hidden />
           </Box>
@@ -188,7 +188,7 @@ export default function MobileFilterSheet({
       </Box>
 
       <Box sx={{ flex: '1 1 auto', minHeight: 0, display: 'flex' }}>
-        <Box component="nav" aria-label="Filter categories" sx={{ flex: '0 0 124px', overflowY: 'auto', bgcolor: (t) => (t.palette.mode === 'light' ? t.palette.grey[100] : t.palette.background.default) }}>
+        <Box component="nav" aria-label="Filter categories" sx={{ flex: '0 0 124px', overflowY: 'auto', bgcolor: tokens.surfaceHover }}>
           <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
             {categories.map((k) => {
               const on = k.id === current.id;
@@ -212,20 +212,20 @@ export default function MobileFilterSheet({
                       boxSizing: 'border-box',
                       border: 0,
                       borderLeft: '3px solid',
-                      borderLeftColor: on ? 'primary.main' : 'transparent',
-                      bgcolor: on ? 'background.paper' : 'transparent',
-                      color: on ? 'primary.dark' : 'text.primary',
+                      borderLeftColor: on ? tokens.navy900 : 'transparent',
+                      bgcolor: on ? tokens.surface : 'transparent',
+                      color: on ? tokens.navy900 : tokens.ink,
                       font: 'inherit',
                       fontSize: '0.88rem',
                       fontWeight: on ? 700 : 500,
                       textAlign: 'left',
                       cursor: 'pointer',
-                      '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 },
+                      '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: -2 },
                     }}
                   >
                     <span>{k.label}</span>
                     {n > 0 && (
-                      <Box component="span" sx={{ minWidth: 18, height: 18, px: 0.6, boxSizing: 'border-box', borderRadius: 9, bgcolor: 'primary.main', color: 'primary.contrastText', fontSize: '0.68rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <Box component="span" sx={{ minWidth: 18, height: 18, px: 0.6, boxSizing: 'border-box', borderRadius: `${tokens.radiusPill}px`, bgcolor: tokens.navy900, color: tokens.paper, fontSize: '0.68rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         {n}
                       </Box>
                     )}
@@ -242,7 +242,7 @@ export default function MobileFilterSheet({
               {current.title}
             </Typography>
             {current.hint && (
-              <Box component="span" sx={{ fontSize: '0.78rem', color: 'text.secondary' }}>
+              <Box component="span" sx={{ fontSize: '0.78rem', color: tokens.inkMuted }}>
                 {current.hint}
               </Box>
             )}
@@ -253,12 +253,12 @@ export default function MobileFilterSheet({
         </Box>
       </Box>
 
-      <Box sx={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 1.25, px: 2, pt: 1.25, pb: 'max(14px, env(safe-area-inset-bottom))', borderTop: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
+      <Box sx={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 1.25, px: 2, pt: 1.25, pb: 'max(14px, env(safe-area-inset-bottom))', borderTop: '1px solid', borderColor: tokens.line, bgcolor: tokens.surface }}>
         <Box
           component="button"
           type="button"
           onClick={() => setDraft(resetCategory(draft, current.id))}
-          sx={{ flex: '0 0 auto', height: 48, px: 2, border: '1px solid', borderColor: 'grey.400', borderRadius: 1.5, bgcolor: 'background.paper', color: 'text.primary', font: 'inherit', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer', '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
+          sx={{ flex: '0 0 auto', height: 48, px: 2, border: '1px solid', borderColor: tokens.lineStrong, borderRadius: 1, bgcolor: tokens.surface, color: tokens.ink, font: 'inherit', fontSize: '0.9rem', fontWeight: 600, cursor: 'pointer', '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } }}
         >
           Reset
         </Box>
@@ -274,15 +274,15 @@ export default function MobileFilterSheet({
             flex: '1 1 auto',
             height: 48,
             border: 0,
-            borderRadius: 1.5,
-            bgcolor: none ? 'grey.500' : 'primary.main',
-            color: 'primary.contrastText',
+            borderRadius: 1,
+            bgcolor: none ? tokens.statusIdle : tokens.navy900,
+            color: tokens.paper,
             font: 'inherit',
             fontSize: '1rem',
             fontWeight: 700,
             cursor: none ? 'not-allowed' : 'pointer',
-            '&:hover': { bgcolor: none ? 'grey.500' : 'primary.dark' },
-            '&:focus-visible': { outline: '2px solid', outlineColor: (t) => alpha(t.palette.primary.main, 0.6), outlineOffset: 2 },
+            '&:hover': { bgcolor: none ? tokens.statusIdle : tokens.navy700 },
+            '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 },
           }}
         >
           {matches === undefined ? 'Show colleges' : none ? 'No colleges match' : `Show ${matches} ${matches === 1 ? 'college' : 'colleges'}`}

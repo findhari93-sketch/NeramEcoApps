@@ -9,6 +9,7 @@ import {
 import StarIcon from '@mui/icons-material/Star';
 import RateReviewIcon from '@mui/icons-material/RateReview';
 import type { CollegeReview } from '@/lib/college-hub/types';
+import { tokens } from '@/design-system';
 
 const YEAR_OPTIONS = [
   '1st Year', '2nd Year', '3rd Year', '4th Year', '5th Year',
@@ -35,7 +36,7 @@ function StarDisplay({ value }: { value: number | null | undefined }) {
   if (!value) return null;
   return (
     <Stack direction="row" alignItems="center" gap={0.5}>
-      <StarIcon sx={{ fontSize: 14, color: '#f59e0b' }} />
+      <StarIcon sx={{ fontSize: 14, color: tokens.gold800 }} />
       <Typography variant="caption" fontWeight={700}>{value.toFixed(1)}</Typography>
     </Stack>
   );
@@ -45,7 +46,7 @@ function ReviewCard({ review }: { review: CollegeReview }) {
   return (
     <Box sx={{ py: 2 }}>
       <Stack direction="row" alignItems="flex-start" gap={2}>
-        <Avatar sx={{ bgcolor: '#2563eb', width: 40, height: 40, fontSize: '1rem' }}>
+        <Avatar sx={{ bgcolor: tokens.navy700, color: tokens.paper, width: 40, height: 40, fontSize: '1rem' }}>
           {review.reviewer_name.charAt(0).toUpperCase()}
         </Avatar>
         <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -57,7 +58,7 @@ function ReviewCard({ review }: { review: CollegeReview }) {
             {review.rating_overall && (
               <Stack direction="row" alignItems="center" gap={0.5}>
                 <Rating value={review.rating_overall} readOnly size="small" max={5} />
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" color={tokens.inkMuted}>
                   {new Date(review.created_at).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}
                 </Typography>
               </Stack>
@@ -68,7 +69,7 @@ function ReviewCard({ review }: { review: CollegeReview }) {
             <Typography variant="body2" fontWeight={600} sx={{ mt: 0.5 }}>{review.title}</Typography>
           )}
 
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, lineHeight: 1.6 }}>
+          <Typography variant="body2" color={tokens.inkMuted} sx={{ mt: 0.5, lineHeight: 1.6 }}>
             {review.body}
           </Typography>
 
@@ -76,25 +77,25 @@ function ReviewCard({ review }: { review: CollegeReview }) {
             <Stack direction={{ xs: 'column', sm: 'row' }} gap={2} sx={{ mt: 1 }}>
               {review.pros && (
                 <Box sx={{ flex: 1 }}>
-                  <Typography variant="caption" color="success.main" fontWeight={700}>Pros</Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>{review.pros}</Typography>
+                  <Typography variant="caption" color={tokens.success} fontWeight={700}>Pros</Typography>
+                  <Typography variant="body2" color={tokens.inkMuted} sx={{ fontSize: '0.8rem' }}>{review.pros}</Typography>
                 </Box>
               )}
               {review.cons && (
                 <Box sx={{ flex: 1 }}>
                   <Typography variant="caption" color="error.main" fontWeight={700}>Cons</Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8rem' }}>{review.cons}</Typography>
+                  <Typography variant="body2" color={tokens.inkMuted} sx={{ fontSize: '0.8rem' }}>{review.cons}</Typography>
                 </Box>
               )}
             </Stack>
           )}
 
           {review.college_reply && (
-            <Box sx={{ mt: 1.5, p: 1.5, borderLeft: '3px solid', borderColor: 'primary.main', bgcolor: 'grey.50', borderRadius: 1 }}>
+            <Box sx={{ mt: 1.5, p: 1.5, borderLeft: '3px solid', borderColor: tokens.navy900, bgcolor: tokens.ground, borderRadius: 1 }}>
               <Typography variant="caption" component="p" fontWeight={700} sx={{ m: 0 }}>
                 Response from the college
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+              <Typography variant="body2" color={tokens.inkMuted} sx={{ mt: 0.25, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
                 {review.college_reply}
               </Typography>
             </Box>
@@ -107,7 +108,7 @@ function ReviewCard({ review }: { review: CollegeReview }) {
               if (!val) return null;
               return (
                 <Box key={key}>
-                  <Typography variant="caption" color="text.secondary">{label}</Typography>
+                  <Typography variant="caption" color={tokens.inkMuted}>{label}</Typography>
                   <StarDisplay value={val} />
                 </Box>
               );
@@ -195,7 +196,7 @@ export default function ReviewSection({ collegeId, collegeName, initialReviews }
             <Stack direction="row" alignItems="center" gap={1} sx={{ mt: 0.5 }}>
               <Typography variant="h4" fontWeight={800} color="primary">{avgRating}</Typography>
               <Rating value={parseFloat(avgRating)} readOnly precision={0.1} />
-              <Typography variant="body2" color="text.secondary">({reviews.length} reviews)</Typography>
+              <Typography variant="body2" color={tokens.inkMuted}>({reviews.length} reviews)</Typography>
             </Stack>
           )}
         </Box>
@@ -203,7 +204,7 @@ export default function ReviewSection({ collegeId, collegeName, initialReviews }
           variant="contained"
           startIcon={<RateReviewIcon />}
           onClick={() => setDialogOpen(true)}
-          sx={{ borderRadius: 2 }}
+          sx={{ borderRadius: 1 }}
         >
           Write a Review
         </Button>
@@ -219,7 +220,7 @@ export default function ReviewSection({ collegeId, collegeName, initialReviews }
 
       {!loading && reviews.length === 0 && (
         <Box sx={{ textAlign: 'center', py: 4 }}>
-          <Typography color="text.secondary" variant="body2">
+          <Typography color={tokens.inkMuted} variant="body2">
             No reviews yet. Be the first to share your experience at {collegeName}.
           </Typography>
         </Box>
@@ -272,7 +273,7 @@ export default function ReviewSection({ collegeId, collegeName, initialReviews }
               <Stack gap={1}>
                 {RATING_LABELS.map(({ key, label }) => (
                   <Stack key={key} direction="row" alignItems="center" justifyContent="space-between">
-                    <Typography variant="body2" color="text.secondary">{label}</Typography>
+                    <Typography variant="body2" color={tokens.inkMuted}>{label}</Typography>
                     <Rating
                       size="small"
                       value={subRatings[key] ?? null}

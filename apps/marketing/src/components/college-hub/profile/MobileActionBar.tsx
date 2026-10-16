@@ -6,6 +6,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import { useCompareList } from '@/lib/college-hub/compare-store';
 import { ctaButtonSx } from '../directory/hub-styles';
+import { tokens } from '@/design-system';
 
 interface Props {
   slug: string;
@@ -37,10 +38,10 @@ export default function MobileActionBar({ slug, name, shortName, stateSlug }: Pr
           px: 1.5,
           pt: 1.25,
           pb: 'max(14px, env(safe-area-inset-bottom))',
-          bgcolor: 'background.paper',
+          bgcolor: tokens.surface,
           borderTop: '1px solid',
-          borderColor: 'divider',
-          boxShadow: '0 -6px 18px rgba(15, 27, 45, 0.08)',
+          borderColor: tokens.line,
+          boxShadow: `0 -6px 18px ${alpha(tokens.navy900, 0.08)}`,
         }}
       >
         <Box
@@ -56,15 +57,15 @@ export default function MobileActionBar({ slug, name, shortName, stateSlug }: Pr
             height: 50,
             px: 1.75,
             border: '1px solid',
-            borderColor: on ? 'primary.main' : 'grey.400',
-            borderRadius: 1.5,
-            bgcolor: (t) => (on ? alpha(t.palette.primary.main, 0.08) : t.palette.background.paper),
-            color: on ? 'primary.dark' : 'text.primary',
+            borderColor: on ? tokens.navy900 : tokens.lineStrong,
+            borderRadius: 1,
+            bgcolor: on ? tokens.surfaceHover : tokens.surface,
+            color: on ? tokens.navy900 : tokens.ink,
             font: 'inherit',
             fontSize: '0.9rem',
             fontWeight: 700,
             cursor: 'pointer',
-            '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+            '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 },
           }}
         >
           {on ? <CheckIcon aria-hidden sx={{ fontSize: 18 }} /> : <CompareArrowsIcon aria-hidden sx={{ fontSize: 18 }} />}
@@ -73,7 +74,7 @@ export default function MobileActionBar({ slug, name, shortName, stateSlug }: Pr
         <Box
           component="a"
           href="#admission-help"
-          sx={{ ...ctaButtonSx, flex: '1 1 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 50, borderRadius: 1.5, fontSize: '1rem', textDecoration: 'none', '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
+          sx={{ ...ctaButtonSx, flex: '1 1 auto', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 50, borderRadius: 1, fontSize: '1rem', textDecoration: 'none', '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } }}
         >
           Get admission help
         </Box>

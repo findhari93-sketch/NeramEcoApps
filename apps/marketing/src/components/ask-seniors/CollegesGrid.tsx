@@ -1,14 +1,9 @@
 'use client';
 
-import {
-  Box,
-  Grid,
-  Card,
-  CardActionArea,
-  Typography,
-} from '@neram/ui';
-import Link from 'next/link';
 import Image from 'next/image';
+import { Box, Typography } from '@neram/ui';
+import { Link } from '@/i18n/routing';
+import { Section, tokens as t, focusRing, hoverGoldBorder } from '@/design-system';
 
 interface AskSeniorsCollege {
   id: string;
@@ -28,154 +23,99 @@ function getCollegeInitials(shortName: string): string {
   return shortName.slice(0, 3).toUpperCase();
 }
 
+/** Participating colleges as linked tiles (logo or initials, name, city). */
 export default function CollegesGrid({ colleges }: CollegesGridProps) {
   return (
-    <Box
-      component="section"
+    <Section
       id="colleges"
-      sx={{
-        py: { xs: 6, md: 9 },
-        px: { xs: 2, md: 4 },
-        maxWidth: 1100,
-        mx: 'auto',
-      }}
+      tone="white"
+      header={{ eyebrow: 'Participating colleges', title: `${colleges.length} Architecture Colleges` }}
     >
-      {/* Overline label */}
-      <Typography
-        variant="overline"
+      <Box
+        component="ul"
         sx={{
-          display: 'block',
-          color: '#e8a020',
-          letterSpacing: 3,
-          fontWeight: 700,
-          mb: 2,
+          m: 0,
+          p: 0,
+          listStyle: 'none',
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 156px), 1fr))',
+          gap: { xs: 1.5, md: 2 },
         }}
       >
-        PARTICIPATING COLLEGES
-      </Typography>
-
-      {/* Heading */}
-      <Typography
-        component="h3"
-        variant="h4"
-        sx={{
-          fontWeight: 800,
-          color: '#fff',
-          mb: 5,
-        }}
-      >
-        {colleges.length}+ Architecture Colleges
-      </Typography>
-
-      {/* Grid */}
-      <Grid container spacing={2}>
         {colleges.map((college) => (
-          <Grid
-            item
-            xs={6}
-            sm={4}
-            md={3}
-            key={college.id}
-          >
-            <Card
+          <Box component="li" key={college.id}>
+            <Box
               component={Link}
               href={`/colleges/${college.state_slug}/${college.slug}`}
               sx={{
-                bgcolor: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                borderRadius: 2,
-                textDecoration: 'none',
-                transition: 'all 0.3s ease',
                 height: '100%',
-                '&:hover': {
-                  borderColor: 'rgba(232,160,32,0.5)',
-                  transform: 'translateY(-2px)',
-                },
+                boxSizing: 'border-box',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                textAlign: 'center',
+                gap: 0.75,
+                p: 2,
+                bgcolor: t.surface,
+                border: `1px solid ${t.line}`,
+                borderRadius: `${t.radius}px`,
+                color: t.ink,
+                textDecoration: 'none',
+                ...hoverGoldBorder,
+                ...focusRing,
               }}
             >
-              <CardActionArea
+              <Box
                 sx={{
-                  p: 2,
-                  textAlign: 'center',
-                  height: '100%',
+                  width: 56,
+                  height: 56,
+                  mb: 0.75,
+                  borderRadius: '50%',
+                  bgcolor: t.surface,
+                  border: `1px solid ${t.line}`,
                   display: 'flex',
-                  flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  overflow: 'hidden',
+                  flexShrink: 0,
                 }}
               >
-                {/* Logo Avatar */}
-                <Box
-                  sx={{
-                    width: 56,
-                    height: 56,
-                    borderRadius: '50%',
-                    bgcolor: '#fff',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    mx: 'auto',
-                    mb: 1.5,
-                    overflow: 'hidden',
-                  }}
-                >
-                  {college.logo_url ? (
-                    <Image
-                      src={college.logo_url}
-                      alt={college.name}
-                      width={50}
-                      height={50}
-                      style={{
-                        objectFit: 'contain',
-                        padding: '4px',
-                      }}
-                      unoptimized
-                    />
-                  ) : (
-                    <Typography
-                      sx={{
-                        fontWeight: 600,
-                        color: '#000',
-                        fontSize: '0.875rem',
-                      }}
-                    >
-                      {getCollegeInitials(college.short_name)}
-                    </Typography>
-                  )}
-                </Box>
-
-                {/* College Name */}
-                <Typography
-                  sx={{
-                    fontWeight: 600,
-                    color: '#e5e7eb',
-                    fontSize: 13,
-                    lineHeight: 1.3,
-                    mb: 0.5,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    display: '-webkit-box',
-                    WebkitLineClamp: 2,
-                    WebkitBoxOrient: 'vertical',
-                  }}
-                >
-                  {college.name}
-                </Typography>
-
-                {/* City */}
-                <Typography
-                  variant="caption"
-                  sx={{
-                    color: '#6b7280',
-                  }}
-                >
-                  {college.city}
-                </Typography>
-              </CardActionArea>
-            </Card>
-          </Grid>
+                {college.logo_url ? (
+                  <Image
+                    src={college.logo_url}
+                    alt={college.name}
+                    width={50}
+                    height={50}
+                    style={{ objectFit: 'contain', padding: '4px' }}
+                    unoptimized
+                  />
+                ) : (
+                  <Typography component="span" aria-hidden sx={{ fontWeight: 700, fontSize: '0.875rem', color: t.navy900 }}>
+                    {getCollegeInitials(college.short_name)}
+                  </Typography>
+                )}
+              </Box>
+              <Typography
+                component="span"
+                sx={{
+                  fontWeight: 600,
+                  fontSize: '0.9375rem',
+                  lineHeight: 1.3,
+                  overflow: 'hidden',
+                  display: '-webkit-box',
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: 'vertical',
+                }}
+              >
+                {college.name}
+              </Typography>
+              <Typography component="span" sx={{ fontSize: '0.8125rem', color: t.inkMuted }}>
+                {college.city}
+              </Typography>
+            </Box>
+          </Box>
         ))}
-      </Grid>
-    </Box>
+      </Box>
+    </Section>
   );
 }

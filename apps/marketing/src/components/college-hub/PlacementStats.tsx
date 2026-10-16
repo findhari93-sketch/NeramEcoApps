@@ -3,6 +3,7 @@ import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import WorkIcon from '@mui/icons-material/Work';
 import SchoolIcon from '@mui/icons-material/School';
 import type { CollegePlacement } from '@/lib/college-hub/types';
+import { siteTokens } from '@neram/ui/site-tokens';
 
 interface PlacementStatsProps {
   placements: CollegePlacement[];
@@ -12,19 +13,17 @@ function StatCard({
   label,
   value,
   icon,
-  color = '#2563eb',
 }: {
   label: string;
   value: string;
   icon: React.ReactNode;
-  color?: string;
 }) {
   return (
     <Paper
       variant="outlined"
       sx={{
         p: { xs: 1.5, sm: 2 },
-        borderRadius: 2,
+        borderRadius: 1,
         display: 'flex',
         alignItems: 'center',
         gap: 1.5,
@@ -34,19 +33,19 @@ function StatCard({
         sx={{
           width: 40,
           height: 40,
-          borderRadius: 2,
-          bgcolor: `${color}15`,
+          borderRadius: 1,
+          bgcolor: siteTokens.navy900,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           flexShrink: 0,
-          color,
+          color: siteTokens.gold500,
         }}
       >
         {icon}
       </Box>
       <Box>
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', lineHeight: 1 }}>
+        <Typography variant="caption" color={siteTokens.inkMuted} sx={{ display: 'block', lineHeight: 1 }}>
           {label}
         </Typography>
         <Typography variant="h6" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
@@ -61,7 +60,7 @@ export default function PlacementStats({ placements }: PlacementStatsProps) {
   if (placements.length === 0) {
     return (
       <Box sx={{ py: 4, textAlign: 'center' }}>
-        <Typography color="text.secondary" variant="body2">
+        <Typography color={siteTokens.inkMuted} variant="body2">
           Placement data not yet available for this college.
         </Typography>
       </Box>
@@ -74,11 +73,11 @@ export default function PlacementStats({ placements }: PlacementStatsProps) {
   return (
     <Box>
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
-        <Typography variant="subtitle2" color="text.secondary">
+        <Typography variant="subtitle2" color={siteTokens.inkMuted}>
           {latest.academic_year} Placement Report
         </Typography>
         {latest.verified && (
-          <Typography variant="caption" sx={{ color: 'success.main', fontWeight: 600 }}>
+          <Typography variant="caption" sx={{ color: siteTokens.success, fontWeight: 600 }}>
             Verified data
           </Typography>
         )}
@@ -91,7 +90,6 @@ export default function PlacementStats({ placements }: PlacementStatsProps) {
               label="Placement Rate"
               value={`${Math.round(latest.placement_rate_percent)}%`}
               icon={<TrendingUpIcon />}
-              color="#16a34a"
             />
           </Grid>
         )}
@@ -101,7 +99,6 @@ export default function PlacementStats({ placements }: PlacementStatsProps) {
               label="Avg Package"
               value={`${latest.average_package_lpa} LPA`}
               icon={<WorkIcon />}
-              color="#2563eb"
             />
           </Grid>
         )}
@@ -111,7 +108,6 @@ export default function PlacementStats({ placements }: PlacementStatsProps) {
               label="Highest Package"
               value={`${latest.highest_package_lpa} LPA`}
               icon={<TrendingUpIcon />}
-              color="#7c3aed"
             />
           </Grid>
         )}
@@ -121,7 +117,6 @@ export default function PlacementStats({ placements }: PlacementStatsProps) {
               label="Higher Studies"
               value={`${Math.round(latest.higher_studies_percent)}%`}
               icon={<SchoolIcon />}
-              color="#d97706"
             />
           </Grid>
         )}
@@ -131,7 +126,7 @@ export default function PlacementStats({ placements }: PlacementStatsProps) {
       {latest.placement_rate_percent !== null && (
         <Box sx={{ mt: 2 }}>
           <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
-            <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" color={siteTokens.inkMuted}>
               Students placed ({latest.students_placed ?? '?'} / {latest.total_eligible ?? '?'})
             </Typography>
             <Typography variant="caption" sx={{ fontWeight: 600 }}>
@@ -141,7 +136,7 @@ export default function PlacementStats({ placements }: PlacementStatsProps) {
           <LinearProgress
             variant="determinate"
             value={latest.placement_rate_percent}
-            sx={{ height: 8, borderRadius: 4, bgcolor: '#e2e8f0', '& .MuiLinearProgress-bar': { bgcolor: '#16a34a' } }}
+            sx={{ height: 8, borderRadius: `${siteTokens.radiusPill}px`, bgcolor: siteTokens.line, '& .MuiLinearProgress-bar': { bgcolor: siteTokens.success } }}
           />
         </Box>
       )}
@@ -149,7 +144,7 @@ export default function PlacementStats({ placements }: PlacementStatsProps) {
       {/* Top recruiters */}
       {latest.top_recruiters && latest.top_recruiters.length > 0 && (
         <Box sx={{ mt: 2 }}>
-          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.75 }}>
+          <Typography variant="caption" color={siteTokens.inkMuted} sx={{ display: 'block', mb: 0.75 }}>
             Top Recruiters
           </Typography>
           <Stack direction="row" flexWrap="wrap" gap={0.75}>

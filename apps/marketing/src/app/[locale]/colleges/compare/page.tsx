@@ -20,6 +20,7 @@ import { addToCompareList, readCompareList, removeFromCompareList } from '@/lib/
 import { collegeHref, shortName, typeLabel } from '@/lib/college-hub/format';
 import Breadcrumbs from '@/components/seo/Breadcrumbs';
 import CollegeLogo from '@/components/college-hub/directory/CollegeLogo';
+import { tokens } from '@/design-system';
 
 type Loaded = { slug: string; college: CollegeDetail | null };
 
@@ -139,10 +140,10 @@ function CompareContent() {
         <Typography component="h1" sx={{ fontSize: { xs: '1.5rem', md: '2rem' }, fontWeight: 800, mb: 1 }}>
           Compare colleges
         </Typography>
-        <Typography color="text.secondary" sx={{ mb: 3 }}>
+        <Typography color={tokens.inkMuted} sx={{ mb: 3 }}>
           Pick up to {COMPARE_MAX} colleges from the list with the Compare box, then come back here to see them side by side.
         </Typography>
-        <Box component={Link} href={backHref} sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minHeight: 48, px: 3, borderRadius: 1.5, bgcolor: 'primary.main', color: 'primary.contrastText', fontWeight: 700, textDecoration: 'none' }}>
+        <Box component={Link} href={backHref} sx={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minHeight: 48, px: 3, borderRadius: 1, bgcolor: tokens.navy900, color: tokens.paper, fontWeight: 700, textDecoration: 'none' }}>
           Browse colleges
         </Box>
       </Container>
@@ -150,23 +151,23 @@ function CompareContent() {
   }
 
   return (
-    <Box sx={{ bgcolor: (t) => (t.palette.mode === 'light' ? t.palette.grey[50] : 'transparent'), pb: { xs: 2, md: 8 } }}>
+    <Box sx={{ bgcolor: tokens.ground, pb: { xs: 2, md: 8 } }}>
       {/* Header band */}
-      <Box sx={{ bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider' }}>
+      <Box sx={{ bgcolor: tokens.surface, borderBottom: '1px solid', borderColor: tokens.line }}>
         <Container maxWidth="xl" sx={{ px: { xs: 2, md: 4 }, py: { xs: 1.5, md: 2.5 }, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           <Box sx={{ display: { xs: 'none', md: 'block' } }}>
             <Breadcrumbs items={[{ name: 'Colleges', href: '/colleges' }, { name: 'Compare' }]} />
           </Box>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'space-between', gap: '12px 32px' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Box component={Link} href={backHref} aria-label="Back to results" sx={{ display: { xs: 'flex', md: 'none' }, width: 44, height: 44, ml: -1.25, alignItems: 'center', justifyContent: 'center', color: 'text.primary', borderRadius: '50%' }}>
+              <Box component={Link} href={backHref} aria-label="Back to results" sx={{ display: { xs: 'flex', md: 'none' }, width: 44, height: 44, ml: -1.25, alignItems: 'center', justifyContent: 'center', color: tokens.ink, borderRadius: '50%' }}>
                 <ArrowBackIcon aria-hidden />
               </Box>
               <Box>
                 <Typography component="h1" sx={{ m: 0, fontSize: { xs: '1.25rem', md: '2rem' }, fontWeight: 800, lineHeight: 1.15, letterSpacing: '-0.02em' }}>
                   Compare colleges
                 </Typography>
-                <Typography sx={{ m: 0, mt: 0.5, fontSize: { xs: '0.82rem', md: '0.95rem' }, color: 'text.secondary' }}>
+                <Typography sx={{ m: 0, mt: 0.5, fontSize: { xs: '0.82rem', md: '0.95rem' }, color: tokens.inkMuted }}>
                   Comparing {colleges.length} {colleges.length === 1 ? 'college' : 'colleges'}. You can add up to {COMPARE_MAX}.
                 </Typography>
               </Box>
@@ -184,13 +185,13 @@ function CompareContent() {
       </Box>
 
       <Container maxWidth="xl" sx={{ px: { xs: 0, md: 4 }, pt: { xs: 0, md: 3 }, display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <Box component={Link} href={backHref} sx={{ display: { xs: 'none', md: 'inline-flex' }, alignSelf: 'flex-start', alignItems: 'center', gap: 0.75, minHeight: 44, fontSize: '0.9rem', fontWeight: 600, color: 'primary.dark', textDecoration: 'none' }}>
+        <Box component={Link} href={backHref} sx={{ display: { xs: 'none', md: 'inline-flex' }, alignSelf: 'flex-start', alignItems: 'center', gap: 0.75, minHeight: 44, fontSize: '0.9rem', fontWeight: 600, color: tokens.navy900, textDecoration: 'none' }}>
           <ArrowBackIcon aria-hidden sx={{ fontSize: 18 }} />
           Back to results
         </Box>
 
         {colleges.length < 2 && (
-          <Box role="status" sx={{ mx: { xs: 2, md: 0 }, mt: { xs: 2, md: 0 }, p: 1.75, borderRadius: 1.5, bgcolor: (t) => alpha(t.palette.warning.main, 0.12), color: 'text.primary', fontSize: '0.9rem' }}>
+          <Box role="status" sx={{ mx: { xs: 2, md: 0 }, mt: { xs: 2, md: 0 }, p: 1.75, borderRadius: 1, bgcolor: tokens.goldTintBg, color: tokens.ink, fontSize: '0.9rem' }}>
             Add at least two colleges to compare. Use Add a college below, or pick from the list.
           </Box>
         )}
@@ -198,7 +199,7 @@ function CompareContent() {
         <DesktopTable colleges={colleges} sections={sections} emptySlots={emptySlots} onRemove={removeSlug} onAdd={addSlug} exclude={slugs} />
         <PhoneCompare colleges={colleges} sections={sections} onRemove={removeSlug} onAdd={addSlug} exclude={slugs} diffOnly={diffOnly} onDiff={setDiffOnly} canAdd={emptySlots > 0} />
 
-        <Typography sx={{ m: 0, px: { xs: 2, md: 0 }, fontSize: '0.82rem', color: 'text.secondary', lineHeight: 1.5 }}>
+        <Typography sx={{ m: 0, px: { xs: 2, md: 0 }, fontSize: '0.82rem', color: tokens.inkMuted, lineHeight: 1.5 }}>
           Fees are tuition only, as published by each college. The 5-year fee is the annual fee times 5. Hostel, exam and material costs are extra.
         </Typography>
       </Container>
@@ -210,8 +211,8 @@ function CompareContent() {
 
 function DiffToggle({ on, onChange, short }: { on: boolean; onChange: (v: boolean) => void; short?: boolean }) {
   return (
-    <Box component="label" sx={{ display: 'flex', alignItems: 'center', gap: 1.25, height: 44, px: 1.75, border: '1px solid', borderColor: 'grey.400', borderRadius: 1.5, bgcolor: 'background.paper', fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer', '&:focus-within': { outline: '2px solid', outlineColor: 'primary.main' } }}>
-      <Box component="input" type="checkbox" checked={on} onChange={() => onChange(!on)} sx={{ width: 18, height: 18, m: 0, accentColor: (t) => t.palette.primary.main }} />
+    <Box component="label" sx={{ display: 'flex', alignItems: 'center', gap: 1.25, height: 44, px: 1.75, border: '1px solid', borderColor: tokens.lineStrong, borderRadius: 1, bgcolor: tokens.surface, fontSize: '0.88rem', fontWeight: 600, cursor: 'pointer', '&:focus-within': { outline: tokens.focusOutline, outlineOffset: 2 } }}>
+      <Box component="input" type="checkbox" checked={on} onChange={() => onChange(!on)} sx={{ width: 18, height: 18, m: 0, accentColor: tokens.navy900 }} />
       {short ? 'Only differences' : 'Show differences only'}
     </Box>
   );
@@ -232,17 +233,17 @@ function ToolButton({ onClick, icon, label, primary, hideLabelOnPhone }: { onCli
         minWidth: 44,
         px: { xs: hideLabelOnPhone ? 1.25 : 1.75, md: 1.75 },
         border: primary ? 0 : '1px solid',
-        borderColor: 'grey.400',
-        borderRadius: 1.5,
-        bgcolor: primary ? 'primary.main' : 'background.paper',
-        color: primary ? 'primary.contrastText' : 'text.primary',
+        borderColor: tokens.lineStrong,
+        borderRadius: 1,
+        bgcolor: primary ? tokens.navy900 : tokens.surface,
+        color: primary ? tokens.paper : tokens.ink,
         font: 'inherit',
         fontSize: '0.88rem',
         fontWeight: 600,
         cursor: 'pointer',
         justifyContent: 'center',
-        '&:hover': { bgcolor: primary ? 'primary.dark' : 'action.hover' },
-        '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+        '&:hover': { bgcolor: primary ? tokens.navy900 : tokens.surfaceHover },
+        '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 },
       }}
     >
       {icon}
@@ -285,7 +286,7 @@ function AddCollege({ id, exclude, onAdd, compact }: { id: string; exclude: stri
       <Box component="label" htmlFor={id} sx={{ fontSize: '0.9rem', fontWeight: 700, display: compact ? 'none' : 'block' }}>
         Add a college
       </Box>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, height: 44, px: 1.25, boxSizing: 'border-box', border: '1px solid', borderColor: 'grey.400', borderRadius: 1.5, bgcolor: 'background.paper', color: 'text.secondary', '&:focus-within': { outline: '2px solid', outlineColor: 'primary.main' } }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, height: 44, px: 1.25, boxSizing: 'border-box', border: '1px solid', borderColor: tokens.lineStrong, borderRadius: 1, bgcolor: tokens.surface, color: tokens.inkMuted, '&:focus-within': { outline: tokens.focusOutline, outlineOffset: 2 } }}>
         <SearchIcon aria-hidden sx={{ fontSize: 18 }} />
         <Box
           component="input"
@@ -296,12 +297,12 @@ function AddCollege({ id, exclude, onAdd, compact }: { id: string; exclude: stri
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQ(e.target.value)}
           placeholder="Search by name"
           size={1}
-          sx={{ flex: '1 1 auto', minWidth: 0, width: '100%', border: 0, outline: 'none', font: 'inherit', fontSize: '1rem', color: 'text.primary', bgcolor: 'transparent' }}
+          sx={{ flex: '1 1 auto', minWidth: 0, width: '100%', border: 0, outline: 'none', font: 'inherit', fontSize: '1rem', color: tokens.ink, bgcolor: 'transparent' }}
         />
       </Box>
       {busy && <Skeleton variant="rounded" height={44} />}
       {!busy && results.length > 0 && (
-        <Box component="ul" aria-label="Matching colleges" sx={{ listStyle: 'none', m: 0, p: 0, border: '1px solid', borderColor: 'divider', borderRadius: 1.5, overflow: 'hidden', bgcolor: 'background.paper' }}>
+        <Box component="ul" aria-label="Matching colleges" sx={{ listStyle: 'none', m: 0, p: 0, border: '1px solid', borderColor: tokens.line, borderRadius: 1, overflow: 'hidden', bgcolor: tokens.surface }}>
           {results.map((c) => (
             <li key={c.slug}>
               <Box
@@ -311,17 +312,17 @@ function AddCollege({ id, exclude, onAdd, compact }: { id: string; exclude: stri
                   onAdd(c);
                   setQ('');
                 }}
-                sx={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.25, minHeight: 48, px: 1.5, py: 1, border: 0, borderTop: '1px solid', borderColor: 'divider', bgcolor: 'transparent', font: 'inherit', textAlign: 'left', cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 } }}
+                sx={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.25, minHeight: 48, px: 1.5, py: 1, border: 0, borderTop: '1px solid', borderColor: tokens.line, bgcolor: 'transparent', font: 'inherit', textAlign: 'left', cursor: 'pointer', '&:hover': { bgcolor: tokens.surfaceHover }, '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: -2 } }}
               >
-                <Box component="span" sx={{ fontSize: '0.88rem', fontWeight: 600, color: 'text.primary' }}>{c.name}</Box>
-                <Box component="span" sx={{ fontSize: '0.78rem', color: 'text.secondary' }}>{c.city}, {c.state}</Box>
+                <Box component="span" sx={{ fontSize: '0.88rem', fontWeight: 600, color: tokens.ink }}>{c.name}</Box>
+                <Box component="span" sx={{ fontSize: '0.78rem', color: tokens.inkMuted }}>{c.city}, {c.state}</Box>
               </Box>
             </li>
           ))}
         </Box>
       )}
       {!busy && q.trim().length >= 2 && results.length === 0 && (
-        <Typography sx={{ m: 0, fontSize: '0.82rem', color: 'text.secondary' }}>No college named &ldquo;{q.trim()}&rdquo;.</Typography>
+        <Typography sx={{ m: 0, fontSize: '0.82rem', color: tokens.inkMuted }}>No college named &ldquo;{q.trim()}&rdquo;.</Typography>
       )}
     </Box>
   );
@@ -329,7 +330,7 @@ function AddCollege({ id, exclude, onAdd, compact }: { id: string; exclude: stri
 
 function BestTag({ tag, small }: { tag: string; small?: boolean }) {
   return (
-    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, height: small ? 18 : 22, px: small ? 0 : 1, borderRadius: 1, bgcolor: small ? 'transparent' : (t) => t.palette.success.light, color: (t) => t.palette.success.dark, fontSize: small ? '0.68rem' : '0.74rem', fontWeight: 700 }}>
+    <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, height: small ? 18 : 22, px: small ? 0 : 1, borderRadius: 1, bgcolor: small ? 'transparent' : tokens.surface, boxShadow: small ? 'none' : `inset 0 0 0 1px ${tokens.success}`, color: tokens.success, fontSize: small ? '0.68rem' : '0.74rem', fontWeight: 700 }}>
       <CheckIcon aria-hidden sx={{ fontSize: small ? 12 : 13 }} />
       {tag}
     </Box>
@@ -348,45 +349,45 @@ interface TableProps {
 function DesktopTable({ colleges, sections, emptySlots, onRemove, onAdd, exclude }: TableProps) {
   const cols = colleges.length + emptySlots;
   const template = `${LABEL_COL}px repeat(${cols}, minmax(0, 1fr))`;
-  const cell = { px: 2.5, py: 1.75, borderBottom: '1px solid', borderRight: '1px solid', borderColor: 'divider' } as const;
+  const cell = { px: 2.5, py: 1.75, borderBottom: '1px solid', borderRight: '1px solid', borderColor: tokens.line } as const;
   return (
-    <Box sx={{ display: { xs: 'none', md: 'block' }, bgcolor: 'background.paper', border: '1px solid', borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
+    <Box sx={{ display: { xs: 'none', md: 'block' }, bgcolor: tokens.surface, border: '1px solid', borderColor: tokens.line, borderRadius: 1, overflow: 'hidden' }}>
       <Box sx={{ overflowX: 'auto' }}>
         <Box role="table" aria-label="College comparison" sx={{ minWidth: LABEL_COL + cols * 220 }}>
           <Box role="rowgroup">
-            <Box role="row" sx={{ display: 'grid', gridTemplateColumns: template, position: 'sticky', top: 0, zIndex: 1, bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider' }}>
-              <Box role="columnheader" sx={{ p: 2.5, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: 1, borderRight: '1px solid', borderColor: 'divider' }}>
-                <Box component="span" sx={{ fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'text.secondary' }}>Comparing</Box>
-                <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: '0.82rem', color: 'text.secondary' }}>
+            <Box role="row" sx={{ display: 'grid', gridTemplateColumns: template, position: 'sticky', top: 0, zIndex: 1, bgcolor: tokens.surface, borderBottom: '1px solid', borderColor: tokens.line }}>
+              <Box role="columnheader" sx={{ p: 2.5, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: 1, borderRight: '1px solid', borderColor: tokens.line }}>
+                <Box component="span" sx={{ fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', color: tokens.inkMuted }}>Comparing</Box>
+                <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: '0.82rem', color: tokens.inkMuted }}>
                   <BestTag tag="Best" /> best value in each row
                 </Box>
               </Box>
               {colleges.map((c) => (
-                <Box role="columnheader" key={c.slug} sx={{ position: 'relative', p: 2.5, display: 'flex', flexDirection: 'column', gap: 1.25, borderRight: '1px solid', borderColor: 'divider' }}>
+                <Box role="columnheader" key={c.slug} sx={{ position: 'relative', p: 2.5, display: 'flex', flexDirection: 'column', gap: 1.25, borderRight: '1px solid', borderColor: tokens.line }}>
                   <Box
                     component="button"
                     type="button"
                     aria-label={`Remove ${shortName(c)}`}
                     onClick={() => onRemove(c.slug)}
-                    sx={{ position: 'absolute', top: 8, right: 8, width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 0, borderRadius: 1, bgcolor: 'transparent', color: 'text.secondary', cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' }, '@media print': { display: 'none' } }}
+                    sx={{ position: 'absolute', top: 8, right: 8, width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', border: 0, borderRadius: 1, bgcolor: 'transparent', color: tokens.inkMuted, cursor: 'pointer', '&:hover': { bgcolor: tokens.surfaceHover }, '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 }, '@media print': { display: 'none' } }}
                   >
                     <CloseIcon aria-hidden sx={{ fontSize: 18 }} />
                   </Box>
                   <CollegeLogo name={c.name} logoUrl={c.logo_url} size={48} />
                   <Typography component="h2" sx={{ m: 0, pr: 4, fontSize: '1.02rem', lineHeight: 1.3, fontWeight: 700, minHeight: '2.6em' }}>{c.name}</Typography>
-                  <Typography sx={{ m: 0, fontSize: '0.84rem', color: 'text.secondary' }}>{c.city} · {typeLabel(c.type)}</Typography>
-                  <Box component={Link} href={collegeHref(c)} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 44, mt: 0.5, border: '1px solid', borderColor: 'primary.main', borderRadius: 1.5, fontSize: '0.88rem', fontWeight: 600, color: 'primary.dark', textDecoration: 'none', '@media print': { display: 'none' } }}>
+                  <Typography sx={{ m: 0, fontSize: '0.84rem', color: tokens.inkMuted }}>{c.city} · {typeLabel(c.type)}</Typography>
+                  <Box component={Link} href={collegeHref(c)} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 44, mt: 0.5, border: '1px solid', borderColor: tokens.navy900, borderRadius: 1, fontSize: '0.88rem', fontWeight: 600, color: tokens.navy900, textDecoration: 'none', '@media print': { display: 'none' } }}>
                     View details
                   </Box>
                 </Box>
               ))}
               {Array.from({ length: emptySlots }).map((_, i) => (
-                <Box role="columnheader" key={`slot-${i}`} sx={{ p: 2.5, display: 'flex', borderRight: '1px solid', borderColor: 'divider', '@media print': { display: 'none' } }}>
-                  <Box sx={{ flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'stretch', textAlign: 'center', gap: 1.25, p: 2, border: '1.5px dashed', borderColor: 'grey.400', borderRadius: 2, bgcolor: (t) => (t.palette.mode === 'light' ? t.palette.grey[50] : 'transparent') }}>
-                    <Box aria-hidden sx={{ alignSelf: 'center', width: 40, height: 40, borderRadius: '50%', bgcolor: (t) => alpha(t.palette.primary.main, 0.1), color: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Box role="columnheader" key={`slot-${i}`} sx={{ p: 2.5, display: 'flex', borderRight: '1px solid', borderColor: tokens.line, '@media print': { display: 'none' } }}>
+                  <Box sx={{ flex: '1 1 auto', minWidth: 0, display: 'flex', flexDirection: 'column', alignItems: 'stretch', textAlign: 'center', gap: 1.25, p: 2, border: '1.5px dashed', borderColor: tokens.lineStrong, borderRadius: 1, bgcolor: tokens.ground }}>
+                    <Box aria-hidden sx={{ alignSelf: 'center', width: 40, height: 40, borderRadius: '50%', bgcolor: tokens.surfaceHover, color: tokens.navy900, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <AddIcon />
                     </Box>
-                    {i === 0 ? <AddCollege id={`add-desktop-${i}`} exclude={exclude} onAdd={onAdd} /> : <Typography sx={{ fontSize: '0.84rem', color: 'text.secondary' }}>Add a college</Typography>}
+                    {i === 0 ? <AddCollege id={`add-desktop-${i}`} exclude={exclude} onAdd={onAdd} /> : <Typography sx={{ fontSize: '0.84rem', color: tokens.inkMuted }}>Add a college</Typography>}
                   </Box>
                 </Box>
               ))}
@@ -395,25 +396,25 @@ function DesktopTable({ colleges, sections, emptySlots, onRemove, onAdd, exclude
           {sections.map((sec) => (
             <Box role="rowgroup" key={sec.id} aria-labelledby={`sec-${sec.id}`}>
               <Box role="row" sx={{ display: 'grid', gridTemplateColumns: '1fr' }}>
-                <Typography id={`sec-${sec.id}`} role="rowheader" component="h3" sx={{ m: 0, px: 2.5, py: 1.75, bgcolor: (t) => (t.palette.mode === 'light' ? t.palette.grey[100] : t.palette.background.default), borderBottom: '1px solid', borderColor: 'divider', fontSize: '0.9rem', fontWeight: 700 }}>
+                <Typography id={`sec-${sec.id}`} role="rowheader" component="h3" sx={{ m: 0, px: 2.5, py: 1.75, bgcolor: tokens.surfaceHover, borderBottom: '1px solid', borderColor: tokens.line, fontSize: '0.9rem', fontWeight: 700 }}>
                   {sec.title}
                 </Typography>
               </Box>
               {sec.rows.map((row) => (
                 <Box role="row" key={row.key} sx={{ display: 'grid', gridTemplateColumns: template }}>
                   <Box role="rowheader" sx={{ ...cell, display: 'flex', flexDirection: 'column', gap: 0.25 }}>
-                    <Box component="span" sx={{ fontSize: '0.9rem', fontWeight: 600, color: 'text.primary' }}>{row.label}</Box>
-                    {row.hint && <Box component="span" sx={{ fontSize: '0.78rem', color: 'text.secondary' }}>{row.hint}</Box>}
-                    {row.same && <Box component="span" sx={{ fontSize: '0.78rem', color: 'text.secondary' }}>Same for all</Box>}
+                    <Box component="span" sx={{ fontSize: '0.9rem', fontWeight: 600, color: tokens.ink }}>{row.label}</Box>
+                    {row.hint && <Box component="span" sx={{ fontSize: '0.78rem', color: tokens.inkMuted }}>{row.hint}</Box>}
+                    {row.same && <Box component="span" sx={{ fontSize: '0.78rem', color: tokens.inkMuted }}>Same for all</Box>}
                   </Box>
                   {row.cells.map((cl, i) => (
-                    <Box role="cell" key={i} sx={{ ...cell, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px 10px', bgcolor: (t) => (cl.best ? alpha(t.palette.success.main, 0.08) : 'transparent') }}>
-                      <Box component="span" sx={{ fontSize: '0.95rem', fontWeight: cl.best ? 700 : cl.missing ? 400 : 500, color: cl.missing ? 'text.secondary' : 'text.primary', fontVariantNumeric: 'tabular-nums' }}>{cl.value}</Box>
+                    <Box role="cell" key={i} sx={{ ...cell, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '6px 10px', bgcolor: 'transparent', boxShadow: cl.best ? `inset 3px 0 0 ${tokens.success}` : 'none' }}>
+                      <Box component="span" sx={{ fontSize: '0.95rem', fontWeight: cl.best ? 700 : cl.missing ? 400 : 500, color: cl.missing ? tokens.inkMuted : tokens.ink, fontVariantNumeric: 'tabular-nums' }}>{cl.value}</Box>
                       {cl.best && row.bestTag && <BestTag tag={row.bestTag} />}
                     </Box>
                   ))}
                   {Array.from({ length: emptySlots }).map((_, i) => (
-                    <Box role="cell" key={`e-${i}`} sx={{ ...cell, bgcolor: (t) => (t.palette.mode === 'light' ? t.palette.grey[50] : 'transparent') }} />
+                    <Box role="cell" key={`e-${i}`} sx={{ ...cell, bgcolor: tokens.ground }} />
                   ))}
                 </Box>
               ))}
@@ -438,25 +439,25 @@ function PhoneCompare({
   const [adding, setAdding] = useState(false);
   const grid = `repeat(${Math.max(colleges.length, 1)}, minmax(0, 1fr))`;
   return (
-    <Box sx={{ display: { xs: 'block', md: 'none' }, bgcolor: 'background.paper' }}>
-      <Box sx={{ position: 'sticky', top: 0, zIndex: 2, bgcolor: 'background.paper', borderBottom: '1px solid', borderColor: 'divider', boxShadow: '0 4px 12px rgba(15, 27, 45, 0.06)' }}>
+    <Box sx={{ display: { xs: 'block', md: 'none' }, bgcolor: tokens.surface }}>
+      <Box sx={{ position: 'sticky', top: 0, zIndex: 2, bgcolor: tokens.surface, borderBottom: '1px solid', borderColor: tokens.line, boxShadow: `0 4px 12px ${alpha(tokens.navy900, 0.06)}` }}>
         <Box component="ul" aria-label="Colleges being compared" sx={{ listStyle: 'none', m: 0, px: 1.5, pt: 1.25, pb: 1, display: 'grid', gridTemplateColumns: grid, gap: 0.75 }}>
           {colleges.map((c) => (
-            <Box component="li" key={c.slug} sx={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, pt: 1, pb: 0.75, px: 0.5, borderRadius: 1.5, bgcolor: (t) => (t.palette.mode === 'light' ? t.palette.grey[100] : t.palette.background.default), textAlign: 'center', minWidth: 0 }}>
+            <Box component="li" key={c.slug} sx={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 0.5, pt: 1, pb: 0.75, px: 0.5, borderRadius: 1, bgcolor: tokens.surfaceHover, textAlign: 'center', minWidth: 0 }}>
               <Box
                 component="button"
                 type="button"
                 aria-label={`Remove ${shortName(c)}`}
                 onClick={() => onRemove(c.slug)}
-                sx={{ position: 'absolute', top: -2, right: -2, width: 44, height: 44, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', p: 0.75, border: 0, bgcolor: 'transparent', color: 'text.secondary', cursor: 'pointer' }}
+                sx={{ position: 'absolute', top: -2, right: -2, width: 44, height: 44, display: 'flex', alignItems: 'flex-start', justifyContent: 'flex-end', p: 0.75, border: 0, bgcolor: 'transparent', color: tokens.inkMuted, cursor: 'pointer' }}
               >
                 <CloseIcon aria-hidden sx={{ fontSize: 16 }} />
               </Box>
               <CollegeLogo name={c.name} logoUrl={c.logo_url} size={38} radius={1.25} />
-              <Box component={Link} href={collegeHref(c)} sx={{ fontSize: '0.8rem', fontWeight: 700, lineHeight: 1.25, color: 'text.primary', textDecoration: 'none', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: '2.5em', wordBreak: 'break-word' }}>
+              <Box component={Link} href={collegeHref(c)} sx={{ fontSize: '0.8rem', fontWeight: 700, lineHeight: 1.25, color: tokens.ink, textDecoration: 'none', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: '2.5em', wordBreak: 'break-word' }}>
                 {shortName(c)}
               </Box>
-              <Box component="span" sx={{ fontSize: '0.7rem', color: 'text.secondary' }}>{c.city}</Box>
+              <Box component="span" sx={{ fontSize: '0.7rem', color: tokens.inkMuted }}>{c.city}</Box>
             </Box>
           ))}
         </Box>
@@ -465,7 +466,7 @@ function PhoneCompare({
             <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, display: 'flex', gap: 0.75, whiteSpace: 'nowrap' }}>
               {sections.map((s) => (
                 <li key={s.id}>
-                  <Box component="a" href={`#m-sec-${s.id}`} sx={{ display: 'flex', alignItems: 'center', height: 36, px: 1.5, borderRadius: 18, border: '1px solid', borderColor: 'grey.400', color: 'text.secondary', textDecoration: 'none', fontSize: '0.8rem', fontWeight: 600 }}>
+                  <Box component="a" href={`#m-sec-${s.id}`} sx={{ display: 'flex', alignItems: 'center', height: 36, px: 1.5, borderRadius: `${tokens.radiusPill}px`, border: '1px solid', borderColor: tokens.lineStrong, color: tokens.inkMuted, textDecoration: 'none', fontSize: '0.8rem', fontWeight: 600 }}>
                     {s.title}
                   </Box>
                 </li>
@@ -478,7 +479,7 @@ function PhoneCompare({
               type="button"
               aria-expanded={adding}
               onClick={() => setAdding((v) => !v)}
-              sx={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 0.5, height: 36, px: 1.5, border: 0, borderRadius: 18, bgcolor: (t) => alpha(t.palette.primary.main, 0.1), color: 'primary.dark', font: 'inherit', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer' }}
+              sx={{ flex: '0 0 auto', display: 'flex', alignItems: 'center', gap: 0.5, height: 36, px: 1.5, border: 0, borderRadius: `${tokens.radiusPill}px`, bgcolor: tokens.surfaceHover, color: tokens.navy900, font: 'inherit', fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer' }}
             >
               <AddIcon aria-hidden sx={{ fontSize: 16 }} />
               Add
@@ -488,7 +489,7 @@ function PhoneCompare({
         <Box sx={{ px: 1.5, pb: 1.25 }}>
           <Box component="label" sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, minHeight: 40, fontSize: '0.84rem', fontWeight: 600 }}>
             Only differences
-            <Box component="input" type="checkbox" role="switch" checked={diffOnly} onChange={() => onDiff(!diffOnly)} sx={{ width: 20, height: 20, m: 0, accentColor: (t) => t.palette.primary.main }} />
+            <Box component="input" type="checkbox" role="switch" checked={diffOnly} onChange={() => onDiff(!diffOnly)} sx={{ width: 20, height: 20, m: 0, accentColor: tokens.navy900 }} />
           </Box>
         </Box>
         {adding && canAdd && (
@@ -500,19 +501,19 @@ function PhoneCompare({
 
       {sections.map((sec) => (
         <Box component="section" key={sec.id} id={`m-sec-${sec.id}`} aria-labelledby={`m-h-${sec.id}`} sx={{ scrollMarginTop: 200 }}>
-          <Typography id={`m-h-${sec.id}`} component="h2" sx={{ m: 0, px: 2, pt: 1.75, pb: 0.75, bgcolor: (t) => (t.palette.mode === 'light' ? t.palette.grey[100] : t.palette.background.default), fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: 'text.secondary' }}>
+          <Typography id={`m-h-${sec.id}`} component="h2" sx={{ m: 0, px: 2, pt: 1.75, pb: 0.75, bgcolor: tokens.surfaceHover, fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.04em', textTransform: 'uppercase', color: tokens.inkMuted }}>
             {sec.title}
           </Typography>
           {sec.rows.map((row) => (
-            <Box key={row.key} sx={{ px: 1.5, pt: 1.25, pb: 1.5, borderBottom: '1px solid', borderColor: 'divider' }}>
+            <Box key={row.key} sx={{ px: 1.5, pt: 1.25, pb: 1.5, borderBottom: '1px solid', borderColor: tokens.line }}>
               <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, px: 0.5, pb: 0.75 }}>
-                <Box component="span" sx={{ fontSize: '0.8rem', fontWeight: 600, color: 'text.secondary' }}>{row.label}</Box>
-                {row.same && <Box component="span" sx={{ fontSize: '0.7rem', color: 'text.secondary', px: 0.75, py: 0.25, borderRadius: 0.5, bgcolor: 'action.hover' }}>Same for all</Box>}
+                <Box component="span" sx={{ fontSize: '0.8rem', fontWeight: 600, color: tokens.inkMuted }}>{row.label}</Box>
+                {row.same && <Box component="span" sx={{ fontSize: '0.7rem', color: tokens.inkMuted, px: 0.75, py: 0.25, borderRadius: 1, bgcolor: tokens.surfaceHover }}>Same for all</Box>}
               </Box>
               <Box sx={{ display: 'grid', gridTemplateColumns: grid, gap: 0.75 }}>
                 {row.cells.map((cl, i) => (
-                  <Box key={i} lang="en" sx={{ display: 'flex', flexDirection: 'column', gap: 0.375, minHeight: 40, px: 0.75, py: 0.875, boxSizing: 'border-box', borderRadius: 1, bgcolor: (t) => (cl.best ? alpha(t.palette.success.main, 0.1) : t.palette.mode === 'light' ? t.palette.grey[50] : t.palette.background.default), minWidth: 0 }}>
-                    <Box component="span" sx={{ fontSize: '0.8rem', fontWeight: cl.best ? 700 : cl.missing ? 400 : 600, lineHeight: 1.3, color: cl.missing ? 'text.secondary' : 'text.primary', fontVariantNumeric: 'tabular-nums', whiteSpace: 'pre-line', overflowWrap: 'break-word', hyphens: 'auto' }}>{cl.value.replace(', ', '\n')}</Box>
+                  <Box key={i} lang="en" sx={{ display: 'flex', flexDirection: 'column', gap: 0.375, minHeight: 40, px: 0.75, py: 0.875, boxSizing: 'border-box', borderRadius: 1, bgcolor: cl.best ? tokens.surface : tokens.ground, boxShadow: cl.best ? `inset 0 0 0 1px ${tokens.success}` : 'none', minWidth: 0 }}>
+                    <Box component="span" sx={{ fontSize: '0.8rem', fontWeight: cl.best ? 700 : cl.missing ? 400 : 600, lineHeight: 1.3, color: cl.missing ? tokens.inkMuted : tokens.ink, fontVariantNumeric: 'tabular-nums', whiteSpace: 'pre-line', overflowWrap: 'break-word', hyphens: 'auto' }}>{cl.value.replace(', ', '\n')}</Box>
                     {cl.best && row.bestTag && <BestTag tag={row.bestTag} small />}
                   </Box>
                 ))}

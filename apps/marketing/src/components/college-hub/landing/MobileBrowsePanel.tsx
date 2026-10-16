@@ -4,12 +4,12 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Box, Typography } from '@mui/material';
-import { alpha } from '@mui/material/styles';
 import SearchIcon from '@mui/icons-material/Search';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
 import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
+import { tokens } from '@/design-system';
 
 interface Props {
   states: Array<{ state_slug: string; state: string; count: number }>;
@@ -32,9 +32,9 @@ const rowSx = {
   gap: 1.5,
   minHeight: 58,
   px: 1.75,
-  color: 'text.primary',
+  color: tokens.ink,
   textDecoration: 'none',
-  '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 },
+  '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: -2 },
 };
 
 /** Phone browse panel on /colleges (canvas: Mobile · Browse colleges). Hidden from 900px up. */
@@ -66,13 +66,13 @@ export default function MobileBrowsePanel({ states, counseling, coaApprovedCount
   const visibleStates = allStates ? byCount : byCount.slice(0, 8);
 
   return (
-    <Box component="section" aria-labelledby="mobile-browse-title" sx={{ display: { xs: 'flex', md: 'none' }, flexDirection: 'column', gap: 2, px: 2, py: 3, bgcolor: 'background.paper' }}>
+    <Box component="section" aria-labelledby="mobile-browse-title" sx={{ display: { xs: 'flex', md: 'none' }, flexDirection: 'column', gap: 2, px: 2, py: 3, bgcolor: tokens.surface }}>
       <Box>
         <Typography id="mobile-browse-title" component="h2" sx={{ m: 0, fontSize: '1.4rem', fontWeight: 800, letterSpacing: '-0.01em' }}>
           Browse colleges
         </Typography>
         {totalColleges > 0 && (
-          <Typography sx={{ m: 0, mt: 0.25, fontSize: '0.88rem', color: 'text.secondary' }}>
+          <Typography sx={{ m: 0, mt: 0.25, fontSize: '0.88rem', color: tokens.inkMuted }}>
             {totalColleges.toLocaleString('en-IN')} B.Arch colleges across India
           </Typography>
         )}
@@ -86,7 +86,7 @@ export default function MobileBrowsePanel({ states, counseling, coaApprovedCount
           const term = q.trim();
           router.push(term ? `/colleges?q=${encodeURIComponent(term)}#browse` : '/colleges#browse');
         }}
-        sx={{ display: 'flex', alignItems: 'center', gap: 1, height: 48, px: 1.75, boxSizing: 'border-box', borderRadius: 1.5, bgcolor: 'action.hover', color: 'text.secondary', '&:focus-within': { outline: '2px solid', outlineColor: 'primary.main' } }}
+        sx={{ display: 'flex', alignItems: 'center', gap: 1, height: 48, px: 1.75, boxSizing: 'border-box', borderRadius: 1, bgcolor: tokens.surfaceHover, color: tokens.inkMuted, '&:focus-within': { outline: tokens.focusOutline, outlineOffset: 2 } }}
       >
         <SearchIcon aria-hidden sx={{ fontSize: 20 }} />
         <Box component="label" htmlFor="mb-q" sx={{ position: 'absolute', width: '1px', height: '1px', overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>
@@ -100,11 +100,11 @@ export default function MobileBrowsePanel({ states, counseling, coaApprovedCount
           value={q}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQ(e.target.value)}
           placeholder="Search a college or city"
-          sx={{ flex: '1 1 auto', minWidth: 0, border: 0, outline: 'none', font: 'inherit', fontSize: '1rem', color: 'text.primary', bgcolor: 'transparent' }}
+          sx={{ flex: '1 1 auto', minWidth: 0, border: 0, outline: 'none', font: 'inherit', fontSize: '1rem', color: tokens.ink, bgcolor: 'transparent' }}
         />
       </Box>
 
-      <Box role="group" aria-label="Browse by" sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', p: 0.5, borderRadius: 1.5, bgcolor: 'action.hover' }}>
+      <Box role="group" aria-label="Browse by" sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', p: 0.5, borderRadius: 1, bgcolor: tokens.surfaceHover }}>
         {TABS.map((t) => {
           const on = t.id === tab;
           return (
@@ -114,7 +114,7 @@ export default function MobileBrowsePanel({ states, counseling, coaApprovedCount
               type="button"
               aria-pressed={on}
               onClick={() => setTab(t.id)}
-              sx={{ height: 44, border: 0, borderRadius: 1.25, bgcolor: on ? 'background.paper' : 'transparent', boxShadow: on ? '0 1px 3px rgba(15,27,45,0.15)' : 'none', color: on ? 'text.primary' : 'text.secondary', font: 'inherit', fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer', '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 } }}
+              sx={{ height: 44, border: 0, borderRadius: 1, bgcolor: on ? tokens.surface : 'transparent', boxShadow: on ? `inset 0 0 0 1px ${tokens.line}` : 'none', color: on ? tokens.ink : tokens.inkMuted, font: 'inherit', fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer', '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: -2 } }}
             >
               {t.label}
             </Box>
@@ -130,13 +130,13 @@ export default function MobileBrowsePanel({ states, counseling, coaApprovedCount
                 <Box
                   component={Link}
                   href={`/colleges/${s.state_slug}`}
-                  sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.75, minHeight: 56, px: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1.5, color: 'text.primary', textDecoration: 'none', '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
+                  sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 0.75, minHeight: 56, px: 1.5, border: '1px solid', borderColor: tokens.line, borderRadius: 1, color: tokens.ink, textDecoration: 'none', '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } }}
                 >
                   <Box component="span" sx={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                     <Box component="span" sx={{ fontSize: '0.92rem', fontWeight: 700, lineHeight: 1.3 }}>{s.state}</Box>
-                    <Box component="span" sx={{ fontSize: '0.76rem', color: 'text.secondary' }}>{s.count} {s.count === 1 ? 'college' : 'colleges'}</Box>
+                    <Box component="span" sx={{ fontSize: '0.76rem', color: tokens.inkMuted }}>{s.count} {s.count === 1 ? 'college' : 'colleges'}</Box>
                   </Box>
-                  <ChevronRightIcon aria-hidden sx={{ fontSize: 18, color: 'text.secondary', flex: '0 0 auto' }} />
+                  <ChevronRightIcon aria-hidden sx={{ fontSize: 18, color: tokens.inkMuted, flex: '0 0 auto' }} />
                 </Box>
               </li>
             ))}
@@ -147,7 +147,7 @@ export default function MobileBrowsePanel({ states, counseling, coaApprovedCount
               type="button"
               aria-expanded={allStates}
               onClick={() => setAllStates((v) => !v)}
-              sx={{ height: 48, border: 0, borderRadius: 1.5, bgcolor: 'action.hover', color: 'text.primary', font: 'inherit', fontSize: '0.94rem', fontWeight: 700, cursor: 'pointer', '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' } }}
+              sx={{ height: 48, border: 0, borderRadius: 1, bgcolor: tokens.surfaceHover, color: tokens.ink, font: 'inherit', fontSize: '0.94rem', fontWeight: 700, cursor: 'pointer', '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } }}
             >
               {allStates ? 'Show fewer states' : `All ${states.length} states`}
             </Box>
@@ -155,15 +155,15 @@ export default function MobileBrowsePanel({ states, counseling, coaApprovedCount
         </Box>
       ) : (
         <Box component="nav" aria-label={tab === 'exam' ? 'Colleges by exam and counselling' : 'Colleges by ranking and filter'}>
-          <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, border: '1px solid', borderColor: 'divider', borderRadius: 2, overflow: 'hidden' }}>
+          <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0, border: '1px solid', borderColor: tokens.line, borderRadius: 1, overflow: 'hidden' }}>
             {(tab === 'exam' ? examRows : rankRows).map((r, i) => (
-              <Box component="li" key={r.href} sx={{ borderTop: i ? '1px solid' : 0, borderColor: 'divider' }}>
+              <Box component="li" key={r.href} sx={{ borderTop: i ? '1px solid' : 0, borderColor: tokens.line }}>
                 <Box component={Link} href={r.href} sx={rowSx}>
                   <Box component="span" sx={{ flex: '1 1 auto', display: 'flex', flexDirection: 'column', gap: 0.125 }}>
                     <Box component="span" sx={{ fontSize: '0.95rem', fontWeight: 600 }}>{r.label}</Box>
-                    <Box component="span" sx={{ fontSize: '0.8rem', color: 'text.secondary' }}>{r.hint}</Box>
+                    <Box component="span" sx={{ fontSize: '0.8rem', color: tokens.inkMuted }}>{r.hint}</Box>
                   </Box>
-                  <ChevronRightIcon aria-hidden sx={{ fontSize: 20, color: 'text.secondary' }} />
+                  <ChevronRightIcon aria-hidden sx={{ fontSize: 20, color: tokens.inkMuted }} />
                 </Box>
               </Box>
             ))}
@@ -172,7 +172,7 @@ export default function MobileBrowsePanel({ states, counseling, coaApprovedCount
       )}
 
       <Box component="nav" aria-labelledby="mobile-tools-title" sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
-        <Typography id="mobile-tools-title" component="h3" sx={{ m: 0, fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'text.secondary' }}>
+        <Typography id="mobile-tools-title" component="h3" sx={{ m: 0, fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: tokens.inkMuted }}>
           Your tools
         </Typography>
         <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 1 }}>
@@ -185,9 +185,9 @@ export default function MobileBrowsePanel({ states, counseling, coaApprovedCount
               key={href}
               component={Link}
               href={href}
-              sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1, minHeight: 72, p: 1.5, borderRadius: 1.5, bgcolor: (t) => alpha(t.palette[tone].main, 0.1), color: 'text.primary', fontSize: '0.9rem', fontWeight: 700, textDecoration: 'none', '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
+              sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 1, minHeight: 72, p: 1.5, borderRadius: 1, bgcolor: tokens.surfaceHover, color: tokens.ink, fontSize: '0.9rem', fontWeight: 700, textDecoration: 'none', '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } }}
             >
-              <Icon aria-hidden sx={{ fontSize: 22, color: `${tone}.dark` }} />
+              <Icon aria-hidden sx={{ fontSize: 22, color: { primary: tokens.navy900, secondary: tokens.gold800, success: tokens.success }[tone] }} />
               {label}
             </Box>
           ))}

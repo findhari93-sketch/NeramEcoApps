@@ -148,7 +148,7 @@ export default function PaymentLinkContent({
     const msg = errorMessages[initialError];
     return (
       <Container maxWidth="sm" sx={{ py: 8 }}>
-        <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}>
+        <Paper variant="outlined" sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}>
           <Typography variant="h5" fontWeight={700} gutterBottom color="error">
             {msg.title}
           </Typography>
@@ -172,7 +172,7 @@ export default function PaymentLinkContent({
   if (step === 'redirecting') {
     return (
       <Container maxWidth="sm" sx={{ py: 8 }}>
-        <Paper sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}>
+        <Paper variant="outlined" sx={{ p: 4, textAlign: 'center', borderRadius: 2 }}>
           <CircularProgress sx={{ mb: 2 }} />
           <Typography variant="body1">Taking you to the payment page...</Typography>
         </Paper>
@@ -182,7 +182,7 @@ export default function PaymentLinkContent({
 
   return (
     <Container maxWidth="sm" sx={{ py: 6, minHeight: '80vh' }}>
-      <Paper sx={{ p: { xs: 3, sm: 4 }, borderRadius: 2 }}>
+      <Paper variant="outlined" sx={{ p: { xs: 3, sm: 4 }, borderRadius: 2 }}>
         {/* Header */}
         <Box sx={{ textAlign: 'center', mb: 4 }}>
           <Box

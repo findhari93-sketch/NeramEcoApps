@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Box } from '@mui/material';
 import TuneIcon from '@mui/icons-material/Tune';
 import type { ReactNode } from 'react';
+import { tokens } from '@/design-system';
 
 /** Content width of the directory (canvas: 1360px container). */
 export const DIRECTORY_MAX_WIDTH = 1360;
@@ -58,12 +59,12 @@ export default function CollegeListingLayout({ hero, sidebar, activeFilters = 0,
   return (
     <>
       {hero && (
-        <Box sx={{ bgcolor: 'background.paper', borderBottom: { md: '1px solid' }, borderColor: { md: 'divider' } }}>
+        <Box sx={{ bgcolor: tokens.surface, borderBottom: { md: '1px solid' }, borderColor: { md: tokens.line } }}>
           <Box sx={{ maxWidth: DIRECTORY_MAX_WIDTH, mx: 'auto', px: { xs: 2, md: 4 }, pt: { xs: 0, md: 2.5 }, pb: { xs: 0, md: 3.5 } }}>{hero}</Box>
         </Box>
       )}
 
-      <Box sx={{ bgcolor: (t) => (t.palette.mode === 'light' ? t.palette.grey[50] : t.palette.background.default) }}>
+      <Box sx={{ bgcolor: tokens.ground }}>
         <Box
           sx={{
             maxWidth: DIRECTORY_MAX_WIDTH,
@@ -88,10 +89,10 @@ export default function CollegeListingLayout({ hero, sidebar, activeFilters = 0,
               maxHeight: `calc(100vh - var(--broadcast-banner-height, 0px) - ${HEADER_HEIGHT + 32}px)`,
               overflowY: 'auto',
               overscrollBehavior: 'contain',
-              bgcolor: 'background.paper',
+              bgcolor: tokens.surface,
               border: '1px solid',
-              borderColor: 'divider',
-              borderRadius: 2,
+              borderColor: tokens.line,
+              borderRadius: 1,
               scrollbarWidth: 'thin',
             }}
           >
@@ -102,16 +103,16 @@ export default function CollegeListingLayout({ hero, sidebar, activeFilters = 0,
                   type="button"
                   onClick={() => setAndStore(false)}
                   aria-label={activeFilters ? `Expand filters, ${activeFilters} active` : 'Expand filters'}
-                  sx={{ position: 'relative', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid', borderColor: 'divider', borderRadius: 1.5, bgcolor: 'background.paper', color: 'text.primary', cursor: 'pointer', '&:hover': { bgcolor: 'action.hover' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
+                  sx={{ position: 'relative', width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid', borderColor: tokens.line, borderRadius: 1, bgcolor: tokens.surface, color: tokens.ink, cursor: 'pointer', '&:hover': { bgcolor: tokens.surfaceHover }, '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 } }}
                 >
                   <TuneIcon aria-hidden sx={{ fontSize: 20 }} />
                   {activeFilters > 0 && (
-                    <Box component="span" sx={{ position: 'absolute', top: -6, right: -6, minWidth: 18, height: 18, px: 0.5, boxSizing: 'border-box', borderRadius: 9, bgcolor: 'primary.main', color: 'primary.contrastText', fontSize: '0.68rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Box component="span" sx={{ position: 'absolute', top: -6, right: -6, minWidth: 18, height: 18, px: 0.5, boxSizing: 'border-box', borderRadius: `${tokens.radiusPill}px`, bgcolor: tokens.navy900, color: tokens.paper, fontSize: '0.68rem', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       {activeFilters}
                     </Box>
                   )}
                 </Box>
-                <Box component="span" aria-hidden sx={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'text.secondary', mt: 0.5 }}>
+                <Box component="span" aria-hidden sx={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: tokens.inkMuted, mt: 0.5 }}>
                   Filters
                 </Box>
               </Box>

@@ -15,6 +15,7 @@ import SmartToyIcon from '@mui/icons-material/SmartToy';
 import CloseIcon from '@mui/icons-material/Close';
 import SendIcon from '@mui/icons-material/Send';
 import Image from 'next/image';
+import { tokens } from '@/design-system';
 import VoiceInputButton from '../aintra/VoiceInputButton';
 import AintraRichText from '../aintra/rich/AintraRichText';
 import { leadAttribution } from '@/lib/attribution';
@@ -242,11 +243,11 @@ export default function NataChatbot() {
                 boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
                 p: 0,
                 overflow: 'hidden',
-                bgcolor: '#f5f5f5',
+                bgcolor: tokens.surface,
                 border: '2px solid',
-                borderColor: 'rgba(0,0,0,0.08)',
+                borderColor: tokens.line,
                 '&:hover': {
-                  bgcolor: '#ebebeb',
+                  bgcolor: tokens.surfaceHover,
                   boxShadow: '0 6px 24px rgba(0,0,0,0.28)',
                 },
               }}
@@ -262,16 +263,9 @@ export default function NataChatbot() {
                 width: 16,
                 height: 16,
                 borderRadius: '50%',
-                bgcolor: '#44b700',
-                border: '2.5px solid white',
-                boxShadow: '0 0 0 0 rgba(68,183,0,0.4)',
+                bgcolor: tokens.statusDone,
+                border: `2.5px solid ${tokens.surface}`,
                 zIndex: 1200,
-                '@keyframes onlinePulse': {
-                  '0%': { boxShadow: '0 0 0 0 rgba(68,183,0,0.45)' },
-                  '70%': { boxShadow: '0 0 0 7px rgba(68,183,0,0)' },
-                  '100%': { boxShadow: '0 0 0 0 rgba(68,183,0,0)' },
-                },
-                animation: 'onlinePulse 2s ease-out infinite',
               }}
             />
           </Box>
@@ -313,7 +307,7 @@ export default function NataChatbot() {
                 Aintra
               </Typography>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: '#44b700' }} />
+                <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: tokens.statusDone }} />
                 <Typography variant="caption" sx={{ opacity: 0.9, fontSize: '0.7rem' }}>
                   NATA Assistant
                 </Typography>
@@ -336,7 +330,7 @@ export default function NataChatbot() {
             overflowY: 'auto',
             px: { xs: 2, sm: 2.5 },
             py: 2,
-            bgcolor: '#f8f9fa',
+            bgcolor: tokens.ground,
             display: 'flex',
             flexDirection: 'column',
             gap: 1.5,
@@ -506,7 +500,7 @@ export default function NataChatbot() {
 
         {/* Remaining questions counter */}
         {questionCount > 0 && (
-          <Box sx={{ px: 2, py: 0.5, bgcolor: '#f0f0f0', textAlign: 'center', flexShrink: 0 }}>
+          <Box sx={{ px: 2, py: 0.5, bgcolor: tokens.ground, borderTop: `1px solid ${tokens.line}`, textAlign: 'center', flexShrink: 0 }}>
             <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
               {MAX_QUESTIONS_PER_SESSION - questionCount} questions remaining in this session
             </Typography>

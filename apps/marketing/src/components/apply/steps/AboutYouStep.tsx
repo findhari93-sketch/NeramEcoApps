@@ -6,6 +6,8 @@ import ButtonBase from '@mui/material/ButtonBase';
 import ExpandMore from '@mui/icons-material/ExpandMore';
 import VerifiedOutlined from '@mui/icons-material/VerifiedOutlined';
 import { useTranslations } from 'next-intl';
+import { tokens as tk } from '@/design-system';
+import { APPLY_ERROR, INPUT_FOCUS_RING } from '../shell/applyTheme';
 import StepHeading from '../StepHeading';
 import { useFormContext } from '../FormContext';
 import { SUPPORTED_COUNTRIES, getCountryConfig } from '../countryConfig';
@@ -87,7 +89,7 @@ export default function AboutYouStep({ onSignIn, signInBusy = false, signInError
   const prefilledChip = (field: string) =>
     isFieldPrefilled(field) ? (
       <InputAdornment position="end">
-        <Chip label={t('aboutYou.prefilled')} size="small" color="info" variant="outlined" />
+        <Chip label={t('aboutYou.prefilled')} size="small" variant="outlined" sx={{ borderColor: tk.line, color: tk.inkMuted }} />
       </InputAdornment>
     ) : undefined;
 
@@ -113,7 +115,7 @@ export default function AboutYouStep({ onSignIn, signInBusy = false, signInError
           </>
         )}
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: { xs: 3, sm: 2 }, alignItems: 'start' }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: '20px 16px', alignItems: 'start' }}>
           <Field id="apply-first-name" label={t('aboutYou.fullName')}>
             <TextField
               id="apply-first-name"
@@ -147,14 +149,29 @@ export default function AboutYouStep({ onSignIn, signInBusy = false, signInError
           </Field>
         </Box>
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: { xs: 3, sm: 2 }, alignItems: 'start' }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: '20px 16px', alignItems: 'start' }}>
           <Field
             id="apply-phone"
             label={t('aboutYou.phoneWhatsapp')}
             error={phonePartial}
             helper={phonePartial ? t('aboutYou.phoneInvalid', { length: countryConfig.phoneLength }) : undefined}
           >
-            <Box sx={{ display: 'flex' }}>
+            <Box
+              sx={{
+                display: 'flex',
+                height: 48,
+                boxSizing: 'border-box',
+                border: `1px solid ${phonePartial ? APPLY_ERROR : tk.lineStrong}`,
+                borderRadius: `${tk.radius}px`,
+                bgcolor: tk.surface,
+                overflow: 'hidden',
+                '&:focus-within': { borderColor: tk.navy900, boxShadow: INPUT_FOCUS_RING },
+                '& .MuiOutlinedInput-root': { height: '100%', borderRadius: 0, bgcolor: 'transparent' },
+                '& .MuiOutlinedInput-root.Mui-focused': { boxShadow: 'none' },
+                // Doubled class beats the theme's focused and hover outline rules.
+                '& .MuiOutlinedInput-root.MuiOutlinedInput-root .MuiOutlinedInput-notchedOutline': { border: 0 },
+              }}
+            >
               <ButtonBase
                 onClick={(e) => setCountryAnchor(e.currentTarget)}
                 aria-haspopup="menu"
@@ -162,21 +179,20 @@ export default function AboutYouStep({ onSignIn, signInBusy = false, signInError
                 sx={{
                   flex: 'none',
                   minWidth: 64,
-                  height: 48,
-                  px: 1.25,
+                  height: '100%',
+                  pl: 1.5,
+                  pr: 1.25,
                   gap: 0.25,
-                  border: '2px solid',
-                  borderColor: 'text.primary',
-                  borderRight: 0,
-                  bgcolor: '#f4f3ef',
+                  borderRight: `1px solid ${tk.line}`,
+                  bgcolor: tk.ground,
                   fontSize: 16,
                   fontWeight: 700,
-                  color: 'text.primary',
-                  '&.Mui-focusVisible': { boxShadow: '0 0 0 3px rgba(232, 160, 32, 0.35)', zIndex: 1 },
+                  color: tk.ink,
+                  '&.Mui-focusVisible': { outline: tk.focusOutline, outlineOffset: '-2px' },
                 }}
               >
                 {countryConfig.phonePrefix}
-                {SUPPORTED_COUNTRIES.length > 1 && <ExpandMore aria-hidden sx={{ fontSize: 18, color: 'text.secondary' }} />}
+                {SUPPORTED_COUNTRIES.length > 1 && <ExpandMore aria-hidden sx={{ fontSize: 18, color: tk.inkMuted }} />}
               </ButtonBase>
               <Menu anchorEl={countryAnchor} open={!!countryAnchor} onClose={() => setCountryAnchor(null)}>
                 {SUPPORTED_COUNTRIES.map((c) => (
@@ -215,14 +231,14 @@ export default function AboutYouStep({ onSignIn, signInBusy = false, signInError
                 }}
                 InputProps={{
                   endAdornment: personal.phoneVerified ? (
-                    <InputAdornment position="end" sx={{ ml: 0.5 }}>
-                      <Chip
-                        icon={<VerifiedOutlined sx={{ fontSize: 14 }} />}
-                        label={t('aboutYou.verified')}
-                        size="small"
-                        color="success"
-                        sx={{ height: 24, '& .MuiChip-label': { px: 0.75, fontSize: '0.75rem' } }}
-                      />
+                    <InputAdornment position="end" sx={{ ml: 0.5, height: 'auto', maxHeight: 'none' }}>
+                      <Box
+                        component="span"
+                        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5, fontSize: 13, fontWeight: 700, color: tk.success, whiteSpace: 'nowrap' }}
+                      >
+                        <VerifiedOutlined aria-hidden sx={{ fontSize: 18 }} />
+                        {t('aboutYou.verified')}
+                      </Box>
                     </InputAdornment>
                   ) : phoneLengthOk ? (
                     <InputAdornment position="end" sx={{ ml: 0.5 }}>
@@ -230,7 +246,16 @@ export default function AboutYouStep({ onSignIn, signInBusy = false, signInError
                         size="small"
                         variant="text"
                         onClick={() => setShowPhoneVerification(true)}
-                        sx={{ minWidth: 'auto', px: 1, minHeight: 44, fontWeight: 700 }}
+                        sx={{
+                          minWidth: 'auto',
+                          px: 1,
+                          minHeight: 44,
+                          color: tk.ink,
+                          fontSize: 15,
+                          fontWeight: 700,
+                          textDecoration: 'underline',
+                          '&:hover': { textDecoration: 'underline', bgcolor: 'transparent', color: tk.gold800 },
+                        }}
                       >
                         {t('aboutYou.verify')}
                       </Button>

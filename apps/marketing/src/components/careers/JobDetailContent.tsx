@@ -13,6 +13,8 @@ import {
 } from '@neram/ui';
 import Link from 'next/link';
 import type { JobPosting, EmploymentType } from '@neram/database';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
+import { tokens } from '@/design-system';
 import JobApplicationForm from './JobApplicationForm';
 
 function employmentTypeLabel(type: EmploymentType): string {
@@ -38,12 +40,13 @@ export default function JobDetailContent({ job }: JobDetailContentProps) {
 
   return (
     <Box sx={{ pb: { xs: 10, md: 4 } }}>
-      {/* Header with purple gradient */}
+      {/* Navy header with the blueprint grid */}
       <Box
         sx={{
           py: { xs: 4, md: 6 },
-          background: 'linear-gradient(135deg, #7b1fa2 0%, #4a148c 100%)',
-          color: 'white',
+          bgcolor: tokens.navy900,
+          ...tokens.blueprint,
+          color: tokens.paper,
         }}
       >
         <Container maxWidth="md">
@@ -114,17 +117,18 @@ export default function JobDetailContent({ job }: JobDetailContentProps) {
             sx={{
               mb: 3,
               p: 2,
-              borderRadius: 2,
-              bgcolor: '#fff3e0',
-              border: '1px solid #ffcc80',
+              borderRadius: `${tokens.radius}px`,
+              bgcolor: tokens.surface,
+              border: `1px solid ${tokens.line}`,
+              boxShadow: `inset 3px 0 0 ${tokens.gold500}`,
               display: 'flex',
               alignItems: 'center',
               gap: 1.5,
             }}
           >
-            <Typography sx={{ fontSize: '1.5rem' }}>&#x1F393;</Typography>
+            <SchoolOutlinedIcon aria-hidden sx={{ fontSize: 28, color: tokens.gold800, flexShrink: 0 }} />
             <Box>
-              <Typography variant="subtitle1" sx={{ fontWeight: 600, color: '#e65100' }}>
+              <Typography variant="subtitle1" sx={{ fontWeight: 600, color: tokens.ink }}>
                 Ideal for College Students
               </Typography>
               <Typography variant="body2" color="text.secondary">
@@ -170,9 +174,9 @@ export default function JobDetailContent({ job }: JobDetailContentProps) {
 
         {/* Schedule Details */}
         {job.schedule_details && (
-          <Card sx={{ mb: 4, bgcolor: '#f3e5f5', border: '1px solid #ce93d8' }}>
+          <Card elevation={0} sx={{ mb: 4, bgcolor: tokens.surface, border: `1px solid ${tokens.line}`, borderRadius: `${tokens.radius}px` }}>
             <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-              <Typography variant="h6" sx={{ fontWeight: 600, mb: 1, color: '#7b1fa2' }}>
+              <Typography variant="h6" sx={{ fontWeight: 600, mb: 1, color: tokens.ink }}>
                 Schedule Details
               </Typography>
               <Typography variant="body1" color="text.secondary" sx={{ whiteSpace: 'pre-line' }}>

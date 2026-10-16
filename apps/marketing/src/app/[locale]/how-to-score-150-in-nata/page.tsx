@@ -19,6 +19,9 @@ import Link from 'next/link';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateFAQSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
+import { siteTokens as t } from '@neram/ui/site-tokens';
+import { errorColor } from '@/design-system/brand-colors';
+import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
 
 
 export async function generateMetadata({
@@ -114,15 +117,16 @@ export default function HowToScore150InNataPage({ params: { locale } }: PageProp
       <Box
         sx={{
           py: { xs: 6, md: 10 },
-          background: 'linear-gradient(135deg, #f57c00 0%, #e65100 100%)',
-          color: 'white',
+          bgcolor: t.navy900,
+          ...t.blueprint,
+          color: t.paper,
         }}
       >
         <Container maxWidth="lg">
           <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', md: '3rem' } }}>
             How to Score 150+ in NATA 2026
           </Typography>
-          <Typography variant="h5" sx={{ mb: 3, opacity: 0.9 }}>
+          <Typography variant="h5" sx={{ mb: 3, color: t.paperMuted }}>
             Proven strategies used by toppers to crack NATA with high scores
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
@@ -130,7 +134,7 @@ export default function HowToScore150InNataPage({ params: { locale } }: PageProp
               variant="contained"
               component={Link}
               href="/apply"
-              sx={{ bgcolor: 'white', color: 'warning.dark' }}
+              sx={{ minHeight: 48 }}
             >
               Start Preparation
             </Button>
@@ -138,7 +142,7 @@ export default function HowToScore150InNataPage({ params: { locale } }: PageProp
               variant="outlined"
               component={Link}
               href="/nata-preparation-guide"
-              sx={{ borderColor: 'white', color: 'white' }}
+              sx={{ minHeight: 48, borderColor: t.outlineDark, color: t.paper, '&:hover': { bgcolor: 'transparent', borderColor: t.gold500, color: t.gold500 } }}
             >
               Full Prep Guide
             </Button>
@@ -147,7 +151,7 @@ export default function HowToScore150InNataPage({ params: { locale } }: PageProp
       </Box>
 
       {/* Score Target */}
-      <Box sx={{ py: { xs: 4, md: 6 }, bgcolor: 'grey.50' }}>
+      <Box sx={{ py: { xs: 4, md: 6 }, bgcolor: t.ground }}>
         <Container maxWidth="lg">
           <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ fontWeight: 700, mb: 4 }}>
             Target Score Breakdown
@@ -155,7 +159,7 @@ export default function HowToScore150InNataPage({ params: { locale } }: PageProp
           <Grid container spacing={3}>
             {scoreBreakdown.map((item, index) => (
               <Grid item xs={12} md={4} key={index}>
-                <Paper sx={{ p: 3, textAlign: 'center', height: '100%' }}>
+                <Paper variant="outlined" sx={{ p: 3, textAlign: 'center', height: '100%' }}>
                   <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>{item.section}</Typography>
                   <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mb: 2 }}>
                     <Box>
@@ -212,8 +216,8 @@ export default function HowToScore150InNataPage({ params: { locale } }: PageProp
                           width: 40,
                           height: 40,
                           borderRadius: '50%',
-                          bgcolor: 'warning.main',
-                          color: 'white',
+                          bgcolor: t.navy900,
+                          color: t.gold500,
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -235,7 +239,7 @@ export default function HowToScore150InNataPage({ params: { locale } }: PageProp
       </Box>
 
       {/* Weekly Schedule */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
+      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: t.ground }}>
         <Container maxWidth="lg">
           <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ fontWeight: 700, mb: 6 }}>
             Ideal Weekly Study Schedule
@@ -271,7 +275,7 @@ export default function HowToScore150InNataPage({ params: { locale } }: PageProp
           <Grid container spacing={4}>
             {topperTips.map((topper, index) => (
               <Grid item xs={12} md={4} key={index}>
-                <Card sx={{ height: '100%', borderTop: 4, borderColor: 'warning.main' }}>
+                <Card sx={{ height: '100%', borderTop: 4, borderColor: t.gold500 }}>
                   <CardContent sx={{ p: 4 }}>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
                       <Typography variant="h6" sx={{ fontWeight: 600 }}>{topper.name}</Typography>
@@ -292,7 +296,7 @@ export default function HowToScore150InNataPage({ params: { locale } }: PageProp
       </Box>
 
       {/* Common Mistakes */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'error.50' }}>
+      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: t.ground }}>
         <Container maxWidth="lg">
           <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ fontWeight: 700, mb: 6 }}>
             Mistakes That Cost Marks
@@ -307,10 +311,11 @@ export default function HowToScore150InNataPage({ params: { locale } }: PageProp
               'Starting preparation too late',
             ].map((mistake, index) => (
               <Grid item xs={12} sm={6} md={4} key={index}>
-                <Card sx={{ height: '100%', bgcolor: 'white' }}>
-                  <CardContent sx={{ p: 3 }}>
-                    <Typography variant="body1" color="error">
-                      ❌ {mistake}
+                <Card sx={{ height: '100%', bgcolor: t.surface }}>
+                  <CardContent sx={{ p: 3, display: 'flex', gap: 1.25, alignItems: 'flex-start' }}>
+                    <CancelOutlinedIcon aria-hidden sx={{ color: errorColor, fontSize: 22, mt: '2px', flexShrink: 0 }} />
+                    <Typography variant="body1" sx={{ color: t.ink }}>
+                      {mistake}
                     </Typography>
                   </CardContent>
                 </Card>
@@ -321,12 +326,12 @@ export default function HowToScore150InNataPage({ params: { locale } }: PageProp
       </Box>
 
       {/* CTA Section */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'warning.main', textAlign: 'center' }}>
+      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: t.navy900, color: t.paper, textAlign: 'center' }}>
         <Container maxWidth="md">
           <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700 }}>
             Ready to Score 150+ in NATA?
           </Typography>
-          <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>
+          <Typography variant="h6" sx={{ mb: 4, color: t.paperMuted }}>
             Join Neram Classes and learn from experts who have produced 100+ top rankers
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -335,7 +340,7 @@ export default function HowToScore150InNataPage({ params: { locale } }: PageProp
               size="large"
               component={Link}
               href="/apply"
-              sx={{ bgcolor: 'white', color: 'warning.dark' }}
+              sx={{ minHeight: 48 }}
             >
               Enroll Now
             </Button>
@@ -344,7 +349,7 @@ export default function HowToScore150InNataPage({ params: { locale } }: PageProp
               size="large"
               component={Link}
               href="/contact"
-              sx={{ borderColor: 'white', color: 'white' }}
+              sx={{ minHeight: 48, borderColor: t.outlineDark, color: t.paper, '&:hover': { bgcolor: 'transparent', borderColor: t.gold500, color: t.gold500 } }}
             >
               Book Free Demo
             </Button>

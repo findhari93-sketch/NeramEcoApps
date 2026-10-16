@@ -1,20 +1,17 @@
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
-import {
-  Box,
-  Container,
-  Typography,
-  Grid,
-  Card,
-  CardContent,
-  Button,
-  Chip,
-} from '@neram/ui';
-import Link from 'next/link';
+import type { ReactElement } from 'react';
+import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
+import BrushOutlinedIcon from '@mui/icons-material/BrushOutlined';
+import LocationCityOutlinedIcon from '@mui/icons-material/LocationCityOutlined';
+import WorkOutlineOutlinedIcon from '@mui/icons-material/WorkOutlineOutlined';
+import NewspaperOutlinedIcon from '@mui/icons-material/NewspaperOutlined';
+import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { buildAlternates } from '@/lib/seo/metadata';
 import RETIRED_CITY_GUIDES from '@/data/geo/retired-city-guides.json';
+import { CtaBand, CtaButton, HubIndex, type HubGroup } from '@/design-system';
 
 
 export async function generateMetadata({
@@ -188,16 +185,47 @@ const blogPosts = [
   },
 ];
 
-const categories = ['All', 'Preparation', 'Drawing', 'City Guide', 'Career', 'News'];
+// Category order for the tabs; a category with no live posts is not shown.
+const categories = ['Preparation', 'Drawing', 'City Guide', 'Career', 'News'];
+
+const CATEGORY_ICON: Record<string, () => ReactElement> = {
+  Preparation: () => <MenuBookOutlinedIcon />,
+  Drawing: () => <BrushOutlinedIcon />,
+  'City Guide': () => <LocationCityOutlinedIcon />,
+  Career: () => <WorkOutlineOutlinedIcon />,
+  News: () => <NewspaperOutlinedIcon />,
+};
+
+const slugKey = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
 export default function BlogPage({ params: { locale } }: PageProps) {
   setRequestLocale(locale);
 
   // City guides were folded into the city coaching pages (they 301 there).
   const livePosts = blogPosts.filter((post) => !(post.slug in RETIRED_CITY_GUIDES));
-  const featuredPosts = livePosts.filter((post) => post.featured);
-  const recentPosts = livePosts.filter((post) => !post.featured);
   const baseUrl = 'https://neramclasses.com';
+
+  // Featured posts first inside each category, then newest first.
+  const ordered = [...livePosts].sort(
+    (a, b) => Number(b.featured) - Number(a.featured) || b.publishedAt.localeCompare(a.publishedAt),
+  );
+
+  const groups: HubGroup[] = categories
+    .map((cat) => ({
+      key: slugKey(cat),
+      label: cat,
+      items: ordered
+        .filter((post) => post.category === cat)
+        .map((post) => ({
+          href: `/blog/${post.slug}`,
+          title: post.title,
+          desc: post.excerpt,
+          icon: (CATEGORY_ICON[cat] ?? (() => <ArticleOutlinedIcon />))(),
+          badge: post.readTime || undefined,
+          keywords: `${post.category} ${post.author}`,
+        })),
+    }))
+    .filter((g) => g.items.length > 0);
 
   return (
     <>
@@ -207,143 +235,25 @@ export default function BlogPage({ params: { locale } }: PageProps) {
           { name: 'Blog' },
         ])}
       />
-    <Box>
-      {/* Hero Section */}
-      <Box
-        sx={{
-          py: { xs: 6, md: 10 },
-          background: 'linear-gradient(135deg, #ec407a 0%, #d81b60 100%)',
-          color: 'white',
-        }}
+
+      <HubIndex
+        breadcrumb={[{ name: 'Home', href: '/' }, { name: 'Blog' }]}
+        eyebrow="Blog · Neram Classes"
+        title="NATA & Architecture Blog"
+        lede="Expert insights, preparation tips, and latest news for architecture aspirants"
+        searchPlaceholder="Search articles, e.g. drawing, strategy"
+        allLabel="All"
+        countNoun="articles"
+        cardCta="Read"
+        groups={groups}
       >
-        <Container maxWidth="lg">
-          <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', md: '3rem' } }}>
-            NATA & Architecture Blog
-          </Typography>
-          <Typography variant="h5" sx={{ mb: 3, opacity: 0.9 }}>
-            Expert insights, preparation tips, and latest news for architecture aspirants
-          </Typography>
-        </Container>
-      </Box>
-
-      {/* Categories */}
-      <Box sx={{ py: 3, bgcolor: 'grey.50', borderBottom: 1, borderColor: 'divider' }}>
-        <Container maxWidth="lg">
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'center' }}>
-            {categories.map((cat, index) => (
-              <Chip
-                key={index}
-                label={cat}
-                variant={index === 0 ? 'filled' : 'outlined'}
-                color={index === 0 ? 'primary' : 'default'}
-                clickable
-                sx={{ fontSize: '0.9rem' }}
-              />
-            ))}
-          </Box>
-        </Container>
-      </Box>
-
-      {/* Featured Posts */}
-      <Box sx={{ py: { xs: 6, md: 10 } }}>
-        <Container maxWidth="lg">
-          <Typography variant="h2" component="h2" gutterBottom sx={{ fontWeight: 700, mb: 4 }}>
-            Featured Articles
-          </Typography>
-          <Grid container spacing={4}>
-            {featuredPosts.map((post, index) => (
-              <Grid item xs={12} md={6} key={index}>
-                <Card
-                  component={Link}
-                  href={`/blog/${post.slug}`}
-                  sx={{
-                    height: '100%',
-                    textDecoration: 'none',
-                    transition: 'transform 0.2s',
-                    '&:hover': { transform: 'translateY(-4px)' },
-                  }}
-                >
-                  <CardContent sx={{ p: 4 }}>
-                    <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-                      <Chip label={post.category} size="small" color="primary" />
-                      <Chip label={post.readTime} size="small" variant="outlined" />
-                    </Box>
-                    <Typography variant="h5" component="h3" gutterBottom sx={{ fontWeight: 600 }}>
-                      {post.title}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      {post.excerpt}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {post.author} • {new Date(post.publishedAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        </Container>
-      </Box>
-
-      {/* Recent Posts */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
-        <Container maxWidth="lg">
-          <Typography variant="h2" component="h2" gutterBottom sx={{ fontWeight: 700, mb: 4 }}>
-            Recent Articles
-          </Typography>
-          <Grid container spacing={3}>
-            {recentPosts.map((post, index) => (
-              <Grid item xs={12} sm={6} md={4} key={index}>
-                <Card
-                  component={Link}
-                  href={`/blog/${post.slug}`}
-                  sx={{
-                    height: '100%',
-                    textDecoration: 'none',
-                    transition: 'transform 0.2s',
-                    '&:hover': { transform: 'translateY(-4px)' },
-                  }}
-                >
-                  <CardContent sx={{ p: 3 }}>
-                    <Chip label={post.category} size="small" sx={{ mb: 2 }} />
-                    <Typography variant="h6" component="h3" gutterBottom sx={{ fontWeight: 600 }}>
-                      {post.title}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                      {post.excerpt}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {new Date(post.publishedAt).toLocaleDateString('en-IN', { dateStyle: 'medium' })}
-                    </Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        </Container>
-      </Box>
-
-      {/* Newsletter CTA */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'secondary.main', color: 'white', textAlign: 'center' }}>
-        <Container maxWidth="md">
-          <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700 }}>
-            Stay Updated
-          </Typography>
-          <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>
-            Get the latest articles and tips delivered to your inbox
-          </Typography>
-          <Button
-            variant="contained"
-            size="large"
-            component={Link}
-            href="/apply"
-            sx={{ bgcolor: 'white', color: 'secondary.main' }}
-          >
-            Subscribe Now
-          </Button>
-        </Container>
-      </Box>
-    </Box>
+        <CtaBand
+          eyebrow="Newsletter"
+          title="Stay Updated"
+          lede="Get the latest articles and tips delivered to your inbox"
+          actions={<CtaButton href="/apply">Subscribe Now</CtaButton>}
+        />
+      </HubIndex>
     </>
   );
 }

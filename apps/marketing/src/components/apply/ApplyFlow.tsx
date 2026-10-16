@@ -273,7 +273,7 @@ export default function ApplyFlow() {
           }
         >
           {welcomeLine && (
-            <Alert severity="success" icon={false} sx={{ mb: 2 }}>
+            <Alert severity="success" icon={false} sx={{ mb: 3 }}>
               {welcomeLine}
             </Alert>
           )}
@@ -285,11 +285,11 @@ export default function ApplyFlow() {
           )}
 
           {showValidationErrors && !currentValidation.isValid && (
-            <Alert severity="warning" role="alert" sx={{ mb: 2 }}>
-              <Typography variant="body2" fontWeight={600}>
+            <Alert severity="error" role="alert" icon={false} sx={{ mb: 3, px: 2.5, py: 1 }}>
+              <Typography component="p" sx={{ m: 0, fontSize: 15, fontWeight: 700 }}>
                 {t('errors.heading')}
               </Typography>
-              <ul style={{ margin: '4px 0 0', paddingLeft: 20 }}>
+              <ul style={{ margin: '6px 0 0', paddingLeft: 20, fontSize: 14, lineHeight: 1.6 }}>
                 {currentValidation.errors.map((err) => (
                   <li key={err.field}>{t(err.message)}</li>
                 ))}

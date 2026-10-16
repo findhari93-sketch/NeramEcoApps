@@ -28,6 +28,7 @@ import {
 } from '@/lib/seo/schemas';
 import { buildAlternates, buildOgImage } from '@/lib/seo/metadata';
 import { BASE_URL } from '@/lib/seo/constants';
+import { siteTokens as t } from '@neram/ui/site-tokens';
 
 export const revalidate = 86400;
 
@@ -202,14 +203,15 @@ export default function NataCutoffTrendsPage({ params: { locale } }: { params: {
         <Box
           sx={{
             py: { xs: 7, md: 11 },
-            background: 'linear-gradient(135deg, #1a237e 0%, #0d47a1 100%)',
-            color: 'white',
+            bgcolor: t.navy900,
+            ...t.blueprint,
+            color: t.paper,
           }}
         >
           <Container maxWidth="lg">
             <Chip
               label="10-Year Analysis: NATA 2015 to 2025"
-              sx={{ bgcolor: 'white', color: 'primary.main', mb: 2, fontWeight: 600 }}
+              sx={{ bgcolor: t.goldTintBg, color: t.gold300, border: `1px solid ${t.goldTintBorder}`, mb: 2, fontWeight: 600 }}
             />
             <Typography
               variant="h1"
@@ -219,7 +221,7 @@ export default function NataCutoffTrendsPage({ params: { locale } }: { params: {
             >
               NATA Cutoff Trends 2015 to 2025
             </Typography>
-            <Typography variant="h5" sx={{ opacity: 0.92, lineHeight: 1.6, maxWidth: 820 }}>
+            <Typography variant="h5" sx={{ color: t.paperMuted, lineHeight: 1.6, maxWidth: 820 }}>
               How NATA qualifying scores and top architecture college cutoffs have shifted across a decade.
               Plan your NATA 2026 target with data, not guesswork.
             </Typography>
@@ -254,7 +256,7 @@ export default function NataCutoffTrendsPage({ params: { locale } }: { params: {
         </Box>
 
         {/* Trend timeline */}
-        <Box sx={{ py: { xs: 6, md: 9 }, bgcolor: 'grey.50' }}>
+        <Box sx={{ py: { xs: 6, md: 9 }, bgcolor: t.ground }}>
           <Container maxWidth="lg">
             <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ fontWeight: 700, mb: 5 }}>
               NATA cutoff trend by period
@@ -262,7 +264,7 @@ export default function NataCutoffTrendsPage({ params: { locale } }: { params: {
             <Grid container spacing={3}>
               {trendPeriods.map((period) => (
                 <Grid item xs={12} md={6} lg={4} key={period.range}>
-                  <Card sx={{ height: '100%', p: 3, borderTop: '4px solid', borderColor: 'primary.main' }}>
+                  <Card sx={{ height: '100%', p: 3, borderTop: '4px solid', borderColor: t.gold500 }}>
                     <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
                       {period.range}
                     </Typography>
@@ -323,20 +325,20 @@ export default function NataCutoffTrendsPage({ params: { locale } }: { params: {
                       display: 'grid',
                       gridTemplateColumns: '2fr 1fr 2fr',
                       borderBottom: '2px solid',
-                      borderColor: 'grey.200',
+                      borderColor: t.line,
                     }}
                   >
-                    <Box sx={{ p: 2.5, bgcolor: 'grey.100' }}>
+                    <Box sx={{ p: 2.5, bgcolor: t.surfaceHover }}>
                       <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
                         College Tier
                       </Typography>
                     </Box>
-                    <Box sx={{ p: 2.5, bgcolor: 'primary.main', color: 'white' }}>
+                    <Box sx={{ p: 2.5, bgcolor: t.navy900, color: t.paper }}>
                       <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
                         NATA Score Band (out of 200)
                       </Typography>
                     </Box>
-                    <Box sx={{ p: 2.5, bgcolor: 'grey.100' }}>
+                    <Box sx={{ p: 2.5, bgcolor: t.surfaceHover }}>
                       <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
                         Notes
                       </Typography>
@@ -349,7 +351,7 @@ export default function NataCutoffTrendsPage({ params: { locale } }: { params: {
                         display: 'grid',
                         gridTemplateColumns: '2fr 1fr 2fr',
                         borderBottom: '1px solid',
-                        borderColor: 'grey.100',
+                        borderColor: t.line,
                       }}
                     >
                       <Box sx={{ p: 2.5 }}>
@@ -357,8 +359,8 @@ export default function NataCutoffTrendsPage({ params: { locale } }: { params: {
                           {row.band}
                         </Typography>
                       </Box>
-                      <Box sx={{ p: 2.5, bgcolor: 'primary.50' }}>
-                        <Typography variant="body1" sx={{ fontWeight: 700, color: 'primary.dark' }}>
+                      <Box sx={{ p: 2.5, bgcolor: t.surfaceHover }}>
+                        <Typography variant="body1" sx={{ fontWeight: 700, color: t.navy900 }}>
                           {row.nataScoreBand}
                         </Typography>
                       </Box>
@@ -382,7 +384,7 @@ export default function NataCutoffTrendsPage({ params: { locale } }: { params: {
                     </Typography>
                     <Chip
                       label={`${row.nataScoreBand} out of 200`}
-                      sx={{ bgcolor: 'primary.main', color: 'white', fontWeight: 600, mb: 1 }}
+                      sx={{ bgcolor: t.navy900, color: t.paper, fontWeight: 600, mb: 1 }}
                     />
                     <Typography variant="body2" color="text.secondary">
                       {row.note}
@@ -395,7 +397,7 @@ export default function NataCutoffTrendsPage({ params: { locale } }: { params: {
         </Box>
 
         {/* Key takeaways */}
-        <Box sx={{ py: { xs: 6, md: 9 }, bgcolor: 'grey.50' }}>
+        <Box sx={{ py: { xs: 6, md: 9 }, bgcolor: t.ground }}>
           <Container maxWidth="md">
             <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ fontWeight: 700, mb: 4 }}>
               5 takeaways for NATA 2026 aspirants
@@ -435,8 +437,8 @@ export default function NataCutoffTrendsPage({ params: { locale } }: { params: {
                         minWidth: 40,
                         height: 40,
                         borderRadius: '50%',
-                        bgcolor: 'primary.main',
-                        color: 'white',
+                        bgcolor: t.navy900,
+                        color: t.gold500,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -479,11 +481,11 @@ export default function NataCutoffTrendsPage({ params: { locale } }: { params: {
               >
                 <AccordionSummary
                   expandIcon={<Typography sx={{ fontSize: '1.2rem', fontWeight: 600 }}>+</Typography>}
-                  sx={{ bgcolor: 'white', minHeight: 48, '&:hover': { bgcolor: 'grey.100' } }}
+                  sx={{ bgcolor: t.surface, minHeight: 48, '&:hover': { bgcolor: t.surfaceHover } }}
                 >
                   <Typography sx={{ fontWeight: 600 }}>{faq.question}</Typography>
                 </AccordionSummary>
-                <AccordionDetails sx={{ bgcolor: 'white' }}>
+                <AccordionDetails sx={{ bgcolor: t.surface }}>
                   <Typography variant="body1" color="text.secondary" sx={{ lineHeight: 1.8 }}>
                     {faq.answer}
                   </Typography>
@@ -497,8 +499,8 @@ export default function NataCutoffTrendsPage({ params: { locale } }: { params: {
         <Box
           sx={{
             py: { xs: 8, md: 12 },
-            background: 'linear-gradient(135deg, #0d47a1 0%, #1565c0 100%)',
-            color: 'white',
+            bgcolor: t.navy900,
+            color: t.paper,
             textAlign: 'center',
           }}
         >
@@ -506,7 +508,7 @@ export default function NataCutoffTrendsPage({ params: { locale } }: { params: {
             <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '1.7rem', md: '2.4rem' } }}>
               Use the live NATA cutoff calculator for your exact score
             </Typography>
-            <Typography variant="h6" sx={{ mb: 4, opacity: 0.9, lineHeight: 1.6 }}>
+            <Typography variant="h6" sx={{ mb: 4, color: t.paperMuted, lineHeight: 1.6 }}>
               Free tool. Enter your expected NATA score and see your admission chances at B.Arch colleges.
             </Typography>
             <Stack direction="row" spacing={2} justifyContent="center" flexWrap="wrap" useFlexGap>
@@ -515,7 +517,7 @@ export default function NataCutoffTrendsPage({ params: { locale } }: { params: {
                 size="large"
                 component={Link}
                 href="/tools/cutoff-calculator"
-                sx={{ bgcolor: 'white', color: 'primary.main', fontWeight: 600, px: 4, minHeight: 48 }}
+                sx={{ fontWeight: 600, px: 4, minHeight: 48 }}
               >
                 Open Cutoff Calculator
               </Button>
@@ -524,7 +526,7 @@ export default function NataCutoffTrendsPage({ params: { locale } }: { params: {
                 size="large"
                 component={Link}
                 href="/nata-online-coaching"
-                sx={{ borderColor: 'white', color: 'white', fontWeight: 600, px: 4, minHeight: 48 }}
+                sx={{ fontWeight: 600, px: 4, minHeight: 48, borderColor: t.outlineDark, color: t.paper, '&:hover': { bgcolor: 'transparent', borderColor: t.gold500, color: t.gold500 } }}
               >
                 NATA Online Coaching
               </Button>

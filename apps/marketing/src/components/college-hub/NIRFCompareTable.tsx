@@ -11,6 +11,7 @@ import {
   Typography,
 } from '@mui/material';
 import type { NIRFRankingWithCollege } from '@neram/database';
+import { siteTokens } from '@neram/ui/site-tokens';
 
 interface Props {
   rows: NIRFRankingWithCollege[];
@@ -47,17 +48,17 @@ export default function NIRFCompareTable({ rows, years, locale }: Props) {
   if (collegeList.length === 0) {
     return (
       <Box sx={{ textAlign: 'center', py: 6 }}>
-        <Typography color="text.secondary">No colleges match the current filters.</Typography>
+        <Typography color={siteTokens.inkMuted}>No colleges match the current filters.</Typography>
       </Box>
     );
   }
 
   return (
-    <Paper variant="outlined" sx={{ borderRadius: 2, overflowX: 'auto' }}>
+    <Paper variant="outlined" sx={{ borderRadius: 1, overflowX: 'auto' }}>
       <Table size="small" sx={{ minWidth: 100 + sortedYears.length * 90 }}>
-        <TableHead sx={{ bgcolor: '#f8fafc' }}>
+        <TableHead sx={{ bgcolor: siteTokens.ground }}>
           <TableRow>
-            <TableCell sx={{ fontWeight: 700, position: 'sticky', left: 0, bgcolor: '#f8fafc', zIndex: 1 }}>
+            <TableCell sx={{ fontWeight: 700, position: 'sticky', left: 0, bgcolor: siteTokens.ground, zIndex: 1 }}>
               College
             </TableCell>
             {sortedYears.map((y) => (
@@ -70,7 +71,7 @@ export default function NIRFCompareTable({ rows, years, locale }: Props) {
         <TableBody>
           {collegeList.map(({ college, perYear }) => (
             <TableRow key={college!.slug} hover>
-              <TableCell sx={{ position: 'sticky', left: 0, bgcolor: 'background.paper', zIndex: 1 }}>
+              <TableCell sx={{ position: 'sticky', left: 0, bgcolor: siteTokens.surface, zIndex: 1 }}>
                 <Link
                   href={`${localePrefix(locale)}/colleges/rankings/nirf/${college!.slug}`}
                   style={{ color: 'inherit', textDecoration: 'none' }}
@@ -78,7 +79,7 @@ export default function NIRFCompareTable({ rows, years, locale }: Props) {
                   <Typography variant="body2" fontWeight={600}>
                     {college!.name}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" color={siteTokens.inkMuted}>
                     {college!.city}, {college!.state}
                   </Typography>
                 </Link>
@@ -88,7 +89,7 @@ export default function NIRFCompareTable({ rows, years, locale }: Props) {
                 if (!r) {
                   return (
                     <TableCell key={y} align="center">
-                      <Typography variant="caption" color="text.disabled">
+                      <Typography variant="caption" color={siteTokens.inkMuted}>
                         .
                       </Typography>
                     </TableCell>
@@ -97,11 +98,11 @@ export default function NIRFCompareTable({ rows, years, locale }: Props) {
                 return (
                   <TableCell key={y} align="center">
                     <Box>
-                      <Typography variant="body2" fontWeight={700} color="primary.main">
+                      <Typography variant="body2" fontWeight={700} color={siteTokens.navy900}>
                         #{r.rank}
                       </Typography>
                       {r.score !== null && (
-                        <Typography variant="caption" color="text.secondary">
+                        <Typography variant="caption" color={siteTokens.inkMuted}>
                           {r.score.toFixed(1)}
                         </Typography>
                       )}

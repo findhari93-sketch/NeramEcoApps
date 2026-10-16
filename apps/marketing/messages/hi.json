@@ -114,7 +114,7 @@
     "shell": {
       "bookDemo": "फ्री डेमो क्लास बुक करें",
       "home": "Neram Classes home",
-      "help": "Help",
+      "help": "Need help?",
       "secure": "Secure application",
       "callUs": "Call us",
       "contactPage": "Contact page",
@@ -122,6 +122,7 @@
       "privacy": "Privacy",
       "refund": "Refund policy",
       "haveAccount": "Have an account?",
+      "legalNav": "Legal",
       "logIn": "Log in",
       "copyright": "© Neram Classes"
     },
@@ -148,51 +149,59 @@
       "nextPayment": "Next: fees and payment options"
     },
     "showcase": {
-      "eyebrow": "Inside the Nexus app",
-      "headline": "India's largest AI-enabled learning platform for",
-      "headlineAccent": "architecture entrance.",
-      "windowAlt": "A short tour of the Nexus app: drawing review, revision scores, question prediction, the AI tutor, the class library, the sketchbook and a live class.",
-      "pause": "Pause the tour",
-      "play": "Play the tour",
-      "previous": "Previous scene",
-      "next": "Next scene",
+      "eyebrow": "Nexus ऐप के अंदर",
+      "headline": "भारत का सबसे बड़ा AI-सक्षम लर्निंग प्लेटफ़ॉर्म,",
+      "headlineAccent": "आर्किटेक्चर प्रवेश परीक्षा के लिए।",
+      "windowAlt": "Nexus ऐप का छोटा टूर: ड्रॉइंग रिव्यू, रिविज़न स्कोर, प्रश्न अनुमान, AI ट्यूटर, क्लास लाइब्रेरी, स्केचबुक और एक लाइव क्लास।",
+      "pause": "टूर रोकें",
+      "play": "टूर चलाएँ",
+      "previous": "पिछला दृश्य",
+      "next": "अगला दृश्य",
+      "tour": "Nexus टूर",
       "scenes": {
         "review": {
-          "label": "Review",
-          "caption": "Your teacher sketches on your drawing and talks you through it."
+          "label": "रिव्यू",
+          "caption": "आपके शिक्षक आपकी ड्रॉइंग पर सुधार चिह्नित करते हैं और हर सुधार समझाते हैं।",
+          "alt": "एक शिक्षक छात्र की पर्सपेक्टिव ड्रॉइंग पर क्रमांकित सुधार बनाते हैं।"
         },
         "revise": {
-          "label": "Revise",
-          "caption": "Fix it, resubmit, watch the score climb."
+          "label": "सुधार",
+          "caption": "सुधारें, दोबारा जमा करें, और अपना स्कोर बढ़ते देखें।",
+          "alt": "दोबारा जमा की गई ड्रॉइंग को 5 में से 5 अंक मिलते हैं।"
         },
         "predict": {
-          "label": "Predict",
-          "caption": "AI predicts this year's questions from 17 years of chapter weightage."
+          "label": "अनुमान",
+          "caption": "AI उन अध्यायों को क्रम देता है जिनके इस साल आने की सबसे ज़्यादा संभावना है।",
+          "alt": "17 वर्षों में कितनी बार पूछे गए, इसके अनुसार क्रमबद्ध अध्यायों की सूची।"
         },
         "tutor": {
-          "label": "AI tutor",
-          "caption": "Every question solved: video, image, and a tutor you can ask anything."
+          "label": "AI ट्यूटर",
+          "caption": "किसी प्रश्न पर अटक गए? ट्यूटर से कदम दर कदम पूछें।",
+          "alt": "एक छात्र हल किए गए प्रश्न के बारे में AI ट्यूटर से बात करता है।"
         },
         "library": {
-          "label": "Library",
-          "caption": "3,000+ recorded classes for NATA and JEE Paper 2."
+          "label": "लाइब्रेरी",
+          "caption": "3,000+ रिकॉर्डेड क्लासें, विषय के अनुसार खोजें।",
+          "alt": "क्लास लाइब्रेरी में 3D geometry खोजी जा रही है।"
         },
         "sketchbook": {
-          "label": "Sketchbook",
-          "caption": "Your digital sketchbook, plus inspiration from every drawing question."
+          "label": "स्केचबुक",
+          "caption": "डिजिटल स्केच बनाएँ, हर ड्रॉइंग प्रश्न के लिए प्रेरणा के साथ।",
+          "alt": "प्रेरणा चित्रों के पास एक डिजिटल स्केच।"
         },
         "live": {
-          "label": "Live",
-          "caption": "Live classes with answer pads, inside Microsoft Teams."
+          "label": "लाइव",
+          "caption": "Microsoft Teams में लाइव क्लासें, आंसर पैड के साथ।",
+          "alt": "एक लाइव क्लास जिसमें छात्र आंसर पैड पर जवाब देते हैं।"
         }
       },
       "stats": {
         "rank": "AIR 1",
         "rankNote": "JEE B.Arch 2024",
         "questions": "10,000+",
-        "questionsNote": "solved questions",
-        "global": "Global",
-        "globalNote": "students across the world"
+        "questionsNote": "हल किए गए प्रश्न",
+        "global": "ग्लोबल",
+        "globalNote": "दुनिया भर के छात्र"
       }
     },
     "aboutYou": {
@@ -373,7 +382,55 @@
     "quickLinks": "त्वरित लिंक",
     "contact": "संपर्क",
     "followUs": "हमें फॉलो करें",
-    "copyright": "© {year} नेरम क्लासेस। सर्वाधिकार सुरक्षित।"
+    "copyright": "© {year} Neram Classes। सर्वाधिकार सुरक्षित।",
+    "about": "2009 से NATA और JEE Paper 2 की कोचिंग। पूरे भारत और खाड़ी देशों में लाइव ऑनलाइन कक्षाएं, तमिलनाडु और बेंगलुरु में क्लासरूम।",
+    "location": "बेंगलुरु, कर्नाटक, भारत",
+    "phone": "फ़ोन: {number}",
+    "email": "ईमेल: {address}",
+    "supportedBy": "Microsoft द्वारा समर्थित",
+    "resources": "संसाधन",
+    "topCities": "प्रमुख शहर",
+    "topStates": "प्रमुख राज्य",
+    "counselling": "B.Arch काउंसलिंग",
+    "goToApp": "ऐप पर जाएं",
+    "nexusBody": "आर्किटेक्ट्स द्वारा डिज़ाइन किया गया, भारत का पहला NATA-विशेष लर्निंग प्लेटफ़ॉर्म। लाइव और रिकॉर्डेड कक्षाओं, AI स्टडी टूल्स और पैरेंट मॉनिटरिंग के साथ एक संपूर्ण सेल्फ-लर्निंग सहायक।",
+    "nexusNote": "मुफ़्त टूल्स सभी के लिए उपलब्ध हैं। Nexus की प्रीमियम सुविधाएं केवल नामांकित छात्रों के लिए हैं।",
+    "tryFreeTools": "मुफ़्त टूल्स आज़माएं",
+    "exploreNexus": "Nexus देखें",
+    "legal": "कानूनी",
+    "socialLabel": "{network} पर Neram Classes",
+    "links": {
+      "home": "होम",
+      "about": "हमारे बारे में",
+      "courses": "कोर्स",
+      "colleges": "आर्किटेक्चर कॉलेज",
+      "compareColleges": "कॉलेजों की तुलना करें",
+      "coaching": "कोचिंग",
+      "demoClass": "मुफ़्त डेमो क्लास",
+      "apply": "अभी आवेदन करें",
+      "contact": "संपर्क",
+      "fees": "फ़ीस",
+      "scholarships": "छात्रवृत्ति",
+      "careers": "करियर",
+      "freeTools": "मुफ़्त टूल्स",
+      "nataSyllabus": "NATA सिलेबस 2026",
+      "nataCoaching": "NATA प्रवेश परीक्षा कोचिंग",
+      "nataGuide": "NATA तैयारी गाइड",
+      "score150": "NATA में 150+ अंक कैसे लाएं",
+      "importantQuestions": "महत्वपूर्ण प्रश्न",
+      "bestBooks": "NATA और JEE के लिए सर्वश्रेष्ठ किताबें",
+      "previousPapers": "पिछले वर्ष के प्रश्नपत्र",
+      "cutoffCalculator": "कटऑफ़ कैलकुलेटर",
+      "nataApp": "मुफ़्त NATA ऐप",
+      "aiarchitek": "aiArchitek AI प्लेटफ़ॉर्म",
+      "nexusLms": "Nexus LMS (छात्र)",
+      "nataOnline": "NATA ऑनलाइन कोचिंग",
+      "blog": "ब्लॉग",
+      "allCounsellings": "सभी 28 काउंसलिंग",
+      "privacy": "गोपनीयता नीति",
+      "terms": "नियम और शर्तें",
+      "refund": "रिफ़ंड नीति"
+    }
   },
   "common": {
     "loading": "लोड हो रहा है...",
@@ -428,7 +485,29 @@
     "fees": "फीस",
     "freeDemo": "फ्री डेमो",
     "freeDemoClass": "फ्री डेमो क्लास",
-    "myDemo": "मेरा डेमो"
+    "myDemo": "मेरा डेमो",
+    "joinShort": "जुड़ें",
+    "continueShort": "जारी रखें",
+    "trackShort": "स्थिति",
+    "payShort": "भुगतान",
+    "appShort": "ऐप",
+    "helpShort": "मदद",
+    "myEnrollment": "मेरा नामांकन",
+    "logIn": "लॉग इन",
+    "logInToSee": "अपना आवेदन देखने के लिए लॉग इन करें",
+    "more": "और",
+    "search": "खोजें",
+    "notifications": "सूचनाएं",
+    "account": "खाता",
+    "signOut": "साइन आउट",
+    "statusNoApplication": "अभी कोई आवेदन नहीं",
+    "statusDemoBooked": "डेमो क्लास बुक हो गई है",
+    "statusDraft": "आवेदन ड्राफ़्ट में है",
+    "statusReview": "आवेदन की समीक्षा हो रही है",
+    "statusApproved": "स्वीकृत, सीट पक्की करने के लिए भुगतान करें",
+    "statusEnrolled": "नामांकित छात्र",
+    "statusApplying": "आवेदन भर रहे हैं",
+    "freeTools": "मुफ़्त टूल्स"
   },
   "centers": {
     "title": "हमारे लर्निंग सेंटर देखें",

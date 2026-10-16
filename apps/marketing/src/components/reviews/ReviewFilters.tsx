@@ -1,7 +1,8 @@
 'use client';
 
 /**
- * Year, city, learning mode and college filters for /reviews.
+ * The T8 body of /reviews: a sticky white filter bar (year, city, mode,
+ * college), then the review wall on the light ground with page links under it.
  *
  * The page stays ISR: with no filter set, the server-rendered list (children) is
  * what everyone, search engines included, sees. Picking a filter fetches
@@ -10,12 +11,15 @@
  * they are read from window.location on mount rather than useSearchParams,
  * which forces client rendering of the whole page at build.
  *
- * Mobile first: the four selects stack two by two at 375px, each 48px tall.
+ * Mobile first: the four selects sit two by two at 375px, each 48px tall.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Box, Button, MenuItem, Skeleton, Stack, TextField, Typography } from '@neram/ui';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { Box, MenuItem, TextField, Typography } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
+import FilterAltOffOutlinedIcon from '@mui/icons-material/FilterAltOffOutlined';
+import { Link } from '@/i18n/routing';
+import { CtaButton, EmptyState, FilterBar, ReviewWall, Surface, tokens as t, focusRing } from '@/design-system';
 import type { PublicReview } from '@/lib/reviews/json-ld';
 import {
   EMPTY_FILTERS,
@@ -25,7 +29,7 @@ import {
   type ReviewFacets,
   type ReviewFilters as Filters,
 } from '@/lib/reviews/hub';
-import { ReviewCard, type ReviewCardLabels } from './ReviewParts';
+import ReviewWallCard, { ReviewWallCardSkeleton, type ReviewWallCardLabels } from './ReviewWallCard';
 
 export interface ReviewFilterLabels {
   heading: string;
@@ -41,35 +45,99 @@ export interface ReviewFilterLabels {
   matchesOne: string;
   noMatchTitle: string;
   noMatchBody: string;
-  modes: Record<'online' | 'hybrid' | 'offline', string>;
-  /** Card templates with {rating} / {college} placeholders. */
-  starsTemplate: string;
-  joinedTemplate: string;
-  featured: string;
-  verified: string;
+  /** Heading over the list ("What students say"). */
+  listTitle: string;
+  card: ReviewWallCardLabels;
+}
+
+export interface ReviewPagination {
+  /** Nav label ("Review pages"). */
+  label: string;
+  /** "Page 2 of 5" */
+  pageOf: string;
+  prevHref: string | null;
+  nextHref: string | null;
+  prevLabel: string;
+  nextLabel: string;
 }
 
 const fill = (template: string, values: Record<string, string | number>) =>
   template.replace(/\{(\w+)\}/g, (_, k) => String(values[k] ?? ''));
+
+/**
+ * All / NATA / JEE Paper 2 as tabs along the bottom edge of the dark hero.
+ * They are separate ISR pages, so these are links, not filters.
+ */
+export function ExamTabs({ label, tabs }: { label: string; tabs: Array<{ href: string; label: string; active: boolean }> }) {
+  return (
+    <Box component="nav" aria-label={label} sx={{ borderTop: `1px solid ${t.lineDark}` }}>
+      <Box
+        component="ul"
+        sx={{
+          maxWidth: t.container.page,
+          mx: 'auto',
+          px: { xs: 2, sm: 3 },
+          my: 0,
+          boxSizing: 'content-box',
+          listStyle: 'none',
+          display: 'flex',
+          flexWrap: 'wrap',
+          columnGap: { xs: 2.5, sm: 4 },
+        }}
+      >
+        {tabs.map((tab) => (
+          <Box component="li" key={tab.href}>
+            <Box
+              component={Link}
+              href={tab.href}
+              aria-current={tab.active ? 'page' : undefined}
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                minHeight: 48,
+                fontSize: '0.9375rem',
+                fontWeight: 600,
+                textDecoration: 'none',
+                color: tab.active ? t.paper : t.paperMuted,
+                borderBottom: `2px solid ${tab.active ? t.gold500 : 'transparent'}`,
+                transition: 'color 150ms ease, border-color 150ms ease',
+                '&:hover': { color: t.paper, borderBottomColor: tab.active ? t.gold500 : t.outlineDark },
+                ...focusRing,
+              }}
+            >
+              {tab.label}
+            </Box>
+          </Box>
+        ))}
+      </Box>
+    </Box>
+  );
+}
 
 export default function ReviewFilters({
   exam,
   locale,
   facets,
   labels,
+  lead,
+  pagination,
   children,
 }: {
   exam: 'all' | 'nata' | 'jee';
   locale: string;
   facets: ReviewFacets;
   labels: ReviewFilterLabels;
-  children: React.ReactNode;
+  /** Shown above the list whatever the filters (the facts block). */
+  lead?: ReactNode;
+  /** Page links under the unfiltered list; null when there is one page. */
+  pagination?: ReviewPagination | null;
+  /** The server-rendered list (a ReviewWall), or the empty state. */
+  children: ReactNode;
 }) {
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [results, setResults] = useState<{ total: number; reviews: PublicReview[] } | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
-  const live = useRef<HTMLDivElement>(null);
   const active = hasActiveFilters(filters);
 
   // Filters from a shared link.
@@ -110,78 +178,177 @@ export default function ReviewFilters({
   const set = useCallback(<K extends keyof Filters>(key: K, value: Filters[K]) => {
     setFilters((f) => ({ ...f, [key]: value || null }));
   }, []);
-
-  const cardLabels: ReviewCardLabels = {
-    stars: (rating) => fill(labels.starsTemplate, { rating }),
-    joined: (college) => fill(labels.joinedTemplate, { college }),
-    featured: labels.featured,
-    verified: labels.verified,
-    modes: labels.modes,
-  };
+  const clear = useCallback(() => setFilters(EMPTY_FILTERS), []);
 
   const hasAnyFacet = facets.years.length + facets.cities.length + facets.modes.length + facets.colleges.length > 0;
+  const status = active && !loading && results ? (results.total === 1 ? labels.matchesOne : fill(labels.matches, { count: results.total })) : '';
 
   return (
     <>
       {hasAnyFacet && (
-        <Box component="section" aria-label={labels.heading} sx={{ mb: 3 }}>
-          <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 1.5 }}>
-            <FilterSelect label={labels.year} any={labels.any} value={filters.year ? String(filters.year) : ''} onChange={(v) => set('year', v ? Number(v) : null)} options={facets.years.map((y) => ({ value: String(y), label: String(y) }))} />
-            <FilterSelect label={labels.city} any={labels.any} value={filters.city || ''} onChange={(v) => set('city', v)} options={facets.cities.map((c) => ({ value: c, label: c }))} />
-            <FilterSelect
+        <FilterBar
+          summary={
+            <Box component="span" role="status" aria-live="polite">
+              {status}
+            </Box>
+          }
+        >
+          <Box
+            role="group"
+            aria-label={labels.heading}
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: 'repeat(2, minmax(0, 1fr))', md: 'repeat(4, minmax(150px, 200px))' },
+              gap: 1,
+              width: { xs: '100%', md: 'auto' },
+            }}
+          >
+            <ChoiceSelect label={labels.year} any={labels.any} value={filters.year ? String(filters.year) : ''} onChange={(v) => set('year', v ? Number(v) : null)} options={facets.years.map((y) => ({ value: String(y), label: String(y) }))} />
+            <ChoiceSelect label={labels.city} any={labels.any} value={filters.city || ''} onChange={(v) => set('city', v)} options={facets.cities.map((c) => ({ value: c, label: c }))} />
+            <ChoiceSelect
               label={labels.mode}
               any={labels.any}
               value={filters.mode || ''}
               onChange={(v) => set('mode', (v || null) as Filters['mode'])}
-              options={facets.modes.map((m) => ({ value: m, label: labels.modes[m] }))}
+              options={facets.modes.map((m) => ({ value: m, label: labels.card.modes[m] }))}
             />
-            <FilterSelect label={labels.college} any={labels.any} value={filters.college || ''} onChange={(v) => set('college', v)} options={facets.colleges.map((c) => ({ value: c, label: c }))} />
+            <ChoiceSelect label={labels.college} any={labels.any} value={filters.college || ''} onChange={(v) => set('college', v)} options={facets.colleges.map((c) => ({ value: c, label: c }))} />
           </Box>
           {active && (
-            <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 1.5, gap: 1, flexWrap: 'wrap' }}>
-              <Typography ref={live} variant="body2" color="text.secondary" role="status" aria-live="polite">
-                {loading ? '' : results ? (results.total === 1 ? labels.matchesOne : fill(labels.matches, { count: results.total })) : ''}
-              </Typography>
-              <Button startIcon={<CloseIcon />} onClick={() => setFilters(EMPTY_FILTERS)} sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600 }}>
-                {labels.clear}
-              </Button>
-            </Stack>
+            <Box
+              component="button"
+              type="button"
+              onClick={clear}
+              sx={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 0.5,
+                minHeight: 44,
+                px: 1.5,
+                border: 0,
+                bgcolor: 'transparent',
+                font: 'inherit',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                color: t.inkMuted,
+                textDecoration: 'underline',
+                textUnderlineOffset: '2px',
+                cursor: 'pointer',
+                '&:hover': { color: t.ink },
+                '& svg': { fontSize: 18 },
+                ...focusRing,
+              }}
+            >
+              <CloseIcon aria-hidden />
+              {labels.clear}
+            </Box>
           )}
-        </Box>
+        </FilterBar>
       )}
 
-      {!active ? (
-        children
-      ) : loading ? (
-        <Box aria-busy="true" sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
-          {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} variant="rounded" height={200} sx={{ borderRadius: 3 }} />
-          ))}
+      <Surface tone="light" component="div">
+        <Box
+          sx={{
+            maxWidth: t.container.page,
+            mx: 'auto',
+            px: { xs: 2, sm: 3 },
+            py: { xs: 5, md: 7 },
+            boxSizing: 'content-box',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: { xs: 4, md: 5 },
+          }}
+        >
+          {lead}
+
+          <Box component="section" aria-labelledby="reviews-list-title">
+            <Typography id="reviews-list-title" component="h2" sx={{ m: 0, mb: 2.5, fontSize: { xs: '1.375rem', md: '1.625rem' }, fontWeight: 700, lineHeight: 1.25, color: t.ink }}>
+              {labels.listTitle}
+            </Typography>
+
+            {!active ? (
+              <>
+                {children}
+                {pagination && <PageLinks {...pagination} />}
+              </>
+            ) : loading ? (
+              <Box aria-busy="true">
+                <ReviewWall>
+                  {[0, 1, 2, 3, 4, 5].map((i) => (
+                    <ReviewWallCardSkeleton key={i} />
+                  ))}
+                </ReviewWall>
+              </Box>
+            ) : failed || !results || results.reviews.length === 0 ? (
+              <EmptyState
+                icon={<FilterAltOffOutlinedIcon />}
+                title={labels.noMatchTitle}
+                body={labels.noMatchBody}
+                action={
+                  <CtaButton variant="outline" size="md" endIcon={null} onClick={clear}>
+                    {labels.clear}
+                  </CtaButton>
+                }
+              />
+            ) : (
+              <ReviewWall>
+                {results.reviews.map((r) => (
+                  <ReviewWallCard key={r.id} review={r} labels={labels.card} />
+                ))}
+              </ReviewWall>
+            )}
+          </Box>
         </Box>
-      ) : failed || !results || results.reviews.length === 0 ? (
-        <Box sx={{ p: 3, textAlign: 'center', border: '1px solid', borderColor: 'grey.200', borderRadius: 3 }}>
-          <Typography component="h2" sx={{ fontWeight: 700, mb: 1 }}>
-            {labels.noMatchTitle}
-          </Typography>
-          <Typography color="text.secondary" sx={{ mb: 2 }}>
-            {labels.noMatchBody}
-          </Typography>
-          <Button variant="outlined" onClick={() => setFilters(EMPTY_FILTERS)} sx={{ minHeight: 48, textTransform: 'none' }}>
-            {labels.clear}
-          </Button>
-        </Box>
-      ) : (
-        <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' }, gap: 2 }}>
-          {results.reviews.map((r) => (
-            <ReviewCard key={r.id} review={r} labels={cardLabels} />
-          ))}
-        </Box>
-      )}
+      </Surface>
     </>
   );
 }
 
-function FilterSelect({
+/** Previous / Page N of M / Next. Plain links, so every page is a cacheable ISR page. */
+function PageLinks({ label, pageOf, prevHref, nextHref, prevLabel, nextLabel }: ReviewPagination) {
+  const linkSx = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 48,
+    minWidth: 104,
+    px: 2.25,
+    boxSizing: 'border-box',
+    borderRadius: `${t.radius}px`,
+    border: `1px solid ${t.ink}`,
+    color: t.ink,
+    fontSize: '0.9375rem',
+    fontWeight: 600,
+    textDecoration: 'none',
+    transition: 'background-color 150ms ease, color 150ms ease',
+    '&:hover': { bgcolor: t.navy900, color: t.paper, borderColor: t.navy900 },
+    ...focusRing,
+  } as const;
+  return (
+    <Box component="nav" aria-label={label} sx={{ mt: 2, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
+      {prevHref ? (
+        <Box component={Link} href={prevHref} rel="prev" sx={linkSx}>
+          {prevLabel}
+        </Box>
+      ) : (
+        <Box sx={{ minWidth: 104 }} />
+      )}
+      <Typography component="p" aria-current="page" sx={{ m: 0, fontSize: '0.875rem', color: t.inkMuted, textAlign: 'center' }}>
+        {pageOf}
+      </Typography>
+      {nextHref ? (
+        <Box component={Link} href={nextHref} rel="next" sx={linkSx}>
+          {nextLabel}
+        </Box>
+      ) : (
+        <Box sx={{ minWidth: 104 }} />
+      )}
+    </Box>
+  );
+}
+
+/** A 48px labelled select (MUI, so it opens as a listbox the E2E suite drives). */
+function ChoiceSelect({
   label,
   any,
   value,
@@ -197,13 +364,23 @@ function FilterSelect({
   return (
     <TextField
       select
+      size="small"
       label={label}
       value={value}
       onChange={(e) => onChange(e.target.value || null)}
       disabled={options.length === 0}
       fullWidth
-      sx={{ '& .MuiInputBase-root': { minHeight: 48, fontSize: 16 }, minWidth: 0 }}
-      SelectProps={{ MenuProps: { PaperProps: { sx: { maxHeight: 360 } } } }}
+      sx={{
+        minWidth: 0,
+        '& .MuiInputBase-root': { minHeight: 48, fontSize: 16, borderRadius: `${t.radius}px`, bgcolor: t.surface, color: t.ink },
+        '& .MuiOutlinedInput-notchedOutline': { borderColor: t.lineStrong },
+        '& .MuiInputBase-root:hover .MuiOutlinedInput-notchedOutline': { borderColor: t.ink },
+        '& .MuiInputBase-root.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: t.navy900, borderWidth: 2 },
+        '& .MuiInputLabel-root': { color: t.inkMuted },
+        '& .MuiInputLabel-root.Mui-focused': { color: t.navy900 },
+        '& .MuiSelect-select': { display: 'flex', alignItems: 'center' },
+      }}
+      SelectProps={{ MenuProps: { PaperProps: { sx: { maxHeight: 360, borderRadius: `${t.radius}px`, border: `1px solid ${t.line}`, boxShadow: 'none' } } } }}
     >
       <MenuItem value="" sx={{ minHeight: 48 }}>
         {any}

@@ -16,6 +16,16 @@ import {
 import { CloseIcon, CheckCircleIcon } from '@neram/ui';
 import { useIsMobile } from '@neram/ui/hooks';
 import YouTubeIcon from '@mui/icons-material/YouTube';
+import { tokens as t } from '@/design-system/tokens';
+import { brandColors } from '@/design-system/brand-colors';
+
+/** 44px close target with the site focus ring. */
+const closeButtonSx = {
+  width: 44,
+  height: 44,
+  color: t.inkMuted,
+  '&:focus-visible': { outline: t.focusOutline, outlineOffset: '2px' },
+} as const;
 
 interface YouTubeSubscribeModalProps {
   open: boolean;
@@ -161,8 +171,8 @@ export default function YouTubeSubscribeModal({
           sx={{
             width: 64,
             height: 64,
-            borderRadius: '50%',
-            bgcolor: '#FFEBEE',
+            borderRadius: `${t.radius}px`,
+            bgcolor: t.navy900,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -170,12 +180,12 @@ export default function YouTubeSubscribeModal({
             mb: 2,
           }}
         >
-          <YouTubeIcon sx={{ fontSize: 36, color: '#FF0000' }} />
+          <YouTubeIcon aria-hidden sx={{ fontSize: 36, color: brandColors.youtube }} />
         </Box>
 
         {state === 'success' ? (
           <>
-            <CheckCircleIcon sx={{ fontSize: 48, color: 'success.main', mb: 1 }} />
+            <CheckCircleIcon aria-hidden sx={{ fontSize: 48, color: t.success, mb: 1 }} />
             <Typography variant="h6" fontWeight={700} gutterBottom>
               Subscription Verified!
             </Typography>
@@ -185,13 +195,14 @@ export default function YouTubeSubscribeModal({
             {couponCode && (
               <Box
                 sx={{
-                  fontFamily: 'monospace',
+                  fontFamily: t.fontMono,
                   fontSize: 18,
                   fontWeight: 700,
-                  color: 'primary.main',
-                  bgcolor: '#E3F2FD',
+                  color: t.ink,
+                  bgcolor: t.ground,
+                  border: `1px dashed ${t.lineStrong}`,
                   p: 1.5,
-                  borderRadius: 1,
+                  borderRadius: `${t.radius}px`,
                   display: 'inline-block',
                   letterSpacing: 1,
                 }}
@@ -200,7 +211,7 @@ export default function YouTubeSubscribeModal({
               </Box>
             )}
             <Box sx={{ mt: 3 }}>
-              <Button variant="contained" onClick={onClose} fullWidth>
+              <Button variant="contained" onClick={onClose} fullWidth sx={{ minHeight: 48, borderRadius: `${t.radius}px`, textTransform: 'none', fontWeight: 700 }}>
                 Continue
               </Button>
             </Box>
@@ -222,16 +233,20 @@ export default function YouTubeSubscribeModal({
           {/* How it works */}
           <Box
             sx={{
-              bgcolor: '#FFF8E1',
-              borderRadius: 1,
+              bgcolor: t.ground,
+              border: `1px solid ${t.line}`,
+              borderRadius: `${t.radius}px`,
               p: 2,
               mb: 3,
             }}
           >
-            <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1, fontSize: 13 }}>
+            <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 1, fontSize: { xs: '1rem', sm: '0.875rem' }, color: t.ink }}>
               How it works:
             </Typography>
-            <Box component="ol" sx={{ pl: 2.5, m: 0, '& li': { fontSize: 12.5, color: 'text.secondary', mb: 0.5 } }}>
+            <Box
+              component="ol"
+              sx={{ pl: 2.5, m: 0, '& li': { fontSize: { xs: '1rem', sm: '0.875rem' }, lineHeight: 1.5, color: t.inkMuted, mb: 0.5 } }}
+            >
               <li>Click the button below to sign in with Google</li>
               <li>Authorize YouTube subscription access</li>
               <li>We&apos;ll subscribe you to our channel automatically</li>
@@ -241,7 +256,7 @@ export default function YouTubeSubscribeModal({
 
           {/* Error message */}
           {state === 'error' && error && (
-            <Alert severity="error" sx={{ mb: 2, fontSize: 13 }}>
+            <Alert severity="error" sx={{ mb: 2, fontSize: '0.875rem' }}>
               {error}
             </Alert>
           )}
@@ -262,12 +277,12 @@ export default function YouTubeSubscribeModal({
             }
             sx={{
               py: 1.5,
-              bgcolor: '#FF0000',
-              fontWeight: 600,
-              fontSize: 15,
+              minHeight: 48,
+              borderRadius: `${t.radius}px`,
+              fontWeight: 700,
+              fontSize: '1rem',
               textTransform: 'none',
-              '&:hover': { bgcolor: '#CC0000' },
-              '&.Mui-disabled': { bgcolor: '#FFCDD2', color: '#fff' },
+              '&:focus-visible': { outline: t.focusOutline, outlineOffset: '2px' },
             }}
           >
             {state === 'loading'
@@ -280,8 +295,8 @@ export default function YouTubeSubscribeModal({
           {state === 'waiting' && (
             <Typography
               variant="caption"
-              color="text.secondary"
-              sx={{ display: 'block', textAlign: 'center', mt: 1.5 }}
+              role="status"
+              sx={{ display: 'block', textAlign: 'center', mt: 1.5, fontSize: '0.875rem', color: t.inkMuted }}
             >
               Complete the subscription in the popup window.
               <br />
@@ -292,8 +307,7 @@ export default function YouTubeSubscribeModal({
           {/* Privacy note */}
           <Typography
             variant="caption"
-            color="text.disabled"
-            sx={{ display: 'block', textAlign: 'center', mt: 2, fontSize: 11 }}
+            sx={{ display: 'block', textAlign: 'center', mt: 2, fontSize: '0.8125rem', color: t.inkMuted }}
           >
             We only request permission to subscribe you to our channel.
             No other data is collected.
@@ -313,14 +327,14 @@ export default function YouTubeSubscribeModal({
         disableSwipeToOpen
         PaperProps={{
           sx: {
-            borderTopLeftRadius: 16,
-            borderTopRightRadius: 16,
+            borderTopLeftRadius: t.radius,
+            borderTopRightRadius: t.radius,
             maxHeight: '85vh',
           },
         }}
       >
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', p: 1, pb: 0 }}>
-          <IconButton onClick={onClose} size="small">
+          <IconButton onClick={onClose} aria-label="Close" sx={closeButtonSx}>
             <CloseIcon fontSize="small" />
           </IconButton>
         </Box>
@@ -335,11 +349,11 @@ export default function YouTubeSubscribeModal({
       onClose={onClose}
       maxWidth="xs"
       fullWidth
-      PaperProps={{ sx: { borderRadius: 1.5 } }}
+      PaperProps={{ sx: { borderRadius: `${t.radius}px` } }}
     >
       <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', pb: 0 }}>
         <span />
-        <IconButton onClick={onClose} size="small">
+        <IconButton onClick={onClose} aria-label="Close" sx={closeButtonSx}>
           <CloseIcon fontSize="small" />
         </IconButton>
       </DialogTitle>

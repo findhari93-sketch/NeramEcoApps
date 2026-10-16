@@ -30,6 +30,7 @@ import HeadsetMicIcon from '@mui/icons-material/HeadsetMic';
 import OpenInFullRoundedIcon from '@mui/icons-material/OpenInFullRounded';
 import CloseFullscreenRoundedIcon from '@mui/icons-material/CloseFullscreenRounded';
 import KeyboardArrowDownRoundedIcon from '@mui/icons-material/KeyboardArrowDownRounded';
+import { tokens, brandColors } from '@/design-system';
 import VoiceInputButton from './aintra/VoiceInputButton';
 import BotAvatar from './aintra/BotAvatar';
 import AssistantMessage, { type ChatMessage } from './aintra/AssistantMessage';
@@ -485,16 +486,9 @@ export default function GeneralChatbot() {
                 width: 16,
                 height: 16,
                 borderRadius: '50%',
-                bgcolor: '#44b700',
-                border: '2.5px solid white',
-                boxShadow: '0 0 0 0 rgba(68,183,0,0.4)',
+                bgcolor: tokens.statusDone,
+                border: `2.5px solid ${tokens.surface}`,
                 zIndex: 1200,
-                '@keyframes onlinePulse': {
-                  '0%': { boxShadow: '0 0 0 0 rgba(68,183,0,0.45)' },
-                  '70%': { boxShadow: '0 0 0 7px rgba(68,183,0,0)' },
-                  '100%': { boxShadow: '0 0 0 0 rgba(68,183,0,0)' },
-                },
-                animation: 'onlinePulse 2s ease-out infinite',
               }}
             />
           </Box>
@@ -587,7 +581,7 @@ export default function GeneralChatbot() {
                     Aintra
                   </Typography>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: '#44b700' }} />
+                    <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: tokens.statusDone }} />
                     <Typography variant="caption" noWrap sx={{ opacity: 0.9, fontSize: '0.75rem' }}>
                       Neram Classes Assistant
                     </Typography>
@@ -625,7 +619,7 @@ export default function GeneralChatbot() {
                 >
                   <MenuItem onClick={handleWhatsApp} sx={{ py: 1.25 }}>
                     <ListItemIcon>
-                      <WhatsAppIcon sx={{ color: '#25D366' }} />
+                      <WhatsAppIcon sx={{ color: brandColors.whatsappDark }} />
                     </ListItemIcon>
                     <ListItemText
                       primary="Chat on WhatsApp"
@@ -636,7 +630,7 @@ export default function GeneralChatbot() {
                   </MenuItem>
                   <MenuItem onClick={handleTawkTo} sx={{ py: 1.25 }}>
                     <ListItemIcon>
-                      <SupportAgentIcon sx={{ color: '#1976d2' }} />
+                      <SupportAgentIcon sx={{ color: tokens.navy900 }} />
                     </ListItemIcon>
                     <ListItemText
                       primary="Live Chat (Tawk.to)"
@@ -664,7 +658,7 @@ export default function GeneralChatbot() {
                   flex: 1,
                   overflowY: 'auto',
                   overscrollBehavior: 'contain',
-                  bgcolor: '#f8f9fa',
+                  bgcolor: tokens.ground,
                   px: { xs: 2, sm: 2.5 },
                   py: 2.5,
                 }}
@@ -852,7 +846,8 @@ export default function GeneralChatbot() {
             <Box
               sx={{
                 px: 2,
-                bgcolor: '#f0f0f0',
+                bgcolor: tokens.ground,
+                borderTop: `1px solid ${tokens.line}`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -872,7 +867,7 @@ export default function GeneralChatbot() {
                   border: 0,
                   bgcolor: 'transparent',
                   font: 'inherit',
-                  '&:focus-visible': { outline: '2px solid #1976d2', outlineOffset: 2 },
+                  '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 },
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '4px',
@@ -880,11 +875,11 @@ export default function GeneralChatbot() {
                   px: 1,
                   borderRadius: 1,
                   minHeight: 44,
-                  '&:hover': { bgcolor: '#e0e0e0' },
+                  '&:hover': { bgcolor: tokens.surfaceHover },
                 }}
               >
-                <WhatsAppIcon sx={{ fontSize: 16, color: '#0F7A3D', display: 'block' }} />
-                <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#0F7A3D', lineHeight: 1 }}>
+                <WhatsAppIcon sx={{ fontSize: 16, color: brandColors.whatsappDark, display: 'block' }} />
+                <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 600, color: tokens.ink, lineHeight: 1 }}>
                   WhatsApp
                 </Typography>
               </Box>
@@ -897,7 +892,7 @@ export default function GeneralChatbot() {
                   border: 0,
                   bgcolor: 'transparent',
                   font: 'inherit',
-                  '&:focus-visible': { outline: '2px solid #1976d2', outlineOffset: 2 },
+                  '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: 2 },
                   display: 'inline-flex',
                   alignItems: 'center',
                   gap: '4px',
@@ -905,11 +900,11 @@ export default function GeneralChatbot() {
                   px: 1,
                   borderRadius: 1,
                   minHeight: 44,
-                  '&:hover': { bgcolor: '#e0e0e0' },
+                  '&:hover': { bgcolor: tokens.surfaceHover },
                 }}
               >
-                <SupportAgentIcon sx={{ fontSize: 16, color: '#1565c0', display: 'block' }} />
-                <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#1565c0', lineHeight: 1 }}>
+                <SupportAgentIcon sx={{ fontSize: 16, color: tokens.navy900, display: 'block' }} />
+                <Typography component="span" sx={{ fontSize: '0.75rem', fontWeight: 600, color: tokens.ink, lineHeight: 1 }}>
                   {liveChatLoading ? 'Connecting' : 'Live Chat'}
                 </Typography>
               </Box>
@@ -917,7 +912,7 @@ export default function GeneralChatbot() {
 
             {/* Remaining questions counter */}
             {questionCount > 0 && (
-              <Box sx={{ px: 2, py: 0.5, bgcolor: '#fafafa', textAlign: 'center', flexShrink: 0 }}>
+              <Box sx={{ px: 2, py: 0.5, bgcolor: tokens.ground, textAlign: 'center', flexShrink: 0 }}>
                 <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
                   {MAX_QUESTIONS_PER_SESSION - questionCount} questions remaining
                 </Typography>
@@ -961,7 +956,7 @@ export default function GeneralChatbot() {
                 value={input}
                 onChange={setInput}
                 disabled={loading || atLimit}
-                color="#1976d2"
+                color={tokens.navy900}
                 size={44}
               />
               {loading ? (

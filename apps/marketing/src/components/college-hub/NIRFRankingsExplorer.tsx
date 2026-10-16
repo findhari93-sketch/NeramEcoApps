@@ -15,6 +15,7 @@ import NIRFFilterBar from './NIRFFilterBar';
 import NIRFRankingTable from './NIRFRankingTable';
 import NIRFRankingCard from './NIRFRankingCard';
 import NIRFCompareTable from './NIRFCompareTable';
+import { tokens } from '@/design-system';
 
 interface Props {
   rows: PublicNIRFRow[];
@@ -84,13 +85,14 @@ function ExplorerBody({ rows, availableYears, states, cities, locale, yearRangeL
               display: 'inline-flex',
               alignItems: 'center',
               gap: 0.75,
-              bgcolor: '#fef0e7',
-              color: '#9a3412',
+              bgcolor: tokens.surface,
+              color: tokens.success,
+              boxShadow: `inset 0 0 0 1px ${tokens.success}`,
               fontWeight: 600,
               fontSize: '0.72rem',
               px: 1.25,
               py: 0.4,
-              borderRadius: 5,
+              borderRadius: `${tokens.radiusPill}px`,
             }}
           >
             <Box
@@ -98,7 +100,7 @@ function ExplorerBody({ rows, availableYears, states, cities, locale, yearRangeL
                 width: 6,
                 height: 6,
                 borderRadius: '50%',
-                bgcolor: '#ea580c',
+                bgcolor: tokens.success,
               }}
             />
             LIVE · NIRF {yearRangeLabel}
@@ -107,13 +109,13 @@ function ExplorerBody({ rows, availableYears, states, cities, locale, yearRangeL
             sx={{
               display: 'inline-flex',
               alignItems: 'center',
-              bgcolor: '#f1efe9',
-              color: 'text.primary',
+              bgcolor: tokens.surfaceHover,
+              color: tokens.ink,
               fontWeight: 600,
               fontSize: '0.72rem',
               px: 1.25,
               py: 0.4,
-              borderRadius: 5,
+              borderRadius: `${tokens.radiusPill}px`,
               letterSpacing: 0.6,
               textTransform: 'uppercase',
             }}
@@ -129,14 +131,14 @@ function ExplorerBody({ rows, availableYears, states, cities, locale, yearRangeL
             startIcon={<CompareArrowsIcon sx={{ fontSize: 18 }} />}
             variant={filters.compare ? 'contained' : 'outlined'}
             sx={{
-              borderRadius: 5,
+              borderRadius: `${tokens.radiusPill}px`,
               minHeight: 36,
               fontSize: '0.82rem',
               textTransform: 'none',
               fontWeight: 600,
               px: 1.75,
-              borderColor: 'divider',
-              color: filters.compare ? undefined : 'text.primary',
+              borderColor: tokens.line,
+              color: filters.compare ? undefined : tokens.ink,
             }}
           >
             {filters.compare ? 'Exit compare' : 'Compare years'}
@@ -146,12 +148,12 @@ function ExplorerBody({ rows, availableYears, states, cities, locale, yearRangeL
             href={`${localePrefix(locale)}/colleges/rankings/nirf`}
             aria-label="Share NIRF rankings"
             sx={{
-              borderRadius: 5,
+              borderRadius: `${tokens.radiusPill}px`,
               minWidth: 40,
               minHeight: 36,
               border: '1px solid',
-              borderColor: 'divider',
-              color: 'text.primary',
+              borderColor: tokens.line,
+              color: tokens.ink,
               p: 0,
             }}
           >
@@ -173,7 +175,7 @@ function ExplorerBody({ rows, availableYears, states, cities, locale, yearRangeL
         NIRF Architecture Rankings {latestYear ?? ''}
       </Typography>
       <Typography
-        color="text.secondary"
+        color={tokens.inkMuted}
         sx={{
           fontSize: { xs: '0.9rem', md: '0.95rem' },
           maxWidth: 720,
@@ -217,12 +219,12 @@ function ExplorerBody({ rows, availableYears, states, cities, locale, yearRangeL
           variant="outlined"
           sx={{
             mb: 2,
-            borderRadius: 1.5,
+            borderRadius: 1,
             fontSize: '0.82rem',
-            bgcolor: '#fafaf7',
-            borderColor: 'divider',
-            color: 'text.primary',
-            '& .MuiAlert-icon': { color: 'text.secondary' },
+            bgcolor: tokens.ground,
+            borderColor: tokens.line,
+            color: tokens.ink,
+            '& .MuiAlert-icon': { color: tokens.inkMuted },
           }}
         >
           <Box>
@@ -236,7 +238,7 @@ function ExplorerBody({ rows, availableYears, states, cities, locale, yearRangeL
               href="https://www.nirfindia.org/Home"
               target="_blank"
               rel="noopener noreferrer"
-              style={{ color: '#1d4ed8', fontWeight: 600, textDecoration: 'none' }}
+              style={{ color: tokens.ink, fontWeight: 600, textDecoration: 'underline' }}
             >
               How NIRF scores are calculated →
             </Link>
@@ -258,7 +260,7 @@ function ExplorerBody({ rows, availableYears, states, cities, locale, yearRangeL
             textAlign: 'center',
           }}
         >
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" color={tokens.inkMuted}>
             Compare-years view is desktop only. Use single-year filtering on mobile.
           </Typography>
         </Box>
@@ -267,7 +269,7 @@ function ExplorerBody({ rows, availableYears, states, cities, locale, yearRangeL
       {/* Empty state */}
       {!filters.compare && data.length === 0 && (
         <Box sx={{ textAlign: 'center', py: 6 }}>
-          <Typography color="text.secondary" sx={{ mb: 2 }}>
+          <Typography color={tokens.inkMuted} sx={{ mb: 2 }}>
             No NIRF rankings match these filters.
           </Typography>
           {filtersActive && (
@@ -275,7 +277,7 @@ function ExplorerBody({ rows, availableYears, states, cities, locale, yearRangeL
               component={Link}
               href={`${localePrefix(locale)}/colleges/rankings/nirf`}
               variant="outlined"
-              sx={{ borderRadius: 5, textTransform: 'none' }}
+              sx={{ borderRadius: `${tokens.radiusPill}px`, textTransform: 'none' }}
             >
               Clear all filters
             </Button>

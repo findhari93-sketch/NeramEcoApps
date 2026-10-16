@@ -1,20 +1,12 @@
+import type { ReactNode } from 'react';
 import { Metadata } from 'next';
 import { setRequestLocale } from 'next-intl/server';
 import { notFound } from 'next/navigation';
-import {
-  Box,
-  Container,
-  Typography,
-  Grid,
-  Card,
-  CardContent,
-  Button,
-  Chip,
-  Paper,
-  Divider,
-} from '@neram/ui';
-import Link from 'next/link';
+import { Box, Typography } from '@neram/ui';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
+import { Link } from '@/i18n/routing';
 import { locales } from '@/i18n';
+import { ArticleSection, CtaBand, CtaButton, DataTable, GuideArticle, InlineCta, eyebrowSx, tokens as t } from '@/design-system';
 import { JsonLd } from '@/components/seo/JsonLd';
 import { generateArticleSchema, generateBreadcrumbSchema } from '@/lib/seo/schemas';
 import { blogPosts as sharedBlogPosts } from '@/lib/blog/posts';
@@ -1063,6 +1055,324 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   };
 }
 
+// ─────────────────────────────────────────────
+// Post body renderer: the posts are a small markdown subset (##/### headings,
+// paragraphs, - and 1. lists, | tables, **bold**, `code`, [links](...), > quotes,
+// ![images](...), ``` fences). Each ## heading opens an ArticleSection.
+// ─────────────────────────────────────────────
+
+type Block =
+  | { kind: 'h3' | 'h4' | 'p'; text: string }
+  | { kind: 'ul'; items: string[] }
+  | { kind: 'ol'; items: string[]; start: number }
+  | { kind: 'table'; header: string[]; rows: string[][] }
+  | { kind: 'quote'; lines: string[] }
+  | { kind: 'img'; alt: string; src: string }
+  | { kind: 'code'; text: string };
+
+interface BodySection {
+  id: string;
+  title: string;
+  blocks: Block[];
+}
+
+const bodySx = { m: 0, fontSize: '1.0625rem', lineHeight: 1.7, color: t.ink } as const;
+
+const inlineLinkStyle = { color: t.gold800, textDecoration: 'underline', textUnderlineOffset: '2px' } as const;
+
+const SITE_ORIGIN = /^https?:\/\/(www\.)?neramclasses\.com/i;
+
+function renderLink(label: string, href: string, key: string): ReactNode {
+  // Arrow glyphs at the end of link labels ("Apply Now →") are dropped: no glyph icons in the UI.
+  const text = label.replace(/\s*[→›»]+\s*$/, '');
+  const path = SITE_ORIGIN.test(href) ? href.replace(SITE_ORIGIN, '') || '/' : href;
+  if (path.startsWith('/')) {
+    return (
+      <Link key={key} href={path} style={inlineLinkStyle}>
+        {text}
+      </Link>
+    );
+  }
+  if (/^https?:\/\//i.test(path)) {
+    return (
+      <a key={key} href={path} target="_blank" rel="noopener noreferrer" style={inlineLinkStyle}>
+        {text}
+      </a>
+    );
+  }
+  return (
+    <a key={key} href={path} style={inlineLinkStyle}>
+      {text}
+    </a>
+  );
+}
+
+function renderInline(text: string, keyBase = 'i'): ReactNode[] {
+  const re = /(\*\*[^*]+\*\*|`[^`]+`|\[[^\]]+\]\([^)\s]+\))/g;
+  const out: ReactNode[] = [];
+  let last = 0;
+  let n = 0;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    const tok = m[0];
+    const key = `${keyBase}-${n++}`;
+    if (tok.startsWith('**')) {
+      out.push(
+        <Box key={key} component="strong" sx={{ fontWeight: 700 }}>
+          {renderInline(tok.slice(2, -2), key)}
+        </Box>
+      );
+    } else if (tok.startsWith('`')) {
+      out.push(
+        <Box
+          key={key}
+          component="code"
+          sx={{ fontFamily: t.fontMono, fontSize: '0.9em', bgcolor: t.surface, border: `1px solid ${t.line}`, borderRadius: `${t.radius}px`, px: 0.5 }}
+        >
+          {tok.slice(1, -1)}
+        </Box>
+      );
+    } else {
+      const lm = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(tok);
+      out.push(lm ? renderLink(lm[1], lm[2], key) : tok);
+    }
+    last = m.index + tok.length;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+function slugify(text: string): string {
+  return (
+    text
+      .toLowerCase()
+      .replace(/\*\*|`/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 60) || 'section'
+  );
+}
+
+const splitRow = (row: string) =>
+  row
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/\|$/, '')
+    .split('|')
+    .map((c) => c.trim());
+
+function parseBody(content: string): { lead: Block[]; sections: BodySection[] } {
+  const lines = content.split('\n');
+  const lead: Block[] = [];
+  const sections: BodySection[] = [];
+  const usedIds = new Set<string>(['cta', 'main-content']);
+  let target = lead;
+  let list: Extract<Block, { kind: 'ul' | 'ol' }> | null = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+    const line = raw.trim();
+
+    if (!line) continue; // a blank line keeps an open list open; any other block closes it
+
+    const ul = /^[-*]\s+(.*)$/.exec(line);
+    const ol = /^(\d+)\.\s+(.*)$/.exec(line);
+    if (ul) {
+      if (!list || list.kind !== 'ul') {
+        list = { kind: 'ul', items: [] };
+        target.push(list);
+      }
+      list.items.push(ul[1]);
+      continue;
+    }
+    if (ol) {
+      if (!list || list.kind !== 'ol') {
+        list = { kind: 'ol', items: [], start: Number(ol[1]) };
+        target.push(list);
+      }
+      list.items.push(ol[2]);
+      continue;
+    }
+    list = null;
+
+    if (line.startsWith('```')) {
+      const code: string[] = [];
+      i++;
+      while (i < lines.length && !lines[i].trim().startsWith('```')) code.push(lines[i++]);
+      target.push({ kind: 'code', text: code.join('\n') });
+      continue;
+    }
+
+    const heading = /^(#{1,4})\s+(.*)$/.exec(line);
+    if (heading) {
+      const level = heading[1].length;
+      if (level <= 2) {
+        let id = slugify(heading[2]);
+        for (let k = 2; usedIds.has(id); k++) id = `${slugify(heading[2])}-${k}`;
+        usedIds.add(id);
+        const section: BodySection = { id, title: heading[2], blocks: [] };
+        sections.push(section);
+        target = section.blocks;
+      } else {
+        target.push({ kind: level === 3 ? 'h3' : 'h4', text: heading[2] });
+      }
+      continue;
+    }
+
+    if (line.startsWith('|')) {
+      const rows: string[][] = [];
+      while (i < lines.length && lines[i].trim().startsWith('|')) {
+        const r = lines[i].trim();
+        if (!/^\|?[\s:|-]+\|?$/.test(r)) rows.push(splitRow(r));
+        i++;
+      }
+      i--;
+      if (rows.length) target.push({ kind: 'table', header: rows[0], rows: rows.slice(1) });
+      continue;
+    }
+
+    if (line.startsWith('>')) {
+      const quote: string[] = [];
+      while (i < lines.length && lines[i].trim().startsWith('>')) {
+        const q = lines[i].trim().replace(/^>\s?/, '');
+        if (q) quote.push(q);
+        i++;
+      }
+      i--;
+      target.push({ kind: 'quote', lines: quote });
+      continue;
+    }
+
+    const img = /^!\[([^\]]*)\]\(([^)\s]+)\)$/.exec(line);
+    if (img) {
+      target.push({ kind: 'img', alt: img[1], src: img[2] });
+      continue;
+    }
+
+    target.push({ kind: 'p', text: line });
+  }
+
+  return { lead, sections };
+}
+
+function renderBlock(block: Block, key: string): ReactNode {
+  switch (block.kind) {
+    case 'p':
+      return (
+        <Typography key={key} component="p" sx={bodySx}>
+          {renderInline(block.text, key)}
+        </Typography>
+      );
+    case 'h3':
+      return (
+        <Typography key={key} component="h3" sx={{ m: 0, mt: 1, fontSize: '1.25rem', fontWeight: 700, lineHeight: 1.3, color: t.ink }}>
+          {renderInline(block.text, key)}
+        </Typography>
+      );
+    case 'h4':
+      return (
+        <Typography key={key} component="h4" sx={{ m: 0, mt: 0.5, fontSize: '1.0625rem', fontWeight: 700, lineHeight: 1.4, color: t.ink }}>
+          {renderInline(block.text, key)}
+        </Typography>
+      );
+    case 'ul':
+    case 'ol':
+      return (
+        <Box
+          key={key}
+          component={block.kind}
+          start={block.kind === 'ol' && block.start !== 1 ? block.start : undefined}
+          sx={{
+            m: 0,
+            pl: 3,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1,
+            '& li': { ...bodySx, pl: 0.5 },
+            '& li::marker': { color: t.gold800, fontWeight: 700 },
+          }}
+        >
+          {block.items.map((item, j) => (
+            <li key={j}>{renderInline(item, `${key}-${j}`)}</li>
+          ))}
+        </Box>
+      );
+    case 'table':
+      return (
+        <DataTable
+          key={key}
+          columns={block.header.map((c, j) => renderInline(c, `${key}-h${j}`))}
+          rows={block.rows.map((r, j) => r.map((c, k) => renderInline(c, `${key}-${j}-${k}`)))}
+        />
+      );
+    case 'quote':
+      return (
+        <Box
+          key={key}
+          component="blockquote"
+          sx={{
+            m: 0,
+            px: 2.5,
+            py: 2,
+            bgcolor: t.surface,
+            border: `1px solid ${t.line}`,
+            borderLeft: 'none',
+            boxShadow: `inset 3px 0 0 ${t.gold500}`,
+            borderRadius: `${t.radius}px`,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1,
+          }}
+        >
+          {block.lines.map((l, j) => (
+            <Typography key={j} component="p" sx={bodySx}>
+              {renderInline(l, `${key}-${j}`)}
+            </Typography>
+          ))}
+        </Box>
+      );
+    case 'img':
+      return (
+        <Box
+          key={key}
+          component="img"
+          src={block.src}
+          alt={block.alt}
+          loading="lazy"
+          sx={{ display: 'block', maxWidth: '100%', height: 'auto', borderRadius: `${t.radius}px`, border: `1px solid ${t.line}` }}
+        />
+      );
+    case 'code':
+      return (
+        <Box
+          key={key}
+          component="pre"
+          sx={{
+            m: 0,
+            p: 2,
+            overflowX: 'auto',
+            bgcolor: t.surface,
+            border: `1px solid ${t.line}`,
+            borderRadius: `${t.radius}px`,
+            fontFamily: t.fontMono,
+            fontSize: '0.875rem',
+            lineHeight: 1.6,
+            color: t.ink,
+          }}
+        >
+          <code>{block.text}</code>
+        </Box>
+      );
+    default:
+      return null;
+  }
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('en-IN', { dateStyle: 'long', timeZone: 'UTC' });
+}
+
 export default function BlogPostPage({ params: { locale, slug } }: PageProps) {
   setRequestLocale(locale);
 
@@ -1073,10 +1383,15 @@ export default function BlogPostPage({ params: { locale, slug } }: PageProps) {
 
   const baseUrl = 'https://neramclasses.com';
 
-  // Get related posts (same category, different slug)
-  const relatedPosts = Object.values(blogPosts)
-    .filter((p) => p.category === post.category && p.slug !== slug)
-    .slice(0, 2);
+  // Related posts: same category first, then the newest other posts. Retired
+  // city guides 301 elsewhere, so they are never offered.
+  const others = Object.values(blogPosts).filter((p) => p.slug !== slug && !(p.slug in RETIRED_CITY_GUIDES));
+  const relatedPosts = [
+    ...others.filter((p) => p.category === post.category),
+    ...others.filter((p) => p.category !== post.category).sort((a, b) => b.publishedAt.localeCompare(a.publishedAt)),
+  ].slice(0, 3);
+
+  const { lead, sections } = parseBody(post.content);
 
   return (
     <>
@@ -1097,146 +1412,75 @@ export default function BlogPostPage({ params: { locale, slug } }: PageProps) {
           { name: post.title },
         ])}
       />
-    <Box>
-      {/* Hero Section */}
-      <Box
-        sx={{
-          py: { xs: 6, md: 10 },
-          background: 'linear-gradient(135deg, #ec407a 0%, #d81b60 100%)',
-          color: 'white',
-        }}
+
+      <GuideArticle
+        breadcrumb={[{ name: 'Home', href: '/' }, { name: 'Blog', href: '/blog' }, { name: post.title }]}
+        eyebrow={post.readTime ? `${post.category || 'Neram blog'} · ${post.readTime}` : post.category || 'Neram blog'}
+        title={post.title}
+        lede={post.excerpt}
+        verified={post.publishedAt ? `Updated ${formatDate(post.publishedAt)} · By ${post.author}` : undefined}
+        related={relatedPosts.map((p) => ({ label: p.title, href: `/blog/${p.slug}`, desc: `${p.category} · ${p.readTime}` }))}
+        back={{ label: 'More Articles', href: '/blog' }}
       >
-        <Container maxWidth="md">
-          <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-            <Chip label={post.category} sx={{ bgcolor: 'white', color: 'secondary.main' }} />
-            <Chip label={post.readTime} sx={{ bgcolor: 'rgba(255,255,255,0.2)', color: 'white' }} />
-          </Box>
-          <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', md: '2.5rem' } }}>
-            {post.title}
-          </Typography>
-          <Typography variant="body1" sx={{ opacity: 0.9, mb: 2 }}>
-            {post.author} • {new Date(post.publishedAt).toLocaleDateString('en-IN', { dateStyle: 'long' })}
-          </Typography>
-        </Container>
-      </Box>
+        {lead.length > 0 && (
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>{lead.map((b, j) => renderBlock(b, `lead-${j}`))}</Box>
+        )}
 
-      {/* Article Content */}
-      <Box sx={{ py: { xs: 4, md: 8 } }}>
-        <Container maxWidth="md">
-          <Paper sx={{ p: { xs: 3, md: 6 } }}>
-            {/* Render content as simple paragraphs (in production, use MDX or rich text renderer) */}
-            {post.content.split('\n').map((line, index) => {
-              if (line.startsWith('## ')) {
-                return (
-                  <Typography key={index} variant="h4" component="h2" gutterBottom sx={{ mt: 4, fontWeight: 600 }}>
-                    {line.replace('## ', '')}
-                  </Typography>
-                );
-              }
-              if (line.startsWith('### ')) {
-                return (
-                  <Typography key={index} variant="h5" component="h3" gutterBottom sx={{ mt: 3, fontWeight: 600 }}>
-                    {line.replace('### ', '')}
-                  </Typography>
-                );
-              }
-              if (line.startsWith('- ')) {
-                return (
-                  <Typography key={index} variant="body1" component="li" sx={{ ml: 3, mb: 1 }}>
-                    {line.replace('- ', '')}
-                  </Typography>
-                );
-              }
-              if (line.trim()) {
-                return (
-                  <Typography key={index} variant="body1" paragraph>
-                    {line}
-                  </Typography>
-                );
-              }
-              return null;
-            })}
+        {sections.map((section) => (
+          <ArticleSection key={section.id} id={section.id} title={renderInline(section.title, section.id)}>
+            {section.blocks.map((b, j) => renderBlock(b, `${section.id}-${j}`))}
+          </ArticleSection>
+        ))}
 
-            <Divider sx={{ my: 4 }} />
-
-            {/* Tags */}
-            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 4 }}>
-              {post.tags.map((tag, index) => (
-                <Chip key={index} label={tag} variant="outlined" size="small" />
-              ))}
-            </Box>
-
-            {/* Share & CTA */}
-            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-              <Button variant="contained" component={Link} href="/apply">
-                Join Neram Classes
-              </Button>
-              <Button variant="outlined" component={Link} href="/blog">
-                More Articles
-              </Button>
-            </Box>
-          </Paper>
-        </Container>
-      </Box>
-
-      {/* Related Posts */}
-      {relatedPosts.length > 0 && (
-        <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
-          <Container maxWidth="lg">
-            <Typography variant="h2" component="h2" gutterBottom sx={{ fontWeight: 700, mb: 4 }}>
-              Related Articles
+        {post.tags.length > 0 && (
+          <Box component="section" aria-label="Tags" sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+            <Typography component="p" sx={eyebrowSx}>
+              Tags
             </Typography>
-            <Grid container spacing={4}>
-              {relatedPosts.map((relatedPost, index) => (
-                <Grid item xs={12} md={6} key={index}>
-                  <Card
-                    component={Link}
-                    href={`/blog/${relatedPost.slug}`}
-                    sx={{
-                      height: '100%',
-                      textDecoration: 'none',
-                      transition: 'transform 0.2s',
-                      '&:hover': { transform: 'translateY(-4px)' },
-                    }}
-                  >
-                    <CardContent sx={{ p: 4 }}>
-                      <Chip label={relatedPost.category} size="small" sx={{ mb: 2 }} />
-                      <Typography variant="h5" component="h3" gutterBottom sx={{ fontWeight: 600 }}>
-                        {relatedPost.title}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {relatedPost.excerpt}
-                      </Typography>
-                    </CardContent>
-                  </Card>
-                </Grid>
+            <Box component="ul" sx={{ m: 0, p: 0, listStyle: 'none', display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+              {post.tags.map((tag) => (
+                <Box
+                  key={tag}
+                  component="li"
+                  sx={{
+                    fontSize: '0.875rem',
+                    lineHeight: 1.4,
+                    color: t.inkMuted,
+                    bgcolor: t.surface,
+                    border: `1px solid ${t.line}`,
+                    borderRadius: `${t.radiusPill}px`,
+                    px: 1.5,
+                    py: 0.5,
+                  }}
+                >
+                  {tag}
+                </Box>
               ))}
-            </Grid>
-          </Container>
-        </Box>
-      )}
+            </Box>
+          </Box>
+        )}
 
-      {/* Newsletter CTA */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'secondary.main', color: 'white', textAlign: 'center' }}>
-        <Container maxWidth="md">
-          <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700 }}>
-            Start Your NATA Journey Today
-          </Typography>
-          <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>
-            Join Neram Classes for expert coaching and comprehensive preparation
-          </Typography>
-          <Button
-            variant="contained"
-            size="large"
-            component={Link}
-            href="/apply"
-            sx={{ bgcolor: 'white', color: 'secondary.main' }}
-          >
-            Enroll Now
-          </Button>
-        </Container>
-      </Box>
-    </Box>
+        <InlineCta
+          eyebrow="Neram Classes"
+          icon={<SchoolOutlinedIcon />}
+          title="Join Neram Classes"
+          body="Expert NATA and JEE B.Arch coaching, live online and in classrooms."
+          action={<CtaButton href="/apply">Join Neram Classes</CtaButton>}
+        />
+      </GuideArticle>
+
+      <CtaBand
+        title="Start Your NATA Journey Today"
+        lede="Join Neram Classes for expert coaching and comprehensive preparation"
+        actions={
+          <>
+            <CtaButton href="/apply">Enroll Now</CtaButton>
+            <CtaButton variant="link" href="/demo-class">
+              Book a free demo class
+            </CtaButton>
+          </>
+        }
+      />
     </>
   );
 }

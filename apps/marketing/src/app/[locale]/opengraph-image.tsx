@@ -1,4 +1,5 @@
 import { ImageResponse } from 'next/og';
+import { siteTokens as t } from '@neram/ui/site-tokens';
 
 export const runtime = 'edge';
 export const alt = 'Neram Classes - Best NATA Coaching in India';
@@ -10,7 +11,7 @@ export default async function Image() {
     (
       <div
         style={{
-          background: 'linear-gradient(135deg, #1a237e 0%, #0d47a1 50%, #1565c0 100%)',
+          background: t.navy900,
           width: '100%',
           height: '100%',
           display: 'flex',
@@ -24,7 +25,7 @@ export default async function Image() {
           style={{
             fontSize: 72,
             fontWeight: 800,
-            color: 'white',
+            color: t.paper,
             textAlign: 'center',
             lineHeight: 1.2,
           }}
@@ -34,7 +35,7 @@ export default async function Image() {
         <div
           style={{
             fontSize: 36,
-            color: '#90caf9',
+            color: t.gold500,
             marginTop: 20,
             textAlign: 'center',
           }}
@@ -46,7 +47,7 @@ export default async function Image() {
             display: 'flex',
             gap: 40,
             marginTop: 40,
-            color: 'white',
+            color: t.paper,
             fontSize: 24,
           }}
         >
@@ -57,7 +58,7 @@ export default async function Image() {
         <div
           style={{
             fontSize: 20,
-            color: '#bbdefb',
+            color: t.paperSubtle,
             marginTop: 30,
           }}
         >

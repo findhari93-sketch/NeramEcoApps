@@ -7,9 +7,10 @@ import {
   Stack,
   Chip,
   Divider,
-  Alert,
 } from '@mui/material';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import { siteTokens as t } from '@neram/ui/site-tokens';
+import { Callout } from '@/design-system';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { generateHowToSchema } from '@/lib/seo/schemas';
 import KeamSpokeShell from '@/components/keam-arch/KeamSpokeShell';
@@ -19,7 +20,6 @@ import { eligibility, documents } from '@/data/keam-arch-2026';
 export const revalidate = 86400;
 
 const SPOKE = 'eligibility-documents';
-const PRIMARY_GREEN = '#0d7a4a';
 
 export async function generateMetadata({
   params: { locale },
@@ -89,9 +89,13 @@ export default function EligibilityDocumentsPage({
       ]}
       prefillCallbackNotes="Need help understanding KEAM B.Arch eligibility"
     >
-      <Alert severity="info" sx={{ mb: 3, borderRadius: 1.5 }}>
-        KEAM does not run an architecture entrance exam. Your eligibility is decided by your <strong>10+2 marks</strong> and your <strong>NATA score</strong>. (Clauses 1.4(b), 6.2.3(b))
-      </Alert>
+      <Box sx={{ mb: 3 }}>
+        <Callout>
+          <Box component="p" sx={{ m: 0 }}>
+              KEAM does not run an architecture entrance exam. Your eligibility is decided by your <strong>10+2 marks</strong> and your <strong>NATA score</strong>. (Clauses 1.4(b), 6.2.3(b))
+          </Box>
+        </Callout>
+      </Box>
 
       {/* Academic */}
       <Typography variant="h6" component="h2" fontWeight={800} sx={{ mb: 1.5 }}>
@@ -99,7 +103,7 @@ export default function EligibilityDocumentsPage({
       </Typography>
       <Paper
         elevation={0}
-        sx={{ p: 2.5, mb: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+        sx={{ p: 2.5, mb: 3, borderRadius: 1, border: `1px solid ${t.line}` }}
       >
         <Typography variant="body2" sx={{ mb: 1.5 }}>
           {eligibility.academic.qualification}
@@ -109,7 +113,7 @@ export default function EligibilityDocumentsPage({
             Compulsory subjects:
           </Typography>
           {eligibility.academic.compulsory_subjects.map((s) => (
-            <Chip key={s} label={s} size="small" color="primary" sx={{ bgcolor: PRIMARY_GREEN }} />
+            <Chip key={s} label={s} size="small" sx={{ bgcolor: t.navy900, color: t.paper }} />
           ))}
         </Stack>
         <Stack direction="row" gap={0.5} flexWrap="wrap" sx={{ mb: 1.5 }}>
@@ -136,11 +140,11 @@ export default function EligibilityDocumentsPage({
       </Typography>
       <Paper
         elevation={0}
-        sx={{ p: 2.5, mb: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+        sx={{ p: 2.5, mb: 3, borderRadius: 1, border: `1px solid ${t.line}` }}
       >
         <Stack direction="row" gap={0.5} flexWrap="wrap" sx={{ mb: 1.5 }}>
           {eligibility.aptitude.accepted_years.map((y) => (
-            <Chip key={y} label={y} size="small" color="primary" sx={{ bgcolor: PRIMARY_GREEN }} />
+            <Chip key={y} label={y} size="small" sx={{ bgcolor: t.navy900, color: t.paper }} />
           ))}
         </Stack>
         <Typography variant="body2" sx={{ mb: 1 }}>
@@ -149,9 +153,13 @@ export default function EligibilityDocumentsPage({
         <Typography variant="body2" sx={{ mb: 1 }}>
           {eligibility.aptitude.relaxation_note}
         </Typography>
-        <Alert severity="warning" sx={{ mt: 1.5, borderRadius: 1.5 }}>
-          {eligibility.aptitude.no_keam_arch_exam_note}
-        </Alert>
+        <Box sx={{ mt: 1.5 }}>
+          <Callout>
+            <Box component="p" sx={{ m: 0 }}>
+                {eligibility.aptitude.no_keam_arch_exam_note}
+            </Box>
+          </Callout>
+        </Box>
       </Paper>
 
       {/* Merit calculator */}
@@ -163,7 +171,7 @@ export default function EligibilityDocumentsPage({
       </Box>
       <Paper
         elevation={0}
-        sx={{ p: 2.5, mb: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+        sx={{ p: 2.5, mb: 3, borderRadius: 1, border: `1px solid ${t.line}` }}
       >
         <Typography variant="body2" sx={{ mb: 1.5 }}>
           {eligibility.merit_formula.description}
@@ -172,12 +180,12 @@ export default function EligibilityDocumentsPage({
           Tie-breaking, in order:
         </Typography>
         <Stack spacing={0.5}>
-          {eligibility.merit_formula.tiebreaker.map((t, i) => (
+          {eligibility.merit_formula.tiebreaker.map((rule, i) => (
             <Stack key={i} direction="row" gap={1} alignItems="flex-start">
-              <Typography variant="body2" sx={{ color: PRIMARY_GREEN, fontWeight: 700 }}>
+              <Typography variant="body2" sx={{ color: t.gold800, fontWeight: 700 }}>
                 {i + 1}.
               </Typography>
-              <Typography variant="body2">{t}</Typography>
+              <Typography variant="body2">{rule}</Typography>
             </Stack>
           ))}
         </Stack>
@@ -189,12 +197,12 @@ export default function EligibilityDocumentsPage({
       </Typography>
       <Paper
         elevation={0}
-        sx={{ p: 2.5, mb: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+        sx={{ p: 2.5, mb: 3, borderRadius: 1, border: `1px solid ${t.line}` }}
       >
         <Stack spacing={1.25}>
           {eligibility.rules.map((r) => (
             <Stack key={r.id} direction="row" gap={1.25} alignItems="flex-start">
-              <CheckCircleOutlineIcon sx={{ color: PRIMARY_GREEN, fontSize: 20, flexShrink: 0, mt: 0.25 }} />
+              <CheckCircleOutlineIcon sx={{ color: t.gold800, fontSize: 20, flexShrink: 0, mt: 0.25 }} />
               <Box>
                 <Typography variant="body2" fontWeight={700}>
                   {r.title}
@@ -203,7 +211,7 @@ export default function EligibilityDocumentsPage({
                   {r.description}
                 </Typography>
                 {r.clause_ref && (
-                  <Typography variant="caption" sx={{ color: PRIMARY_GREEN, fontWeight: 600 }}>
+                  <Typography variant="caption" sx={{ color: t.gold800, fontWeight: 600 }}>
                     {r.clause_ref}
                   </Typography>
                 )}
@@ -222,7 +230,7 @@ export default function EligibilityDocumentsPage({
           <Paper
             key={d.name}
             elevation={0}
-            sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+            sx={{ p: 2, borderRadius: 1, border: `1px solid ${t.line}` }}
           >
             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 0.5 }}>
               <Typography variant="subtitle2" fontWeight={700}>
@@ -232,9 +240,10 @@ export default function EligibilityDocumentsPage({
                 label={d.mandatory ? 'Mandatory' : 'If applicable'}
                 size="small"
                 sx={{
-                  bgcolor: d.mandatory ? '#dcfce7' : '#fef3c7',
-                  color: d.mandatory ? '#15803d' : '#92400e',
-                  fontWeight: 600,
+                  bgcolor: d.mandatory ? t.navy900 : 'transparent',
+                  color: d.mandatory ? t.paper : t.inkMuted,
+                  border: `1px solid ${d.mandatory ? t.navy900 : t.lineStrong}`,
+                  fontWeight: 700,
                 }}
               />
             </Stack>
@@ -247,7 +256,7 @@ export default function EligibilityDocumentsPage({
               </Typography>
             )}
             {d.clause_ref && (
-              <Typography variant="caption" sx={{ color: PRIMARY_GREEN, fontWeight: 600, mt: 0.5, display: 'block' }}>
+              <Typography variant="caption" sx={{ color: t.gold800, fontWeight: 600, mt: 0.5, display: 'block' }}>
                 {d.clause_ref}
               </Typography>
             )}

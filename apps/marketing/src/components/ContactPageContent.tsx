@@ -1,41 +1,81 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
-import {
-  Box,
-  Container,
-  Typography,
-  Grid,
-  Card,
-  CardContent,
-  TextField,
-  Button,
-  Alert,
-  Chip,
-  CircularProgress,
-  Link as MuiLink,
-} from '@neram/ui';
-import { Link } from '@neram/ui';
-import PhoneIcon from '@mui/icons-material/Phone';
-import EmailIcon from '@mui/icons-material/Email';
-import LocationOnIcon from '@mui/icons-material/LocationOn';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import { useState, useEffect, type ReactNode } from 'react';
+import { Box, Typography, TextField, Alert, CircularProgress, Skeleton } from '@neram/ui';
+import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
+import LocationOnOutlinedIcon from '@mui/icons-material/LocationOnOutlined';
 import TawkToChat from './TawkToChat';
 import WhatsAppChatBubble from './WhatsAppChatBubble';
 import type { OfflineCenter } from '@neram/database';
 import { centrePagePath } from '@/lib/seo/centre-pages';
+import { LeadCard, Section as BodySection } from '@/components/coaching-location/parts';
+import { PageHero, AsideLayout, Section, FactsCard, CtaButton, CtaBand, tokens as t } from '@/design-system';
 
 interface CenterData {
   headquarters: OfflineCenter | null;
   subOffices: OfflineCenter[];
 }
 
-export default function ContactPageContent() {
-  const params = useParams();
-  const locale = (params.locale as string) || 'en';
+const linkSx = {
+  // 44px tap height for the phone and mail links (they stand alone in fact rows, not inside sentences).
+  display: 'inline-flex',
+  alignItems: 'center',
+  minHeight: 44,
+  color: 'inherit',
+  textDecoration: 'underline',
+  textDecorationColor: t.lineStrong,
+  textUnderlineOffset: '3px',
+  '&:hover': { textDecorationColor: t.gold500 },
+  '&:focus-visible': { outline: t.focusOutline, outlineOffset: '2px' },
+} as const;
 
+function TextLink({ href, children }: { href: string; children: ReactNode }) {
+  return (
+    <Box component="a" href={href} sx={linkSx}>
+      {children}
+    </Box>
+  );
+}
+
+const bodySx = { m: 0, fontSize: '1rem', lineHeight: 1.6, color: t.inkMuted } as const;
+
+const cardSx = {
+  bgcolor: t.surface,
+  border: `1px solid ${t.line}`,
+  borderRadius: `${t.radius}px`,
+  p: { xs: 2.5, sm: 3 },
+  color: t.ink,
+} as const;
+
+/** The map embed for the headquarters (falls back to the Bangalore office coordinates). */
+function HqMap({ hq }: { hq: OfflineCenter }) {
+  return (
+    <Box
+      sx={{
+        width: '100%',
+        height: { xs: 300, md: 450 },
+        borderRadius: `${t.radius}px`,
+        border: `1px solid ${t.line}`,
+        overflow: 'hidden',
+        bgcolor: t.surface,
+      }}
+    >
+      <iframe
+        title="Neram Classes Location"
+        src={`https://www.google.com/maps/embed?pb=!1m14!1m8!1m3!1d3889.0!2d${hq.longitude || 77.6603}!3d${hq.latitude || 12.8456}!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMTLCsDUwJzQ0LjIiTiA3N8KwMzknMzcuMSJF!5e0!3m2!1sen!2sin!4v1`}
+        width="100%"
+        height="100%"
+        style={{ border: 0, display: 'block' }}
+        allowFullScreen
+        loading="lazy"
+        referrerPolicy="no-referrer-when-downgrade"
+      />
+    </Box>
+  );
+}
+
+/** T9 utility/company page: dark hero, contact facts + the form in a lead card, centres, map. */
+export default function ContactPageContent() {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -137,450 +177,308 @@ export default function ContactPageContent() {
       <TawkToChat />
       <WhatsAppChatBubble />
 
-      {/* Hero Section */}
-      <Box
-        sx={{
-          bgcolor: 'primary.main',
-          color: 'primary.contrastText',
-          py: { xs: 6, md: 8 },
-        }}
-      >
-        <Container maxWidth="lg">
-          <Typography
-            variant="h2"
-            component="h1"
-            gutterBottom
-            sx={{ fontWeight: 700, fontSize: { xs: '2rem', md: '3rem' } }}
-          >
-            Contact Us
-          </Typography>
-          <Typography
-            variant="h5"
-            sx={{
-              maxWidth: '700px',
-              opacity: 0.9,
-              fontSize: { xs: '1.1rem', md: '1.4rem' },
-            }}
-          >
-            Have questions about NATA coaching? We would love to hear from you. Reach out to us and
-            we will respond as soon as possible.
-          </Typography>
-        </Container>
-      </Box>
+      <PageHero
+        breadcrumb={[{ name: 'Home', href: '/' }, { name: 'Contact' }]}
+        title="Contact Us"
+        lede="Have questions about NATA coaching? We would love to hear from you. Reach out to us and we will respond as soon as possible."
+        actions={
+          <>
+            <CtaButton href="tel:+919176137043" startIcon={<PhoneOutlinedIcon aria-hidden />} endIcon={null}>
+              +91-9176137043
+            </CtaButton>
+            <CtaButton variant="outline" href="#message">
+              Send us a Message
+            </CtaButton>
+          </>
+        }
+      />
 
-      {/* Headquarters Section */}
-      {hq && (
-        <Box sx={{ py: { xs: 5, md: 8 } }}>
-          <Container maxWidth="lg">
-            <Typography
-              variant="h4"
-              gutterBottom
-              sx={{ fontWeight: 700, mb: { xs: 3, md: 4 }, fontSize: { xs: '1.5rem', md: '2rem' } }}
-            >
-              Our Headquarters
+      <Box sx={{ bgcolor: t.ground }}>
+        <AsideLayout
+          aside={
+            <LeadCard id="message" title="Send us a Message" body="Fill out the form below and we will get back to you within 24 hours">
+              {submitResult && (
+                <Alert severity={submitResult.type} role={submitResult.type === 'error' ? 'alert' : 'status'}>
+                  {submitResult.message}
+                </Alert>
+              )}
+
+              <Box component="form" onSubmit={handleSubmit} sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 0.5 }}>
+                <TextField
+                  fullWidth
+                  label="Full Name"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  required
+                  variant="outlined"
+                  disabled={submitting}
+                  autoComplete="name"
+                  inputProps={{ minLength: 2 }}
+                />
+                <TextField
+                  fullWidth
+                  label="Email Address"
+                  name="email"
+                  type="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  required
+                  variant="outlined"
+                  disabled={submitting}
+                  autoComplete="email"
+                />
+                <TextField
+                  fullWidth
+                  label="Phone Number"
+                  name="phone"
+                  type="tel"
+                  value={formData.phone}
+                  onChange={handleChange}
+                  variant="outlined"
+                  disabled={submitting}
+                  autoComplete="tel"
+                  inputProps={{ inputMode: 'tel' }}
+                />
+                <TextField
+                  fullWidth
+                  label="Subject"
+                  name="subject"
+                  value={formData.subject}
+                  onChange={handleChange}
+                  required
+                  variant="outlined"
+                  disabled={submitting}
+                  inputProps={{ minLength: 2 }}
+                />
+                <TextField
+                  fullWidth
+                  label="Message"
+                  name="message"
+                  value={formData.message}
+                  onChange={handleChange}
+                  required
+                  multiline
+                  rows={5}
+                  variant="outlined"
+                  disabled={submitting}
+                  inputProps={{ minLength: 10 }}
+                />
+                <CtaButton
+                  type="submit"
+                  fullWidth
+                  disabled={submitting}
+                  endIcon={submitting ? <CircularProgress size={20} color="inherit" aria-hidden /> : undefined}
+                >
+                  {submitting ? 'Sending...' : 'Send Message'}
+                </CtaButton>
+              </Box>
+            </LeadCard>
+          }
+        >
+          <BodySection id="get-in-touch" title="Get in Touch">
+            <Typography component="p" sx={bodySx}>
+              Feel free to reach out to us through any of these channels
             </Typography>
-            <Grid container spacing={{ xs: 3, md: 4 }}>
-              {/* HQ Info */}
-              <Grid item xs={12} md={5}>
-                <Card sx={{ height: '100%' }}>
-                  <CardContent sx={{ p: { xs: 2.5, md: 3 } }}>
-                    <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
-                      {hq.name}
-                    </Typography>
-                    {hq.description && (
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                        {hq.description}
-                      </Typography>
-                    )}
+            <FactsCard
+              items={[
+                { label: 'Phone', value: <TextLink href="tel:+919176137043">+91-9176137043</TextLink> },
+                {
+                  label: 'Email',
+                  value: (
+                    <Box component="span" sx={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.5, wordBreak: 'break-word' }}>
+                      <TextLink href="mailto:info@neramclasses.com">info@neramclasses.com</TextLink>
+                      <TextLink href="mailto:admissions@neramclasses.com">admissions@neramclasses.com</TextLink>
+                    </Box>
+                  ),
+                },
+                {
+                  label: 'Office Hours',
+                  value: (
+                    <Box component="span" sx={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.5 }}>
+                      <span>Monday - Saturday</span>
+                      <span>9:00 AM - 6:00 PM</span>
+                      <span>Sunday: Closed</span>
+                    </Box>
+                  ),
+                },
+              ]}
+            />
+          </BodySection>
 
-                    <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, mb: 2 }}>
-                      <LocationOnIcon color="primary" sx={{ mt: 0.3, flexShrink: 0 }} />
-                      <Typography variant="body1">
+          {centersLoading && (
+            <Box sx={{ ...cardSx, display: 'flex', flexDirection: 'column', gap: 1 }} aria-busy="true" aria-label="Loading our offices">
+              <Skeleton variant="text" width="45%" height={32} />
+              <Skeleton variant="text" width="90%" />
+              <Skeleton variant="text" width="75%" />
+              <Skeleton variant="text" width="60%" />
+            </Box>
+          )}
+
+          {hq && (
+            <BodySection id="headquarters" title="Our Headquarters">
+              {hq.description && (
+                <Typography component="p" sx={bodySx}>
+                  {hq.description}
+                </Typography>
+              )}
+              <FactsCard
+                title={hq.name}
+                titleAs="h3"
+                items={[
+                  {
+                    label: 'Address',
+                    value: (
+                      <>
                         {hq.address}
                         <br />
                         {hq.city}, {hq.state} {hq.pincode && `- ${hq.pincode}`}
                         <br />
                         {hq.country}
-                      </Typography>
-                    </Box>
+                      </>
+                    ),
+                  },
+                  ...(hq.contact_phone
+                    ? [{ label: 'Phone', value: <TextLink href={`tel:${hq.contact_phone}`}>{hq.contact_phone}</TextLink> }]
+                    : []),
+                  ...(hq.contact_email
+                    ? [
+                        {
+                          label: 'Email',
+                          value: (
+                            <Box component="span" sx={{ wordBreak: 'break-word' }}>
+                              <TextLink href={`mailto:${hq.contact_email}`}>{hq.contact_email}</TextLink>
+                            </Box>
+                          ),
+                        },
+                      ]
+                    : []),
+                  ...(hq.operating_hours
+                    ? [
+                        {
+                          label: 'Office Hours',
+                          value: (
+                            <Box component="span" sx={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0.5 }}>
+                              {Object.entries(hq.operating_hours).map(([day, hours]) => (
+                                <span key={day}>
+                                  {day}: {hours ? `${hours.open} - ${hours.close}` : 'Closed'}
+                                </span>
+                              ))}
+                            </Box>
+                          ),
+                        },
+                      ]
+                    : []),
+                ]}
+              />
 
-                    {hq.contact_phone && (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-                        <PhoneIcon color="primary" sx={{ flexShrink: 0 }} />
-                        <MuiLink href={`tel:${hq.contact_phone}`} color="inherit" underline="hover">
-                          {hq.contact_phone}
-                        </MuiLink>
-                      </Box>
-                    )}
-
-                    {hq.contact_email && (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
-                        <EmailIcon color="primary" sx={{ flexShrink: 0 }} />
-                        <MuiLink href={`mailto:${hq.contact_email}`} color="inherit" underline="hover">
-                          {hq.contact_email}
-                        </MuiLink>
-                      </Box>
-                    )}
-
-                    {hq.operating_hours && (
-                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, mb: 2 }}>
-                        <AccessTimeIcon color="primary" sx={{ mt: 0.3, flexShrink: 0 }} />
-                        <Box>
-                          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                            Office Hours
-                          </Typography>
-                          {Object.entries(hq.operating_hours).map(([day, hours]) => (
-                            <Typography key={day} variant="body2" color="text.secondary">
-                              {day}: {hours ? `${hours.open} - ${hours.close}` : 'Closed'}
-                            </Typography>
-                          ))}
-                        </Box>
-                      </Box>
-                    )}
-
-                    {hq.facilities && hq.facilities.length > 0 && (
-                      <Box sx={{ mt: 2, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                        {hq.facilities.map((facility) => (
-                          <Chip
-                            key={facility}
-                            label={facility}
-                            size="small"
-                            color="primary"
-                            variant="outlined"
-                          />
-                        ))}
-                      </Box>
-                    )}
-
-                    {hq.seo_slug && (
-                      <Box sx={{ mt: 3 }}>
-                        <Button
-                          component={Link}
-                          href={centrePagePath(hq.seo_slug)}
-                          variant="outlined"
-                          size="small"
-                          endIcon={<ArrowForwardIcon />}
-                        >
-                          View Full Details
-                        </Button>
-                      </Box>
-                    )}
-                  </CardContent>
-                </Card>
-              </Grid>
-
-              {/* HQ Map */}
-              <Grid item xs={12} md={7}>
-                <Box
-                  sx={{
-                    width: '100%',
-                    height: { xs: 300, md: 400 },
-                    borderRadius: 1,
-                    overflow: 'hidden',
-                  }}
-                >
-                  <iframe
-                    title="Neram Classes Headquarters - Bangalore"
-                    src={`https://www.google.com/maps/embed?pb=!1m14!1m8!1m3!1d3889.0!2d${hq.longitude || 77.6603}!3d${hq.latitude || 12.8456}!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMTLCsDUwJzQ0LjIiTiA3N8KwMzknMzcuMSJF!5e0!3m2!1sen!2sin!4v1`}
-                    width="100%"
-                    height="100%"
-                    style={{ border: 0 }}
-                    allowFullScreen
-                    loading="lazy"
-                    referrerPolicy="no-referrer-when-downgrade"
-                  />
-                </Box>
-              </Grid>
-            </Grid>
-          </Container>
-        </Box>
-      )}
-
-      {/* Sub-offices Section */}
-      {!centersLoading && centers.subOffices.length > 0 && (
-        <Box sx={{ bgcolor: 'grey.50', py: { xs: 5, md: 8 } }}>
-          <Container maxWidth="lg">
-            <Typography
-              variant="h4"
-              gutterBottom
-              sx={{ fontWeight: 700, mb: { xs: 3, md: 4 }, fontSize: { xs: '1.5rem', md: '2rem' } }}
-            >
-              Our Centers Across India
-            </Typography>
-            <Grid container spacing={{ xs: 2, md: 3 }}>
-              {centers.subOffices.map((center) => (
-                <Grid item xs={12} sm={6} md={4} key={center.id}>
-                  <Card
-                    sx={{
-                      height: '100%',
-                      transition: 'box-shadow 0.2s',
-                      '&:hover': { boxShadow: 4 },
-                    }}
-                  >
-                    <CardContent sx={{ p: { xs: 2, md: 2.5 } }}>
-                      <Typography variant="h6" gutterBottom sx={{ fontWeight: 700 }}>
-                        {center.city}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
-                        {center.address}
-                        <br />
-                        {center.city}, {center.state}
-                      </Typography>
-
-                      {center.contact_phone && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                          <PhoneIcon fontSize="small" color="action" />
-                          <MuiLink
-                            href={`tel:${center.contact_phone}`}
-                            variant="body2"
-                            color="inherit"
-                            underline="hover"
-                          >
-                            {center.contact_phone}
-                          </MuiLink>
-                        </Box>
-                      )}
-
-                      {center.seo_slug && (
-                        <Button
-                          component={Link}
-                          href={centrePagePath(center.seo_slug)}
-                          size="small"
-                          endIcon={<ArrowForwardIcon />}
-                          sx={{ mt: 1 }}
-                        >
-                          View Details
-                        </Button>
-                      )}
-                    </CardContent>
-                  </Card>
-                </Grid>
-              ))}
-            </Grid>
-          </Container>
-        </Box>
-      )}
-
-      {/* Contact Form Section */}
-      <Box sx={{ py: { xs: 5, md: 8 } }}>
-        <Container maxWidth="lg">
-          <Grid container spacing={{ xs: 4, md: 6 }}>
-            {/* Contact Information Sidebar */}
-            <Grid item xs={12} md={4}>
-              <Box sx={{ mb: 4 }}>
-                <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
-                  Get in Touch
-                </Typography>
-                <Typography variant="body1" color="text.secondary" paragraph>
-                  Feel free to reach out to us through any of these channels
-                </Typography>
-              </Box>
-
-              <Card sx={{ mb: 3 }}>
-                <CardContent>
-                  <Typography variant="h6" gutterBottom color="primary">
-                    Phone
-                  </Typography>
-                  <MuiLink
-                    href="tel:+919176137043"
-                    color="inherit"
-                    underline="hover"
-                    variant="body2"
-                  >
-                    +91-9176137043
-                  </MuiLink>
-                </CardContent>
-              </Card>
-
-              <Card sx={{ mb: 3 }}>
-                <CardContent>
-                  <Typography variant="h6" gutterBottom color="primary">
-                    Email
-                  </Typography>
-                  <Typography variant="body2">
-                    <MuiLink href="mailto:info@neramclasses.com" color="inherit" underline="hover">
-                      info@neramclasses.com
-                    </MuiLink>
-                    <br />
-                    <MuiLink
-                      href="mailto:admissions@neramclasses.com"
-                      color="inherit"
-                      underline="hover"
+              {hq.facilities && hq.facilities.length > 0 && (
+                <Box component="ul" aria-label="Facilities" sx={{ m: 0, p: 0, listStyle: 'none', display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                  {hq.facilities.map((facility) => (
+                    <Box
+                      component="li"
+                      key={facility}
+                      sx={{
+                        border: `1px solid ${t.line}`,
+                        borderRadius: `${t.radiusPill}px`,
+                        bgcolor: t.surface,
+                        px: 1.5,
+                        py: 0.5,
+                        fontSize: '0.875rem',
+                        fontWeight: 500,
+                        color: t.ink,
+                      }}
                     >
-                      admissions@neramclasses.com
-                    </MuiLink>
-                  </Typography>
-                </CardContent>
-              </Card>
+                      {facility}
+                    </Box>
+                  ))}
+                </Box>
+              )}
 
-              <Card>
-                <CardContent>
-                  <Typography variant="h6" gutterBottom color="primary">
-                    Office Hours
-                  </Typography>
-                  <Typography variant="body2">
-                    Monday - Saturday
-                    <br />
-                    9:00 AM - 6:00 PM
-                    <br />
-                    <br />
-                    Sunday: Closed
-                  </Typography>
-                </CardContent>
-              </Card>
-            </Grid>
-
-            {/* Contact Form */}
-            <Grid item xs={12} md={8}>
-              <Card>
-                <CardContent sx={{ p: { xs: 2.5, md: 4 } }}>
-                  <Typography variant="h5" gutterBottom sx={{ fontWeight: 700 }}>
-                    Send us a Message
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                    Fill out the form below and we will get back to you within 24 hours
-                  </Typography>
-
-                  {submitResult && (
-                    <Alert severity={submitResult.type} sx={{ mb: 3 }}>
-                      {submitResult.message}
-                    </Alert>
-                  )}
-
-                  <form onSubmit={handleSubmit}>
-                    <Grid container spacing={2.5}>
-                      <Grid item xs={12} sm={6}>
-                        <TextField
-                          fullWidth
-                          label="Full Name"
-                          name="name"
-                          value={formData.name}
-                          onChange={handleChange}
-                          required
-                          variant="outlined"
-                          disabled={submitting}
-                          inputProps={{ minLength: 2 }}
-                        />
-                      </Grid>
-                      <Grid item xs={12} sm={6}>
-                        <TextField
-                          fullWidth
-                          label="Email Address"
-                          name="email"
-                          type="email"
-                          value={formData.email}
-                          onChange={handleChange}
-                          required
-                          variant="outlined"
-                          disabled={submitting}
-                        />
-                      </Grid>
-                      <Grid item xs={12} sm={6}>
-                        <TextField
-                          fullWidth
-                          label="Phone Number"
-                          name="phone"
-                          value={formData.phone}
-                          onChange={handleChange}
-                          variant="outlined"
-                          disabled={submitting}
-                        />
-                      </Grid>
-                      <Grid item xs={12} sm={6}>
-                        <TextField
-                          fullWidth
-                          label="Subject"
-                          name="subject"
-                          value={formData.subject}
-                          onChange={handleChange}
-                          required
-                          variant="outlined"
-                          disabled={submitting}
-                          inputProps={{ minLength: 2 }}
-                        />
-                      </Grid>
-                      <Grid item xs={12}>
-                        <TextField
-                          fullWidth
-                          label="Message"
-                          name="message"
-                          value={formData.message}
-                          onChange={handleChange}
-                          required
-                          multiline
-                          rows={5}
-                          variant="outlined"
-                          disabled={submitting}
-                          inputProps={{ minLength: 10 }}
-                        />
-                      </Grid>
-                      <Grid item xs={12}>
-                        <Button
-                          type="submit"
-                          variant="contained"
-                          size="large"
-                          fullWidth
-                          disabled={submitting}
-                          sx={{ py: 1.5, minHeight: 48 }}
-                        >
-                          {submitting ? (
-                            <CircularProgress size={24} color="inherit" />
-                          ) : (
-                            'Send Message'
-                          )}
-                        </Button>
-                      </Grid>
-                    </Grid>
-                  </form>
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
-        </Container>
+              {hq.seo_slug && (
+                <Box>
+                  <CtaButton variant="outline" size="md" href={centrePagePath(hq.seo_slug)}>
+                    View Full Details
+                  </CtaButton>
+                </Box>
+              )}
+            </BodySection>
+          )}
+        </AsideLayout>
       </Box>
 
-      {/* Map Section - HQ */}
-      {hq && (
-        <Box sx={{ bgcolor: 'grey.100', py: { xs: 5, md: 8 } }}>
-          <Container maxWidth="lg">
-            <Typography
-              variant="h4"
-              align="center"
-              gutterBottom
-              sx={{ fontWeight: 700, fontSize: { xs: '1.5rem', md: '2rem' } }}
-            >
-              Find Us on Map
-            </Typography>
-            <Typography
-              variant="body1"
-              align="center"
-              color="text.secondary"
-              sx={{ mb: 4 }}
-            >
-              {hq.address}, {hq.city}, {hq.state}
-            </Typography>
-            <Box
-              sx={{
-                width: '100%',
-                height: { xs: 300, md: 450 },
-                borderRadius: 1,
-                overflow: 'hidden',
-              }}
-            >
-              <iframe
-                title="Neram Classes Location"
-                src={`https://www.google.com/maps/embed?pb=!1m14!1m8!1m3!1d3889.0!2d${hq.longitude || 77.6603}!3d${hq.latitude || 12.8456}!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMTLCsDUwJzQ0LjIiTiA3N8KwMzknMzcuMSJF!5e0!3m2!1sen!2sin!4v1`}
-                width="100%"
-                height="100%"
-                style={{ border: 0 }}
-                allowFullScreen
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-              />
-            </Box>
-          </Container>
-        </Box>
+      {!centersLoading && centers.subOffices.length > 0 && (
+        <Section id="centres" tone="white" gap={3.5} header={{ align: 'start', title: 'Our Centers Across India' }}>
+          <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 280px), 1fr))', gap: 2 }}>
+            {centers.subOffices.map((center) => (
+              <Box
+                key={center.id}
+                component="article"
+                sx={{
+                  ...cardSx,
+                  bgcolor: t.ground,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 1.25,
+                  transition: 'border-color 150ms ease',
+                  '&:hover': { borderColor: t.gold500 },
+                }}
+              >
+                <Typography component="h3" sx={{ m: 0, fontSize: '1.125rem', fontWeight: 700, lineHeight: 1.3 }}>
+                  {center.city}
+                </Typography>
+                <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                  <LocationOnOutlinedIcon aria-hidden sx={{ fontSize: 20, color: t.gold800, flexShrink: 0, mt: '2px' }} />
+                  <Typography component="p" sx={{ ...bodySx, fontSize: '0.9375rem' }}>
+                    {center.address}
+                    <br />
+                    {center.city}, {center.state}
+                  </Typography>
+                </Box>
+
+                {center.contact_phone && (
+                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', fontSize: '0.9375rem' }}>
+                    <PhoneOutlinedIcon aria-hidden sx={{ fontSize: 20, color: t.gold800, flexShrink: 0 }} />
+                    <TextLink href={`tel:${center.contact_phone}`}>{center.contact_phone}</TextLink>
+                  </Box>
+                )}
+
+                {center.seo_slug && (
+                  <Box sx={{ mt: 'auto', pt: 0.5 }}>
+                    <CtaButton variant="link" size="md" href={centrePagePath(center.seo_slug)} endIcon={undefined}>
+                      View Details
+                    </CtaButton>
+                  </Box>
+                )}
+              </Box>
+            ))}
+          </Box>
+        </Section>
       )}
+
+      {hq && (
+        <Section
+          id="map"
+          gap={3}
+          header={{ align: 'start', title: 'Find Us on Map', lede: `${hq.address}, ${hq.city}, ${hq.state}`, ledeWidth: 720 }}
+        >
+          <HqMap hq={hq} />
+        </Section>
+      )}
+
+      <CtaBand
+        eyebrow="Free demo class"
+        title="See how we teach before you decide"
+        lede="Join a free live demo class with our architecture faculty, or talk to us about fees and batches."
+        actions={
+          <>
+            <CtaButton href="/demo-class">Book a free demo class</CtaButton>
+            <CtaButton variant="link" href="/fees">
+              View fees
+            </CtaButton>
+          </>
+        }
+      />
     </Box>
   );
 }

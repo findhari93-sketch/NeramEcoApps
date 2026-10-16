@@ -1,17 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  Box,
-  Button,
-  FormControl,
-  InputLabel,
-  MenuItem,
-  Paper,
-  Select,
-  Typography,
-} from '@neram/ui';
-import Link from 'next/link';
+import { FormControl, FormHelperText, InputLabel, MenuItem, Select } from '@neram/ui';
+import { CtaButton, QuickCheck, QuickCheckResult } from '@/design-system';
+
+const FULL_TOOL = 'https://app.neramclasses.com/tools/counseling/insights';
 
 const INSIGHTS_BY_STATE: Record<string, string> = {
   'Tamil Nadu': '45 B.Arch colleges participate in TNEA counseling. Average cutoff: 110.',
@@ -44,24 +37,11 @@ export default function CounselingInsightsTeaser() {
   }
 
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: { xs: 3, sm: 4 },
-        border: '1px solid #E0E0E0',
-        borderRadius: 2,
-      }}
-    >
-      <Typography
-        component="h2"
-        sx={{ fontWeight: 700, fontSize: { xs: '1.25rem', sm: '1.5rem' }, mb: 2 }}
-      >
-        State Counseling Overview
-      </Typography>
-
-      <FormControl fullWidth sx={{ mb: 2 }} error={!!error}>
-        <InputLabel>Select Your State</InputLabel>
+    <QuickCheck title="State counseling overview" headingId="counseling-insights-quick-check">
+      <FormControl fullWidth error={!!error}>
+        <InputLabel id="counseling-insights-state-label">Select Your State</InputLabel>
         <Select
+          labelId="counseling-insights-state-label"
           value={state}
           label="Select Your State"
           onChange={(e) => {
@@ -69,7 +49,7 @@ export default function CounselingInsightsTeaser() {
             setError('');
             setResult(null);
           }}
-          sx={{ minHeight: 48 }}
+          sx={{ minHeight: 48, fontSize: '1rem' }}
         >
           {STATES.map((s) => (
             <MenuItem key={s} value={s}>
@@ -77,59 +57,22 @@ export default function CounselingInsightsTeaser() {
             </MenuItem>
           ))}
         </Select>
-        {error && (
-          <Typography sx={{ fontSize: '0.75rem', color: 'error.main', mt: 0.5, ml: 1.75 }}>
-            {error}
-          </Typography>
-        )}
+        {error && <FormHelperText>{error}</FormHelperText>}
       </FormControl>
 
-      <Button
-        variant="contained"
-        fullWidth
-        onClick={handleCheck}
-        sx={{
-          minHeight: 48,
-          fontWeight: 700,
-          fontSize: '1rem',
-          mb: result ? 3 : 0,
-        }}
-      >
+      <CtaButton variant="navy" fullWidth onClick={handleCheck} endIcon={null}>
         Show Counseling Info
-      </Button>
+      </CtaButton>
 
-      {result && (
-        <Box>
-          <Typography
-            sx={{
-              fontSize: { xs: '1rem', sm: '1.1rem' },
-              fontWeight: 600,
-              color: 'text.primary',
-              mb: 2,
-              p: 2,
-              bgcolor: '#E8F5E9',
-              borderRadius: 1,
-              lineHeight: 1.6,
-            }}
-          >
-            {result}
-          </Typography>
-
-          <Button
-            component={Link}
-            href="https://app.neramclasses.com/tools/counseling/insights"
-            variant="outlined"
-            fullWidth
-            sx={{
-              minHeight: 48,
-              fontWeight: 700,
-              fontSize: '0.95rem',
-            }}
-          >
-            Get personalized counseling recommendations
-          </Button>
-        </Box>
+      {result ? (
+        <QuickCheckResult label={state} summary={result} />
+      ) : (
+        <QuickCheckResult label="Counseling in your state" summary="Pick your state to see the overview" />
       )}
-    </Paper>
+
+      <CtaButton href={FULL_TOOL} external fullWidth>
+        Get personalized counseling recommendations
+      </CtaButton>
+    </QuickCheck>
   );
 }

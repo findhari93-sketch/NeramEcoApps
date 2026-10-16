@@ -151,6 +151,45 @@ test.describe('SEO Health @admin', () => {
       await expect(page.getByRole('gridcell', { name: 'Server error (5xx)' })).toBeVisible();
     });
 
+    test('Who fixes it: filter, chips, and Copy for Claude Code (table and drawer)', async ({ page, context }) => {
+      await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: ADMIN_BASE });
+      const mixed = [
+        ...findings,
+        { id: 'f3', rule_id: 'S1', category: 'performance', severity: 'high', url: 'https://neramclasses.com/nata-online-coaching', title: 'Still says 2026: NATA 2027 searches start soon', detail: {}, status: 'open', first_seen: '2026-10-16T03:04:00Z', last_seen: '2026-10-16T03:04:00Z' },
+        { id: 'f4', rule_id: 'I4', category: 'indexing', severity: 'medium', url: 'https://app.neramclasses.com/tools/coa-checker', title: 'Not indexed: Discovered - currently not indexed', detail: {}, status: 'open', first_seen: '2026-10-14T03:04:00Z', last_seen: '2026-10-16T03:04:00Z' },
+      ];
+      test.skip(!(await open(page, { findings: mixed })), 'Runner is not signed in to the admin app.');
+
+      // One chip per row, as text (not colour alone).
+      await expect(page.getByRole('gridcell', { name: 'Claude Code' })).toHaveCount(2);
+      await expect(page.getByRole('gridcell', { name: 'Google' })).toHaveCount(1);
+      await expect(page.getByRole('gridcell', { name: 'You' })).toHaveCount(1);
+
+      // The header button copies the code-fixable rules in view.
+      const copyAll = page.getByRole('button', { name: 'Copy for Claude Code (2)' });
+      await copyAll.click();
+      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('/seo-fix O3 S1');
+      await expect(page.getByText(/Paste it into Claude Code/)).toBeVisible();
+      const box = await copyAll.boundingBox();
+      expect(box!.height).toBeGreaterThanOrEqual(44);
+
+      // Google-only view: no code button, and it says nothing needs changing.
+      await page.getByRole('combobox', { name: 'Who fixes it' }).click();
+      await page.getByRole('option', { name: 'Google' }).click();
+      await expect(page.getByRole('gridcell', { name: /Discovered - currently not indexed/ })).toBeVisible();
+      await expect(page.getByRole('gridcell', { name: 'Server error (5xx)' })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /Copy for Claude Code/ })).toHaveCount(0);
+      await expect(page.getByText(/Nothing to change in code/)).toBeVisible();
+
+      // The drawer copies one finding (the mocked drawer holds the O3 finding).
+      await page.getByRole('combobox', { name: 'Who fixes it' }).click();
+      await page.getByRole('option', { name: 'Everyone' }).click();
+      await page.getByRole('gridcell', { name: 'Page has no canonical link' }).click();
+      const drawer = page.getByRole('presentation').last();
+      await drawer.getByRole('button', { name: 'Copy for Claude Code: Page has no canonical link' }).click();
+      expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('/seo-fix f2');
+    });
+
     test('the tab is kept in the URL', async ({ page }) => {
       test.skip(!(await open(page)), 'Runner is not signed in to the admin app.');
       await page.route('**/api/seo-audit/urls', (r) => r.fulfill({ json: { urls: [] } }));

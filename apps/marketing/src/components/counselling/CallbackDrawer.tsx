@@ -17,6 +17,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import HeadsetMicIcon from '@mui/icons-material/HeadsetMic';
 import { leadAttribution, touchAttribution } from '@/lib/attribution';
 import { trackTaxonomyEvent } from '@/lib/funnel-tracker';
+import { CtaButton, eyebrowSx, tokens as t } from '@/design-system';
 
 export interface CallbackDrawerProps {
   ctaLabel?: string;
@@ -31,6 +32,11 @@ export interface CallbackDrawerProps {
   collegePredictorUrl?: string;
   prefillNotes?: string;
   variant?: 'sticky' | 'inline';
+  /**
+   * Also render a navy "free counselling help" box where this component sits
+   * in the article (T5). Its button opens the same drawer as the sticky bar.
+   */
+  card?: { eyebrow?: string; title: string; body?: string; button?: string };
 }
 
 const PREFERRED_SLOTS = [
@@ -54,6 +60,7 @@ export default function CallbackDrawer({
   collegePredictorUrl = 'https://app.neramclasses.com/tools/counseling/college-predictor',
   prefillNotes,
   variant = 'sticky',
+  card,
 }: CallbackDrawerProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
@@ -159,6 +166,37 @@ export default function CallbackDrawer({
 
   return (
     <>
+      {card && (
+        <Box
+          component="aside"
+          aria-label={card.eyebrow ?? 'Free counselling help'}
+          sx={{
+            bgcolor: t.navy900,
+            color: t.paper,
+            borderRadius: `${t.radius}px`,
+            p: 3,
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 2,
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, maxWidth: 460 }}>
+            <Typography component="span" sx={{ ...eyebrowSx, color: t.gold500 }}>
+              {card.eyebrow ?? 'Free counselling help'}
+            </Typography>
+            <Typography component="strong" sx={{ fontSize: '1.1875rem', fontWeight: 700, lineHeight: 1.3 }}>
+              {card.title}
+            </Typography>
+            {card.body && <Typography sx={{ fontSize: '0.875rem', lineHeight: 1.5, color: t.paperMuted }}>{card.body}</Typography>}
+          </Box>
+          <CtaButton onClick={() => setOpen(true)} size="md">
+            {card.button ?? 'Get a call back'}
+          </CtaButton>
+        </Box>
+      )}
+
       <Box sx={triggerStyles}>
         <Button
           fullWidth
@@ -169,7 +207,7 @@ export default function CallbackDrawer({
           sx={{
             minHeight: 48,
             fontWeight: 700,
-            borderRadius: 2,
+            borderRadius: `${t.radius}px`,
           }}
         >
           {ctaLabel}
@@ -182,8 +220,8 @@ export default function CallbackDrawer({
         onClose={() => setOpen(false)}
         PaperProps={{
           sx: {
-            borderTopLeftRadius: 16,
-            borderTopRightRadius: 16,
+            borderTopLeftRadius: t.radius,
+            borderTopRightRadius: t.radius,
             maxHeight: '90vh',
             mx: { xs: 0, md: 'auto' },
             width: { xs: '100%', md: 480 },
@@ -202,7 +240,7 @@ export default function CallbackDrawer({
 
           {success ? (
             <Stack spacing={2}>
-              <Alert severity="success" sx={{ borderRadius: 2 }}>
+              <Alert severity="success" sx={{ borderRadius: `${t.radius}px` }}>
                 {successMessage}
               </Alert>
               <Typography variant="body2" color="text.secondary">
@@ -309,7 +347,7 @@ export default function CallbackDrawer({
                 size="large"
                 disabled={submitting}
                 startIcon={submitting ? <CircularProgress size={16} color="inherit" /> : null}
-                sx={{ minHeight: 48, fontWeight: 700, borderRadius: 2 }}
+                sx={{ minHeight: 48, fontWeight: 700, borderRadius: `${t.radius}px` }}
               >
                 {submitting ? 'Sending...' : 'Request Callback'}
               </Button>

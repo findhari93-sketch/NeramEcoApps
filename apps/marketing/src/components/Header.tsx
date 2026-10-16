@@ -5,52 +5,58 @@ import dynamic from 'next/dynamic';
 import { useParams } from 'next/navigation';
 import {
   AppBar,
-  Toolbar,
   Typography,
-  Button,
   Box,
   IconButton,
   SwipeableDrawer,
   List,
   ListItemButton,
-  ListItemText,
-  Divider,
-  Tooltip,
-  MenuIcon,
-  CloseIcon,
-  HelpOutlineIcon,
-  useScrollDirection,
-  ListItemIcon,
   Collapse,
+  CloseIcon,
+  MenuIcon,
+  useScrollDirection,
+  siteDarkTheme,
+  siteLightTheme,
 } from '@neram/ui';
 import { ClickAwayListener, Fade, Paper, Popper, useMediaQuery } from '@mui/material';
-import { alpha } from '@mui/material/styles';
-import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
-import FavoriteBorderIcon from '@mui/icons-material/FavoriteBorder';
-import PlaceOutlinedIcon from '@mui/icons-material/PlaceOutlined';
-import CalculateOutlinedIcon from '@mui/icons-material/CalculateOutlined';
-import CastForEducationOutlinedIcon from '@mui/icons-material/CastForEducationOutlined';
-import QuizOutlinedIcon from '@mui/icons-material/QuizOutlined';
-import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
-import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
-import StarBorderRoundedIcon from '@mui/icons-material/StarBorderRounded';
-import WorkOutlineIcon from '@mui/icons-material/WorkOutline';
-import MailOutlineIcon from '@mui/icons-material/MailOutline';
-import HomeRoundedIcon from '@mui/icons-material/HomeRounded';
+import { ThemeProvider } from '@mui/material/styles';
 import SearchIcon from '@mui/icons-material/Search';
 import CurrencyRupeeIcon from '@mui/icons-material/CurrencyRupee';
 import VideocamOutlinedIcon from '@mui/icons-material/VideocamOutlined';
-import SchoolIcon from '@mui/icons-material/School';
-import MenuBookIcon from '@mui/icons-material/MenuBook';
-import TrendingUpIcon from '@mui/icons-material/TrendingUp';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
+import BadgeOutlinedIcon from '@mui/icons-material/BadgeOutlined';
+import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import NorthEastIcon from '@mui/icons-material/NorthEast';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import ConstructionOutlinedIcon from '@mui/icons-material/ConstructionOutlined';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import LanguageIcon from '@mui/icons-material/Language';
 import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown';
+import { useTranslations } from 'next-intl';
+import { useFirebaseAuth } from '@neram/auth';
 import { Link, usePathname, useRouter } from '@/i18n/routing';
 import { locales, localeLabels, type Locale } from '@/i18n';
-import { useTranslations } from 'next-intl';
-import AuthButton from './AuthButton';
+import { tokens as tk, indicLabelSx } from '@/design-system';
+import AuthButton, { AvatarRing, requestLogin, useSiteSignOut } from './AuthButton';
 import BrandWordmark from './brand/BrandWordmark';
 import UserNotificationBell from './UserNotificationBell';
+import { useApplicationStatus } from '@/hooks/useApplicationStatus';
+import { useGoToApp } from '@/hooks/useGoToApp';
+import { getDemoCta, readDemoActive, type DemoActiveFlag } from '@/lib/demo-cta';
+import CollegesMegaMenu from '@/components/college-hub/CollegesMegaMenu';
+import MegaMenuPanel, { NavBadge, isCurrent, type NavLink } from '@/components/nav/MegaMenuPanel';
+import { NAV_GROUPS, groupLinks, type NavGroup } from '@/components/nav/nav-groups';
+import {
+  getHeaderState,
+  PRIMARY_LABELS,
+  SECONDARY_LABELS,
+  STATUS_SENTENCES,
+  type HeaderState,
+  type StatusDot,
+} from './header/header-state';
+import { HEADER_CONTAINER, fromTier, headerTier, type HeaderTier } from './header/header-tier';
+import { getHeaderTone } from './header/header-tone';
+
 // Search (dialog + Fuse + the ~70 KB generated index) is its own chunk, fetched
 // on the first open (or on hover/focus of the search button) instead of being
 // shipped with the header on every page.
@@ -60,314 +66,38 @@ const SearchDialog = dynamic(loadSearchDialog, { ssr: false });
 const loadInlineSearch = () => import('./search/InlineSearch');
 const InlineSearch = dynamic(loadInlineSearch, {
   ssr: false,
-  loading: () => <Box sx={{ flex: '1 1 auto', maxWidth: 720, mx: 'auto', height: 44, borderRadius: 22, border: '1.5px solid', borderColor: 'primary.main' }} />,
+  loading: () => <Box sx={{ flex: '1 1 auto', maxWidth: 720, mx: 'auto', height: 44, borderRadius: `${tk.radius}px`, border: `1px solid ${tk.lineStrong}` }} />,
 });
-import { useApplicationStatus, type AppStatusSummary } from '@/hooks/useApplicationStatus';
-import { useGoToApp } from '@/hooks/useGoToApp';
-import { getDemoCta, readDemoActive, type DemoActiveFlag } from '@/lib/demo-cta';
-import CollegesMegaMenu from '@/components/college-hub/CollegesMegaMenu';
-import MegaMenuPanel, { NavBadge, type NavAside, type NavColumn, type NavFooter, type NavLink } from '@/components/nav/MegaMenuPanel';
-import HeaderCtaPill from './HeaderCtaPill';
 
-// ─── CTA config (unchanged) ────────────────────────────────────────────────
+const DOT_COLOR: Record<StatusDot, string> = {
+  draft: tk.statusDraft,
+  review: tk.statusReview,
+  done: tk.statusDone,
+};
 
-function getCtaConfig(status: AppStatusSummary, t: ReturnType<typeof useTranslations>) {
-  switch (status) {
-    case 'enrolled':
-    case 'partial_payment':
-      return {
-        label: t('header.goToApp'),
-        href: null as null,
-        variant: 'contained' as const,
-        sx: {
-          bgcolor: '#2E7D32',
-          color: '#fff',
-          '&:hover': { bgcolor: '#1B5E20', boxShadow: 2 },
-        },
-      };
-    case 'approved':
-      return {
-        label: t('header.payAndJoin'),
-        href: '/apply' as const,
-        variant: 'contained' as const,
-        sx: {
-          bgcolor: '#2E7D32',
-          color: '#fff',
-          animation: 'ctaPulse 2s ease-in-out infinite',
-          '@keyframes ctaPulse': {
-            '0%, 100%': { boxShadow: '0 0 0 0 rgba(46,125,50,0.4)' },
-            '50%': { boxShadow: '0 0 0 8px rgba(46,125,50,0)' },
-          },
-          '&:hover': { bgcolor: '#1B5E20', boxShadow: 2 },
-        },
-      };
-    case 'draft':
-      return {
-        label: t('header.continueApplication'),
-        href: '/apply' as const,
-        variant: 'outlined' as const,
-        sx: {
-          color: 'white',
-          borderColor: 'rgba(255,255,255,0.6)',
-          '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
-        },
-      };
-    case 'submitted':
-    case 'under_review':
-    case 'pending_verification':
-      return {
-        label: t('header.trackApplication'),
-        href: '/apply' as const,
-        variant: 'outlined' as const,
-        sx: {
-          color: 'white',
-          borderColor: 'rgba(144,202,249,0.7)',
-          '&:hover': { borderColor: '#90CAF9', bgcolor: 'rgba(144,202,249,0.1)' },
-        },
-      };
-    default:
-      return {
-        label: t('header.joinNow'),
-        href: '/apply' as const,
-        variant: 'contained' as const,
-        sx: {
-          boxShadow: 'none',
-          '&:hover': { boxShadow: 2 },
-        },
-      };
-  }
+const SECONDARY_ICON = {
+  freeDemo: VideocamOutlinedIcon,
+  myDemo: EventAvailableOutlinedIcon,
+  myEnrollment: BadgeOutlinedIcon,
+} as const;
+
+const TOOLS_HREF = '/tools';
+const MORE_KEY = 'more';
+
+function StatusDotMark({ dot }: { dot: StatusDot | null }) {
+  if (!dot) return null;
+  return (
+    <Box
+      component="span"
+      aria-hidden
+      sx={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, bgcolor: DOT_COLOR[dot], boxShadow: '0 0 0 2px rgba(6,13,31,0.35)' }}
+    />
+  );
 }
 
-// ─── Nav group structure ────────────────────────────────────────────────────
-
-interface NavGroup {
-  key: string;
-  labelKey: 'colleges' | 'examHubNav' | 'counselingNav' | 'aboutNav';
-  icon: React.ReactNode;
-  columns: NavColumn[];
-  aside?: NavAside;
-  footer?: NavFooter;
-  /** 'cards': the desktop panel is a single column of icon cards. */
-  variant?: 'columns' | 'cards';
-}
-
-// Desktop shows each group as one MegaMenuPanel; the phone drawer lists every
-// link of the group (columns, "more" links, side cards and the footer link).
-const NAV_GROUPS: NavGroup[] = [
-  {
-    key: 'colleges',
-    labelKey: 'colleges',
-    icon: <SchoolIcon fontSize="small" />,
-    columns: [
-      {
-        title: 'By state',
-        links: [
-          { label: 'Tamil Nadu', href: '/colleges/tamil-nadu' },
-          { label: 'Karnataka', href: '/colleges/karnataka' },
-          { label: 'Maharashtra', href: '/colleges/maharashtra' },
-          { label: 'Delhi NCR', href: '/colleges/delhi' },
-          { label: 'Kerala', href: '/colleges/kerala' },
-          { label: 'Telangana', href: '/colleges/telangana' },
-        ],
-        more: { label: 'All states', href: '/colleges#explore' },
-      },
-      {
-        title: 'By exam and counselling',
-        links: [
-          { label: 'NATA colleges', href: '/colleges?exam=NATA#browse' },
-          { label: 'JEE Main Paper 2 colleges', href: '/colleges?exam=JEE_PAPER_2#browse' },
-          { label: 'TNEA counselling', href: '/colleges/tnea' },
-          { label: 'JoSAA counselling', href: '/colleges/josaa' },
-          { label: 'KEAM counselling', href: '/counseling/keam-arch' },
-          { label: 'KCET counselling', href: '/colleges/counseling/kcet' },
-        ],
-        more: { label: 'All counselling', href: '/colleges#explore' },
-      },
-      {
-        title: 'Rankings and filters',
-        links: [
-          { label: 'NIRF Architecture', href: '/colleges/rankings/nirf' },
-          { label: 'ArchIndex top rated', href: '/colleges/rankings/archindex' },
-          { label: 'COA approved', href: '/colleges/accreditation/coa-approved' },
-          { label: 'Government colleges', href: '/colleges/type/government' },
-          { label: 'Private colleges', href: '/colleges/type/private' },
-          { label: 'Fee under ₹3L', href: '/colleges/fees/below-3-lakhs' },
-        ],
-        more: { label: 'All fee ranges', href: '/colleges#explore' },
-      },
-    ],
-    aside: {
-      title: 'Your tools',
-      cards: [
-        { label: 'Compare colleges', hint: 'Up to 4, side by side', href: '/colleges/compare', Icon: CompareArrowsIcon, tone: 'primary' },
-        { label: 'Saved colleges', hint: 'Your shortlist', href: '/colleges/saved', Icon: FavoriteBorderIcon, tone: 'secondary' },
-        { label: 'Browse by city', hint: 'Colleges near you', href: '/colleges#explore', Icon: PlaceOutlinedIcon, tone: 'success' },
-        { label: 'College predictor', hint: 'Colleges for your score', href: '/tools/college-predictor', Icon: CalculateOutlinedIcon, tone: 'warning' },
-      ],
-    },
-    footer: {
-      lead: 'B.Arch colleges across India',
-      text: 'with fees, seats and admission routes.',
-      cta: { label: 'Browse all colleges', href: '/colleges#browse' },
-    },
-  },
-  {
-    key: 'examHub',
-    labelKey: 'examHubNav',
-    icon: <MenuBookIcon fontSize="small" />,
-    columns: [
-      {
-        title: 'NATA 2026',
-        links: [
-          { label: 'Eligibility', href: '/nata-2026/eligibility' },
-          { label: 'Important Dates', href: '/nata-2026/important-dates' },
-          { label: 'Syllabus', href: '/nata-2026/syllabus' },
-        ],
-        more: { label: 'NATA 2026 Hub', href: '/nata-2026' },
-      },
-      {
-        title: 'JEE Main Paper 2',
-        links: [
-          { label: 'Paper 2A: B.Arch', href: '/jee-barch-hub#paper-2a' },
-          { label: 'Paper 2B: B.Planning', href: '/jee-barch-hub#paper-2b' },
-          { label: 'NITs / SPAs / IIITs', href: '/colleges/josaa' },
-          { label: 'JEE Paper 2 Prep', href: '/jee-paper-2-preparation' },
-        ],
-        more: { label: 'JEE B.Arch Hub', href: '/jee-barch-hub' },
-      },
-      {
-        title: 'AAT 2026',
-        badge: 'NEW',
-        links: [
-          { label: 'Eligibility', href: '/aat-2026#eligibility' },
-          { label: 'Schedule', href: '/aat-2026#schedule' },
-          { label: 'Syllabus (5 sections)', href: '/aat-2026#syllabus' },
-          { label: 'Drawing Kit', href: '/aat-2026#drawing-kit' },
-        ],
-        more: { label: 'AAT 2026 Hub', href: '/aat-2026' },
-      },
-      {
-        title: 'PGETA 2026',
-        badge: 'NEW',
-        links: [
-          { label: 'Eligibility', href: '/pgeta-2026#eligibility' },
-          { label: '3 Test Dates', href: '/pgeta-2026#schedule' },
-          { label: 'Syllabus (4 modules)', href: '/pgeta-2026#exam-pattern' },
-          { label: 'Fees + Scholarships', href: '/pgeta-2026#fees' },
-        ],
-        more: { label: 'PGETA 2026 Hub', href: '/pgeta-2026' },
-      },
-    ],
-    aside: {
-      title: 'Prepare',
-      cards: [
-        { label: 'NATA Online Coaching', hint: 'Live classes for NATA and JEE', href: '/nata-online-coaching', Icon: CastForEducationOutlinedIcon, tone: 'primary', badge: 'TOP' },
-        { label: 'Free Tools & Mocks', hint: 'Practice tests and tools', href: '/tools', Icon: QuizOutlinedIcon, tone: 'success' },
-        { label: 'aiArchitek: AI Tools', hint: 'AI help for drawing and design', href: '/aiarchitek', Icon: AutoAwesomeOutlinedIcon, tone: 'secondary' },
-      ],
-    },
-    footer: {
-      lead: 'Every B.Arch entrance exam',
-      text: 'with dates, eligibility and syllabus.',
-      cta: { label: 'NATA vs JEE Paper 2', href: '/counseling/concepts/nata-vs-jee-paper-2' },
-    },
-  },
-  {
-    key: 'counseling',
-    labelKey: 'counselingNav',
-    icon: <TrendingUpIcon fontSize="small" />,
-    columns: [
-      {
-        title: 'JEE Main Paper 2 route',
-        links: [
-          { label: 'JoSAA (NIT/IIT/SPA)', href: '/counseling/josaa', badge: 'NEW' },
-          { label: 'CSAB Special', href: '/counseling/csab-special' },
-          { label: 'CSAB-NEUT (NE & UTs)', href: '/counseling/csab-neut' },
-          { label: 'JAC Delhi (IGDTUW)', href: '/counseling/jac-delhi-barch' },
-          { label: 'JAC Chandigarh (CCA)', href: '/counseling/jac-chandigarh-barch' },
-        ],
-      },
-      {
-        title: 'NATA-only',
-        links: [
-          { label: 'KEAM (Kerala)', href: '/counseling/keam-arch' },
-          { label: 'CEPT University', href: '/counseling/cept-university' },
-          { label: 'HSTES (Haryana)', href: '/counseling/hstes-barch' },
-          { label: 'DTE Goa (GCA Panaji)', href: '/counseling/dte-goa-barch' },
-        ],
-      },
-      {
-        title: 'NATA + JEE P2 accepted',
-        links: [
-          { label: 'TNEA (Tamil Nadu)', href: '/counseling/tnea-barch' },
-          { label: 'MHT-CET (Maharashtra)', href: '/counseling/mht-cet-barch', badge: 'NEW' },
-          { label: 'KEA (Karnataka)', href: '/counseling/kea-barch' },
-          { label: 'ACPC (Gujarat)', href: '/counseling/acpc-barch' },
-          { label: 'AP B.Arch', href: '/counseling/ap-barch' },
-          { label: 'TG B.Arch (Telangana)', href: '/counseling/tg-barch' },
-          { label: 'UPTAC (Uttar Pradesh)', href: '/counseling/uptac-barch' },
-        ],
-      },
-      {
-        title: 'Concepts',
-        links: [
-          { label: 'Freeze vs Float vs Slide', href: '/counseling/concepts/freeze-float-slide' },
-          { label: 'JoSAA vs CSAB', href: '/counseling/concepts/josaa-vs-csab' },
-          { label: 'AAT explained', href: '/counseling/concepts/aat-explained' },
-          { label: 'NATA vs JEE Paper 2', href: '/counseling/concepts/nata-vs-jee-paper-2' },
-          { label: '45% vs 50% PCM rule', href: '/counseling/concepts/eligibility-45-vs-50-rule' },
-        ],
-      },
-    ],
-    aside: {
-      title: 'Tools',
-      cards: [
-        { label: 'College Predictor', hint: 'Colleges for your score', href: '/tools/college-predictor', Icon: CalculateOutlinedIcon, tone: 'warning' },
-        { label: 'Cutoff Calculator', hint: 'Check where you stand', href: '/tools/cutoff-calculator', Icon: InsightsOutlinedIcon, tone: 'primary' },
-      ],
-    },
-    footer: {
-      lead: '28 B.Arch counsellings',
-      text: 'grouped by the exam they accept.',
-      cta: { label: 'All 28 counsellings', href: '/counseling' },
-    },
-  },
-  {
-    key: 'about',
-    labelKey: 'aboutNav',
-    icon: <InfoOutlinedIcon fontSize="small" />,
-    variant: 'cards',
-    columns: [],
-    aside: {
-      title: 'Neram Classes',
-      cards: [
-        { label: 'About Us', hint: 'Who we are and how we teach', href: '/about', Icon: InfoOutlinedIcon, tone: 'primary' },
-        { label: 'Course fees', hint: 'Plans and what each includes', href: '/fees', Icon: CurrencyRupeeIcon, tone: 'success' },
-        { label: 'Student Reviews', hint: 'What our students say', href: '/testimonials', Icon: StarBorderRoundedIcon, tone: 'secondary' },
-        { label: 'Careers', hint: 'Teach or work with us', href: '/careers', Icon: WorkOutlineIcon, tone: 'info' },
-        { label: 'Contact', hint: 'Talk to our team', href: '/contact', Icon: MailOutlineIcon, tone: 'warning' },
-      ],
-    },
-  },
-];
-
-/** Every link of a group, in reading order, for the phone drawer and the active check. */
-function groupLinks(group: NavGroup): NavLink[] {
-  const all: NavLink[] = [
-    ...group.columns.flatMap((col) => [
-      ...col.links,
-      ...(col.more ? [{ ...col.more, badge: col.more.badge ?? col.badge }] : []),
-    ]),
-    ...(group.aside?.cards ?? []).map(({ label, href, badge }) => ({ label, href, badge })),
-    ...(group.footer ? [group.footer.cta] : []),
-  ];
-  const seen = new Set<string>();
-  return all.filter((l) => {
-    const k = `${l.href}|${l.label}`;
-    if (seen.has(k)) return false;
-    seen.add(k);
-    return true;
-  });
+function PrimaryIcon({ kind, size }: { kind: HeaderState['primary']['kind']; size: number }) {
+  const Icon = kind === 'app' ? NorthEastIcon : kind === 'help' ? HelpOutlineIcon : ArrowForwardIcon;
+  return <Icon aria-hidden sx={{ fontSize: size }} />;
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -379,17 +109,23 @@ export default function Header() {
   const router = useRouter();
   const t = useTranslations();
 
-  const isApplyPage = pathname === '/apply';
+  const tone = getHeaderTone(pathname);
+  const light = tone === 'light';
+  const ink = light ? tk.ink : tk.paper;
+  const openBg = light ? tk.surfaceHover : 'rgba(255,255,255,0.08)';
+  const outlineBorder = light ? tk.lineStrong : 'rgba(245,240,232,0.24)';
+
   const { scrollDirection, isAtTop } = useScrollDirection();
+  const { user } = useFirebaseAuth();
   const { status: appStatus } = useApplicationStatus();
   const { goToApp } = useGoToApp();
-  const ctaConfig = getCtaConfig(appStatus, t);
+  const { signOut, signingOut } = useSiteSignOut();
   const isEnrolled = appStatus === 'enrolled' || appStatus === 'partial_payment';
   // Phones get "View fees" in the drawer; laptops find Course fees under About.
-  const showFeesLink = !isEnrolled && !isApplyPage && pathname !== '/fees';
+  const showFeesLink = !isEnrolled && pathname !== '/fees';
 
-  // "Free demo" beside Join Now, or "My demo" once one is booked. Read from a
-  // browser flag the booking card writes, so no page pays for an API call.
+  // "Free demo", or "My demo" once one is booked. Read from a browser flag the
+  // booking card writes, so no page pays for an API call.
   const [demoActive, setDemoActive] = useState<DemoActiveFlag | null>(null);
   useEffect(() => {
     setDemoActive(readDemoActive());
@@ -398,6 +134,8 @@ export default function Header() {
     return () => window.removeEventListener('storage', onStorage);
   }, [pathname]);
   const demoCta = getDemoCta({ pathname, applicationStatus: appStatus, enrolled: isEnrolled, active: demoActive });
+  const hs = getHeaderState({ status: appStatus, signedIn: !!user, demo: demoCta, pathname });
+  const labels = PRIMARY_LABELS[hs.primary.kind];
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [searchOpen, setSearchOpenState] = useState(false);
@@ -428,10 +166,10 @@ export default function Header() {
     if (restoreFocus) window.setTimeout(() => searchButtonRef.current?.focus(), 0);
   }, []);
 
-  // Desktop: which group's popover is open
+  // Desktop: which group's panel is open
   const [openMenu, setOpenMenu] = useState<{ key: string; anchorEl: HTMLElement } | null>(null);
 
-  // Mobile: which group is expanded in accordion
+  // Mobile: which group is expanded in the drawer
   const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
 
   const handleLocaleChange = (newLocale: Locale) => {
@@ -454,7 +192,7 @@ export default function Header() {
 
   useEffect(() => setInlineSearch(false), [pathname]);
 
-  const toggleMobileMenu = () => setMobileMenuOpen(!mobileMenuOpen);
+  const closeDrawer = () => setMobileMenuOpen(false);
 
   // Desktop menus are non-modal: the header stays clickable above the scrim, so
   // another trigger swaps the open menu in one click.
@@ -490,6 +228,24 @@ export default function Header() {
 
   useEffect(() => setOpenMenu(null), [pathname]);
 
+  // Width tiers are CSS container queries; this only closes an open panel when
+  // the tier changes, since its trigger may have moved into (or out of) More.
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    let tier: HeaderTier = headerTier(el.getBoundingClientRect().width);
+    const ro = new ResizeObserver(() => {
+      const next = headerTier(el.getBoundingClientRect().width);
+      if (next !== tier) {
+        tier = next;
+        setOpenMenu(null);
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const handleClickAway = (event: MouseEvent | TouchEvent) => {
     // A trigger click is handled by the trigger itself (toggle or swap).
     const target = event.target as Node;
@@ -497,654 +253,636 @@ export default function Header() {
     setOpenMenu(null);
   };
 
-  const toggleMobileGroup = (key: string) =>
-    setExpandedGroup((prev) => (prev === key ? null : key));
+  const toggleMobileGroup = (key: string) => setExpandedGroup((prev) => (prev === key ? null : key));
 
-  // Check if any link in a group matches the current path
-  const isGroupActive = (group: NavGroup) =>
-    (group.key === 'colleges' && /^\/colleges(\/|$)/.test(pathname)) ||
-    groupLinks(group).some(
-      (link) =>
-        pathname === link.href ||
-        (link.href !== '/' && pathname.startsWith(link.href)),
+  // Active = the group's own columns, not its shortcut cards and footer link:
+  // Colleges and Exam Hub also point at counselling and /tools pages, which
+  // lit up two nav items at once.
+  const isGroupActive = (group: NavGroup) => {
+    if (group.key === 'colleges') return /^\/colleges(\/|$)/.test(pathname);
+    if (group.key === 'counseling') return /^\/counseling(\/|$)/.test(pathname);
+    const own: NavLink[] =
+      group.variant === 'cards'
+        ? group.aside?.cards ?? []
+        : group.columns.flatMap((col) => [...col.links, ...(col.more ? [col.more] : [])]);
+    return own.some((link) => {
+      const href = link.href.split(/[?#]/)[0];
+      if (href.startsWith('/colleges')) return false; // Colleges owns those
+      return pathname === href || (href !== '/' && pathname.startsWith(`${href}/`));
+    });
+  };
+  const toolsActive = pathname === TOOLS_HREF || pathname.startsWith(`${TOOLS_HREF}/`);
+  const moreActive = toolsActive || NAV_GROUPS.some((g) => g.inMore && isGroupActive(g));
+
+  // ─── Shared styles ──────────────────────────────────────────────────────
+  const focus = { '&:focus-visible': { outline: tk.focusOutline, outlineOffset: 2 } } as const;
+
+  const navItemSx = (on: boolean, open: boolean) => ({
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '2px',
+    height: 44,
+    px: '10px',
+    border: 0,
+    borderRadius: `${tk.radius}px`,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+    flexShrink: 0,
+    font: 'inherit',
+    fontSize: 15,
+    fontWeight: on || open ? 600 : 500,
+    color: ink,
+    opacity: on || open ? 1 : 0.82,
+    bgcolor: open ? openBg : 'transparent',
+    // Active: a straight 2px gold rule along the bottom (an inset shadow would follow the radius).
+    position: 'relative',
+    ...(on && { '&::after': { content: '""', position: 'absolute', left: 10, right: 10, bottom: 0, height: 2, bgcolor: tk.gold500 } }),
+    textDecoration: 'none',
+    transition: 'opacity 150ms ease, background-color 150ms ease',
+    '&:hover': { opacity: 1, bgcolor: openBg },
+    ...focus,
+    '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+  });
+
+  const chevronSx = (open: boolean) => ({
+    fontSize: 18,
+    transition: 'transform 200ms ease',
+    transform: open ? 'rotate(180deg)' : 'none',
+    '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+  });
+
+  const iconButtonSx = {
+    width: 44,
+    height: 44,
+    flexShrink: 0,
+    borderRadius: `${tk.radius}px`,
+    color: ink,
+    '&:hover': { bgcolor: openBg },
+    '&.Mui-focusVisible': { outline: tk.focusOutline, outlineOffset: 2 },
+  } as const;
+
+  const ghost = hs.primary.ghost;
+  const primarySx = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: 1,
+    height: 44,
+    px: 2,
+    flexShrink: 0,
+    boxSizing: 'border-box',
+    borderRadius: `${tk.radius}px`,
+    border: ghost ? `1px solid ${outlineBorder}` : 0,
+    bgcolor: ghost ? 'transparent' : tk.gold500,
+    color: ghost ? ink : tk.navy900,
+    font: 'inherit',
+    fontSize: 14,
+    fontWeight: 700,
+    whiteSpace: 'nowrap',
+    textDecoration: 'none',
+    cursor: 'pointer',
+    transition: 'background-color 150ms ease, border-color 150ms ease',
+    '&:hover': ghost ? { borderColor: tk.gold500 } : { bgcolor: tk.gold300 },
+    ...focus,
+    '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+  } as const;
+
+  // ─── Pieces ─────────────────────────────────────────────────────────────
+
+  /** The primary action as a link, or a button for Go to App (SSO hand-off). */
+  const renderPrimary = (sx: object, children: React.ReactNode, onDone?: () => void) =>
+    hs.primary.href ? (
+      <Box component={Link} href={hs.primary.href as '/apply'} onClick={onDone} sx={sx}>
+        {children}
+      </Box>
+    ) : (
+      <Box component="button" type="button" onClick={() => { onDone?.(); goToApp(); }} sx={sx}>
+        {children}
+      </Box>
     );
+
+  const SecondaryIcon = hs.secondary ? SECONDARY_ICON[hs.secondary.kind] : null;
+  const secondaryLabel = hs.secondary ? t(`header.${SECONDARY_LABELS[hs.secondary.kind]}`) : '';
+
+  const panelPaperSx = {
+    borderRadius: `${tk.radius}px`,
+    border: `1px solid ${tk.line}`,
+    bgcolor: tk.surface,
+    color: tk.ink,
+    backgroundImage: 'none',
+    boxShadow: tk.shadowMegaMenu,
+    overflowX: 'hidden',
+    overflowY: 'auto',
+    maxHeight: 'calc(100vh - var(--broadcast-banner-height, 0px) - 88px)',
+    maxWidth: '94vw',
+  } as const;
+
+  const renderPopper = (key: string, panel: React.ReactNode) => {
+    const isOpen = openMenu?.key === key;
+    return (
+      // Rendered right after its trigger (no portal) so Tab moves from the
+      // trigger into the panel, and the panel sits above the scrim.
+      <Popper
+        open={isOpen}
+        anchorEl={isOpen ? openMenu?.anchorEl : null}
+        placement="bottom-start"
+        disablePortal
+        transition
+        modifiers={[
+          { name: 'offset', options: { offset: [0, 10] } },
+          { name: 'preventOverflow', options: { padding: 16 } },
+          { name: 'flip', enabled: false },
+        ]}
+        sx={{ zIndex: 1 }}
+      >
+        {({ TransitionProps }) => (
+          <Fade {...TransitionProps} timeout={reduceMotion ? 0 : 160} easing="cubic-bezier(0, 0, 0.2, 1)">
+            <div>
+              <ClickAwayListener onClickAway={handleClickAway}>
+                <Paper id={`nav-panel-${key}`} elevation={0} sx={panelPaperSx}>
+                  {panel}
+                </Paper>
+              </ClickAwayListener>
+            </div>
+          </Fade>
+        )}
+      </Popper>
+    );
+  };
+
+  const moreLinks: { title: string; links: NavLink[] }[] = [
+    ...NAV_GROUPS.filter((g) => g.inMore).map((g) => ({
+      title: t(`nav.${g.labelKey}`),
+      links: [...(g.footer ? [g.footer.cta] : []), ...(g.aside?.cards ?? []).map(({ label, href, badge }) => ({ label, href, badge }))],
+    })),
+    { title: t('header.freeTools'), links: [{ label: t('header.freeTools'), href: TOOLS_HREF }] },
+  ];
+
+  const morePanel = (
+    <Box component="section" aria-label={`${t('header.more')} menu`} sx={{ width: 'min(340px, 94vw)', py: 1.5 }}>
+      {moreLinks.map((group) => (
+        <Box component="nav" key={group.title} aria-label={group.title} sx={{ px: 1.5, py: 1, '& + &': { borderTop: `1px solid ${tk.line}` } }}>
+          <Typography component="h2" sx={{ m: 0, mb: 0.5, mx: 1.5, fontFamily: tk.fontMono, fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.15em', textTransform: 'uppercase', color: tk.gold800, ...indicLabelSx }}>
+            {group.title}
+          </Typography>
+          {group.links.map((l) => {
+            const on = isCurrent(pathname, l.href);
+            return (
+              <Box
+                key={l.href + l.label}
+                component={Link}
+                href={l.href as any}
+                onClick={handleMenuClose}
+                aria-current={on ? 'page' : undefined}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.75,
+                  minHeight: 44,
+                  px: 1.5,
+                  borderRadius: `${tk.radius}px`,
+                  color: tk.ink,
+                  bgcolor: on ? tk.surfaceHover : 'transparent',
+                  fontSize: '0.9375rem',
+                  fontWeight: on ? 700 : 500,
+                  textDecoration: 'none',
+                  '&:hover': { bgcolor: tk.surfaceHover },
+                  '&:focus-visible': { outline: tk.focusOutline, outlineOffset: -2 },
+                }}
+              >
+                {l.label}
+                {l.badge && <NavBadge label={l.badge} />}
+              </Box>
+            );
+          })}
+        </Box>
+      ))}
+    </Box>
+  );
+
+  const hideBelowCompact = { display: 'none', [fromTier('compact')]: { display: 'inline-flex' } };
+
+  // ─── Render ─────────────────────────────────────────────────────────────
 
   return (
     <>
       <AppBar
         position="fixed"
-        elevation={1}
+        elevation={0}
         sx={{
           top: 'var(--broadcast-banner-height, 0px)',
           transform:
-            scrollDirection === 'down' && !isAtTop && !mobileMenuOpen && !openMenu
-              ? 'translateY(-100%)'
-              : 'translateY(0)',
-          transition:
-            'transform 300ms cubic-bezier(0.4, 0, 0.2, 1), top 200ms ease',
+            scrollDirection === 'down' && !isAtTop && !mobileMenuOpen && !openMenu ? 'translateY(-100%)' : 'translateY(0)',
+          transition: 'transform 300ms cubic-bezier(0.4, 0, 0.2, 1), top 200ms ease',
+          bgcolor: light ? tk.surface : tk.navy900,
+          color: ink,
           backgroundImage: 'none',
+          boxShadow: 'none',
           borderRadius: 0,
+          borderBottom: `1px solid ${light ? tk.line : tk.lineDark}`,
+          fontFamily: tk.fontSans,
           '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
         }}
       >
-        {/* Full width up to 1680px, so the logo sits at the far left on laptops */}
-        <Box sx={{ width: '100%', maxWidth: 1680, mx: 'auto', px: { xs: 2, md: 3 }, boxSizing: 'border-box' }}>
-          <Toolbar disableGutters sx={{ minHeight: { xs: 56, md: 64 }, gap: { md: 0.5 } }}>
-
-            {/* ── Logo + Microsoft Badge ── */}
-            <Box
-              component={Link}
-              href="/"
-              sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'flex-end',
-                mr: { xs: 0, md: 3 },
-                textDecoration: 'none',
-                color: 'inherit',
-                flexShrink: 0,
-              }}
-            >
-              <BrandWordmark />
-            </Box>
-
-            {/* ── Desktop: Grouped nav buttons ── */}
-            <Box
-              sx={{
-                flexGrow: 1,
-                display: { xs: 'none', md: inlineSearch ? 'none' : 'flex' },
-                gap: 0.25,
-                alignItems: 'center',
-              }}
-            >
-              {/* Home icon (when not on homepage) */}
-              {pathname !== '/' && (
-                <Tooltip title={t('nav.home')} arrow>
-                  <IconButton
-                    component={Link}
-                    href="/"
-                    color="inherit"
-                    size="small"
-                    sx={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: '8px',
-                      opacity: 0.75,
-                      transition: 'opacity 0.2s, background-color 0.2s',
-                      '&:hover': { opacity: 1, bgcolor: 'action.hover' },
-                    }}
-                  >
-                    <HomeRoundedIcon sx={{ fontSize: 20 }} />
-                  </IconButton>
-                </Tooltip>
-              )}
-
-              {/* Group buttons */}
-              {NAV_GROUPS.map((group) => {
-                const isActive = isGroupActive(group);
-                const isOpen = openMenu?.key === group.key;
-                return (
-                  <Box key={group.key} sx={{ display: 'contents' }}>
-                  <Button
-                    ref={(el: HTMLButtonElement | null) => { triggerRefs.current[group.key] = el; }}
-                    aria-expanded={isOpen}
-                    aria-controls={`nav-panel-${group.key}`}
-                    onClick={(e) => isOpen ? handleMenuClose() : handleMenuOpen(group.key, e)}
-                    endIcon={
-                      <KeyboardArrowDownIcon
-                        sx={{
-                          fontSize: '16px !important',
-                          transition: 'transform 200ms ease',
-                          transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                        }}
-                      />
-                    }
-                    sx={{
-                      color: 'inherit',
-                      minWidth: 0,
-                      px: { md: 0.75, lg: 1.25 },
-                      whiteSpace: { md: 'normal', lg: 'nowrap' },
-                      py: 1,
-                      fontWeight: isActive || isOpen ? 600 : 400,
-                      opacity: isActive || isOpen ? 1 : 0.85,
-                      bgcolor: isOpen ? 'action.selected' : 'transparent',
-                      borderRadius: '8px',
-                      position: 'relative',
-                      overflow: 'visible',
-                      transition: 'opacity 0.2s ease, background-color 0.2s ease',
-                      '&::after': {
-                        content: '""',
-                        position: 'absolute',
-                        bottom: 4,
-                        left: '50%',
-                        width: isActive ? '60%' : '0%',
-                        height: '2px',
-                        bgcolor: 'currentcolor',
-                        borderRadius: '1px',
-                        transform: 'translateX(-50%)',
-                        transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                      },
-                      '&:hover': {
-                        opacity: 1,
-                        bgcolor: 'action.hover',
-                        '&::after': { width: '60%' },
-                      },
-                    }}
-                  >
-                    {t(`nav.${group.labelKey}`)}
-                  </Button>
-                  {/* Rendered right after its trigger (no portal) so Tab moves from the
-                      trigger into the panel, and the panel sits above the scrim. */}
-                  <Popper
-                    open={isOpen}
-                    anchorEl={isOpen ? openMenu?.anchorEl : null}
-                    placement="bottom-start"
-                    disablePortal
-                    transition
-                    modifiers={[
-                      { name: 'offset', options: { offset: [0, 8] } },
-                      { name: 'preventOverflow', options: { padding: 16 } },
-                      { name: 'flip', enabled: false },
-                    ]}
-                    sx={{ zIndex: 1 }}
-                  >
-                    {({ TransitionProps }) => (
-                      <Fade {...TransitionProps} timeout={reduceMotion ? 0 : 160} easing="cubic-bezier(0, 0, 0.2, 1)">
-                        <div>
-                          <ClickAwayListener onClickAway={handleClickAway}>
-                            <Paper
-                              id={`nav-panel-${group.key}`}
-                              elevation={8}
-                              sx={{
-                                borderRadius: 2,
-                                border: '1px solid',
-                                borderColor: 'divider',
-                                overflowX: 'hidden',
-                                overflowY: 'auto',
-                                maxHeight: 'calc(100vh - var(--broadcast-banner-height, 0px) - 88px)',
-                                maxWidth: '94vw',
-                              }}
-                            >
-                              {group.key === 'colleges' ? (
-                                <CollegesMegaMenu
-                                  columns={group.columns}
-                                  aside={group.aside}
-                                  footer={group.footer}
-                                  pathname={pathname}
-                                  onNavigate={handleMenuClose}
-                                />
-                              ) : (
-                                <MegaMenuPanel
-                                  label={t(`nav.${group.labelKey}`)}
-                                  columns={group.columns}
-                                  aside={group.aside}
-                                  footer={group.footer}
-                                  variant={group.variant}
-                                  pathname={pathname}
-                                  onNavigate={handleMenuClose}
-                                />
-                              )}
-                            </Paper>
-                          </ClickAwayListener>
-                        </div>
-                      </Fade>
-                    )}
-                  </Popper>
-                  </Box>
-                );
-              })}
-
-              {/* Free Tools direct link */}
-              <Button
+        <ThemeProvider theme={light ? siteLightTheme : siteDarkTheme}>
+          {/* Full width up to 1680px, so the logo sits at the far left on laptops.
+              The container is what the width tiers measure. */}
+          <Box
+            ref={containerRef}
+            sx={{
+              containerType: 'inline-size',
+              containerName: HEADER_CONTAINER,
+              position: 'relative',
+              width: '100%',
+              maxWidth: 1680,
+              mx: 'auto',
+              boxSizing: 'border-box',
+            }}
+          >
+            {/* ── Laptop bar: Brand | Nav | Actions | Account ── */}
+            <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 0.5, height: 64, px: 3 }}>
+              <Box
                 component={Link}
-                href="/tools"
-                sx={{
-                  color: 'inherit',
-                  minWidth: 0,
-                  px: { md: 0.75, lg: 1.25 },
-                  whiteSpace: { md: 'normal', lg: 'nowrap' },
-                  py: 1,
-                  fontWeight: pathname === '/tools' || pathname.startsWith('/tools/') ? 600 : 400,
-                  opacity: pathname === '/tools' || pathname.startsWith('/tools/') ? 1 : 0.85,
-                  borderRadius: '8px',
-                  position: 'relative',
-                  overflow: 'visible',
-                  transition: 'opacity 0.2s ease, background-color 0.2s ease',
-                  '&::after': {
-                    content: '""',
-                    position: 'absolute',
-                    bottom: 4,
-                    left: '50%',
-                    width: pathname === '/tools' || pathname.startsWith('/tools/') ? '60%' : '0%',
-                    height: '2px',
-                    bgcolor: 'currentcolor',
-                    borderRadius: '1px',
-                    transform: 'translateX(-50%)',
-                    transition: 'width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  },
-                  '&:hover': {
-                    opacity: 1,
-                    bgcolor: 'action.hover',
-                    '&::after': { width: '60%' },
-                  },
-                }}
+                href="/"
+                aria-label="Neram Classes home"
+                sx={{ display: 'flex', flexShrink: 0, mr: 2, color: ink, textDecoration: 'none', borderRadius: `${tk.radius}px`, ...focus }}
               >
-                Free Tools
-              </Button>
-            </Box>
+                <BrandWordmark tone={tone} />
+              </Box>
 
-            {inlineSearch && <InlineSearch onClose={closeInlineSearch} />}
+              <Box
+                component="nav"
+                aria-label="Main"
+                sx={{ flex: 1, minWidth: 0, display: inlineSearch ? 'none' : 'flex', alignItems: 'center', height: 44 }}
+              >
+                {NAV_GROUPS.map((group) => {
+                  const isOpen = openMenu?.key === group.key;
+                  const on = isGroupActive(group);
+                  return (
+                    <Box key={group.key} sx={{ display: 'contents' }}>
+                      <Box
+                        component="button"
+                        type="button"
+                        ref={(el: HTMLButtonElement | null) => { triggerRefs.current[group.key] = el; }}
+                        aria-expanded={isOpen}
+                        aria-controls={`nav-panel-${group.key}`}
+                        onClick={(e: React.MouseEvent<HTMLElement>) => (isOpen ? handleMenuClose() : handleMenuOpen(group.key, e))}
+                        sx={{ ...navItemSx(on, isOpen), ...(group.inMore ? hideBelowCompact : {}) }}
+                      >
+                        {t(`nav.${group.labelKey}`)}
+                        <KeyboardArrowDownIcon aria-hidden sx={chevronSx(isOpen)} />
+                      </Box>
+                      {renderPopper(
+                        group.key,
+                        group.key === 'colleges' ? (
+                          <CollegesMegaMenu columns={group.columns} aside={group.aside} footer={group.footer} pathname={pathname} onNavigate={handleMenuClose} />
+                        ) : (
+                          <MegaMenuPanel
+                            label={t(`nav.${group.labelKey}`)}
+                            columns={group.columns}
+                            aside={group.aside}
+                            footer={group.footer}
+                            variant={group.variant}
+                            pathname={pathname}
+                            onNavigate={handleMenuClose}
+                          />
+                        ),
+                      )}
+                    </Box>
+                  );
+                })}
 
-            {/* Spacer for mobile */}
-            <Box sx={{ flexGrow: 1, display: { xs: 'block', md: 'none' } }} />
+                <Box component={Link} href={TOOLS_HREF} aria-current={toolsActive ? 'page' : undefined} sx={{ ...navItemSx(toolsActive, false), ...hideBelowCompact }}>
+                  {t('header.freeTools')}
+                </Box>
 
-            {/* ── Search: an icon that opens the field in the header (laptops) or full screen (phones) ── */}
-            {!inlineSearch && (
-              <Tooltip title="Search (Ctrl K)" arrow>
+                {/* 900 to 1059px: Counseling, About and Free Tools move in here. */}
+                <Box
+                  component="button"
+                  type="button"
+                  ref={(el: HTMLButtonElement | null) => { triggerRefs.current[MORE_KEY] = el; }}
+                  aria-expanded={openMenu?.key === MORE_KEY}
+                  aria-controls={`nav-panel-${MORE_KEY}`}
+                  onClick={(e: React.MouseEvent<HTMLElement>) => (openMenu?.key === MORE_KEY ? handleMenuClose() : handleMenuOpen(MORE_KEY, e))}
+                  sx={{ ...navItemSx(moreActive, openMenu?.key === MORE_KEY), [fromTier('compact')]: { display: 'none' } }}
+                >
+                  {t('header.more')}
+                  <KeyboardArrowDownIcon aria-hidden sx={chevronSx(openMenu?.key === MORE_KEY)} />
+                </Box>
+                {renderPopper(MORE_KEY, morePanel)}
+              </Box>
+
+              {inlineSearch && <InlineSearch onClose={closeInlineSearch} />}
+
+              {!inlineSearch && (
                 <IconButton
                   ref={searchButtonRef}
-                  color="inherit"
                   onClick={openSearch}
                   onPointerEnter={preloadSearch}
                   onFocus={preloadSearch}
-                  aria-label="Search"
+                  aria-label={t('header.search')}
+                  title={`${t('header.search')} (Ctrl K)`}
                   aria-keyshortcuts="Control+K Meta+K"
-                  sx={{
-                    width: 44,
-                    height: 44,
-                    flexShrink: 0,
-                    borderRadius: '50%',
-                    mr: 0.5,
-                    '&:hover': { bgcolor: 'action.hover' },
-                    '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main' },
-                  }}
+                  sx={iconButtonSx}
                 >
                   <SearchIcon sx={{ fontSize: 22 }} />
                 </IconButton>
-              </Tooltip>
-            )}
+              )}
 
-            {/* My Enrollment (enrolled students) */}
-            {isEnrolled && (
-              <Button
-                component={Link}
-                href="/my-enrollment"
-                size="small"
-                sx={{
-                  display: { xs: 'none', md: 'inline-flex' },
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  fontSize: '0.875rem',
-                  px: 2,
-                  mr: 0.5,
-                  textTransform: 'none',
-                  color: 'white',
-                  opacity: pathname === '/my-enrollment' ? 1 : 0.8,
-                  '&:hover': { bgcolor: 'rgba(255,255,255,0.1)', opacity: 1 },
-                }}
-              >
-                My Enrollment
-              </Button>
-            )}
+              {hs.secondary && SecondaryIcon && (
+                <Box
+                  component={Link}
+                  href={hs.secondary.href as '/demo-class'}
+                  title={secondaryLabel}
+                  aria-label={secondaryLabel}
+                  aria-current={isCurrent(pathname, hs.secondary.href) ? 'page' : undefined}
+                  sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 1,
+                    height: 44,
+                    minWidth: 44,
+                    px: '11px',
+                    flexShrink: 0,
+                    boxSizing: 'border-box',
+                    border: `1px solid ${outlineBorder}`,
+                    borderRadius: `${tk.radius}px`,
+                    color: ink,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    whiteSpace: 'nowrap',
+                    textDecoration: 'none',
+                    transition: 'border-color 150ms ease',
+                    '&:hover': { borderColor: tk.gold500 },
+                    ...focus,
+                    [fromTier('full')]: { px: '14px' },
+                  }}
+                >
+                  <SecondaryIcon aria-hidden sx={{ fontSize: 20 }} />
+                  <Box component="span" sx={{ display: 'none', [fromTier('full')]: { display: 'inline' } }}>
+                    {secondaryLabel}
+                  </Box>
+                </Box>
+              )}
 
-            {/* CTA */}
-            {isApplyPage ? (
-              <Button
-                component={Link}
-                href="/contact"
-                variant="outlined"
-                size="small"
-                startIcon={<HelpOutlineIcon sx={{ fontSize: { xs: 16, md: 18 } }} />}
-                sx={{
-                  borderRadius: '6px',
-                  fontWeight: 600,
-                  fontSize: { xs: '0.75rem', md: '0.875rem' },
-                  px: { xs: 1.5, md: 2.5 },
-                  mr: 1,
-                  textTransform: 'none',
-                  color: 'white',
-                  borderColor: 'rgba(255,255,255,0.6)',
-                  '&:hover': { borderColor: 'white', bgcolor: 'rgba(255,255,255,0.1)' },
-                }}
-              >
-                {t('header.needHelp')}
-              </Button>
-            ) : (
-              <HeaderCtaPill
-                status={appStatus}
-                demo={demoCta ? { href: demoCta.href, label: demoCta.label === 'myDemo' ? t('header.myDemo') : t('header.freeDemo') } : null}
-                primary={{ label: ctaConfig.label, href: ctaConfig.href, onClick: goToApp }}
-              />
-            )}
+              {renderPrimary(
+                { ...primarySx, ml: 0.5 },
+                <>
+                  <StatusDotMark dot={hs.dot} />
+                  {labels.full === labels.compact ? (
+                    t(`header.${labels.full}`)
+                  ) : (
+                    <>
+                      <Box component="span" sx={{ [fromTier('full')]: { display: 'none' } }}>{t(`header.${labels.compact}`)}</Box>
+                      <Box component="span" sx={{ display: 'none', [fromTier('full')]: { display: 'inline' } }}>{t(`header.${labels.full}`)}</Box>
+                    </>
+                  )}
+                  <PrimaryIcon kind={hs.primary.kind} size={18} />
+                </>,
+              )}
 
-            {/* Desktop: Notifications + Auth */}
-            <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 0.5 }}>
-              <UserNotificationBell />
-              <AuthButton />
+              <UserNotificationBell tone={tone} />
+              <AuthButton tone={tone} goldRing={hs.goldRing} />
             </Box>
 
-            {/* Mobile: Hamburger */}
-            <Box sx={{ display: { xs: 'block', md: 'none' } }}>
+            {/* ── Phone bar: wordmark, search, short primary, menu ── */}
+            <Box sx={{ display: { xs: 'flex', md: 'none' }, alignItems: 'center', gap: 0.5, height: 56, pl: 2, pr: 1 }}>
+              <Box
+                component={Link}
+                href="/"
+                aria-label="Neram Classes home"
+                sx={{ display: 'flex', flexShrink: 0, color: ink, textDecoration: 'none', borderRadius: `${tk.radius}px`, ...focus }}
+              >
+                <BrandWordmark size="sm" tone={tone} />
+              </Box>
+              <Box sx={{ flex: 1 }} />
+              <IconButton onClick={() => setSearchOpen(true)} onPointerEnter={preloadSearch} aria-label={t('header.search')} sx={iconButtonSx}>
+                <SearchIcon sx={{ fontSize: 22 }} />
+              </IconButton>
+              {renderPrimary(
+                { ...primarySx, px: 1.75, gap: 0.75 },
+                <>
+                  <StatusDotMark dot={hs.dot} />
+                  {t(`header.${labels.short}`)}
+                </>,
+              )}
               <IconButton
-                edge="end"
-                color="inherit"
                 aria-label={t('header.openMenu')}
-                onClick={toggleMobileMenu}
-                sx={{ p: 1.5 }}
+                aria-expanded={mobileMenuOpen}
+                onClick={() => setMobileMenuOpen(true)}
+                sx={iconButtonSx}
               >
                 <MenuIcon />
               </IconButton>
             </Box>
-          </Toolbar>
+          </Box>
+        </ThemeProvider>
+      </AppBar>
+
+      {/* ── Phone drawer: account, actions, nav, language ── */}
+      <SwipeableDrawer
+        anchor="right"
+        open={mobileMenuOpen}
+        onOpen={() => setMobileMenuOpen(true)}
+        onClose={closeDrawer}
+        PaperProps={{ sx: { width: 'min(380px, 100vw)', bgcolor: tk.surface, color: tk.ink, backgroundImage: 'none' } }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 56, pl: 2, pr: 1, borderBottom: `1px solid ${tk.line}` }}>
+          <BrandWordmark size="sm" tone="light" />
+          <IconButton onClick={closeDrawer} aria-label={t('header.closeMenu')} sx={{ ...iconButtonSx, color: tk.ink, '&:hover': { bgcolor: tk.surfaceHover } }}>
+            <CloseIcon />
+          </IconButton>
         </Box>
 
-
-        {/* ── Mobile Navigation Drawer ── */}
-        <SwipeableDrawer
-          anchor="right"
-          open={mobileMenuOpen}
-          onOpen={() => setMobileMenuOpen(true)}
-          onClose={toggleMobileMenu}
-          PaperProps={{ sx: { width: 280 } }}
-        >
-          {/* Drawer Header */}
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              justifyContent: 'space-between',
-              px: 2,
-              py: 1.5,
-            }}
-          >
-            <BrandWordmark size="sm" />
-            <IconButton onClick={toggleMobileMenu} aria-label={t('header.closeMenu')}>
-              <CloseIcon />
-            </IconButton>
-          </Box>
-          <Divider />
-
-          {/* Search */}
-          <ListItemButton
-            onClick={() => { setMobileMenuOpen(false); setSearchOpen(true); }}
-            sx={{ py: 1.5 }}
-          >
-            <ListItemIcon sx={{ minWidth: 36 }}>
-              <SearchIcon sx={{ fontSize: 20 }} />
-            </ListItemIcon>
-            <ListItemText primary="Search" primaryTypographyProps={{ fontWeight: 400 }} />
-          </ListItemButton>
-
-          {/* Home (when not on homepage) */}
-          {pathname !== '/' && (
-            <ListItemButton
-              component={Link}
-              href="/"
-              onClick={toggleMobileMenu}
-              sx={{ py: 1.5 }}
+        {/* Account card first, then the two actions full width */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, p: 2, bgcolor: tk.ground, borderBottom: `1px solid ${tk.line}` }}>
+          {user ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <AvatarRing name={user.name || user.email || 'User'} avatar={user.avatar} goldRing={hs.goldRing} tone="light" />
+              <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }}>
+                <Typography sx={{ fontSize: 16, fontWeight: 700, color: tk.ink }} noWrap>
+                  {user.name || user.email}
+                </Typography>
+                {STATUS_SENTENCES[hs.key] && (
+                  <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, fontSize: 13, color: tk.inkMuted }}>
+                    <StatusDotMark dot={hs.dot} />
+                    {t(`header.${STATUS_SENTENCES[hs.key]}`)}
+                  </Typography>
+                )}
+              </Box>
+              <Box sx={{ color: tk.ink }}>
+                <UserNotificationBell tone="light" />
+              </Box>
+            </Box>
+          ) : (
+            <Box
+              component="button"
+              type="button"
+              onClick={() => { closeDrawer(); requestLogin(); }}
+              sx={{ alignSelf: 'flex-start', minHeight: 44, p: 0, border: 0, bgcolor: 'transparent', color: tk.ink, font: 'inherit', fontSize: 15, fontWeight: 600, textDecoration: 'underline', textUnderlineOffset: '3px', cursor: 'pointer', ...focus }}
             >
-              <ListItemIcon sx={{ minWidth: 36 }}>
-                <HomeRoundedIcon sx={{ fontSize: 20 }} />
-              </ListItemIcon>
-              <ListItemText primary={t('nav.home')} primaryTypographyProps={{ fontWeight: 400 }} />
-            </ListItemButton>
+              {t('header.logInToSee')}
+            </Box>
           )}
 
-          {/* Nav groups as accordion */}
-          <List sx={{ flexGrow: 1, py: 0 }}>
-            {NAV_GROUPS.map((group) => {
-              const isOpen = expandedGroup === group.key;
-              const isActive = isGroupActive(group);
-              const allLinks = groupLinks(group);
+          {renderPrimary(
+            {
+              ...primarySx,
+              display: 'flex',
+              justifyContent: 'space-between',
+              height: 'auto',
+              minHeight: 52,
+              fontSize: 16,
+              ...(ghost && { bgcolor: tk.surface, color: tk.ink, border: `1px solid ${tk.ink}` }),
+            },
+            <>
+              <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <StatusDotMark dot={hs.dot} />
+                {t(`header.${labels.full}`)}
+              </Box>
+              <PrimaryIcon kind={hs.primary.kind} size={20} />
+            </>,
+            closeDrawer,
+          )}
 
-              return (
-                <Box key={group.key}>
-                  <ListItemButton
-                    onClick={() => toggleMobileGroup(group.key)}
-                    sx={{
-                      py: 1.5,
-                      borderLeft: isActive ? '3px solid' : '3px solid transparent',
-                      borderColor: isActive ? 'primary.main' : 'transparent',
-                      bgcolor: isActive ? 'primary.50' : 'transparent',
-                    }}
-                  >
-                    <ListItemIcon sx={{ minWidth: 36 }}>
-                      {group.icon}
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={t(`nav.${group.labelKey}`)}
-                      primaryTypographyProps={{ fontWeight: isActive ? 600 : 400 }}
-                    />
-                    <KeyboardArrowDownIcon
-                      sx={{
-                        fontSize: 20,
-                        color: 'text.secondary',
-                        transition: 'transform 200ms ease',
-                        transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                      }}
-                    />
-                  </ListItemButton>
+          {hs.secondary && SecondaryIcon && (
+            <Box
+              component={Link}
+              href={hs.secondary.href as '/demo-class'}
+              onClick={closeDrawer}
+              sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 48, px: 2, boxSizing: 'border-box', border: `1px solid ${tk.ink}`, borderRadius: `${tk.radius}px`, color: tk.ink, fontSize: 15, fontWeight: 600, textDecoration: 'none', '&:hover': { bgcolor: tk.navy900, color: tk.paper, borderColor: tk.navy900 }, ...focus }}
+            >
+              <SecondaryIcon aria-hidden sx={{ fontSize: 20 }} />
+              {hs.secondary.kind === 'freeDemo' ? t('header.freeDemoClass') : secondaryLabel}
+            </Box>
+          )}
 
-                  <Collapse in={isOpen} timeout={200}>
-                    <List disablePadding sx={{ bgcolor: 'grey.50' }}>
-                      {allLinks.map((link) => {
-                        const isLinkActive =
-                          pathname === link.href ||
-                          (link.href !== '/' && pathname.startsWith(link.href));
-                        return (
-                          <ListItemButton
-                            key={`${link.href}|${link.label}`}
-                            component={Link}
-                            href={link.href as any}
-                            onClick={toggleMobileMenu}
-                            selected={isLinkActive}
-                            sx={{
-                              pl: 6.5,
-                              py: 1.25,
-                              '&.Mui-selected': {
-                                color: 'primary.main',
-                                bgcolor: 'primary.50',
-                              },
-                            }}
-                          >
-                            <ListItemText
-                              primary={
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                  <Typography variant="body2" sx={{ fontWeight: isLinkActive ? 600 : 400 }}>
-                                    {link.label}
-                                  </Typography>
-                                  {link.badge && <NavBadge label={link.badge} />}
-                                </Box>
-                              }
-                            />
-                          </ListItemButton>
-                        );
-                      })}
-                    </List>
-                  </Collapse>
-                  <Divider />
-                </Box>
-              );
-            })}
-          </List>
+          {showFeesLink && (
+            <Box
+              component={Link}
+              href="/fees"
+              onClick={closeDrawer}
+              sx={{ display: 'flex', alignItems: 'center', gap: 1, minHeight: 48, px: 2, boxSizing: 'border-box', border: `1px solid ${tk.lineStrong}`, borderRadius: `${tk.radius}px`, bgcolor: tk.surface, color: tk.ink, fontSize: 15, fontWeight: 600, textDecoration: 'none', '&:hover': { borderColor: tk.gold500 }, ...focus }}
+            >
+              <CurrencyRupeeIcon aria-hidden sx={{ fontSize: 20 }} />
+              {t('header.viewFees')}
+            </Box>
+          )}
+        </Box>
 
-          {/* Free Tools */}
+        {/* Nav groups as 52px rows */}
+        <List disablePadding sx={{ flexGrow: 1 }}>
+          {NAV_GROUPS.map((group) => {
+            const isOpen = expandedGroup === group.key;
+            const on = isGroupActive(group);
+            return (
+              <Box key={group.key} sx={{ borderBottom: `1px solid ${tk.line}` }}>
+                <ListItemButton
+                  onClick={() => toggleMobileGroup(group.key)}
+                  aria-expanded={isOpen}
+                  sx={{ minHeight: 52, px: 2, gap: 1.5, boxShadow: on ? `inset 3px 0 0 ${tk.gold500}` : 'none' }}
+                >
+                  <Box component="span" sx={{ display: 'flex', color: tk.inkMuted }}>{group.icon}</Box>
+                  <Box component="span" sx={{ flex: 1, fontSize: 16, fontWeight: 600, color: tk.ink }}>{t(`nav.${group.labelKey}`)}</Box>
+                  <KeyboardArrowDownIcon aria-hidden sx={{ ...chevronSx(isOpen), fontSize: 20, color: tk.inkMuted }} />
+                </ListItemButton>
+
+                <Collapse in={isOpen} timeout={reduceMotion ? 0 : 200}>
+                  <List disablePadding sx={{ bgcolor: tk.ground, pb: 1 }}>
+                    {groupLinks(group).map((link) => {
+                      const linkOn = pathname === link.href || (link.href !== '/' && pathname.startsWith(link.href));
+                      return (
+                        <ListItemButton
+                          key={`${link.href}|${link.label}`}
+                          component={Link}
+                          href={link.href as any}
+                          onClick={closeDrawer}
+                          selected={linkOn}
+                          sx={{
+                            minHeight: 44,
+                            pl: 6.5,
+                            gap: 1,
+                            fontSize: 15,
+                            color: tk.ink,
+                            fontWeight: linkOn ? 700 : 400,
+                            '&.Mui-selected, &.Mui-selected:hover': { bgcolor: tk.surfaceHover },
+                          }}
+                        >
+                          {link.label}
+                          {link.badge && <NavBadge label={link.badge} />}
+                        </ListItemButton>
+                      );
+                    })}
+                  </List>
+                </Collapse>
+              </Box>
+            );
+          })}
+
           <ListItemButton
             component={Link}
-            href="/tools"
-            onClick={toggleMobileMenu}
-            selected={pathname === '/tools' || pathname.startsWith('/tools/')}
-            sx={{
-              py: 1.5,
-              borderLeft: pathname === '/tools' || pathname.startsWith('/tools/') ? '3px solid' : '3px solid transparent',
-              borderColor: pathname === '/tools' || pathname.startsWith('/tools/') ? 'primary.main' : 'transparent',
-              bgcolor: pathname === '/tools' || pathname.startsWith('/tools/') ? 'primary.50' : 'transparent',
-              '&.Mui-selected': { color: 'primary.main', bgcolor: 'primary.50' },
-            }}
+            href={TOOLS_HREF}
+            onClick={closeDrawer}
+            selected={toolsActive}
+            sx={{ minHeight: 52, px: 2, gap: 1.5, borderBottom: `1px solid ${tk.line}`, boxShadow: toolsActive ? `inset 3px 0 0 ${tk.gold500}` : 'none', '&.Mui-selected, &.Mui-selected:hover': { bgcolor: tk.surface } }}
           >
-            <ListItemIcon sx={{ minWidth: 36 }}>
-              <TrendingUpIcon fontSize="small" />
-            </ListItemIcon>
-            <ListItemText
-              primary="Free Tools"
-              primaryTypographyProps={{ fontWeight: pathname === '/tools' || pathname.startsWith('/tools/') ? 600 : 400 }}
-            />
+            <ConstructionOutlinedIcon aria-hidden sx={{ fontSize: 20, color: tk.inkMuted }} />
+            <Box component="span" sx={{ flex: 1, fontSize: 16, fontWeight: 600, color: tk.ink }}>{t('header.freeTools')}</Box>
+            <ChevronRightIcon aria-hidden sx={{ fontSize: 20, color: tk.inkMuted }} />
           </ListItemButton>
-          <Divider />
+        </List>
 
-          {/* My Enrollment */}
-          {isEnrolled && (
-            <Box sx={{ px: 2, pb: 1 }}>
-              <Button
-                component={Link}
-                href="/my-enrollment"
-                variant="outlined"
-                fullWidth
-                onClick={toggleMobileMenu}
-                sx={{ borderRadius: '6px', fontWeight: 600, textTransform: 'none', py: 1 }}
-              >
-                My Enrollment
-              </Button>
-            </Box>
-          )}
-
-          {/* Mobile CTA */}
-          {!isApplyPage && (
-            <Box sx={{ px: 2, pb: 1.5 }}>
-              {demoCta && (
-                <Button
-                  component={Link}
-                  href={demoCta.href}
-                  variant="outlined"
-                  fullWidth
-                  onClick={toggleMobileMenu}
-                  startIcon={<VideocamOutlinedIcon />}
-                  sx={{
-                    mb: 1,
-                    minHeight: 48,
-                    borderRadius: '6px',
-                    fontWeight: 600,
-                    textTransform: 'none',
-                  }}
-                >
-                  {demoCta.label === 'myDemo' ? t('header.myDemo') : t('header.freeDemoClass')}
-                </Button>
-              )}
-              {ctaConfig.href ? (
-                <Button
-                  component={Link}
-                  href={ctaConfig.href}
-                  variant={ctaConfig.variant}
-                  color={appStatus ? undefined : 'secondary'}
-                  fullWidth
-                  onClick={toggleMobileMenu}
-                  sx={{
-                    borderRadius: '6px',
-                    fontWeight: 600,
-                    textTransform: 'none',
-                    py: 1.2,
-                    ...(appStatus === 'approved'
-                      ? { bgcolor: '#2E7D32', color: '#fff', '&:hover': { bgcolor: '#1B5E20' } }
-                      : appStatus === 'draft'
-                        ? { borderColor: 'primary.main', color: 'primary.main' }
-                        : appStatus
-                          ? { borderColor: '#1976D2', color: '#1976D2' }
-                          : {}),
-                  }}
-                >
-                  {ctaConfig.label}
-                </Button>
-              ) : (
-                <Button
-                  onClick={() => { toggleMobileMenu(); goToApp(); }}
-                  variant={ctaConfig.variant}
-                  fullWidth
-                  sx={{
-                    borderRadius: '6px',
-                    fontWeight: 600,
-                    textTransform: 'none',
-                    py: 1.2,
-                    bgcolor: '#2E7D32',
-                    color: '#fff',
-                    '&:hover': { bgcolor: '#1B5E20' },
-                  }}
-                >
-                  {ctaConfig.label}
-                </Button>
-              )}
-              {showFeesLink && (
-                <Button
-                  component={Link}
-                  href="/fees"
-                  variant="outlined"
-                  fullWidth
-                  onClick={toggleMobileMenu}
-                  startIcon={<CurrencyRupeeIcon />}
-                  sx={{
-                    mt: 1,
-                    minHeight: 48,
-                    borderRadius: '6px',
-                    fontWeight: 600,
-                    textTransform: 'none',
-                  }}
-                >
-                  {t('header.viewFees')}
-                </Button>
-              )}
-            </Box>
-          )}
-          <Divider />
-
-          {/* Auth */}
-          <Box
-            sx={{
-              px: 2,
-              py: 2,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-              '& .MuiButton-root': { ml: 0, flex: 1 },
-            }}
-          >
-            <UserNotificationBell />
-            <AuthButton />
-          </Box>
-          <Divider />
-
-          {/* Language */}
-          <Box sx={{ px: 2, py: 2 }}>
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              sx={{ mb: 1, display: 'block', fontWeight: 500 }}
-            >
-              {t('header.language')}
-            </Typography>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-              {locales.map((loc) => (
-                <Button
+        {/* Language, then sign out */}
+        <Box sx={{ px: 2, py: 1.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Typography component="span" sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: 14, color: tk.inkMuted }}>
+            <LanguageIcon aria-hidden sx={{ fontSize: 20 }} />
+            {t('header.language')}
+          </Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+            {locales.map((loc) => {
+              const on = loc === locale;
+              return (
+                <Box
                   key={loc}
-                  size="small"
-                  variant={loc === locale ? 'contained' : 'outlined'}
-                  onClick={() => { handleLocaleChange(loc); toggleMobileMenu(); }}
+                  component="button"
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => { handleLocaleChange(loc); closeDrawer(); }}
                   sx={{
-                    minWidth: 0,
-                    minHeight: 36,
-                    px: 1.5,
-                    fontSize: '0.75rem',
-                    borderRadius: '6px',
+                    minHeight: 44,
+                    px: 1.75,
+                    borderRadius: `${tk.radiusPill}px`,
+                    border: `1px solid ${on ? tk.navy900 : tk.lineStrong}`,
+                    bgcolor: on ? tk.navy900 : tk.surface,
+                    color: on ? tk.paper : tk.ink,
+                    font: 'inherit',
+                    fontSize: 14,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    ...focus,
                   }}
                 >
                   {localeLabels[loc]}
-                </Button>
-              ))}
-            </Box>
+                </Box>
+              );
+            })}
           </Box>
-        </SwipeableDrawer>
-      </AppBar>
+          {user && (
+            <Box
+              component="button"
+              type="button"
+              onClick={() => { void signOut(); }}
+              disabled={signingOut}
+              sx={{ alignSelf: 'flex-start', minHeight: 44, px: 0, border: 0, bgcolor: 'transparent', color: tk.inkMuted, font: 'inherit', fontSize: 14, fontWeight: 600, cursor: 'pointer', ...focus }}
+            >
+              {t('header.signOut')}
+            </Box>
+          )}
+        </Box>
+      </SwipeableDrawer>
 
-      {/* Laptops: dim and lightly blur the page under an open menu. It starts below
-          the header, so the header stays sharp and another menu is one click away. */}
+      {/* Laptops: dim the page under an open menu. It starts below the header, so
+          the header stays sharp and another menu is one click away. */}
       <Fade in={!!openMenu} timeout={reduceMotion ? 0 : { enter: 200, exit: 150 }} unmountOnExit>
         <Box
           data-testid="nav-scrim"
@@ -1158,19 +896,14 @@ export default function Header() {
             right: 0,
             bottom: 0,
             zIndex: (theme) => theme.zIndex.appBar - 1,
-            bgcolor: (theme) => alpha(theme.palette.grey[900], 0.4),
-            backdropFilter: 'blur(3px)',
-            WebkitBackdropFilter: 'blur(3px)',
+            bgcolor: 'rgba(6,13,31,0.4)',
           }}
         />
       </Fade>
 
-      {/* Spacer */}
       {searchMounted && <SearchDialog open={searchOpen} onClose={() => setSearchOpen(false)} />}
-      <Toolbar
-        disableGutters
-        sx={{ minHeight: { xs: 56, md: 64 }, mt: 'var(--broadcast-banner-height, 0px)' }}
-      />
+      {/* Spacer under the fixed bar */}
+      <Box aria-hidden sx={{ height: { xs: 56, md: 64 }, mt: 'var(--broadcast-banner-height, 0px)' }} />
     </>
   );
 }

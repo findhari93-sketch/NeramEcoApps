@@ -1,27 +1,35 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import {
-  Box,
-  Container,
-  Typography,
-  Grid,
-  Card,
-  CardContent,
-  Button,
-  Chip,
-  Skeleton,
-} from '@neram/ui';
-import Link from 'next/link';
+import { Box, Typography, Skeleton } from '@neram/ui';
+import PaymentsOutlinedIcon from '@mui/icons-material/PaymentsOutlined';
+import HealthAndSafetyOutlinedIcon from '@mui/icons-material/HealthAndSafetyOutlined';
+import MenuBookOutlinedIcon from '@mui/icons-material/MenuBookOutlined';
+import HomeWorkOutlinedIcon from '@mui/icons-material/HomeWorkOutlined';
+import TrendingUpOutlinedIcon from '@mui/icons-material/TrendingUpOutlined';
+import CelebrationOutlinedIcon from '@mui/icons-material/CelebrationOutlined';
+import WorkOutlineOutlinedIcon from '@mui/icons-material/WorkOutlineOutlined';
+import ErrorOutlineOutlinedIcon from '@mui/icons-material/ErrorOutlineOutlined';
 import type { JobPosting, EmploymentType } from '@neram/database';
+import {
+  PageHero,
+  Section,
+  FeatureCard,
+  CheckList,
+  EmptyState,
+  Pill,
+  CtaButton,
+  CtaBand,
+  tokens as t,
+} from '@/design-system';
 
 const benefits = [
-  { icon: '\uD83D\uDCB0', title: 'Competitive Salary', desc: 'Industry-leading compensation packages' },
-  { icon: '\uD83C\uDFE5', title: 'Health Insurance', desc: 'Comprehensive health coverage for you and family' },
-  { icon: '\uD83D\uDCDA', title: 'Learning Budget', desc: 'Annual allowance for courses and certifications' },
-  { icon: '\uD83C\uDFE0', title: 'Flexible Work', desc: 'Work from home options available' },
-  { icon: '\uD83C\uDFAF', title: 'Growth Path', desc: 'Clear career progression opportunities' },
-  { icon: '\uD83C\uDF89', title: 'Team Events', desc: 'Regular team outings and celebrations' },
+  { icon: <PaymentsOutlinedIcon />, title: 'Competitive Salary', desc: 'Industry-leading compensation packages' },
+  { icon: <HealthAndSafetyOutlinedIcon />, title: 'Health Insurance', desc: 'Comprehensive health coverage for you and family' },
+  { icon: <MenuBookOutlinedIcon />, title: 'Learning Budget', desc: 'Annual allowance for courses and certifications' },
+  { icon: <HomeWorkOutlinedIcon />, title: 'Flexible Work', desc: 'Work from home options available' },
+  { icon: <TrendingUpOutlinedIcon />, title: 'Growth Path', desc: 'Clear career progression opportunities' },
+  { icon: <CelebrationOutlinedIcon />, title: 'Team Events', desc: 'Regular team outings and celebrations' },
 ];
 
 const values = [
@@ -45,25 +53,68 @@ function employmentTypeLabel(type: EmploymentType): string {
   return filterLabels[type] || type;
 }
 
-function JobCardSkeleton() {
+const autoGrid = (min: number) => ({
+  display: 'grid',
+  gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${min}px), 1fr))`,
+  gap: 2,
+});
+
+const cardSx = {
+  bgcolor: t.surface,
+  border: `1px solid ${t.line}`,
+  borderRadius: `${t.radius}px`,
+  p: { xs: 2.5, sm: 3 },
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 1.5,
+  height: '100%',
+  boxSizing: 'border-box',
+  color: t.ink,
+} as const;
+
+/** A small meta tag on a job card (department, location, type). */
+function Tag({ children, strong = false }: { children: React.ReactNode; strong?: boolean }) {
   return (
-    <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <CardContent sx={{ flexGrow: 1, p: { xs: 3, md: 4 } }}>
-        <Skeleton variant="text" width="70%" height={32} sx={{ mb: 1 }} />
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
-          <Skeleton variant="rounded" width={80} height={24} />
-          <Skeleton variant="rounded" width={100} height={24} />
-          <Skeleton variant="rounded" width={70} height={24} />
-        </Box>
-        <Skeleton variant="text" width="100%" />
-        <Skeleton variant="text" width="90%" />
-        <Skeleton variant="text" width="60%" sx={{ mb: 2 }} />
-        <Skeleton variant="rounded" width="100%" height={40} />
-      </CardContent>
-    </Card>
+    <Box
+      component="li"
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        border: `1px solid ${strong ? t.ink : t.line}`,
+        borderRadius: `${t.radiusPill}px`,
+        px: 1.25,
+        py: '3px',
+        fontSize: '0.8125rem',
+        fontWeight: strong ? 700 : 500,
+        color: strong ? t.ink : t.inkMuted,
+        lineHeight: 1.5,
+      }}
+    >
+      {children}
+    </Box>
   );
 }
 
+function JobCardSkeleton() {
+  return (
+    <Box sx={cardSx} aria-hidden>
+      <Skeleton variant="text" width="70%" height={32} />
+      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+        <Skeleton variant="rounded" width={80} height={24} />
+        <Skeleton variant="rounded" width={100} height={24} />
+        <Skeleton variant="rounded" width={70} height={24} />
+      </Box>
+      <Box>
+        <Skeleton variant="text" width="100%" />
+        <Skeleton variant="text" width="90%" />
+        <Skeleton variant="text" width="60%" />
+      </Box>
+      <Skeleton variant="rounded" width="100%" height={48} />
+    </Box>
+  );
+}
+
+/** T9 company page: dark hero, values, benefits, openings, closing band. */
 export default function CareersPageContent() {
   const [jobs, setJobs] = useState<JobPosting[]>([]);
   const [loading, setLoading] = useState(true);
@@ -99,249 +150,135 @@ export default function CareersPageContent() {
 
   return (
     <Box>
-      {/* Hero Section */}
-      <Box
-        sx={{
-          py: { xs: 8, md: 12 },
-          background: 'linear-gradient(135deg, #7b1fa2 0%, #4a148c 100%)',
-          color: 'white',
-        }}
+      <PageHero
+        breadcrumb={[{ name: 'Home', href: '/' }, { name: 'Careers' }]}
+        eyebrow="Careers"
+        title="Shape the Future of Education"
+        lede="Join Neram Classes and help thousands of students achieve their dream of becoming architects. We're building the best team in education."
+        actions={<CtaButton href="#openings">View Open Positions</CtaButton>}
+      />
+
+      <Section
+        id="values"
+        rule={false}
+        gap={3.5}
+        header={{ align: 'start', title: 'Our Values', lede: 'What drives us every day' }}
       >
-        <Container maxWidth="lg">
-          <Grid container spacing={4} alignItems="center">
-            <Grid item xs={12} md={8}>
-              <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2.5rem', md: '3.5rem' } }}>
-                Shape the Future of Education
-              </Typography>
-              <Typography variant="h5" sx={{ mb: 4, opacity: 0.9 }}>
-                Join Neram Classes and help thousands of students achieve their dream of becoming architects.
-                We&apos;re building the best team in education.
-              </Typography>
-              <Button
-                variant="contained"
-                size="large"
-                href="#openings"
-                sx={{ bgcolor: 'white', color: 'secondary.main', '&:hover': { bgcolor: 'grey.100' } }}
-              >
-                View Open Positions
-              </Button>
-            </Grid>
-          </Grid>
-        </Container>
-      </Box>
+        <CheckList
+          titleAs="h3"
+          columnMin={420}
+          items={values.map((value) => ({ title: value.title, body: value.desc }))}
+        />
+      </Section>
 
-      {/* Our Values Section */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
-        <Container maxWidth="lg">
-          <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 2, fontWeight: 700 }}>
-            Our Values
-          </Typography>
-          <Typography variant="h6" align="center" color="text.secondary" sx={{ mb: 6 }}>
-            What drives us every day
-          </Typography>
+      <Section
+        id="benefits"
+        tone="white"
+        gap={3.5}
+        header={{ align: 'start', title: 'Why Work With Us', lede: 'We take care of our team' }}
+      >
+        <Box sx={autoGrid(300)}>
+          {benefits.map((benefit) => (
+            <FeatureCard key={benefit.title} icon={benefit.icon} title={benefit.title} body={benefit.desc} />
+          ))}
+        </Box>
+      </Section>
 
-          <Grid container spacing={4}>
-            {values.map((value, index) => (
-              <Grid item xs={12} sm={6} md={3} key={index}>
-                <Card sx={{ height: '100%', textAlign: 'center', p: 3 }}>
-                  <Typography variant="h5" gutterBottom sx={{ fontWeight: 600, color: 'secondary.main' }}>
-                    {value.title}
-                  </Typography>
-                  <Typography variant="body2" color="text.secondary">
-                    {value.desc}
-                  </Typography>
-                </Card>
-              </Grid>
+      <Section
+        id="openings"
+        gap={3.5}
+        header={{ align: 'start', title: 'Open Positions', lede: 'Find your next opportunity' }}
+        sx={{ scrollMarginTop: { xs: 56, md: 64 } }}
+      >
+        {/* Filter pills */}
+        {!loading && jobs.length > 0 && (
+          <Box role="group" aria-label="Filter by employment type" sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <Pill selected={filter === 'all'} onClick={() => setFilter('all')}>
+              All
+            </Pill>
+            {(['full_time', 'part_time', 'contract', 'internship'] as EmploymentType[]).map((type) =>
+              availableTypes.has(type) ? (
+                <Pill key={type} selected={filter === type} onClick={() => setFilter(type)}>
+                  {filterLabels[type]}
+                </Pill>
+              ) : null
+            )}
+          </Box>
+        )}
+
+        {/* Loading skeletons */}
+        {loading && (
+          <Box sx={autoGrid(420)} aria-busy="true" aria-label="Loading open positions">
+            {[1, 2, 3, 4].map((i) => (
+              <JobCardSkeleton key={i} />
             ))}
-          </Grid>
-        </Container>
-      </Box>
+          </Box>
+        )}
 
-      {/* Benefits Section */}
-      <Box sx={{ py: { xs: 6, md: 10 }, bgcolor: 'grey.50' }}>
-        <Container maxWidth="lg">
-          <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 2, fontWeight: 700 }}>
-            Why Work With Us
-          </Typography>
-          <Typography variant="h6" align="center" color="text.secondary" sx={{ mb: 6 }}>
-            We take care of our team
-          </Typography>
-
-          <Grid container spacing={3}>
-            {benefits.map((benefit, index) => (
-              <Grid item xs={12} sm={6} md={4} key={index}>
-                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
-                  <Typography variant="h3">{benefit.icon}</Typography>
-                  <Box>
-                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                      {benefit.title}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      {benefit.desc}
-                    </Typography>
-                  </Box>
-                </Box>
-              </Grid>
-            ))}
-          </Grid>
-        </Container>
-      </Box>
-
-      {/* Open Positions Section */}
-      <Box id="openings" sx={{ py: { xs: 6, md: 10 }, bgcolor: 'background.default' }}>
-        <Container maxWidth="lg">
-          <Typography variant="h2" component="h2" align="center" gutterBottom sx={{ mb: 2, fontWeight: 700 }}>
-            Open Positions
-          </Typography>
-          <Typography variant="h6" align="center" color="text.secondary" sx={{ mb: 4 }}>
-            Find your next opportunity
-          </Typography>
-
-          {/* Filter Chips */}
-          {!loading && jobs.length > 0 && (
-            <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1, flexWrap: 'wrap', mb: 4 }}>
-              <Chip
-                label="All"
-                color={filter === 'all' ? 'secondary' : 'default'}
-                variant={filter === 'all' ? 'filled' : 'outlined'}
-                onClick={() => setFilter('all')}
-                sx={{ minHeight: 40, cursor: 'pointer' }}
-              />
-              {(['full_time', 'part_time', 'contract', 'internship'] as EmploymentType[]).map((type) =>
-                availableTypes.has(type) ? (
-                  <Chip
-                    key={type}
-                    label={filterLabels[type]}
-                    color={filter === type ? 'secondary' : 'default'}
-                    variant={filter === type ? 'filled' : 'outlined'}
-                    onClick={() => setFilter(type)}
-                    sx={{ minHeight: 40, cursor: 'pointer' }}
-                  />
-                ) : null
-              )}
-            </Box>
-          )}
-
-          {/* Loading Skeletons */}
-          {loading && (
-            <Grid container spacing={4}>
-              {[1, 2, 3, 4].map((i) => (
-                <Grid item xs={12} md={6} key={i}>
-                  <JobCardSkeleton />
-                </Grid>
-              ))}
-            </Grid>
-          )}
-
-          {/* Error */}
-          {!loading && error && (
-            <Box sx={{ textAlign: 'center', py: 6 }}>
-              <Typography color="error" sx={{ mb: 2 }}>{error}</Typography>
-              <Button variant="outlined" onClick={() => window.location.reload()}>
+        {/* Error */}
+        {!loading && error && (
+          <EmptyState
+            icon={<ErrorOutlineOutlinedIcon />}
+            title={error}
+            action={
+              <CtaButton variant="outline" onClick={() => window.location.reload()} endIcon={null}>
                 Retry
-              </Button>
-            </Box>
-          )}
+              </CtaButton>
+            }
+          />
+        )}
 
-          {/* No Jobs */}
-          {!loading && !error && filteredJobs.length === 0 && (
-            <Box sx={{ textAlign: 'center', py: 8 }}>
-              <Typography variant="h6" color="text.secondary" sx={{ mb: 1 }}>
-                {filter !== 'all'
-                  ? `No ${filterLabels[filter].toLowerCase()} positions available at the moment.`
-                  : 'No open positions at the moment.'}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                Send your resume to careers@neramclasses.com and we&apos;ll keep you in mind for future opportunities.
-              </Typography>
-            </Box>
-          )}
+        {/* No jobs */}
+        {!loading && !error && filteredJobs.length === 0 && (
+          <EmptyState
+            icon={<WorkOutlineOutlinedIcon />}
+            title={
+              filter !== 'all'
+                ? `No ${filterLabels[filter].toLowerCase()} positions available at the moment.`
+                : 'No open positions at the moment.'
+            }
+            body="Send your resume to careers@neramclasses.com and we'll keep you in mind for future opportunities."
+          />
+        )}
 
-          {/* Job Cards */}
-          {!loading && !error && filteredJobs.length > 0 && (
-            <Grid container spacing={4}>
-              {filteredJobs.map((job) => (
-                <Grid item xs={12} md={6} key={job.id}>
-                  <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', transition: 'box-shadow 0.2s', '&:hover': { boxShadow: 6 } }}>
-                    <CardContent sx={{ flexGrow: 1, p: { xs: 3, md: 4 } }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                        <Typography variant="h5" sx={{ fontWeight: 600 }}>
-                          {job.title}
-                        </Typography>
-                      </Box>
+        {/* Job cards */}
+        {!loading && !error && filteredJobs.length > 0 && (
+          <Box sx={autoGrid(420)}>
+            {filteredJobs.map((job) => (
+              <Box key={job.id} component="article" sx={{ ...cardSx, transition: 'border-color 150ms ease', '&:hover': { borderColor: t.gold500 } }}>
+                <Typography component="h3" sx={{ m: 0, fontSize: '1.25rem', fontWeight: 700, lineHeight: 1.3 }}>
+                  {job.title}
+                </Typography>
 
-                      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
-                        <Chip label={job.department} size="small" color="secondary" />
-                        <Chip label={job.location} size="small" variant="outlined" />
-                        <Chip label={employmentTypeLabel(job.employment_type)} size="small" variant="outlined" />
-                        {job.experience_required && (
-                          <Chip label={job.experience_required} size="small" variant="outlined" />
-                        )}
-                        {job.target_audience === 'college_students' && (
-                          <Chip
-                            label="Ideal for College Students"
-                            size="small"
-                            sx={{
-                              bgcolor: '#fff3e0',
-                              color: '#e65100',
-                              fontWeight: 600,
-                              border: '1px solid #ffcc80',
-                            }}
-                          />
-                        )}
-                      </Box>
+                <Box component="ul" sx={{ m: 0, p: 0, listStyle: 'none', display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                  <Tag strong>{job.department}</Tag>
+                  <Tag>{job.location}</Tag>
+                  <Tag>{employmentTypeLabel(job.employment_type)}</Tag>
+                  {job.experience_required && <Tag>{job.experience_required}</Tag>}
+                  {job.target_audience === 'college_students' && <Tag strong>Ideal for College Students</Tag>}
+                </Box>
 
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                        {job.description.length > 150
-                          ? `${job.description.substring(0, 150)}...`
-                          : job.description}
-                      </Typography>
+                <Typography component="p" sx={{ m: 0, flex: 1, fontSize: '1rem', lineHeight: 1.55, color: t.inkMuted }}>
+                  {job.description.length > 150
+                    ? `${job.description.substring(0, 150)}...`
+                    : job.description}
+                </Typography>
 
-                      <Button
-                        component={Link}
-                        href={`/careers/${job.slug}`}
-                        variant="outlined"
-                        color="secondary"
-                        fullWidth
-                        sx={{ mt: 'auto', minHeight: 48 }}
-                      >
-                        View Details & Apply
-                      </Button>
-                    </CardContent>
-                  </Card>
-                </Grid>
-              ))}
-            </Grid>
-          )}
-        </Container>
-      </Box>
+                <CtaButton variant="outline" href={`/careers/${job.slug}`} fullWidth>
+                  View Details & Apply
+                </CtaButton>
+              </Box>
+            ))}
+          </Box>
+        )}
+      </Section>
 
-      {/* CTA Section */}
-      <Box
-        sx={{
-          py: { xs: 6, md: 10 },
-          background: 'linear-gradient(135deg, #7b1fa2 0%, #4a148c 100%)',
-          color: 'white',
-          textAlign: 'center',
-        }}
-      >
-        <Container maxWidth="md">
-          <Typography variant="h3" component="h2" gutterBottom sx={{ fontWeight: 700 }}>
-            Don&apos;t See a Perfect Fit?
-          </Typography>
-          <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>
-            We&apos;re always looking for talented individuals. Send us your resume and we&apos;ll keep you in mind for future opportunities.
-          </Typography>
-          <Button
-            variant="contained"
-            size="large"
-            href="mailto:careers@neramclasses.com"
-            sx={{ bgcolor: 'white', color: 'secondary.main', '&:hover': { bgcolor: 'grey.100' } }}
-          >
-            Send Your Resume
-          </Button>
-        </Container>
-      </Box>
+      <CtaBand
+        eyebrow="Careers"
+        title="Don't See a Perfect Fit?"
+        lede="We're always looking for talented individuals. Send us your resume and we'll keep you in mind for future opportunities."
+        actions={<CtaButton href="mailto:careers@neramclasses.com">Send Your Resume</CtaButton>}
+      />
     </Box>
   );
 }

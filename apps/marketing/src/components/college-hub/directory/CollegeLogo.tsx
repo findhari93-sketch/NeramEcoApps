@@ -1,7 +1,7 @@
 import { Box } from '@mui/material';
 import Image from 'next/image';
-import { alpha } from '@mui/material/styles';
 import { initials } from '@/lib/college-hub/format';
+import { siteTokens } from '@neram/ui/site-tokens';
 
 interface CollegeLogoProps {
   name: string;
@@ -13,7 +13,7 @@ interface CollegeLogoProps {
 }
 
 /** College logo, or an initials tile when there is none. Decorative (the name is next to it). */
-export default function CollegeLogo({ name, logoUrl, size, rank, radius = 1.5 }: CollegeLogoProps) {
+export default function CollegeLogo({ name, logoUrl, size, rank, radius = 1 }: CollegeLogoProps) {
   return (
     <Box
       aria-hidden
@@ -23,13 +23,13 @@ export default function CollegeLogo({ name, logoUrl, size, rank, radius = 1.5 }:
         width: size,
         height: size,
         borderRadius: radius,
-        bgcolor: (t) => (logoUrl ? t.palette.background.paper : alpha(t.palette.primary.main, 0.08)),
+        bgcolor: logoUrl ? siteTokens.surface : siteTokens.surfaceHover,
         border: '1px solid',
-        borderColor: (t) => alpha(t.palette.primary.main, 0.16),
+        borderColor: siteTokens.line,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        color: 'primary.main',
+        color: siteTokens.navy900,
         fontWeight: 700,
         fontSize: Math.round(size * 0.32),
         letterSpacing: '-0.01em',
@@ -53,11 +53,11 @@ export default function CollegeLogo({ name, logoUrl, size, rank, radius = 1.5 }:
             height: 22,
             px: 0.625,
             boxSizing: 'border-box',
-            borderRadius: 11,
-            bgcolor: 'grey.900',
-            color: 'common.white',
+            borderRadius: `${siteTokens.radiusPill}px`,
+            bgcolor: siteTokens.navy900,
+            color: siteTokens.paper,
             border: '2px solid',
-            borderColor: 'background.paper',
+            borderColor: siteTokens.surface,
             fontSize: 11,
             fontWeight: 700,
             display: 'flex',

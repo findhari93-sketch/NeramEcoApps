@@ -5,7 +5,6 @@ import {
   Box,
   Typography,
   IconButton,
-  Badge,
   Popover,
   List,
   ListItem,
@@ -14,8 +13,10 @@ import {
   Divider,
   CircularProgress,
 } from '@neram/ui';
+import { useTranslations } from 'next-intl';
+import { tokens as t, errorColor } from '@/design-system';
+import type { HeaderTone } from './header/header-tone';
 import NotificationsNoneIcon from '@mui/icons-material/NotificationsNone';
-import NotificationsIcon from '@mui/icons-material/Notifications';
 import { useUserNotifications } from '@neram/ui';
 import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import { useRouter } from '@/i18n/routing';
@@ -24,12 +25,12 @@ import { usePathname } from 'next/navigation';
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
 
 const EVENT_TYPE_COLORS: Record<string, string> = {
-  application_approved: '#4caf50',
-  payment_received: '#9c27b0',
-  scholarship_approved: '#4caf50',
-  scholarship_rejected: '#f44336',
-  scholarship_opened: '#2196f3',
-  scholarship_revision_requested: '#ff5722',
+  application_approved: t.statusDone,
+  payment_received: t.statusDone,
+  scholarship_approved: t.statusDone,
+  scholarship_rejected: errorColor,
+  scholarship_opened: t.statusReview,
+  scholarship_revision_requested: t.statusDraft,
 };
 
 function timeAgo(dateStr: string): string {
@@ -47,7 +48,8 @@ function timeAgo(dateStr: string): string {
   return date.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
 }
 
-export default function UserNotificationBell() {
+export default function UserNotificationBell({ tone = 'dark' }: { tone?: HeaderTone }) {
+  const tr = useTranslations('header');
   const { user } = useFirebaseAuth();
   const router = useRouter();
   const pathname = usePathname();
@@ -110,14 +112,39 @@ export default function UserNotificationBell() {
 
   return (
     <>
-      <IconButton onClick={handleOpen} size="small" sx={{ color: 'inherit', mr: 0.5 }}>
-        <Badge badgeContent={unreadCount} color="error" max={99}>
-          {unreadCount > 0 ? (
-            <NotificationsIcon sx={{ fontSize: 22 }} />
-          ) : (
-            <NotificationsNoneIcon sx={{ fontSize: 22 }} />
-          )}
-        </Badge>
+      <IconButton
+        onClick={handleOpen}
+        aria-label={unreadCount > 0 ? `${tr('notifications')} (${unreadCount})` : tr('notifications')}
+        sx={{
+          position: 'relative',
+          width: 44,
+          height: 44,
+          ml: 0.5,
+          flexShrink: 0,
+          borderRadius: `${t.radius}px`,
+          color: 'inherit',
+          '&:hover': { bgcolor: tone === 'light' ? t.surfaceHover : 'rgba(255,255,255,0.08)' },
+          '&.Mui-focusVisible': { outline: t.focusOutline, outlineOffset: 2 },
+        }}
+      >
+        <NotificationsNoneIcon sx={{ fontSize: 24 }} />
+        {unreadCount > 0 && (
+          <Box
+            component="span"
+            aria-hidden
+            sx={{
+              position: 'absolute',
+              top: 9,
+              right: 10,
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              bgcolor: t.gold500,
+              border: `2px solid ${tone === 'light' ? t.surface : t.navy900}`,
+              boxSizing: 'content-box',
+            }}
+          />
+        )}
       </IconButton>
 
       <Popover
@@ -132,8 +159,9 @@ export default function UserNotificationBell() {
               width: { xs: 'calc(100vw - 16px)', sm: 360 },
               maxWidth: { xs: 'calc(100vw - 16px)', sm: 360 },
               maxHeight: { xs: '70vh', sm: 480 },
-              borderRadius: 2,
-              boxShadow: '0 8px 32px rgba(0,0,0,0.12)',
+              borderRadius: `${t.radius}px`,
+              border: `1px solid ${t.line}`,
+              boxShadow: t.shadowMegaMenu,
             },
           },
         }}
@@ -155,7 +183,7 @@ export default function UserNotificationBell() {
           </Box>
         ) : notifications.length === 0 ? (
           <Box sx={{ p: 4, textAlign: 'center' }}>
-            <NotificationsNoneIcon sx={{ fontSize: 40, color: 'grey.300', mb: 1 }} />
+            <NotificationsNoneIcon sx={{ fontSize: 40, color: t.lineStrong, mb: 1 }} />
             <Typography variant="body2" color="text.secondary">
               No notifications yet
             </Typography>
@@ -182,7 +210,7 @@ export default function UserNotificationBell() {
                     width: 8,
                     height: 8,
                     borderRadius: '50%',
-                    bgcolor: EVENT_TYPE_COLORS[notification.event_type] || '#757575',
+                    bgcolor: EVENT_TYPE_COLORS[notification.event_type] || t.statusIdle,
                     mr: 1.5,
                     flexShrink: 0,
                     mt: 0.5,

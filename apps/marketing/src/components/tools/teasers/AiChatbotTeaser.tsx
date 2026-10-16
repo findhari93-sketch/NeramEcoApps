@@ -1,7 +1,8 @@
 'use client';
 
-import { Box, Button, Chip, Paper, Stack, Typography } from '@neram/ui';
-import Link from 'next/link';
+import { Box, Typography } from '@neram/ui';
+import { Link } from '@/i18n/routing';
+import { CtaButton, QuickCheck, tokens } from '@/design-system';
 
 const SAMPLE_PROMPTS = [
   {
@@ -28,93 +29,67 @@ const SAMPLE_PROMPTS = [
 
 export default function AiChatbotTeaser() {
   return (
-    <Paper
-      elevation={0}
-      sx={{
-        p: { xs: 3, sm: 4 },
-        border: '1px solid #E0E0E0',
-        borderRadius: 2,
-      }}
-    >
-      <Typography
-        component="h2"
-        sx={{ fontWeight: 700, fontSize: { xs: '1.25rem', sm: '1.5rem' }, mb: 1 }}
-      >
-        Ask Aintra, the Architecture Admissions AI
-      </Typography>
-
-      <Typography sx={{ fontSize: '0.9rem', color: 'text.secondary', mb: 2.5, lineHeight: 1.5 }}>
+    <QuickCheck title="Ask Aintra, the Architecture Admissions AI" headingId="ai-chatbot-quick-check">
+      <Typography sx={{ fontSize: '1rem', color: tokens.inkMuted, lineHeight: 1.5 }}>
         Aintra is a free AI assistant trained on NATA syllabus, JEE Paper 2 patterns, B.Arch
         college data, and TNEA / KEAM cutoffs from the last five years. It cites every fact and
         knows current admission rules.
       </Typography>
 
-      <Typography
-        sx={{
-          fontWeight: 600,
-          fontSize: '0.85rem',
-          color: 'text.secondary',
-          mb: 1.5,
-          textTransform: 'uppercase',
-          letterSpacing: 0.5,
-        }}
-      >
-        Try a sample question
-      </Typography>
-
-      <Stack spacing={1} sx={{ mb: 2.5 }}>
+      <Box component="nav" aria-labelledby="ai-chatbot-samples" sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <Typography
+          id="ai-chatbot-samples"
+          sx={{
+            fontWeight: 600,
+            fontSize: '0.8125rem',
+            color: tokens.inkMuted,
+            textTransform: 'uppercase',
+            letterSpacing: '0.04em',
+          }}
+        >
+          Try a sample question
+        </Typography>
         {SAMPLE_PROMPTS.map((prompt) => (
-          <Chip
+          <Box
             key={prompt.text}
             component={Link}
             href={prompt.href}
-            label={prompt.text}
-            clickable
-            variant="outlined"
             sx={{
+              display: 'flex',
+              alignItems: 'center',
               minHeight: 44,
-              height: 'auto',
-              py: 1,
-              px: 1.5,
-              fontSize: '0.85rem',
-              borderRadius: 2,
-              justifyContent: 'flex-start',
-              '& .MuiChip-label': {
-                whiteSpace: 'normal',
-                lineHeight: 1.4,
-                textAlign: 'left',
-              },
+              px: 1.75,
+              py: 1.25,
+              boxSizing: 'border-box',
+              border: `1px solid ${tokens.line}`,
+              borderRadius: `${tokens.radius}px`,
+              bgcolor: tokens.surface,
+              color: tokens.ink,
+              fontSize: '0.9375rem',
+              lineHeight: 1.4,
+              textDecoration: 'none',
+              transition: 'border-color 150ms ease',
+              '&:hover': { borderColor: tokens.gold500, color: tokens.ink },
+              '&:focus-visible': { outline: tokens.focusOutline, outlineOffset: '2px' },
             }}
-          />
+          >
+            {prompt.text}
+          </Box>
         ))}
-      </Stack>
-
-      <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5 }}>
-        <Button
-          component={Link}
-          href="/counseling/tnea-barch"
-          variant="contained"
-          fullWidth
-          sx={{ minHeight: 48, fontWeight: 700, fontSize: '1rem' }}
-        >
-          Open TNEA B.Arch Aintra
-        </Button>
-        <Button
-          component={Link}
-          href="/counseling/keam-arch"
-          variant="outlined"
-          fullWidth
-          sx={{ minHeight: 48, fontWeight: 700, fontSize: '0.95rem' }}
-        >
-          Open KEAM Aintra
-        </Button>
       </Box>
 
-      <Typography
-        sx={{ mt: 1.5, fontSize: '0.8rem', color: 'text.secondary', textAlign: 'center' }}
-      >
+      <Typography sx={{ fontSize: '0.8125rem', color: tokens.inkMuted, textAlign: 'center' }}>
         Free, no signup, answers cite data sources you can verify.
       </Typography>
-    </Paper>
+
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+        <CtaButton href="/counseling/keam-arch" variant="outline" fullWidth>
+          Open KEAM Aintra
+        </CtaButton>
+        <CtaButton href="/counseling/tnea-barch" fullWidth>
+          Open TNEA B.Arch Aintra
+        </CtaButton>
+      </Box>
+    </QuickCheck>
   );
 }

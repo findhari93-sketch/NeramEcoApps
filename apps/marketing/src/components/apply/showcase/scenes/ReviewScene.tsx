@@ -1,162 +1,135 @@
 'use client';
 
 import { Box } from '@neram/ui';
-import PauseRounded from '@mui/icons-material/PauseRounded';
-import { NX, img, mono } from '../palette';
-import { chip, draw, fadeIn, fill, pop, ring, wave } from '../keyframes';
+import GraphicEqOutlined from '@mui/icons-material/GraphicEqOutlined';
+import { tokens } from '@/design-system';
+import { NARROW, motion, type SceneProps } from '../motion';
+import { CoverImage, splitRule, tagSx } from './shared';
 
-const WAVE_BARS = [8, 14, 20, 12, 24, 16, 10, 22, 18, 9, 26, 14, 20, 11, 17, 23, 13, 8];
-
-const CAPTIONS = [
-  { text: 'Extend this edge back to the vanishing point.', delay: 0.4, duration: 2 },
-  { text: 'This corner of the cube is bending inward.', delay: 2.5, duration: 1.8 },
-  { text: 'Same fix on the left box. Use the semi-ellipse trick.', delay: 4.4, duration: 1.6 },
+const NOTES = [
+  { at: 1.2, text: 'Extend this edge to the vanishing point.' },
+  { at: 2.8, text: 'These corners bend inward. Keep them vertical.' },
+  { at: 4.4, text: 'Redraw the curve with the semi-ellipse trick.' },
 ];
 
-const stroke = (colour: string, width: number, duration: number, delay: number) => ({
-  fill: 'none',
-  stroke: colour,
-  strokeWidth: width,
-  strokeLinecap: 'round',
-  strokeDasharray: '1200',
-  animation: `${draw} ${duration}s ease-out ${delay}s both`,
-});
+const MARKERS = [
+  { x: 1102, y: 244, n: 1, at: 1.1 },
+  { x: 693, y: 413, n: 2, at: 2.7 },
+  { x: 866, y: 372, n: 3, at: 4.4 },
+];
 
-/** Scene 1: the teacher draws guide lines and corrections over the student's plate while a voice note plays. */
-export default function ReviewScene() {
+const strokeProps = { fill: 'none', stroke: tokens.gold500, strokeLinecap: 'round', pathLength: 1 } as const;
+
+/** 01 Review: the teacher draws numbered corrections on the plate and explains each one. */
+export default function ReviewScene(props: SceneProps) {
+  const { s, k, appear, pop, draw } = motion(props);
+  const active = NOTES.reduce((last, note, i) => (k(note.at, 0.45) > 0 ? i : last), -1);
+  const voice = Math.min(1, s / 6.4);
+  const seconds = Math.round(voice * 24);
+
   return (
-    <Box sx={{ position: 'absolute', inset: 0, animation: `${fadeIn} .4s ease both` }}>
-      <Box
-        component="img"
-        src={img('drawing-1215')}
-        srcSet={`${img('drawing-680')} 680w, ${img('drawing-1215')} 1215w`}
-        sizes="(min-width: 900px) min(44vw, 680px), 100vw"
-        alt=""
-        loading="eager"
-        decoding="async"
-        sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-      />
-      <Box
-        component="svg"
-        viewBox="0 0 1215 680"
-        preserveAspectRatio="xMidYMid slice"
-        sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
-      >
-        <Box component="path" d="M802 330 L1102 244" sx={stroke(NX.orange, 3, 1.2, 0.6)} />
-        <Box component="rect" x={1094} y={236} width={16} height={16} sx={{ fill: NX.orange, animation: `${pop} .3s ease 1.3s both` }} />
-        <Box component="path" d="M741 317 L802 385" sx={stroke(NX.red, 6, 1.4, 1.6)} />
-        <Box component="path" d="M741 365 L693 413" sx={stroke(NX.red, 6, 1.4, 2.3)} />
-        <Box component="ellipse" cx={748} cy={372} rx={110} ry={96} sx={stroke(NX.orange, 4, 1.6, 3.0)} />
-        <Box component="path" d="M350 340 L95 244" sx={stroke(NX.orange, 3, 1.2, 3.8)} />
-        <Box component="rect" x={87} y={236} width={16} height={16} sx={{ fill: NX.orange, animation: `${pop} .3s ease 4.4s both` }} />
-        <Box component="path" d="M433 397 L504 442" sx={stroke(NX.red, 6, 1.4, 4.3)} />
+    <Box sx={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1fr)' }}>
+      <Box sx={{ position: 'relative', overflow: 'hidden', bgcolor: tokens.navy800 }}>
+        <CoverImage name="drawing-1215" small="drawing-680" sizes="(min-width: 900px) min(26vw, 420px), 62vw" eager />
+        <Box
+          component="svg"
+          viewBox="0 0 1215 680"
+          preserveAspectRatio="xMidYMid slice"
+          sx={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
+        >
+          <path d="M802 330 L1102 244" strokeWidth={7} {...strokeProps} style={draw(0.4, 0.9)} />
+          <path d="M741 317 L802 385 M741 365 L693 413" strokeWidth={7} {...strokeProps} style={draw(2.0, 0.9)} />
+          <ellipse cx={748} cy={372} rx={118} ry={102} strokeWidth={6} {...strokeProps} style={draw(3.6, 1.0)} />
+          {MARKERS.map((m) => (
+            <g key={m.n} style={pop(m.at)}>
+              <circle cx={m.x} cy={m.y} r={30} fill={tokens.navy900} stroke={tokens.gold500} strokeWidth={4} />
+              <text x={m.x} y={m.y + 12} fontSize={34} fontWeight={800} fill={tokens.paper} textAnchor="middle">
+                {m.n}
+              </text>
+            </g>
+          ))}
+        </Box>
+        <Box component="span" sx={tagSx}>
+          Your plate · Perspective
+        </Box>
       </Box>
 
-      <Box sx={{ position: 'absolute', left: 12, top: 12, display: 'grid', maxWidth: '62%' }}>
-        {CAPTIONS.map((c) => (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, p: 1.5, borderLeft: splitRule, minWidth: 0, [NARROW]: { p: 1, gap: 0.75 } }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
           <Box
-            key={c.text}
             component="span"
             sx={{
-              gridArea: '1 / 1',
-              alignSelf: 'start',
-              bgcolor: NX.navy,
-              color: NX.white,
-              fontSize: 12,
-              lineHeight: 1.4,
-              px: 1.25,
-              py: 0.875,
-              animation: `${chip} ${c.duration}s ease ${c.delay}s both`,
+              width: 28,
+              height: 28,
+              flex: 'none',
+              borderRadius: '50%',
+              display: 'grid',
+              placeItems: 'center',
+              bgcolor: tokens.navy900,
+              color: tokens.gold500,
+              fontSize: 11,
+              fontWeight: 800,
             }}
           >
-            &ldquo;{c.text}&rdquo;
+            HB
+          </Box>
+          <Box sx={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+            <Box component="strong" sx={{ fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              Ar. Hari Babu
+            </Box>
+            <Box component="span" sx={{ fontSize: 11, color: tokens.inkMuted, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              Reviewing your plate
+            </Box>
+          </Box>
+        </Box>
+
+        {NOTES.map((note, i) => (
+          <Box
+            key={note.text}
+            style={appear(note.at)}
+            sx={{
+              display: 'flex',
+              gap: 1,
+              p: '6px 8px',
+              borderRadius: '6px',
+              transition: 'background-color 200ms ease',
+              bgcolor: i === active ? tokens.ground : 'transparent',
+              boxShadow: i === active ? `inset 3px 0 0 ${tokens.gold500}` : 'none',
+              // A narrow window has room for the newest note only.
+              [NARROW]: { display: i === active || (active === -1 && i === 0) ? 'flex' : 'none' },
+            }}
+          >
+            <Box
+              component="span"
+              sx={{
+                width: 18,
+                height: 18,
+                flex: 'none',
+                borderRadius: '50%',
+                display: 'grid',
+                placeItems: 'center',
+                bgcolor: tokens.navy900,
+                color: tokens.paper,
+                fontSize: 11,
+                fontWeight: 800,
+              }}
+            >
+              {i + 1}
+            </Box>
+            <Box component="span" sx={{ fontSize: 12, lineHeight: 1.35 }}>
+              {note.text}
+            </Box>
           </Box>
         ))}
-      </Box>
 
-      <Box
-        sx={{
-          position: 'absolute',
-          right: 12,
-          top: 12,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1,
-          p: '5px 10px 5px 5px',
-          bgcolor: NX.white,
-          color: NX.ink,
-        }}
-      >
-        <Box
-          component="span"
-          sx={{
-            width: 26,
-            height: 26,
-            display: 'grid',
-            placeItems: 'center',
-            bgcolor: NX.navy,
-            color: NX.gold,
-            fontSize: 10,
-            fontWeight: 800,
-            animation: `${ring} 1s infinite`,
-          }}
-        >
-          HB
-        </Box>
-        <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-          <Box component="b" sx={{ fontSize: 11 }}>
-            Ar. Hari Babu
+        <Box sx={{ mt: 'auto', display: 'flex', alignItems: 'center', gap: 1 }}>
+          <GraphicEqOutlined sx={{ fontSize: 18, color: tokens.navy900, flex: 'none' }} />
+          <Box component="span" sx={{ flex: 1, height: 4, borderRadius: '2px', bgcolor: tokens.line, overflow: 'hidden' }}>
+            <Box component="span" style={{ width: `${voice * 100}%` }} sx={{ display: 'block', height: 4, bgcolor: tokens.navy900 }} />
           </Box>
-          <Box component="span" sx={{ fontSize: 10, color: NX.inkMuted }}>
-            sketch + voice
+          <Box component="span" sx={{ fontFamily: tokens.fontMono, fontSize: 11, color: tokens.inkMuted }}>
+            {`0:${String(seconds).padStart(2, '0')}`}
           </Box>
-        </Box>
-      </Box>
-
-      <Box
-        sx={{
-          position: 'absolute',
-          left: 12,
-          right: 12,
-          bottom: 12,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1.25,
-          p: '8px 12px 8px 8px',
-          bgcolor: NX.white,
-          color: NX.ink,
-        }}
-      >
-        <Box sx={{ width: 30, height: 30, flex: 'none', display: 'grid', placeItems: 'center', bgcolor: NX.orange, color: NX.white }}>
-          <PauseRounded sx={{ fontSize: 18 }} />
-        </Box>
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75, flex: 1, minWidth: 0 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, fontSize: 12, fontWeight: 700 }}>
-            <Box component="span" sx={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              Voice feedback from your teacher
-            </Box>
-            <Box component="span" sx={{ display: 'flex', alignItems: 'center', gap: '2px', height: 14 }}>
-              {WAVE_BARS.map((h, i) => (
-                <Box
-                  key={i}
-                  component="span"
-                  sx={{
-                    width: 2,
-                    height: h,
-                    bgcolor: NX.orange,
-                    transformOrigin: 'center',
-                    animation: `${wave} .6s ease-in-out ${(i % 7) * 0.08}s infinite alternate`,
-                  }}
-                />
-              ))}
-            </Box>
-          </Box>
-          <Box component="span" sx={{ display: 'block', height: 4, bgcolor: NX.line }}>
-            <Box component="span" sx={{ display: 'block', height: 4, bgcolor: NX.orange, animation: `${fill} 5.6s linear .2s both` }} />
-          </Box>
-        </Box>
-        <Box component="span" sx={{ fontFamily: mono, fontSize: 11, fontWeight: 600, color: NX.inkMuted }}>
-          0:24
         </Box>
       </Box>
     </Box>

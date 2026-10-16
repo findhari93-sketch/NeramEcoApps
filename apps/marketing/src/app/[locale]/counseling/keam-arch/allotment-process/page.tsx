@@ -5,10 +5,11 @@ import {
   Paper,
   Typography,
   Stack,
-  Alert,
   Divider,
 } from '@mui/material';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import { siteTokens as t } from '@neram/ui/site-tokens';
+import { Callout } from '@/design-system';
 import { buildAlternates } from '@/lib/seo/metadata';
 import { generateHowToSchema } from '@/lib/seo/schemas';
 import KeamSpokeShell from '@/components/keam-arch/KeamSpokeShell';
@@ -18,7 +19,6 @@ import { allotment } from '@/data/keam-arch-2026';
 export const revalidate = 86400;
 
 const SPOKE = 'allotment-process';
-const PRIMARY_GREEN = '#0d7a4a';
 
 export async function generateMetadata({
   params: { locale },
@@ -91,10 +91,14 @@ export default function AllotmentProcessPage({
       ]}
       prefillCallbackNotes="Need help understanding the CAP allotment phases"
     >
-      <Alert severity="info" sx={{ mb: 3, borderRadius: 1.5 }}>
-        Allotment is run by the <strong>{allotment.authority}</strong>, in conformity with{' '}
-        {allotment.governing_council} guidelines. ({allotment.clause_refs.authority})
-      </Alert>
+      <Box sx={{ mb: 3 }}>
+        <Callout>
+          <Box component="p" sx={{ m: 0 }}>
+              Allotment is run by the <strong>{allotment.authority}</strong>, in conformity with{' '}
+              {allotment.governing_council} guidelines. ({allotment.clause_refs.authority})
+          </Box>
+        </Callout>
+      </Box>
 
       <Typography variant="h6" component="h2" fontWeight={800} sx={{ mb: 1.5 }}>
         Phases at a glance
@@ -108,7 +112,7 @@ export default function AllotmentProcessPage({
       </Typography>
       <Paper
         elevation={0}
-        sx={{ p: 2.5, mb: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+        sx={{ p: 2.5, mb: 3, borderRadius: 1, border: `1px solid ${t.line}` }}
       >
         <Typography variant="body2">{allotment.option_registration_note}</Typography>
       </Paper>
@@ -116,16 +120,20 @@ export default function AllotmentProcessPage({
       <Typography variant="h6" component="h2" fontWeight={800} sx={{ mb: 1.5 }}>
         Fee remittance after allotment
       </Typography>
-      <Alert severity="warning" sx={{ mb: 3, borderRadius: 1.5 }}>
-        {allotment.fee_remittance_note}
-      </Alert>
+      <Box sx={{ mb: 3 }}>
+        <Callout>
+          <Box component="p" sx={{ m: 0 }}>
+              {allotment.fee_remittance_note}
+          </Box>
+        </Callout>
+      </Box>
 
       <Typography variant="h6" component="h2" fontWeight={800} sx={{ mb: 1.5 }}>
         Reporting at the college
       </Typography>
       <Paper
         elevation={0}
-        sx={{ p: 2.5, mb: 3, borderRadius: 2, border: '1px solid', borderColor: 'divider' }}
+        sx={{ p: 2.5, mb: 3, borderRadius: 1, border: `1px solid ${t.line}` }}
       >
         <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
           Carry these originals at the time of admission ({allotment.clause_refs.reporting},{' '}
@@ -134,7 +142,7 @@ export default function AllotmentProcessPage({
         <Stack spacing={0.75}>
           {allotment.reporting_documents.map((doc) => (
             <Stack key={doc} direction="row" gap={1} alignItems="flex-start">
-              <CheckCircleOutlineIcon sx={{ color: PRIMARY_GREEN, fontSize: 18, flexShrink: 0, mt: 0.25 }} />
+              <CheckCircleOutlineIcon sx={{ color: t.gold800, fontSize: 18, flexShrink: 0, mt: 0.25 }} />
               <Typography variant="body2">{doc}</Typography>
             </Stack>
           ))}
@@ -152,10 +160,11 @@ export default function AllotmentProcessPage({
         elevation={0}
         sx={{
           p: 2.5,
-          borderRadius: 2,
-          border: '1px solid',
-          borderColor: 'warning.light',
-          bgcolor: '#FFFBEB',
+          borderRadius: 1,
+          border: `1px solid ${t.line}`,
+          borderLeft: 'none',
+          boxShadow: `inset 3px 0 0 ${t.gold500}`,
+          bgcolor: t.surface,
         }}
       >
         <Typography variant="body2">{allotment.liquidated_damages_note}</Typography>

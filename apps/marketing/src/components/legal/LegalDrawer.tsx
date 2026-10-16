@@ -12,6 +12,7 @@ import {
   useTheme,
 } from '@neram/ui';
 import { CloseIcon } from '@neram/ui';
+import { tokens as tk } from '@/design-system';
 import TermsContent from './TermsContent';
 import RefundPolicyContent from './RefundPolicyContent';
 
@@ -21,6 +22,17 @@ interface LegalDrawerProps {
   /** Which tab to open initially: 0 = Terms, 1 = Refund Policy */
   initialTab?: number;
 }
+
+/** Tabs in the site tokens: 14px semibold ink, gold underline on the open one. */
+const tabSx = {
+  textTransform: 'none',
+  fontWeight: 600,
+  fontSize: 14,
+  minHeight: 48,
+  color: tk.inkMuted,
+  '&.Mui-selected': { color: tk.ink },
+  '&.Mui-focusVisible': { outline: tk.focusOutline, outlineOffset: '-2px' },
+} as const;
 
 export default function LegalDrawer({ open, onClose, initialTab = 0 }: LegalDrawerProps) {
   const [tab, setTab] = useState(initialTab);
@@ -45,8 +57,7 @@ export default function LegalDrawer({ open, onClose, initialTab = 0 }: LegalDraw
           px: 2,
           pt: isMobile ? 1 : 2,
           pb: 0,
-          borderBottom: '1px solid',
-          borderColor: 'divider',
+          borderBottom: `1px solid ${tk.line}`,
         }}
       >
         {/* Drag handle for mobile */}
@@ -59,8 +70,8 @@ export default function LegalDrawer({ open, onClose, initialTab = 0 }: LegalDraw
               transform: 'translateX(-50%)',
               width: 40,
               height: 4,
-              bgcolor: 'grey.400',
-              borderRadius: 1,
+              bgcolor: tk.lineStrong,
+              borderRadius: '2px',
             }}
           />
         )}
@@ -68,13 +79,28 @@ export default function LegalDrawer({ open, onClose, initialTab = 0 }: LegalDraw
         <Tabs
           value={tab}
           onChange={(_, v) => setTab(v)}
-          sx={{ flex: 1, minHeight: 44 }}
+          sx={{
+            flex: 1,
+            minHeight: 48,
+            '& .MuiTabs-indicator': { backgroundColor: tk.gold500, height: 3 },
+          }}
         >
-          <Tab label="Terms & Conditions" sx={{ textTransform: 'none', fontWeight: 600, fontSize: 13 }} />
-          <Tab label="Refund Policy" sx={{ textTransform: 'none', fontWeight: 600, fontSize: 13 }} />
+          <Tab label="Terms & Conditions" sx={tabSx} />
+          <Tab label="Refund Policy" sx={tabSx} />
         </Tabs>
 
-        <IconButton onClick={onClose} size="small" sx={{ ml: 1 }}>
+        <IconButton
+          onClick={onClose}
+          aria-label="Close"
+          sx={{
+            ml: 1,
+            width: 44,
+            height: 44,
+            color: tk.ink,
+            borderRadius: `${tk.radius}px`,
+            '&.Mui-focusVisible': { outline: tk.focusOutline, outlineOffset: '2px' },
+          }}
+        >
           <CloseIcon />
         </IconButton>
       </Box>
@@ -107,7 +133,7 @@ export default function LegalDrawer({ open, onClose, initialTab = 0 }: LegalDraw
       disableSwipeToOpen
       PaperProps={{
         sx: {
-          borderRadius: isMobile ? '12px 12px 0 0' : 0,
+          borderRadius: isMobile ? `${tk.radius}px ${tk.radius}px 0 0` : 0,
           maxHeight: isMobile ? '85vh' : '100vh',
         },
       }}

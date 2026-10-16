@@ -99,9 +99,14 @@ test.describe('aiArchitek hub', () => {
 
   test('mobile: touch targets are at least 44px', async ({ page }) => {
     await page.goto(PATH);
-    await assertTouchTargetSize(page, 'main .MuiButton-root');
+    // Design-system CTAs are links, and the FAQ rows are buttons. Check each set is present so the check can't pass empty.
+    const appLinks = page.locator('#tools a[aria-label^="Open the "]');
+    const faqRows = page.locator('#faq button[aria-expanded]');
+    expect(await appLinks.count()).toBeGreaterThan(0);
+    expect(await faqRows.count()).toBeGreaterThan(0);
+    await assertTouchTargetSize(page, '#tools a[aria-label^="Open the "]');
     await assertTouchTargetSize(page, '#tools h4 a', 44);
-    await assertTouchTargetSize(page, '#faq summary');
+    await assertTouchTargetSize(page, '#faq button[aria-expanded]');
   });
 
   for (const width of [375, 768, 1024, 1440]) {

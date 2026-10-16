@@ -34,10 +34,10 @@ async function pages(make: (from: number, to: number) => any): Promise<any[]> {
   }
 }
 
-async function chunked<T>(values: T[], fetch: (part: T[]) => any): Promise<any[]> {
+async function chunked<T>(values: T[], query: (part: T[]) => any): Promise<any[]> {
   const out: any[] = [];
   for (let i = 0; i < values.length; i += CHUNK) {
-    const { data, error } = await fetch(values.slice(i, i + CHUNK));
+    const { data, error } = await query(values.slice(i, i + CHUNK));
     if (error) throw new Error(error.message);
     out.push(...(data ?? []));
   }
