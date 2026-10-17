@@ -16705,7 +16705,13 @@ export type Database = {
         | "course_question"
         | "other"
       support_ticket_priority: "low" | "medium" | "high"
-      support_ticket_status: "open" | "in_progress" | "resolved" | "closed"
+      support_ticket_status:
+        | "open"
+        | "in_progress"
+        | "waiting_on_student"
+        | "awaiting_confirmation"
+        | "resolved"
+        | "closed"
       testimonial_learning_mode: "online" | "hybrid" | "offline"
       user_status: "pending" | "approved" | "rejected" | "active" | "inactive"
       user_type: "lead" | "student" | "teacher" | "admin" | "parent"
@@ -17037,7 +17043,14 @@ export const Constants = {
         "other",
       ],
       support_ticket_priority: ["low", "medium", "high"],
-      support_ticket_status: ["open", "in_progress", "resolved", "closed"],
+      support_ticket_status: [
+        "open",
+        "in_progress",
+        "waiting_on_student",
+        "awaiting_confirmation",
+        "resolved",
+        "closed",
+      ],
       testimonial_learning_mode: ["online", "hybrid", "offline"],
       user_status: ["pending", "approved", "rejected", "active", "inactive"],
       user_type: ["lead", "student", "teacher", "admin", "parent"],

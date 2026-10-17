@@ -673,6 +673,13 @@ function getEmailTemplateSlug(eventType: NotificationEventType): string | null {
   const map: Record<NotificationEventType, string | null> = {
     new_onboarding: 'team-new-onboarding',
     new_signup: null, // Bell + phone push only (services/signup-alert.ts)
+    fee_details_check: null, // Student: Neram Assistant via Nexus sendNudge
+    fee_installment_reminder: null, // Student: Neram Assistant via Nexus sendNudge
+    fee_correction_resolved: null, // Student: Neram Assistant via Nexus sendNudge
+    fee_correction_reported: null, // Staff: bell + phone push
+    fee_details_confirmed: null, // Staff: bell only
+    fee_installment_due: null, // Staff: bell + one daily push (fee-reminders cron)
+    fee_installment_overdue: null, // Staff: bell + one daily push (fee-reminders cron)
     onboarding_skipped: null,
     new_application: 'team-new-application',
     payment_received: null,
@@ -725,6 +732,11 @@ function getEmailTemplateSlug(eventType: NotificationEventType): string | null {
     study_material_comment_added: null, // In-app only (Nexus)
     assignment_reviewed: null, // In-app only (Nexus student bell)
     auto_first_touch_sent: null, // Auto-messaging only (no team email)
+    ticket_reply: null, // Requester: bell + ticket-update email sent by the Admin route
+    ticket_info_requested: null, // Requester: bell + ticket-update email sent by the Admin route
+    ticket_closed: null, // Requester: bell + ticket-update email sent by the Admin route
+    ticket_student_replied: null, // Staff: Admin bell only
+    ticket_reopened: null, // Staff: Admin bell only
   };
 
   return map[eventType];

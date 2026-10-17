@@ -15,8 +15,8 @@ import { useCanReportProblem } from '@/components/ReporterAccessContext';
 /**
  * Error boundary for any uncaught render error under (protected). Shows a
  * friendly screen (never the raw error) with a one-tap "Report this issue"
- * for enrolled students, and a link to Support for everyone else, who cannot
- * file a report and would otherwise hit a 403.
+ * for anyone signed in, and a link to Support while the session is still
+ * loading (no reporter context yet).
  */
 export default function ProtectedError({
   error,

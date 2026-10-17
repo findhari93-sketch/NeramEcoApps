@@ -9,6 +9,11 @@ import { renewFromEmbed } from '@/components/video/renew-from-embed';
 import type { WatchSession } from '@/components/video/useWatchSession';
 import { lastPlayedPoint } from '@/lib/played-ranges';
 import { useAuthFetch } from '@/components/curriculum/shared';
+import SkippedPartChip from '@/components/video/controls/SkippedPartChip';
+import type { SkippedPart } from '@/lib/trim-skipped-parts';
+
+/** How long "Watch it" stays up after the playhead passes a skipped pause. */
+const SKIPPED_CHIP_SECONDS = 8;
 
 /**
  * Gated player for a class recording, inline on the recap page.
@@ -74,6 +79,14 @@ interface RecapPlayerProps {
    * it gates rather than opens.
    */
   mode?: VideoGateMode;
+  /**
+   * Pauses the trim took out (only those of 10s or more). Each is a tick on the
+   * scrub bar, and "Watch it" shows for a few seconds after the playhead
+   * passes one.
+   */
+  skipped?: SkippedPart[];
+  /** "Watch it" was tapped. The player has already paused. */
+  onWatchSkipped?: (part: SkippedPart) => void;
 }
 
 interface Watermark {
@@ -89,6 +102,8 @@ export default function RecapPlayer({
   title,
   onFullscreenChange,
   mode = 'gated',
+  skipped,
+  onWatchSkipped,
 }: RecapPlayerProps) {
   const authFetch = useAuthFetch();
   // Whichever surface is live. The checkpoint list drives playback through this,
@@ -152,8 +167,8 @@ export default function RecapPlayer({
    * it for the checkpoints they have already earned.
    */
   const marks = useMemo(
-    () =>
-      sections
+    () => [
+      ...sections
         .filter((s) => Number.isFinite(s.end_timestamp_seconds) && s.end_timestamp_seconds > 0)
         .map((s, i) => ({
           id: s.id,
@@ -164,8 +179,47 @@ export default function RecapPlayer({
           // rewatching a class they sat in as a row of unmet gates.
           passed: mode === 'gated' ? s.passed : true,
         })),
-    [sections, mode],
+      ...(skipped ?? []).map((p) => ({
+        id: `skip-${p.at}`,
+        at: p.at,
+        label: 'Skipped pause',
+        kind: 'skip' as const,
+      })),
+    ],
+    [sections, mode, skipped],
   );
+
+  /**
+   * The skipped pause the playhead passed in the last few seconds, if any.
+   * Worked out from each time tick rather than a timer, so pausing keeps it up
+   * and a seek away takes it down.
+   */
+  const [chipPart, setChipPart] = useState<SkippedPart | null>(null);
+  const skippedRef = useRef(skipped);
+  skippedRef.current = skipped;
+  const sessionTimeUpdate = playerProps.onTimeUpdate;
+  const onTimeUpdate = useCallback(
+    (seconds: number, dur: number) => {
+      sessionTimeUpdate?.(seconds, dur);
+      const parts = skippedRef.current;
+      if (!parts?.length) return;
+      let hit: SkippedPart | null = null;
+      for (const p of parts) {
+        if (p.at <= seconds && seconds - p.at < SKIPPED_CHIP_SECONDS) hit = p;
+      }
+      setChipPart((prev) => (prev?.at === hit?.at ? prev : hit));
+    },
+    [sessionTimeUpdate],
+  );
+  const watchSkipped = useCallback(() => {
+    if (!chipPart) return;
+    transportRef.current?.pause();
+    onWatchSkipped?.(chipPart);
+  }, [chipPart, onWatchSkipped]);
+  const chip =
+    chipPart && onWatchSkipped ? (
+      <SkippedPartChip seconds={chipPart.to - chipPart.from} onWatch={watchSkipped} />
+    ) : null;
 
   /**
    * Subtitles, riding the grant the video already holds.
@@ -318,6 +372,8 @@ export default function RecapPlayer({
         watched={playedRanges}
         resumeAt={resumeFrom}
         {...playerProps}
+        onTimeUpdate={onTimeUpdate}
+        overlay={chip}
         onCheckpointReached={handleBoundary}
         onLoadedMetadata={setDuration}
         allowFullscreen
@@ -355,6 +411,8 @@ export default function RecapPlayer({
       captions={captions}
       resumeAt={resumeFrom}
       {...playerProps}
+      onTimeUpdate={onTimeUpdate}
+      overlay={chip}
       onCheckpointReached={handleBoundary}
       onLoadedMetadata={setDuration}
       allowFullscreen

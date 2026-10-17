@@ -77,7 +77,8 @@ export async function grantVideoAccess(input: GrantVideoAccessInput): Promise<Vi
     await supabase.from('nexus_class_recap_stream_grants').insert({
       student_id: input.userId,
       recap_id: input.recapId ?? (input.scope === 'recap' ? input.refId : null),
-      scheduled_class_id: input.scheduledClassId ?? (input.scope === 'class' ? input.refId : null),
+      scheduled_class_id:
+        input.scheduledClassId ?? (input.scope === 'class' || input.scope === 'class_original' ? input.refId : null),
       session_id: sid,
       expires_at: expiresAt,
       ip:

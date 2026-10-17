@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { timingSafeEqual } from 'crypto';
 import { getSupabaseAdminClient } from '@neram/database';
+import { authorisedBearer } from '@/lib/internal-auth';
 import {
   applyReadyTrims,
   claimTrimJob,
@@ -19,7 +19,7 @@ import {
  * scripts/recording-trim/worker.mjs) comes through. Body: { action, ... }.
  *
  *   claim        { run }                          the next job, or { job: null }
- *   plan         { job_id, report }               { keep } or { skip }
+ *   plan         { job_id, report }               { keep, cut_method } or { skip }
  *   upload       { job_id }                       { upload_url, file_name }
  *   complete     { job_id, report }               { status }
  *   fail         { job_id, reason, detail }       { ok }
@@ -34,17 +34,8 @@ import {
 export const runtime = 'nodejs';
 export const maxDuration = 120;
 
-function authorised(request: NextRequest): boolean {
-  const secret = process.env.RECORDING_TRIM_TOKEN;
-  const header = request.headers.get('Authorization') || '';
-  if (!secret || !header.startsWith('Bearer ')) return false;
-  const a = Buffer.from(header.slice(7));
-  const b = Buffer.from(secret);
-  return a.length === b.length && timingSafeEqual(a, b);
-}
-
 export async function POST(request: NextRequest) {
-  if (!authorised(request)) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (!authorisedBearer(request, 'RECORDING_TRIM_TOKEN')) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
   const body = await request.json().catch(() => ({}));
   const supabase = getSupabaseAdminClient() as any;

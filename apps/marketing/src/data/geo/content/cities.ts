@@ -1260,14 +1260,16 @@ export const CITY_CONTENT: Record<string, CityContent> = {
       "updatedAt": "2026-10-01"
     },
     "patna": {
-      "localContext": "Patna, as the ancient Pataliputra, was once the largest city in the world and the capital of the Maurya Empire. The Mauryan-era archaeological sites nearby, including the remains at Kumhrar with its 80-pillar hall, provide insights into India's earliest monumental architecture. Day trips to the Nalanda University ruins (UNESCO) offer NATA aspirants exposure to sophisticated monastery campus planning from the 5th century. NIT Patna's growing architecture department is strengthening Bihar's architectural education infrastructure.",
+      "localContext": "Patna, the ancient Pataliputra and capital of the Maurya Empire, sits on the south bank of the Ganga. The excavated remains at Kumhrar, with the base of an 80-pillar hall, are among the earliest monumental architecture in India. The Golghar granary and Takht Sri Patna Sahib are sketching landmarks in the city, and the Mahatma Gandhi Setu crosses the Ganga to the north. A day trip to the Nalanda Mahavihara ruins, a UNESCO World Heritage Site, shows monastery campus planning in brick.",
+      "intro": "Patna students can reach B.Arch in two ways. NIT Patna admits B.Arch students through JoSAA on their JEE Main Paper 2 rank, while Bihar's BCECEB UGEAC counselling offers B.Arch only at Gaya College of Engineering, and that counselling is held offline. Neram Classes teaches Patna students through live online classes with drawing feedback, so you can prepare for NATA and JEE Paper 2 from home.",
       "highlights": [
-        "Study of one of the world's oldest continuously inhabited cities (as Pataliputra, founded ~490 BCE)",
-        "Proximity to Nalanda University ruins, an ancient seat of learning with sophisticated monastery architecture",
-        "Sketching at Golghar (granary), Patna Sahib Gurudwara, and the Mahatma Gandhi Setu",
-        "Regional hub for NATA aspirants from Bihar, Jharkhand, and eastern UP"
+        "NIT Patna offers B.Arch in the city, with admission through JoSAA on the JEE Main Paper 2 rank.",
+        "Bihar state counselling (BCECEB UGEAC) offers B.Arch only at Gaya College of Engineering, and it is held offline.",
+        "Kumhrar, Golghar and Takht Sri Patna Sahib are close at hand for building and perspective sketching.",
+        "Classes for Patna students are live online, with drawing reviews and mock tests."
       ],
-      "updatedAt": "2026-10-01"
+      "reviewed": false,
+      "updatedAt": "2026-10-16"
     },
     "perambalur": {
       "localContext": "Perambalur is a dry inland district town in central Tamil Nadu, surrounded by rain-fed farmland and low hills. Its most distinctive heritage site is the Ranjankudi Fort near Valikandapuram, a stone fort associated with the Carnatic wars, whose walls and bastions are laid out on a compact plan. At Sathanur, a fossilised tree trunk from the Cretaceous period is preserved in a national fossil wood park, a reminder of the region's deep geological past. The Madhura Kaliamman temple at Siruvachur is a major pilgrim site. Older homes in the district use thick walls, tiled or flat roofs and inner courtyards to manage heat, while newer construction follows growth along the Chennai to Tiruchirappalli highway.",

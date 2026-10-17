@@ -4,9 +4,12 @@ import { Box, Button, IconButton, Typography } from '@neram/ui';
 import GetAppRoundedIcon from '@mui/icons-material/GetAppRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import { useInstallPrompt } from '@/hooks/useInstallPrompt';
+import { useHideReportFab } from '@/components/ReporterAccessContext';
 
 export default function InstallPromptBanner() {
   const { isInstallable, promptInstall, dismiss } = useInstallPrompt();
+  // The banner sits where the report button does, at every width.
+  useHideReportFab(isInstallable);
 
   if (!isInstallable) return null;
 

@@ -33,9 +33,9 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: `JEE Paper 2 Preparation Guide ${YEAR}: B.Arch & B.Planning`,
-    description: `Complete JEE Main Paper 2 (B.Arch/B.Planning) ${YEAR} preparation guide. Learn about exam pattern, syllabus, preparation strategy, and tips to crack JEE Paper 2.`,
-    keywords: 'JEE Paper 2 preparation, JEE B.Arch, JEE B.Planning, JEE Paper 2 syllabus, JEE Paper 2 tips',
+    title: `JEE Paper 2 Coaching ${YEAR}: Preparation Guide`,
+    description: `JEE Paper 2 coaching and preparation guide for ${YEAR}: Paper 2A (B.Arch) and 2B (B.Planning) pattern, syllabus, a study strategy and tips to crack JEE Main Paper 2.`,
+    keywords: 'JEE Paper 2 coaching, JEE Paper 2 preparation, JEE B.Arch, JEE B.Planning, JEE Paper 2 syllabus, JEE Paper 2 tips',
     alternates: buildAlternates(locale, '/jee-paper-2-preparation'),
   };
 }
@@ -155,10 +155,10 @@ export default function JeePaper2PreparationPage({ params: { locale } }: PagePro
       >
         <Container maxWidth="lg">
           <Typography variant="h1" component="h1" gutterBottom sx={{ fontWeight: 700, fontSize: { xs: '2rem', md: '3rem' } }}>
-            JEE Paper 2 Preparation Guide {YEAR}
+            JEE Paper 2 Coaching and Preparation Guide {YEAR}
           </Typography>
           <Typography variant="h5" sx={{ mb: 3, color: t.paperMuted }}>
-            Your complete guide to crack JEE Main Paper 2 for B.Arch & B.Planning
+            JEE Main Paper 2 has two papers: 2A (B.Arch) tests Mathematics, Aptitude and Drawing, 2B (B.Planning) swaps Drawing for Planning, and each is 400 marks in 3 hours.
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
             <Button

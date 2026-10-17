@@ -97,6 +97,32 @@ export async function GET(
       name: user.name || msUser.name || msUser.email || 'Neram student',
       code: shortCode(user.id),
     };
+    // ?variant=original: the untrimmed Teams recording, for a student who opens
+    // a part the trim skipped. Same access rules as above. It plays in a sheet
+    // beside the recap and earns no watch credit, so it carries no progress.
+    if (request.nextUrl.searchParams.get('variant') === 'original') {
+      const unavailable = NextResponse.json({ error: 'There is no untrimmed recording for this class.' }, { status: 404 });
+      if (!recap.scheduled_class_id) return unavailable;
+      const { data: cls } = await supabase
+        .from('nexus_scheduled_classes')
+        .select('recording_trim_state')
+        .eq('id', recap.scheduled_class_id)
+        .maybeSingle();
+      if (cls?.recording_trim_state !== 'applied') return unavailable;
+      const original = await grantVideoAccess({
+        scope: 'class_original',
+        refId: recap.scheduled_class_id,
+        userId: user.id,
+        recapId,
+        scheduledClassId: recap.scheduled_class_id,
+        request,
+      });
+      return NextResponse.json(
+        { mode: 'proxy', streamUrl: original.src, src: original.src, expires_at: original.expiresAt, watermark },
+        { headers: { 'Cache-Control': 'no-store' } },
+      );
+    }
+
     const resumeAt = watch.resumeAt;
     // The stored position rises with any seek, so it says where they got to, not
     // what they saw. played_ranges is what they saw: the quiz gate counts it and

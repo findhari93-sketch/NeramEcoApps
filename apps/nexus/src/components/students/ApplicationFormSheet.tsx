@@ -6,6 +6,7 @@ import {
   Box,
   Button,
   Chip,
+  Collapse,
   Dialog,
   Drawer,
   Paper,
@@ -20,9 +21,9 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import ContentCopyOutlinedIcon from '@mui/icons-material/ContentCopyOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import FamilyRestroomOutlinedIcon from '@mui/icons-material/FamilyRestroomOutlined';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import LinkOutlinedIcon from '@mui/icons-material/LinkOutlined';
-import SendOutlinedIcon from '@mui/icons-material/SendOutlined';
 import OpenInNewOutlinedIcon from '@mui/icons-material/OpenInNewOutlined';
 import PhoneIphoneOutlinedIcon from '@mui/icons-material/PhoneIphoneOutlined';
 import StudentAvatar from './StudentAvatar';
@@ -98,23 +99,6 @@ interface LoadState {
 interface Viewing {
   student: StudentFormReview;
   candidate: FormCandidateView;
-}
-
-/**
- * A message to paste into WhatsApp when nothing was found.
- *
- * Kept as the fallback now that a link exists, for the student whose family shares
- * one phone and answers in the chat rather than opening anything.
- */
-function askMessage(name: string): string {
-  const first = name.trim().split(/\s+/)[0] || 'there';
-  return [
-    `Hi ${first}, we are updating your Neram Classes record. Please reply with:`,
-    '1. Your class now (for example Class 12, or finished Class 12)',
-    '2. The year you will write the exam',
-    "3. Your father's name",
-    '4. Your city',
-  ].join('\n');
 }
 
 /**
@@ -199,8 +183,8 @@ export default function ApplicationFormSheet({
    */
   const [linkFor, setLinkFor] = useState<Record<string, string>>({});
   const [linkBusy, setLinkBusy] = useState<string | null>(null);
-  /** Students the nudge has been sent to while the sheet is open. */
-  const [nudged, setNudged] = useState<Record<string, string>>({});
+  /** Students whose "Other ways" panel is open. */
+  const [otherWaysFor, setOtherWaysFor] = useState<Record<string, boolean>>({});
   /** The card button that opened the form, so focus can go back to it. */
   const returnFocusRef = useRef<HTMLElement | null>(null);
 
@@ -233,6 +217,7 @@ export default function ApplicationFormSheet({
     setActionError(null);
     setCopiedFor(null);
     setViewing(null);
+    setOtherWaysFor({});
     load();
   }, [open, load]);
 
@@ -287,15 +272,6 @@ export default function ApplicationFormSheet({
     }
   };
 
-  const copyAsk = async (student: StudentFormReview) => {
-    try {
-      await navigator.clipboard.writeText(askMessage(student.name));
-      setCopiedFor(student.id);
-    } catch {
-      setActionError({ key: student.id, message: 'Could not copy the message.' });
-    }
-  };
-
   /**
    * Make (or reuse) the student's link and put the WhatsApp message on the
    * clipboard. The URL is also shown on the card, so a failed clipboard write is
@@ -330,37 +306,6 @@ export default function ApplicationFormSheet({
     }
   };
 
-  /**
-   * Ask through Teams and the Nexus bell as well as by link.
-   *
-   * Worth doing alongside the link rather than instead of it: a student who already
-   * uses Nexus gets a message where they are and a form they can fill in without
-   * leaving the app, and one who has never signed in is unreachable this way and
-   * still needs the WhatsApp link. The route decides which channels actually
-   * landed and says so.
-   */
-  const sendNudge = async (student: StudentFormReview) => {
-    setLinkBusy(student.id);
-    setActionError(null);
-    try {
-      const token = await getToken();
-      if (!token) throw new Error('Your session has ended. Sign in again.');
-      const res = await fetch('/api/students/detail-request/nudge', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ classroomId, studentId: student.id }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data?.error || 'Could not send that.');
-      setNudged((prev) => ({ ...prev, [student.id]: data.summary || 'Sent.' }));
-      onChanged();
-    } catch (err) {
-      setActionError({ key: student.id, message: err instanceof Error ? err.message : 'Something went wrong.' });
-    } finally {
-      setLinkBusy(null);
-    }
-  };
-
   const openForm = (student: StudentFormReview, candidate: FormCandidateView, trigger: HTMLElement | null) => {
     returnFocusRef.current = trigger;
     setActionError(null);
@@ -385,6 +330,8 @@ export default function ApplicationFormSheet({
       nexusOrigin: typeof window === 'undefined' ? null : window.location.origin,
       configured: process.env.NEXT_PUBLIC_ADMIN_URL ?? null,
       section: 'application',
+      // Opens Admin's Application and fees form straight away.
+      open: 'fees',
     });
 
   const { loading, error, students, canLink } = state;
@@ -511,120 +458,21 @@ export default function ApplicationFormSheet({
                   );
                 })
               ) : (
-                <Box sx={{ mt: 1.25 }}>
-                  <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'flex-start' }}>
-                    <InfoOutlinedIcon aria-hidden sx={{ fontSize: 18, mt: '2px', color: 'text.secondary' }} />
-                    <Typography variant="body2">
-                      No application form found. Send them a link to fill it in themselves, or
-                      {canLink ? ' fill it in for them in Admin.' : ' pass the details to the office.'}
-                    </Typography>
-                  </Box>
-
-                  {/* Where the ask has got to, so two teachers do not chase the same
-                      student while nobody chases the next one. */}
-                  {progressLine(student.detailRequest, now) && (
-                    <Typography
-                      variant="body2"
-                      role="status"
-                      sx={{
-                        mt: 1,
-                        fontWeight: 600,
-                        color:
-                          student.detailRequest?.progress === 'answered' ? 'success.main' : 'text.secondary',
-                      }}
-                    >
-                      {progressLine(student.detailRequest, now)}
-                    </Typography>
-                  )}
-
-                  {nudged[student.id] && (
-                    <Typography variant="body2" role="status" sx={{ mt: 0.75, color: 'success.main' }}>
-                      {nudged[student.id]}
-                    </Typography>
-                  )}
-
-                  {/* The link itself, always visible and selectable: a clipboard write
-                      can fail silently inside an in-app browser. */}
-                  {linkFor[student.id] && (
-                    <Box
-                      sx={{
-                        mt: 1,
-                        p: 1,
-                        borderRadius: 1,
-                        bgcolor: 'action.hover',
-                        fontFamily: 'monospace',
-                        fontSize: 13,
-                        overflowWrap: 'anywhere',
-                        userSelect: 'all',
-                      }}
-                    >
-                      {linkFor[student.id]}
-                    </Box>
-                  )}
-
-                  <Box sx={{ mt: 1, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                    <Button
-                      variant="contained"
-                      disabled={linkBusy === student.id}
-                      startIcon={copiedFor === student.id ? <CheckCircleOutlineIcon /> : <ContentCopyOutlinedIcon />}
-                      onClick={() => getLink(student)}
-                      sx={{ minHeight: 48 }}
-                    >
-                      {linkBusy === student.id
-                        ? 'Working...'
-                        : copiedFor === student.id
-                          ? 'Copied'
-                          : student.detailRequest?.progress === 'not_asked'
-                            ? 'Get a link to ask'
-                            : 'Copy link again'}
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      disabled={linkBusy === student.id}
-                      startIcon={<SendOutlinedIcon />}
-                      onClick={() => sendNudge(student)}
-                      sx={{ minHeight: 48 }}
-                    >
-                      Send in Teams and Nexus
-                    </Button>
-                    {student.detailRequest && student.detailRequest.progress !== 'not_asked' && (
-                      <Button
-                        variant="text"
-                        disabled={linkBusy === student.id}
-                        onClick={() => getLink(student, true)}
-                        sx={{ minHeight: 48 }}
-                      >
-                        Send a new link
-                      </Button>
-                    )}
-                    <Button
-                      variant="text"
-                      startIcon={<ContentCopyOutlinedIcon />}
-                      onClick={() => copyAsk(student)}
-                      sx={{ minHeight: 48 }}
-                    >
-                      Copy the questions instead
-                    </Button>
-                    {canLink && (
-                      <Button
-                        variant="text"
-                        component="a"
-                        href={adminHref(student.id)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        endIcon={<OpenInNewOutlinedIcon />}
-                        sx={{ minHeight: 48 }}
-                      >
-                        Fill in Admin
-                      </Button>
-                    )}
-                  </Box>
-                  {actionError?.key === student.id && (
-                    <Typography variant="body2" color="error" sx={{ mt: 0.75 }}>
-                      {actionError.message}
-                    </Typography>
-                  )}
-                </Box>
+                <NoFormBlock
+                  student={student}
+                  now={now}
+                  canLink={canLink}
+                  adminHref={adminHref(student.id)}
+                  linkUrl={linkFor[student.id] ?? null}
+                  linkBusy={linkBusy === student.id}
+                  copied={copiedFor === student.id}
+                  otherWaysOpen={!!otherWaysFor[student.id]}
+                  error={actionError?.key === student.id ? actionError.message : null}
+                  onToggleOtherWays={() =>
+                    setOtherWaysFor((prev) => ({ ...prev, [student.id]: !prev[student.id] }))
+                  }
+                  onGetLink={(regenerate) => getLink(student, regenerate)}
+                />
               )}
             </Paper>
           ))}
@@ -852,6 +700,168 @@ function CandidateBlock({
         <Alert severity="error" sx={{ mt: 1 }}>
           {error}
         </Alert>
+      )}
+    </Box>
+  );
+}
+
+/**
+ * A student with no form anywhere. ONE path (founder, 2026-10-16): staff fill in
+ * the form and fees in Admin and send it to the student to check from there.
+ *
+ * The link stays, folded under "Other ways", because most students with no form
+ * have never opened Nexus: a WhatsApp link is the only way to reach them. Staff
+ * who cannot use Admin get the link as their main button instead.
+ */
+function NoFormBlock({
+  student,
+  now,
+  canLink,
+  adminHref,
+  linkUrl,
+  linkBusy,
+  copied,
+  otherWaysOpen,
+  error,
+  onToggleOtherWays,
+  onGetLink,
+}: {
+  student: StudentFormReview;
+  now: number;
+  canLink: boolean;
+  adminHref: string;
+  linkUrl: string | null;
+  linkBusy: boolean;
+  copied: boolean;
+  otherWaysOpen: boolean;
+  error: string | null;
+  onToggleOtherWays: () => void;
+  onGetLink: (regenerate: boolean) => void;
+}) {
+  const progress = progressLine(student.detailRequest, now);
+  const asked = !!student.detailRequest && student.detailRequest.progress !== 'not_asked';
+  const panelId = `other-ways-${student.id}`;
+  const panelOpen = otherWaysOpen || !!linkUrl;
+
+  const linkTools = (primary: boolean) => (
+    <Box>
+      {/* Where the ask has got to, so two teachers do not chase the same
+          student while nobody chases the next one. */}
+      {progress && (
+        <Typography
+          variant="body2"
+          role="status"
+          sx={{
+            mb: 1,
+            fontWeight: 600,
+            color: student.detailRequest?.progress === 'answered' ? 'success.main' : 'text.secondary',
+          }}
+        >
+          {progress}
+        </Typography>
+      )}
+      {/* The link itself, always visible and selectable: a clipboard write can
+          fail silently inside an in-app browser. */}
+      {linkUrl && (
+        <Box
+          sx={{
+            mb: 1,
+            p: 1,
+            borderRadius: 1,
+            bgcolor: 'action.hover',
+            fontFamily: 'monospace',
+            fontSize: 13,
+            overflowWrap: 'anywhere',
+            userSelect: 'all',
+          }}
+        >
+          {linkUrl}
+        </Box>
+      )}
+      <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+        <Button
+          variant={primary ? 'contained' : 'outlined'}
+          disabled={linkBusy}
+          startIcon={copied ? <CheckCircleOutlineIcon /> : <ContentCopyOutlinedIcon />}
+          onClick={() => onGetLink(false)}
+          sx={{ minHeight: 48, width: primary ? { xs: '100%', sm: 'auto' } : undefined }}
+        >
+          {linkBusy ? 'Working...' : copied ? 'Copied' : asked ? 'Copy link again' : 'Send them a link to fill in'}
+        </Button>
+        {asked && (
+          <Button variant="text" disabled={linkBusy} onClick={() => onGetLink(true)} sx={{ minHeight: 48 }}>
+            Send a new link
+          </Button>
+        )}
+      </Box>
+    </Box>
+  );
+
+  return (
+    <Box sx={{ mt: 1.25 }}>
+      <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'flex-start' }}>
+        <InfoOutlinedIcon aria-hidden sx={{ fontSize: 18, mt: '2px', color: 'text.secondary' }} />
+        <Typography variant="body2">
+          {canLink
+            ? 'No application form found. Fill in their form and fees in Admin, then send it to them to check.'
+            : 'No application form found. Ask the office to fill in their form and fees.'}
+        </Typography>
+      </Box>
+
+      {canLink ? (
+        <>
+          <Button
+            variant="contained"
+            component="a"
+            href={adminHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            endIcon={<OpenInNewOutlinedIcon aria-hidden />}
+            sx={{ mt: 1.25, minHeight: 48, width: { xs: '100%', sm: 'auto' }, fontWeight: 700 }}
+          >
+            Fill in form and fees in Admin
+          </Button>
+          <Box sx={{ mt: 1 }}>
+            <Button
+              variant="text"
+              onClick={onToggleOtherWays}
+              aria-expanded={panelOpen}
+              aria-controls={panelId}
+              endIcon={
+                <ExpandMoreIcon
+                  aria-hidden
+                  sx={{
+                    transform: panelOpen ? 'rotate(180deg)' : 'none',
+                    transition: 'transform 200ms',
+                    '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+                  }}
+                />
+              }
+              sx={{ minHeight: 44, px: 1 }}
+            >
+              Other ways
+            </Button>
+          </Box>
+          <Collapse in={panelOpen} timeout="auto" unmountOnExit>
+            <Box id={panelId} sx={{ mt: 0.5, pl: 1.5, borderLeft: 2, borderColor: 'divider' }}>
+              {linkTools(false)}
+            </Box>
+          </Collapse>
+          {/* An ask already out is worth seeing without opening Other ways. */}
+          {!panelOpen && progress && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              {progress}
+            </Typography>
+          )}
+        </>
+      ) : (
+        <Box sx={{ mt: 1.25 }}>{linkTools(true)}</Box>
+      )}
+
+      {error && (
+        <Typography variant="body2" color="error" role="alert" sx={{ mt: 0.75 }}>
+          {error}
+        </Typography>
       )}
     </Box>
   );

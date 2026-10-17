@@ -1,8 +1,8 @@
 name: Recording trim
 
 # Cuts the silent stretches out of class recordings (the wait before class,
-# the dead tail, and still-and-silent pauses), so catch-up and the YouTube
-# backup are shorter. See scripts/recording-trim/worker.mjs.
+# the dead tail, and every wordless pause of 3s or more), so catch-up and the
+# YouTube backup are shorter. See scripts/recording-trim/worker.mjs.
 #
 # The runner does the ffmpeg work; Nexus decides what to cut and holds every
 # credential. Takes no jobs unless the staff.auto-trim flag is on in Nexus.
@@ -19,9 +19,9 @@ on:
   workflow_dispatch:
     inputs:
       max_jobs:
-        description: 'Recordings to process in this run'
+        description: 'Recordings to process in this run (each is re-encoded, several minutes)'
         required: false
-        default: '6'
+        default: '2'
       apply_ready:
         description: 'Only switch in trims waiting for the overnight window'
         type: boolean
@@ -67,4 +67,4 @@ jobs:
 
       - name: Trim recordings
         if: github.event.schedule != '5,35 20-22 * * *' && inputs.apply_ready != true
-        run: node scripts/recording-trim/worker.mjs --max-jobs "${{ inputs.max_jobs || '6' }}"
+        run: node scripts/recording-trim/worker.mjs --max-jobs "${{ inputs.max_jobs || '2' }}"

@@ -16,6 +16,7 @@ import ExamProfileOnboarding from '@/components/question-bank/ExamProfileOnboard
 import { readQbOnboarding, writeQbOnboarding } from '@/components/question-bank/qb-onboarding-storage';
 import ToolPageHeader from '@/components/tools-hub/ToolPageHeader';
 import { TOOLS_HOME_HREF } from '@/lib/navigation-data';
+import { useHideReportFab } from '@/components/ReporterAccessContext';
 
 type SortBy = 'newest' | 'most_voted';
 
@@ -57,6 +58,8 @@ function PageSkeleton() {
 function QuestionBankContent() {
   const { user, loading: authLoading } = useFirebaseAuth();
   const userId = user?.id ?? null;
+  // The phone "Post a question" button owns the report button's corner below md.
+  useHideReportFab(!!userId, 'md');
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();

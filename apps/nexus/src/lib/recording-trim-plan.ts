@@ -6,12 +6,15 @@
  * them sit through all of it. Across 30 recent classes, speech started 5 to 20
  * minutes in and 15 to 34% of each recording was silent.
  *
- * The founder's rule (2026-10-14):
+ * The founder's rule:
  *   - always cut the wait before the class really starts, and the dead tail
- *     after it ends;
- *   - in the middle, cut only a stretch of 30 seconds or more where nobody
- *     speaks AND the screen does not change. Silence alone is not enough: a
- *     teacher drawing without talking is teaching, and the screen moves.
+ *     after it ends (2026-10-14);
+ *   - in the middle, with a transcript, tighten every gap of 3 seconds or more
+ *     where nobody says a word down to about a second of quiet, whatever the
+ *     screen does (2026-10-16). Students can still open any skipped part from
+ *     the catch-up player, so a silent drawing demo is one tap away;
+ *   - without a usable transcript, the older rule stays: cut only a stretch of
+ *     30 seconds or more that is silent AND where the screen does not change.
  *
  * Inputs come from ffmpeg on the trim worker (silencedetect, freezedetect, the
  * keyframe list) plus the transcript's cue times, which say where speech is far
@@ -19,9 +22,10 @@
  * decides who is speaking (founder, 2026-10-15); the audio level is only the
  * fallback for a class without one. Pure, so every rule is unit tested.
  *
- * Cuts are snapped to keyframes because the worker cuts without re-encoding
- * (fast, no quality loss): a kept stretch can only begin on a keyframe. The
- * snap always keeps a little more video, never less.
+ * When the worker cuts without re-encoding, cuts are snapped to keyframes: a
+ * kept stretch can only begin on one. The snap always keeps a little more
+ * video, never less. A re-encoding worker sends no keyframes, so cuts land
+ * where the plan says.
  */
 
 export type Span = readonly [number, number];
@@ -48,8 +52,26 @@ export interface TrimParams {
   minKept: number;
   /** Below this in total, trimming is not worth a new file. */
   minWorth: number;
-  /** At most this many mid-class cuts. */
+  /** At most this many mid-class cuts (the longest are kept). */
   maxMidCuts: number;
+  /**
+   * 'ignore': with a usable transcript, any wordless gap is a pause, whatever
+   * the screen does. 'freeze': a pause must also have a still screen and last
+   * minMidCut. Without a usable transcript, 'freeze' always applies.
+   */
+  screenRule: 'ignore' | 'freeze';
+  /** Shortest wordless gap tightened under the transcript rule. */
+  pauseMinGap: number;
+  /** Quiet kept after the last word before a tightened gap. */
+  keepAfterSpeech: number;
+  /** Quiet kept before the first word after it (cues can start a little late). */
+  keepBeforeSpeech: number;
+  /**
+   * Below this share of the class covered by cues, the transcript is not
+   * trusted to say where nobody speaks (a wrong language, a dropped feed), and
+   * pauses fall back to the 'freeze' rule. Real classes run 0.43 to 0.88.
+   */
+  minSpeechCoverage: number;
 }
 
 export const DEFAULT_TRIM_PARAMS: TrimParams = {
@@ -64,7 +86,12 @@ export const DEFAULT_TRIM_PARAMS: TrimParams = {
   maxRemovedRatio: 0.6,
   minKept: 600,
   minWorth: 60,
-  maxMidCuts: 40,
+  maxMidCuts: 600,
+  screenRule: 'ignore',
+  pauseMinGap: 3,
+  keepAfterSpeech: 0.4,
+  keepBeforeSpeech: 0.6,
+  minSpeechCoverage: 0.35,
 };
 
 export interface TrimPlanInput {
@@ -88,8 +115,11 @@ export interface TrimCut {
   kind: CutKind;
 }
 
+/** Which rule decided the mid-class pauses, stored with the plan so a result can be explained later. */
+export type PauseRule = 'transcript' | 'freeze' | 'freeze_low_coverage';
+
 export type TrimPlan =
-  | { kind: 'cut'; cuts: TrimCut[]; keep: Span[]; removedSeconds: number }
+  | { kind: 'cut'; cuts: TrimCut[]; keep: Span[]; removedSeconds: number; pauseRule: PauseRule }
   | { kind: 'skip'; reason: 'NO_CUTS' | 'NOT_WORTH_IT' | 'GUARD_RATIO' | 'NO_DURATION' | 'NO_SPEECH' };
 
 function merge(spans: ReadonlyArray<Span>): [number, number][] {
@@ -176,17 +206,27 @@ function keyframeAtOrBefore(keyframes: ReadonlyArray<number>, t: number): number
   return best >= 0 ? keyframes[best] : 0;
 }
 
-function minFor(kind: CutKind, p: TrimParams): number {
-  return kind === 'lead' ? p.leadMinCut : kind === 'tail' ? p.tailMinCut : p.minMidCut - 2 * p.midMargin;
+function minFor(kind: CutKind, p: TrimParams, rule: PauseRule): number {
+  if (kind === 'lead') return p.leadMinCut;
+  if (kind === 'tail') return p.tailMinCut;
+  return rule === 'transcript'
+    ? p.pauseMinGap - p.keepAfterSpeech - p.keepBeforeSpeech
+    : p.minMidCut - 2 * p.midMargin;
 }
 
-function finish(cuts: TrimCut[], duration: number, p: TrimParams, keyframes: ReadonlyArray<number>): TrimPlan {
+function finish(
+  cuts: TrimCut[],
+  duration: number,
+  p: TrimParams,
+  keyframes: ReadonlyArray<number>,
+  rule: PauseRule,
+): TrimPlan {
   // Snap each cut's end back to a keyframe: the kept stretch after it starts
   // there. A tail cut runs to the end of the file and needs no snap.
   const snapped: TrimCut[] = [];
   for (const cut of cuts) {
     const to = cut.kind === 'tail' ? duration : keyframeAtOrBefore(keyframes, cut.to);
-    if (to - cut.from >= minFor(cut.kind, p)) snapped.push({ ...cut, to });
+    if (to - cut.from >= minFor(cut.kind, p, rule) - 1e-6) snapped.push({ ...cut, to });
   }
   if (!snapped.length) return { kind: 'skip', reason: 'NO_CUTS' };
 
@@ -206,7 +246,21 @@ function finish(cuts: TrimCut[], duration: number, p: TrimParams, keyframes: Rea
     return { kind: 'skip', reason: 'GUARD_RATIO' };
   }
   if (removedSeconds < p.minWorth) return { kind: 'skip', reason: 'NOT_WORTH_IT' };
-  return { kind: 'cut', cuts: snapped, keep: kept, removedSeconds };
+  return { kind: 'cut', cuts: snapped, keep: kept, removedSeconds, pauseRule: rule };
+}
+
+/** The share of [from, to] covered by speech. */
+function speechShare(speech: ReadonlyArray<Span>, from: number, to: number): number {
+  return to > from ? coverage(speech, from, to) / (to - from) : 0;
+}
+
+/** The longest n spans, back in time order. */
+function longest(spans: [number, number][], n: number): [number, number][] {
+  if (spans.length <= n) return spans;
+  return [...spans]
+    .sort((x, y) => y[1] - y[0] - (x[1] - x[0]))
+    .slice(0, n)
+    .sort((x, y) => x[0] - y[0]);
 }
 
 export function planTrim(input: TrimPlanInput): TrimPlan {
@@ -228,25 +282,46 @@ export function planTrim(input: TrimPlanInput): TrimPlan {
   const tailStart = Math.min(D, end + p.tailMargin);
   if (D - tailStart >= p.tailMinCut) cuts.push({ from: tailStart, to: D, kind: 'tail' });
 
-  // Nobody speaking AND nothing moving on screen. With a transcript, "nobody
-  // speaking" means no words in it, not an audio level: open student mics keep
-  // the level above the silence threshold through a pause nobody talks in (the
-  // 14 Oct JEE class kept a 39s pause after the greetings this way, and 19
-  // trimmed classes kept 0.6 to 5 minutes each; founder, 2026-10-15).
-  const quiet = input.speech.length ? complement(speech, D) : input.silences;
-  const idle = intersect(quiet, input.freezes)
-    .map(([a, b]) => [Math.max(a, leadEnd), Math.min(b, tailStart)] as [number, number])
-    .filter(([a, b]) => b - a >= p.minMidCut)
-    // Speech inside an idle span (a quiet voice under the threshold) wins.
-    .filter(([a, b]) => coverage(speech, a + p.midMargin, b - p.midMargin) < 1)
-    .slice(0, p.maxMidCuts);
-  for (const [a, b] of idle) cuts.push({ from: a + p.midMargin, to: b - p.midMargin, kind: 'pause' });
+  const hasTranscript = input.speech.length > 0;
+  const trusted = hasTranscript && speechShare(speech, start, end) >= p.minSpeechCoverage;
+  const rule: PauseRule = !hasTranscript
+    ? 'freeze'
+    : !trusted
+      ? 'freeze_low_coverage'
+      : p.screenRule === 'ignore'
+        ? 'transcript'
+        : 'freeze';
 
-  const plan = finish(cuts, D, p, input.keyframes);
+  if (rule === 'transcript') {
+    // Every wordless gap of pauseMinGap or more between the class's first and
+    // last words shrinks to about a second of quiet. The 14 Oct JEE class kept
+    // a 39s pause after the greetings under the freeze rule because a tile in
+    // the Teams gallery changed (founder, 2026-10-16).
+    const gaps = complement(speech, D).filter(([a, b]) => a >= start && b <= end && b - a >= p.pauseMinGap);
+    for (const [a, b] of longest(gaps, p.maxMidCuts)) {
+      cuts.push({ from: a + p.keepAfterSpeech, to: b - p.keepBeforeSpeech, kind: 'pause' });
+    }
+  } else {
+    // Nobody speaking AND nothing moving on screen. With a transcript, "nobody
+    // speaking" means no words in it, not an audio level: open student mics keep
+    // the level above the silence threshold through a pause nobody talks in
+    // (founder, 2026-10-15). A transcript too thin to trust leaves it to audio.
+    const quiet = rule === 'freeze' && hasTranscript ? complement(speech, D) : input.silences;
+    const idle = intersect(quiet, input.freezes)
+      .map(([a, b]) => [Math.max(a, leadEnd), Math.min(b, tailStart)] as [number, number])
+      .filter(([a, b]) => b - a >= p.minMidCut)
+      // Speech inside an idle span (a quiet voice under the threshold) wins.
+      .filter(([a, b]) => coverage(speech, a + p.midMargin, b - p.midMargin) < 1);
+    for (const [a, b] of longest(idle, p.maxMidCuts)) {
+      cuts.push({ from: a + p.midMargin, to: b - p.midMargin, kind: 'pause' });
+    }
+  }
+
+  const plan = finish(cuts, D, p, input.keyframes, rule);
   // Too much for the guards: fall back to just the edges, which are the part
   // everyone agrees on.
   if (plan.kind === 'skip' && plan.reason === 'GUARD_RATIO') {
-    return finish(cuts.filter((c) => c.kind !== 'pause'), D, p, input.keyframes);
+    return finish(cuts.filter((c) => c.kind !== 'pause'), D, p, input.keyframes, rule);
   }
   return plan;
 }

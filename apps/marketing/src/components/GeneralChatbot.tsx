@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import { usePathname } from 'next/navigation';
 import { isHubRoute } from '@/components/college-hub/hub-routes';
 import { useFirebaseAuth } from '@neram/auth';
@@ -41,8 +42,15 @@ import { useBackLayers } from './aintra/panel/useBackLayers';
 import SuggestionChips from './aintra/rich/SuggestionChips';
 import { readChatStream } from '@/lib/aintra/chat-stream';
 import { leadAttribution } from '@/lib/attribution';
+import { ensureAccount } from '@/lib/ensure-account';
+import SignInGateCard from './aintra/SignInGateCard';
 import { buildWhatsAppLink } from '@/lib/whatsapp';
 import { trackWhatsAppClick } from '@/lib/whatsapp-track';
+
+// The sign-in dialog loads only when a returning guest needs it.
+const LoginModal = dynamic(() => import('@neram/ui').then((m) => m.LoginModal), { ssr: false });
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
 
 const MAX_QUESTIONS_PER_SESSION = 20;
 const LEAD_CAPTURE_AFTER = 3;
@@ -75,6 +83,26 @@ const FAB_BOTTOM = 24;
 const OVER_STICKY_CTA_BOTTOM = 96;
 const STICKY_CTA_PATH = /\/coaching\/(nata-coaching|jee-paper-2-coaching)/;
 const DISMISSED_KEY = 'aintra_dismissed';
+/** Set when Aintra asked this returning guest to sign in, so a refresh shows the card straight away. */
+const SIGNIN_REQUIRED_KEY = 'aintra_signin_required';
+
+function readSignInRequired(): boolean {
+  if (typeof window === 'undefined') return false;
+  try {
+    return window.sessionStorage.getItem(SIGNIN_REQUIRED_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function writeSignInRequired(on: boolean) {
+  try {
+    if (on) window.sessionStorage.setItem(SIGNIN_REQUIRED_KEY, '1');
+    else window.sessionStorage.removeItem(SIGNIN_REQUIRED_KEY);
+  } catch {
+    // Private mode: the card still shows after the next send.
+  }
+}
 
 const headerButtonSx = { color: 'inherit', width: 44, height: 44 } as const;
 
@@ -110,6 +138,11 @@ export default function GeneralChatbot() {
   const [canvasOpen, setCanvasOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [showJump, setShowJump] = useState(false);
+  // Returning guest: Aintra is free on the first day, later it asks them to sign in.
+  const [signInRequired, setSignInRequired] = useState(readSignInRequired);
+  const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [resendAfterLogin, setResendAfterLogin] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const followRef = useRef(true);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -191,6 +224,13 @@ export default function GeneralChatbot() {
   const sendMessage = async (text: string) => {
     if (!text.trim() || loading) return;
 
+    if (signInRequired && !firebaseUser) {
+      setPendingQuestion(text.trim());
+      setInput('');
+      setLoginOpen(true);
+      return;
+    }
+
     if (questionCount >= MAX_QUESTIONS_PER_SESSION) {
       setMessages((prev) => [
         ...prev,
@@ -256,6 +296,7 @@ export default function GeneralChatbot() {
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
+        if (errData.code === 'SIGNUP_REQUIRED') throw new Error('SIGNUP_REQUIRED');
         throw new Error(errData.code === 'AI_UNAVAILABLE' ? 'AI_UNAVAILABLE' : errData.error || 'Failed to get response');
       }
 
@@ -290,6 +331,20 @@ export default function GeneralChatbot() {
         return;
       }
       const reason = err instanceof Error ? err.message : '';
+      // A returning guest: keep the question, take the pair off the screen and
+      // show the sign-in card. It goes out again by itself once they are in.
+      if (reason === 'SIGNUP_REQUIRED') {
+        const userBubbleIndex = (list: ChatMessage[]) => list.findIndex((m) => m.id === answerId) - 1;
+        setMessages((prev) => {
+          const i = userBubbleIndex(prev);
+          return prev.filter((m, j) => m.id !== answerId && j !== i);
+        });
+        setQuestionCount((c) => Math.max(0, c - 1));
+        setPendingQuestion(text.trim());
+        setSignInRequired(true);
+        writeSignInRequired(true);
+        return;
+      }
       // AI_UNAVAILABLE is an outage, not a blip: retrying will not help, a person will.
       const errorMsg = reason === 'AI_UNAVAILABLE'
         ? 'Our assistant is offline for a bit. Our team replies fast on WhatsApp, or call us at **+91 91761 37043**.'
@@ -309,6 +364,29 @@ export default function GeneralChatbot() {
   const sendSuggestion = useCallback((q: string) => void sendRef.current(q), []);
 
   const stopAnswer = () => abortRef.current?.abort();
+
+  // Signed in (here, or in another tab): the gate no longer applies.
+  useEffect(() => {
+    if (!firebaseUser || !signInRequired) return;
+    setSignInRequired(false);
+    writeSignInRequired(false);
+  }, [firebaseUser, signInRequired]);
+
+  // After the sign-in dialog finishes (Google or phone, then the OTP), send what they asked.
+  useEffect(() => {
+    if (!resendAfterLogin || !firebaseUser) return;
+    setResendAfterLogin(false);
+    const q = pendingQuestion;
+    setPendingQuestion(null);
+    if (q) void sendRef.current(q);
+  }, [resendAfterLogin, firebaseUser, pendingQuestion]);
+
+  const onSignedIn = useCallback(() => {
+    setLoginOpen(false);
+    // Links the account to this visitor id, so their guest chats join it in Admin.
+    void ensureAccount();
+    setResendAfterLogin(true);
+  }, []);
 
   const handleLeadSubmit = async () => {
     if (!leadName.trim() || !leadPhone.trim()) return;
@@ -911,7 +989,7 @@ export default function GeneralChatbot() {
             </Box>
 
             {/* Remaining questions counter */}
-            {questionCount > 0 && (
+            {questionCount > 0 && !(signInRequired && !firebaseUser) && (
               <Box sx={{ px: 2, py: 0.5, bgcolor: tokens.ground, textAlign: 'center', flexShrink: 0 }}>
                 <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>
                   {MAX_QUESTIONS_PER_SESSION - questionCount} questions remaining
@@ -919,7 +997,10 @@ export default function GeneralChatbot() {
               </Box>
             )}
 
-            {/* Input */}
+            {/* Input, or the sign-in card for a returning guest */}
+            {signInRequired && !firebaseUser ? (
+              <SignInGateCard pendingQuestion={pendingQuestion} onSignIn={() => setLoginOpen(true)} />
+            ) : (
             <Box
               sx={{
                 display: 'flex',
@@ -990,6 +1071,7 @@ export default function GeneralChatbot() {
                 </IconButton>
               )}
             </Box>
+            )}
 
             {/* Canvas over the chat (phones and tablets) */}
             {!canvasBeside || isPhone ? (
@@ -1008,6 +1090,23 @@ export default function GeneralChatbot() {
           </Box>
         </Box>
       </SwipeableDrawer>
+
+      {loginOpen && (
+        <LoginModal
+          open={loginOpen}
+          onClose={() => {
+            setLoginOpen(false);
+            // Closed after Google but before the phone step: they are signed in, so still send it.
+            setResendAfterLogin(true);
+          }}
+          allowClose
+          allowEscapeHatch
+          apiBaseUrl={APP_URL}
+          onAuthenticated={onSignedIn}
+          // Above the chat drawer (1450) and its menus (1460).
+          zIndex={1500}
+        />
+      )}
     </>
   );
 }

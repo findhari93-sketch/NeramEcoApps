@@ -109,10 +109,30 @@ describe('buildAttentionRows', () => {
       suggestionCount: 2,
       backInNexusCount: 2,
       notStartedLongCount: 2,
+      noFeeCount: 2,
     });
+    expect(rows.some((r) => r.key === 'no_fee')).toBe(true);
     for (const row of rows) {
       expect(row.message).not.toMatch(/—|--/);
       for (const action of row.actions) expect(action.label).not.toMatch(/—|--/);
     }
+  });
+
+  it('lists students with a form but no fee right after the missing forms', () => {
+    const rows = buildAttentionRows({ ...none, noFormCount: 2, noFeeCount: 3, noStageCount: 1 });
+    expect(rows.map((r) => r.key)).toEqual(['no_form', 'no_fee', 'no_stage']);
+  });
+
+  it('words the no fee row for one and for many, with the Admin action', () => {
+    expect(buildAttentionRows({ ...none, noFeeCount: 1 })[0].message).toBe(
+      '1 student has an application but no fee details.',
+    );
+    const many = buildAttentionRows({ ...none, noFeeCount: 4 })[0];
+    expect(many.message).toBe('4 students have an application but no fee details.');
+    expect(many.actions).toEqual([{ key: 'review_fees', label: 'Add fees in Admin', primary: true }]);
+  });
+
+  it('shows no fee row when the count is absent, as it is for teachers', () => {
+    expect(buildAttentionRows({ ...none, noFormCount: 1 }).map((r) => r.key)).toEqual(['no_form']);
   });
 });

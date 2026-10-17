@@ -14,9 +14,9 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: 'IITs Offering B.Arch via AAT 2026: Roorkee, Kharagpur, BHU Varanasi',
+    title: 'IITs for B.Arch via AAT: Roorkee, Kharagpur, BHU',
     description:
-      'Three IITs offer the 5-year B.Arch program through AAT 2026: IIT Roorkee, IIT Kharagpur, and IIT (BHU) Varanasi. Department details, NIRF rankings, and admission process via JoSAA.',
+      'Only three IITs offer B.Arch through AAT: Roorkee, Kharagpur and IIT (BHU) Varanasi. Compare their NIRF ranks and departments, and see how JoSAA allots seats on your JEE Advanced rank.',
     keywords:
       'IIT B.Arch colleges, AAT participating IITs, IIT Roorkee architecture, IIT Kharagpur architecture, IIT BHU architecture, B.Arch IIT admission',
     alternates: buildAlternates(locale, '/aat-2026/participating-iits'),

@@ -37,6 +37,13 @@ export interface EnrolledStudent {
   has_application_form?: boolean;
 
   /**
+   * Has an application but no agreed fee. Sent ONLY to callers with
+   * coord.student.finance; absent (not false) for everyone else, so a teacher's
+   * payload carries nothing about money.
+   */
+  fee_missing?: boolean;
+
+  /**
    * Where they live, from lead_profiles: the newest of their rows that names a
    * city, title-cased. Kept apart so a city stays comparable; the row joins the
    * two for display with placeLabel(). See lib/student-place.ts.

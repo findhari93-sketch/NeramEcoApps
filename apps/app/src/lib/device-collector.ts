@@ -130,3 +130,55 @@ export function collectLocation(): Promise<LocationInfo | null> {
     );
   });
 }
+
+/** What a problem report adds on top of DeviceInfo: where on the page, and when. */
+export interface ReportDeviceInfo extends DeviceInfo {
+  viewport_width: number;
+  viewport_height: number;
+  scroll_x: number;
+  scroll_y: number;
+  page_height: number;
+  online: boolean;
+  build_id: string | null;
+  captured_at: string;
+}
+
+/**
+ * The deployed build, when we can tell. Vercel's commit sha if it was exposed
+ * at build time, otherwise the id in Next's build manifest script path.
+ */
+export function detectBuildId(): string | null {
+  const sha = process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA || process.env.NEXT_PUBLIC_BUILD_ID;
+  if (sha) return sha.slice(0, 12);
+  try {
+    const scripts = Array.from(document.querySelectorAll<HTMLScriptElement>('script[src*="/_next/static/"]'));
+    for (const s of scripts) {
+      const m = s.src.match(/\/_next\/static\/([^/]+)\/_(?:build|ssg)Manifest\.js/);
+      if (m) return m[1];
+    }
+  } catch {
+    // no DOM, or a locked-down document
+  }
+  return null;
+}
+
+/** Device info for a problem report. Never throws; missing parts are left at safe defaults. */
+export function collectReportDeviceInfo(): ReportDeviceInfo | undefined {
+  try {
+    const base = collectDeviceInfo();
+    const root = document.documentElement;
+    return {
+      ...base,
+      viewport_width: window.innerWidth,
+      viewport_height: window.innerHeight,
+      scroll_x: Math.round(window.scrollX),
+      scroll_y: Math.round(window.scrollY),
+      page_height: Math.max(document.body?.scrollHeight || 0, root.scrollHeight),
+      online: typeof navigator.onLine === 'boolean' ? navigator.onLine : true,
+      build_id: detectBuildId(),
+      captured_at: new Date().toISOString(),
+    };
+  } catch {
+    return undefined;
+  }
+}

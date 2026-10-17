@@ -1,99 +1,93 @@
 export const dynamic = 'force-dynamic';
 
 /**
- * Support Ticket Comments API
+ * Reply on your own ticket (Tools App, Firebase auth).
  *
- * POST /api/support-tickets/[id]/comments - Add a comment to a ticket (Firebase auth required)
+ * POST /api/support-tickets/[id]/comments  { content }
+ *
+ *  - Closed tickets take no replies: 409, use "Still happening" instead, which
+ *    reopens it with a fresh snapshot.
+ *  - A reply while staff wait on you puts the ticket back to work (resume).
+ *  - Every reply rings the Admin bell.
+ *
+ * Somebody else's ticket answers 404, the same as one that does not exist.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyIdToken } from '@/lib/firebase-admin';
 import {
-  getUserByFirebaseUid,
   getSupabaseAdminClient,
-  getSupportTicketById,
-  addTicketComment,
+  getSupportTicketByRef,
+  addSupportTicketMessage,
+  resumeSupportTicket,
+  createAdminNotification,
 } from '@neram/database';
+import { requireSignedInRequester } from '@/lib/student-ticket';
 
-// ---------------------------------------------------------------------------
-// Auth helper
-// ---------------------------------------------------------------------------
+const MAX_REPLY = 5000;
 
-async function requireAuth(
-  req: NextRequest,
-): Promise<{ userId: string; userName: string } | NextResponse> {
-  const authHeader = req.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-  }
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const token = authHeader.split(' ')[1];
-    const decoded = await verifyIdToken(token);
-    const adminClient = getSupabaseAdminClient();
-    const dbUser = await getUserByFirebaseUid(decoded.uid, adminClient);
-    if (!dbUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
-    return {
-      userId: dbUser.id,
-      userName: dbUser.name || dbUser.first_name || 'Unknown',
-    };
-  } catch {
-    return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-  }
-}
-
-// ---------------------------------------------------------------------------
-// POST /api/support-tickets/[id]/comments
-// ---------------------------------------------------------------------------
-
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
-) {
-  try {
-    const auth = await requireAuth(req);
+    const auth = await requireSignedInRequester(req);
     if (auth instanceof NextResponse) return auth;
 
     const { id } = await params;
-
-    if (!id) {
-      return NextResponse.json({ error: 'Ticket ID is required' }, { status: 400 });
-    }
-
     const supabase = getSupabaseAdminClient();
-
-    // Get the ticket and verify the user owns it
-    const ticket = await getSupportTicketById(id, supabase);
-
-    if (!ticket) {
+    const ticket = id ? await getSupportTicketByRef(id, supabase) : null;
+    if (!ticket || ticket.user_id !== auth.userId) {
       return NextResponse.json({ error: 'Ticket not found' }, { status: 404 });
     }
 
-    if (ticket.user_id !== auth.userId) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    const body = await req.json();
-    const { content } = body;
-
-    if (!content || typeof content !== 'string' || content.trim().length === 0) {
+    const body = await req.json().catch(() => null);
+    const content = typeof body?.content === 'string' ? body.content.trim() : '';
+    if (!content) {
       return NextResponse.json({ error: 'Comment content is required' }, { status: 400 });
     }
 
-    // Add the comment (is_admin: false since this comes from the student app)
-    const comment = await addTicketComment(
-      {
-        ticket_id: id,
-        user_id: auth.userId,
-        user_name: auth.userName,
-        is_admin: false,
-        content: content.trim(),
-      },
+    if (ticket.status === 'closed' || ticket.status === 'resolved') {
+      return NextResponse.json(
+        { error: 'ticket_closed', message: 'This request is closed. Use Still happening to reopen it.' },
+        { status: 409 },
+      );
+    }
+
+    const actor = { id: auth.userId, name: auth.userName };
+    const comment = await addSupportTicketMessage(
+      ticket,
+      { author: actor, side: 'student', content: content.slice(0, MAX_REPLY) },
       supabase,
     );
 
-    return NextResponse.json({ comment }, { status: 201 });
+    let status: string = ticket.status;
+    if (ticket.status === 'waiting_on_student') {
+      // Null means staff moved it in the meantime; the reply still stands.
+      const moved = await resumeSupportTicket(ticket, actor, supabase, { byStudent: true });
+      if (moved) status = moved.status;
+    }
+
+    try {
+      await createAdminNotification({
+        event_type: 'ticket_student_replied',
+        title: 'Student replied',
+        message: `${auth.userName} replied on ${ticket.ticket_number}: "${content.slice(0, 140)}"`,
+        metadata: { ticket_id: ticket.id, ticket_number: ticket.ticket_number, source_app: 'app' },
+      });
+    } catch (err) {
+      console.error('[support-tickets] reply notification failed:', err);
+    }
+
+    return NextResponse.json(
+      {
+        comment: {
+          id: comment.id,
+          side: 'student',
+          author_label: 'You',
+          content: comment.content,
+          created_at: comment.created_at,
+        },
+        status,
+      },
+      { status: 201 },
+    );
   } catch (error) {
     console.error('Error adding ticket comment:', error);
     return NextResponse.json({ error: 'Failed to add comment' }, { status: 500 });

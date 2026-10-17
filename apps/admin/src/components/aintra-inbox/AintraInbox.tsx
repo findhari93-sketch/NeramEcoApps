@@ -20,9 +20,11 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import CloseIcon from '@mui/icons-material/Close';
 import { useTheme } from '@mui/material/styles';
 import { OpsPageHeader, TARGET_44 } from '@/components/ops/OpsUi';
-import { withTurns } from '@/lib/aintra-inbox/build';
+import { useAdminBadges } from '@/contexts/AdminBadgesContext';
+import { countQueue, withTurns } from '@/lib/aintra-inbox/build';
+import { REVIEW_QUEUE_DAYS } from '@/lib/aintra-inbox/status';
 import type { InsightRange } from '@/lib/aintra-inbox/insights';
-import type { InboxConversation, InboxPayload, InboxPerson, InboxTurn, Nudge } from '@/lib/aintra-inbox/types';
+import type { InboxConversation, InboxPayload, InboxPerson, InboxTurn } from '@/lib/aintra-inbox/types';
 import ConversationList, { matchesQuery, matchesSegment, matchesStatus, type Segment, type StatusFilter } from './ConversationList';
 import InsightsTab from './InsightsTab';
 import PeopleTab from './PeopleTab';
@@ -35,7 +37,6 @@ const TABS: InboxTab[] = ['conversations', 'people', 'insights'];
 const SEGMENTS: Segment[] = ['all', 'user', 'guest'];
 const STATUSES: StatusFilter[] = ['all', 'queue', 'review', 'error', 'none'];
 const RANGES: InsightRange[] = ['30', '180', 'all'];
-const QUEUE_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
 interface AiHealth {
   blocked: boolean;
@@ -73,6 +74,7 @@ export default function AintraInbox() {
   const now = useMemo(() => (data ? new Date(data.generatedAt) : new Date()), [data]);
 
   const notify = useCallback((message: string, severity: 'success' | 'error' = 'success') => setSnack({ message, severity }), []);
+  const { refresh: refreshBadges } = useAdminBadges();
 
   // Read the view from the URL once (useSearchParams would need a Suspense boundary for the build).
   useEffect(() => {
@@ -183,13 +185,29 @@ export default function AintraInbox() {
       turnCache.current.set(selectedId, next);
       setTurns(next);
       setData((d) => (d ? { ...d, conversations: d.conversations.map((c) => (c.id === selectedId ? withTurns(c, next) : c)) } : d));
+      // A save or resolve can change the queue: bring the sidebar badge in line now, not at the next poll.
+      refreshBadges(true);
     },
-    [selectedId]
+    [selectedId, refreshBadges]
   );
 
-  const onNudge = useCallback((personKey: string, n: Nudge | null) => {
-    setData((d) => (d ? { ...d, people: d.people.map((p) => (p.key === personKey ? { ...p, nudge: n } : p)) } : d));
-  }, []);
+  const resolveCredits = useCallback(async () => {
+    try {
+      const res = await fetch('/api/aintra-inbox/resolve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind: 'credits' }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.error || 'Could not resolve these questions');
+      turnCache.current.clear();
+      await load();
+      refreshBadges(true);
+      notify(`${json.resolved ?? 0} ${json.resolved === 1 ? 'question' : 'questions'} marked resolved`);
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Could not resolve these questions', 'error');
+    }
+  }, [load, refreshBadges, notify]);
 
   const openChat = useCallback((id: string) => {
     setTab('conversations');
@@ -205,14 +223,9 @@ export default function AintraInbox() {
     setMobileDetail(true);
   }, []);
 
-  // Review queue: the same turns the sidebar badge counts (last 30 days, wrong or unanswered, not corrected).
-  const reviewQueue = useMemo(
-    () =>
-      conversations
-        .filter((c) => now.getTime() - Date.parse(c.lastAt) <= QUEUE_DAYS_MS)
-        .reduce((n, c) => n + c.reviewCount + c.errorCount, 0),
-    [conversations, now]
-  );
+  // Review queue: the same questions the sidebar badge counts (asked in the last 30 days, wrong or
+  // unanswered, not corrected or resolved). Counted against the current time so it ages like the badge.
+  const reviewQueue = useMemo(() => countQueue(conversations, new Date(), REVIEW_QUEUE_DAYS), [conversations]);
 
   const staleWarning = useMemo(() => {
     const newest = conversations[0];
@@ -246,7 +259,7 @@ export default function AintraInbox() {
   };
 
   const panel = (
-    <PersonPanel person={person as InboxPerson | null} conversation={selected as InboxConversation | null} onNudge={onNudge} notify={notify} />
+    <PersonPanel person={person as InboxPerson | null} conversation={selected as InboxConversation | null} notify={notify} />
   );
 
   const list = (
@@ -262,6 +275,7 @@ export default function AintraInbox() {
       selectedId={selectedId}
       onSelect={select}
       now={now}
+      onResolveCredits={resolveCredits}
     />
   );
 

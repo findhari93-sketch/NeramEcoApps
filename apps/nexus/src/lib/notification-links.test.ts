@@ -62,3 +62,11 @@ describe('class notices open the class', () => {
     }
   });
 });
+
+describe('fee check notifications open Check your details', () => {
+  it('maps the three student fee events to /student/check-details', () => {
+    for (const type of ['fee_details_check', 'fee_installment_reminder', 'fee_correction_resolved']) {
+      expect(notificationHref(row(type), 'student')).toBe('/student/check-details');
+    }
+  });
+});

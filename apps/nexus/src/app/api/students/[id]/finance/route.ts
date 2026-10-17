@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getRequestUser, assertCapability } from '@/lib/study-materials';
 import { errorResponse } from '@/lib/api-errors';
 import { getSupabaseAdminClient } from '@neram/database';
+import { pickFeeLead } from '@neram/database/fee-plan';
 import {
   LEAD_PROFILE_FINANCE_COLUMNS,
   LEAD_PROFILE_KEY_COLUMNS,
@@ -56,14 +57,23 @@ export async function GET(
     // Wave 1: the two rows that hold the fee agreement and the cache, plus the
     // enrolment date the derived due-date fallback needs.
     const [leadResult, recordResult, enrollmentResult] = await Promise.all([
+      // Every live row, then pickFeeLead: the one rule Admin and the student
+      // page use for which record holds the money. "The newest row" split fees
+      // for a student with a website form and a profile-page row.
       supabase
         .from('lead_profiles')
-        .select(selectColumns(LEAD_PROFILE_KEY_COLUMNS, LEAD_PROFILE_FINANCE_COLUMNS))
+        .select(
+          selectColumns(LEAD_PROFILE_KEY_COLUMNS, LEAD_PROFILE_FINANCE_COLUMNS, [
+            'created_at',
+            'application_number',
+            'reviewed_by',
+            'applicant_category',
+            'academic_data',
+          ]),
+        )
         .eq('user_id', studentId)
         .is('deleted_at', null)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+        .order('created_at', { ascending: false }),
 
       supabase
         .from('student_profiles')
@@ -80,7 +90,7 @@ export async function GET(
         .maybeSingle(),
     ]);
 
-    const lead = (leadResult.data as any) ?? null;
+    const lead = (pickFeeLead(((leadResult.data as any[]) || []) as any[]) as any) ?? null;
     const record = (recordResult.data as any) ?? null;
 
     if (!enrollmentResult.data) {
@@ -117,6 +127,18 @@ export async function GET(
 
     const summary = computeFeeSummary({
       finalFee: lead?.final_fee ?? null,
+      plan: lead
+        ? {
+            payment_scheme: lead.payment_scheme ?? null,
+            full_payment_discount: lead.full_payment_discount ?? null,
+            allowed_payment_modes: lead.allowed_payment_modes ?? null,
+          }
+        : null,
+      installments: ((installmentsResult.data as any[]) || []).map((i) => ({
+        installment_number: i.installment_number ?? null,
+        due_date: i.due_date ?? null,
+        status: i.status ?? null,
+      })),
       payments,
       nextPaymentDate: record?.next_payment_date ?? null,
       paymentDeadline: lead?.payment_deadline ?? null,

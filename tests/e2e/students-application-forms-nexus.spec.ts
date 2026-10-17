@@ -46,6 +46,12 @@ test.describe('Students application forms', () => {
     expect(res.status()).toBe(200);
     const body = await res.json();
     expect(typeof body.counts.noForm).toBe('number');
+    // Finance viewers get a count and a per-student flag; everyone else gets 0
+    // and no flag at all, so a teacher's payload says nothing about money.
+    expect(typeof body.counts.noFee).toBe('number');
+    const flagged = body.students.filter((s: any) => 'fee_missing' in s).length;
+    expect(flagged === 0 || flagged === body.students.length).toBe(true);
+    if (flagged === 0) expect(body.counts.noFee).toBe(0);
     for (const student of body.students) {
       expect(typeof student.has_application_form).toBe('boolean');
     }
@@ -149,6 +155,91 @@ test.describe('Students application forms', () => {
       expect(box!.height).toBeGreaterThanOrEqual(48);
       await done.click();
       await expect(sheet).toHaveCount(0);
+    });
+  });
+
+  /**
+   * The no-form card offers ONE path: fill in the form and fees in Admin. The
+   * review list is intercepted so a student with nothing found is always there,
+   * and the roster count is nudged to at least 1 so the attention row shows.
+   */
+  test.describe('a student with no form anywhere', () => {
+    const NO_FORM_STUDENT = {
+      id: '11111111-1111-4111-8111-111111111111',
+      name: 'Rayna Test',
+      email: 'rayna.test@example.com',
+      candidates: [],
+      detailRequest: { progress: 'not_asked', askedAt: null, askedByName: null, openedAt: null, answeredAt: null, expiresAt: null },
+    };
+
+    async function openCard(page: Page, canLink: boolean) {
+      const ok = await injectAuthForPage(page, 'teacher');
+      test.skip(!ok, 'Nexus test-login unavailable');
+      await page.route((url) => url.pathname === '/api/students', async (route) => {
+        const response = await route.fetch();
+        const body = await response.json().catch(() => null);
+        if (body?.counts) body.counts.noForm = Math.max(1, body.counts.noForm || 0);
+        await route.fulfill({ response, json: body });
+      });
+      await page.route((url) => url.pathname === '/api/students/application-forms', (route) =>
+        route.fulfill({ json: { students: [NO_FORM_STUDENT], canLink } }),
+      );
+      await page.goto(`${NEXUS}/teacher/students`, { waitUntil: 'domcontentloaded', timeout: 90_000 });
+      const card = page.getByRole('region', { name: 'Needs attention' });
+      await expect(card).toBeVisible({ timeout: 60_000 });
+      const toggle = card.getByRole('button', { name: /^Needs attention \(/ });
+      if ((await toggle.getAttribute('aria-expanded')) === 'false') await toggle.click();
+      await card.getByRole('button', { name: 'Find their forms' }).click();
+      const sheet = page.getByRole('dialog', { name: 'Application forms' });
+      await expect(sheet.getByRole('region', { name: 'Rayna Test' })).toBeVisible({ timeout: 60_000 });
+      return sheet.getByRole('region', { name: 'Rayna Test' });
+    }
+
+    test('one primary button to Admin, and Other ways shows only the link', async ({ page }) => {
+      const student = await openCard(page, true);
+      await expect(
+        student.getByText('No application form found. Fill in their form and fees in Admin, then send it to them to check.'),
+      ).toBeVisible();
+
+      const admin = student.getByRole('link', { name: 'Fill in form and fees in Admin' });
+      await expect(admin).toBeVisible();
+      await expect(admin).toHaveAttribute('href', /\/crm\/11111111-1111-4111-8111-111111111111\?section=application&open=fees$/);
+      const box = await admin.boundingBox();
+      expect(box!.height).toBeGreaterThanOrEqual(48);
+      // Full width on a phone: the card is the only thing it shares a row with.
+      expect(box!.width).toBeGreaterThan(250);
+
+      await expect(student.getByRole('button', { name: 'Send in Teams and Nexus' })).toHaveCount(0);
+      await expect(student.getByRole('button', { name: 'Copy the questions instead' })).toHaveCount(0);
+      await expect(student.getByRole('button', { name: 'Send them a link to fill in' })).toHaveCount(0);
+
+      const other = student.getByRole('button', { name: 'Other ways' });
+      await expect(other).toHaveAttribute('aria-expanded', 'false');
+      await other.click();
+      await expect(other).toHaveAttribute('aria-expanded', 'true');
+      await expect(student.getByRole('button', { name: 'Send them a link to fill in' })).toBeVisible();
+      // Exactly one option behind Other ways.
+      await expect(student.locator('[id^="other-ways-"] button')).toHaveCount(1);
+      expect(await fitsWidth(page)).toBe(true);
+      if (process.env.CHECK_SHOTS) {
+        // Let the Collapse and the sheet finish moving before the picture.
+        await page.waitForTimeout(600);
+        await page.screenshot({ path: `${process.env.CHECK_SHOTS}/no-form-card-375.png`, fullPage: false });
+        await page.setViewportSize({ width: 1280, height: 900 });
+        await expect(page.getByRole('dialog', { name: 'Application forms' })).toBeVisible();
+        await page.waitForTimeout(800);
+        await page.screenshot({ path: `${process.env.CHECK_SHOTS}/no-form-card-1280.png`, fullPage: false });
+      }
+    });
+
+    test('staff who cannot use Admin get the link as the main button', async ({ page }) => {
+      const student = await openCard(page, false);
+      await expect(student.getByText('No application form found. Ask the office to fill in their form and fees.')).toBeVisible();
+      await expect(student.getByRole('link', { name: 'Fill in form and fees in Admin' })).toHaveCount(0);
+      await expect(student.getByRole('button', { name: 'Other ways' })).toHaveCount(0);
+      const link = student.getByRole('button', { name: 'Send them a link to fill in' });
+      await expect(link).toBeVisible();
+      expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(48);
     });
   });
 });

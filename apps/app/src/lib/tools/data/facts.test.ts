@@ -12,6 +12,7 @@ import {
   limitForDemo,
   predictorCityGate,
   coaCityGate,
+  citySlugFor,
   rankBands,
   bandForMark,
   type CentreRow,
@@ -100,6 +101,14 @@ describe('demo maths', () => {
     expect(predictorCityGate(0, 0, true).index).toBe(false);
     expect(coaCityGate(2).index).toBe(true);
     expect(coaCityGate(1).index).toBe(false);
+  });
+});
+
+describe('city slugs for COA colleges', () => {
+  it('keeps a shared city name in the college\'s own state', () => {
+    expect(citySlugFor('Aurangabad', 'maharashtra')).toBe('aurangabad');
+    expect(citySlugFor('Aurangabad', 'bihar')).toBe('aurangabad-bihar');
+    expect(citySlugFor('Aurangabad', 'kerala')).toBeNull();
   });
 });
 

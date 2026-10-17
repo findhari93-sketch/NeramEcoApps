@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getRequestUser, assertCapability } from '@/lib/study-materials';
+import { getRequestUser, assertCapability, hasCapability } from '@/lib/study-materials';
 import { errorResponse } from '@/lib/api-errors';
 import { getSupabaseAdminClient, getCurrentBatch, isTracked, pairStatus } from '@neram/database';
 import { attendanceCountsByStudent, fetchAttendanceCounts } from '@/lib/attendance-counts';
@@ -8,6 +8,7 @@ import { isAwaitingMicrosoft } from '@/lib/microsoft-account';
 import { findRosterDuplicates } from '@/lib/roster-duplicates';
 import { activityOf } from '@/lib/student-roster-view';
 import { isSubmittedApplication } from '@/lib/application-form';
+import { money, pickFeeLead } from '@neram/database/fee-plan';
 import { pickStudentPlace } from '@/lib/student-place';
 import { backInNexus, isNotStarted, needsDecision } from '@/lib/not-started';
 import { readNotStartedSchedule } from '@/lib/lifecycle-schedule';
@@ -190,6 +191,7 @@ export async function GET(request: NextRequest) {
           neverSignedIn: 0,
           notSeen14d: 0,
           noForm: 0,
+          noFee: 0,
           notStarted: 0,
           pausedByStaff: 0,
           notStartedNeedsDecision: 0,
@@ -319,6 +321,36 @@ export async function GET(request: NextRequest) {
       (formResult.data || []).filter((row: any) => isSubmittedApplication(row)).map((row: any) => row.user_id),
     );
 
+    // "Has an application but no fee details", for finance staff only. A SEPARATE
+    // query, run only for a caller with coord.student.finance, so the roster
+    // select above stays free of fee columns and a teacher's payload never carries
+    // even a yes/no about money (lib/student-finance.ts, the fee gate). The fee is
+    // read from pickFeeLead's row, the same record Admin's form writes to.
+    const canSeeFinance = hasCapability(caller, 'coord.student.finance');
+    const usersMissingFee = new Set<string>();
+    if (canSeeFinance && usersWithForm.size) {
+      const { data: feeRows, error: feeError } = await supabase
+        .from('lead_profiles')
+        .select('id, user_id, final_fee, source, application_number, reviewed_by, created_at, applicant_category, academic_data')
+        .in('user_id', Array.from(usersWithForm))
+        .is('deleted_at', null);
+      if (feeError) {
+        // A Needs attention row, not the roster: log and carry on.
+        console.error('Students GET fee lookup failed:', feeError.message);
+      } else {
+        const feeRowsByUser = new Map<string, any[]>();
+        for (const row of (feeRows || []) as any[]) {
+          const list = feeRowsByUser.get(row.user_id);
+          if (list) list.push(row);
+          else feeRowsByUser.set(row.user_id, [row]);
+        }
+        for (const userId of usersWithForm) {
+          const lead = pickFeeLead(feeRowsByUser.get(userId) || []);
+          if (!lead || money(lead.final_fee) === null) usersMissingFee.add(userId);
+        }
+      }
+    }
+
     // Where each student lives. A student can hold several lead_profiles rows that
     // disagree, so pickStudentPlace settles it the same way the City-Wise screen
     // does: the newest row that names a city. See lib/student-place.ts.
@@ -393,6 +425,8 @@ export async function GET(request: NextRequest) {
         // Filled below, once the whole roster is known.
         possible_duplicate_of: null as { id: string; name: string } | null,
         has_application_form: usersWithForm.has(userId),
+        // Finance callers only; absent for everyone else (see usersMissingFee).
+        ...(canSeeFinance ? { fee_missing: usersMissingFee.has(userId) } : {}),
         // Title-cased city and state, kept apart so a caller can still compare a
         // city. The roster joins them for display with placeLabel().
         city: placeByUser.get(userId)?.city ?? null,
@@ -495,6 +529,11 @@ export async function GET(request: NextRequest) {
 
     // The same targetable population as the application-forms review lists.
     const noForm = targetable.filter((s: any) => !s.has_application_form).length;
+    // Has a form but no fee. Anyone without a form is already in noForm, and
+    // filling the form in Admin sets the fee in the same step.
+    const noFee = canSeeFinance
+      ? targetable.filter((s: any) => s.has_application_form && s.fee_missing).length
+      : 0;
 
     // The two kinds of dormant, and the two moments staff should act on them:
     // Not started for 14+ days (remind again, or pause with a reason), and a
@@ -519,6 +558,7 @@ export async function GET(request: NextRequest) {
       neverSignedIn,
       notSeen14d,
       noForm,
+      noFee,
       notStarted: notStartedRows.length,
       pausedByStaff: pausedRows.length,
       notStartedNeedsDecision,

@@ -73,7 +73,7 @@ export default function DirectoryHero({ stateSlug, stateName, states, colleges, 
 
   const stats = useMemo(() => (colleges ? kpis(colleges) : null), [colleges]);
   const place = stateName ?? 'India';
-  const title = stateName ? `B.Arch Colleges in ${stateName}` : 'Browse all B.Arch colleges';
+  const title = stateName ? `B.Arch and Architecture Colleges in ${stateName}` : 'Browse all B.Arch colleges';
 
   return (
     <Box component="section" aria-labelledby="dir-title" sx={{ display: 'flex', flexDirection: 'column', gap: { md: 2.25 } }}>

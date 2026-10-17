@@ -2670,6 +2670,14 @@ export type ProgramType = 'year_long' | 'crash_course';
 export type NotificationEventType =
   | 'new_onboarding'
   | 'new_signup'
+  // Fee checks and second installments (migration 20261204090000)
+  | 'fee_details_check'
+  | 'fee_installment_reminder'
+  | 'fee_correction_resolved'
+  | 'fee_correction_reported'
+  | 'fee_details_confirmed'
+  | 'fee_installment_due'
+  | 'fee_installment_overdue'
   | 'onboarding_skipped'
   | 'new_application'
   | 'payment_received'
@@ -2721,7 +2729,13 @@ export type NotificationEventType =
   | 'foundation_issue_info_requested'
   | 'study_material_comment_added'
   | 'assignment_reviewed'
-  | 'auto_first_touch_sent';
+  | 'auto_first_touch_sent'
+  // Support ticket lifecycle (migration 20261206090000)
+  | 'ticket_reply'
+  | 'ticket_info_requested'
+  | 'ticket_closed'
+  | 'ticket_student_replied'
+  | 'ticket_reopened';
 
 // Classroom access request types
 export type ClassroomAccessRequestStatus = 'pending' | 'approved' | 'rejected';
@@ -2925,8 +2939,45 @@ export interface UserNotification {
 // SUPPORT TICKETS (migration 20260310)
 // ============================================
 
-export type SupportTicketStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
+/**
+ * 'resolved' is legacy: nothing writes it since 20261206090100, which moved
+ * the old rows to 'closed'. The lifecycle rules live in
+ * utils/support-ticket-status.ts.
+ */
+export type SupportTicketStatus =
+  | 'open'
+  | 'in_progress'
+  | 'waiting_on_student'
+  | 'awaiting_confirmation'
+  | 'resolved'
+  | 'closed';
 export type SupportTicketPriority = 'low' | 'medium' | 'high';
+/** How a ticket ended. no_response is written by the auto-close cron only. */
+export type SupportTicketResolutionCode =
+  | 'fixed'
+  | 'answered'
+  | 'not_a_bug'
+  | 'duplicate'
+  | 'wont_fix'
+  | 'no_response';
+export type SupportTicketRequesterSegment = 'enrolled' | 'lead' | 'guest' | 'staff';
+export type SupportTicketActivityAction =
+  | 'created'
+  | 'started'
+  | 'assigned'
+  | 'unassigned'
+  | 'info_requested'
+  | 'student_replied'
+  | 'resumed'
+  | 'resolved'
+  | 'confirmed'
+  | 'reopened'
+  | 'closed'
+  | 'auto_closed'
+  | 'priority_changed'
+  | 'category_changed';
+/** The tabs on the Admin inbox. */
+export type SupportTicketQueue = 'new' | 'in_progress' | 'waiting' | 'to_confirm' | 'closed' | 'all';
 export type SupportTicketCategory =
   | 'enrollment_issue'
   | 'payment_issue'
@@ -2960,6 +3011,36 @@ export interface SupportTicket extends Timestamps {
   resolution_notes: string | null;
   resolved_by: string | null;
   resolved_at: string | null;
+  // Lifecycle (migration 20261206090100)
+  resolution_code: SupportTicketResolutionCode | null;
+  duplicate_of: string | null;
+  auto_close_at: string | null;
+  closed_at: string | null;
+  assigned_by: string | null;
+  first_response_at: string | null;
+  last_reply_at: string | null;
+  last_reply_by: 'staff' | 'student' | null;
+  staff_seen_at: string | null;
+  student_seen_at: string | null;
+  reopen_count: number;
+  /** Staff only. reopens[] holds a snapshot per "still happening". */
+  context: SupportTicketContext;
+  requester_segment: SupportTicketRequesterSegment | null;
+}
+
+/** A device and console snapshot taken when the requester said "still happening". */
+export interface SupportTicketReopenSnapshot {
+  at: string;
+  reason: string | null;
+  page_url: string | null;
+  console_logs: Record<string, unknown>[] | null;
+  device_info: Record<string, unknown> | null;
+  screenshot_urls: string[];
+}
+
+export interface SupportTicketContext {
+  reopens?: SupportTicketReopenSnapshot[];
+  [key: string]: unknown;
 }
 
 export interface SupportTicketComment {
@@ -2968,8 +3049,90 @@ export interface SupportTicketComment {
   user_id: string | null;
   user_name: string;
   is_admin: boolean;
+  /** Staff-only note. Never returned to the requester. */
+  is_internal: boolean;
   content: string;
   created_at: string;
+}
+
+export interface SupportTicketActivity {
+  id: string;
+  ticket_id: string;
+  actor_id: string | null;
+  actor_name: string | null;
+  action: SupportTicketActivityAction;
+  old_status: string | null;
+  new_status: string | null;
+  reason: string | null;
+  metadata: Record<string, unknown>;
+  visible_to_student: boolean;
+  created_at: string;
+}
+
+/** The lean row the Admin inbox list shows. No logs, no device info. */
+export type SupportTicketListItem = Pick<
+  SupportTicket,
+  | 'id'
+  | 'ticket_number'
+  | 'user_id'
+  | 'user_name'
+  | 'category'
+  | 'subject'
+  | 'source_app'
+  | 'status'
+  | 'priority'
+  | 'assigned_to'
+  | 'resolution_code'
+  | 'auto_close_at'
+  | 'closed_at'
+  | 'last_reply_at'
+  | 'last_reply_by'
+  | 'staff_seen_at'
+  | 'requester_segment'
+  | 'reopen_count'
+  | 'created_at'
+  | 'updated_at'
+> & {
+  screenshot_count: number;
+  assignee_name: string | null;
+};
+
+export interface SupportTicketDetail extends SupportTicket {
+  assignee_name: string | null;
+  resolver_name: string | null;
+  duplicate_of_number: string | null;
+  comments: SupportTicketComment[];
+  activity: SupportTicketActivity[];
+}
+
+/** What the requester may see. Staff-only fields are removed, not blanked. */
+export type SupportTicketStudentView = Omit<
+  SupportTicketDetail,
+  'console_logs' | 'device_info' | 'context' | 'staff_seen_at' | 'assigned_by'
+>;
+
+export interface SupportTicketQueueCounts {
+  new: number;
+  in_progress: number;
+  waiting: number;
+  to_confirm: number;
+  closed: number;
+  all: number;
+  mine: number;
+  unread: number;
+}
+
+export interface SupportTicketInboxFilters {
+  queue?: SupportTicketQueue;
+  /** 'me' needs actorId. */
+  assignee?: 'me' | 'unassigned' | 'any';
+  actorId?: string | null;
+  source?: string;
+  category?: SupportTicketCategory;
+  priority?: SupportTicketPriority;
+  search?: string;
+  page?: number;
+  limit?: number;
 }
 
 export interface CreateSupportTicketInput {
@@ -2986,6 +3149,7 @@ export interface CreateSupportTicketInput {
   screenshot_urls?: string[];
   console_logs?: Record<string, unknown>[];
   device_info?: Record<string, unknown>;
+  requester_segment?: SupportTicketRequesterSegment;
 }
 
 export interface UpdateSupportTicketInput {

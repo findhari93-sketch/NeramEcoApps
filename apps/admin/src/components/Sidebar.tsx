@@ -88,6 +88,7 @@ import TuneIcon from '@mui/icons-material/Tune';
 import HistoryIcon from '@mui/icons-material/History';
 import TravelExploreIcon from '@mui/icons-material/TravelExplore';
 import SavingsOutlinedIcon from '@mui/icons-material/SavingsOutlined';
+import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
 import { useMicrosoftAuth } from '@neram/auth';
 import NotificationBell from './NotificationBell';
 import { useSidebar } from '@/contexts/SidebarContext';
@@ -108,7 +109,8 @@ type BadgeKey =
   | 'chat_history'
   | 'duplicates'
   | 'follow_ups'
-  | 'lifecycle';
+  | 'lifecycle'
+  | 'collections';
 
 interface MenuItem {
   text: string;
@@ -163,6 +165,7 @@ const menuGroups: MenuGroup[] = [
     label: 'Finance',
     items: [
       { text: 'Payments', icon: PaymentIcon, path: '/payments', hasBadge: 'payments' },
+      { text: 'Collections', icon: AccountBalanceWalletIcon, path: '/collections', hasBadge: 'collections' },
       { text: 'Fee Structures', icon: AttachMoneyIcon, path: '/fee-structures' },
       { text: 'Expenses', icon: ReceiptLongIcon, path: '/expenses' },
       { text: 'Staff Assignments', icon: BusinessCenterIcon, path: '/staff-assignments' },

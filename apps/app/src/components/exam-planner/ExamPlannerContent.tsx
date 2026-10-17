@@ -29,6 +29,7 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import EventBusyIcon from '@mui/icons-material/EventBusy';
 import type { ExamPhase, ExamTimeSlot, PlannerSession } from '@neram/database';
 import { useExamPlanner } from '@/hooks/useExamPlanner';
+import { useHideReportFab } from '@/components/ReporterAccessContext';
 import ToolPageHeader from '@/components/tools-hub/ToolPageHeader';
 import {
   PHASE_1_SESSIONS,
@@ -275,6 +276,8 @@ function SelectionSummary({
   onClear: () => void;
 }) {
   const [showClearDialog, setShowClearDialog] = useState(false);
+  // This bar spans the bottom of the screen at every width.
+  useHideReportFab(selectedCount > 0 || !!savedPhase);
 
   if (selectedCount === 0 && !savedPhase) return null;
 

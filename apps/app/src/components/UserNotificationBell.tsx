@@ -45,6 +45,13 @@ function getNavigationUrl(notification: { event_type: string; metadata: Record<s
       return '/my-applications';
     case 'payment_received':
       return '/my-applications';
+    case 'ticket_resolved':
+    case 'ticket_reply':
+    case 'ticket_info_requested':
+    case 'ticket_closed': {
+      const ticketId = notification.metadata?.ticket_id as string | undefined;
+      return ticketId ? `/support/${encodeURIComponent(ticketId)}` : '/support';
+    }
     default:
       return null;
   }

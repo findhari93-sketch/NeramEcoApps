@@ -6,7 +6,7 @@
  */
 import type { Intent } from './intents';
 
-export type TurnStatus = 'error' | 'review' | 'none' | 'corrected' | 'ok';
+export type TurnStatus = 'error' | 'review' | 'none' | 'corrected' | 'resolved' | 'gated' | 'ok';
 
 export type LeadStage = 'Enrolled' | 'Demo booked' | 'Applied' | 'Hot lead' | 'Warm' | 'Unknown';
 
@@ -41,6 +41,8 @@ export interface InboxRow {
   created_at: string;
   thumbs_up: boolean | null;
   has_correction: boolean;
+  /** Staff marked it dealt with (resolved_at set). */
+  resolved: boolean;
   promoted_to_kb: boolean | null;
   ai_verdict: AiVerdict | null;
   geo_city: string | null;
@@ -63,6 +65,8 @@ export interface InboxTurn {
   correction: string | null;
   correctedByName: string | null;
   correctedAt: string | null;
+  resolvedAt: string | null;
+  resolvedByName: string | null;
   promotedToKb: boolean;
   aiReview: AiReview | null;
   model: string | null;
@@ -79,6 +83,8 @@ export interface InboxUser {
   avatarUrl: string | null;
   joinedAt: string | null;
   firstChannel: string | null;
+  /** neram_anon_id the account was created from, so earlier guest chats join this person. */
+  anonymousId: string | null;
   /** e.g. "NATA · School student", from the application form. */
   profileLabel: string | null;
   enrolled: boolean;
@@ -103,6 +109,9 @@ export interface InboxConversation {
   name: string;
   guestTag: string | null;
   initials: string;
+  avatarUrl: string | null;
+  /** An enrolled Neram student: shown with the gold ring. */
+  enrolled: boolean;
   phone: string | null;
   startedAt: string;
   lastAt: string;
@@ -122,6 +131,10 @@ export interface InboxConversation {
   reviewCount: number;
   errorCount: number;
   creditErrorCount: number;
+  /** When each question still in the Review queue was asked (the badge counts the last 30 days of these). */
+  queueAt: string[];
+  /** Latest time this guest came back and was asked to sign in before Aintra answered. */
+  gatedAt: string | null;
 }
 
 export interface InboxPerson {
@@ -135,6 +148,7 @@ export interface InboxPerson {
   phone: string | null;
   email: string | null;
   avatarUrl: string | null;
+  enrolled: boolean;
   profileLabel: string | null;
   joinedAt: string | null;
   place: string | null;
@@ -148,6 +162,7 @@ export interface InboxPerson {
   intents: Intent[];
   stage: LeadStage;
   nudge: Nudge | null;
+  gatedAt: string | null;
 }
 
 export interface InboxPayload {

@@ -21,7 +21,7 @@ import {
 } from '@/lib/aintra/chat-stream';
 import { signupGeoFromHeaders, type SignupGeo } from '@neram/database/signup-geo';
 import { chatVisitorFromHeaders, visitorCookie, type ChatVisitor } from '@/lib/aintra/visitor';
-import { claimSignupNudge, SIGNUP_NUDGE_TAIL } from '@/lib/aintra/signup-nudge';
+import { E2E_RETURNING_GUEST_HEADER, guestNeedsSignIn, SIGNUP_REQUIRED } from '@/lib/aintra/guest-gate';
 
 /**
  * Rounds of tool use before the model is forced to answer with text.
@@ -495,6 +495,30 @@ export async function POST(request: NextRequest) {
   const clientKey = hashClientKey(sessionId, ipFromHeaders(request.headers));
   const visitor = chatVisitorFromHeaders(request.headers);
 
+  // Free on a guest's first day; on a later day Aintra asks them to sign in first.
+  // A just-minted visitor id is a first visit, so it needs no lookup.
+  if (!userId && !visitor.minted) {
+    const returning = isE2ETestRun()
+      ? request.headers.get(E2E_RETURNING_GUEST_HEADER) === '1'
+      : await guestNeedsSignIn(createAdminClient(), visitor.anonymousId);
+    if (returning) {
+      // Logged so staff still see what they wanted to ask (Admin > Aintra Inbox: "Asked to sign in").
+      await logConversation({
+        sessionId: sessionId || 'unknown',
+        userMessage: message.trim(),
+        aiResponse: null,
+        pageUrl,
+        error: SIGNUP_REQUIRED,
+        geo,
+        visitor,
+      });
+      return NextResponse.json(
+        { error: 'Sign in to keep chatting with Aintra.', code: SIGNUP_REQUIRED },
+        { status: 403, headers: { 'Cache-Control': 'no-store' } }
+      );
+    }
+  }
+
   // The answer streams as Server-Sent Events (lib/aintra/chat-stream.ts), so the visitor
   // sees it being written instead of waiting for the whole thing. Every outcome,
   // the errors included, travels as an event on the stream.
@@ -618,19 +642,6 @@ async function answer(params: {
     });
     await log({ aiResponse: null, error: errors.join(' | ') });
     return;
-  }
-
-  // Staff asked this guest to sign up (Admin > Aintra Inbox): add the Apply button once.
-  if (
-    !isE2ETestRun() &&
-    (await claimSignupNudge(createAdminClient(), {
-      anonymousId: visitor?.anonymousId ?? null,
-      sessionId: sessionId || 'unknown',
-      signedIn: !!userId,
-    }))
-  ) {
-    emit({ t: 'delta', text: SIGNUP_NUDGE_TAIL });
-    result = { ...result, reply: result.reply.trimEnd() + SIGNUP_NUDGE_TAIL };
   }
 
   // Tell the visitor first; the log row can be written after they have the answer.

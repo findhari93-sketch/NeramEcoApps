@@ -58,7 +58,7 @@ interface SupabaseUser {
   status: string;
   onboarding_completed: boolean;
   account_tier: AccountTier;
-  /** Set by /api/auth/register-user. Gates the "Report a problem" reporter. */
+  /** Set by /api/auth/register-user. No longer gates the reporter (anyone signed in may report). */
   is_enrolled_student?: boolean;
 }
 
@@ -449,11 +449,11 @@ export default function StudentSession({
   }
 
   return (
-    <ReporterAccessProvider canReport={supabaseUser?.is_enrolled_student === true}>
+    <ReporterAccessProvider canReport={!!supabaseUser}>
       {/* Global error/crash logger */}
       <GlobalErrorLogger idToken={idToken} sessionId={diagnosticSessionId} />
 
-      {/* "Report a problem" button, enrolled students only */}
+      {/* "Report a problem" button, anyone signed in (leads included) */}
       <ReportProblemFab />
 
       <AppShell

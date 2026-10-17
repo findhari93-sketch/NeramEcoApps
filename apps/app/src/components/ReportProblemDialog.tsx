@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useId } from 'react';
+import Link from 'next/link';
 import {
   Box,
   Typography,
@@ -15,30 +16,41 @@ import {
   IconButton,
   useTheme,
   useMediaQuery,
-  Snackbar,
   Alert,
   ImageUploadList,
 } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
 import SendIcon from '@mui/icons-material/Send';
+import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import type { SupportTicketCategory } from '@neram/database/types';
-import { collectDeviceInfo } from '@/lib/device-collector';
+import { collectReportDeviceInfo } from '@/lib/device-collector';
 import { getRecentErrors } from '@/lib/error-buffer';
 import { collectScreenshotPaths, compressForUpload } from '@/lib/issue-screenshot-upload';
 
-// These are the support_tickets categories, used here verbatim rather than
-// mapped from a second set. A report from this dialog lands in the Admin
-// support queue, so the reporter picks from the same list staff filter on.
-const CATEGORIES: { value: SupportTicketCategory; label: string }[] = [
-  { value: 'technical_issue', label: 'Something Broken' },
-  { value: 'course_question', label: 'Course or Content Question' },
-  { value: 'account_issue', label: 'Account Problem' },
-  { value: 'payment_issue', label: 'Payment Problem' },
-  { value: 'enrollment_issue', label: 'Enrollment Problem' },
-  { value: 'other', label: 'Other' },
-];
+/**
+ * One form for every way a signed-in person raises a ticket in the Tools App.
+ *
+ *   mode="report"  the floating button and the crash screen. A picture of the
+ *                  page is attached (they may drop it), details are optional.
+ *   mode="support" "New request" on /support. Topic first, then subject and
+ *                  description, attachments optional, no page picture.
+ *
+ * Both modes attach device details and recent console/network errors, so staff
+ * can see what went wrong without asking. Phone: bottom sheet with the actions
+ * pinned above the keyboard area. Wider: a dialog.
+ *
+ * After sending, the sheet shows the ticket number and a way to follow it.
+ */
 
-const DEFAULT_CATEGORY: SupportTicketCategory = 'technical_issue';
+// The support_tickets categories, used verbatim. Staff filter on the same list.
+const CATEGORIES: { value: SupportTicketCategory; label: string; hint: string }[] = [
+  { value: 'technical_issue', label: 'Something is broken', hint: 'A page, button or tool not working' },
+  { value: 'course_question', label: 'Course or content', hint: 'Classes, material, the question bank' },
+  { value: 'account_issue', label: 'My account', hint: 'Sign in, phone, profile' },
+  { value: 'payment_issue', label: 'Payment', hint: 'Fees, receipts, refunds' },
+  { value: 'enrollment_issue', label: 'Enrollment', hint: 'Joining a class or course' },
+  { value: 'other', label: 'Something else', hint: 'Anything not listed here' },
+];
 
 const BUCKET_PREFIX = 'issue-screenshots/';
 function pathToUrl(path: string): string {
@@ -49,6 +61,13 @@ function urlToPath(url: string): string {
   return idx >= 0 ? url.slice(idx + BUCKET_PREFIX.length) : url;
 }
 
+export type ReportDialogMode = 'report' | 'support';
+
+export interface SubmittedTicket {
+  id: string | null;
+  ticket_number: string;
+}
+
 interface ReportProblemDialogProps {
   open: boolean;
   onClose: () => void;
@@ -56,7 +75,12 @@ interface ReportProblemDialogProps {
   pageUrl?: string;
   initialScreenshotFile?: File | null;
   prefill?: { title?: string; description?: string; category?: SupportTicketCategory };
+  mode?: ReportDialogMode;
+  /** Called once the ticket exists, before the success view shows. */
+  onSubmitted?: (ticket: SubmittedTicket) => void;
 }
+
+const touch = { minHeight: 48 } as const;
 
 export default function ReportProblemDialog({
   open,
@@ -65,11 +89,16 @@ export default function ReportProblemDialog({
   pageUrl,
   initialScreenshotFile,
   prefill,
+  mode = 'report',
+  onSubmitted,
 }: ReportProblemDialogProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const titleId = useId();
+  const isSupport = mode === 'support';
+  const defaultCategory: SupportTicketCategory = isSupport ? 'other' : 'technical_issue';
 
-  const [category, setCategory] = useState<SupportTicketCategory>(DEFAULT_CATEGORY);
+  const [category, setCategory] = useState<SupportTicketCategory>(defaultCategory);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [screenshots, setScreenshots] = useState<string[]>([]); // storage paths
@@ -80,27 +109,26 @@ export default function ReportProblemDialog({
   const [autoShotDropped, setAutoShotDropped] = useState(false);
   const [attaching, setAttaching] = useState(false);
   const [autoShotPreview, setAutoShotPreview] = useState<string | null>(null);
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
-    open: false,
-    message: '',
-    severity: 'success',
-  });
+  const [error, setError] = useState<string | null>(null);
+  const [sent, setSent] = useState<SubmittedTicket | null>(null);
 
-  const autoShot = autoShotDropped ? null : initialScreenshotFile || null;
+  const autoShot = isSupport || autoShotDropped ? null : initialScreenshotFile || null;
 
   const resetForm = () => {
-    setCategory(DEFAULT_CATEGORY);
+    setCategory(defaultCategory);
     setTitle('');
     setDescription('');
     setScreenshots([]);
     setAutoShotDropped(false);
+    setError(null);
+    setSent(null);
   };
 
-  // Manual-upload closure for the shared widget: compress → POST → path.
+  // Manual-upload closure for the shared widget: compress, POST, path.
   const uploadScreenshot = useCallback(
     async (file: File): Promise<{ url: string; path?: string }> => {
       const token = await getToken();
-      if (!token) throw new Error('Not authenticated');
+      if (!token) throw new Error('Please sign in again.');
       const compressed = await compressForUpload(file);
       const fd = new FormData();
       fd.append('file', compressed, 'screenshot.jpg');
@@ -134,7 +162,7 @@ export default function ReportProblemDialog({
   }, [open]);
 
   // Local preview of the page shot, so the reporter can see (and drop) what is
-  // about to be attached. Nothing is sent to the server until Submit.
+  // about to be attached. Nothing is sent to the server until Send.
   useEffect(() => {
     if (!open || !autoShot) {
       setAutoShotPreview(null);
@@ -145,19 +173,17 @@ export default function ReportProblemDialog({
     return () => URL.revokeObjectURL(objectUrl);
   }, [open, autoShot]);
 
+  const canSend = isSupport ? !!title.trim() && !!description.trim() : !!title.trim();
+
   const handleSubmit = async () => {
-    if (!title.trim()) return;
+    if (!canSend || submitting) return;
     setSubmitting(true);
+    setError(null);
     try {
       const token = await getToken();
-      if (!token) throw new Error('Not authenticated');
+      if (!token) throw new Error('Please sign in again to send this.');
 
-      let deviceInfo: ReturnType<typeof collectDeviceInfo> | undefined;
-      try {
-        deviceInfo = collectDeviceInfo();
-      } catch {
-        deviceInfo = undefined;
-      }
+      const deviceInfo = collectReportDeviceInfo();
       const consoleLogs = getRecentErrors();
 
       // Upload the page shot now, so its path goes straight into the body below
@@ -171,35 +197,38 @@ export default function ReportProblemDialog({
       });
       setAttaching(false);
 
-      const res = await fetch('/api/error-reports', {
+      const common = {
+        category,
+        page_url: pageUrl || window.location.pathname,
+        screenshot_urls: screenshotPaths.length > 0 ? screenshotPaths : undefined,
+        device_info: deviceInfo,
+        console_logs: consoleLogs.length > 0 ? consoleLogs : undefined,
+      };
+      const res = await fetch(isSupport ? '/api/support-tickets' : '/api/error-reports', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: title.trim(),
-          description: description.trim(),
-          category,
-          page_url: pageUrl || window.location.pathname,
-          screenshot_urls: screenshotPaths.length > 0 ? screenshotPaths : undefined,
-          device_info: deviceInfo,
-          console_logs: consoleLogs.length > 0 ? consoleLogs : undefined,
-        }),
+        body: JSON.stringify(
+          isSupport
+            ? { ...common, subject: title.trim(), description: description.trim() }
+            : { ...common, title: title.trim(), description: description.trim() },
+        ),
       });
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        // A client that was open before enrolment changed, or one calling the
-        // route directly, gets told what to do instead of a generic failure.
-        if (res.status === 403) {
-          throw new Error('Problem reports are for enrolled students. Please use Support to reach us.');
-        }
-        throw new Error('Could not send the report. Please try again.');
+        if (res.status === 429 && data.message) throw new Error(data.message);
+        if (res.status === 401) throw new Error('Please sign in again to send this.');
+        throw new Error('Could not send it. Please check your connection and try again.');
       }
-      const data = await res.json();
-      resetForm();
-      onClose();
-      setSnackbar({ open: true, message: `Report ${data.ticket_number} sent. Thank you!`, severity: 'success' });
+      const ticket: SubmittedTicket = {
+        id: data.ticket_id || data.ticketId || data.issue_id || null,
+        ticket_number: data.ticket_number || data.ticketNumber || '',
+      };
+      onSubmitted?.(ticket);
+      setSent(ticket);
     } catch (err) {
-      const message =
-        err instanceof Error && err.message ? err.message : 'Could not send the report. Please try again.';
-      setSnackbar({ open: true, message, severity: 'error' });
+      setError(
+        err instanceof Error && err.message ? err.message : 'Could not send it. Please try again.',
+      );
     } finally {
       setAttaching(false);
       setSubmitting(false);
@@ -207,49 +236,107 @@ export default function ReportProblemDialog({
   };
 
   const handleClose = () => {
-    if (!submitting) {
-      resetForm();
-      onClose();
-    }
+    if (submitting) return;
+    resetForm();
+    onClose();
   };
 
-  const formContent = (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-      <TextField
-        select
-        label="Category"
-        value={category}
-        onChange={(e) => setCategory(e.target.value as SupportTicketCategory)}
-        size="small"
-        fullWidth
+  const heading = sent
+    ? isSupport
+      ? 'Request sent'
+      : 'Report sent'
+    : isSupport
+      ? 'New request'
+      : 'Report a problem';
+
+  const categoryPicker = isSupport ? (
+    <Box component="fieldset" sx={{ border: 0, p: 0, m: 0, minWidth: 0 }}>
+      <Typography component="legend" variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+        What is it about?
+      </Typography>
+      <Box
+        role="radiogroup"
+        aria-label="What is it about?"
+        sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1 }}
       >
-        {CATEGORIES.map((cat) => (
-          <MenuItem key={cat.value} value={cat.value}>
-            {cat.label}
-          </MenuItem>
-        ))}
-      </TextField>
+        {CATEGORIES.map((cat) => {
+          const selected = category === cat.value;
+          return (
+            <Box
+              key={cat.value}
+              component="button"
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              onClick={() => setCategory(cat.value)}
+              sx={{
+                ...touch,
+                textAlign: 'left',
+                font: 'inherit',
+                cursor: 'pointer',
+                px: 1.5,
+                py: 1,
+                borderRadius: 2,
+                border: '1.5px solid',
+                borderColor: selected ? 'primary.main' : 'divider',
+                bgcolor: selected ? 'action.selected' : 'background.paper',
+                color: 'text.primary',
+                transition: 'border-color 150ms ease, background-color 150ms ease',
+                '&:hover': { borderColor: selected ? 'primary.main' : 'text.secondary' },
+                '&:focus-visible': { outline: '3px solid', outlineColor: 'primary.light', outlineOffset: 2 },
+                '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
+              }}
+            >
+              <Typography component="span" sx={{ display: 'block', fontWeight: 600, fontSize: '0.9375rem' }}>
+                {cat.label}
+              </Typography>
+              <Typography component="span" sx={{ display: 'block', color: 'text.secondary', fontSize: '0.8125rem' }}>
+                {cat.hint}
+              </Typography>
+            </Box>
+          );
+        })}
+      </Box>
+    </Box>
+  ) : (
+    <TextField
+      select
+      label="Category"
+      value={category}
+      onChange={(e) => setCategory(e.target.value as SupportTicketCategory)}
+      fullWidth
+    >
+      {CATEGORIES.map((cat) => (
+        <MenuItem key={cat.value} value={cat.value} sx={touch}>
+          {cat.label}
+        </MenuItem>
+      ))}
+    </TextField>
+  );
+
+  const formContent = (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 0.5 }}>
+      {categoryPicker}
 
       <TextField
-        label="What's the issue?"
-        placeholder="e.g. Page won't load, button does nothing..."
+        label={isSupport ? 'Subject' : 'What went wrong?'}
+        placeholder={isSupport ? 'A few words about it' : 'e.g. The page will not load, a button does nothing'}
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        size="small"
         fullWidth
         required
         inputProps={{ maxLength: 200 }}
       />
 
       <TextField
-        label="Details (optional)"
-        placeholder="Describe what happened..."
+        label={isSupport ? 'Tell us more' : 'Details (optional)'}
+        placeholder={isSupport ? 'What happened, and what you expected' : 'What were you trying to do?'}
         value={description}
         onChange={(e) => setDescription(e.target.value)}
-        size="small"
         fullWidth
+        required={isSupport}
         multiline
-        rows={3}
+        minRows={3}
         inputProps={{ maxLength: 2000 }}
       />
 
@@ -262,10 +349,12 @@ export default function ReportProblemDialog({
             <Box
               component="img"
               src={autoShotPreview}
-              alt="This page"
+              alt="Picture of the page you were on"
+              data-testid="report-auto-screenshot"
               sx={{
                 width: 88,
                 height: 88,
+                flexShrink: 0,
                 objectFit: 'cover',
                 objectPosition: 'top',
                 borderRadius: 1.5,
@@ -274,14 +363,13 @@ export default function ReportProblemDialog({
               }}
             />
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+              <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                 We will send this along so we can see what you saw.
               </Typography>
               <Button
-                size="small"
                 onClick={() => setAutoShotDropped(true)}
                 disabled={submitting}
-                sx={{ textTransform: 'none', minHeight: 40, px: 1, mt: 0.25 }}
+                sx={{ ...touch, textTransform: 'none', px: 1, mt: 0.25 }}
               >
                 Do not send it
               </Button>
@@ -291,7 +379,7 @@ export default function ReportProblemDialog({
       )}
 
       <ImageUploadList
-        label="Screenshots"
+        label={isSupport ? 'Attachments (optional)' : 'More screenshots (optional)'}
         values={screenshots.map(pathToUrl)}
         onChange={(urls) => setScreenshots(urls.map(urlToPath))}
         upload={uploadScreenshot}
@@ -299,80 +387,137 @@ export default function ReportProblemDialog({
         accept="image/jpeg,image/png,image/webp"
       />
 
-      <Typography variant="caption" sx={{ color: 'text.disabled', fontSize: '0.7rem' }}>
-        Technical details (page, device, recent errors) are attached automatically so we can fix this faster.
-        {pageUrl ? ` Page: ${pageUrl}` : ''}
+      <Typography variant="caption" sx={{ color: 'text.secondary', display: 'block' }}>
+        Your device details and any recent errors are attached so we can help faster.
+      </Typography>
+
+      {error && (
+        <Alert severity="error" role="alert">
+          {error}
+        </Alert>
+      )}
+    </Box>
+  );
+
+  const successContent = sent && (
+    <Box sx={{ textAlign: 'center', py: 2 }} aria-live="polite">
+      <CheckCircleRoundedIcon sx={{ fontSize: 56, color: 'success.main', mb: 1 }} aria-hidden="true" />
+      <Typography sx={{ fontWeight: 700, fontSize: '1.125rem' }}>Thank you. We have it.</Typography>
+      {sent.ticket_number && (
+        <Typography
+          data-testid="report-ticket-number"
+          sx={{ fontFamily: 'monospace', fontSize: '1rem', fontWeight: 600, mt: 1 }}
+        >
+          {sent.ticket_number}
+        </Typography>
+      )}
+      <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1, maxWidth: 360, mx: 'auto' }}>
+        We will reply in Support and by email. You can follow every step there.
       </Typography>
     </Box>
   );
 
-  const actions = (
+  const actions = sent ? (
     <>
-      <Button onClick={handleClose} sx={{ textTransform: 'none' }}>
+      <Button onClick={handleClose} sx={{ ...touch, textTransform: 'none' }}>
+        Done
+      </Button>
+      <Button
+        variant="contained"
+        component={Link}
+        href={sent.id ? `/support/${sent.id}` : '/support'}
+        onClick={handleClose}
+        sx={{ ...touch, textTransform: 'none' }}
+      >
+        Track it
+      </Button>
+    </>
+  ) : (
+    <>
+      <Button onClick={handleClose} disabled={submitting} sx={{ ...touch, textTransform: 'none' }}>
         Cancel
       </Button>
       <Button
         variant="contained"
         onClick={handleSubmit}
-        disabled={submitting || !title.trim()}
+        disabled={submitting || !canSend}
         endIcon={<SendIcon sx={{ fontSize: '1rem !important' }} />}
-        sx={{ textTransform: 'none', minHeight: 40 }}
+        sx={{ ...touch, textTransform: 'none', px: 2.5 }}
       >
-        {attaching ? 'Attaching picture…' : submitting ? 'Sending…' : 'Send report'}
+        {attaching ? 'Attaching picture' : submitting ? 'Sending' : isSupport ? 'Send request' : 'Send report'}
       </Button>
     </>
   );
 
-  return (
-    <>
-      {isMobile ? (
-        <SwipeableDrawer
-          anchor="bottom"
-          open={open}
-          onClose={handleClose}
-          onOpen={() => {}}
-          disableSwipeToOpen
-          PaperProps={{ sx: { borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: '90vh' } }}
-        >
-          <Box sx={{ display: 'flex', justifyContent: 'center', py: 1 }}>
-            <Box sx={{ width: 40, height: 4, borderRadius: 2, bgcolor: 'divider' }} />
-          </Box>
-          <Box sx={{ px: 2.5, pb: 2 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-              <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                Report a problem
-              </Typography>
-              <IconButton size="small" onClick={handleClose}>
-                <CloseIcon fontSize="small" />
-              </IconButton>
-            </Box>
-            {formContent}
-            <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', mt: 2 }}>{actions}</Box>
-          </Box>
-        </SwipeableDrawer>
-      ) : (
-        <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
-          <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>
-            Report a problem
-            <IconButton onClick={handleClose} sx={{ position: 'absolute', right: 8, top: 8 }}>
-              <CloseIcon />
-            </IconButton>
-          </DialogTitle>
-          <DialogContent>{formContent}</DialogContent>
-          <DialogActions sx={{ px: 3, pb: 2 }}>{actions}</DialogActions>
-        </Dialog>
-      )}
-
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={4000}
-        onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+  if (isMobile) {
+    return (
+      <SwipeableDrawer
+        anchor="bottom"
+        open={open}
+        onClose={handleClose}
+        onOpen={() => {}}
+        disableSwipeToOpen
+        PaperProps={{
+          'aria-labelledby': titleId,
+          role: 'dialog',
+          sx: {
+            borderTopLeftRadius: 16,
+            borderTopRightRadius: 16,
+            maxHeight: '92dvh',
+            display: 'flex',
+            flexDirection: 'column',
+          },
+        } as object}
       >
-        <Alert severity={snackbar.severity} onClose={() => setSnackbar((s) => ({ ...s, open: false }))}>
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
-    </>
+        <Box sx={{ display: 'flex', justifyContent: 'center', pt: 1 }} aria-hidden="true">
+          <Box sx={{ width: 40, height: 4, borderRadius: 2, bgcolor: 'divider' }} />
+        </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 2, pt: 0.5 }}>
+          <Typography id={titleId} component="h2" sx={{ fontWeight: 700, fontSize: '1.125rem' }}>
+            {heading}
+          </Typography>
+          <IconButton onClick={handleClose} aria-label="Close" sx={{ width: 48, height: 48 }} disabled={submitting}>
+            <CloseIcon />
+          </IconButton>
+        </Box>
+        <Box sx={{ px: 2, pb: 2, overflowY: 'auto', flex: 1, minHeight: 0 }}>
+          {sent ? successContent : formContent}
+        </Box>
+        <Box
+          sx={{
+            display: 'flex',
+            gap: 1,
+            justifyContent: 'flex-end',
+            px: 2,
+            pt: 1.5,
+            pb: 'calc(12px + env(safe-area-inset-bottom, 0px))',
+            borderTop: '1px solid',
+            borderColor: 'divider',
+            bgcolor: 'background.paper',
+            '& > *': { flex: 1 },
+          }}
+        >
+          {actions}
+        </Box>
+      </SwipeableDrawer>
+    );
+  }
+
+  return (
+    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth aria-labelledby={titleId}>
+      <DialogTitle id={titleId} sx={{ fontWeight: 700, pr: 8 }}>
+        {heading}
+        <IconButton
+          onClick={handleClose}
+          aria-label="Close"
+          disabled={submitting}
+          sx={{ position: 'absolute', right: 8, top: 8, width: 48, height: 48 }}
+        >
+          <CloseIcon />
+        </IconButton>
+      </DialogTitle>
+      <DialogContent>{sent ? successContent : formContent}</DialogContent>
+      <DialogActions sx={{ px: 3, pb: 2, gap: 1 }}>{actions}</DialogActions>
+    </Dialog>
   );
 }

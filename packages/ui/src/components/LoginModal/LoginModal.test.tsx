@@ -54,8 +54,8 @@ async function sendAndEnterOtp() {
   fireEvent.change(screen.getByLabelText('Phone Number'), { target: { value: '9876543210' } });
   fireEvent.click(screen.getByRole('button', { name: 'Send OTP' }));
   await screen.findByLabelText('OTP');
+  // The sixth digit verifies by itself: no Verify tap.
   fireEvent.change(screen.getByLabelText('OTP'), { target: { value: '123456' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Verify OTP' }));
 }
 
 beforeEach(() => {
@@ -212,6 +212,73 @@ describe('LoginModal', () => {
     await waitFor(() => expect(auth.signInWithGoogleOrRedirect).toHaveBeenCalled());
     expect(screen.queryByRole('alert')).toBeNull();
     expect(screen.getByText('Sign In')).toBeTruthy();
+  });
+
+  it('verifies by itself on the sixth digit, once, and says where the code went', async () => {
+    mockServer();
+    const onAuthenticated = vi.fn();
+    render(<LoginModal open phoneOnly apiBaseUrl="" onAuthenticated={onAuthenticated} />);
+    fireEvent.change(screen.getByLabelText('Phone Number'), { target: { value: '9876543210' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send OTP' }));
+    await screen.findByLabelText('OTP');
+    expect(screen.getByText('+91 98765 43210')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Resend in 30s/ })).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText('OTP'), { target: { value: '12345' } });
+    expect(auth.verifyPhoneAndLink).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByLabelText('OTP'), { target: { value: '123456' } });
+    await waitFor(() => expect(onAuthenticated).toHaveBeenCalledWith('9876543210'));
+    expect(auth.verifyPhoneAndLink).toHaveBeenCalledTimes(1);
+  });
+
+  it('a wrong code is not retried by itself; changing it tries again', async () => {
+    mockServer();
+    auth.verifyPhoneAndLink.mockImplementationOnce(async () => {
+      throw Object.assign(new Error('bad code'), { code: 'auth/invalid-verification-code' });
+    });
+    render(<LoginModal open phoneOnly apiBaseUrl="" />);
+    await sendAndEnterOtp();
+    await waitFor(() => expect(auth.verifyPhoneAndLink).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Verify OTP' })).toBeTruthy());
+    expect(auth.verifyPhoneAndLink).toHaveBeenCalledTimes(1);
+    fireEvent.change(screen.getByLabelText('OTP'), { target: { value: '654321' } });
+    await waitFor(() => expect(auth.verifyPhoneAndLink).toHaveBeenCalledTimes(2));
+  });
+
+  it('Edit next to the number goes back to the phone step', async () => {
+    mockServer();
+    render(<LoginModal open phoneOnly apiBaseUrl="" />);
+    fireEvent.change(screen.getByLabelText('Phone Number'), { target: { value: '9876543210' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send OTP' }));
+    await screen.findByLabelText('OTP');
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(await screen.findByLabelText('Phone Number')).toBeTruthy();
+  });
+
+  it('Enter on the phone number sends the OTP', async () => {
+    mockServer();
+    render(<LoginModal open phoneOnly apiBaseUrl="" />);
+    const field = screen.getByLabelText('Phone Number');
+    fireEvent.change(field, { target: { value: '9876543210' } });
+    fireEvent.keyDown(field, { key: 'Enter' });
+    await waitFor(() => expect(auth.sendPhoneOTP).toHaveBeenCalledWith('+919876543210'));
+  });
+
+  it('fills the code from the SMS where the browser can read it (WebOTP)', async () => {
+    mockServer();
+    const onAuthenticated = vi.fn();
+    (window as any).OTPCredential = function OTPCredential() {};
+    const get = vi.fn(async () => ({ code: '424242' }));
+    Object.defineProperty(navigator, 'credentials', { value: { get }, configurable: true });
+    try {
+      render(<LoginModal open phoneOnly apiBaseUrl="" onAuthenticated={onAuthenticated} />);
+      fireEvent.change(screen.getByLabelText('Phone Number'), { target: { value: '9876543210' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Send OTP' }));
+      await waitFor(() => expect(auth.verifyPhoneAndLink).toHaveBeenCalledWith('424242'));
+      expect(get).toHaveBeenCalledWith(expect.objectContaining({ otp: { transport: ['sms'] } }));
+    } finally {
+      delete (window as any).OTPCredential;
+    }
   });
 
   /** The capture-phone bodies, in the order they were sent. */

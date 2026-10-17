@@ -65,9 +65,13 @@ function clock(seconds: number): string {
 }
 
 function minutes(seconds: number): string {
+  if (seconds < 59.5) return `${Math.round(seconds)}s`;
   const m = Math.round(seconds / 60);
   return m === 1 ? '1 min' : `${m} min`;
 }
+
+/** Pauses shorter than this are summed into one line of "What was removed". */
+const SHORT_PAUSE = 10;
 
 const KIND_LABEL: Record<Cut['kind'], string> = {
   lead: 'before class',
@@ -206,11 +210,25 @@ export default function RecordingTrimPanel({ classId, getToken, onNotify, onChan
           </Button>
           <Collapse in={showCuts} unmountOnExit>
             <Box component="ul" sx={{ m: 0, pl: 3, display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-              {trim.cuts.map((c) => (
-                <Typography component="li" variant="body2" key={`${c.from}-${c.to}`} color="text.secondary">
-                  {clock(c.from)} to {clock(c.to)}, {KIND_LABEL[c.kind]} ({minutes(c.to - c.from)})
-                </Typography>
-              ))}
+              {/* Every pause of 3s or more is tightened now, so a class can have
+                  hundreds. The short ones are one line, not hundreds of rows. */}
+              {trim.cuts
+                .filter((c) => c.kind !== 'pause' || c.to - c.from >= SHORT_PAUSE)
+                .map((c) => (
+                  <Typography component="li" variant="body2" key={`${c.from}-${c.to}`} color="text.secondary">
+                    {clock(c.from)} to {clock(c.to)}, {KIND_LABEL[c.kind]} ({minutes(c.to - c.from)})
+                  </Typography>
+                ))}
+              {(() => {
+                const short = trim.cuts.filter((c) => c.kind === 'pause' && c.to - c.from < SHORT_PAUSE);
+                if (!short.length) return null;
+                const total = short.reduce((sum, c) => sum + c.to - c.from, 0);
+                return (
+                  <Typography component="li" variant="body2" color="text.secondary">
+                    {short.length} short {short.length === 1 ? 'pause' : 'pauses'} under {SHORT_PAUSE}s, {minutes(total)} in all
+                  </Typography>
+                );
+              })()}
             </Box>
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
               Times are on the original recording.

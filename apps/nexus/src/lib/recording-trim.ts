@@ -41,7 +41,15 @@ export interface TrimConfig {
   /** Queue past classes too, not just new ones. */
   backlog: boolean;
   params: Partial<TrimParams>;
+  /**
+   * 'reencode': the worker re-encodes, so a cut lands on any frame and a 3s
+   * pause can go. 'copy': no re-encode, cuts snap to keyframes (every 6s on
+   * Teams files), which loses most short pauses. Kept as the rollback.
+   */
+  cutMethod: CutMethod;
 }
+
+export type CutMethod = 'reencode' | 'copy';
 
 /** How far back "past classes" goes: this academic year's recordings. */
 const BACKLOG_DAYS = 150;
@@ -51,12 +59,13 @@ const SETTLE_MINUTES = 60;
 export async function readTrimConfig(): Promise<TrimConfig> {
   const [flags, setting] = await Promise.all([getNexusSetting(FEATURE_FLAGS_KEY), getNexusSetting(TRIM_SETTING_KEY)]);
   const enabled = isFeatureEnabled(TRIM_FLAG, resolveFlags((flags?.value as Record<string, boolean>) || {}));
-  const value = (setting?.value ?? {}) as Partial<TrimConfig>;
+  const value = (setting?.value ?? {}) as Partial<TrimConfig> & { cut_method?: string };
   return {
     enabled,
     mode: value.mode === 'apply' ? 'apply' : 'dry_run',
     backlog: value.backlog === true,
     params: (value.params ?? {}) as Partial<TrimParams>,
+    cutMethod: value.cut_method === 'copy' ? 'copy' : 'reencode',
   };
 }
 
@@ -179,13 +188,20 @@ export interface PlanReport {
   freezes: Span[];
   keyframes: number[];
   probe?: Record<string, unknown>;
+  /** What the worker can do. A worker from before re-encoding sends nothing: copy only. */
+  cut_methods?: string[];
+}
+
+/** Re-encode only when the setting wants it AND the worker can do it. */
+export function chooseCutMethod(config: Pick<TrimConfig, 'cutMethod'>, report: Pick<PlanReport, 'cut_methods'>): CutMethod {
+  return config.cutMethod === 'reencode' && report.cut_methods?.includes('reencode') ? 'reencode' : 'copy';
 }
 
 export async function planTrimJob(
   supabase: any,
   jobId: string,
   report: PlanReport,
-): Promise<{ keep: Span[] } | { skip: string }> {
+): Promise<{ keep: Span[]; cut_method: CutMethod } | { skip: string }> {
   const { data: job } = await supabase
     .from('nexus_recording_trims')
     .select('id, class_id, status, previous')
@@ -194,12 +210,14 @@ export async function planTrimJob(
   if (!job || job.status !== 'running') return { skip: 'NOT_RUNNING' };
   const config = await readTrimConfig();
   const speech = await speechSpans(supabase, job.class_id);
+  const cutMethod = chooseCutMethod(config, report);
   const plan = planTrim({
     duration: report.duration,
     speech,
     silences: report.silences,
     freezes: report.freezes,
-    keyframes: report.keyframes,
+    // A re-encode cuts on any frame, so nothing is snapped.
+    keyframes: cutMethod === 'reencode' ? [] : report.keyframes,
     params: config.params,
   });
 
@@ -215,6 +233,8 @@ export async function planTrimJob(
     silence_spans: roundSpans(report.silences),
     freeze_spans: roundSpans(report.freezes),
     probe: report.probe ?? null,
+    cut_method: cutMethod,
+    pause_rule: plan.kind === 'cut' ? plan.pauseRule : null,
   };
   const base = { detection, plan, original_duration_seconds: report.duration, updated_at: new Date().toISOString() };
 
@@ -240,7 +260,7 @@ export async function planTrimJob(
     return { skip: 'DRY_RUN' };
   }
   await supabase.from('nexus_recording_trims').update({ ...base, removed_seconds: plan.removedSeconds }).eq('id', jobId);
-  return { keep: plan.keep as Span[] };
+  return { keep: plan.keep as Span[], cut_method: cutMethod };
 }
 
 export async function openTrimUpload(supabase: any, jobId: string): Promise<{ upload_url: string; file_name: string }> {

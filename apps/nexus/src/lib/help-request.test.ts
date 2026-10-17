@@ -146,7 +146,7 @@ describe('handleHelpRequest', () => {
       user_id: null,
       user_name: 'Santhosh V',
       user_phone: '+919876543210',
-      category: 'technical',
+      category: 'technical_issue',
       subject: "Nexus: Can't open the app",
       source_app: 'nexus',
       requester_ip_hash: 'key-1',
@@ -161,7 +161,7 @@ describe('handleHelpRequest', () => {
   it('files a sign-in problem under account', async () => {
     const { fake, deps } = setup();
     await handleHelpRequest({ ...VALID, problem: 'cant_sign_in' }, 'k', deps);
-    expect(fake.inserted[0].category).toBe('account');
+    expect(fake.inserted[0].category).toBe('account_issue');
   });
 
   it('ties the ticket to the signed-in account when there is one', async () => {

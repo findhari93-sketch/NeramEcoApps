@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseSilences, parseFreezes, parseKeyframes, medianKeyframeGap } from './ffmpeg-log.mjs';
+import { cueSpans, parseSilences, parseFreezes, parseKeyframes, medianKeyframeGap } from './ffmpeg-log.mjs';
 
 describe('parseSilences', () => {
   it('reads paired starts and ends, and runs an open one to the end of the file', () => {
@@ -47,5 +47,24 @@ describe('keyframes', () => {
   it('finds the middle gap', () => {
     expect(medianKeyframeGap([0, 2, 4, 10])).toBe(2);
     expect(medianKeyframeGap([0])).toBe(Infinity);
+  });
+});
+
+describe('cueSpans', () => {
+  it('reads Teams cue times, with and without hours', () => {
+    const vtt = [
+      'WEBVTT',
+      '',
+      'a1/1',
+      '00:11:59.080 --> 00:12:00.440',
+      '<v Hari>Good evening, students.</v>',
+      '',
+      '12:44.480 --> 12:45.560',
+      'Okay.',
+      '',
+      '01:05:19.780 --> 01:05:34.980',
+      'Bye.',
+    ].join('\n');
+    expect(cueSpans(vtt)).toEqual([[719.08, 720.44], [764.48, 765.56], [3919.78, 3934.98]]);
   });
 });

@@ -101,6 +101,15 @@ export function firePhoneVerifiedConversion(userId: string | undefined) {
 // TYPES
 // ============================================
 
+/** Seconds before "Resend OTP" comes back. Short: a slow SMS is the main reason students give up here. */
+export const OTP_RESEND_SECONDS = 30;
+
+/** "+91 98765 43210": the number the code went to, easy to check at a glance. */
+export function formatSentTo(dialCode: string, digits: string): string {
+  const grouped = digits.length === 10 ? `${digits.slice(0, 5)} ${digits.slice(5)}` : digits;
+  return `${dialCode} ${grouped}`;
+}
+
 export interface FunnelEventData {
   funnel: 'auth' | 'onboarding' | 'application';
   event: string;
@@ -145,6 +154,8 @@ export interface LoginModalProps {
   dialCode?: string;
   /** Digits in a national mobile number for `dialCode`. Default: 10. */
   phoneLength?: number;
+  /** Stacking order, for opening above another overlay such as a chat drawer. Default: the theme's modal level. */
+  zIndex?: number;
 }
 
 type ModalStep = 'login' | 'verifyEmail' | 'phone' | 'otp' | 'phoneInUse';
@@ -245,6 +256,7 @@ export default function LoginModal({
   onSkip,
   onGetHelp,
   requireEmailVerification = false,
+  zIndex,
   dialCode = '+91',
   phoneLength = 10,
 }: LoginModalProps) {
@@ -283,6 +295,8 @@ export default function LoginModal({
   const [switchLoading, setSwitchLoading] = useState(false);
   const recaptchaInitialized = useRef(false);
   const recaptchaContainerRef = useRef<HTMLDivElement | null>(null);
+  /** The last code sent off by itself, so a failed code is not retried in a loop. */
+  const autoSubmittedOtpRef = useRef('');
 
   const showEscapeHatch = (allowEscapeHatch || !!onGetHelp) && failedAttempts >= maxAttemptsBeforeEscape;
   const fullPhone = `${dialCode}${phoneNumber}`;
@@ -367,6 +381,23 @@ export default function LoginModal({
       });
     }
   }, [open]);
+
+  // Android Chrome can read the code from the SMS (WebOTP). It fills the field
+  // only when the SMS ends with an "@<this site> #<code>" line, and does nothing
+  // anywhere else. The keyboard's "From Messages" suggestion (one-time-code
+  // autocomplete) covers iPhones and every other case.
+  useEffect(() => {
+    if (!open || step !== 'otp' || typeof window === 'undefined' || !('OTPCredential' in window)) return;
+    const ac = new AbortController();
+    (navigator.credentials as any)
+      .get({ otp: { transport: ['sms'] }, signal: ac.signal })
+      .then((cred: { code?: string } | null) => {
+        const code = (cred?.code ?? '').replace(/\D/g, '').slice(0, 6);
+        if (code.length === 6) setOtp(code);
+      })
+      .catch(() => undefined); // aborted, denied, or no SMS: typing still works
+    return () => ac.abort();
+  }, [open, step]);
 
   // Resend timer countdown
   useEffect(() => {
@@ -652,8 +683,9 @@ export default function LoginModal({
       await sendPhoneOTP(fullPhone);
       capturePhone(fullPhone, 'otp_sent');
       onFunnelEvent?.({ funnel: 'auth', event: 'otp_requested', status: 'completed' });
+      autoSubmittedOtpRef.current = '';
       setStep('otp');
-      setResendTimer(60);
+      setResendTimer(OTP_RESEND_SECONDS);
     } catch (err: any) {
       const errMsg = getFirebaseErrorMessage(err);
       onFunnelEvent?.({ funnel: 'auth', event: 'otp_request_failed', status: 'failed', error_message: errMsg, error_code: err?.code });
@@ -668,8 +700,9 @@ export default function LoginModal({
           await sendPhoneOTP(fullPhone);
           capturePhone(fullPhone, 'otp_sent');
           onFunnelEvent?.({ funnel: 'auth', event: 'otp_requested', status: 'completed', metadata: { retry: true } });
+          autoSubmittedOtpRef.current = '';
           setStep('otp');
-          setResendTimer(60);
+          setResendTimer(OTP_RESEND_SECONDS);
           return;
         } catch (retryErr: any) {
           capturePhone(fullPhone, 'failed', { code: retryErr?.code, message: retryErr?.message });
@@ -792,7 +825,8 @@ export default function LoginModal({
       await reinitRecaptcha();
       await sendPhoneOTP(fullPhone);
       capturePhone(fullPhone, 'otp_sent');
-      setResendTimer(60);
+      autoSubmittedOtpRef.current = '';
+      setResendTimer(OTP_RESEND_SECONDS);
     } catch (err: any) {
       capturePhone(fullPhone, 'failed', { code: err?.code, message: err?.message });
       setPhoneError(getFirebaseErrorMessage(err));
@@ -801,6 +835,17 @@ export default function LoginModal({
       setPhoneLoading(false);
     }
   };
+
+  // The sixth digit (typed, pasted, or filled from the SMS) verifies by itself:
+  // no hunting for the Verify button. A code that failed is not resent until
+  // it is changed; the button is still there.
+  useEffect(() => {
+    if (step !== 'otp' || otp.length !== 6 || phoneLoading || autoSubmittedOtpRef.current === otp) return;
+    autoSubmittedOtpRef.current = otp;
+    void handleVerifyOtp();
+    // handleVerifyOtp reads the current otp; it is rebuilt every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [otp, step, phoneLoading]);
 
   // ---- Render ----
 
@@ -853,6 +898,7 @@ export default function LoginModal({
       disableScrollLock
       TransitionComponent={isMobile ? SlideTransition : undefined}
       sx={{
+        ...(zIndex !== undefined ? { zIndex } : {}),
         '& .MuiDialog-paper': {
           borderRadius: isMobile ? '12px 12px 0 0' : 1.5,
           m: isMobile ? 0 : 2,
@@ -1105,10 +1151,18 @@ export default function LoginModal({
                     </Typography>
                   ),
                 }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && phoneNumber.length === phoneLength && !phoneLoading) {
+                    e.preventDefault();
+                    void handleSendOtp();
+                  }
+                }}
                 inputProps={{
                   inputMode: 'numeric',
                   pattern: '[0-9]*',
                   autoComplete: 'tel-national',
+                  name: 'tel',
+                  enterKeyHint: 'send',
                   style: { fontSize: '18px' },
                 }}
                 sx={{
@@ -1137,10 +1191,23 @@ export default function LoginModal({
           {/* ---- OTP STEP ---- */}
           {step === 'otp' && (
             <Box>
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                Enter the 6-digit OTP
+              <Typography variant="body2" color="text.secondary" component="p" sx={{ mb: 1 }}>
+                Enter the 6-digit code sent to{' '}
+                <Box component="span" sx={{ color: 'text.primary', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                  {formatSentTo(dialCode, phoneNumber)}
+                </Box>{' '}
+                <Button
+                  variant="text"
+                  size="small"
+                  onClick={handleChangePhone}
+                  disabled={phoneLoading}
+                  sx={{ minWidth: 0, minHeight: 44, px: 1, verticalAlign: 'baseline' }}
+                >
+                  Edit
+                </Button>
               </Typography>
               <TextField
+                id="login-modal-otp"
                 fullWidth
                 label="OTP"
                 placeholder="000000"
@@ -1150,10 +1217,14 @@ export default function LoginModal({
                   setOtp(value);
                   setPhoneError('');
                 }}
+                helperText={phoneLoading && otp.length === 6 ? 'Verifying…' : 'It fills in by itself when your phone offers the code'}
                 inputProps={{
                   inputMode: 'numeric',
                   pattern: '[0-9]*',
                   autoComplete: 'one-time-code',
+                  name: 'otp',
+                  enterKeyHint: 'done',
+                  readOnly: phoneLoading,
                   style: {
                     fontSize: '24px',
                     letterSpacing: '8px',
@@ -1170,24 +1241,17 @@ export default function LoginModal({
               <Box
                 sx={{
                   display: 'flex',
-                  justifyContent: 'space-between',
+                  justifyContent: 'flex-end',
                   alignItems: 'center',
-                  mt: 2,
+                  mt: 1,
                 }}
               >
                 <Button
                   variant="text"
                   size="small"
-                  onClick={handleChangePhone}
-                  disabled={phoneLoading}
-                >
-                  Change Phone Number
-                </Button>
-                <Button
-                  variant="text"
-                  size="small"
                   onClick={handleResendOtp}
                   disabled={phoneLoading || resendTimer > 0}
+                  sx={{ minHeight: 44 }}
                 >
                   {resendTimer > 0 ? `Resend in ${resendTimer}s` : 'Resend OTP'}
                 </Button>

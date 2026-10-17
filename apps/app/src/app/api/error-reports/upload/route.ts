@@ -7,45 +7,21 @@ export const dynamic = 'force-dynamic';
  * Uploads to the shared `issue-screenshots` bucket and returns { path }.
  * The report itself goes to the Admin support queue, and POST
  * /api/error-reports absolutises this path before storing it.
- * Enrolled students only, same rule as the report route.
+ * Anyone signed in, same rule as the report route. Files land under the
+ * uploader's own user id.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyIdToken } from '@/lib/firebase-admin';
-import { getUserByFirebaseUid, getSupabaseAdminClient } from '@neram/database';
-import { isEnrolledStudent } from '@/lib/enrollment';
+import { getSupabaseAdminClient } from '@neram/database';
+import { requireSignedInRequester } from '@/lib/student-ticket';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const BUCKET_NAME = 'issue-screenshots';
 
-async function requireAuth(req: NextRequest): Promise<{ userId: string } | NextResponse> {
-  const authHeader = req.headers.get('Authorization');
-  if (!authHeader?.startsWith('Bearer ')) {
-    return NextResponse.json({ error: 'Authentication required' }, { status: 401 });
-  }
-  try {
-    const token = authHeader.split(' ')[1];
-    const decoded = await verifyIdToken(token);
-    const adminClient = getSupabaseAdminClient();
-    const dbUser = await getUserByFirebaseUid(decoded.uid, adminClient);
-    if (!dbUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 });
-    }
-    // Same gate as POST /api/error-reports. Without it a non-enrolled user
-    // could still push files into the shared bucket with the button hidden.
-    if (!(await isEnrolledStudent(dbUser.id, adminClient))) {
-      return NextResponse.json({ error: 'not_enrolled' }, { status: 403 });
-    }
-    return { userId: dbUser.id };
-  } catch {
-    return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
-  }
-}
-
 export async function POST(req: NextRequest) {
   try {
-    const auth = await requireAuth(req);
+    const auth = await requireSignedInRequester(req);
     if (auth instanceof NextResponse) return auth;
 
     const formData = await req.formData();

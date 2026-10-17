@@ -32,6 +32,15 @@ describe('adminCrmUrl', () => {
       adminCrmUrl('u-1', { nexusOrigin: 'http://localhost:3012', section: 'application' }),
     ).toBe('http://localhost:3013/crm/u-1?section=application');
   });
+
+  it('asks Admin to open the fees form straight away', () => {
+    expect(
+      adminCrmUrl('u-1', { nexusOrigin: 'https://nexus.neramclasses.com', section: 'application', open: 'fees' }),
+    ).toBe('https://admin.neramclasses.com/crm/u-1?section=application&open=fees');
+    expect(adminCrmUrl('u-1', { nexusOrigin: 'https://nexus.neramclasses.com', open: 'fees' })).toBe(
+      'https://admin.neramclasses.com/crm/u-1?open=fees',
+    );
+  });
 });
 
 describe('adminDuplicatesUrl', () => {

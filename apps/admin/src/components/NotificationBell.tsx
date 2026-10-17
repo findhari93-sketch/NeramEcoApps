@@ -46,7 +46,13 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   callback_reminder: '#ff9800',
   link_regeneration_requested: '#e91e63',
   ticket_created: '#ff9800',
+  ticket_student_replied: '#1565c0',
+  ticket_reopened: '#f44336',
   direct_enrollment_completed: '#4caf50',
+  fee_correction_reported: '#e91e63',
+  fee_details_confirmed: '#4caf50',
+  fee_installment_due: '#ff9800',
+  fee_installment_overdue: '#f44336',
 };
 
 const EVENT_SECTION_MAP: Record<string, string> = {
@@ -81,14 +87,28 @@ function getNavigationUrl(notification: AdminNotification): string | null {
     return '/direct-enrollment';
   }
 
-  if (notification.event_type === 'ticket_created') {
+  // Ticket events open that ticket in the support inbox, by its number. Older
+  // rows without a number fall back to the id (the inbox reads ?highlight= too).
+  if (['ticket_created', 'ticket_student_replied', 'ticket_reopened'].includes(notification.event_type)) {
+    const ticketNumber = notification.metadata?.ticket_number as string;
+    if (ticketNumber) return `/support-tickets?ticket=${encodeURIComponent(ticketNumber)}`;
     const ticketId = notification.metadata?.ticket_id as string;
-    if (ticketId) return `/support-tickets?highlight=${ticketId}`;
+    if (ticketId) return `/support-tickets?highlight=${encodeURIComponent(ticketId)}`;
     return '/support-tickets';
   }
 
   if (notification.event_type === 'direct_enrollment_completed') {
     return '/direct-enrollment';
+  }
+
+  // Fees: a student's report goes to the review list, due dates to who owes.
+  if (notification.event_type === 'fee_correction_reported') return '/collections?tab=reports';
+  if (notification.event_type === 'fee_installment_due' || notification.event_type === 'fee_installment_overdue') {
+    return '/collections?filter=due';
+  }
+  if (notification.event_type === 'fee_details_confirmed') {
+    const confirmedUserId = notification.metadata?.user_id as string;
+    return confirmedUserId ? `/crm/${confirmedUserId}?section=application` : '/collections?tab=checks';
   }
 
   const userId = notification.metadata?.user_id as string;

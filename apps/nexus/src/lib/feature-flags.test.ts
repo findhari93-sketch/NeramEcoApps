@@ -349,3 +349,11 @@ describe('Drawing Reviews retired', () => {
     expect(featureForPath('/teacher/drawing-reviews/abc')).toBeUndefined();
   });
 });
+
+describe('Check your details is never switched off', () => {
+  // The office asks the student to check their fees by Teams and the bell. A
+  // feature flag that hid the page would turn that message into a dead link.
+  it('leaves /student/check-details ungated', () => {
+    expect(featureForPath('/student/check-details')).toBeUndefined();
+  });
+});

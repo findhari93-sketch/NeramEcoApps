@@ -33,6 +33,10 @@ export {
 } from './services/email';
 export type { EmailData, TemplateData } from './services/email';
 
+// Services - Support ticket update email (requester)
+export { buildTicketUpdateEmail, sendTicketUpdateEmail } from './services/ticket-email';
+export type { TicketUpdateKind, TicketUpdateEmailInput } from './services/ticket-email';
+
 // Services - Telegram
 export {
   sendTelegramMessage,
@@ -186,6 +190,7 @@ export { createUnsubscribeToken, verifyUnsubscribeToken } from './utils/unsubscr
 // Demo Class v2 scheduling (client-safe copy at '@neram/database/demo-schedule')
 export * from './utils/demo-schedule';
 export * from './utils/demo-follow-up';
+export * from './utils/fee-plan';
 export { fetchAllRows, countRowsByKey, countRowsForIds } from './utils/paged-rows';
 export {
   classifyCatchupCandidate,

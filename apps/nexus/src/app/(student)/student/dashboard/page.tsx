@@ -22,6 +22,8 @@ import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlin
 import CalendarTodayOutlinedIcon from '@mui/icons-material/CalendarTodayOutlined';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
+import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
+import Link from 'next/link';
 import PlayCircleOutlinedIcon from '@mui/icons-material/PlayCircleOutlined';
 import HistoryOutlinedIcon from '@mui/icons-material/HistoryOutlined';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
@@ -67,6 +69,8 @@ interface CompletedClass {
 }
 
 interface DashboardData {
+  /** The office's latest "Check your details" ask, or null. */
+  recordCheck?: { status: string } | null;
   upcomingClasses: UpcomingClass[];
   /**
    * Class ids whose prep gate is shut, keyed by id. The server has already
@@ -91,6 +95,9 @@ interface DashboardData {
   examCountdown: ExamCountdownTarget | null;
 }
 
+/** Check statuses that still want the student to look. */
+const CHECK_PENDING = new Set(['queued', 'sent', 'opened', 'changed']);
+
 export default function StudentDashboard() {
   const theme = useTheme();
   const router = useRouter();
@@ -101,6 +108,8 @@ export default function StudentDashboard() {
   const [foundationChapters, setFoundationChapters] = useState<NexusFoundationChapterWithProgress[] | null>(null);
   const [foundationLoading, setFoundationLoading] = useState(true);
   const [profileIncomplete, setProfileIncomplete] = useState(false);
+  /** The same ask, when profile-completion was called anyway (no phone on file). */
+  const [profileCheck, setProfileCheck] = useState<{ status: string } | null>(null);
   // The class whose recording is playing. Students watch in-app, because the
   // SharePoint link only works for whoever Microsoft happened to share the file
   // with, which for a non-channel meeting is just the meeting's invitees.
@@ -160,6 +169,7 @@ export default function StudentDashboard() {
         if (res.ok) {
           const data = await res.json();
           setProfileIncomplete(!data.isComplete);
+          setProfileCheck(data.recordCheck ?? null);
         }
       } catch { /* ignore */ }
     };
@@ -306,6 +316,46 @@ export default function StudentDashboard() {
         variant="hero"
         onClick={() => router.push('/student/course-plan')}
       />
+
+      {/* ── Check your details ── The office filled in their form and fees and
+          asked them to check it. Shown until they confirm or report. */}
+      {CHECK_PENDING.has((data?.recordCheck ?? profileCheck)?.status ?? '') && (
+        <Paper
+          elevation={0}
+          sx={{
+            mb: 2,
+            p: 2,
+            borderRadius: 2,
+            border: '1px solid',
+            borderColor: 'info.light',
+            bgcolor: alpha(theme.palette.info.main, 0.06),
+            display: 'flex',
+            alignItems: { xs: 'flex-start', sm: 'center' },
+            flexWrap: { xs: 'wrap', sm: 'nowrap' },
+            gap: 1.5,
+          }}
+        >
+          <FactCheckOutlinedIcon aria-hidden sx={{ fontSize: 28, color: 'info.main' }} />
+          <Box sx={{ flex: '1 1 200px', minWidth: 0 }}>
+            <Typography variant="body2" fontWeight={700}>
+              {(data?.recordCheck ?? profileCheck)?.status === 'changed'
+                ? 'The office updated your fees'
+                : 'Please check your details and fees'}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              The office filled them in. Tell us if anything is wrong.
+            </Typography>
+          </Box>
+          <Button
+            component={Link}
+            href="/student/check-details"
+            variant="contained"
+            sx={{ minHeight: 48, fontWeight: 700, flexShrink: 0, width: { xs: '100%', sm: 'auto' } }}
+          >
+            Check your details
+          </Button>
+        </Paper>
+      )}
 
       {/* ── Complete Profile Banner ── */}
       {profileIncomplete && (

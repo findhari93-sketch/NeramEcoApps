@@ -69,7 +69,7 @@ export async function generateMetadata({
   const title =
     localized?.title ??
     // The [locale] layout template appends " | Neram Classes".
-    `NATA Online Coaching ${YEAR} | Live Classes, Mock Tests, Drawing`;
+    `NATA Online Coaching ${YEAR}: Live Classes, Drawing`;
   const description =
     localized?.description ??
     `NATA online coaching since 2009: ${PROOF_POINTS.students}, ${PROOF_POINTS.topResult}. Live classes across India and the Gulf, daily drawing practice, 100+ mock tests in the 1-Year program, free demo. Fees from ₹15,000.`;

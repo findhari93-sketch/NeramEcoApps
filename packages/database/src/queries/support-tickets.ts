@@ -8,10 +8,27 @@ import { SupabaseClient } from '@supabase/supabase-js';
 import type {
   SupportTicket,
   SupportTicketComment,
+  SupportTicketActivity,
+  SupportTicketActivityAction,
+  SupportTicketDetail,
+  SupportTicketStudentView,
+  SupportTicketListItem,
+  SupportTicketQueueCounts,
+  SupportTicketInboxFilters,
+  SupportTicketResolutionCode,
+  SupportTicketReopenSnapshot,
+  SupportTicketPriority,
+  SupportTicketCategory,
   CreateSupportTicketInput,
   UpdateSupportTicketInput,
   ListSupportTicketsFilters,
 } from '../types';
+import {
+  TICKET_QUEUE_STATUSES,
+  TICKET_CONFIRM_DAYS,
+  TICKET_WAITING_DAYS,
+  ticketDaysFromNow,
+} from '../utils/support-ticket-status';
 
 // ============================================
 // TICKET OPERATIONS
@@ -42,11 +59,25 @@ export async function createSupportTicket(
       screenshot_urls: input.screenshot_urls || [],
       console_logs: input.console_logs || null,
       device_info: input.device_info || null,
+      // Named only when given, so a caller that predates the column still inserts.
+      ...(input.requester_segment ? { requester_segment: input.requester_segment } : {}),
     })
     .select()
     .single();
 
   if (error) throw error;
+
+  await logSupportTicketActivity(
+    {
+      ticket_id: data.id,
+      actor_id: input.user_id || null,
+      actor_name: input.user_name,
+      action: 'created',
+      new_status: data.status,
+    },
+    supabase
+  );
+
   return data;
 }
 
@@ -117,9 +148,10 @@ export async function listSupportTickets(
     query = query.eq('user_id', filters.userId);
   }
 
-  if (filters.search) {
+  const search = sanitizeTicketSearch(filters.search);
+  if (search) {
     query = query.or(
-      `ticket_number.ilike.%${filters.search}%,user_name.ilike.%${filters.search}%,user_email.ilike.%${filters.search}%,subject.ilike.%${filters.search}%`
+      `ticket_number.ilike.%${search}%,user_name.ilike.%${search}%,user_email.ilike.%${search}%,subject.ilike.%${search}%`
     );
   }
 
@@ -195,17 +227,23 @@ export async function addTicketComment(
 }
 
 /**
- * Get comments for a ticket
+ * Get comments for a ticket.
+ *
+ * Internal staff notes are left out unless `includeInternal` is set. Every
+ * requester-facing caller (Tools App, marketing /track) relies on that default.
  */
 export async function getTicketComments(
   ticketId: string,
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  opts: { includeInternal?: boolean } = {}
 ): Promise<SupportTicketComment[]> {
-  const { data, error } = await supabase
+  let query = supabase
     .from('support_ticket_comments')
     .select('*')
-    .eq('ticket_id', ticketId)
-    .order('created_at', { ascending: true });
+    .eq('ticket_id', ticketId);
+  if (!opts.includeInternal) query = query.eq('is_internal', false);
+
+  const { data, error } = await query.order('created_at', { ascending: true });
 
   if (error) throw error;
   return data || [];
@@ -221,17 +259,624 @@ export async function getTicketComments(
 export async function getSupportTicketStats(
   supabase: SupabaseClient
 ): Promise<{ open: number; in_progress: number; resolved: number; total: number }> {
-  const { data, error, count } = await supabase
-    .from('support_tickets')
-    .select('status', { count: 'exact' });
+  const counts = await getSupportTicketQueueCounts(null, supabase);
+  return {
+    open: counts.new,
+    in_progress: counts.in_progress,
+    resolved: counts.closed,
+    total: counts.all,
+  };
+}
 
+// ============================================
+// LIFECYCLE (migration 20261206090100)
+// ============================================
+//
+// Every move is an update conditioned on the status the caller saw. If someone
+// else moved the ticket in between, nothing changes and the caller gets null,
+// which the routes answer with 409. The rules for which move is allowed live in
+// utils/support-ticket-status.ts; these functions only write.
+
+const TICKET_NUMBER_RE = /^NERAM-TKT-\d{3,}$/i;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Fields the requester never sees. */
+const STAFF_ONLY_FIELDS = ['console_logs', 'device_info', 'context', 'staff_seen_at', 'assigned_by', 'requester_ip_hash'] as const;
+
+/** Columns the inbox list needs. No logs or device info: they are large. */
+const LIST_COLUMNS = [
+  'id', 'ticket_number', 'user_id', 'user_name', 'category', 'subject', 'source_app',
+  'status', 'priority', 'assigned_to', 'resolution_code', 'auto_close_at', 'closed_at',
+  'last_reply_at', 'last_reply_by', 'staff_seen_at', 'requester_segment', 'reopen_count',
+  'screenshot_urls', 'created_at', 'updated_at',
+].join(',');
+
+/**
+ * Make free text safe to drop into a PostgREST .or() filter. Commas, brackets
+ * and the like would otherwise end the ilike and start a filter of the
+ * caller's choosing.
+ */
+export function sanitizeTicketSearch(value: string | null | undefined): string {
+  if (!value) return '';
+  return value.replace(/[,()%*\\:"']/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+}
+
+/** Write one activity row. Never throws: a lost log line must not fail a move. */
+export async function logSupportTicketActivity(
+  entry: {
+    ticket_id: string;
+    actor_id?: string | null;
+    actor_name?: string | null;
+    action: SupportTicketActivityAction;
+    old_status?: string | null;
+    new_status?: string | null;
+    reason?: string | null;
+    metadata?: Record<string, unknown>;
+    visible_to_student?: boolean;
+  },
+  supabase: SupabaseClient
+): Promise<void> {
+  try {
+    const { error } = await supabase.from('support_ticket_activity').insert({
+      ticket_id: entry.ticket_id,
+      actor_id: entry.actor_id ?? null,
+      actor_name: entry.actor_name ?? null,
+      action: entry.action,
+      old_status: entry.old_status ?? null,
+      new_status: entry.new_status ?? null,
+      reason: entry.reason ?? null,
+      metadata: entry.metadata ?? {},
+      visible_to_student: entry.visible_to_student ?? true,
+    });
+    if (error) console.error('[support-tickets] activity log failed:', error.message);
+  } catch (err) {
+    console.error('[support-tickets] activity log failed:', err);
+  }
+}
+
+/** A ticket by UUID or by its number (NERAM-TKT-00001). */
+export async function getSupportTicketByRef(
+  ref: string,
+  supabase: SupabaseClient
+): Promise<SupportTicket | null> {
+  const value = ref.trim();
+  if (UUID_RE.test(value)) return getSupportTicketById(value, supabase);
+  if (TICKET_NUMBER_RE.test(value)) return getSupportTicketByNumber(value.toUpperCase(), supabase);
+  return null;
+}
+
+async function namesFor(ids: (string | null | undefined)[], supabase: SupabaseClient): Promise<Map<string, string>> {
+  const unique = [...new Set(ids.filter((v): v is string => !!v))];
+  const map = new Map<string, string>();
+  if (unique.length === 0) return map;
+  const { data } = await supabase.from('users').select('id, name').in('id', unique);
+  for (const row of (data || []) as { id: string; name: string | null }[]) {
+    if (row.name) map.set(row.id, row.name);
+  }
+  return map;
+}
+
+/**
+ * The full ticket for a detail screen: names for the people on it, the
+ * conversation and the activity log.
+ *
+ * With `forStudent`, internal notes, hidden activity and staff-only fields are
+ * removed before anything leaves the server.
+ */
+export async function getSupportTicketDetail(
+  ref: string,
+  supabase: SupabaseClient,
+  opts: { forStudent: true }
+): Promise<SupportTicketStudentView | null>;
+export async function getSupportTicketDetail(
+  ref: string,
+  supabase: SupabaseClient,
+  opts?: { forStudent?: false }
+): Promise<SupportTicketDetail | null>;
+export async function getSupportTicketDetail(
+  ref: string,
+  supabase: SupabaseClient,
+  opts: { forStudent?: boolean } = {}
+): Promise<SupportTicketDetail | SupportTicketStudentView | null> {
+  const ticket = await getSupportTicketByRef(ref, supabase);
+  if (!ticket) return null;
+  const forStudent = opts.forStudent === true;
+
+  let activityQuery = supabase
+    .from('support_ticket_activity')
+    .select('*')
+    .eq('ticket_id', ticket.id);
+  if (forStudent) activityQuery = activityQuery.eq('visible_to_student', true);
+
+  const [comments, activityRes, names, duplicate] = await Promise.all([
+    getTicketComments(ticket.id, supabase, { includeInternal: !forStudent }),
+    activityQuery.order('created_at', { ascending: true }),
+    namesFor([ticket.assigned_to, ticket.resolved_by], supabase),
+    ticket.duplicate_of
+      ? supabase.from('support_tickets').select('ticket_number').eq('id', ticket.duplicate_of).maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+
+  const detail: SupportTicketDetail = {
+    ...ticket,
+    screenshot_urls: ticket.screenshot_urls || [],
+    context: ticket.context || {},
+    reopen_count: ticket.reopen_count ?? 0,
+    assignee_name: ticket.assigned_to ? names.get(ticket.assigned_to) ?? null : null,
+    resolver_name: ticket.resolved_by ? names.get(ticket.resolved_by) ?? null : null,
+    duplicate_of_number: (duplicate.data as { ticket_number?: string } | null)?.ticket_number ?? null,
+    comments,
+    // The table may not exist yet if the app lands before the migration.
+    activity: (activityRes.error ? [] : activityRes.data || []) as SupportTicketActivity[],
+  };
+
+  if (!forStudent) return detail;
+  const view: Record<string, unknown> = { ...detail };
+  for (const field of STAFF_ONLY_FIELDS) delete view[field];
+  return view as unknown as SupportTicketStudentView;
+}
+
+/** The Admin inbox list: one queue, lean rows, newest work first. */
+export async function listSupportTicketInbox(
+  filters: SupportTicketInboxFilters,
+  supabase: SupabaseClient
+): Promise<{ data: SupportTicketListItem[]; total: number }> {
+  const page = Math.max(1, filters.page || 1);
+  const limit = Math.min(100, Math.max(1, filters.limit || 30));
+  const offset = (page - 1) * limit;
+  const queue = filters.queue || 'new';
+
+  let query = supabase.from('support_tickets').select(LIST_COLUMNS, { count: 'exact' });
+
+  if (queue !== 'all') query = query.in('status', TICKET_QUEUE_STATUSES[queue]);
+  if (filters.assignee === 'me' && filters.actorId) query = query.eq('assigned_to', filters.actorId);
+  if (filters.assignee === 'unassigned') query = query.is('assigned_to', null);
+  if (filters.source) query = query.eq('source_app', filters.source);
+  if (filters.category) query = query.eq('category', filters.category);
+  if (filters.priority) query = query.eq('priority', filters.priority);
+
+  const search = sanitizeTicketSearch(filters.search);
+  if (search) {
+    query = query.or(
+      `ticket_number.ilike.%${search}%,user_name.ilike.%${search}%,user_email.ilike.%${search}%,subject.ilike.%${search}%`
+    );
+  }
+
+  // New: first come, first served. To confirm: the one closing soonest.
+  // Closed: most recently closed. Everything else: most recently touched.
+  switch (queue) {
+    case 'new':
+      query = query.order('created_at', { ascending: true });
+      break;
+    case 'to_confirm':
+      query = query.order('auto_close_at', { ascending: true, nullsFirst: false });
+      break;
+    case 'closed':
+      query = query.order('closed_at', { ascending: false, nullsFirst: false }).order('updated_at', { ascending: false });
+      break;
+    default:
+      query = query.order('updated_at', { ascending: false });
+  }
+
+  const { data, error, count } = await query.range(offset, offset + limit - 1);
   if (error) throw error;
 
-  const statuses = data || [];
+  const rows = (data || []) as unknown as (SupportTicket & { screenshot_urls: string[] | null })[];
+  const names = await namesFor(rows.map((r) => r.assigned_to), supabase);
+
   return {
-    open: statuses.filter((t: { status: string }) => t.status === 'open').length,
-    in_progress: statuses.filter((t: { status: string }) => t.status === 'in_progress').length,
-    resolved: statuses.filter((t: { status: string }) => t.status === 'resolved').length,
+    data: rows.map(({ screenshot_urls, ...row }) => ({
+      ...(row as unknown as SupportTicketListItem),
+      screenshot_count: (screenshot_urls || []).length,
+      assignee_name: row.assigned_to ? names.get(row.assigned_to) ?? null : null,
+    })),
     total: count || 0,
   };
+}
+
+const EMPTY_COUNTS: SupportTicketQueueCounts = {
+  new: 0, in_progress: 0, waiting: 0, to_confirm: 0, closed: 0, all: 0, mine: 0, unread: 0,
+};
+
+/** Tab counts for the Admin inbox, in one call. */
+export async function getSupportTicketQueueCounts(
+  actorId: string | null,
+  supabase: SupabaseClient
+): Promise<SupportTicketQueueCounts> {
+  const { data, error } = await supabase.rpc('support_ticket_queue_counts', { p_actor: actorId });
+  if (error) throw error;
+  return { ...EMPTY_COUNTS, ...((data || {}) as Partial<SupportTicketQueueCounts>) };
+}
+
+/** Who made a move. Null id means the system (cron). */
+export interface TicketActor {
+  id: string | null;
+  name: string | null;
+}
+
+/**
+ * Move a ticket from `from` to whatever `patch` says, only if it is still at
+ * `from`. Returns the updated row, or null when someone else moved it first.
+ */
+export async function moveSupportTicket(
+  id: string,
+  from: string,
+  patch: Record<string, unknown>,
+  activity: {
+    actor: TicketActor;
+    action: SupportTicketActivityAction;
+    reason?: string | null;
+    metadata?: Record<string, unknown>;
+    visible_to_student?: boolean;
+  },
+  supabase: SupabaseClient
+): Promise<SupportTicket | null> {
+  const { data, error } = await supabase
+    .from('support_tickets')
+    .update(patch)
+    .eq('id', id)
+    .eq('status', from)
+    .select()
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  await logSupportTicketActivity(
+    {
+      ticket_id: id,
+      actor_id: activity.actor.id,
+      actor_name: activity.actor.name,
+      action: activity.action,
+      old_status: from,
+      new_status: (patch.status as string | undefined) ?? from,
+      reason: activity.reason ?? null,
+      metadata: activity.metadata,
+      visible_to_student: activity.visible_to_student,
+    },
+    supabase
+  );
+  return data as SupportTicket;
+}
+
+/** Fields that describe how a ticket ended. Cleared whenever it goes back to work. */
+const CLEARED_RESOLUTION = {
+  resolution_code: null,
+  resolution_notes: null,
+  resolved_by: null,
+  resolved_at: null,
+  closed_at: null,
+  auto_close_at: null,
+  duplicate_of: null,
+};
+
+/** Start: open to in_progress. Claims the ticket when nobody owns it. */
+export function startSupportTicket(ticket: SupportTicket, actor: TicketActor, supabase: SupabaseClient) {
+  const now = new Date().toISOString();
+  const claim = !ticket.assigned_to && actor.id
+    ? { assigned_to: actor.id, assigned_at: now, assigned_by: actor.id }
+    : {};
+  return moveSupportTicket(
+    ticket.id,
+    ticket.status,
+    { status: 'in_progress', ...claim },
+    { actor, action: 'started' },
+    supabase
+  );
+}
+
+/** Ask the requester for more. Their turn; closes as no_response after 7 days. */
+export function requestSupportTicketInfo(
+  ticket: SupportTicket,
+  actor: TicketActor,
+  supabase: SupabaseClient
+) {
+  return moveSupportTicket(
+    ticket.id,
+    ticket.status,
+    { status: 'waiting_on_student', auto_close_at: ticketDaysFromNow(TICKET_WAITING_DAYS) },
+    { actor, action: 'info_requested' },
+    supabase
+  );
+}
+
+/** Back to work from waiting_on_student, by staff or by the requester replying. */
+export function resumeSupportTicket(
+  ticket: SupportTicket,
+  actor: TicketActor,
+  supabase: SupabaseClient,
+  opts: { byStudent?: boolean } = {}
+) {
+  return moveSupportTicket(
+    ticket.id,
+    ticket.status,
+    { status: 'in_progress', auto_close_at: null },
+    { actor, action: opts.byStudent ? 'student_replied' : 'resumed' },
+    supabase
+  );
+}
+
+/** Resolve: the requester confirms, or it closes on its own in 3 days. */
+export function resolveSupportTicket(
+  ticket: SupportTicket,
+  actor: TicketActor,
+  input: { resolution_code: SupportTicketResolutionCode; note: string },
+  supabase: SupabaseClient
+) {
+  const now = new Date().toISOString();
+  return moveSupportTicket(
+    ticket.id,
+    ticket.status,
+    {
+      status: 'awaiting_confirmation',
+      resolution_code: input.resolution_code,
+      resolution_notes: input.note,
+      resolved_by: actor.id,
+      resolved_at: now,
+      auto_close_at: ticketDaysFromNow(TICKET_CONFIRM_DAYS),
+    },
+    { actor, action: 'resolved', reason: input.note, metadata: { resolution_code: input.resolution_code } },
+    supabase
+  );
+}
+
+/** Confirm a resolution (requester, or staff on their behalf). */
+export function confirmSupportTicket(ticket: SupportTicket, actor: TicketActor, supabase: SupabaseClient) {
+  return moveSupportTicket(
+    ticket.id,
+    ticket.status,
+    { status: 'closed', closed_at: new Date().toISOString(), auto_close_at: null },
+    { actor, action: 'confirmed' },
+    supabase
+  );
+}
+
+/**
+ * Staff close with an outcome, without asking the requester to confirm.
+ * Duplicate needs the ticket it duplicates.
+ */
+export function closeSupportTicketByStaff(
+  ticket: SupportTicket,
+  actor: TicketActor,
+  input: { resolution_code: SupportTicketResolutionCode; note: string; duplicate_of?: string | null },
+  supabase: SupabaseClient
+) {
+  const now = new Date().toISOString();
+  return moveSupportTicket(
+    ticket.id,
+    ticket.status,
+    {
+      status: 'closed',
+      resolution_code: input.resolution_code,
+      resolution_notes: input.note,
+      resolved_by: ticket.resolved_by || actor.id,
+      resolved_at: ticket.resolved_at || now,
+      closed_at: now,
+      auto_close_at: null,
+      duplicate_of: input.duplicate_of ?? null,
+    },
+    {
+      actor,
+      action: 'closed',
+      reason: input.note,
+      metadata: { resolution_code: input.resolution_code, duplicate_of: input.duplicate_of ?? null },
+    },
+    supabase
+  );
+}
+
+/**
+ * Reopen: back to in_progress if someone owns it, otherwise to the New queue.
+ * A requester's "still happening" keeps a device and console snapshot (staff only).
+ */
+export function reopenSupportTicket(
+  ticket: SupportTicket,
+  actor: TicketActor,
+  input: { reason: string | null; snapshot?: SupportTicketReopenSnapshot | null },
+  supabase: SupabaseClient
+) {
+  const reopens = [...(ticket.context?.reopens || [])];
+  if (input.snapshot) reopens.push(input.snapshot);
+  return moveSupportTicket(
+    ticket.id,
+    ticket.status,
+    {
+      status: ticket.assigned_to ? 'in_progress' : 'open',
+      ...CLEARED_RESOLUTION,
+      reopen_count: (ticket.reopen_count ?? 0) + 1,
+      context: { ...(ticket.context || {}), reopens: reopens.slice(-5) },
+    },
+    { actor, action: 'reopened', reason: input.reason },
+    supabase
+  );
+}
+
+/** The cron's close: waiting tickets end as no_response, resolved ones keep their outcome. */
+export function autoCloseSupportTicket(ticket: SupportTicket, supabase: SupabaseClient) {
+  const now = new Date().toISOString();
+  const noReply = ticket.status === 'waiting_on_student';
+  return moveSupportTicket(
+    ticket.id,
+    ticket.status,
+    {
+      status: 'closed',
+      closed_at: now,
+      auto_close_at: null,
+      ...(noReply ? { resolution_code: 'no_response', resolved_at: ticket.resolved_at || now } : {}),
+    },
+    {
+      actor: { id: null, name: 'Neram Support' },
+      action: 'auto_closed',
+      metadata: { resolution_code: noReply ? 'no_response' : ticket.resolution_code },
+    },
+    supabase
+  );
+}
+
+/** Tickets whose auto-close time has passed, oldest first. */
+export async function getExpiredSupportTickets(limit: number, supabase: SupabaseClient): Promise<SupportTicket[]> {
+  const { data, error } = await supabase
+    .from('support_tickets')
+    .select('*')
+    .in('status', ['waiting_on_student', 'awaiting_confirmation'])
+    .lte('auto_close_at', new Date().toISOString())
+    .order('auto_close_at', { ascending: true })
+    .limit(limit);
+  if (error) throw error;
+  return (data || []) as SupportTicket[];
+}
+
+/** Assign to someone, or unassign with null. Does not change status. */
+export async function assignSupportTicket(
+  ticket: SupportTicket,
+  assigneeId: string | null,
+  actor: TicketActor,
+  supabase: SupabaseClient
+): Promise<SupportTicket> {
+  const { data, error } = await supabase
+    .from('support_tickets')
+    .update({
+      assigned_to: assigneeId,
+      assigned_at: assigneeId ? new Date().toISOString() : null,
+      assigned_by: assigneeId ? actor.id : null,
+    })
+    .eq('id', ticket.id)
+    .select()
+    .single();
+  if (error) throw error;
+
+  const names = await namesFor([assigneeId], supabase);
+  await logSupportTicketActivity(
+    {
+      ticket_id: ticket.id,
+      actor_id: actor.id,
+      actor_name: actor.name,
+      action: assigneeId ? 'assigned' : 'unassigned',
+      old_status: ticket.status,
+      new_status: ticket.status,
+      metadata: { assignee_id: assigneeId, assignee_name: assigneeId ? names.get(assigneeId) ?? null : null },
+      visible_to_student: false,
+    },
+    supabase
+  );
+  return data as SupportTicket;
+}
+
+/** Change priority or category. Logged, never shown to the requester. */
+export async function setSupportTicketField(
+  ticket: SupportTicket,
+  field: 'priority' | 'category',
+  value: SupportTicketPriority | SupportTicketCategory,
+  actor: TicketActor,
+  supabase: SupabaseClient
+): Promise<SupportTicket> {
+  const { data, error } = await supabase
+    .from('support_tickets')
+    .update({ [field]: value })
+    .eq('id', ticket.id)
+    .select()
+    .single();
+  if (error) throw error;
+
+  await logSupportTicketActivity(
+    {
+      ticket_id: ticket.id,
+      actor_id: actor.id,
+      actor_name: actor.name,
+      action: field === 'priority' ? 'priority_changed' : 'category_changed',
+      old_status: ticket.status,
+      new_status: ticket.status,
+      metadata: { from: ticket[field], to: value },
+      visible_to_student: false,
+    },
+    supabase
+  );
+  return data as SupportTicket;
+}
+
+/**
+ * Add a message to the thread. A public message moves last_reply_*, and the
+ * first staff one stamps first_response_at. An internal note touches neither.
+ */
+export async function addSupportTicketMessage(
+  ticket: SupportTicket,
+  input: {
+    author: TicketActor;
+    side: 'staff' | 'student';
+    content: string;
+    internal?: boolean;
+  },
+  supabase: SupabaseClient
+): Promise<SupportTicketComment> {
+  const internal = input.side === 'staff' && input.internal === true;
+  const { data, error } = await supabase
+    .from('support_ticket_comments')
+    .insert({
+      ticket_id: ticket.id,
+      user_id: input.author.id,
+      user_name: input.author.name || (input.side === 'staff' ? 'Neram Support' : ticket.user_name),
+      is_admin: input.side === 'staff',
+      is_internal: internal,
+      content: input.content,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+
+  if (!internal) {
+    const now = data.created_at || new Date().toISOString();
+    const patch: Record<string, unknown> = { last_reply_at: now, last_reply_by: input.side };
+    if (input.side === 'staff' && !ticket.first_response_at) patch.first_response_at = now;
+    if (input.side === 'staff') patch.staff_seen_at = now;
+    if (input.side === 'student') patch.student_seen_at = now;
+    const { error: patchError } = await supabase.from('support_tickets').update(patch).eq('id', ticket.id);
+    if (patchError) console.error('[support-tickets] reply stamp failed:', patchError.message);
+  }
+  return data as SupportTicketComment;
+}
+
+/** Mark the thread read for one side. Never throws. */
+export async function markSupportTicketSeen(
+  id: string,
+  side: 'staff' | 'student',
+  supabase: SupabaseClient
+): Promise<void> {
+  const column = side === 'staff' ? 'staff_seen_at' : 'student_seen_at';
+  const { error } = await supabase
+    .from('support_tickets')
+    .update({ [column]: new Date().toISOString() })
+    .eq('id', id);
+  if (error) console.error('[support-tickets] mark seen failed:', error.message);
+}
+
+/** How many tickets this user raised since `sinceIso`. For the report rate limit. */
+export async function countRecentTicketsByUser(
+  userId: string,
+  sinceIso: string,
+  supabase: SupabaseClient
+): Promise<number> {
+  const { count, error } = await supabase
+    .from('support_tickets')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', userId)
+    .gte('created_at', sinceIso);
+  if (error) throw error;
+  return count || 0;
+}
+
+/** Other tickets from the same person, for the requester card. */
+export async function listOtherTicketsByRequester(
+  ticket: Pick<SupportTicket, 'id' | 'user_id' | 'user_email'>,
+  supabase: SupabaseClient,
+  limit = 5
+): Promise<Pick<SupportTicket, 'id' | 'ticket_number' | 'subject' | 'status' | 'created_at'>[]> {
+  if (!ticket.user_id && !ticket.user_email) return [];
+  let query = supabase
+    .from('support_tickets')
+    .select('id, ticket_number, subject, status, created_at')
+    .neq('id', ticket.id);
+  query = ticket.user_id ? query.eq('user_id', ticket.user_id) : query.eq('user_email', ticket.user_email as string);
+  const { data, error } = await query.order('created_at', { ascending: false }).limit(limit);
+  if (error) return [];
+  return (data || []) as Pick<SupportTicket, 'id' | 'ticket_number' | 'subject' | 'status' | 'created_at'>[];
 }

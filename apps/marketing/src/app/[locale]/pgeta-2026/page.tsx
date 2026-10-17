@@ -80,12 +80,11 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title:
-      'PGETA 2026 (PGEAT): COA M.Arch Entrance, Dates, Syllabus, Fees & Participating Institutes',
+    title: 'PGETA 2027 and 2026: COA M.Arch Entrance Guide',
     description:
-      'Complete PGETA 2026 guide (also known as PGEAT): three CBT test dates (May 31, June 14, June 28), eligibility, 4-module exam pattern, fees, top-100 scholarship, test cities, and 132 participating M.Arch institutes. Conducted by the Council of Architecture (COA) for postgraduate architecture admissions.',
+      'PGETA 2027 dates are awaited, so this PGETA (PGEAT) guide follows the 2026 cycle: three CBT test dates (May 31, June 14, June 28), eligibility, 4-module exam pattern, fees, top-100 scholarship, test cities, and 132 participating M.Arch institutes. Conducted by the Council of Architecture (COA) for postgraduate architecture admissions.',
     keywords:
-      'PGETA 2026, PGEAT 2026, PGETA exam, PGETA syllabus, PGETA eligibility, PGETA fees, PGETA test dates, COA M.Arch entrance, M.Arch admission 2026, COA postgraduate exam, Master of Architecture entrance India, PGETA registration',
+      'PGETA 2027, PGETA 2026, PGEAT 2026, PGETA exam, PGETA syllabus, PGETA eligibility, PGETA fees, PGETA test dates, COA M.Arch entrance, M.Arch admission 2026, COA postgraduate exam, Master of Architecture entrance India, PGETA registration',
     alternates: buildAlternates(locale, '/pgeta-2026'),
     openGraph: {
       title: 'PGETA 2026 (PGEAT): COA M.Arch Entrance Test, Complete Guide',
@@ -181,8 +180,8 @@ export default async function Pgeta2026HubPage({ params: { locale } }: PageProps
         breadcrumb={[{ name: 'Home', href: '/' }, { name: 'PGETA 2026' }]}
         pills={['NEW']}
         eyebrow="M.Arch Entrance"
-        title="PGETA 2026: The COA M.Arch Entrance, Decoded"
-        lede="PGETA, also commonly searched as PGEAT, is the unified national-level entrance test for Master of Architecture (M.Arch) programs in India. Conducted by the Council of Architecture (COA), with three test dates and best-score-retained policy. Below: dates, eligibility, exam pattern, fees, scholarships, and accepting institutes."
+        title="PGETA 2026 and 2027: The COA M.Arch Entrance, Decoded"
+        lede="PGETA 2027 dates are expected (official notice awaited), so this guide uses the 2026 schedule, pattern and fees until COA publishes the 2027 brochure. PGETA, also commonly searched as PGEAT, is the unified national-level entrance test for Master of Architecture (M.Arch) programs in India. Conducted by the Council of Architecture (COA), with three test dates and best-score-retained policy. Below: dates, eligibility, exam pattern, fees, scholarships, and accepting institutes."
         actions={
           <>
             <CtaButton href="/apply">Talk to a counsellor</CtaButton>

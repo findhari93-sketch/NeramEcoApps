@@ -26,6 +26,8 @@ interface TicketData {
 const STATUS_CONFIG: Record<string, { label: string; iconColor: string; icon: React.ReactNode }> = {
   open: { label: 'Open', iconColor: t.gold800, icon: <ErrorOutlineOutlinedIcon aria-hidden /> },
   in_progress: { label: 'In Progress', iconColor: t.inkMuted, icon: <HourglassEmptyOutlinedIcon aria-hidden /> },
+  waiting_on_student: { label: 'Needs your reply', iconColor: t.gold800, icon: <AccessTimeOutlinedIcon aria-hidden /> },
+  awaiting_confirmation: { label: 'Fixed, please confirm', iconColor: t.success, icon: <CheckCircleOutlinedIcon aria-hidden /> },
   resolved: { label: 'Resolved', iconColor: t.success, icon: <CheckCircleOutlinedIcon aria-hidden /> },
   closed: { label: 'Closed', iconColor: t.inkMuted, icon: <CheckCircleOutlinedIcon aria-hidden /> },
 };

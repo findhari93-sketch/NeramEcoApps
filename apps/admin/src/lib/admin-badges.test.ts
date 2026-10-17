@@ -8,6 +8,8 @@ import {
   shouldRefreshBadges,
   BADGE_POLL_MS,
   BADGE_MIN_GAP_MS,
+  collectionsBadgeCount,
+  istTodayKey,
 } from './admin-badges';
 
 describe('normalizeBadgeCounts', () => {
@@ -66,5 +68,31 @@ describe('shouldRefreshBadges', () => {
     expect(shouldRefreshBadges(null, now)).toBe(true);
     expect(shouldRefreshBadges(now - BADGE_MIN_GAP_MS + 1, now)).toBe(false);
     expect(shouldRefreshBadges(now - BADGE_MIN_GAP_MS, now)).toBe(true);
+  });
+});
+
+describe('collections badge', () => {
+  it('is a sidebar badge key that defaults to zero', () => {
+    expect(BADGE_KEYS).toContain('collections');
+    expect(ZERO_BADGES.collections).toBe(0);
+    expect(normalizeBadgeCounts({ collections: '4' }).collections).toBe(4);
+  });
+
+  it('adds open fee reports and installments due today or earlier', () => {
+    expect(collectionsBadgeCount(2, 3)).toBe(5);
+    expect(collectionsBadgeCount(0, 0)).toBe(0);
+  });
+
+  it('treats a failed count (null) or garbage as zero instead of hiding the other', () => {
+    expect(collectionsBadgeCount(null, 3)).toBe(3);
+    expect(collectionsBadgeCount(2, undefined)).toBe(2);
+    expect(collectionsBadgeCount(-1, Number.NaN)).toBe(0);
+  });
+
+  it('uses the India date for "due today", so 11pm IST is still the same day', () => {
+    // 2026-10-16 17:30 UTC is 23:00 on 16 Oct in India.
+    expect(istTodayKey(new Date('2026-10-16T17:30:00Z'))).toBe('2026-10-16');
+    // 2026-10-16 18:30 UTC is midnight, 17 Oct in India.
+    expect(istTodayKey(new Date('2026-10-16T18:30:00Z'))).toBe('2026-10-17');
   });
 });

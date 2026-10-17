@@ -2,13 +2,17 @@ import { describe, it, expect } from 'vitest';
 import {
   DESCRIPTION_MAX,
   TITLE_MAX,
+  STATE_TITLE_MAX,
   buildCollegeDescription,
+  buildStateListingTitle,
+  generateStateListingMetadata,
   buildCollegeTitle,
   collegeNotFoundMetadata,
   generateCollegeDetailMetadata,
   truncateAtWord,
 } from './seo';
-import { admissionYear } from './constants';
+import { STATE_NAMES, admissionYear } from './constants';
+import { STATES } from '@neram/geo';
 import { makeBareCollege, makeCollege } from './__fixtures__/college';
 
 const DASHES = /—|--|&mdash;/;
@@ -133,5 +137,29 @@ describe('generateCollegeDetailMetadata', () => {
 
   it('not-found metadata is noindex, follow', () => {
     expect(collegeNotFoundMetadata().robots).toEqual({ index: false, follow: true });
+  });
+});
+
+describe('buildStateListingTitle', () => {
+  it('leads with "Best Architecture Colleges in" for the states people search', () => {
+    expect(buildStateListingTitle('Maharashtra', 2027)).toBe('Best Architecture Colleges in Maharashtra 2027');
+    expect(buildStateListingTitle('Tamil Nadu', 2027)).toBe('Best Architecture Colleges in Tamil Nadu 2027');
+    expect(buildStateListingTitle('Andhra Pradesh', 2027)).toBe('Best Architecture Colleges in Andhra Pradesh 2027');
+    expect(buildStateListingTitle('Delhi', 2027)).toBe('Best Architecture Colleges in Delhi 2027');
+  });
+  it('fits under 65 characters with the layout suffix for every state whose name allows it', () => {
+    // "Dadra and Nagar Haveli and Daman and Diu" is too long for any title; it gets the shortest form.
+    const names = [...Object.values(STATE_NAMES), ...STATES.map((s) => s.name)].filter((n) => `B.Arch Colleges in ${n}`.length <= STATE_TITLE_MAX);
+    expect(names.length).toBeGreaterThan(30);
+    for (const name of names) {
+      const t = buildStateListingTitle(name, 2027);
+      expect(t.length, name).toBeLessThanOrEqual(STATE_TITLE_MAX);
+      expect(t).toContain(name);
+    }
+  });
+  it('writes a dash-free description with the count', () => {
+    const m = generateStateListingMetadata('en', 'kerala', 'Kerala', 22);
+    expect(String(m.description)).toMatch(/^22 architecture \(B\.Arch\) colleges in Kerala/);
+    expect(String(m.title) + String(m.description)).not.toMatch(DASHES);
   });
 });

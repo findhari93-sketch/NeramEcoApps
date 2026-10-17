@@ -15,6 +15,12 @@
 
 export const ADMIN_ID_HEADER = 'x-neram-admin-id';
 export const ADMIN_TYPE_HEADER = 'x-neram-admin-type';
+/**
+ * Set by middleware on a 401 about the Microsoft token itself (missing, expired,
+ * rejected). The browser fetch wrapper reads it to ask the user to sign in again
+ * and replay the call, so a route's own 401 never opens the sign-in dialog.
+ */
+export const REAUTH_HEADER = 'x-neram-reauth';
 
 /** Who may use the admin API. Mirrors the check in /api/auth/me. */
 export const STAFF_USER_TYPES = ['admin', 'teacher'] as const;

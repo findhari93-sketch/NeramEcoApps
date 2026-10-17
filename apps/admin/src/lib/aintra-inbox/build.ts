@@ -6,7 +6,7 @@
 import { formatSignupPlace } from '@neram/database/signup-geo';
 import { intentsOf, intentsOfMany, type Intent } from './intents';
 import { isRecent, leadStage } from './stage';
-import { isCreditsError, turnStatus, worstStatus } from './status';
+import { inReviewQueue, isCreditsError, isSignupGate, turnStatus, worstStatus } from './status';
 import type {
   DayBucket,
   InboxConversation,
@@ -60,9 +60,20 @@ export function initialsOf(name: string | null | undefined): string {
   return (first + last).toUpperCase();
 }
 
-export function personKeyOf(row: Pick<InboxRow, 'user_id' | 'anonymous_id' | 'session_id'>): string {
+/**
+ * Who a chat belongs to. A guest chat whose visitor id later created an account
+ * (users.anonymous_id) belongs to that account, so their chats from before and
+ * after signing up show as one person.
+ */
+export function personKeyOf(
+  row: Pick<InboxRow, 'user_id' | 'anonymous_id' | 'session_id'>,
+  accountByAnon?: Map<string, string>
+): string {
   if (row.user_id) return `u:${row.user_id}`;
-  if (row.anonymous_id) return `a:${row.anonymous_id}`;
+  if (row.anonymous_id) {
+    const owner = accountByAnon?.get(row.anonymous_id);
+    return owner ? `u:${owner}` : `a:${row.anonymous_id}`;
+  }
   return `s:${row.session_id}`;
 }
 
@@ -100,6 +111,9 @@ export function buildConversations(
     else bySession.set(r.session_id, [r]);
   }
 
+  const accountByAnon = new Map<string, string>();
+  for (const u of users.values()) if (u.anonymousId) accountByAnon.set(u.anonymousId, u.id);
+
   const out: InboxConversation[] = [];
   for (const [sessionId, list] of bySession) {
     list.sort((a, b) => a.created_at.localeCompare(b.created_at));
@@ -114,13 +128,15 @@ export function buildConversations(
     const { place, stateName } = placeOf(list);
     out.push({
       id: sessionId,
-      personKey: personKeyOf({ user_id: userId, anonymous_id: anonymousId, session_id: sessionId }),
+      personKey: personKeyOf({ user_id: userId, anonymous_id: anonymousId, session_id: sessionId }, accountByAnon),
       userId,
       anonymousId,
       isGuest: !userId,
       name,
       guestTag: tag,
       initials: userId ? initialsOf(name) : '',
+      avatarUrl: user?.avatarUrl ?? null,
+      enrolled: !!user?.enrolled,
       phone: userId ? user?.phone || latest(list, (r) => r.lead_phone) : null,
       startedAt: list[0].created_at,
       lastAt: last.created_at,
@@ -139,6 +155,8 @@ export function buildConversations(
       reviewCount: statuses.filter((s) => s === 'review').length,
       errorCount: statuses.filter((s) => s === 'error').length,
       creditErrorCount: list.filter((r, i) => statuses[i] === 'error' && isCreditsError(r.error)).length,
+      queueAt: list.filter((_, i) => inReviewQueue(statuses[i])).map((r) => r.created_at),
+      gatedAt: latest(list, (r) => (isSignupGate(r.error) ? r.created_at : null)),
     });
   }
   return out.sort((a, b) => b.lastAt.localeCompare(a.lastAt));
@@ -163,22 +181,25 @@ export function buildPeople(
     // conversations arrive newest first
     const newest = list[0];
     const oldest = list[list.length - 1];
-    const user = newest.userId ? users.get(newest.userId) ?? null : null;
+    // A person with an account is named after it, even when their newest chat was before signing in.
+    const owner = list.find((c) => c.userId) ?? newest;
+    const user = owner.userId ? users.get(owner.userId) ?? null : null;
     const allQuestions = list.flatMap((c) => c.questions);
     const recentQuestions = list.filter((c) => isRecent(c.lastAt, now)).flatMap((c) => c.questions);
     const allIntents: Intent[] = intentsOfMany(allQuestions);
     const recentIntents: Intent[] = [...new Set(recentQuestions.flatMap((q) => intentsOf(q)))];
     out.push({
       key,
-      userId: newest.userId,
+      userId: owner.userId,
       anonymousId: newest.anonymousId,
-      isGuest: newest.isGuest,
-      name: newest.name,
-      guestTag: newest.guestTag,
-      initials: newest.initials,
-      phone: newest.phone,
+      isGuest: owner.isGuest,
+      name: owner.name,
+      guestTag: owner.guestTag,
+      initials: owner.initials,
+      phone: owner.phone,
       email: user?.email ?? null,
       avatarUrl: user?.avatarUrl ?? null,
+      enrolled: !!user?.enrolled,
       profileLabel: user?.profileLabel ?? null,
       joinedAt: user?.joinedAt ?? null,
       place: list.find((c) => c.place)?.place ?? null,
@@ -192,6 +213,7 @@ export function buildPeople(
       intents: allIntents,
       stage: leadStage({ user, recentIntents, allIntents }),
       nudge: newest.anonymousId ? nudges.get(newest.anonymousId) ?? null : null,
+      gatedAt: list.reduce<string | null>((max, c) => (c.gatedAt && (!max || c.gatedAt > max) ? c.gatedAt : max), null),
     });
   }
   return out.sort((a, b) => b.lastAt.localeCompare(a.lastAt));
@@ -206,6 +228,7 @@ export function restatus(t: InboxTurn): InboxTurn {
       thumbs_up: t.thumbsUp,
       has_correction: !!t.correction?.trim(),
       ai_verdict: t.aiReview?.verdict ?? null,
+      resolved: !!t.resolvedAt,
     }),
   };
 }
@@ -220,5 +243,14 @@ export function withTurns(c: InboxConversation, turns: InboxTurn[]): InboxConver
     reviewCount: statuses.filter((s) => s === 'review').length,
     errorCount: statuses.filter((s) => s === 'error').length,
     creditErrorCount: turns.filter((t) => t.status === 'error' && isCreditsError(t.error)).length,
+    queueAt: turns.filter((t) => inReviewQueue(t.status)).map((t) => t.at),
   };
+}
+
+/** Questions in the Review queue asked in the last `days` days: the same rule as the sidebar badge. */
+export function countQueue(conversations: Pick<InboxConversation, 'queueAt'>[], now: Date, days = 30): number {
+  const since = now.getTime() - days * DAY_MS;
+  let n = 0;
+  for (const c of conversations) for (const at of c.queueAt) if (Date.parse(at) >= since) n++;
+  return n;
 }

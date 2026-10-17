@@ -3,6 +3,7 @@ import { verifyMsToken } from '@/lib/ms-verify';
 import { getSupabaseAdminClient, getRecapForStudent, upsertRecapProgress } from '@neram/database';
 import { NOT_PREWATCH_KINDS, RESOURCE_COLS } from '@/lib/class-resources';
 import { watchModeFor } from '@/lib/recap-obligation';
+import { skippedParts, type SkippedPart } from '@/lib/trim-skipped-parts';
 
 /**
  * GET /api/student/class-recaps/[recapId]
@@ -76,8 +77,10 @@ export async function GET(
     // How much the trim took out, so the screen can say "53:51 instead of
     // 1:05:45". Only while the class is actually playing the trimmed copy.
     let trimRemovedSeconds: number | null = null;
+    // The pauses it skipped, so the player can offer "Watch it" at each one.
+    let trimSkipped: SkippedPart[] = [];
     if (recap.scheduled_class_id) {
-      const [{ data }, { data: cls }] = await Promise.all([
+      const [{ data }, { data: cls }, { data: trim }] = await Promise.all([
         supabase
           .from('nexus_class_absences')
           .select('caught_up_at, excused_at')
@@ -89,10 +92,16 @@ export async function GET(
           .select('recording_trim_state, recording_trim_removed_seconds')
           .eq('id', recap.scheduled_class_id)
           .maybeSingle(),
+        supabase
+          .from('nexus_recording_trims')
+          .select('status, cut_map')
+          .eq('class_id', recap.scheduled_class_id)
+          .maybeSingle(),
       ]);
       obligation = data ?? null;
       if (cls?.recording_trim_state === 'applied') {
         trimRemovedSeconds = Number(cls.recording_trim_removed_seconds) || null;
+        if (trim?.status === 'applied') trimSkipped = skippedParts(trim.cut_map);
       }
     }
     const watchMode = recap.scheduled_class_id ? watchModeFor(obligation) : 'gated';
@@ -102,6 +111,7 @@ export async function GET(
       resources: resources || [],
       watch_mode: watchMode,
       trim_removed_seconds: trimRemovedSeconds,
+      trim_skipped: trimSkipped,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load recap';

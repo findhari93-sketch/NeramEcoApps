@@ -3,14 +3,14 @@ import type { ToolConfig } from '../types';
 
 export const cutoffCalculatorConfig: ToolConfig = {
   slug: 'cutoff-calculator',
-  title: 'NATA Cutoff Calculator 2026',
+  title: 'NATA Score and Cutoff Calculator',
   subtitle:
-    'Estimate your NATA cutoff score, check your percentile, and discover which architecture colleges match your marks. Our calculator uses board marks conversion, multi-attempt logic, and historical cutoff data to give you a realistic picture of your admission chances.',
+    'Enter your NATA score and Class 12 marks to get your total cutoff score, your percentile and the architecture colleges that match it. The calculator uses board marks conversion, multi-attempt logic, and historical cutoff data to give you a realistic picture of your admission chances.',
   category: 'nata',
   appUrl: 'https://app.neramclasses.com/tools/nata/cutoff-calculator',
-  metaTitle: 'NATA Cutoff Calculator 2026: Score and College Chances',
+  metaTitle: 'NATA Score and Cutoff Calculator: College Chances',
   metaDescription:
-    'Free NATA cutoff calculator. Enter your scores to calculate total marks, percentile, and check admission chances at top architecture colleges across India.',
+    'Free NATA score and cutoff calculator. Add your NATA marks and board marks to see your total, your percentile and your chances at architecture colleges across India.',
   keywords: [
     'NATA cutoff calculator 2026',
     'JEE Paper 2 cutoff calculator',

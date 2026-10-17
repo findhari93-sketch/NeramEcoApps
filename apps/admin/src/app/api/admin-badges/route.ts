@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
 import { createAdminClient, istDayBounds } from '@neram/database';
-import { ZERO_BADGES, badgeWindow, normalizeBadgeCounts } from '@/lib/admin-badges';
+import { ZERO_BADGES, badgeWindow, normalizeBadgeCounts, collectionsBadgeCount, istTodayKey } from '@/lib/admin-badges';
 import { countReviewQueue } from '@/lib/aintra-inbox/server';
 
 const NO_STORE = { 'Cache-Control': 'no-store' };
@@ -17,24 +17,49 @@ export async function GET() {
   const supabase = createAdminClient();
   const { chatSince, followUpBefore } = badgeWindow();
   try {
-    const [{ data, error }, reviewQueue] = await Promise.all([
+    const [{ data, error }, reviewQueue, collections] = await Promise.all([
       supabase.rpc('admin_badge_counts', {
         p_chat_since: chatSince,
         p_follow_up_before: followUpBefore,
       }),
       countReviewQueue(supabase),
+      countCollections(supabase),
     ]);
     if (error) throw error;
     // Aintra Inbox: the badge is the Review queue (wrong or unanswered, not yet
     // corrected), the same number as the page's header button.
     const counts = normalizeBadgeCounts(data);
     if (reviewQueue !== null) counts.chat_history = reviewQueue;
+    counts.collections = collections;
     return NextResponse.json(counts, { headers: NO_STORE });
   } catch (rpcErr) {
     // The function ships in a migration; until it is applied in an environment,
     // fall back to the old per-table counts so the sidebar never goes blank.
     console.warn('[admin-badges] RPC unavailable, using per-table counts:', (rpcErr as any)?.message);
-    return NextResponse.json(await legacyCounts(supabase), { headers: NO_STORE });
+    const counts = await legacyCounts(supabase);
+    counts.collections = await countCollections(supabase);
+    return NextResponse.json(counts, { headers: NO_STORE });
+  }
+}
+
+/**
+ * Collections: open fee reports from students plus unpaid installments due
+ * today or earlier (IST). Two head counts, kept outside the SQL function so the
+ * badge works before any migration to admin_badge_counts. 0 on any error.
+ */
+async function countCollections(supabase: ReturnType<typeof createAdminClient>): Promise<number> {
+  try {
+    const [reports, due] = await Promise.all([
+      supabase.from('fee_correction_reports').select('id', { count: 'exact', head: true }).eq('status', 'open'),
+      supabase
+        .from('payment_installments')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'pending')
+        .lte('due_date', istTodayKey()),
+    ]);
+    return collectionsBadgeCount(reports.error ? 0 : reports.count, due.error ? 0 : due.count);
+  } catch {
+    return 0;
   }
 }
 

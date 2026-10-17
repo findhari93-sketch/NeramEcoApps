@@ -4,6 +4,7 @@ import {
   ADMIN_TYPE_HEADER,
   AdminCallerCache,
   isExemptApiPath,
+  REAUTH_HEADER,
   resolveAdminCaller,
 } from '@/lib/admin-api-auth';
 
@@ -60,7 +61,10 @@ export async function middleware(request: NextRequest) {
     return forward(request);
   }
 
-  return NextResponse.json({ error: caller.error }, { status: caller.status });
+  return NextResponse.json(
+    { error: caller.error },
+    { status: caller.status, headers: caller.status === 401 ? { [REAUTH_HEADER]: '1' } : undefined },
+  );
 }
 
 export const config = {

@@ -15,6 +15,7 @@ import {
 import type { StudentFinancePayload } from '@/lib/student-profile-types';
 
 const DUE_SOURCE_NOTE: Record<string, string> = {
+  installment: 'The next installment the office scheduled.',
   student_profile: 'Set on the student record.',
   application_deadline: 'From the payment deadline on the application.',
   derived_installment: 'Worked out from the enrolment date and the instalment window.',

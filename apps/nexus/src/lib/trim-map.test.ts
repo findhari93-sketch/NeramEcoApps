@@ -10,6 +10,7 @@ import {
   moveSections,
   moveChapters,
 } from './trim-map';
+import type { Span } from './trim-map';
 
 // Recap 68f14d40's shape: a 541s lead-in cut, a 120s pause cut at 2000, and a tail.
 const MAP = buildCutMap([
@@ -111,5 +112,27 @@ describe('transcripts, checkpoints and chapters', () => {
       { t: 0, label: 'Waiting' },
       { t: 1459, label: 'Break' },
     ]);
+  });
+});
+
+describe('hundreds of pause cuts (transcript rule, re-encoded)', () => {
+  // A 4,000s class: 400 kept stretches of 7s, each followed by a 3s cut.
+  const keep: Span[] = Array.from({ length: 400 }, (_, i) => [i * 10, i * 10 + 7] as Span);
+  const map = buildCutMap(keep, keep.map(([a, b]) => b - a));
+
+  it('maps every kept time there and back exactly', () => {
+    expect(outputDuration(map)).toBe(2800);
+    for (const t of [0, 3.5, 6.99, 10, 1234.5, 3996.9]) {
+      expect(toOriginal(map, toTrimmed(map, t))).toBeCloseTo(t, 6);
+    }
+    expect(toTrimmed(map, 8.5)).toBe(7); // inside a cut: lands on the join
+  });
+
+  it('a student who watched the whole original has watched the whole trimmed copy, in one piece', () => {
+    expect(rangesToTrimmed(map, [[0, 4000]])).toEqual([[0, 2800]]);
+  });
+
+  it('a stretch watched on the trimmed copy maps back to the same content', () => {
+    expect(rangesToOriginal(map, [[0, 14]])).toEqual([[0, 7], [10, 17]]);
   });
 });

@@ -43,6 +43,7 @@ import ConfirmationNumberIcon from '@mui/icons-material/ConfirmationNumber';
 import SchoolIcon from '@mui/icons-material/School';
 import type { UserJourneyDetail, FeeStructure, ContactedStatus, PaymentRecommendation } from '@neram/database';
 import EditApplicationDialog from './EditApplicationDialog';
+import ApplicationFeesPanel from './ApplicationFeesPanel';
 
 interface ApplicationSectionProps {
   detail: UserJourneyDetail;
@@ -212,16 +213,16 @@ export default function ApplicationSection({
           <AssignmentIcon sx={{ fontSize: 36, color: 'grey.300', mb: 1 }} />
           <Typography variant="body2" color="text.secondary">No application submitted yet.</Typography>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
-            Fill it in from what the student told you. Nexus reads their class and exam year from it.
+            Fill in their form and fees from what the student told you, then send it to them to check in Nexus.
           </Typography>
-          <Button
-            variant="contained"
-            size="small"
-            onClick={() => setEditDialogOpen(true)}
-            sx={{ mt: 2, textTransform: 'none', fontWeight: 600, boxShadow: 'none' }}
-          >
-            Fill application form
-          </Button>
+          <ApplicationFeesPanel
+            userId={detail.user.id}
+            studentName={detail.user.name}
+            variant="empty"
+            hasFee={false}
+            onChanged={onStatusChange}
+            onDetailsOnly={() => setEditDialogOpen(true)}
+          />
         </Box>
         <EditApplicationDialog
           open={editDialogOpen}
@@ -814,6 +815,19 @@ export default function ApplicationSection({
             </Box>
           </>
         )}
+
+        {/* Fees: the Application and fees form, the student check, fee reports */}
+        <Divider sx={{ my: 1.5 }} />
+        <Typography variant="overline" sx={{ display: 'block', px: 1.5, fontWeight: 700, letterSpacing: 1, color: 'text.secondary', fontSize: 10.5 }}>
+          Fees and student check
+        </Typography>
+        <ApplicationFeesPanel
+          userId={detail.user.id}
+          studentName={detail.user.name}
+          variant="full"
+          hasFee={Boolean(leadProfile.final_fee)}
+          onChanged={onStatusChange}
+        />
 
         {/* Quick Actions: Edit + Delete */}
         {leadProfile && (

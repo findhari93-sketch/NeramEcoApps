@@ -257,6 +257,20 @@ describe('setStudentFees', () => {
     expect(res.warnings.some((w) => w.includes('fee cache was not refreshed'))).toBe(true);
   });
 
+  it('caches a part-paid student as pending, a value the payment_status enum has', async () => {
+    // 'partial' is not in the enum, and writing it threw after the payment row was
+    // already saved, so every second-instalment student failed half way.
+    const fake = fakeSupabase({ user: USER, lead: { id: 'l1' }, studentProfile: { id: 'sp1' } });
+    await setStudentFees(
+      { userId: 'u1', fees: { final_fee: 30000 }, collected: { amount: 15000 }, adminId: 'a1' },
+      fake.client,
+    );
+    const cache = fake.writes.find((w) => w.table === 'student_profiles')!;
+    expect(['pending', 'processing', 'paid', 'failed', 'refunded']).toContain(cache.payload.payment_status);
+    expect(cache.payload.payment_status).toBe('pending');
+    expect(cache.payload.fee_due).toBe(15000);
+  });
+
   it('flags an alumnus rather than refusing, since old debts are still real', async () => {
     const fake = fakeSupabase({
       user: { ...USER, is_alumni: true }, lead: { id: 'l1' }, studentProfile: { id: 'sp1' },

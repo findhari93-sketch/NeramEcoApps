@@ -35,15 +35,19 @@ export function adminOriginFor(nexusOrigin: string | null | undefined, configure
 
 /**
  * The student's page in the Admin CRM. `section` scrolls to a part of that page,
- * e.g. 'application' for the application form.
+ * e.g. 'application' for the application form. `open` asks that page to open a
+ * dialog straight away: 'fees' opens the Application and fees form.
  */
 export function adminCrmUrl(
   userId: string,
-  options: { nexusOrigin?: string | null; configured?: string | null; section?: string } = {},
+  options: { nexusOrigin?: string | null; configured?: string | null; section?: string; open?: string } = {},
 ): string {
   const base = adminOriginFor(options.nexusOrigin, options.configured);
-  const query = options.section ? `?section=${encodeURIComponent(options.section)}` : '';
-  return `${base}/crm/${encodeURIComponent(userId)}${query}`;
+  const params = new URLSearchParams();
+  if (options.section) params.set('section', options.section);
+  if (options.open) params.set('open', options.open);
+  const query = params.toString();
+  return `${base}/crm/${encodeURIComponent(userId)}${query ? `?${query}` : ''}`;
 }
 
 /**

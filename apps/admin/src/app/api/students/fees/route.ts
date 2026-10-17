@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient } from '@neram/database';
 import { setStudentFees, validateFees, STUDENT_FEE_FIELDS } from '@neram/database/queries';
+import { getRequestAdminId } from '@/lib/request-admin';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,7 +82,9 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/students/fees
- * Body: { userId, fees, collected?, adminId?, dryRun? }
+ * Body: { userId, fees, collected?, dryRun? }
+ * The acting admin is the verified caller (getRequestAdminId). A body adminId is
+ * only read when the middleware did not stamp one (report mode).
  *
  * `dryRun: true` returns the same before/after the spreadsheet loader prints,
  * so the dialog can show staff exactly what will move before they commit.
@@ -123,13 +126,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: check.errors.join(' ') }, { status: 400 });
     }
 
+    const actingAdminId = getRequestAdminId(request) || (adminId && UUID_REGEX.test(String(adminId)) ? adminId : null);
     const supabase = getSupabaseAdminClient();
     const result = await setStudentFees(
       {
         userId,
         fees: safeFees,
         collected: safeCollected,
-        adminId: adminId && UUID_REGEX.test(String(adminId)) ? adminId : null,
+        adminId: actingAdminId,
         dryRun: dryRun === true,
       },
       supabase,

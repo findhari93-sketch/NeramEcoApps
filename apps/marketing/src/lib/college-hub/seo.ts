@@ -35,19 +35,33 @@ export function generateCollegesListingMetadata(locale: string): Metadata {
 
 // ─── State listing page ──────────────────────────────────────────────────────
 
+/** SEO Health flags a rendered title over 65 characters, suffix included. */
+export const STATE_TITLE_MAX = 65 - ' | Neram Classes'.length;
+
+/** Leads with the phrase people search ("best architecture colleges in X"), shortest fallback last. */
+export function buildStateListingTitle(stateName: string, year: number = admissionYear()): string {
+  const ladder = [
+    `Best Architecture Colleges in ${stateName} ${year}`,
+    `B.Arch Colleges in ${stateName} ${year}`,
+    `B.Arch Colleges in ${stateName}`,
+  ];
+  return ladder.find((t) => t.length <= STATE_TITLE_MAX) ?? ladder[ladder.length - 1];
+}
+
 export function generateStateListingMetadata(
   locale: string,
   stateSlug: string,
   stateName: string,
   collegeCount: number
 ): Metadata {
-  const title = `Best B.Arch Colleges in ${stateName} 2026: Fees, Cutoffs, NATA`;
-  const description = `${collegeCount} B.Arch colleges in ${stateName}. Compare fees, TNEA/JoSAA cutoffs, NAAC grades, placements and infrastructure. Shortlist the right college.`;
+  const year = admissionYear();
+  const title = buildStateListingTitle(stateName, year);
+  const description = `${collegeCount} architecture (B.Arch) colleges in ${stateName} for ${year} admission. Compare fees, cutoffs, NAAC grades and placements side by side, then shortlist yours.`;
 
   return {
     title,
     description,
-    keywords: `B.Arch colleges ${stateName}, architecture colleges ${stateName}, NATA coaching ${stateName}, B.Arch admissions ${stateName}`,
+    keywords: `best architecture colleges in ${stateName}, B.Arch colleges in ${stateName}, architecture colleges ${stateName}, NATA coaching ${stateName}, B.Arch admissions ${stateName}`,
     alternates: buildAlternates(locale, `/colleges/${stateSlug}`),
     openGraph: {
       title,

@@ -22,14 +22,15 @@ import ThumbDownOutlinedIcon from '@mui/icons-material/ThumbDownOutlined';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
+import TaskAltIcon from '@mui/icons-material/TaskAlt';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import { alpha } from '@mui/material/styles';
 import { OpsSkeleton } from '@/components/ops/OpsUi';
 import { parseAnswer, sourceLabel, type AnswerBlock } from '@/lib/aintra-inbox/answer';
 import { restatus } from '@/lib/aintra-inbox/build';
-import { errorLabel, isCreditsError } from '@/lib/aintra-inbox/status';
+import { errorLabel, isCreditsError, isSignupGate } from '@/lib/aintra-inbox/status';
 import type { AiReview, InboxConversation, InboxTurn } from '@/lib/aintra-inbox/types';
-import { chatbotLabel, fmtAgo, fmtDateTime, fmtTime, Pill, sourceLabelOf, StatusPill } from './ui';
+import { chatbotLabel, fmtAgo, fmtDateTime, fmtTime, PersonAvatar, Pill, sourceLabelOf, StatusPill } from './ui';
 
 export type Notify = (message: string, severity?: 'success' | 'error') => void;
 
@@ -54,6 +55,8 @@ async function patchTurn(id: string, body: Record<string, unknown>) {
     corrected_by_name: string | null;
     corrected_at: string | null;
     promoted_to_kb: boolean;
+    resolved_at?: string | null;
+    resolved_by_name?: string | null;
   };
 }
 
@@ -140,11 +143,27 @@ function TurnCard({ turn, onChange, notify }: { turn: InboxTurn; onChange: (t: I
   const [addToKb, setAddToKb] = useState(true);
   const [saving, setSaving] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [resolving, setResolving] = useState(false);
   const [showAi, setShowAi] = useState(!!turn.aiReview && turn.status === 'review');
 
   const update = (patch: Partial<InboxTurn>) => onChange(restatus({ ...turn, ...patch }));
   const credits = isCreditsError(turn.error);
+  const gated = isSignupGate(turn.error);
   const noAnswer = !turn.answer?.trim();
+  const canResolve = turn.status === 'error' || turn.status === 'review';
+
+  const setResolved = async (value: boolean) => {
+    setResolving(true);
+    try {
+      const saved = await patchTurn(turn.id, { resolved: value });
+      update({ resolvedAt: saved.resolved_at ?? null, resolvedByName: saved.resolved_by_name ?? null });
+      notify(value ? 'Marked resolved' : 'Back in the Review queue');
+    } catch (e) {
+      notify(e instanceof Error ? e.message : 'Could not save', 'error');
+    } finally {
+      setResolving(false);
+    }
+  };
 
   const rate = async (value: boolean) => {
     const next = turn.thumbsUp === value ? null : value;
@@ -246,12 +265,51 @@ function TurnCard({ turn, onChange, notify }: { turn: InboxTurn; onChange: (t: I
         <StatusPill status={turn.status} credits={credits} />
       </Box>
 
-      {turn.error && noAnswer && (
+      {gated && (
+        <Box sx={{ bgcolor: 'grey.100', borderRadius: 2.5, px: 2, py: 1.75 }}>
+          <Typography sx={{ fontWeight: 600, color: 'text.primary' }}>Asked to sign in first</Typography>
+          <Typography sx={{ fontSize: 13, color: 'text.secondary', mt: 0.5 }}>
+            This guest came back on a later day, so Aintra asked them to sign in before answering. If they sign in, the question is
+            sent again and their chats show under their name.
+          </Typography>
+        </Box>
+      )}
+
+      {turn.error && noAnswer && !gated && turn.status === 'error' && (
         <Box sx={{ bgcolor: (t) => alpha(t.palette.error.main, 0.08), borderRadius: 2.5, px: 2, py: 1.75 }}>
           <Typography sx={{ fontWeight: 600, color: 'error.dark' }}>No answer delivered: {errorLabel(turn.error)}</Typography>
           <Typography sx={{ fontSize: 13, color: 'error.dark', mt: 0.5 }}>
-            This person left without a reply. Write one below and save it to the knowledge base so Aintra answers it next time.
+            This person left without a reply. Write one below and save it to the knowledge base so Aintra answers it next time, or mark
+            it resolved if nothing more is needed.
           </Typography>
+        </Box>
+      )}
+
+      {turn.resolvedAt && !turn.correction && (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            flexWrap: 'wrap',
+            bgcolor: (t) => alpha(t.palette.success.main, 0.08),
+            border: 1,
+            borderColor: (t) => alpha(t.palette.success.main, 0.3),
+            borderRadius: 2.5,
+            px: 2,
+            py: 1,
+          }}
+        >
+          <TaskAltIcon sx={{ fontSize: 18, color: 'success.dark' }} aria-hidden />
+          <Typography sx={{ fontSize: 13, color: 'success.dark', fontWeight: 600, flex: 1, minWidth: 0 }}>
+            {noAnswer && turn.error ? `Resolved: ${errorLabel(turn.error)}, no answer needed` : 'Resolved'}
+            <Box component="span" sx={{ fontWeight: 400, color: 'text.secondary' }}>
+              {turn.resolvedByName ? ` · by ${turn.resolvedByName}` : ''} · {fmtAgo(turn.resolvedAt)}
+            </Box>
+          </Typography>
+          <Button size="small" onClick={() => setResolved(false)} disabled={resolving} sx={{ minHeight: 44 }}>
+            Undo
+          </Button>
         </Box>
       )}
 
@@ -384,7 +442,7 @@ function TurnCard({ turn, onChange, notify }: { turn: InboxTurn; onChange: (t: I
             </Button>
           </Box>
         </Box>
-      ) : (
+      ) : gated ? null : (
         <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center', flexWrap: 'wrap' }}>
           {!noAnswer && (
             <>
@@ -435,6 +493,21 @@ function TurnCard({ turn, onChange, notify }: { turn: InboxTurn; onChange: (t: I
           >
             {ai && showAi ? 'Hide AI Review' : 'AI Review'}
           </Button>
+          {canResolve && (
+            <Tooltip title="No answer needed: take it out of the Review queue">
+              <span>
+                <Button
+                  size="small"
+                  onClick={() => setResolved(true)}
+                  disabled={resolving}
+                  startIcon={resolving ? <CircularProgress size={16} /> : <TaskAltIcon />}
+                  sx={{ minHeight: 44, borderRadius: 5, color: 'success.dark' }}
+                >
+                  Mark resolved
+                </Button>
+              </span>
+            </Tooltip>
+          )}
         </Box>
       )}
     </Box>
@@ -488,12 +561,13 @@ export default function Transcript({
       )}
       {c ? (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.75, px: 3, py: 2, borderBottom: 1, borderColor: 'divider' }}>
+          <PersonAvatar isGuest={c.isGuest} initials={c.initials} src={c.avatarUrl} enrolled={c.enrolled} size={44} />
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, flexWrap: 'wrap' }}>
               <Typography component="h2" sx={{ fontSize: 18, fontWeight: 700 }}>
                 {c.isGuest ? `Guest ${c.guestTag ?? ''}` : c.name}
               </Typography>
-              {c.isGuest ? <Pill>Guest</Pill> : <Pill tone="primary">Signed in</Pill>}
+              {c.isGuest ? <Pill>Guest</Pill> : c.enrolled ? <Pill tone="warning">Enrolled student</Pill> : <Pill tone="primary">Signed in</Pill>}
             </Box>
             <Typography sx={{ fontSize: 13, color: 'text.secondary', mt: 0.25 }}>{headerMeta}</Typography>
           </Box>

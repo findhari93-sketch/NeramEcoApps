@@ -19,10 +19,10 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: `KEAM B.Arch Colleges 2026: ${colleges.length} Architecture Colleges in Kerala`,
-    description: `${colleges.length} B.Arch colleges in Kerala under KEAM 2026 with ${totalSeats}+ seats. Search by district, filter by affiliating university (Calicut, Kerala, CUSAT, KTU, MG). Address, phone, and Google Maps for every college.`,
+    title: `${colleges.length} Architecture Colleges in Kerala: KEAM B.Arch`,
+    description: `${colleges.length} architecture (B.Arch) colleges in Kerala under KEAM 2026 with ${totalSeats}+ seats. Search by district, filter by affiliating university (Calicut, Kerala, CUSAT, KTU, MG). Address, phone, and Google Maps for every college.`,
     keywords:
-      'KEAM B.Arch colleges 2026, architecture colleges Kerala, B.Arch colleges Kochi, B.Arch colleges Thiruvananthapuram, Kerala architecture colleges list, KEAM college codes',
+      'architecture colleges in Kerala, B.Arch colleges in Kerala, KEAM B.Arch colleges 2026, architecture colleges Kerala, B.Arch colleges Kochi, B.Arch colleges Thiruvananthapuram, Kerala architecture colleges list, KEAM college codes',
     alternates: buildAlternates(locale, `/counseling/keam-arch/${SPOKE}`),
   };
 }
@@ -65,8 +65,8 @@ export default function CollegesInKeralaPage({
       locale={locale}
       spokeSlug={SPOKE}
       spokeChip="College Locator"
-      topicTitle={`${colleges.length} B.Arch Colleges in Kerala under KEAM 2026`}
-      topicSubtitle={`Combined intake of about ${totalSeats} seats across ${districts.length} districts and 5 affiliating universities. Use the search and filters to find the colleges you want to add to your KEAM option list.`}
+      topicTitle={`${colleges.length} Architecture (B.Arch) Colleges in Kerala under KEAM 2026`}
+      topicSubtitle={`Kerala has ${colleges.length} B.Arch (architecture) colleges admitting through KEAM, with a combined intake of about ${totalSeats} seats across ${districts.length} districts and 5 affiliating universities. Use the search and filters to find the colleges you want to add to your KEAM option list.`}
       jsonLd={[itemListSchema, ...collegeSchemas]}
       related={[
         { label: 'Eligibility & Documents', href: 'eligibility-documents' },

@@ -3,14 +3,14 @@ import CollegePredictorTeaser from '@/components/tools/teasers/CollegePredictorT
 
 export const collegePredictorConfig: ToolConfig = {
   slug: 'college-predictor',
-  title: 'NATA College Predictor 2026',
+  title: 'NATA College Predictor: Find NATA Colleges for Your Score',
   subtitle:
-    'The NATA College Predictor helps you find the best architecture colleges that match your NATA 2026 score. Enter your score, select your preferred state and category, and instantly see a personalised list of B.Arch colleges ranked by admission probability. Our database covers 500+ colleges across 28 states and 8 union territories, including government institutions, private colleges, deemed universities, and NITs. Each college listing shows previous year cutoffs, annual fees, seat count, accreditation status, and the counselling body that manages admissions. Whether you scored 80 or 170, the predictor shows realistic options so you can plan your architecture career with confidence.',
+    'Enter your NATA score to see the B.Arch colleges that accept NATA and match your marks. Pick your preferred state and category for a personalised list of B.Arch colleges ranked by admission probability. Our database covers 500+ colleges across 28 states and 8 union territories, including government institutions, private colleges, deemed universities, and NITs. Each college listing shows previous year cutoffs, annual fees, seat count, accreditation status, and the counselling body that manages admissions. Whether you scored 80 or 170, the predictor shows realistic options so you can plan your architecture career with confidence.',
   category: 'counseling',
   appUrl: 'https://app.neramclasses.com/tools/counseling/college-predictor',
-  metaTitle: 'NATA College Predictor 2026: Find Colleges for Your Score',
+  metaTitle: 'NATA Colleges by Score: Free College Predictor',
   metaDescription:
-    'Free NATA college predictor. Enter your score to find matching B.Arch colleges from 500+ institutions. Filter by state, fees, and admission probability.',
+    'Which NATA colleges can you get? Enter your NATA score to see matching B.Arch colleges from 500+ institutions, with past cutoffs, fees and your admission chances.',
   keywords: [
     'NATA college predictor 2026',
     'JEE B.Arch college list',

@@ -59,6 +59,8 @@ export interface ControlBarProps {
 
   /** Keeps the settings menu inside the fullscreen subtree. */
   menuContainer?: HTMLElement | null;
+  /** What the lock means, when it is not a checkpoint quiz. */
+  lockLabel?: string;
 }
 
 export default function ControlBar(props: ControlBarProps) {
@@ -94,6 +96,7 @@ export default function ControlBar(props: ControlBarProps) {
     pipActive,
     onTogglePip,
     menuContainer,
+    lockLabel,
   } = props;
 
   const bounded = Number.isFinite(seekCeiling);
@@ -135,6 +138,7 @@ export default function ControlBar(props: ControlBarProps) {
         onRefused={onRefusedSeek}
         onScrubbingChange={onScrubbingChange}
         disabled={duration <= 0}
+        lockLabel={lockLabel}
       />
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: { xs: 0, sm: 0.5 }, mt: -0.5 }}>
@@ -232,12 +236,18 @@ export default function ControlBar(props: ControlBarProps) {
           {/* One line on a phone. Two lines made the bar cover most of a 193px
               tall player, with the paused Play button sitting on the seek rail. */}
           <Typography sx={{ fontSize: 11, color: 'rgba(255,255,255,0.7)' }}>
-            <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
-              Pass the quiz at the lock to go on.
-            </Box>
-            <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
-              Move freely up to the lock. Pass its quiz to unlock the next part.
-            </Box>
+            {lockLabel ? (
+              lockLabel
+            ) : (
+              <>
+                <Box component="span" sx={{ display: { xs: 'inline', sm: 'none' } }}>
+                  Pass the quiz at the lock to go on.
+                </Box>
+                <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                  Move freely up to the lock. Pass its quiz to unlock the next part.
+                </Box>
+              </>
+            )}
           </Typography>
         </Box>
       )}

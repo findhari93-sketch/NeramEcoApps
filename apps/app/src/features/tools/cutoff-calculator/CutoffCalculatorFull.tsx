@@ -48,6 +48,7 @@ import { useScoreAutoSave, type ScoreSaveStatus } from './useScoreAutoSave';
 import { PurposePrompt } from './PurposePrompt';
 import type { CalculationPurpose } from '@neram/database';
 import { useToolOpened } from '@/hooks/useToolOpened';
+import { useHideReportFab } from '@/components/ReporterAccessContext';
 import {
   BOARD_CONFIG,
   calculateBestNataScore,
@@ -892,6 +893,8 @@ function MobileStickyResult({
   hasData: boolean;
   onViewDetails: () => void;
 }) {
+  // The strip only shows below md, so the report button steps aside there only.
+  useHideReportFab(hasData, 'md');
   if (!hasData) return null;
 
   return (

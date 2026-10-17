@@ -49,6 +49,8 @@ const SOURCE_COLUMN: Record<VideoScope, { table: string; column: string }> = {
   recap: { table: 'nexus_class_recaps', column: 'recording_url' },
   class: { table: 'nexus_scheduled_classes', column: 'recording_url' },
   foundation: { table: 'nexus_foundation_chapters', column: 'sharepoint_video_url' },
+  // recording_url is always the Teams original, even while a trim is applied.
+  class_original: { table: 'nexus_scheduled_classes', column: 'recording_url' },
 };
 
 /**

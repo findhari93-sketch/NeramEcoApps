@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { loadOwnAttendance } from '@/lib/student-attendance';
 import { getSupabaseAdminClient } from '@neram/database';
+import { getLatestRecordCheck } from '@neram/database/queries';
 import { CLASS_IMAGES_EMBED } from '@/lib/class-cover';
 import { applyClassPrepGate } from '@/lib/class-prep-server';
 import { resolveExamCountdown } from '@/lib/exam-countdown-server';
@@ -63,6 +64,7 @@ export async function GET(request: NextRequest) {
       topicTotalResult,
       topicCompletedResult,
       examCountdown,
+      latestCheck,
     ] = await Promise.all([
       // Upcoming classes, through the shared loader the assistant also uses, so
       // the brief and the dashboard can never disagree about "next class".
@@ -139,6 +141,15 @@ export async function GET(request: NextRequest) {
       // student's own booked slot, if they have one, outranks the cohort date, so
       // this number can never contradict the one on their exam screen.
       resolveExamCountdown(supabase, { classroomId, studentId: user.id }),
+
+      // The office's latest "Check your details" ask, for the dashboard banner.
+      // Rides on this request so the banner costs no request of its own (most
+      // students never call profile-completion from here). A banner, not the
+      // page: an error hides it rather than failing the dashboard.
+      getLatestRecordCheck(supabase, user.id).catch((err: unknown) => {
+        console.error('[dashboard] record check failed:', err instanceof Error ? err.message : err);
+        return null;
+      }),
     ]);
 
     // The class prep gate. This is a student-only route, so every class here is
@@ -176,6 +187,7 @@ export async function GET(request: NextRequest) {
         total: topicTotalResult.count || 0,
       },
       examCountdown,
+      recordCheck: latestCheck && latestCheck.status !== 'cancelled' ? { status: latestCheck.status } : null,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load dashboard';

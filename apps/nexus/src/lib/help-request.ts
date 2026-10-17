@@ -231,7 +231,9 @@ export async function handleHelpRequest(body: unknown, key: string | null, deps:
 
   const problemLabel = helpProblemLabel(input.problem);
   const subject = `Nexus: ${problemLabel}`;
-  const category = input.problem === 'cant_sign_in' ? 'account' : 'technical';
+  // Must be a support_ticket_category enum value. 'account' and 'technical' were
+  // not, so every /help request failed to insert.
+  const category = input.problem === 'cant_sign_in' ? 'account_issue' : 'technical_issue';
   const screenshotUrl = input.screenshotPath ? deps.publicUrl(input.screenshotPath) : null;
 
   const { data: ticket, error } = await deps.supabase

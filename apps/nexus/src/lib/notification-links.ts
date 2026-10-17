@@ -247,6 +247,13 @@ function mappedHref(
       // event type (a non-clickable row) would waste the one message that reaches
       // a student who barely opens Nexus.
       return '/student/complete-profile';
+    // The office filled in their form and fees and asks them to check it; a
+    // second installment is coming up; or the office answered their fee report.
+    // All three are about the same page.
+    case 'fee_details_check':
+    case 'fee_installment_reminder':
+    case 'fee_correction_resolved':
+      return '/student/check-details';
     case 'catchup_overdue':
     case 'prework_reason_needed':
     case 'recap_needs_review': {

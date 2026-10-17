@@ -11,7 +11,6 @@ import {
   useMaterialReactTable,
 } from 'material-react-table';
 import {
-  UserAvatar,
   Box,
   Button,
   Chip,
@@ -59,6 +58,7 @@ import {
 } from '@neram/database';
 import AuthStatusBadge from '../leads/AuthStatusBadge';
 import CopyablePhone from '@/components/CopyablePhone';
+import EnrolledAvatar from '@/components/EnrolledAvatar';
 
 interface UsersTableProps {
   data: UserJourney[];
@@ -259,35 +259,14 @@ function MobileUserCard({
         minHeight: 60,
       }}
     >
-      {/* Avatar */}
-      {isEnrolled ? (
-        <Box
-          sx={{
-            width: 40,
-            height: 40,
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #FFD700, #FFA000, #FFD700)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            flexShrink: 0,
-            mt: 0.25,
-          }}
-        >
-          <UserAvatar src={user.avatar_url} name={getDisplayName(user)} size={36} tapToView={false} />
-        </Box>
-      ) : (
-        <UserAvatar
-          src={user.avatar_url}
-          name={getDisplayName(user)}
-          size={40}
-          tapToView={false}
-          sx={{
-            flexShrink: 0,
-            mt: 0.25,
-          }}
-        />
-      )}
+      {/* Avatar: gold ring for enrolled students */}
+      <EnrolledAvatar
+        src={user.avatar_url}
+        name={getDisplayName(user)}
+        size={isEnrolled ? 34 : 40}
+        enrolled={!!isEnrolled}
+        sx={{ mt: 0.25 }}
+      />
 
       {/* Content */}
       <Box sx={{ flex: 1, minWidth: 0 }}>
@@ -567,36 +546,12 @@ export default function UsersTable(props: UsersTableProps) {
         enableColumnFilter: false,
         Cell: ({ row }) => (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0 }}>
-            {(row.original.pipeline_stage === 'enrolled' || row.original.linked_classroom_email) ? (
-              <Box
-                sx={{
-                  width: 34,
-                  height: 34,
-                  borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #FFD700, #FFA000, #FFD700)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                }}
-              >
-                <Box
-                  sx={{
-                    width: 30,
-                    height: 30,
-                    borderRadius: '50%',
-                    bgcolor: 'background.paper',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}
-                >
-                  <UserAvatar src={row.original.avatar_url} name={getDisplayName(row.original)} size={28} tapToView={false} />
-                </Box>
-              </Box>
-            ) : (
-              <UserAvatar src={row.original.avatar_url} name={getDisplayName(row.original)} size={28} tapToView={false} />
-            )}
+            <EnrolledAvatar
+              src={row.original.avatar_url}
+              name={getDisplayName(row.original)}
+              size={28}
+              enrolled={row.original.pipeline_stage === 'enrolled' || !!row.original.linked_classroom_email}
+            />
             <Box sx={{ minWidth: 0 }}>
               <Typography
                 variant="body2"

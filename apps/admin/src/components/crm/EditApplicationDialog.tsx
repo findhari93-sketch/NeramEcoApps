@@ -9,13 +9,14 @@ import {
   DialogContent,
   DialogActions,
   Alert,
-  MenuItem,
-  TextField,
-  Typography,
-  Divider,
-  Grid,
 } from '@neram/ui';
 import type { UserJourneyDetail } from '@neram/database';
+import ApplicationDetailsFields, {
+  EMPTY_DETAILS,
+  detailsFormFromLead,
+  detailsUpdatesFromForm,
+  type ApplicationDetailsForm,
+} from './ApplicationDetailsFields';
 
 interface EditApplicationDialogProps {
   open: boolean;
@@ -25,77 +26,8 @@ interface EditApplicationDialogProps {
   onSaved: () => void;
 }
 
-const COURSE_OPTIONS = [
-  { value: 'nata', label: 'NATA' },
-  { value: 'jee_paper2', label: 'JEE Paper 2' },
-  { value: 'both', label: 'Both NATA & JEE' },
-  { value: 'not_sure', label: 'Not Sure' },
-];
-
-const LEARNING_MODES = [
-  { value: 'hybrid', label: 'Hybrid' },
-  { value: 'online_only', label: 'Online Only' },
-];
-
-const APPLICANT_CATEGORIES = [
-  { value: 'school_student', label: 'School Student' },
-  { value: 'diploma_student', label: 'Diploma Student' },
-  { value: 'college_student', label: 'College Student' },
-  { value: 'working_professional', label: 'Working Professional' },
-];
-
-/** The values the apply form stores in academic_data.current_class. Nexus reads them. */
-const CLASS_OPTIONS = [
-  { value: '10', label: 'Class 10' },
-  { value: '11', label: 'Class 11' },
-  { value: '12', label: 'Class 12' },
-  { value: '12_completed', label: '12th completed' },
-];
-
-const CASTE_CATEGORIES = [
-  { value: 'general', label: 'General' },
-  { value: 'obc', label: 'OBC' },
-  { value: 'sc', label: 'SC' },
-  { value: 'st', label: 'ST' },
-  { value: 'ews', label: 'EWS' },
-  { value: 'other', label: 'Other' },
-];
-
-const SCHOOL_TYPES = [
-  { value: 'private_school', label: 'Private School' },
-  { value: 'government_aided', label: 'Government Aided' },
-  { value: 'government_school', label: 'Government School' },
-];
-
-const TEXT_FIELDS = [
-  'father_name',
-  'applicant_category',
-  'interest_course',
-  'learning_mode',
-  'city',
-  'state',
-  'pincode',
-  'school_type',
-  'caste_category',
-] as const;
-
-const EMPTY_FORM = {
-  father_name: '',
-  applicant_category: '',
-  current_class: '',
-  interest_course: '',
-  learning_mode: '',
-  city: '',
-  state: '',
-  pincode: '',
-  school_type: '',
-  caste_category: '',
-  target_exam_year: '',
-};
-
-type FormState = typeof EMPTY_FORM;
-
-const FIELD_SX = { '& .MuiOutlinedInput-root': { borderRadius: 0.75 } };
+const EMPTY_FORM = EMPTY_DETAILS;
+type FormState = ApplicationDetailsForm;
 
 /**
  * Edit a student's application, or fill one in for a student who has none.
@@ -119,21 +51,7 @@ export default function EditApplicationDialog({
 
   useEffect(() => {
     if (!open) return;
-    const current = (leadProfile || {}) as Record<string, any>;
-    const academic = (current.academic_data || {}) as Record<string, unknown>;
-    setFormData({
-      father_name: current.father_name || '',
-      applicant_category: current.applicant_category || '',
-      current_class: academic.current_class ? String(academic.current_class) : '',
-      interest_course: current.interest_course || '',
-      learning_mode: current.learning_mode || '',
-      city: current.city || '',
-      state: current.state || '',
-      pincode: current.pincode || '',
-      school_type: current.school_type || '',
-      caste_category: current.caste_category || '',
-      target_exam_year: current.target_exam_year?.toString() || '',
-    });
+    setFormData(detailsFormFromLead(leadProfile as Record<string, any> | null));
     setError('');
   }, [open, leadProfile]);
 
@@ -146,26 +64,10 @@ export default function EditApplicationDialog({
     setError('');
 
     try {
-      const current = (leadProfile || {}) as Record<string, any>;
-      const updates: Record<string, unknown> = {};
-
-      // Only include changed fields
-      for (const field of TEXT_FIELDS) {
-        if (formData[field] !== (current[field] || '')) updates[field] = formData[field] || null;
-      }
-
-      if (formData.target_exam_year !== (current.target_exam_year?.toString() || '')) {
-        const year = formData.target_exam_year ? Number(formData.target_exam_year) : null;
-        if (year !== null && (!Number.isInteger(year) || year < 2000 || year > 2100)) {
-          setError('Target exam year must be a year such as 2027.');
-          return;
-        }
-        updates.target_exam_year = year;
-      }
-
-      const academic = (current.academic_data || {}) as Record<string, unknown>;
-      if (formData.current_class !== (academic.current_class ? String(academic.current_class) : '')) {
-        updates.academic_data = { ...academic, current_class: formData.current_class || null };
+      const { updates, error: fieldError } = detailsUpdatesFromForm(formData, leadProfile as Record<string, any> | null);
+      if (fieldError) {
+        setError(fieldError);
+        return;
       }
 
       if (isNew) {
@@ -223,174 +125,7 @@ export default function EditApplicationDialog({
             </Alert>
           )}
 
-          {/* Personal */}
-          <Typography variant="overline" sx={{ fontWeight: 700, letterSpacing: 1, color: 'text.secondary', fontSize: 10.5 }}>
-            Personal Details
-          </Typography>
-
-          <TextField
-            label="Father's Name"
-            value={formData.father_name}
-            onChange={(e) => handleChange('father_name', e.target.value)}
-            fullWidth
-            size="small"
-            sx={FIELD_SX}
-          />
-
-          <Grid container spacing={2}>
-            <Grid item xs={6}>
-              <TextField
-                select
-                label="Applicant Category"
-                value={formData.applicant_category}
-                onChange={(e) => handleChange('applicant_category', e.target.value)}
-                fullWidth
-                size="small"
-                sx={FIELD_SX}
-              >
-                <MenuItem value="">-- Select --</MenuItem>
-                {APPLICANT_CATEGORIES.map((opt) => (
-                  <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid item xs={6}>
-              <TextField
-                select
-                label="Current Class"
-                value={formData.current_class}
-                onChange={(e) => handleChange('current_class', e.target.value)}
-                fullWidth
-                size="small"
-                helperText="For school students"
-                sx={FIELD_SX}
-              >
-                <MenuItem value="">-- Select --</MenuItem>
-                {CLASS_OPTIONS.map((opt) => (
-                  <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-          </Grid>
-
-          <Divider sx={{ my: 0.5 }} />
-          <Typography variant="overline" sx={{ fontWeight: 700, letterSpacing: 1, color: 'text.secondary', fontSize: 10.5 }}>
-            Course & Learning
-          </Typography>
-
-          <TextField
-            select
-            label="Course Interest"
-            value={formData.interest_course}
-            onChange={(e) => handleChange('interest_course', e.target.value)}
-            fullWidth
-            size="small"
-            sx={FIELD_SX}
-          >
-            {isNew && <MenuItem value="">-- Select --</MenuItem>}
-            {COURSE_OPTIONS.map((opt) => (
-              <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
-            ))}
-          </TextField>
-
-          <TextField
-            select
-            label="Learning Mode"
-            value={formData.learning_mode}
-            onChange={(e) => handleChange('learning_mode', e.target.value)}
-            fullWidth
-            size="small"
-            sx={FIELD_SX}
-          >
-            {isNew && <MenuItem value="">-- Select --</MenuItem>}
-            {LEARNING_MODES.map((opt) => (
-              <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
-            ))}
-          </TextField>
-
-          <Grid container spacing={2}>
-            <Grid item xs={6}>
-              <TextField
-                select
-                label="School Type"
-                value={formData.school_type}
-                onChange={(e) => handleChange('school_type', e.target.value)}
-                fullWidth
-                size="small"
-                sx={FIELD_SX}
-              >
-                <MenuItem value="">-- Select --</MenuItem>
-                {SCHOOL_TYPES.map((opt) => (
-                  <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid item xs={6}>
-              <TextField
-                select
-                label="Caste Category"
-                value={formData.caste_category}
-                onChange={(e) => handleChange('caste_category', e.target.value)}
-                fullWidth
-                size="small"
-                sx={FIELD_SX}
-              >
-                <MenuItem value="">-- Select --</MenuItem>
-                {CASTE_CATEGORIES.map((opt) => (
-                  <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-          </Grid>
-
-          <TextField
-            label="Target Exam Year"
-            type="number"
-            value={formData.target_exam_year}
-            onChange={(e) => handleChange('target_exam_year', e.target.value)}
-            fullWidth
-            size="small"
-            placeholder="e.g. 2027"
-            helperText="The calendar year they write the exam. The 2026-27 batch writes in 2027."
-            sx={FIELD_SX}
-          />
-
-          <Divider sx={{ my: 0.5 }} />
-          <Typography variant="overline" sx={{ fontWeight: 700, letterSpacing: 1, color: 'text.secondary', fontSize: 10.5 }}>
-            Location
-          </Typography>
-
-          <Grid container spacing={2}>
-            <Grid item xs={6}>
-              <TextField
-                label="City"
-                value={formData.city}
-                onChange={(e) => handleChange('city', e.target.value)}
-                fullWidth
-                size="small"
-                sx={FIELD_SX}
-              />
-            </Grid>
-            <Grid item xs={6}>
-              <TextField
-                label="State"
-                value={formData.state}
-                onChange={(e) => handleChange('state', e.target.value)}
-                fullWidth
-                size="small"
-                sx={FIELD_SX}
-              />
-            </Grid>
-          </Grid>
-
-          <TextField
-            label="Pincode"
-            value={formData.pincode}
-            onChange={(e) => handleChange('pincode', e.target.value)}
-            fullWidth
-            size="small"
-            sx={FIELD_SX}
-          />
+          <ApplicationDetailsFields value={formData} onChange={handleChange} isNew={isNew} />
 
           {error && <Alert severity="error" sx={{ borderRadius: 0.75 }}>{error}</Alert>}
         </Box>

@@ -20,7 +20,7 @@
 export const VIDEO_TOKEN_PREFIX = 'vid_';
 
 /** Scopes the Worker will serve bytes for. Mirrors VideoScope in video-token.ts. */
-export const STREAM_SCOPES = ['recap', 'class', 'foundation'] as const;
+export const STREAM_SCOPES = ['recap', 'class', 'foundation', 'class_original'] as const;
 export type StreamScope = (typeof STREAM_SCOPES)[number];
 
 export interface VideoGrantPayload {

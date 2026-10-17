@@ -16,6 +16,7 @@ export type AttentionKey =
   | 'back_in_nexus'
   | 'not_started_long'
   | 'no_form'
+  | 'no_fee'
   | 'no_stage'
   | 'no_year';
 
@@ -26,6 +27,7 @@ export type AttentionActionKey =
   | 'review_back_in_nexus'
   | 'review_not_started'
   | 'review_forms'
+  | 'review_fees'
   | 'prefill'
   | 'fix_stages'
   | 'fix_years';
@@ -57,6 +59,11 @@ export interface AttentionInput {
   backInNexusCount?: number;
   /** Not started (never entered Nexus) for 14 days or more. See lib/not-started.ts. */
   notStartedLongCount?: number;
+  /**
+   * Has an application but no fee details. Only ever non-zero for a viewer with
+   * coord.student.finance: the roster route counts it for nobody else.
+   */
+  noFeeCount?: number;
 }
 
 function studentHas(count: number): string {
@@ -117,6 +124,17 @@ export function buildAttentionRows(input: AttentionInput): AttentionRow[] {
       key: 'no_form',
       message: `${input.noFormCount} ${studentHas(input.noFormCount)} no application form linked, so their class and exam year cannot be filled in from it.`,
       actions: [{ key: 'review_forms', label: 'Find their forms', primary: true }],
+    });
+  }
+
+  // Finance staff only (the count is 0 for everyone else). Fees are added in
+  // Admin's Application and fees form, so the action opens a list of links there.
+  const noFee = input.noFeeCount ?? 0;
+  if (noFee > 0) {
+    rows.push({
+      key: 'no_fee',
+      message: `${noFee} ${studentHas(noFee)} an application but no fee details.`,
+      actions: [{ key: 'review_fees', label: 'Add fees in Admin', primary: true }],
     });
   }
 

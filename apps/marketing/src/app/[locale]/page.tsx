@@ -10,6 +10,7 @@ import { COURSE_FEES, ORG_FACTS, PROOF_POINTS } from '@/lib/seo/facts';
 import { siteTokens as t } from '@neram/ui/site-tokens';
 import { Section, CtaBand, CtaButton, FaqList } from '@/design-system';
 import { APP_URL } from '@/lib/seo/constants';
+import { admissionYear } from '@/lib/college-hub/constants';
 
 // ISR daily. The only data here is the #AskSeniors block (tagged 'ask-seniors',
 // purged on admin event edits). It used to be hourly, which rebuilt the home
@@ -100,8 +101,8 @@ export async function generateMetadata({
   return {
     // The layout's '%s | Neram Classes' template does not apply to the page in the
     // layout's own segment, so the home title carries the brand itself.
-    title: { absolute: 'NATA Coaching: Online and Classroom Since 2009 | Neram Classes' },
-    description: `NATA and JEE Paper 2 coaching since 2009: ${PROOF_POINTS.line}. Live online classes across India and the Gulf, classrooms in Tamil Nadu and Bangalore.`,
+    title: { absolute: `NATA Coaching ${admissionYear()}: Live Online and Classroom | Neram Classes` },
+    description: `NATA ${admissionYear()} and JEE Paper 2 coaching since 2009: ${PROOF_POINTS.line}. Live online classes across India and the Gulf, classrooms in Tamil Nadu and Bangalore. Free demo class.`,
     keywords:
       'NATA coaching, NATA coaching online, NATA coaching centre, NATA classes, NATA drawing classes, JEE Paper 2 coaching, B.Arch entrance coaching, NATA coaching Chennai, NATA coaching Bangalore, NATA coaching Tamil Nadu, NATA 2026 preparation',
     // The home page is English in every locale, so /ta, /hi, /kn and /ml point

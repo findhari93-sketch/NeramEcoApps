@@ -35,8 +35,13 @@ export const VIDEO_TOKEN_PREFIX = 'vid_';
  */
 export const VIDEO_TOKEN_TTL_SECONDS = 600;
 
-/** Which table refId points at. Keeps one proxy serving every video surface. */
-export type VideoScope = 'recap' | 'class' | 'foundation';
+/**
+ * Which table refId points at. Keeps one proxy serving every video surface.
+ * 'class_original' is a class's untrimmed Teams recording, for a student who
+ * opens a part the trim skipped. Mirrors STREAM_SCOPES in the media Worker.
+ */
+export type VideoScope = 'recap' | 'class' | 'foundation' | 'class_original';
+export const VIDEO_SCOPES: readonly VideoScope[] = ['recap', 'class', 'foundation', 'class_original'];
 
 export interface VideoTokenPayload {
   /** Schema version, in case the payload shape evolves. */
@@ -169,7 +174,7 @@ export function verifyVideoTokenDetailed(
   }
 
   if (!payload || payload.vid !== true || !payload.refId || !payload.userId) return null;
-  if (!['recap', 'class', 'foundation'].includes(payload.scope)) return null;
+  if (!VIDEO_SCOPES.includes(payload.scope)) return null;
   if (typeof payload.exp !== 'number') return null;
 
   return { payload, expired: payload.exp < Math.floor(Date.now() / 1000) };

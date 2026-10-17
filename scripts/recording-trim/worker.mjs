@@ -15,10 +15,15 @@
  *   1. download the original
  *   2. measure: duration, keyframes, silences, frozen stretches
  *   3. ask Nexus for the cuts (it reads the transcript and applies the rules)
- *   4. cut the kept stretches without re-encoding, join them, check the result
+ *   4. cut: re-encode in one pass so a cut lands on any frame (reencode.mjs),
+ *      or, when Nexus says 'copy', cut on keyframes without re-encoding and
+ *      join the pieces; then check the result
  *   5. upload the trimmed copy beside the original, tell Nexus it is there
  *
  * Usage: node scripts/recording-trim/worker.mjs [--max-jobs N] [--apply-ready]
+ *        node scripts/recording-trim/worker.mjs --local <in.mp4> --vtt <in.vtt> --out <out.mp4>
+ *          A preview on this machine: plans with the same rules as Nexus
+ *          (default params) and writes the trimmed file. Nothing is uploaded.
  * Env:   NEXUS_URL, RECORDING_TRIM_TOKEN, RUNNER_TEMP (optional), GITHUB_RUN_ID
  */
 
@@ -29,19 +34,26 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { medianKeyframeGap, parseFreezes, parseKeyframes, parseSilences } from './ffmpeg-log.mjs';
+import { cueSpans, medianKeyframeGap, parseFreezes, parseKeyframes, parseSilences } from './ffmpeg-log.mjs';
+import { buildFilterScript, encodeArgs, pickFps, segmentsOf, snapToFrames } from './reencode.mjs';
 
 const NEXUS = (process.env.NEXUS_URL || '').replace(/\/+$/, '');
 const TOKEN = process.env.RECORDING_TRIM_TOKEN || '';
 const WORK = join(process.env.RUNNER_TEMP || tmpdir(), 'recording-trim');
 const RUN = `gha-${process.env.GITHUB_RUN_ID || 'local'}`;
-const DEADLINE = Date.now() + 45 * 60_000;
+// No new job after 30 minutes: a re-encode must finish inside the 55 minute job.
+const DEADLINE = Date.now() + 30 * 60_000;
 /** A multiple of 320 KiB, as Graph upload sessions require. */
 const CHUNK = 10 * 1024 * 1024;
 
 const args = process.argv.slice(2);
-const maxJobs = Number(args[args.indexOf('--max-jobs') + 1]) || 6;
+const argOf = (name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
+// Re-encoding a class takes several minutes, so fewer jobs fit in a run.
+const maxJobs = Number(argOf('--max-jobs')) || 2;
 const applyReadyOnly = args.includes('--apply-ready');
+const local = argOf('--local');
+/** Video and audio may end this far apart after a re-encode (one frame plus slack). */
+const REENCODE_AV_TOLERANCE = 0.3;
 
 function mask(value) {
   if (value && process.env.GITHUB_ACTIONS) process.stdout.write(`::add-mask::${value}\n`);
@@ -124,6 +136,22 @@ async function streamDurations(file) {
   return { video: of('video'), audio: of('audio') };
 }
 
+/** Frame rate and audio sample rate, for the re-encode. */
+async function streamInfo(file) {
+  const { stdout } = await run('ffprobe', [
+    '-v', 'error', '-show_entries', 'stream=codec_type,avg_frame_rate,r_frame_rate,sample_rate', '-of', 'json', file,
+  ]);
+  const streams = JSON.parse(stdout).streams || [];
+  const video = streams.find((s) => s.codec_type === 'video') || {};
+  const audio = streams.find((s) => s.codec_type === 'audio');
+  const rate = (r) => {
+    const [n, d] = String(r || '').split('/').map(Number);
+    return d ? n / d : n;
+  };
+  const fps = rate(video.avg_frame_rate) || rate(video.r_frame_rate);
+  return { fps, sampleRate: audio ? Number(audio.sample_rate) || 0 : 0 };
+}
+
 async function download(url, file) {
   // A connection dropped part way through a 200 MB download is retried whole.
   for (let i = 0; i < 3; i++) {
@@ -165,6 +193,39 @@ async function measure(file) {
   };
 }
 
+/** Video and audio stream lengths must agree, within tolerance. */
+async function checkSync(output, tolerance) {
+  const streams = await streamDurations(output);
+  if (Number.isFinite(streams.audio) && Math.abs(streams.video - streams.audio) > tolerance) {
+    throw Object.assign(new Error(`AV_DESYNC ${streams.video} vs ${streams.audio}`), { reason: 'AV_DESYNC' });
+  }
+}
+
+/**
+ * One re-encoding pass that keeps only the kept stretches, cut on any frame.
+ * See reencode.mjs for how sync stays exact.
+ */
+async function cutReencode(file, keep, dir, duration) {
+  const info = await streamInfo(file);
+  const fps = pickFps(info.fps, info.sampleRate);
+  const frames = snapToFrames(keep, fps, duration);
+  const segments = segmentsOf(frames, fps);
+  const scriptFile = join(dir, 'graph.txt');
+  await writeFile(scriptFile, buildFilterScript(frames, fps, info.sampleRate));
+  const output = join(dir, 'trimmed.mp4');
+  const started = Date.now();
+  await run('ffmpeg', encodeArgs({ input: file, scriptFile, output, fps, hasAudio: info.sampleRate > 0 }));
+  log(`re-encoded ${segments.length} pieces at ${fps} fps in ${Math.round((Date.now() - started) / 1000)}s`);
+
+  const total = segments.reduce((sum, s) => sum + s.out_len, 0);
+  const outputDuration = await probeDuration(output);
+  if (Math.abs(outputDuration - total) > Math.max(1, total * 0.002)) {
+    throw Object.assign(new Error(`DURATION_MISMATCH ${outputDuration} vs ${total}`), { reason: 'DURATION_MISMATCH' });
+  }
+  await checkSync(output, REENCODE_AV_TOLERANCE);
+  return { output, segments, outputDuration };
+}
+
 async function cut(file, keep, dir) {
   const segments = [];
   const list = [];
@@ -188,10 +249,7 @@ async function cut(file, keep, dir) {
   const total = segments.reduce((sum, s) => sum + s.out_len, 0);
   const outputDuration = await probeDuration(output);
   if (Math.abs(outputDuration - total) > 1) throw Object.assign(new Error('DURATION_MISMATCH'), { reason: 'DURATION_MISMATCH' });
-  const streams = await streamDurations(output);
-  if (Number.isFinite(streams.audio) && Math.abs(streams.video - streams.audio) > 1) {
-    throw Object.assign(new Error('AV_DESYNC'), { reason: 'AV_DESYNC' });
-  }
+  await checkSync(output, 1);
   return { output, segments, outputDuration };
 }
 
@@ -232,14 +290,20 @@ async function processJob(job) {
 
     const decision = await api('plan', {
       job_id: job.job_id,
-      report: { duration: m.duration, silences: m.silences, freezes: m.freezes, keyframes: m.keyframes },
+      report: {
+        duration: m.duration, silences: m.silences, freezes: m.freezes, keyframes: m.keyframes,
+        cut_methods: ['copy', 'reencode'],
+      },
     });
     if (decision.skip) {
       log(`${job.job_id}: not cut (${decision.skip})`);
       return;
     }
 
-    const { output, segments, outputDuration } = await cut(input, decision.keep, dir);
+    const { output, segments, outputDuration } =
+      decision.cut_method === 'reencode'
+        ? await cutReencode(input, decision.keep, dir, m.duration)
+        : await cut(input, decision.keep, dir);
     log(`${job.job_id}: cut to ${Math.round(outputDuration)}s in ${segments.length} pieces`);
     const { upload_url } = await api('upload', { job_id: job.job_id });
     mask(upload_url);
@@ -257,7 +321,40 @@ async function processJob(job) {
   }
 }
 
+/**
+ * --local: trim a recording on this machine to watch the result before the
+ * rules change for everyone. Needs ffmpeg and Node 23.6+ (it imports the
+ * planner's TypeScript directly, so the rules are exactly Nexus's).
+ */
+async function preview() {
+  const vttFile = argOf('--vtt');
+  const out = argOf('--out') || 'trimmed-preview.mp4';
+  if (!vttFile) throw new Error('--vtt <transcript.vtt> is required with --local');
+  const { planTrim } = await import(new URL('../../apps/nexus/src/lib/recording-trim-plan.ts', import.meta.url).href);
+  const dir = join(WORK, 'preview');
+  await rm(dir, { recursive: true, force: true });
+  await mkdir(dir, { recursive: true });
+  try {
+    const m = await measure(local);
+    const speech = cueSpans(await readFile(vttFile, 'utf8'));
+    const plan = planTrim({ duration: m.duration, speech, silences: m.silences, freezes: m.freezes, keyframes: [] });
+    if (plan.kind !== 'cut') {
+      log(`not cut (${plan.reason})`);
+      return;
+    }
+    const pauses = plan.cuts.filter((c) => c.kind === 'pause').length;
+    log(`plan (${plan.pauseRule}): ${plan.cuts.length} cuts, ${pauses} pauses, ${Math.round(plan.removedSeconds)}s removed of ${Math.round(m.duration)}s`);
+    const { output, outputDuration } = await cutReencode(local, plan.keep, dir, m.duration);
+    await writeFile(out, await readFile(output));
+    await writeFile(`${out}.cuts.json`, JSON.stringify(plan.cuts, null, 1));
+    log(`wrote ${out} (${Math.round(outputDuration)}s) and ${out}.cuts.json`);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
 async function main() {
+  if (local) return preview();
   if (!NEXUS || !TOKEN) throw new Error('NEXUS_URL and RECORDING_TRIM_TOKEN are required');
   if (applyReadyOnly) {
     const result = await api('apply_ready');

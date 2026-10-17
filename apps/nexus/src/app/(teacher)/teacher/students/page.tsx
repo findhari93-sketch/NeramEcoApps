@@ -43,6 +43,7 @@ import DormantViewBar from '@/components/students/DormantViewBar';
 import RemoveStudentDialog from '@/components/RemoveStudentDialog';
 import AddStudentSheet from '@/components/students/AddStudentSheet';
 import ApplicationFormSheet from '@/components/students/ApplicationFormSheet';
+import MissingFeesSheet from '@/components/students/MissingFeesSheet';
 import CreateAccountForm, { type AccountPrefill } from '@/components/students/CreateAccountForm';
 import ResetPasswordSheet, { type ResetPasswordTarget } from '@/components/students/ResetPasswordSheet';
 import BulkSelectBar from '@/components/students/BulkSelectBar';
@@ -146,6 +147,8 @@ interface StudentCounts {
   notSeen14d: number;
   /** No application form on their own record. Excludes dormant students. */
   noForm: number;
+  /** Has a form but no fee details. Finance viewers only; 0 for everyone else. */
+  noFee?: number;
   /** Dormant because they never entered Nexus (lib/not-started.ts). */
   notStarted: number;
   /** Dormant because a person paused them. */
@@ -178,6 +181,7 @@ const EMPTY_COUNTS: StudentCounts = {
   neverSignedIn: 0,
   notSeen14d: 0,
   noForm: 0,
+  noFee: 0,
   notStarted: 0,
   pausedByStaff: 0,
   notStartedNeedsDecision: 0,
@@ -284,6 +288,7 @@ export default function TeacherStudents() {
   /** Count only, so the attention card can hide the prefill button when there is nothing. */
   const [suggestionCount, setSuggestionCount] = useState(0);
   /** The application-form review: everyone without a form, or one student from their row. */
+  const [feesSheetOpen, setFeesSheetOpen] = useState(false);
   const [formSheet, setFormSheet] = useState<{ open: boolean; studentId: string | null }>({
     open: false,
     studentId: null,
@@ -958,6 +963,9 @@ export default function TeacherStudents() {
         case 'review_forms':
           setFormSheet({ open: true, studentId: null });
           break;
+        case 'review_fees':
+          setFeesSheetOpen(true);
+          break;
         case 'show_never_signed_in':
           setMismatchOnly(false);
           handleSegmentChange('all_active');
@@ -1438,6 +1446,7 @@ export default function TeacherStudents() {
             mismatchCount={counts.mismatch}
             neverSignedInCount={filters.signIn === 'never' ? 0 : counts.neverSignedIn}
             noFormCount={filters.form === 'missing' ? 0 : counts.noForm}
+            noFeeCount={counts.noFee ?? 0}
             noStageCount={segment === 'unset' ? 0 : unsetTotal}
             noYearCount={counts.noYear}
             backInNexusCount={segment === 'dormant' && dormantView === 'back_in_nexus' ? 0 : counts.backInNexus}
@@ -1631,6 +1640,14 @@ export default function TeacherStudents() {
           }}
         />
       )}
+
+      <MissingFeesSheet
+        open={feesSheetOpen}
+        students={students.filter(
+          (s) => s.fee_missing === true && s.has_application_form === true && s.participation_status !== 'dormant',
+        )}
+        onClose={() => setFeesSheetOpen(false)}
+      />
 
       {activeClassroom && removeTarget && removeTarget.enrollment_id && (
         <RemoveStudentDialog

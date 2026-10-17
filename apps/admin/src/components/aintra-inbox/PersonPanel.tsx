@@ -2,17 +2,17 @@
 
 /**
  * Right pane of Conversations: who this is. Signed-in people get contact
- * buttons and a counsellor note; guests show what the device told us and a
- * one-click "ask to sign up next visit" that the marketing chat acts on.
+ * buttons and a counsellor note; guests show what the device told us and
+ * where they are with sign-in (Aintra is free on a guest's first day, and asks
+ * them to sign in when they come back on a later day: no staff action needed).
  */
 import { useEffect, useState } from 'react';
 import { Box, Button, CircularProgress, TextField, Typography } from '@neram/ui';
 import CallIcon from '@mui/icons-material/Call';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
-import PersonAddAltIcon from '@mui/icons-material/PersonAddAlt';
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { INTENT_LABELS } from '@/lib/aintra-inbox/intents';
-import type { InboxConversation, InboxPerson, Nudge } from '@/lib/aintra-inbox/types';
+import type { InboxConversation, InboxPerson } from '@/lib/aintra-inbox/types';
 import type { Notify } from './Transcript';
 import { fmtAgo, fmtDate, Pill, PersonAvatar, SectionLabel, sourceLabelOf, STAGE_TONE } from './ui';
 
@@ -120,79 +120,42 @@ function Notes({ userId, notify }: { userId: string; notify: Notify }) {
   );
 }
 
-function NudgeButton({ person, onNudge, notify }: { person: InboxPerson; onNudge: (n: Nudge | null) => void; notify: Notify }) {
-  const [busy, setBusy] = useState(false);
-  const n = person.nudge;
+/** Where a guest is with the automatic sign-in on their next day. */
+function SignInStatus({ person }: { person: InboxPerson }) {
   if (!person.anonymousId) {
     return (
       <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
-        This chat is from before visitors were tracked across visits, so a sign-up card cannot reach them.
+        This chat is from before visitors were tracked across visits, so Aintra cannot recognise them when they come back.
       </Typography>
     );
   }
-  const call = async (method: 'POST' | 'DELETE') => {
-    setBusy(true);
-    try {
-      const res = await fetch('/api/aintra-inbox/nudge', {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ anonymousId: person.anonymousId }),
-      });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json.error || 'Could not update');
-      onNudge(json.nudge ?? null);
-      notify(method === 'POST' ? 'Sign-up card queued for their next visit' : 'Sign-up card cancelled');
-    } catch (e) {
-      notify(e instanceof Error ? e.message : 'Could not update', 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (n && !n.shownAt) {
+  if (person.gatedAt) {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-        <Pill tone="primary" sx={{ alignSelf: 'flex-start' }}>
-          Sign-up card queued
+        <Pill tone="primary" sx={{ alignSelf: 'flex-start', gap: 0.5 }}>
+          <LockOutlinedIcon sx={{ fontSize: 14 }} aria-hidden /> Asked to sign in
         </Pill>
-        <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>
-          {[n.requestedByName ? `by ${n.requestedByName}` : null, fmtAgo(n.requestedAt)].filter(Boolean).join(', ')}. Shows with Aintra&apos;s next answer to them.
+        <Typography sx={{ fontSize: 12, color: 'text.secondary', lineHeight: 1.5 }}>
+          Came back on {fmtDate(person.gatedAt)} and was asked to sign in. Aintra answers again once they do.
         </Typography>
-        <Button size="small" onClick={() => call('DELETE')} disabled={busy} sx={{ alignSelf: 'flex-start', minHeight: 44 }}>
-          Cancel
-        </Button>
       </Box>
     );
   }
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
-      {n?.shownAt && (
-        <Typography sx={{ fontSize: 12, color: 'success.dark', display: 'flex', gap: 0.5, alignItems: 'center' }}>
-          <CheckCircleOutlineIcon sx={{ fontSize: 16 }} aria-hidden /> Sign-up card shown on {fmtDate(n.shownAt)}
-        </Typography>
-      )}
-      <Button
-        variant="outlined"
-        onClick={() => call('POST')}
-        disabled={busy}
-        startIcon={busy ? <CircularProgress size={14} /> : <PersonAddAltIcon />}
-        sx={{ minHeight: 44 }}
-      >
-        {n?.shownAt ? 'Ask again next visit' : 'Ask to sign up next visit'}
-      </Button>
-    </Box>
+    <Typography sx={{ fontSize: 12, color: 'text.secondary', lineHeight: 1.5 }}>
+      Aintra is free on their first day ({fmtDate(person.firstSeen)}). If they come back on a later day, it asks them to sign in
+      before answering.
+    </Typography>
   );
 }
 
 export default function PersonPanel({
   person,
   conversation,
-  onNudge,
   notify,
 }: {
   person: InboxPerson | null;
   conversation: InboxConversation | null;
-  onNudge: (personKey: string, n: Nudge | null) => void;
   notify: Notify;
 }) {
   if (!person || !conversation) {
@@ -211,20 +174,20 @@ export default function PersonPanel({
     <Box component="aside" aria-label={`About ${p.isGuest ? `guest ${p.guestTag}` : p.name}`} sx={{ display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ p: 2.5, display: 'flex', flexDirection: 'column', gap: 1.75, borderBottom: 1, borderColor: 'divider' }}>
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
-          <PersonAvatar isGuest={p.isGuest} initials={p.initials} src={p.avatarUrl} size={48} />
+          <PersonAvatar isGuest={p.isGuest} initials={p.initials} src={p.avatarUrl} enrolled={p.enrolled} size={48} />
           <Box sx={{ minWidth: 0 }}>
             <Typography sx={{ fontWeight: 700, fontSize: 16, lineHeight: 1.25 }}>{p.isGuest ? `Guest ${p.guestTag}` : p.name}</Typography>
             <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>
-              {p.isGuest ? 'No account · not contactable' : p.profileLabel ?? 'Signed in'}
+              {p.isGuest ? 'No account · not contactable' : p.enrolled ? 'Enrolled Neram student' : p.profileLabel ?? 'Signed in'}
             </Typography>
           </Box>
         </Box>
         {p.isGuest ? (
           <>
             <Typography sx={{ fontSize: 13, color: 'text.secondary', lineHeight: 1.5 }}>
-              Only device signals are known. Ask them to sign up in chat to turn this visitor into a lead.
+              Only device signals are known until they sign in.
             </Typography>
-            <NudgeButton person={p} onNudge={(n) => onNudge(p.key, n)} notify={notify} />
+            <SignInStatus person={p} />
           </>
         ) : (
           <Box sx={{ display: 'flex', gap: 1 }}>

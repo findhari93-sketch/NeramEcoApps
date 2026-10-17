@@ -20,10 +20,10 @@ export async function generateMetadata({
   params: { locale: string };
 }): Promise<Metadata> {
   return {
-    title: `TNEA TFC List 2026: ${tfcs.length}+ Facilitation Centres in Tamil Nadu`,
-    description: `Find your nearest TNEA Facilitation Centre. Search ${tfcs.length}+ TFCs across ${districts.length} districts of Tamil Nadu. Address, phone, working hours (9 AM to 5 PM), and map for every centre.`,
+    title: `TNEA TFC Centre Near Me: ${tfcs.length}+ Centres`,
+    description: `Find the TNEA TFC centre near you: ${tfcs.length}+ facilitation centres across ${districts.length} districts of Tamil Nadu, each with address, phone, hours (9 AM to 5 PM) and a map link.`,
     keywords:
-      'TNEA TFC list 2026, TNEA facilitation centre, TNEA centre Chennai, TNEA centre Coimbatore, TNEA centre Madurai, TNEA registration centre near me',
+      'TFC centre near me, TNEA TFC centre, TNEA TFC list 2026, TNEA facilitation centre, TNEA centre Chennai, TNEA centre Coimbatore, TNEA centre Madurai, TNEA registration centre near me',
     alternates: buildAlternates(locale, `/counseling/tnea-barch/${SPOKE}`),
   };
 }
@@ -62,8 +62,8 @@ export default function TfcListPage({
       locale={locale}
       spokeSlug={SPOKE}
       spokeChip="TFC Locator"
-      topicTitle={`${tfcs.length}+ TNEA Facilitation Centres in Tamil Nadu`}
-      topicSubtitle={`Search by city, college name, or filter by district. Every TFC has working hours of 9 AM to 5 PM, click-to-call phone numbers, and a Google Maps link.`}
+      topicTitle={`Find a TNEA TFC Centre Near You: ${tfcs.length}+ in Tamil Nadu`}
+      topicSubtitle={`To find your nearest TFC centre, search by city or college name, or filter by district. Every TFC has working hours of 9 AM to 5 PM, click-to-call phone numbers, and a Google Maps link.`}
       jsonLd={[itemListSchema, ...localBusinessSchemas]}
       related={[
         { label: 'How to Apply', href: 'how-to-apply' },

@@ -37,7 +37,7 @@ describe('a Node-minted grant verifies in the Worker', () => {
     expect(verifyVideoToken(token)).toMatchObject({ refId: 'recap-1' });
   });
 
-  it.each(['recap', 'class', 'foundation'] as const)('accepts the %s scope', async (scope) => {
+  it.each(['recap', 'class', 'foundation', 'class_original'] as const)('accepts the %s scope', async (scope) => {
     const { token } = mintVideoToken({ ...base, scope });
     expect((await verifyVideoGrant(token, SECRET))?.scope).toBe(scope);
   });

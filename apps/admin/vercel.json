@@ -12,6 +12,8 @@
     { "path": "/api/cron/marketing-ai/weekly", "schedule": "0 2 * * 1" },
     { "path": "/api/cron/demo-messages", "schedule": "*/5 * * * *" },
     { "path": "/api/cron/follow-up-digest", "schedule": "30 3 * * *" },
+    { "path": "/api/cron/fee-reminders", "schedule": "0 4 * * *" },
+    { "path": "/api/cron/support-tickets-auto-close", "schedule": "45 2 * * *" },
     { "path": "/api/cron/college-photos", "schedule": "0 23 * * *" },
     { "path": "/api/cron/college-content", "schedule": "30 23 * * *" },
     { "path": "/api/cron/gbp-sync", "schedule": "15 22 * * *" },

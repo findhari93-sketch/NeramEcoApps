@@ -35,6 +35,12 @@ export interface SeekMark {
   at: number;
   label: string;
   passed?: boolean;
+  /**
+   * 'skip': where the trim took out a pause, drawn as a small white tick so it
+   * cannot be mistaken for a checkpoint. The player's "Watch it" chip is how a
+   * student opens one; the tick only shows where they are.
+   */
+  kind?: 'checkpoint' | 'skip';
 }
 
 export interface SeekBarProps {
@@ -54,6 +60,8 @@ export interface SeekBarProps {
   /** Holds the controls open while a drag is in progress. */
   onScrubbingChange?: (scrubbing: boolean) => void;
   disabled?: boolean;
+  /** What the lock means, when it is not a checkpoint quiz. */
+  lockLabel?: string;
 }
 
 const PLAYED = '#42A5F5';
@@ -69,6 +77,7 @@ export default function SeekBar({
   onRefused,
   onScrubbingChange,
   disabled = false,
+  lockLabel,
 }: SeekBarProps) {
   const trackRef = useRef<HTMLDivElement | null>(null);
   /**
@@ -285,7 +294,7 @@ export default function SeekBar({
         >
           {hoveringLocked && <LockRoundedIcon sx={{ fontSize: 12 }} />}
           <Typography sx={{ fontSize: 11, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-            {hoveringLocked ? 'Pass the quiz to unlock' : formatClock(hover.t)}
+            {hoveringLocked ? lockLabel ?? 'Pass the quiz to unlock' : formatClock(hover.t)}
           </Typography>
         </Box>
       )}
@@ -305,7 +314,7 @@ export default function SeekBar({
         aria-valuenow={Math.round(displayed)}
         aria-valuetext={
           lockedAt !== null
-            ? `${formatSpoken(displayed)} of ${formatSpoken(duration)}. Locked after ${formatSpoken(lockedAt)} until you pass the checkpoint quiz.`
+            ? `${formatSpoken(displayed)} of ${formatSpoken(duration)}. ${lockLabel ?? `Locked after ${formatSpoken(lockedAt)} until you pass the checkpoint quiz.`}`
             : `${formatSpoken(displayed)} of ${formatSpoken(duration)}`
         }
         aria-disabled={disabled || undefined}
@@ -377,7 +386,27 @@ export default function SeekBar({
             }}
           />
 
-          {marks.map((m) => {
+          {marks
+            .filter((m) => m.kind === 'skip')
+            .map((m) => (
+              <Box
+                key={m.id}
+                aria-hidden
+                data-testid="seek-skip-mark"
+                sx={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: `${pct(m.at)}%`,
+                  transform: 'translate(-50%, -50%)',
+                  width: 2,
+                  height: 8,
+                  borderRadius: 1,
+                  bgcolor: 'rgba(255,255,255,0.85)',
+                }}
+              />
+            ))}
+
+          {marks.filter((m) => m.kind !== 'skip').map((m) => {
             // A question count on a checkpoint the student has not reached leaks
             // the shape of content that is deliberately locked. Position only.
             const beyond = lockedAt !== null && m.at > lockedAt;

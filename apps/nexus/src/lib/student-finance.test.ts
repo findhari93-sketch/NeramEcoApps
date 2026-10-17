@@ -166,6 +166,42 @@ describe('computeFeeSummary: the canonical arithmetic', () => {
   });
 });
 
+describe('computeFeeSummary: the installment plan', () => {
+  it('prefers the earliest installment that is neither paid nor waived', () => {
+    const s = computeFeeSummary({
+      finalFee: 30000,
+      payments: [paid(15000)],
+      nextPaymentDate: '2026-09-01',
+      installments: [
+        { installment_number: 1, due_date: '2026-07-01', status: 'paid' },
+        { installment_number: 3, due_date: '2026-12-20', status: 'pending' },
+        { installment_number: 2, due_date: '2026-11-15', status: 'pending' },
+        { installment_number: 4, due_date: '2026-10-01', status: 'waived' },
+      ],
+    });
+    expect(s.nextDue).toEqual({ date: '2026-11-15', source: 'installment' });
+  });
+
+  it('ignores an open installment once the balance is cleared', () => {
+    const s = computeFeeSummary({
+      finalFee: 30000,
+      payments: [paid(30000)],
+      installments: [{ installment_number: 2, due_date: '2026-11-15', status: 'pending' }],
+    });
+    expect(s.nextDue).toEqual({ date: null, source: null });
+  });
+
+  it('takes the online full-payment discount off the agreed total', () => {
+    const s = computeFeeSummary({
+      finalFee: 30000,
+      plan: { payment_scheme: 'full', full_payment_discount: 2000, allowed_payment_modes: 'full_and_installment' },
+      payments: [paid(28000)],
+    });
+    expect(s.agreed).toBe(28000);
+    expect(s.balance).toBe(0);
+  });
+});
+
 describe('computeFeeSummary: the next-due fallback chain', () => {
   it('prefers the date a human set on the student profile', () => {
     const s = computeFeeSummary({

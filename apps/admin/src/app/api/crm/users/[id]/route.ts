@@ -7,26 +7,16 @@ import {
   adminUpdateLeadProfile,
   createAdminClient,
   recordUserHistory,
+  STAFF_APPLICATION_FIELDS,
 } from '@neram/database';
 
 /**
- * Fields staff may fill in when a student has no application yet. The same set the
- * Edit Application dialog edits, plus academic_data for the current class, which
- * Nexus reads to set the student's class.
+ * Fields staff may fill in when a student has no application yet. The shared
+ * list (STAFF_APPLICATION_FIELDS) is also what the Application and fees form
+ * writes, so both paths fill the same columns. It includes academic_data for
+ * the current class, which Nexus reads to set the student's class.
  */
-const NEW_APPLICATION_FIELDS = [
-  'father_name',
-  'applicant_category',
-  'academic_data',
-  'interest_course',
-  'learning_mode',
-  'school_type',
-  'caste_category',
-  'target_exam_year',
-  'city',
-  'state',
-  'pincode',
-] as const;
+const NEW_APPLICATION_FIELDS = STAFF_APPLICATION_FIELDS;
 
 class HttpError extends Error {
   constructor(message: string, public status: number) {

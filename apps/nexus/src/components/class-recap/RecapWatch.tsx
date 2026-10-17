@@ -41,6 +41,8 @@ import type { VideoGateMode } from '@/lib/video-gate';
 import { coveredWithin } from '@/lib/played-ranges';
 import { describeTrimSaving, type TrimSaving } from '@/lib/recap-trim-saving';
 import ContentCutRoundedIcon from '@mui/icons-material/ContentCutRounded';
+import SkippedPartSheet from './SkippedPartSheet';
+import type { SkippedPart } from '@/lib/trim-skipped-parts';
 
 export interface RecapSection {
   id: string;
@@ -105,6 +107,10 @@ export default function RecapWatch({
 
   const [recap, setRecap] = useState<Recap | null>(null);
   const [trimSaving, setTrimSaving] = useState<TrimSaving | null>(null);
+  /** Pauses the trim skipped, each one a "Watch it" in the player. */
+  const [skipped, setSkipped] = useState<SkippedPart[]>([]);
+  /** The skipped pause open in the sheet, if any. */
+  const [skippedOpen, setSkippedOpen] = useState<SkippedPart | null>(null);
   /**
    * Starts strict and is only ever relaxed by the server's answer. A render
    * between mount and the fetch landing therefore gates, which is the safe way
@@ -143,6 +149,7 @@ export default function RecapWatch({
       const r = res.recap as Recap;
       setRecap(r);
       setTrimSaving(describeTrimSaving(r.video_duration_seconds, res.trim_removed_seconds));
+      setSkipped(Array.isArray(res.trim_skipped) ? res.trim_skipped : []);
       // Anything the server did not say is 'gated'. There is no client default
       // that opens the gate.
       const mode: VideoGateMode = res.watch_mode === 'revision' ? 'revision' : 'gated';
@@ -403,6 +410,7 @@ export default function RecapWatch({
             </Box>{' '}
             We cut {trimSaving.savedMinutes} {trimSaving.savedMinutes === 1 ? 'minute' : 'minutes'}{' '}
             of waiting and silence, so you only watch the teaching.
+            {skipped.length > 0 && ' Longer pauses show a Watch it button as you pass them, if you want to see what was on screen.'}
           </Typography>
         </Box>
       )}
@@ -426,6 +434,8 @@ export default function RecapWatch({
           title={recap.title}
           onFullscreenChange={setQuizHost}
           mode={watchMode}
+          skipped={skipped}
+          onWatchSkipped={setSkippedOpen}
         />
       </Box>
 
@@ -580,6 +590,17 @@ export default function RecapWatch({
           })}
         </Stack>
       )}
+
+      {/* A pause the trim skipped, from the full recording. Back resumes the class. */}
+      <SkippedPartSheet
+        recapId={recap.id}
+        part={skippedOpen}
+        container={quizHost}
+        onClose={() => {
+          setSkippedOpen(null);
+          setTimeout(() => (window as any).__recapPlayer?.play(), 150);
+        }}
+      />
 
       {/* Mandatory checkpoint quiz */}
       {activeSection && (

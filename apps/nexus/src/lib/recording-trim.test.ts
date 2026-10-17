@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 vi.mock('@neram/database', () => ({ getNexusSetting: vi.fn(async () => null) }));
 vi.mock('./recording-source-cache', () => ({ evictMedia: vi.fn() }));
 
-import { failTrimJob, requeueTrim } from './recording-trim';
+import { chooseCutMethod, failTrimJob, requeueTrim } from './recording-trim';
 
 /**
  * Re-trimming a class students already watch trimmed (founder, 2026-10-15).
@@ -89,5 +89,14 @@ describe('failTrimJob during a re-trim', () => {
     const { client, updates } = fakeSupabase({ id: 't1', previous: null });
     await failTrimJob(client, 't1', 'WORKER_FAILED');
     expect(updates[0]).toMatchObject({ status: 'failed', reason: 'WORKER_FAILED' });
+  });
+});
+
+describe('chooseCutMethod', () => {
+  it('re-encodes only when the setting wants it and the worker can', () => {
+    expect(chooseCutMethod({ cutMethod: 'reencode' }, { cut_methods: ['copy', 'reencode'] })).toBe('reencode');
+    // A worker from before re-encoding sends nothing: its plan must stay keyframe-snapped.
+    expect(chooseCutMethod({ cutMethod: 'reencode' }, {})).toBe('copy');
+    expect(chooseCutMethod({ cutMethod: 'copy' }, { cut_methods: ['copy', 'reencode'] })).toBe('copy');
   });
 });

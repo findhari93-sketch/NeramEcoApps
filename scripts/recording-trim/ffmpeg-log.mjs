@@ -79,3 +79,16 @@ export function medianKeyframeGap(keyframes) {
   gaps.sort((a, b) => a - b);
   return gaps[Math.floor(gaps.length / 2)];
 }
+
+/** Cue times from a WebVTT file: [[start, end], ...]. Hours are optional. */
+export function cueSpans(vtt) {
+  const time = (h, m, s) => Number(h || 0) * 3600 + Number(m) * 60 + Number(s);
+  const re = /(?:(\d+):)?(\d+):(\d+(?:\.\d+)?)\s*-->\s*(?:(\d+):)?(\d+):(\d+(?:\.\d+)?)/g;
+  const out = [];
+  for (const m of String(vtt).matchAll(re)) {
+    const a = time(m[1], m[2], m[3]);
+    const b = time(m[4], m[5], m[6]);
+    if (b > a) out.push([a, b]);
+  }
+  return out;
+}

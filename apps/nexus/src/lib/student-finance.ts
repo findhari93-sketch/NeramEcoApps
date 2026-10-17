@@ -36,6 +36,8 @@
  * is worse than one total that might be stale.
  */
 
+import { effectiveAgreedFee } from '@neram/database/fee-plan';
+
 // ─── Column allowlists ───────────────────────────────────────────────────────
 
 /** Identifiers. No signal on their own, needed by both routes. */
@@ -169,6 +171,7 @@ export interface PaymentRow {
 }
 
 export type NextDueSource =
+  | 'installment'
   | 'student_profile'
   | 'application_deadline'
   | 'derived_installment';
@@ -176,6 +179,21 @@ export type NextDueSource =
 export interface FeeInputs {
   /** lead_profiles.final_fee. null when there is no application on file. */
   finalFee: number | null | undefined;
+  /**
+   * The rest of the fee lead's plan, so a full payer's online discount is taken
+   * off the agreed total the same way Admin and the student page do
+   * (effectiveAgreedFee in @neram/database/fee-plan).
+   */
+  plan?: {
+    payment_scheme?: string | null;
+    full_payment_discount?: number | string | null;
+    allowed_payment_modes?: string | null;
+  } | null;
+  /**
+   * payment_installments on the fee lead. The earliest one not paid or waived
+   * is the next due date: it is the date the office actually agreed.
+   */
+  installments?: { installment_number?: number | null; due_date: string | null; status: string | null }[] | null;
   payments: PaymentRow[];
   /** student_profiles.next_payment_date */
   nextPaymentDate?: string | null;
@@ -227,16 +245,29 @@ export function computeFeeSummary(input: FeeInputs): FeeSummary {
   // A missing agreement stays null all the way to the UI. Collapsing it to 0
   // would render a fake settled balance for every staff-added student.
   const agreed =
-    input.finalFee === null || input.finalFee === undefined || Number.isNaN(input.finalFee)
+    input.finalFee === null || input.finalFee === undefined || Number.isNaN(Number(input.finalFee))
       ? null
-      : Number(input.finalFee);
+      : effectiveAgreedFee({
+          id: '',
+          final_fee: Number(input.finalFee),
+          payment_scheme: input.plan?.payment_scheme ?? null,
+          full_payment_discount: input.plan?.full_payment_discount ?? null,
+          allowed_payment_modes: input.plan?.allowed_payment_modes ?? null,
+        });
 
   const balance = agreed === null ? null : Math.max(0, agreed - paid);
 
   // Three sources, in descending order of how directly a human set them. The
   // UI names which one it used, so nobody mistakes a derived date for a promise.
+  // A scheduled installment comes first: the office set that date on purpose,
+  // and the cache's next_payment_date is only a copy of it.
+  const openInstallment = (input.installments || [])
+    .filter((i) => i.due_date && i.status !== 'paid' && i.status !== 'waived')
+    .sort((a, b) => String(a.due_date).localeCompare(String(b.due_date)))[0];
   let nextDue: FeeSummary['nextDue'] = { date: null, source: null };
-  if (input.nextPaymentDate) {
+  if (openInstallment && (balance === null || balance > 0)) {
+    nextDue = { date: openInstallment.due_date, source: 'installment' };
+  } else if (input.nextPaymentDate) {
     nextDue = { date: input.nextPaymentDate, source: 'student_profile' };
   } else if (input.paymentDeadline) {
     nextDue = { date: input.paymentDeadline, source: 'application_deadline' };

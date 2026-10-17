@@ -43,6 +43,10 @@ const conv = (over: Record<string, unknown>) => ({
   reviewCount: 0,
   errorCount: 0,
   creditErrorCount: 0,
+  queueAt: [],
+  gatedAt: null,
+  avatarUrl: null,
+  enrolled: false,
   ...over,
 });
 
@@ -66,6 +70,7 @@ const PAYLOAD = {
       intents: ['fees', 'timings'],
       status: 'review',
       reviewCount: 1,
+      queueAt: [minsAgo(30)],
     }),
     conv({
       id: 's-user',
@@ -85,6 +90,7 @@ const PAYLOAD = {
       lastQuestion: 'Is the NATA 2027 exam date announced?',
       intents: ['exam_dates'],
       status: 'ok',
+      enrolled: true,
     }),
     conv({
       id: 's-credits',
@@ -98,6 +104,7 @@ const PAYLOAD = {
       status: 'error',
       errorCount: 1,
       creditErrorCount: 1,
+      queueAt: [minsAgo(90)],
     }),
   ],
   people: [
@@ -105,25 +112,27 @@ const PAYLOAD = {
       key: `a:${GUEST_ANON}`, userId: null, anonymousId: GUEST_ANON, isGuest: true, name: 'Guest', guestTag: '#4A1F', initials: '',
       phone: null, email: null, avatarUrl: null, profileLabel: null, joinedAt: null, place: 'Madurai, Tamil Nadu', channel: 'meta_ads',
       device: 'Android · Chrome', visits: 3, firstSeen: minsAgo(5000), lastAt: minsAgo(30), lastQuestion: 'What are the course fees?',
-      lastConversationId: 's-guest', intents: ['fees', 'timings'], stage: 'Warm', nudge: null,
+      lastConversationId: 's-guest', intents: ['fees', 'timings'], stage: 'Warm', nudge: null, enrolled: false, gatedAt: null,
     },
     {
       key: 'u:u1', userId: 'u1', anonymousId: null, isGuest: false, name: 'Arjun Selvam', guestTag: null, initials: 'AS',
       phone: '+919444055218', email: 'arjun@example.com', avatarUrl: null, profileLabel: 'School Student · NATA', joinedAt: minsAgo(40000),
       place: 'Chennai, Tamil Nadu', channel: 'youtube', device: null, visits: 7, firstSeen: minsAgo(40000), lastAt: minsAgo(60),
       lastQuestion: 'Is the NATA 2027 exam date announced?', lastConversationId: 's-user', intents: ['exam_dates'], stage: 'Enrolled', nudge: null,
+      enrolled: true, gatedAt: null,
     },
     {
       key: 's:s-credits', userId: null, anonymousId: null, isGuest: true, name: 'Guest', guestTag: '#77C2', initials: '',
       phone: null, email: null, avatarUrl: null, profileLabel: null, joinedAt: null, place: null, channel: null, device: null, visits: 1,
       firstSeen: minsAgo(90), lastAt: minsAgo(90), lastQuestion: 'Do you have weekend batches?', lastConversationId: 's-credits',
-      intents: ['timings'], stage: 'Warm', nudge: null,
+      intents: ['timings'], stage: 'Warm', nudge: null, enrolled: false, gatedAt: null,
     },
   ],
 };
 
 const turn = (over: Record<string, unknown>) => ({
   at: minsAgo(30), error: null, status: 'none', thumbsUp: null, correction: null, correctedByName: null, correctedAt: null,
+  resolvedAt: null, resolvedByName: null,
   promotedToKb: false, aiReview: null, model: 'gemini-2.5-flash', responseMs: 1800, tools: [], pageUrl: '/', ...over,
 });
 
@@ -139,14 +148,27 @@ const TURNS: Record<string, unknown[]> = {
     }),
   ],
   's-user': [turn({ id: 't3', question: 'Is the NATA 2027 exam date announced?', answer: 'Not yet.', status: 'ok', thumbsUp: true })],
-  's-credits': [turn({ id: 't4', question: 'Do you have weekend batches?', answer: null, error: 'CREDITS_DEPLETED', status: 'error' })],
+  's-credits': [turn({ id: 't4', at: minsAgo(90), question: 'Do you have weekend batches?', answer: null, error: 'CREDITS_DEPLETED', status: 'error' })],
 };
 
 async function mockInbox(page: Page) {
   const patches: { id: string; body: any }[] = [];
   const kbPosts: any[] = [];
   const nudges: any[] = [];
-  await page.route('**/api/aintra-inbox', (r) => r.fulfill({ json: PAYLOAD }));
+  const resolves: any[] = [];
+  let payload: any = PAYLOAD;
+  await page.route('**/api/aintra-inbox', (r) => r.fulfill({ json: payload }));
+  await page.route('**/api/aintra-inbox/resolve', (r) => {
+    resolves.push(JSON.parse(r.request().postData() || '{}'));
+    // After the bulk resolve, the reload shows the credits chat resolved.
+    payload = {
+      ...PAYLOAD,
+      conversations: PAYLOAD.conversations.map((c: any) =>
+        c.id === 's-credits' ? { ...c, status: 'resolved', turnStatuses: ['resolved'], errorCount: 0, creditErrorCount: 0, queueAt: [] } : c
+      ),
+    };
+    return r.fulfill({ json: { resolved: 1 } });
+  });
   await page.route('**/api/aintra-inbox/conversation/*', (r) => {
     const id = decodeURIComponent(r.request().url().split('/').pop()!);
     return r.fulfill({ json: { turns: TURNS[id] ?? [] } });
@@ -173,6 +195,8 @@ async function mockInbox(page: Page) {
           corrected_by_name: body.admin_correction ? 'Test Teacher' : null,
           corrected_at: body.admin_correction ? NOW.toISOString() : null,
           promoted_to_kb: !!body.promoted_to_kb,
+          resolved_at: body.resolved ? NOW.toISOString() : null,
+          resolved_by_name: body.resolved ? 'Test Teacher' : null,
         },
       },
     });
@@ -186,7 +210,7 @@ async function mockInbox(page: Page) {
     kbPosts.push(JSON.parse(r.request().postData() || '{}'));
     return r.fulfill({ json: { data: { id: 'kb1' } } });
   });
-  return { patches, kbPosts, nudges };
+  return { patches, kbPosts, nudges, resolves };
 }
 
 /** Opens the page; skips the test when the runner has no Microsoft session (as the other admin UI specs do). */
@@ -302,12 +326,64 @@ test.describe('Aintra Inbox @admin', () => {
     await expect(transcript.getByRole('button', { name: 'Good answer' })).toHaveCount(0);
   });
 
-  test('guest: ask to sign up next visit queues the card', async ({ page }) => {
+  test('guest: sign-in on a later day is automatic, with no manual button', async ({ page }) => {
+    await mockInbox(page);
+    await open(page);
+    const panel = page.getByRole('complementary', { name: /guest #4A1F/i });
+    await expect(panel.getByText(/Aintra is free on their first day/)).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Ask to sign up next visit' })).toHaveCount(0);
+  });
+
+  test('a guest who came back and was asked to sign in is shown as such, not in the queue', async ({ page }) => {
+    await mockInbox(page);
+    // Added last, so it answers before the default payload route.
+    await page.route('**/api/aintra-inbox', (r) =>
+      r.fulfill({
+        json: { ...PAYLOAD, people: PAYLOAD.people.map((p: any) => (p.key === `a:${GUEST_ANON}` ? { ...p, gatedAt: minsAgo(10) } : p)) },
+      })
+    );
+    await open(page);
+    const panel = page.getByRole('complementary', { name: /guest #4A1F/i });
+    await expect(panel.getByText('Asked to sign in')).toBeVisible();
+  });
+
+  test('Mark resolved takes an unanswered question out of the Review queue, and Undo puts it back', async ({ page }) => {
+    const calls = await mockInbox(page);
+    await open(page, '/aintra-inbox?c=s-credits');
+    await expect(page.getByRole('button', { name: /Review queue · 2/ })).toBeVisible();
+    const transcript = page.getByRole('region', { name: 'Transcript' });
+    await transcript.getByRole('button', { name: 'Mark resolved' }).click();
+    await expect(transcript.getByText(/Resolved: credits ran out, no answer needed/)).toBeVisible();
+    await expect(page.getByRole('button', { name: /Review queue · 1/ })).toBeVisible();
+    expect(calls.patches.some((p) => p.id === 't4' && p.body.resolved === true)).toBe(true);
+    await transcript.getByRole('button', { name: 'Undo' }).click();
+    await expect(page.getByRole('button', { name: /Review queue · 2/ })).toBeVisible();
+    expect(calls.patches.some((p) => p.id === 't4' && p.body.resolved === false)).toBe(true);
+  });
+
+  test('Resolve all clears every credits ran out question after a confirm', async ({ page }) => {
     const calls = await mockInbox(page);
     await open(page);
-    await page.getByRole('button', { name: 'Ask to sign up next visit' }).click();
-    await expect(page.getByText('Sign-up card queued')).toBeVisible();
-    expect(calls.nudges[0]).toMatchObject({ method: 'POST', body: { anonymousId: GUEST_ANON } });
+    const list = page.getByRole('region', { name: 'Conversations' });
+    await list.getByRole('button', { name: /Credits ran out · 1/ }).click();
+    const banner = list.getByRole('region', { name: 'Resolve credits ran out' });
+    await banner.getByRole('button', { name: 'Resolve all' }).click();
+    // Nothing is sent until the confirm.
+    expect(calls.resolves).toEqual([]);
+    await banner.getByRole('button', { name: 'Resolve 1' }).click();
+    await expect(page.getByText('1 question marked resolved')).toBeVisible();
+    expect(calls.resolves[0]).toEqual({ kind: 'credits' });
+    await expect(page.getByRole('button', { name: /Review queue · 1/ })).toBeVisible();
+  });
+
+  test('an enrolled student shows the gold ring and says so', async ({ page }) => {
+    await mockInbox(page);
+    await open(page, '/aintra-inbox?c=s-user');
+    const transcript = page.getByRole('region', { name: 'Transcript' });
+    await expect(transcript.getByText('Enrolled student', { exact: true })).toBeVisible();
+    await expect(page.locator('[title="Enrolled student"]').first()).toBeVisible();
+    const panel = page.getByRole('complementary', { name: /Arjun Selvam/ });
+    await expect(panel.getByText('Enrolled Neram student')).toBeVisible();
   });
 
   test('signed in: Call and WhatsApp link to the phone', async ({ page }) => {

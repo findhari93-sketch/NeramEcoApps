@@ -140,7 +140,7 @@ export default function HelpPage() {
         </Box>
         <Button
           component={Link}
-          href="/support"
+          href="/support?new=1"
           variant="contained"
           endIcon={<ArrowForwardRoundedIcon />}
           sx={{ minHeight: 48, flexShrink: 0 }}

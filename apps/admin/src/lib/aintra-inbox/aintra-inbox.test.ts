@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { intentsOf, intentsOfMany, isHot } from './intents';
 import { inReviewQueue, isCreditsError, turnStatus, worstStatus } from './status';
 import { leadStage } from './stage';
-import { buildConversations, buildPeople, dayBucket, guestTag, initialsOf, istDay } from './build';
+import { buildConversations, buildPeople, countQueue, dayBucket, guestTag, initialsOf, istDay, withTurns } from './build';
 import { buildInsights, normalizeQuestion } from './insights';
 import { parseAnswer, plainInline, sourceLabel } from './answer';
 import type { InboxRow, InboxUser, Nudge } from './types';
@@ -20,6 +20,7 @@ function row(p: Partial<InboxRow> & { id: string; session_id: string; created_at
     error: null,
     thumbs_up: null,
     has_correction: false,
+    resolved: false,
     promoted_to_kb: false,
     ai_verdict: null,
     geo_city: null,
@@ -39,6 +40,7 @@ const user = (p: Partial<InboxUser> & { id: string }): InboxUser => ({
   avatarUrl: null,
   joinedAt: null,
   firstChannel: null,
+  anonymousId: null,
   profileLabel: null,
   enrolled: false,
   demoBooked: false,
@@ -258,5 +260,73 @@ describe('answer rendering', () => {
     expect(sourceLabel([])).toBe('Knowledge base');
     expect(sourceLabel(['search_colleges', 'get_college'])).toBe('College directory');
     expect(sourceLabel(['some_tool'])).toBe('Some tool');
+  });
+});
+
+describe('resolved, sign-in gate and enrolled students', () => {
+  const base = { error: null, thumbs_up: null, has_correction: false, ai_verdict: null } as const;
+
+  it('a resolved question leaves the queue; a saved correction still wins', () => {
+    expect(turnStatus({ ...base, error: 'CREDITS_DEPLETED', resolved: true })).toBe('resolved');
+    expect(turnStatus({ ...base, thumbs_up: false, resolved: true })).toBe('resolved');
+    expect(turnStatus({ ...base, error: 'CREDITS_DEPLETED', resolved: true, has_correction: true })).toBe('corrected');
+    expect(inReviewQueue('resolved')).toBe(false);
+  });
+
+  it('a returning guest asked to sign in is not a failure', () => {
+    expect(turnStatus({ ...base, error: 'SIGNUP_REQUIRED' })).toBe('gated');
+    expect(inReviewQueue('gated')).toBe(false);
+    expect(worstStatus(['ok', 'gated'])).toBe('gated');
+    expect(worstStatus(['gated', 'error'])).toBe('error');
+  });
+
+  it('counts the queue per question asked in the last 30 days, like the badge', () => {
+    const rows = [
+      row({ id: 'q1', session_id: 's1', created_at: '2026-10-14T10:00:00Z', error: 'CREDITS_DEPLETED' }),
+      row({ id: 'q2', session_id: 's1', created_at: '2026-10-14T10:01:00Z', error: 'CREDITS_DEPLETED', resolved: true }),
+      row({ id: 'q3', session_id: 's1', created_at: '2026-10-14T10:02:00Z', error: 'SIGNUP_REQUIRED' }),
+      // Old question in a chat that is otherwise recent: outside the window.
+      row({ id: 'q4', session_id: 's2', created_at: '2026-08-01T10:00:00Z', thumbs_up: false }),
+      row({ id: 'q5', session_id: 's2', created_at: '2026-10-15T10:00:00Z', thumbs_up: false }),
+    ];
+    const convs = buildConversations(rows, new Map(), NOW);
+    expect(countQueue(convs, NOW)).toBe(2);
+    const s1 = convs.find((c) => c.id === 's1')!;
+    expect(s1.errorCount).toBe(1);
+    expect(s1.creditErrorCount).toBe(1);
+    expect(s1.gatedAt).toBe('2026-10-14T10:02:00Z');
+  });
+
+  it('withTurns keeps the queue dates in line after a resolve', () => {
+    const [c] = buildConversations([row({ id: 'q1', session_id: 's1', created_at: '2026-10-14T10:00:00Z', error: 'CREDITS_DEPLETED' })], new Map(), NOW);
+    expect(countQueue([c], NOW)).toBe(1);
+    const next = withTurns(c, [
+      {
+        id: 'q1', at: '2026-10-14T10:00:00Z', question: 'Fees?', answer: null, error: 'CREDITS_DEPLETED', status: 'resolved',
+        thumbsUp: null, correction: null, correctedByName: null, correctedAt: null, resolvedAt: '2026-10-15T10:00:00Z',
+        resolvedByName: 'Hari', promotedToKb: false, aiReview: null, model: null, responseMs: null, tools: [], pageUrl: null,
+      },
+    ]);
+    expect(countQueue([next], NOW)).toBe(0);
+    expect(next.status).toBe('resolved');
+  });
+
+  it('carries the photo and the enrolled flag, and joins guest chats to the account made from them', () => {
+    const users = new Map<string, InboxUser>([
+      ['u1', user({ id: 'u1', name: 'Kavya R', avatarUrl: 'https://x/k.jpg', enrolled: true, anonymousId: 'anon_aaaa' })],
+    ]);
+    const rows = [
+      row({ id: 'g1', session_id: 'guest-chat', created_at: '2026-10-10T10:00:00Z', anonymous_id: 'anon_aaaa' }),
+      row({ id: 'm1', session_id: 'signed-chat', created_at: '2026-10-15T10:00:00Z', user_id: 'u1', anonymous_id: 'anon_aaaa' }),
+    ];
+    const convs = buildConversations(rows, users, NOW);
+    const signed = convs.find((c) => c.id === 'signed-chat')!;
+    expect(signed.enrolled).toBe(true);
+    expect(signed.avatarUrl).toBe('https://x/k.jpg');
+    expect(convs.find((c) => c.id === 'guest-chat')!.personKey).toBe('u:u1');
+
+    const people = buildPeople(convs, users, new Map(), NOW);
+    expect(people).toHaveLength(1);
+    expect(people[0]).toMatchObject({ name: 'Kavya R', enrolled: true, isGuest: false, visits: 2 });
   });
 });

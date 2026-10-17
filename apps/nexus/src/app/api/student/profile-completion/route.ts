@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
 import { assessApplication, getSupabaseAdminClient } from '@neram/database';
 import {
+  getLatestRecordCheck,
   getLiveDetailRequestForUser,
   markDetailRequestAnswered,
+  stampRecordCheckDetailsUpdated,
 } from '@neram/database/queries';
 
 /**
@@ -57,7 +59,18 @@ export async function GET(request: NextRequest) {
     if (!user.gender) niceToHave.push('gender');
     if (!leadProfile?.pincode) niceToHave.push('pincode');
 
+    // The office's latest "Check your details" ask, so the dashboard can show its
+    // banner without a request of its own. Bookkeeping: never fails the page.
+    let recordCheck: { status: string } | null = null;
+    try {
+      const check = await getLatestRecordCheck(supabase, user.id);
+      if (check && check.status !== 'cancelled') recordCheck = { status: check.status };
+    } catch (checkError: any) {
+      console.warn('[profile-completion] could not read the record check:', checkError?.message);
+    }
+
     return NextResponse.json({
+      recordCheck,
       user: {
         id: user.id,
         name: user.name,
@@ -208,6 +221,14 @@ export async function PATCH(request: NextRequest) {
     } catch (requestError: any) {
       // Closing the ask is bookkeeping. It must never fail the student's save.
       console.warn('[profile-completion] could not close the detail request:', requestError?.message);
+    }
+
+    // The office may have asked them to check these details: note that they
+    // changed something, so staff see it next to the check. Never fails the save.
+    try {
+      await stampRecordCheckDetailsUpdated(supabase, user.id);
+    } catch (stampError: any) {
+      console.warn('[profile-completion] could not stamp the record check:', stampError?.message);
     }
 
     return NextResponse.json({ success: true });

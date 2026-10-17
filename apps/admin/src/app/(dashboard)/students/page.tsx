@@ -41,7 +41,7 @@ import HistoryEduOutlinedIcon from '@mui/icons-material/HistoryEduOutlined';
 import StudentHubTable, { type StudentRow } from '@/components/students/StudentHubTable';
 import StudentDetailDrawer from '@/components/alumni/StudentDetailDrawer';
 import DetailLinksDialog from '@/components/students/DetailLinksDialog';
-import StudentFeesDialog from '@/components/students/StudentFeesDialog';
+import ApplicationAndFeesDialog from '@/components/students/ApplicationAndFeesDialog';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
 import GraduateDialog from '@/components/crm/GraduateDialog';
 import SetAcademicYearDialog from '@/components/crm/SetAcademicYearDialog';
@@ -1685,11 +1685,9 @@ export default function StudentsPage() {
       {/* Row-click detail drawer: full application detail + editable personal fields */}
       {/* Links dialog. Mounted with the rows it was opened for rather than reading
           the selection, so closing the selection banner cannot empty it mid-copy. */}
-      <StudentFeesDialog
+      <ApplicationAndFeesDialog
         open={!!feesRow}
         userId={feesRow?.id ?? null}
-        studentName={feesRow?.name ?? null}
-        adminId={supabaseUserId}
         onClose={() => setFeesRow(null)}
         onSaved={() => { fetchStudents(); fetchRevenue(); }}
       />

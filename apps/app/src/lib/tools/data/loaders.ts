@@ -169,31 +169,32 @@ export const loadCutoffColleges = cache(async (): Promise<CutoffCollege[]> => {
 
 // ─── COA approved colleges ────────────────────────────────────────────────
 
+// Only raw rows go in the Data Cache, which outlives deploys. Slugs are worked
+// out per request, so a fix to place matching shows on the next deploy instead
+// of a day later (v1 cached slugs and kept Aurangabad pages 404ing).
 const readCoa = unstable_cache(
-  () =>
-    safe(async () => {
-      const rows = await selectAll('coa_institutions', SELECTS.coa);
-      return rows.map((r: any): CoaCollege => {
-        const stateSlug = stateSlugForName(String(r.state ?? ''));
-        return {
-          code: String(r.institution_code ?? ''),
-          name: r.name,
-          city: r.city ?? '',
-          citySlug: citySlugFor(r.city, stateSlug),
-          stateSlug,
-          intake: r.current_intake ?? null,
-          period: r.approval_period_raw ?? null,
-          checkedAt: r.last_scraped_at ?? null,
-          since: r.commenced_year ?? null,
-          university: r.affiliating_university ?? null,
-        };
-      });
-    }, [] as CoaCollege[]),
-  ['app-tool-coa-v1'],
+  () => safe(() => selectAll('coa_institutions', SELECTS.coa), [] as any[]),
+  ['app-tool-coa-v2'],
   TAGS
 );
 
-export const loadCoaColleges = cache(() => readCoa());
+export const loadCoaColleges = cache(async (): Promise<CoaCollege[]> =>
+  (await readCoa()).map((r: any): CoaCollege => {
+    const stateSlug = stateSlugForName(String(r.state ?? ''));
+    return {
+      code: String(r.institution_code ?? ''),
+      name: r.name,
+      city: r.city ?? '',
+      citySlug: citySlugFor(r.city, stateSlug),
+      stateSlug,
+      intake: r.current_intake ?? null,
+      period: r.approval_period_raw ?? null,
+      checkedAt: r.last_scraped_at ?? null,
+      since: r.commenced_year ?? null,
+      university: r.affiliating_university ?? null,
+    };
+  })
+);
 
 // ─── JoSAA closing ranks (B.Arch, open, gender-neutral, final round) ──────
 

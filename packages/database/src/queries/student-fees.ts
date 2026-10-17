@@ -91,9 +91,12 @@ export interface SetStudentFeesResult {
 }
 
 export class StudentFeeError extends Error {
-  constructor(message: string) {
+  /** Per-field messages for a form, when the input was refused field by field. */
+  fieldErrors?: { field: string; message: string }[];
+  constructor(message: string, fieldErrors?: { field: string; message: string }[]) {
     super(message);
     this.name = 'StudentFeeError';
+    if (fieldErrors) this.fieldErrors = fieldErrors;
   }
 }
 
@@ -394,7 +397,10 @@ export async function setStudentFees(
         total_fee: finalFee,
         fee_paid: paidTotal,
         fee_due: Math.max(0, finalFee - paidTotal),
-        payment_status: paidTotal >= finalFee ? 'paid' : paidTotal > 0 ? 'partial' : 'pending',
+        // payment_status is the payment_status enum (pending, processing, paid,
+        // failed, refunded). There is no 'partial': writing it threw for every
+        // part-paid student. Part paid is fee_paid > 0 with fee_due > 0.
+        payment_status: paidTotal >= finalFee ? 'paid' : 'pending',
         updated_at: new Date().toISOString(),
       })
       .eq('id', studentProfileId);

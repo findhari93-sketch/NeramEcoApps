@@ -7,6 +7,7 @@ import { staffName } from '@/lib/aintra-inbox/server';
 //   thumbs_up       true (good answer), false (wrong answer), null (clear)
 //   admin_correction  the better answer; saving one stamps who and when
 //   promoted_to_kb  set after the correction is added to the knowledge base
+//   resolved        true marks it dealt with (leaves the Review queue), false undoes it
 export async function PATCH(request: NextRequest, { params }: { params: { id: string } }) {
   let body: Record<string, unknown>;
   try {
@@ -33,6 +34,13 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       updates.corrected_by_name = text ? await staffName(supabase, adminId) : null;
       updates.corrected_at = text ? new Date().toISOString() : null;
     }
+    if ('resolved' in body) {
+      if (typeof body.resolved !== 'boolean') return NextResponse.json({ error: 'resolved must be true or false' }, { status: 400 });
+      const adminId = getRequestAdminId(request);
+      updates.resolved_at = body.resolved ? new Date().toISOString() : null;
+      updates.resolved_by = body.resolved ? adminId : null;
+      updates.resolved_by_name = body.resolved ? await staffName(supabase, adminId) : null;
+    }
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 });
@@ -42,7 +50,9 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       .from('chatbot_conversations')
       .update(updates)
       .eq('id', params.id)
-      .select('id, thumbs_up, admin_correction, corrected_by_name, corrected_at, promoted_to_kb')
+      .select(
+        `id, thumbs_up, admin_correction, corrected_by_name, corrected_at, promoted_to_kb${'resolved' in body ? ', resolved_at, resolved_by_name' : ''}`
+      )
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

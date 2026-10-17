@@ -135,6 +135,17 @@ export interface NeramVideoPlayerProps {
   resumeAt?: number;
   /** Checkpoint positions drawn on the scrub bar. */
   marks?: SeekMark[];
+  /**
+   * A caller's own control drawn over the picture, inside the player's
+   * container so it stays visible in fullscreen (the recap's "Watch it" chip).
+   * Give its root videoOverlayDialogProps so the player's gestures skip it.
+   */
+  overlay?: React.ReactNode;
+  /**
+   * What the lock on the scrub bar means, when it is not a checkpoint quiz:
+   * the skipped-part sheet stops at the end of the part, and says so.
+   */
+  lockLabel?: string;
   /** Stretches already played, drawn on the scrub bar (see usePlayedRanges). */
   watched?: ReadonlyArray<TimeRange>;
   /**
@@ -227,6 +238,8 @@ export default function NeramVideoPlayer({
   title,
   resumeAt = 0,
   marks,
+  overlay,
+  lockLabel,
   watched,
   captions = null,
   onTimeUpdate,
@@ -1263,7 +1276,10 @@ export default function NeramVideoPlayer({
         pipActive={pipActive}
         onTogglePip={togglePip}
         menuContainer={fullscreen.isFullscreen ? containerRef.current : null}
+        lockLabel={lockLabel}
       />
+
+      {overlay}
     </Box>
   );
 }

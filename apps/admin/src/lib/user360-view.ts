@@ -69,6 +69,8 @@ export const BACK_TARGETS: Record<string, { href: string; label: string }> = {
   lifecycle: { href: '/lifecycle', label: 'Back to Lifecycle' },
   testimonials: { href: '/testimonials', label: 'Back to Testimonials' },
   students: { href: '/students', label: 'Back to Students' },
+  collections: { href: '/collections', label: 'Back to Collections' },
+  'support-tickets': { href: '/support-tickets', label: 'Back to Support tickets' },
 };
 
 export function resolveBackTarget(from: string | null | undefined): { href: string; label: string } {

@@ -801,6 +801,7 @@ export default function StudentHubTable({
             <IconButton
               size="small"
               data-row-action
+              aria-label={row.original.final_fee ? 'Edit application and fees' : 'No fee set. Add application and fees'}
               // Amber when nothing is on record, so a roster of students with no
               // fee reads at a glance instead of needing a column of its own.
               color={row.original.final_fee ? 'default' : 'warning'}

@@ -65,6 +65,10 @@ const ASSISTANT: Record<string, string> = {
     'Class notices: created, moved, cancelled, recording up, week published. An announcement to a class.',
   'apps/nexus/src/lib/catchup-congrats.ts':
     'Well done on a cleared class, and on a clean slate. The system noticed; nobody pressed anything.',
+  'apps/nexus/src/lib/record-check-send.ts':
+    'The office asks the student to check the form and fees it filled in, and later answers their fee report. The school asking, like the application form request.',
+  'apps/nexus/src/lib/fee-reminders.ts':
+    'Second installment due in 3 days, or today. A daily sweep.',
   'apps/nexus/src/app/api/cron/demo-staff-reminders/route.ts':
     "audience: 'staff'. Demo requests and demo-day reminders to the demo team, queued by the system.",
 };
@@ -163,9 +167,9 @@ function callSites(): CallSite[] {
     const path = relative(REPO_ROOT, file).split(sep).join('/');
     if (path === DOOR) continue;
     const code = stripComments(readFileSync(file, 'utf8'));
-    // Imported from the door, not merely a local function that shares the name:
-    // ApplicationFormSheet.tsx declares its own sendNudge helper. The dynamic
-    // form counts too, which is how away-windows avoids an import cycle.
+    // Imported from the door, not merely a local function that shares the name
+    // (a component may declare its own sendNudge helper). The dynamic form
+    // counts too, which is how away-windows avoids an import cycle.
     const fromDoor =
       /import\s*\{[^}]*\bsendNudge\b[^}]*\}\s*from\s*['"][^'"]*nudge-delivery['"]/.test(code) ||
       /import\(\s*['"][^'"]*nudge-delivery['"]\s*\)/.test(code);

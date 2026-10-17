@@ -9,6 +9,7 @@ import { Avatar, Box, Paper, Typography } from '@neram/ui';
 import PersonIcon from '@mui/icons-material/Person';
 import { alpha, type Theme } from '@mui/material/styles';
 import { channelLabel } from '@neram/database/analytics';
+import { GoldRing } from '@/components/EnrolledAvatar';
 import type { LeadStage, TurnStatus } from '@/lib/aintra-inbox/types';
 
 const IST = 'Asia/Kolkata';
@@ -43,6 +44,8 @@ export const STATUS_META: Record<TurnStatus, { label: string; tone: Tone }> = {
   review: { label: 'Needs review', tone: 'error' },
   error: { label: 'No answer', tone: 'error' },
   corrected: { label: 'Corrected', tone: 'success' },
+  resolved: { label: 'Resolved', tone: 'success' },
+  gated: { label: 'Asked to sign in', tone: 'neutral' },
   ok: { label: 'Verified', tone: 'success' },
   none: { label: 'Not reviewed', tone: 'neutral' },
 };
@@ -101,15 +104,18 @@ export const STAGE_TONE: Record<LeadStage, { color: string }> = {
   Unknown: { color: 'text.secondary' },
 };
 
+/** Guests get a grey person icon; signed-in people their photo or initials; enrolled students the gold ring. */
 export function PersonAvatar({
   isGuest,
   initials,
   src,
+  enrolled = false,
   size = 36,
 }: {
   isGuest: boolean;
   initials: string;
   src?: string | null;
+  enrolled?: boolean;
   size?: number;
 }) {
   if (isGuest) {
@@ -119,14 +125,19 @@ export function PersonAvatar({
       </Avatar>
     );
   }
+  // The ring adds 6px, so the photo shrinks to keep the overall size the same.
+  const inner = enrolled ? size - 6 : size;
   return (
-    <Avatar
-      aria-hidden
-      src={src ?? undefined}
-      sx={{ width: size, height: size, bgcolor: 'primary.main', color: 'primary.contrastText', fontSize: size * 0.36, fontWeight: 600 }}
-    >
-      {initials || <PersonIcon sx={{ fontSize: size * 0.55 }} />}
-    </Avatar>
+    <GoldRing enrolled={enrolled} size={inner}>
+      <Avatar
+        aria-hidden
+        src={src ?? undefined}
+        imgProps={{ loading: 'lazy' }}
+        sx={{ width: inner, height: inner, bgcolor: 'primary.main', color: 'primary.contrastText', fontSize: inner * 0.36, fontWeight: 600 }}
+      >
+        {initials || <PersonIcon sx={{ fontSize: inner * 0.55 }} />}
+      </Avatar>
+    </GoldRing>
   );
 }
 

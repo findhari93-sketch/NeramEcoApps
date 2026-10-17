@@ -1,326 +1,427 @@
-// @ts-nocheck
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+/**
+ * One support request, as its owner follows it.
+ *
+ *   Back to Support (explicit href)
+ *   number, status, subject
+ *   tracker: Received, Being worked on, Fixed, Closed
+ *   banner: the one thing to know or do now (reply, confirm, reopen, report again)
+ *   what they sent
+ *   the conversation: messages plus short system lines for each step
+ *   reply box (hidden once closed: "Still happening" reopens instead)
+ *
+ * Opening the page marks staff replies read. Every move that loses a race
+ * (409) reloads and says so. Entered from /support, the bell, or the email.
+ */
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import {
+  Alert,
   Box,
-  Container,
-  Typography,
   Button,
-  Paper,
-  Chip,
   CircularProgress,
+  Container,
+  Skeleton,
+  Snackbar,
   TextField,
-  Divider,
-  IconButton,
+  Typography,
 } from '@neram/ui';
-import ArrowBackIcon from '@mui/icons-material/ArrowBack';
-import SendIcon from '@mui/icons-material/Send';
-import { useFirebaseAuth, getCurrentUser } from '@neram/auth';
-import { useRouter, useParams } from 'next/navigation';
+import ArrowBackRoundedIcon from '@mui/icons-material/ArrowBackRounded';
+import SendRoundedIcon from '@mui/icons-material/SendRounded';
+import FiberManualRecordIcon from '@mui/icons-material/FiberManualRecord';
+import { useFirebaseAuth } from '@neram/auth';
+import { TICKET_CATEGORY_LABEL } from '@neram/database/support-ticket-status';
+import ReportProblemDialog from '@/components/ReportProblemDialog';
+import TicketStatusTracker from '@/components/support/TicketStatusTracker';
+import TicketStatusBanner from '@/components/support/TicketStatusBanner';
+import TicketStatusChip from '@/components/support/TicketStatusChip';
+import StillHappeningSheet from '@/components/support/StillHappeningSheet';
+import { getIdTokenOrNull, shortDateTime, supportFetch } from '@/lib/support-client';
+import { eventLine } from '@/lib/student-ticket-view';
+import type {
+  StudentTicketEvent,
+  StudentTicketMessage,
+  StudentTicketPayload,
+} from '@/lib/student-ticket-view';
 
-const STATUS_COLORS: Record<string, 'warning' | 'info' | 'success' | 'default'> = {
-  open: 'warning',
-  in_progress: 'info',
-  resolved: 'success',
-  closed: 'default',
-};
-
-const CATEGORY_LABELS: Record<string, string> = {
-  enrollment_issue: 'Enrollment Issue',
-  payment_issue: 'Payment Issue',
-  technical_issue: 'Technical Issue',
-  account_issue: 'Account Issue',
-  course_question: 'Course Question',
-  other: 'Other',
-};
-
-function formatDate(dateStr: string): string {
-  return new Date(dateStr).toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
+type ThreadItem =
+  | { kind: 'message'; at: string; message: StudentTicketMessage }
+  | { kind: 'event'; at: string; event: StudentTicketEvent; text: string };
 
 export default function TicketDetailPage() {
   const { user } = useFirebaseAuth();
-  const router = useRouter();
   const params = useParams();
-  const ticketId = params.id as string;
+  const ticketId = String(params?.id || '');
 
-  const [ticket, setTicket] = useState<any>(null);
-  const [comments, setComments] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [newComment, setNewComment] = useState('');
-  const [sendingComment, setSendingComment] = useState(false);
+  const [payload, setPayload] = useState<StudentTicketPayload | null>(null);
+  const [state, setState] = useState<'loading' | 'ready' | 'not_found' | 'error'>('loading');
+  const [reply, setReply] = useState('');
+  const [sending, setSending] = useState(false);
+  const [replyError, setReplyError] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [againOpen, setAgainOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const replyRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const fetchTicket = useCallback(async () => {
-    if (!user || !ticketId) return;
-    try {
-      setLoading(true);
-      const firebaseUser = getCurrentUser();
-      const idToken = await firebaseUser?.getIdToken();
-      const res = await fetch(`/api/support-tickets/${ticketId}`, {
-        headers: { Authorization: `Bearer ${idToken}` },
-      });
-      const data = await res.json();
-      if (data.ticket) {
-        setTicket(data.ticket);
-        setComments(data.comments || []);
-      }
-    } catch (err) {
-      console.error('Error fetching ticket:', err);
-    } finally {
-      setLoading(false);
+  const load = useCallback(async () => {
+    const res = await supportFetch<StudentTicketPayload>(`/api/support-tickets/${encodeURIComponent(ticketId)}`);
+    if (res.ok && res.data) {
+      setPayload(res.data);
+      setState('ready');
+    } else if (res.status === 404 || res.status === 403) {
+      setState('not_found');
+    } else {
+      setState((s) => (s === 'ready' ? s : 'error'));
+      if (res.message) setToast(res.message);
     }
-  }, [user, ticketId]);
+  }, [ticketId]);
 
   useEffect(() => {
-    fetchTicket();
-  }, [fetchTicket]);
+    if (user && ticketId) load();
+  }, [user, ticketId, load]);
 
-  const handleSendComment = async () => {
-    if (!newComment.trim()) return;
+  const thread = useMemo<ThreadItem[]>(() => {
+    if (!payload) return [];
+    const items: ThreadItem[] = [];
+    for (const m of payload.comments) items.push({ kind: 'message', at: m.created_at, message: m });
+    for (const e of payload.activity) {
+      const text = eventLine(e);
+      if (text) items.push({ kind: 'event', at: e.created_at, event: e, text });
+    }
+    return items.sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
+  }, [payload]);
 
-    setSendingComment(true);
-    try {
-      const firebaseUser = getCurrentUser();
-      const idToken = await firebaseUser?.getIdToken();
+  const staffQuestion = useMemo(() => {
+    if (!payload) return null;
+    const last = [...payload.comments].reverse().find((c) => c.side === 'staff');
+    return last ? { text: last.content, author: last.author_label } : null;
+  }, [payload]);
 
-      const res = await fetch(`/api/support-tickets/${ticketId}/comments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${idToken}`,
-        },
-        body: JSON.stringify({ content: newComment }),
-      });
+  const handleConflict = (message?: string | null) => {
+    setToast(message || 'This request changed. Showing the latest.');
+    load();
+  };
 
-      const data = await res.json();
-      if (data.comment) {
-        setComments((prev) => [...prev, data.comment]);
-        setNewComment('');
-      }
-    } catch (err) {
-      console.error('Error sending comment:', err);
-    } finally {
-      setSendingComment(false);
+  const confirm = async () => {
+    setConfirming(true);
+    const res = await supportFetch<{ ok: boolean }>(`/api/support-tickets/${encodeURIComponent(ticketId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ action: 'confirm' }),
+    });
+    setConfirming(false);
+    if (res.ok) {
+      setToast('Thanks for confirming. We have closed it.');
+      load();
+    } else if (res.status === 409) handleConflict(res.message);
+    else setToast(res.message || 'Could not save that. Please try again.');
+  };
+
+  const sendReply = async () => {
+    const content = reply.trim();
+    if (!content || sending) return;
+    setSending(true);
+    setReplyError(null);
+    const res = await supportFetch<{ comment: StudentTicketMessage; status: string }>(
+      `/api/support-tickets/${encodeURIComponent(ticketId)}/comments`,
+      { method: 'POST', body: JSON.stringify({ content }) },
+    );
+    setSending(false);
+    if (res.ok) {
+      setReply('');
+      load();
+    } else if (res.status === 409) {
+      handleConflict(res.message);
+    } else {
+      setReplyError(res.message || 'Could not send. Please try again.');
     }
   };
 
-  if (loading) {
+  const focusReply = () => {
+    const el = replyRef.current;
+    if (!el) return;
+    const reduce = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'center' });
+    el.focus({ preventScroll: true });
+  };
+
+  const backLink = (
+    <Button
+      component={Link}
+      href="/support"
+      startIcon={<ArrowBackRoundedIcon />}
+      sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600, ml: -1, mb: 1 }}
+    >
+      Support
+    </Button>
+  );
+
+  if (state === 'loading') {
     return (
-      <Container maxWidth="sm" sx={{ py: 6, textAlign: 'center' }}>
-        <CircularProgress />
+      <Container maxWidth="sm" sx={{ py: { xs: 2, md: 4 } }}>
+        {backLink}
+        <Box aria-busy="true" aria-label="Loading request">
+          <Skeleton width={140} height={20} />
+          <Skeleton width="80%" height={36} sx={{ mb: 2 }} />
+          <Skeleton variant="rounded" height={56} sx={{ mb: 2 }} />
+          <Skeleton variant="rounded" height={120} sx={{ mb: 2 }} />
+          <Skeleton variant="rounded" height={160} />
+        </Box>
       </Container>
     );
   }
 
-  if (!ticket) {
+  if (state === 'not_found' || (state === 'error' && !payload)) {
     return (
-      <Container maxWidth="sm" sx={{ py: 6, textAlign: 'center' }}>
-        <Typography variant="h6">Ticket not found</Typography>
-        <Button onClick={() => router.push('/support')} sx={{ mt: 2 }}>
-          Back to Support
-        </Button>
+      <Container maxWidth="sm" sx={{ py: { xs: 2, md: 4 } }}>
+        {backLink}
+        <Box sx={{ textAlign: 'center', py: 6 }}>
+          <Typography component="h1" sx={{ fontWeight: 700, fontSize: '1.25rem' }}>
+            {state === 'not_found' ? 'We could not find that request' : 'Could not load this request'}
+          </Typography>
+          <Typography sx={{ color: 'text.secondary', mt: 1, mb: 3 }}>
+            {state === 'not_found'
+              ? 'It may belong to another account. Your own requests are all in Support.'
+              : 'Please check your connection and try again.'}
+          </Typography>
+          {state === 'error' ? (
+            <Button variant="contained" onClick={() => { setState('loading'); load(); }} sx={{ minHeight: 48, textTransform: 'none' }}>
+              Try again
+            </Button>
+          ) : (
+            <Button variant="contained" component={Link} href="/support" sx={{ minHeight: 48, textTransform: 'none' }}>
+              Go to Support
+            </Button>
+          )}
+        </Box>
       </Container>
     );
   }
+
+  const t = payload!.ticket;
+  const isClosed = t.status === 'closed' || t.status === 'resolved';
+  const waiting = t.status === 'waiting_on_student';
 
   return (
-    <Container maxWidth="sm" sx={{ py: { xs: 2, md: 4 }, pb: 10 }}>
-      {/* Header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 3 }}>
-        <IconButton onClick={() => router.push('/support')} size="small">
-          <ArrowBackIcon />
-        </IconButton>
-        <Box sx={{ flex: 1 }}>
-          <Typography variant="caption" color="text.secondary" fontFamily="monospace">
-            {ticket.ticket_number}
+    <Container maxWidth="sm" sx={{ py: { xs: 2, md: 4 }, pb: { xs: 4, md: 6 } }}>
+      {backLink}
+
+      <Box component="header" sx={{ mb: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
+          <Typography component="span" sx={{ fontFamily: 'monospace', fontSize: '0.875rem', color: 'text.secondary' }}>
+            {t.ticket_number}
           </Typography>
-          <Typography variant="h6" fontWeight={700} lineHeight={1.2}>
-            {ticket.subject}
-          </Typography>
+          <TicketStatusChip status={t.status} />
         </Box>
-        <Chip
-          label={ticket.status.replace('_', ' ')}
-          size="small"
-          color={STATUS_COLORS[ticket.status] || 'default'}
-          sx={{ textTransform: 'capitalize' }}
+        <Typography
+          component="h1"
+          sx={{ fontWeight: 700, fontSize: { xs: '1.25rem', md: '1.5rem' }, lineHeight: 1.3, overflowWrap: 'anywhere' }}
+        >
+          {t.subject}
+        </Typography>
+        <Typography sx={{ color: 'text.secondary', fontSize: '0.875rem', mt: 0.5 }}>
+          {TICKET_CATEGORY_LABEL[t.category] || 'Other'} · Sent {shortDateTime(t.created_at)}
+        </Typography>
+      </Box>
+
+      <Box sx={{ mb: 2.5, px: { xs: 0, sm: 1 } }}>
+        <TicketStatusTracker status={t.status} note={waiting ? 'Waiting on you' : null} />
+      </Box>
+
+      <Box sx={{ mb: 3 }}>
+        <TicketStatusBanner
+          ticket={t}
+          staffQuestion={waiting ? staffQuestion : null}
+          confirming={confirming}
+          onConfirm={confirm}
+          onStillHappening={() => setSheetOpen(true)}
+          onReportAgain={() => setAgainOpen(true)}
+          onReply={focusReply}
         />
       </Box>
 
-      {/* Ticket Info */}
-      <Paper
-        elevation={0}
-        sx={{
-          p: 2,
-          mb: 2,
-          border: '1px solid',
-          borderColor: 'divider',
-          borderRadius: 1.5,
-        }}
-      >
-        <Box sx={{ display: 'flex', gap: 1, mb: 1.5, flexWrap: 'wrap' }}>
-          <Chip
-            label={CATEGORY_LABELS[ticket.category] || ticket.category}
-            size="small"
-            variant="outlined"
-          />
-          <Chip
-            label={`Priority: ${ticket.priority}`}
-            size="small"
-            variant="outlined"
-            sx={{ textTransform: 'capitalize' }}
-          />
-        </Box>
-        <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
-          {ticket.description}
+      <Box component="section" aria-labelledby="what-you-sent" sx={{ mb: 3 }}>
+        <Typography id="what-you-sent" component="h2" sx={sectionHeading}>
+          What you sent
         </Typography>
-        <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 1.5 }}>
-          Created on {formatDate(ticket.created_at)}
-        </Typography>
-      </Paper>
-
-      {/* Screenshots */}
-      {ticket.screenshot_urls?.length > 0 && (
-        <Paper
-          elevation={0}
-          sx={{
-            p: 2,
-            mb: 2,
-            border: '1px solid',
-            borderColor: 'divider',
-            borderRadius: 1.5,
-          }}
-        >
-          <Typography variant="subtitle2" fontWeight={600} mb={1}>
-            Attachments
+        <Box sx={{ p: 2, borderRadius: 2, border: '1px solid', borderColor: 'divider', bgcolor: 'background.paper' }}>
+          <Typography sx={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: '0.9375rem' }}>
+            {t.description}
           </Typography>
-          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-            {ticket.screenshot_urls.map((url: string, i: number) => (
+          {t.screenshot_urls.length > 0 && (
+            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 1.5 }}>
+              {t.screenshot_urls.map((url, i) => (
+                <Box
+                  key={url}
+                  component="a"
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label={`Open picture ${i + 1} in a new tab`}
+                  sx={{
+                    width: 72,
+                    height: 72,
+                    borderRadius: 1.5,
+                    overflow: 'hidden',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    '&:focus-visible': { outline: '3px solid', outlineColor: 'primary.light', outlineOffset: 2 },
+                  }}
+                >
+                  <Box
+                    component="img"
+                    src={url}
+                    alt=""
+                    loading="lazy"
+                    sx={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top' }}
+                  />
+                </Box>
+              ))}
+            </Box>
+          )}
+        </Box>
+      </Box>
+
+      <Box component="section" aria-labelledby="conversation" sx={{ mb: 3 }}>
+        <Typography id="conversation" component="h2" sx={sectionHeading}>
+          Conversation
+        </Typography>
+        <Box component="ol" sx={{ listStyle: 'none', p: 0, m: 0, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          {thread.map((item) =>
+            item.kind === 'event' ? (
               <Box
-                key={i}
-                component="a"
-                href={url}
-                target="_blank"
-                rel="noopener noreferrer"
-                sx={{
-                  width: 80,
-                  height: 80,
-                  borderRadius: 1,
-                  overflow: 'hidden',
-                  border: '1px solid',
-                  borderColor: 'divider',
-                }}
+                component="li"
+                key={`e-${item.event.id}`}
+                sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, color: 'text.secondary', px: 0.5 }}
+              >
+                <FiberManualRecordIcon aria-hidden="true" sx={{ fontSize: 8, mt: '7px', flexShrink: 0 }} />
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography component="span" sx={{ fontSize: '0.875rem', color: 'text.primary' }}>
+                    {item.text}
+                  </Typography>
+                  <Typography component="span" sx={{ fontSize: '0.8125rem', ml: 1 }}>
+                    {shortDateTime(item.at)}
+                  </Typography>
+                  {item.event.action === 'reopened' && item.event.reason && (
+                    <Typography sx={{ fontSize: '0.875rem', mt: 0.25, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                      &ldquo;{item.event.reason}&rdquo;
+                    </Typography>
+                  )}
+                </Box>
+              </Box>
+            ) : (
+              <Box
+                component="li"
+                key={`m-${item.message.id}`}
+                sx={{ display: 'flex', justifyContent: item.message.side === 'staff' ? 'flex-start' : 'flex-end' }}
               >
                 <Box
-                  component="img"
-                  src={url}
-                  alt={`Attachment ${i + 1}`}
-                  sx={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
+                  sx={{
+                    maxWidth: '88%',
+                    p: 1.5,
+                    borderRadius: 2,
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    bgcolor: item.message.side === 'staff' ? 'background.paper' : 'action.hover',
+                  }}
+                >
+                  <Typography sx={{ fontSize: '0.8125rem', fontWeight: 700, color: 'text.secondary' }}>
+                    {item.message.author_label}
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.9375rem', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                    {item.message.content}
+                  </Typography>
+                  <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary', mt: 0.5 }}>
+                    {shortDateTime(item.message.created_at)}
+                  </Typography>
+                </Box>
               </Box>
-            ))}
-          </Box>
-        </Paper>
-      )}
-
-      {/* Resolution notes */}
-      {ticket.status === 'resolved' && ticket.resolution_notes && (
-        <Paper
-          elevation={0}
-          sx={{
-            p: 2,
-            mb: 2,
-            bgcolor: '#E8F5E9',
-            border: '1px solid #A5D6A7',
-            borderRadius: 1.5,
-          }}
-        >
-          <Typography variant="subtitle2" fontWeight={600} color="#2E7D32" mb={0.5}>
-            Resolution
-          </Typography>
-          <Typography variant="body2">{ticket.resolution_notes}</Typography>
-        </Paper>
-      )}
-
-      {/* Comments */}
-      <Divider sx={{ my: 2 }} />
-      <Typography variant="subtitle2" fontWeight={600} mb={2}>
-        Conversation
-      </Typography>
-
-      {comments.length === 0 ? (
-        <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 3 }}>
-          No messages yet. Add a comment below.
-        </Typography>
-      ) : (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mb: 2 }}>
-          {comments.map((comment: any) => (
-            <Box
-              key={comment.id}
-              sx={{
-                display: 'flex',
-                justifyContent: comment.is_admin ? 'flex-start' : 'flex-end',
-              }}
-            >
-              <Paper
-                elevation={0}
-                sx={{
-                  p: 1.5,
-                  maxWidth: '85%',
-                  borderRadius: 2,
-                  bgcolor: comment.is_admin ? '#F3F4F6' : 'primary.50',
-                  border: '1px solid',
-                  borderColor: comment.is_admin ? 'divider' : 'primary.100',
-                }}
-              >
-                <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">
-                  {comment.is_admin ? `${comment.user_name} (Support)` : 'You'}
-                </Typography>
-                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                  {comment.content}
-                </Typography>
-                <Typography variant="caption" color="text.disabled" display="block" mt={0.5}>
-                  {formatDate(comment.created_at)}
-                </Typography>
-              </Paper>
-            </Box>
-          ))}
+            ),
+          )}
         </Box>
-      )}
+      </Box>
 
-      {/* Comment Input */}
-      {ticket.status !== 'closed' && (
-        <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
+      {!isClosed && (
+        <Box component="section" aria-labelledby="reply-heading">
+          <Typography id="reply-heading" component="h2" sx={sectionHeading}>
+            {waiting ? 'Your reply' : 'Add a message'}
+          </Typography>
           <TextField
-            value={newComment}
-            onChange={(e) => setNewComment(e.target.value)}
-            placeholder="Type a message..."
-            fullWidth
-            size="small"
-            multiline
-            maxRows={4}
+            inputRef={replyRef}
+            label={waiting ? 'Answer their question' : 'Message'}
+            placeholder="Write here"
+            value={reply}
+            onChange={(e) => setReply(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
+              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
                 e.preventDefault();
-                handleSendComment();
+                sendReply();
               }
             }}
+            fullWidth
+            multiline
+            minRows={3}
+            maxRows={8}
+            inputProps={{ maxLength: 5000 }}
           />
-          <IconButton
-            color="primary"
-            onClick={handleSendComment}
-            disabled={!newComment.trim() || sendingComment}
-          >
-            {sendingComment ? <CircularProgress size={20} /> : <SendIcon />}
-          </IconButton>
+          {replyError && (
+            <Alert severity="error" role="alert" sx={{ mt: 1 }}>
+              {replyError}
+            </Alert>
+          )}
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+            <Button
+              variant="contained"
+              onClick={sendReply}
+              disabled={!reply.trim() || sending}
+              endIcon={sending ? <CircularProgress size={16} color="inherit" /> : <SendRoundedIcon />}
+              sx={{ minHeight: 48, textTransform: 'none', fontWeight: 600, px: 3, width: { xs: '100%', sm: 'auto' } }}
+            >
+              {sending ? 'Sending' : 'Send'}
+            </Button>
+          </Box>
         </Box>
       )}
+
+      <StillHappeningSheet
+        open={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        ticketId={t.id}
+        onDone={({ message }) => {
+          setSheetOpen(false);
+          setToast(message);
+          load();
+        }}
+      />
+
+      <ReportProblemDialog
+        open={againOpen}
+        onClose={() => setAgainOpen(false)}
+        getToken={getIdTokenOrNull}
+        mode="support"
+        prefill={{ title: `Follow-up to ${t.ticket_number}`, category: t.category }}
+      />
+
+      <Snackbar
+        open={!!toast}
+        autoHideDuration={5000}
+        onClose={() => setToast(null)}
+        message={toast}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        sx={{ bottom: { xs: 'calc(var(--app-bottom-inset, 0px) + 16px)', md: 24 } }}
+      />
     </Container>
   );
 }
+
+const sectionHeading = {
+  fontSize: '0.8125rem',
+  fontWeight: 700,
+  letterSpacing: '0.04em',
+  textTransform: 'uppercase',
+  color: 'text.secondary',
+  mb: 1,
+} as const;

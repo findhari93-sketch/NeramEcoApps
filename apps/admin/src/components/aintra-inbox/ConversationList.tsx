@@ -4,8 +4,9 @@
  * Left pane of Conversations: search, All / Signed in / Guests, status chips,
  * and chats grouped by day. Up and Down move the selection.
  */
-import { useMemo, useRef, type KeyboardEvent } from 'react';
-import { Box, Chip, InputAdornment, TextField, Typography } from '@neram/ui';
+import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { Box, Button, Chip, CircularProgress, InputAdornment, TextField, Typography } from '@neram/ui';
+import { alpha } from '@mui/material/styles';
 import SearchIcon from '@mui/icons-material/Search';
 import { FOCUS_RING, OpsSkeleton } from '@/components/ops/OpsUi';
 import type { InboxConversation } from '@/lib/aintra-inbox/types';
@@ -61,6 +62,7 @@ export default function ConversationList({
   selectedId,
   onSelect,
   now,
+  onResolveCredits,
 }: {
   loading: boolean;
   conversations: InboxConversation[];
@@ -73,9 +75,25 @@ export default function ConversationList({
   selectedId: string | null;
   onSelect: (id: string) => void;
   now: Date;
+  /** "Resolve all credits ran out". Resolves every such question, in every segment. */
+  onResolveCredits?: () => Promise<void>;
 }) {
   const q = query.trim().toLowerCase();
   const listRef = useRef<HTMLDivElement>(null);
+  const [confirmResolve, setConfirmResolve] = useState(false);
+  const [resolving, setResolving] = useState(false);
+  const allCredits = useMemo(() => conversations.reduce((n, c) => n + c.creditErrorCount, 0), [conversations]);
+
+  const resolveAll = async () => {
+    if (!onResolveCredits) return;
+    setResolving(true);
+    try {
+      await onResolveCredits();
+      setConfirmResolve(false);
+    } finally {
+      setResolving(false);
+    }
+  };
 
   const segCounts = useMemo(() => {
     const base = conversations.filter((c) => matchesStatus(c, status) && matchesQuery(c, q));
@@ -207,6 +225,52 @@ export default function ConversationList({
             />
           ))}
         </Box>
+
+        {status === 'error' && allCredits > 0 && onResolveCredits && !loading && (
+          <Box
+            role="region"
+            aria-label="Resolve credits ran out"
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 1,
+              p: 1.5,
+              borderRadius: 2,
+              border: 1,
+              borderColor: (t) => alpha(t.palette.warning.main, 0.45),
+              bgcolor: (t) => alpha(t.palette.warning.main, 0.08),
+            }}
+          >
+            <Typography sx={{ fontSize: 13, color: 'text.primary', lineHeight: 1.5 }}>
+              {confirmResolve
+                ? `Mark all ${allCredits} as resolved? They leave the Review queue. You can still open each one and write an answer.`
+                : `${allCredits} ${allCredits === 1 ? 'question' : 'questions'} got no answer while AI credits were out. If credits are back, resolve them in one go.`}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+              {confirmResolve ? (
+                <>
+                  <Button size="small" onClick={() => setConfirmResolve(false)} disabled={resolving} sx={{ minHeight: 44 }}>
+                    Cancel
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="contained"
+                    onClick={resolveAll}
+                    disabled={resolving}
+                    startIcon={resolving ? <CircularProgress size={16} color="inherit" /> : undefined}
+                    sx={{ minHeight: 44 }}
+                  >
+                    Resolve {allCredits}
+                  </Button>
+                </>
+              ) : (
+                <Button size="small" variant="outlined" onClick={() => setConfirmResolve(true)} sx={{ minHeight: 44 }}>
+                  Resolve all
+                </Button>
+              )}
+            </Box>
+          </Box>
+        )}
       </Box>
 
       <Box ref={listRef} onKeyDown={onKeyDown} sx={{ flex: 1, overflow: 'auto', minHeight: 0 }}>
@@ -247,7 +311,7 @@ export default function ConversationList({
               </Box>
               {g.items.map((c) => {
                 const sel = c.id === selectedId;
-                const showStatus = c.status === 'review' || c.status === 'error' || c.status === 'corrected';
+                const showStatus = c.status === 'review' || c.status === 'error' || c.status === 'corrected' || c.status === 'resolved';
                 const meta = [c.place, c.channel ? sourceLabelOf(c.channel) : chatbotLabel(c.source), c.turnCount > 1 ? `${c.turnCount} questions` : null]
                   .filter(Boolean)
                   .join(' · ');
@@ -278,7 +342,7 @@ export default function ConversationList({
                       '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: -2 },
                     }}
                   >
-                    <PersonAvatar isGuest={c.isGuest} initials={c.initials} />
+                    <PersonAvatar isGuest={c.isGuest} initials={c.initials} src={c.avatarUrl} enrolled={c.enrolled} />
                     <Box sx={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: '1px' }}>
                       <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'baseline', minWidth: 0 }}>
                         <Typography

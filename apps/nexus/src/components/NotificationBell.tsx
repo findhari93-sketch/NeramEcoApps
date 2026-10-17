@@ -77,6 +77,11 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   scorecard_reminder: '#0ea5e9',
   scorecard_released: '#2E7D32',
   exam_date_reminder: '#ed6c02',
+  // The office asking a student to check their form and fees, a second
+  // installment coming up, and the office answering a fee report.
+  fee_details_check: '#0ea5e9',
+  fee_installment_reminder: '#ed6c02',
+  fee_correction_resolved: '#2E7D32',
 };
 
 function timeAgo(dateStr: string): string {

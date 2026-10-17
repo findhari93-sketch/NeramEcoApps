@@ -24,6 +24,7 @@ export const BADGE_KEYS = [
   'duplicates',
   'follow_ups',
   'lifecycle',
+  'collections',
   'careers',
   'messages_unread',
   'notifications_unread',
@@ -71,6 +72,21 @@ export function badgeWindow(now: Date = new Date()): { chatSince: string; follow
     chatSince: new Date(now.getTime() - DAY_MS).toISOString(),
     followUpBefore: new Date(startOfTodayIst + DAY_MS).toISOString(),
   };
+}
+
+/** Today's date in India, YYYY-MM-DD: installments due on or before it count. */
+export function istTodayKey(now: Date = new Date()): string {
+  return new Date(now.getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
+}
+
+/**
+ * The Collections badge: open fee reports from students, plus unpaid
+ * installments due today or earlier. Both are things staff should act on now.
+ */
+export function collectionsBadgeCount(openReports: number | null | undefined, dueInstallments: number | null | undefined): number {
+  const a = Number(openReports);
+  const b = Number(dueInstallments);
+  return (Number.isFinite(a) && a > 0 ? Math.floor(a) : 0) + (Number.isFinite(b) && b > 0 ? Math.floor(b) : 0);
 }
 
 /** Whether a focus / navigation trigger should fetch, given when the last fetch ran. */
