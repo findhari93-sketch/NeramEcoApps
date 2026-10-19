@@ -174,12 +174,3 @@ export async function updateMyDemo(
   const { status, data } = await call('PATCH', '/api/demo-class/mine', body);
   return toResult(status, data);
 }
-
-/** Google Ads conversion for a booked demo (only when a label is configured). */
-export function fireDemoConversion(ref: string): void {
-  const w = window as unknown as { gtag?: (...args: unknown[]) => void };
-  const adsId = process.env.NEXT_PUBLIC_GOOGLE_ADS_ID;
-  const label = process.env.NEXT_PUBLIC_GOOGLE_ADS_DEMO_LABEL;
-  if (!w.gtag || !adsId || !label) return;
-  w.gtag('event', 'conversion', { send_to: `${adsId}/${label}`, transaction_id: ref });
-}

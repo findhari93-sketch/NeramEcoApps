@@ -50,13 +50,16 @@ const submitApplication = vi.fn(async (_client: unknown, id: string) => ({
   id,
   application_number: 'NERAM-2609-00042',
   interest_course: 'nata',
+  status: 'submitted',
 }));
+const claimFunnelStage = vi.fn(async (..._args: unknown[]) => true);
 vi.mock('@neram/database/queries', () => ({
   createApplication: (...args: unknown[]) => createApplication(...(args as [unknown, unknown])),
   getApplicationsByUserId: async () => existingApplications,
   submitApplication: (...args: unknown[]) => submitApplication(...(args as [unknown, string])),
   hasExistingApplication: async () => existingApplications.length > 0,
   deleteApplication: vi.fn(),
+  claimFunnelStage: (...args: unknown[]) => claimFunnelStage(...args),
 }));
 
 const INDIAN_AUTH = { userId: 'user-1', email: 'arun@example.com', name: 'Arun', phone: '+919876543210', phoneVerified: true };
@@ -156,6 +159,35 @@ describe('POST /api/application', () => {
     const update = calls.find((c) => c.table === 'lead_profiles' && c.op === 'update');
     expect(update?.filters).toContainEqual(['eq', 'id', 'lead-draft']);
     expect(submitApplication).toHaveBeenCalledWith(supabase, 'lead-draft');
+  });
+});
+
+describe('POST /api/application: Google Ads application stage', () => {
+  beforeEach(() => {
+    existingApplications = [];
+    authResult = INDIAN_AUTH;
+    claimFunnelStage.mockClear();
+  });
+
+  it('claims application_submitted once and tells the form to fire the conversion', async () => {
+    claimFunnelStage.mockResolvedValueOnce(true);
+    const res = await POST(request('POST', submitBody));
+    const json = await res.json();
+    expect(json.applicationConversion).toBe(true);
+    expect(claimFunnelStage).toHaveBeenCalledWith(supabase, 'user-1', 'application_submitted', {
+      metadata: { application_id: 'lead-new', value_inr: 500 },
+      sourceApp: 'marketing',
+    });
+
+    claimFunnelStage.mockResolvedValueOnce(false);
+    const again = await (await POST(request('POST', submitBody))).json();
+    expect(again.applicationConversion).toBe(false);
+  });
+
+  it('never claims for a draft save', async () => {
+    const json = await (await POST(request('POST', { ...submitBody, status: 'draft' }))).json();
+    expect(json.applicationConversion).toBe(false);
+    expect(claimFunnelStage).not.toHaveBeenCalled();
   });
 });
 

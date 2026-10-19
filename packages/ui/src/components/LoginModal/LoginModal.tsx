@@ -23,6 +23,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import React from 'react';
 import type { TransitionProps } from '@mui/material/transitions';
 import { ConnectToOffice } from '../ChatWidget/ConnectToOffice';
+import { trackSignupVerified } from '../../analytics/conversions';
 
 /**
  * Where this visitor came from, for a cross-origin sign-up (the app cannot read
@@ -79,22 +80,18 @@ function phoneAttemptAnonymousId(): string | undefined {
 }
 
 /**
- * Google Ads "Sign-up (1)": a sign-up with a verified phone, the account's one
- * primary conversion. Fired here because every OTP flow, in the app and on the
- * marketing site, ends in this modal. The label is set on production only, so
- * staging never counts. transaction_id is our user id (never the phone), and
- * stops a retry counting the same student twice. Never throws.
+ * Google Ads "Sign-up (OTP verified)": the account's first phone verification.
+ * Fired here because every OTP flow, in the app and on the marketing site, ends
+ * in this modal. verify-phone records the stage once in the database and says
+ * `signupConversion: true` only that first time, so a returning login, a
+ * retry or a staff-made account never counts. Never throws.
  */
-export function firePhoneVerifiedConversion(userId: string | undefined) {
-  const adsId = process.env.NEXT_PUBLIC_GOOGLE_ADS_ID;
-  const label = process.env.NEXT_PUBLIC_GOOGLE_ADS_PHONE_VERIFIED_LABEL;
-  const gtag = typeof window !== 'undefined' ? (window as any).gtag : undefined;
-  if (!adsId || !label || typeof gtag !== 'function') return;
-  try {
-    gtag('event', 'conversion', { send_to: `${adsId}/${label}`, transaction_id: userId });
-  } catch {
-    // Tracking never blocks sign-in.
-  }
+export function fireSignupConversion(
+  verified: { signupConversion?: boolean; user?: { id?: string; phone?: string | null; email?: string | null } } | null | undefined,
+  phone: string,
+) {
+  if (!verified?.signupConversion || !verified.user?.id) return;
+  trackSignupVerified({ userId: verified.user.id, phone: verified.user.phone || phone, email: verified.user.email });
 }
 
 // ============================================
@@ -432,7 +429,7 @@ export default function LoginModal({
     const response = await fetch(`${apiBaseUrl}/api/auth/verify-phone`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ idToken, phoneNumber: phone, anonymousId: phoneAttemptAnonymousId() }),
+      body: JSON.stringify({ idToken, phoneNumber: phone, ...signupOriginFields(), anonymousId: phoneAttemptAnonymousId() }),
     });
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
@@ -742,7 +739,7 @@ export default function LoginModal({
       if (currentUser) {
         const idToken = await currentUser.getIdToken(true); // Force refresh to include phone claim
         const verified = await verifyPhone(idToken, fullPhone);
-        firePhoneVerifiedConversion(verified?.user?.id);
+        fireSignupConversion(verified, fullPhone);
       }
 
       onAuthenticated?.(phoneNumber);
@@ -790,7 +787,7 @@ export default function LoginModal({
       }
       await registerUser(idToken).catch(() => undefined);
       const verified = await verifyPhone(idToken, fullPhone);
-      firePhoneVerifiedConversion(verified?.user?.id);
+      fireSignupConversion(verified, fullPhone);
       onFunnelEvent?.({ funnel: 'auth', event: 'phone_account_switched', status: 'completed' });
       onAuthenticated?.(phoneNumber);
     } catch (err: any) {

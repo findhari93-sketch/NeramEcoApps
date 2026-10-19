@@ -36,6 +36,9 @@ export interface AttributionData {
   utm_campaign?: string;
   utm_term?: string;
   utm_content?: string;
+  /** Google Ads final URL suffix: {matchtype} and {device}. */
+  matchtype?: string;
+  device?: string;
   referral_code?: string;
   landing_page?: string;
   captured_at?: string;
@@ -56,6 +59,8 @@ const CAMPAIGN_KEYS = [
   'utm_campaign',
   'utm_term',
   'utm_content',
+  'matchtype',
+  'device',
 ] as const;
 
 const LEAD_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'gclid', 'wbraid'] as const;

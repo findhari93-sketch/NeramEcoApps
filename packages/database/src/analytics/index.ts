@@ -248,6 +248,9 @@ export const FIRST_TOUCH_KEYS = [
   'gclid',
   'wbraid',
   'gbraid',
+  // Google Ads final URL suffix ({matchtype}, {device}).
+  'matchtype',
+  'device',
   'referral_code',
   'landing_page',
   'referrer',
@@ -297,6 +300,38 @@ export function resolveSignupFirstTouch(input: {
     : first?.channel ?? (out.referrer ? classifyChannel({ referrer: out.referrer }) : null);
   if (channel) out.channel = channel;
   return sanitizeFirstTouch(out);
+}
+
+/** How long after creation an account may still have its origin filled in. */
+export const SIGNUP_ORIGIN_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * True for an account created in the last day that is still missing its
+ * anonymous id or first touch. Sign-up runs several calls at once (register-user,
+ * verify-phone) and the one that creates the row may know less than the others,
+ * so later calls fill the gaps. Older accounts are never touched: a later visit
+ * is not the first touch.
+ */
+export function isRecentAccountWithoutOrigin(
+  user: { created_at?: string | null; first_touch_at?: string | null; anonymous_id?: string | null },
+  now: number = Date.now(),
+): boolean {
+  if (!user.created_at) return false;
+  const age = now - new Date(user.created_at).getTime();
+  if (!(age >= 0 && age < SIGNUP_ORIGIN_WINDOW_MS)) return false;
+  return !user.first_touch_at || !user.anonymous_id;
+}
+
+/**
+ * What users.last_touch should hold at sign-up: the last non-direct visit from
+ * neram_touches (body first, then the cookie). Null when nothing was recorded.
+ */
+export function resolveSignupLastTouch(input: {
+  bodyTouches?: unknown;
+  cookieHeader?: string | null;
+}): Touches['last'] {
+  const touches = parseTouches(input.bodyTouches) ?? parseTouches(readCookie(input.cookieHeader, TOUCH_COOKIE));
+  return touches?.last ?? null;
 }
 
 // ── Browser helpers ────────────────────────────────────────────────────────

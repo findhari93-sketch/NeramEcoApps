@@ -9,6 +9,7 @@
  *
  *   phone_verified  GOOGLE_ADS_CONV_ACTION_PHONE  the primary conversion
  *   demo_booked     GOOGLE_ADS_CONV_ACTION_DEMO   secondary, reporting only
+ *   demo_attended   GOOGLE_ADS_CONV_ACTION_DEMO_ATTENDED  "Demo Attended", secondary
  *   admission_paid  GOOGLE_ADS_CONV_ACTION_PAID   secondary, valued at the fee
  *
  * Each upload carries whatever can identify the click:
@@ -27,7 +28,7 @@ import { createHash } from 'crypto';
 import type { AdsEnv } from '../config';
 import type { AdsClient, ClickConversion } from './client';
 
-export type ConversionType = 'phone_verified' | 'demo_booked' | 'admission_paid';
+export type ConversionType = 'phone_verified' | 'demo_booked' | 'demo_attended' | 'admission_paid';
 
 export interface UserForConversion {
   id: string;
@@ -154,6 +155,7 @@ export function toAdsDateTime(iso: string): string {
 const ACTION_ENV: Record<ConversionType, keyof AdsEnv> = {
   phone_verified: 'conversionActionPhone',
   demo_booked: 'conversionActionDemo',
+  demo_attended: 'conversionActionDemoAttended',
   admission_paid: 'conversionActionPaid',
 };
 
@@ -207,6 +209,11 @@ export async function loadConversionEvents(db: any, now = new Date()): Promise<C
   const { data: demos, error: de } = await db.from('demo_class_registrations').select('id, user_id, created_at').not('user_id', 'is', null).gte('created_at', since).limit(10000);
   if (de) throw new Error(`demo_class_registrations: ${de.message}`);
   for (const r of demos ?? []) events.push({ user_id: r.user_id, type: 'demo_booked', at: r.created_at, value_inr: null, order_id: `demo-${r.id}` });
+
+  // Staff marked the demo attended: the funnel stage row a DB trigger records once per user.
+  const { data: attended, error: ae } = await db.from('user_funnel_events').select('user_id, created_at').eq('event', 'demo_attended').not('user_id', 'is', null).gte('created_at', since).limit(10000);
+  if (ae) throw new Error(`user_funnel_events: ${ae.message}`);
+  for (const r of attended ?? []) events.push({ user_id: r.user_id, type: 'demo_attended', at: r.created_at, value_inr: null, order_id: `demo-attended-${r.user_id}` });
 
   const { data: pays, error: ye } = await db.from('payments').select('id, user_id, amount, verified_at, updated_at, created_at').eq('status', 'paid').not('user_id', 'is', null).gte('created_at', since).limit(10000);
   if (ye) throw new Error(`payments: ${ye.message}`);

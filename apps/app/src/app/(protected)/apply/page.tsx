@@ -17,6 +17,7 @@ import {
   LoginModal,
 } from '@neram/ui';
 import { ChatWidget, applicationFormFlow } from '@neram/ui';
+import { trackApplicationSubmitted } from '@neram/ui/analytics';
 import { FormProvider, useFormContext } from './hooks/useApplicationForm';
 import type { FormStep } from './types';
 import { STEP_LABELS } from './types';
@@ -135,6 +136,14 @@ function ApplyFormContent() {
         status: 'completed',
         metadata: { application_id: result?.leadProfileId ?? null, course: formData.course.interestCourse ?? null },
       });
+      // Google Ads "Application Submitted": only the account's first submitted form.
+      if (result?.applicationConversion && result.leadProfileId) {
+        trackApplicationSubmitted({
+          applicationId: result.leadProfileId,
+          phone: formData.personal.phone,
+          email: formData.personal.email,
+        });
+      }
 
       clearSavedForm();
       setShowSuccess(true);

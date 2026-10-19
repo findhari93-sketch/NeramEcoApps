@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { DM_Sans } from 'next/font/google';
 import { NeramThemeProvider } from '@neram/ui';
 import { enterpriseLightTheme, enterpriseDarkTheme } from '@/lib/theme';
-import GoogleAdsTag from '@/components/GoogleAdsTag';
+import { GoogleTag } from '@neram/ui/analytics';
 import AdClickCapture from '@/components/AdClickCapture';
 import EnvBadge from '@/components/EnvBadge';
 import { AUTH_HINT_SCRIPT } from '@/lib/auth-hint';
@@ -85,7 +85,7 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
       </head>
       <body className={dmSans.className}>
-        <GoogleAdsTag />
+        <GoogleTag strategy="lazyOnload" />
         <AdClickCapture />
         <NeramThemeProvider
           lightTheme={enterpriseLightTheme}

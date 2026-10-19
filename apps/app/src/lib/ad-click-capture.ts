@@ -22,7 +22,8 @@ export const ATTRIBUTION_COOKIE = 'neram_attribution';
 const MAX_AGE_SECONDS = 90 * 24 * 60 * 60;
 const MAX_VALUE_LENGTH = 100;
 
-export const CAMPAIGN_KEYS = ['gclid', 'wbraid', 'gbraid', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'] as const;
+// matchtype and device come from the Google Ads final URL suffix.
+export const CAMPAIGN_KEYS = ['gclid', 'wbraid', 'gbraid', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'matchtype', 'device'] as const;
 
 const EMAIL_PATTERN = /[^\s@]+@[^\s@]+\.[^\s@]+/;
 const INDIAN_MOBILE_PATTERN = /(?:^|\D)(?:\+?91[\s-]?)?[6-9]\d{9}(?:\D|$)/;

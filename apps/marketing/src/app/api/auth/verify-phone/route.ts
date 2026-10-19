@@ -22,8 +22,15 @@ import {
   normalizeAttemptPhone,
   recordPhoneAttempt,
   queueFirstTouchWhatsApp,
+  recordFirstTouch,
+  claimFunnelStage,
 } from '@neram/database';
-import { isValidAnonymousId } from '@neram/database/analytics';
+import {
+  isRecentAccountWithoutOrigin,
+  isValidAnonymousId,
+  resolveSignupFirstTouch,
+  resolveSignupLastTouch,
+} from '@neram/database/analytics';
 
 // Firebase Admin is initialized in _lib/auth.ts — ensure it's imported
 import '@/app/api/_lib/auth';
@@ -71,8 +78,19 @@ export async function POST(req: NextRequest) {
 
     const adminClient = getSupabaseAdminClient();
 
+    // Where this person came from (body from LoginModal, else the shared cookies).
+    const cookieHeader = req.headers.get('cookie');
+    const origin = {
+      anonymousId: isValidAnonymousId(body.anonymousId) ? body.anonymousId : null,
+      firstTouch: resolveSignupFirstTouch({ bodyFirstTouch: body.first_touch, bodyTouches: body.touches, cookieHeader }),
+      lastTouch: resolveSignupLastTouch({ bodyTouches: body.touches, cookieHeader }) as Record<string, unknown> | null,
+    };
+
     // Get user from Supabase
     let user = await getUserByFirebaseUid(decodedToken.uid, adminClient);
+    if (user && isRecentAccountWithoutOrigin(user)) {
+      await recordFirstTouch(adminClient, user.id, origin);
+    }
 
     if (!user) {
       // Fallback: create user if register-user hadn't completed
@@ -85,6 +103,7 @@ export async function POST(req: NextRequest) {
           displayName: decodedToken.name || null,
         });
         user = result.user;
+        if (result.isNewUser) await recordFirstTouch(adminClient, user.id, origin);
       } catch (createError) {
         console.error('Failed to create fallback user:', createError);
         return NextResponse.json(
@@ -141,6 +160,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // Google Ads "Sign-up (OTP verified)", once per lead account (see the app's route).
+    const signupConversion =
+      user.user_type === 'lead' &&
+      (await claimFunnelStage(adminClient, user.id, 'signup_verified', {
+        metadata: { value_inr: 100 },
+        sourceApp: 'marketing',
+      }));
+
     // First verified phone of a new account: tell staff (bell + phone push).
     await alertNewSignup(adminClient, user.id);
     // A Google-first sign-in was queued an email welcome (no phone then); now
@@ -149,6 +176,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      signupConversion,
       user: {
         id: updatedUser.id,
         name: updatedUser.name,

@@ -38,7 +38,6 @@ vi.mock('./demo-client', async (importOriginal) => {
     ...actual,
     fetchMyDemo: vi.fn().mockResolvedValue({ signedIn: true, request: null }),
     submitDemoRequest: (...a: unknown[]) => submitDemoRequest(...a),
-    fireDemoConversion: vi.fn(),
   };
 });
 vi.mock('@/lib/funnel-tracker', () => ({ trackTaxonomyEvent: vi.fn() }));

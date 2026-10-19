@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient, parseExamYearAnswer } from '@neram/database';
+import { claimFunnelStage, createAdminClient, parseExamYearAnswer } from '@neram/database';
 import { createApplication, updateApplication, submitApplication } from '@neram/database/queries';
 import { getAuth } from 'firebase-admin/auth';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
@@ -163,11 +163,19 @@ export async function POST(request: NextRequest) {
       leadProfile = await submitApplication(supabase, leadProfile.id);
     }
 
+    // Google Ads "Application Submitted": recorded once per account, so the page
+    // fires the browser conversion only for the first submitted application.
+    const applicationConversion = await claimFunnelStage(supabase, userId, 'application_submitted', {
+      metadata: { application_id: leadProfile.id, value_inr: 500 },
+      sourceApp: 'app',
+    });
+
     return NextResponse.json({
       success: true,
       message: 'Application submitted successfully',
       leadProfileId: leadProfile.id,
       applicationNumber: leadProfile.application_number,
+      applicationConversion,
     });
   } catch (error) {
     console.error('Application submit error:', error);

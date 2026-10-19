@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, Skeleton, Snackbar, Typography } from '@neram/ui';
 import { LoginModal } from '@neram/ui';
+import { trackApplicationSubmitted } from '@neram/ui/analytics';
 import { useFirebaseAuth } from '@neram/auth';
 import { useTranslations } from 'next-intl';
 import { useFormContext } from './FormContext';
@@ -34,20 +35,11 @@ const visuallyHidden = {
   border: 0,
 } as const;
 
-function fireSignupConversion(transactionId: string | undefined, formData: ApplicationFormData) {
-  if (typeof window === 'undefined' || !(window as any).gtag) return;
-  const adsId = process.env.NEXT_PUBLIC_GOOGLE_ADS_ID;
-  const signupLabel = process.env.NEXT_PUBLIC_GOOGLE_ADS_SIGNUP_LABEL;
-  if (!adsId || !signupLabel) return;
-  (window as any).gtag('event', 'conversion', {
-    send_to: `${adsId}/${signupLabel}`,
-    transaction_id: transactionId,
-    utm_source: formData.utmSource || undefined,
-    utm_medium: formData.utmMedium || undefined,
-    utm_campaign: formData.utmCampaign || undefined,
-    gclid: formData.gclid || undefined,
-    wbraid: formData.wbraid || undefined,
-  });
+/** E.164 for enhanced conversions: the form keeps national digits plus the country. */
+function conversionPhone(formData: ApplicationFormData): string | null {
+  const digits = (formData.personal.phone || '').replace(/\D/g, '');
+  if (!digits) return null;
+  return `${getCountryConfig(formData.personal.phoneCountry).phonePrefix}${digits}`;
 }
 
 /**
@@ -172,7 +164,9 @@ export default function ApplyFlow() {
       const result = await submitApplication();
       if (!result.ok) return;
       trackTaxonomyEvent('application_completed', { application_id: result.id, edited: returnUserMode === 'edit' });
-      fireSignupConversion(result.id, formData);
+      if (result.applicationConversion) {
+        trackApplicationSubmitted({ applicationId: result.id, phone: conversionPhone(formData), email: formData.personal.email });
+      }
       setActiveStep(3);
       return;
     }

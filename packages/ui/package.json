@@ -12,7 +12,8 @@
     "./site-tokens": "./src/theme/site-tokens.ts",
     "./components": "./src/components/index.tsx",
     "./hooks": "./src/hooks/index.ts",
-    "./utils": "./src/utils/index.ts"
+    "./utils": "./src/utils/index.ts",
+    "./analytics": "./src/analytics/index.ts"
   },
   "scripts": {
     "lint": "echo 'Linted via consuming apps'",

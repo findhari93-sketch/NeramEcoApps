@@ -10,8 +10,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { isSamePhone } from '@/lib/phone-match';
 import { verifyIdToken } from '@/lib/firebase-admin';
-import { getUserByFirebaseUid, updateUser, getOrCreateUserFromFirebase, checkPhoneExists, findVerifiedPhoneOwner, getSupabaseAdminClient, insertFunnelEvent, recordDuplicateCandidate, linkPhoneAttempts, normalizeAttemptPhone, recordPhoneAttempt, recordFirstTouch, queueFirstTouchWhatsApp } from '@neram/database';
-import { isValidAnonymousId, resolveSignupFirstTouch } from '@neram/database/analytics';
+import { getUserByFirebaseUid, updateUser, getOrCreateUserFromFirebase, checkPhoneExists, findVerifiedPhoneOwner, getSupabaseAdminClient, insertFunnelEvent, recordDuplicateCandidate, linkPhoneAttempts, normalizeAttemptPhone, recordPhoneAttempt, recordFirstTouch, queueFirstTouchWhatsApp, claimFunnelStage } from '@neram/database';
+import { isRecentAccountWithoutOrigin, isValidAnonymousId, resolveSignupFirstTouch, resolveSignupLastTouch } from '@neram/database/analytics';
 import { clientIpFromHeaders, signupGeoFromHeaders } from '@neram/database/signup-geo';
 import { alertNewSignup, recordSignupGeo } from '@neram/database/signup-alert';
 
@@ -58,8 +58,22 @@ export async function POST(req: NextRequest) {
 
     const adminClient = getSupabaseAdminClient();
 
+    // Where this person came from: the body (LoginModal sends the shared cookies,
+    // which a cross-origin call from the marketing site does not carry) or the
+    // cookie header (same-origin calls from this app).
+    const cookieHeader = req.headers.get('cookie');
+    const origin = {
+      anonymousId: isValidAnonymousId(body.anonymousId) ? body.anonymousId : null,
+      firstTouch: resolveSignupFirstTouch({ bodyFirstTouch: body.first_touch, bodyTouches: body.touches, cookieHeader }),
+      lastTouch: resolveSignupLastTouch({ bodyTouches: body.touches, cookieHeader }) as Record<string, unknown> | null,
+    };
+
     // Get user from Supabase (use admin client to bypass RLS)
     let user = await getUserByFirebaseUid(decodedToken.uid, adminClient);
+    if (user && isRecentAccountWithoutOrigin(user)) {
+      // register-user lost the race to an earlier call that knew less; fill the gaps.
+      await recordFirstTouch(adminClient, user.id, origin);
+    }
 
     if (!user) {
       // Fallback: create user if register-user hadn't completed
@@ -74,10 +88,7 @@ export async function POST(req: NextRequest) {
         user = result.user;
         // register-user never ran for this account: keep its origin and place here.
         if (result.isNewUser) {
-          await recordFirstTouch(adminClient, user.id, {
-            anonymousId: isValidAnonymousId(body.anonymousId) ? body.anonymousId : null,
-            firstTouch: resolveSignupFirstTouch({ cookieHeader: req.headers.get('cookie') }),
-          });
+          await recordFirstTouch(adminClient, user.id, origin);
           await recordSignupGeo(adminClient, user.id, signupGeoFromHeaders(req.headers));
         }
       } catch (createError) {
@@ -174,6 +185,16 @@ export async function POST(req: NextRequest) {
       page_url: null,
     }).catch(() => {});
 
+    // Google Ads "Sign-up (OTP verified)": the first phone verification of a
+    // lead account, recorded once in the DB. The browser fires the conversion
+    // only when this is true, so a returning login never counts.
+    const signupConversion =
+      user.user_type === 'lead' &&
+      (await claimFunnelStage(adminClient, user.id, 'signup_verified', {
+        metadata: { value_inr: 100 },
+        sourceApp: 'app',
+      }));
+
     // First verified phone of a new account: tell staff (bell + phone push).
     await alertNewSignup(adminClient, user.id);
     // A Google-first sign-in was queued an email welcome (no phone then); now
@@ -182,6 +203,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      signupConversion,
       user: {
         id: updatedUser.id,
         name: updatedUser.name,

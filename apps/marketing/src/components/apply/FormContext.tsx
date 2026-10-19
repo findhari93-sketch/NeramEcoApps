@@ -111,7 +111,9 @@ function clearStorage(): void {
 export type ReturnUserMode = 'dashboard' | 'edit' | 'add-course' | 'new-form';
 
 export type SubmitResult =
-  | { ok: true; id: string; applicationNumber: string | null }
+  // applicationConversion: the server recorded this account's first submitted
+  // application just now, so the Google Ads conversion may fire.
+  | { ok: true; id: string; applicationNumber: string | null; applicationConversion?: boolean }
   | { ok: false; error: string };
 
 interface FormContextType {
@@ -866,7 +868,7 @@ export function FormProvider({ children }: FormProviderProps) {
       const submitted = { id: result.data.id as string, applicationNumber: (result.data.application_number as string) || null };
       setSubmittedApplication(submitted);
       setDraftId(submitted.id);
-      return { ok: true, ...submitted };
+      return { ok: true, ...submitted, applicationConversion: result.applicationConversion === true };
     } catch (error) {
       console.error('Submission error:', error);
       setSubmissionError('errors.submitFailed');

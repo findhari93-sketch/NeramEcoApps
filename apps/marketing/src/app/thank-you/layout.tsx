@@ -5,7 +5,7 @@
 // and globals.css give it the site theme, font stack and focus rings.
 
 import { ThemeRegistry, marketingLightTheme, marketingDarkTheme } from '@neram/ui';
-import GoogleAdsTag from '@/components/GoogleAdsTag';
+import { GoogleTag } from '@neram/ui/analytics';
 import '@/styles/globals.css';
 
 export const metadata = {
@@ -21,7 +21,7 @@ export default function ThankYouLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body suppressHydrationWarning>
-        <GoogleAdsTag />
+        <GoogleTag />
         <ThemeRegistry
           options={{ key: 'neram-thanks-mui' }}
           lightTheme={marketingLightTheme}

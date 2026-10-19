@@ -165,7 +165,7 @@ export default function StudentSession({
         });
 
         if (response.ok) {
-          const { user: dbUser, isNewUser } = await response.json();
+          const { user: dbUser } = await response.json();
           setSupabaseUser(dbUser);
           setPhoneVerified(dbUser.phone_verified);
           setOnboardingCompleted(dbUser.onboarding_completed ?? false);
@@ -177,17 +177,9 @@ export default function StudentSession({
           if (!dbUser.phone_verified) {
             trackFunnelEvent({ funnel: 'auth', event: 'phone_screen_shown', status: 'started' });
           }
-
-          // Fire Google Ads conversion for new registrations
-          if (isNewUser && (window as any).gtag) {
-            const adsId = process.env.NEXT_PUBLIC_GOOGLE_ADS_ID;
-            const signupLabel = process.env.NEXT_PUBLIC_GOOGLE_ADS_SIGNUP_LABEL;
-            if (adsId && signupLabel) {
-              (window as any).gtag('event', 'conversion', {
-                send_to: `${adsId}/${signupLabel}`,
-              });
-            }
-          }
+          // No Google Ads conversion here: a new account is not yet a sign-up.
+          // The sign-up conversion fires from LoginModal after the first phone
+          // verification (this used to fire the Application label on every tool).
         } else {
           console.error('Register user failed:', response.status);
           // With a cached profile the student keeps working; the next load retries.

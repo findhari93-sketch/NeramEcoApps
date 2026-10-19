@@ -7,7 +7,7 @@ import { ThemeRegistry, marketingLightTheme, marketingDarkTheme } from '@neram/u
 import { locales } from '@/i18n';
 import AuthProvider from '@/components/AuthProvider';
 import SiteChrome from '@/components/SiteChrome';
-import GoogleAdsTag from '@/components/GoogleAdsTag';
+import { GoogleTag } from '@neram/ui/analytics';
 import AttributionCapture from '@/components/AttributionCapture';
 import PageViewBeacon from '@/components/PageViewBeacon';
 import EnvBadge from '@/components/EnvBadge';
@@ -156,7 +156,7 @@ export default async function RootLayout({
             __html: `(function(){var K='chunk-err-reload';function r(){if(!sessionStorage.getItem(K)){sessionStorage.setItem(K,'1');window.location.reload();}}window.addEventListener('error',function(e){if(e.filename&&e.filename.indexOf('/_next/static/')!==-1)r();},true);window.addEventListener('unhandledrejection',function(e){var m=e.reason&&(e.reason.message||String(e.reason))||'';if(/ChunkLoadError|Loading chunk|dynamically imported module/i.test(m))r();});})();`,
           }}
         />
-        <GoogleAdsTag />
+        <GoogleTag />
         {/* One Organization node on every page; page and centre schemas point at its @id. */}
         <JsonLd data={generateOrganizationSchema()} />
         <AttributionCapture />

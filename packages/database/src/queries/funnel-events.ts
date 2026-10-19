@@ -327,37 +327,88 @@ export async function getBatchUserAuthDiagnostics(
 }
 
 /**
- * Record where a new account came from, once. Never overwrites an existing
- * first touch (a later campaign is not the first touch), and never throws: a
- * failure here must not fail sign-up.
+ * Record where a new account came from, once. Each field is filled only while
+ * it is empty, independently: a first call that knew only the anonymous id (a
+ * cross-origin verify-phone carries no cookies) must not lock out the campaign
+ * record a later call brings. Never overwrites an existing first touch (a later
+ * campaign is not the first touch), and never throws: a failure here must not
+ * fail sign-up.
  */
 export async function recordFirstTouch(
   client: TypedSupabaseClient,
   userId: string,
-  input: { anonymousId?: string | null; firstTouch?: Record<string, string> | null },
+  input: {
+    anonymousId?: string | null;
+    firstTouch?: Record<string, string> | null;
+    lastTouch?: Record<string, unknown> | null;
+  },
 ): Promise<boolean> {
-  const updates: Record<string, unknown> = {};
-  if (input.anonymousId) updates.anonymous_id = input.anonymousId;
-  if (input.firstTouch) {
-    updates.first_touch = input.firstTouch;
-    updates.first_touch_at = new Date().toISOString();
-  }
-  if (Object.keys(updates).length === 0) return false;
+  if (!input.anonymousId && !input.firstTouch && !input.lastTouch) return false;
+  let recorded = false;
   try {
-    const { error } = await client
-      .from('users')
-      .update(updates)
-      .eq('id', userId)
-      .is('first_touch_at', null)
-      .is('anonymous_id', null);
-    if (error) {
-      console.warn('[funnel] first touch not recorded:', error.message);
-      return false;
+    if (input.firstTouch) {
+      const { data, error } = await client
+        .from('users')
+        .update({ first_touch: input.firstTouch, first_touch_at: new Date().toISOString() })
+        .eq('id', userId)
+        .is('first_touch_at', null)
+        .select('id');
+      if (error) console.warn('[funnel] first touch not recorded:', error.message);
+      else if (data?.length) recorded = true;
     }
-    if (input.anonymousId) await linkAnonymousEvents(client, input.anonymousId, userId);
-    return true;
+    if (input.lastTouch) {
+      const { error } = await client
+        .from('users')
+        .update({ last_touch: input.lastTouch })
+        .eq('id', userId)
+        .is('last_touch', null);
+      if (error) console.warn('[funnel] last touch not recorded:', error.message);
+    }
+    if (input.anonymousId) {
+      const { error } = await client
+        .from('users')
+        .update({ anonymous_id: input.anonymousId })
+        .eq('id', userId)
+        .is('anonymous_id', null);
+      if (error) console.warn('[funnel] anonymous id not recorded:', error.message);
+      await linkAnonymousEvents(client, input.anonymousId, userId);
+    }
+    return recorded;
   } catch (err) {
     console.warn('[funnel] first touch not recorded:', err);
+    return recorded;
+  }
+}
+
+/** The four Google Ads funnel stages, each recorded once per user. */
+export type FunnelStage = 'signup_verified' | 'application_submitted' | 'demo_attended' | 'enrolled';
+
+/**
+ * Record a funnel stage for a user. True only for the call that wrote the row,
+ * so a browser conversion can fire exactly once (the DB holds one row per user
+ * per stage). Never throws: a failure counts as "already recorded", which can
+ * only miss a conversion, never double count one.
+ */
+export async function claimFunnelStage(
+  client: TypedSupabaseClient,
+  userId: string,
+  stage: FunnelStage,
+  options: { metadata?: Record<string, unknown>; sourceApp?: 'marketing' | 'app' } = {},
+): Promise<boolean> {
+  try {
+    const { data, error } = await client.rpc('claim_funnel_stage', {
+      p_user_id: userId,
+      p_stage: stage,
+      p_metadata: options.metadata ?? {},
+      p_source_app: options.sourceApp ?? null,
+    });
+    if (error) {
+      console.warn(`[funnel] ${stage} not claimed:`, error.message);
+      return false;
+    }
+    return data === true;
+  } catch (err) {
+    console.warn(`[funnel] ${stage} not claimed:`, err);
     return false;
   }
 }

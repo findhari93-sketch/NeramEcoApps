@@ -44,6 +44,7 @@ export interface AdsEnv {
    */
   conversionActionPhone: string;
   conversionActionDemo: string;
+  conversionActionDemoAttended: string;
   conversionActionPaid: string;
   allowMutations: boolean;
 }
@@ -62,6 +63,7 @@ export function readAdsEnv(env: Record<string, string | undefined> = process.env
     loginCustomerId: digits(env.GOOGLE_ADS_LOGIN_CUSTOMER_ID),
     conversionActionPhone: digits(env.GOOGLE_ADS_CONV_ACTION_PHONE),
     conversionActionDemo: digits(env.GOOGLE_ADS_CONV_ACTION_DEMO),
+    conversionActionDemoAttended: digits(env.GOOGLE_ADS_CONV_ACTION_DEMO_ATTENDED),
     conversionActionPaid: digits(env.GOOGLE_ADS_CONV_ACTION_PAID),
     allowMutations: env.MARKETING_AI_ALLOW_MUTATIONS === 'true',
   };

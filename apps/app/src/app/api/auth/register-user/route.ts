@@ -12,9 +12,11 @@ import { verifyIdToken } from '@/lib/firebase-admin';
 import { getOrCreateUserFromFirebase, updateUser, getUserByFirebaseUid, getSupabaseAdminClient, computeAccountTier, createAutoMessage, schedulePhoneDrip, insertFunnelEvent, linkAnonymousEvents, recordFirstTouch } from '@neram/database';
 import {
   ANON_ID_COOKIE,
+  isRecentAccountWithoutOrigin,
   isValidAnonymousId,
   readCookie,
   resolveSignupFirstTouch,
+  resolveSignupLastTouch,
 } from '@neram/database/analytics';
 import { clientIpFromHeaders, signupGeoFromHeaders } from '@neram/database/signup-geo';
 import { alertNewSignup, recordSignupGeo } from '@neram/database/signup-alert';
@@ -49,6 +51,7 @@ export async function POST(req: NextRequest) {
       bodyTouches: body.touches,
       cookieHeader,
     });
+    const lastTouch = resolveSignupLastTouch({ bodyTouches: body.touches, cookieHeader }) as Record<string, unknown> | null;
     const clientIp = clientIpFromHeaders(req.headers);
 
     if (!idToken) {
@@ -103,12 +106,18 @@ export async function POST(req: NextRequest) {
 
     // First touch is recorded once, on the account's creation; for anyone, the
     // anonymous journey from this browser becomes theirs.
+    // The Google Ads sign-up stage is never claimed here: verify-phone claims it,
+    // so the browser that just passed the OTP is the one told to fire.
     if (isNewUser) {
-      await recordFirstTouch(adminClient, user.id, { anonymousId, firstTouch });
+      await recordFirstTouch(adminClient, user.id, { anonymousId, firstTouch, lastTouch });
       await recordSignupGeo(adminClient, user.id, signupGeoFromHeaders(req.headers));
       // Phone-first sign-in: the account is born with a verified phone, so the
       // staff alert goes now (verify-phone sends it for Google-first sign-ins).
       if (user.phone_verified) await alertNewSignup(adminClient, user.id);
+    } else if (isRecentAccountWithoutOrigin(user as any)) {
+      // An earlier sign-up call (verify-phone, cross-origin) created the row
+      // without the cookies this call carries.
+      await recordFirstTouch(adminClient, user.id, { anonymousId, firstTouch, lastTouch });
     } else if (anonymousId) {
       await linkAnonymousEvents(adminClient, anonymousId, user.id);
     }

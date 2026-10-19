@@ -54,7 +54,6 @@ import {
   applyDraftPrefill,
   clearDraft,
   fetchMyDemo,
-  fireDemoConversion,
   hasApplyDraft,
   loadDraft,
   saveDraft,
@@ -321,7 +320,6 @@ export default function DemoBookingCard() {
       clearDraft();
       setBooked(result.request);
       writeDemoActive(result.request);
-      fireDemoConversion(result.request.ref);
       trackTaxonomyEvent('demo_requested', { ref: result.request.ref, window: draft.window, parent: draft.parentJoining, from });
       requestAnimationFrame(() => headingRef.current?.focus());
       return;

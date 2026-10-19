@@ -14,6 +14,7 @@ import {
   submitApplication,
   hasExistingApplication,
   deleteApplication,
+  claimFunnelStage,
   type CreateApplicationInput,
 } from '@neram/database/queries';
 import { verifyFirebaseToken } from '../_lib/auth';
@@ -43,6 +44,8 @@ interface ApplicationResponse {
   success: boolean;
   data?: unknown;
   error?: string;
+  /** True only for the account's first submitted application (Google Ads conversion). */
+  applicationConversion?: boolean;
 }
 
 // Course type labels
@@ -485,8 +488,18 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
       }
     }
 
+    // Google Ads "Application Submitted": recorded once per account, so the form
+    // fires the browser conversion only for the first submitted application.
+    const applicationConversion =
+      isSubmitting && application?.status === 'submitted'
+        ? await claimFunnelStage(supabase, auth.userId, 'application_submitted', {
+            metadata: { application_id: application.id, value_inr: 500 },
+            sourceApp: 'marketing',
+          })
+        : false;
+
     return NextResponse.json(
-      { success: true, data: application },
+      { success: true, data: application, applicationConversion },
       { status: 201 }
     );
   } catch (error: any) {
