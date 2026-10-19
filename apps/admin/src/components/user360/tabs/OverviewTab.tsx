@@ -17,6 +17,7 @@ import { formatDate, formatDateTime, isOverdue, relativeTime, sentenceCase, sugg
 import { EmptyNote, KeyValue, SectionCard, TwoColumns, type User360TabProps } from '../shared';
 import IdentityList from '../IdentityList';
 import PhoneNumberList from '../PhoneNumberList';
+import FamilyCard from '../FamilyCard';
 
 const FIRST_TOUCH_LABELS: Record<string, string> = {
   utm_source: 'Source',
@@ -70,6 +71,10 @@ export default function OverviewTab({ data, detail, onNavigateTab }: User360TabP
               notes still apply.
             </EmptyNote>
           </SectionCard>
+        )}
+
+        {inLifecycle && p.id && (
+          <FamilyCard personId={p.id} personName={p.name ?? null} isParentAccount={Boolean(p.is_guardian_account)} />
         )}
 
         {inLifecycle && (

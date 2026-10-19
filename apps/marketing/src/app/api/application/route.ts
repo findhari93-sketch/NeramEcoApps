@@ -6,6 +6,7 @@ import {
   sendTemplateEmail,
   notifyNewApplication,
   parseExamYearAnswer,
+  recordStatedExamYear,
   createLogger,
 } from '@neram/database';
 import {
@@ -433,6 +434,15 @@ export async function POST(request: NextRequest): Promise<NextResponse<Applicati
     // with the NaN above it fired for everyone, so a Class 11 applicant was tagged
     // as sitting the exam this year. A NULL cohort is honest, the Nexus students
     // screen surfaces it as "no exam year set", and staff fix it in one tap.
+    // The one stated-year write path. Runs before the cohort stamp below,
+    // because recordStatedExamYear never writes over a set academic_year. Its
+    // own guard: a failure here must never skip the cohort stamp.
+    try {
+      const { examYear } = parseExamYearAnswer(body.target_exam_year);
+      if (examYear) await recordStatedExamYear(supabase as any, auth.userId, examYear, 'apply');
+    } catch (yearErr) {
+      console.error('[Application API] stated exam year failed:', yearErr);
+    }
     try {
       const { academicYear } = parseExamYearAnswer(body.target_exam_year);
       if (academicYear) {

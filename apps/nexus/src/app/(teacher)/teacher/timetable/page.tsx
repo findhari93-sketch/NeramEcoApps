@@ -43,6 +43,9 @@ import HolidayManager from '@/components/timetable/HolidayManager';
 import AvailabilitySheet, {
   type AvailabilityScope,
 } from '@/components/timetable/AvailabilitySheet';
+import AttendanceFollowUpSheet, {
+  type FollowUpClassOption,
+} from '@/components/timetable/AttendanceFollowUpSheet';
 import TimetableNotificationBell from '@/components/timetable/TimetableNotificationBell';
 import { type ClassCardData } from '@/components/timetable/ClassCard';
 import { LAYOUT } from '@/components/timetable/timetable-theme';
@@ -196,6 +199,8 @@ export default function TeacherTimetable() {
     severity: 'success' | 'error' | 'warning' | 'info';
     /** Optional follow-up, e.g. "Add pre-class work" after creating a class. */
     action?: { label: string; onClick: () => void };
+    /** A second follow-up beside it, e.g. "Ask who is coming". */
+    secondAction?: { label: string; onClick: () => void };
   }>({
     open: false,
     message: '',
@@ -1062,6 +1067,26 @@ export default function TeacherTimetable() {
     setAvailabilityScope({ kind: 'class', classId, date: cls?.scheduled_date || '' });
   };
 
+  /**
+   * Confirm who is coming, for the classes a day card or class view named.
+   * Replaces the availability sheet rather than stacking on it: one sheet at a
+   * time on a phone.
+   */
+  const [followUpClasses, setFollowUpClasses] = useState<FollowUpClassOption[] | null>(null);
+  const openFollowUp = (classIds: string[]) => {
+    const options = classIds
+      .map((id) => {
+        const fromRange = availability?.classes.find((c) => c.class_id === id);
+        if (fromRange) return { id, title: fromRange.title, start_time: fromRange.start_time };
+        const cls = classesRef.current.find((c) => c.id === id);
+        return cls ? { id, title: cls.title, start_time: cls.start_time } : null;
+      })
+      .filter((c): c is FollowUpClassOption => !!c);
+    if (options.length === 0) return;
+    setAvailabilityScope(null);
+    setFollowUpClasses(options);
+  };
+
   /** From a day card in the planner: close the sheet, open Add Class on that date. */
   const handleScheduleForDate = (date: string) => {
     setAvailabilityScope(null);
@@ -1738,6 +1763,12 @@ export default function TeacherTimetable() {
                   },
                 }
               : undefined,
+            // Classes are often posted a couple of hours ahead, so the ask is
+            // offered the moment one exists. Opening the sheet sends nothing.
+            secondAction:
+              only && !editingClass
+                ? { label: 'Ask who is coming', onClick: () => openFollowUp([only.id]) }
+                : undefined,
           });
           fetchClasses(true);
           fetchHolidays();
@@ -1779,6 +1810,16 @@ export default function TeacherTimetable() {
         standingStudents={standingForForecast}
         onOpenClass={handleOpenClassFromPlanner}
         onSchedule={handleScheduleForDate}
+        onConfirm={openFollowUp}
+      />
+
+      <AttendanceFollowUpSheet
+        open={!!followUpClasses}
+        onClose={() => setFollowUpClasses(null)}
+        classroomId={activeClassroom?.id ?? null}
+        classes={followUpClasses || []}
+        standingStudents={standingForForecast}
+        onChanged={() => fetchClasses(true)}
       />
 
       {/* The register and what it adds up to, in one dialog. These were two
@@ -1952,7 +1993,7 @@ export default function TeacherTimetable() {
       {/* Snackbar */}
       <Snackbar
         open={snackbar.open}
-        autoHideDuration={4000}
+        autoHideDuration={snackbar.action || snackbar.secondAction ? 8000 : 4000}
         onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
@@ -1960,19 +2001,25 @@ export default function TeacherTimetable() {
           severity={snackbar.severity}
           onClose={() => setSnackbar((s) => ({ ...s, open: false }))}
           action={
-            snackbar.action ? (
-              <Button
-                color="inherit"
-                size="small"
-                onClick={() => {
-                  const run = snackbar.action?.onClick;
-                  setSnackbar((s) => ({ ...s, open: false }));
-                  run?.();
-                }}
-                sx={{ textTransform: 'none', fontWeight: 700, minHeight: 36 }}
-              >
-                {snackbar.action.label}
-              </Button>
+            snackbar.action || snackbar.secondAction ? (
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                {[snackbar.action, snackbar.secondAction]
+                  .filter((a): a is { label: string; onClick: () => void } => !!a)
+                  .map((a) => (
+                    <Button
+                      key={a.label}
+                      color="inherit"
+                      size="small"
+                      onClick={() => {
+                        setSnackbar((s) => ({ ...s, open: false }));
+                        a.onClick();
+                      }}
+                      sx={{ textTransform: 'none', fontWeight: 700, minHeight: 44 }}
+                    >
+                      {a.label}
+                    </Button>
+                  ))}
+              </Box>
             ) : undefined
           }
         >

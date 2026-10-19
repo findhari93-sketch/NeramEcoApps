@@ -4,6 +4,8 @@ import {
   marketingOriginFor,
   studentDetailUrl,
   whatsappMessage,
+  payBalanceUrl,
+  payBalanceMessage,
 } from './marketing-links';
 
 describe('marketingOriginFor', () => {
@@ -89,5 +91,32 @@ describe('whatsappMessage', () => {
 
   it('uses no em dashes, which are banned in user-visible copy', () => {
     expect(whatsappMessage('Ravi', 'https://x.test/s/t')).not.toMatch(/[—–]|--/);
+  });
+});
+
+describe('payBalanceUrl', () => {
+  it('points at the pay balance page on the paired marketing host', () => {
+    expect(payBalanceUrl({ adminOrigin: 'https://admin.neramclasses.com' })).toBe('https://neramclasses.com/en/pay-balance');
+    expect(payBalanceUrl({ adminOrigin: 'https://staging-admin.neramclasses.com' })).toBe('https://staging.neramclasses.com/en/pay-balance');
+    expect(payBalanceUrl({ adminOrigin: 'http://localhost:3013' })).toBe('http://localhost:3010/en/pay-balance');
+  });
+
+  it('prefers the configured marketing URL', () => {
+    expect(payBalanceUrl({ adminOrigin: 'http://localhost:3013', configured: 'https://example.org/' })).toBe('https://example.org/en/pay-balance');
+  });
+});
+
+describe('payBalanceMessage', () => {
+  it('greets by first name and says the amount, the link and how to sign in', () => {
+    const msg = payBalanceMessage('Radhika', '₹13,500', 'https://neramclasses.com/en/pay-balance');
+    expect(msg).toBe(
+      'Hi Radhika, you can pay your Neram Classes balance of ₹13,500 here: https://neramclasses.com/en/pay-balance. Sign in with your registered phone number. Reply here if you need help.',
+    );
+  });
+
+  it('still reads well without a name or an amount, and has no em dashes', () => {
+    const msg = payBalanceMessage('', null, 'https://neramclasses.com/en/pay-balance');
+    expect(msg.startsWith('Hi, you can pay your Neram Classes balance here:')).toBe(true);
+    expect(msg).not.toMatch(/—|--/);
   });
 });

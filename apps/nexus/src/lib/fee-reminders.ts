@@ -38,7 +38,8 @@ import {
 } from '@neram/database/queries';
 import { sendNudge } from './nudge-delivery';
 import { CHECK_DETAILS_PATH, deliveryChannel, deliveryLanded, installmentReminderMessage } from './fee-check-copy';
-import { checkDetailsUrl, sendRecordCheck } from './record-check-send';
+import { sendRecordCheck } from './record-check-send';
+import { payBalanceUrl } from './marketing-links';
 
 export interface FeeRemindersReport {
   dryRun: boolean;
@@ -146,7 +147,13 @@ export async function runFeeReminders(
           due_date: reminder.dueDate,
           source: 'fee_reminders',
         },
-        assistant: { link: { url: checkDetailsUrl(options.origin), label: copy.linkLabel } },
+        // The button opens the pay balance page (marketing): sign in, pay, send the UTR.
+        assistant: {
+          link: {
+            url: payBalanceUrl({ nexusOrigin: options.origin, configured: process.env.NEXT_PUBLIC_MARKETING_URL }),
+            label: copy.linkLabel,
+          },
+        },
         reachNotStarted: true,
         source: { kind: 'fee_installment_reminder', refId: reminder.installmentId },
       });

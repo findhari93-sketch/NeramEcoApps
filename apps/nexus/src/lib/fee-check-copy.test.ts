@@ -62,10 +62,10 @@ describe('student copy', () => {
   it('words the installment reminder for 3 days before and for the day', () => {
     const upcoming = installmentReminderMessage({ kind: 'upcoming', amount: 15000, dueDate: '2026-10-19' });
     expect(upcoming.plain).toBe(
-      'Hi {firstName}, your second installment of ₹15,000 is due on 19 Oct 2026. Already paid? Tell us on Check your details.',
+      'Hi {firstName}, your second installment of ₹15,000 is due on 19 Oct 2026. Tap Pay now to pay by UPI or bank transfer. Already paid at the office? You can ignore this.',
     );
     const today = installmentReminderMessage({ kind: 'due_today', amount: 15000, dueDate: '2026-10-19' });
     expect(today.plain).toContain('is due today.');
-    expect(today.linkLabel).toBe('See your fees');
+    expect(today.linkLabel).toBe('Pay now');
   });
 });

@@ -34,6 +34,7 @@ interface AdminNotification {
 
 const EVENT_TYPE_COLORS: Record<string, string> = {
   new_signup: '#1565c0',
+  phone_stuck: '#e65100',
   new_onboarding: '#4caf50',
   onboarding_skipped: '#ff9800',
   new_application: '#2196f3',
@@ -53,6 +54,7 @@ const EVENT_TYPE_COLORS: Record<string, string> = {
   fee_details_confirmed: '#4caf50',
   fee_installment_due: '#ff9800',
   fee_installment_overdue: '#f44336',
+  payment_to_verify: '#e65100',
 };
 
 const EVENT_SECTION_MAP: Record<string, string> = {
@@ -97,8 +99,18 @@ function getNavigationUrl(notification: AdminNotification): string | null {
     return '/support-tickets';
   }
 
+  // Stuck at phone sign-in: the list, with the call buttons and the reason.
+  if (notification.event_type === 'phone_stuck') return '/phone-sign-in';
+
   if (notification.event_type === 'direct_enrollment_completed') {
     return '/direct-enrollment';
+  }
+
+  // A student paid through their link: open the card that verifies it. The
+  // server picks where (the demo desk or Direct Enroll); only admin paths count.
+  if (notification.event_type === 'payment_to_verify') {
+    const url = notification.metadata?.url;
+    return typeof url === 'string' && url.startsWith('/') && !url.startsWith('//') ? url : '/direct-enrollment';
   }
 
   // Fees: a student's report goes to the review list, due dates to who owes.

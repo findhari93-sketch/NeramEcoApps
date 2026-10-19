@@ -43,10 +43,19 @@ function automated(): boolean {
   return typeof navigator !== 'undefined' && navigator.webdriver === true;
 }
 
-export function requestReauth(now: number = Date.now()): Promise<string | null> {
+export interface ReauthRequest {
+  /**
+   * The call came from a click (Try again, Save). The quiet spell after "Not now"
+   * is for background polls; without this, Try again on a dead page waited and
+   * failed again with no dialog for half a minute.
+   */
+  userInitiated?: boolean;
+}
+
+export function requestReauth(now: number = Date.now(), opts: ReauthRequest = {}): Promise<string | null> {
   if (pending) return pending.promise;
   if (listeners.size === 0 || inMsalPopup() || automated()) return Promise.resolve(null);
-  if (now - declinedAt < DECLINE_QUIET_MS) return Promise.resolve(null);
+  if (!opts.userInitiated && now - declinedAt < DECLINE_QUIET_MS) return Promise.resolve(null);
 
   let resolve!: (token: string | null) => void;
   const promise = new Promise<string | null>((r) => {

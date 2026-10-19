@@ -5,6 +5,7 @@ import { NextRequest } from 'next/server';
 let dbUser: any = null;
 const claimFunnelStage = vi.fn(async (..._args: unknown[]) => true);
 const recordFirstTouch = vi.fn(async (..._args: unknown[]) => true);
+const resolveDuplicatesFor = vi.fn(async (id: string, ..._rest: unknown[]) => ({ survivorId: id }));
 const getOrCreateUserFromFirebase = vi.fn(async () => ({ user: { ...baseUser, created_at: new Date().toISOString() }, isNewUser: true }));
 
 const baseUser = { id: 'user-1', name: 'Arun', email: 'arun@example.com', phone: null, phone_verified: false, user_type: 'lead' };
@@ -18,6 +19,9 @@ vi.mock('@neram/database', () => ({
   getSupabaseAdminClient: () => ({}),
   insertFunnelEvent: vi.fn(async () => null),
   recordDuplicateCandidate: vi.fn(async () => undefined),
+  resolveDuplicatesFor: (...a: unknown[]) => resolveDuplicatesFor(...(a as [string])),
+  normalisePhoneE164: (p: string) => p,
+  getUserById: async (id: string) => ({ ...baseUser, id, name: 'Kavya', phone: '+919876543210', phone_verified: true }),
   linkPhoneAttempts: vi.fn(async () => undefined),
   normalizeAttemptPhone: (p: string) => p,
   recordPhoneAttempt: vi.fn(async () => undefined),
@@ -71,6 +75,14 @@ describe('POST /api/auth/verify-phone: Google Ads sign-up stage', () => {
     claimFunnelStage.mockResolvedValueOnce(false);
     const returning = await (await call()).json();
     expect(returning.signupConversion).toBe(false);
+  });
+
+  it('a sign-up folded into a known family is not an Ads sign-up', async () => {
+    resolveDuplicatesFor.mockResolvedValueOnce({ survivorId: 'student-9' });
+    const json = await (await call()).json();
+    expect(json).toMatchObject({ success: true, signupConversion: false, mergedInto: 'student-9' });
+    expect(json.user.id).toBe('student-9');
+    expect(claimFunnelStage).not.toHaveBeenCalled();
   });
 
   it('never counts a non-lead account (staff-made student, teacher)', async () => {

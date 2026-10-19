@@ -8,6 +8,7 @@ import InlineText from './InlineText';
 import AintraTable from './AintraTable';
 import FeeCards from './FeeCards';
 import ActionButtons from './ActionButtons';
+import BookingBlock from './booking/BookingBlock';
 
 export interface AintraRichTextProps {
   /** The raw answer. Ignored when `parsed` is given. */
@@ -43,7 +44,8 @@ export default function AintraRichText({ text = '', parsed, streaming, variant =
       }}
     >
       {answer.blocks.map((block, i) => (
-        <BlockView key={i} block={block} body={body} variant={variant} onOpenCanvas={onOpenCanvas} first={i === 0} />
+        // A booking card keeps its key while the answer streams, so a half-filled card is never reset.
+        <BlockView key={block.type === 'book' ? `book-${block.suggestion.kind}` : i} block={block} body={body} variant={variant} onOpenCanvas={onOpenCanvas} first={i === 0} />
       ))}
     </Box>
   );
@@ -54,10 +56,16 @@ export default function AintraRichText({ text = '', parsed, streaming, variant =
  * [[cta:apply,demo]] under them, the same two buttons show twice in a row.
  */
 function withoutRepeatedActions(answer: ParsedAnswer): ParsedAnswer {
-  if (!answer.blocks.some((b) => b.type === 'fees')) return answer;
+  const fees = answer.blocks.some((b) => b.type === 'fees');
+  // A booking card already is the demo or call button.
+  const bookDemo = answer.blocks.some((b) => b.type === 'book' && b.suggestion.kind === 'demo');
+  const bookCall = answer.blocks.some((b) => b.type === 'book' && b.suggestion.kind === 'callback');
+  if (!fees && !bookDemo && !bookCall) return answer;
   const blocks = answer.blocks.flatMap((b): Block[] => {
     if (b.type !== 'cta') return [b];
-    const actions = b.actions.filter((a) => a !== 'apply' && a !== 'demo');
+    const actions = b.actions.filter(
+      (a) => !(fees && (a === 'apply' || a === 'demo')) && !(bookDemo && a === 'demo') && !(bookCall && a === 'call'),
+    );
     return actions.length ? [{ ...b, actions }] : [];
   });
   return { ...answer, blocks };
@@ -170,6 +178,8 @@ function BlockView({
       return <FeeCards ids={block.ids} variant={variant} onOpenCanvas={onOpenCanvas} />;
     case 'cta':
       return <ActionButtons actions={block.actions} />;
+    case 'book':
+      return <BookingBlock suggestion={block.suggestion} interactive={variant === 'chat'} />;
     default:
       return null;
   }

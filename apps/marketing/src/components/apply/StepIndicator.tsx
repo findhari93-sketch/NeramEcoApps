@@ -4,6 +4,7 @@ import { Box, Typography } from '@neram/ui';
 import { useTranslations } from 'next-intl';
 import { tokens as tk } from '@/design-system';
 import { STEP_COUNT, STEP_KEYS, type FormStep } from './types';
+import { DESK } from './shell/density';
 
 interface StepIndicatorProps {
   step: FormStep;
@@ -48,6 +49,7 @@ export default function StepIndicator({ step, onStepClick }: StepIndicatorProps)
                 gap: 1,
                 width: '100%',
                 minHeight: 44,
+                [DESK]: { gap: 0.75 },
                 pt: 0.5,
                 cursor: clickable ? 'pointer' : 'default',
                 color: active || done ? tk.ink : tk.inkMuted,
@@ -58,6 +60,7 @@ export default function StepIndicator({ step, onStepClick }: StepIndicatorProps)
               <Box
                 sx={{
                   height: 4,
+                  [DESK]: { height: 3 },
                   borderRadius: '2px',
                   bgcolor: active || done ? tk.gold500 : tk.line,
                   transition: 'background-color 200ms',
@@ -71,6 +74,7 @@ export default function StepIndicator({ step, onStepClick }: StepIndicatorProps)
                   gap: 0.75,
                   alignItems: 'baseline',
                   fontSize: { xs: 13, sm: 14 },
+                  [DESK]: { fontSize: 13 },
                   fontWeight: active ? 700 : 600,
                   lineHeight: 1.2,
                   whiteSpace: 'nowrap',

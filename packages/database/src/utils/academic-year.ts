@@ -63,6 +63,47 @@ export function addAcademicYears(academicYear: string | null | undefined, years:
   return startYear === null ? null : formatAcademicYear(startYear + years);
 }
 
+/** India Standard Time is UTC+05:30 all year (no daylight saving). */
+const IST_OFFSET_MS = 330 * 60 * 1000;
+
+/**
+ * The exam year of the season a date falls in.
+ *
+ * The NATA / JEE B.Arch season runs 1 July to 30 June in IST: everything from
+ * July 2026 onward is preparation for the 2027 exam, while 30 June 2026 still
+ * belongs to the 2026 exam. This is the same rule `user_lifecycle_view` uses to
+ * estimate an exam year from a sign-up date, so a year picked from
+ * `examYearChoices` and a year estimated by the CRM agree on what "this year"
+ * means. Reads the calendar in IST so a server running in UTC flips on the
+ * same midnight a student in India sees.
+ */
+export function examSeasonYear(date: Date = new Date()): number {
+  const ist = new Date(date.getTime() + IST_OFFSET_MS);
+  const year = ist.getUTCFullYear();
+  return ist.getUTCMonth() >= 6 ? year + 1 : year; // July (index 6) starts the next season
+}
+
+/**
+ * The four exam years a student can pick when asked "Which year will you write
+ * NATA or JEE B.Arch?": the current season and the three after it. A Class 9
+ * student is the youngest the question is meant for.
+ */
+export function examYearChoices(now: Date = new Date()): number[] {
+  const y = examSeasonYear(now);
+  return [y, y + 1, y + 2, y + 3];
+}
+
+/**
+ * Whether a stated exam year is plausible: within the picker's range with one
+ * year of slack either side (a student answering on 1 July about the exam they
+ * just wrote, or a Class 8 student who is very early).
+ */
+export function isPlausibleStatedExamYear(year: unknown, now: Date = new Date()): year is number {
+  if (typeof year !== 'number' || !Number.isInteger(year)) return false;
+  const choices = examYearChoices(now);
+  return year >= choices[0] - 1 && year <= choices[choices.length - 1] + 1;
+}
+
 /**
  * Selectable cohorts: two years ahead of the current one, down to 2022-23.
  * Generated rather than read from the batch registry so a year like 2025-26 is

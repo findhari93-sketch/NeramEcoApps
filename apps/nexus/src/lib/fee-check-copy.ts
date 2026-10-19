@@ -90,7 +90,7 @@ export function installmentReminderMessage(input: {
   const when = input.kind === 'due_today' ? 'is due today' : `is due on ${formatDueDate(input.dueDate)}`;
   return {
     subject: input.kind === 'due_today' ? 'Your second installment is due today' : 'Your second installment is coming up',
-    plain: `Hi {firstName}, your second installment of ${amount} ${when}. Already paid? Tell us on Check your details.`,
-    linkLabel: 'See your fees',
+    plain: `Hi {firstName}, your second installment of ${amount} ${when}. Tap Pay now to pay by UPI or bank transfer. Already paid at the office? You can ignore this.`,
+    linkLabel: 'Pay now',
   };
 }

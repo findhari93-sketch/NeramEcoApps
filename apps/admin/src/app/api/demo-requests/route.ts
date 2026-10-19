@@ -14,6 +14,8 @@ import {
   enqueueDemoMessages,
   demoPhone10,
   listDemoFollowUpsByDemo,
+  isPlausibleStatedExamYear,
+  recordStatedExamYear,
   type DemoRequest,
   type TypedSupabaseClient,
   type DemoWindow,
@@ -217,6 +219,10 @@ export async function POST(req: Request) {
     const channelDef = STAFF_DEMO_CHANNELS.find((c) => c.id === channel);
     if (!channelDef) throw new AddError('Pick where they came from.');
 
+    // Required: the year they will write NATA or JEE B.Arch.
+    const examYear = Number(body.examYear);
+    if (!isPlausibleStatedExamYear(examYear)) throw new AddError('Pick the exam year.');
+
     // Validate the held-demo fields before anything is written (incl. a new person).
     const heldParsed = mode === 'held' ? await parseHeldDemoWithSettings(body, supabase) : null;
     const planned = mode === 'planned' ? await parsePlanned(body, supabase) : null;
@@ -269,6 +275,15 @@ export async function POST(req: Request) {
     }
     const userId = user!.id;
 
+    // The one stated-year write path (a batch year is never overwritten). Only on the student's own account: a
+    // parent's account must not carry their child's exam year.
+    if (accountHolder === 'student') {
+      await recordStatedExamYear(supabase, userId, examYear, 'demo').catch((err) =>
+        console.error('demo add exam year failed:', err),
+      );
+    }
+
+
     const parentPhone = demoPhone10(str(body.parentPhone, 20));
     const parentName = str(body.parentName, 100) || null;
     const currentClass = CLASSES.has(str(body.currentClass, 20)) ? str(body.currentClass, 20) : null;
@@ -278,6 +293,7 @@ export async function POST(req: Request) {
       email: email || (accountHolder === 'student' ? user!.email : null) || null,
       phone,
       current_class: currentClass,
+      exam_year: examYear,
       parent_joining: !!(parentPhone || parentName),
       parent_name: parentName,
       parent_phone: parentPhone,
@@ -299,6 +315,7 @@ export async function POST(req: Request) {
         phone,
         account_holder: accountHolder,
         ...(currentClass ? { current_class: currentClass } : {}),
+        exam_year: examYear,
         ...(email ? { email } : {}),
         ...(parentName || parentPhone ? { parent_joining: true, parent_name: parentName, parent_phone: parentPhone } : {}),
       };

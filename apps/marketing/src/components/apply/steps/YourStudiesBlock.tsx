@@ -42,10 +42,10 @@ import {
 const fieldGridSx = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))',
-  gap: '20px 16px',
+  gap: { xs: '20px 16px', md: '16px' },
 } as const;
 
-const questionSx = { m: 0, mb: 1.5, fontSize: 17, fontWeight: 700, lineHeight: 1.35, color: t.ink } as const;
+const questionSx = { m: 0, mb: 1.5, fontSize: { xs: 17, md: 16 }, fontWeight: 700, lineHeight: 1.35, color: t.ink } as const;
 
 interface SelectFieldProps {
   id: string;
@@ -229,7 +229,7 @@ export default function YourStudiesBlock() {
   const percentage = (v: string) => (v ? Number(v) : undefined);
 
   return (
-    <Box component="section" aria-labelledby="apply-studies-title" sx={{ display: 'flex', flexDirection: 'column', gap: 3.5 }}>
+    <Box component="section" aria-labelledby="apply-studies-title" sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 3.5, md: 2.5 } }}>
       <Box>
         <Typography id="apply-studies-title" component="h2" sx={{ m: 0, fontSize: 22, fontWeight: 800, lineHeight: 1.25, color: t.ink }}>
           {tr('yourCourse.studiesTitle')}

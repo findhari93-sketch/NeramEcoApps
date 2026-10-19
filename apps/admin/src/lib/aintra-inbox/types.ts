@@ -8,7 +8,7 @@ import type { Intent } from './intents';
 
 export type TurnStatus = 'error' | 'review' | 'none' | 'corrected' | 'resolved' | 'gated' | 'ok';
 
-export type LeadStage = 'Enrolled' | 'Demo booked' | 'Applied' | 'Hot lead' | 'Warm' | 'Unknown';
+export type LeadStage = 'Enrolled' | 'Demo booked' | 'Callback asked' | 'Applied' | 'Hot lead' | 'Warm' | 'Unknown';
 
 export type AiVerdict = 'correct' | 'needs_fix' | 'wrong' | 'uncertain';
 
@@ -89,6 +89,8 @@ export interface InboxUser {
   profileLabel: string | null;
   enrolled: boolean;
   demoBooked: boolean;
+  /** Asked for a callback from the Aintra chat card. */
+  callbackAsked?: boolean;
   applied: boolean;
 }
 

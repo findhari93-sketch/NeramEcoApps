@@ -247,10 +247,35 @@ function AuthButtonInner({ tone = 'dark', goldRing = false }: AuthButtonProps) {
         disableScrollLock
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        // A white panel like the mega menu, whatever the header tone. Inside a dark
+        // band the dark theme would paint the paper navy800 under ink text, and its
+        // white hover tint would vanish, so every state sets its own colours.
         PaperProps={{
-          sx: { minWidth: 240, mt: 1, borderRadius: `${t.radius}px`, border: `1px solid ${t.line}`, boxShadow: t.shadowMegaMenu },
+          sx: {
+            minWidth: 240,
+            mt: 1,
+            borderRadius: `${t.radius}px`,
+            border: `1px solid ${t.line}`,
+            bgcolor: t.surface,
+            color: t.ink,
+            backgroundImage: 'none',
+            boxShadow: t.shadowMegaMenu,
+          },
         }}
-        MenuListProps={{ sx: { py: 0.5, '& .MuiMenuItem-root': { minHeight: 48, fontSize: 15, color: t.ink } } }}
+        MenuListProps={{
+          sx: {
+            py: 0.5,
+            '& .MuiMenuItem-root': {
+              minHeight: 48,
+              fontSize: 15,
+              color: t.ink,
+              '&:hover': { bgcolor: t.surfaceHover },
+              '&.Mui-focusVisible': { bgcolor: t.surfaceHover, outline: t.focusOutline, outlineOffset: -2 },
+              '&.Mui-disabled': { opacity: 1, color: t.inkMuted },
+            },
+            '& .MuiListItemIcon-root': { color: t.inkMuted },
+          },
+        }}
       >
         <Box sx={{ px: 2, py: 1.5 }}>
           <Typography sx={{ fontSize: 15, fontWeight: 700, color: t.ink }} noWrap>

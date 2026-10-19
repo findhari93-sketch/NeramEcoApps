@@ -30,6 +30,7 @@ export {
   notifyAdmin,
   sendFirstTouchEmail,
   sendPhoneDripEmail,
+  sendEnrolmentLinkEmail,
 } from './services/email';
 export type { EmailData, TemplateData } from './services/email';
 
@@ -78,6 +79,8 @@ export {
   DEMO_WA_TEMPLATES,
   APPLY_WA_TEMPLATES,
   sendApplyDraftDemoNudge,
+  ENROLMENT_WA_TEMPLATES,
+  sendEnrolmentLinkWhatsApp,
   sendTicketConfirmation as sendWhatsAppTicketConfirmation,
   sendFirstTouchQuickQuestion,
   sendFirstTouchResultsVideo,
@@ -131,8 +134,12 @@ export {
   yearTier,
   pairStatus,
   parseExamYearAnswer,
+  examSeasonYear,
+  examYearChoices,
+  isPlausibleStatedExamYear,
 } from './utils/academic-year';
 export type { YearTier, PairStatus } from './utils/academic-year';
+export * from './utils/exam-year-prompt';
 
 // How complete a student's application form is. One rule for the Admin grid, the
 // Nexus students sheet and the student's own form, so the three stop disagreeing.
@@ -191,6 +198,9 @@ export { createUnsubscribeToken, verifyUnsubscribeToken } from './utils/unsubscr
 export * from './utils/demo-schedule';
 export * from './utils/demo-follow-up';
 export * from './utils/fee-plan';
+export * from './utils/enrolment-link';
+export * from './utils/phone';
+export * from './utils/duplicate-evidence';
 export { fetchAllRows, countRowsByKey, countRowsForIds } from './utils/paged-rows';
 export {
   classifyCatchupCandidate,

@@ -35,6 +35,8 @@ import { trackFunnelEvent, trackFunnelEventImmediate, setFunnelTrackerToken } fr
 
 // Only phone-unverified students see this, so keep it out of every page's first load.
 const LoginModal = dynamic(() => import('@neram/ui').then((m) => m.LoginModal), { ssr: false });
+// Only students who have not stated an exam year are asked; load it on demand.
+const ExamYearSheet = dynamic(() => import('@/components/exam-year/ExamYearSheet'), { ssr: false });
 
 const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost:3010';
 
@@ -77,6 +79,9 @@ export default function StudentSession({
   const [phoneVerified, setPhoneVerified] = useState(false);
   const [phoneSkipped, setPhoneSkipped] = useState(false);
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
+  // True when the wizard was finished or skipped in this visit: one round of
+  // questions per visit is enough, so the exam year sheet waits for the next.
+  const [onboardedThisVisit, setOnboardedThisVisit] = useState(false);
   const [supabaseUser, setSupabaseUser] = useState<SupabaseUser | null>(null);
   const [checkingUser, setCheckingUser] = useState(true);
   const [registrationError, setRegistrationError] = useState(false);
@@ -502,9 +507,21 @@ export default function StudentSession({
           userToken={idToken}
           userName={user.name || undefined}
           sourceApp="app"
-          onComplete={() => setOnboardingCompleted(true)}
-          onSkip={() => setOnboardingCompleted(true)}
+          onComplete={() => {
+            setOnboardingCompleted(true);
+            setOnboardedThisVisit(true);
+          }}
+          onSkip={() => {
+            setOnboardingCompleted(true);
+            setOnboardedThisVisit(true);
+          }}
         />
+      )}
+
+      {/* Exam year question: only once the phone and onboarding gates are
+          done, so it never stacks on top of either. */}
+      {phoneVerified && onboardingCompleted && !onboardedThisVisit && idToken && (
+        <ExamYearSheet idToken={idToken} />
       )}
     </ReporterAccessProvider>
   );

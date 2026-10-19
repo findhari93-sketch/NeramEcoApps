@@ -7,6 +7,10 @@ import { useTranslations } from 'next-intl';
 import type { FormStep } from './types';
 import StepIndicator from './StepIndicator';
 import { tokens as tk, eyebrowSx } from '@/design-system';
+import { DESK } from './shell/density';
+
+/** Side padding of the form column on a laptop; the sticky action bar bleeds into it. */
+const DESK_GUTTER = '40px';
 
 export interface StepActions {
   primaryLabel: string;
@@ -36,6 +40,11 @@ interface StepShellProps {
  * four-step indicator (which carries "Step 2 of 4" for screen readers), the
  * step itself, then the action block inline under the fields on every width:
  * the wide gold button, then "Back" on the left and one quiet note.
+ *
+ * From 900px (laptops) the column tightens: the eyebrow goes (the header
+ * already says "Secure application"), and the actions become one sticky bar
+ * at the bottom of the window, "Back" and the note on the left and the gold
+ * button on the right, so the next step is always one click away.
  */
 export default function StepShell({ step, children, actions, onStepClick, aside }: StepShellProps) {
   const t = useTranslations('apply');
@@ -47,24 +56,46 @@ export default function StepShell({ step, children, actions, onStepClick, aside 
         maxWidth: 720,
         boxSizing: 'border-box',
         px: 'clamp(16px, 4vw, 48px)',
-        pt: { xs: 4, md: 6 },
-        pb: { xs: 5, md: 7 },
+        pt: 4,
+        pb: 5,
         display: 'flex',
         flexDirection: 'column',
         gap: 3.5,
+        [DESK]: { maxWidth: 680, px: DESK_GUTTER, pt: 'clamp(16px, 2.5vh, 32px)', pb: 4, gap: 2 },
       }}
     >
       <Box component="header" sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <Typography component="p" sx={{ ...eyebrowSx, color: tk.gold800 }}>
+        <Typography component="p" sx={{ ...eyebrowSx, color: tk.gold800, [DESK]: { display: 'none' } }}>
           {t('eyebrow')}
         </Typography>
         <StepIndicator step={step} onStepClick={onStepClick} />
       </Box>
 
-      <Box>{children}</Box>
+      {/* Keyboard focus scrolls a field clear of the sticky action bar, never under it. */}
+      <Box sx={{ [DESK]: { '& input, & textarea, & button, & [role="button"]': { scrollMarginBottom: '96px' } } }}>{children}</Box>
 
       {actions && (
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25, borderTop: `1px solid ${tk.line}`, pt: 3 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1.25,
+            borderTop: `1px solid ${tk.line}`,
+            pt: 3,
+            [DESK]: {
+              position: 'sticky',
+              bottom: 0,
+              zIndex: 2,
+              flexDirection: 'row-reverse',
+              alignItems: 'center',
+              gap: 2,
+              mx: `-${DESK_GUTTER}`,
+              px: DESK_GUTTER,
+              py: 1.5,
+              bgcolor: tk.surface,
+            },
+          }}
+        >
           <Button
             variant="contained"
             color="primary"
@@ -75,6 +106,7 @@ export default function StepShell({ step, children, actions, onStepClick, aside 
             sx={{
               minHeight: 56,
               px: 2.5,
+              [DESK]: { width: 'auto', flex: '0 0 auto', minWidth: 300, minHeight: 52 },
               justifyContent: 'space-between',
               borderRadius: `${tk.radius}px`,
               bgcolor: tk.gold500,
@@ -99,6 +131,7 @@ export default function StepShell({ step, children, actions, onStepClick, aside 
                 columnGap: 1.5,
                 flexWrap: 'wrap',
                 minHeight: 44,
+                [DESK]: { flex: 1, minWidth: 0 },
               }}
             >
               {actions.onBack && (

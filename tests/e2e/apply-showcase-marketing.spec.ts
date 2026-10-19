@@ -100,3 +100,44 @@ test.describe('Apply showcase on a phone', () => {
     await assertTouchTargetSize(page, 'button:visible, a[href]:visible', 44);
   });
 });
+
+/**
+ * A 1920x1080 laptop at 125 to 135% Windows scaling gives Chrome a window of
+ * about 1422x739 CSS px; a 1366x768 laptop at 100% gives about 1366x650.
+ * The whole of step 1 and the whole showcase must fit without scrolling.
+ */
+for (const viewport of [
+  { width: 1422, height: 739 },
+  { width: 1536, height: 800 },
+  { width: 1366, height: 650 },
+]) {
+  test.describe(`Apply on a ${viewport.width}x${viewport.height} laptop`, () => {
+    test.use({ viewport });
+
+    test('the showcase fits its column and the next step is one click away', async ({ page }) => {
+      const errors = collectConsoleErrors(page);
+      await page.goto(`${MARKETING_URL}/apply`);
+      const panel = showcase(page);
+      await expect(panel).toBeVisible();
+
+      // Every showcase control is on screen without scrolling.
+      for (const name of [/pause the tour/i, /next scene/i]) {
+        const box = (await panel.getByRole('button', { name }).first().boundingBox())!;
+        expect(box.y + box.height, `${name} is on the first screen`).toBeLessThanOrEqual(viewport.height);
+      }
+
+      // The primary button is on the first screen, and stays there after scrolling.
+      const primary = page.getByRole('button', { name: /continue to your course/i });
+      const before = (await primary.boundingBox())!;
+      expect(before.y + before.height, 'Continue is on the first screen').toBeLessThanOrEqual(viewport.height);
+      await page.mouse.wheel(0, 400);
+      await page.waitForTimeout(200);
+      const after = (await primary.boundingBox())!;
+      expect(after.y + after.height, 'Continue stays on screen').toBeLessThanOrEqual(viewport.height);
+
+      await assertNoHorizontalOverflow(page);
+      await assertTouchTargetSize(page, 'main button:visible', 44);
+      expect(errors, 'no console errors').toEqual([]);
+    });
+  });
+}

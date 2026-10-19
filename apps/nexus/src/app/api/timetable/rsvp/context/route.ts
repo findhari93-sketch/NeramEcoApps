@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyMsToken } from '@/lib/ms-verify';
-import { getSupabaseAdminClient } from '@neram/database';
+import { getSupabaseAdminClient, istTodayYmd } from '@neram/database';
+import { coveringWindow, describeWindow, isMissingTable, loadAwayWindows } from '@/lib/away-windows';
 
 /**
  * GET /api/timetable/rsvp/context?class_id={id}
@@ -58,13 +59,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'You are not enrolled in this class', code: 'not_enrolled' }, { status: 403 });
     }
 
-    // Default-attending: only a not_attending row is meaningful.
-    const { data: rsvp } = await supabase
-      .from('nexus_class_rsvp')
-      .select('*')
-      .eq('scheduled_class_id', classId)
-      .eq('student_id', user.id)
-      .maybeSingle();
+    // Default-attending: only a not_attending row is meaningful. The other two
+    // reads let the page answer "were you asked, did you already say yes, are
+    // you already away" when it is opened from the Assistant's confirm message.
+    const [{ data: rsvp }, confirmRes, windows] = await Promise.all([
+      supabase
+        .from('nexus_class_rsvp')
+        .select('*')
+        .eq('scheduled_class_id', classId)
+        .eq('student_id', user.id)
+        .maybeSingle(),
+      supabase
+        .from('nexus_attendance_confirmations')
+        .select('asked_at, confirmed_at')
+        .eq('scheduled_class_id', classId)
+        .eq('student_id', user.id)
+        .maybeSingle(),
+      loadAwayWindows(supabase, { studentIds: [user.id], from: cls.scheduled_date, to: cls.scheduled_date }),
+    ]);
+    if (confirmRes.error && !isMissingTable(confirmRes.error)) throw confirmRes.error;
+    const awayWindow = coveringWindow(windows, cls.scheduled_date);
 
     return NextResponse.json({
       class: {
@@ -79,6 +93,13 @@ export async function GET(request: NextRequest) {
       },
       role: enrollment.role,
       myRsvp: rsvp?.response === 'not_attending' ? rsvp : null,
+      confirmation: {
+        asked_at: confirmRes.data?.asked_at ?? null,
+        confirmed_at: confirmRes.data?.confirmed_at ?? null,
+      },
+      away: awayWindow ? { summary: describeWindow(awayWindow, istTodayYmd()) } : null,
+      // Nothing left to answer once the date is past.
+      open: cls.scheduled_date >= istTodayYmd() && cls.status !== 'cancelled',
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to load RSVP context';

@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getSupabaseAdminClient, listUsers, createUser, createLeadProfile } from '@neram/database';
+import { getSupabaseAdminClient, listUsers, createUser, createLeadProfile, getUserByPhone, normalisePhoneE164 } from '@neram/database';
 import type { UserType, UserStatus, CourseType } from '@neram/database';
 
 // GET /api/leads - List all leads
@@ -102,11 +102,23 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdminClient();
 
+    // One record per person and family: a number already on file is that
+    // record, not a new lead (any stored shape, see users.phone_key).
+    if (phone) {
+      const existing = await getUserByPhone(String(phone), supabase);
+      if (existing) {
+        return NextResponse.json(
+          { error: `This number already belongs to ${existing.name || 'an existing record'}. Open that record instead.`, existingUserId: existing.id },
+          { status: 409 }
+        );
+      }
+    }
+
     // Create user
     const user = await createUser({
       name,
       email: email || null,
-      phone: phone || null,
+      phone: phone ? normalisePhoneE164(String(phone)) || String(phone).trim() : null,
       username: null,
       avatar_url: null,
       firebase_uid: null,

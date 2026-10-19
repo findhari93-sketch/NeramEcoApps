@@ -23,6 +23,7 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { useFirebaseAuth, getFirebaseAuth } from '@neram/auth';
 import { useExamCountdown } from '@/hooks/useExamCountdown';
 import type { ExamScheduleSession, NataExamStatus } from '@neram/database';
+import { examSeasonYear } from '@neram/database';
 
 // --- Sub-components ---
 
@@ -57,7 +58,9 @@ function IntentStep({
 }: {
   onSelect: (status: NataExamStatus, planYear?: number) => void;
 }) {
-  const currentYear = new Date().getFullYear();
+  // The exam season (1 July to 30 June IST), not the calendar year: in
+  // October 2026 "this year" is the 2027 exam.
+  const currentYear = examSeasonYear();
 
   const options: { label: string; status: NataExamStatus; planYear?: number }[] = [
     { label: "Yes, I've applied", status: 'applied_waiting' },
@@ -334,7 +337,7 @@ function PersonalizedCountdown({
             YOUR NEXT EXAM
           </Typography>
           <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-            NATA {new Date().getFullYear()} · {sessionLabel}
+            NATA {examSeasonYear()} · {sessionLabel}
           </Typography>
         </Box>
         <Button size="small" startIcon={<EditIcon sx={{ fontSize: '0.8rem !important' }} />} onClick={onEdit} sx={{ fontSize: '0.75rem' }}>
@@ -383,7 +386,7 @@ function PlanningCard({
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Box>
           <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-            NATA {new Date().getFullYear()}
+            NATA {examSeasonYear()}
           </Typography>
           {regCloseStr && (
             <Typography variant="body2" color="text.secondary">
@@ -431,7 +434,7 @@ function CompactInfoCard({
     <Paper sx={{ p: 1.5, mb: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="body2" color="text.secondary">
-          NATA {new Date().getFullYear()}
+          NATA {examSeasonYear()}
           {nextStr && ` · Next exam: ${nextStr}`}
           {regStr && ` · Reg closes: ${regStr}`}
         </Typography>
@@ -564,7 +567,7 @@ export default function ExamSetupCard() {
       user_reported_city?: string;
     }[];
   }) => {
-    saveDetails('applied_waiting', new Date().getFullYear(), data.sessions);
+    saveDetails('applied_waiting', examSeasonYear(), data.sessions);
   };
 
   const handleSkip = () => {

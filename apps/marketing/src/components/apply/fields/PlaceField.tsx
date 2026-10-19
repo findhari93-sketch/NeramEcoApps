@@ -11,12 +11,15 @@ import { OTHER_COUNTRY, SUPPORTED_COUNTRIES } from '../countryConfig';
 import { useLocationLookup } from '../steps/useLocationLookup';
 import Field from './Field';
 import { tokens as tk } from '@/design-system';
+import { DESK, visuallyHiddenSx } from '../shell/density';
 
 const linkButtonSx = { minHeight: 44, px: 1, ml: -1, color: tk.ink, fontSize: 14, fontWeight: 600, justifyContent: 'flex-start' } as const;
 
 /**
  * "Where you live". India: a PIN code, and the place it finds shown under it
  * with Edit. Abroad: a country and a city. No state lists anywhere.
+ * On a laptop the heading is for screen readers only (the PIN label says it)
+ * and the two links sit beside the PIN field instead of under it.
  */
 export default function PlaceField({ onTouched }: { onTouched?: () => void }) {
   const t = useTranslations('apply');
@@ -44,18 +47,34 @@ export default function PlaceField({ onTouched }: { onTouched?: () => void }) {
   const touched = () => onTouched?.();
 
   return (
-    <Box component="section" aria-labelledby="apply-place-heading">
+    <Box component="section" aria-labelledby="apply-place-heading" sx={{ position: 'relative' }}>
       <Typography
         id="apply-place-heading"
         component="h2"
-        sx={{ m: 0, mb: 1.5, fontSize: 17, fontWeight: 700, lineHeight: 1.3, color: tk.ink }}
+        sx={{ m: 0, mb: 1.5, fontSize: 17, fontWeight: 700, lineHeight: 1.3, color: tk.ink, [DESK]: visuallyHiddenSx }}
       >
         {t('aboutYou.location')}
       </Typography>
 
       {inIndia ? (
-        <Stack spacing={1.5}>
-          <Box sx={{ maxWidth: 280 }}>
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 1.5,
+            // Laptop: PIN (row 1, left), the links (row 1, right), everything else full width below.
+            [DESK]: {
+              display: 'grid',
+              gridTemplateColumns: '240px minmax(0, 1fr)',
+              columnGap: 3,
+              rowGap: 1.5,
+              '& > *': { gridColumn: '1 / -1' },
+              '& > [data-place-pin]': { gridColumn: 1, gridRow: 1 },
+              '& > [data-place-links]': { gridColumn: 2, gridRow: 1, alignSelf: 'end' },
+            },
+          }}
+        >
+          <Box data-place-pin sx={{ maxWidth: 280 }}>
           <Field
             id="apply-pincode"
             label={t('aboutYou.pinCode')}
@@ -157,7 +176,7 @@ export default function PlaceField({ onTouched }: { onTouched?: () => void }) {
             </Box>
           )}
 
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', columnGap: 2 }}>
+          <Box data-place-links sx={{ display: 'flex', flexWrap: 'wrap', columnGap: 2 }}>
             <Button
               variant="text"
               size="small"
@@ -186,7 +205,7 @@ export default function PlaceField({ onTouched }: { onTouched?: () => void }) {
               {geoError}
             </Alert>
           )}
-        </Stack>
+        </Box>
       ) : (
         <Stack spacing={2}>
           <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 2, alignItems: 'start' }}>

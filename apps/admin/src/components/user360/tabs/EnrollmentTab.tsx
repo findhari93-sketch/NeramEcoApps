@@ -11,6 +11,7 @@ import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import WorkspacePremiumOutlinedIcon from '@mui/icons-material/WorkspacePremiumOutlined';
 import OnboardingSection from '@/components/crm/OnboardingSection';
 import DocumentsSection from '@/components/crm/DocumentsSection';
+import EnrolmentLinksCard from '@/components/direct-enrollment/EnrolmentLinksCard';
 import { formatDate, nexusAccessText, relativeTime, sentenceCase } from '@/lib/user360-view';
 import { EmptyNote, KeyValue, SectionCard, StatusChip, TwoColumns, type User360TabProps } from '../shared';
 
@@ -58,7 +59,7 @@ export function NexusAccessCard({ person }: { person: Record<string, any> }) {
   );
 }
 
-export default function EnrollmentTab({ data, detail }: User360TabProps) {
+export default function EnrollmentTab({ userId, data, detail, adminId, onRefresh }: User360TabProps) {
   const enrollments = data.enrollments || [];
   return (
     <Box sx={{ minWidth: 0 }}>
@@ -115,6 +116,21 @@ export default function EnrollmentTab({ data, detail }: User360TabProps) {
           )}
         </SectionCard>
       </TwoColumns>
+
+      <Box id="crm-section-enrolment-links" sx={{ mt: 2 }}>
+        <EnrolmentLinksCard
+          userId={userId}
+          adminId={adminId}
+          prefill={{
+            studentName: detail?.user.name || detail?.user.first_name || '',
+            studentPhone: detail?.user.phone || '',
+            studentEmail: detail?.user.email || '',
+            interestCourse: detail?.leadProfile?.interest_course || '',
+            userId,
+          }}
+          onChanged={() => onRefresh()}
+        />
+      </Box>
 
       {detail && (
         <>

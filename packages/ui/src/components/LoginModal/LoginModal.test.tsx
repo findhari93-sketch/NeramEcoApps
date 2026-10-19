@@ -314,4 +314,63 @@ describe('LoginModal', () => {
     await waitFor(() => expect(captureBodies(fetchMock).map((b) => b.event)).toEqual(['entered', 'failed']));
     expect(captureBodies(fetchMock)[1]).toMatchObject({ errorCode: 'auth/too-many-requests' });
   });
+
+  it('says the student closed the dialog after the OTP went out', async () => {
+    state.signedIn = false;
+    const fetchMock = mockServer();
+    const onClose = vi.fn();
+    render(<LoginModal open phoneOnly allowClose onClose={onClose} apiBaseUrl="https://app.test" />);
+    fireEvent.change(screen.getByLabelText('Phone Number'), { target: { value: '9876543210' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send OTP' }));
+    await screen.findByLabelText('OTP');
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+    expect(onClose).toHaveBeenCalled();
+    await waitFor(() => expect(captureBodies(fetchMock).map((b) => b.event)).toEqual(['entered', 'otp_sent', 'closed']));
+    expect(captureBodies(fetchMock)[2].phoneNumber).toBe('+919876543210');
+  });
+
+  it('tells our server failing apart from a wrong code', async () => {
+    const fetchMock = vi.fn(async (url: string) =>
+      url.endsWith('/api/auth/verify-phone')
+        ? { ok: false, status: 500, json: async () => ({ error: 'boom' }) }
+        : { ok: true, json: async () => ({}) },
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    render(<LoginModal open phoneOnly apiBaseUrl="" />);
+    await sendAndEnterOtp();
+
+    await waitFor(() =>
+      expect(captureBodies(fetchMock as any).map((b) => b.event)).toEqual(['entered', 'otp_sent', 'otp_checked', 'failed']),
+    );
+    expect(captureBodies(fetchMock as any)[3]).toMatchObject({ errorCode: 'neram/verify-phone-500' });
+  });
+
+  it('a closing tab mid sign-in sends a beacon, without a token', async () => {
+    state.signedIn = false;
+    mockServer();
+    const sendBeacon = vi.fn(() => true);
+    Object.defineProperty(navigator, 'sendBeacon', { value: sendBeacon, configurable: true });
+    try {
+      render(<LoginModal open phoneOnly apiBaseUrl="https://app.test" />);
+      fireEvent.change(screen.getByLabelText('Phone Number'), { target: { value: '9876543210' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Send OTP' }));
+      await screen.findByLabelText('OTP');
+      window.dispatchEvent(new Event('pagehide'));
+
+      expect(sendBeacon).toHaveBeenCalledTimes(1);
+      const [url, blob] = sendBeacon.mock.calls[0] as unknown as [string, Blob];
+      expect(url).toBe('https://app.test/api/auth/capture-phone');
+      const text = await new Promise<string>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.readAsText(blob);
+      });
+      const body = JSON.parse(text);
+      expect(body).toMatchObject({ event: 'tab_closed', phoneNumber: '+919876543210' });
+      expect(body.idToken).toBeUndefined();
+    } finally {
+      delete (navigator as any).sendBeacon;
+    }
+  });
 });

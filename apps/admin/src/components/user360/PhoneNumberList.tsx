@@ -1,15 +1,27 @@
 'use client';
 
-import { Box, IconButton, Tooltip, Typography } from '@neram/ui';
+import { useId, useState } from 'react';
+import { Box, Button, Collapse, IconButton, Tooltip, Typography } from '@neram/ui';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
 import PhoneOutlinedIcon from '@mui/icons-material/PhoneOutlined';
 import WhatsAppIcon from '@mui/icons-material/WhatsApp';
+import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import type { PhoneAttempt } from '@neram/database';
 import CopyablePhone from '@/components/CopyablePhone';
-import { attemptPlace, attemptStatus, formatAttemptPhone, phoneDigits, type AttemptTone } from '@/lib/phone-attempts-view';
+import {
+  attemptDevice,
+  attemptPlace,
+  attemptStatus,
+  attemptSteps,
+  formatAttemptPhone,
+  phoneDigits,
+  stepTime,
+  type AttemptTone,
+} from '@/lib/phone-attempts-view';
+import { FOCUS_RING, TARGET_44 } from '@/components/ops/OpsUi';
 import { relativeTime } from '@/lib/user360-view';
 import { EmptyNote } from './shared';
 
@@ -31,9 +43,12 @@ const iconButtonSx = { width: 44, height: 44 } as const;
 export default function PhoneNumberList({
   numbers,
   emptyText = 'No number typed into a phone sign-in yet.',
+  showSteps = false,
 }: {
   numbers: PhoneAttempt[];
   emptyText?: string;
+  /** A "Show steps" toggle under each number: what happened, in order. */
+  showSteps?: boolean;
 }) {
   if (!numbers.length) return <EmptyNote>{emptyText}</EmptyNote>;
 
@@ -45,6 +60,7 @@ export default function PhoneNumberList({
         const digits = phoneDigits(n.phone);
         const pretty = formatAttemptPhone(n.phone);
         const last = relativeTime(n.last_attempt_at);
+        const device = attemptDevice(n);
         return (
           <Box
             component="li"
@@ -61,7 +77,9 @@ export default function PhoneNumberList({
                 {attemptPlace(n.source, n.source_app)}
                 {` · ${n.attempts} ${n.attempts === 1 ? 'try' : 'tries'}`}
                 {last ? ` · last ${last}` : ''}
+                {device ? ` · ${device}` : ''}
               </Typography>
+              {showSteps && <AttemptSteps attempt={n} />}
             </Box>
             <Box sx={{ display: 'flex', flexShrink: 0 }}>
               <Tooltip title={`Call ${pretty}`}>
@@ -85,6 +103,50 @@ export default function PhoneNumberList({
           </Box>
         );
       })}
+    </Box>
+  );
+}
+
+/** The number's steps, oldest first, behind a toggle. */
+function AttemptSteps({ attempt }: { attempt: PhoneAttempt }) {
+  const [open, setOpen] = useState(false);
+  const id = useId();
+  const steps = attemptSteps(attempt);
+  if (!steps.length) {
+    return (
+      <Typography variant="caption" color="text.secondary" component="p">
+        Steps not recorded (tried before step tracking began).
+      </Typography>
+    );
+  }
+  return (
+    <Box>
+      <Button
+        size="small"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        aria-controls={id}
+        endIcon={
+          <ExpandMoreIcon
+            sx={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 200ms', '@media (prefers-reduced-motion: reduce)': { transition: 'none' } }}
+          />
+        }
+        sx={{ ...TARGET_44, ml: -1, textTransform: 'none', fontWeight: 600, ...FOCUS_RING }}
+      >
+        {open ? 'Hide steps' : `Show steps (${steps.length})`}
+      </Button>
+      <Collapse in={open} id={id}>
+        <Box component="ol" sx={{ m: 0, mb: 1, pl: 2.5, display: 'grid', gap: 0.5 }}>
+          {steps.map((step, i) => (
+            <Typography component="li" variant="body2" key={`${step.at}-${i}`} sx={{ color: step.failed ? 'error.dark' : 'text.primary' }}>
+              <Box component="span" sx={{ color: 'text.secondary', fontVariantNumeric: 'tabular-nums', mr: 1 }}>
+                {stepTime(step.at)}
+              </Box>
+              {step.text}
+            </Typography>
+          ))}
+        </Box>
+      </Collapse>
     </Box>
   );
 }

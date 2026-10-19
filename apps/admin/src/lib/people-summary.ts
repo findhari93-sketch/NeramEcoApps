@@ -61,6 +61,8 @@ export interface PeopleSelection {
   currentExamYear: number;
   activity?: ActivityGroup | null;
   stage?: LifecycleStage | null;
+  /** Only people whose exam year came from this source ('signup' = still to ask). */
+  yearSource?: 'batch' | 'stated' | 'signup' | null;
 }
 
 export interface PeopleSummary {
@@ -99,6 +101,7 @@ export function summarisePeople(rows: PeopleBreakdownRow[], sel: PeopleSelection
     if (!inSeason(r.exam_year, sel.season, sel.currentExamYear)) continue;
 
     if (r.exam_year_source === 'signup') estimated += n;
+    if (sel.yearSource && r.exam_year_source !== sel.yearSource) continue;
 
     const group = activityGroupOf(r.engagement);
     const stageOk = !sel.stage || r.lifecycle_stage === sel.stage;

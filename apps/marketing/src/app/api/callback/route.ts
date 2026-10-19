@@ -8,6 +8,8 @@ import {
   getCallbackRequestsByUserId,
   type CreateCallbackInput,
 } from '@neram/database/queries';
+import { ANON_ID_COOKIE, isValidAnonymousId } from '@neram/database/analytics';
+import { cleanPreferredDate } from '@/lib/aintra/booking';
 import { getAuth } from 'firebase-admin/auth';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 
@@ -89,10 +91,12 @@ function isValidIndianPhone(phone: string): boolean {
  * - course_interest: CourseType (optional)
  * - query_type: string (optional)
  * - notes: string (optional)
+ * - source: 'aintra' when the visitor confirmed the callback card in the Aintra chat
  *
  * Response:
  * - 201: { success: true, data: CallbackRequest }
  * - 400: { success: false, error: 'Validation error' }
+ * - 429: { success: false, code: 'ALREADY_ASKED' } one Aintra callback per visitor per day
  * - 500: { success: false, error: 'Internal error' }
  */
 export async function POST(request: NextRequest): Promise<NextResponse<CallbackResponse>> {
@@ -142,6 +146,24 @@ export async function POST(request: NextRequest): Promise<NextResponse<CallbackR
     const auth = await tryVerifyToken(request);
 
     const supabase = createAdminClient();
+    const fromAintra = body.source === 'aintra';
+
+    // The Aintra chat: one callback per visitor per day, on top of the phone rule below.
+    const anonCookie = request.cookies.get(ANON_ID_COOKIE)?.value;
+    const visitorId = fromAintra && anonCookie && isValidAnonymousId(anonCookie) ? anonCookie : undefined;
+    if (visitorId) {
+      const { count: visitorCount } = await supabase
+        .from('callback_requests' as any)
+        .select('*', { count: 'exact', head: true })
+        .eq('visitor_id', visitorId)
+        .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+      if ((visitorCount || 0) > 0) {
+        return NextResponse.json(
+          { success: false, code: 'ALREADY_ASKED', error: 'We already have your callback request from today. Our team will call you soon.' } as CallbackResponse,
+          { status: 429 }
+        );
+      }
+    }
 
     // Check for duplicate recent callback requests (within last hour)
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
@@ -169,12 +191,13 @@ export async function POST(request: NextRequest): Promise<NextResponse<CallbackR
       name: body.name.trim(),
       phone: cleanPhone,
       email: body.email?.trim(),
-      preferred_date: body.preferred_date,
+      preferred_date: cleanPreferredDate(body.preferred_date) ?? undefined,
       preferred_slot: body.preferred_slot,
       course_interest: body.course_interest,
       query_type: body.query_type,
       notes: body.notes?.trim(),
       source: body.source || 'website_form',
+      visitor_id: visitorId,
       utm_source: body.utm_source || undefined,
       utm_medium: body.utm_medium || undefined,
       utm_campaign: body.utm_campaign || undefined,

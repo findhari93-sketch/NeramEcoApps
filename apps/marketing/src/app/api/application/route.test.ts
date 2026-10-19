@@ -34,8 +34,10 @@ function chain(table: string) {
 
 const supabase = { from: (table: string) => chain(table) };
 
+const recordStatedExamYear = vi.fn(async (..._args: unknown[]) => ({ saved: true }));
 vi.mock('@neram/database', () => ({
   createAdminClient: () => supabase,
+  recordStatedExamYear: (...args: unknown[]) => recordStatedExamYear(...args),
   sendTemplateEmail: vi.fn(async () => undefined),
   notifyNewApplication: vi.fn(async () => undefined),
   parseExamYearAnswer: (v: unknown) => ({
@@ -130,6 +132,21 @@ describe('POST /api/application', () => {
     expect(emailUpdate?.filters).toContainEqual(['is', 'email', null]);
     const phoneUpdate = userUpdates.find((c) => (c.payload as any).phone);
     expect(phoneUpdate?.filters).toContainEqual(['is', 'phone', null]);
+  });
+
+  it('records the stated exam year (source apply) and still stamps the cohort', async () => {
+    recordStatedExamYear.mockClear();
+    await POST(request('POST', submitBody));
+    expect(recordStatedExamYear).toHaveBeenCalledWith(supabase, 'user-1', 2027, 'apply');
+    const cohort = calls.find((c) => c.table === 'users' && c.op === 'update' && (c.payload as any).academic_year);
+    expect(cohort?.payload).toMatchObject({ academic_year: '2027-28' });
+  });
+
+  it('a failed exam year write never skips the cohort stamp', async () => {
+    recordStatedExamYear.mockRejectedValueOnce(new Error('boom'));
+    await POST(request('POST', submitBody));
+    const cohort = calls.find((c) => c.table === 'users' && c.op === 'update' && (c.payload as any).academic_year);
+    expect(cohort?.payload).toMatchObject({ academic_year: '2027-28' });
   });
 
   it('rejects an invalid gender or fee_source instead of forwarding it', async () => {

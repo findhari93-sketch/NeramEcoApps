@@ -5,6 +5,7 @@ import { Box, Button, Collapse, Skeleton, Typography, alpha, useTheme } from '@n
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import EventAvailableOutlinedIcon from '@mui/icons-material/EventAvailableOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import HowToRegRoundedIcon from '@mui/icons-material/HowToRegRounded';
 import StudentAvatar from '@/components/students/StudentAvatar';
 import ResponsiveSheet from '@/components/study-materials/recordings/ResponsiveSheet';
 import { useAuthSWR } from '@/lib/nexus-swr';
@@ -23,7 +24,7 @@ import type {
   RsvpDashboardRangeResponse,
   RsvpDaySummary,
 } from '@/app/api/timetable/rsvp-dashboard/route';
-import { formatDateISO, formatTime, relativeDayLabel } from './date-utils';
+import { formatDateISO, formatTime, hasClassEnded, relativeDayLabel } from './date-utils';
 import { REDUCED_MOTION_QUERY, tagSx } from './timetable-theme';
 import AwayRangeBar from './AwayRangeBar';
 import DayForecastCard from './DayForecastCard';
@@ -95,6 +96,8 @@ interface AvailabilitySheetProps {
   standingStudents?: ForecastStudent[] | null;
   onOpenClass?: (classId: string) => void;
   onSchedule?: (date: string) => void;
+  /** Open the confirm-who-is-coming sheet for these classes. Absent, no button. */
+  onConfirm?: (classIds: string[]) => void;
 }
 
 /** Does this payload already hold a day row for every date the planner needs? */
@@ -181,6 +184,7 @@ export default function AvailabilitySheet({
   standingStudents,
   onOpenClass,
   onSchedule,
+  onConfirm,
 }: AvailabilitySheetProps) {
   const theme = useTheme();
 
@@ -307,12 +311,13 @@ export default function AvailabilitySheet({
       awayById={awayById}
       declinedById={declinedById}
       forecast={forecastByDate?.[day.date] ?? null}
-      rarelyComing={rarelyComingOn(day, data?.classes ?? [], standingStudents, today)}
-      newcomers={newcomersOn(day, data?.classes ?? [], standingStudents, today)}
+      rarelyComing={rarelyComingOn(day, payload?.classes ?? [], standingStudents, today)}
+      newcomers={newcomersOn(day, payload?.classes ?? [], standingStudents, today)}
       expanded={expandedDate === day.date}
       onToggle={() => setExpandedDate((d) => (d === day.date ? null : day.date))}
       onOpenClass={onOpenClass}
       onSchedule={onSchedule}
+      onConfirm={onConfirm}
     />
   );
 
@@ -405,6 +410,19 @@ export default function AvailabilitySheet({
               ? `, ${steppedOutLabel(single.summary.not_attending)}`
               : ''}
           </Typography>
+
+          {onConfirm && !hasClassEnded(single, now) && (
+            <Button
+              fullWidth
+              variant="contained"
+              disableElevation
+              startIcon={<HowToRegRoundedIcon />}
+              onClick={() => onConfirm([single.class_id])}
+              sx={{ minHeight: 48, mt: 1.5 }}
+            >
+              Confirm who is coming
+            </Button>
+          )}
 
           {single.away_ids.length === 0 && single.declined_ids.length === 0 ? (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 2 }}>

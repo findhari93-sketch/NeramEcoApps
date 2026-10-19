@@ -2,6 +2,7 @@
 
 import { Box, Typography } from '@neram/ui';
 import { tokens as t } from '@/design-system';
+import { DESK } from '../shell/density';
 
 interface FieldProps {
   /** The id of the input inside, so the label is tied to it. */
@@ -24,7 +25,7 @@ export default function Field({ id, label, helper, error, children }: FieldProps
         component="label"
         id={`${id}-label`}
         htmlFor={id}
-        sx={{ display: 'block', mb: 1, fontSize: 15, fontWeight: 600, lineHeight: 1.35, color: t.ink }}
+        sx={{ display: 'block', mb: 1, fontSize: 15, fontWeight: 600, lineHeight: 1.35, color: t.ink, [DESK]: { mb: 0.75, fontSize: 14 } }}
       >
         {label}
       </Typography>
@@ -33,7 +34,7 @@ export default function Field({ id, label, helper, error, children }: FieldProps
         <Typography
           component="p"
           id={`${id}-helper`}
-          sx={{ m: 0, mt: 0.75, fontSize: 13, lineHeight: 1.45, color: error ? 'error.main' : t.inkMuted }}
+          sx={{ m: 0, mt: 0.75, fontSize: 13, lineHeight: 1.45, color: error ? 'error.main' : t.inkMuted, [DESK]: { mt: 0.5, lineHeight: 1.4 } }}
         >
           {helper}
         </Typography>

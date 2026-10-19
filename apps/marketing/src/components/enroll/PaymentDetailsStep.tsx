@@ -6,9 +6,6 @@ import {
   TextField,
   Paper,
   Divider,
-  RadioGroup,
-  FormControlLabel,
-  Radio,
   FormControl,
   InputLabel,
   Select,
@@ -31,6 +28,18 @@ interface LinkData {
   finalFee: number;
   amountPaid: number;
   paymentMethod?: string | null;
+  /** Set by the office on the link; the student does not choose it. */
+  paymentScheme?: 'full' | 'installment' | null;
+  balanceDueDate?: string | null;
+}
+
+function formatDay(dateKey: string): string {
+  return new Date(`${dateKey}T00:00:00Z`).toLocaleDateString('en-IN', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
 }
 
 interface PaymentDetailsStepProps {
@@ -127,12 +136,20 @@ export default function PaymentDetailsStep({
           </Typography>
         </Box>
         {balanceDue > 0 && (
-          <Box display="flex" justifyContent="space-between" py={0.5}>
+          <Box display="flex" justifyContent="space-between" py={0.5} gap={2}>
             <Typography variant="body2" color="error.main" fontWeight={600}>Balance Due</Typography>
-            <Typography variant="body2" color="error.main" fontWeight={600}>
+            <Typography variant="body2" color="error.main" fontWeight={600} textAlign="right">
               ₹{Number(balanceDue).toLocaleString('en-IN')}
+              {linkData.balanceDueDate ? ` by ${formatDay(linkData.balanceDueDate)}` : ''}
             </Typography>
           </Box>
+        )}
+        {balanceDue > 0 && (
+          <Typography variant="caption" color="text.secondary" display="block" mt={1}>
+            {linkData.balanceDueDate
+              ? 'You pay the balance as a second installment. We will remind you a few days before it is due.'
+              : 'You pay the balance as a second installment. Our team will confirm the date with you.'}
+          </Typography>
         )}
       </Paper>
 
@@ -148,48 +165,6 @@ export default function PaymentDetailsStep({
         inputProps={{ max: new Date().toISOString().split('T')[0] }}
         sx={{ mb: 3, '& .MuiInputBase-root': { minHeight: 48 } }}
       />
-
-      {/* Payment Type */}
-      <Typography variant="subtitle2" fontWeight={600} mb={1}>
-        Payment Type
-      </Typography>
-      <RadioGroup
-        value={payment.paymentType}
-        onChange={(e) => updatePayment({
-          paymentType: e.target.value as 'full' | 'installment',
-          installmentNumber: e.target.value === 'full' ? 1 : payment.installmentNumber,
-        })}
-        sx={{ mb: 2 }}
-      >
-        <FormControlLabel
-          value="full"
-          control={<Radio />}
-          label="Full Payment"
-          sx={{ '& .MuiFormControlLabel-label': { fontSize: '0.95rem' } }}
-        />
-        <FormControlLabel
-          value="installment"
-          control={<Radio />}
-          label="Installment"
-          sx={{ '& .MuiFormControlLabel-label': { fontSize: '0.95rem' } }}
-        />
-      </RadioGroup>
-
-      {/* Installment Number */}
-      {payment.paymentType === 'installment' && (
-        <FormControl fullWidth sx={{ mb: 3 }}>
-          <InputLabel>Installment Number</InputLabel>
-          <Select
-            value={payment.installmentNumber}
-            label="Installment Number"
-            onChange={(e) => updatePayment({ installmentNumber: Number(e.target.value) })}
-            sx={{ minHeight: 48 }}
-          >
-            <MenuItem value={1}>1st Installment</MenuItem>
-            <MenuItem value={2}>2nd Installment</MenuItem>
-          </Select>
-        </FormControl>
-      )}
 
       {/* Payment Method */}
       <FormControl fullWidth required sx={{ mb: 3 }}>

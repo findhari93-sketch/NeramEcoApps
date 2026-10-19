@@ -129,6 +129,14 @@ export interface DayForecast {
    */
   confidence: 'firm' | 'soft';
   scheduled: boolean;
+  /**
+   * Said "I'll be there", themselves or to the office on the phone. Counted as a
+   * whole seat: a yes is an answer, not a chance. Zero when nobody was asked.
+   * Optional so a forecast built by hand (a fallback, a fixture) need not say.
+   */
+  confirmed?: number;
+  /** Asked to confirm and silent, on the roll and not otherwise explained. The call list. */
+  noReply?: number;
 }
 
 /** Past this share of counted students resting on the prior, the estimate is soft. */
@@ -160,7 +168,7 @@ export function dayBatchIds(
 }
 
 /** Enrolled by this date, and invited to it. */
-function onRollFor(s: ForecastStudent, date: string, batchIds: Set<string> | null): boolean {
+export function onRollFor(s: ForecastStudent, date: string, batchIds: Set<string> | null): boolean {
   if (batchIds && !batchIds.has(s.batch_id ?? '')) return false;
   return !joinedAfterClass(s.enrolled_at, date);
 }
@@ -239,6 +247,10 @@ export function buildForecast(input: ForecastInput): Map<string, DayForecast> {
     let atRisk = 0;
     let likelyExact = 0;
     let counted = 0;
+    let confirmed = 0;
+    let noReply = 0;
+    const confirmedIds = new Set(day.confirmed_ids || []);
+    const askedIds = new Set(day.asked_ids || []);
     const newcomers: string[] = [];
     const unknowns: string[] = [];
 
@@ -250,6 +262,13 @@ export function buildForecast(input: ForecastInput): Map<string, DayForecast> {
         // empty chair off the roll twice.
         if (excluded.has(s.id)) continue;
         counted += 1;
+        if (confirmedIds.has(s.id)) {
+          // They told us. Their record stops being evidence for this date.
+          confirmed += 1;
+          likelyExact += 1;
+          continue;
+        }
+        if (askedIds.has(s.id)) noReply += 1;
         if (isNewcomer(s, today)) {
           // "Never discounted, always named" is this field's standing promise,
           // so a newcomer contributes a whole chair rather than the room's
@@ -304,6 +323,8 @@ export function buildForecast(input: ForecastInput): Map<string, DayForecast> {
       confidence:
         counted > 0 && unknowns.length > counted * SOFT_CONFIDENCE_SHARE ? 'soft' : 'firm',
       scheduled: day.class_ids.length > 0,
+      confirmed,
+      noReply,
     });
   }
 
@@ -323,7 +344,8 @@ export function rarelyComingOn(
   today: string,
 ): RarelyComes[] {
   const batchIds = dayBatchIds(day, new Map(classes.map((c) => [c.class_id, c] as const)));
-  const excluded = new Set([...day.away_ids, ...day.declined_ids]);
+  // A student who confirmed is no longer at risk, whatever their record says.
+  const excluded = new Set([...day.away_ids, ...day.declined_ids, ...(day.confirmed_ids || [])]);
 
   return (students || [])
     .filter((s) => onRollFor(s, day.date, batchIds) && !excluded.has(s.id) && !isNewcomer(s, today))

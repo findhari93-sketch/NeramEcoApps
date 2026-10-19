@@ -98,6 +98,7 @@ export function StatusPill({ status, credits }: { status: TurnStatus; credits?: 
 export const STAGE_TONE: Record<LeadStage, { color: string }> = {
   Enrolled: { color: 'success.dark' },
   'Demo booked': { color: 'primary.main' },
+  'Callback asked': { color: 'primary.main' },
   Applied: { color: 'primary.main' },
   'Hot lead': { color: 'primary.main' },
   Warm: { color: 'text.primary' },

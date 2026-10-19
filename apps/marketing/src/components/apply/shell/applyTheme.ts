@@ -1,6 +1,7 @@
 import { siteLightTheme } from '@neram/ui';
 import { siteTokens as t } from '@neram/ui/site-tokens';
 import { createTheme } from '@mui/material/styles';
+import { DESK } from './density';
 
 /** Field errors and the error summary rail. The site tokens have no error red yet. */
 export const APPLY_ERROR = '#c62828';
@@ -18,8 +19,8 @@ const rail = (color: string) => ({
  * The /apply, /pay and /enroll theme: the site light theme (navy, gold, Inter,
  * 8px radius) plus the form-specific pieces of the Apply Flow handoff, so every
  * plain MUI control in the flow already looks right:
- * - inputs 48px, 1px lineStrong, focus = navy border + gold ring, 16px text
- * - toggle buttons as separate 48px pills, selected = navy fill
+ * - inputs 48px (46px on a laptop), 1px lineStrong, focus = navy border + gold ring, 16px text
+ * - toggle buttons as separate 48px pills (44px on a laptop), selected = navy fill
  * - checkboxes and radios navy when checked
  * - alerts as a white card with a 3px coloured rail, never a tinted fill
  * Spec: apps/marketing/Docs/Marketing Website Design Audit/design_handoff_neram_apply_flow/README.md
@@ -61,6 +62,8 @@ export const applyTheme = createTheme(siteLightTheme, {
         input: {
           fontSize: 16,
           padding: '12.5px 14px',
+          // Text stays 16px so iPad Safari never zooms into the field.
+          [DESK]: { padding: '11.5px 14px' },
           '&::placeholder': { color: t.inkMuted, opacity: 1 },
         },
         multiline: { padding: 0, '& textarea': { padding: '12px 14px', lineHeight: 1.5 } },
@@ -69,7 +72,7 @@ export const applyTheme = createTheme(siteLightTheme, {
     MuiSelect: { styleOverrides: { select: { minHeight: 'unset' } } },
     MuiFormHelperText: {
       styleOverrides: {
-        root: { fontFamily: 'inherit', fontSize: 13, lineHeight: 1.45, letterSpacing: 0, textTransform: 'none', marginLeft: 0, marginRight: 0, marginTop: 6 },
+        root: { fontFamily: 'inherit', fontSize: 13, lineHeight: 1.45, letterSpacing: 0, textTransform: 'none', marginLeft: 0, marginRight: 0, marginTop: 6, [DESK]: { marginTop: 4 } },
       },
     },
     MuiToggleButtonGroup: {
@@ -89,6 +92,7 @@ export const applyTheme = createTheme(siteLightTheme, {
       styleOverrides: {
         root: {
           minHeight: 48,
+          [DESK]: { minHeight: 44 },
           padding: '0 14px',
           borderRadius: t.radius,
           border: `2px solid ${t.line}`,

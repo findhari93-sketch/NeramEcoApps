@@ -1,28 +1,20 @@
 'use client';
 
 /**
- * The top of the admin People page: which exam season, who is still around,
- * and where they are in the journey. Every card is a filter button; the
- * numbers come from summarisePeople() over one grouped query, so they are
- * exact and add up to what the table shows after a click.
+ * The top of the admin People page in two compact rows:
+ *   1. which exam season, and how many people told us their exam year
+ *   2. one strip: where they are in the journey, then how active they are
+ * Every segment is a filter button; the numbers come from summarisePeople()
+ * over one grouped query, so they are exact and add up to what the table shows
+ * after a click.
  */
 
 import { Box, Typography, Skeleton, Tooltip, alpha } from '@neram/ui';
 import type { Theme } from '@mui/material/styles';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import TrendingUpIcon from '@mui/icons-material/TrendingUp';
-import ScheduleIcon from '@mui/icons-material/Schedule';
-import BedtimeOutlinedIcon from '@mui/icons-material/BedtimeOutlined';
-import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
-import PhoneAndroidIcon from '@mui/icons-material/PhoneAndroid';
-import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
-import HowToRegOutlinedIcon from '@mui/icons-material/HowToRegOutlined';
-import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
-import PauseCircleOutlineIcon from '@mui/icons-material/PauseCircleOutline';
-import WorkspacePremiumOutlinedIcon from '@mui/icons-material/WorkspacePremiumOutlined';
-import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
-import { ACTIVITY_GROUPS, PEOPLE_STAGE_LABELS, LIFECYCLE_STAGE_MEANINGS } from '@neram/database';
+import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import { ACTIVITY_GROUPS, LIFECYCLE_STAGE_MEANINGS, PEOPLE_STAGE_LABELS } from '@neram/database';
 import type { ActivityGroup, LifecycleStage } from '@neram/database';
 import {
   ACTIVITY_ORDER,
@@ -33,10 +25,22 @@ import {
   type Season,
 } from '@/lib/people-summary';
 
-const ACTIVITY_ICONS: Record<ActivityGroup, React.ElementType> = {
-  recent: TrendingUpIcon,
-  quiet: ScheduleIcon,
-  gone: BedtimeOutlinedIcon,
+/** Short strip labels; the full name and meaning are in the tooltip. */
+const STAGE_SHORT: Record<LifecycleStage, string> = {
+  prospect: 'Signed up',
+  lead: 'Shared phone',
+  applicant: 'Applied',
+  enrolled: 'Enrolled',
+  active_student: 'Studying',
+  paused: 'Paused',
+  alumni: 'Alumni',
+  archived: 'Archived',
+};
+
+const ACTIVITY_SHORT: Record<ActivityGroup, string> = {
+  recent: 'Active',
+  quiet: 'Quiet',
+  gone: 'No activity',
 };
 
 /** Palette keys from the @neram/ui theme; no new colours. */
@@ -44,17 +48,6 @@ const ACTIVITY_TONE: Record<ActivityGroup, 'success' | 'warning' | 'secondary'> 
   recent: 'success',
   quiet: 'warning',
   gone: 'secondary',
-};
-
-const STAGE_ICONS: Record<LifecycleStage, React.ElementType> = {
-  prospect: PersonOutlineIcon,
-  lead: PhoneAndroidIcon,
-  applicant: DescriptionOutlinedIcon,
-  enrolled: HowToRegOutlinedIcon,
-  active_student: SchoolOutlinedIcon,
-  paused: PauseCircleOutlineIcon,
-  alumni: WorkspacePremiumOutlinedIcon,
-  archived: Inventory2OutlinedIcon,
 };
 
 /** The six journey stages always show in Current; Alumni and Archived only when present. */
@@ -68,7 +61,7 @@ const focusRing = {
 };
 
 const noMotion = {
-  transition: 'border-color 150ms, background-color 150ms',
+  transition: 'border-color 150ms, background-color 150ms, color 150ms',
   '@media (prefers-reduced-motion: reduce)': { transition: 'none' },
 };
 
@@ -79,9 +72,12 @@ interface PeopleSummaryProps {
   currentExamYear: number | null;
   activity: ActivityGroup | null;
   stage: LifecycleStage | null;
+  /** True while the list shows only people whose exam year is estimated. */
+  yearUnknownOnly: boolean;
   onSeasonChange: (season: Season) => void;
   onActivityChange: (activity: ActivityGroup | null) => void;
   onStageChange: (stage: LifecycleStage | null) => void;
+  onYearUnknownOnlyChange: (on: boolean) => void;
 }
 
 export default function PeopleSummary({
@@ -91,24 +87,17 @@ export default function PeopleSummary({
   currentExamYear,
   activity,
   stage,
+  yearUnknownOnly,
   onSeasonChange,
   onActivityChange,
   onStageChange,
+  onYearUnknownOnlyChange,
 }: PeopleSummaryProps) {
   if (!summary || currentExamYear === null) {
     return (
-      <Box aria-busy="true" aria-label="Loading counts" sx={{ display: 'grid', gap: 1.5 }}>
-        <Skeleton variant="rounded" height={44} sx={{ maxWidth: 640 }} />
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 1.5 }}>
-          {[0, 1, 2].map((i) => (
-            <Skeleton key={i} variant="rounded" height={88} />
-          ))}
-        </Box>
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 1.5 }}>
-          {ALWAYS_SHOWN.map((s) => (
-            <Skeleton key={s} variant="rounded" height={88} />
-          ))}
-        </Box>
+      <Box aria-busy="true" aria-label="Loading counts" sx={{ display: 'grid', gap: 1.25 }}>
+        <Skeleton variant="rounded" height={44} sx={{ maxWidth: 720 }} />
+        <Skeleton variant="rounded" height={52} />
       </Box>
     );
   }
@@ -126,29 +115,27 @@ export default function PeopleSummary({
     },
     {
       key: 'earlier',
-      label: 'Earlier seasons',
+      label: 'Earlier',
       hint: `People whose exam was ${currentExamYear - 1} or before. Most have finished.`,
     },
-    { key: 'all', label: 'All seasons', hint: 'Everyone, whatever their exam year.' },
+    { key: 'all', label: 'All', hint: 'Everyone, whatever their exam year.' },
   ];
 
   const seasonTotal = summary.seasons[season];
+  const known = Math.max(0, seasonTotal - summary.estimated);
   const activityBase = ACTIVITY_ORDER.reduce((sum, a) => sum + summary.activity[a], 0);
   const stageBase = STAGE_ORDER.reduce((sum, s) => sum + summary.stages[s], 0);
   const stagesShown = STAGE_ORDER.filter(
     (s) => (view === 'active' && ALWAYS_SHOWN.includes(s)) || summary.stages[s] > 0
   );
+  const percent = (n: number, base: number) => (base > 0 ? Math.round((n / base) * 100) : 0);
 
   return (
-    <Box sx={{ display: 'grid', gap: 2 }}>
-      {/* Exam season */}
-      <Box>
-        <Box
-          role="group"
-          aria-label="Exam season"
-          sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1 }}
-        >
-          <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary', mr: 0.5 }}>
+    <Box sx={{ display: 'grid', gap: 1.25 }}>
+      {/* Row 1: exam season, and how many told us their year */}
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1, justifyContent: 'space-between' }}>
+        <Box role="group" aria-label="Exam season" sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 0.75 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary', mr: 0.25 }}>
             Exam season
           </Typography>
           {seasonChips.map((chip) => {
@@ -165,7 +152,7 @@ export default function PeopleSummary({
                     alignItems: 'center',
                     gap: 0.75,
                     minHeight: 44,
-                    px: 1.75,
+                    px: 1.5,
                     border: '1.5px solid',
                     borderColor: selected ? 'primary.main' : 'grey.300',
                     borderRadius: 999,
@@ -174,6 +161,7 @@ export default function PeopleSummary({
                     fontFamily: 'inherit',
                     fontSize: 14,
                     fontWeight: selected ? 700 : 500,
+                    whiteSpace: 'nowrap',
                     cursor: 'pointer',
                     '&:hover': { borderColor: 'primary.main' },
                     ...focusRing,
@@ -190,92 +178,135 @@ export default function PeopleSummary({
             );
           })}
         </Box>
-        {summary.estimated > 0 && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.75, color: 'text.secondary' }}>
-            <InfoOutlinedIcon sx={{ fontSize: 16 }} aria-hidden />
-            <Typography variant="caption" sx={{ fontSize: 13 }}>
-              {formatCount(summary.estimated)} of {formatCount(seasonTotal)} never told us their exam year. Their
-              season is estimated from when they signed up (a season runs 1 July to 30 June), marked &quot;est.&quot;
-              in the table.
-            </Typography>
+
+        <Tooltip
+          arrow
+          title={
+            yearUnknownOnly
+              ? 'Showing only people who never told us their exam year. Click to show everyone again.'
+              : `${formatCount(summary.estimated)} of ${formatCount(seasonTotal)} never told us their exam year. Their season is estimated from when they signed up (a season runs 1 July to 30 June) and marked "est." in the table. Click to list them.`
+          }
+        >
+          <Box
+            component="button"
+            type="button"
+            aria-pressed={yearUnknownOnly}
+            onClick={() => onYearUnknownOnlyChange(!yearUnknownOnly)}
+            sx={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 0.75,
+              minHeight: 44,
+              px: 1.5,
+              border: '1.5px solid',
+              borderColor: yearUnknownOnly ? 'warning.main' : 'grey.300',
+              borderRadius: 1,
+              bgcolor: (t: Theme) => (yearUnknownOnly ? alpha(t.palette.warning.main, 0.1) : t.palette.background.paper),
+              color: 'text.primary',
+              fontFamily: 'inherit',
+              fontSize: 13,
+              whiteSpace: 'nowrap',
+              cursor: 'pointer',
+              '&:hover': { borderColor: 'warning.main' },
+              ...focusRing,
+              ...noMotion,
+            }}
+          >
+            {yearUnknownOnly ? (
+              <>
+                <CheckCircleIcon sx={{ fontSize: 18, color: 'warning.dark' }} aria-hidden />
+                Exam year still to ask: <b>{formatCount(summary.estimated)}</b>
+              </>
+            ) : (
+              <>
+                <HelpOutlineIcon sx={{ fontSize: 18, color: 'text.secondary' }} aria-hidden />
+                Exam year known: <b>{formatCount(known)}</b> of {formatCount(seasonTotal)}
+              </>
+            )}
           </Box>
-        )}
+        </Tooltip>
       </Box>
 
-      {/* Still around? */}
-      <CardRow title="Still around?" minWidth={210}>
-        {ACTIVITY_ORDER.map((key) => {
-          const group = ACTIVITY_GROUPS[key];
-          return (
-            <FilterCard
+      {/* Row 2: one strip. Stage funnel, then activity. */}
+      <Box
+        sx={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'stretch',
+          border: '1px solid',
+          borderColor: 'grey.200',
+          borderRadius: 1,
+          bgcolor: 'background.paper',
+          overflow: 'hidden',
+        }}
+      >
+        <Box
+          role="group"
+          aria-label="Where they are"
+          sx={{ display: 'flex', alignItems: 'stretch', flex: '1 1 auto', minWidth: 0, overflowX: 'auto' }}
+        >
+          {stagesShown.map((key, i) => (
+            <Box key={key} sx={{ display: 'flex', alignItems: 'center' }}>
+              {i > 0 && <ChevronRightIcon aria-hidden sx={{ fontSize: 16, color: 'grey.400', mx: -0.25 }} />}
+              <Segment
+                label={STAGE_SHORT[key]}
+                hint={`${PEOPLE_STAGE_LABELS[key]}: ${LIFECYCLE_STAGE_MEANINGS[key]} (${percent(summary.stages[key], stageBase)}%)`}
+                count={summary.stages[key]}
+                tone="primary"
+                selected={stage === key}
+                onClick={() => onStageChange(stage === key ? null : key)}
+              />
+            </Box>
+          ))}
+        </Box>
+        <Box
+          role="group"
+          aria-label="How active"
+          sx={{
+            display: 'flex',
+            alignItems: 'stretch',
+            flex: '0 0 auto',
+            borderLeft: '1px solid',
+            borderColor: 'grey.200',
+            bgcolor: 'grey.50',
+            overflowX: 'auto',
+          }}
+        >
+          {ACTIVITY_ORDER.map((key) => (
+            <Segment
               key={key}
-              label={group.label}
-              hint={group.hint}
+              label={ACTIVITY_SHORT[key]}
+              hint={`${ACTIVITY_GROUPS[key].label}: ${ACTIVITY_GROUPS[key].hint} (${percent(summary.activity[key], activityBase)}%)`}
               count={summary.activity[key]}
-              base={activityBase}
               tone={ACTIVITY_TONE[key]}
-              Icon={ACTIVITY_ICONS[key]}
+              dot
               selected={activity === key}
               onClick={() => onActivityChange(activity === key ? null : key)}
             />
-          );
-        })}
-      </CardRow>
-
-      {/* Where they are */}
-      <CardRow title="Where they are" minWidth={150}>
-        {stagesShown.map((key) => (
-          <FilterCard
-            key={key}
-            label={PEOPLE_STAGE_LABELS[key]}
-            hint={LIFECYCLE_STAGE_MEANINGS[key]}
-            count={summary.stages[key]}
-            base={stageBase}
-            tone="primary"
-            Icon={STAGE_ICONS[key]}
-            selected={stage === key}
-            onClick={() => onStageChange(stage === key ? null : key)}
-          />
-        ))}
-      </CardRow>
-    </Box>
-  );
-}
-
-function CardRow({ title, minWidth, children }: { title: string; minWidth: number; children: React.ReactNode }) {
-  return (
-    <Box role="group" aria-label={title}>
-      <Typography variant="body2" sx={{ fontWeight: 600, color: 'text.secondary', mb: 0.75 }}>
-        {title}
-      </Typography>
-      {/* auto-fill measures the content area, not the window, so the sidebar never squeezes it. */}
-      <Box sx={{ display: 'grid', gridTemplateColumns: `repeat(auto-fill, minmax(${minWidth}px, 1fr))`, gap: 1.5 }}>
-        {children}
+          ))}
+        </Box>
       </Box>
     </Box>
   );
 }
 
-function FilterCard({
+function Segment({
   label,
   hint,
   count,
-  base,
   tone,
-  Icon,
+  dot,
   selected,
   onClick,
 }: {
   label: string;
   hint: string;
   count: number;
-  base: number;
   tone: 'success' | 'warning' | 'secondary' | 'primary';
-  Icon: React.ElementType;
+  dot?: boolean;
   selected: boolean;
   onClick: () => void;
 }) {
-  const percent = base > 0 ? Math.round((count / base) * 100) : 0;
   return (
     <Tooltip title={hint} arrow placement="top">
       <Box
@@ -287,48 +318,40 @@ function FilterCard({
         sx={(theme: Theme) => {
           const color = toneColor(theme, tone);
           return {
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'flex-start',
-            gap: 0.5,
-            minHeight: 88,
-            p: 1.5,
-            textAlign: 'left',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 0.75,
+            minHeight: 52,
+            px: 1.25,
+            border: 'none',
+            borderBottom: '3px solid',
+            borderBottomColor: selected ? color : 'transparent',
+            bgcolor: selected ? alpha(color, 0.08) : 'transparent',
             fontFamily: 'inherit',
+            whiteSpace: 'nowrap',
             cursor: 'pointer',
-            borderRadius: 1,
-            border: '1.5px solid',
-            borderColor: selected ? color : theme.palette.grey[200],
-            bgcolor: selected ? alpha(color, 0.08) : theme.palette.background.paper,
-            '&:hover': { borderColor: color },
+            '&:hover': { bgcolor: alpha(color, 0.06) },
             ...focusRing,
+            outlineOffset: -3,
             ...noMotion,
           };
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', gap: 1 }}>
-          <Icon sx={(t: Theme) => ({ fontSize: 20, color: toneColor(t, tone) })} aria-hidden />
-          <Typography
-            component="span"
-            sx={{ fontSize: 13, fontWeight: 600, color: 'text.primary', lineHeight: 1.3, flex: 1 }}
-          >
-            {label}
-          </Typography>
-          {selected && <CheckCircleIcon sx={(t: Theme) => ({ fontSize: 18, color: toneColor(t, tone) })} aria-hidden />}
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
-          <Typography
-            component="span"
-            sx={{ fontSize: 26, fontWeight: 800, lineHeight: 1.1, color: count > 0 ? 'text.primary' : 'text.secondary' }}
-          >
-            {formatCount(count)}
-          </Typography>
-          {count > 0 && (
-            <Typography component="span" sx={{ fontSize: 12, fontWeight: 600, color: 'text.secondary' }}>
-              {percent}%
-            </Typography>
-          )}
-        </Box>
+        {dot && (
+          <Box
+            aria-hidden
+            sx={(t: Theme) => ({ width: 8, height: 8, borderRadius: '50%', bgcolor: toneColor(t, tone), flexShrink: 0 })}
+          />
+        )}
+        <Typography component="span" sx={{ fontSize: 13, fontWeight: 600, color: 'text.secondary' }}>
+          {label}
+        </Typography>
+        <Typography
+          component="span"
+          sx={{ fontSize: 17, fontWeight: 800, color: count > 0 ? 'text.primary' : 'text.secondary' }}
+        >
+          {formatCount(count)}
+        </Typography>
       </Box>
     </Tooltip>
   );

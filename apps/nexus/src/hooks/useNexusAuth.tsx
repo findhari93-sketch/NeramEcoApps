@@ -283,6 +283,20 @@ const ACTIVE_CLASSROOM_KEY = 'nexus_active_classroom_id';
 export const ME_TIMEOUT_MS = 15_000;
 const IMPERSONATION_KEY = 'nexus_impersonation';
 
+/**
+ * The `test_` token the E2E harness injects, honoured in a dev build only.
+ *
+ * The server accepts one only outside production (lib/ms-verify.ts), so in a
+ * production build it can never work. Read there anyway, a token left behind by
+ * an earlier test run made `pnpm preview:prod:nexus` look signed in while every
+ * call failed Graph with 401 "The token could not be read", and MSAL was never
+ * asked for the real token sitting beside it.
+ */
+function injectedTestToken(): string | null {
+  if (typeof window === 'undefined' || process.env.NODE_ENV === 'production') return null;
+  return localStorage.getItem('nexus_test_token');
+}
+
 function readStoredImpersonation(): StoredImpersonation | null {
   if (typeof window === 'undefined') return null;
   try {
@@ -504,10 +518,8 @@ export function useNexusAuth(): NexusAuthState {
     // assert on layout and never on real data. Mirrors the same fallback in
     // startImpersonation below. Inert in production: no test token is ever set
     // there, and the server rejects one anyway.
-    if (typeof window !== 'undefined') {
-      const injected = localStorage.getItem('nexus_test_token');
-      if (injected) return injected;
-    }
+    const injected = injectedTestToken();
+    if (injected) return injected;
 
     const token = await getAccessToken(loginScopes.nexus);
     if (token) setSessionExpired(false);
@@ -519,10 +531,8 @@ export function useNexusAuth(): NexusAuthState {
     // need MSAL.
     if (impersonationToken) return impersonationToken;
     if (parentToken) return parentToken;
-    if (typeof window !== 'undefined') {
-      const injected = localStorage.getItem('nexus_test_token');
-      if (injected) return injected;
-    }
+    const injected = injectedTestToken();
+    if (injected) return injected;
 
     try {
       // signInSilent answers null only when Microsoft needs the user (an expired
@@ -571,8 +581,7 @@ export function useNexusAuth(): NexusAuthState {
   // read cached auth data directly from localStorage (no API call needed).
   // The auth setup stores nexus_auth_user, nexus_auth_role, nexus_auth_classrooms.
   const [testMode] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return !!localStorage.getItem('nexus_test_token');
+    return !!injectedTestToken();
   });
 
   useEffect(() => {
@@ -909,8 +918,7 @@ export function useNexusAuth(): NexusAuthState {
       // Mint with the real teacher/admin token. Under the E2E test-mode bypass
       // there is no MSAL token, so fall back to the injected test token (which
       // verifyMsToken accepts in non-production).
-      const testToken =
-        typeof window !== 'undefined' ? localStorage.getItem('nexus_test_token') : null;
+      const testToken = injectedTestToken();
       const token = testToken || (await getAccessToken(loginScopes.nexus));
       const res = await fetch('/api/auth/impersonate', {
         method: 'POST',

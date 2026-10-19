@@ -7,7 +7,10 @@
 import { SupabaseClient } from '@supabase/supabase-js';
 import type {
   DirectEnrollmentLink,
+  DirectEnrollmentLinkEvent,
+  DirectEnrollmentLinkEventKind,
   DirectEnrollmentLinkStatus,
+  DirectEnrollmentPaymentScheme,
   CourseType,
   LearningMode,
 } from '../types';
@@ -39,6 +42,15 @@ export interface CreateDirectEnrollmentLinkInput {
   expires_at?: string;
   user_id?: string;
   demo_registration_id?: string;
+  payment_scheme?: DirectEnrollmentPaymentScheme;
+  installment_2_amount?: number | null;
+  installment_2_due_date?: string | null;
+  payment_mode?: 'recorded' | 'student_pays';
+  fee_structure_id?: string | null;
+  offer_full_amount?: number | null;
+  offer_installment_1?: number | null;
+  offer_installment_2?: number | null;
+  offer_balance_due_days?: number | null;
 }
 
 export interface UpdateDirectEnrollmentLinkInput {
@@ -55,11 +67,20 @@ export interface UpdateDirectEnrollmentLinkInput {
   payment_date?: string;
   transaction_reference?: string;
   payment_proof_url?: string;
+  verified_by?: string;
+  verified_at?: string;
 }
+
+/** What staff can change on a link that has not been used yet. */
+export type EditDirectEnrollmentLinkInput = Partial<
+  Omit<CreateDirectEnrollmentLinkInput, 'token' | 'created_by' | 'user_id' | 'demo_registration_id' | 'expires_at'>
+>;
 
 export interface ListDirectEnrollmentLinksFilters {
   status?: DirectEnrollmentLinkStatus;
   created_by?: string;
+  user_id?: string;
+  demo_registration_id?: string;
   search?: string;
   page?: number;
   limit?: number;
@@ -100,6 +121,16 @@ export async function createDirectEnrollmentLink(
       payment_proof_url: data.payment_proof_url || null,
       user_id: data.user_id || null,
       demo_registration_id: data.demo_registration_id || null,
+      payment_scheme: data.payment_scheme || 'full',
+      installment_2_amount: data.installment_2_amount ?? null,
+      installment_2_due_date: data.installment_2_due_date || null,
+      // Student pays (migration 20261213090000); a recorded link leaves these empty.
+      payment_mode: data.payment_mode || 'recorded',
+      fee_structure_id: data.fee_structure_id || null,
+      offer_full_amount: data.offer_full_amount ?? null,
+      offer_installment_1: data.offer_installment_1 ?? null,
+      offer_installment_2: data.offer_installment_2 ?? null,
+      offer_balance_due_days: data.offer_balance_due_days ?? null,
       expires_at: data.expires_at || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
     })
     .select()
@@ -170,6 +201,14 @@ export async function listDirectEnrollmentLinks(
 
   if (filters.created_by) {
     query = query.eq('created_by', filters.created_by);
+  }
+
+  if (filters.user_id) {
+    query = query.eq('user_id', filters.user_id);
+  }
+
+  if (filters.demo_registration_id) {
+    query = query.eq('demo_registration_id', filters.demo_registration_id);
   }
 
   if (filters.search) {
@@ -306,6 +345,12 @@ export async function regenerateDirectEnrollmentLink(
       payment_date: oldLink.payment_date,
       admin_notes: oldLink.admin_notes,
       payment_proof_url: oldLink.payment_proof_url,
+      user_id: oldLink.user_id,
+      demo_registration_id: oldLink.demo_registration_id,
+      parent_phone: oldLink.parent_phone,
+      payment_scheme: oldLink.payment_scheme || 'full',
+      installment_2_amount: oldLink.installment_2_amount,
+      installment_2_due_date: oldLink.installment_2_due_date,
       regenerated_from: oldLinkId,
       expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
     })
@@ -342,4 +387,116 @@ export async function getActiveEnrollmentLinkForUser(
 
   if (error) throw error;
   return data;
+}
+
+// ============================================
+// ONE LINK PER STUDENT, EDITS AND SHARING
+// ============================================
+
+/** The last 10 digits of a phone number, for matching "+91 96560 77577" to "9656077577". */
+export function phoneTail(phone: string | null | undefined): string | null {
+  const digits = (phone || '').replace(/\D/g, '');
+  return digits.length >= 10 ? digits.slice(-10) : null;
+}
+
+/**
+ * The student's active, unexpired link, if staff already made one: matched by
+ * account first, then by phone (links made on Direct Enroll carry no account).
+ */
+export async function findActiveLinkForStudent(
+  who: { userId?: string | null; phone?: string | null; excludeId?: string | null },
+  supabase: SupabaseClient
+): Promise<DirectEnrollmentLink | null> {
+  const now = new Date().toISOString();
+  const pick = async (column: 'user_id' | 'student_phone', value: string, like: boolean) => {
+    let q = supabase
+      .from('direct_enrollment_links')
+      .select('*')
+      .eq('status', 'active')
+      .gt('expires_at', now);
+    q = like ? q.ilike(column, `%${value}`) : q.eq(column, value);
+    if (who.excludeId) q = q.neq('id', who.excludeId);
+    const { data, error } = await q.order('created_at', { ascending: false }).limit(1).maybeSingle();
+    if (error) throw error;
+    return data as DirectEnrollmentLink | null;
+  };
+
+  if (who.userId) {
+    const byUser = await pick('user_id', who.userId, false);
+    if (byUser) return byUser;
+  }
+  const tail = phoneTail(who.phone);
+  return tail ? pick('student_phone', tail, true) : null;
+}
+
+/** Change an unused link in place. The token, and so the URL already sent, stays. */
+export async function editDirectEnrollmentLink(
+  id: string,
+  data: EditDirectEnrollmentLinkInput,
+  supabase: SupabaseClient
+): Promise<DirectEnrollmentLink> {
+  const patch: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (value !== undefined) patch[key] = value === '' ? null : value;
+  }
+  // An edit is a fresh start for the student: a full week from now.
+  patch.expires_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const { data: link, error } = await supabase
+    .from('direct_enrollment_links')
+    .update(patch)
+    .eq('id', id)
+    .eq('status', 'active')
+    .select()
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!link) throw new Error('This link is no longer active, so it cannot be changed.');
+  return link;
+}
+
+export async function logDirectEnrollmentLinkEvent(
+  linkId: string,
+  kind: DirectEnrollmentLinkEventKind,
+  actorId: string | null,
+  meta: Record<string, unknown>,
+  supabase: SupabaseClient
+): Promise<void> {
+  const { error } = await supabase
+    .from('direct_enrollment_link_events')
+    .insert({ link_id: linkId, kind, actor_id: actorId, meta });
+  if (error) console.error('direct_enrollment_link_events insert failed', error.message);
+}
+
+export interface DirectEnrollmentLinkEventWithActor extends DirectEnrollmentLinkEvent {
+  actor_name: string | null;
+}
+
+export async function listDirectEnrollmentLinkEvents(
+  linkId: string,
+  supabase: SupabaseClient
+): Promise<DirectEnrollmentLinkEventWithActor[]> {
+  const { data, error } = await supabase
+    .from('direct_enrollment_link_events')
+    .select('*, actor:users!direct_enrollment_link_events_actor_id_fkey(name)')
+    .eq('link_id', linkId)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  return (data || []).map((row: any) => {
+    const { actor, ...rest } = row;
+    return { ...rest, actor_name: actor?.name ?? null };
+  });
+}
+
+/** Count a share and remember when it happened. */
+export async function markDirectEnrollmentLinkShared(
+  link: Pick<DirectEnrollmentLink, 'id' | 'share_count'>,
+  supabase: SupabaseClient
+): Promise<void> {
+  const { error } = await supabase
+    .from('direct_enrollment_links')
+    .update({ share_count: (link.share_count || 0) + 1, last_shared_at: new Date().toISOString() })
+    .eq('id', link.id);
+  if (error) throw error;
 }

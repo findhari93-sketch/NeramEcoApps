@@ -33,6 +33,9 @@ export interface ResponsiveSheetProps {
 export default function ResponsiveSheet({ open, onClose, title, busy, actions, children }: ResponsiveSheetProps) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  // Slide and fade are decoration: skip them for people who asked for less motion.
+  const reduceMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
+  const transitionDuration = reduceMotion ? 0 : undefined;
   const titleId = useId();
   const close = () => {
     if (!busy) onClose();
@@ -46,6 +49,7 @@ export default function ResponsiveSheet({ open, onClose, title, busy, actions, c
         onClose={close}
         onOpen={() => {}}
         disableSwipeToOpen
+        transitionDuration={transitionDuration}
         PaperProps={
           {
             role: 'dialog',
@@ -91,7 +95,14 @@ export default function ResponsiveSheet({ open, onClose, title, busy, actions, c
   }
 
   return (
-    <Dialog open={open} onClose={close} maxWidth="sm" fullWidth aria-labelledby={titleId}>
+    <Dialog
+      open={open}
+      onClose={close}
+      maxWidth="sm"
+      fullWidth
+      aria-labelledby={titleId}
+      transitionDuration={transitionDuration}
+    >
       <DialogTitle id={titleId} sx={{ fontWeight: 700, pr: 8 }}>
         {title}
         <IconButton

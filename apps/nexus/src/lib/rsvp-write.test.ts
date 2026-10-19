@@ -45,6 +45,18 @@ describe('writeRsvp', () => {
     expect(notify).toHaveBeenCalledTimes(1);
   });
 
+  it('stores a yes as a confirmation, naming staff only when staff typed it', async () => {
+    const d = db();
+    await writeRsvp(d, { userId: 's1', classId: 'k1', response: 'attending' }, { notify: vi.fn() });
+    const rows = d.rows('nexus_attendance_confirmations');
+    expect(rows[0]).toMatchObject({ scheduled_class_id: 'k1', student_id: 's1', classroom_id: 'c1', confirmed_by: null });
+    expect(rows[0].confirmed_at).toBeTruthy();
+
+    await writeRsvp(d, { userId: 's1', classId: 'k1', response: 'attending', confirmedBy: 'staff-1' }, { notify: vi.fn() });
+    expect(d.rows('nexus_attendance_confirmations')).toHaveLength(1);
+    expect(d.rows('nexus_attendance_confirmations')[0].confirmed_by).toBe('staff-1');
+  });
+
   it('a notification failure never loses the RSVP', async () => {
     const d = db();
     const notify = vi.fn(async () => { throw new Error('teams down'); });

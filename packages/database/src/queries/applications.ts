@@ -341,6 +341,8 @@ export interface CreateCallbackInput {
   notes?: string;
   // Attribution
   source?: string;
+  /** The site visitor (neram_anon_id) who asked from the Aintra chat; limits repeat asks. */
+  visitor_id?: string;
   utm_source?: string;
   utm_medium?: string;
   utm_campaign?: string;

@@ -3,6 +3,7 @@
 import { Box, Button, Collapse, Typography, alpha, useTheme } from '@neram/ui';
 import AddIcon from '@mui/icons-material/Add';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import HowToRegRoundedIcon from '@mui/icons-material/HowToRegRounded';
 import StudentAvatar from '@/components/students/StudentAvatar';
 import { coveringWindow, describeWindow } from '@/lib/away-windows';
 import { describeReason } from '@/lib/rsvp-reasons';
@@ -67,6 +68,12 @@ export interface DayForecastCardProps {
   onToggle: () => void;
   onOpenClass?: (classId: string) => void;
   onSchedule?: (date: string) => void;
+  /**
+   * Opens the follow-up sheet for the day's classes that have not finished:
+   * ask the students who often miss, call the ones who stay silent, record
+   * what they said. Absent, the button is not drawn.
+   */
+  onConfirm?: (classIds: string[]) => void;
 }
 
 /** Separates the three reasons a chair is empty, which are not the same event. */
@@ -143,6 +150,7 @@ export default function DayForecastCard({
   onToggle,
   onOpenClass,
   onSchedule,
+  onConfirm,
 }: DayForecastCardProps) {
   const theme = useTheme();
 
@@ -438,6 +446,34 @@ export default function DayForecastCard({
         )}
 
         <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
+          {decidable && onConfirm && (
+            <Button
+              size="small"
+              variant="contained"
+              disableElevation
+              startIcon={<HowToRegRoundedIcon />}
+              onClick={() => onConfirm(classes.filter((c) => !hasClassEnded(c, now)).map((c) => c.class_id))}
+              sx={{ minHeight: 44, flex: '1 1 auto' }}
+            >
+              Confirm who is coming
+              {(f.noReply ?? 0) > 0 && (
+                <Box
+                  component="span"
+                  sx={{
+                    ml: 1,
+                    px: 0.75,
+                    borderRadius: 999,
+                    fontSize: '0.75rem',
+                    fontWeight: 700,
+                    bgcolor: 'common.white',
+                    color: 'primary.dark',
+                  }}
+                >
+                  {f.noReply} no reply
+                </Box>
+              )}
+            </Button>
+          )}
           {scheduled && onOpenClass && (
             <Button
               size="small"

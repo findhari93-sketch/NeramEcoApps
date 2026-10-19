@@ -35,7 +35,6 @@ import HowToRegIcon from '@mui/icons-material/HowToReg';
 import PersonOffIcon from '@mui/icons-material/PersonOff';
 import ReplayIcon from '@mui/icons-material/Replay';
 import SendIcon from '@mui/icons-material/Send';
-import SchoolIcon from '@mui/icons-material/School';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import FamilyRestroomIcon from '@mui/icons-material/FamilyRestroom';
 import {
@@ -48,7 +47,8 @@ import {
 import { OpsSkeleton, FOCUS_RING } from '@/components/ops/OpsUi';
 import { INTEREST_LABELS } from '@neram/database/demo-follow-up';
 import LogOutcomeDialog from '@/components/follow-ups/LogOutcomeDialog';
-import GenerateLinkDialog from '@/components/direct-enrollment/GenerateLinkDialog';
+import EnrolmentLinkDrawer from '@/components/direct-enrollment/EnrolmentLinkDrawer';
+import EnrolmentLinkStatus, { linkMoneyLine } from './EnrolmentLinkStatus';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
 import AttendedDialog from './AttendedDialog';
 import HeldDemoDialog from './HeldDemoDialog';
@@ -166,6 +166,8 @@ export default function RequestPanel({
   const [stopOpen, setStopOpen] = useState(false);
   const [linkInput, setLinkInput] = useState('');
   const [linkOpen, setLinkOpen] = useState(false);
+  // What the last Verify or Reject did ("Enrolled as NC-2026-0123, ..."), kept after the panel refreshes.
+  const [paymentNote, setPaymentNote] = useState<{ kind: 'verify' | 'reject'; text: string; linkId: string } | null>(null);
   const { supabaseUserId } = useAdminProfile();
   const linkReq = detail?.request;
   const linkPrefill = useMemo(
@@ -207,6 +209,14 @@ export default function RequestPanel({
   // Confirm always sets an organizer; a demo recorded as held outside the desk has none.
   const heldOutside = !r.organizer_upn;
   const parentAccount = r.account_holder === 'parent';
+
+  const onPaymentDecided = (decision: 'verify' | 'reject', text: string) => {
+    if (detail.enrolmentLink) setPaymentNote({ kind: decision, text, linkId: detail.enrolmentLink.id });
+    // The note refreshes the panel, so the link shows its new state.
+    onAction({ action: 'note', note: decision === 'verify' ? `Payment verified. ${text}` : `${text}` }).then((err) => {
+      if (err) setError(err);
+    });
+  };
 
   const run = async (key: string, body: Record<string, unknown>) => {
     setBusy(key);
@@ -400,10 +410,16 @@ export default function RequestPanel({
             </Box>
           )}
           {r.status === 'attended' && !detail.followUp && r.user_id && (
-            <Box sx={{ display: 'flex', gap: 1, mt: 1, flexWrap: 'wrap' }}>
-            <Button variant="contained" startIcon={<SchoolIcon />} onClick={() => setLinkOpen(true)} disabled={!supabaseUserId} sx={{ minHeight: 44 }}>
-              Send enrolment link
-            </Button>
+            <Box sx={{ mt: 1 }}>
+              <EnrolmentLinkStatus
+                link={detail.enrolmentLink}
+                disabled={!supabaseUserId}
+                onOpen={() => setLinkOpen(true)}
+                adminId={supabaseUserId}
+                onPaymentDecided={onPaymentDecided}
+                notice={paymentNote && paymentNote.linkId === detail.enrolmentLink?.id ? paymentNote : null}
+                onDismissNotice={() => setPaymentNote(null)}
+              />
             </Box>
           )}
           {r.status === 'approved' && (
@@ -596,12 +612,20 @@ export default function RequestPanel({
             <Button color="error" onClick={() => setStopOpen(true)} sx={{ minHeight: 44 }}>
               Stop follow-up
             </Button>
-            {r.user_id && (
-            <Button variant="contained" startIcon={<SchoolIcon />} onClick={() => setLinkOpen(true)} disabled={!supabaseUserId} sx={{ minHeight: 44 }}>
-              Send enrolment link
-            </Button>
-            )}
           </Box>
+          {r.user_id && (
+            <Box sx={{ mt: 1 }}>
+              <EnrolmentLinkStatus
+                link={detail.enrolmentLink}
+                disabled={!supabaseUserId}
+                onOpen={() => setLinkOpen(true)}
+                adminId={supabaseUserId}
+                onPaymentDecided={onPaymentDecided}
+                notice={paymentNote && paymentNote.linkId === detail.enrolmentLink?.id ? paymentNote : null}
+                onDismissNotice={() => setPaymentNote(null)}
+              />
+            </Box>
+          )}
           <LogOutcomeDialog
             open={logOpen}
             name={r.name}
@@ -836,15 +860,34 @@ export default function RequestPanel({
         </Box>
       </Box>
 
-      <GenerateLinkDialog
+      <EnrolmentLinkDrawer
         open={linkOpen}
         onClose={() => setLinkOpen(false)}
-        onSuccess={() => {
-          setLinkOpen(false);
-          onAction({ action: 'note', note: 'Enrolment link sent' });
-        }}
         adminId={supabaseUserId || ''}
-        prefillData={linkPrefill}
+        prefill={linkPrefill}
+        linkId={
+          detail.enrolmentLink && ['active', 'payment_submitted', 'used'].includes(detail.enrolmentLink.status)
+            ? detail.enrolmentLink.id
+            : null
+        }
+        onChanged={(link, change) => {
+          // The note goes in the activity log and refreshes the panel's link state.
+          const what =
+            change === 'created'
+              ? 'Enrolment link made'
+              : change === 'cancelled'
+                ? 'Enrolment link cancelled'
+                : change === 'regenerated'
+                  ? 'New enrolment link made'
+                  : change === 'payment_verified'
+                    ? 'Payment verified, student enrolled'
+                    : change === 'payment_rejected'
+                      ? 'Payment rejected'
+                      : 'Enrolment link changed';
+          onAction({ action: 'note', note: `${what}: ${linkMoneyLine(link)}.` }).then((err) => {
+            if (err) setError(err);
+          });
+        }}
       />
       <AttendedDialog
         open={attendedOpen}

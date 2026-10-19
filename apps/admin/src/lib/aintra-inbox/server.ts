@@ -93,17 +93,19 @@ export async function loadUsers(db: Db, ids: string[]): Promise<Map<string, Inbo
   if (!ids.length) return map;
   const any = db as any;
   for (const part of chunks(ids)) {
-    const [users, leads, students, demos] = await Promise.all([
+    const [users, leads, students, demos, callbacks] = await Promise.all([
       any.from('users').select('id, name, first_name, last_name, phone, email, avatar_url, created_at, first_touch, anonymous_id, linked_classroom_email').in('id', part),
       any.from('lead_profiles').select('user_id, interest_course, applicant_category').in('user_id', part).is('deleted_at', null),
       any.from('student_profiles').select('user_id').in('user_id', part),
       any.from('demo_class_registrations').select('user_id').in('user_id', part),
+      any.from('callback_requests').select('user_id').eq('source', 'aintra').in('user_id', part),
     ]);
     if (users.error) throw users.error;
     const leadBy = new Map<string, any>();
     for (const l of leads.data ?? []) if (!leadBy.has(l.user_id)) leadBy.set(l.user_id, l);
     const enrolled = new Set((students.data ?? []).map((s: any) => s.user_id));
     const demoed = new Set((demos.data ?? []).map((d: any) => d.user_id));
+    const calledBack = new Set((callbacks.data ?? []).map((c: any) => c.user_id));
     for (const u of users.data ?? []) {
       const name = u.first_name ? `${u.first_name}${u.last_name ? ` ${u.last_name}` : ''}` : u.name || null;
       map.set(u.id, {
@@ -119,6 +121,7 @@ export async function loadUsers(db: Db, ids: string[]): Promise<Map<string, Inbo
         // Same rule as the gold ring in CRM Users: a student profile, or a classroom account.
         enrolled: enrolled.has(u.id) || !!u.linked_classroom_email,
         demoBooked: demoed.has(u.id),
+        callbackAsked: calledBack.has(u.id),
         applied: leadBy.has(u.id),
       });
     }

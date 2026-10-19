@@ -85,6 +85,8 @@ export async function listUserJourneys(
     examYearMin,
     examYearMax,
     identity,
+    examYearSource,
+    includeGuardians = false,
     limit = 25,
     offset = 0,
     orderBy = 'created_at',
@@ -124,6 +126,15 @@ export async function listUserJourneys(
   }
   if (examYearMax !== undefined) {
     query = query.lte('exam_year', examYearMax);
+  }
+  if (examYearSource) {
+    query = query.eq('exam_year_source', examYearSource);
+  }
+
+  // Parent accounts show on their child's row, not as people of their own
+  // (is_guardian_account, migration 20261209090000).
+  if (!includeGuardians) {
+    query = query.eq('is_guardian_account', false);
   }
 
   // Apply filters

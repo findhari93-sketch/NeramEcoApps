@@ -1265,3 +1265,74 @@ export default {
   sendFirstTouchEmail,
   sendPhoneDripEmail,
 };
+
+// ============================================
+// ENROLMENT LINK (Admin > Enrolment link drawer)
+// ============================================
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/** Email a student their enrolment link with the fee plan staff agreed. */
+export async function sendEnrolmentLinkEmail(input: {
+  to: string;
+  studentName: string;
+  url: string;
+  courseLabel: string;
+  /** "Course fee: ₹30,000", "Paid: ₹15,000", "Balance: ₹15,000, due by 30 Nov 2026" */
+  planLines: string[];
+  /** "24 Oct 2026" */
+  expiresOn: string | null;
+  /** Student-pays link: the student chooses a plan and pays on the page. */
+  studentPays?: boolean;
+}): Promise<{ success: boolean; error?: string }> {
+  const first = escapeHtml(input.studentName.trim().split(/\s+/)[0] || 'there');
+  const rows = input.planLines
+    .map((line) => {
+      const at = line.indexOf(':');
+      const label = escapeHtml(at > 0 ? line.slice(0, at) : line);
+      const value = escapeHtml(at > 0 ? line.slice(at + 1).trim() : '');
+      return `<tr><td style="padding:6px 0;color:#555;">${label}</td><td style="padding:6px 0;text-align:right;font-weight:600;color:#111;">${value}</td></tr>`;
+    })
+    .join('');
+  const url = escapeHtml(input.url);
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head>
+    <body style="margin:0;background:#f4f6f8;font-family:'Segoe UI',Arial,sans-serif;line-height:1.6;color:#222;">
+      <div style="max-width:560px;margin:0 auto;padding:24px 16px;">
+        <div style="background:#0D47A1;color:#fff;padding:24px;border-radius:8px 8px 0 0;">
+          <h1 style="margin:0;font-size:22px;">${input.studentPays ? 'Choose your plan and join' : 'Complete your enrolment'}</h1>
+          <p style="margin:4px 0 0;opacity:.9;">Neram Classes</p>
+        </div>
+        <div style="background:#fff;padding:24px;border-radius:0 0 8px 8px;">
+          <p style="margin-top:0;">Hi <strong>${first}</strong>,</p>
+          <p>Welcome to Neram Classes. Your seat in <strong>${escapeHtml(input.courseLabel)}</strong> is reserved. ${input.studentPays ? 'Check your details, choose to pay in full or in two installments, and pay securely to the trust account. It takes about 3 minutes.' : 'Please complete your enrolment details using the button below.'}</p>
+          <table role="presentation" style="width:100%;border-collapse:collapse;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;margin:16px 0;">${rows}</table>
+          <p style="text-align:center;margin:24px 0;">
+            <a href="${url}" style="display:inline-block;background:#1565C0;color:#fff;padding:14px 32px;text-decoration:none;border-radius:6px;font-weight:600;">${input.studentPays ? 'Choose plan and pay' : 'Complete enrolment'}</a>
+          </p>
+          <p style="font-size:13px;color:#555;">Or open this link: <a href="${url}" style="color:#1565C0;word-break:break-all;">${url}</a></p>
+          ${input.expiresOn ? `<p style="font-size:13px;color:#555;">The link works until ${escapeHtml(input.expiresOn)}.</p>` : ''}
+          <p style="font-size:13px;color:#555;margin-bottom:0;">Questions? Reply to this email and our team will help.</p>
+        </div>
+        <p style="text-align:center;font-size:12px;color:#777;">Neram Classes, Architecture Entrance Coaching | www.neramclasses.com</p>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: input.to,
+    subject: input.studentPays ? 'Your Neram Classes seat: choose your plan and pay' : 'Complete your enrolment at Neram Classes',
+    html,
+  });
+}

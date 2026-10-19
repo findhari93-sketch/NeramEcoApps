@@ -4,13 +4,14 @@
   "framework": "nextjs",
   "regions": ["sin1"],
   "crons": [
-    { "path": "/api/cron/sync-ms-photos", "schedule": "0 20 * * 0" },
+    { "path": "/api/cron/sync-ms-photos", "schedule": "0 20 * * *" },
     { "path": "/api/cron/identity-sweep", "schedule": "45 21 * * *" },
     { "path": "/api/cron/marketing-ai/ingest", "schedule": "30 0 * * *" },
     { "path": "/api/cron/marketing-ai/analyze", "schedule": "0 1 * * *" },
     { "path": "/api/cron/marketing-ai/conversions", "schedule": "15 */6 * * *" },
     { "path": "/api/cron/marketing-ai/weekly", "schedule": "0 2 * * 1" },
     { "path": "/api/cron/demo-messages", "schedule": "*/5 * * * *" },
+    { "path": "/api/cron/phone-stuck", "schedule": "*/15 * * * *" },
     { "path": "/api/cron/follow-up-digest", "schedule": "30 3 * * *" },
     { "path": "/api/cron/fee-reminders", "schedule": "0 4 * * *" },
     { "path": "/api/cron/support-tickets-auto-close", "schedule": "45 2 * * *" },
@@ -26,7 +27,7 @@
       "source": "/(.*)",
       "headers": [
         { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "X-Frame-Options", "value": "SAMEORIGIN" },
         { "key": "X-XSS-Protection", "value": "1; mode=block" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
         { "key": "X-Robots-Tag", "value": "noindex, nofollow" }

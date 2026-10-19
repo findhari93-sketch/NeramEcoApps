@@ -48,7 +48,8 @@ import FiberNewOutlinedIcon from '@mui/icons-material/FiberNewOutlined';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import BedtimeOutlinedIcon from '@mui/icons-material/BedtimeOutlined';
-import type { UserJourney, PipelineStage, EngagementState } from '@neram/database';
+import Link from 'next/link';
+import type { UserJourney, PipelineStage, EngagementState, GuardianSummary } from '@neram/database';
 import {
   PIPELINE_STAGE_CONFIG,
   LIFECYCLE_STAGE_LABELS,
@@ -96,6 +97,37 @@ interface UsersTableProps {
    * Stage column instead of Pipeline, and Last active says what they did.
    */
   peopleView?: boolean;
+  /** Filter controls shown in the table toolbar, next to the search box. */
+  toolbarFilters?: React.ReactNode;
+}
+
+/** "Parent: Sameera Najmal", linking to the parent's own page. */
+function ParentLine({ guardians }: { guardians: GuardianSummary[] }) {
+  const first = guardians[0];
+  const label =
+    `${first.relationship === 'guardian' ? 'Guardian' : 'Parent'}: ${first.name || first.email || first.phone || 'Unnamed'}` +
+    (guardians.length > 1 ? ` +${guardians.length - 1}` : '');
+  return (
+    <Typography
+      component={Link}
+      href={`/crm/${first.guardian_user_id}`}
+      data-bulk-action
+      onClick={(e: React.MouseEvent) => e.stopPropagation()}
+      variant="caption"
+      noWrap
+      sx={{
+        display: 'block',
+        color: 'primary.main',
+        fontWeight: 600,
+        lineHeight: 1.4,
+        textDecoration: 'none',
+        '&:hover': { textDecoration: 'underline' },
+        '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 1 },
+      }}
+    >
+      {label}
+    </Typography>
+  );
 }
 
 /** "2027", or "2027 est." when the year was guessed from the sign-up date. */
@@ -528,6 +560,7 @@ export default function UsersTable(props: UsersTableProps) {
     onColumnFiltersChange,
     showLifecycleColumns,
     peopleView,
+    toolbarFilters,
   } = props;
 
   const theme = useTheme();
@@ -628,6 +661,24 @@ export default function UsersTable(props: UsersTableProps) {
                     mt: 0.25,
                   }}
                 />
+              )}
+              {/* Archived by staff, then active again: worth a look (auto-archives return on their own). */}
+              {row.original.lifecycle_status === 'archived' &&
+                row.original.archived_at &&
+                row.original.last_meaningful_activity_at &&
+                row.original.last_meaningful_activity_at > row.original.archived_at && (
+                  <Tooltip title="Active again since they were archived. Restore them to work with them.">
+                    <Chip
+                      label="Came back"
+                      size="small"
+                      sx={{ height: 18, fontSize: 9, fontWeight: 700, borderRadius: 0.75, mt: 0.25, ml: 0.5 }}
+                      color="success"
+                      variant="outlined"
+                    />
+                  </Tooltip>
+                )}
+              {row.original.guardians && row.original.guardians.length > 0 && (
+                <ParentLine guardians={row.original.guardians} />
               )}
             </Box>
           </Box>
@@ -1267,11 +1318,13 @@ export default function UsersTable(props: UsersTableProps) {
 
     positionGlobalFilter: 'left',
     muiSearchTextFieldProps: {
-      placeholder: 'Search by name, email, phone, or application number...',
+      placeholder: peopleView ? 'Name, email or phone' : 'Search by name, email, phone, or application number...',
       variant: 'outlined' as const,
       size: 'small' as const,
       sx: {
         minWidth: 400,
+        my: 0,
+        '& .MuiInputBase-root': { minWidth: { xs: 0, md: 360 }, height: 40 },
         '& .MuiOutlinedInput-root': {
           borderRadius: 1,
           bgcolor: 'grey.50',
@@ -1286,8 +1339,11 @@ export default function UsersTable(props: UsersTableProps) {
     },
     muiTopToolbarProps: {
       sx: {
-        px: 3,
-        py: 2,
+        // One slim row: MRT's own 3.5rem min height and inner padding doubled it.
+        minHeight: 0,
+        px: 2,
+        py: 0.75,
+        '& > .MuiBox-root': { p: 0, alignItems: 'center' },
         bgcolor: 'background.paper',
         borderBottom: '1px solid',
         borderBottomColor: 'grey.100',
@@ -1304,7 +1360,19 @@ export default function UsersTable(props: UsersTableProps) {
     },
     initialState: {
       density: 'compact',
+      // The People page keeps search open: it is the most used control.
+      showGlobalFilter: Boolean(peopleView),
     },
+    ...(toolbarFilters
+      ? {
+          renderTopToolbarCustomActions: () => (
+            // flex: 1 keeps the filters next to the search box instead of centred.
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', flex: 1, ml: 1.5 }}>
+              {toolbarFilters}
+            </Box>
+          ),
+        }
+      : {}),
     muiPaginationProps: {
       rowsPerPageOptions: [25, 50, 100],
       showFirstButton: true,

@@ -44,6 +44,7 @@ import { readChatStream } from '@/lib/aintra/chat-stream';
 import { leadAttribution } from '@/lib/attribution';
 import { ensureAccount } from '@/lib/ensure-account';
 import SignInGateCard from './aintra/SignInGateCard';
+import { AintraBookingProvider, type AintraBookingContextValue } from './aintra/rich/booking/BookingContext';
 import { buildWhatsAppLink } from '@/lib/whatsapp';
 import { trackWhatsAppClick } from '@/lib/whatsapp-track';
 
@@ -280,9 +281,20 @@ export default function GeneralChatbot() {
     };
 
     try {
+      // A signed-in student's token lets Aintra ask for, and save, their exam year.
+      let authHeader: Record<string, string> = {};
+      if (firebaseUser) {
+        try {
+          const { getFirebaseAuth } = await import('@neram/auth');
+          const token = await getFirebaseAuth().currentUser?.getIdToken();
+          if (token) authHeader = { Authorization: `Bearer ${token}` };
+        } catch {
+          // No token: Aintra still answers, it just does not ask.
+        }
+      }
       const res = await fetch('/api/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeader },
         signal: controller.signal,
         body: JSON.stringify({
           message: text.trim(),
@@ -380,6 +392,9 @@ export default function GeneralChatbot() {
     setPendingQuestion(null);
     if (q) void sendRef.current(q);
   }, [resendAfterLogin, firebaseUser, pendingQuestion]);
+
+  // Booking cards in answers ([[book:callback]], [[book:demo]]) use the chat's own sign-in.
+  const booking = useMemo<AintraBookingContextValue>(() => ({ sessionId, openSignIn: () => setLoginOpen(true) }), [sessionId]);
 
   const onSignedIn = useCallback(() => {
     setLoginOpen(false);
@@ -773,6 +788,7 @@ export default function GeneralChatbot() {
                     </Box>
                   )}
 
+                  <AintraBookingProvider value={booking}>
                   {messages.map((msg) =>
                     msg.role === 'model' ? (
                       <AssistantMessage
@@ -807,6 +823,7 @@ export default function GeneralChatbot() {
                       </Box>
                     ),
                   )}
+                  </AintraBookingProvider>
 
                   {/* Lead capture card */}
                   {showLeadCapture && !leadCaptured && (

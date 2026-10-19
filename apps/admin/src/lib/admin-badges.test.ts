@@ -89,6 +89,12 @@ describe('collections badge', () => {
     expect(collectionsBadgeCount(-1, Number.NaN)).toBe(0);
   });
 
+  it('adds balance payments waiting to be verified', () => {
+    expect(collectionsBadgeCount(1, 2, 3)).toBe(6);
+    expect(collectionsBadgeCount(0, 0, 4)).toBe(4);
+    expect(collectionsBadgeCount(2, 3, null)).toBe(5);
+  });
+
   it('uses the India date for "due today", so 11pm IST is still the same day', () => {
     // 2026-10-16 17:30 UTC is 23:00 on 16 Oct in India.
     expect(istTodayKey(new Date('2026-10-16T17:30:00Z'))).toBe('2026-10-16');

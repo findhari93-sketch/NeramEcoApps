@@ -14,7 +14,7 @@ const silentToken = () => getAccessTokenSilent(loginScopes.default);
 // child component's effect fetches. When the token cannot be renewed silently,
 // the call waits on the Sign in again dialog (a popup, never a redirect, so a
 // half-filled form survives) and then goes out with the new token.
-installAdminApiAuth(silentToken, () => requestReauth());
+installAdminApiAuth(silentToken, (opts) => requestReauth(Date.now(), opts));
 
 /** How often returning to the tab re-checks that a token can still be had. */
 const RECHECK_MS = 2 * 60 * 1000;

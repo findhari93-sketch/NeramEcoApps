@@ -8,6 +8,10 @@ export const dynamic = 'force-dynamic';
  * ('failed'). Every number lands in phone_attempts, signed in or not (a
  * signed-out visitor is keyed by the anonymous id and moved onto the account
  * at sign-up), so staff can call a student whose OTP never went out.
+ * Signals say what the student did next (otp_checked, help, closed,
+ * skipped, tab_closed; a closing tab sends no token, the visitor id finds
+ * the row) and the user agent gives the device and browser, so Admin can
+ * tell "the student stopped" from "our sign-in broke".
  *
  * Signed in with an unverified phone, 'entered' also saves the number on the
  * user record (phone_verified stays false). verify-phone sets it to true.
@@ -20,6 +24,7 @@ import {
   getUserByFirebaseUid,
   getSupabaseAdminClient,
   insertFunnelEvent,
+  describeUserAgent,
   linkPhoneAttempts,
   parsePhoneCaptureBody,
   recordPhoneAttempt,
@@ -62,6 +67,7 @@ export async function POST(req: NextRequest) {
     if (user && capture.anonymousId && capture.event === 'entered') {
       await linkPhoneAttempts(capture.anonymousId, user.id, adminClient);
     }
+    const { device, browser } = describeUserAgent(req.headers.get('user-agent'));
     const captured = await recordPhoneAttempt(
       {
         userId: user?.id ?? null,
@@ -72,6 +78,8 @@ export async function POST(req: NextRequest) {
         sourceApp: 'app',
         errorCode: capture.errorCode,
         errorMessage: capture.errorMessage,
+        device,
+        browser,
       },
       adminClient,
     );

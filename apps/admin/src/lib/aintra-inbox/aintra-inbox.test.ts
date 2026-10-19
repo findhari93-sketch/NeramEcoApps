@@ -112,6 +112,10 @@ describe('lead stage', () => {
     expect(leadStage({ user: user({ id: 'u', demoBooked: true }), recentIntents: [], allIntents: [] })).toBe('Demo booked');
     expect(leadStage({ user: user({ id: 'u', applied: true }), recentIntents: [], allIntents: [] })).toBe('Applied');
   });
+  it('a callback asked from the Aintra card ranks after a demo, before an application', () => {
+    expect(leadStage({ user: user({ id: 'u', callbackAsked: true, applied: true }), recentIntents: [], allIntents: [] })).toBe('Callback asked');
+    expect(leadStage({ user: user({ id: 'u', callbackAsked: true, demoBooked: true }), recentIntents: [], allIntents: [] })).toBe('Demo booked');
+  });
   it('signed in and asking about fees this week is a hot lead', () => {
     expect(leadStage({ user: user({ id: 'u' }), recentIntents: ['fees'], allIntents: ['fees'] })).toBe('Hot lead');
     expect(leadStage({ user: user({ id: 'u' }), recentIntents: [], allIntents: ['fees'] })).toBe('Warm');
@@ -244,6 +248,12 @@ describe('answer rendering', () => {
     expect(blocks[3]).toEqual({ type: 'paragraph', text: 'Scholarships are available.' });
     expect(blocks[4]).toEqual({ type: 'card', label: 'Buttons shown: Apply, Book a demo' });
     expect(blocks[5]).toEqual({ type: 'card', label: 'Suggested next: Timings? · Demo?' });
+  });
+
+  it('labels the Aintra booking cards', () => {
+    const blocks = parseAnswer('Sure.\n[[book:callback,tomorrow,evening]]\n[[book:demo]]');
+    expect(blocks).toContainEqual({ type: 'card', label: 'Callback card shown' });
+    expect(blocks).toContainEqual({ type: 'card', label: 'Demo booking card shown' });
   });
 
   it('reads lists and headings, and drops unknown directives', () => {

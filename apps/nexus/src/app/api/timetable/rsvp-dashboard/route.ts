@@ -8,6 +8,7 @@ import {
   describeWindow,
   eachDayYmd,
   groupByStudent,
+  isMissingTable,
   loadAwayWindows,
   type AwayWindow,
 } from '@/lib/away-windows';
@@ -193,10 +194,11 @@ export async function GET(request: NextRequest) {
       // on deploy-db-production. A raw query here would 500 the entire calendar
       // in the window between Vercel going live and the migration landing.
       const classIds = (classes || []).map((c: any) => c.id);
-      const [byClass, awayWindows, presentByClass] = await Promise.all([
+      const [byClass, awayWindows, presentByClass, confirmations] = await Promise.all([
         fetchOptOuts(supabase, classIds),
         loadAwayWindows(supabase, { studentIds, from: start, to: end }),
         fetchPresent(supabase, classIds, studentIds),
+        fetchConfirmations(supabase, classIds),
       ]);
       const awayByStudent = groupByStudent(awayWindows);
 
@@ -235,6 +237,7 @@ export async function GET(request: NextRequest) {
           also_declined_ids: full.away.filter((a) => a.also_declined).map((a) => a.id),
           reason_tally: full.reason_tally,
           away_tally: tallyReasons(full.away),
+          ...confirmIdsFor([cls.id], confirmations),
         };
       });
 
@@ -309,6 +312,9 @@ export async function GET(request: NextRequest) {
           // tally is the only reason breakdown there is.
           away_tally: tallyReasons(full.away),
           class_ids: dayClasses.map((c: any) => c.id),
+          // A yes to ANY of the day's classes is a yes for the day, the mirror of
+          // the declines above counting once.
+          ...confirmIdsFor(dayClasses.map((c: any) => c.id), confirmations),
         };
       });
 
@@ -462,6 +468,15 @@ export interface RsvpClassSummary {
   reason_tally: Record<RsvpReasonCode, number>;
   /** Why the away students are away. A different question, a different tally. */
   away_tally: Record<RsvpReasonCode, number>;
+  /**
+   * Said they are coming (nexus_attendance_confirmations.confirmed_at). Optional
+   * so every fixture and older payload still type-checks; absent reads as none.
+   * May overlap away_ids / declined_ids: a later reason outranks an earlier yes,
+   * and lib/attendance-confirm.ts confirmStatusOf is where that is decided.
+   */
+  confirmed_ids?: string[];
+  /** Asked to confirm through Neram Assistant, whatever they answered. */
+  asked_ids?: string[];
 }
 
 /**
@@ -498,6 +513,9 @@ export interface RsvpDaySummary {
   away_tally: Record<RsvpReasonCode, number>;
   /** Empty when nothing is scheduled that date. */
   class_ids: string[];
+  /** Same meaning as on a class, unioned across the day's classes. */
+  confirmed_ids?: string[];
+  asked_ids?: string[];
 }
 
 export interface AwayStudentRow {
@@ -545,6 +563,55 @@ async function fetchOptOuts(supabase: any, classIds: string[]): Promise<Map<stri
     byClass.set(row.scheduled_class_id, list);
   }
   return byClass;
+}
+
+interface ConfirmationRow {
+  scheduled_class_id: string;
+  student_id: string;
+  asked_at: string | null;
+  confirmed_at: string | null;
+}
+
+/**
+ * Every ask and every yes for the given classes, grouped by class id. One query.
+ *
+ * Swallows a missing table the way loadAwayWindows does: deploy-nexus does not
+ * wait for the migration, and a raw read here would 500 the whole calendar in
+ * the gap. No table means nobody has been asked yet, which is the truth.
+ */
+async function fetchConfirmations(supabase: any, classIds: string[]): Promise<Map<string, ConfirmationRow[]>> {
+  const byClass = new Map<string, ConfirmationRow[]>();
+  if (classIds.length === 0) return byClass;
+  const { data, error } = await supabase
+    .from('nexus_attendance_confirmations')
+    .select('scheduled_class_id, student_id, asked_at, confirmed_at')
+    .in('scheduled_class_id', classIds);
+  if (error) {
+    if (isMissingTable(error)) return byClass;
+    throw error;
+  }
+  for (const row of (data || []) as ConfirmationRow[]) {
+    const list = byClass.get(row.scheduled_class_id);
+    if (list) list.push(row);
+    else byClass.set(row.scheduled_class_id, [row]);
+  }
+  return byClass;
+}
+
+/** The confirmed and asked ids across some classes, each student once. */
+function confirmIdsFor(
+  classIds: string[],
+  byClass: Map<string, ConfirmationRow[]>,
+): { confirmed_ids: string[]; asked_ids: string[] } {
+  const confirmed = new Set<string>();
+  const asked = new Set<string>();
+  for (const id of classIds) {
+    for (const row of byClass.get(id) || []) {
+      if (row.confirmed_at) confirmed.add(row.student_id);
+      if (row.asked_at) asked.add(row.student_id);
+    }
+  }
+  return { confirmed_ids: [...confirmed], asked_ids: [...asked] };
 }
 
 /** Shared empty set, so the hot loops never allocate one per class. */

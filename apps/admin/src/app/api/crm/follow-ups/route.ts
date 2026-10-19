@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { listFollowUps, countDueFollowUps } from '@neram/database';
+import { listFollowUps, countDueFollowUps, listClosedFollowUps } from '@neram/database';
 import type { FollowUpRange } from '@neram/database';
 import { getRequestAdminId } from '@/lib/request-admin';
 
@@ -11,6 +11,8 @@ const RANGES: FollowUpRange[] = ['overdue', 'today', 'week', 'all'];
  * GET /api/crm/follow-ups?range=overdue|today|week|all&mine=true
  * Open callbacks by due time (India calendar day). `mine` limits to calls
  * assigned to, or people owned by, the signed-in staff member.
+ * GET /api/crm/follow-ups?range=closed
+ * Follow-ups the nightly job closed in the last 30 days, with the reason.
  */
 export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
@@ -20,6 +22,10 @@ export async function GET(request: NextRequest) {
   const typeParam = sp.get('type');
   const type = typeParam === 'demo' || typeParam === 'callback' ? typeParam : 'all';
   try {
+    if (sp.get('range') === 'closed') {
+      const [closed, dueCount] = await Promise.all([listClosedFollowUps({ type }), countDueFollowUps()]);
+      return NextResponse.json({ closed, dueCount }, { headers: { 'Cache-Control': 'private, no-store' } });
+    }
     const [followUps, dueCount] = await Promise.all([listFollowUps({ range, ownerId, type }), countDueFollowUps()]);
     return NextResponse.json({ followUps, dueCount }, { headers: { 'Cache-Control': 'private, no-store' } });
   } catch (error) {

@@ -8,6 +8,7 @@
  */
 
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../client';
+import { normalisePhoneE164 } from '../utils/phone';
 import { fetchAllRows, IN_LIST_CHUNK } from '../utils/paged-rows';
 import { getUserJourneyDetail } from './crm';
 import { listColleges } from './colleges';
@@ -618,7 +619,7 @@ export async function createManualAlumnus(
     .insert({
       name: name.trim(),
       email: email?.trim() || null,
-      phone: phone?.trim() || null,
+      phone: normalisePhoneE164(phone) || phone?.trim() || null,
       user_type: 'student',
       status: 'active',
       is_alumni: true,

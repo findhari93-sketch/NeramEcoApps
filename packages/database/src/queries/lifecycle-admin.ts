@@ -4,11 +4,12 @@
  *
  * The rules live in site_settings['lifecycle_rules'] and are edited on the admin
  * Settings page. A daily pg_cron job (generate_lifecycle_suggestions) turns them
- * into suggestions; a person accepts or dismisses each one. Nothing here acts on
- * a user by itself.
+ * into suggestions; a person accepts or dismisses each one. The one exception is
+ * the auto-archive further down, which the founder asked to run on its own.
  */
 
 import { getSupabaseAdminClient, TypedSupabaseClient } from '../client';
+import type { AutoArchiveCandidate, PeopleAutoArchiveRun } from '../types';
 
 export interface LifecycleRules {
   student_quiet_days: number;
@@ -17,6 +18,12 @@ export interface LifecycleRules {
   suggest_graduation: boolean;
   join_reminder_days: number[];
   not_started_decision_days: number;
+  /** Nightly auto-archive of quiet leads (off until staff turn it on). */
+  auto_archive_enabled: boolean;
+  /** Earlier-season leads are archived after this many quiet days. */
+  earlier_season_idle_days: number;
+  /** Nightly close of stale follow-ups (off until staff turn it on). */
+  follow_up_expiry_enabled: boolean;
 }
 
 export const DEFAULT_LIFECYCLE_RULES: LifecycleRules = {
@@ -26,6 +33,9 @@ export const DEFAULT_LIFECYCLE_RULES: LifecycleRules = {
   suggest_graduation: true,
   join_reminder_days: [1, 3, 7],
   not_started_decision_days: 14,
+  auto_archive_enabled: false,
+  earlier_season_idle_days: 90,
+  follow_up_expiry_enabled: false,
 };
 
 export type SuggestionKind = 'check_in_student' | 'archive_lead' | 'deactivate_account' | 'graduate_student';
@@ -37,11 +47,15 @@ export const SUGGESTION_LABELS: Record<SuggestionKind, { title: string; action: 
   graduate_student: { title: 'Graduate a student whose batch has ended', action: 'Open Graduate' },
 };
 
-const LIMITS: Record<keyof Omit<LifecycleRules, 'suggest_graduation' | 'join_reminder_days'>, [number, number]> = {
+const LIMITS: Record<
+  keyof Omit<LifecycleRules, 'suggest_graduation' | 'join_reminder_days' | 'auto_archive_enabled'>,
+  [number, number]
+> = {
   student_quiet_days: [7, 120],
   lead_archive_days: [30, 730],
   archived_deactivate_days: [90, 1825],
   not_started_decision_days: [3, 60],
+  earlier_season_idle_days: [30, 365],
 };
 
 /** Pure: clamp and validate rules from the settings form. */
@@ -55,6 +69,8 @@ export function sanitizeLifecycleRules(input: Partial<LifecycleRules>): { rules:
     else rules[key] = v;
   }
   if (input.suggest_graduation !== undefined) rules.suggest_graduation = Boolean(input.suggest_graduation);
+  if (input.auto_archive_enabled !== undefined) rules.auto_archive_enabled = Boolean(input.auto_archive_enabled);
+  if (input.follow_up_expiry_enabled !== undefined) rules.follow_up_expiry_enabled = Boolean(input.follow_up_expiry_enabled);
   if (input.join_reminder_days !== undefined) {
     const days = input.join_reminder_days;
     if (!Array.isArray(days) || days.length === 0 || days.length > 5 || days.some((d) => !Number.isInteger(d) || d < 1 || d > 30)) {
@@ -80,9 +96,11 @@ export async function saveLifecycleRules(
   adminId: string,
   client?: TypedSupabaseClient,
 ): Promise<LifecycleRules> {
-  const { rules, errors } = sanitizeLifecycleRules(input);
-  if (errors.length) throw Object.assign(new Error(errors.join(' ')), { status: 400 });
   const supabase = client || getSupabaseAdminClient();
+  // Keys the form does not send (such as auto_archive_enabled) keep their saved value.
+  const current = await getLifecycleRules(supabase);
+  const { rules, errors } = sanitizeLifecycleRules({ ...current, ...input });
+  if (errors.length) throw Object.assign(new Error(errors.join(' ')), { status: 400 });
   const { error } = await supabase
     .from('site_settings')
     .upsert({ key: 'lifecycle_rules', value: rules, updated_at: new Date().toISOString(), updated_by: adminId });
@@ -139,6 +157,61 @@ export async function resolveLifecycleSuggestion(
   if (error) throw error;
   if (!data) throw Object.assign(new Error('This suggestion was already resolved.'), { status: 409 });
   return data;
+}
+
+// ── Auto-archive (migration 20261209090100) ─────────────────────────────────
+// Unlike the suggestions above, this one acts: run_people_auto_archive()
+// archives quiet leads (CRM-only, sign-in untouched) and brings back anyone it
+// archived who became active again. Nightly when auto_archive_enabled is on.
+
+/** Who the next run would archive: the total, a count per rule and a sample. */
+export async function previewAutoArchive(
+  sampleSize = 50,
+  client?: TypedSupabaseClient,
+): Promise<{ total: number; byRule: { earlier_season: number; long_quiet: number }; sample: AutoArchiveCandidate[] }> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase.rpc('auto_archive_candidates');
+  if (error) throw error;
+  const rows = (data || []) as AutoArchiveCandidate[];
+  const byRule = { earlier_season: 0, long_quiet: 0 };
+  for (const r of rows) byRule[r.rule] = (byRule[r.rule] || 0) + 1;
+  // Most recently active first, so staff check the borderline people.
+  const sample = [...rows]
+    .sort((a, b) => (b.last_activity_at || b.created_at).localeCompare(a.last_activity_at || a.created_at))
+    .slice(0, sampleSize);
+  return { total: rows.length, byRule, sample };
+}
+
+/** Archive now (and restore anyone back since). Staff runs go ahead even when the nightly job is off. */
+export async function runAutoArchiveNow(adminId: string, client?: TypedSupabaseClient): Promise<PeopleAutoArchiveRun> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase.rpc('run_people_auto_archive', { p_triggered_by: `staff:${adminId}` });
+  if (error) throw error;
+  return data as PeopleAutoArchiveRun;
+}
+
+/** Last runs, newest first; the latest run that did something is what the People page reports. */
+export async function listAutoArchiveRuns(limit = 10, client?: TypedSupabaseClient): Promise<PeopleAutoArchiveRun[]> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('people_auto_archive_runs')
+    .select('*')
+    .order('ran_at', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data || []) as PeopleAutoArchiveRun[];
+}
+
+/** Turn the nightly job on or off, keeping the other rules. */
+export async function setAutoArchiveEnabled(enabled: boolean, adminId: string, client?: TypedSupabaseClient) {
+  const supabase = client || getSupabaseAdminClient();
+  const { data } = await supabase.from('site_settings').select('value').eq('key', 'lifecycle_rules').maybeSingle();
+  const value = { ...DEFAULT_LIFECYCLE_RULES, ...(data?.value || {}), auto_archive_enabled: Boolean(enabled) };
+  const { error } = await supabase
+    .from('site_settings')
+    .upsert({ key: 'lifecycle_rules', value, updated_at: new Date().toISOString(), updated_by: adminId });
+  if (error) throw error;
+  return value as LifecycleRules;
 }
 
 /** Re-run the generator now (after the rules change). */

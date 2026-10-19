@@ -673,6 +673,8 @@ function getEmailTemplateSlug(eventType: NotificationEventType): string | null {
   const map: Record<NotificationEventType, string | null> = {
     new_onboarding: 'team-new-onboarding',
     new_signup: null, // Bell + phone push only (services/signup-alert.ts)
+    phone_stuck: null, // Bell + phone push only (admin cron phone-stuck)
+    payment_to_verify: null, // Own email + bell + push (services/enrolment-payment-email.ts)
     fee_details_check: null, // Student: Neram Assistant via Nexus sendNudge
     fee_installment_reminder: null, // Student: Neram Assistant via Nexus sendNudge
     fee_correction_resolved: null, // Student: Neram Assistant via Nexus sendNudge

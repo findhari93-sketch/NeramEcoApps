@@ -24,6 +24,9 @@ import {
   queueFirstTouchWhatsApp,
   recordFirstTouch,
   claimFunnelStage,
+  resolveDuplicatesFor,
+  normalisePhoneE164,
+  getUserById,
 } from '@neram/database';
 import {
   isRecentAccountWithoutOrigin,
@@ -143,9 +146,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Update user with verified phone
-    const updatedUser = await updateUser(user.id, {
-      phone: phoneNumber,
+    // Update user with verified phone, stored as E.164 (one shape for lookups).
+    let updatedUser = await updateUser(user.id, {
+      phone: normalisePhoneE164(phoneNumber) || phoneNumber,
       phone_verified: true,
     }, adminClient);
 
@@ -158,6 +161,27 @@ export async function POST(req: NextRequest) {
         { userId: user.id, anonymousId, phone: verifiedPhone, event: 'verified', sourceApp: 'marketing' },
         adminClient,
       );
+    }
+
+    // One record per family (see the app's route): a sign-up folded into a
+    // known student or an older record is not a new lead, an Ads sign-up or a
+    // new welcome.
+    const resolved = await resolveDuplicatesFor(user.id, { via: 'signin' }, adminClient);
+    if (resolved.survivorId !== user.id) {
+      const survivor = await getUserById(resolved.survivorId, adminClient).catch(() => null);
+      if (survivor) updatedUser = survivor;
+      return NextResponse.json({
+        success: true,
+        signupConversion: false,
+        mergedInto: resolved.survivorId,
+        user: {
+          id: updatedUser.id,
+          name: updatedUser.name,
+          email: updatedUser.email,
+          phone: updatedUser.phone,
+          phone_verified: updatedUser.phone_verified,
+        },
+      });
     }
 
     // Google Ads "Sign-up (OTP verified)", once per lead account (see the app's route).

@@ -60,7 +60,42 @@ async function detail(id: string) {
     listDemoFollowUpsByDemo([id], supabase),
   ]);
   // The newest follow-up of this demo even when it is closed (stopped or joined).
-  return { request, events, messages, actors, followUp, lastFollowUp: latest[id] ?? null };
+  const enrolmentLink = await deskEnrolmentLink(supabase, id, request.user_id);
+  return { request, events, messages, actors, followUp, lastFollowUp: latest[id] ?? null, enrolmentLink };
+}
+
+/**
+ * The student's enrolment link, made here or anywhere else (Direct Enroll,
+ * Follow-ups), so the desk never offers a second one. Active first, then newest.
+ */
+async function deskEnrolmentLink(supabase: any, demoId: string, userId: string | null) {
+  const match = userId ? `demo_registration_id.eq.${demoId},user_id.eq.${userId}` : `demo_registration_id.eq.${demoId}`;
+  const { data, error } = await supabase
+    .from('direct_enrollment_links')
+    .select(
+      'id, status, expires_at, created_at, created_by, final_fee, amount_paid, payment_scheme, installment_2_due_date, share_count, last_shared_at, payment_mode, total_fee, discount_amount, offer_full_amount, offer_installment_1, offer_installment_2, rejection_reason',
+    )
+    .or(match)
+    .order('created_at', { ascending: false })
+    .limit(10);
+  if (error) {
+    console.error('desk enrolment link lookup failed:', error.message);
+    return null;
+  }
+  const now = Date.now();
+  const rows = (data ?? []).map((l: any) => ({
+    ...l,
+    status: l.status === 'active' && l.expires_at && new Date(l.expires_at).getTime() < now ? 'expired' : l.status,
+  }));
+  // A payment waiting for staff comes first: it is the one thing to act on.
+  const pick =
+    rows.find((l: any) => l.status === 'payment_submitted') ||
+    rows.find((l: any) => l.status === 'active') ||
+    rows.find((l: any) => l.status === 'used') ||
+    rows[0];
+  if (!pick) return null;
+  const { data: maker } = await supabase.from('users').select('name').eq('id', pick.created_by).maybeSingle();
+  return { ...pick, created_by_name: maker?.name ?? null };
 }
 
 /** GET /api/demo-requests/[id]: the request, its activity log and its WhatsApp queue. */

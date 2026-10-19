@@ -148,3 +148,15 @@ export function buildCorrectionReport(
   if (!checked.ok) return checked;
   return { ok: true, body: { items: checked.items, note: checked.note } };
 }
+
+/**
+ * What the "Pay now" button asks for: the next installment (what the pay balance
+ * page charges), or the plain balance when there is no schedule. Null when
+ * nothing is owed, so the button is hidden.
+ */
+export function payNowAmount(fees: Pick<FeeView, 'nextDue' | 'balance'> | null | undefined): number | null {
+  if (!fees || fees.balance === null || fees.balance <= 0.01) return null;
+  const next = fees.nextDue?.amount;
+  if (typeof next === 'number' && next > 0.01) return next;
+  return fees.balance;
+}

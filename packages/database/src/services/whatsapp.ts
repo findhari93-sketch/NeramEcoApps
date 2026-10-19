@@ -749,6 +749,44 @@ export async function sendApplyDraftDemoNudge(phone: string, name: string): Prom
   ]);
 }
 
+/**
+ * The enrolment link staff send from Admin > Enrolment link. Utility category:
+ * it reports on a purchase the student already made. Must be approved in
+ * WhatsApp Manager under this exact name before automatic sending works.
+ */
+export const ENROLMENT_WA_TEMPLATES = {
+  enrolment_link: {
+    name: 'enrolment_link',
+    params: ['recipientName', 'planSummary', 'url'] as const,
+    body:
+      'Hi {{1}}, welcome to Neram Classes. {{2}} Please complete your enrolment details here: {{3}} ' +
+      'Reply to this message if you need any help.',
+  },
+};
+
+/** Send a student their enrolment link through the WhatsApp Cloud API. */
+export async function sendEnrolmentLinkWhatsApp(
+  phone: string,
+  name: string,
+  planSummary: string,
+  url: string,
+): Promise<WhatsAppSendResult> {
+  if (!isWhatsAppConfigured()) {
+    return { success: false, error: 'WA_NOT_CONFIGURED: WHATSAPP_PHONE_NUMBER_ID or WHATSAPP_ACCESS_TOKEN is not set' };
+  }
+  const recipient = name.replace(/\s+/g, ' ').trim().split(' ')[0] || 'there';
+  return sendWhatsAppTemplate(phone, ENROLMENT_WA_TEMPLATES.enrolment_link.name, 'en', [
+    {
+      type: 'body',
+      parameters: [
+        { type: 'text', text: recipient },
+        { type: 'text', text: planSummary.replace(/\s+/g, ' ').trim() },
+        { type: 'text', text: url },
+      ],
+    },
+  ]);
+}
+
 export interface WhatsAppHealth {
   configured: boolean;
   phoneNumberId: string | null;

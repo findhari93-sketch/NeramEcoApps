@@ -38,16 +38,19 @@ import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import TimerIcon from '@mui/icons-material/Timer';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import DoNotDisturbIcon from '@mui/icons-material/DoNotDisturb';
+import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import type { DirectEnrollmentLink, DirectEnrollmentLinkStatus } from '@neram/database';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
-import GenerateLinkDialog from '@/components/direct-enrollment/GenerateLinkDialog';
-import ShareLinkPanel from '@/components/direct-enrollment/ShareLinkPanel';
+import EnrolmentLinkDrawer from '@/components/direct-enrollment/EnrolmentLinkDrawer';
+import { linkMoneyLine, isUnpaidStudentPays, linkOfferLine } from '@/components/demo-requests/EnrolmentLinkStatus';
+import { enrolmentLinkUrl } from '@neram/database/enrolment-link';
+import { marketingOriginFor } from '@/lib/marketing-links';
 import ConfirmDialog from '@/components/direct-enrollment/ConfirmDialog';
 
-const ENROLLMENT_URL_BASE = `${process.env.NEXT_PUBLIC_MARKETING_URL}/en/enroll?token=`;
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All Statuses' },
+  { value: 'payment_submitted', label: 'Payment to verify' },
   { value: 'active', label: 'Active' },
   { value: 'used', label: 'Completed' },
   { value: 'expired', label: 'Expired' },
@@ -56,6 +59,7 @@ const STATUS_OPTIONS = [
 
 const STATUS_LABELS: Record<string, string> = {
   active: 'Active',
+  payment_submitted: 'Payment to verify',
   used: 'Completed',
   expired: 'Expired',
   cancelled: 'Cancelled',
@@ -77,6 +81,8 @@ function getStatusColor(status: DirectEnrollmentLinkStatus): 'success' | 'info' 
   switch (status) {
     case 'active':
       return 'success';
+    case 'payment_submitted':
+      return 'warning';
     case 'used':
       return 'info';
     case 'expired':
@@ -117,6 +123,7 @@ interface LinkStats {
   active: number;
   used: number;
   expired: number;
+  toVerify: number;
 }
 
 // Stats card component
@@ -183,7 +190,7 @@ export default function DirectEnrollmentPage() {
 
   const [links, setLinks] = useState<DirectEnrollmentLink[]>([]);
   const [totalCount, setTotalCount] = useState(0);
-  const [stats, setStats] = useState<LinkStats>({ total: 0, active: 0, used: 0, expired: 0 });
+  const [stats, setStats] = useState<LinkStats>({ total: 0, active: 0, used: 0, expired: 0, toVerify: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -198,9 +205,8 @@ export default function DirectEnrollmentPage() {
   const [rowsPerPage, setRowsPerPage] = useState(20);
 
   // Dialogs
-  const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
-  const [sharePanelOpen, setSharePanelOpen] = useState(false);
-  const [selectedLink, setSelectedLink] = useState<(DirectEnrollmentLink & { course_name?: string; batch_name?: string }) | null>(null);
+  // The enrolment-link drawer: a link to view, or null for a new one.
+  const [drawer, setDrawer] = useState<{ linkId: string | null } | null>(null);
 
   // Snackbar
   const [snackbar, setSnackbar] = useState({ open: false, message: '' });
@@ -245,7 +251,8 @@ export default function DirectEnrollmentPage() {
         const active = allLinks.filter((l: DirectEnrollmentLink) => l.status === 'active').length;
         const used = allLinks.filter((l: DirectEnrollmentLink) => l.status === 'used').length;
         const expired = allLinks.filter((l: DirectEnrollmentLink) => l.status === 'expired').length;
-        setStats({ total, active, used, expired });
+        const toVerify = allLinks.filter((l: DirectEnrollmentLink) => l.status === 'payment_submitted').length;
+        setStats({ total, active, used, expired, toVerify });
       }
     } catch (err: any) {
       setError(err.message || 'Failed to fetch links');
@@ -265,7 +272,8 @@ export default function DirectEnrollmentPage() {
       const active = allLinks.filter((l) => l.status === 'active').length;
       const used = allLinks.filter((l) => l.status === 'used').length;
       const expired = allLinks.filter((l) => l.status === 'expired').length;
-      setStats({ total, active, used, expired });
+      const toVerify = allLinks.filter((l) => l.status === 'payment_submitted').length;
+      setStats({ total, active, used, expired, toVerify });
     } catch {
       // Silent fail for stats
     }
@@ -279,28 +287,12 @@ export default function DirectEnrollmentPage() {
     fetchStats();
   }, [fetchStats]);
 
-  // Auto-open ShareLinkPanel when ?highlight={linkId} is present
+  // Open the link drawer when ?highlight={linkId} is present
   useEffect(() => {
-    if (highlightLinkId && !highlightHandled.current && !loading && links.length > 0) {
+    // Opens even when the link is not on this page (a bell click, a shared URL).
+    if (highlightLinkId && !highlightHandled.current && !loading) {
       highlightHandled.current = true;
-      const found = links.find((l) => l.id === highlightLinkId);
-      if (found) {
-        handleRowClick(found);
-      } else {
-        // Link not in current page, fetch it directly
-        (async () => {
-          try {
-            const res = await fetch(`/api/direct-enrollment/${highlightLinkId}`);
-            if (res.ok) {
-              const data = await res.json();
-              setSelectedLink(data.data);
-              setSharePanelOpen(true);
-            }
-          } catch {
-            // Silent fail
-          }
-        })();
-      }
+      setDrawer({ linkId: highlightLinkId });
     }
   }, [highlightLinkId, loading, links]);
 
@@ -328,23 +320,15 @@ export default function DirectEnrollmentPage() {
     setPage(0);
   };
 
-  const handleRowClick = async (link: DirectEnrollmentLink) => {
-    try {
-      const res = await fetch(`/api/direct-enrollment/${link.id}`);
-      if (!res.ok) throw new Error('Failed to fetch link details');
-      const data = await res.json();
-      setSelectedLink(data.data);
-      setSharePanelOpen(true);
-    } catch {
-      // Fall back to basic link data
-      setSelectedLink(link);
-      setSharePanelOpen(true);
-    }
+  const handleRowClick = (link: DirectEnrollmentLink) => {
+    setDrawer({ linkId: link.id });
   };
 
   const handleCopyLink = (e: React.MouseEvent, token: string) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(`${ENROLLMENT_URL_BASE}${token}`);
+    navigator.clipboard.writeText(
+      enrolmentLinkUrl(token, marketingOriginFor(window.location.origin, process.env.NEXT_PUBLIC_MARKETING_URL)),
+    );
     setSnackbar({ open: true, message: 'Link copied to clipboard!' });
   };
 
@@ -406,27 +390,6 @@ export default function DirectEnrollmentPage() {
     }
   };
 
-  const handleGenerateSuccess = (link: any) => {
-    setGenerateDialogOpen(false);
-    setSelectedLink(link);
-    setSharePanelOpen(true);
-    fetchLinks();
-    fetchStats();
-  };
-
-  const handleRegenerated = (newLink: DirectEnrollmentLink & { course_name?: string; batch_name?: string }) => {
-    // Close current panel, refresh list, then open panel with new link
-    setSharePanelOpen(false);
-    setSelectedLink(null);
-    fetchLinks();
-    fetchStats();
-    // Open the new link's ShareLinkPanel after a short delay to allow state reset
-    setTimeout(() => {
-      setSelectedLink(newLink);
-      setSharePanelOpen(true);
-    }, 100);
-  };
-
   const handleRegenerateFromTable = async (e: React.MouseEvent, link: DirectEnrollmentLink) => {
     e.stopPropagation();
     if (!supabaseUserId) return;
@@ -441,9 +404,7 @@ export default function DirectEnrollmentPage() {
       setSnackbar({ open: true, message: 'New link generated successfully!' });
       fetchLinks();
       fetchStats();
-      // Open the new link in ShareLinkPanel
-      setSelectedLink(data.data);
-      setSharePanelOpen(true);
+      setDrawer({ linkId: data.data.id });
     } catch (err: any) {
       setSnackbar({ open: true, message: err.message || 'Failed to regenerate link' });
     }
@@ -487,7 +448,7 @@ export default function DirectEnrollmentPage() {
           <Button
             variant="contained"
             startIcon={<AddIcon />}
-            onClick={() => setGenerateDialogOpen(true)}
+            onClick={() => setDrawer({ linkId: null })}
             sx={{ borderRadius: 1, fontWeight: 600, textTransform: 'none' }}
           >
             Generate New Link
@@ -499,6 +460,22 @@ export default function DirectEnrollmentPage() {
       {error && (
         <Alert severity="error" sx={{ mb: 2, borderRadius: 1 }}>
           {error}
+        </Alert>
+      )}
+
+      {/* Payments students sent, waiting for a check against the bank */}
+      {stats.toVerify > 0 && statusFilter !== 'payment_submitted' && (
+        <Alert
+          severity="warning"
+          icon={<FactCheckOutlinedIcon />}
+          sx={{ mb: 2, borderRadius: 1 }}
+          action={
+            <Button color="inherit" onClick={() => handleStatusChange('payment_submitted')} sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}>
+              Show them
+            </Button>
+          }
+        >
+          {stats.toVerify === 1 ? '1 payment is' : `${stats.toVerify} payments are`} waiting for you to verify. Open a row to match the UTR with the bank statement.
         </Alert>
       )}
 
@@ -587,7 +564,7 @@ export default function DirectEnrollmentPage() {
             <Button
               variant="outlined"
               startIcon={<AddIcon />}
-              onClick={() => setGenerateDialogOpen(true)}
+              onClick={() => setDrawer({ linkId: null })}
               sx={{ borderRadius: 1, textTransform: 'none' }}
             >
               Generate Your First Link
@@ -602,7 +579,7 @@ export default function DirectEnrollmentPage() {
                     <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Student Name</TableCell>
                     <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Phone</TableCell>
                     <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Course</TableCell>
-                    <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }} align="right">Amount Paid</TableCell>
+                    <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }} align="right">Amount</TableCell>
                     <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Status</TableCell>
                     <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Created</TableCell>
                     <TableCell sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>Expires</TableCell>
@@ -615,7 +592,13 @@ export default function DirectEnrollmentPage() {
                       key={link.id}
                       hover
                       onClick={() => handleRowClick(link)}
-                      sx={{ cursor: 'pointer', '&:last-child td': { borderBottom: 0 } }}
+                      sx={{
+                        cursor: 'pointer',
+                        '&:last-child td': { borderBottom: 0 },
+                        ...(link.status === 'payment_submitted'
+                          ? { bgcolor: 'rgba(237, 108, 2, 0.06)', '& td:first-of-type': { boxShadow: 'inset 3px 0 0 #ED6C02' } }
+                          : {}),
+                      }}
                     >
                       <TableCell>
                         <Typography variant="body2" fontWeight={500} noWrap sx={{ maxWidth: 200 }}>
@@ -641,16 +624,37 @@ export default function DirectEnrollmentPage() {
                         />
                       </TableCell>
                       <TableCell align="right">
-                        <Typography variant="body2" fontWeight={600} color="success.main">
-                          {formatCurrency(link.amount_paid)}
-                        </Typography>
+                        {isUnpaidStudentPays(link as any) ? (
+                          <>
+                            <Typography variant="body2" fontWeight={600}>
+                              {link.status === 'payment_submitted' && link.submitted_amount
+                                ? `Sent ${formatCurrency(link.submitted_amount)}`
+                                : 'Student pays'}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', whiteSpace: 'nowrap' }}>
+                              {linkOfferLine(link as any)}
+                            </Typography>
+                          </>
+                        ) : (
+                          <>
+                            <Typography variant="body2" fontWeight={600} color="success.main">
+                              {formatCurrency(link.amount_paid)}
+                            </Typography>
+                            {Number(link.final_fee) - Number(link.amount_paid) > 0.01 && (
+                              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', whiteSpace: 'nowrap' }}>
+                                {linkMoneyLine(link as any).replace(/^.*? paid, /, '')}
+                              </Typography>
+                            )}
+                          </>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Chip
                           label={STATUS_LABELS[link.status] || link.status}
                           size="small"
                           color={getStatusColor(link.status)}
-                          sx={{ fontWeight: 500 }}
+                          icon={link.status === 'payment_submitted' ? <FactCheckOutlinedIcon /> : undefined}
+                          sx={{ fontWeight: link.status === 'payment_submitted' ? 700 : 500 }}
                         />
                       </TableCell>
                       <TableCell>
@@ -670,6 +674,18 @@ export default function DirectEnrollmentPage() {
                               <VisibilityIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
+                          {link.status === 'payment_submitted' && (
+                            <Tooltip title="Verify payment">
+                              <IconButton
+                                size="small"
+                                color="warning"
+                                aria-label={`Verify the payment from ${link.student_name}`}
+                                onClick={(e) => { e.stopPropagation(); handleRowClick(link); }}
+                              >
+                                <FactCheckOutlinedIcon fontSize="small" />
+                              </IconButton>
+                            </Tooltip>
+                          )}
                           {link.status === 'active' && (
                             <>
                               <Tooltip title="Copy Link">
@@ -732,24 +748,17 @@ export default function DirectEnrollmentPage() {
         )}
       </Paper>
 
-      {/* Generate Link Dialog */}
-      <GenerateLinkDialog
-        open={generateDialogOpen}
-        onClose={() => setGenerateDialogOpen(false)}
-        onSuccess={handleGenerateSuccess}
+      {/* Make, view and share a link */}
+      <EnrolmentLinkDrawer
+        open={drawer !== null}
+        onClose={() => setDrawer(null)}
         adminId={supabaseUserId || ''}
+        linkId={drawer?.linkId ?? null}
+        onChanged={() => {
+          fetchLinks();
+          fetchStats();
+        }}
       />
-
-      {/* Share Link Panel */}
-      {selectedLink && (
-        <ShareLinkPanel
-          open={sharePanelOpen}
-          onClose={() => { setSharePanelOpen(false); setSelectedLink(null); }}
-          link={selectedLink}
-          adminId={supabaseUserId || ''}
-          onRegenerated={handleRegenerated}
-        />
-      )}
 
       {/* Cancel Confirmation Dialog */}
       <ConfirmDialog

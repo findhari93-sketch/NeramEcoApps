@@ -66,7 +66,7 @@ type TimeSlot = 'morning' | 'afternoon' | 'evening';
 const sectionSx = { borderTop: `1px solid ${tk.line}`, pt: 3.5 } as const;
 
 /** Question headings (h2): 17px bold ink. */
-const questionSx = { m: 0, mb: 1.5, fontSize: 17, fontWeight: 700, lineHeight: 1.35, color: tk.ink } as const;
+const questionSx = { m: 0, mb: 1.5, fontSize: { xs: 17, md: 16 }, fontWeight: 700, lineHeight: 1.35, color: tk.ink } as const;
 
 /** Layout of a choice card (the look comes from selectedCardSx). */
 const cardLayout = {
@@ -357,7 +357,7 @@ export default function YourCourseStep() {
     <Box>
       <StepHeading title={t('yourCourse.title')} subtitle={t('yourCourse.subtitle')} />
 
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3.5 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: { xs: 3.5, md: 2.5 } }}>
         {/* Which exam, then the programme (or the not-sure notice) */}
         <Box component="section" aria-labelledby="apply-course-q">
           <Typography id="apply-course-q" component="h2" sx={questionSx}>

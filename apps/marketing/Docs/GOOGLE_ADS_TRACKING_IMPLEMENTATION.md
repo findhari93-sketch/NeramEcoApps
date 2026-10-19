@@ -104,7 +104,7 @@ Environment variables (both apps, Vercel Production only):
 NEXT_PUBLIC_GOOGLE_ADS_ID=AW-757750634
 NEXT_PUBLIC_GADS_LABEL_SIGNUP=G5yMCLzC95ocEOq2qekC
 NEXT_PUBLIC_GADS_LABEL_APPLICATION=T2hTCJOWlYUcEOq2qekC
-NEXT_PUBLIC_GA4_ID=G-XXXXXXXXXX        # the correct GA4 measurement ID, see T8
+NEXT_PUBLIC_GA4_ID=G-5F32YKNRCS        # property neramclasses-ab480 (341960840), web stream "neramclasses", see T8
 ```
 
 `src/env.ts`:
@@ -514,16 +514,16 @@ order by enrolments desc, applications desc, signups desc;
 | # | Change | Status |
 |---|---|---|
 | 1 | Rename "Sign-up (1)" to "Sign-up (OTP verified)" | DONE 2026-10-17 |
-| 2 | Sign-up (OTP verified): default value ₹100 (code also sends 100) | DONE |
-| 3 | Application Submitted: fixed value ₹500 for every conversion (code also sends 500) | DONE |
-| 4 | Rename "Purchase (Page load neramclasses.com/thank-you)" to "Apply page view", category Page view, keep Secondary | DONE |
-| 5 | Remove "Phone call leads", "Contacts" and "Leads from messages" from account-default goals (Goals > Summary > each goal > Edit) | DONE |
-| 6 | Conversion settings > Enhanced conversions for leads > Turn on, method Google tag | DONE |
-| 7 | Admin > Account settings > Auto-tagging: confirm ON | DONE |
-| 8 | Admin > Account settings > Tracking > Final URL suffix: `utm_source=google&utm_medium=cpc&utm_campaign={campaignid}&utm_term={keyword}&utm_content={adgroupid}&matchtype={matchtype}&device={device}` | DONE |
-| 9 | Data manager > Google tag > Configure domains: do **not** accept the `*.vercel.app` suggestions | DONE |
-| 10 | Data manager > link Search Console for neramclasses.com | DONE |
-| 10b | The "Purchase" goal shows "Misconfigured" because it has no action in it. Harmless; fixed in phase 2 (T9) when "Enrolled (Fee Paid)" is added to that goal | PHASE 2 |
+| 2 | Sign-up (OTP verified): "Use different values", default ₹100 (code also sends 100) | DONE 2026-10-17 |
+| 3 | Application Submitted: fixed value ₹500 per conversion | DONE 2026-10-17 |
+| 4 | Rename "Purchase (Page load neramclasses.com/thank-you)" to "Apply page view", Secondary | DONE 2026-10-17 (category still "Purchases"; cosmetic, can be moved from Goals > Summary) |
+| 5 | Remove "Phone call leads", "Contacts" and "Leads from messages" from account-default goals | DONE 2026-10-17 |
+| 6 | Conversion settings > Enhanced conversions for leads > On, method Google tag | DONE 2026-10-17 |
+| 7 | Admin > Account settings > Auto-tagging ON | DONE (was already on) |
+| 8 | Admin > Account settings > Tracking > Final URL suffix: `utm_source=google&utm_medium=cpc&utm_campaign={campaignid}&utm_term={keyword}&utm_content={adgroupid}&matchtype={matchtype}&device={device}` | DONE 2026-10-17 |
+| 9 | Data manager > Google tag > Configure domains: do **not** accept the `*.vercel.app` suggestions | Left untouched (correct) |
+| 10 | Data manager > link Search Console for neramclasses.com | DONE 2026-10-17 (status: Linked) |
+| 10b | "Purchase" goal is still account-default with 0 primary actions ("Misconfigured"). Harmless now; make "Enrolled (Fee Paid)" its primary action in T9 | TODO (with T9) |
 | 11 | After T1 to T7 are live for 30 days and a campaign has 15+ conversions/month, switch it to Maximize conversions | LATER |
 
 ---

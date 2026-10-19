@@ -52,3 +52,11 @@ export function studentDetailUrl(
   const base = marketingOriginFor(options.nexusOrigin, options.configured);
   return `${base}/s/${encodeURIComponent(token)}`;
 }
+
+/**
+ * Where an enrolled student pays their next installment to the trust:
+ * neramclasses.com/en/pay-balance. They sign in there with their phone number.
+ */
+export function payBalanceUrl(options: { nexusOrigin?: string | null; configured?: string | null } = {}): string {
+  return `${marketingOriginFor(options.nexusOrigin, options.configured)}/en/pay-balance`;
+}

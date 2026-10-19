@@ -21,8 +21,7 @@ import ScholarshipSection from '@/components/crm/ScholarshipSection';
 import PaymentSection from '@/components/crm/PaymentSection';
 import RefundSection from '@/components/crm/RefundSection';
 import { ScoreCalculationsSection } from '@/components/crm/ScoreCalculationsSection';
-import GenerateLinkDialog from '@/components/direct-enrollment/GenerateLinkDialog';
-import ShareLinkPanel from '@/components/direct-enrollment/ShareLinkPanel';
+import EnrolmentLinkDrawer from '@/components/direct-enrollment/EnrolmentLinkDrawer';
 import { formatDate, sentenceCase } from '@/lib/user360-view';
 import { EmptyNote, KeyValue, SectionCard, StatusChip, TwoColumns, type User360TabProps } from '../shared';
 import { LIFECYCLE_ICONS, LIFECYCLE_TONES } from '../status-icons';
@@ -52,7 +51,6 @@ export default function JourneyTab({ data, detail, adminId, onRefresh }: User360
   const StageIcon = stage ? LIFECYCLE_ICONS[stage] : null;
 
   const [directEnrollOpen, setDirectEnrollOpen] = useState(false);
-  const [shareLink, setShareLink] = useState<any>(null);
   const [linkCopied, setLinkCopied] = useState(false);
   const [linkLoading, setLinkLoading] = useState(false);
   const [linkError, setLinkError] = useState('');
@@ -212,7 +210,7 @@ export default function JourneyTab({ data, detail, adminId, onRefresh }: User360
                   onClick={() => setDirectEnrollOpen(true)}
                   sx={{ textTransform: 'none', fontWeight: 600, minHeight: 44 }}
                 >
-                  Generate direct enrollment link
+                  Enrolment link
                 </Button>
               )}
               {detail.leadProfile?.status === 'approved' && (
@@ -248,17 +246,13 @@ export default function JourneyTab({ data, detail, adminId, onRefresh }: User360
             <ScoreCalculationsSection userId={detail.user.id} />
           </Box>
 
-          <GenerateLinkDialog
+          <EnrolmentLinkDrawer
             open={directEnrollOpen}
             onClose={() => setDirectEnrollOpen(false)}
-            onSuccess={(link: any) => {
-              setDirectEnrollOpen(false);
-              setShareLink(link);
-            }}
             adminId={adminId}
-            prefillData={prefill}
+            prefill={prefill}
+            onChanged={() => onRefresh?.()}
           />
-          {shareLink && <ShareLinkPanel open={!!shareLink} onClose={() => setShareLink(null)} link={shareLink} />}
           <Snackbar
             open={linkCopied}
             autoHideDuration={4000}

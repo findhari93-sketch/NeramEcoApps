@@ -5,6 +5,7 @@ import {
   listUserJourneys,
   getCurrentBatch,
   getPeopleBreakdown,
+  getGuardiansFor,
   getSupabaseAdminClient,
   examYearForBatchCode,
 } from '@neram/database';
@@ -23,6 +24,7 @@ const ENGAGEMENT_STATES = ['new', 'engaged', 'low', 'inactive', 'dormant'];
 const IDENTITIES = ['firebase', 'microsoft', 'all'];
 const ACTIVITY = ['recent', 'quiet', 'gone'];
 const OUTCOMES = ['dead_lead', 'irrelevant'];
+const YEAR_SOURCES = ['batch', 'stated', 'signup'];
 
 /** Only known values reach the query; anything else is ignored. */
 function oneOf<T extends string>(value: string | null, allowed: string[]): T | undefined {
@@ -88,6 +90,8 @@ export async function GET(request: NextRequest) {
       engagement: oneOf<EngagementState>(searchParams.get('engagement'), ENGAGEMENT_STATES),
       activityGroup: oneOf<'recent' | 'quiet' | 'gone'>(searchParams.get('activity'), ACTIVITY),
       identity: oneOf<'firebase' | 'microsoft' | 'all'>(searchParams.get('identity'), IDENTITIES),
+      // ?year_source=signup lists the people we still need to ask for an exam year.
+      examYearSource: oneOf<'batch' | 'stated' | 'signup'>(searchParams.get('year_source'), YEAR_SOURCES),
       limit: parseInt(searchParams.get('limit') || '25', 10),
       offset: parseInt(searchParams.get('offset') || '0', 10),
       orderBy: searchParams.get('order_by') || 'created_at',
@@ -126,8 +130,22 @@ export async function GET(request: NextRequest) {
         : Promise.resolve(undefined),
     ]);
 
+    // Parents on each row of this page (one batched read for up to a page of ids).
+    const users = usersResult.users;
+    // The list still loads if this read fails; the rows just show no parent.
+    if (users.length > 0) {
+      try {
+        const guardians = await getGuardiansFor(users.map((u) => u.id));
+        for (const u of users as Array<(typeof users)[number] & { guardians?: unknown }>) {
+          if (guardians[u.id]) u.guardians = guardians[u.id];
+        }
+      } catch (err) {
+        console.error('CRM users: parents read failed:', err);
+      }
+    }
+
     return NextResponse.json({
-      users: usersResult.users,
+      users,
       total: usersResult.total,
       page: Math.floor((options.offset || 0) / (options.limit || 25)),
       limit: options.limit,

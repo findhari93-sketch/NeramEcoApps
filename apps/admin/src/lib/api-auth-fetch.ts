@@ -16,8 +16,19 @@
  */
 
 import { REAUTH_HEADER } from './admin-api-auth';
+import type { ReauthRequest } from './admin-reauth';
 
 export type TokenGetter = () => Promise<string | null>;
+export type Reauth = (opts: ReauthRequest) => Promise<string | null>;
+
+/**
+ * True while the page holds a click's transient activation (a few seconds in
+ * Chrome). Read before any await: silent renewal can outlast it.
+ */
+function clickedJustNow(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return (navigator as Navigator & { userActivation?: { isActive: boolean } }).userActivation?.isActive === true;
+}
 
 /** True for a same-origin request to /api/ (relative or absolute). */
 export function isAdminApiRequest(input: RequestInfo | URL, origin: string): boolean {
@@ -61,21 +72,22 @@ export function createAuthedFetch(
   baseFetch: typeof fetch,
   getToken: TokenGetter,
   origin: string,
-  reauth?: TokenGetter,
+  reauth?: Reauth,
 ): typeof fetch {
   return async (input: RequestInfo | URL, init?: RequestInit) => {
     if (!isAdminApiRequest(input, origin) || hasAuthorization(input, init)) {
       return baseFetch(input, init);
     }
+    const ask = { userInitiated: clickedJustNow() };
     let token = await getToken().catch(() => null);
-    if (!token && reauth) token = await reauth().catch(() => null);
+    if (!token && reauth) token = await reauth(ask).catch(() => null);
     if (!token) return baseFetch(input, init);
 
     const res = await baseFetch(input, withToken(input, init, token));
     if (res.status !== 401 || !reauth || !res.headers.get(REAUTH_HEADER) || !canReplay(input, init)) {
       return res;
     }
-    const fresh = await reauth().catch(() => null);
+    const fresh = await reauth(ask).catch(() => null);
     if (!fresh || fresh === token) return res;
     return baseFetch(input, withToken(input, init, fresh));
   };
@@ -84,7 +96,7 @@ export function createAuthedFetch(
 let installed = false;
 
 /** Wrap window.fetch once. Safe to call repeatedly and during SSR (no-op). */
-export function installAdminApiAuth(getToken: TokenGetter, reauth?: TokenGetter): void {
+export function installAdminApiAuth(getToken: TokenGetter, reauth?: Reauth): void {
   if (installed || typeof window === 'undefined') return;
   installed = true;
   const base = window.fetch.bind(window);

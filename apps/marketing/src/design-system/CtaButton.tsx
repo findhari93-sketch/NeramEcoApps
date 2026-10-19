@@ -95,8 +95,8 @@ export default function CtaButton({
   const trailing =
     endIcon === null ? null : endIcon ?? (external ? <NorthEastIcon aria-hidden /> : variant === 'link' ? null : <ArrowForwardIcon aria-hidden />);
 
-  // In-page anchors, phone and mail links are plain <a>; other paths go through the locale-aware Link.
-  const plainAnchor = href ? /^(#|tel:|mailto:)/.test(href) : false;
+  // In-page anchors, phone, mail and UPI app links are plain <a>; other paths go through the locale-aware Link.
+  const plainAnchor = href ? /^(#|tel:|mailto:|upi:)/.test(href) : false;
   const linkProps = href
     ? external
       ? { component: 'a' as const, href, target: '_blank', rel: 'noopener noreferrer' }

@@ -165,14 +165,75 @@ export async function mergeUserRecords(
   adminId: string | null,
   client?: TypedSupabaseClient,
 ): Promise<Array<{ table: string; column: string; rows: number }>> {
+  const { summary } = await mergeUserRecordsLogged(winnerId, loserId, adminId, {}, client);
+  return summary;
+}
+
+export type MergeRelation = 'self' | 'parent' | 'unknown';
+
+export interface MergeOptions {
+  /**
+   * Who the folded-in record was. 'self' (default) fills the survivor's blanks
+   * from it; 'parent' and 'unknown' keep the survivor's own details and save
+   * the folded-in phone and email as family contacts.
+   */
+  relation?: MergeRelation;
+  via?: 'staff' | 'auto' | 'signin';
+  evidence?: Record<string, unknown> | null;
+  candidateId?: string | null;
+}
+
+/**
+ * The merge, plus the user_merge_log id that unmergeUserRecords takes to undo
+ * it. The SQL function reports the log id as a last pseudo row, which is
+ * stripped from the summary.
+ */
+export async function mergeUserRecordsLogged(
+  winnerId: string,
+  loserId: string,
+  adminId: string | null,
+  options: MergeOptions = {},
+  client?: TypedSupabaseClient,
+): Promise<{ summary: Array<{ table: string; column: string; rows: number }>; logId: string | null }> {
   const supabase = client || getSupabaseAdminClient();
-  const { data, error } = await supabase.rpc('merge_user_records', {
-    winner_id: winnerId,
-    loser_id: loserId,
-    admin_id: adminId,
+  const args: Record<string, unknown> = { winner_id: winnerId, loser_id: loserId, admin_id: adminId };
+  // Only send the newer arguments when used, so this keeps working against a
+  // database still on the three-argument function.
+  if (options.relation && options.relation !== 'self') args.p_relation = options.relation;
+  if (options.via && options.via !== 'staff') args.p_via = options.via;
+  if (options.evidence) args.p_evidence = options.evidence;
+  if (options.candidateId) args.p_candidate_id = options.candidateId;
+  const { data, error } = await supabase.rpc('merge_user_records', args);
+  if (error) throw error;
+  const rows = (data || []) as Array<{ ref_table: string; ref_column: string; repointed_rows: number }>;
+  const logRow = rows.find((r) => r.ref_table === 'user_merge_log');
+  return {
+    summary: rows
+      .filter((r) => r.ref_table !== 'user_merge_log')
+      .map((r) => ({ table: r.ref_table, column: r.ref_column, rows: r.repointed_rows })),
+    logId: logRow?.ref_column ?? null,
+  };
+}
+
+/**
+ * Reverse a merge from its user_merge_log row (within 30 days). The folded-in
+ * record comes back with its own id and rows; the pair returns to the queue and
+ * never merges automatically again. Returns the restored record's id.
+ */
+export async function unmergeUserRecords(
+  logId: string,
+  adminId: string | null,
+  note?: string | null,
+  client?: TypedSupabaseClient,
+): Promise<string> {
+  const supabase = client || getSupabaseAdminClient();
+  const { data, error } = await supabase.rpc('unmerge_user_records', {
+    p_log_id: logId,
+    p_admin: adminId,
+    p_note: note ?? null,
   });
   if (error) throw error;
-  return (data || []).map((r: any) => ({ table: r.ref_table, column: r.ref_column, rows: r.repointed_rows }));
+  return data as string;
 }
 
 // ----------------------------------------------------------------------------

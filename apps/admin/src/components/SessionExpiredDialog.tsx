@@ -69,7 +69,13 @@ export default function SessionExpiredDialog() {
   return (
     <Dialog
       open={open}
-      onClose={busy ? undefined : () => finishReauth(null)}
+      // A stray click beside the dialog used to count as "Not now": every waiting
+      // call went out unsigned and the page filled with "Sign in again" errors.
+      // Only the button or Esc (a deliberate keyboard choice) decline now.
+      onClose={(_event, reason) => {
+        if (busy || reason === 'backdropClick') return;
+        finishReauth(null);
+      }}
       maxWidth="xs"
       fullWidth
       aria-labelledby="session-expired-title"

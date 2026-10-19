@@ -54,6 +54,14 @@ describe('sanitizeLifecycleRules', () => {
     expect(sanitizeLifecycleRules({ join_reminder_days: [7, 1, 3, 3] }).rules.join_reminder_days).toEqual([1, 3, 7]);
     expect(sanitizeLifecycleRules({ join_reminder_days: [0] }).errors).toHaveLength(1);
   });
+
+  it('keeps auto-archive off by default and bounds the earlier-season wait', () => {
+    expect(DEFAULT_LIFECYCLE_RULES.auto_archive_enabled).toBe(false);
+    expect(DEFAULT_LIFECYCLE_RULES.earlier_season_idle_days).toBe(90);
+    expect(sanitizeLifecycleRules({ auto_archive_enabled: true }).rules.auto_archive_enabled).toBe(true);
+    expect(sanitizeLifecycleRules({ earlier_season_idle_days: 10 }).errors[0]).toMatch(/earlier_season_idle_days/);
+    expect(sanitizeLifecycleRules({ earlier_season_idle_days: 120 }).rules.earlier_season_idle_days).toBe(120);
+  });
 });
 
 describe('istDayBounds', () => {

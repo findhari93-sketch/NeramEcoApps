@@ -1,5 +1,6 @@
 'use client';
 
+import { DEFAULT_PAYMENT_PAYEE } from '@neram/database/student-pay';
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Script from 'next/script';
@@ -823,10 +824,10 @@ export default function PaymentPage({ params }: { params: { leadId: string } }) 
                 <Box sx={{ mt: 3 }}>
                   <Alert severity="info" sx={{ mb: 3 }}>
                     <Typography variant="body2" fontWeight={600}>
-                      UPI ID: neramclasses@upi
+                      UPI ID: {DEFAULT_PAYMENT_PAYEE.upiId} ({DEFAULT_PAYMENT_PAYEE.payeeName})
                     </Typography>
                     <Typography variant="body2">
-                      Bank: HDFC Bank | A/C: 50200012345678 | IFSC: HDFC0001234
+                      Bank: {DEFAULT_PAYMENT_PAYEE.bank.bankName}, {DEFAULT_PAYMENT_PAYEE.bank.branch} | A/C: {DEFAULT_PAYMENT_PAYEE.bank.accountNumber} | IFSC: {DEFAULT_PAYMENT_PAYEE.bank.ifsc}
                     </Typography>
                     <Typography variant="body2" sx={{ mt: 1 }}>
                       Please transfer <strong>Rs. {payableAmount.toLocaleString('en-IN')}</strong> and upload the screenshot below.

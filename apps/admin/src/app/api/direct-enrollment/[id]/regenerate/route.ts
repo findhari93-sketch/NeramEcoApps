@@ -7,7 +7,9 @@ import {
   getSupabaseAdminClient,
   regenerateDirectEnrollmentLink,
   getDirectEnrollmentLinkById,
+  logDirectEnrollmentLinkEvent,
 } from '@neram/database';
+import { actingAdminId } from '@/lib/fee-request';
 
 // POST /api/direct-enrollment/[id]/regenerate - Regenerate a link with new token
 export async function POST(
@@ -16,8 +18,8 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
-    const body = await request.json();
-    const { adminId } = body;
+    const body = await request.json().catch(() => ({}));
+    const adminId = actingAdminId(request, body);
 
     if (!adminId) {
       return NextResponse.json(
@@ -49,6 +51,7 @@ export async function POST(
 
     // Regenerate
     const newLink = await regenerateDirectEnrollmentLink(id, newToken, adminId, supabase);
+    await logDirectEnrollmentLinkEvent(newLink.id, 'created', adminId, { regeneratedFrom: id }, supabase);
 
     // Fetch course/batch names for the response
     let courseName = null;

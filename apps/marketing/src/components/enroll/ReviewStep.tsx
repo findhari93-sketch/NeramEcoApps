@@ -208,7 +208,11 @@ export default function ReviewStep({
         />
         <DetailRow
           label="Payment Type"
-          value={formData.payment.paymentType === 'installment' ? `Installment #${formData.payment.installmentNumber}` : 'Full Payment'}
+          value={
+            Number(linkData.finalFee) - Number(linkData.amountPaid) > 0.01
+              ? 'First installment (balance later)'
+              : 'Full Payment'
+          }
         />
         <DetailRow
           label="Payment Method"

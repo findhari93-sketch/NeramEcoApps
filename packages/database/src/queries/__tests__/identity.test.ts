@@ -195,3 +195,32 @@ describe('findVerifiedPhoneOwner', () => {
     expect(await findVerifiedPhoneOwner('+919876543210', 'u-owner', verified.client)).toBeNull();
   });
 });
+
+describe('duplicate accounts from stored-phone and email shapes (2026-10-19)', () => {
+  it('a phone OTP sign-in finds a student stored with a bare ten-digit number', async () => {
+    // Nexus and staff store "8682822310"; the Firebase token says "+918682822310".
+    const { client, tables } = world([
+      { id: 'u-student', name: 'Pranav Shankar', email: 'Pranav@neram.co.in', phone: '8682822310', firebase_uid: null, ms_oid: 'oid-p' },
+    ]);
+    const r = await getOrCreateUserFromFirebase({ uid: 'fb-pranav', phoneNumber: '+918682822310' }, client);
+    expect(r).toMatchObject({ isNewUser: false, user: { id: 'u-student', firebase_uid: 'fb-pranav' } });
+    expect(tables.users).toHaveLength(1);
+  });
+
+  it('a Google sign-in finds the student whose Gmail is kept as personal_email', async () => {
+    const { client, tables } = world([
+      { id: 'u-org', name: 'Rabiya K', email: 'rabiya@neramclasses.com', personal_email: 'Rabiya.K@gmail.com', phone: null, firebase_uid: null, ms_oid: 'oid-r' },
+    ]);
+    const r = await getOrCreateUserFromFirebase({ uid: 'fb-rabiya', email: 'rabiya.k@gmail.com' }, client);
+    expect(r).toMatchObject({ isNewUser: false, user: { id: 'u-org' } });
+    expect(tables.users).toHaveLength(1);
+  });
+
+  it('two rows sharing a personal_email are left for a person, not guessed', async () => {
+    const { client } = world([
+      { id: 'u1', name: 'A', email: 'a@neramclasses.com', personal_email: 'same@gmail.com' },
+      { id: 'u2', name: 'B', email: 'b@neramclasses.com', personal_email: 'same@gmail.com' },
+    ]);
+    expect(await getUserByEmail('same@gmail.com', client)).toBeNull();
+  });
+});

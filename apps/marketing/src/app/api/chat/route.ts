@@ -4,7 +4,19 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient, getActiveAintraKnowledgeBase } from '@neram/database';
+import {
+  createAdminClient,
+  getActiveAintraKnowledgeBase,
+  getExamYearStatus,
+  recordStatedExamYear,
+} from '@neram/database';
+import { verifyFirebaseToken } from '../_lib/auth';
+import {
+  assistantAskedExamYear,
+  extractExamYearAnswer,
+  askExamYearPrompt,
+  savedExamYearPrompt,
+} from '@/lib/aintra/exam-year';
 import { extractCollegeSlug } from '@/lib/aintra/slug';
 import { buildSystemPrompt } from '@/lib/aintra/primer';
 import { TOOL_DECLARATIONS } from '@/lib/aintra/tools/declarations';
@@ -13,6 +25,9 @@ import { isE2ETestRun } from '@/lib/e2e-mode';
 import { AiBillingError, AiBlockedError, streamGemini, hashClientKey, ipFromHeaders } from '@neram/ai';
 import type { GeminiPart } from '@neram/ai';
 import { feesPromptText } from '@/lib/aintra/fees';
+import { demoDaysPrompt, visitorBookingsPrompt } from '@/lib/aintra/booking-prompt';
+import { loadDemoSettings } from '@/lib/demo-request';
+import { getActiveDemoRequestForUser } from '@neram/database';
 import {
   CHAT_STREAM_CONTENT_TYPE,
   encodeChatEvent,
@@ -90,11 +105,13 @@ Yes, we offer free tools at app.neramclasses.com:
 - Exam Centers finder
 
 ## DEMO CLASS
-- Available on **Sundays only**
-- Time slots: **10:00 AM** (morning) or **3:00 PM** (afternoon)
-- Demo class is conducted when **10+ students register**
-- Register at neramclasses.com/demo-class
-- Phone verification required for registration
+- A **free online demo class** on Microsoft Teams, about 45 minutes. Parents are welcome to join and ask questions.
+- The visitor picks a day and a time of day (morning, afternoon or evening) from the open slots listed under DEMO SLOTS NOW, or "any time". Our team then calls to fix the exact time and sends the Teams link on WhatsApp.
+- Booking needs a sign-in and a verified phone number; the booking card in this chat handles both.
+- The page for it is neramclasses.com/demo-class
+
+## CALLBACKS
+- Anyone can ask our team to call them back: they pick a day and morning, afternoon or evening, and our counsellor calls on that day.
 
 ## REFUND POLICY
 - Refund requests accepted **only within 24 hours** of payment
@@ -142,6 +159,11 @@ Yes, we offer free tools at app.neramclasses.com:
 - TABLES: only to compare 3 or more items side by side (colleges, exam phases). Use a standard markdown table with a header row and a |---| separator row, each row on its own line, at most 5 columns.
 - HEADINGS: use ### headings only when the answer has 2 or more distinct sections.
 - BUTTONS: when the visitor shows intent, add one line such as [[cta:apply,demo]]. Actions: apply, demo, whatsapp, call. At most one line per answer.
+- BOOKING IN THE CHAT: when the visitor asks to be called back, or to book or attend a demo class, reply in one or two short sentences and put the booking card on its own line. They confirm it inside the chat.
+  - Callback: [[book:callback]], or with their wish, for example [[book:callback,tomorrow,evening]] (day: today, tomorrow or a date YYYY-MM-DD; time: morning, afternoon or evening).
+  - Demo class: [[book:demo]], or with a slot from DEMO SLOTS NOW, for example [[book:demo,2026-10-21,evening]]. Use "anytime" if they have no preference.
+  - NEVER ask for a phone number, name or email in the chat: the card collects them, so they are not typed into the chat.
+  - Never say a callback or demo is booked; the card confirms it after they tap. Use [[book:...]] instead of [[cta:demo]] or [[cta:call]] for these requests.
 - FOLLOW-UPS: end every answer with [[suggest: question 1 | question 2 | question 3]], up to 3 short questions (under 40 characters each) the visitor is likely to ask next, written as the visitor would ask them. Use this instead of ending with a question of your own.
 - Never use em dashes or en dashes. Use commas, colons, periods or parentheses instead.`;
 
@@ -488,6 +510,15 @@ export async function POST(request: NextRequest) {
     }
   }
   contents.push({ role: 'user', parts: [{ text: message }] });
+  const modelTexts = contents
+    .filter((c) => c.role === 'model')
+    .map((c) => c.parts.map((p) => ('text' in p && typeof p.text === 'string' ? p.text : '')).join(' '));
+
+  // A verified sign-in (the body's userId is only a label and is never trusted
+  // for a write). Used to ask for, and save, the student's exam year.
+  const verified = request.headers.get('authorization')
+    ? await verifyFirebaseToken(request).catch(() => null)
+    : null;
 
   const geo = signupGeoFromHeaders(request.headers);
   // Session and IP together. Either alone is defeated by a script or punishes a
@@ -548,6 +579,8 @@ export async function POST(request: NextRequest) {
           clientKey,
           visitor,
           emit,
+          verifiedUserId: verified?.userId ?? null,
+          modelTexts,
         });
       } catch (error) {
         console.error('Chat API error:', error);
@@ -575,6 +608,78 @@ export async function POST(request: NextRequest) {
   });
 }
 
+/**
+ * The exam year line for the system prompt. For a signed-in student with no
+ * stated (or batch) year: save it when this message answers it, otherwise ask
+ * once. No extra model call; at most three small reads and one write.
+ */
+async function examYearPromptFor(userId: string | null, message: string, modelTexts: string[]): Promise<string> {
+  if (!userId || isE2ETestRun()) return '';
+  try {
+    const supabase = createAdminClient();
+    const status = await getExamYearStatus(supabase as any, userId);
+    if (status.source !== null) return '';
+    const justAsked = assistantAskedExamYear(modelTexts.slice(-1));
+    const year = extractExamYearAnswer(message, { justAsked });
+    if (year !== null) {
+      const res = await recordStatedExamYear(supabase as any, userId, year, 'aintra');
+      return res.saved ? savedExamYearPrompt(year) : '';
+    }
+    return assistantAskedExamYear(modelTexts) ? '' : askExamYearPrompt();
+  } catch (err) {
+    console.error('Aintra exam year check failed:', err);
+    return '';
+  }
+}
+
+let demoSettingsCache: { value: Awaited<ReturnType<typeof loadDemoSettings>>; fetchedAt: number } | null = null;
+
+/** Demo settings for the prompt, cached like the knowledge base (5 minutes). */
+async function demoSettingsForPrompt() {
+  if (demoSettingsCache && Date.now() - demoSettingsCache.fetchedAt < KB_CACHE_TTL_MS) return demoSettingsCache.value;
+  const value = await loadDemoSettings();
+  demoSettingsCache = { value, fetchedAt: Date.now() };
+  return value;
+}
+
+/**
+ * The booking lines: open demo slots for everyone, and for a signed-in visitor
+ * the demo or callback they already have. Two small reads at most.
+ */
+async function bookingPromptFor(userId: string | null): Promise<string> {
+  try {
+    const settings = await demoSettingsForPrompt();
+    let text = demoDaysPrompt(new Date(), settings.schedule);
+    if (userId && !isE2ETestRun()) {
+      const supabase = createAdminClient();
+      const [demo, { data: callbacks }] = await Promise.all([
+        getActiveDemoRequestForUser(userId, supabase as any),
+        (supabase as any)
+          .from('callback_requests')
+          .select('preferred_date, preferred_slot')
+          .eq('user_id', userId)
+          .in('status', ['pending', 'scheduled', 'attempted'])
+          .not('query_type', 'in', '(post_demo,demo_rebook)')
+          .order('created_at', { ascending: false })
+          .limit(1),
+      ]);
+      text += visitorBookingsPrompt(
+        {
+          demo: demo
+            ? { ref: demo.ref_code || '', preferredDate: demo.preferred_date, preferredWindow: demo.preferred_window, status: demo.status }
+            : null,
+          openCallback: callbacks?.[0] ? { preferredDate: callbacks[0].preferred_date, preferredSlot: callbacks[0].preferred_slot } : null,
+        },
+        settings.schedule,
+      );
+    }
+    return text;
+  } catch (err) {
+    console.error('Aintra booking note failed:', err);
+    return '';
+  }
+}
+
 async function answer(params: {
   message: string;
   contents: GeminiContent[];
@@ -586,16 +691,27 @@ async function answer(params: {
   clientKey: string | null;
   visitor?: ChatVisitor | null;
   emit: Emit;
+  /** Supabase user id from a verified Firebase token, or null. */
+  verifiedUserId?: string | null;
+  /** Earlier assistant turns, to ask about the exam year only once. */
+  modelTexts?: string[];
 }) {
   const { message, contents, sessionId, userId, userName, pageUrl, geo, clientKey, visitor, emit } = params;
   const startTime = Date.now();
-  const kbSection = await getKBSection();
+  const [kbSection, examYearNote, bookingNote] = await Promise.all([
+    getKBSection(),
+    examYearPromptFor(params.verifiedUserId ?? null, message, params.modelTexts ?? []),
+    bookingPromptFor(params.verifiedUserId ?? null),
+  ]);
   const currentCollegeSlug = extractCollegeSlug(pageUrl || null);
-  const effectivePrompt = buildSystemPrompt({
-    base: SYSTEM_PROMPT,
-    kb: kbSection,
-    currentCollegeSlug,
-  });
+  const effectivePrompt =
+    buildSystemPrompt({
+      base: SYSTEM_PROMPT,
+      kb: kbSection,
+      currentCollegeSlug,
+    }) +
+    bookingNote +
+    examYearNote;
 
   const log = (fields: { aiResponse: string | null; error?: string; modelUsed?: string; toolCalls?: ToolCallLog[] }) =>
     logConversation({

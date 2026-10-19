@@ -100,7 +100,7 @@ export default function AboutYouStep({ onSignIn, signInBusy = false, signInError
     <Box>
       <StepHeading title={t('aboutYou.title')} subtitle={t('aboutYou.subtitleShort')} />
 
-      <Stack spacing={3}>
+      <Stack spacing={{ xs: 3, md: 2 }}>
         {onSignIn && (
           <>
             <Box>
@@ -115,7 +115,7 @@ export default function AboutYouStep({ onSignIn, signInBusy = false, signInError
           </>
         )}
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: '20px 16px', alignItems: 'start' }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: { xs: '20px 16px', md: '16px' }, alignItems: 'start' }}>
           <Field id="apply-first-name" label={t('aboutYou.fullName')}>
             <TextField
               id="apply-first-name"
@@ -149,7 +149,7 @@ export default function AboutYouStep({ onSignIn, signInBusy = false, signInError
           </Field>
         </Box>
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: '20px 16px', alignItems: 'start' }}>
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))', gap: { xs: '20px 16px', md: '16px' }, alignItems: 'start' }}>
           <Field
             id="apply-phone"
             label={t('aboutYou.phoneWhatsapp')}
@@ -159,7 +159,7 @@ export default function AboutYouStep({ onSignIn, signInBusy = false, signInError
             <Box
               sx={{
                 display: 'flex',
-                height: 48,
+                height: { xs: 48, md: 46 },
                 boxSizing: 'border-box',
                 border: `1px solid ${phonePartial ? APPLY_ERROR : tk.lineStrong}`,
                 borderRadius: `${tk.radius}px`,

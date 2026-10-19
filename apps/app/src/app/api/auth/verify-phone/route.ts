@@ -10,7 +10,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { isSamePhone } from '@/lib/phone-match';
 import { verifyIdToken } from '@/lib/firebase-admin';
-import { getUserByFirebaseUid, updateUser, getOrCreateUserFromFirebase, checkPhoneExists, findVerifiedPhoneOwner, getSupabaseAdminClient, insertFunnelEvent, recordDuplicateCandidate, linkPhoneAttempts, normalizeAttemptPhone, recordPhoneAttempt, recordFirstTouch, queueFirstTouchWhatsApp, claimFunnelStage } from '@neram/database';
+import { getUserByFirebaseUid, updateUser, getOrCreateUserFromFirebase, checkPhoneExists, findVerifiedPhoneOwner, getSupabaseAdminClient, insertFunnelEvent, recordDuplicateCandidate, resolveDuplicatesFor, normalisePhoneE164, getUserById, linkPhoneAttempts, normalizeAttemptPhone, recordPhoneAttempt, recordFirstTouch, queueFirstTouchWhatsApp, claimFunnelStage } from '@neram/database';
 import { isRecentAccountWithoutOrigin, isValidAnonymousId, resolveSignupFirstTouch, resolveSignupLastTouch } from '@neram/database/analytics';
 import { clientIpFromHeaders, signupGeoFromHeaders } from '@neram/database/signup-geo';
 import { alertNewSignup, recordSignupGeo } from '@neram/database/signup-alert';
@@ -149,8 +149,9 @@ export async function POST(req: NextRequest) {
     }
 
     // Update user with verified phone (use admin client to bypass RLS)
-    const updatedUser = await updateUser(user.id, {
-      phone: phoneNumber,
+    // Stored as E.164 so later lookups and the duplicates check see one shape.
+    let updatedUser = await updateUser(user.id, {
+      phone: normalisePhoneE164(phoneNumber) || phoneNumber,
       phone_verified: true,
     }, adminClient);
 
@@ -184,6 +185,28 @@ export async function POST(req: NextRequest) {
       source_app: 'app',
       page_url: null,
     }).catch(() => {});
+
+    // One record per family: if this number already belongs to a student (or
+    // to this person's older record) and the pair passes the guardrails, fold
+    // it in now. A folded-in sign-up is a family we already know, so it is not
+    // announced as a new lead, counted as an Ads sign-up, or welcomed again.
+    const resolved = await resolveDuplicatesFor(user.id, { via: 'signin' }, adminClient);
+    if (resolved.survivorId !== user.id) {
+      const survivor = await getUserById(resolved.survivorId, adminClient).catch(() => null);
+      if (survivor) updatedUser = survivor;
+      return NextResponse.json({
+        success: true,
+        signupConversion: false,
+        mergedInto: resolved.survivorId,
+        user: {
+          id: updatedUser.id,
+          name: updatedUser.name,
+          email: updatedUser.email,
+          phone: updatedUser.phone,
+          phone_verified: updatedUser.phone_verified,
+        },
+      }, { headers: corsHeaders });
+    }
 
     // Google Ads "Sign-up (OTP verified)": the first phone verification of a
     // lead account, recorded once in the DB. The browser fires the conversion

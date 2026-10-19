@@ -4,6 +4,8 @@
 import { useCallback, useState } from 'react';
 import { Button, CircularProgress } from '@neram/ui';
 import DownloadIcon from '@mui/icons-material/Download';
+import { enrolmentLinkUrl } from '@neram/database/enrolment-link';
+import { marketingOriginFor } from '@/lib/marketing-links';
 
 interface InvoiceData {
   studentName: string;
@@ -25,7 +27,6 @@ interface InvoiceDownloadProps {
   size?: 'small' | 'medium' | 'large';
 }
 
-const ENROLLMENT_URL_BASE = `${process.env.NEXT_PUBLIC_MARKETING_URL}/en/enroll?token=`;
 
 function formatCurrencyPDF(amount: number): string {
   return `Rs. ${Number(amount).toLocaleString('en-IN')}`;
@@ -233,7 +234,10 @@ export default function InvoiceDownload({
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
       doc.setTextColor(21, 101, 192);
-      const enrollmentUrl = `${ENROLLMENT_URL_BASE}${linkData.token}`;
+      const enrollmentUrl = enrolmentLinkUrl(
+        linkData.token,
+        marketingOriginFor(window.location.origin, process.env.NEXT_PUBLIC_MARKETING_URL),
+      );
       doc.text(enrollmentUrl, margin, y);
       y += 12;
 

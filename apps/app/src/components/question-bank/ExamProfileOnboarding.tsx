@@ -8,10 +8,16 @@ import {
 import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import type { NataExamStatus } from '@neram/database';
+import { examSeasonYear, examYearChoices } from '@neram/database';
 import { writeQbOnboarding } from './qb-onboarding-storage';
 
+// Past attempts are calendar years (an exam already written).
 const CURRENT_YEAR = new Date().getFullYear();
 const EXAM_YEARS = Array.from({ length: 5 }, (_, i) => CURRENT_YEAR + i - 1);
+// A planned exam is a season year (1 July to 30 June IST): in October 2026 the
+// next exam a student can write is the 2027 one.
+const SEASON_YEAR = examSeasonYear();
+const PLANNING_YEARS = examYearChoices();
 
 interface ExamProfileOnboardingProps {
   /** Firebase uid, so the cached answer belongs to this account only */
@@ -48,7 +54,7 @@ export default function ExamProfileOnboarding({
   const [nextExamDate, setNextExamDate] = useState('');
 
   // Planning details
-  const [planningYear, setPlanningYear] = useState(CURRENT_YEAR);
+  const [planningYear, setPlanningYear] = useState(SEASON_YEAR);
 
   const handleStatusSelect = (status: NataExamStatus) => {
     setNataStatus(status);
@@ -310,7 +316,7 @@ export default function ExamProfileOnboarding({
           fullWidth
           sx={{ mb: 2 }}
         >
-          {EXAM_YEARS.filter((y) => y >= CURRENT_YEAR).map((y) => (
+          {PLANNING_YEARS.map((y) => (
             <MenuItem key={y} value={y}>{y}</MenuItem>
           ))}
         </TextField>

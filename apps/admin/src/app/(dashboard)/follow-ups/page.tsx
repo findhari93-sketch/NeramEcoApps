@@ -2,26 +2,31 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Box, Tabs, Tab, Alert, Button, ToggleButton, ToggleButtonGroup, Typography } from '@neram/ui';
+import { Box, Tabs, Tab, Alert, Button, ToggleButton, ToggleButtonGroup, Typography, Popover, Snackbar } from '@neram/ui';
+import type { ClosedFollowUp } from '@neram/database';
 import PhoneCallbackIcon from '@mui/icons-material/PhoneCallback';
 import PersonIcon from '@mui/icons-material/Person';
 import GroupsIcon from '@mui/icons-material/Groups';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import { pickParam } from '@/lib/ops-format';
 import { OpsPageHeader, EmptyState, OpsSkeleton, FOCUS_RING, TARGET_44 } from '@/components/ops/OpsUi';
 import FollowUpRow, { type FollowUp } from '@/components/follow-ups/FollowUpRow';
 import LogOutcomeDialog from '@/components/follow-ups/LogOutcomeDialog';
-import GenerateLinkDialog from '@/components/direct-enrollment/GenerateLinkDialog';
+import ClosedFollowUpRow from '@/components/follow-ups/ClosedFollowUpRow';
+import FollowUpExpiryBar from '@/components/follow-ups/FollowUpExpiryBar';
+import EnrolmentLinkDrawer from '@/components/direct-enrollment/EnrolmentLinkDrawer';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
 
-type Range = 'overdue' | 'today' | 'week' | 'all';
-const RANGES: readonly Range[] = ['overdue', 'today', 'week', 'all'];
+type Range = 'overdue' | 'today' | 'week' | 'all' | 'closed';
+const RANGES: readonly Range[] = ['overdue', 'today', 'week', 'all', 'closed'];
 const RANGE_LABELS: Record<Range, string> = {
   overdue: 'Overdue',
   today: 'Today',
   week: 'This week',
   all: 'All open',
+  closed: 'Closed by system',
 };
 type RowType = 'all' | 'demo' | 'callback';
 const TYPES: readonly RowType[] = ['all', 'demo', 'callback'];
@@ -33,7 +38,54 @@ const EMPTY_COPY: Record<Range, { title: string; body: string }> = {
   today: { title: 'No calls due today', body: 'Check This week to get ahead, or All open for everything waiting.' },
   week: { title: 'No calls due this week', body: 'New callback requests from the website land here with a due time.' },
   all: { title: 'No open callbacks', body: 'When someone asks for a call back, it appears here.' },
+  closed: { title: 'Nothing closed in the last 30 days', body: 'Old follow-ups the nightly job closes show here, with the reason.' },
 };
+
+/** The (i) under the subtitle: where follow-ups come from and when they close. */
+function HowFollowUpsWork() {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  return (
+    <>
+      <Button
+        size="small"
+        startIcon={<InfoOutlinedIcon fontSize="small" />}
+        onClick={(e) => setAnchor(e.currentTarget)}
+        aria-haspopup="dialog"
+        sx={{ ...TARGET_44, ...FOCUS_RING, textTransform: 'none', ml: -0.75, px: 0.75 }}
+      >
+        Where follow-ups come from
+      </Button>
+      <Popover
+        open={!!anchor}
+        anchorEl={anchor}
+        onClose={() => setAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        slotProps={{ paper: { sx: { maxWidth: 440, p: 2 } } }}
+      >
+        <Typography variant="subtitle2" sx={{ mb: 1 }}>
+          Where follow-ups come from
+        </Typography>
+        <Box component="ul" sx={{ m: 0, pl: 2.25, display: 'grid', gap: 0.75, typography: 'body2' }}>
+          <li>
+            <b>Callback requests</b> from the website: the counselling pages, the apply page, the apply chat and the Aintra chat.
+            They are due on the day the person picked, or the day they asked.
+          </li>
+          <li>
+            <b>Callbacks staff schedule</b> on a person&apos;s page.
+          </li>
+          <li>
+            <b>After demo</b> and <b>Rebook demo</b>, made when demo attendance is marked.
+          </li>
+        </Box>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 1.25 }}>
+          Each night, follow-ups that no longer need a call close by themselves: the person joined, their exam season has
+          passed, they were archived on People, a counselling request is over 60 days old, or a request with no account is over
+          30 days old. Nothing is deleted; reopen any of them from Closed by system.
+        </Typography>
+      </Popover>
+    </>
+  );
+}
 
 function FollowUpsInner() {
   const router = useRouter();
@@ -43,6 +95,10 @@ function FollowUpsInner() {
   const type = pickParam(searchParams.get('type'), TYPES, 'all');
 
   const [items, setItems] = useState<FollowUp[]>([]);
+  const [closedItems, setClosedItems] = useState<ClosedFollowUp[]>([]);
+  const [closing, setClosing] = useState<FollowUp | null>(null);
+  const [reopening, setReopening] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ text: string; severity: 'success' | 'error' } | null>(null);
   const [dueCount, setDueCount] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -74,6 +130,7 @@ function FollowUpsInner() {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || 'Could not load follow-ups.');
       setItems(data.followUps || []);
+      setClosedItems(data.closed || []);
       setDueCount(typeof data.dueCount === 'number' ? data.dueCount : null);
       setNow(new Date());
     } catch (e: any) {
@@ -98,7 +155,24 @@ function FollowUpsInner() {
     router.replace(`/follow-ups${params.toString() ? `?${params.toString()}` : ''}`, { scroll: false });
   };
 
+  const reopen = async (id: string) => {
+    setReopening(id);
+    try {
+      const res = await fetch(`/api/crm/follow-ups/${id}/reopen`, { method: 'POST' });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(d.error || 'Could not reopen.');
+      setClosedItems((prev) => prev.filter((c) => c.callback_id !== id));
+      setToast({ severity: 'success', text: 'Back on the list, due today.' });
+    } catch (e: any) {
+      setToast({ severity: 'error', text: e?.message || 'Could not reopen.' });
+    } finally {
+      setReopening(null);
+    }
+  };
+
   const overdueInList = items.filter((i) => i.overdue).length;
+  const isClosed = range === 'closed';
+  const shown = isClosed ? closedItems.length : items.length;
   const empty = EMPTY_COPY[range];
 
   return (
@@ -106,7 +180,14 @@ function FollowUpsInner() {
       <OpsPageHeader
         icon={PhoneCallbackIcon}
         title="Follow-ups"
-        subtitle="Open callback requests by due time, in India time. Today also lists anything overdue."
+        subtitle={
+          <>
+            Open callback requests by due time, in India time. Today also lists anything overdue.
+            <Box component="span" sx={{ display: 'block' }}>
+              <HowFollowUpsWork />
+            </Box>
+          </>
+        }
         actions={
           <>
             <ToggleButtonGroup
@@ -151,6 +232,8 @@ function FollowUpsInner() {
         }
       />
 
+      <FollowUpExpiryBar onChanged={load} />
+
       <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
         <Tabs
           value={range}
@@ -190,19 +273,35 @@ function FollowUpsInner() {
             <OpsSkeleton key={i} variant="rounded" height={96} />
           ))}
         </Box>
-      ) : items.length === 0 && !error ? (
+      ) : shown === 0 && !error ? (
         <EmptyState
           icon={EventAvailableIcon}
           title={empty.title}
-          body={mine ? `${empty.body} Only calls assigned to you or people you own are shown. Switch to Everyone to see all.` : empty.body}
+          body={mine && !isClosed ? `${empty.body} Only calls assigned to you or people you own are shown. Switch to Everyone to see all.` : empty.body}
           action={
-            mine ? (
+            mine && !isClosed ? (
               <Button variant="outlined" onClick={() => setUrl({ mine: false })} sx={{ ...TARGET_44, ...FOCUS_RING, textTransform: 'none' }}>
                 Show everyone
               </Button>
             ) : undefined
           }
         />
+      ) : isClosed ? (
+        <>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }} aria-live="polite">
+            {closedItems.length} closed by the nightly job in the last 30 days. Reopen puts one back on the list, due today.
+          </Typography>
+          <Box component="ul" sx={{ display: 'grid', gap: 1, p: 0, m: 0 }}>
+            {closedItems.map((item) => (
+              <ClosedFollowUpRow
+                key={item.callback_id}
+                item={item}
+                reopening={reopening === item.callback_id}
+                onReopen={() => reopen(item.callback_id)}
+              />
+            ))}
+          </Box>
+        </>
       ) : (
         <>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }} aria-live="polite">
@@ -227,18 +326,44 @@ function FollowUpsInner() {
           </Box>
           <Box component="ul" sx={{ display: 'grid', gap: 1, p: 0, m: 0 }}>
             {items.map((item) => (
-              <FollowUpRow key={item.callback_id} item={item} now={now} onLogOutcome={item.user_id ? () => setLogging(item) : undefined} onSendLink={item.user_id && supabaseUserId ? () => setLinking(item) : undefined} />
+              <FollowUpRow
+                key={item.callback_id}
+                item={item}
+                now={now}
+                onLogOutcome={item.user_id ? () => setLogging(item) : undefined}
+                onSendLink={item.user_id && supabaseUserId ? () => setLinking(item) : undefined}
+                onClose={item.user_id ? undefined : () => setClosing(item)}
+              />
             ))}
           </Box>
         </>
       )}
-      <GenerateLinkDialog
+      <EnrolmentLinkDrawer
         open={!!linking}
         onClose={() => setLinking(null)}
-        onSuccess={() => setLinking(null)}
         adminId={supabaseUserId || ''}
-        prefillData={linkPrefill}
+        prefill={linkPrefill}
       />
+      <LogOutcomeDialog
+        open={!!closing}
+        stopMode
+        name={closing?.person_name || closing?.person_phone || ''}
+        callbackId={closing?.callback_id || ''}
+        interest={null}
+        onClose={() => setClosing(null)}
+        onSaved={() => {
+          setClosing(null);
+          setToast({ severity: 'success', text: 'Request closed.' });
+          load();
+        }}
+      />
+      <Snackbar open={!!toast} autoHideDuration={5000} onClose={() => setToast(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        {toast ? (
+          <Alert severity={toast.severity} onClose={() => setToast(null)} variant="filled">
+            {toast.text}
+          </Alert>
+        ) : undefined}
+      </Snackbar>
       <LogOutcomeDialog
         open={!!logging}
         name={logging?.person_name || logging?.person_phone || ''}

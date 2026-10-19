@@ -7,6 +7,7 @@ import {
   Box,
   Button,
   Checkbox,
+  Chip,
   CircularProgress,
   Dialog,
   DialogActions,
@@ -20,6 +21,7 @@ import {
   Typography,
 } from '@neram/ui';
 import { istDateKey } from '@neram/database/demo-schedule';
+import { examYearChoices } from '@neram/database/academic-year';
 import { STAFF_DEMO_CHANNELS, heldTutorOptions } from '@/lib/demo/staff-add';
 import type { DemoPerson } from '@/app/api/demo-requests/people/route';
 import PlannedDemoFields, { checkPlanned, defaultPlannedValue, plannedPayload, type PlannedValue } from './PlannedDemoFields';
@@ -85,6 +87,7 @@ export default function AddDemoDialog({
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [currentClass, setCurrentClass] = useState('');
+  const [examYear, setExamYear] = useState<number | null>(null);
   const [parentName, setParentName] = useState('');
   const [parentPhone, setParentPhone] = useState('');
   const [channel, setChannel] = useState('whatsapp');
@@ -112,6 +115,7 @@ export default function AddDemoDialog({
     setPhone('');
     setEmail('');
     setCurrentClass('');
+    setExamYear(null);
     setParentName('');
     setParentPhone('');
     setChannel('whatsapp');
@@ -183,6 +187,9 @@ export default function AddDemoDialog({
   const phone10 = phone.replace(/\D/g, '').slice(-10);
   const phoneOk = /^[6-9]\d{9}$/.test(phone10);
   const nameOk = name.trim().length >= 2;
+  // Required: which year they will write NATA or JEE B.Arch (this season and the next three).
+  const yearChoices = useMemo(() => examYearChoices(), []);
+  const examYearOk = examYear !== null && yearChoices.includes(examYear);
   const heldCheck = checkHeld(held);
   const plannedCheck = checkPlanned(planned);
   const windows = useMemo(() => settings.schedule.windows, [settings.schedule.windows]);
@@ -194,6 +201,7 @@ export default function AddDemoDialog({
   const canSave =
     nameOk &&
     phoneOk &&
+    examYearOk &&
     !!channel &&
     !blockedByOpen &&
     (mode !== 'request' || window === 'anytime' || !!date) &&
@@ -201,7 +209,7 @@ export default function AddDemoDialog({
     (mode !== 'planned' || (plannedCheck.ok && settings.hosts.length > 0));
 
   const save = async () => {
-    setTouched({ name: true, phone: true });
+    setTouched({ name: true, phone: true, examYear: true });
     if (!canSave) return;
     setSaving(true);
     setError(null);
@@ -217,6 +225,7 @@ export default function AddDemoDialog({
           phone: phone10,
           email: email.trim(),
           currentClass,
+          examYear,
           parentName: parentName.trim(),
           parentPhone: parentPhone.replace(/\D/g, ''),
           channel,
@@ -364,6 +373,50 @@ export default function AddDemoDialog({
             autoComplete="off"
           />
         </Box>
+
+        <SectionLabel>Exam year</SectionLabel>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }} id="add-demo-exam-year-help">
+          Which year will they write NATA or JEE B.Arch?
+        </Typography>
+        <Box
+          role="group"
+          aria-label="Exam year"
+          aria-describedby="add-demo-exam-year-help"
+          aria-required="true"
+          sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}
+        >
+          {yearChoices.map((y) => {
+            const selected = examYear === y;
+            return (
+              <Chip
+                key={y}
+                label={y}
+                clickable
+                color={selected ? 'primary' : 'default'}
+                variant={selected ? 'filled' : 'outlined'}
+                onClick={() => {
+                  setExamYear(y);
+                  setTouched((t) => ({ ...t, examYear: true }));
+                }}
+                aria-pressed={selected}
+                data-testid={`add-demo-exam-year-${y}`}
+                sx={{
+                  minHeight: 44,
+                  minWidth: 80,
+                  fontWeight: 600,
+                  fontSize: '0.95rem',
+                  borderRadius: 999,
+                  '&.Mui-focusVisible': { outline: '3px solid', outlineColor: 'primary.main', outlineOffset: 2 },
+                }}
+              />
+            );
+          })}
+        </Box>
+        {touched.examYear && !examYearOk && (
+          <Typography variant="caption" color="error" sx={{ display: 'block', mt: 0.75 }} role="alert">
+            Pick the exam year
+          </Typography>
+        )}
 
         <SectionLabel>Where they came from</SectionLabel>
         <TextField

@@ -406,3 +406,43 @@ describe('the people behind the number', () => {
     expect(rarelyComingOn(day(), [], roster, TODAY).map((r) => r.id)).toEqual([]);
   });
 });
+
+describe('students who confirmed', () => {
+  it('counts a confirmed student as a whole seat, whatever their record', () => {
+    // Ten on the roll: nine perfect, one who comes 1 in 10.
+    const roster = [...perfect(9), student('shaky')];
+    const before = forecastFor(day(), roster);
+    const after = forecastFor(day({ confirmed_ids: ['shaky'] }), roster);
+    expect(before.likely).toBeLessThan(10);
+    expect(after.likely).toBe(10);
+    expect(after.confirmed).toBe(1);
+    expect(after.atRisk).toBe(0);
+  });
+
+  it('counts the asked and silent as no reply, and never the ones who answered', () => {
+    const roster = [...perfect(7), student('a'), student('b'), student('c')];
+    const f = forecastFor(day({ asked_ids: ['a', 'b', 'c'], confirmed_ids: ['a'] }), roster);
+    expect(f.confirmed).toBe(1);
+    expect(f.noReply).toBe(2);
+  });
+
+  it('lets a later reason outrank an earlier yes', () => {
+    const roster = [...perfect(9), student('x')];
+    const f = forecastFor(
+      day({
+        confirmed_ids: ['x'],
+        declined_ids: ['x'],
+        summary: summary({ attending: 9, not_attending: 1, total: 10 }),
+      }),
+      roster,
+    );
+    expect(f.confirmed).toBe(0);
+    expect(f.likely).toBe(9);
+  });
+
+  it('drops a confirmed student from the rarely-comes list', () => {
+    const roster = [...perfect(9), student('shaky')];
+    expect(rarelyComingOn(day(), [], roster, TODAY).map((r) => r.id)).toEqual(['shaky']);
+    expect(rarelyComingOn(day({ confirmed_ids: ['shaky'] }), [], roster, TODAY)).toEqual([]);
+  });
+});

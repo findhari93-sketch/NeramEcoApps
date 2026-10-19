@@ -26,7 +26,8 @@ function ilikeMatch(value: unknown, pattern: string): boolean {
 function parseOr(expr: string): Filter {
   const parts = expr.split(',').map((p) => {
     const [col, op, ...rest] = p.split('.');
-    const val = rest.join('.');
+    // PostgREST lets a value be double-quoted when it holds reserved characters.
+    const val = rest.join('.').replace(/^"(.*)"$/, '$1');
     if (op === 'eq') return (r: Row) => String(r[col] ?? '') === val;
     if (op === 'ilike') return (r: Row) => ilikeMatch(r[col], val);
     throw new Error(`fake or(): unsupported op ${op}`);

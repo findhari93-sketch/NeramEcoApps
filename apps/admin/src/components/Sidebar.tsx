@@ -110,7 +110,9 @@ type BadgeKey =
   | 'duplicates'
   | 'follow_ups'
   | 'lifecycle'
-  | 'collections';
+  | 'collections'
+  | 'phone_stuck'
+  | 'direct_enrollment';
 
 interface MenuItem {
   text: string;
@@ -136,7 +138,7 @@ const menuGroups: MenuGroup[] = [
     items: [
       { text: 'Users (CRM)', icon: PeopleIcon, path: '/crm' },
       { text: 'Follow-ups', icon: PhoneCallbackIcon, path: '/follow-ups', hasBadge: 'follow_ups' },
-      { text: 'Stuck at phone sign-in', icon: PhoneMissedOutlinedIcon, path: '/phone-sign-in' },
+      { text: 'Stuck at phone sign-in', icon: PhoneMissedOutlinedIcon, path: '/phone-sign-in', hasBadge: 'phone_stuck' },
       { text: 'Duplicates', icon: MergeTypeIcon, path: '/duplicates', hasBadge: 'duplicates' },
       { text: 'Lifecycle', icon: AutorenewIcon, path: '/lifecycle', hasBadge: 'lifecycle' },
       { text: 'Exam Batches', icon: CalendarMonthIcon, path: '/exam-batches' },
@@ -144,7 +146,7 @@ const menuGroups: MenuGroup[] = [
       { text: 'Leads by channel', icon: InsightsIcon, path: '/leads/channels' },
       { text: 'Students', icon: SchoolIcon, path: '/students', hasBadge: 'students' },
       { text: 'Student Devices', icon: DevicesIcon, path: '/devices' },
-      { text: 'Direct Enroll', icon: PersonAddAlt1Icon, path: '/direct-enrollment' },
+      { text: 'Direct Enroll', icon: PersonAddAlt1Icon, path: '/direct-enrollment', hasBadge: 'direct_enrollment' },
       { text: 'Student Onboarding', icon: AssignmentTurnedInIcon, path: '/student-onboarding' },
       { text: 'Demo Classes', icon: VideocamIcon, path: '/demo-classes', hasBadge: 'demo_classes' },
       { text: 'AskSeniors', icon: EmojiEventsIcon, path: '/ask-seniors' },

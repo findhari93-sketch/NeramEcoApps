@@ -4,6 +4,7 @@ import {
   correctionRowErrors,
   installmentChip,
   newCorrectionRow,
+  payNowAmount,
   planLabel,
   shortIstDate,
   statusBanner,
@@ -123,5 +124,21 @@ describe('the Something is wrong form', () => {
       TODAY,
     );
     expect(result.ok).toBe(false);
+  });
+});
+
+describe('payNowAmount', () => {
+  it('asks for the next installment, which is what the pay balance page charges', () => {
+    expect(payNowAmount({ balance: 27000, nextDue: { installmentId: 'i2', number: 2, amount: 13500, dueDate: '2026-11-01' } })).toBe(13500);
+  });
+
+  it('falls back to the balance when there is no schedule', () => {
+    expect(payNowAmount({ balance: 5000, nextDue: null })).toBe(5000);
+  });
+
+  it('hides the button when nothing is owed or no fee is set', () => {
+    expect(payNowAmount({ balance: 0, nextDue: null })).toBeNull();
+    expect(payNowAmount({ balance: null, nextDue: null })).toBeNull();
+    expect(payNowAmount(null)).toBeNull();
   });
 });

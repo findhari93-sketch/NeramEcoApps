@@ -16,6 +16,7 @@ import { getApps } from 'firebase-admin/app';
 import {
   getUserByFirebaseUid,
   getSupabaseAdminClient,
+  describeUserAgent,
   linkPhoneAttempts,
   parsePhoneCaptureBody,
   recordPhoneAttempt,
@@ -62,6 +63,7 @@ export async function POST(req: NextRequest) {
     if (user && capture.anonymousId && capture.event === 'entered') {
       await linkPhoneAttempts(capture.anonymousId, user.id, adminClient);
     }
+    const { device, browser } = describeUserAgent(req.headers.get('user-agent'));
     const captured = await recordPhoneAttempt(
       {
         userId: user?.id ?? null,
@@ -72,6 +74,8 @@ export async function POST(req: NextRequest) {
         sourceApp: 'marketing',
         errorCode: capture.errorCode,
         errorMessage: capture.errorMessage,
+        device,
+        browser,
       },
       adminClient,
     );

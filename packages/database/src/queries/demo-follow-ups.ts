@@ -147,7 +147,26 @@ export async function logDemoFollowUpOutcome(
   const { data: row, error: rowErr } = await supabase.from('callback_requests').select(COLS + ', attempt_count').eq('id', input.callbackId).maybeSingle();
   if (rowErr) throw rowErr;
   if (!row) return { error: 'Follow-up not found.' };
-  if (!row.user_id) return { error: 'This request has no account yet. Open it in People first.' };
+  if (!row.user_id) {
+    // No account to log a call against: staff can only close it, with a reason.
+    if (input.outcome !== 'not_interested') return { error: 'This request has no account yet. You can only close it.' };
+    const reason = input.reason?.trim();
+    if (!reason || reason.length < 2) return { error: 'Add a reason.' };
+    const comment = [`Reason: ${reason}`, input.note || null].filter(Boolean).join('. ');
+    const { error: closeErr } = await supabase
+      .from('callback_requests')
+      .update({
+        status: 'cancelled',
+        call_outcome: 'not_interested',
+        call_notes: comment,
+        closed_by: input.admin.id,
+        completed_at: new Date().toISOString(),
+      })
+      .eq('id', row.id)
+      .in('status', OPEN);
+    if (closeErr) throw closeErr;
+    return {};
+  }
   const { data: attempts, error: attemptsErr } = await supabase
     .from('callback_attempts')
     .select('outcome')

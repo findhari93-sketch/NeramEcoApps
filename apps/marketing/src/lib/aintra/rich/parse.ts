@@ -12,11 +12,16 @@
  *  - [[fees]] / [[fees:1-year,2-year]]   designed fee cards
  *  - [[cta:apply,demo,whatsapp,call]]    action buttons
  *  - [[suggest: Q1 | Q2 | Q3]]           follow-up chips, returned separately
+ *  - [[book:callback]] / [[book:demo,2026-10-21,evening]]
+ *                                        a card to confirm a callback or a demo
+ *                                        class inside the chat (one per kind)
  *
  * It is tolerant of a half-written answer: while `streaming` is set, an
  * unfinished table row or [[directive is held back until it completes, so the
  * visitor never sees raw pipes or brackets flash up and vanish.
  */
+
+import { parseBookArgs, type BookSuggestion } from '../booking';
 
 export type CtaAction = 'apply' | 'demo' | 'whatsapp' | 'call';
 
@@ -37,7 +42,8 @@ export type Block =
   | { type: 'code'; text: string }
   | { type: 'hr' }
   | { type: 'fees'; ids: string[] | null }
-  | { type: 'cta'; actions: CtaAction[] };
+  | { type: 'cta'; actions: CtaAction[] }
+  | { type: 'book'; suggestion: BookSuggestion };
 
 export interface ParsedAnswer {
   blocks: Block[];
@@ -114,6 +120,11 @@ export function parseAintraAnswer(raw: string, opts: { streaming?: boolean } = {
           .map((s) => s.trim().toLowerCase())
           .filter((s): s is CtaAction => (CTA_ACTIONS as string[]).includes(s));
         if (actions.length) blocks.push({ type: 'cta', actions: [...new Set(actions)] });
+      } else if (name === 'book') {
+        const suggestion = parseBookArgs(arg);
+        if (suggestion && !blocks.some((b) => b.type === 'book' && b.suggestion.kind === suggestion.kind)) {
+          blocks.push({ type: 'book', suggestion });
+        }
       } else if (name === 'suggest') {
         for (const q of arg.split('|').map((s) => s.trim()).filter(Boolean)) {
           if (suggestions.length < 3 && !suggestions.includes(q)) suggestions.push(q);

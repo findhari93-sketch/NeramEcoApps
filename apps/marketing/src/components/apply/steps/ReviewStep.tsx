@@ -34,7 +34,7 @@ const CLASS_KEYS: Record<string, string> = {
 const fieldGridSx = {
   display: 'grid',
   gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 240px), 1fr))',
-  gap: '20px 16px',
+  gap: { xs: '20px 16px', md: '16px' },
 } as const;
 
 const focusSx = { outline: tk.focusOutline, outlineOffset: '2px' } as const;
@@ -143,7 +143,7 @@ function MoreDetails() {
           <Box
             sx={{
               display: 'flex',
-              height: 48,
+              height: { xs: 48, md: 46 },
               boxSizing: 'border-box',
               border: `1px solid ${tk.lineStrong}`,
               borderRadius: `${tk.radius}px`,

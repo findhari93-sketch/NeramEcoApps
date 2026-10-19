@@ -85,6 +85,8 @@ const FROM_TEACHER: Record<string, string> = {
   'apps/nexus/src/app/api/timetable/[classId]/catchup-nudge/route.ts': 'A teacher asking why.',
   'apps/nexus/src/app/api/timetable/[classId]/homework-reminders/route.ts':
     'A teacher reminding the students who came to hand the homework in.',
+  'apps/nexus/src/app/api/timetable/[classId]/confirmations/route.ts':
+    'Staff pressed Ask: "will you be in class?" to the students who often miss. They may reply with why not.',
   'apps/nexus/src/app/api/tests/runs/[placementId]/message/route.ts':
     'The Message button on the Students tab: a teacher typed it.',
   'apps/nexus/src/app/api/study-materials/files/[id]/nudge/route.ts': 'A teacher pointing at material.',

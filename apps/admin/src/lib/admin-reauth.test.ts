@@ -35,6 +35,19 @@ describe('admin re-sign-in coordinator', () => {
     await expect(later).resolves.toBe('fresh');
   });
 
+  it('asks again at once when the user clicks (Try again) right after "Not now"', async () => {
+    const listener = vi.fn();
+    subscribeReauth(listener);
+    const first = requestReauth(1_000);
+    finishReauth(null, 1_000);
+    await expect(first).resolves.toBeNull();
+    // The quiet spell is for background polls. A click means the user wants in.
+    const retry = requestReauth(5_000, { userInitiated: true });
+    expect(listener).toHaveBeenLastCalledWith(true);
+    finishReauth('fresh', 5_000);
+    await expect(retry).resolves.toBe('fresh');
+  });
+
   it('tells a dialog that mounts mid-request that it should be open', () => {
     subscribeReauth(() => {});
     void requestReauth();

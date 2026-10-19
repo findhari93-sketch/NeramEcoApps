@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
-import { claimFunnelStage, createAdminClient, parseExamYearAnswer } from '@neram/database';
+import { claimFunnelStage, createAdminClient, parseExamYearAnswer, recordStatedExamYear } from '@neram/database';
 import { createApplication, updateApplication, submitApplication } from '@neram/database/queries';
 import { getAuth } from 'firebase-admin/auth';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
@@ -100,6 +100,15 @@ export async function POST(request: NextRequest) {
     // not already set. NO fallback to the current year: that fallback, plus a
     // Number('2026-27') that always produced NaN, is what tagged Class 11 students
     // as sitting the exam this year. NULL is honest and gets surfaced in Nexus.
+    // The one stated-year write path. Runs before the cohort stamp below,
+    // because recordStatedExamYear never writes over a set academic_year. Its
+    // own guard: a failure here must never skip the cohort stamp.
+    try {
+      const { examYear } = parseExamYearAnswer(body.target_exam_year);
+      if (examYear) await recordStatedExamYear(supabase as any, userId, examYear, 'apply');
+    } catch (yearErr) {
+      console.error('[App submit] stated exam year failed:', yearErr);
+    }
     try {
       const { academicYear } = parseExamYearAnswer(body.target_exam_year);
       if (academicYear) {

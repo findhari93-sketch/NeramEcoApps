@@ -31,6 +31,8 @@ export interface DemoRequest {
   email: string | null;
   phone: string;
   current_class: string | null;
+  /** Year they will write NATA or JEE B.Arch (20261209090200). Null on older rows. */
+  exam_year?: number | null;
   interest_course: string | null;
   city: string | null;
   status: DemoRequestStatus;
@@ -120,6 +122,8 @@ export interface CreateDemoRequestInput {
   parent_phone: string | null;
   preferred_language: string | null;
   interest_course?: string | null;
+  /** Year they will write NATA or JEE B.Arch. */
+  exam_year?: number | null;
   /** Staff-added rows: 'contacted' (time agreed) or attended/no_show (held outside the desk). */
   status?: DemoRequestStatus;
   scheduled_start?: string | null;
@@ -146,11 +150,15 @@ export async function createDemoRequest(
   input: CreateDemoRequestInput,
   client?: TypedSupabaseClient,
 ): Promise<DemoRequest> {
-  const { data, error } = await db(client)
-    .from('demo_class_registrations')
-    .insert({ slot_id: null, status: 'pending', ...input })
-    .select('*')
-    .single();
+  const insert = (row: Record<string, unknown>) =>
+    db(client).from('demo_class_registrations').insert(row).select('*').single();
+  let { data, error } = await insert({ slot_id: null, status: 'pending', ...input });
+  // A database without the exam_year column (20261209090200 not applied yet)
+  // must still take the booking; the year is also kept on the exam profile.
+  if (error && 'exam_year' in input && /exam_year/.test(error.message || '') && (error.code === 'PGRST204' || error.code === '42703')) {
+    const { exam_year: _dropped, ...rest } = input;
+    ({ data, error } = await insert({ slot_id: null, status: 'pending', ...rest }));
+  }
   if (error) throw error;
   return data as DemoRequest;
 }

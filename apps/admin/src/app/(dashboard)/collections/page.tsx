@@ -11,6 +11,7 @@ import {
   CardActionArea,
   Chip,
   CircularProgress,
+  IconButton,
   MenuItem,
   Paper,
   Skeleton,
@@ -18,7 +19,9 @@ import {
   Tab,
   Tabs,
   TextField,
+  Tooltip,
   Typography,
+  useCopyToClipboard,
 } from '@neram/ui';
 import { DataGrid, type GridColDef } from '@mui/x-data-grid';
 import AccountBalanceWalletIcon from '@mui/icons-material/AccountBalanceWallet';
@@ -26,10 +29,18 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import AddCardIcon from '@mui/icons-material/AddCard';
 import SendIcon from '@mui/icons-material/Send';
 import RateReviewOutlinedIcon from '@mui/icons-material/RateReviewOutlined';
+import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import CheckIcon from '@mui/icons-material/Check';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { formatDueDate, formatRupees } from '@neram/database/fee-plan';
 import ApplicationAndFeesDialog, { type PrefillPaymentLine } from '@/components/students/ApplicationAndFeesDialog';
 import FeeReportReviewDialog, { type FeeReport } from '@/components/students/FeeReportReviewDialog';
 import RecordPaymentDialog from '@/components/students/RecordPaymentDialog';
+import { FeeClaimDrawer, PaymentsToVerifyPanel } from '@/components/collections/PaymentsToVerify';
+import { useAdminProfile } from '@/contexts/AdminProfileContext';
+import { useAdminBadges } from '@/contexts/AdminBadgesContext';
+import { payBalanceMessage, payBalanceUrl } from '@/lib/marketing-links';
+import type { FeeClaimSummary } from '@/lib/fee-claims-view';
 import {
   checkStatusColor,
   checkStatusLabel,
@@ -96,6 +107,19 @@ function shortDate(iso: string | null | undefined): string {
   return iso ? formatDueDate(iso.slice(0, 10)) : '';
 }
 
+/** wa.me wants digits with the country code; Indian 10-digit numbers get 91. */
+function waUrl(phone: string | null | undefined, text: string): string {
+  let digits = (phone || '').replace(/\D/g, '');
+  if (digits.length === 10) digits = `91${digits}`;
+  return digits ? `https://wa.me/${digits}?text=${encodeURIComponent(text)}` : `https://wa.me/?text=${encodeURIComponent(text)}`;
+}
+
+/** What the student pays now: the next installment, or the plain balance. */
+function payNowAmount(r: { nextDue: { amount: number } | null; balance: number | null }): number | null {
+  if (r.nextDue && r.nextDue.amount > 0.01) return r.nextDue.amount;
+  return r.balance !== null && r.balance > 0.01 ? r.balance : null;
+}
+
 function CollectionsPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -104,6 +128,13 @@ function CollectionsPageInner() {
   const filterParam = searchParams.get('filter');
   const filter: FilterKey = FILTERS.includes(filterParam as FilterKey) ? (filterParam as FilterKey) : 'all';
   const yearParam = searchParams.get('year') || '';
+  const verifyId = searchParams.get('verify') || null;
+  const { supabaseUserId } = useAdminProfile();
+  const { refresh: refreshBadges } = useAdminBadges();
+  const { copy } = useCopyToClipboard(2000);
+  const [copiedFor, setCopiedFor] = useState<string | null>(null);
+  const [claims, setClaims] = useState<FeeClaimSummary[]>([]);
+  const [claimsLoading, setClaimsLoading] = useState(true);
 
   const [data, setData] = useState<CollectionsData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -146,6 +177,50 @@ function CollectionsPageInner() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Balance payments students sent from the pay balance page, waiting for staff.
+  const loadClaims = useCallback(async () => {
+    setClaimsLoading(true);
+    try {
+      const res = await fetch('/api/fee-claims?status=pending', { cache: 'no-store' });
+      const body = await res.json().catch(() => ({}));
+      if (res.ok) setClaims(Array.isArray(body.data) ? body.data : []);
+    } catch {
+      // The section stays hidden; Collections itself still works.
+    } finally {
+      setClaimsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadClaims();
+  }, [loadClaims]);
+
+  const payLink = useCallback(
+    () =>
+      payBalanceUrl({
+        adminOrigin: typeof window === 'undefined' ? null : window.location.origin,
+        configured: process.env.NEXT_PUBLIC_MARKETING_URL,
+      }),
+    [],
+  );
+
+  const copyPayLink = async (row: CollectionsRow) => {
+    const url = payLink();
+    const ok = await copy(url);
+    if (ok) {
+      setCopiedFor(row.userId);
+      window.setTimeout(() => setCopiedFor((cur) => (cur === row.userId ? null : cur)), 2000);
+    } else {
+      setNotice({ text: `Could not copy. The pay link is ${url}`, severity: 'info' });
+    }
+  };
+
+  const whatsappPayLink = (row: CollectionsRow) => {
+    const amount = payNowAmount(row);
+    const first = (row.name || '').trim().split(/\s+/)[0] || null;
+    return waUrl(row.phone, payBalanceMessage(first, amount !== null ? formatRupees(amount) : null, payLink()));
+  };
 
   const rows = useMemo(() => data?.rows ?? [], [data]);
   const nameOf = useMemo(() => new Map(rows.map((r) => [r.userId, r.name || r.email || 'Student'])), [rows]);
@@ -267,20 +342,50 @@ function CollectionsPageInner() {
     {
       field: 'actions',
       headerName: 'Actions',
-      width: 240,
+      width: 340,
       sortable: false,
       filterable: false,
       renderCell: (p) => (
-        <Stack direction="row" spacing={1}>
+        <Stack direction="row" spacing={0.5} alignItems="center">
           {(p.row.balance ?? 0) > 0.01 && (
             <Button
               size="small"
               variant="contained"
               onClick={() => setPayRow(p.row)}
-              sx={{ textTransform: 'none', fontWeight: 600, boxShadow: 'none', minHeight: 36 }}
+              sx={{ textTransform: 'none', fontWeight: 600, boxShadow: 'none', minHeight: 36, mr: 0.5 }}
             >
               Record payment
             </Button>
+          )}
+          {(p.row.balance ?? 0) > 0.01 && (
+            <Tooltip title={copiedFor === p.row.userId ? 'Copied' : 'Copy pay link'}>
+              <IconButton
+                onClick={() => copyPayLink(p.row)}
+                aria-label={
+                  copiedFor === p.row.userId
+                    ? `Pay link for ${p.row.name || 'student'} copied`
+                    : `Copy pay link for ${p.row.name || 'student'}`
+                }
+                data-testid={`copy-pay-link-${p.row.userId}`}
+                sx={{ width: 44, height: 44 }}
+              >
+                {copiedFor === p.row.userId ? <CheckIcon fontSize="small" color="success" /> : <ContentCopyIcon fontSize="small" />}
+              </IconButton>
+            </Tooltip>
+          )}
+          {(p.row.balance ?? 0) > 0.01 && (
+            <Tooltip title="Send pay link on WhatsApp">
+              <IconButton
+                component="a"
+                href={whatsappPayLink(p.row)}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Send pay link to ${p.row.name || 'student'} on WhatsApp`}
+                sx={{ width: 44, height: 44, color: 'success.dark' }}
+              >
+                <WhatsAppIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
           )}
           <Button
             size="small"
@@ -432,6 +537,9 @@ function CollectionsPageInner() {
         </Alert>
       )}
 
+      {/* Balance payments students sent, waiting for a bank match */}
+      <PaymentsToVerifyPanel claims={claims} loading={claimsLoading} onOpen={(id) => setParams({ verify: id })} />
+
       {/* KPI cards: each one filters Who owes */}
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr 1fr', md: 'repeat(4, 1fr)' }, gap: 2, mb: 3 }}>
         {!totals
@@ -554,6 +662,18 @@ function CollectionsPageInner() {
         </Paper>
       )}
 
+      <FeeClaimDrawer
+        claimId={verifyId}
+        studentName={claims.find((c) => c.id === verifyId)?.studentName ?? null}
+        adminId={supabaseUserId}
+        onClose={() => setParams({ verify: null })}
+        onChanged={(_decision, message) => {
+          setNotice({ text: message, severity: 'success' });
+          void load();
+          void loadClaims();
+          refreshBadges(true);
+        }}
+      />
       <RecordPaymentDialog
         open={Boolean(payRow)}
         userId={payRow?.userId ?? null}

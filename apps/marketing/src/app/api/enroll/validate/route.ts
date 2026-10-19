@@ -5,6 +5,30 @@ import { createAdminClient } from '@neram/database';
 import { getDirectEnrollmentLinkByToken, expireOldDirectEnrollmentLinks } from '@neram/database/queries';
 import { verifyFirebaseToken } from '../../_lib/auth';
 import { maskPhone } from '@/lib/phone';
+import { offerFromLink, paymentReference } from '@neram/database/student-pay';
+import { getPaymentPayee } from '@neram/database/payment-payee';
+
+/** Demo answers in the enrol form's shape, so the student does not type them twice. */
+async function demoPrefill(supabase: any, demoId: string | null) {
+  if (!demoId) return null;
+  const { data: d } = await supabase
+    .from('demo_class_registrations')
+    .select('name, email, city, current_class, exam_year, parent_name, parent_phone')
+    .eq('id', demoId)
+    .maybeSingle();
+  if (!d) return null;
+  const CLASS: Record<string, string> = { '10th': '10', '11th': '11', '12th': '12', '12th-pass': '12_completed' };
+  const examYear = Number(d.exam_year);
+  return {
+    email: d.email || null,
+    city: d.city || null,
+    fatherName: d.parent_name || null,
+    parentPhone: d.parent_phone || null,
+    currentClass: CLASS[d.current_class] || null,
+    // '2026-27' means the 2027 exam (exam-year convention).
+    targetExamYear: Number.isFinite(examYear) && examYear > 2000 ? `${examYear - 1}-${String(examYear).slice(2)}` : null,
+  };
+}
 
 // GET /api/enroll/validate?token=XXX - Validate a direct enrollment token (public, no auth)
 export async function GET(request: NextRequest) {
@@ -161,6 +185,33 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Student-pays: the student paid and staff are checking it with the bank.
+    if (link.status === 'payment_submitted') {
+      const offer = offerFromLink(link as any);
+      const l = link as any;
+      return NextResponse.json({
+        success: true,
+        data: {
+          token: link.token,
+          linkStatus: 'payment_submitted',
+          paymentMode: 'student_pays',
+          studentName: link.student_name,
+          interestCourse: link.interest_course,
+          submission: {
+            amount: Number(l.submitted_amount) || 0,
+            scheme: l.chosen_scheme,
+            method: l.submitted_method,
+            // Only the tail: the link is a bearer secret, the UTR is not needed in full.
+            utrTail: l.submitted_utr ? String(l.submitted_utr).slice(-4) : null,
+            paidOn: l.submitted_paid_on,
+            submittedAt: l.submitted_at,
+            balance: l.chosen_scheme === 'installment' ? offer.installment2 : null,
+            balanceDueDate: l.installment_2_due_date || null,
+          },
+        },
+      });
+    }
+
     if (link.status === 'expired' || new Date(link.expires_at) < new Date()) {
       return NextResponse.json(
         { error: 'This enrollment link has expired. Please contact your admin.', code: 'EXPIRED' },
@@ -226,12 +277,33 @@ export async function GET(request: NextRequest) {
         finalFee: link.final_fee,
         amountPaid: link.amount_paid,
         paymentMethod: link.payment_method || null,
+        paymentDate: link.payment_date || null,
+        // The plan the office agreed: set by staff, shown read-only to the student.
+        paymentScheme: (link as any).payment_scheme || (Number(link.final_fee) - Number(link.amount_paid) > 0.01 ? 'installment' : 'full'),
+        balanceAmount: Math.max(0, Number(link.final_fee) - Number(link.amount_paid)),
+        balanceDueDate: (link as any).installment_2_due_date || null,
         expiresAt: link.expires_at,
         // A link tied to an account asks for a phone-first sign-in; the wording
         // says "demo" only when the link was made from a demo.
         forDemo: Boolean((link as any).demo_registration_id),
         forAccount: Boolean((link as any).user_id),
         maskedPhone: maskPhone(link.student_phone),
+        linkStatus: 'active',
+        paymentMode: (link as any).payment_mode || 'recorded',
+        ...((link as any).payment_mode === 'student_pays'
+          ? await (async () => {
+              const offer = offerFromLink(link as any);
+              const payee = await getPaymentPayee(supabase);
+              return {
+                offer: { ...offer, balanceDueDays: (link as any).offer_balance_due_days || 45 },
+                payee,
+                paymentNote: paymentReference(link.id),
+                // Set when staff could not match the last payment; the student retries.
+                rejectionReason: (link as any).rejection_reason || null,
+                prefill: await demoPrefill(supabase, (link as any).demo_registration_id || null),
+              };
+            })()
+          : {}),
       },
     });
   } catch (error) {

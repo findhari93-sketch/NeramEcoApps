@@ -11,6 +11,82 @@ import type {
   Payment, ScholarshipApplication, PaymentInstallment,
 } from '../types';
 import { findUserIdByIdentity, recordIdentity, escapeIlikeValue } from './identity';
+import { phoneKey } from '../utils/phone';
+
+/** The column or table this query needs is not in the database yet (deploy before migration). */
+function isMissingSchemaError(error: { code?: string; message?: string } | null | undefined): boolean {
+  if (!error) return false;
+  return (
+    error.code === '42703' ||
+    error.code === '42P01' ||
+    error.code === 'PGRST204' ||
+    error.code === 'PGRST205' ||
+    /column .* does not exist|relation .* does not exist|Could not find the/i.test(error.message || '')
+  );
+}
+
+/**
+ * A PostgREST .or() that finds a stored phone in any shape: the generated
+ * users.phone_key (last ten digits) plus the raw spellings older rows used
+ * ("8682822310", "+918682822310", "918682822310"). Exact strings alone missed a
+ * ten-digit row from a "+91" token and created duplicate accounts.
+ */
+function phoneOrFilter(phone: string, withKey: boolean): string {
+  const digits = phone.replace(/\D/g, '');
+  const key = phoneKey(phone);
+  const spellings = new Set<string>([digits, `+91${digits}`, `+${digits}`]);
+  if (key) {
+    spellings.add(key);
+    spellings.add(`+91${key}`);
+    spellings.add(`91${key}`);
+  }
+  const parts = [...spellings].filter((v) => v.replace(/\D/g, '').length > 0).map((v) => `phone.eq.${v}`);
+  if (withKey && key) parts.unshift(`phone_key.eq.${key}`);
+  return parts.join(',');
+}
+
+/** Run a users query on the phone filter, falling back to raw spellings before phone_key exists. */
+async function selectUsersByPhone(
+  supabase: TypedSupabaseClient,
+  phone: string,
+  shape: (query: any) => any,
+): Promise<User[]> {
+  const first = await shape(supabase.from('users').select('*').or(phoneOrFilter(phone, true)));
+  if (!first.error) return first.data || [];
+  if (!isMissingSchemaError(first.error)) throw first.error;
+  const legacy = await shape(supabase.from('users').select('*').or(phoneOrFilter(phone, false)));
+  if (legacy.error) throw legacy.error;
+  return legacy.data || [];
+}
+
+/**
+ * The person an older number or email of their OWN belongs to (user_contacts
+ * relation 'self', written when two records of one person were merged). Family
+ * numbers (a parent's, the enrolment-link number) are deliberately not used for
+ * sign-in: a sibling on the family phone must not land in the student's account.
+ */
+async function findSelfContactOwner(
+  supabase: TypedSupabaseClient,
+  kind: 'phone' | 'email',
+  valueKey: string | null,
+): Promise<User | null> {
+  if (!valueKey) return null;
+  const { data, error } = await supabase
+    .from('user_contacts')
+    .select('user_id')
+    .eq('kind', kind)
+    .eq('value_key', valueKey)
+    .eq('relation', 'self')
+    .limit(2);
+  if (error) {
+    if (!isMissingSchemaError(error)) console.warn('[users] contact lookup failed:', error.message);
+    return null;
+  }
+  const owners = [...new Set((data || []).map((r: { user_id: string }) => r.user_id))];
+  if (owners.length !== 1) return null; // two people claim it: a person decides
+  const { data: user } = await supabase.from('users').select('*').eq('id', owners[0]).maybeSingle();
+  return (user as User) || null;
+}
 
 // ============================================
 // USER QUERIES
@@ -61,8 +137,24 @@ export async function getUserByEmail(
     .limit(2);
 
   if (error) throw error;
-  if (!data || data.length === 0) return null;
-  return data.find((u: User) => u.email === email) ?? data[0];
+  if (data && data.length > 0) return data.find((u: User) => u.email === email) ?? data[0];
+
+  // Not anyone's primary email: a student's Gmail kept as personal_email when
+  // their classroom account became primary, or the classroom address an app
+  // row was linked to. Missing these signed students in as brand-new leads.
+  const quoted = `"${escapeIlikeValue(email).replace(/"/g, '')}"`;
+  const { data: other, error: otherError } = await supabase
+    .from('users')
+    .select('*')
+    .or(`personal_email.ilike.${quoted},linked_classroom_email.ilike.${quoted}`)
+    .order('created_at', { ascending: true })
+    .limit(2);
+  if (otherError) {
+    if (!isMissingSchemaError(otherError)) throw otherError;
+  } else if (other && other.length === 1) {
+    return other[0];
+  }
+  return findSelfContactOwner(supabase, 'email', email.trim().toLowerCase());
 }
 
 /**
@@ -73,23 +165,15 @@ export async function getUserByPhone(
   client?: TypedSupabaseClient
 ): Promise<User | null> {
   const supabase = client || getSupabaseBrowserClient();
+  if (!phone || !phone.replace(/\D/g, '')) return null;
 
-  // Normalize phone number
-  const normalizedPhone = phone.replace(/\D/g, '');
-
-  // Use .limit(1) instead of .single() to handle potential duplicates gracefully
-  // Order by phone_verified desc so we prefer the verified account
-  const { data, error } = await supabase
-    .from('users')
-    .select('*')
-    .or(`phone.eq.${normalizedPhone},phone.eq.+91${normalizedPhone},phone.eq.+${normalizedPhone}`)
-    .order('phone_verified', { ascending: false })
-    .order('created_at', { ascending: true })
-    .limit(1);
-
-  if (error) throw error;
-
-  return data && data.length > 0 ? data[0] : null;
+  // .limit(1) instead of .single() so a duplicate pair does not read as "not
+  // found"; the verified, then oldest, account wins.
+  const rows = await selectUsersByPhone(supabase, phone, (q) =>
+    q.order('phone_verified', { ascending: false }).order('created_at', { ascending: true }).limit(1),
+  );
+  if (rows.length > 0) return rows[0];
+  return findSelfContactOwner(supabase, 'phone', phoneKey(phone));
 }
 
 /**
@@ -213,21 +297,11 @@ export async function checkPhoneExists(
   client?: TypedSupabaseClient
 ): Promise<User | null> {
   const supabase = client || getSupabaseAdminClient();
-  const normalizedPhone = phone.replace(/\D/g, '');
-
-  let query = supabase
-    .from('users')
-    .select('*')
-    .or(`phone.eq.${normalizedPhone},phone.eq.+91${normalizedPhone},phone.eq.+${normalizedPhone}`);
-
-  if (excludeUserId) {
-    query = query.neq('id', excludeUserId);
-  }
-
-  const { data, error } = await query.limit(1);
-  if (error) throw error;
-
-  return data && data.length > 0 ? data[0] : null;
+  if (!phone || !phone.replace(/\D/g, '')) return null;
+  const rows = await selectUsersByPhone(supabase, phone, (q) =>
+    (excludeUserId ? q.neq('id', excludeUserId) : q).limit(1),
+  );
+  return rows[0] ?? null;
 }
 
 /**
@@ -241,22 +315,12 @@ export async function findVerifiedPhoneOwner(
   client?: TypedSupabaseClient
 ): Promise<User | null> {
   const supabase = client || getSupabaseAdminClient();
-  const normalizedPhone = phone.replace(/\D/g, '');
-
-  let query = supabase
-    .from('users')
-    .select('*')
-    .eq('phone_verified', true)
-    .or(`phone.eq.${normalizedPhone},phone.eq.+91${normalizedPhone},phone.eq.+${normalizedPhone}`);
-
-  if (excludeUserId) {
-    query = query.neq('id', excludeUserId);
-  }
-
-  const { data, error } = await query.limit(1);
-  if (error) throw error;
-
-  return data && data.length > 0 ? data[0] : null;
+  if (!phone || !phone.replace(/\D/g, '')) return null;
+  const rows = await selectUsersByPhone(supabase, phone, (q) => {
+    const verified = q.eq('phone_verified', true);
+    return (excludeUserId ? verified.neq('id', excludeUserId) : verified).limit(1);
+  });
+  return rows[0] ?? null;
 }
 
 /**

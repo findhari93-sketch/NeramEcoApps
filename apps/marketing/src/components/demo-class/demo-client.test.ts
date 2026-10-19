@@ -30,7 +30,7 @@ describe('loadDraft', () => {
 describe('applyDraftPrefill', () => {
   it('is empty without an application draft', () => {
     expect(hasApplyDraft()).toBe(false);
-    expect(applyDraftPrefill()).toEqual({ name: '', currentClass: '' });
+    expect(applyDraftPrefill()).toEqual({ name: '', currentClass: '', examYear: null });
   });
 
   it('carries the name and the class from the application', () => {
@@ -39,7 +39,15 @@ describe('applyDraftPrefill', () => {
       academic: { applicantCategory: 'school_student', currentlyIn: '', schoolStudentData: { current_class: '12' } },
     });
     expect(hasApplyDraft()).toBe(true);
-    expect(applyDraftPrefill()).toEqual({ name: 'Priya', currentClass: '12th' });
+    expect(applyDraftPrefill()).toEqual({ name: 'Priya', currentClass: '12th', examYear: null });
+  });
+
+  it('carries the exam year from the application cohort', () => {
+    saveApplyDraft({
+      personal: { firstName: 'Priya' },
+      academic: { applicantCategory: 'school_student', targetExamYear: '2026-27', schoolStudentData: { current_class: '12' } },
+    });
+    expect(applyDraftPrefill().examYear).toBe(2027);
   });
 
   it('maps a finished class 12 to Drop year and a college student to Other', () => {
@@ -54,11 +62,11 @@ describe('applyDraftPrefill', () => {
 
   it('uses the About you tap when Your studies is not filled yet', () => {
     saveApplyDraft({ personal: { firstName: '' }, academic: { applicantCategory: null, currentlyIn: '11' } });
-    expect(applyDraftPrefill()).toEqual({ name: '', currentClass: '11th' });
+    expect(applyDraftPrefill()).toEqual({ name: '', currentClass: '11th', examYear: null });
   });
 
   it('survives a broken draft', () => {
     window.localStorage.setItem('neram_application_draft', '{oops');
-    expect(applyDraftPrefill()).toEqual({ name: '', currentClass: '' });
+    expect(applyDraftPrefill()).toEqual({ name: '', currentClass: '', examYear: null });
   });
 });

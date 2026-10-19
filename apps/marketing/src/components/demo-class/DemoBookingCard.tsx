@@ -41,6 +41,7 @@ import {
   type DemoWindow,
   type DemoWindowId,
 } from '@neram/database/demo-schedule';
+import { examYearChoices } from '@neram/database/academic-year';
 import { touchAttribution } from '@/lib/attribution';
 import { trackTaxonomyEvent } from '@/lib/funnel-tracker';
 import { ensureAccount, type EnsuredAccount } from '@/lib/ensure-account';
@@ -188,10 +189,17 @@ export default function DemoBookingCard() {
     setFrom(source && FROM_PAGE_CODE[source] ? source : null);
     setApplyDraftExists(hasApplyDraft());
     // Left the application to book a demo: carry over what the form knows.
-    const carried = source?.startsWith('apply') ? applyDraftPrefill() : { name: '', currentClass: '' };
+    const carried = source?.startsWith('apply')
+      ? applyDraftPrefill()
+      : { name: '', currentClass: '', examYear: null };
     const base = saved ?? EMPTY_DRAFT;
-    if (saved || carried.name || carried.currentClass) {
-      setDraft({ ...base, name: base.name || carried.name, currentClass: base.currentClass || carried.currentClass });
+    if (saved || carried.name || carried.currentClass || carried.examYear) {
+      setDraft({
+        ...base,
+        name: base.name || carried.name,
+        currentClass: base.currentClass || carried.currentClass,
+        examYear: base.examYear ?? carried.examYear,
+      });
     }
     fetch('/api/demo-class/settings', { cache: 'no-store' })
       .then((r) => r.json())
@@ -305,7 +313,10 @@ export default function DemoBookingCard() {
   const selectedDay = days.find((d) => d.date === draft.date) ?? null;
   const parentPhoneOk = !draft.parentPhone || /^[6-9]\d{9}$/.test(draft.parentPhone.replace(/\D/g, '').slice(-10));
   const step0Done = draft.window === 'anytime' || (!!draft.date && !!draft.window);
-  const step1Done = draft.name.trim().length >= 2 && parentPhoneOk;
+  // The exam year picker: this season and the three after (1 July to 30 June IST).
+  const yearChoices = useMemo(() => examYearChoices(now ?? new Date()), [now]);
+  const examYearOk = draft.examYear !== null && yearChoices.includes(draft.examYear);
+  const step1Done = draft.name.trim().length >= 2 && parentPhoneOk && examYearOk;
   const phoneVerified = !!account?.phone_verified;
   const accountName = account?.name || user?.name || '';
   const namePrefilled = !!draft.name && draft.name === accountName;
@@ -815,6 +826,30 @@ export default function DemoBookingCard() {
                   </Pill>
                 ))}
               </Box>
+              <Typography component="p" variant="subtitle2" fontWeight={700} sx={{ mt: 2.5, mb: 0.5 }} id="exam-year-label">
+                Exam year
+              </Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }} id="exam-year-help">
+                Which year will you write NATA or JEE B.Arch?
+              </Typography>
+              <Box
+                role="group"
+                aria-labelledby="exam-year-label"
+                aria-describedby="exam-year-help"
+                aria-required="true"
+                sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}
+              >
+                {yearChoices.map((y) => (
+                  <Pill key={y} selected={draft.examYear === y} onClick={() => update({ examYear: y })} label={`Exam year ${y}`}>
+                    {y}
+                  </Pill>
+                ))}
+              </Box>
+              {!examYearOk && draft.name.trim().length >= 2 && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+                  Pick your exam year to send the request.
+                </Typography>
+              )}
               <Typography component="p" variant="subtitle2" fontWeight={700} sx={{ mt: 2.5, mb: 1 }} id="lang-label">
                 Class language
               </Typography>

@@ -137,3 +137,22 @@ export function reviewReminderMessage(
     url,
   ].join('\n');
 }
+
+/**
+ * Where an enrolled student pays their next installment to the trust:
+ * neramclasses.com/en/pay-balance. No token: they sign in with their phone.
+ */
+export function payBalanceUrl(options: { adminOrigin?: string | null; configured?: string | null } = {}): string {
+  return `${marketingOriginFor(options.adminOrigin, options.configured)}/en/pay-balance`;
+}
+
+/**
+ * The message staff paste into WhatsApp with the pay link. `amount` is already
+ * formatted (for example "₹13,500"). No em dashes: this is user-visible copy.
+ */
+export function payBalanceMessage(firstName: string | null | undefined, amount: string | null | undefined, url: string): string {
+  const name = (firstName || '').trim();
+  const greeting = name ? `Hi ${name},` : 'Hi,';
+  const what = amount ? `your Neram Classes balance of ${amount}` : 'your Neram Classes balance';
+  return `${greeting} you can pay ${what} here: ${url}. Sign in with your registered phone number. Reply here if you need help.`;
+}

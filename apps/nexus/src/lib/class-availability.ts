@@ -1,5 +1,6 @@
 import { RSVP_REASONS, type RsvpReasonCode } from '@/lib/rsvp-reasons';
 import type { RsvpSummary } from '@/app/api/timetable/rsvp-dashboard/route';
+import { confirmSummaryLabel } from '@/lib/attendance-confirm';
 
 /**
  * How the expected headcount is worded, in one place.
@@ -164,6 +165,10 @@ export interface ForecastLike {
   actual?: number | null;
   discounted?: number;
   confidence?: 'firm' | 'soft';
+  /** Asked and said yes. Optional, like the four above, so old callers keep their wording. */
+  confirmed?: number;
+  /** Asked and silent: the office's call list. */
+  noReply?: number;
 }
 
 /**
@@ -295,6 +300,9 @@ export function forecastBreakdownLabel(f: ForecastLike): string {
     // days and the opt-outs still explain the shape of the room; "4 rarely
     // come" about a night already counted is noise.
     f.outcome === 'actual' ? '' : riskLabel(f),
+    // What asking has turned into answers. Last, because it is the part that
+    // changes through the day as replies come in.
+    f.outcome === 'actual' ? '' : confirmSummaryLabel(f.confirmed ?? 0, f.noReply ?? 0),
     f.outcome === 'actual' ? '' : softNote(f),
   ];
   return parts.filter(Boolean).join(', ');

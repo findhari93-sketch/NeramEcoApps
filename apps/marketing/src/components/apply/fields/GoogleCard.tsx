@@ -4,6 +4,7 @@ import { Box, CircularProgress, Typography } from '@neram/ui';
 import ButtonBase from '@mui/material/ButtonBase';
 import ArrowForward from '@mui/icons-material/ArrowForward';
 import { tokens as t } from '@/design-system';
+import { DESK } from '../shell/density';
 
 interface GoogleCardProps {
   title: string;
@@ -28,7 +29,8 @@ function GoogleG() {
 /**
  * The sign-in card at the top of About you: a full-width white card (1px
  * lineStrong, gold border on hover) with the Google mark in a 40px tile, a
- * title, one line under it and an arrow. It opens the existing
+ * title, one line under it and an arrow (on a laptop, one 52px row with the
+ * line beside the title). It opens the existing
  * sign-in dialog (Google or phone OTP), which fills the name and email.
  */
 export default function GoogleCard({ title, body, onClick, busy = false }: GoogleCardProps) {
@@ -44,6 +46,7 @@ export default function GoogleCard({ title, body, onClick, busy = false }: Googl
         px: 2.5,
         py: 1.75,
         gap: 2,
+        [DESK]: { minHeight: 52, px: 2, py: 1, gap: 1.5 },
         justifyContent: 'flex-start',
         textAlign: 'left',
         borderRadius: `${t.radius}px`,
@@ -59,6 +62,7 @@ export default function GoogleCard({ title, body, onClick, busy = false }: Googl
         sx={{
           width: 40,
           height: 40,
+          [DESK]: { width: 32, height: 32 },
           flex: 'none',
           borderRadius: `${t.radius}px`,
           border: `1px solid ${t.line}`,
@@ -69,11 +73,11 @@ export default function GoogleCard({ title, body, onClick, busy = false }: Googl
       >
         <GoogleG />
       </Box>
-      <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Typography component="span" sx={{ display: 'block', fontSize: 17, fontWeight: 700, lineHeight: 1.3, color: t.ink }}>
+      <Box sx={{ flex: 1, minWidth: 0, [DESK]: { display: 'flex', flexWrap: 'wrap', alignItems: 'baseline', columnGap: 1.5 } }}>
+        <Typography component="span" sx={{ display: 'block', fontSize: 17, fontWeight: 700, lineHeight: 1.3, color: t.ink, [DESK]: { fontSize: 16 } }}>
           {title}
         </Typography>
-        <Typography component="span" sx={{ display: 'block', fontSize: 14, lineHeight: 1.45, color: t.inkMuted, mt: 0.25 }}>
+        <Typography component="span" sx={{ display: 'block', fontSize: 14, lineHeight: 1.45, color: t.inkMuted, mt: 0.25, [DESK]: { mt: 0, fontSize: 13.5 } }}>
           {body}
         </Typography>
       </Box>

@@ -3,6 +3,7 @@ import {
   PROD_MARKETING_ORIGIN,
   marketingOriginFor,
   studentDetailUrl,
+  payBalanceUrl,
 } from './marketing-links';
 
 /**
@@ -76,5 +77,18 @@ describe('studentDetailUrl', () => {
     expect(studentDetailUrl(token, { nexusOrigin: 'https://nexus.neramclasses.com' })).toBe(
       `https://neramclasses.com/s/${token}`,
     );
+  });
+});
+
+describe('payBalanceUrl', () => {
+  it('opens the pay balance page on the paired marketing host', () => {
+    expect(payBalanceUrl({ nexusOrigin: 'https://nexus.neramclasses.com' })).toBe('https://neramclasses.com/en/pay-balance');
+    expect(payBalanceUrl({ nexusOrigin: 'https://staging-nexus.neramclasses.com' })).toBe('https://staging.neramclasses.com/en/pay-balance');
+    expect(payBalanceUrl({ nexusOrigin: 'http://localhost:3012' })).toBe('http://localhost:3010/en/pay-balance');
+    expect(payBalanceUrl({ nexusOrigin: null })).toBe(`${PROD_MARKETING_ORIGIN}/en/pay-balance`);
+  });
+
+  it('prefers NEXT_PUBLIC_MARKETING_URL when set', () => {
+    expect(payBalanceUrl({ nexusOrigin: 'http://localhost:3012', configured: 'https://example.org/' })).toBe('https://example.org/en/pay-balance');
   });
 });

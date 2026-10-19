@@ -50,6 +50,17 @@ const defaultValue: BatchContextValue = {
 
 const STORAGE_KEY = 'admin.selectedBatch';
 
+// The pick lives in sessionStorage, not localStorage: it survives navigation and
+// refresh within a working session, but every new visit opens on the current batch.
+// A long-lived "All batches" pick mixed past years into every list without notice.
+function batchStore(): Storage | null {
+  try {
+    return window.sessionStorage;
+  } catch {
+    return null;
+  }
+}
+
 const BatchContext = createContext<BatchContextValue>(defaultValue);
 
 export function BatchProvider({ children }: { children: ReactNode }) {
@@ -58,13 +69,15 @@ export function BatchProvider({ children }: { children: ReactNode }) {
   const [needsAssignment, setNeedsAssignment] = useState({ lead: 0, student: 0 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Global selected batch (defaults to current). Hydrated from localStorage after
+  // Global selected batch (defaults to current). Hydrated from sessionStorage after
   // mount so it sticks across navigation/refresh without an SSR hydration mismatch.
   const [selectedBatch, setSelectedBatchState] = useState<string>('current');
 
   useEffect(() => {
     try {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
+      // Drop the old forever-pick so admins stuck on "All" come back to current.
+      window.localStorage.removeItem(STORAGE_KEY);
+      const saved = batchStore()?.getItem(STORAGE_KEY);
       if (saved) setSelectedBatchState(saved);
     } catch {
       /* ignore storage errors */
@@ -74,7 +87,7 @@ export function BatchProvider({ children }: { children: ReactNode }) {
   const setSelectedBatch = useCallback((v: string) => {
     setSelectedBatchState(v);
     try {
-      window.localStorage.setItem(STORAGE_KEY, v);
+      batchStore()?.setItem(STORAGE_KEY, v);
     } catch {
       /* ignore storage errors */
     }

@@ -7,6 +7,8 @@ import {
   createUser,
   createLeadProfile,
   getCourseBySlug,
+  getUserByPhone,
+  normalisePhoneE164,
 } from '@neram/database';
 
 // POST /api/apply - Submit application form
@@ -53,14 +55,15 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdminClient();
 
-    // Check if user already exists
-    const { data: existingUser } = await (supabase
-      .from('users') as any)
-      .select('id')
-      .or(`email.eq.${email},phone.eq.${cleanPhone}`)
-      .single();
+    // Check if user already exists: the phone in any stored shape (a raw
+    // string match missed "+91..." rows and created duplicates), the email in
+    // any casing.
+    const existingByPhone = await getUserByPhone(cleanPhone, supabase);
+    const { data: existingByEmail } = email
+      ? await (supabase.from('users') as any).select('id').ilike('email', String(email).replace(/[\\%_]/g, '\\$&')).limit(1)
+      : { data: [] };
 
-    if (existingUser) {
+    if (existingByPhone || (existingByEmail && existingByEmail.length > 0)) {
       return NextResponse.json(
         { error: 'An account with this email or phone already exists' },
         { status: 409 }
@@ -81,7 +84,7 @@ export async function POST(request: NextRequest) {
       {
         name,
         email,
-        phone: cleanPhone,
+        phone: normalisePhoneE164(cleanPhone) || cleanPhone,
         user_type: 'lead',
         status: 'pending',
         preferred_language: preferredLanguage || 'en',

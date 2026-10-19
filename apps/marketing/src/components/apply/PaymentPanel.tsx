@@ -18,6 +18,7 @@ import ReceiptDownload from './ReceiptDownload';
 import RefundRequestButton from './RefundRequestButton';
 import { iconTile40Sx, railCardSx, selectedCardSx, outlineButtonSx, inkRuleTopSx } from './styles';
 import { APPLY_ERROR } from './shell/applyTheme';
+import { usePaymentPayee } from '@/hooks/usePaymentPayee';
 
 // ── Session persistence for user choices ──
 const PAYMENT_CACHE_PREFIX = 'neram_payment_';
@@ -435,6 +436,7 @@ export default function PaymentPanel({
 
   const [selectedScheme, setSelectedScheme] = useState<'full' | 'installment'>('full');
   const [paymentMethod, setPaymentMethod] = useState<'razorpay' | 'direct'>('razorpay');
+  const payee = usePaymentPayee();
 
   const [couponCode, setCouponCode] = useState('');
   const [couponApplied, setCouponApplied] = useState(false);
@@ -1142,8 +1144,10 @@ export default function PaymentPanel({
                 color: t.ink,
               }}
             >
-              <Box component="p" sx={{ m: 0, fontWeight: 700 }}>UPI ID: neramclasses@upi</Box>
-              <Box component="p" sx={{ m: 0 }}>Bank: HDFC Bank, A/C 50200012345678, IFSC HDFC0001234</Box>
+              <Box component="p" sx={{ m: 0, fontWeight: 700 }}>UPI ID: {payee.upiId} ({payee.payeeName})</Box>
+              <Box component="p" sx={{ m: 0 }}>
+                Bank: {payee.bank.bankName}, {payee.bank.branch}. A/C {payee.bank.accountNumber}, IFSC {payee.bank.ifsc}, name {payee.bank.accountName}
+              </Box>
               <Box component="p" sx={{ m: 0, mt: 1 }}>
                 Transfer <strong>{inr(payableAmount)}</strong>, then contact support with the screenshot.
               </Box>

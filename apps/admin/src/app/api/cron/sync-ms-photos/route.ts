@@ -9,11 +9,11 @@ export const maxDuration = 60;
  *
  * Scheduled Microsoft profile-photo sync. Pulls each ms_oid user's Graph photo
  * into Storage and updates users.avatar_url, so avatars stay fresh across every
- * app without anyone clicking the CRM "Sync photos" button.
+ * app. This schedule is the only trigger now; the People page button is gone.
  *
  * Guarded by CRON_SECRET (same pattern as /api/cron/auto-first-touch). Scheduled
- * weekly by Vercel Cron (see apps/admin/vercel.json); photos change rarely, so
- * weekly is the cheap default.
+ * daily at 01:30 IST by Vercel Cron (see apps/admin/vercel.json), so a new
+ * student's photo shows by the next morning (about 200 users, well under 60s).
  *
  * Runtime note: if the ms_oid user count grows enough that a full run risks the
  * 60s maxDuration, switch syncMsPhotosBulk to process a rotating oldest-updated

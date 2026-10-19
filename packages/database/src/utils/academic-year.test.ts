@@ -6,6 +6,9 @@ import {
   currentAcademicYear,
   deriveAcademicYearFromExamYear,
   examYearFromAcademicYear,
+  examSeasonYear,
+  examYearChoices,
+  isPlausibleStatedExamYear,
   expectedYearForStage,
   pairStatus,
   parseExamYearAnswer,
@@ -271,6 +274,53 @@ describe('the classroom in the screenshots', () => {
     const broken = roster.filter((r) => pairStatus(r.stage, r.year, C) === 'mismatch');
     for (const student of broken) {
       expect(expectedYearForStage(student.stage, C)).toBe('2027-28');
+    }
+  });
+});
+
+describe('examSeasonYear (1 July to 30 June, IST)', () => {
+  it('30 June 2026 late evening IST is still the 2026 season', () => {
+    // 23:59 IST on 30 June = 18:29 UTC on 30 June.
+    expect(examSeasonYear(new Date('2026-06-30T18:29:00Z'))).toBe(2026);
+  });
+
+  it('1 July 2026 just after midnight IST is the 2027 season, even though UTC still says 30 June', () => {
+    // 00:01 IST on 1 July = 18:31 UTC on 30 June.
+    expect(examSeasonYear(new Date('2026-06-30T18:31:00Z'))).toBe(2027);
+  });
+
+  it('October 2026 belongs to the 2027 exam', () => {
+    expect(examSeasonYear(new Date('2026-10-19T06:00:00Z'))).toBe(2027);
+  });
+
+  it('January to June keeps the calendar year', () => {
+    expect(examSeasonYear(new Date('2027-01-05T06:00:00Z'))).toBe(2027);
+    expect(examSeasonYear(new Date('2027-04-15T06:00:00Z'))).toBe(2027);
+  });
+
+  it('31 December IST late evening rolls to the next season, not the next calendar year twice', () => {
+    expect(examSeasonYear(new Date('2026-12-31T18:00:00Z'))).toBe(2027); // 1 Jan 2027 IST
+  });
+});
+
+describe('examYearChoices', () => {
+  it('offers the current season and the three after it', () => {
+    expect(examYearChoices(new Date('2026-10-19T06:00:00Z'))).toEqual([2027, 2028, 2029, 2030]);
+    expect(examYearChoices(new Date('2026-06-30T18:29:00Z'))).toEqual([2026, 2027, 2028, 2029]);
+    expect(examYearChoices(new Date('2026-06-30T18:31:00Z'))).toEqual([2027, 2028, 2029, 2030]);
+  });
+});
+
+describe('isPlausibleStatedExamYear', () => {
+  const now = new Date('2026-10-19T06:00:00Z'); // choices 2027..2030
+
+  it('accepts the choices with one year of slack either side', () => {
+    for (const y of [2026, 2027, 2028, 2029, 2030, 2031]) expect(isPlausibleStatedExamYear(y, now)).toBe(true);
+  });
+
+  it('rejects anything else', () => {
+    for (const y of [2025, 2032, 2027.5, NaN, '2027', null, undefined]) {
+      expect(isPlausibleStatedExamYear(y as unknown, now)).toBe(false);
     }
   });
 });

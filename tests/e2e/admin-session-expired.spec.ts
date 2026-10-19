@@ -105,6 +105,30 @@ test.describe('Admin session expired', () => {
     expect(centreCalls.every((auth) => auth === 'none')).toBe(true);
   });
 
+  // Founder report 2026-10-19: a click beside the dialog closed it, the dashboard
+  // filled with "Sign in again: no Microsoft token was sent." and Try again
+  // failed quietly for half a minute.
+  test('a click beside the dialog keeps it open, and Try again after Not now asks again', async ({ page }) => {
+    test.setTimeout(120_000);
+    await page.goto(`${APP_URLS.admin}/`);
+
+    const dialog = page.getByRole('dialog', { name: 'Sign in again to keep working' });
+    await expect(dialog).toBeVisible({ timeout: 30_000 });
+
+    // Backdrop click: nothing happens.
+    await page.mouse.click(10, 10);
+    await expect(dialog).toBeVisible();
+
+    await dialog.getByRole('button', { name: 'Not now' }).click();
+    await expect(dialog).toBeHidden();
+    const retry = page.getByRole('button', { name: 'Try again' }).first();
+    await expect(retry).toBeVisible({ timeout: 15_000 });
+
+    // Well inside the 30s quiet spell, a click still brings the dialog back.
+    await retry.click();
+    await expect(dialog).toBeVisible({ timeout: 30_000 });
+  });
+
   test('the server marks a token problem so only that 401 opens the dialog', async ({ request }) => {
     const res = await request.get(`${APP_URLS.admin}/api/centres`);
     expect(res.status()).toBe(401);

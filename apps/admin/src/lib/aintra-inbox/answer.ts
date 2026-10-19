@@ -30,6 +30,12 @@ function directiveLabel(body: string): string | null {
       .filter(Boolean);
     return actions.length ? `Buttons shown: ${actions.join(', ')}` : null;
   }
+  if (key === 'book') {
+    const kind = rest.split(/[,|]/)[0]?.trim().toLowerCase();
+    if (kind === 'callback') return 'Callback card shown';
+    if (kind === 'demo') return 'Demo booking card shown';
+    return null;
+  }
   if (key === 'suggest') {
     const items = rest.split('|').map((s) => s.trim()).filter(Boolean);
     return items.length ? `Suggested next: ${items.join(' · ')}` : null;

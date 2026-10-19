@@ -42,6 +42,16 @@ describe('seasonBounds', () => {
 });
 
 describe('summarisePeople', () => {
+  it('narrows the strip to people still to ask for an exam year, keeping the chip counts', () => {
+    const s = summarisePeople(rows, { ...base, yearSource: 'signup' });
+    expect(s.estimated).toBe(200);
+    expect(s.seasons.current).toBe(282);
+    expect(s.matching).toBe(200);
+    expect(s.stages.lead).toBe(200);
+    expect(s.stages.active_student).toBe(0);
+    expect(s.activity).toEqual({ recent: 0, quiet: 200, gone: 0 });
+  });
+
   it('counts every row once in the totals, whatever is selected', () => {
     const s = summarisePeople(rows, { ...base, stage: 'lead', activity: 'recent' });
     expect(s.totals).toEqual({ active: 1492, archived: 70, all: 1562 });

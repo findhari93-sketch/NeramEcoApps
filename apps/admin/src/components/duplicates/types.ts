@@ -1,9 +1,32 @@
-import type { DuplicatePair, CandidatePerson } from '@neram/database';
+import type { DuplicatePair, CandidatePerson, DuplicateRelation } from '@neram/database';
 
-export type { DuplicatePair, CandidatePerson };
+export type { DuplicatePair, CandidatePerson, DuplicateRelation };
 
-export type DuplicateTab = 'open' | 'merged' | 'dismissed';
-export const DUPLICATE_TABS: readonly DuplicateTab[] = ['open', 'merged', 'dismissed'];
+/**
+ * ready    open pairs that passed every check (merge on their own when the
+ *          setting is on, or with one click)
+ * review   open pairs a guardrail stopped, waiting for a person
+ * auto     merged automatically, with Undo for 30 days
+ * history  merged by staff, and pairs marked as different people
+ */
+export type DuplicateTab = 'ready' | 'review' | 'auto' | 'history';
+export const DUPLICATE_TABS: readonly DuplicateTab[] = ['ready', 'review', 'auto', 'history'];
+
+export interface UndoState {
+  undoable: boolean;
+  undoneAt: string | null;
+  mergedAt: string;
+  relation: string | null;
+}
+
+/** A pair as GET /api/duplicates returns it. */
+export type QueuePair = DuplicatePair & { undo: UndoState | null };
+
+export interface TabCounts {
+  ready: number;
+  review: number;
+  auto: number;
+}
 
 /** A users row as the merge preview returns it (winner, loser). */
 export interface PreviewRow {
@@ -31,14 +54,8 @@ export interface ReferenceCount {
 
 /** GET /api/duplicates/[id] */
 export interface DuplicatePreviewResponse {
-  candidate: {
-    id: string;
-    reason: string;
-    confidence: 'strong' | 'likely';
-    status: 'open' | 'merged' | 'dismissed';
-    detected_at: string;
-    note: string | null;
-  };
+  candidate: DuplicatePair;
+  relation: DuplicateRelation;
   winnerId: string;
   loserId: string;
   preview: {
@@ -49,4 +66,10 @@ export interface DuplicatePreviewResponse {
     referenceCounts: ReferenceCount[];
   };
   refused: boolean;
+}
+
+/** POST /api/duplicates/bulk-merge */
+export interface BulkMergeResponse {
+  merged: Array<{ candidateId: string; winnerId: string; loserId: string; logId: string | null }>;
+  failed: Array<{ candidateId: string; error: string }>;
 }

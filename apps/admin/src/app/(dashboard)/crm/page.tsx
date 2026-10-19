@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import Link from 'next/link';
 import {
   Box,
   Typography,
@@ -10,21 +9,21 @@ import {
   IconButton,
   Tooltip,
   Paper,
-  CircularProgress,
   TextField,
   MenuItem,
   Button,
+  Popover,
   useMediaQuery,
   useTheme,
 } from '@neram/ui';
 import { useRouter, useSearchParams } from 'next/navigation';
 import PeopleAltIcon from '@mui/icons-material/PeopleAlt';
 import RefreshIcon from '@mui/icons-material/Refresh';
-import AddAPhotoIcon from '@mui/icons-material/AddAPhoto';
 import FullscreenIcon from '@mui/icons-material/Fullscreen';
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit';
 import FilterAltOffOutlinedIcon from '@mui/icons-material/FilterAltOffOutlined';
-import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import TuneIcon from '@mui/icons-material/Tune';
 import type {
   UserJourney,
   ExamStatus,
@@ -40,6 +39,8 @@ import UsersTable from '../../../components/crm/UsersTable';
 import BulkDeleteDialog from '../../../components/crm/BulkDeleteDialog';
 import ArchiveDialog from '../../../components/crm/ArchiveDialog';
 import VerifyStatusDialog from '../../../components/crm/VerifyStatusDialog';
+import AutoArchiveBar from '../../../components/crm/AutoArchiveBar';
+import UnlinkedParentsBar from '../../../components/crm/UnlinkedParentsBar';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
 import { useBatches } from '@/contexts/BatchContext';
 
@@ -62,7 +63,7 @@ const SEASONS: readonly Season[] = ['current', 'later', 'earlier', 'all'];
 const ACTIVITY_KEYS: readonly ActivityGroup[] = ['recent', 'quiet', 'gone'];
 const VIEW_HINTS: Record<LifecycleView, string> = {
   active: 'Leads and students you are working with now.',
-  archived: 'Moved out of the working list by staff. They can still sign in, and you can restore them.',
+  archived: 'Out of the working list (by staff or auto-archive). They can still sign in, and you can restore them.',
 };
 
 /** Column filters the API supports: column id to query param. */
@@ -97,14 +98,12 @@ export default function CRMPage() {
   const [totalCount, setTotalCount] = useState(0);
   // Exact grouped counts for the season, activity and stage cards.
   const [breakdown, setBreakdown] = useState<PeopleBreakdownRow[] | null>(null);
-  const [allAccounts, setAllAccounts] = useState<number | null>(null);
-  const [archiveSuggestions, setArchiveSuggestions] = useState(0);
   const [currentExamYear, setCurrentExamYear] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [notice, setNotice] = useState('');
-  const [syncingPhotos, setSyncingPhotos] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [moreFiltersAnchor, setMoreFiltersAnchor] = useState<HTMLElement | null>(null);
+  const [helpAnchor, setHelpAnchor] = useState<HTMLElement | null>(null);
 
   const [lifecycleView, setLifecycleView] = useState<LifecycleView>(
     searchParams.get('lifecycle') === 'archived' ? 'archived' : 'active'
@@ -146,6 +145,8 @@ export default function CRMPage() {
   const [identity, setIdentity] = useState<IdentityFilter>(
     readParam(searchParams.get('identity'), ['firebase', 'microsoft', 'all'] as const) || 'all'
   );
+  // Only people who never told us their exam year (the ones to ask).
+  const [yearUnknownOnly, setYearUnknownOnly] = useState(searchParams.get('year_source') === 'signup');
   const [lifecycleStage, setLifecycleStage] = useState<LifecycleStage | ''>(
     readParam(searchParams.get('lifecycle_stage'), LIFECYCLE_STAGE_KEYS)
   );
@@ -181,6 +182,7 @@ export default function CRMPage() {
       if (outcome) params.set('outcome', outcome);
       if (lifecycleStage) params.set('lifecycle_stage', lifecycleStage);
       if (activity) params.set('activity', activity);
+      if (yearUnknownOnly) params.set('year_source', 'signup');
       for (const f of columnFilters) {
         const param = COLUMN_FILTER_PARAMS[f.id];
         if (param && typeof f.value === 'string' && f.value) params.set(param, f.value);
@@ -202,7 +204,7 @@ export default function CRMPage() {
     } finally {
       setLoading(false);
     }
-  }, [pagination, sorting, globalFilter, lifecycleView, season, identity, outcome, lifecycleStage, activity, columnFilters]);
+  }, [pagination, sorting, globalFilter, lifecycleView, season, identity, outcome, lifecycleStage, activity, yearUnknownOnly, columnFilters]);
 
   // The counts depend only on sign-in and call outcome; season, stage and
   // activity are worked out on the page from the same breakdown.
@@ -214,8 +216,6 @@ export default function CRMPage() {
       if (!res.ok) throw new Error('Failed to load the counts');
       const data = await res.json();
       setBreakdown(data.breakdown || []);
-      setAllAccounts(data.allAccounts ?? null);
-      setArchiveSuggestions(data.archiveSuggestions || 0);
       setCurrentExamYear(data.currentExamYear ?? null);
     } catch (err: any) {
       setError(err.message);
@@ -244,9 +244,10 @@ export default function CRMPage() {
             currentExamYear,
             activity: activity || null,
             stage: lifecycleStage || null,
+            yearSource: yearUnknownOnly ? 'signup' : null,
           })
         : null,
-    [breakdown, currentExamYear, lifecycleView, season, activity, lifecycleStage]
+    [breakdown, currentExamYear, lifecycleView, season, activity, lifecycleStage, yearUnknownOnly]
   );
 
   // Escape key to exit fullscreen
@@ -289,6 +290,12 @@ export default function CRMPage() {
     replaceUrlParam('season', value === 'current' ? null : value);
   };
 
+  const handleYearUnknownOnlyChange = (on: boolean) => {
+    setYearUnknownOnly(on);
+    resetToFirstPage();
+    replaceUrlParam('year_source', on ? 'signup' : null);
+  };
+
   const handleOutcomeChange = (value: Outcome | '') => {
     setOutcome(value);
     resetToFirstPage();
@@ -306,51 +313,22 @@ export default function CRMPage() {
     }
   };
 
+  // Sign-in and call outcome live under "More filters"; stage, activity and
+  // "exam year still to ask" are the strip and chip above the table.
+  const moreFiltersCount = (identity !== 'all' ? 1 : 0) + (outcome ? 1 : 0);
   const filtersActive =
-    identity !== 'all' || !!outcome || !!lifecycleStage || !!activity || columnFilters.length > 0;
+    moreFiltersCount > 0 || !!lifecycleStage || !!activity || yearUnknownOnly || columnFilters.length > 0;
   const clearFilters = () => {
     handleIdentityChange('all');
     handleOutcomeChange('');
     handleLifecycleStageChange('');
     handleActivityChange(null);
+    handleYearUnknownOnlyChange(false);
     handleColumnFiltersChange([]);
   };
 
   const handleRowClick = (userId: string) => {
     router.push(`/crm/${userId}`);
-  };
-
-  // Pull Microsoft Graph profile photos into our DB for every user with an MS
-  // account, then refresh so the new avatars show. Stored once, served from
-  // avatar_url everywhere (no per-render Graph calls).
-  const handleSyncMsPhotos = async () => {
-    setSyncingPhotos(true);
-    setError('');
-    setNotice('');
-    try {
-      const res = await fetch('/api/crm/sync-ms-photos', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      });
-      const data = await res.json();
-      if (!res.ok || data.success === false) {
-        throw new Error(data.configError?.message || data.error || 'Failed to sync Microsoft photos');
-      }
-      const failed = data.failures?.length ? `, ${data.failures.length} failed` : '';
-      // permissionDenied/throttled = Microsoft blocked the app-only photo read
-      // (not "no photo"); surface it so low coverage is explainable.
-      const blocked = (data.permissionDenied || 0) + (data.throttled || 0);
-      const blockedNote = blocked ? `, ${blocked} blocked by Microsoft` : '';
-      setNotice(
-        `Microsoft photos synced: ${data.synced} updated, ${data.unchanged} unchanged, ${data.noPhoto} without a photo${blockedNote}${failed}.`
-      );
-      await refreshAll();
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setSyncingPhotos(false);
-    }
   };
 
   const [searchDebounce, setSearchDebounce] = useState<NodeJS.Timeout | null>(null);
@@ -481,7 +459,7 @@ export default function CRMPage() {
     await refreshAll();
   };
 
-  const handleRestore = async (user: UserJourney) => {
+  const handleRestore = async (user: Pick<UserJourney, 'id'>) => {
     if (!supabaseUserId) return;
     try {
       const res = await fetch(`/api/crm/users/${user.id}/archive`, {
@@ -522,16 +500,6 @@ export default function CRMPage() {
     await refreshAll();
   };
 
-  const totals = summary?.totals;
-  const unfiltered = identity === 'all' && !outcome;
-  const headerLine = !totals
-    ? 'Loading counts...'
-    : unfiltered && allAccounts !== null
-    ? `${formatCount(allAccounts)} accounts: ${formatCount(totals.active)} current leads and students, ${formatCount(
-        totals.archived
-      )} archived, ${formatCount(Math.max(0, allAccounts - totals.all))} staff and parents`
-    : `${formatCount(totals.active)} current and ${formatCount(totals.archived)} archived match the sign-in and call outcome filters`;
-
   return (
     <Box>
       {/* Page header — stacks on mobile */}
@@ -568,9 +536,17 @@ export default function CRMPage() {
               sx={{ lineHeight: 1.2 }}
             >
               People
+              <IconButton
+                size="small"
+                aria-label="How People works"
+                onClick={(e) => setHelpAnchor(e.currentTarget)}
+                sx={{ ml: 0.5, width: 32, height: 32, verticalAlign: 'middle' }}
+              >
+                <InfoOutlinedIcon sx={{ fontSize: 20 }} />
+              </IconButton>
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: 13, md: 14 } }}>
-              {headerLine}
+              Leads and students who signed up to Neram.
             </Typography>
           </Box>
         </Box>
@@ -582,8 +558,8 @@ export default function CRMPage() {
             sx={{ display: 'inline-flex', p: 0.375, gap: 0.375, borderRadius: 1.25, bgcolor: 'grey.100' }}
           >
             {([
-              { key: 'active', label: 'Current', count: totals?.active },
-              { key: 'archived', label: 'Archived', count: totals?.archived },
+              { key: 'active', label: 'Current', count: summary?.totals.active },
+              { key: 'archived', label: 'Archived', count: summary?.totals.archived },
             ] as { key: LifecycleView; label: string; count?: number }[]).map((seg) => {
               const selected = lifecycleView === seg.key;
               return (
@@ -619,28 +595,6 @@ export default function CRMPage() {
             })}
           </Box>
 
-          {archiveSuggestions > 0 && (
-            <Button
-              component={Link}
-              href="/lifecycle?kind=archive_lead"
-              endIcon={<ArrowForwardIcon />}
-              sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}
-            >
-              {formatCount(archiveSuggestions)} suggested to archive
-            </Button>
-          )}
-
-          <Tooltip title="Sync Microsoft profile photos for all staff & students">
-            <span>
-              <IconButton size="small" onClick={handleSyncMsPhotos} disabled={syncingPhotos}>
-                {syncingPhotos ? (
-                  <CircularProgress size={16} thickness={5} />
-                ) : (
-                  <AddAPhotoIcon fontSize="small" />
-                )}
-              </IconButton>
-            </span>
-          </Tooltip>
           <Tooltip title="Refresh data">
             <span>
               <IconButton size="small" onClick={refreshAll} disabled={loading} aria-label="Refresh">
@@ -662,75 +616,10 @@ export default function CRMPage() {
         </Box>
       </Box>
 
-      {/* Lifecycle filters: who (sign-in), where (stage), how active */}
-      <Box
-        role="group"
-        aria-label="Filter people"
-        sx={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 1,
-          alignItems: 'center',
-          mb: { xs: 1.5, md: 2 },
-          '& .MuiInputBase-root': { minHeight: 44 },
-        }}
-      >
-        <TextField
-          select
-          size="small"
-          label="Sign-in"
-          value={identity}
-          onChange={(e) => handleIdentityChange(e.target.value as IdentityFilter)}
-          fullWidth={false}
-          SelectProps={{ displayEmpty: true }}
-          InputLabelProps={{ shrink: true }}
-          sx={{ width: { xs: 'calc(50% - 4px)', sm: 220 } }}
-        >
-          {IDENTITY_OPTIONS.map((o) => (
-            <MenuItem key={o.value} value={o.value}>
-              {o.label}
-            </MenuItem>
-          ))}
-        </TextField>
-        <TextField
-          select
-          size="small"
-          label="Call outcome"
-          value={outcome}
-          onChange={(e) => handleOutcomeChange(e.target.value as Outcome | '')}
-          fullWidth={false}
-          SelectProps={{ displayEmpty: true }}
-          InputLabelProps={{ shrink: true }}
-          sx={{ width: { xs: 'calc(50% - 4px)', sm: 230 } }}
-        >
-          {OUTCOME_OPTIONS.map((o) => (
-            <MenuItem key={o.value || 'any'} value={o.value}>
-              {o.label}
-            </MenuItem>
-          ))}
-        </TextField>
-        {filtersActive && (
-          <Button
-            onClick={clearFilters}
-            startIcon={<FilterAltOffOutlinedIcon />}
-            sx={{ minHeight: 44, textTransform: 'none', flex: { xs: '1 1 calc(50% - 4px)', sm: '0 0 auto' } }}
-          >
-            Clear filters
-          </Button>
-        )}
-      </Box>
-
       {/* Error */}
       {error && (
         <Alert severity="error" sx={{ mb: { xs: 1.5, md: 2 }, borderRadius: 1 }}>
           {error}
-        </Alert>
-      )}
-
-      {/* Photo-sync result */}
-      {notice && (
-        <Alert severity="success" onClose={() => setNotice('')} sx={{ mb: { xs: 1.5, md: 2 }, borderRadius: 1 }}>
-          {notice}
         </Alert>
       )}
 
@@ -744,10 +633,16 @@ export default function CRMPage() {
             currentExamYear={currentExamYear}
             activity={activity || null}
             stage={lifecycleStage || null}
+            yearUnknownOnly={yearUnknownOnly}
             onSeasonChange={handleSeasonChange}
             onActivityChange={handleActivityChange}
             onStageChange={(value) => handleLifecycleStageChange(value || '')}
+            onYearUnknownOnlyChange={handleYearUnknownOnlyChange}
           />
+          <Box sx={{ display: 'grid', gap: 1, mt: 1.25 }}>
+            <AutoArchiveBar onChanged={refreshAll} onRestore={(id) => handleRestore({ id })} />
+            <UnlinkedParentsBar onLinked={refreshAll} />
+          </Box>
         </Box>
       )}
 
@@ -817,8 +712,129 @@ export default function CRMPage() {
           columnFilters={columnFilters}
           onColumnFiltersChange={handleColumnFiltersChange}
           peopleView
+          toolbarFilters={
+            <>
+              <Button
+                variant={moreFiltersCount ? 'contained' : 'outlined'}
+                color={moreFiltersCount ? 'primary' : 'inherit'}
+                startIcon={<TuneIcon />}
+                onClick={(e) => setMoreFiltersAnchor(e.currentTarget)}
+                aria-haspopup="dialog"
+                sx={{ minHeight: 40, textTransform: 'none', borderColor: 'grey.300' }}
+              >
+                More filters{moreFiltersCount ? ` (${moreFiltersCount})` : ''}
+              </Button>
+              {filtersActive && (
+                <Button
+                  onClick={clearFilters}
+                  startIcon={<FilterAltOffOutlinedIcon />}
+                  sx={{ minHeight: 40, textTransform: 'none' }}
+                >
+                  Clear all
+                </Button>
+              )}
+            </>
+          }
         />
       </Paper>
+
+      {/* More filters: sign-in and call outcome */}
+      <Popover
+        open={Boolean(moreFiltersAnchor)}
+        anchorEl={moreFiltersAnchor}
+        onClose={() => setMoreFiltersAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        PaperProps={{ sx: { p: 2, width: 320, display: 'grid', gap: 2 } }}
+      >
+        <TextField
+          select
+          size="small"
+          label="Sign-in"
+          value={identity}
+          onChange={(e) => handleIdentityChange(e.target.value as IdentityFilter)}
+          helperText="Google or phone is the Tools app; Microsoft only is Nexus."
+          sx={{ '& .MuiInputBase-root': { minHeight: 44 } }}
+        >
+          {IDENTITY_OPTIONS.map((o) => (
+            <MenuItem key={o.value} value={o.value}>
+              {o.label}
+            </MenuItem>
+          ))}
+        </TextField>
+        <TextField
+          select
+          size="small"
+          label="Call outcome"
+          value={outcome}
+          onChange={(e) => handleOutcomeChange(e.target.value as Outcome | '')}
+          SelectProps={{ displayEmpty: true }}
+          InputLabelProps={{ shrink: true }}
+          helperText="What a staff call found out."
+          sx={{ '& .MuiInputBase-root': { minHeight: 44 } }}
+        >
+          {OUTCOME_OPTIONS.map((o) => (
+            <MenuItem key={o.value || 'any'} value={o.value}>
+              {o.label}
+            </MenuItem>
+          ))}
+        </TextField>
+      </Popover>
+
+      {/* How People works */}
+      <Popover
+        open={Boolean(helpAnchor)}
+        anchorEl={helpAnchor}
+        onClose={() => setHelpAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+        PaperProps={{ sx: { p: 2.5, maxWidth: 440 } }}
+      >
+        <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
+          How People works
+        </Typography>
+        <Box
+          component="dl"
+          sx={{
+            m: 0,
+            display: 'grid',
+            gap: 1.25,
+            '& dt': { fontWeight: 700, fontSize: 14 },
+            '& dd': { m: 0, fontSize: 14, color: 'text.secondary' },
+          }}
+        >
+          <div>
+            <dt>Who is here</dt>
+            <dd>
+              Leads and students: everyone who signed up in the Tools app, on the website, or with a Neram Microsoft
+              account. Staff are not listed. Parents show on their child&apos;s row.
+            </dd>
+          </div>
+          <div>
+            <dt>Current</dt>
+            <dd>People you are working with now.</dd>
+          </div>
+          <div>
+            <dt>Archived</dt>
+            <dd>
+              Out of the working list only. They can still sign in to the Tools app and Nexus as before. Anyone
+              auto-archived comes back to Current on their own when they are active again, and you can restore anyone.
+            </dd>
+          </div>
+          <div>
+            <dt>Auto-archive</dt>
+            <dd>
+              When it is on, every night it archives leads from earlier exam seasons after 90 quiet days, and any other
+              lead after 180 quiet days. It never archives anyone enrolled, studying, paused or who paid.
+            </dd>
+          </div>
+          <div>
+            <dt>Exam season and &quot;est.&quot;</dt>
+            <dd>
+              The exam year comes from their batch or the year they told us. When they never told us, it is estimated
+              from when they signed up (a season runs 1 July to 30 June) and marked &quot;est.&quot;
+            </dd>
+          </div>
+        </Box>
+      </Popover>
 
       {/* Bulk delete confirmation dialog */}
       <BulkDeleteDialog

@@ -13,7 +13,16 @@ import type {
   SaveExamDetailsInput,
   ExamDetailAuditLog,
   NataExamStatus,
+  ExamYearSource,
 } from '../types';
+import { examSeasonYear, isPlausibleStatedExamYear, startYearOf } from '../utils/academic-year';
+import {
+  readExamYearPromptState,
+  snoozeExamYearPrompt,
+  isExamYearPromptDue,
+  type ExamYearPromptState,
+  type ExamYearSnoozeAction,
+} from '../utils/exam-year-prompt';
 
 /**
  * Get user's exam profile (null if not onboarded).
@@ -177,7 +186,8 @@ export async function saveExamDetails(
         nata_status: input.nata_status,
         attempt_count: input.sessions?.length || 0,
         next_exam_date: nextExamDate,
-        planning_year: input.planning_year || new Date().getFullYear(),
+        // The season, not the calendar year: from July the next exam is next year's.
+        planning_year: input.planning_year || examSeasonYear(),
         exam_details_completed: true,
         exam_details_completed_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -190,6 +200,14 @@ export async function saveExamDetails(
   if (profileError) {
     throw new Error(`Failed to save exam profile: ${profileError.message}`);
   }
+
+  // Say where the year came from. Best effort: a database without the
+  // 20261209090200 columns must not fail the save.
+  await (supabase as any)
+    .from('user_exam_profiles')
+    .update({ planning_year_source: 'exam_setup', planning_year_set_at: new Date().toISOString() })
+    .eq('user_id', userId)
+    .then(() => undefined, () => undefined);
 
   // 4. Handle attempts — delete old, insert new (for the current year)
   if (input.sessions && input.sessions.length > 0) {
@@ -338,4 +356,185 @@ export async function getUserExamAuditLogs(
   }
 
   return (data || []) as ExamDetailAuditLog[];
+}
+
+// ─── Stated exam year: one write path ────────────────────────────────────────
+//
+// About 1,600 of 1,900 accounts only have an exam year the CRM estimates from
+// the sign-up date. Every surface that asks the student (Tools App sheet,
+// Aintra, demo booking, apply forms, staff, exam setup) records the answer
+// here, so the rules live in one place:
+//   - a year from a batch (users.academic_year) is never overwritten,
+//   - the year must be plausible (examYearChoices, plus or minus one),
+//   - an inferred answer (Aintra parsing a chat message) never replaces a year
+//     the student already stated somewhere more deliberate.
+
+export type RecordStatedExamYearResult =
+  | { saved: true; year: number; source: ExamYearSource }
+  | {
+      saved: false;
+      reason: 'invalid_year' | 'no_user' | 'batch' | 'kept_existing' | 'error';
+      error?: string;
+    };
+
+/** Sources that only infer a year and so never replace an existing one. */
+const INFERRED_SOURCES: ReadonlySet<ExamYearSource> = new Set<ExamYearSource>(['aintra']);
+
+/** PostgREST / Postgres "that column does not exist" (migration not applied yet). */
+function isMissingColumnError(error: { code?: string; message?: string } | null | undefined): boolean {
+  if (!error) return false;
+  return (
+    error.code === 'PGRST204' ||
+    error.code === '42703' ||
+    /planning_year_(source|set_at)/.test(error.message || '')
+  );
+}
+
+export async function recordStatedExamYear(
+  client: TypedSupabaseClient | null | undefined,
+  userId: string | null | undefined,
+  year: unknown,
+  source: ExamYearSource,
+  now: Date = new Date(),
+): Promise<RecordStatedExamYearResult> {
+  const examYear = typeof year === 'string' && /^\d{4}$/.test(year.trim()) ? Number(year) : year;
+  if (!isPlausibleStatedExamYear(examYear, now)) return { saved: false, reason: 'invalid_year' };
+  if (!userId) return { saved: false, reason: 'no_user' };
+
+  const supabase = (client || getSupabaseAdminClient()) as any;
+
+  try {
+    const { data: user, error: userError } = await supabase
+      .from('users')
+      .select('id, academic_year')
+      .eq('id', userId)
+      .maybeSingle();
+    if (userError) return { saved: false, reason: 'error', error: userError.message };
+    if (!user) return { saved: false, reason: 'no_user' };
+    // A batch year is staff-assigned and authoritative.
+    if (startYearOf(user.academic_year) !== null) return { saved: false, reason: 'batch' };
+
+    const { data: existing, error: readError } = await supabase
+      .from('user_exam_profiles')
+      .select('id, planning_year')
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (readError) return { saved: false, reason: 'error', error: readError.message };
+
+    if (existing && existing.planning_year != null && INFERRED_SOURCES.has(source)) {
+      return { saved: false, reason: 'kept_existing' };
+    }
+
+    const stamp = new Date(now).toISOString();
+    const full = {
+      planning_year: examYear,
+      planning_year_source: source,
+      planning_year_set_at: stamp,
+      updated_at: stamp,
+    };
+    const bare = { planning_year: examYear, updated_at: stamp };
+
+    const write = async (fields: Record<string, unknown>) => {
+      if (existing) {
+        return supabase.from('user_exam_profiles').update(fields).eq('user_id', userId);
+      }
+      // A new row only records the year. It must not mark the Question Bank
+      // onboarding done (that column defaults to true), and nata_status is NOT
+      // NULL: someone naming a future exam year is planning to apply.
+      return supabase.from('user_exam_profiles').insert({
+        user_id: userId,
+        nata_status: 'planning_to_apply',
+        attempt_count: 0,
+        qb_onboarding_completed: false,
+        ...fields,
+      });
+    };
+
+    let { error } = await write(full);
+    if (error && isMissingColumnError(error)) ({ error } = await write(bare));
+    if (error && error.code === '23505') {
+      // Lost a race with another insert for the same user: update instead.
+      ({ error } = await supabase.from('user_exam_profiles').update(full).eq('user_id', userId));
+      if (error && isMissingColumnError(error)) {
+        ({ error } = await supabase.from('user_exam_profiles').update(bare).eq('user_id', userId));
+      }
+    }
+    if (error) return { saved: false, reason: 'error', error: error.message };
+
+    return { saved: true, year: examYear as number, source };
+  } catch (err) {
+    return { saved: false, reason: 'error', error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export interface ExamYearStatus {
+  /** The year the student (or a batch) gave us, or null when we only have an estimate. */
+  year: number | null;
+  source: 'batch' | 'stated' | null;
+  prompt: ExamYearPromptState;
+  /** True when the Tools App sheet should ask now. */
+  promptDue: boolean;
+}
+
+/**
+ * Whether a user has stated an exam year, using the same priority as
+ * user_lifecycle_view: batch, then the latest application form, then
+ * user_exam_profiles.planning_year.
+ */
+export async function getExamYearStatus(
+  client: TypedSupabaseClient | null | undefined,
+  userId: string,
+  now: Date = new Date(),
+): Promise<ExamYearStatus> {
+  const supabase = (client || getSupabaseAdminClient()) as any;
+
+  const [userRes, leadRes, profileRes] = await Promise.all([
+    supabase.from('users').select('academic_year, metadata').eq('id', userId).maybeSingle(),
+    supabase
+      .from('lead_profiles')
+      .select('target_exam_year')
+      .eq('user_id', userId)
+      .is('deleted_at', null)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase.from('user_exam_profiles').select('planning_year').eq('user_id', userId).maybeSingle(),
+  ]);
+  if (userRes.error) throw new Error(userRes.error.message);
+
+  const prompt = readExamYearPromptState(userRes.data?.metadata?.exam_year_prompt);
+  const batchStart = startYearOf(userRes.data?.academic_year);
+  if (batchStart !== null) {
+    return { year: batchStart + 1, source: 'batch', prompt, promptDue: false };
+  }
+  const stated = leadRes.data?.target_exam_year ?? profileRes.data?.planning_year ?? null;
+  if (stated != null) {
+    return { year: Number(stated), source: 'stated', prompt, promptDue: false };
+  }
+  return { year: null, source: null, prompt, promptDue: isExamYearPromptDue(prompt, now) };
+}
+
+/**
+ * Remember a "Later" or "Not sure yet" in users.metadata.exam_year_prompt,
+ * merging into whatever else metadata holds.
+ */
+export async function snoozeExamYearPromptForUser(
+  client: TypedSupabaseClient | null | undefined,
+  userId: string,
+  action: ExamYearSnoozeAction,
+  now: Date = new Date(),
+): Promise<ExamYearPromptState> {
+  const supabase = (client || getSupabaseAdminClient()) as any;
+  const { data, error } = await supabase.from('users').select('metadata').eq('id', userId).maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error('User not found');
+
+  const metadata = data.metadata && typeof data.metadata === 'object' ? data.metadata : {};
+  const next = snoozeExamYearPrompt(readExamYearPromptState(metadata.exam_year_prompt), action, now);
+  const { error: writeError } = await supabase
+    .from('users')
+    .update({ metadata: { ...metadata, exam_year_prompt: next } })
+    .eq('id', userId);
+  if (writeError) throw new Error(writeError.message);
+  return next;
 }

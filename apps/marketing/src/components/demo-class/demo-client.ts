@@ -4,6 +4,7 @@
  */
 
 import type { DemoWindow } from '@neram/database/demo-schedule';
+import { parseExamYearAnswer } from '@neram/database/academic-year';
 import type { PublicDemoRequest } from '@/lib/demo-request';
 
 export interface DemoDraft {
@@ -13,6 +14,8 @@ export interface DemoDraft {
   window: DemoWindow | null;
   name: string;
   currentClass: string;
+  /** The year they will write NATA or JEE B.Arch. Required to book. */
+  examYear: number | null;
   language: string;
   parentJoining: boolean;
   parentName: string;
@@ -25,6 +28,7 @@ export const EMPTY_DRAFT: DemoDraft = {
   window: null,
   name: '',
   currentClass: '',
+  examYear: null,
   language: 'en',
   parentJoining: true,
   parentName: '',
@@ -81,17 +85,22 @@ export function hasApplyDraft(): boolean {
 }
 
 /**
- * Name and class from the apply draft, for a student who left the form to
- * book a demo. Only what the form already holds; empty strings otherwise.
+ * Name, class and exam year from the apply draft, for a student who left the
+ * form to book a demo. Only what the form already holds; empty otherwise.
  */
-export function applyDraftPrefill(): { name: string; currentClass: string } {
+export function applyDraftPrefill(): { name: string; currentClass: string; examYear: number | null } {
   try {
     const raw = window.localStorage.getItem(APPLY_DRAFT_KEY);
-    if (!raw) return { name: '', currentClass: '' };
+    if (!raw) return { name: '', currentClass: '', examYear: null };
     const state = JSON.parse(raw) as {
       formData?: {
         personal?: { firstName?: string };
-        academic?: { applicantCategory?: string; currentlyIn?: string; schoolStudentData?: { current_class?: string } | null };
+        academic?: {
+          applicantCategory?: string;
+          currentlyIn?: string;
+          targetExamYear?: string | number | null;
+          schoolStudentData?: { current_class?: string } | null;
+        };
       };
     };
     const name = (state.formData?.personal?.firstName || '').trim();
@@ -104,9 +113,11 @@ export function applyDraftPrefill(): { name: string; currentClass: string } {
     } else if (academic?.applicantCategory) {
       currentlyIn = 'other';
     }
-    return { name, currentClass: APPLY_CLASS_TO_DEMO[currentlyIn] || '' };
+    // The apply form keeps the year as a cohort ('2026-27' writes in 2027).
+    const examYear = parseExamYearAnswer(academic?.targetExamYear ?? null).examYear;
+    return { name, currentClass: APPLY_CLASS_TO_DEMO[currentlyIn] || '', examYear };
   } catch {
-    return { name: '', currentClass: '' };
+    return { name: '', currentClass: '', examYear: null };
   }
 }
 
@@ -153,6 +164,7 @@ export async function submitDemoRequest(draft: DemoDraft, attribution: Record<st
     window: draft.window,
     name: draft.name,
     currentClass: draft.currentClass || null,
+    examYear: draft.examYear,
     language: draft.language,
     parentJoining: draft.parentJoining,
     parentName: draft.parentName,

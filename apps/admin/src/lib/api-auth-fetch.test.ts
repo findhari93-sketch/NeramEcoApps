@@ -122,6 +122,31 @@ describe('createAuthedFetch with re-sign-in', () => {
     expect(res.status).toBe(401);
   });
 
+  it('tells re-sign-in when the call came from a click, judged before the token wait', async () => {
+    const activation = { isActive: true };
+    vi.stubGlobal('navigator', { userActivation: activation });
+    try {
+      const base = vi.fn(async () => new Response('{}'));
+      // Silent renewal can take seconds; the click's activation has lapsed by then.
+      const getToken = vi.fn(async () => {
+        activation.isActive = false;
+        return null;
+      });
+      const reauth = vi.fn(async () => 'fresh');
+      const f = createAuthedFetch(base as unknown as typeof fetch, getToken, ORIGIN, reauth);
+      await f('/api/stats');
+      expect(reauth).toHaveBeenCalledWith({ userInitiated: true });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('marks a background poll (no recent click) as not user initiated', async () => {
+    const { f, reauth } = setup({ token: null, fresh: null });
+    await f('/api/admin-badges');
+    expect(reauth).toHaveBeenCalledWith({ userInitiated: false });
+  });
+
   it('never replays a streamed body it cannot send twice', async () => {
     const { f, base, reauth } = setup({ token: 'stale', fresh: 'fresh', responses: [expired()] });
     const body = new ReadableStream();

@@ -234,7 +234,8 @@ export default function PhoneAlertsCard() {
           </Typography>
           <Typography variant="body2" color="text.secondary">
             Get a notification the moment a new student signs up: their phone number, how they reached us (Google Ads,
-            Google search, ChatGPT and more) and their approximate city and state. Tap it to open their profile.
+            Google search, ChatGPT and more) and their approximate city and state. Tap it to open their profile. You
+            are also alerted when someone is stuck at phone sign-in for 10 minutes, with the likely reason.
           </Typography>
         </Box>
       </Stack>

@@ -25,6 +25,8 @@ export const BADGE_KEYS = [
   'follow_ups',
   'lifecycle',
   'collections',
+  'phone_stuck',
+  'direct_enrollment',
   'careers',
   'messages_unread',
   'notifications_unread',
@@ -80,13 +82,19 @@ export function istTodayKey(now: Date = new Date()): string {
 }
 
 /**
- * The Collections badge: open fee reports from students, plus unpaid
- * installments due today or earlier. Both are things staff should act on now.
+ * The Collections badge: open fee reports from students, unpaid installments
+ * due today or earlier, and balance payments students sent from the pay balance
+ * page that are waiting to be verified. All are things staff should act on now.
  */
-export function collectionsBadgeCount(openReports: number | null | undefined, dueInstallments: number | null | undefined): number {
-  const a = Number(openReports);
-  const b = Number(dueInstallments);
-  return (Number.isFinite(a) && a > 0 ? Math.floor(a) : 0) + (Number.isFinite(b) && b > 0 ? Math.floor(b) : 0);
+export function collectionsBadgeCount(
+  openReports: number | null | undefined,
+  dueInstallments: number | null | undefined,
+  paymentsToVerify?: number | null,
+): number {
+  return [openReports, dueInstallments, paymentsToVerify].reduce<number>((sum, raw) => {
+    const n = Number(raw);
+    return sum + (Number.isFinite(n) && n > 0 ? Math.floor(n) : 0);
+  }, 0);
 }
 
 /** Whether a focus / navigation trigger should fetch, given when the last fetch ran. */

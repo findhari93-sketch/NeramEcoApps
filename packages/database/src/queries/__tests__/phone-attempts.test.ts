@@ -3,6 +3,7 @@ import {
   attemptSource,
   getPhoneAttemptsForUser,
   normalizeAttemptPhone,
+  describeUserAgent,
   parsePhoneCaptureBody,
   recordPhoneAttempt,
 } from '../phone-attempts';
@@ -93,6 +94,46 @@ describe('recordPhoneAttempt', () => {
     const broken = vi.fn().mockRejectedValue(new Error('down'));
     vi.spyOn(console, 'error').mockImplementation(() => {});
     expect(await recordPhoneAttempt({ userId: 'u1', phone: '+919876543210', event: 'entered' }, { rpc: broken } as any)).toBe(false);
+  });
+});
+
+describe('phone attempt signals', () => {
+  it('accepts what the student did next, never verified', () => {
+    for (const event of ['otp_checked', 'help', 'closed', 'skipped', 'tab_closed']) {
+      expect(parsePhoneCaptureBody({ phoneNumber: '9876543210', event, anonymousId: ANON }, null)?.event).toBe(event);
+    }
+    expect(parsePhoneCaptureBody({ phoneNumber: '9876543210', event: 'closed', errorCode: 'x' }, null)?.errorCode).toBeNull();
+  });
+
+  it('sends the device, and falls back to the old function for status events', async () => {
+    const rpc = vi
+      .fn()
+      .mockResolvedValueOnce({ error: { code: 'PGRST202', message: 'not found' } })
+      .mockResolvedValueOnce({ error: null });
+    const ok = await recordPhoneAttempt({ anonymousId: ANON, phone: '+919876543210', event: 'entered', device: 'iPhone' }, { rpc } as any);
+    expect(ok).toBe(true);
+    expect(rpc.mock.calls[0][1]).toMatchObject({ p_device: 'iPhone' });
+    expect(rpc.mock.calls[1][1]).not.toHaveProperty('p_device');
+
+    const signalRpc = vi.fn().mockResolvedValue({ error: { code: 'PGRST202', message: 'not found' } });
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    expect(await recordPhoneAttempt({ anonymousId: ANON, phone: '+919876543210', event: 'closed' }, { rpc: signalRpc } as any)).toBe(false);
+    expect(signalRpc).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('describeUserAgent', () => {
+  it('names the device and in-app browsers', () => {
+    expect(
+      describeUserAgent('Mozilla/5.0 (Linux; Android 13; SM-A146B Build/TP1A; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/129.0 Mobile Safari/537.36 Instagram 350.0.0'),
+    ).toEqual({ device: 'Android phone', browser: 'Instagram in-app browser' });
+    expect(
+      describeUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1'),
+    ).toEqual({ device: 'iPhone', browser: 'Safari' });
+    expect(
+      describeUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36'),
+    ).toEqual({ device: 'Desktop', browser: 'Chrome' });
+    expect(describeUserAgent(null)).toEqual({ device: null, browser: null });
   });
 });
 

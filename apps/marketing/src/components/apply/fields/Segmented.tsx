@@ -2,6 +2,7 @@
 
 import { Box, ToggleButton, ToggleButtonGroup, Typography } from '@neram/ui';
 import { tokens as t } from '@/design-system';
+import { DESK } from '../shell/density';
 
 export interface SegmentedOption<T extends string> {
   value: T;
@@ -34,7 +35,7 @@ export default function Segmented<T extends string>({
   const labelId = `${id}-label`;
   return (
     <Box>
-      <Typography id={labelId} component="p" sx={{ m: 0, mb: 1, fontSize: 15, fontWeight: 600, lineHeight: 1.35, color: t.ink }}>
+      <Typography id={labelId} component="p" sx={{ m: 0, mb: 1, fontSize: 15, fontWeight: 600, lineHeight: 1.35, color: t.ink, [DESK]: { mb: 0.75, fontSize: 14 } }}>
         {label}
       </Typography>
       <ToggleButtonGroup

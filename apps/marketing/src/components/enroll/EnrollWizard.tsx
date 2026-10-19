@@ -33,6 +33,10 @@ import PaymentDetailsStep from './PaymentDetailsStep';
 import ReviewStep from './ReviewStep';
 import SuccessScreen from './SuccessScreen';
 import ApplicationDetailsDialog from './ApplicationDetailsDialog';
+import PlanChoiceStep from './PlanChoiceStep';
+import PayStep from './PayStep';
+import PaymentSubmittedScreen from './PaymentSubmittedScreen';
+import { rupees, istTodayKey, addDays, type StudentPayLinkData, type PaymentSubmission } from './student-pay-types';
 import { useEnrollmentProgress } from '@/hooks/useEnrollmentProgress';
 import type {
   PersonalInfoData,
@@ -43,6 +47,8 @@ import type {
 import { DEFAULT_FORM_DATA } from '@/components/apply/types';
 
 const STEP_LABELS = ['Personal Details', 'Academic Details', 'Payment Details', 'Review & Confirm'];
+/** Student-pays links: the student chooses the plan and pays on the last step. */
+const PAY_STEP_LABELS = ['Your details', 'Your studies', 'Choose plan', 'Pay'];
 
 interface LinkData {
   token: string;
@@ -68,6 +74,26 @@ interface LinkData {
   forAccount?: boolean;
   /** That number with the middle hidden, e.g. 90******77. */
   maskedPhone?: string | null;
+  paymentScheme?: 'full' | 'installment' | null;
+  balanceDueDate?: string | null;
+  linkStatus?: 'active' | 'payment_submitted';
+  paymentMode?: 'recorded' | 'student_pays';
+  offer?: StudentPayLinkData['offer'];
+  payee?: StudentPayLinkData['payee'];
+  paymentNote?: string;
+  rejectionReason?: string | null;
+  prefill?: StudentPayLinkData['prefill'];
+}
+
+/** The fee line on the sign-in card: what was paid, or what there is to pay. */
+function feeSummary(link: LinkData): string {
+  if (link.paymentMode === 'student_pays' && link.offer) {
+    const o = link.offer;
+    return o.allowsInstallments && o.installment1
+      ? `Pay in full ${rupees(o.fullAmount)}, or ${rupees(o.installment1)} now and ${rupees(o.installment2)} later`
+      : `Fee: ${rupees(o.fullAmount)}`;
+  }
+  return `Fee: ${rupees(link.finalFee)} | Paid: ${rupees(link.amountPaid)}`;
 }
 
 /** The app hosts register-user, verify-phone and adopt-account for every site. */
@@ -128,7 +154,10 @@ export default function EnrollWizard() {
   const initializedFromRestore = useRef(false);
 
   // Token validation state
-  const [tokenStatus, setTokenStatus] = useState<'loading' | 'valid' | 'invalid' | 'expired' | 'used'>('loading');
+  const [tokenStatus, setTokenStatus] = useState<'loading' | 'valid' | 'invalid' | 'expired' | 'used' | 'submitted'>('loading');
+  // Student-pays: the payment the student submitted, waiting for staff.
+  const [submission, setSubmission] = useState<PaymentSubmission | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [tokenError, setTokenError] = useState<string>('');
   const [linkData, setLinkData] = useState<LinkData | null>(null);
   const [usedLinkData, setUsedLinkData] = useState<UsedLinkData | null>(null);
@@ -279,6 +308,36 @@ export default function EnrollWizard() {
     }
   }, [user, linkData]);
 
+  // Student-pays links: fill blanks from the demo the student booked, and
+  // start the payment on UPI with today's date. Never overwrites an answer.
+  const prefilledFromDemo = useRef(false);
+  useEffect(() => {
+    if (!linkData || linkData.paymentMode !== 'student_pays' || prefilledFromDemo.current) return;
+    prefilledFromDemo.current = true;
+    const p = linkData.prefill;
+    setFormData((prev) => {
+      const next = { ...prev, personal: { ...prev.personal }, location: { ...prev.location }, academic: { ...prev.academic }, payment: { ...prev.payment } };
+      if (p) {
+        if (!next.personal.email && p.email) next.personal.email = p.email;
+        if (!next.personal.fatherName && p.fatherName) next.personal.fatherName = p.fatherName;
+        if (!next.personal.parentPhone && p.parentPhone) next.personal.parentPhone = p.parentPhone;
+        if (!next.location.city && p.city) next.location.city = p.city;
+        if (!next.academic.targetExamYear && p.targetExamYear) next.academic.targetExamYear = p.targetExamYear;
+        if (!next.academic.applicantCategory && p.currentClass) {
+          next.academic.applicantCategory = 'school_student' as any;
+          next.academic.schoolStudentData = {
+            ...(next.academic.schoolStudentData || { current_class: '', school_name: '', board: '' }),
+            current_class: p.currentClass,
+          } as any;
+        }
+      }
+      if (!next.payment.paymentMethod || next.payment.paymentMethod === 'cash') next.payment.paymentMethod = 'upi_direct';
+      if (!next.payment.paymentDate || next.payment.paymentDate > istTodayKey()) next.payment.paymentDate = istTodayKey();
+      if (!linkData.offer?.allowsInstallments) next.payment.paymentType = 'full';
+      return next;
+    });
+  }, [linkData]);
+
   // Auto-detect phone verified from Firebase (Fix 2)
   useEffect(() => {
     if (user && linkData && !phoneVerified) {
@@ -342,6 +401,14 @@ export default function EnrollWizard() {
           setTokenStatus('invalid');
         }
         setTokenError(data.error || 'Invalid link');
+        clearProgress();
+        return;
+      }
+
+      if (data.data?.linkStatus === 'payment_submitted') {
+        setLinkData(data.data);
+        setSubmission(data.data.submission || null);
+        setTokenStatus('submitted');
         clearProgress();
         return;
       }
@@ -448,12 +515,15 @@ export default function EnrollWizard() {
           paymentMethod: formData.payment.paymentMethod,
           transactionReference: formData.payment.transactionReference,
           paymentProofUrl: formData.payment.paymentProofUrl,
+          // Student-pays: the plan. The amount is the server's, never sent.
+          scheme: formData.payment.paymentType,
         }),
       });
 
       const data = await res.json();
 
       if (!res.ok) {
+        setFieldErrors(data.fieldErrors || {});
         // A demo link opened with a different, established account: nothing was
         // written. Offer to switch to the demo number (progress is kept).
         if (data.code === 'WRONG_ACCOUNT') {
@@ -472,6 +542,15 @@ export default function EnrollWizard() {
 
       // Clear saved progress on success
       clearProgress();
+      setFieldErrors({});
+
+      // Student-pays: a claim waiting for staff, not an enrolment yet.
+      if (data.data?.status === 'payment_submitted') {
+        setSubmission(data.data);
+        setTokenStatus('submitted');
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
 
       // Invalidate application status so Header re-fetches and shows "Go to App"
       invalidateApplicationStatus();
@@ -622,6 +701,10 @@ export default function EnrollWizard() {
         </Typography>
       </Container>
     );
+  }
+
+  if (tokenStatus === 'submitted' && submission) {
+    return <PaymentSubmittedScreen studentName={formData.personal.firstName || linkData?.studentName || null} submission={submission} />;
   }
 
   if (tokenStatus === 'invalid') {
@@ -1076,9 +1159,7 @@ export default function EnrollWizard() {
             <Typography variant="body2">
               Course: {linkData.courseName || linkData.interestCourse?.toUpperCase()}
             </Typography>
-            <Typography variant="body2">
-              Fee: ₹{Number(linkData.finalFee).toLocaleString('en-IN')} | Paid: ₹{Number(linkData.amountPaid).toLocaleString('en-IN')}
-            </Typography>
+            <Typography variant="body2">{feeSummary(linkData)}</Typography>
           </Paper>
 
           <Button
@@ -1165,9 +1246,7 @@ export default function EnrollWizard() {
               <Typography variant="body2">
                 Course: {linkData.courseName || linkData.interestCourse?.toUpperCase()}
               </Typography>
-              <Typography variant="body2">
-                Fee: ₹{Number(linkData.finalFee).toLocaleString('en-IN')} | Paid: ₹{Number(linkData.amountPaid).toLocaleString('en-IN')}
-              </Typography>
+              <Typography variant="body2">{feeSummary(linkData)}</Typography>
             </Paper>
           )}
 
@@ -1227,17 +1306,31 @@ export default function EnrollWizard() {
   // MAIN FORM
   // ============================================
 
+  const studentPays = linkData?.paymentMode === 'student_pays' && !!linkData.offer && !!linkData.payee;
+  const stepLabels = studentPays ? PAY_STEP_LABELS : STEP_LABELS;
+  const payScheme: 'full' | 'installment' =
+    formData.payment.paymentType === 'installment' && linkData?.offer?.allowsInstallments ? 'installment' : 'full';
+  const payAmount = linkData?.offer ? (payScheme === 'installment' ? linkData.offer.installment1 ?? 0 : linkData.offer.fullAmount) : 0;
+
   return (
     <Container maxWidth="md" sx={{ py: { xs: 2, md: 4 } }}>
       {/* Header */}
       <Box mb={3}>
-        <Typography variant="h5" fontWeight={700}>
-          Complete Your Enrollment
+        <Typography variant="h5" component="h1" fontWeight={700}>
+          {studentPays ? 'Join Neram Classes' : 'Complete Your Enrollment'}
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Fill in your details to complete enrollment at Neram Classes.
+          {studentPays
+            ? 'Check your details, choose a plan and pay. It takes about 3 minutes.'
+            : 'Fill in your details to complete enrollment at Neram Classes.'}
         </Typography>
       </Box>
+
+      {studentPays && linkData?.rejectionReason && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          We could not confirm your last payment: {linkData.rejectionReason} Please check the reference number and submit again.
+        </Alert>
+      )}
 
       {/* Resume banner */}
       {isResuming && (
@@ -1268,7 +1361,7 @@ export default function EnrollWizard() {
           }
           onClose={dismissResume}
         >
-          Resuming from Step {(restoredState?.currentStep ?? 0) + 1}: {STEP_LABELS[restoredState?.currentStep ?? 0]}. Your previous progress has been restored.
+          Resuming from Step {(restoredState?.currentStep ?? 0) + 1}: {stepLabels[restoredState?.currentStep ?? 0]}. Your previous progress has been restored.
         </Alert>
       )}
 
@@ -1289,7 +1382,7 @@ export default function EnrollWizard() {
         />
       ) : (
         <Stepper activeStep={currentStep} sx={{ mb: 4 }}>
-          {STEP_LABELS.map((label, index) => (
+          {stepLabels.map((label, index) => (
             <Step
               key={label}
               completed={index < currentStep}
@@ -1310,7 +1403,7 @@ export default function EnrollWizard() {
       {/* Step title on mobile */}
       {isMobile && (
         <Typography variant="subtitle2" color="text.secondary" mb={2}>
-          Step {currentStep + 1} of 4: {STEP_LABELS[currentStep]}
+          Step {currentStep + 1} of 4: {stepLabels[currentStep]}
         </Typography>
       )}
 
@@ -1369,7 +1462,45 @@ export default function EnrollWizard() {
             updateAcademic={updateAcademicData}
           />
         )}
-        {currentStep === 2 && (
+        {currentStep === 2 && studentPays && (
+          <PlanChoiceStep
+            offer={linkData!.offer!}
+            scheme={payScheme}
+            onChange={(scheme) => updatePaymentData({ paymentType: scheme })}
+            accessUntil={linkData!.payee!.accessUntilLabel}
+            payeeName={linkData!.payee!.payeeName}
+          />
+        )}
+        {currentStep === 3 && studentPays && (
+          <PayStep
+            amount={payAmount}
+            scheme={payScheme}
+            balance={payScheme === 'installment' ? linkData!.offer!.installment2 : null}
+            balanceDueDate={
+              payScheme === 'installment'
+                ? addDays(formData.payment.paymentDate || istTodayKey(), linkData!.offer!.balanceDueDays || 45)
+                : null
+            }
+            payee={linkData!.payee!}
+            paymentNote={linkData!.paymentNote || ''}
+            token={linkData!.token}
+            payment={formData.payment}
+            updatePayment={(d) => {
+              updatePaymentData(d);
+              const keys = Object.keys(d);
+              if (keys.some((k) => fieldErrors[k])) {
+                setFieldErrors((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => !keys.includes(k))));
+              }
+            }}
+            termsAccepted={termsAccepted}
+            setTermsAccepted={setTermsAccepted}
+            phoneVerified={isPhoneCurrentlyVerified}
+            onSubmit={handleSubmit}
+            submitting={submitting}
+            fieldErrors={fieldErrors}
+          />
+        )}
+        {currentStep === 2 && !studentPays && (
           <PaymentDetailsStep
             payment={formData.payment}
             updatePayment={updatePaymentData}
@@ -1377,7 +1508,7 @@ export default function EnrollWizard() {
             token={linkData!.token}
           />
         )}
-        {currentStep === 3 && (
+        {currentStep === 3 && !studentPays && (
           <ReviewStep
             formData={formData}
             linkData={linkData!}

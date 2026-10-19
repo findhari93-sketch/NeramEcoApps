@@ -14,7 +14,10 @@ import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
 import TodayIcon from '@mui/icons-material/Today';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
+import ChatBubbleOutlineIcon from '@mui/icons-material/ChatBubbleOutline';
 import { describeDue, formatIstDate, humanizeKey } from '@/lib/ops-format';
+import { aintraSessionFromNotes, examYearLabel, followUpKindLabel, followUpSourceLabel } from '@/lib/follow-up-source';
 import { StatusChip, FOCUS_RING, TARGET_44 } from '@/components/ops/OpsUi';
 
 export interface FollowUp {
@@ -40,6 +43,10 @@ export interface FollowUp {
   demo_registration_id: string | null;
   interest_level: 'hot' | 'warm' | 'cold' | null;
   flags: string[] | null;
+  exam_year?: number | null;
+  exam_year_source?: string | null;
+  lifecycle_status?: string | null;
+  source?: string | null;
 }
 
 /** WhatsApp link: the last ten digits get the 91 prefix. */
@@ -69,11 +76,14 @@ export default function FollowUpRow({
   now,
   onLogOutcome,
   onSendLink,
+  onClose,
 }: {
   item: FollowUp;
   now: Date;
   onLogOutcome?: () => void;
   onSendLink?: () => void;
+  /** Close a request that has no account (no call to log against). */
+  onClose?: () => void;
 }) {
   const due = describeDue(item.due_at, now);
   const overdue = item.overdue || due.tone === 'overdue';
@@ -82,6 +92,13 @@ export default function FollowUpRow({
     ? (LIFECYCLE_STAGE_LABELS as Record<string, string>)[item.lifecycle_stage] || humanizeKey(item.lifecycle_stage)
     : null;
   const attempts = item.attempt_count || 0;
+  const examLabel = examYearLabel(item.exam_year, item.exam_year_source);
+  const sourceLabel = followUpSourceLabel({
+    query_type: item.query_type,
+    source: item.source,
+    assigned_by_staff: !item.query_type && !item.source && item.status === 'scheduled',
+  });
+  const chatSession = aintraSessionFromNotes(item.notes);
 
   return (
     <Paper
@@ -122,6 +139,7 @@ export default function FollowUpRow({
         </Typography>
         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
           {stageLabel && <StatusChip icon={PersonOutlineIcon} label={stageLabel} />}
+          {examLabel && <StatusChip icon={SchoolOutlinedIcon} label={examLabel} />}
           {!item.user_id && <StatusChip icon={PersonOutlineIcon} label="No account" tone="warning" />}
           {item.interest_level && (
             <StatusChip
@@ -159,17 +177,31 @@ export default function FollowUpRow({
       <Box sx={{ minWidth: 0 }}>
         <Label>Request</Label>
         <Typography variant="body2" fontWeight={600}>
-          {item.query_type === 'post_demo'
-            ? 'After demo'
-            : item.query_type === 'demo_rebook'
-              ? 'Rebook demo'
-              : item.query_type
-                ? humanizeKey(item.query_type)
-                : 'Callback'}
+          {followUpKindLabel(item.query_type)}
           <Typography component="span" variant="body2" color="text.secondary">
             {`, ${humanizeKey(item.status)}`}
           </Typography>
         </Typography>
+        {sourceLabel && (
+          <Typography variant="body2" color="text.secondary">
+            From: {sourceLabel}
+            {chatSession && (
+              <>
+                {', '}
+                <Link href={`/aintra-inbox?c=${encodeURIComponent(chatSession)}&range=all`}>
+                  <Typography
+                    component="span"
+                    variant="body2"
+                    sx={{ color: 'primary.main', textDecoration: 'underline', textUnderlineOffset: 2, display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
+                  >
+                    <ChatBubbleOutlineIcon aria-hidden sx={{ fontSize: 14 }} />
+                    open the chat
+                  </Typography>
+                </Link>
+              </>
+            )}
+          </Typography>
+        )}
         {item.demo_registration_id && (
           <Link href={`/demo-classes?id=${item.demo_registration_id}`}>
             <Typography
@@ -181,7 +213,7 @@ export default function FollowUpRow({
             </Typography>
           </Link>
         )}
-        {item.notes && (
+        {item.notes && !chatSession && (
           <Typography
             variant="body2"
             color="text.secondary"
@@ -251,6 +283,17 @@ export default function FollowUpRow({
             sx={{ ...TARGET_44, ...FOCUS_RING, textTransform: 'none', flex: { xs: 1, md: 'none' } }}
           >
             Log outcome
+          </Button>
+        )}
+        {onClose && (
+          <Button
+            variant="outlined"
+            color="inherit"
+            onClick={onClose}
+            aria-label={`Close the request from ${name}`}
+            sx={{ ...TARGET_44, ...FOCUS_RING, textTransform: 'none', flex: { xs: 1, md: 'none' } }}
+          >
+            Close
           </Button>
         )}
         {onSendLink && (

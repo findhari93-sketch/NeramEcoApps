@@ -764,7 +764,7 @@ export interface PostEnrollmentDetails extends Timestamps {
 // DIRECT ENROLLMENT LINKS (migration 20260308)
 // ============================================
 
-export type DirectEnrollmentLinkStatus = 'active' | 'used' | 'expired' | 'cancelled';
+export type DirectEnrollmentLinkStatus = 'active' | 'payment_submitted' | 'used' | 'expired' | 'cancelled';
 
 /**
  * Direct enrollment links - admin-generated links for students who paid directly
@@ -820,6 +820,68 @@ export interface DirectEnrollmentLink extends Timestamps {
   // Regeneration tracking
   regenerated_from: string | null;
   regenerated_to: string | null;
+
+  // Who it is for (migration 20261129090100)
+  user_id: string | null;
+  demo_registration_id: string | null;
+  parent_phone: string | null;
+
+  // Payment plan and sharing (migration 20261207090000)
+  payment_scheme: DirectEnrollmentPaymentScheme;
+  installment_2_amount: number | null;
+  installment_2_due_date: string | null;
+  last_shared_at: string | null;
+  share_count: number;
+
+  // Student pays (migration 20261213090000). 'recorded' = staff already got
+  // the money; 'student_pays' = the student picks a plan and pays on the link.
+  payment_mode?: DirectEnrollmentPaymentMode;
+  fee_structure_id?: string | null;
+  offer_full_amount?: number | null;
+  offer_installment_1?: number | null;
+  offer_installment_2?: number | null;
+  offer_balance_due_days?: number | null;
+  chosen_scheme?: DirectEnrollmentPaymentScheme | null;
+  submitted_amount?: number | null;
+  submitted_utr?: string | null;
+  submitted_method?: 'upi_direct' | 'bank_transfer' | null;
+  submitted_paid_on?: string | null;
+  submitted_proof_url?: string | null;
+  submitted_form?: Record<string, unknown> | null;
+  submitted_user_id?: string | null;
+  submitted_at?: string | null;
+  verified_by?: string | null;
+  verified_at?: string | null;
+  rejection_reason?: string | null;
+  rejected_at?: string | null;
+}
+
+export type DirectEnrollmentPaymentMode = 'recorded' | 'student_pays';
+
+export type DirectEnrollmentPaymentScheme = 'full' | 'installment';
+
+export type DirectEnrollmentLinkEventKind =
+  | 'created'
+  | 'updated'
+  | 'copied'
+  | 'emailed'
+  | 'email_failed'
+  | 'whatsapp_opened'
+  | 'whatsapp_sent'
+  | 'whatsapp_failed'
+  | 'cancelled'
+  | 'merged'
+  | 'payment_submitted'
+  | 'payment_verified'
+  | 'payment_rejected';
+
+export interface DirectEnrollmentLinkEvent {
+  id: string;
+  link_id: string;
+  kind: DirectEnrollmentLinkEventKind;
+  actor_id: string | null;
+  meta: Record<string, unknown>;
+  created_at: string;
 }
 
 // ============================================
@@ -2670,6 +2732,10 @@ export type ProgramType = 'year_long' | 'crash_course';
 export type NotificationEventType =
   | 'new_onboarding'
   | 'new_signup'
+  // A student paid on a student-pays enrolment link; staff verify (migration 20261213090000)
+  | 'payment_to_verify'
+  // Someone stuck at phone sign-in for 10+ minutes (migration 20261211090000)
+  | 'phone_stuck'
   // Fee checks and second installments (migration 20261204090000)
   | 'fee_details_check'
   | 'fee_installment_reminder'
@@ -3449,6 +3515,10 @@ export interface UserJourneyListOptions {
   examYearMax?: number;
   /** 'firebase' (default Leads list), 'microsoft' (Microsoft-only people), 'all'. */
   identity?: 'firebase' | 'microsoft' | 'all';
+  /** Only people whose exam year came from this source ('signup' = still to ask). */
+  examYearSource?: 'batch' | 'stated' | 'signup';
+  /** Parent accounts are hidden unless this is true (migration 20261209090000). */
+  includeGuardians?: boolean;
   limit?: number;
   offset?: number;
   orderBy?: string;
@@ -3501,6 +3571,60 @@ export interface UserLifecycleColumns {
   exam_year?: number | null;
   /** batch | stated | signup. 'signup' means estimated from the sign-up date. */
   exam_year_source?: 'batch' | 'stated' | 'signup' | null;
+  /** A parent account, kept out of People and Leads (migration 20261209090000). */
+  is_guardian_account?: boolean;
+  /** Parents of this person, added by the admin People API (not a view column). */
+  guardians?: GuardianSummary[];
+}
+
+/** One parent or guardian of a student, from user_guardian_links or nexus_parent_links. */
+export interface GuardianSummary {
+  /** user_guardian_links.id, or null for a Nexus parent login link. */
+  link_id: string | null;
+  guardian_user_id: string;
+  student_user_id: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  relationship: 'parent' | 'guardian' | 'other';
+  source: 'demo' | 'enrolment' | 'staff' | 'nexus';
+}
+
+/** A parent account no child is linked to yet, with the demo it booked. */
+export interface UnlinkedGuardianAccount {
+  user_id: string;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  created_at: string;
+  /** The child's name as typed on the demo booking, to find the student. */
+  demo_student_name: string | null;
+  demo_date: string | null;
+}
+
+/** One run of run_people_auto_archive() (migration 20261209090100). */
+export interface PeopleAutoArchiveRun {
+  id: string;
+  ran_at: string;
+  triggered_by: string;
+  archived_ids: string[];
+  restored_ids: string[];
+  archived: number;
+  restored: number;
+  skipped: boolean;
+}
+
+/** One person auto_archive_candidates() would archive now. */
+export interface AutoArchiveCandidate {
+  user_id: string;
+  name: string | null;
+  email: string | null;
+  exam_year: number | null;
+  exam_year_source: 'batch' | 'stated' | 'signup' | null;
+  lifecycle_stage: LifecycleStage;
+  created_at: string;
+  last_activity_at: string | null;
+  rule: 'earlier_season' | 'long_quiet';
 }
 
 /** One row of crm_people_breakdown(): a count per combination. */
@@ -3784,6 +3908,9 @@ export interface QuestionChangeRequestDisplay extends QuestionChangeRequest {
 // Phase 3: Exam Profile Onboarding (migration 20260304)
 export type NataExamStatus = 'attempted' | 'applied_waiting' | 'planning_to_apply' | 'not_interested';
 
+/** Every surface that can record a stated exam year (user_exam_profiles.planning_year_source). */
+export type ExamYearSource = 'tools_sheet' | 'aintra' | 'demo' | 'apply' | 'staff' | 'exam_setup';
+
 export interface UserExamProfile {
   id: string;
   user_id: string;
@@ -3791,6 +3918,9 @@ export interface UserExamProfile {
   attempt_count: number;
   next_exam_date: string | null;
   planning_year: number | null;
+  /** Where planning_year came from (20261209090200). Null for rows saved before. */
+  planning_year_source?: ExamYearSource | null;
+  planning_year_set_at?: string | null;
   qb_onboarding_completed: boolean;
   exam_details_completed: boolean;
   exam_details_completed_at: string | null;

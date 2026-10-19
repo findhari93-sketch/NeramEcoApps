@@ -37,6 +37,7 @@ import {
   type RuleNumberKey,
 } from '@/lib/ops-format';
 import { OpsPageHeader, OpsSkeleton, FOCUS_RING, TARGET_44 } from '@/components/ops/OpsUi';
+import PaymentDetailsCard from '@/components/settings/PaymentDetailsCard';
 
 const NUMBER_FIELDS: Array<{ key: RuleNumberKey; label: string; help: string }> = [
   {
@@ -72,7 +73,8 @@ function toForm(rules: LifecycleRules): RulesFormValues {
   };
 }
 
-function toRules(v: RulesFormValues): LifecycleRules {
+// Auto-archive is switched on the People page; saving keeps its stored value.
+function toRules(v: RulesFormValues): Omit<LifecycleRules, 'auto_archive_enabled' | 'earlier_season_idle_days' | 'follow_up_expiry_enabled'> {
   return {
     student_quiet_days: Number(v.student_quiet_days),
     lead_archive_days: Number(v.lead_archive_days),
@@ -217,7 +219,7 @@ export default function SettingsPage() {
 
   return (
     <Box sx={{ maxWidth: 960 }}>
-      <OpsPageHeader icon={SettingsIcon} title="Settings" subtitle="Rules for lifecycle suggestions, and who gets staff notifications." />
+      <OpsPageHeader icon={SettingsIcon} title="Settings" subtitle="Rules for lifecycle suggestions, who gets staff notifications, and where students pay." />
 
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: 'minmax(0,1fr) 280px' }, alignItems: 'start' }}>
         <Paper variant="outlined" sx={{ borderRadius: 2, overflow: 'hidden' }}>
@@ -470,6 +472,10 @@ export default function SettingsPage() {
             </Box>
             <KeyboardArrowRightIcon aria-hidden color="action" />
           </Paper>
+        </Box>
+
+        <Box sx={{ gridColumn: { md: '1 / 2' } }}>
+          <PaymentDetailsCard />
         </Box>
       </Box>
     </Box>

@@ -44,6 +44,11 @@ vi.mock('@/lib/funnel-tracker', () => ({ trackTaxonomyEvent: vi.fn() }));
 vi.mock('@/lib/attribution', () => ({ touchAttribution: (pageCode?: string) => ({ page_code: pageCode ?? null }) }));
 
 import DemoBookingCard from './DemoBookingCard';
+import { examYearChoices } from '@neram/database/academic-year';
+
+/** This season's exam year, and the apply form's cohort code for it. */
+const YEAR = examYearChoices()[0];
+const COHORT = `${YEAR - 1}-${String(YEAR % 100).padStart(2, '0')}`;
 
 const VERIFIED = { id: 'u1', name: 'Priya Devi', email: 'priya@gmail.com', phone: '+919876543210', phone_verified: true, email_verified: true };
 const UNVERIFIED = { ...VERIFIED, phone: null, phone_verified: false };
@@ -115,7 +120,7 @@ describe('DemoBookingCard, step 2', () => {
   });
 
   it('signed in and verified: name pre-filled, phone verified, only class and language left', async () => {
-    startOnStep2();
+    startOnStep2({ examYear: YEAR });
     authState.user = { uid: 'g1', name: 'Priya Devi', email: 'priya@gmail.com' };
     ensureAccount.mockResolvedValue(VERIFIED);
     render(<DemoBookingCard />);
@@ -139,7 +144,7 @@ describe('DemoBookingCard, step 2', () => {
   });
 
   it('signed in without a verified phone: asks for the OTP once and blocks the request', async () => {
-    startOnStep2({ name: 'Priya' });
+    startOnStep2({ name: 'Priya', examYear: YEAR });
     authState.user = { uid: 'g1', name: 'Priya', email: null };
     ensureAccount.mockResolvedValueOnce(UNVERIFIED).mockResolvedValue(VERIFIED);
     render(<DemoBookingCard />);
@@ -157,7 +162,10 @@ describe('DemoBookingCard, step 2', () => {
     window.localStorage.setItem(
       'neram_application_draft',
       JSON.stringify({
-        formData: { personal: { firstName: 'Kiran' }, academic: { applicantCategory: 'school_student', schoolStudentData: { current_class: '12' } } },
+        formData: {
+          personal: { firstName: 'Kiran' },
+          academic: { applicantCategory: 'school_student', targetExamYear: COHORT, schoolStudentData: { current_class: '12' } },
+        },
         savedAt: new Date().toISOString(),
       }),
     );
@@ -175,9 +183,28 @@ describe('DemoBookingCard, step 2', () => {
     const name = (await screen.findByLabelText(/Student name/)) as HTMLInputElement;
     expect(name.value).toBe('Kiran');
     expect(screen.getByRole('button', { name: /Class 12/ }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: `Exam year ${YEAR}` }).getAttribute('aria-pressed')).toBe('true');
 
     fireEvent.click(screen.getByRole('button', { name: /Request my free demo/ }));
     await waitFor(() => expect(submitDemoRequest).toHaveBeenCalled());
     expect(submitDemoRequest.mock.calls[0][1]).toEqual({ page_code: 'DC-APL' });
+  });
+
+  it('the exam year is required: the request stays blocked until one is picked', async () => {
+    startOnStep2({ name: 'Priya' });
+    authState.user = { uid: 'g1', name: 'Priya', email: null };
+    ensureAccount.mockResolvedValue(VERIFIED);
+    submitDemoRequest.mockResolvedValue({ ok: true, request: { ref: 'DEMO-2', status: 'pending' } });
+    render(<DemoBookingCard />);
+    await screen.findByText('Verified');
+    const send = screen.getByRole('button', { name: /Request my free demo/ }) as HTMLButtonElement;
+    expect(send.disabled).toBe(true);
+    expect(screen.getByText('Pick your exam year to send the request.')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: `Exam year ${YEAR + 1}` }));
+    expect(send.disabled).toBe(false);
+    fireEvent.click(send);
+    await waitFor(() => expect(submitDemoRequest).toHaveBeenCalled());
+    expect(submitDemoRequest.mock.calls[0][0].examYear).toBe(YEAR + 1);
   });
 });

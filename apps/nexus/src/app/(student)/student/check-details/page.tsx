@@ -26,10 +26,13 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import ReportProblemOutlinedIcon from '@mui/icons-material/ReportProblemOutlined';
 import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import PaymentsOutlinedIcon from '@mui/icons-material/PaymentsOutlined';
+import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { formatDueDate, formatRupees, istToday, OFFICE_PAYMENT_METHODS, paymentMethodLabel } from '@neram/database/fee-plan';
 import { useNexusAuthContext } from '@/hooks/useNexusAuth';
 import { useAuthSWR } from '@/lib/nexus-swr';
 import ResponsiveSheet from '@/components/study-materials/recordings/ResponsiveSheet';
+import { payBalanceUrl } from '@/lib/marketing-links';
 import ProfileDetailsFields, {
   EMPTY_PROFILE_DETAILS,
   lookupPincodePlace,
@@ -44,6 +47,7 @@ import {
   correctionRowErrors,
   installmentChip,
   newCorrectionRow,
+  payNowAmount,
   planLabel,
   statusBanner,
   type CorrectionRowInput,
@@ -241,6 +245,11 @@ export default function CheckDetailsPage() {
   }
 
   const fees = page.fees;
+  const payAmount = payNowAmount(fees);
+  const payHref = payBalanceUrl({
+    nexusOrigin: typeof window === 'undefined' ? null : window.location.origin,
+    configured: process.env.NEXT_PUBLIC_MARKETING_URL,
+  });
 
   const answerButtons = (
     <Box sx={{ display: 'flex', gap: 1, flexDirection: { xs: 'row', md: 'row' } }}>
@@ -317,6 +326,29 @@ export default function CheckDetailsPage() {
           </Typography>
         </Box>
         {fees ? <FeeSummary fees={fees} /> : null}
+        {payAmount !== null && (
+          <Box sx={{ mt: 2 }}>
+            <Button
+              component="a"
+              href={payHref}
+              target="_blank"
+              rel="noopener noreferrer"
+              variant="contained"
+              size="large"
+              startIcon={<PaymentsOutlinedIcon aria-hidden />}
+              endIcon={<OpenInNewIcon aria-hidden sx={{ fontSize: 18 }} />}
+              aria-label={`Pay ${formatRupees(payAmount)} now (opens in a new tab)`}
+              data-testid="pay-balance-now"
+              sx={{ minHeight: 48, width: { xs: '100%', sm: 'auto' }, fontWeight: 800, fontSize: '1rem' }}
+            >
+              Pay {formatRupees(payAmount)} now
+            </Button>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              Opens the Neram Classes pay page. Sign in there with your registered phone number, pay by UPI or bank transfer,
+              and send the UTR. The office checks it and emails your receipt.
+            </Typography>
+          </Box>
+        )}
       </Paper>
 
       {/* ── Your details ── */}

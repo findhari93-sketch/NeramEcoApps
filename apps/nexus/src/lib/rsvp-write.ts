@@ -7,6 +7,7 @@
  */
 import { notifyRsvpToTeacher } from '@/lib/timetable-notifications';
 import { isRsvpReasonCode, reasonRequiresNote } from '@/lib/rsvp-reasons';
+import { isMissingTable } from '@/lib/away-windows';
 
 export interface RsvpWriteInput {
   userId: string;
@@ -17,6 +18,11 @@ export interface RsvpWriteInput {
   reasonCode?: unknown;
   note?: string | null;
   wantsCatchup?: boolean;
+  /**
+   * Who said "coming". Undefined or null is the student themselves; a staff id
+   * means the office was told on the phone (api/timetable/[classId]/confirmations).
+   */
+  confirmedBy?: string | null;
 }
 
 export type RsvpWriteResult =
@@ -69,6 +75,12 @@ export async function writeRsvp(
       .eq('scheduled_class_id', input.classId)
       .eq('student_id', input.userId);
     if (error) throw error;
+    await recordConfirmation(supabase, {
+      classId: input.classId,
+      studentId: input.userId,
+      classroomId,
+      confirmedBy: input.confirmedBy ?? null,
+    });
     return { ok: true, attending: true, rsvp: null, classTitle: cls.title ?? null, classroomId };
   }
 
@@ -99,4 +111,31 @@ export async function writeRsvp(
   }
 
   return { ok: true, attending: false, rsvp: data, classTitle: cls.title ?? null, classroomId };
+}
+
+/**
+ * "I'll be there", stored as an answer.
+ *
+ * On the default-attending model a yes used to leave no trace, so a student who
+ * was asked and said yes looked the same as one who ignored the message. The
+ * office's call list (lib/attendance-confirm.ts) needs them apart.
+ *
+ * Best-effort on a missing table, like every reader of it: the app can go live
+ * before the migration lands, and a lost yes is better than a lost RSVP.
+ */
+async function recordConfirmation(
+  supabase: any,
+  input: { classId: string; studentId: string; classroomId: string; confirmedBy: string | null },
+): Promise<void> {
+  const { error } = await supabase.from('nexus_attendance_confirmations').upsert(
+    {
+      scheduled_class_id: input.classId,
+      student_id: input.studentId,
+      classroom_id: input.classroomId,
+      confirmed_at: new Date().toISOString(),
+      confirmed_by: input.confirmedBy,
+    },
+    { onConflict: 'scheduled_class_id,student_id' },
+  );
+  if (error && !isMissingTable(error)) throw error;
 }

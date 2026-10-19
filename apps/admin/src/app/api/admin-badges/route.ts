@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 import { NextResponse } from 'next/server';
-import { createAdminClient, istDayBounds } from '@neram/database';
+import { countStuckPhonePeople, createAdminClient, istDayBounds } from '@neram/database';
 import { ZERO_BADGES, badgeWindow, normalizeBadgeCounts, collectionsBadgeCount, istTodayKey } from '@/lib/admin-badges';
 import { countReviewQueue } from '@/lib/aintra-inbox/server';
 
@@ -17,13 +17,15 @@ export async function GET() {
   const supabase = createAdminClient();
   const { chatSince, followUpBefore } = badgeWindow();
   try {
-    const [{ data, error }, reviewQueue, collections] = await Promise.all([
+    const [{ data, error }, reviewQueue, collections, phoneStuck, paymentsToVerify] = await Promise.all([
       supabase.rpc('admin_badge_counts', {
         p_chat_since: chatSince,
         p_follow_up_before: followUpBefore,
       }),
       countReviewQueue(supabase),
       countCollections(supabase),
+      countStuckPhonePeople({ days: 7 }, supabase),
+      countPaymentsToVerify(supabase),
     ]);
     if (error) throw error;
     // Aintra Inbox: the badge is the Review queue (wrong or unanswered, not yet
@@ -31,6 +33,12 @@ export async function GET() {
     const counts = normalizeBadgeCounts(data);
     if (reviewQueue !== null) counts.chat_history = reviewQueue;
     counts.collections = collections;
+    // Stuck at phone sign-in: people with no progress for 10 minutes in the
+    // last 7 days, not marked done. Same rule as the phone-stuck alert.
+    counts.phone_stuck = phoneStuck ?? 0;
+    // Direct Enroll: student-pays links where the student sent a UTR that
+    // staff have not verified or rejected yet.
+    counts.direct_enrollment = paymentsToVerify;
     return NextResponse.json(counts, { headers: NO_STORE });
   } catch (rpcErr) {
     // The function ships in a migration; until it is applied in an environment,
@@ -38,26 +46,48 @@ export async function GET() {
     console.warn('[admin-badges] RPC unavailable, using per-table counts:', (rpcErr as any)?.message);
     const counts = await legacyCounts(supabase);
     counts.collections = await countCollections(supabase);
+    counts.phone_stuck = (await countStuckPhonePeople({ days: 7 }, supabase)) ?? 0;
+    counts.direct_enrollment = await countPaymentsToVerify(supabase);
     return NextResponse.json(counts, { headers: NO_STORE });
   }
 }
 
+/** Student-pays links with a submitted payment waiting for staff. 0 on any error. */
+async function countPaymentsToVerify(supabase: ReturnType<typeof createAdminClient>): Promise<number> {
+  try {
+    const { count, error } = await supabase
+      .from('direct_enrollment_links')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'payment_submitted');
+    return error ? 0 : count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 /**
- * Collections: open fee reports from students plus unpaid installments due
- * today or earlier (IST). Two head counts, kept outside the SQL function so the
- * badge works before any migration to admin_badge_counts. 0 on any error.
+ * Collections: open fee reports from students, unpaid installments due today or
+ * earlier (IST), and balance payments from the pay balance page waiting to be
+ * verified (fee_payment_claims, status pending). Head counts kept outside the
+ * SQL function so the badge works before any migration to admin_badge_counts.
+ * A failed count is 0 and never hides the others.
  */
 async function countCollections(supabase: ReturnType<typeof createAdminClient>): Promise<number> {
   try {
-    const [reports, due] = await Promise.all([
+    const [reports, due, claims] = await Promise.all([
       supabase.from('fee_correction_reports').select('id', { count: 'exact', head: true }).eq('status', 'open'),
       supabase
         .from('payment_installments')
         .select('id', { count: 'exact', head: true })
         .eq('status', 'pending')
         .lte('due_date', istTodayKey()),
+      supabase.from('fee_payment_claims').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
     ]);
-    return collectionsBadgeCount(reports.error ? 0 : reports.count, due.error ? 0 : due.count);
+    return collectionsBadgeCount(
+      reports.error ? 0 : reports.count,
+      due.error ? 0 : due.count,
+      claims.error ? 0 : claims.count,
+    );
   } catch {
     return 0;
   }

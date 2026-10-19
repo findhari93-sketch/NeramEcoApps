@@ -85,7 +85,7 @@ test.describe('Direct Enrollment API - CRUD Operations', () => {
     const payload = {
       adminId,
       studentName: 'E2E Test Student',
-      studentPhone: '9876543210',
+      studentPhone: `+919${String(Math.floor(Math.random() * 1e9)).padStart(9, '0')}`,
       studentEmail: 'e2e-test-student@example.com',
       interestCourse: 'nata',
       learningMode: 'hybrid',
@@ -123,7 +123,8 @@ test.describe('Direct Enrollment API - CRUD Operations', () => {
     expect(response.status()).toBe(400);
 
     const body = await response.json();
-    expect(body.error).toContain('Missing required fields');
+    expect(body.error).toContain('Check the highlighted fields');
+    expect(body.fieldErrors).toHaveProperty('amountPaid');
   });
 
   test('POST /api/direct-enrollment should reject empty body', async ({ request }) => {
@@ -245,7 +246,7 @@ test.describe('Direct Enrollment API - CRUD Operations', () => {
       data: {
         adminId,
         studentName: 'E2E Delete Guard Test',
-        studentPhone: '9000000001',
+        studentPhone: `+919${String(Math.floor(Math.random() * 1e9)).padStart(9, '0')}`,
         interestCourse: 'nata',
         learningMode: 'hybrid',
         totalFee: 10000,
@@ -367,7 +368,7 @@ test.describe('Direct Enrollment API - Link Regeneration', () => {
       data: {
         adminId,
         studentName: 'E2E Regeneration Test',
-        studentPhone: '9000000050',
+        studentPhone: `+919${String(Math.floor(Math.random() * 1e9)).padStart(9, '0')}`,
         interestCourse: 'nata',
         learningMode: 'hybrid',
         totalFee: 20000,
@@ -425,20 +426,23 @@ test.describe('Direct Enrollment API - Link Regeneration', () => {
     expect(body.data.status).toBe('cancelled');
   });
 
-  test('POST /api/direct-enrollment/:id/regenerate should require adminId', async ({ request }) => {
+  test('POST /api/direct-enrollment/:id/regenerate acts as the signed-in staff member, not a body adminId', async ({ request }) => {
     if (!regeneratedLinkId) {
       test.skip();
       return;
     }
 
+    // middleware.ts verifies the token and stamps the caller; no adminId is sent.
     const response = await request.post(`/api/direct-enrollment/${regeneratedLinkId}/regenerate`, {
       data: {},
       failOnStatusCode: false,
     });
-    expect(response.status()).toBe(400);
+    expect(response.status()).toBe(200);
 
     const body = await response.json();
-    expect(body.error).toContain('Admin ID');
+    expect(body.data.regenerated_from).toBe(regeneratedLinkId);
+    // Tidy up the extra link this made.
+    await request.patch(`/api/direct-enrollment/${body.data.id}`, { data: { status: 'cancelled' } });
   });
 
   test('POST /api/direct-enrollment/:id/regenerate should return 404 for non-existent link', async ({ request }) => {
@@ -483,7 +487,7 @@ test.describe('Direct Enrollment - Full Flow (Create & Verify)', () => {
       data: {
         adminId,
         studentName: 'E2E Flow Test Student',
-        studentPhone: '9988776655',
+        studentPhone: `+919${String(Math.floor(Math.random() * 1e9)).padStart(9, '0')}`,
         interestCourse: 'jee_paper2',
         learningMode: 'online_only',
         totalFee: 30000,

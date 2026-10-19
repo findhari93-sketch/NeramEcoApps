@@ -48,6 +48,30 @@ export interface DeskDetail {
   followUp: DemoFollowUpRow | null;
   /** This demo's newest follow-up, open or closed. */
   lastFollowUp: DemoFollowUpRow | null;
+  /** The student's enrolment link (active first), made from any screen. */
+  enrolmentLink?: DeskEnrolmentLink | null;
+}
+
+export interface DeskEnrolmentLink {
+  id: string;
+  status: 'active' | 'payment_submitted' | 'used' | 'expired' | 'cancelled';
+  expires_at: string;
+  created_at: string;
+  created_by_name: string | null;
+  final_fee: number | string;
+  amount_paid: number | string;
+  payment_scheme: 'full' | 'installment' | null;
+  installment_2_due_date: string | null;
+  share_count: number | null;
+  last_shared_at: string | null;
+  /** student_pays links: the offer snapshot and the last rejection, if any. */
+  payment_mode?: 'student_pays' | 'recorded' | null;
+  total_fee?: number | string | null;
+  discount_amount?: number | string | null;
+  offer_full_amount?: number | string | null;
+  offer_installment_1?: number | string | null;
+  offer_installment_2?: number | string | null;
+  rejection_reason?: string | null;
 }
 
 export type { DeskStage, DeskPerson } from './journey';

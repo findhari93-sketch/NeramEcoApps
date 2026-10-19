@@ -7,7 +7,11 @@ import {
   getDirectEnrollmentLinkById,
   updateDirectEnrollmentLink,
   deleteDirectEnrollmentLink,
+  listDirectEnrollmentLinkEvents,
+  logDirectEnrollmentLinkEvent,
 } from '@neram/database';
+import { actingAdminId } from '@/lib/fee-request';
+import { effectiveStatus, toLinkView } from '@/lib/enrolment-link-server';
 
 // GET /api/direct-enrollment/[id] - Get link details
 export async function GET(
@@ -58,13 +62,20 @@ export async function GET(
       centerName = center?.name || null;
     }
 
+    const [view, events] = await Promise.all([
+      toLinkView(link, request, supabase),
+      listDirectEnrollmentLinkEvents(id, supabase).catch(() => []),
+    ]);
+
     return NextResponse.json({
       success: true,
       data: {
-        ...link,
+        ...view,
+        status: effectiveStatus(link),
         course_name: courseName,
         batch_name: batchName,
         center_name: centerName,
+        events,
       },
     });
   } catch (error) {
@@ -137,6 +148,9 @@ export async function PATCH(
     if (adminNotes !== undefined) updateData.admin_notes = adminNotes;
 
     const link = await updateDirectEnrollmentLink(id, updateData, supabase);
+    if (status === 'cancelled' && existing.status !== 'cancelled') {
+      await logDirectEnrollmentLinkEvent(id, 'cancelled', actingAdminId(request, body), {}, supabase);
+    }
 
     return NextResponse.json({
       success: true,

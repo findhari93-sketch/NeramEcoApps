@@ -14,6 +14,8 @@ import {
   makeDemoRefCode,
   makeDemoJoinToken,
   demoPhone10,
+  isPlausibleStatedExamYear,
+  recordStatedExamYear,
   type DemoWindow,
 } from '@neram/database';
 import { verifyFirebaseToken } from '../../_lib/auth';
@@ -83,6 +85,12 @@ export async function POST(request: NextRequest) {
     const name = str(body.name, 100) || str(user?.name, 100) || str(auth.name, 100);
     if (name.length < 2) return NextResponse.json({ error: 'Please enter the student name.' }, { status: 400 });
 
+    // Required: which year they will write NATA or JEE B.Arch.
+    const examYear = Number(body.examYear);
+    if (!isPlausibleStatedExamYear(examYear)) {
+      return NextResponse.json({ error: 'Please pick the year you will write the exam.' }, { status: 400 });
+    }
+
     const currentClass = CLASSES.has(str(body.currentClass, 20)) ? str(body.currentClass, 20) : null;
     const language = LANGS.has(str(body.language, 5)) ? str(body.language, 5) : null;
     const interest = INTERESTS.has(str(body.interestCourse, 20)) ? str(body.interestCourse, 20) : null;
@@ -103,6 +111,7 @@ export async function POST(request: NextRequest) {
             email: user?.email || auth.email || null,
             phone,
             current_class: currentClass,
+            exam_year: examYear,
             interest_course: interest,
             preferred_date: date,
             preferred_window: window,
@@ -128,6 +137,8 @@ export async function POST(request: NextRequest) {
     if (!created) throw new Error('could not create demo request');
 
     await saveLeadTouch(supabase as any, 'demo_class_registrations', created.id, body);
+    // The one stated-year write path (never overwrites a batch year).
+    await recordStatedExamYear(supabase as any, auth.userId, examYear, 'demo').catch(() => undefined);
 
     // Neram Assistant pings whoever on the demo team takes new requests (the caller).
     const callers = settings.hosts.filter((h) => h.notifyNewRequests).map((h) => h.upn);

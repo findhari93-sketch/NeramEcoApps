@@ -10,6 +10,7 @@ import { useTranslations } from 'next-intl';
 import { StatStrip, tokens } from '@/design-system';
 import { SHOWCASE_COLORS, SHOWCASE_IMAGES } from './palette';
 import { AUTHORED_SECONDS, CONTAINER, HOLD_SECONDS, NARROW, type SceneProps } from './motion';
+import { DESK, DESK_SHORT } from '../shell/density';
 import ReviewScene from './scenes/ReviewScene';
 import ReviseScene from './scenes/ReviseScene';
 import PredictScene from './scenes/PredictScene';
@@ -194,12 +195,14 @@ export default function NexusShowcase({ sceneSeconds = AUTHORED_SECONDS, videoSr
         containerName: CONTAINER,
         display: 'flex',
         flexDirection: 'column',
-        gap: { xs: '18px', md: '22px' },
+        gap: '18px',
+        [DESK]: { gap: '16px' },
+        [DESK_SHORT]: { gap: '12px' },
         color: tokens.paper,
         fontFamily: tokens.fontSans,
       }}
     >
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: '14px', [DESK]: { gap: '10px' } }}>
         <Typography
           component="p"
           sx={{
@@ -223,8 +226,10 @@ export default function NexusShowcase({ sceneSeconds = AUTHORED_SECONDS, videoSr
             m: 0,
             fontFamily: tokens.fontSans,
             fontWeight: 800,
-            fontSize: 'clamp(1.75rem, 3vw, 2.5rem)',
-            lineHeight: 1.12,
+            // Sized for the laptop column: about 28px at 1422px wide, 32px at most.
+            fontSize: 'clamp(1.5rem, 0.75rem + 1.15vw, 2rem)',
+            [DESK_SHORT]: { fontSize: 'clamp(1.5rem, 0.75rem + 1.15vw, 1.75rem)' },
+            lineHeight: 1.15,
             letterSpacing: '-0.01em',
             color: tokens.paper,
             textWrap: 'balance',
@@ -238,10 +243,10 @@ export default function NexusShowcase({ sceneSeconds = AUTHORED_SECONDS, videoSr
       </Box>
 
       {!videoSrc && (
-        <Box aria-live="polite" sx={{ display: 'flex', gap: '14px', alignItems: 'flex-start', minHeight: 60 }}>
+        <Box aria-live="polite" sx={{ display: 'flex', gap: '14px', alignItems: 'flex-start', minHeight: 60, [DESK]: { gap: '12px', minHeight: 48 } }}>
           <Box
             component="span"
-            sx={{ fontFamily: tokens.fontMono, fontSize: 26, fontWeight: 700, lineHeight: 1, color: tokens.gold500, flex: 'none', pt: '2px' }}
+            sx={{ fontFamily: tokens.fontMono, fontSize: 26, fontWeight: 700, lineHeight: 1, color: tokens.gold500, flex: 'none', pt: '2px', [DESK]: { fontSize: 22 } }}
           >
             {String(scene + 1).padStart(2, '0')}
           </Box>
@@ -252,7 +257,7 @@ export default function NexusShowcase({ sceneSeconds = AUTHORED_SECONDS, videoSr
             >
               {t(`scenes.${sceneKey}.label`)}
             </Box>
-            <Box component="p" sx={{ m: 0, fontSize: 18, lineHeight: 1.4, fontWeight: 600, textWrap: 'pretty' }}>
+            <Box component="p" sx={{ m: 0, fontSize: 18, lineHeight: 1.4, fontWeight: 600, textWrap: 'pretty', [DESK]: { fontSize: 16 } }}>
               {t(`scenes.${sceneKey}.caption`)}
             </Box>
           </Box>
@@ -309,12 +314,25 @@ export default function NexusShowcase({ sceneSeconds = AUTHORED_SECONDS, videoSr
             bgcolor: tokens.navy800,
             border: `1px solid ${SHOWCASE_COLORS.windowBorder}`,
             boxShadow: tokens.shadowHeroCard,
+            // On a laptop the window is as wide as the column allows, but never so tall
+            // that the panel outgrows the screen: its width follows the window height.
+            // --nx-chrome is everything in the panel that is not the scene picture.
+            '--nx-ratio': '1.6',
+            '--nx-extra': '0px',
+            [NARROW]: { '--nx-ratio': '1.3333', '--nx-extra': '60px' },
+            [DESK]: {
+              '--nx-chrome': '470px',
+              width: 'min(100%, max(280px, calc((100dvh - var(--nx-chrome) - var(--nx-extra)) * var(--nx-ratio))))',
+              mx: 'auto',
+            },
+            [DESK_SHORT]: { '--nx-chrome': '375px' },
           }}
         >
           <Box
             aria-hidden
             sx={{
               height: 40,
+              [DESK]: { height: 36 },
               display: 'flex',
               alignItems: 'center',
               gap: '14px',
@@ -335,7 +353,7 @@ export default function NexusShowcase({ sceneSeconds = AUTHORED_SECONDS, videoSr
                     fontSize: 12,
                     fontWeight: 600,
                     px: 1,
-                    height: 40,
+                    height: '100%',
                     display: 'flex',
                     alignItems: 'center',
                     whiteSpace: 'nowrap',
@@ -480,7 +498,7 @@ export default function NexusShowcase({ sceneSeconds = AUTHORED_SECONDS, videoSr
         </Box>
       )}
 
-      <Box sx={{ display: { xs: 'none', md: 'block' } }}>
+      <Box sx={{ display: { xs: 'none', md: 'block' }, [DESK_SHORT]: { display: 'none' } }}>
         <StatStrip
           size="compact"
           maxWidth={4000}

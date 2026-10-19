@@ -294,6 +294,13 @@ export default function LoginModal({
   const recaptchaContainerRef = useRef<HTMLDivElement | null>(null);
   /** The last code sent off by itself, so a failed code is not retried in a loop. */
   const autoSubmittedOtpRef = useRef('');
+  /**
+   * The number Send OTP was last tapped for in this opening, and whether it
+   * got verified: leaving without verifying (close, skip, closing the tab) is
+   * reported against it, so staff can tell a student who stopped from a bug.
+   */
+  const sentPhoneRef = useRef<string | null>(null);
+  const phoneDoneRef = useRef(false);
 
   const showEscapeHatch = (allowEscapeHatch || !!onGetHelp) && failedAttempts >= maxAttemptsBeforeEscape;
   const fullPhone = `${dialCode}${phoneNumber}`;
@@ -320,6 +327,8 @@ export default function LoginModal({
       setPhoneInUse(null);
       setEmailNotice('');
       advancingRef.current = false;
+      sentPhoneRef.current = null;
+      phoneDoneRef.current = false;
 
       // Someone who closed "Check your inbox" earlier and is still signed in
       // with an unverified email goes back there, never straight to phone.
@@ -433,16 +442,19 @@ export default function LoginModal({
     });
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
+      // Coded, so Admin can tell our server failing from a wrong OTP.
+      const coded = (message: string, code: string) => Object.assign(new Error(message), { code });
       if (errorData.error === 'PHONE_ALREADY_EXISTS') {
-        throw new Error(
+        throw coded(
           errorData.message ||
-          'This phone number is already registered with another account. Please use a different number.'
+          'This phone number is already registered with another account. Please use a different number.',
+          'PHONE_ALREADY_EXISTS',
         );
       }
       if (errorData.error === 'PHONE_NOT_VERIFIED') {
-        throw new Error('We could not confirm this number on your account. Request a new OTP and try again.');
+        throw coded('We could not confirm this number on your account. Request a new OTP and try again.', 'neram/verify-phone-not-verified');
       }
-      throw new Error('We could not save your verified number. Please try again.');
+      throw coded('We could not save your verified number. Please try again.', `neram/verify-phone-${response.status}`);
     }
     return response.json();
   }, [apiBaseUrl]);
@@ -455,7 +467,12 @@ export default function LoginModal({
    */
   const captureQueue = useRef<Promise<void>>(Promise.resolve());
   const capturePhone = useCallback(
-    (phone: string, event: 'entered' | 'otp_sent' | 'failed', error?: { code?: string; message?: string }) => {
+    (
+      phone: string,
+      event: 'entered' | 'otp_sent' | 'failed' | 'otp_checked' | 'help' | 'closed' | 'skipped',
+      error?: { code?: string; message?: string },
+    ) => {
+      if (event === 'entered') sentPhoneRef.current = phone;
       const send = async () => {
         // Signed out, or the token cannot be read: the visitor id still files it.
         let idToken: string | undefined;
@@ -487,6 +504,39 @@ export default function LoginModal({
     },
     [apiBaseUrl],
   );
+
+  /** They walked away from a number they asked an OTP for, without verifying it. */
+  const noteLeftPhone = useCallback(
+    (how: 'closed' | 'skipped' | 'help') => {
+      if (sentPhoneRef.current && !phoneDoneRef.current) capturePhone(sentPhoneRef.current, how);
+    },
+    [capturePhone],
+  );
+
+  // Closing the tab or leaving the page mid sign-in: a beacon, since nothing
+  // can be awaited there. No token; the visitor id finds the row. pagehide,
+  // not visibilitychange: switching to the SMS app must not count.
+  useEffect(() => {
+    if (!open || typeof window === 'undefined') return;
+    const onPageHide = () => {
+      const phone = sentPhoneRef.current;
+      if (!phone || phoneDoneRef.current || typeof navigator.sendBeacon !== 'function') return;
+      try {
+        const body = JSON.stringify({
+          anonymousId: phoneAttemptAnonymousId(),
+          phoneNumber: phone,
+          event: 'tab_closed',
+          source: window.location.pathname,
+        });
+        // text/plain keeps the beacon a simple request across origins.
+        navigator.sendBeacon(`${apiBaseUrl}/api/auth/capture-phone`, new Blob([body], { type: 'text/plain;charset=UTF-8' }));
+      } catch {
+        // Best effort only.
+      }
+    };
+    window.addEventListener('pagehide', onPageHide);
+    return () => window.removeEventListener('pagehide', onPageHide);
+  }, [open, apiBaseUrl]);
 
   // ---- Post-Login Flow ----
 
@@ -691,6 +741,8 @@ export default function LoginModal({
         || err?.code === 'auth/captcha-check-failed'
         || err?.code === 'auth/internal-error';
       if (isRetryable) {
+        // Kept even when the retry works: a reCAPTCHA that needs a second go is worth knowing.
+        capturePhone(fullPhone, 'failed', { code: err?.code || 'neram/recaptcha', message: err?.message });
         try {
           const { sendPhoneOTP } = await import('@neram/auth');
           await reinitRecaptcha();
@@ -723,6 +775,7 @@ export default function LoginModal({
     }
 
     onFunnelEvent?.({ funnel: 'auth', event: 'otp_entered', status: 'started' });
+    capturePhone(fullPhone, 'otp_checked');
     setPhoneError('');
     setPhoneLoading(true);
     try {
@@ -742,11 +795,13 @@ export default function LoginModal({
         fireSignupConversion(verified, fullPhone);
       }
 
+      phoneDoneRef.current = true;
       onAuthenticated?.(phoneNumber);
     } catch (err: any) {
       const errMsg = err?.message || '';
       if (err?.code === 'neram/phone-in-use' || errMsg.includes('already registered')) {
         onFunnelEvent?.({ funnel: 'auth', event: 'phone_already_exists', status: 'failed', error_message: errMsg, error_code: 'PHONE_ALREADY_EXISTS' });
+        capturePhone(fullPhone, 'failed', { code: 'PHONE_ALREADY_EXISTS', message: errMsg });
         // Firebase-level: the number is another sign-in, which they can switch to.
         // Database-level (409): only a different number or help.
         setPhoneInUse({ credential: err?.code === 'neram/phone-in-use' ? err.credential ?? null : null });
@@ -789,6 +844,7 @@ export default function LoginModal({
       const verified = await verifyPhone(idToken, fullPhone);
       fireSignupConversion(verified, fullPhone);
       onFunnelEvent?.({ funnel: 'auth', event: 'phone_account_switched', status: 'completed' });
+      phoneDoneRef.current = true;
       onAuthenticated?.(phoneNumber);
     } catch (err: any) {
       setPhoneError(getFirebaseErrorMessage(err));
@@ -846,7 +902,11 @@ export default function LoginModal({
 
   // ---- Render ----
 
-  const handleClose = allowClose ? onClose : undefined;
+  const closeDialog = () => {
+    noteLeftPhone('closed');
+    onClose?.();
+  };
+  const handleClose = allowClose ? closeDialog : undefined;
 
   // Shown after repeated reCAPTCHA/OTP failures so a Google-authenticated user is
   // never permanently trapped behind a broken phone-verification step.
@@ -857,7 +917,10 @@ export default function LoginModal({
         size="small"
         onClick={() => {
           setShowHelp((v) => !v);
-          if (!showHelp) onGetHelp?.();
+          if (!showHelp) {
+            noteLeftPhone('help');
+            onGetHelp?.();
+          }
         }}
         sx={{ textTransform: 'none', fontWeight: 600 }}
       >
@@ -873,7 +936,10 @@ export default function LoginModal({
           variant="text"
           size="small"
           fullWidth
-          onClick={onSkip}
+          onClick={() => {
+            noteLeftPhone('skipped');
+            onSkip();
+          }}
           sx={{ textTransform: 'none', mt: 1.5, color: 'text.secondary' }}
         >
           Skip for now and verify later
@@ -923,7 +989,7 @@ export default function LoginModal({
           </Typography>
         </Box>
         {allowClose && onClose && (
-          <IconButton onClick={onClose} sx={{ ml: 1 }}>
+          <IconButton onClick={closeDialog} aria-label="Close" sx={{ ml: 1 }}>
             <CloseIcon />
           </IconButton>
         )}
@@ -941,25 +1007,39 @@ export default function LoginModal({
                 size="large"
                 onClick={handleGoogleSignIn}
                 disabled={loginLoading}
+                // Google's own light button (white fill, #1F1F1F text, #747775 outline).
+                // Every state sets its own colours so a dark theme's outlined-button
+                // hover (paper text) can never land on the white fill.
                 sx={{
                   py: 1.5,
                   textTransform: 'none',
                   fontSize: '1rem',
+                  fontWeight: 600,
                   minHeight: 48,
-                  borderColor: '#dadce0',
-                  color: '#3c4043',
+                  bgcolor: '#ffffff',
+                  borderColor: '#747775',
+                  color: '#1f1f1f',
                   '&:hover': {
-                    borderColor: '#d2d2d2',
-                    bgcolor: '#f8f9fa',
+                    bgcolor: '#f2f2f2',
+                    borderColor: '#1f1f1f',
+                    color: '#1f1f1f',
+                  },
+                  '&.Mui-disabled': {
+                    bgcolor: '#ffffff',
+                    borderColor: 'rgba(31,31,31,0.24)',
+                    color: 'rgba(31,31,31,0.6)',
                   },
                 }}
               >
                 {loginLoading ? (
-                  <CircularProgress size={24} color="primary" />
+                  <CircularProgress size={24} sx={{ color: '#1f1f1f' }} />
                 ) : (
                   <>
-                    <Box component="span" sx={{ width: 20, height: 20, mr: 2, display: 'inline-block', fontSize: '20px', lineHeight: '20px' }}>
-                      G
+                    <Box component="svg" viewBox="0 0 48 48" aria-hidden="true" sx={{ width: 20, height: 20, mr: 1.5, flexShrink: 0 }}>
+                      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+                      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+                      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+                      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
                     </Box>
                     Continue with Google
                   </>
