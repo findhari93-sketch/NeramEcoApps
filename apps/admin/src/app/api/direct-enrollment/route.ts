@@ -13,9 +13,10 @@ import {
   logDirectEnrollmentLinkEvent,
 } from '@neram/database';
 import { checkEnrolmentPlan } from '@neram/database/enrolment-link';
-import { buildStudentPayOffer } from '@neram/database/student-pay';
+import { buildStudentPayOffer, validateOfferOverrides, offerSnapshotColumns } from '@neram/database/student-pay';
 import type { DirectEnrollmentLinkStatus, CourseType, LearningMode } from '@neram/database';
 import { UUID_REGEX, actingAdminId } from '@/lib/fee-request';
+import { getEnrolmentLinkDays } from '@neram/database/payment-payee';
 import { effectiveStatus, toLinkView } from '@/lib/enrolment-link-server';
 
 // GET /api/direct-enrollment - List links. ?userId= or ?demoRegistrationId= for one person.
@@ -109,6 +110,12 @@ export async function POST(request: NextRequest) {
       feeStructureId,
     } = body;
     const studentPays = paymentMode === 'student_pays';
+    // Per-student pricing (Phase 1): quoted fee, pay-in-full price, installments
+    // total, first installment, balance due days. Anything left out comes from
+    // the fee structure. Validated server-side; the browser never sets the amount.
+    const offerOverrides = body.offerOverrides && typeof body.offerOverrides === 'object' ? body.offerOverrides : null;
+    const expiresInDays = [7, 14, 30].includes(Number(body.expiresInDays)) ? Number(body.expiresInDays) : null;
+    const balanceDueDays = Math.min(180, Math.max(7, Math.round(Number(offerOverrides?.balanceDueDays)) || 45));
 
     const adminId = actingAdminId(request, body);
     if (!adminId) return NextResponse.json({ error: 'Sign in again to continue.' }, { status: 401 });
@@ -136,14 +143,14 @@ export async function POST(request: NextRequest) {
         if (!fs || fs.is_active === false) {
           fieldErrors.feeStructureId = 'That fee structure is not available.';
         } else {
-          const offer = buildStudentPayOffer(fs, discountAmount);
+          const offer = buildStudentPayOffer(fs, discountAmount, offerOverrides);
           if (offer.fullAmount <= 0) fieldErrors.discount = 'The discount leaves nothing to pay.';
+          const offerErrors = validateOfferOverrides(offer);
+          if (offerErrors.length) fieldErrors.offer = offerErrors.join(' ');
           offerFields = {
             payment_mode: 'student_pays',
             fee_structure_id: fs.id,
-            total_fee: offer.listFee,
-            discount_amount: offer.extraDiscount,
-            final_fee: offer.fullAmount,
+            ...offerSnapshotColumns(offer, balanceDueDays),
             amount_paid: 0,
             payment_method: 'upi_direct',
             transaction_reference: null,
@@ -152,10 +159,6 @@ export async function POST(request: NextRequest) {
             payment_scheme: 'full',
             installment_2_amount: null,
             installment_2_due_date: null,
-            offer_full_amount: offer.fullAmount,
-            offer_installment_1: offer.installment1,
-            offer_installment_2: offer.installment2,
-            offer_balance_due_days: 45,
           };
         }
       }
@@ -287,11 +290,14 @@ export async function POST(request: NextRequest) {
     // Generate URL-safe unique token
     const token = crypto.randomBytes(16).toString('base64url');
 
+    // How long the link stays open: the drawer's choice, else Settings (default 14 days).
+    const linkDays = expiresInDays ?? (await getEnrolmentLinkDays(supabase));
     let link;
     try {
       link = await createDirectEnrollmentLink(
         {
           ...fields,
+          expires_at: new Date(Date.now() + linkDays * 24 * 60 * 60 * 1000).toISOString(),
           token,
           created_by: adminId,
           user_id: userId || undefined,

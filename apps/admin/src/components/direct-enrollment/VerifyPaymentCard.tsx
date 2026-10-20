@@ -26,14 +26,18 @@ import {
   Tooltip,
   Typography,
   useCopyToClipboard,
+  Checkbox,
+  FormControlLabel,
 } from '@neram/ui';
 import { alpha } from '@mui/material/styles';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
 import CheckIcon from '@mui/icons-material/Check';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import PendingActionsOutlinedIcon from '@mui/icons-material/PendingActionsOutlined';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import { formatDueDate, formatRupees } from '@neram/database/fee-plan';
+import { whatsappDigits } from '@neram/database/student-pay';
 import { OpsSkeleton as Skeleton } from '@/components/ops/OpsUi';
 import { BankMatchHint, Dd, Dt, ProofPreview, dateTime, firstName, methodLabel } from '@/components/payments/PaymentClaimParts';
 
@@ -48,6 +52,8 @@ interface Claim {
   amount: number;
   method: 'upi_direct' | 'bank_transfer' | null;
   utr: string | null;
+  proofChannel?: 'upload' | 'whatsapp' | null;
+  payerName?: string | null;
   paidOn: string | null;
   submittedAt: string | null;
   balance: number | null;
@@ -76,6 +82,7 @@ export default function VerifyPaymentCard({
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ kind: VerifyDecision; text: string } | null>(null);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [statementChecked, setStatementChecked] = useState(false);
   const [rejectOpen, setRejectOpen] = useState(false);
   const [reason, setReason] = useState('');
   const [reasonError, setReasonError] = useState<string | null>(null);
@@ -115,6 +122,7 @@ export default function VerifyPaymentCard({
         body: JSON.stringify({
           decision,
           reason: decision === 'reject' ? reason.trim() : undefined,
+          statementChecked: decision === 'verify' ? statementChecked : undefined,
           adminId: adminId || undefined,
         }),
       });
@@ -250,6 +258,39 @@ export default function VerifyPaymentCard({
             <Dt>Method</Dt>
             <Dd>{methodLabel(claim.method)}</Dd>
 
+            <Dt>Proof</Dt>
+            <Dd>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                <Chip
+                  size="small"
+                  icon={claim.proofChannel === 'whatsapp' ? <WhatsAppIcon /> : undefined}
+                  label={claim.proofChannel === 'whatsapp' ? 'Screenshot on WhatsApp' : 'Screenshot uploaded'}
+                  color={claim.proofChannel === 'whatsapp' ? 'success' : 'default'}
+                  variant="outlined"
+                  sx={{ fontWeight: 600 }}
+                />
+                {claim.proofChannel === 'whatsapp' && claim.studentPhone && (
+                  <Button
+                    size="small"
+                    href={`https://wa.me/${whatsappDigits(claim.studentPhone) || ''}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    startIcon={<WhatsAppIcon />}
+                    sx={{ minHeight: 36, textTransform: 'none', fontWeight: 600 }}
+                  >
+                    Open WhatsApp chat
+                  </Button>
+                )}
+              </Box>
+            </Dd>
+
+            {claim.payerName && (
+              <>
+                <Dt>Paid from</Dt>
+                <Dd>{claim.payerName}</Dd>
+              </>
+            )}
+
             <Dt>UTR</Dt>
             <Dd>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
@@ -349,9 +390,21 @@ export default function VerifyPaymentCard({
         </DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary">
-            This enrols {firstName(claim.studentName)} and emails a confirmation. Only verify once the UTR {claim.utr ? `${claim.utr} ` : ''}
-            and amount show in the bank statement.
+            This enrols {firstName(claim.studentName)} and emails a confirmation.
           </Typography>
+          <FormControlLabel
+            sx={{ mt: 2, alignItems: 'flex-start', mr: 0 }}
+            control={<Checkbox checked={statementChecked} onChange={(e) => setStatementChecked(e.target.checked)} sx={{ mt: -0.75 }} inputProps={{ 'aria-describedby': 'statement-tick-help' }} />}
+            label={
+              <Typography variant="body2">
+                I found <strong>{formatRupees(claim.amount)}</strong> in the bank statement{claim.utr ? ` with UTR ${claim.utr}` : ''}.
+              </Typography>
+            }
+          />
+          <Typography id="statement-tick-help" variant="caption" color="text.secondary" sx={{ display: 'block', ml: 4 }}>
+            Screenshots are easy to fake. The statement or the GPay history is the proof.
+          </Typography>
+
           {error && (
             <Alert severity="error" role="alert" sx={{ mt: 2 }}>
               {error}
@@ -366,7 +419,7 @@ export default function VerifyPaymentCard({
             variant="contained"
             color="success"
             onClick={() => decide('verify')}
-            disabled={busy !== null}
+            disabled={busy !== null || !statementChecked}
             startIcon={busy === 'verify' ? <CircularProgress size={16} color="inherit" /> : <CheckIcon />}
             sx={{ minHeight: 44, minWidth: 140, fontWeight: 700, textTransform: 'none' }}
           >

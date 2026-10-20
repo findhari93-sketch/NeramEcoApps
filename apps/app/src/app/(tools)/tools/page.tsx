@@ -1,4 +1,5 @@
 import { Box, Typography, Button } from '@neram/ui';
+import AskBar from '@/components/ask/AskBar';
 import Link from 'next/link';
 import type { Metadata } from 'next';
 import CheckCircleOutlineRoundedIcon from '@mui/icons-material/CheckCircleOutlineRounded';
@@ -107,6 +108,11 @@ export default async function ToolsLandingPage() {
                 {benefit}
               </Box>
             ))}
+          </Box>
+
+          {/* Ask aiArchitek: type the question instead of picking a tool. */}
+          <Box sx={{ mb: 2.5 }}>
+            <AskBar tone="dark" />
           </Box>
 
           <Box sx={{ display: 'flex', flexDirection: { xs: 'column', sm: 'row' }, gap: 1.5 }}>

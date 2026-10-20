@@ -351,6 +351,14 @@ export async function regenerateDirectEnrollmentLink(
       payment_scheme: oldLink.payment_scheme || 'full',
       installment_2_amount: oldLink.installment_2_amount,
       installment_2_due_date: oldLink.installment_2_due_date,
+      // Student-pays links keep their mode and offer. The column default is
+      // 'recorded', which would enrol the student on submit with nothing paid.
+      payment_mode: (oldLink as any).payment_mode || 'recorded',
+      fee_structure_id: (oldLink as any).fee_structure_id || null,
+      offer_full_amount: (oldLink as any).offer_full_amount ?? null,
+      offer_installment_1: (oldLink as any).offer_installment_1 ?? null,
+      offer_installment_2: (oldLink as any).offer_installment_2 ?? null,
+      offer_balance_due_days: (oldLink as any).offer_balance_due_days ?? null,
       regenerated_from: oldLinkId,
       expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
     })

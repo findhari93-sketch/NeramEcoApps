@@ -136,5 +136,24 @@ test.describe('Aintra sign-in on a later day @marketing', () => {
       expect(res.status()).toBe(403);
       expect(await res.json()).toMatchObject({ code: 'SIGNUP_REQUIRED' });
     });
+
+    test('a made-up userId in the body does not get a returning guest past the gate', async ({ request }) => {
+      const res = await request.post('/api/chat', {
+        headers: { cookie: `neram_anon_id=${ANON}`, 'x-e2e-returning-guest': '1' },
+        data: { message: 'What are the fees?', sessionId: 'e2e-gate', history: [], userId: 'not-a-real-firebase-uid' },
+        failOnStatusCode: false,
+      });
+      expect(res.status()).toBe(403);
+      expect(await res.json()).toMatchObject({ code: 'SIGNUP_REQUIRED' });
+    });
+
+    test('an invalid sign-in token does not count as signed in', async ({ request }) => {
+      const res = await request.post('/api/chat', {
+        headers: { cookie: `neram_anon_id=${ANON}`, 'x-e2e-returning-guest': '1', authorization: 'Bearer not-a-token' },
+        data: { message: 'What are the fees?', sessionId: 'e2e-gate', history: [] },
+        failOnStatusCode: false,
+      });
+      expect(res.status()).toBe(403);
+    });
   });
 });

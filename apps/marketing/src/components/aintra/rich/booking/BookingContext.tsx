@@ -176,6 +176,35 @@ export function BookingCardFrame({ icon, title, children, labelledBy }: { icon: 
   );
 }
 
+/**
+ * What Aintra filled in, to check at a glance before Confirm: label above
+ * value, one row each, so a long name wraps instead of squeezing the label.
+ */
+export function SummaryList({ rows }: { rows: { label: string; value: string }[] }) {
+  return (
+    <Box
+      component="dl"
+      sx={{
+        m: 0,
+        display: 'grid',
+        gap: 1.25,
+        p: 1.5,
+        borderRadius: `${tokens.radius}px`,
+        bgcolor: 'action.hover',
+        '& dt': { m: 0, fontSize: '0.8125rem', fontWeight: 600, color: 'text.secondary', lineHeight: 1.3 },
+        '& dd': { m: 0, fontSize: '1rem', fontWeight: 700, color: 'text.primary', lineHeight: 1.4, overflowWrap: 'anywhere' },
+      }}
+    >
+      {rows.map((r) => (
+        <Box key={r.label}>
+          <dt>{r.label}</dt>
+          <dd>{r.value}</dd>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
 export function FieldLabel({ children }: { id?: string; children: ReactNode }) {
   return (
     <Typography component="p" sx={{ fontWeight: 700, fontSize: '0.875rem', mb: 0.75 }}>

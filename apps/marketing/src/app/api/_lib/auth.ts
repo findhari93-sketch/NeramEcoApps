@@ -28,6 +28,22 @@ export interface AuthResult {
 }
 
 /**
+ * True when the Authorization header carries a valid Firebase ID token, even
+ * for someone with no users row yet (signed in a moment ago, not registered).
+ * For "is this person signed in?" checks that need no account.
+ */
+export async function hasValidFirebaseToken(request: NextRequest): Promise<boolean> {
+  const authHeader = request.headers.get('Authorization');
+  if (!authHeader?.startsWith('Bearer ')) return false;
+  try {
+    await getAuth().verifyIdToken(authHeader.substring(7));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Verify Firebase ID token from Authorization header and resolve the Supabase user ID.
  */
 export async function verifyFirebaseToken(request: NextRequest): Promise<AuthResult | null> {

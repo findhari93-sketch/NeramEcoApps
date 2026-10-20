@@ -5,10 +5,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   createAdminClient,
   getDirectEnrollmentLinkByToken,
-  updateUser,
-  decideEnrolUser,
-  isDisposableAccount,
-  mergeUserRecords,
   logDirectEnrollmentLinkEvent,
   istToday,
   isDateKey,
@@ -16,11 +12,14 @@ import {
   addDaysToKey,
 } from '@neram/database';
 import { finaliseDirectEnrolment, type DirectEnrolmentForm } from '@neram/database/direct-enrolment';
-import { offerFromLink, amountDueToday, normaliseTransactionRef } from '@neram/database/student-pay';
-import { sendPaymentSubmittedEmail, alertStaffPaymentToVerify } from '@neram/database/enrolment-payment-email';
+import { offerFromLink, amountDueToday, normaliseTransactionRef, offerLines } from '@neram/database/student-pay';
+import { enrolmentLinkUrl } from '@neram/database/enrolment-link';
+import { getPaymentPayee } from '@neram/database/payment-payee';
+import { sendPaymentSubmittedEmail, sendPaymentSavedEmail, alertStaffPaymentToVerify } from '@neram/database/enrolment-payment-email';
 import { isUtrTaken } from '@neram/database/fee-payment-claims';
+import { recordLegacyProofSubmission } from '@neram/database/payments';
 import { verifyFirebaseToken } from '../../_lib/auth';
-import { normalisePhone, isSameMobile } from '@/lib/phone';
+import { resolveEnrolUser, formFromBody } from '../_lib/enrol-user';
 
 const COURSE_LABELS: Record<string, string> = {
   nata: 'NATA coaching',
@@ -63,29 +62,10 @@ export async function POST(request: NextRequest) {
     if ('response' in who) return who.response;
     const userId = who.userId;
 
-    const form: DirectEnrolmentForm = {
-      firstName,
-      fatherName: body.fatherName,
-      dateOfBirth: body.dateOfBirth,
-      gender: body.gender,
-      country: body.country,
-      state: body.state,
-      city: body.city,
-      district: body.district,
-      pincode: body.pincode,
-      address: body.address,
-      applicantCategory,
-      academicData: body.academicData,
-      casteCategory: body.casteCategory,
-      targetExamYear: body.targetExamYear,
-      schoolType: body.schoolType,
-      parentPhone: body.parentPhone,
-      studentPhone: body.studentPhone,
-      phoneVerifiedAt: body.phoneVerifiedAt,
-    };
+    const form: DirectEnrolmentForm = formFromBody(body);
 
     if (link.payment_mode === 'student_pays') {
-      return submitStudentPayment({ supabase, link, userId, auth, form, body });
+      return submitStudentPayment({ supabase, link, userId, auth, form, body, request });
     }
 
     const { data: existingUser } = await supabase.from('users').select('user_type').eq('id', userId).single();
@@ -124,50 +104,18 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * A link made for a demo person enrols THAT account. Signed in with another
- * account: it is folded into the demo account (the demo account wins) only when
- * it is a shell made by this very sign-in AND it proved the demo person's number
- * by OTP. Holding the link alone is never enough, so nobody's account is merged
- * on a link that leaked.
- */
-async function resolveEnrolUser(supabase: any, link: any, auth: any): Promise<{ userId: string } | { response: NextResponse }> {
-  if (!link.user_id || link.user_id === auth.userId) return { userId: auth.userId };
-
-  const { data: linkUser, error: linkUserError } = await supabase
-    .from('users')
-    .select('id, user_type, phone, phone_verified')
-    .eq('id', link.user_id)
-    .maybeSingle();
-  if (linkUserError) throw linkUserError;
-  if (linkUser?.user_type === 'student') {
-    return { response: NextResponse.json({ error: 'You are already enrolled as a student' }, { status: 400 }) };
-  }
-  const demoPhone = linkUser?.phone || link.student_phone;
-  const provedDemoNumber = Boolean(linkUser) && auth.phoneVerified === true && isSameMobile(auth.phone, demoPhone);
-  const { data: signedIn } = await supabase.from('users').select('id, user_type, created_at').eq('id', auth.userId).single();
-  const decision = decideEnrolUser({
-    linkUserId: link.user_id,
-    signedInUserId: auth.userId,
-    signedInIsDisposable: provedDemoNumber && signedIn ? await isDisposableAccount(supabase as any, signedIn) : false,
-  });
-  if (decision.action === 'refuse') {
-    const message = link.demo_registration_id
-      ? decision.message
-      : decision.message.replace('the number you used for your demo', 'the number on your Neram account');
-    return { response: NextResponse.json({ error: message, code: 'WRONG_ACCOUNT' }, { status: 409 }) };
-  }
-  if (decision.action === 'merge') {
-    await mergeUserRecords(decision.userId, decision.mergeFrom, null, supabase);
-    console.log(`[Direct Enrollment] Merged sign-in account ${decision.mergeFrom} into demo account ${decision.userId}`);
-    const proven: Record<string, unknown> = { phone_verified: true };
-    if (!linkUser.phone) proven.phone = normalisePhone(auth.phone) || auth.phone;
-    await updateUser(decision.userId, proven, supabase);
-  }
-  return { userId: decision.userId };
+/** The site's own origin for links in emails (the request's host locally). */
+function siteOrigin(request: NextRequest): string {
+  const origin = new URL(request.url).origin;
+  if (/localhost|127\.0\.0\.1/.test(origin)) return origin;
+  return (process.env.NEXT_PUBLIC_SITE_URL || origin).replace(/\/+$/, '');
 }
 
-/** Student-pays: save the claim, tell the student and staff. Enrols nobody. */
+/**
+ * Student-pays: save the claim (or, for "pay later", just the details), tell
+ * the student and staff. Enrols nobody. Proof is a screenshot on the page OR
+ * "sent on WhatsApp"; the UTR is optional but must look real when given.
+ */
 async function submitStudentPayment(args: {
   supabase: any;
   link: any;
@@ -175,8 +123,9 @@ async function submitStudentPayment(args: {
   auth: any;
   form: DirectEnrolmentForm;
   body: any;
+  request: NextRequest;
 }) {
-  const { supabase, link, userId, auth, form, body } = args;
+  const { supabase, link, userId, auth, form, body, request } = args;
 
   const { data: existingUser } = await supabase.from('users').select('user_type, email, name').eq('id', userId).single();
   if (existingUser?.user_type === 'student') {
@@ -184,32 +133,83 @@ async function submitStudentPayment(args: {
   }
 
   const scheme = body.scheme === 'installment' ? 'installment' : body.scheme === 'full' ? 'full' : null;
-  const method = body.paymentMethod === 'bank_transfer' ? 'bank_transfer' : body.paymentMethod === 'upi_direct' ? 'upi_direct' : null;
   const offer = offerFromLink(link);
   const amount = scheme ? amountDueToday(offer, scheme) : null;
-  const utr = method ? normaliseTransactionRef(body.transactionReference, method) : null;
+  const to = auth.email || existingUser?.email || link.student_email || null;
+  const studentName = form.firstName || link.student_name;
+  const courseLabel = COURSE_LABELS[link.interest_course] || 'Neram Classes coaching';
+
+  // ── Pay later: keep the details, keep the link open, email how to pay ──────
+  if (body.intent === 'pay_later') {
+    const { data: saved, error: saveErr } = await supabase
+      .from('direct_enrollment_links')
+      .update({
+        details_saved_at: new Date().toISOString(),
+        submitted_form: form,
+        submitted_user_id: userId,
+        chosen_scheme: scheme && amount !== null ? scheme : link.chosen_scheme || null,
+        parent_phone: form.parentPhone || link.parent_phone || null,
+      })
+      .eq('id', link.id)
+      .eq('status', 'active')
+      .select('id')
+      .maybeSingle();
+    if (saveErr) throw saveErr;
+    if (!saved) return NextResponse.json({ error: 'This link was already used. Refresh the page.', code: 'NOT_ACTIVE' }, { status: 409 });
+
+    await logDirectEnrollmentLinkEvent(link.id, 'details_saved', null, { scheme }, supabase);
+    if (to) {
+      const origin = siteOrigin(request);
+      const payee = await getPaymentPayee(supabase);
+      const planScheme = scheme && amount !== null ? scheme : 'full';
+      const sent = await sendPaymentSavedEmail(to, {
+        studentName,
+        courseLabel,
+        offerLines: offerLines(offer, formatDueDate(addDaysToKey(istToday(), link.offer_balance_due_days || 45))),
+        payee,
+        resumeUrl: enrolmentLinkUrl(link.token, origin),
+        qrPngUrl: `${origin}/api/enroll/qr?token=${encodeURIComponent(link.token)}&scheme=${planScheme}`,
+        expiresLabel: formatDueDate(String(link.expires_at).slice(0, 10)),
+      }).catch((e: any) => ({ success: false, error: e?.message }));
+      if (!sent.success) console.error('[enroll/complete] saved email failed:', sent.error);
+    }
+    return NextResponse.json({ success: true, data: { status: 'details_saved', emailedTo: to } });
+  }
+
+  // ── A payment claim ────────────────────────────────────────────────────────
+  const method = body.paymentMethod === 'bank_transfer' ? 'bank_transfer' : body.paymentMethod === 'upi_direct' ? 'upi_direct' : null;
+  const rawUtr = typeof body.transactionReference === 'string' ? body.transactionReference.trim() : '';
+  const utr = rawUtr && method ? normaliseTransactionRef(rawUtr, method) : null;
   const today = istToday();
   const paidOn = isDateKey(body.paymentDate) && body.paymentDate <= today ? body.paymentDate : null;
   const proofUrl = typeof body.paymentProofUrl === 'string' && body.paymentProofUrl.startsWith('http') ? body.paymentProofUrl : null;
+  const proofChannel: 'upload' | 'whatsapp' = body.proofChannel === 'whatsapp' ? 'whatsapp' : 'upload';
+  const whatsappSent = body.whatsappSent === true;
+  const payerName = typeof body.payerName === 'string' ? body.payerName.trim().slice(0, 80) || null : null;
 
   const fieldErrors: Record<string, string> = {};
   if (!scheme || amount === null) fieldErrors.scheme = 'Choose how you want to pay.';
   if (!method) fieldErrors.paymentMethod = 'Choose UPI or bank transfer.';
-  if (method && !utr) {
+  if (rawUtr && method && !utr) {
     fieldErrors.transactionReference =
       method === 'upi_direct'
-        ? 'The UPI reference (UTR) is the 12-digit number in your payment app.'
-        : 'Enter the bank reference (UTR) from your transfer receipt.';
+        ? 'A UPI reference (UTR) is 12 digits. Leave it empty if you cannot find it.'
+        : 'A bank reference is 12 to 22 letters and digits. Leave it empty if you cannot find it.';
   }
   if (!paidOn) fieldErrors.paymentDate = 'Choose the day you paid (not a future date).';
-  if (!proofUrl) fieldErrors.paymentProofUrl = 'Upload the payment screenshot.';
+  if (proofChannel === 'upload' && !proofUrl) fieldErrors.paymentProofUrl = 'Upload the payment screenshot, or choose "I sent it on WhatsApp".';
+  if (proofChannel === 'whatsapp') {
+    const payee = await getPaymentPayee(supabase);
+    if (!payee.whatsappNumber) fieldErrors.proofChannel = 'Sending on WhatsApp is not available right now. Upload the screenshot instead.';
+    else if (!whatsappSent) fieldErrors.whatsappSent = 'Tick the box once you have sent the screenshot on WhatsApp.';
+  }
   if (Object.keys(fieldErrors).length) {
     return NextResponse.json({ error: 'Check the highlighted fields.', fieldErrors }, { status: 400 });
   }
 
   // One UTR, one payment: never a reference already on a payment, a balance
   // claim or another enrolment link.
-  if (await isUtrTaken(supabase, utr)) {
+  if (utr && (await isUtrTaken(supabase, utr))) {
     return NextResponse.json(
       { error: 'This reference number was already used for another payment. Check the number in your payment app.', code: 'UTR_USED', fieldErrors: { transactionReference: 'Already used for another payment.' } },
       { status: 409 },
@@ -227,6 +227,8 @@ async function submitStudentPayment(args: {
       submitted_method: method,
       submitted_paid_on: paidOn,
       submitted_proof_url: proofUrl,
+      submitted_proof_channel: proofChannel,
+      submitted_payer_name: payerName,
       submitted_form: form,
       submitted_user_id: userId,
       submitted_at: new Date().toISOString(),
@@ -256,21 +258,26 @@ async function submitStudentPayment(args: {
     return NextResponse.json({ error: 'This link was already used. Refresh the page.', code: 'NOT_ACTIVE' }, { status: 409 });
   }
 
-  await logDirectEnrollmentLinkEvent(link.id, 'payment_submitted', null, { amount, scheme, method, utr }, supabase);
+  await logDirectEnrollmentLinkEvent(link.id, 'payment_submitted', null, { amount, scheme, method, utr, proofChannel }, supabase);
+  // Payments v2 (Phase 0): the same submission as an intent + awaiting_review
+  // attempt, so the audit trail and the outbox exist. The link stays the source
+  // of truth until the read model moves; the bridge never throws.
+  await recordLegacyProofSubmission(supabase, { link, userId, scheme: scheme as 'full' | 'installment', method: method as 'upi_direct' | 'bank_transfer', utr, paidOn, proofUrl, proofChannel, payerName });
 
   const facts = {
-    studentName: form.firstName || link.student_name,
-    amount,
-    scheme,
-    method,
+    studentName,
+    amount: amount as number,
+    scheme: scheme as 'full' | 'installment',
+    method: method as 'upi_direct' | 'bank_transfer',
     utr,
+    proofChannel,
+    payerName,
     paidOn: formatDueDate(paidOn),
-    courseLabel: COURSE_LABELS[link.interest_course] || 'Neram Classes coaching',
+    courseLabel,
     balance: scheme === 'installment' ? offer.installment2 : null,
     balanceDueLabel: balanceDueDate ? formatDueDate(balanceDueDate) : null,
   };
 
-  const to = auth.email || existingUser?.email || link.student_email;
   if (to) {
     const sent = await sendPaymentSubmittedEmail(to, facts).catch((e) => ({ success: false, error: e?.message }));
     if (!sent.success) console.error('[enroll/complete] submitted email failed:', sent.error);
@@ -291,6 +298,7 @@ async function submitStudentPayment(args: {
       scheme,
       method,
       utr,
+      proofChannel,
       paidOn,
       balance: facts.balance,
       balanceDueDate,

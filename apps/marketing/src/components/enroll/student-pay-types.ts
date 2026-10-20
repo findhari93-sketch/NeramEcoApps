@@ -1,12 +1,16 @@
-import type { StudentPayOffer, PaymentPayee } from '@neram/database/student-pay';
+import type { StudentPayOffer, PaymentPayee, PaymentQrCode } from '@neram/database/student-pay';
 
-export type { StudentPayOffer, PaymentPayee };
+export type { StudentPayOffer, PaymentPayee, PaymentQrCode };
 
 /** What /api/enroll/validate adds for a student-pays link. */
 export interface StudentPayLinkData {
   paymentMode: 'student_pays';
   offer: StudentPayOffer & { balanceDueDays: number };
   payee: PaymentPayee;
+  /** Official QR images for exact amounts; the page draws its own otherwise. */
+  qrCodes?: PaymentQrCode[];
+  /** Set when the student chose "pay later": their details are on the link. */
+  detailsSavedAt?: string | null;
   /** "NRM 4F2A9C": the note the student adds to the payment. */
   paymentNote: string;
   /** Set when staff could not match the last payment. */
@@ -29,6 +33,8 @@ export interface PaymentSubmission {
   /** Full UTR right after submitting; the last 4 digits when revisiting. */
   utr?: string | null;
   utrTail?: string | null;
+  /** 'whatsapp': the screenshot went to our WhatsApp, not the page. */
+  proofChannel?: 'upload' | 'whatsapp' | null;
   paidOn: string | null;
   balance: number | null;
   balanceDueDate: string | null;

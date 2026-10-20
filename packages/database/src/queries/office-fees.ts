@@ -484,7 +484,8 @@ export async function saveStudentApplicationAndFees(
  * is already set. Same rules as the form: idempotent, reconciled, cached.
  */
 export async function recordOfficePayment(
-  options: { userId: string; line: PaymentLineInput; adminId: string },
+  // adminId is null when the payment was confirmed from a bank alert, not by staff.
+  options: { userId: string; line: PaymentLineInput; adminId: string | null },
   supabase: any,
 ): Promise<{ payment: RecordedPaymentLine; view: FeeView; warnings: string[] }> {
   const state = await loadStudentFeeState(supabase, options.userId);
@@ -511,7 +512,7 @@ export async function recordOfficePayment(
   const final = await loadStudentFeeState(supabase, options.userId);
   await refreshStudentFeeCache(supabase, final);
   await markConfirmedCheckChanged(supabase, options.userId, feeSignature(final.view));
-  if (payment.created) {
+  if (payment.created && options.adminId) {
     await recordUserHistory(
       supabase,
       options.userId,

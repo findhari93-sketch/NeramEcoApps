@@ -64,9 +64,15 @@ vi.mock('@neram/database/direct-enrolment', () => ({ finaliseDirectEnrolment: (.
 
 const submittedEmail = vi.fn(async () => ({ success: true }));
 const staffAlert = vi.fn(async () => undefined);
+const savedEmail = vi.fn(async () => ({ success: true }));
 vi.mock('@neram/database/enrolment-payment-email', () => ({
   sendPaymentSubmittedEmail: (...a: unknown[]) => submittedEmail(...(a as [])),
   alertStaffPaymentToVerify: (...a: unknown[]) => staffAlert(...(a as [])),
+  sendPaymentSavedEmail: (...a: unknown[]) => savedEmail(...(a as [])),
+}));
+let payeeWhatsapp: string | null = '+91 88074 37399';
+vi.mock('@neram/database/payment-payee', () => ({
+  getPaymentPayee: async () => ({ upiId: 'neramclassroom-1@okicici', payeeName: 'Manoharan Trust', gpayNumber: null, bank: { accountName: 'Manoharan Trust', accountNumber: '1928135000001183', ifsc: 'KVBL0001928', bankName: 'Karur Vysya Bank', branch: 'Pudukkottai' }, accessUntilLabel: 'September 2027', whatsappNumber: payeeWhatsapp }),
 }));
 
 vi.mock('../../_lib/auth', () => ({
@@ -176,6 +182,55 @@ describe('POST /api/enroll/complete, student pays', () => {
     expect(res.status).toBe(400);
     const json = await res.json();
     expect(Object.keys(json.fieldErrors).sort()).toEqual(['paymentDate', 'paymentProofUrl', 'transactionReference']);
+  });
+
+  it('the UTR is optional: new students rarely know it', async () => {
+    const res = await POST(req(body({ transactionReference: '' })));
+    expect(res.status).toBe(200);
+    expect(linkUpdates[0]).toMatchObject({ status: 'payment_submitted', submitted_utr: null, submitted_proof_channel: 'upload' });
+  });
+
+  it('"I sent it on WhatsApp" needs no screenshot once the student confirms', async () => {
+    const res = await POST(req(body({ transactionReference: '', paymentProofUrl: null, proofChannel: 'whatsapp', whatsappSent: true })));
+    expect(res.status).toBe(200);
+    expect(linkUpdates[0]).toMatchObject({ status: 'payment_submitted', submitted_proof_channel: 'whatsapp', submitted_proof_url: null, submitted_utr: null });
+    expect(staffAlert).toHaveBeenCalledTimes(1);
+  });
+
+  it('WhatsApp is refused when Settings has no WhatsApp number', async () => {
+    payeeWhatsapp = null;
+    try {
+      const res = await POST(req(body({ paymentProofUrl: null, proofChannel: 'whatsapp', whatsappSent: true })));
+      const json = await res.json();
+      expect(res.status).toBe(400);
+      expect(Object.keys(json.fieldErrors)).toEqual(['proofChannel']);
+    } finally {
+      payeeWhatsapp = '+91 88074 37399';
+    }
+  });
+
+  it('WhatsApp without the confirmation is refused', async () => {
+    const res = await POST(req(body({ paymentProofUrl: null, proofChannel: 'whatsapp', whatsappSent: false })));
+    const json = await res.json();
+    expect(res.status).toBe(400);
+    expect(Object.keys(json.fieldErrors)).toEqual(['whatsappSent']);
+  });
+
+  it('remembers whose account the money came from', async () => {
+    await POST(req(body({ payerName: '  Appa  ' })));
+    expect(linkUpdates[0]).toMatchObject({ submitted_payer_name: 'Appa' });
+  });
+
+  it('pay later: saves the details, keeps the link open, emails the payment details, enrols nobody', async () => {
+    const res = await POST(req(body({ intent: 'pay_later', transactionReference: '', paymentProofUrl: null })));
+    const json = await res.json();
+    expect(res.status).toBe(200);
+    expect(json.data.status).toBe('details_saved');
+    expect(linkUpdates[0]).toMatchObject({ details_saved_at: expect.any(String), submitted_user_id: 'user-1', chosen_scheme: 'full' });
+    expect(linkUpdates[0].status).toBeUndefined();
+    expect(finalise).not.toHaveBeenCalled();
+    expect(submittedEmail).not.toHaveBeenCalled();
+    expect(savedEmail).toHaveBeenCalledTimes(1);
   });
 
   it('a link already submitted cannot be submitted again', async () => {

@@ -60,27 +60,54 @@ export type SubmitClaimResult =
   | { ok: true; claim: any; due: BalanceDue }
   | { ok: false; status: number; error: string; code?: string; fieldErrors?: Record<string, string> };
 
-export async function submitFeePaymentClaim(
-  supabase: any,
-  input: { userId: string; method: unknown; transactionReference: unknown; paymentDate: unknown; paymentProofUrl: unknown },
-): Promise<SubmitClaimResult> {
+export interface SubmitClaimInput {
+  userId: string;
+  method: unknown;
+  transactionReference: unknown;
+  paymentDate: unknown;
+  paymentProofUrl: unknown;
+  /** 'upload' (default) or 'whatsapp': the screenshot went to our WhatsApp instead. */
+  proofChannel?: unknown;
+  /** WhatsApp channel: the student ticked "I have sent it". */
+  whatsappSent?: unknown;
+  /** Whose account the money came from, when not the student's. */
+  payerName?: unknown;
+  /** False when Settings has no WhatsApp number: the channel is then refused. Default true. */
+  whatsappAllowed?: boolean;
+}
+
+/**
+ * The student says they paid. Proof is a screenshot on the page OR "sent on
+ * WhatsApp"; the UTR is optional (new students rarely know it) but must look
+ * real when given. The amount is the fee plan's, never the browser's.
+ */
+export async function submitFeePaymentClaim(supabase: any, input: SubmitClaimInput): Promise<SubmitClaimResult> {
   const method: StudentPayMethod | null =
     input.method === 'bank_transfer' ? 'bank_transfer' : input.method === 'upi_direct' ? 'upi_direct' : null;
-  const utr = method ? normaliseTransactionRef(input.transactionReference, method) : null;
+  const rawUtr = typeof input.transactionReference === 'string' ? input.transactionReference.trim() : '';
+  const utr = rawUtr && method ? normaliseTransactionRef(rawUtr, method) : null;
   const today = istToday();
   const paidOn = isDateKey(input.paymentDate) && (input.paymentDate as string) <= today ? (input.paymentDate as string) : null;
   const proofUrl = typeof input.paymentProofUrl === 'string' && input.paymentProofUrl.startsWith('http') ? input.paymentProofUrl : null;
+  const proofChannel: 'upload' | 'whatsapp' = input.proofChannel === 'whatsapp' ? 'whatsapp' : 'upload';
+  const whatsappSent = input.whatsappSent === true;
+  const payerName = typeof input.payerName === 'string' ? input.payerName.trim().slice(0, 80) || null : null;
 
   const fieldErrors: Record<string, string> = {};
   if (!method) fieldErrors.paymentMethod = 'Choose UPI or bank transfer.';
-  if (method && !utr) {
+  if (rawUtr && method && !utr) {
     fieldErrors.transactionReference =
       method === 'upi_direct'
-        ? 'The UPI reference (UTR) is the 12-digit number in your payment app.'
-        : 'Enter the bank reference (UTR) from your transfer receipt.';
+        ? 'A UPI reference (UTR) is 12 digits. Leave it empty if you cannot find it.'
+        : 'A bank reference is 12 to 22 letters and digits. Leave it empty if you cannot find it.';
   }
   if (!paidOn) fieldErrors.paymentDate = 'Choose the day you paid (not a future date).';
-  if (!proofUrl) fieldErrors.paymentProofUrl = 'Upload the payment screenshot.';
+  if (proofChannel === 'upload' && !proofUrl) fieldErrors.paymentProofUrl = 'Upload the payment screenshot, or choose "I sent it on WhatsApp".';
+  if (proofChannel === 'whatsapp' && input.whatsappAllowed === false) {
+    fieldErrors.proofChannel = 'Sending on WhatsApp is not available right now. Upload the screenshot instead.';
+  } else if (proofChannel === 'whatsapp' && !whatsappSent) {
+    fieldErrors.whatsappSent = 'Tick the box once you have sent the screenshot on WhatsApp.';
+  }
   if (Object.keys(fieldErrors).length) return { ok: false, status: 400, error: 'Check the highlighted fields.', fieldErrors };
 
   const due = await loadBalanceDue(supabase, input.userId);
@@ -100,7 +127,7 @@ export async function submitFeePaymentClaim(
     return { ok: false, status: 409, code: 'CLAIM_PENDING', error: 'Your last payment is still being verified. We will email you soon.' };
   }
 
-  if (await isUtrTaken(supabase, utr as string)) {
+  if (utr && (await isUtrTaken(supabase, utr))) {
     return {
       ok: false,
       status: 409,
@@ -122,6 +149,8 @@ export async function submitFeePaymentClaim(
       utr,
       paid_on: paidOn,
       proof_url: proofUrl,
+      proof_channel: proofChannel,
+      payer_name: payerName,
     })
     .select('*')
     .single();
@@ -176,10 +205,11 @@ export async function verifyFeePaymentClaim(supabase: any, claimId: string, admi
         direct_payment_utr: claim.utr,
         direct_payment_screenshot_url: claim.proof_url,
         screenshot_url: claim.proof_url,
+        direct_payment_payer_name: claim.payer_name || null,
         screenshot_verified: true,
         verified_by: adminId,
         verified_at: now,
-        description: `Balance paid by ${claim.method === 'bank_transfer' ? 'bank transfer' : 'UPI'}, verified against the bank. UTR ${claim.utr}`,
+        description: `Balance paid by ${claim.method === 'bank_transfer' ? 'bank transfer' : 'UPI'}, verified against the bank.${claim.utr ? ` UTR ${claim.utr}` : claim.proof_channel === 'whatsapp' ? ' Screenshot on WhatsApp.' : ''}`,
       })
       .eq('idempotency_key', key);
     if (payErr) console.error('[fee-claim] payment proof update failed:', payErr.message);

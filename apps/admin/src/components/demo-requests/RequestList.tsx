@@ -25,16 +25,19 @@ import FamilyRestroomIcon from '@mui/icons-material/FamilyRestroom';
 import BrushIcon from '@mui/icons-material/Brush';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import ErrorOutlineIcon from '@mui/icons-material/ErrorOutline';
+import AutoModeIcon from '@mui/icons-material/AutoMode';
 import { FOCUS_RING } from '@/components/ops/OpsUi';
+import { hasLiveTeamsMeeting, type DemoWithTeams } from '@/lib/demo/teams-evidence';
+import { NO_SHOW_AFTER_END_MIN } from '@/lib/demo/demo-verdict';
 import type { DemoScheduleSettings, DemoHost } from './types';
-import { MEETING_LABELS, closedReason, isFollowUpOpen, meetingKindOf, type DeskPerson, type DeskStage } from './journey';
+import { MEETING_LABELS, closedReason, isFollowUpOpen, meetingKindOf, saysJoinedNoFee, type DemoEnrolment, type DeskPerson, type DeskStage } from './journey';
 import { ago, classLabel, isCallbackDue, isOverdueNew, telHref, waHref, whenLabel } from './format';
 
 const HEAD: Record<DeskStage, [string, string]> = {
   to_call: ['Asked for', 'Call back'],
   scheduled: ['Demo', 'Meeting'],
   after_demo: ['Demo', 'Next follow-up'],
-  joined: ['Demo', 'Joined'],
+  joined: ['Demo', 'Enrolled'],
   closed: ['Last request', 'Why closed'],
 };
 
@@ -73,7 +76,7 @@ export default function RequestList({
   hosts,
   now,
   followUps,
-  joinedAt,
+  enrolment,
 }: {
   people: DeskPerson[];
   stage: DeskStage;
@@ -83,7 +86,7 @@ export default function RequestList({
   hosts: DemoHost[];
   now: Date;
   followUps: Record<string, DemoFollowUpRow>;
-  joinedAt: Record<string, string>;
+  enrolment: Record<string, DemoEnrolment>;
 }) {
   const nameOf = (upn: string | null) => (upn ? hosts.find((h) => h.upn.toLowerCase() === upn.toLowerCase())?.name || upn.split('@')[0] : null);
   return (
@@ -106,6 +109,7 @@ export default function RequestList({
             const selected = r.id === selectedId || p.history.some((h) => h.id === selectedId);
             const start = r.scheduled_start ? new Date(r.scheduled_start) : null;
             const f = followUps[r.id];
+            const e = enrolment[r.id];
             return (
               <TableRow
                 key={p.key}
@@ -133,6 +137,22 @@ export default function RequestList({
                       <Typography variant="caption">
                         +{p.history.length} earlier request{p.history.length === 1 ? '' : 's'}
                       </Typography>
+                    )}
+                    {e?.kind === 'student_before' && (
+                      <Tooltip title="Had a student profile before this demo: a current student or a test account">
+                        <Chip size="small" variant="outlined" color="info" label={`Student since ${formatIstDate(e.since)}`} sx={{ height: 20, fontSize: 11 }} />
+                      </Tooltip>
+                    )}
+                    {(r as DemoWithTeams).attendance_source === 'teams' && (r.status === 'attended' || r.status === 'no_show') && (
+                      <Tooltip title={(r as DemoWithTeams).teams_verdict?.reason ?? 'Marked from Teams attendance'}>
+                        <Chip
+                          size="small"
+                          variant="outlined"
+                          icon={<AutoModeIcon />}
+                          label={r.status === 'attended' ? 'Attended, by Teams' : 'No-show, by Teams'}
+                          sx={{ height: 20, fontSize: 11, '& .MuiChip-icon': { fontSize: 14 } }}
+                        />
+                      </Tooltip>
                     )}
                     {r.account_holder === 'parent' && (
                       <Chip size="small" variant="outlined" label="Parent's account" sx={{ height: 20, fontSize: 11 }} />
@@ -188,21 +208,35 @@ export default function RequestList({
 
                   {stage === 'scheduled' &&
                     (start && start.getTime() + r.scheduled_minutes * 60_000 < now.getTime() ? (
-                      <Chip size="small" color="error" icon={<ErrorOutlineIcon />} label="Mark what happened" />
+                      // A Teams demo decides itself; only an unclear one, or one past the wait, needs a person.
+                      hasLiveTeamsMeeting(r) &&
+                      (r as DemoWithTeams).teams_verdict?.kind !== 'unclear' &&
+                      now.getTime() < start.getTime() + (r.scheduled_minutes + NO_SHOW_AFTER_END_MIN + 30) * 60_000 ? (
+                        <Chip size="small" variant="outlined" icon={<AutoModeIcon />} label="Checking Teams" />
+                      ) : (
+                        <Tooltip title={(r as DemoWithTeams).teams_verdict?.reason ?? ''}>
+                          <Chip size="small" color="error" icon={<ErrorOutlineIcon />} label="Mark what happened" />
+                        </Tooltip>
+                      )
                     ) : (
                       <Typography variant="body2" color={meetingKindOf(r) === 'later' ? 'warning.dark' : 'text.primary'} fontWeight={meetingKindOf(r) === 'later' ? 600 : 400}>
                         {MEETING_LABELS[meetingKindOf(r)]}
                       </Typography>
                     ))}
 
-                  {stage === 'after_demo' && <FollowUpCell f={f} now={now} />}
+                  {stage === 'after_demo' &&
+                    (saysJoinedNoFee(f, e) ? (
+                      <Chip size="small" color="warning" variant="outlined" icon={<ErrorOutlineIcon />} label="Says joined, fee not recorded" />
+                    ) : (
+                      <FollowUpCell f={f} now={now} />
+                    ))}
 
                   {stage === 'joined' && (
                     <Chip
                       size="small"
                       color="success"
                       icon={<CheckCircleIcon />}
-                      label={r.user_id && joinedAt[r.user_id] ? `Joined ${formatIstDate(joinedAt[r.user_id])}` : 'Joined'}
+                      label={e?.kind === 'enrolled' ? `Enrolled ${formatIstDate(e.on)}` : 'Enrolled'}
                     />
                   )}
 

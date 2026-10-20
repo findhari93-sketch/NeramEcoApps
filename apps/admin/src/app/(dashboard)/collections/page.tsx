@@ -37,6 +37,7 @@ import ApplicationAndFeesDialog, { type PrefillPaymentLine } from '@/components/
 import FeeReportReviewDialog, { type FeeReport } from '@/components/students/FeeReportReviewDialog';
 import RecordPaymentDialog from '@/components/students/RecordPaymentDialog';
 import { FeeClaimDrawer, PaymentsToVerifyPanel } from '@/components/collections/PaymentsToVerify';
+import BankCreditsDesk from '@/components/collections/BankCreditsDesk';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
 import { useAdminBadges } from '@/contexts/AdminBadgesContext';
 import { payBalanceMessage, payBalanceUrl } from '@/lib/marketing-links';
@@ -89,10 +90,10 @@ interface CollectionsData {
   };
 }
 
-type TabKey = 'owes' | 'missing' | 'reports' | 'checks';
+type TabKey = 'owes' | 'missing' | 'reports' | 'checks' | 'credits';
 type FilterKey = 'all' | 'collected' | 'balance' | 'overdue' | 'due';
 
-const TABS: TabKey[] = ['owes', 'missing', 'reports', 'checks'];
+const TABS: TabKey[] = ['owes', 'missing', 'reports', 'checks', 'credits'];
 const FILTERS: FilterKey[] = ['all', 'collected', 'balance', 'overdue', 'due'];
 
 const FILTER_WORDS: Record<FilterKey, string> = {
@@ -592,11 +593,12 @@ function CollectionsPageInner() {
           <Tab value="missing" label={`Missing fee details${totals ? ` (${totals.missingFeeCount})` : ''}`} />
           <Tab value="reports" label={`Student reports${totals ? ` (${reports.length})` : ''}`} />
           <Tab value="checks" label="Checks" />
+          <Tab value="credits" label="Bank credits" />
         </Tabs>
       </Paper>
 
       <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 1.5 }} flexWrap="wrap" useFlexGap>
-        {tab !== 'reports' && (
+        {tab !== 'reports' && tab !== 'credits' && (
           <TextField
             size="small"
             label="Search students"
@@ -619,6 +621,7 @@ function CollectionsPageInner() {
       {tab === 'owes' && grid(owesRows, owesColumns, 'No students match this view.', 'grid-owes')}
       {tab === 'missing' && grid(missingRows, missingColumns, 'Every student in this batch has fee details.', 'grid-missing')}
       {tab === 'checks' && grid(checkRows, checkColumns, 'No students with a fee yet.', 'grid-checks')}
+      {tab === 'credits' && <BankCreditsDesk />}
       {tab === 'reports' && (
         <Paper variant="outlined" sx={{ borderRadius: 1 }} data-testid="reports-list">
           {loading && !data ? (

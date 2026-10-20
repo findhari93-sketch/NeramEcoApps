@@ -170,6 +170,16 @@ describe('time', () => {
     expect(ticketClosesInText(ticketDaysFromNow(3, NOW), NOW)).toBe('closes in 3 days');
   });
 
+  it('a viewer clock a little behind the server still reads 3 days, not 4', () => {
+    const autoCloseAt = ticketDaysFromNow(3, NOW);
+    expect(ticketClosesInText(autoCloseAt, NOW - 5_000)).toBe('closes in 3 days');
+    expect(ticketClosesInText(autoCloseAt, NOW - 30 * 60_000)).toBe('closes in 3 days');
+  });
+
+  it('a few hours short of 3 days still reads 3', () => {
+    expect(ticketClosesInText(new Date(NOW + 3 * DAY - 5 * 3_600_000).toISOString(), NOW)).toBe('closes in 3 days');
+  });
+
   it('daysUntil ignores junk', () => {
     expect(ticketDaysUntil('not a date', NOW)).toBeNull();
   });

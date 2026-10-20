@@ -42,7 +42,7 @@ const nextConfig = {
     // Supabase generated types are out of sync with actual DB schema
     ignoreBuildErrors: true,
   },
-  transpilePackages: ['@neram/ai', '@neram/ui', '@neram/database', '@neram/i18n', '@neram/auth', '@neram/geo'],
+  transpilePackages: ['@neram/ai', '@neram/ui', '@neram/database', '@neram/i18n', '@neram/auth', '@neram/geo', '@neram/tools-core'],
   images: {
     minimumCacheTTL: 2592000, // 30 days — Supabase storage images are immutable
     remotePatterns: [
@@ -141,14 +141,14 @@ const nextConfig = {
       // These pages have no real translations — Google sees them as duplicates of the
       // English version and reports "Duplicate, Google chose different canonical".
       {
-        source: '/(ta|hi|kn|ml)/(nata-2026|blog|tools|colleges|nata-syllabus|nata-preparation-guide|nata-important-questions|jee-paper-2-preparation|best-books-nata-jee|how-to-score-150-in-nata|previous-year-papers|nata-app|best-nata-coaching-online|nata-cutoff-trends-2015-2025|nata-coaching|aiarchitek|counseling|careers|contact|free-resources|demo-class|courses|nata-hub|jee-barch-hub|scholarship|premium|alumni|aat-2026|pgeta-2026|fees)/:path*',
+        source: '/(ta|hi|kn|ml)/(nata-2026|blog|tools|colleges|nata-syllabus|nata-preparation-guide|nata-important-questions|jee-paper-2-preparation|best-books-nata-jee|how-to-score-150-in-nata|previous-year-papers|nata-app|best-nata-coaching-online|nata-cutoff-trends-2015-2025|nata-coaching|aiarchitek|counseling|careers|contact|free-resources|demo-class|courses|nata-hub|jee-barch-hub|scholarship|premium|alumni|aat-2026|pgeta-2026|fees|centers)/:path*',
         headers: [
           { key: 'X-Robots-Tag', value: 'noindex, follow' },
         ],
       },
       // Also catch the root-level (non-nested) versions of these paths
       {
-        source: '/(ta|hi|kn|ml)/(nata-2026|blog|colleges|nata-syllabus|nata-preparation-guide|nata-important-questions|jee-paper-2-preparation|best-books-nata-jee|how-to-score-150-in-nata|previous-year-papers|nata-app|best-nata-coaching-online|nata-cutoff-trends-2015-2025|nata-coaching|aiarchitek|counseling|careers|contact|free-resources|demo-class|courses|nata-hub|jee-barch-hub|scholarship|premium|alumni|aat-2026|pgeta-2026|fees)',
+        source: '/(ta|hi|kn|ml)/(nata-2026|blog|colleges|nata-syllabus|nata-preparation-guide|nata-important-questions|jee-paper-2-preparation|best-books-nata-jee|how-to-score-150-in-nata|previous-year-papers|nata-app|best-nata-coaching-online|nata-cutoff-trends-2015-2025|nata-coaching|aiarchitek|counseling|careers|contact|free-resources|demo-class|courses|nata-hub|jee-barch-hub|scholarship|premium|alumni|aat-2026|pgeta-2026|fees|centers)',
         headers: [
           { key: 'X-Robots-Tag', value: 'noindex, follow' },
         ],
@@ -178,6 +178,14 @@ const nextConfig = {
       // lib/seo/indexable-locales.ts); the hi, kn and ml copies are English.
       {
         source: '/(hi|kn|ml)/apply',
+        headers: [
+          { key: 'X-Robots-Tag', value: 'noindex, follow' },
+        ],
+      },
+      // About is translated in Tamil; hi, kn and ml miss the story block (about 40%
+      // translated), and Google folded them into /about.
+      {
+        source: '/(hi|kn|ml)/about',
         headers: [
           { key: 'X-Robots-Tag', value: 'noindex, follow' },
         ],

@@ -114,3 +114,20 @@ describe('featureById', () => {
     expect(featureById('nope')).toBeUndefined();
   });
 });
+
+describe('Ask aiArchitek (Tools app chat)', () => {
+  it('is a cheap, capped, auto-only student chatbot with no free key', () => {
+    // The chat carries marks, community and city, so the free key (whose inputs
+    // Google may train on) stays off.
+    expect(featureById('app.ask')).toMatchObject({
+      app: 'app',
+      trigger: 'student',
+      tier: 'cheap',
+      defaultMode: 'auto',
+      supportsManual: false,
+      allowFreeKey: false,
+      perClientHourlyCap: 40,
+      backupDropsTools: true,
+    });
+  });
+});

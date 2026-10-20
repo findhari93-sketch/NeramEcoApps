@@ -13,7 +13,7 @@ export const DESK_STAGES: Array<{ id: DeskStage; label: string; hint: string }> 
   { id: 'to_call', label: 'To call', hint: 'Not called yet, or called with no time fixed' },
   { id: 'scheduled', label: 'Scheduled', hint: 'Demo time fixed' },
   { id: 'after_demo', label: 'After demo', hint: 'Follow up until they join or say no' },
-  { id: 'joined', label: 'Joined', hint: 'Enrolled after the demo' },
+  { id: 'joined', label: 'Enrolled', hint: 'Paid the fee after the demo' },
   { id: 'closed', label: 'Closed', hint: 'Not interested, cancelled, or follow-up stopped' },
 ];
 
@@ -24,16 +24,53 @@ export function isFollowUpOpen(f: Pick<DemoFollowUpRow, 'status'> | null | undef
   return !!f && OPEN_FOLLOW_UP.has(f.status);
 }
 
+/** What the desk knows about fees paid and student profiles, read once per list load. */
+export interface EnrolmentEvidence {
+  /** Student profile per user id. */
+  profiles: Record<string, { enrolledOn: string | null; createdAt: string }>;
+  /** Enrolment links that finished (status 'used': fee recorded or verified by staff). */
+  usedLinks: Array<{ demoId: string | null; userId: string | null; usedAt: string | null }>;
+}
+
 /**
- * Where this request's student is.
- * `joinedOn` is undefined when the person has no student profile.
+ * Enrolled: the fee was paid and recorded after this demo was asked for.
+ * Already a student: the profile is older than the request (a test account,
+ * or a current student taking a demo). That is never "Enrolled".
+ */
+export type DemoEnrolment = { kind: 'enrolled'; on: string } | { kind: 'student_before'; since: string };
+
+const ms = (s: string) => new Date(s).getTime();
+
+export function enrolmentOf(r: Pick<DemoRequest, 'id' | 'user_id' | 'created_at'>, ev: EnrolmentEvidence): DemoEnrolment | null {
+  const asked = ms(r.created_at);
+  const profile = r.user_id ? ev.profiles[r.user_id] : undefined;
+  const viaDemo = ev.usedLinks.find((l) => l.demoId === r.id);
+  if (viaDemo) return { kind: 'enrolled', on: viaDemo.usedAt || profile?.enrolledOn || r.created_at };
+  const later = r.user_id ? ev.usedLinks.find((l) => l.userId === r.user_id && l.usedAt && ms(l.usedAt) >= asked) : undefined;
+  if (later) return { kind: 'enrolled', on: later.usedAt! };
+  if (profile && ms(profile.createdAt) >= asked) return { kind: 'enrolled', on: profile.enrolledOn || profile.createdAt };
+  if (profile) return { kind: 'student_before', since: profile.enrolledOn || profile.createdAt };
+  return null;
+}
+
+/** Staff closed the follow-up as "joined" but no fee is recorded yet. */
+export function saysJoinedNoFee(
+  followUp: Pick<DemoFollowUpRow, 'status' | 'call_outcome'> | null | undefined,
+  enrolment: DemoEnrolment | null | undefined,
+): boolean {
+  return !!followUp && followUp.status === 'completed' && followUp.call_outcome === 'joined' && enrolment?.kind !== 'enrolled';
+}
+
+/**
+ * Where this request's student is. Enrolled needs a recorded fee; joining the
+ * Teams meeting is Attended (After demo), never Enrolled.
  */
 export function stageOf(
   r: Pick<DemoRequest, 'status'>,
   followUp: Pick<DemoFollowUpRow, 'status' | 'call_outcome'> | null | undefined,
-  joinedOn: string | null | undefined,
+  enrolment: DemoEnrolment | null | undefined,
 ): DeskStage {
-  if (joinedOn !== undefined) return 'joined';
+  if (enrolment?.kind === 'enrolled') return 'joined';
   switch (r.status) {
     case 'pending':
     case 'contacted':
@@ -42,7 +79,8 @@ export function stageOf(
       return 'scheduled';
     case 'attended':
     case 'no_show':
-      if (followUp && followUp.status === 'completed') return followUp.call_outcome === 'joined' ? 'joined' : 'closed';
+      // "Joined" without a fee stays here until staff record the payment.
+      if (followUp && followUp.status === 'completed' && followUp.call_outcome !== 'joined') return 'closed';
       return 'after_demo';
     default:
       return 'closed';
@@ -88,7 +126,7 @@ export function sortPeople(
   stage: DeskStage,
   people: DeskPerson[],
   followUps: Record<string, DemoFollowUpRow>,
-  joinedAt: Record<string, string>,
+  enrolment: Record<string, DemoEnrolment>,
 ): DeskPerson[] {
   const copy = [...people];
   const c = (p: DeskPerson) => p.current;
@@ -108,7 +146,10 @@ export function sortPeople(
         return da - db;
       });
     case 'joined': {
-      const j = (p: DeskPerson) => t((p.current.user_id && joinedAt[p.current.user_id]) || p.current.updated_at, 0);
+      const j = (p: DeskPerson) => {
+        const e = enrolment[p.current.id];
+        return t(e?.kind === 'enrolled' ? e.on : p.current.updated_at, 0);
+      };
       return copy.sort((a, b) => j(b) - j(a));
     }
     default:

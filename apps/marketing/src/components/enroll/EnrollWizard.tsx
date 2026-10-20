@@ -36,7 +36,8 @@ import ApplicationDetailsDialog from './ApplicationDetailsDialog';
 import PlanChoiceStep from './PlanChoiceStep';
 import PayStep from './PayStep';
 import PaymentSubmittedScreen from './PaymentSubmittedScreen';
-import { rupees, istTodayKey, addDays, type StudentPayLinkData, type PaymentSubmission } from './student-pay-types';
+import { fetchPaymentMethods, createIntent, startInstantOrder, pollInstantOrder, cancelInstantOrder, type PaymentMethodsView } from './instant-upi-client';
+import { rupees, istTodayKey, addDays, type StudentPayLinkData, type PaymentSubmission, formatDay } from './student-pay-types';
 import { useEnrollmentProgress } from '@/hooks/useEnrollmentProgress';
 import type {
   PersonalInfoData,
@@ -80,6 +81,8 @@ interface LinkData {
   paymentMode?: 'recorded' | 'student_pays';
   offer?: StudentPayLinkData['offer'];
   payee?: StudentPayLinkData['payee'];
+  qrCodes?: StudentPayLinkData['qrCodes'];
+  detailsSavedAt?: string | null;
   paymentNote?: string;
   rejectionReason?: string | null;
   prefill?: StudentPayLinkData['prefill'];
@@ -166,6 +169,8 @@ export default function EnrollWizard() {
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState(DEFAULT_FORM_DATA);
   const [submitting, setSubmitting] = useState(false);
+  const [payLaterBusy, setPayLaterBusy] = useState(false);
+  const [payLaterSaved, setPayLaterSaved] = useState<{ emailedTo: string | null } | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [applicationNumber, setApplicationNumber] = useState<string | null>(null);
 
@@ -196,6 +201,18 @@ export default function EnrollWizard() {
   const [requestLoading, setRequestLoading] = useState(false);
   const [requestResult, setRequestResult] = useState<{ ticketNumber: string; message: string } | null>(null);
   const [ticketResult, setTicketResult] = useState<{ ticketNumber: string } | null>(null);
+  // Which ways to pay are on, asked once the Pay step is reached (Instant UPI hides itself when off).
+  const [methodsView, setMethodsView] = useState<PaymentMethodsView | null>(null);
+  useEffect(() => {
+    if (currentStep !== 3 || methodsView || linkData?.paymentMode !== 'student_pays') return;
+    let alive = true;
+    fetchPaymentMethods().then((m) => {
+      if (alive) setMethodsView(m || { upiAuto: { available: false, reason: 'error', orderMinutes: 30, mode: 'shadow' }, upiProof: { available: true }, bankProof: { available: true }, razorpay: { available: false, feePercent: 0 } });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [currentStep, methodsView, linkData?.paymentMode]);
 
   // Restore state from localStorage — only when token is confirmed valid (not used/expired)
   useEffect(() => {
@@ -468,10 +485,54 @@ export default function EnrollWizard() {
     return null;
   };
 
-  const handleSubmit = async () => {
-    if (!user || !linkData) return;
+  /** What /api/enroll/complete and /api/payments/intents both take. Amounts are never in it. */
+  const buildEnrolBody = (intent: 'submit' | 'pay_later' | 'instant') => ({
+    token: linkData?.token,
+    firstName: formData.personal.firstName,
+    fatherName: formData.personal.fatherName,
+    dateOfBirth: formData.personal.dateOfBirth,
+    gender: formData.personal.gender,
+    country: formData.location.country,
+    state: formData.location.state,
+    city: formData.location.city,
+    district: formData.location.district,
+    pincode: formData.location.pincode,
+    address: formData.location.address,
+    applicantCategory: formData.academic.applicantCategory,
+    academicData: getAcademicDataForSubmit(),
+    casteCategory: formData.academic.casteCategory,
+    targetExamYear: formData.academic.targetExamYear,
+    schoolType: formData.academic.schoolType,
+    parentPhone: formData.personal.parentPhone,
+    // The student's OWN number, so the server can persist it on users.phone.
+    // Google-login students have no phone on their user row, and that number
+    // is the key the admin Entra reconciler uses to recognise them later.
+    studentPhone: verifiedPhone || formData.personal.phone || null,
+    phoneVerified,
+    phoneVerifiedAt,
+    // Payment details from student
+    paymentDate: formData.payment.paymentDate,
+    paymentType: formData.payment.paymentType,
+    installmentNumber: formData.payment.installmentNumber,
+    paymentMethod: formData.payment.paymentMethod,
+    transactionReference: formData.payment.transactionReference,
+    paymentProofUrl: formData.payment.paymentProofUrl,
+    // Student-pays: the plan. The amount is the server's, never sent.
+    scheme: formData.payment.paymentType,
+    proofChannel: formData.payment.proofChannel || 'upload',
+    whatsappSent: formData.payment.whatsappSent === true,
+    payerName: formData.payment.payerName || null,
+    // Instant UPI enrols without the submit button, so the server checks the terms too.
+    termsAccepted,
+    // 'pay_later' saves the details and emails how to pay; nothing is claimed.
+    intent,
+  });
 
-    setSubmitting(true);
+  const handleSubmit = async (intent?: 'pay_later') => {
+    if (!user || !linkData) return;
+    const setBusy = intent === 'pay_later' ? setPayLaterBusy : setSubmitting;
+
+    setBusy(true);
     setSubmitError(null);
 
     try {
@@ -484,40 +545,7 @@ export default function EnrollWizard() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${idToken}`,
         },
-        body: JSON.stringify({
-          token: linkData.token,
-          firstName: formData.personal.firstName,
-          fatherName: formData.personal.fatherName,
-          dateOfBirth: formData.personal.dateOfBirth,
-          gender: formData.personal.gender,
-          country: formData.location.country,
-          state: formData.location.state,
-          city: formData.location.city,
-          district: formData.location.district,
-          pincode: formData.location.pincode,
-          address: formData.location.address,
-          applicantCategory: formData.academic.applicantCategory,
-          academicData: getAcademicDataForSubmit(),
-          casteCategory: formData.academic.casteCategory,
-          targetExamYear: formData.academic.targetExamYear,
-          schoolType: formData.academic.schoolType,
-          parentPhone: formData.personal.parentPhone,
-          // The student's OWN number, so the server can persist it on users.phone.
-          // Google-login students have no phone on their user row, and that number
-          // is the key the admin Entra reconciler uses to recognise them later.
-          studentPhone: verifiedPhone || formData.personal.phone || null,
-          phoneVerified,
-          phoneVerifiedAt,
-          // Payment details from student
-          paymentDate: formData.payment.paymentDate,
-          paymentType: formData.payment.paymentType,
-          installmentNumber: formData.payment.installmentNumber,
-          paymentMethod: formData.payment.paymentMethod,
-          transactionReference: formData.payment.transactionReference,
-          paymentProofUrl: formData.payment.paymentProofUrl,
-          // Student-pays: the plan. The amount is the server's, never sent.
-          scheme: formData.payment.paymentType,
-        }),
+        body: JSON.stringify(buildEnrolBody(intent || 'submit')),
       });
 
       const data = await res.json();
@@ -540,6 +568,14 @@ export default function EnrollWizard() {
         throw new Error(data.error || 'Failed to complete enrollment');
       }
 
+      // Pay later: details are on the link; keep the local progress so they can continue here.
+      if (data.data?.status === 'details_saved') {
+        setFieldErrors({});
+        setPayLaterSaved({ emailedTo: data.data.emailedTo || null });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
       // Clear saved progress on success
       clearProgress();
       setFieldErrors({});
@@ -560,8 +596,20 @@ export default function EnrollWizard() {
     } catch (err: any) {
       setSubmitError(err.message || 'Something went wrong. Please try again.');
     } finally {
-      setSubmitting(false);
+      setBusy(false);
     }
+  };
+
+  // Instant UPI: the intent is created from the same form body the complete
+  // route takes, so auto-fulfilment enrols from the saved details.
+  const startInstantUpi = async () => {
+    const intentId = await createIntent(buildEnrolBody('instant'));
+    return startInstantOrder(intentId);
+  };
+  const onInstantUpiDone = () => {
+    clearProgress();
+    invalidateApplicationStatus();
+    if (linkData) validateToken(linkData.token, user ? (user.raw as any) : undefined);
   };
 
   // Save updated enrollment details
@@ -1328,7 +1376,14 @@ export default function EnrollWizard() {
 
       {studentPays && linkData?.rejectionReason && (
         <Alert severity="warning" sx={{ mb: 2 }}>
-          We could not confirm your last payment: {linkData.rejectionReason} Please check the reference number and submit again.
+          We could not confirm your last payment: {linkData.rejectionReason} Please check the details and submit again.
+        </Alert>
+      )}
+
+      {studentPays && payLaterSaved && (
+        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setPayLaterSaved(null)}>
+          Saved. {payLaterSaved.emailedTo ? `We emailed ${payLaterSaved.emailedTo} the payment details and this link.` : 'Your details are on this link.'} Pay whenever you are ready
+          {linkData?.expiresAt ? `, before ${formatDay(String(linkData.expiresAt).slice(0, 10))}` : ''}.
         </Alert>
       )}
 
@@ -1482,6 +1537,10 @@ export default function EnrollWizard() {
                 : null
             }
             payee={linkData!.payee!}
+            qrCodes={linkData!.qrCodes || []}
+            studentName={formData.personal.firstName || linkData!.studentName || null}
+            onPayLater={() => handleSubmit('pay_later')}
+            payLaterBusy={payLaterBusy}
             paymentNote={linkData!.paymentNote || ''}
             token={linkData!.token}
             payment={formData.payment}
@@ -1495,6 +1554,11 @@ export default function EnrollWizard() {
             termsAccepted={termsAccepted}
             setTermsAccepted={setTermsAccepted}
             phoneVerified={isPhoneCurrentlyVerified}
+            instant={
+              methodsView?.upiAuto.available
+                ? { orderMinutes: methodsView.upiAuto.orderMinutes, mode: methodsView.upiAuto.mode || 'live', start: startInstantUpi, poll: pollInstantOrder, cancel: cancelInstantOrder, onDone: onInstantUpiDone }
+                : undefined
+            }
             onSubmit={handleSubmit}
             submitting={submitting}
             fieldErrors={fieldErrors}

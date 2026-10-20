@@ -9,8 +9,9 @@ import TaskAltOutlined from '@mui/icons-material/TaskAltOutlined';
 import { tokens as t, CtaButton } from '@/design-system';
 import PayStep from '@/components/enroll/PayStep';
 import PaymentSubmittedScreen from '@/components/enroll/PaymentSubmittedScreen';
-import { rupees, formatDay, istTodayKey, type PaymentPayee } from '@/components/enroll/student-pay-types';
+import { rupees, formatDay, istTodayKey, type PaymentPayee, type PaymentQrCode } from '@/components/enroll/student-pay-types';
 import type { PaymentDetailsData } from '@/components/apply/types';
+import { fetchPaymentMethods, createIntent, startInstantOrder, pollInstantOrder, cancelInstantOrder, type PaymentMethodsView } from '@/components/enroll/instant-upi-client';
 
 /** The app hosts register-user and verify-phone for every site. */
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
@@ -21,6 +22,7 @@ interface Claim {
   amount: number;
   method: 'upi_direct' | 'bank_transfer';
   utrTail: string | null;
+  proofChannel?: 'upload' | 'whatsapp';
   paidOn: string | null;
   submittedAt: string;
   rejectionReason: string | null;
@@ -38,6 +40,7 @@ interface BalanceData {
     balance: number | null;
   };
   payee: PaymentPayee;
+  qrCodes?: PaymentQrCode[];
   paymentNote: string;
   pending: Claim | null;
   lastRejection: Claim | null;
@@ -68,6 +71,8 @@ export default function PayBalanceContent() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState<{ claim: Claim; utr: string; emailedTo: string | null } | null>(null);
+  const [methodsView, setMethodsView] = useState<PaymentMethodsView | null>(null);
+  const [instantDone, setInstantDone] = useState(false);
 
   const authHeaders = async (): Promise<Record<string, string>> => {
     const idToken = await getCurrentUser()?.getIdToken();
@@ -90,6 +95,15 @@ export default function PayBalanceContent() {
     if (user) load();
   }, [user, load]);
 
+  useEffect(() => {
+    if (!user || methodsView) return;
+    let alive = true;
+    fetchPaymentMethods().then((m) => alive && m && setMethodsView(m));
+    return () => {
+      alive = false;
+    };
+  }, [user, methodsView]);
+
   const updatePayment = (d: Partial<PaymentDetailsData>) => {
     setPayment((prev) => ({ ...prev, ...d }));
     const keys = Object.keys(d);
@@ -110,6 +124,9 @@ export default function PayBalanceContent() {
           transactionReference: payment.transactionReference,
           paymentDate: payment.paymentDate,
           paymentProofUrl: payment.paymentProofUrl,
+          proofChannel: payment.proofChannel || 'upload',
+          whatsappSent: payment.whatsappSent === true,
+          payerName: payment.payerName || null,
         }),
       });
       const json = await res.json();
@@ -154,6 +171,34 @@ export default function PayBalanceContent() {
     );
   }
 
+  // ── Instant UPI confirmed ─────────────────────────────────────────────────
+  if (instantDone) {
+    return (
+      <Container maxWidth="sm" sx={{ py: { xs: 4, md: 8 }, px: 2, textAlign: 'center' }}>
+        <TaskAltOutlined aria-hidden sx={{ fontSize: 56, color: t.success, mb: 1.5 }} />
+        <Typography component="h1" sx={{ fontSize: { xs: 24, md: 28 }, fontWeight: 800, color: t.ink }}>
+          Payment received
+        </Typography>
+        <Typography sx={{ fontSize: 16, color: t.inkMuted, mt: 1, lineHeight: 1.5 }}>
+          Thank you. It is recorded on your fee plan; your fee page shows it as paid.
+        </Typography>
+        <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center' }}>
+          <CtaButton
+            variant="outline"
+            onClick={() => {
+              setInstantDone(false);
+              setData(null);
+              load();
+            }}
+            endIcon={null}
+          >
+            See what is left to pay
+          </CtaButton>
+        </Box>
+      </Container>
+    );
+  }
+
   // ── Just submitted, or a payment already waiting ──────────────────────────
   const waiting = submitted?.claim || data?.pending;
   if (waiting) {
@@ -166,6 +211,7 @@ export default function PayBalanceContent() {
           method: waiting.method,
           utr: submitted?.utr || null,
           utrTail: waiting.utrTail,
+          proofChannel: waiting.proofChannel || null,
           paidOn: waiting.paidOn,
           balance: null,
           balanceDueDate: null,
@@ -267,6 +313,8 @@ export default function PayBalanceContent() {
             : 'This clears your fee. Nothing more to pay after this.'
         }
         payee={data.payee}
+        qrCodes={data.qrCodes || []}
+        studentName={data.studentName}
         paymentNote={data.paymentNote}
         token="balance"
         payment={payment}
@@ -275,6 +323,18 @@ export default function PayBalanceContent() {
         setTermsAccepted={() => {}}
         showTerms={false}
         phoneVerified
+        instant={
+          methodsView?.upiAuto.available
+            ? {
+                orderMinutes: methodsView.upiAuto.orderMinutes,
+                mode: methodsView.upiAuto.mode || 'live',
+                start: async () => startInstantOrder(await createIntent({ purpose: 'installment' })),
+                poll: pollInstantOrder,
+                cancel: cancelInstantOrder,
+                onDone: () => setInstantDone(true),
+              }
+            : undefined
+        }
         onSubmit={submit}
         submitting={submitting}
         fieldErrors={fieldErrors}

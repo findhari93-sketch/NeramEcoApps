@@ -22,6 +22,7 @@
     "@neram/auth": "workspace:*",
     "@neram/database": "workspace:*",
     "@neram/geo": "workspace:*",
+    "@neram/tools-core": "workspace:*",
     "@neram/i18n": "workspace:*",
     "@neram/ui": "workspace:*",
     "@tailwindcss/postcss": "^4.2.1",

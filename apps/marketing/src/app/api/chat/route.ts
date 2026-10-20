@@ -10,7 +10,12 @@ import {
   getExamYearStatus,
   recordStatedExamYear,
 } from '@neram/database';
-import { verifyFirebaseToken } from '../_lib/auth';
+import { hasValidFirebaseToken, verifyFirebaseToken } from '../_lib/auth';
+import { parseBookArgs } from '@/lib/aintra/booking';
+import { cachedDemoSettings } from '@/lib/aintra/tools/booking-tools';
+import { intentCard } from '@/lib/aintra/tools/booking-plan';
+import { applicationPromptFor } from '@/lib/aintra/tools/application-tools';
+import type { ToolContext } from '@/lib/aintra/tools/types';
 import {
   assistantAskedExamYear,
   extractExamYearAnswer,
@@ -25,8 +30,7 @@ import { isE2ETestRun } from '@/lib/e2e-mode';
 import { AiBillingError, AiBlockedError, streamGemini, hashClientKey, ipFromHeaders } from '@neram/ai';
 import type { GeminiPart } from '@neram/ai';
 import { feesPromptText } from '@/lib/aintra/fees';
-import { demoDaysPrompt, visitorBookingsPrompt } from '@/lib/aintra/booking-prompt';
-import { loadDemoSettings } from '@/lib/demo-request';
+import { demoDaysPrompt, visitorBookingsPrompt, visitorPrompt } from '@/lib/aintra/booking-prompt';
 import { getActiveDemoRequestForUser } from '@neram/database';
 import {
   CHAT_STREAM_CONTENT_TYPE,
@@ -150,8 +154,31 @@ Yes, we offer free tools at app.neramclasses.com:
 - For questions you don't know the answer to, say: "I'm not sure about that. Please contact us at **+91 91761 37043** or **info@neramclasses.com** for accurate information."
 - NEVER fabricate information or make up details
 - When relevant, naturally mention free tools at app.neramclasses.com
-- If the user seems interested in joining, suggest visiting neramclasses.com/apply or booking a demo class
+- If the user seems interested in joining, offer to fill in the application with them right here, or to book a demo class
 - IMPORTANT: Always complete your answer. If a topic needs a long explanation, summarize the key points concisely rather than giving an incomplete detailed answer. Never end mid-sentence.
+
+## DOING THINGS FOR THE VISITOR
+You can set things up for the visitor so they only check a card and tap Confirm. Do it here in the chat instead of sending them to a page:
+- prepare_demo_booking: book a free demo class, or move their demo to another time.
+- prepare_demo_cancel: cancel their demo class (only when they clearly ask to cancel).
+- prepare_callback: ask our counsellor to call them.
+- get_my_status: their own demo, callback and application status (signed-in visitors).
+- save_application_details and prepare_application_submit: fill in their application form with them (below).
+- prepare_centre_visit: a visit to one of our classroom centres. prepare_college_enquiry: an admission enquiry to a college, sent with their consent. prepare_message: a written message to our team (they reply by email).
+Filling in the application with them ("help me apply", "complete my application"):
+- They must be signed in first: if THIS VISITOR says not signed in, call save_application_details with nothing, and only ask them to sign in on the card. Do not ask any form question yet: nothing can be saved until they sign in.
+- Ask the form's questions one or two at a time, in a natural order: student name and father's name; what they are studying now (class, or diploma, college, working) with the school and board (or college and department); the exam year; the course (NATA, JEE Paper 2 or both) and the programme (crash course, 1-year or 2-year, see the fees); their PIN code; their date of birth.
+- Every time they answer, call save_application_details with exactly what they said. Its result says what was saved, the place for a PIN code (confirm it with them), anything not saved and why, and what is still needed. Skip what THIS VISITOR'S APPLICATION already has.
+- When nothing is still needed, call prepare_application_submit. Tell them to check the summary on the card, tick the terms and tap Submit. Never say the application is submitted: only their tap does that.
+- They can also finish on the full form at neramclasses.com/apply, where everything saved here is already filled in.
+Booking a demo, in as few messages as possible:
+1. No day or time yet: ask which suits them, offering 2 or 3 open slots from DEMO SLOTS NOW as [[suggest: ...]] chips, for example [[suggest: Tomorrow evening | Thursday morning | Any time works]].
+2. Student name or exam year not known (see THIS VISITOR): ask for both in one short question. A parent may be booking for their child.
+3. Call prepare_demo_booking with everything you know. Then reply in one or two sentences: what you set up, and the next step the tool result gives (tap Confirm, or sign in or verify the phone first). The card is attached for you; do not write [[book:...]] after calling a tool.
+A callback needs only the day and time (and a topic if they said one): call prepare_callback. Whenever you can call a tool, call it rather than writing a [[book:...]] line yourself.
+- If a tool says a time is not open, offer the open ones it lists.
+- Never ask for a phone number or email in the chat: the card handles them. Never say something is booked or cancelled: that happens only when they tap the button on the card.
+- NO TOOLS? When these tools are not available to you right now, you MUST put the card line yourself, on its own line, or the visitor has nothing to tap: [[book:demo,DATE,window]] (or [[book:demo,anytime]]), [[book:callback,day,time]], [[book:cancel-demo]], or [[book:apply]] for the application. Never say you "prepared" or "set up" something without that line.
 
 ## FORMAT (the chat window draws these, so follow them exactly)
 - Write in markdown. Short paragraphs, "- " bullet lists for 3 or more items, **bold** for key figures.
@@ -159,11 +186,7 @@ Yes, we offer free tools at app.neramclasses.com:
 - TABLES: only to compare 3 or more items side by side (colleges, exam phases). Use a standard markdown table with a header row and a |---| separator row, each row on its own line, at most 5 columns.
 - HEADINGS: use ### headings only when the answer has 2 or more distinct sections.
 - BUTTONS: when the visitor shows intent, add one line such as [[cta:apply,demo]]. Actions: apply, demo, whatsapp, call. At most one line per answer.
-- BOOKING IN THE CHAT: when the visitor asks to be called back, or to book or attend a demo class, reply in one or two short sentences and put the booking card on its own line. They confirm it inside the chat.
-  - Callback: [[book:callback]], or with their wish, for example [[book:callback,tomorrow,evening]] (day: today, tomorrow or a date YYYY-MM-DD; time: morning, afternoon or evening).
-  - Demo class: [[book:demo]], or with a slot from DEMO SLOTS NOW, for example [[book:demo,2026-10-21,evening]]. Use "anytime" if they have no preference.
-  - NEVER ask for a phone number, name or email in the chat: the card collects them, so they are not typed into the chat.
-  - Never say a callback or demo is booked; the card confirms it after they tap. Use [[book:...]] instead of [[cta:demo]] or [[cta:call]] for these requests.
+- BOOKING CARDS WITHOUT A TOOL: if you cannot call the booking tools, put the card on its own line yourself: [[book:callback]] or [[book:callback,tomorrow,evening]] (day: today, tomorrow or YYYY-MM-DD; time: morning, afternoon or evening), [[book:demo]] or [[book:demo,2026-10-21,evening]] (a slot from DEMO SLOTS NOW, or "anytime"), [[book:cancel-demo]] to cancel their demo. Use [[book:...]] instead of [[cta:demo]] or [[cta:call]] for these requests.
 - FOLLOW-UPS: end every answer with [[suggest: question 1 | question 2 | question 3]], up to 3 short questions (under 40 characters each) the visitor is likely to ask next, written as the visitor would ask them. Use this instead of ending with a question of your own.
 - Never use em dashes or en dashes. Use commas, colons, periods or parentheses instead.`;
 
@@ -300,15 +323,34 @@ function finishReply(
   return { reply, model, finishReason, toolCalls };
 }
 
+/**
+ * The booking cards the tools prepared, one per kind (the latest wins), added
+ * under the finished answer. Written by the server, so a card always carries
+ * exactly what the tool checked, whatever the model wrote around it.
+ */
+function attachCards(result: GeminiResult, cards: string[], emit: Emit): GeminiResult {
+  const byKind = new Map<string, string>();
+  for (const card of cards) {
+    const kind = parseBookArgs(card.replace(/^\[\[book:|\]\]$/g, ''))?.kind;
+    if (kind) byKind.set(kind, card);
+  }
+  if (!byKind.size) return result;
+  const tail = `\n\n${[...byKind.values()].join('\n\n')}`;
+  emit({ t: 'delta', text: tail });
+  return { ...result, reply: result.reply.trimEnd() + tail };
+}
+
 async function runGeminiLoop(
   initialContents: GeminiContent[],
   systemPrompt: string,
   errors: string[],
   clientKey: string | null,
-  emit: Emit
+  emit: Emit,
+  toolContext: ToolContext
 ): Promise<GeminiResult | null> {
   const contents: GeminiContent[] = [...initialContents];
   const toolCalls: ToolCallLog[] = [];
+  const cards: string[] = [];
 
   // Gemini disallows combining built-in tools (google_search) with
   // functionDeclarations in the same request, so we use only function calling.
@@ -341,7 +383,7 @@ async function runGeminiLoop(
         errors.push(`${result.model}:EMPTY_TEXT`);
         return null;
       }
-      return finishReply(reply, result.model, result.finishReason, toolCalls, emit);
+      return attachCards(finishReply(reply, result.model, result.finishReason, toolCalls, emit), cards, emit);
     }
 
     // The model said something like "Let me check" before asking for a tool.
@@ -362,8 +404,9 @@ async function runGeminiLoop(
     const executions = await Promise.all(
       functionCalls.map(async (call) => {
         const started = Date.now();
-        const res = await dispatchTool(call.name, call.args);
+        const res = await dispatchTool(call.name, call.args, toolContext);
         const latency = Date.now() - started;
+        if (res.ok && res.card) cards.push(res.card);
         toolCalls.push({
           name: call.name,
           args: call.args,
@@ -378,13 +421,15 @@ async function runGeminiLoop(
     // Append each tool result as a functionResponse. Gemini REST v1beta expects
     // functionResponse messages to carry role 'user' (not 'function').
     for (const { call, res } of executions) {
+      // The card is for the visitor, not the model (see attachCards).
+      const forModel = res.ok ? { ok: true, data: res.data, ...(res.card ? { card: 'shown under your answer' } : {}) } : res;
       contents.push({
         role: 'user',
         parts: [
           {
             functionResponse: {
               name: call.name,
-              response: res as unknown as Record<string, unknown>,
+              response: forModel as unknown as Record<string, unknown>,
             },
           },
         ],
@@ -401,7 +446,7 @@ async function runGeminiLoop(
   if (!finalResult) return null;
   const finalReply = finalResult.text.trim();
   if (!finalReply) return null;
-  return finishReply(finalReply, finalResult.model, finalResult.finishReason, toolCalls, emit);
+  return attachCards(finishReply(finalReply, finalResult.model, finalResult.finishReason, toolCalls, emit), cards, emit);
 }
 
 // ============================================
@@ -528,7 +573,11 @@ export async function POST(request: NextRequest) {
 
   // Free on a guest's first day; on a later day Aintra asks them to sign in first.
   // A just-minted visitor id is a first visit, so it needs no lookup.
-  if (!userId && !visitor.minted) {
+  // Signed in means a valid Firebase token, never the body's userId (any script
+  // could send one). A token for an account not yet registered still counts:
+  // the person did sign in, and the widget registers them on the way.
+  const signedIn = !!verified || (!!request.headers.get('authorization') && (await hasValidFirebaseToken(request)));
+  if (!signedIn && !visitor.minted) {
     const returning = isE2ETestRun()
       ? request.headers.get(E2E_RETURNING_GUEST_HEADER) === '1'
       : await guestNeedsSignIn(createAdminClient(), visitor.anonymousId);
@@ -580,6 +629,14 @@ export async function POST(request: NextRequest) {
           visitor,
           emit,
           verifiedUserId: verified?.userId ?? null,
+          toolContext: {
+            userId: verified?.userId ?? null,
+            name: verified?.name && verified.name !== 'User' ? verified.name : null,
+            phoneVerified: verified?.phoneVerified ?? false,
+            // Only ever copied onto their own application draft; never sent to the model.
+            phone: verified?.phoneVerified ? verified.phone : null,
+            email: verified?.email ?? null,
+          },
           modelTexts,
         });
       } catch (error) {
@@ -613,33 +670,28 @@ export async function POST(request: NextRequest) {
  * stated (or batch) year: save it when this message answers it, otherwise ask
  * once. No extra model call; at most three small reads and one write.
  */
-async function examYearPromptFor(userId: string | null, message: string, modelTexts: string[]): Promise<string> {
-  if (!userId || isE2ETestRun()) return '';
+async function examYearPromptFor(
+  userId: string | null,
+  message: string,
+  modelTexts: string[],
+): Promise<{ text: string; year: number | null }> {
+  const none = { text: '', year: null };
+  if (!userId || isE2ETestRun()) return none;
   try {
     const supabase = createAdminClient();
     const status = await getExamYearStatus(supabase as any, userId);
-    if (status.source !== null) return '';
+    if (status.source !== null) return { text: '', year: status.year };
     const justAsked = assistantAskedExamYear(modelTexts.slice(-1));
     const year = extractExamYearAnswer(message, { justAsked });
     if (year !== null) {
       const res = await recordStatedExamYear(supabase as any, userId, year, 'aintra');
-      return res.saved ? savedExamYearPrompt(year) : '';
+      return res.saved ? { text: savedExamYearPrompt(year), year } : none;
     }
-    return assistantAskedExamYear(modelTexts) ? '' : askExamYearPrompt();
+    return { text: assistantAskedExamYear(modelTexts) ? '' : askExamYearPrompt(), year: null };
   } catch (err) {
     console.error('Aintra exam year check failed:', err);
-    return '';
+    return none;
   }
-}
-
-let demoSettingsCache: { value: Awaited<ReturnType<typeof loadDemoSettings>>; fetchedAt: number } | null = null;
-
-/** Demo settings for the prompt, cached like the knowledge base (5 minutes). */
-async function demoSettingsForPrompt() {
-  if (demoSettingsCache && Date.now() - demoSettingsCache.fetchedAt < KB_CACHE_TTL_MS) return demoSettingsCache.value;
-  const value = await loadDemoSettings();
-  demoSettingsCache = { value, fetchedAt: Date.now() };
-  return value;
 }
 
 /**
@@ -648,7 +700,7 @@ async function demoSettingsForPrompt() {
  */
 async function bookingPromptFor(userId: string | null): Promise<string> {
   try {
-    const settings = await demoSettingsForPrompt();
+    const settings = await cachedDemoSettings();
     let text = demoDaysPrompt(new Date(), settings.schedule);
     if (userId && !isE2ETestRun()) {
       const supabase = createAdminClient();
@@ -693,15 +745,18 @@ async function answer(params: {
   emit: Emit;
   /** Supabase user id from a verified Firebase token, or null. */
   verifiedUserId?: string | null;
+  /** The verified visitor, for the booking tools. */
+  toolContext: ToolContext;
   /** Earlier assistant turns, to ask about the exam year only once. */
   modelTexts?: string[];
 }) {
-  const { message, contents, sessionId, userId, userName, pageUrl, geo, clientKey, visitor, emit } = params;
+  const { message, contents, sessionId, userId, userName, pageUrl, geo, clientKey, visitor, emit, toolContext } = params;
   const startTime = Date.now();
-  const [kbSection, examYearNote, bookingNote] = await Promise.all([
+  const [kbSection, examYear, bookingNote, applicationNote] = await Promise.all([
     getKBSection(),
     examYearPromptFor(params.verifiedUserId ?? null, message, params.modelTexts ?? []),
     bookingPromptFor(params.verifiedUserId ?? null),
+    applicationPromptFor(params.verifiedUserId ?? null),
   ]);
   const currentCollegeSlug = extractCollegeSlug(pageUrl || null);
   const effectivePrompt =
@@ -710,8 +765,15 @@ async function answer(params: {
       kb: kbSection,
       currentCollegeSlug,
     }) +
+    visitorPrompt({
+      signedIn: !!toolContext.userId,
+      name: toolContext.name,
+      phoneVerified: toolContext.phoneVerified,
+      examYear: examYear.year,
+    }) +
     bookingNote +
-    examYearNote;
+    applicationNote +
+    examYear.text;
 
   const log = (fields: { aiResponse: string | null; error?: string; modelUsed?: string; toolCalls?: ToolCallLog[] }) =>
     logConversation({
@@ -729,7 +791,7 @@ async function answer(params: {
   const errors: string[] = [];
   let result: GeminiResult | null;
   try {
-    result = await runGeminiLoop(contents, effectivePrompt, errors, clientKey, emit);
+    result = await runGeminiLoop(contents, effectivePrompt, errors, clientKey, emit, toolContext);
   } catch (err) {
     // The AI budget is spent, or the assistant is switched off in the control
     // panel. A visitor cannot run a prompt themselves, so this reads as a
@@ -758,6 +820,18 @@ async function answer(params: {
     });
     await log({ aiResponse: null, error: errors.join(' | ') });
     return;
+  }
+
+  // The backup (Groq/OpenRouter) cannot call the booking tools. If it answered
+  // a plain "book my demo" without a card, add the plain card, so the visitor
+  // always has something to tap.
+  if (!result.model.startsWith('gemini') && !/\[\[book:/i.test(result.reply)) {
+    const card = intentCard(message);
+    if (card) {
+      const tail = `\n\n${card}`;
+      emit({ t: 'delta', text: tail });
+      result = { ...result, reply: result.reply.trimEnd() + tail };
+    }
   }
 
   // Tell the visitor first; the log row can be written after they have the answer.

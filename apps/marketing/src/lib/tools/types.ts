@@ -42,6 +42,11 @@ export interface ToolConfig {
   faqs: ToolFAQ[];
   relatedToolSlugs: string[];
   teaserComponent: ComponentType;
+  /**
+   * Server-rendered sections shown after "How it works" (data tables and the
+   * like). May be an async server component.
+   */
+  extraSections?: ComponentType;
 }
 
 export interface ToolCardData {

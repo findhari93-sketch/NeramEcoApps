@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     const bucketExists = buckets?.some((b) => b.id === BUCKET_NAME);
     if (!bucketExists) {
       await supabase.storage.createBucket(BUCKET_NAME, {
-        public: true,
+        public: false,
         fileSizeLimit: 5242880, // 5MB
         allowedMimeTypes: allowedTypes,
       });
@@ -74,13 +74,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get public URL
-    const { data: urlData } = supabase.storage
+    // The bucket is private: a 24-hour signed link for the drawer preview. The
+    // stored value is re-signed by /api/payment-proof whenever it is opened.
+    const { data: signed, error: signError } = await supabase.storage
       .from(BUCKET_NAME)
-      .getPublicUrl(data.path);
+      .createSignedUrl(data.path, 60 * 60 * 24);
+    if (signError || !signed?.signedUrl) {
+      console.error('Storage sign error:', signError?.message);
+      return NextResponse.json({ error: 'Upload failed: could not prepare the preview' }, { status: 500 });
+    }
 
     return NextResponse.json({
-      url: urlData.publicUrl,
+      url: signed.signedUrl,
       path: data.path,
     });
   } catch (error) {

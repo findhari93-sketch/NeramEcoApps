@@ -18,6 +18,7 @@ import {
   useMediaQuery,
   Alert,
   ImageUploadList,
+  Skeleton,
 } from '@neram/ui';
 import CloseIcon from '@mui/icons-material/Close';
 import SendIcon from '@mui/icons-material/Send';
@@ -74,6 +75,12 @@ interface ReportProblemDialogProps {
   getToken: () => Promise<string | null>;
   pageUrl?: string;
   initialScreenshotFile?: File | null;
+  /**
+   * A page picture still being taken. The dialog opens at once and shows a
+   * placeholder until it lands; Send waits a few seconds for it. Capturing
+   * before opening made the button feel dead for up to 10s on a long page.
+   */
+  autoShotPromise?: Promise<File | null> | null;
   prefill?: { title?: string; description?: string; category?: SupportTicketCategory };
   mode?: ReportDialogMode;
   /** Called once the ticket exists, before the success view shows. */
@@ -88,6 +95,7 @@ export default function ReportProblemDialog({
   getToken,
   pageUrl,
   initialScreenshotFile,
+  autoShotPromise,
   prefill,
   mode = 'report',
   onSubmitted,
@@ -112,7 +120,32 @@ export default function ReportProblemDialog({
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<SubmittedTicket | null>(null);
 
-  const autoShot = isSupport || autoShotDropped ? null : initialScreenshotFile || null;
+  const [capturedShot, setCapturedShot] = useState<File | null>(null);
+  const [capturePending, setCapturePending] = useState(false);
+
+  useEffect(() => {
+    setCapturedShot(null);
+    if (!open || !autoShotPromise) {
+      setCapturePending(false);
+      return;
+    }
+    let cancelled = false;
+    setCapturePending(true);
+    autoShotPromise
+      .then((file) => {
+        if (!cancelled) setCapturedShot(file);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setCapturePending(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, autoShotPromise]);
+
+  const autoShot = isSupport || autoShotDropped ? null : initialScreenshotFile || capturedShot || null;
+  const showCapturing = !isSupport && !autoShotDropped && !autoShot && capturePending;
 
   const resetForm = () => {
     setCategory(defaultCategory);
@@ -186,13 +219,23 @@ export default function ReportProblemDialog({
       const deviceInfo = collectReportDeviceInfo();
       const consoleLogs = getRecentErrors();
 
+      // Still taking the page picture: give it a few seconds, then send without it.
+      let pageShot = autoShot;
+      if (!pageShot && showCapturing && autoShotPromise) {
+        setAttaching(true);
+        pageShot = await Promise.race([
+          autoShotPromise.catch(() => null),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), 6000)),
+        ]);
+      }
+
       // Upload the page shot now, so its path goes straight into the body below
       // instead of through component state. Best-effort: a failed or slow upload
       // never blocks the report.
-      if (autoShot) setAttaching(true);
+      if (pageShot) setAttaching(true);
       const screenshotPaths = await collectScreenshotPaths({
         manual: screenshots,
-        autoFile: autoShot,
+        autoFile: pageShot,
         upload: (file) => uploadScreenshot(file).then((r) => r.path || null),
       });
       setAttaching(false);
@@ -340,6 +383,20 @@ export default function ReportProblemDialog({
         inputProps={{ maxLength: 2000 }}
       />
 
+      {showCapturing && (
+        <Box aria-live="polite" data-testid="report-auto-screenshot-pending">
+          <Typography variant="body2" sx={{ mb: 0.75, fontWeight: 600 }}>
+            Picture of this page
+          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <Skeleton variant="rounded" width={88} height={88} sx={{ flexShrink: 0, borderRadius: 1.5 }} />
+            <Typography variant="body2" sx={{ color: 'text.secondary' }}>
+              Taking a picture of the page. You can start typing.
+            </Typography>
+          </Box>
+        </Box>
+      )}
+
       {autoShotPreview && (
         <Box>
           <Typography variant="body2" sx={{ mb: 0.75, fontWeight: 600 }}>
@@ -457,6 +514,8 @@ export default function ReportProblemDialog({
         onClose={handleClose}
         onOpen={() => {}}
         disableSwipeToOpen
+        // Opens while the page picture is still being taken: keep the sheet out of it.
+        data-no-screenshot="true"
         PaperProps={{
           'aria-labelledby': titleId,
           role: 'dialog',
@@ -504,7 +563,15 @@ export default function ReportProblemDialog({
   }
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth aria-labelledby={titleId}>
+    <Dialog
+      open={open}
+      onClose={handleClose}
+      maxWidth="sm"
+      fullWidth
+      aria-labelledby={titleId}
+      // Opens while the page picture is still being taken: keep the dialog out of it.
+      data-no-screenshot="true"
+    >
       <DialogTitle id={titleId} sx={{ fontWeight: 700, pr: 8 }}>
         {heading}
         <IconButton

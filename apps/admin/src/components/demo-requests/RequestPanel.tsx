@@ -56,6 +56,8 @@ import { heldTutorOptions } from '@/lib/demo/staff-add';
 import { meetingKindOf } from '@/lib/demo/meeting';
 import { closedReason } from './journey';
 import ScheduleDialog, { type ScheduleSubmit } from './ScheduleDialog';
+import TeamsEvidence from './TeamsEvidence';
+import { guestsWhoJoined, hasLiveTeamsMeeting, type DemoWithTeams } from '@/lib/demo/teams-evidence';
 import type { DeskDetail, DeskSettings, DemoRequest } from './types';
 import { ago, classLabel, prettyPhone, telHref, waHref } from './format';
 
@@ -161,6 +163,8 @@ export default function RequestPanel({
   const [reason, setReason] = useState('');
   const [copied, setCopied] = useState(false);
   const [attendedOpen, setAttendedOpen] = useState(false);
+  // Opened to correct an automatic No-show: mark Attended rather than only start a follow-up.
+  const [attendedFix, setAttendedFix] = useState(false);
   const [heldOpen, setHeldOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
   const [stopOpen, setStopOpen] = useState(false);
@@ -200,7 +204,9 @@ export default function RequestPanel({
   const nameOf = (upn: string | null) => (upn ? settings.hosts.find((h) => h.upn.toLowerCase() === upn.toLowerCase())?.name || upn : 'someone');
   const start = r.scheduled_start ? new Date(r.scheduled_start) : null;
   const joinOpen = start ? isJoinOpen(start, r.scheduled_minutes, now) : false;
-  const canMarkAttendance = start ? now.getTime() >= start.getTime() - 15 * 60_000 : false;
+  // From 15 minutes before the start, or earlier once Teams shows a guest joined (a demo held early).
+  const teamsGuests = guestsWhoJoined((r as DemoWithTeams).teams_attendance);
+  const canMarkAttendance = start ? now.getTime() >= start.getTime() - 15 * 60_000 || teamsGuests.length > 0 : false;
   const ownLink = isOwnLinkDemo(r);
   const meetingKind = meetingKindOf(r);
   const lastFollowUp = detail.lastFollowUp ?? null;
@@ -460,6 +466,21 @@ export default function RequestPanel({
         </Paper>
       )}
 
+      {['approved', 'attended', 'no_show'].includes(r.status) && hasLiveTeamsMeeting(r) && (
+        <TeamsEvidence
+          r={r as DemoWithTeams}
+          now={now}
+          busy={busy}
+          onCheck={() => run('teams_check', { action: 'teams_check' })}
+          onMarkAttended={() => {
+            setAttendedFix(true);
+            setAttendedOpen(true);
+          }}
+          onMarkNoShow={() => run('attendance', { action: 'attendance', attended: false })}
+          onPick={(itemId) => run(`pick:${itemId}`, { action: 'pick_recording', itemId })}
+        />
+      )}
+
       {/* Not yet confirmed: call, then confirm */}
       {(r.status === 'pending' || r.status === 'contacted') && (
         <Box sx={{ mt: 2 }}>
@@ -567,7 +588,9 @@ export default function RequestPanel({
               <Typography variant="body2" color="text.secondary">
                 {followUpStopped
                   ? lastFollowUp?.call_outcome === 'joined'
-                    ? 'Follow-up closed: they joined.'
+                    ? detail.enrolmentLink?.status === 'used'
+                      ? 'Follow-up closed: they enrolled.'
+                      : 'They said they would join, but no fee is recorded yet. Record the payment or send the enrolment link to enrol them.'
                     : `${closedReason(r, lastFollowUp)}.`
                   : 'No follow-up yet. Start one so this student is called until they join or say no.'}
               </Typography>
@@ -896,11 +919,16 @@ export default function RequestPanel({
         error={attendedOpen ? error : null}
         onClose={() => {
           setAttendedOpen(false);
+          setAttendedFix(false);
           setError(null);
         }}
         onSubmit={async (v) => {
-          const err = await run('attendance', { action: r.status === 'approved' ? 'attendance' : 'follow_up', attended: true, ...v });
-          if (!err) setAttendedOpen(false);
+          const mark = r.status === 'approved' || (attendedFix && r.status === 'no_show');
+          const err = await run('attendance', { action: mark ? 'attendance' : 'follow_up', attended: true, ...v });
+          if (!err) {
+            setAttendedOpen(false);
+            setAttendedFix(false);
+          }
         }}
       />
 

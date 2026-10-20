@@ -55,6 +55,7 @@ import {
   checkBoardEligibility,
   checkNataAttempt,
   convertBoardMarks,
+  cutoffPrefillQuery,
   type BoardType,
   type NataAttempt,
   type NataAttemptResult,
@@ -62,6 +63,9 @@ import {
   type CutoffDemoInput,
 } from '@/lib/tools/cutoff-formula';
 import type { FullToolProps } from '@/components/tools/full-tools';
+import { useGuestRunGate } from '@/components/tools/ToolTrial';
+import { GuestTrialBanner, LockedResult } from '@/components/tools/GuestTrialParts';
+import AskAboutLink from '@/components/ask/AskAboutLink';
 
 // ─── Types & Constants ───────────────────────────────────────────────
 
@@ -887,10 +891,13 @@ function SaveNotice({ status, onRetry }: { status: ScoreSaveStatus; onRetry: () 
 function MobileStickyResult({
   finalCutoff,
   hasData,
+  locked = false,
   onViewDetails,
 }: {
   finalCutoff: number;
   hasData: boolean;
+  /** A guest past the free calculations: the number stays hidden. */
+  locked?: boolean;
   onViewDetails: () => void;
 }) {
   // The strip only shows below md, so the report button steps aside there only.
@@ -923,11 +930,11 @@ function MobileStickyResult({
           Your Cutoff Score
         </Typography>
         <Typography variant="h6" component="p" fontWeight={700} color="primary.main">
-          {finalCutoff} / 400
+          {locked ? 'Sign in to see' : `${finalCutoff} / 400`}
         </Typography>
       </Box>
       <Button variant="contained" onClick={onViewDetails} endIcon={<KeyboardArrowDownIcon />}>
-        See details
+        {locked ? 'Sign in' : 'See details'}
       </Button>
     </Paper>
   );
@@ -1060,6 +1067,20 @@ export default function CutoffCalculatorPage({ initialInput }: FullToolProps) {
       hasData: state.hasData && isLoggedIn,
     });
 
+  // ─── Free trial (signed-out visitors, see lib/tools/guest-runs.ts) ─
+  // A run is a set of inputs that settles; the third new one is blurred.
+  const runFingerprint = state.hasData
+    ? JSON.stringify([
+        state.board,
+        state.maxMarksNum,
+        state.marksSecuredNum,
+        state.attempts,
+        state.hasPreviousYear ? state.prevYearScoreNum : 0,
+      ])
+    : null;
+  const guestRuns = useGuestRunGate('nata-cutoff-calculator', runFingerprint, !isLoggedIn);
+  const locked = !isLoggedIn && guestRuns.locked;
+
   useEffect(() => {
     if (revealRequest > 0) revealElement(resultsRef.current);
   }, [revealRequest]);
@@ -1089,7 +1110,20 @@ export default function CutoffCalculatorPage({ initialInput }: FullToolProps) {
     return 2;
   };
 
-  const resultsPanel = (
+  const resultsPanel = locked ? (
+    <LockedResult
+      toolId="nata-cutoff-calculator"
+      headline={`You have used your ${guestRuns.limit} free calculations`}
+      benefits={['Unlimited calculations, saved on every device', "Best of all your NATA attempts and last year's score", 'Colleges that match your cutoff']}
+      input={{
+        board: state.board,
+        maxMarks: state.maxMarksNum,
+        marksSecured: state.marksSecuredNum,
+        partA: parseFloat(state.attempts[0]?.partA) || 0,
+        partB: parseFloat(state.attempts[0]?.partB) || 0,
+      }}
+    />
+  ) : (
     <ResultsPanel
       boardConverted={state.boardConverted}
       boardPercentage={state.boardPercentage}
@@ -1111,11 +1145,30 @@ export default function CutoffCalculatorPage({ initialInput }: FullToolProps) {
     />
   );
 
-  const saveNotice = state.hasData ? <SaveNotice status={saveStatus} onRetry={retrySave} /> : null;
+  const saveNotice = state.hasData ? (
+    <>
+      <SaveNotice status={saveStatus} onRetry={retrySave} />
+      {!locked && (
+        <AskAboutLink
+          label={`Ask which colleges take ${Math.round(state.finalCutoff)} out of 400`}
+          question={`Which B.Arch colleges can I get with a cutoff of ${state.finalCutoff} out of 400?`}
+          query={cutoffPrefillQuery({
+            board: state.board,
+            maxMarks: state.maxMarksNum,
+            marksSecured: state.marksSecuredNum,
+            partA: parseFloat(state.attempts[0]?.partA) || 0,
+            partB: parseFloat(state.attempts[0]?.partB) || 0,
+          })}
+          from="Cutoff Calculator"
+        />
+      )}
+    </>
+  ) : null;
 
   return (
     <Box sx={{ pb: { xs: 12, md: 0 } }}>
       <ToolPageHeader toolId="nata-cutoff-calculator" />
+      {!isLoggedIn && guestRuns.available && <GuestTrialBanner remaining={guestRuns.remaining} limit={guestRuns.limit} locked={locked} />}
 
       {/* Stepper */}
       {isMobile ? (
@@ -1305,6 +1358,7 @@ export default function CutoffCalculatorPage({ initialInput }: FullToolProps) {
         <MobileStickyResult
           finalCutoff={state.finalCutoff}
           hasData={state.hasData}
+          locked={locked}
           onViewDetails={handleViewDetails}
         />
       )}

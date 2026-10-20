@@ -26,7 +26,8 @@ import { trackTaxonomyEvent } from '@/lib/funnel-tracker';
 import { writeDemoActive } from '@/lib/demo-cta';
 import { ensureAccount, type EnsuredAccount } from '@/lib/ensure-account';
 import { EMPTY_DRAFT, fetchMyDemo, submitDemoRequest, updateMyDemo } from '@/components/demo-class/demo-client';
-import { BookingCardFrame, ChoicePill, FieldLabel, PillRow, useAintraBooking } from './BookingContext';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import { BookingCardFrame, ChoicePill, FieldLabel, PillRow, SummaryList, useAintraBooking } from './BookingContext';
 
 const LoginModal = dynamic(() => import('@neram/ui').then((m) => m.LoginModal), { ssr: false });
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
@@ -46,21 +47,29 @@ function initialPick(days: ReturnType<typeof availableDemoDays>, s: BookSuggesti
  * page's: sign in, a verified phone, one open request per person, the exam
  * year required. A guest gets the chat's own sign-in; someone who already has
  * a demo sees it, with Change time.
+ *
+ * When Aintra gathered the details in the conversation (suggestion.draft, from
+ * the prepare_demo_booking tool) the card opens as a summary to check, with one
+ * Confirm button; "Change details" opens the full picker.
  */
 export default function DemoCard({ suggestion }: { suggestion: BookSuggestion }) {
   const ctx = useAintraBooking();
   const { user, loading: authLoading } = useFirebaseAuth();
+  const draft = suggestion.draft;
   const [now] = useState(() => new Date());
   const [schedule, setSchedule] = useState<DemoScheduleSettings | null>(null);
   const [callbackPromise, setCallbackPromise] = useState('within 2 working hours');
   const [account, setAccount] = useState<EnsuredAccount | null>(null);
   const [existing, setExisting] = useState<PublicDemoRequest | null>(null);
   const [checked, setChecked] = useState(false);
-  const [changing, setChanging] = useState(false);
+  // Aintra prepared a new time for the demo they have: open straight on it.
+  const [changing, setChanging] = useState(!!suggestion.change);
+  const [editing, setEditing] = useState(false);
   const [date, setDate] = useState<string | null>(null);
   const [window, setWindow] = useState<DemoWindow | null>(null);
-  const [name, setName] = useState('');
-  const [examYear, setExamYear] = useState<number | null>(null);
+  const [name, setName] = useState(draft?.name ?? '');
+  const [examYear, setExamYear] = useState<number | null>(draft?.examYear ?? null);
+  const parentJoining = draft?.parentJoining ?? EMPTY_DRAFT.parentJoining;
   const [phoneDialog, setPhoneDialog] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -127,13 +136,21 @@ export default function DemoCard({ suggestion }: { suggestion: BookSuggestion })
   const detailsOk = name.trim().length >= 2 && examYear !== null && yearChoices.includes(examYear);
   const phoneVerified = !!account?.phone_verified;
   const preference = schedule ? formatDemoPreference(window === 'anytime' ? null : date, window, schedule) : '';
+  // Check and confirm, rather than fill in: Aintra already has everything, and it is all still valid.
+  const summary = !!draft && !editing && whenOk && detailsOk;
+  const summaryRows = [
+    { label: 'When', value: preference },
+    { label: 'Student', value: name.trim() },
+    { label: 'Exam year', value: String(examYear ?? '') },
+    ...(draft?.parentJoining !== undefined ? [{ label: 'Parent joining', value: draft.parentJoining ? 'Yes' : 'No' }] : []),
+  ];
 
   const book = async () => {
     if (!whenOk || !detailsOk || !window) return;
     setBusy(true);
     setError(null);
     const result = await submitDemoRequest(
-      { ...EMPTY_DRAFT, step: 1, date: window === 'anytime' ? null : date, window, name: name.trim(), examYear },
+      { ...EMPTY_DRAFT, step: 1, date: window === 'anytime' ? null : date, window, name: name.trim(), examYear, parentJoining },
       touchAttribution('AI-DEM') as unknown as Record<string, unknown>,
     );
     setBusy(false);
@@ -281,10 +298,27 @@ export default function DemoCard({ suggestion }: { suggestion: BookSuggestion })
   }
 
   return (
-    <BookingCardFrame icon={<EventAvailableRoundedIcon />} title="Book a free demo class" labelledBy="aintra-demo-title">
-      {picker}
+    <BookingCardFrame
+      icon={<EventAvailableRoundedIcon />}
+      title={summary ? 'Check and confirm your free demo' : 'Book a free demo class'}
+      labelledBy="aintra-demo-title"
+    >
+      {summary ? (
+        <>
+          <SummaryList rows={summaryRows} />
+          <Button
+            onClick={() => setEditing(true)}
+            startIcon={<EditOutlinedIcon />}
+            sx={{ alignSelf: 'flex-start', minHeight: 48, textTransform: 'none', fontWeight: 700 }}
+          >
+            Change details
+          </Button>
+        </>
+      ) : (
+        picker
+      )}
 
-      {user && (
+      {user && !summary && (
         <>
           <TextField
             label="Student name"
@@ -326,10 +360,10 @@ export default function DemoCard({ suggestion }: { suggestion: BookSuggestion })
             startIcon={<LoginRoundedIcon />}
             sx={{ minHeight: 48, fontWeight: 800, textTransform: 'none', fontSize: '1rem' }}
           >
-            Sign in to book
+            {summary ? 'Sign in to confirm' : 'Sign in to book'}
           </Button>
           <Typography variant="caption" color="text.secondary">
-            Sign in with Google or your phone so we know who to call. Your choice above is kept.
+            Sign in with Google or your phone so we know who to call. {summary ? 'These details are kept.' : 'Your choice above is kept.'}
           </Typography>
         </>
       ) : !phoneVerified ? (
@@ -359,7 +393,7 @@ export default function DemoCard({ suggestion }: { suggestion: BookSuggestion })
             startIcon={busy ? <CircularProgress size={18} color="inherit" /> : undefined}
             sx={{ minHeight: 48, fontWeight: 800, textTransform: 'none', fontSize: '1rem' }}
           >
-            {busy ? 'Booking' : 'Book my free demo'}
+            {busy ? 'Booking' : summary ? 'Confirm booking' : 'Book my free demo'}
           </Button>
           <Typography variant="caption" color="text.secondary">
             {examYear === null ? 'Pick your exam year to book. ' : ''}

@@ -202,6 +202,9 @@ importers:
       '@mui/material':
         specifier: ^5.15.0
         version: 5.18.0(@emotion/react@11.14.0)(@emotion/styled@11.14.1)(@types/react@18.3.27)(react-dom@18.3.1)(react@18.3.1)
+      '@neram/ai':
+        specifier: workspace:*
+        version: link:../../packages/ai
       '@neram/auth':
         specifier: workspace:*
         version: link:../../packages/auth
@@ -214,6 +217,9 @@ importers:
       '@neram/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
+      '@neram/tools-core':
+        specifier: workspace:*
+        version: link:../../packages/tools-core
       '@neram/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -290,6 +296,9 @@ importers:
       '@neram/i18n':
         specifier: workspace:*
         version: link:../../packages/i18n
+      '@neram/tools-core':
+        specifier: workspace:*
+        version: link:../../packages/tools-core
       '@neram/ui':
         specifier: workspace:*
         version: link:../../packages/ui
@@ -514,6 +523,12 @@ importers:
       next-intl:
         specifier: ^3.4.0
         version: 3.26.5(next@14.2.21)(react@18.3.1)
+    devDependencies:
+      typescript:
+        specifier: ^5.3.3
+        version: 5.9.3
+
+  packages/tools-core:
     devDependencies:
       typescript:
         specifier: ^5.3.3

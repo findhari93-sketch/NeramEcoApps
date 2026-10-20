@@ -5,7 +5,9 @@ import { Box, MenuItem, TextField, Typography } from '@neram/ui';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import ErrorOutlineRoundedIcon from '@mui/icons-material/ErrorOutlineRounded';
 import DemoGate from '@/components/tools/DemoGate';
-import { BOARD_CONFIG, cutoffTotal, type BoardType } from '@/lib/tools/cutoff-formula';
+import { TryFullToolButton } from '@/components/tools/GuestTrialParts';
+import AskAboutLink from '@/components/ask/AskAboutLink';
+import { BOARD_CONFIG, cutoffPrefillQuery, cutoffTotal, type BoardType } from '@/lib/tools/cutoff-formula';
 
 const num = (v: string) => {
   const n = parseFloat(v);
@@ -146,6 +148,20 @@ export default function CutoffDemo() {
           </Typography>
         )}
       </Box>
+
+      {result && (
+        <AskAboutLink
+          label={`Ask which colleges take ${Math.round(result.total)} out of 400`}
+          question={`Which B.Arch colleges can I get with a cutoff of ${result.total} out of 400?`}
+          query={cutoffPrefillQuery({ board, maxMarks: num(maxMarks), marksSecured: num(marks), partA: num(partA) || 0, partB: num(partB) || 0 })}
+          from="Cutoff Calculator"
+        />
+      )}
+
+      <TryFullToolButton
+        label="Use the full calculator free"
+        input={marks !== '' ? { board, maxMarks: num(maxMarks), marksSecured: num(marks), partA: num(partA) || 0, partB: num(partB) || 0 } : null}
+      />
 
       {result && (
         <DemoGate

@@ -1,0 +1,21 @@
+{
+  "name": "@neram/tools-core",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pure calculation logic for the student tools (NATA cutoff out of 400, board conversion, eligibility), shared by the Tools app, the marketing site and the Ask aiArchitek chat so they can never disagree",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./cutoff": "./src/cutoff-formula.ts"
+  },
+  "scripts": {
+    "lint": "echo 'Linted via consuming apps'",
+    "type-check": "echo 'Type-checked via consuming apps'",
+    "clean": "rm -rf dist .turbo node_modules",
+    "clean:build": "rm -rf dist .turbo"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}

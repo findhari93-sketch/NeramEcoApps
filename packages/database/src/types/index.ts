@@ -873,7 +873,12 @@ export type DirectEnrollmentLinkEventKind =
   | 'merged'
   | 'payment_submitted'
   | 'payment_verified'
-  | 'payment_rejected';
+  | 'payment_rejected'
+  // Phase 1 (migration 20261220090200): pay later, reminders, expiry, extend.
+  | 'details_saved'
+  | 'reminder_sent'
+  | 'expired'
+  | 'extended';
 
 export interface DirectEnrollmentLinkEvent {
   id: string;
@@ -10925,3 +10930,6 @@ export interface JosaaTrendPoint {
   opening_rank: number | null;
   closing_rank: number | null;
 }
+
+// Payments v2 (migration 20261220090000): intents, attempts, bank credits, outbox.
+export * from './payments-v2';

@@ -33,6 +33,7 @@ export default function PaymentSubmittedScreen({ studentName, submission, planLa
     ['Paid by', submission.method === 'bank_transfer' ? 'Bank transfer' : 'UPI'],
   ];
   if (utrShown) rows.push(['Reference (UTR)', utrShown]);
+  rows.push(['Proof', submission.proofChannel === 'whatsapp' ? 'Screenshot sent on WhatsApp' : 'Screenshot uploaded']);
   if (submission.paidOn) rows.push(['Paid on', formatDay(submission.paidOn)]);
   if (submission.scheme === 'installment' && submission.balance) {
     rows.push(['Second installment', `${rupees(submission.balance)}${submission.balanceDueDate ? ` by ${formatDay(submission.balanceDueDate)}` : ''}`]);
@@ -70,7 +71,7 @@ export default function PaymentSubmittedScreen({ studentName, submission, planLa
       </Typography>
       <Timeline
         items={[
-          { label: 'You paid and sent us the reference', date: 'Done', state: 'done' },
+          { label: submission.proofChannel === 'whatsapp' ? 'You paid and sent the screenshot on WhatsApp' : 'You paid and sent us the screenshot', date: 'Done', state: 'done' },
           { label: 'We match it with the bank', date: 'Now', state: 'now', note: submission.emailedTo ? `We emailed ${submission.emailedTo}.` : undefined },
           {
             label: doneLabel || 'You are enrolled',

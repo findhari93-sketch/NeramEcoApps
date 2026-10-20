@@ -5,6 +5,7 @@ import { getSupabaseAdminClient, formatDueDate } from '@neram/database';
 import { loadBalanceDue, verifyFeePaymentClaim, rejectFeePaymentClaim } from '@neram/database/fee-payment-claims';
 import { sendBalanceVerifiedEmail, sendPaymentRejectedEmail } from '@neram/database/enrolment-payment-email';
 import { UUID_REGEX, actingAdminId } from '@/lib/fee-request';
+import { reviewLegacyClaim } from '@neram/database/payments';
 import { linkOrigin } from '@/lib/enrolment-link-server';
 import { signedProofUrl } from '@/lib/payment-proof';
 
@@ -39,6 +40,8 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
         amount: Number(claim.amount) || 0,
         method: claim.method,
         utr: claim.utr,
+        proofChannel: claim.proof_channel || 'upload',
+        payerName: claim.payer_name || null,
         paidOn: claim.paid_on,
         installmentNumber: claim.installment_number,
         submittedAt: claim.created_at,
@@ -83,6 +86,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       }
       const result = await rejectFeePaymentClaim(supabase, claim.id, reason);
       if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+      await reviewLegacyClaim(supabase, { claimId: claim.id, decision: 'reject', staffId: adminId, reason });
       if (to) {
         const sent = await sendPaymentRejectedEmail(to, {
           studentName: name,
@@ -97,8 +101,13 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       return NextResponse.json({ success: true, data: { status: 'rejected', emailedTo: to } });
     }
 
+    if (body?.statementChecked !== true) {
+      return NextResponse.json({ error: 'Tick that you found this payment in the bank statement before you verify.', code: 'STATEMENT_REQUIRED' }, { status: 400 });
+    }
     const result = await verifyFeePaymentClaim(supabase, claim.id, adminId);
     if (!result.ok) return NextResponse.json({ error: result.error }, { status: result.status });
+    // Payments v2 (Phase 0): the waiting attempt succeeds; its fulfil job finds the ledger row and stamps it.
+    await reviewLegacyClaim(supabase, { claimId: claim.id, decision: 'verify', staffId: adminId });
 
     let receiptNumber: string | null = null;
     if (result.paymentId) {

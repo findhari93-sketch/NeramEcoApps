@@ -42,8 +42,13 @@ describe('indexableLocales', () => {
 
   it('keeps the partial and full translations', () => {
     expect(indexableLocales('/nata-online-coaching')).toEqual(['en', 'ta', 'hi']);
-    expect(indexableLocales('/about')).toEqual(['en', 'ta', 'hi', 'kn', 'ml']);
-    expect(indexableLocales('/centers')).toEqual(['en', 'ta', 'hi', 'kn', 'ml']);
+    expect(indexableLocales('/about')).toEqual(['en', 'ta']);
+    expect(buildAlternates('ml', '/about').canonical).toBe(`${BASE}/about`);
+  });
+
+  it('indexes the centres page in English only (its list is English data)', () => {
+    expect(indexableLocales('/centers')).toEqual(['en']);
+    expect(buildAlternates('ta', '/centers').canonical).toBe(`${BASE}/centers`);
   });
 });
 
@@ -59,15 +64,12 @@ describe('buildAlternates', () => {
     expect(buildAlternates('kn', '/nata-online-coaching').canonical).toBe(`${BASE}/nata-online-coaching`);
   });
 
-  it('keeps the full cluster for translated pages', () => {
+  it('keeps the translated cluster for translated pages', () => {
     const a = buildAlternates('ta', '/about');
     expect(a.canonical).toBe(`${BASE}/ta/about`);
     expect(a.languages).toEqual({
       en: `${BASE}/about`,
       ta: `${BASE}/ta/about`,
-      hi: `${BASE}/hi/about`,
-      kn: `${BASE}/kn/about`,
-      ml: `${BASE}/ml/about`,
       'x-default': `${BASE}/about`,
     });
   });

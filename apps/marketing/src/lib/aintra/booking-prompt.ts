@@ -22,6 +22,23 @@ export function demoDaysPrompt(now: Date, schedule: DemoScheduleSettings): strin
   return `\n\n## DEMO SLOTS NOW\nToday is ${today} (India). Open demo class slots, with the date to use in [[book:demo,DATE,window]]:\n${lines.join('\n')}`;
 }
 
+/**
+ * Who Aintra is talking to, so it asks only for what it does not know. The
+ * name and exam year come from the verified account; the phone number itself
+ * is never in the prompt, only whether it is verified.
+ */
+export function visitorPrompt(v: { signedIn: boolean; name: string | null; phoneVerified: boolean; examYear: number | null }): string {
+  if (!v.signedIn) {
+    return '\n\n## THIS VISITOR\nNot signed in. Their name and exam year are not known. They sign in on the booking card when they confirm.';
+  }
+  const lines = [
+    `- Name on the account: ${v.name ?? 'not known'} (the student may be someone else if a parent is booking).`,
+    `- Phone verified: ${v.phoneVerified ? 'yes' : 'no (the booking card asks them to verify it)'}.`,
+    `- Exam year: ${v.examYear ?? 'not known'}.`,
+  ];
+  return `\n\n## THIS VISITOR\nSigned in.\n${lines.join('\n')}`;
+}
+
 export interface VisitorBookings {
   demo: { ref: string; preferredDate: string | null; preferredWindow: string | null; status: string } | null;
   openCallback: { preferredDate: string | null; preferredSlot: string | null } | null;
@@ -34,13 +51,13 @@ export function visitorBookingsPrompt(b: VisitorBookings, schedule: DemoSchedule
     const when = formatDemoPreference(b.demo.preferredDate, b.demo.preferredWindow as DemoWindow, schedule);
     lines.push(
       `- This visitor already has a demo class booked (ref ${b.demo.ref}, ${when}${b.demo.status === 'approved' ? ', confirmed' : ', waiting for our call'}). ` +
-        'If they ask about it or want another time, say so and add [[book:demo]]: the card shows their booking with Change time. Never book a second one.',
+        'If they ask about it or want another time, call prepare_demo_booking with the new time (it moves this booking), or prepare_demo_cancel to cancel it. Never book a second one.',
     );
   }
   if (b.openCallback) {
     const when = [b.openCallback.preferredDate, b.openCallback.preferredSlot].filter(Boolean).join(' ');
     lines.push(
-      `- This visitor already asked for a callback${when ? ` (${when})` : ''}. Tell them our team will call; add [[book:callback]] only if they want a different time.`,
+      `- This visitor already asked for a callback${when ? ` (${when})` : ''}. Tell them our team will call; call prepare_callback only if they want a different time.`,
     );
   }
   return lines.length ? `\n\n## THIS VISITOR'S BOOKINGS\n${lines.join('\n')}` : '';

@@ -75,6 +75,26 @@ function urlOf(input: unknown): string {
   }
 }
 
+/**
+ * Ad and analytics hosts. Their calls are fire-and-forget beacons that ad
+ * blockers kill all day; a report full of them buried the real error (first
+ * staging report, NERAM-TKT-00006, was 5 of 6 tracker lines).
+ */
+const TRACKER_HOST = /(^|\.)(google-analytics\.com|googletagmanager\.com|doubleclick\.net|googleadservices\.com|googlesyndication\.com|facebook\.com|facebook\.net|clarity\.ms|hotjar\.com)$/i;
+const TRACKER_PATH = /^\/(ccm|rmkt|pagead|ads)\//i;
+
+/** Is this request an ad or analytics beacon whose failure means nothing to us? */
+export function isTrackerRequest(url: string): boolean {
+  try {
+    const u = new URL(url, typeof window !== 'undefined' ? window.location.href : 'https://app.neramclasses.com');
+    if (TRACKER_HOST.test(u.hostname)) return true;
+    // www.google.com/ccm/collect, /rmkt/collect, /pagead/... are Ads conversion pings.
+    return /(^|\.)google\.[a-z.]+$/i.test(u.hostname) && TRACKER_PATH.test(u.pathname);
+  } catch {
+    return false;
+  }
+}
+
 export function installErrorCapture() {
   if (installed || typeof window === 'undefined') return;
   installed = true;
@@ -104,9 +124,13 @@ export function installErrorCapture() {
   if (typeof window.fetch !== 'function') return;
   const origFetch = window.fetch.bind(window);
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = urlOf(input);
+    const tracker = isTrackerRequest(url);
     try {
       const res = await origFetch(input, init);
-      if (!res.ok) {
+      // An opaque (no-cors) response always reads as status 0, success or not,
+      // so it says nothing. Tracker beacons are the usual source.
+      if (!res.ok && res.type !== 'opaque' && !tracker) {
         let body = '';
         try {
           body = truncate(await res.clone().text(), BODY_MAX);
@@ -121,10 +145,12 @@ export function installErrorCapture() {
       }
       return res;
     } catch (err) {
-      recordError({
-        message: `Fetch failed: ${urlOf(input)} — ${(err as Error)?.message || 'network error'}`,
-        url: urlOf(input),
-      });
+      if (!tracker) {
+        recordError({
+          message: `Fetch failed: ${url} — ${(err as Error)?.message || 'network error'}`,
+          url,
+        });
+      }
       throw err;
     }
   };

@@ -137,6 +137,36 @@ describe('submitFeePaymentClaim', () => {
     expect(await submitFeePaymentClaim(supabase, goodInput)).toMatchObject({ ok: false, code: 'UTR_USED' });
   });
 
+  it('saves a claim with no UTR at all (new students do not know the number)', async () => {
+    const r = await submitFeePaymentClaim(supabase, { ...goodInput, transactionReference: '' });
+    expect(r.ok).toBe(true);
+    expect(inserted[0]).toMatchObject({ utr: null, proof_channel: 'upload' });
+  });
+
+  it('"sent on WhatsApp" needs no screenshot, once the student confirms they sent it', async () => {
+    const r = await submitFeePaymentClaim(supabase, { ...goodInput, transactionReference: '', paymentProofUrl: null, proofChannel: 'whatsapp', whatsappSent: true });
+    expect(r.ok).toBe(true);
+    expect(inserted[0]).toMatchObject({ proof_channel: 'whatsapp', proof_url: null, utr: null });
+  });
+
+  it('"sent on WhatsApp" is refused when no WhatsApp number is set up', async () => {
+    const r: any = await submitFeePaymentClaim(supabase, { ...goodInput, paymentProofUrl: null, proofChannel: 'whatsapp', whatsappSent: true, whatsappAllowed: false });
+    expect(r.ok).toBe(false);
+    expect(Object.keys(r.fieldErrors)).toEqual(['proofChannel']);
+  });
+
+  it('"sent on WhatsApp" without the confirmation is refused', async () => {
+    const r: any = await submitFeePaymentClaim(supabase, { ...goodInput, paymentProofUrl: null, proofChannel: 'whatsapp', whatsappSent: false });
+    expect(r.ok).toBe(false);
+    expect(Object.keys(r.fieldErrors)).toEqual(['whatsappSent']);
+  });
+
+  it('remembers whose account the money came from', async () => {
+    const r = await submitFeePaymentClaim(supabase, { ...goodInput, payerName: '  Appa (Suresh)  ' });
+    expect(r.ok).toBe(true);
+    expect(inserted[0]).toMatchObject({ payer_name: 'Appa (Suresh)' });
+  });
+
   it('field errors for a short UTR, future date, missing screenshot', async () => {
     const r: any = await submitFeePaymentClaim(supabase, { ...goodInput, transactionReference: '123', paymentDate: '2999-01-01', paymentProofUrl: null });
     expect(r.ok).toBe(false);

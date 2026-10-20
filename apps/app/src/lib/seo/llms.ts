@@ -26,6 +26,7 @@ export function buildLlmsTxt(tools: ToolSeo[], geo: GeoPageSummary[], full = fal
     '## Tools',
     '',
     ...tools.map((t) => `- [${t.name}](${APP_URL}${t.path}): ${t.answer}`),
+    `- [Ask aiArchitek](${APP_URL}/ask): a chat that works out the NATA cutoff out of 400 and lists the B.Arch colleges students with that score got last year, from the official TNEA, KEAM and JoSAA allotment lists, with the source shown. Three free answers a day without an account.`,
   ];
 
   const indexed = geo.filter((g) => g.index);

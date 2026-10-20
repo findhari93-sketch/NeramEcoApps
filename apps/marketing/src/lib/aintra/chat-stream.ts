@@ -74,6 +74,15 @@ export const TOOL_STATUS: Record<string, string> = {
   get_college: 'Checking college details',
   search_colleges: 'Searching colleges',
   compare_colleges: 'Comparing colleges',
+  prepare_demo_booking: 'Setting up your demo class',
+  prepare_demo_cancel: 'Finding your demo class',
+  prepare_callback: 'Setting up your callback',
+  get_my_status: 'Checking your bookings',
+  save_application_details: 'Saving your application',
+  prepare_application_submit: 'Getting your application ready',
+  prepare_centre_visit: 'Setting up your centre visit',
+  prepare_college_enquiry: 'Preparing your enquiry',
+  prepare_message: 'Writing your message',
 };
 
 export function toolStatusText(names: string[]): string {

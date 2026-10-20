@@ -650,9 +650,13 @@ export default function DirectEnrollmentPage() {
                       </TableCell>
                       <TableCell>
                         <Chip
-                          label={STATUS_LABELS[link.status] || link.status}
+                          label={
+                            link.status === 'active' && (link as any).details_saved_at
+                              ? 'Details saved, not paid'
+                              : STATUS_LABELS[link.status] || link.status
+                          }
                           size="small"
-                          color={getStatusColor(link.status)}
+                          color={link.status === 'active' && (link as any).details_saved_at ? 'info' : getStatusColor(link.status)}
                           icon={link.status === 'payment_submitted' ? <FactCheckOutlinedIcon /> : undefined}
                           sx={{ fontWeight: link.status === 'payment_submitted' ? 700 : 500 }}
                         />

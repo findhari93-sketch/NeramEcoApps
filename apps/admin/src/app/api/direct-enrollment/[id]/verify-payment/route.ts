@@ -15,6 +15,7 @@ import { sendPaymentVerifiedEmail, sendPaymentRejectedEmail } from '@neram/datab
 import { UUID_REGEX, actingAdminId } from '@/lib/fee-request';
 import { linkOrigin } from '@/lib/enrolment-link-server';
 import { signedProofUrl } from '@/lib/payment-proof';
+import { reviewLegacyLink } from '@neram/database/payments';
 
 const COURSE_LABELS: Record<string, string> = {
   nata: 'NATA coaching',
@@ -33,6 +34,8 @@ function claimView(link: any) {
     amount: Number(link.submitted_amount) || 0,
     method: link.submitted_method,
     utr: link.submitted_utr,
+    proofChannel: link.submitted_proof_channel || 'upload',
+    payerName: link.submitted_payer_name || null,
     paidOn: link.submitted_paid_on,
     submittedAt: link.submitted_at,
     balance: link.chosen_scheme === 'installment' ? offer.installment2 : null,
@@ -129,10 +132,16 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
         }).catch((e) => ({ success: false, error: e?.message }));
         if (!sent.success) console.error('[verify-payment] rejection email failed:', sent.error);
       }
+      // Payments v2 (Phase 0): the waiting attempt is rejected too. Never throws.
+      await reviewLegacyLink(supabase, { linkId: link.id, decision: 'reject', staffId: adminId, reason });
       return NextResponse.json({ success: true, data: { status: 'active', emailedTo: studentEmail } });
     }
 
     // ── Verify ───────────────────────────────────────────────────────────────
+    // Screenshots are easy to fake: staff must say they found it in the bank statement.
+    if (body?.statementChecked !== true) {
+      return NextResponse.json({ error: 'Tick that you found this payment in the bank statement before you verify.', code: 'STATEMENT_REQUIRED' }, { status: 400 });
+    }
     if (!link.submitted_user_id || !link.submitted_form) {
       return NextResponse.json({ error: 'This submission is missing the student details. Ask them to submit again.' }, { status: 409 });
     }
@@ -199,6 +208,8 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     }
 
     await logDirectEnrollmentLinkEvent(link.id, 'payment_verified', adminId, { amount, utr: link.submitted_utr, scheme: link.chosen_scheme }, supabase);
+    // Payments v2 (Phase 0): the waiting attempt succeeds; its fulfil job finds the link used and only stamps the ledger.
+    await reviewLegacyLink(supabase, { linkId: link.id, decision: 'verify', staffId: adminId });
 
     if (studentEmail) {
       const sent = await sendPaymentVerifiedEmail(studentEmail, {

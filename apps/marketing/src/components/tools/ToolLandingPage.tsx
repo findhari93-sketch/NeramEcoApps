@@ -21,6 +21,7 @@ function toolHref(url: string): { href: string; external: boolean } {
  */
 export default function ToolLandingPage({ config }: { config: ToolConfig }) {
   const QuickCheckWidget = config.teaserComponent;
+  const ExtraSections = config.extraSections;
   const full = toolHref(config.appUrl);
   const related = config.relatedToolSlugs.map((slug) => TOOL_BY_SLUG[slug]).filter(Boolean);
 
@@ -57,6 +58,8 @@ export default function ToolLandingPage({ config }: { config: ToolConfig }) {
       >
         <StepList items={config.steps.map((s) => ({ title: s.title, body: s.desc }))} />
       </Section>
+
+      {ExtraSections && <ExtraSections />}
 
       <Section id="features" tone="white" header={{ eyebrow: 'Features', title: 'Key features', align: 'start' }}>
         <CheckList variant="ruled" columnMin={320} items={config.features.map((f) => ({ title: f.title, body: f.desc }))} />

@@ -45,6 +45,12 @@ export async function POST(
         { status: 400 }
       );
     }
+    if (existing.status === 'payment_submitted') {
+      return NextResponse.json(
+        { error: 'A payment is waiting on this link. Verify or reject it first; a new link would cancel it.' },
+        { status: 409 }
+      );
+    }
 
     // Generate new token
     const newToken = crypto.randomBytes(16).toString('base64url');

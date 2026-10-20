@@ -30,7 +30,7 @@ import type { AiTier } from './pricing';
 
 export type AiMode = 'auto' | 'manual' | 'off';
 
-export type AiApp = 'marketing' | 'nexus' | 'admin';
+export type AiApp = 'marketing' | 'nexus' | 'admin' | 'app';
 
 /** Who causes the call. Informational, but it is what the panel groups by. */
 export type AiTrigger = 'public' | 'staff' | 'student' | 'cron';
@@ -170,6 +170,28 @@ export const AI_FEATURES = [
     allowFreeKey: true,
     dailyCallCap: 500,
     perClientHourlyCap: 20,
+  },
+  // ── Tools app (aiArchitek): students and guests ──────────────────────────
+  /**
+   * Ask aiArchitek (/ask on app.neramclasses.com). A tool loop like the site
+   * chatbot: every number it shows comes from a tool (cutoff formula, allotment
+   * lists), the model only writes the sentences around them. Guests get three
+   * answers a day before sign-in, enforced in the route. Carries a student's
+   * marks, community and city, so no free key.
+   */
+  {
+    id: 'app.ask',
+    label: 'Ask aiArchitek (Tools app chat)',
+    app: 'app',
+    group: 'Public chatbots',
+    trigger: 'student',
+    tier: 'cheap',
+    defaultMode: 'auto',
+    supportsManual: false,
+    allowFreeKey: false,
+    dailyCallCap: 3000,
+    perClientHourlyCap: 40,
+    backupDropsTools: true,
   },
   /**
    * The review link a past student opens (/r/<token>). Turns a spoken or typed

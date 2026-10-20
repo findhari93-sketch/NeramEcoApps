@@ -6,6 +6,7 @@ import type {
   DemoScheduleSettings,
   DemoFollowUpRow,
 } from '@neram/database';
+import type { DemoEnrolment } from './journey';
 
 export type { DemoRequest, DemoRequestEvent, DemoRequestMessage, DemoHost, DemoScheduleSettings };
 
@@ -35,8 +36,8 @@ export interface DeskList {
   settings: DeskSettings;
   /** After-demo follow-up per demo request id (attended and no-show only). */
   followUps: Record<string, DemoFollowUpRow>;
-  /** student_profiles.enrollment_date per user id. */
-  joinedAt: Record<string, string>;
+  /** Per request id: enrolled after it (fee recorded), or already a student before it. */
+  enrolment: Record<string, DemoEnrolment>;
 }
 
 export interface DeskDetail {

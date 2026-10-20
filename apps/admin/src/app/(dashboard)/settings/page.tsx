@@ -38,6 +38,7 @@ import {
 } from '@/lib/ops-format';
 import { OpsPageHeader, OpsSkeleton, FOCUS_RING, TARGET_44 } from '@/components/ops/OpsUi';
 import PaymentDetailsCard from '@/components/settings/PaymentDetailsCard';
+import InstantUpiCard from '@/components/settings/InstantUpiCard';
 
 const NUMBER_FIELDS: Array<{ key: RuleNumberKey; label: string; help: string }> = [
   {
@@ -476,6 +477,9 @@ export default function SettingsPage() {
 
         <Box sx={{ gridColumn: { md: '1 / 2' } }}>
           <PaymentDetailsCard />
+        </Box>
+        <Box sx={{ gridColumn: { md: '1 / 2' } }}>
+          <InstantUpiCard />
         </Box>
       </Box>
     </Box>

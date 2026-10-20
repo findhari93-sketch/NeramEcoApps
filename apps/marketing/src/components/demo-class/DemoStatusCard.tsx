@@ -3,21 +3,29 @@
 import type { ReactNode } from 'react';
 import { Box, Button, Paper, Typography } from '@neram/ui';
 import VideocamIcon from '@mui/icons-material/Videocam';
-import EventIcon from '@mui/icons-material/Event';
-import DownloadIcon from '@mui/icons-material/Download';
 import PhoneInTalkIcon from '@mui/icons-material/PhoneInTalk';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import FamilyRestroomIcon from '@mui/icons-material/FamilyRestroom';
+import LaptopIcon from '@mui/icons-material/Laptop';
+import PhoneIphoneIcon from '@mui/icons-material/PhoneIphone';
 import {
   formatDemoDate,
   formatDemoPreference,
   formatDemoTime,
-  googleCalendarUrl,
   isJoinOpen,
   resolveDemoSchedule,
 } from '@neram/database/demo-schedule';
 import type { PublicDemoRequest } from '@/lib/demo-request';
 import DrawingShareCard from './DrawingShareCard';
+import { AddToCalendarRow, CountdownTiles, useDemoClock } from './DemoCountdownParts';
+import { demoCountdown } from '@/lib/demo-countdown';
+
+/** Live time left; a quiet placeholder until mounted so server and client match. */
+function CardCountdown({ start, minutes }: { start: Date; minutes: number }) {
+  const now = useDemoClock(1000);
+  if (!now) return <Box sx={{ height: 58 }} />;
+  return <CountdownTiles countdown={demoCountdown(start, minutes, now)} />;
+}
 
 const STEPS = ['Requested', 'We call you', 'Confirmed', 'Demo day'];
 
@@ -114,7 +122,10 @@ export default function DemoStatusCard({
               Note from our team: {r.scheduleNote}
             </Typography>
           )}
-          <Box sx={{ display: 'grid', gap: 1.25, mt: 2.5 }}>
+          <Box sx={{ mt: 2 }}>
+            <CardCountdown start={start} minutes={r.minutes} />
+          </Box>
+          <Box sx={{ display: 'grid', gap: 1.25, mt: 2 }}>
             {r.joinUrl && (
               <Button
                 variant="contained"
@@ -126,39 +137,45 @@ export default function DemoStatusCard({
                 rel="noopener noreferrer"
                 sx={{ minHeight: 52, fontWeight: 700 }}
               >
-                {joinOpen ? 'Join the demo now' : 'Join link (opens Teams)'}
+                {joinOpen ? 'Join the demo now' : 'Join on Microsoft Teams'}
               </Button>
             )}
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 1.25 }}>
-              <Button
-                variant="outlined"
-                startIcon={<EventIcon />}
-                href={googleCalendarUrl({
-                  title: 'Neram free demo class',
-                  start,
-                  minutes: r.minutes,
-                  details: 'Live NATA / JEE Paper 2 demo class. Parents are welcome to join.',
-                  url: r.joinUrl || `${origin}/d/${r.token}`,
-                  uid: r.ref,
-                })}
-                target="_blank"
-                rel="noopener noreferrer"
-                sx={{ minHeight: 48 }}
-              >
-                Add to Google Calendar
-              </Button>
-              <Button variant="outlined" startIcon={<DownloadIcon />} href={`${origin}/api/demo-class/ics/${r.token}`} sx={{ minHeight: 48 }}>
-                Apple or Outlook calendar
-              </Button>
+            <Box sx={{ mt: 1 }}>
+              <AddToCalendarRow
+                event={{ ref: r.ref, token: r.token, start, minutes: r.minutes, joinUrl: r.joinUrl, hostName: r.hostName, origin }}
+              />
             </Box>
           </Box>
           <Box sx={{ mt: 2.5, p: 2, borderRadius: 2, bgcolor: 'action.hover' }}>
-            <Typography variant="subtitle2" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography variant="subtitle2" component="h3" fontWeight={700}>
+              How to join
+            </Typography>
+            <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0, mt: 1, display: 'grid', gap: 1.25 }}>
+              <Box component="li" sx={{ display: 'flex', gap: 1.25 }}>
+                <LaptopIcon aria-hidden fontSize="small" sx={{ mt: '2px', color: 'text.secondary' }} />
+                <Typography variant="body2">
+                  <b>On a laptop:</b> open the join link in Chrome or Edge and choose Continue on this browser. No download and no
+                  account needed.
+                </Typography>
+              </Box>
+              <Box component="li" sx={{ display: 'flex', gap: 1.25 }}>
+                <PhoneIphoneIcon aria-hidden fontSize="small" sx={{ mt: '2px', color: 'text.secondary' }} />
+                <Typography variant="body2">
+                  <b>On a phone:</b> install the free Microsoft Teams app, tap the join link and choose Join as a guest. No
+                  sign-in needed.
+                </Typography>
+              </Box>
+            </Box>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1.25 }}>
+              A steady internet connection is all you need.
+            </Typography>
+          </Box>
+          <Box sx={{ mt: 1.5, p: 2, borderRadius: 2, bgcolor: 'action.hover' }}>
+            <Typography variant="subtitle2" component="h3" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <FamilyRestroomIcon aria-hidden fontSize="small" /> Join with your parents
             </Typography>
             <Typography variant="body2" sx={{ mt: 0.5 }}>
-              Sit together, ask every doubt about the course and the exams, and see how a real class runs. Use a laptop, or a
-              phone with the Microsoft Teams app, and keep a pencil and paper ready.
+              Sit together, see how a real Neram class runs and ask us anything about the course, the exams or the fees.
             </Typography>
           </Box>
         </>

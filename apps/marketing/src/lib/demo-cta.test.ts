@@ -44,6 +44,21 @@ describe('demo active flag', () => {
     expect(readDemoActive()).toBeNull();
   });
 
+  it('keeps the confirmed time and calendar data for the header countdown', () => {
+    writeDemoActive({
+      ref: 'DEMO-9',
+      status: 'approved',
+      scheduledStart: '2026-10-20T04:30:00.000Z',
+      minutes: 45,
+      token: 'tok',
+      joinUrl: 'https://teams.microsoft.com/meet/1',
+      hostName: 'Hari',
+    });
+    expect(readDemoActive()).toMatchObject({ start: '2026-10-20T04:30:00.000Z', minutes: 45, token: 'tok', hostName: 'Hari' });
+    writeDemoActive({ ref: 'DEMO-9', status: 'pending', scheduledStart: null });
+    expect(readDemoActive()?.start).toBeUndefined();
+  });
+
   it('ignores junk in storage', () => {
     window.localStorage.setItem('neram_demo_active', '{not json');
     expect(readDemoActive()).toBeNull();

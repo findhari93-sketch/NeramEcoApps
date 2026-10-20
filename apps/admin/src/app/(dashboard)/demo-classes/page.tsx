@@ -17,18 +17,18 @@ import WhatsAppHealthDialog from '@/components/demo-requests/WhatsAppHealthDialo
 import AddDemoDialog from '@/components/demo-requests/AddDemoDialog';
 import type { DemoFollowUpRow, DemoRequest } from '@neram/database';
 import type { DeskDetail, DeskList } from '@/components/demo-requests/types';
-import { DESK_STAGES, groupByPerson, sortPeople, stageOf, type DeskPerson, type DeskStage } from '@/components/demo-requests/journey';
+import { DESK_STAGES, groupByPerson, sortPeople, stageOf, type DemoEnrolment, type DeskPerson, type DeskStage } from '@/components/demo-requests/journey';
 
 const EMPTY: Record<DeskStage, { title: string; body: string }> = {
   to_call: { title: 'Nobody to call', body: 'New website requests land here. Call them within 2 hours. Add demo covers WhatsApp and phone enquiries.' },
   scheduled: { title: 'No demos scheduled', body: 'Confirm a request, or use Add demo > Demo planned for one fixed on WhatsApp.' },
   after_demo: { title: 'No follow-ups running', body: 'After a demo, students stay here until they join or say no.' },
-  joined: { title: 'Nobody has joined after a demo yet', body: 'Students who enrol after their demo show here.' },
+  joined: { title: 'Nobody has enrolled after a demo yet', body: 'Students show here once their fee is recorded or their payment is verified.' },
   closed: { title: 'Nothing closed', body: 'Not interested, cancelled and stopped follow-ups are kept here with the reason.' },
 };
 
-function stageOfRequest(r: DemoRequest, followUp: DemoFollowUpRow | null | undefined, joinedAt: Record<string, string>): DeskStage {
-  return stageOf(r, followUp, r.user_id && r.user_id in joinedAt ? joinedAt[r.user_id] : undefined);
+function stageOfRequest(r: DemoRequest, followUp: DemoFollowUpRow | null | undefined, enrolment: Record<string, DemoEnrolment>): DeskStage {
+  return stageOf(r, followUp, enrolment[r.id]);
 }
 
 function Kpi({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
@@ -112,7 +112,7 @@ function DemoDesk() {
 
   const people = useMemo(() => (list ? groupByPerson(list.requests) : []), [list]);
   const stageOfPerson = useCallback(
-    (p: DeskPerson): DeskStage => stageOfRequest(p.current, list?.followUps?.[p.current.id], list?.joinedAt ?? {}),
+    (p: DeskPerson): DeskStage => stageOfRequest(p.current, list?.followUps?.[p.current.id], list?.enrolment ?? {}),
     [list],
   );
   const personOf = useCallback(
@@ -124,7 +124,7 @@ function DemoDesk() {
   useEffect(() => {
     if (!detail || detail.request.id !== selectedId) return;
     const p = personOf(selectedId);
-    setTab(p ? stageOfPerson(p) : stageOfRequest(detail.request, detail.lastFollowUp, list?.joinedAt ?? {}));
+    setTab(p ? stageOfPerson(p) : stageOfRequest(detail.request, detail.lastFollowUp, list?.enrolment ?? {}));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detail?.request.id]);
 
@@ -145,7 +145,7 @@ function DemoDesk() {
       if (!res.ok) return d.error || 'Something went wrong';
       setDetail(d);
       // Follow the student to their new tab (confirmed, held, attended, stopped), so the panel stays in view.
-      setTab(stageOfRequest(d.request, d.lastFollowUp, list?.joinedAt ?? {}));
+      setTab(stageOfRequest(d.request, d.lastFollowUp, list?.enrolment ?? {}));
       setList((prev) =>
         prev ? { ...prev, requests: prev.requests.map((r) => (r.id === d.request.id ? d.request : r)) } : prev,
       );
@@ -163,7 +163,7 @@ function DemoDesk() {
   }, [people, stageOfPerson]);
 
   const rows = useMemo(
-    () => (list ? sortPeople(tab, people.filter((p) => stageOfPerson(p) === tab), list.followUps ?? {}, list.joinedAt ?? {}) : []),
+    () => (list ? sortPeople(tab, people.filter((p) => stageOfPerson(p) === tab), list.followUps ?? {}, list.enrolment ?? {}) : []),
     [list, people, tab, stageOfPerson],
   );
   const selectedPerson = personOf(selectedId);
@@ -175,7 +175,7 @@ function DemoDesk() {
       <OpsPageHeader
         icon={VideocamIcon}
         title="Demo classes"
-        subtitle="One row per student, from first call to joining. Website requests land in To call; Add demo covers WhatsApp and phone enquiries, planned demos and demos already held. After the demo, students stay in After demo until they join or say no."
+        subtitle="One row per student, from first call to enrolment. Website requests land in To call; Add demo covers WhatsApp and phone enquiries, planned demos and demos already held. After the demo, students stay in After demo until they pay the fee or say no."
         actions={
           <>
             <Button variant="contained" startIcon={<AddIcon />} onClick={() => setAddOpen(true)} disabled={!list} sx={{ minHeight: 44 }}>
@@ -263,7 +263,7 @@ function DemoDesk() {
               hosts={list.settings.hosts}
               now={now}
               followUps={list.followUps ?? {}}
-              joinedAt={list.joinedAt ?? {}}
+              enrolment={list.enrolment ?? {}}
             />
           )}
         </Box>

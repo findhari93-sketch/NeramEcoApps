@@ -41,7 +41,8 @@ export default function CallbackCard({ suggestion }: { suggestion: BookSuggestio
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [editPhone, setEditPhone] = useState(false);
-  const [topic, setTopic] = useState('');
+  // What they said they want to talk about, when Aintra prepared the call.
+  const [topic, setTopic] = useState(suggestion.draft?.topic ?? '');
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -109,6 +109,12 @@ export interface PaymentDetailsData {
   transactionReference: string;
   paymentProofUrl: string | null;
   paymentProofFileName: string | null;
+  /** Student-pays: how the proof reaches us. 'upload' (default) or 'whatsapp'. */
+  proofChannel?: 'upload' | 'whatsapp';
+  /** Student-pays, WhatsApp channel: the student confirmed they sent the screenshot. */
+  whatsappSent?: boolean;
+  /** Student-pays: whose account the money came from, when not the student's. */
+  payerName?: string;
 }
 
 /**

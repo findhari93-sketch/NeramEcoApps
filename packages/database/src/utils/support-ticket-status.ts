@@ -263,12 +263,19 @@ export function ticketDaysFromNow(days: number, now: number = Date.now()): strin
   return new Date(now + days * DAY_MS).toISOString();
 }
 
+/**
+ * The server sets auto_close_at to exactly N days from its clock. Rounding up
+ * against a viewer's clock that runs a moment behind turned 3 into 4 (seen on
+ * staging, NERAM-TKT-00006), so an hour of drift is forgiven.
+ */
+const CLOCK_TOLERANCE_MS = 60 * 60 * 1000;
+
 /** Whole days until an ISO time, never negative. Null when there is no time. */
 export function ticketDaysUntil(iso: string | null | undefined, now: number = Date.now()): number | null {
   if (!iso) return null;
   const t = new Date(iso).getTime();
   if (Number.isNaN(t)) return null;
-  return Math.max(0, Math.ceil((t - now) / DAY_MS));
+  return Math.max(0, Math.ceil((t - now - CLOCK_TOLERANCE_MS) / DAY_MS));
 }
 
 /** Whole days since an ISO time, never negative. */

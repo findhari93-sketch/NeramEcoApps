@@ -47,12 +47,13 @@ import {
   enrolmentShareMessage,
 } from '@neram/database/enrolment-link';
 import { addDaysToKey, formatDueDate, formatRupees, istToday } from '@neram/database/fee-plan';
-import { buildStudentPayOffer, offerFromLink, type StudentPayOffer } from '@neram/database/student-pay';
+import { buildStudentPayOffer, offerFromLink, validateOfferOverrides, type StudentPayOffer } from '@neram/database/student-pay';
 import PhonelinkRingOutlinedIcon from '@mui/icons-material/PhonelinkRingOutlined';
 import ReceiptLongOutlinedIcon from '@mui/icons-material/ReceiptLongOutlined';
 import InvoiceDownload from './InvoiceDownload';
 import ConfirmDialog from './ConfirmDialog';
 import VerifyPaymentCard from './VerifyPaymentCard';
+import ProofLink from '../payments/ProofLink';
 import {
   COUNTRY_CODES,
   COURSE_OPTIONS,
@@ -429,10 +430,54 @@ function EditForm({
   const studentPays = values.paymentMode === 'student_pays';
   const selectedFs = feeStructures.find((f) => f.id === values.feeStructureId) || null;
   const offer = useMemo(
-    () => (selectedFs ? buildStudentPayOffer(selectedFs, values.discount) : null),
-    [selectedFs, values.discount],
+    () =>
+      selectedFs
+        ? buildStudentPayOffer(selectedFs, values.discount, {
+            quotedFee: values.quotedFee || null,
+            fullAmount: values.fullPrice || null,
+            installmentTotal: values.installmentTotal || null,
+            installment1: values.installment1 || null,
+          })
+        : null,
+    [selectedFs, values.discount, values.quotedFee, values.fullPrice, values.installmentTotal, values.installment1],
   );
-  const offerDueDays = Number(editingLink?.offer_balance_due_days) || 45;
+  const offerDueDays = Number(values.balanceDueDays) || Number(editingLink?.offer_balance_due_days) || 45;
+  const offerErrors = useMemo(() => (offer ? validateOfferOverrides(offer) : []), [offer]);
+  const hasOverrides = Boolean(values.quotedFee || values.fullPrice || values.installmentTotal || values.installment1);
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  // Editing a link seeds the typed figures from its snapshot. If they only repeat
+  // the preset, drop them so a new fee structure or discount re-prices as before;
+  // if they differ, show them, so staff see why the preview is not the preset.
+  const seededFor = useMemo(() => editingLink?.id || null, [editingLink?.id]);
+  const [seedChecked, setSeedChecked] = useState<string | null>(null);
+  useEffect(() => {
+    if (!seededFor || !selectedFs || seedChecked === seededFor) return;
+    setSeedChecked(seededFor);
+    const preset = buildStudentPayOffer(selectedFs, values.discount);
+    const typed = buildStudentPayOffer(selectedFs, values.discount, {
+      quotedFee: values.quotedFee || null,
+      fullAmount: values.fullPrice || null,
+      installmentTotal: values.installmentTotal || null,
+      installment1: values.installment1 || null,
+    });
+    const same = ['listFee', 'fullAmount', 'installmentTotal', 'installment1', 'installment2'].every((k) => (preset as any)[k] === (typed as any)[k]);
+    if (same) {
+      set('quotedFee', '');
+      set('fullPrice', '');
+      set('installmentTotal', '');
+      set('installment1', '');
+    } else {
+      setAdjustOpen(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seededFor, selectedFs?.id]);
+  /** Typed figures belong to one preset: a new fee structure or discount starts from the preset again. */
+  const clearOverrides = () => {
+    set('quotedFee', '');
+    set('fullPrice', '');
+    set('installmentTotal', '');
+    set('installment1', '');
+  };
 
   const setFee =(key: 'totalFee' | 'discount', raw: string) => {
     const v = raw.replace(/[^\d]/g, '');
@@ -489,6 +534,14 @@ function EditForm({
                 paymentMode: 'student_pays',
                 feeStructureId: values.feeStructureId,
                 discountAmount: Number(values.discount) || 0,
+                expiresInDays: editingLink ? undefined : Number(values.expiresInDays) || undefined,
+                offerOverrides: {
+                  quotedFee: values.quotedFee || null,
+                  fullAmount: values.fullPrice || null,
+                  installmentTotal: values.installmentTotal || null,
+                  installment1: values.installment1 || null,
+                  balanceDueDays: Number(values.balanceDueDays) || 45,
+                },
               }
             : {
                 ...common,
@@ -677,7 +730,10 @@ function EditForm({
                   select
                   label="Fee structure"
                   value={feeOptions.some((f) => f.id === values.feeStructureId) ? values.feeStructureId : ''}
-                  onChange={(e) => set('feeStructureId', e.target.value)}
+                  onChange={(e) => {
+                    set('feeStructureId', e.target.value);
+                    clearOverrides();
+                  }}
                   required
                   error={Boolean(errors.feeStructureId)}
                   helperText={errors.feeStructureId || 'The offer comes from this fee structure.'}
@@ -697,11 +753,61 @@ function EditForm({
               <MoneyField
                 label="Extra discount (optional)"
                 value={values.discount}
-                onChange={(v) => set('discount', v)}
+                onChange={(v) => {
+                  set('discount', v);
+                  if (hasOverrides) clearOverrides();
+                }}
                 error={errors.discount}
-                helperText="Comes off both plans, on top of the pay in full saving."
+                helperText={hasOverrides ? 'Changing this clears the figures you typed below and re-prices from the preset.' : 'Comes off both plans, on top of the pay in full saving.'}
               />
+              <Box>
+                <Button
+                  type="button"
+                  onClick={() => setAdjustOpen((v) => !v)}
+                  aria-expanded={adjustOpen}
+                  aria-controls="adjust-price-fields"
+                  sx={{ textTransform: 'none', minHeight: 44, px: 0.5, fontWeight: 600 }}
+                >
+                  {adjustOpen ? 'Hide per-student pricing' : hasOverrides ? 'Per-student pricing is on. Show it' : 'Adjust the price for this student'}
+                </Button>
+                {adjustOpen && (
+                  <Box id="adjust-price-fields" sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, mt: 1 }}>
+                    <MoneyField label="Quoted fee" value={values.quotedFee} onChange={(v) => set('quotedFee', v)} helperText={selectedFs ? `Preset: ${formatRupees(selectedFs.fee_amount)}` : 'What you quoted them.'} />
+                    <MoneyField label="Pay in full price" value={values.fullPrice} onChange={(v) => set('fullPrice', v)} helperText="What they pay in one go." />
+                    <MoneyField label="Installments total" value={values.installmentTotal} onChange={(v) => set('installmentTotal', v)} helperText="Defaults to the quoted fee. Lower it to close the deal." />
+                    <MoneyField label="First installment" value={values.installment1} onChange={(v) => set('installment1', v)} helperText="The second installment is the rest." />
+                    <TextField
+                      label="Balance due in (days)"
+                      value={values.balanceDueDays}
+                      onChange={(e) => set('balanceDueDays', e.target.value.replace(/[^\d]/g, '').slice(0, 3))}
+                      inputProps={{ inputMode: 'numeric' }}
+                      helperText="After the first installment. Default 45."
+                    />
+                  </Box>
+                )}
+              </Box>
+              {!editingLink && (
+                <TextField
+                  select
+                  label="Link stays open for"
+                  value={values.expiresInDays}
+                  onChange={(e) => set('expiresInDays', e.target.value as '' | '7' | '14' | '30')}
+                  helperText="You can extend it later without changing the link."
+                  SelectProps={{ displayEmpty: true }}
+                  InputLabelProps={{ shrink: true }}
+                >
+                  <MenuItem value="">Default from Settings</MenuItem>
+                  <MenuItem value="7">7 days</MenuItem>
+                  <MenuItem value="14">14 days</MenuItem>
+                  <MenuItem value="30">30 days</MenuItem>
+                </TextField>
+              )}
               {offer && <OfferPreview offer={offer} dueDays={offerDueDays} />}
+              {(offerErrors.length > 0 || errors.offer) && (
+                <Alert severity="error" role="alert">
+                  {errors.offer || offerErrors.join(' ')}
+                </Alert>
+              )}
             </>
           )}
           {!studentPays && feeOptions.length > 0 && (
@@ -971,6 +1077,27 @@ function LinkView({
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [verifyNote, setVerifyNote] = useState<{ kind: 'verify' | 'reject'; text: string } | null>(null);
 
+  /** Push the expiry forward; the URL in the student's WhatsApp keeps working. */
+  const extend = async (days: 7 | 14 | 30) => {
+    setBusy('extend');
+    setResult(null);
+    try {
+      const res = await fetch(`/api/direct-enrollment/${link.id}/extend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ days, adminId }),
+      });
+      const json = await readJson(res);
+      if (!res.ok) throw new Error(json.error || 'Could not extend the link.');
+      setResult({ kind: 'success', text: `Extended. The same link now works until ${shortDate(json.data.expiresAt)}.` });
+      await onReload(link.id, 'updated');
+    } catch (err: any) {
+      setResult({ kind: 'error', text: err?.message || 'Could not extend the link.' });
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const status = STATUS[link.status] || STATUS.active;
   const isActive = link.status === 'active';
   const finalFee = Number(link.final_fee) || 0;
@@ -1115,6 +1242,9 @@ function LinkView({
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 2 }}>
           <Chip label={status.label} color={status.color} size="small" sx={{ fontWeight: 600 }} />
+          {link.status === 'active' && link.details_saved_at && (
+            <Chip label="Details saved, not paid" color="info" variant="outlined" size="small" sx={{ fontWeight: 600 }} />
+          )}
           <Typography variant="body2" color="text.secondary">
             Made by {link.created_by_name || 'staff'} on {shortDate(link.created_at)}
             {isActive && link.expires_at ? `, works until ${shortDate(link.expires_at)}` : ''}
@@ -1156,12 +1286,20 @@ function LinkView({
             severity="warning"
             sx={{ mb: 2 }}
             action={
-              <Button color="inherit" onClick={renew} disabled={busy === 'renew'} startIcon={<RefreshIcon />} sx={{ minHeight: 44 }}>
-                {busy === 'renew' ? 'Making' : 'Make a new link'}
-              </Button>
+              <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+                {link.status === 'expired' && (
+                  <Button color="inherit" onClick={() => extend(7)} disabled={busy !== null} startIcon={<EventOutlinedIcon />} sx={{ minHeight: 44 }}>
+                    {busy === 'extend' ? 'Extending' : 'Extend 7 days'}
+                  </Button>
+                )}
+                <Button color="inherit" onClick={renew} disabled={busy !== null} startIcon={<RefreshIcon />} sx={{ minHeight: 44 }}>
+                  {busy === 'renew' ? 'Making' : 'Make a new link'}
+                </Button>
+              </Box>
             }
           >
             This link {link.status === 'expired' ? 'has expired' : 'was cancelled'} and no longer works.
+            {link.status === 'expired' ? ' Extend keeps the same URL, so the message the student already has works again.' : ''}
           </Alert>
         )}
 
@@ -1184,6 +1322,16 @@ function LinkView({
                 {copied ? 'Copied' : 'Copy link'}
               </Button>
             </Box>
+            {link.expires_at && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Works until {shortDate(link.expires_at)}.
+                </Typography>
+                <Button size="small" onClick={() => extend(7)} disabled={busy !== null} startIcon={<EventOutlinedIcon />} sx={{ textTransform: 'none', minHeight: 36, fontWeight: 600 }}>
+                  {busy === 'extend' ? 'Extending' : 'Extend 7 days'}
+                </Button>
+              </Box>
+            )}
 
             <Typography component="h3" sx={SECTION_LABEL_SX}>Send to the student</Typography>
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 1, mb: 1 }}>
@@ -1298,9 +1446,7 @@ function LinkView({
             <>
               <Typography component="dt" variant="body2" color="text.secondary">Proof</Typography>
               <Typography component="dd" variant="body2" sx={{ m: 0 }}>
-                <Box component="a" href={link.payment_proof_url} target="_blank" rel="noopener noreferrer" sx={{ color: 'primary.main', display: 'inline-flex', alignItems: 'center', gap: 0.5, minHeight: 32 }}>
-                  View payment proof <OpenInNewIcon sx={{ fontSize: 16 }} />
-                </Box>
+                <ProofLink stored={link.payment_proof_url} label="View payment proof" />
               </Typography>
             </>
           )}

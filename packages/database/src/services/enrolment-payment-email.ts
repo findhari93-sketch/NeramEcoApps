@@ -12,6 +12,7 @@ import { sendEmail } from './email';
 import { sendStaffPush } from './staff-push';
 import { createAdminNotification } from '../queries/notifications';
 import { formatRupees } from '../utils/fee-plan';
+import type { PaymentPayee } from '../utils/student-pay';
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@neramclasses.com';
 const ADMIN_URL = (process.env.NEXT_PUBLIC_ADMIN_URL || 'https://admin.neramclasses.com').replace(/\/+$/, '');
@@ -62,7 +63,11 @@ export interface SubmittedPaymentFacts {
   amount: number;
   scheme: 'full' | 'installment';
   method: 'upi_direct' | 'bank_transfer';
-  utr: string;
+  /** Optional since Phase 1: new students rarely know it. */
+  utr: string | null;
+  /** 'whatsapp': the screenshot came to our WhatsApp, not the page. */
+  proofChannel?: 'upload' | 'whatsapp' | null;
+  payerName?: string | null;
   paidOn: string; // "19 Oct 2026"
   courseLabel: string;
   /** Installments only. */
@@ -80,7 +85,9 @@ export async function sendPaymentSubmittedEmail(to: string, f: SubmittedPaymentF
     ['Plan', isBalance ? 'Balance payment' : planLabel(f.scheme)],
     ['Amount', formatRupees(f.amount)],
     ['Paid by', methodLabel(f.method)],
-    ['Reference (UTR)', f.utr],
+    ...(f.utr ? ([['Reference (UTR)', f.utr]] as [string, string][]) : []),
+    ...(f.payerName ? ([['Paid from', f.payerName]] as [string, string][]) : []),
+    ['Proof', f.proofChannel === 'whatsapp' ? 'Screenshot sent on WhatsApp' : 'Screenshot uploaded'],
     ['Paid on', f.paidOn],
   ];
   if (f.scheme === 'installment' && f.balance) {
@@ -110,7 +117,7 @@ export async function sendPaymentVerifiedEmail(
     ['Course', f.courseLabel],
     ['Plan', planLabel(f.scheme)],
     ['Amount received', formatRupees(f.amount)],
-    ['Reference (UTR)', f.utr],
+    ...(f.utr ? ([['Reference (UTR)', f.utr]] as [string, string][]) : []),
     ['Paid on', f.paidOn],
   ];
   if (f.scheme === 'installment' && f.balance) {
@@ -137,12 +144,12 @@ export async function sendPaymentVerifiedEmail(
 /** To the student, when staff verified a balance payment: their receipt. */
 export async function sendBalanceVerifiedEmail(
   to: string,
-  f: { studentName: string; amount: number; method: 'upi_direct' | 'bank_transfer'; utr: string; paidOn: string; balanceAfter: number | null; receiptNumber?: string | null },
+  f: { studentName: string; amount: number; method: 'upi_direct' | 'bank_transfer'; utr: string | null; paidOn: string; balanceAfter: number | null; receiptNumber?: string | null },
 ) {
   const rows: [string, string][] = [
     ['Amount received', formatRupees(f.amount)],
     ['Paid by', methodLabel(f.method)],
-    ['Reference (UTR)', f.utr],
+    ...(f.utr ? ([['Reference (UTR)', f.utr]] as [string, string][]) : []),
     ['Paid on', f.paidOn],
   ];
   if (f.receiptNumber) rows.unshift(['Receipt number', f.receiptNumber]);
@@ -163,7 +170,7 @@ export async function sendBalanceVerifiedEmail(
 /** To the student, when staff could not find the payment. */
 export async function sendPaymentRejectedEmail(
   to: string,
-  f: { studentName: string; amount: number; utr: string; reason: string; url: string; purpose?: 'enrolment' | 'balance' },
+  f: { studentName: string; amount: number; utr: string | null; reason: string; url: string; purpose?: 'enrolment' | 'balance' },
 ) {
   const url = esc(f.url);
   const html = shell({
@@ -172,7 +179,7 @@ export async function sendPaymentRejectedEmail(
     subtitle: 'Neram Classes enrolment',
     body: `
       <p style="margin-top:0;">Hi <strong>${firstName(f.studentName)}</strong>,</p>
-      <p>We checked our bank for ${esc(formatRupees(f.amount))} with reference <strong>${esc(f.utr)}</strong> but could not match it.</p>
+      <p>We checked our bank for ${esc(formatRupees(f.amount))}${f.utr ? ` with reference <strong>${esc(f.utr)}</strong>` : ''} but could not match it.</p>
       <p style="background:#FFF3E0;border-radius:6px;padding:12px 16px;"><strong>What our team said:</strong> ${esc(f.reason)}</p>
       <p>${f.purpose === 'balance' ? 'Your pay balance page is open again.' : 'Your enrolment link is open again.'} Please check the reference number in your payment app and submit it again.</p>
       <p style="text-align:center;margin:24px 0;">
@@ -197,7 +204,8 @@ export async function alertStaffPaymentToVerify(
       ? `/demo-classes?id=${encodeURIComponent(f.demoRegistrationId)}`
       : `/direct-enrollment?highlight=${encodeURIComponent(f.linkId || '')}`;
   const title = `Verify payment: ${f.studentName}`;
-  const body = `${formatRupees(f.amount)} by ${methodLabel(f.method)}, UTR ${f.utr} (${planLabel(f.scheme)})`;
+  const proofNote = f.utr ? `UTR ${f.utr}` : f.proofChannel === 'whatsapp' ? 'screenshot on WhatsApp, no UTR' : 'screenshot uploaded, no UTR';
+  const body = `${formatRupees(f.amount)} by ${methodLabel(f.method)}, ${proofNote} (${planLabel(f.scheme)})`;
 
   try {
     await createAdminNotification(
@@ -232,7 +240,7 @@ export async function alertStaffPaymentToVerify(
     ['Plan', f.purpose === 'balance' ? 'Balance payment (already enrolled)' : planLabel(f.scheme)],
     ['Amount', formatRupees(f.amount)],
     ['Paid by', methodLabel(f.method)],
-    ['UTR', f.utr],
+    ['Proof', f.utr ? `UTR ${f.utr}` : f.proofChannel === 'whatsapp' ? 'Screenshot on WhatsApp' : 'Screenshot uploaded'],
     ['Paid on', f.paidOn],
   ];
   const link = esc(`${ADMIN_URL}${path}`);
@@ -249,4 +257,106 @@ export async function alertStaffPaymentToVerify(
   });
   const sent = await sendEmail({ to: ADMIN_EMAIL, subject: `[Verify payment] ${formatRupees(f.amount)} from ${f.studentName}`, html });
   if (!sent.success) console.error('[payment-to-verify] staff email failed:', sent.error);
+}
+
+// ─── Phase 1: pay later, reminders, expiry ────────────────────────────────────
+
+export interface PayDetailsEmailFacts {
+  studentName: string;
+  courseLabel: string;
+  /** "Pay in full: ₹25,000 (save ₹5,000)" style lines from offerLines(). */
+  offerLines: string[];
+  payee: PaymentPayee;
+  /** The student's own link, to come back and finish. */
+  resumeUrl: string;
+  /** A PNG of the UPI QR for the amount due (Gmail blocks data URIs). */
+  qrPngUrl: string;
+  /** "26 Oct 2026" */
+  expiresLabel: string;
+}
+
+function payDetailsBlock(f: PayDetailsEmailFacts): string {
+  const p = f.payee;
+  const lines = f.offerLines.map((l) => `<li style="margin:4px 0;">${esc(l)}</li>`).join('');
+  const bank: [string, string][] = [
+    ['Account name', p.bank.accountName],
+    ['Account number', p.bank.accountNumber],
+    ['IFSC', p.bank.ifsc],
+    ['Bank', `${p.bank.bankName}, ${p.bank.branch}`],
+  ];
+  return `
+      <ul style="padding-left:18px;margin:8px 0 16px;">${lines}</ul>
+      <p style="margin:0 0 8px;font-weight:600;">Pay by UPI</p>
+      <p style="margin:0 0 8px;">UPI ID: <strong>${esc(p.upiId)}</strong> (${esc(p.payeeName)})${p.gpayNumber ? ` or GPay number <strong>${esc(p.gpayNumber)}</strong>` : ''}</p>
+      <p style="text-align:center;margin:12px 0;"><img src="${esc(f.qrPngUrl)}" width="200" height="200" alt="UPI QR code to pay ${esc(p.payeeName)}" style="border:1px solid #e3e6ea;border-radius:8px;" /></p>
+      <p style="font-size:13px;color:#555;margin:0 0 16px;">Save the QR to your phone, open GPay or PhonePe, tap Scan and choose it from your gallery. Check the name reads <strong>${esc(p.payeeName)}</strong> before you pay.</p>
+      <p style="margin:0 0 8px;font-weight:600;">Or by bank transfer</p>
+      <table role="presentation" style="width:100%;border-collapse:collapse;margin:0 0 16px;">${rowsHtml(bank)}</table>
+      <p style="text-align:center;margin:24px 0;">
+        <a href="${esc(f.resumeUrl)}" style="display:inline-block;background:#1565C0;color:#fff;padding:14px 32px;text-decoration:none;border-radius:6px;font-weight:600;">Open my enrolment link</a>
+      </p>
+      <p style="font-size:13px;color:#555;">After you pay, open the link and send us the screenshot (or send it on WhatsApp). Your link is open until <strong>${esc(f.expiresLabel)}</strong>.</p>`;
+}
+
+/** To the student who chose "I'll pay later": the details are safe, here is how to pay. */
+export async function sendPaymentSavedEmail(to: string, f: PayDetailsEmailFacts) {
+  const html = shell({
+    accent: '#0D47A1',
+    title: 'Your application is saved',
+    subtitle: 'Pay when you are ready to confirm your seat',
+    body: `
+      <p style="margin-top:0;">Hi <strong>${firstName(f.studentName)}</strong>,</p>
+      <p>We have your details for <strong>${esc(f.courseLabel)}</strong>. Your seat is confirmed the moment your payment reaches the trust.</p>
+      ${payDetailsBlock(f)}`,
+  });
+  return sendEmail({ to, subject: 'Your application is saved, pay to confirm your seat', html });
+}
+
+export type EnrolmentReminderStage = 'day1' | 'day3' | 'last_chance';
+
+const REMINDER_COPY: Record<EnrolmentReminderStage, { subject: string; title: string; lead: string }> = {
+  day1: {
+    subject: 'Complete your enrolment at Neram Classes',
+    title: 'Your seat is waiting',
+    lead: 'You opened your enrolment link yesterday. Paying takes about two minutes, and paying in full saves you money.',
+  },
+  day3: {
+    subject: 'Still thinking? Your Neram seat is waiting',
+    title: 'A quick reminder',
+    lead: 'Your enrolment link is still open. If anything is unclear about the fee or the plan, just reply to this email.',
+  },
+  last_chance: {
+    subject: 'Your enrolment link closes soon',
+    title: 'Last chance to use this link',
+    lead: 'Your enrolment link closes in two days. Pay before then, or reply and we will extend it for you.',
+  },
+};
+
+/** To a student with an unpaid link: day 1, day 3, and two days before it closes. */
+export async function sendEnrolmentReminderEmail(to: string, f: PayDetailsEmailFacts & { stage: EnrolmentReminderStage }) {
+  const copy = REMINDER_COPY[f.stage];
+  const html = shell({
+    accent: f.stage === 'last_chance' ? '#E65100' : '#0D47A1',
+    title: copy.title,
+    subtitle: `Neram Classes, ${f.courseLabel}`,
+    body: `
+      <p style="margin-top:0;">Hi <strong>${firstName(f.studentName)}</strong>,</p>
+      <p>${esc(copy.lead)}</p>
+      ${payDetailsBlock(f)}`,
+  });
+  return sendEmail({ to, subject: copy.subject, html });
+}
+
+/** To a student whose unpaid link closed. */
+export async function sendLinkExpiredEmail(to: string, f: { studentName: string; courseLabel: string; whatsappHref?: string | null }) {
+  const html = shell({
+    accent: '#546E7A',
+    title: 'Your enrolment link has expired',
+    subtitle: `Neram Classes, ${f.courseLabel}`,
+    body: `
+      <p style="margin-top:0;">Hi <strong>${firstName(f.studentName)}</strong>,</p>
+      <p>The enrolment link we sent you has closed. Nothing is lost: reply to this email${f.whatsappHref ? ` or <a href="${esc(f.whatsappHref)}" style="color:#1565C0;font-weight:600;">message us on WhatsApp</a>` : ''} and we will open it again for you.</p>
+      <p style="font-size:13px;color:#555;margin-bottom:0;">If you already paid, send us the screenshot and we will match it with the bank.</p>`,
+  });
+  return sendEmail({ to, subject: 'Your enrolment link has expired', html });
 }

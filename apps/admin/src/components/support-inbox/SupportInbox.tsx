@@ -256,11 +256,42 @@ export default function SupportInbox() {
   /** After any change: the pane, the list, the counts and the sidebar badges. */
   const afterChange = useCallback(
     (fresh: SupportTicketDetail | null) => {
-      if (fresh) setDetail(fresh);
+      if (fresh) {
+        setDetail(fresh);
+        // Move the row at once from the ticket the server just returned. The
+        // refresh below confirms it, but on staging it landed a step late (the
+        // first move after a token renewal), which left a started ticket under New.
+        const stillListed =
+          (view.queue === 'all' || ticketStaffQueueOf(fresh.status) === view.queue) &&
+          !(view.assignee === 'unassigned' && fresh.assigned_to);
+        setTickets((prev) =>
+          prev.flatMap((t) => {
+            if (t.id !== fresh.id) return [t];
+            if (!stillListed) return [];
+            return [
+              {
+                ...t,
+                status: fresh.status,
+                priority: fresh.priority,
+                category: fresh.category,
+                assigned_to: fresh.assigned_to,
+                assignee_name: fresh.assignee_name,
+                resolution_code: fresh.resolution_code,
+                auto_close_at: fresh.auto_close_at,
+                closed_at: fresh.closed_at,
+                last_reply_at: fresh.last_reply_at,
+                last_reply_by: fresh.last_reply_by,
+                staff_seen_at: fresh.staff_seen_at,
+                reopen_count: fresh.reopen_count,
+              },
+            ];
+          })
+        );
+      }
       loadList({ quiet: true });
       refreshBadges(true);
     },
-    [loadList, refreshBadges]
+    [loadList, refreshBadges, view.queue, view.assignee]
   );
 
   const onConflict = useCallback(() => {

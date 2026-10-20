@@ -17,12 +17,45 @@ const STATS = [
   { value: '10+', label: 'Years' },
 ];
 
-/** Tool badges around the clock. Same /tools/* scheme as the Learning Tools cards. */
-const BADGES: Array<{ label: string; href: string; icon: ReactNode; pos: object }> = [
-  { label: 'Cut Off Calculator', href: '/tools/cutoff-calculator', icon: <CalculateOutlinedIcon />, pos: { top: '8%', left: 0 } },
-  { label: 'College Predictor', href: '/tools/college-predictor', icon: <SchoolOutlinedIcon />, pos: { top: '44%', right: 0 } },
-  { label: 'Question Bank', href: '/tools/question-bank', icon: <QuizOutlinedIcon />, pos: { bottom: '6%', left: '8%' } },
+/**
+ * Tool badges around the clock. Same /tools/* scheme as the Learning Tools cards.
+ * Each one drifts on its own rhythm (staggered duration and delay) so the three
+ * never bob in sync.
+ */
+const BADGES: Array<{ label: string; href: string; icon: ReactNode; pos: object; float: object }> = [
+  {
+    label: 'Cut Off Calculator',
+    href: '/tools/cutoff-calculator',
+    icon: <CalculateOutlinedIcon />,
+    pos: { top: '8%', left: 0 },
+    float: { animation: 'heroBadgeFloatA 6s ease-in-out infinite' },
+  },
+  {
+    label: 'College Predictor',
+    href: '/tools/college-predictor',
+    icon: <SchoolOutlinedIcon />,
+    pos: { top: '44%', right: 0 },
+    float: { animation: 'heroBadgeFloatB 7s ease-in-out infinite', animationDelay: '-2s' },
+  },
+  {
+    label: 'Question Bank',
+    href: '/tools/question-bank',
+    icon: <QuizOutlinedIcon />,
+    pos: { bottom: '6%', left: '8%' },
+    float: { animation: 'heroBadgeFloatA 8s ease-in-out infinite', animationDelay: '-4s' },
+  },
 ];
+
+const badgeFloatKeyframes = {
+  '@keyframes heroBadgeFloatA': {
+    '0%, 100%': { transform: 'translateY(0)' },
+    '50%': { transform: 'translateY(-10px)' },
+  },
+  '@keyframes heroBadgeFloatB': {
+    '0%, 100%': { transform: 'translate(0, 0)' },
+    '50%': { transform: 'translate(-4px, -8px)' },
+  },
+} as const;
 
 const MS_SQUARES = ['#f25022', '#7fba00', '#00a4ef', '#ffb900']; // Microsoft logo colours (brand mark, not theme)
 
@@ -159,6 +192,12 @@ export default function NewHeroSection() {
               sx={{
                 position: 'absolute',
                 ...b.pos,
+                ...badgeFloatKeyframes,
+                ...b.float,
+                willChange: 'transform',
+                // Hold still while pointed at or focused, so the click target does not move.
+                '&:hover, &:focus-visible': { animationPlayState: 'paused' },
+                '@media (prefers-reduced-motion: reduce)': { animation: 'none' },
                 display: 'flex',
                 alignItems: 'center',
                 gap: 1,

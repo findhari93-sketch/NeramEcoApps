@@ -3,6 +3,7 @@
 import type { SvgIconComponent } from '@mui/icons-material';
 import HomeOutlinedIcon from '@mui/icons-material/HomeOutlined';
 import GridViewOutlinedIcon from '@mui/icons-material/GridViewOutlined';
+import AutoAwesomeOutlinedIcon from '@mui/icons-material/AutoAwesomeOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import SupportAgentOutlinedIcon from '@mui/icons-material/SupportAgentOutlined';
 import PersonOutlineIcon from '@mui/icons-material/PersonOutline';
@@ -316,6 +317,7 @@ export interface AppNavItem {
 export const PRIMARY_NAV: AppNavItem[] = [
   { title: 'Home', href: '/dashboard', Icon: HomeOutlinedIcon },
   { title: 'All tools', href: TOOLS_HOME_HREF, Icon: GridViewOutlinedIcon },
+  { title: 'Ask aiArchitek', href: '/ask', Icon: AutoAwesomeOutlinedIcon },
 ];
 
 export const ACCOUNT_NAV: AppNavItem[] = [

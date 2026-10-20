@@ -3,7 +3,8 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, formatDueDate } from '@neram/database';
 import { loadBalanceDue, submitFeePaymentClaim } from '@neram/database/fee-payment-claims';
-import { getPaymentPayee } from '@neram/database/payment-payee';
+import { getPaymentPayee, getPaymentQrCodes } from '@neram/database/payment-payee';
+import { recordLegacyBalanceClaim } from '@neram/database/payments';
 import { sendPaymentSubmittedEmail, alertStaffPaymentToVerify } from '@neram/database/enrolment-payment-email';
 import { verifyFirebaseToken } from '../_lib/auth';
 
@@ -23,6 +24,7 @@ function claimView(c: any) {
     amount: Number(c.amount) || 0,
     method: c.method,
     utrTail: c.utr ? String(c.utr).slice(-4) : null,
+    proofChannel: c.proof_channel || 'upload',
     paidOn: c.paid_on,
     submittedAt: c.created_at,
     rejectionReason: c.rejection_reason || null,
@@ -39,9 +41,10 @@ export async function GET(request: NextRequest) {
 
   try {
     const supabase = createAdminClient();
-    const [due, payee, claimsRes] = await Promise.all([
+    const [due, payee, qrCodes, claimsRes] = await Promise.all([
       loadBalanceDue(supabase, auth.userId),
       getPaymentPayee(supabase),
+      getPaymentQrCodes(supabase),
       (supabase as any)
         .from('fee_payment_claims')
         .select('*')
@@ -66,6 +69,7 @@ export async function GET(request: NextRequest) {
           balance: due.balance,
         },
         payee,
+        qrCodes,
         paymentNote: noteFor(auth.userId),
         pending: latest?.status === 'pending' ? claimView(latest) : null,
         lastRejection: latest?.status === 'rejected' ? claimView(latest) : null,
@@ -88,18 +92,25 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
     const supabase = createAdminClient();
+    const payee = await getPaymentPayee(supabase);
     const result = await submitFeePaymentClaim(supabase, {
+      whatsappAllowed: Boolean(payee.whatsappNumber),
       userId: auth.userId,
       method: body.paymentMethod,
       transactionReference: body.transactionReference,
       paymentDate: body.paymentDate,
       paymentProofUrl: body.paymentProofUrl,
+      proofChannel: body.proofChannel,
+      whatsappSent: body.whatsappSent,
+      payerName: body.payerName,
     });
     if (!result.ok) {
       return NextResponse.json({ error: result.error, code: result.code, fieldErrors: result.fieldErrors }, { status: result.status });
     }
 
     const { claim, due } = result;
+    // Payments v2 (Phase 0): the claim as an intent + awaiting_review attempt too. Never throws.
+    await recordLegacyBalanceClaim(supabase, { claim, userId: auth.userId });
     const { data: lead } = due.leadProfileId
       ? await (supabase as any).from('lead_profiles').select('interest_course').eq('id', due.leadProfileId).maybeSingle()
       : { data: null };
@@ -108,7 +119,9 @@ export async function POST(request: NextRequest) {
       amount: Number(claim.amount),
       scheme: 'installment' as const,
       method: claim.method,
-      utr: claim.utr,
+      utr: claim.utr || null,
+      proofChannel: claim.proof_channel || 'upload',
+      payerName: claim.payer_name || null,
       paidOn: formatDueDate(claim.paid_on),
       courseLabel: COURSE_LABELS[lead?.interest_course] || 'Neram Classes coaching',
       purpose: 'balance' as const,

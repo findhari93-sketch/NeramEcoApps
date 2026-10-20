@@ -122,7 +122,9 @@ function mainPages(): string[] {
     '## Free tools',
     `- aiArchitek, the Neram AI-powered NATA platform (what each tool and AI feature does): ${U('/aiarchitek')}`,
     // The tools live on the app, which has a demo and state and city pages for each.
-    `- NATA cutoff calculator: ${APP_URL}/tools/nata/cutoff-calculator`,
+    `- NATA cutoff calculator, free with no login (12th marks out of 200 plus NATA out of 200, every board's real maximum, best of two attempts, real TNEA and KEAM closing marks): ${U('/tools/cutoff-calculator')}`,
+    `- Full NATA cutoff calculator in the app (last year's score, saved results): ${APP_URL}/tools/nata/cutoff-calculator`,
+    `- Ask aiArchitek, a chat that answers NATA cutoff and B.Arch college questions from the official TNEA, KEAM and JoSAA allotment lists, with the source shown: ${APP_URL}/ask`,
     `- B.Arch college predictor: ${APP_URL}/tools/counseling/college-predictor`,
     `- NATA exam centre finder (every state and city): ${APP_URL}/tools/nata/exam-centers`,
     `- COA approved college checker: ${APP_URL}/tools/counseling/coa-checker`,

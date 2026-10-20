@@ -6,13 +6,14 @@ import {
   cleanIndianMobile,
   cleanPreferredDate,
   describeCallbackTime,
+  formatBookMarker,
   istToday,
   maskPhone,
   parseBookArgs,
   pickCallbackDefault,
 } from './booking';
 import { parseAintraAnswer } from './rich/parse';
-import { demoDaysPrompt, visitorBookingsPrompt } from './booking-prompt';
+import { demoDaysPrompt, visitorBookingsPrompt, visitorPrompt } from './booking-prompt';
 import { DEFAULT_DEMO_SCHEDULE } from '@neram/database/demo-schedule';
 
 // Monday 19 Oct 2026, 11:30 India time: the morning slot has just closed.
@@ -34,6 +35,41 @@ describe('parseBookArgs', () => {
 
   it('treats "anytime" on a callback as no preference', () => {
     expect(parseBookArgs('callback,anytime', MORNING)?.window).toBeNull();
+  });
+
+  it('reads a server-written draft, keeping the case and punctuation of a name', () => {
+    expect(parseBookArgs('demo,2026-10-21,evening,name=Priya%20K%2C%20Jr,year=2027,parent=yes', MORNING)).toEqual({
+      kind: 'demo',
+      date: '2026-10-21',
+      window: 'evening',
+      draft: { name: 'Priya K, Jr', examYear: 2027, parentJoining: true },
+    });
+    expect(parseBookArgs('demo,2026-10-21,evening,change', MORNING)?.change).toBe(true);
+    expect(parseBookArgs('cancel-demo,tomorrow,reason=exam%20clash', MORNING)).toEqual({
+      kind: 'cancel-demo',
+      date: null,
+      window: null,
+      draft: { reason: 'exam clash' },
+    });
+  });
+
+  it('carries a short form\'s fields, and drops a time on the untimed cards', () => {
+    const s = {
+      kind: 'visit' as const,
+      date: '2026-10-22',
+      window: null,
+      draft: { fields: { centreId: 'c2', centreName: 'Tambaram, Chennai', slots: '10:00 AM - 12:00 PM|2:00 PM - 5:00 PM' } },
+    };
+    expect(parseBookArgs(formatBookMarker(s).slice(7, -2), MORNING)).toEqual(s);
+    expect(parseBookArgs('apply,tomorrow,evening', MORNING)).toEqual({ kind: 'apply', date: null, window: null });
+    expect(parseBookArgs('message,f.subject=Hi%2C%20there,f.bad-key=x', MORNING)?.draft).toEqual({ fields: { subject: 'Hi, there' } });
+  });
+
+  it('round-trips through formatBookMarker, whatever the name holds', () => {
+    const s = { kind: 'demo' as const, date: '2026-10-21', window: 'morning' as const, draft: { name: 'A]]B | C, D', examYear: 2028, parentJoining: false } };
+    const marker = formatBookMarker(s);
+    expect(marker).toMatch(/^\[\[book:[^\]\n]+\]\]$/);
+    expect(parseBookArgs(marker.slice(7, -2), MORNING)).toEqual(s);
   });
 });
 
@@ -126,6 +162,28 @@ describe('[[book:...]] in an answer', () => {
   it('drops an unknown kind', () => {
     const { blocks } = parseAintraAnswer('Ok.\n[[book:meeting]]');
     expect(blocks.map((b) => b.type)).toEqual(['paragraph']);
+  });
+
+  it('lets the card a tool prepared replace a plain one the model wrote, in its place', () => {
+    const { blocks } = parseAintraAnswer('Done.\n[[book:demo]]\nTap Confirm.\n\n[[book:demo,anytime,name=Priya,year=2027]]');
+    const books = blocks.filter((b) => b.type === 'book');
+    expect(books).toHaveLength(1);
+    expect(blocks.map((b) => b.type)).toEqual(['paragraph', 'book', 'paragraph']);
+    expect(books[0]).toMatchObject({ suggestion: { window: 'anytime', draft: { name: 'Priya', examYear: 2027 } } });
+  });
+});
+
+describe('visitorPrompt', () => {
+  it('tells Aintra what it already knows about a signed-in visitor, never the phone number', () => {
+    const text = visitorPrompt({ signedIn: true, name: 'Priya', phoneVerified: false, examYear: 2027 });
+    expect(text).toContain('Name on the account: Priya');
+    expect(text).toContain('Phone verified: no');
+    expect(text).toContain('Exam year: 2027');
+    expect(text).not.toMatch(/\d{10}/);
+  });
+
+  it('marks a guest as not signed in', () => {
+    expect(visitorPrompt({ signedIn: false, name: null, phoneVerified: false, examYear: null })).toContain('Not signed in');
   });
 });
 

@@ -42,6 +42,9 @@ export const ENGLISH_ONLY_SECTIONS = [
   'pgeta-2026',
   // Only the "what's included" block is translated; title, plans and FAQ are English.
   'fees',
+  // The centre list loads in the browser and is English data in every locale, so
+  // Google read each copy as a duplicate of /centers (2026-10-20).
+  'centers',
 ] as const;
 
 /**
@@ -59,6 +62,8 @@ const PARTIAL_TRANSLATIONS: Record<string, readonly string[]> = {
   'nata-online-coaching': ['en', 'ta', 'hi'],
   // The apply form is translated in Tamil only (2026-10-13).
   apply: ['en', 'ta'],
+  // hi, kn and ml have no story block (about 40% translated); kept out until it is.
+  about: ['en', 'ta'],
 };
 
 function firstSegment(path: string): string {

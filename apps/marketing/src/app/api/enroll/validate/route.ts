@@ -6,7 +6,7 @@ import { getDirectEnrollmentLinkByToken, expireOldDirectEnrollmentLinks } from '
 import { verifyFirebaseToken } from '../../_lib/auth';
 import { maskPhone } from '@/lib/phone';
 import { offerFromLink, paymentReference } from '@neram/database/student-pay';
-import { getPaymentPayee } from '@neram/database/payment-payee';
+import { getPaymentPayee, getPaymentQrCodes } from '@neram/database/payment-payee';
 
 /** Demo answers in the enrol form's shape, so the student does not type them twice. */
 async function demoPrefill(supabase: any, demoId: string | null) {
@@ -203,6 +203,7 @@ export async function GET(request: NextRequest) {
             method: l.submitted_method,
             // Only the tail: the link is a bearer secret, the UTR is not needed in full.
             utrTail: l.submitted_utr ? String(l.submitted_utr).slice(-4) : null,
+            proofChannel: (link as any).submitted_proof_channel || 'upload',
             paidOn: l.submitted_paid_on,
             submittedAt: l.submitted_at,
             balance: l.chosen_scheme === 'installment' ? offer.installment2 : null,
@@ -293,10 +294,12 @@ export async function GET(request: NextRequest) {
         ...((link as any).payment_mode === 'student_pays'
           ? await (async () => {
               const offer = offerFromLink(link as any);
-              const payee = await getPaymentPayee(supabase);
+              const [payee, qrCodes] = await Promise.all([getPaymentPayee(supabase), getPaymentQrCodes(supabase)]);
               return {
                 offer: { ...offer, balanceDueDays: (link as any).offer_balance_due_days || 45 },
                 payee,
+                qrCodes,
+                detailsSavedAt: (link as any).details_saved_at || null,
                 paymentNote: paymentReference(link.id),
                 // Set when staff could not match the last payment; the student retries.
                 rejectionReason: (link as any).rejection_reason || null,

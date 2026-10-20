@@ -122,8 +122,13 @@ export function parseAintraAnswer(raw: string, opts: { streaming?: boolean } = {
         if (actions.length) blocks.push({ type: 'cta', actions: [...new Set(actions)] });
       } else if (name === 'book') {
         const suggestion = parseBookArgs(arg);
-        if (suggestion && !blocks.some((b) => b.type === 'book' && b.suggestion.kind === suggestion.kind)) {
+        const same = suggestion ? blocks.findIndex((b) => b.type === 'book' && b.suggestion.kind === suggestion.kind) : -1;
+        if (suggestion && same === -1) {
           blocks.push({ type: 'book', suggestion });
+        } else if (suggestion && (suggestion.draft || suggestion.change)) {
+          // The card a booking tool prepared (the server adds it at the end)
+          // wins over a plain one the model wrote itself, in the same place.
+          blocks[same] = { type: 'book', suggestion };
         }
       } else if (name === 'suggest') {
         for (const q of arg.split('|').map((s) => s.trim()).filter(Boolean)) {

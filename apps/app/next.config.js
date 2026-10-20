@@ -50,7 +50,7 @@ const nextConfig = {
     // Supabase generated types are out of sync with actual DB schema
     ignoreBuildErrors: true,
   },
-  transpilePackages: ['@neram/ui', '@neram/database', '@neram/auth', '@neram/i18n', '@neram/geo'],
+  transpilePackages: ['@neram/ai', '@neram/ui', '@neram/database', '@neram/auth', '@neram/i18n', '@neram/geo', '@neram/tools-core'],
   experimental: {
     // @neram/ui's root barrel is 'use client', so without this every page
     // ships every component it re-exports (ChatWidget, uploaders, ...).

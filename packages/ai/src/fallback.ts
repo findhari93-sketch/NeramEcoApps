@@ -6,7 +6,7 @@
  *
  * Deliberately narrow:
  *
- *  - Nexus and Marketing features only (BACKUP_APPS). Each app has its own
+ *  - Nexus, Marketing and Tools app features only (BACKUP_APPS). Each app has its own
  *    Groq and OpenRouter keys on its own Vercel project, so the website chatbot
  *    cannot use up Nexus's free allowance or the other way round. Marketing was
  *    added the same day, after the site chatbot went "offline" on the 402.
@@ -41,12 +41,13 @@ interface Provider {
 }
 
 /** The apps whose features may fall back. Each holds its own keys. */
-const BACKUP_APPS = new Set(['nexus', 'marketing']);
+const BACKUP_APPS = new Set(['nexus', 'marketing', 'app']);
 
 /** Who is calling, per app, for providers that ask. */
 const ATTRIBUTION: Record<string, Record<string, string>> = {
   nexus: { 'X-Title': 'Neram Nexus', 'HTTP-Referer': 'https://nexus.neramclasses.com' },
   marketing: { 'X-Title': 'Neram Classes', 'HTTP-Referer': 'https://neramclasses.com' },
+  app: { 'X-Title': 'aiArchitek', 'HTTP-Referer': 'https://app.neramclasses.com' },
 };
 
 /** Model ids checked against each provider's live list on 2026-10-15. */

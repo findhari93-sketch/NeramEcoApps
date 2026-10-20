@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { Fab, Tooltip, CircularProgress } from '@neram/ui';
+import { Fab, Tooltip } from '@neram/ui';
 import BugReportOutlinedIcon from '@mui/icons-material/BugReportOutlined';
 import { getCurrentUser } from '@neram/auth';
 import { captureScreenshot } from '@/lib/capture-screenshot';
@@ -27,8 +27,7 @@ export default function ReportProblemFab() {
   const canReport = useCanReportProblem();
   const hiddenBelow = useReportFabHidden();
   const [open, setOpen] = useState(false);
-  const [capturing, setCapturing] = useState(false);
-  const [autoShot, setAutoShot] = useState<File | null>(null);
+  const [autoShotPromise, setAutoShotPromise] = useState<Promise<File | null> | null>(null);
 
   const getToken = async (): Promise<string | null> => {
     const u = getCurrentUser();
@@ -39,12 +38,12 @@ export default function ReportProblemFab() {
   if (pathname?.startsWith('/support')) return null;
   if (hiddenBelow === 'all' && !open) return null;
 
-  const handleClick = async () => {
-    if (capturing || open) return;
-    setCapturing(true);
-    const shot = await captureScreenshot();
-    setAutoShot(shot);
-    setCapturing(false);
+  // The picture starts first, then the dialog opens at once. The capture clones
+  // the page as it is right now, and the dialog carries data-no-screenshot, so
+  // the dialog never ends up in the picture.
+  const handleClick = () => {
+    if (open) return;
+    setAutoShotPromise(captureScreenshot());
     setOpen(true);
   };
 
@@ -62,9 +61,7 @@ export default function ReportProblemFab() {
           <Fab
             color="primary"
             aria-label="Report a problem"
-            aria-busy={capturing || undefined}
             onClick={handleClick}
-            disabled={capturing}
             data-no-screenshot="true"
             data-testid="report-problem-fab"
             sx={{
@@ -86,7 +83,7 @@ export default function ReportProblemFab() {
               },
             }}
           >
-            {capturing ? <CircularProgress size={22} color="inherit" /> : <BugReportOutlinedIcon />}
+            <BugReportOutlinedIcon />
           </Fab>
         </Tooltip>
       )}
@@ -94,11 +91,11 @@ export default function ReportProblemFab() {
         open={open}
         onClose={() => {
           setOpen(false);
-          setAutoShot(null);
+          setAutoShotPromise(null);
         }}
         getToken={getToken}
         pageUrl={pathname || undefined}
-        initialScreenshotFile={autoShot}
+        autoShotPromise={autoShotPromise}
       />
     </>
   );

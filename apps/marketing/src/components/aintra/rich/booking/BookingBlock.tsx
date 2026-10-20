@@ -3,11 +3,29 @@
 import Link from 'next/link';
 import { Box, Button } from '@neram/ui';
 import EventAvailableRoundedIcon from '@mui/icons-material/EventAvailableRounded';
+import EventBusyRoundedIcon from '@mui/icons-material/EventBusyRounded';
 import PhoneCallbackRoundedIcon from '@mui/icons-material/PhoneCallbackRounded';
-import type { BookSuggestion } from '@/lib/aintra/booking';
+import AssignmentOutlinedIcon from '@mui/icons-material/AssignmentOutlined';
+import StoreMallDirectoryOutlinedIcon from '@mui/icons-material/StoreMallDirectoryOutlined';
+import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
+import MailOutlineRoundedIcon from '@mui/icons-material/MailOutlineRounded';
+import type { BookKind, BookSuggestion } from '@/lib/aintra/booking';
 import { useAintraBooking } from './BookingContext';
+import ApplicationCard from './ApplicationCard';
 import CallbackCard from './CallbackCard';
 import DemoCard from './DemoCard';
+import DemoCancelCard from './DemoCancelCard';
+import QuickFormCard from './QuickFormCard';
+
+const FALLBACK: Record<BookKind, { href: string; label: string; icon: JSX.Element }> = {
+  demo: { href: '/demo-class', label: 'Book a demo class', icon: <EventAvailableRoundedIcon /> },
+  'cancel-demo': { href: '/demo-class/my', label: 'Manage my demo class', icon: <EventBusyRoundedIcon /> },
+  callback: { href: '/apply/callback', label: 'Request a callback', icon: <PhoneCallbackRoundedIcon /> },
+  apply: { href: '/apply', label: 'Fill in the application', icon: <AssignmentOutlinedIcon /> },
+  visit: { href: '/centers', label: 'Book a centre visit', icon: <StoreMallDirectoryOutlinedIcon /> },
+  'college-enquiry': { href: '/colleges', label: 'Find the college', icon: <SchoolOutlinedIcon /> },
+  message: { href: '/contact', label: 'Message our team', icon: <MailOutlineRoundedIcon /> },
+};
 
 /**
  * A [[book:...]] line. Inside the Aintra drawer it is a card the visitor
@@ -17,20 +35,33 @@ import DemoCard from './DemoCard';
 export default function BookingBlock({ suggestion, interactive }: { suggestion: BookSuggestion; interactive: boolean }) {
   const ctx = useAintraBooking();
   if (ctx && interactive) {
-    return suggestion.kind === 'demo' ? <DemoCard suggestion={suggestion} /> : <CallbackCard suggestion={suggestion} />;
+    switch (suggestion.kind) {
+      case 'demo':
+        return <DemoCard suggestion={suggestion} />;
+      case 'cancel-demo':
+        return <DemoCancelCard suggestion={suggestion} />;
+      case 'apply':
+        return <ApplicationCard />;
+      case 'visit':
+      case 'college-enquiry':
+      case 'message':
+        return <QuickFormCard suggestion={{ ...suggestion, kind: suggestion.kind }} />;
+      default:
+        return <CallbackCard suggestion={suggestion} />;
+    }
   }
-  const demo = suggestion.kind === 'demo';
+  const link = FALLBACK[suggestion.kind];
   return (
     <Box>
       <Button
         component={Link}
-        href={demo ? '/demo-class' : '/apply/callback'}
+        href={link.href}
         variant="contained"
         disableElevation
-        startIcon={demo ? <EventAvailableRoundedIcon /> : <PhoneCallbackRoundedIcon />}
+        startIcon={link.icon}
         sx={{ minHeight: 48, px: 2.25, borderRadius: 2, textTransform: 'none', fontWeight: 700 }}
       >
-        {demo ? 'Book a demo class' : 'Request a callback'}
+        {link.label}
       </Button>
     </Box>
   );

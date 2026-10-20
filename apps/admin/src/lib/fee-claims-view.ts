@@ -14,6 +14,8 @@ export interface FeeClaimSummary {
   amount: number;
   method: 'upi_direct' | 'bank_transfer' | string | null;
   utr: string | null;
+  proofChannel?: 'upload' | 'whatsapp' | null;
+  payerName?: string | null;
   paidOn: string | null;
   status: 'pending' | 'verified' | 'rejected' | string;
   installmentNumber: number | null;

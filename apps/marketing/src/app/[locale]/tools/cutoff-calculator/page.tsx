@@ -5,10 +5,14 @@ import {
   generateBreadcrumbSchema,
   generateWebApplicationSchema,
   generateFAQSchema,
+  generateHowToSchema,
 } from '@/lib/seo/schemas';
 import { buildAlternates, buildOgImage } from '@/lib/seo/metadata';
 import ToolLandingPage from '@/components/tools/ToolLandingPage';
 import { cutoffCalculatorConfig } from '@/lib/tools/configs/cutoff-calculator';
+
+// The closing-marks table reads the latest allotments; refresh it daily.
+export const revalidate = 86400;
 
 const baseUrl = 'https://neramclasses.com';
 const config = cutoffCalculatorConfig;
@@ -56,6 +60,13 @@ export default function CutoffCalculatorPage({
             description: config.metaDescription,
             url: `${baseUrl}/tools/${config.slug}`,
             applicationCategory: 'EducationalApplication',
+          }),
+          generateHowToSchema({
+            name: 'How to calculate your NATA cutoff out of 400',
+            description:
+              'Convert your 12th marks to a score out of 200, add your best NATA score out of 200, and check the 45% rule.',
+            totalTime: 'PT2M',
+            steps: config.steps.map((s) => ({ name: s.title, text: s.desc })),
           }),
           generateFAQSchema(config.faqs),
         ]}

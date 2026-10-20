@@ -9,6 +9,7 @@ import AintraTable from './AintraTable';
 import FeeCards from './FeeCards';
 import ActionButtons from './ActionButtons';
 import BookingBlock from './booking/BookingBlock';
+import { formatBookMarker, type BookSuggestion } from '@/lib/aintra/booking';
 
 export interface AintraRichTextProps {
   /** The raw answer. Ignored when `parsed` is given. */
@@ -45,10 +46,19 @@ export default function AintraRichText({ text = '', parsed, streaming, variant =
     >
       {answer.blocks.map((block, i) => (
         // A booking card keeps its key while the answer streams, so a half-filled card is never reset.
-        <BlockView key={block.type === 'book' ? `book-${block.suggestion.kind}` : i} block={block} body={body} variant={variant} onOpenCanvas={onOpenCanvas} first={i === 0} />
+        <BlockView key={block.type === 'book' ? bookKey(block.suggestion) : i} block={block} body={body} variant={variant} onOpenCanvas={onOpenCanvas} first={i === 0} />
       ))}
     </Box>
   );
+}
+
+/**
+ * A card a booking tool filled in arrives once, at the end of the answer, and
+ * replaces any plain card the model wrote: a new key so it opens with the
+ * tool's values instead of keeping the plain card's state.
+ */
+function bookKey(s: BookSuggestion): string {
+  return s.draft || s.change ? `book-${s.kind}-${formatBookMarker(s)}` : `book-${s.kind}`;
 }
 
 /**
@@ -58,13 +68,18 @@ export default function AintraRichText({ text = '', parsed, streaming, variant =
 function withoutRepeatedActions(answer: ParsedAnswer): ParsedAnswer {
   const fees = answer.blocks.some((b) => b.type === 'fees');
   // A booking card already is the demo or call button.
-  const bookDemo = answer.blocks.some((b) => b.type === 'book' && b.suggestion.kind === 'demo');
+  const bookDemo = answer.blocks.some((b) => b.type === 'book' && (b.suggestion.kind === 'demo' || b.suggestion.kind === 'cancel-demo'));
   const bookCall = answer.blocks.some((b) => b.type === 'book' && b.suggestion.kind === 'callback');
-  if (!fees && !bookDemo && !bookCall) return answer;
+  const bookApply = answer.blocks.some((b) => b.type === 'book' && b.suggestion.kind === 'apply');
+  if (!fees && !bookDemo && !bookCall && !bookApply) return answer;
   const blocks = answer.blocks.flatMap((b): Block[] => {
     if (b.type !== 'cta') return [b];
     const actions = b.actions.filter(
-      (a) => !(fees && (a === 'apply' || a === 'demo')) && !(bookDemo && a === 'demo') && !(bookCall && a === 'call'),
+      (a) =>
+        !(fees && (a === 'apply' || a === 'demo')) &&
+        !(bookDemo && a === 'demo') &&
+        !(bookCall && a === 'call') &&
+        !(bookApply && a === 'apply'),
     );
     return actions.length ? [{ ...b, actions }] : [];
   });

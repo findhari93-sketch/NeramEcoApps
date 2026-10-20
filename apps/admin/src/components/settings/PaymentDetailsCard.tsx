@@ -6,7 +6,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { Alert, Box, Button, CircularProgress, Divider, Paper, TextField, Typography } from '@neram/ui';
+import { Alert, Box, Button, CircularProgress, Divider, MenuItem, Paper, TextField, Typography } from '@neram/ui';
+import PaymentQrCodesField, { qrRowsToSetting, qrSettingToRows, type QrCodeRow } from './PaymentQrCodesField';
 import SaveIcon from '@mui/icons-material/Save';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import AccountBalanceOutlinedIcon from '@mui/icons-material/AccountBalanceOutlined';
@@ -23,12 +24,17 @@ interface PayeeForm {
   bankName: string;
   branch: string;
   accessUntilLabel: string;
+  whatsappNumber: string;
+  /** How long a new enrolment link stays open: 7, 14 or 30 days. */
+  linkDays: string;
 }
 
 type PayeeErrors = Partial<Record<keyof PayeeForm | 'form', string>>;
 
-function toForm(p: any): PayeeForm {
+function toForm(p: any, linkDays?: number): PayeeForm {
   return {
+    whatsappNumber: p?.whatsappNumber || '',
+    linkDays: String(linkDays || 14),
     upiId: p?.upiId || '',
     payeeName: p?.payeeName || '',
     gpayNumber: p?.gpayNumber || '',
@@ -52,6 +58,8 @@ export default function PaymentDetailsCard() {
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<PayeeErrors>({});
   const [notice, setNotice] = useState(false);
+  const [qrRows, setQrRows] = useState<QrCodeRow[]>([]);
+  const [savedQr, setSavedQr] = useState<QrCodeRow[]>([]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -60,9 +68,12 @@ export default function PaymentDetailsCard() {
       const res = await fetch('/api/settings/payment-payee', { cache: 'no-store' });
       const json = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(json.error || 'Could not load the payment details.');
-      const next = toForm(json.payee);
+      const next = toForm(json.payee, json.linkDays);
       setSaved(next);
       setForm(next);
+      const rows = qrSettingToRows(json.qrCodes);
+      setSavedQr(rows);
+      setQrRows(rows);
     } catch (err: any) {
       setLoadError(err?.message || 'Could not load the payment details.');
     } finally {
@@ -74,7 +85,7 @@ export default function PaymentDetailsCard() {
     load();
   }, [load]);
 
-  const dirty = useMemo(() => !sameForm(form, saved), [form, saved]);
+  const dirty = useMemo(() => !sameForm(form, saved) || JSON.stringify(qrRows) !== JSON.stringify(savedQr), [form, saved, qrRows, savedQr]);
 
   const update = (key: keyof PayeeForm, value: string) => {
     setForm((f) => (f ? { ...f, [key]: value } : f));
@@ -107,7 +118,10 @@ export default function PaymentDetailsCard() {
               branch: form.branch.trim(),
             },
             accessUntilLabel: form.accessUntilLabel.trim(),
+            whatsappNumber: form.whatsappNumber.trim() || null,
           },
+          qrCodes: qrRowsToSetting(qrRows),
+          linkDays: Number(form.linkDays) || 14,
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -115,9 +129,12 @@ export default function PaymentDetailsCard() {
         setErrors({ ...(json.fieldErrors || {}), form: json.error || 'Could not save.' });
         return;
       }
-      const next = toForm(json.payee);
+      const next = toForm(json.payee, json.linkDays);
       setSaved(next);
       setForm(next);
+      const rows = qrSettingToRows(json.qrCodes);
+      setSavedQr(rows);
+      setQrRows(rows);
       setNotice(true);
     } catch (err: any) {
       setErrors({ form: err?.message || 'Could not save.' });
@@ -192,7 +209,13 @@ export default function PaymentDetailsCard() {
             {field('upiId', 'UPI ID', { help: 'Like name@bank. The QR and pay button use it.' })}
             {field('payeeName', 'Payee name', { help: 'The name the UPI app shows.' })}
             {field('gpayNumber', 'GPay number', { numeric: true, help: 'Optional. Leave empty to hide it.' })}
+            {field('whatsappNumber', 'WhatsApp for screenshots', { help: 'With the country code, like +91 88074 37399. Students can send the payment screenshot here instead of uploading it. Leave empty to hide that option.' })}
           </Box>
+
+          <Typography variant="subtitle2" component="h3" fontWeight={700}>
+            Official QR codes
+          </Typography>
+          <PaymentQrCodesField rows={qrRows} onChange={(rows) => { setQrRows(rows); setNotice(false); }} disabled={saving} />
 
           <Typography variant="subtitle2" component="h3" fontWeight={700}>
             Bank transfer
@@ -210,6 +233,19 @@ export default function PaymentDetailsCard() {
           </Typography>
           <Box sx={{ display: 'grid', gap: 1, gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' } }}>
             {field('accessUntilLabel', 'Access until', { help: 'Shown with the pay in full benefits, like September 2027.' })}
+            <TextField
+              id="payee-linkDays"
+              select
+              label="New enrolment links stay open for"
+              value={form?.linkDays ?? '14'}
+              onChange={(e) => update('linkDays', e.target.value)}
+              helperText="Staff can pick a different length per link, and extend any link later."
+              fullWidth
+            >
+              <MenuItem value="7">7 days</MenuItem>
+              <MenuItem value="14">14 days</MenuItem>
+              <MenuItem value="30">30 days</MenuItem>
+            </TextField>
           </Box>
 
           {notice && !dirty && (
@@ -228,6 +264,7 @@ export default function PaymentDetailsCard() {
               type="button"
               onClick={() => {
                 setForm(saved);
+                setQrRows(savedQr);
                 setErrors({});
               }}
               disabled={saving || !dirty}

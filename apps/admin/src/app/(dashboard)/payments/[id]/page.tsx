@@ -33,6 +33,7 @@ import ErrorIcon from '@mui/icons-material/Error';
 import PendingIcon from '@mui/icons-material/Pending';
 import ReplayIcon from '@mui/icons-material/Replay';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
+import ProofLink from '@/components/payments/ProofLink';
 
 interface PaymentDetail {
   id: string;
@@ -671,7 +672,7 @@ export default function PaymentDetailPage({ params }: { params: { id: string } }
                 {payment.screenshot_url && (
                   <>
                     <Divider sx={{ my: 0.5 }} />
-                    <DetailRow label="Screenshot" value="View Screenshot" link={payment.screenshot_url} />
+                    <DetailRow label="Screenshot" value={<ProofLink stored={payment.screenshot_url} />} />
                   </>
                 )}
                 {payment.verified_at && (

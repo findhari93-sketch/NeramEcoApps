@@ -52,6 +52,14 @@ export interface EnrolmentLinkFormValues {
   interestCourse: string;
   learningMode: 'hybrid' | 'online_only';
   feeStructureId: string;
+  /** Student pays: how long the link stays open (new links only). '' = the Settings default. */
+  expiresInDays: '' | '7' | '14' | '30';
+  /** Student pays, per-student pricing. Blank = the fee structure's figure. */
+  quotedFee: string;
+  fullPrice: string;
+  installmentTotal: string;
+  installment1: string;
+  balanceDueDays: string;
   totalFee: string;
   discount: string;
   scheme: 'full' | 'installment';
@@ -84,6 +92,12 @@ function blank(prefill?: EnrolmentLinkPrefill): EnrolmentLinkFormValues {
     interestCourse: prefill?.interestCourse && COURSE_OPTIONS.some((c) => c.value === prefill.interestCourse) ? prefill.interestCourse : 'nata',
     learningMode: 'hybrid',
     feeStructureId: '',
+    expiresInDays: '',
+    quotedFee: '',
+    fullPrice: '',
+    installmentTotal: '',
+    installment1: '',
+    balanceDueDays: '45',
     totalFee: '',
     discount: '',
     scheme: 'full',
@@ -111,6 +125,13 @@ export function valuesFromLink(link: any): EnrolmentLinkFormValues {
     interestCourse: link.interest_course || 'nata',
     learningMode: link.learning_mode === 'online_only' ? 'online_only' : 'hybrid',
     feeStructureId: link.fee_structure_id || '',
+    expiresInDays: '',
+    quotedFee: link.payment_mode === 'student_pays' ? num(link.total_fee) : '',
+    fullPrice: num(link.offer_full_amount),
+    installmentTotal:
+      link.offer_installment_1 && link.offer_installment_2 ? String(Math.round(Number(link.offer_installment_1) + Number(link.offer_installment_2))) : '',
+    installment1: num(link.offer_installment_1),
+    balanceDueDays: String(Number(link.offer_balance_due_days) || 45),
     totalFee: num(link.total_fee),
     discount: num(link.discount_amount),
     scheme: link.payment_scheme === 'installment' ? 'installment' : 'full',
@@ -124,7 +145,7 @@ export function valuesFromLink(link: any): EnrolmentLinkFormValues {
   };
 }
 
-export type FieldErrors = Partial<Record<keyof EnrolmentLinkFormValues | 'totalFee' | 'amountPaid' | 'balanceDueDate', string>>;
+export type FieldErrors = Partial<Record<keyof EnrolmentLinkFormValues | 'totalFee' | 'amountPaid' | 'balanceDueDate' | 'offer', string>>;
 
 export function useEnrolmentLinkForm(prefill?: EnrolmentLinkPrefill) {
   const [values, setValues] = useState<EnrolmentLinkFormValues>(() => blank(prefill));

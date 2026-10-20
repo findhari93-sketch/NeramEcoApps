@@ -76,6 +76,7 @@ export const TicketComposer = forwardRef<
   const [error, setError] = useState<string | null>(null);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const [outcomeAnchor, setOutcomeAnchor] = useState<HTMLElement | null>(null);
+  const [focused, setFocused] = useState(false);
   const splitRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -111,6 +112,11 @@ export const TicketComposer = forwardRef<
 
   const templates = templatesFor(internal ? 'note' : 'reply');
   const resolveOutcomes = TICKET_STAFF_OUTCOMES.filter((o) => o.code !== 'duplicate');
+  // Sticky at the bottom of the pane, so at rest it stays small: on a laptop
+  // the full composer (toggle, templates, 2-row box, hint, Send) hid the report
+  // and the timeline it sits under. It opens up on focus or once there is text.
+  // The Send menus render in a portal outside the form, so an open menu counts as focus.
+  const expanded = focused || text.length > 0 || !!error || busy || !!menuAnchor || !!outcomeAnchor;
 
   return (
     <Box
@@ -119,6 +125,11 @@ export const TicketComposer = forwardRef<
       onSubmit={(e) => {
         e.preventDefault();
         send('none');
+      }}
+      onFocus={() => setFocused(true)}
+      onBlur={(e) => {
+        // Moving to a template chip or the Send menu keeps it open.
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setFocused(false);
       }}
       sx={{
         position: 'sticky',
@@ -155,7 +166,7 @@ export const TicketComposer = forwardRef<
         </Typography>
       </Box>
 
-      {templates.length > 0 && (
+      {expanded && templates.length > 0 && (
         <Box role="group" aria-label="Templates" sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
           {templates.map((t) => (
             <Chip key={t.id} label={t.label} variant="outlined" clickable onClick={() => update(applyTemplate(text, t))} sx={CHIP_SX} />
@@ -169,11 +180,11 @@ export const TicketComposer = forwardRef<
         onChange={(e) => update(e.target.value)}
         placeholder={internal ? 'Add a note for the team' : 'Write to the requester'}
         multiline
-        minRows={2}
+        minRows={expanded ? 3 : 1}
         maxRows={10}
         fullWidth
         error={!!error}
-        helperText={error || 'Ctrl+Enter to send'}
+        helperText={error || (expanded ? 'Ctrl+Enter to send' : undefined)}
         inputProps={{ 'aria-label': internal ? 'Internal note' : 'Reply', maxLength: 5000, 'aria-keyshortcuts': 'Control+Enter' }}
         onKeyDown={(e) => {
           if (isSendShortcut(e)) {
@@ -184,7 +195,7 @@ export const TicketComposer = forwardRef<
         sx={{ bgcolor: 'background.paper', '& .MuiInputBase-root': { fontSize: 14 } }}
       />
 
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+      <Box sx={{ display: expanded ? 'flex' : 'none', justifyContent: 'flex-end' }}>
         <ButtonGroup variant="contained" disableElevation ref={splitRef} aria-label="Send options" color="primary">
           <Button
             type="submit"
