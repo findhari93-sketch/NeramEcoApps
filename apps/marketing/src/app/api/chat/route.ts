@@ -15,6 +15,7 @@ import { parseBookArgs } from '@/lib/aintra/booking';
 import { cachedDemoSettings } from '@/lib/aintra/tools/booking-tools';
 import { intentCard } from '@/lib/aintra/tools/booking-plan';
 import { applicationPromptFor } from '@/lib/aintra/tools/application-tools';
+import { claimSignupNudge, SIGNUP_NUDGE_TAIL } from '@/lib/aintra/signup-nudge';
 import type { ToolContext } from '@/lib/aintra/tools/types';
 import {
   assistantAskedExamYear,
@@ -56,7 +57,8 @@ import { E2E_RETURNING_GUEST_HEADER, guestNeedsSignIn, SIGNUP_REQUIRED } from '@
  */
 const MAX_TOOL_ITERATIONS = 2;
 
-const SYSTEM_PROMPT = `You are the Neram Classes Assistant: a friendly, helpful chatbot on neramclasses.com. You help prospective and current students with questions about Neram Classes courses, fees, timings, NATA exam, and related topics.
+const SYSTEM_PROMPT = `You are Aintra, the Neram Classes assistant on neramclasses.com. You help prospective and current students with questions about Neram Classes courses, fees, timings, NATA exam, and related topics, and you also get things done for them inside Neram with your tools (booking a demo class, filling in the application, planning a centre visit, checking their fees and more, see DOING THINGS FOR THE VISITOR).
+- If asked who or what you are: you are Aintra, Neram's assistant. You answer questions and you can also do these jobs for them right here in the chat. Do not call yourself a chatbot.
 
 ## ABOUT NERAM CLASSES
 Neram Classes has coached students for NATA and JEE Paper 2 (B.Arch/B.Planning) since 2009. We offer live online classes across India and the Gulf, and classroom batches in Tamil Nadu and Bangalore.
@@ -164,7 +166,8 @@ You can set things up for the visitor so they only check a card and tap Confirm.
 - prepare_callback: ask our counsellor to call them.
 - get_my_status: their own demo, callback and application status (signed-in visitors).
 - save_application_details and prepare_application_submit: fill in their application form with them (below).
-- prepare_centre_visit: a visit to one of our classroom centres. prepare_college_enquiry: an admission enquiry to a college, sent with their consent. prepare_message: a written message to our team (they reply by email).
+- prepare_centre_visit: a visit to one of our classroom centres. prepare_college_enquiry: an admission enquiry to a college, sent with their consent. prepare_message: a written message to our team (they reply by email). prepare_ticket: a problem our team must fix (enrolment, payment, account, website), with a ticket number. prepare_save_college: save a college to their shortlist.
+- get_payment_status: what a signed-in student owes (next instalment, an approved application's fee, an enrolment link) with a button to the page that takes each payment. Nothing is ever paid in the chat; never ask for card, UPI or bank details. Buying a course outright in the chat is not offered yet: to join, they apply (or book a demo) and our team confirms the fee.
 Filling in the application with them ("help me apply", "complete my application"):
 - They must be signed in first: if THIS VISITOR says not signed in, call save_application_details with nothing, and only ask them to sign in on the card. Do not ask any form question yet: nothing can be saved until they sign in.
 - Ask the form's questions one or two at a time, in a natural order: student name and father's name; what they are studying now (class, or diploma, college, working) with the school and board (or college and department); the exam year; the course (NATA, JEE Paper 2 or both) and the programme (crash course, 1-year or 2-year, see the fees); their PIN code; their date of birth.
@@ -831,6 +834,20 @@ async function answer(params: {
       const tail = `\n\n${card}`;
       emit({ t: 'delta', text: tail });
       result = { ...result, reply: result.reply.trimEnd() + tail };
+    }
+  }
+
+  // Admin > Aintra Inbox "Ask to sign up next visit": shown once, claimed in
+  // one conditional update, on the first answer this guest gets after it.
+  if (!toolContext.userId && !isE2ETestRun() && visitor?.anonymousId) {
+    const claimed = await claimSignupNudge(createAdminClient(), {
+      anonymousId: visitor.anonymousId,
+      sessionId: sessionId || 'unknown',
+      signedIn: false,
+    });
+    if (claimed) {
+      emit({ t: 'delta', text: SIGNUP_NUDGE_TAIL });
+      result = { ...result, reply: result.reply.trimEnd() + SIGNUP_NUDGE_TAIL };
     }
   }
 

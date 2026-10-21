@@ -14,7 +14,17 @@
  * apply: the application Aintra filled in, to check and submit.
  * visit, college-enquiry, message: the site's short public forms, filled in.
  */
-export type BookKind = 'callback' | 'demo' | 'cancel-demo' | 'apply' | 'visit' | 'college-enquiry' | 'message';
+export type BookKind =
+  | 'callback'
+  | 'demo'
+  | 'cancel-demo'
+  | 'apply'
+  | 'visit'
+  | 'college-enquiry'
+  | 'message'
+  | 'ticket'
+  | 'save-college'
+  | 'pay';
 export type CallbackSlot = 'morning' | 'afternoon' | 'evening';
 export type BookWindow = CallbackSlot | 'anytime';
 
@@ -65,9 +75,9 @@ export function addDays(date: string, n: number): string {
   return new Date(Date.parse(`${date}T00:00:00Z`) + n * DAY_MS).toISOString().slice(0, 10);
 }
 
-const KINDS: BookKind[] = ['callback', 'demo', 'cancel-demo', 'apply', 'visit', 'college-enquiry', 'message'];
+const KINDS: BookKind[] = ['callback', 'demo', 'cancel-demo', 'apply', 'visit', 'college-enquiry', 'message', 'ticket', 'save-college', 'pay'];
 /** Kinds whose card has no day or time of its own. */
-const UNTIMED: BookKind[] = ['cancel-demo', 'apply', 'college-enquiry', 'message'];
+const UNTIMED: BookKind[] = ['cancel-demo', 'apply', 'college-enquiry', 'message', 'ticket', 'save-college', 'pay'];
 
 /** Free text from a marker or a tool call: one line, no control characters, capped. */
 export function cleanDraftText(value: unknown, max: number): string | undefined {

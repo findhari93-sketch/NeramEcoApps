@@ -15,6 +15,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: APP_URL, lastModified, changeFrequency: 'weekly', priority: 1 },
     { url: `${APP_URL}/tools`, lastModified, changeFrequency: 'weekly', priority: 1 },
     { url: `${APP_URL}/ask`, lastModified, changeFrequency: 'weekly', priority: 0.9 },
+    { url: `${APP_URL}/connect`, lastModified, changeFrequency: 'monthly', priority: 0.6 },
     ...allToolSeo().map((t) => ({ url: `${APP_URL}${t.path}`, lastModified, changeFrequency: 'weekly' as const, priority: 0.9 })),
     ...systems.flatMap((s) => [
       { url: `${APP_URL}/tools/counseling/rank-predictor/${s}`, lastModified, changeFrequency: 'monthly' as const, priority: 0.7 },

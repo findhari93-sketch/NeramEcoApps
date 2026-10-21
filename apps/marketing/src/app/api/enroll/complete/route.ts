@@ -49,7 +49,12 @@ export async function POST(request: NextRequest) {
     if (!firstName || !applicantCategory) {
       return NextResponse.json({ error: 'First name and applicant category are required' }, { status: 400 });
     }
-    if (!phoneVerified) return NextResponse.json({ error: 'Phone verification is required' }, { status: 400 });
+    // The account's OTP-verified phone, never the browser's say-so: a script
+    // sending phoneVerified: true used to skip the OTP. (body.phoneVerified is
+    // still required, so an old wizard that forgot to verify fails the same way.)
+    if (!phoneVerified || !auth.phoneVerified) {
+      return NextResponse.json({ error: 'Phone verification is required' }, { status: 400 });
+    }
 
     const supabase = createAdminClient();
 

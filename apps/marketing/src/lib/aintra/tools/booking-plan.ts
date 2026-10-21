@@ -216,6 +216,10 @@ export function intentCard(message: string): string | null {
   if (/\b(apply|application|admission form)\b/.test(m) && /\b(help|complete|fill|start|finish|submit|want)\b/.test(m)) {
     return formatBookMarker({ kind: 'apply', date: null, window: null });
   }
+  // Their own fee, not a question about the price ("can I pay in instalments?").
+  if (/\b(pay|payment)\b/.test(m) && /\b(my (fee|fees|balance|instalment|installment)|balance|due|owe)\b/.test(m)) {
+    return formatBookMarker({ kind: 'pay', date: null, window: null });
+  }
   return null;
 }
 

@@ -16,6 +16,11 @@ import CallbackCard from './CallbackCard';
 import DemoCard from './DemoCard';
 import DemoCancelCard from './DemoCancelCard';
 import QuickFormCard from './QuickFormCard';
+import SaveCollegeCard from './SaveCollegeCard';
+import PayCard from './PayCard';
+import SupportAgentOutlinedIcon from '@mui/icons-material/SupportAgentOutlined';
+import BookmarkAddOutlinedIcon from '@mui/icons-material/BookmarkAddOutlined';
+import CurrencyRupeeRoundedIcon from '@mui/icons-material/CurrencyRupeeRounded';
 
 const FALLBACK: Record<BookKind, { href: string; label: string; icon: JSX.Element }> = {
   demo: { href: '/demo-class', label: 'Book a demo class', icon: <EventAvailableRoundedIcon /> },
@@ -25,6 +30,9 @@ const FALLBACK: Record<BookKind, { href: string; label: string; icon: JSX.Elemen
   visit: { href: '/centers', label: 'Book a centre visit', icon: <StoreMallDirectoryOutlinedIcon /> },
   'college-enquiry': { href: '/colleges', label: 'Find the college', icon: <SchoolOutlinedIcon /> },
   message: { href: '/contact', label: 'Message our team', icon: <MailOutlineRoundedIcon /> },
+  ticket: { href: '/contact', label: 'Contact our team', icon: <SupportAgentOutlinedIcon /> },
+  'save-college': { href: '/colleges/saved', label: 'My saved colleges', icon: <BookmarkAddOutlinedIcon /> },
+  pay: { href: '/pay-balance', label: 'Pay my fees', icon: <CurrencyRupeeRoundedIcon /> },
 };
 
 /**
@@ -45,7 +53,12 @@ export default function BookingBlock({ suggestion, interactive }: { suggestion: 
       case 'visit':
       case 'college-enquiry':
       case 'message':
+      case 'ticket':
         return <QuickFormCard suggestion={{ ...suggestion, kind: suggestion.kind }} />;
+      case 'save-college':
+        return <SaveCollegeCard suggestion={suggestion} />;
+      case 'pay':
+        return <PayCard />;
       default:
         return <CallbackCard suggestion={suggestion} />;
     }

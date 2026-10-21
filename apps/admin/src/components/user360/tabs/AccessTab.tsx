@@ -20,6 +20,7 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import Inventory2OutlinedIcon from '@mui/icons-material/Inventory2Outlined';
 import UnarchiveOutlinedIcon from '@mui/icons-material/UnarchiveOutlined';
 import CredentialsSection from '@/components/crm/CredentialsSection';
+import ClassAccountCard from '@/components/class-account/ClassAccountCard';
 import DeviceDiagnosticsSection from '@/components/crm/DeviceDiagnosticsSection';
 import ArchiveDialog from '@/components/crm/ArchiveDialog';
 import { sentenceCase } from '@/lib/user360-view';
@@ -187,6 +188,11 @@ export default function AccessTab({ data, detail, adminId, onRefresh }: User360T
 
       {detail && (
         <>
+          {detail.user.user_type === 'student' && (
+            <Box id="crm-section-class-account" sx={{ mb: 2 }}>
+              <ClassAccountCard userId={detail.user.id} adminId={adminId} />
+            </Box>
+          )}
           <Box id="crm-section-credentials">
             <CredentialsSection
               userId={detail.user.id}

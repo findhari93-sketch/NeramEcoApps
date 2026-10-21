@@ -27,6 +27,7 @@ import ConfirmLoginTermsStep from '@/components/onboarding/ConfirmLoginTermsStep
 import NexusStatusPoller from '@/components/onboarding/NexusStatusPoller';
 import CongratulationsModal from '@/components/onboarding/CongratulationsModal';
 import WhatsAppJoinStep from '@/components/onboarding/WhatsAppJoinStep';
+import ClassSetupGuide, { ClassSetupSkeleton, classSetupIdToken, type ClassSetupData } from '@/components/class-setup/ClassSetupGuide';
 
 // ─── Types ───
 
@@ -167,7 +168,8 @@ function DeleteCredentialsStep({
 
 // ─── Main Component ───
 
-export default function OnboardingPage() {
+/** The old four-phase onboarding, kept for students made before class accounts. */
+function LegacyOnboardingPage() {
   const [steps, setSteps] = useState<OnboardingStep[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -695,4 +697,43 @@ export default function OnboardingPage() {
       />
     </Container>
   );
+}
+
+
+/**
+ * A student whose class account was made at enrolment gets the five-step setup
+ * guide; everyone else keeps the older onboarding.
+ */
+export default function OnboardingPage() {
+  const [view, setView] = useState<'loading' | 'guide' | 'legacy'>('loading');
+  const [setup, setSetup] = useState<ClassSetupData | null>(null);
+
+  const fetchSetup = useCallback(async (): Promise<ClassSetupData | null> => {
+    try {
+      const token = await classSetupIdToken();
+      if (!token) return null;
+      const res = await fetch('/api/class-setup', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+      if (!res.ok) return null;
+      const json = await res.json();
+      return json?.data?.ready ? (json.data as ClassSetupData) : null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchSetup().then((data) => {
+      if (cancelled) return;
+      setSetup(data);
+      setView(data ? 'guide' : 'legacy');
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchSetup]);
+
+  if (view === 'loading') return <ClassSetupSkeleton />;
+  if (view === 'guide' && setup) return <ClassSetupGuide initial={setup} onRefresh={fetchSetup} />;
+  return <LegacyOnboardingPage />;
 }

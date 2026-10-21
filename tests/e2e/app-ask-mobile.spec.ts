@@ -1,5 +1,5 @@
 /**
- * Tools App: Ask aiArchitek (/ask), as a signed-out visitor.
+ * Tools App: Aintra (/ask), as a signed-out visitor.
  *
  * The chat route is mocked with a canned event stream (the real one calls
  * Gemini), so these tests check the screen deterministically and spend
@@ -88,7 +88,7 @@ async function ask(page: Page, text: string) {
   await page.getByRole('button', { name: 'Send' }).click();
 }
 
-test.describe('Ask aiArchitek (guest)', () => {
+test.describe('Aintra in the Tools app (guest)', () => {
   test('AC1: the welcome is server-rendered for crawlers', async ({ request }) => {
     const res = await request.get(`${APP_URL}/ask`);
     expect(res.status()).toBe(200);
@@ -112,7 +112,7 @@ test.describe('Ask aiArchitek (guest)', () => {
     await expect(page.getByRole('button', { name: 'What is my rank?' })).toBeVisible();
     await expect(page.getByText('[[suggest')).toHaveCount(0);
 
-    const strip = page.getByRole('region', { name: 'Details Ask aiArchitek remembers' });
+    const strip = page.getByRole('region', { name: 'Details Aintra remembers' });
     await expect(strip.getByText('Tamil Nadu State 540/600')).toBeVisible();
     await expect(strip.getByText('BC')).toBeVisible();
 
@@ -139,6 +139,43 @@ test.describe('Ask aiArchitek (guest)', () => {
     await expect(page.getByText('My cutoff is 300, which colleges?')).toBeVisible();
     await expect(page.getByRole('region', { name: 'Your B.Arch cutoff' })).toBeVisible();
     await expect(page).toHaveURL(/\/ask$/);
+  });
+
+  test('Share sends the result with a link that opens the tool filled in', async ({ page }) => {
+    // No share sheet in a headless browser: the button falls back to WhatsApp.
+    await page.addInitScript(() => {
+      Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
+      (window as unknown as { __opened: string[] }).__opened = [];
+      window.open = ((url: string) => {
+        (window as unknown as { __opened: string[] }).__opened.push(url);
+        return {} as Window;
+      }) as typeof window.open;
+    });
+    await mockAnswers(page, { allowed: 3 });
+    await page.goto(`${APP_URL}/ask`);
+    await ask(page, 'TN board 540 out of 600, NATA 128');
+    await page.getByRole('region', { name: 'Your B.Arch cutoff' }).getByRole('button', { name: 'Share this result' }).click();
+    const opened = await page.evaluate(() => (window as unknown as { __opened: string[] }).__opened);
+    expect(opened).toHaveLength(1);
+    const text = decodeURIComponent(opened[0].replace('https://wa.me/?text=', ''));
+    expect(text).toContain('My B.Arch cutoff is 308/400');
+    expect(text).toContain('/tools/nata/cutoff-calculator?board=TN_STATE&max=600&marks=540');
+  });
+
+  test('voice input sits next to Send when the browser supports it', async ({ page }) => {
+    await mockAnswers(page, { allowed: 3 });
+    await page.goto(`${APP_URL}/ask`);
+    const supported = await page.evaluate(() => 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window);
+    const mic = page.getByTestId('ask-voice-mic');
+    if (!supported) {
+      await expect(mic).toHaveCount(0);
+      return;
+    }
+    await expect(mic).toBeVisible();
+    const box = await mic.boundingBox();
+    expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+    await page.getByTestId('ask-voice-lang').click();
+    await expect(page.getByRole('menuitem', { name: /தமிழ்/ })).toBeVisible();
   });
 
   test('mobile: no sideways scroll and thumb-sized targets', async ({ page }) => {

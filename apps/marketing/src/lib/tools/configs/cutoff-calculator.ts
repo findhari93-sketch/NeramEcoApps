@@ -49,7 +49,7 @@ export const cutoffCalculatorConfig: ToolConfig = {
     },
     {
       title: 'See matching colleges',
-      desc: 'Tap "See colleges" to open Ask aiArchitek with your score. It lists colleges whose closing mark or rank you beat in TNEA, KEAM or JoSAA, with the year and round as the source.',
+      desc: 'Tap "See colleges" to ask Aintra, with your score filled in. It lists colleges whose closing mark or rank you beat in TNEA, KEAM or JoSAA, with the year and round as the source.',
     },
   ],
   features: [
@@ -117,12 +117,12 @@ export const cutoffCalculatorConfig: ToolConfig = {
     {
       question: 'What cutoff do I need for TNEA B.Arch?',
       answer:
-        'It depends on the college and your community. The table on this page shows last year’s General (OC) closing marks for the top TNEA B.Arch colleges, from the official allotment list. Ask aiArchitek with your score to see every college you would have got, for your community.',
+        'It depends on the college and your community. The table on this page shows last year’s General (OC) closing marks for the top TNEA B.Arch colleges, from the official allotment list. Ask Aintra with your score to see every college you would have got, for your community.',
     },
     {
       question: 'Can ChatGPT or Gemini calculate my NATA cutoff?',
       answer:
-        'They can repeat the formula, but they often use the wrong maximum marks for your board and guess college cutoffs. This calculator uses each board’s real maximum, and Ask aiArchitek answers college questions from the official TNEA, KEAM and JoSAA allotment lists, with the source shown.',
+        'They can repeat the formula, but they often use the wrong maximum marks for your board and guess college cutoffs. This calculator uses each board’s real maximum, and Aintra answers college questions from the official TNEA, KEAM and JoSAA allotment lists, with the source shown.',
     },
     {
       question: 'Can I use scores from both NATA sessions?',

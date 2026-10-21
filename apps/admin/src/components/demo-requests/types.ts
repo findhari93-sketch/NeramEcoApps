@@ -73,6 +73,9 @@ export interface DeskEnrolmentLink {
   offer_installment_1?: number | string | null;
   offer_installment_2?: number | string | null;
   rejection_reason?: string | null;
+  /** The enrolled student's record (the class account is made for them). */
+  user_id?: string | null;
+  submitted_user_id?: string | null;
 }
 
 export type { DeskStage, DeskPerson } from './journey';

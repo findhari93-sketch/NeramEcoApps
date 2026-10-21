@@ -152,6 +152,12 @@ describe('intentCard (backup model safety net)', () => {
     expect(intentCard('How long is the demo class?')).toBeNull();
     expect(intentCard('What are the fees?')).toBeNull();
   });
+
+  it('gives the apply and pay cards for their own application and fee, not for a price question', () => {
+    expect(intentCard('Help me complete my application')).toBe('[[book:apply]]');
+    expect(intentCard('I want to pay my balance')).toBe('[[book:pay]]');
+    expect(intentCard('Can I pay the fees in instalments?')).toBeNull();
+  });
 });
 
 describe('describeMyStatus', () => {

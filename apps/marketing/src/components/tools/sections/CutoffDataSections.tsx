@@ -93,7 +93,7 @@ export default async function CutoffDataSections() {
               href={`${APP_URL}/ask`}
               sx={{ color: t.gold800, fontWeight: 700, textDecoration: 'underline', textUnderlineOffset: '2px' }}
             >
-              Ask aiArchitek
+              Ask Aintra
             </Box>{' '}
             with your score to see every college that matches, with its source.
           </Typography>

@@ -21,8 +21,9 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  IconButton,
 } from '@neram/ui';
-import { KeyboardArrowLeft, KeyboardArrowRight, CheckCircleOutlined, ErrorOutline, TimerOff, Google, Refresh, SupportAgent, Save as SaveIcon, PhoneIphone } from '@mui/icons-material';
+import { KeyboardArrowLeft, KeyboardArrowRight, CheckCircleOutlined, ErrorOutline, TimerOff, Google, Refresh, SupportAgent, Save as SaveIcon, PhoneIphone, Close } from '@mui/icons-material';
 import { useFirebaseAuth, getCurrentUser } from '@neram/auth';
 import { LoginModal } from '@neram/ui';
 import { useSearchParams } from 'next/navigation';
@@ -39,6 +40,8 @@ import PaymentSubmittedScreen from './PaymentSubmittedScreen';
 import { fetchPaymentMethods, createIntent, startInstantOrder, pollInstantOrder, cancelInstantOrder, type PaymentMethodsView } from './instant-upi-client';
 import { rupees, istTodayKey, addDays, type StudentPayLinkData, type PaymentSubmission, formatDay } from './student-pay-types';
 import { useEnrollmentProgress } from '@/hooks/useEnrollmentProgress';
+import { useEnrollmentDraftSync } from '@/hooks/useEnrollmentDraftSync';
+import { planResume, resumeMessage, type ServerResume } from './resume';
 import type {
   PersonalInfoData,
   LocationData,
@@ -152,9 +155,11 @@ export default function EnrollWizard() {
   const [showSignIn, setShowSignIn] = useState(false);
   const [wrongAccount, setWrongAccount] = useState(false);
 
-  // Session persistence
-  const { restoredState, isResuming, saveProgress, clearProgress, dismissResume } = useEnrollmentProgress(token);
-  const initializedFromRestore = useRef(false);
+  // Session persistence: this browser's copy (every keystroke, 7 days) and the
+  // link's copy (checkpoints, any device). The newest wins on arrival.
+  const { restoredState, saveProgress, clearProgress } = useEnrollmentProgress(token);
+  const [resumeChecked, setResumeChecked] = useState(false);
+  const [resumeInfo, setResumeInfo] = useState<{ step: number; savedAt: string } | null>(null);
 
   // Token validation state
   const [tokenStatus, setTokenStatus] = useState<'loading' | 'valid' | 'invalid' | 'expired' | 'used' | 'submitted'>('loading');
@@ -168,6 +173,8 @@ export default function EnrollWizard() {
   // Form state - initialize from restored state if available
   const [currentStep, setCurrentStep] = useState(0);
   const [formData, setFormData] = useState(DEFAULT_FORM_DATA);
+  const formDataRef = useRef(formData);
+  formDataRef.current = formData;
   const [submitting, setSubmitting] = useState(false);
   const [payLaterBusy, setPayLaterBusy] = useState(false);
   const [payLaterSaved, setPayLaterSaved] = useState<{ emailedTo: string | null } | null>(null);
@@ -214,18 +221,43 @@ export default function EnrollWizard() {
     };
   }, [currentStep, methodsView, linkData?.paymentMode]);
 
-  // Restore state from localStorage — only when token is confirmed valid (not used/expired)
+  // Resume once signed in: the newest of this browser's copy, the draft on the
+  // link and the application saved with "pay later". Until this has run the
+  // steps are not shown, so nothing typed is overwritten.
   useEffect(() => {
-    if (restoredState && !initializedFromRestore.current && tokenStatus === 'valid') {
-      initializedFromRestore.current = true;
-      setCurrentStep(restoredState.currentStep);
-      setFormData(restoredState.formData as unknown as typeof DEFAULT_FORM_DATA);
-      setPhoneVerified(restoredState.phoneVerified);
-      setPhoneVerifiedAt(restoredState.phoneVerifiedAt || null);
-      setVerifiedPhone(restoredState.verifiedPhone || null);
-      setTermsAccepted(restoredState.termsAccepted);
-    }
-  }, [restoredState, tokenStatus]);
+    if (tokenStatus !== 'valid' || !user || !token || resumeChecked) return;
+    let alive = true;
+    (async () => {
+      let server: ServerResume | null = null;
+      try {
+        const idToken = await getCurrentUser()?.getIdToken();
+        if (idToken) {
+          const res = await fetch(`/api/enroll/draft?token=${encodeURIComponent(token)}`, { headers: { Authorization: `Bearer ${idToken}` } });
+          if (res.ok) server = (await res.json())?.data || null;
+        }
+      } catch {
+        // No answer: this browser's copy, if any, still resumes.
+      }
+      if (!alive) return;
+      const local = restoredState;
+      if (local) {
+        setPhoneVerified(local.phoneVerified);
+        setPhoneVerifiedAt(local.phoneVerifiedAt || null);
+        setVerifiedPhone(local.verifiedPhone || null);
+      }
+      const plan = planResume({ local, server, base: formDataRef.current });
+      if (plan) {
+        setFormData(plan.formData);
+        setCurrentStep(plan.step);
+        setTermsAccepted(plan.termsAccepted);
+        setResumeInfo({ step: plan.step, savedAt: plan.savedAt });
+      }
+      setResumeChecked(true);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [tokenStatus, user, token, resumeChecked, restoredState]);
 
   // Save progress whenever form state changes
   useEffect(() => {
@@ -240,6 +272,15 @@ export default function EnrollWizard() {
       });
     }
   }, [currentStep, formData, phoneVerified, phoneVerifiedAt, verifiedPhone, termsAccepted, tokenStatus, saveProgress]);
+
+  // Checkpoint the draft on the link (step changes at once, edits after a pause).
+  const draftSync = useEnrollmentDraftSync({
+    token,
+    enabled: tokenStatus === 'valid' && !!user && resumeChecked && currentStep < 4,
+    step: currentStep,
+    formData: formData as unknown as Record<string, unknown>,
+    getIdToken: async () => (await getCurrentUser()?.getIdToken()) || null,
+  });
 
   // Validate token — wait for auth to finish loading so we can include the token for ownership check
   useEffect(() => {
@@ -302,28 +343,30 @@ export default function EnrollWizard() {
   }, [usedLinkData?.isOwner, usedLinkData?.leadProfile]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
-  // Auto-fill from Google login + linkData phone (skip fields already filled from restore)
+  // What the account and the link already know: name, email, phone (Google
+  // account, then the number staff put on the link) and the payment method.
+  const withAccountDefaults = (prev: typeof DEFAULT_FORM_DATA): typeof DEFAULT_FORM_DATA => {
+    if (!user || !linkData) return prev;
+    const adminPhone = linkData.studentPhone
+      ? (linkData.studentPhone.startsWith('+') ? linkData.studentPhone : `+91${linkData.studentPhone}`)
+      : '';
+    return {
+      ...prev,
+      personal: {
+        ...prev.personal,
+        firstName: prev.personal.firstName || user.name?.split(' ')[0] || '',
+        email: user.email || prev.personal.email,
+        phone: user.phone || prev.personal.phone || adminPhone,
+      },
+      payment: {
+        ...prev.payment,
+        paymentMethod: prev.payment.paymentMethod || linkData.paymentMethod || '',
+      },
+    };
+  };
   useEffect(() => {
-    if (user && linkData) {
-      // Use phone from: Google account → linkData (admin-set) → existing form value
-      const adminPhone = linkData.studentPhone
-        ? (linkData.studentPhone.startsWith('+') ? linkData.studentPhone : `+91${linkData.studentPhone}`)
-        : '';
-      setFormData((prev) => ({
-        ...prev,
-        personal: {
-          ...prev.personal,
-          firstName: prev.personal.firstName || user.name?.split(' ')[0] || '',
-          email: user.email || prev.personal.email,
-          phone: user.phone || prev.personal.phone || adminPhone,
-        },
-        payment: {
-          ...prev.payment,
-          paymentMethod: prev.payment.paymentMethod || linkData.paymentMethod || '',
-        },
-      }));
-    }
-  }, [user, linkData]);
+    if (user && linkData) setFormData((prev) => withAccountDefaults(prev));
+  }, [user, linkData]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Student-pays links: fill blanks from the demo the student booked, and
   // start the payment on UPI with today's date. Never overwrites an answer.
@@ -476,6 +519,18 @@ export default function EnrollWizard() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
+  // "Start over": forget both copies of the draft; the account's own details stay.
+  const startOver = () => {
+    clearProgress();
+    void draftSync.clear();
+    setResumeInfo(null);
+    setFieldErrors({});
+    setTermsAccepted(false);
+    setFormData(withAccountDefaults(DEFAULT_FORM_DATA));
+    setCurrentStep(0);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const getAcademicDataForSubmit = () => {
     const { applicantCategory } = formData.academic;
     if (applicantCategory === 'school_student') return formData.academic.schoolStudentData;
@@ -578,6 +633,7 @@ export default function EnrollWizard() {
 
       // Clear saved progress on success
       clearProgress();
+      void draftSync.clear();
       setFieldErrors({});
 
       // Student-pays: a claim waiting for staff, not an enrolment yet.
@@ -608,6 +664,7 @@ export default function EnrollWizard() {
   };
   const onInstantUpiDone = () => {
     clearProgress();
+    void draftSync.clear();
     invalidateApplicationStatus();
     if (linkData) validateToken(linkData.token, user ? (user.raw as any) : undefined);
   };
@@ -1351,6 +1408,30 @@ export default function EnrollWizard() {
   }
 
   // ============================================
+  // RESUME CHECK (one round trip after sign-in)
+  // ============================================
+
+  if (tokenStatus === 'valid' && user && !resumeChecked) {
+    return (
+      <Container maxWidth="md" sx={{ py: { xs: 2, md: 4 } }}>
+        <Box mb={3}>
+          <Typography variant="h5" component="h1" fontWeight={700}>
+            {linkData?.paymentMode === 'student_pays' ? 'Join Neram Classes' : 'Complete Your Enrollment'}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" role="status" aria-live="polite">
+            Checking for details you already entered...
+          </Typography>
+        </Box>
+        <Skeleton variant="rounded" height={8} sx={{ mb: 3 }} />
+        <Skeleton variant="rounded" height={56} sx={{ mb: 2 }} />
+        <Skeleton variant="rounded" height={56} sx={{ mb: 2 }} />
+        <Skeleton variant="rounded" height={56} sx={{ mb: 2 }} />
+        <Skeleton variant="rounded" height={56} />
+      </Container>
+    );
+  }
+
+  // ============================================
   // MAIN FORM
   // ============================================
 
@@ -1388,35 +1469,34 @@ export default function EnrollWizard() {
       )}
 
       {/* Resume banner */}
-      {isResuming && (
+      {resumeInfo && (
         <Alert
           severity="info"
-          sx={{ mb: 2 }}
+          sx={{
+            mb: 2,
+            flexWrap: { xs: 'wrap', sm: 'nowrap' },
+            '& .MuiAlert-message': { flex: { xs: '1 1 0', sm: '0 1 auto' }, minWidth: 0 },
+            '& .MuiAlert-action': {
+              alignItems: 'center',
+              pt: 0,
+              width: { xs: '100%', sm: 'auto' },
+              justifyContent: 'flex-end',
+              ml: { xs: 0, sm: 'auto' },
+              pl: { xs: 0, sm: 2 },
+            },
+          }}
           action={
-            <Button
-              color="inherit"
-              size="small"
-              onClick={async () => {
-                clearProgress();
-                setCurrentStep(0);
-                setFormData(DEFAULT_FORM_DATA);
-                setPhoneVerified(false);
-                setPhoneVerifiedAt(null);
-                setVerifiedPhone(null);
-                setTermsAccepted(false);
-                dismissResume();
-                try {
-                  const { getFirebaseAuth } = await import('@neram/auth');
-                  await getFirebaseAuth().signOut();
-                } catch { /* ignore */ }
-              }}
-            >
-              Start Fresh
-            </Button>
+            <Box display="flex" alignItems="center" gap={0.5}>
+              <Button color="inherit" size="small" onClick={startOver} sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}>
+                Start over
+              </Button>
+              <IconButton color="inherit" size="small" aria-label="Dismiss" onClick={() => setResumeInfo(null)} sx={{ width: 44, height: 44 }}>
+                <Close fontSize="small" />
+              </IconButton>
+            </Box>
           }
-          onClose={dismissResume}
         >
-          Resuming from Step {(restoredState?.currentStep ?? 0) + 1}: {stepLabels[restoredState?.currentStep ?? 0]}. Your previous progress has been restored.
+          {resumeMessage(resumeInfo, stepLabels)}
         </Alert>
       )}
 
@@ -1459,6 +1539,24 @@ export default function EnrollWizard() {
       {isMobile && (
         <Typography variant="subtitle2" color="text.secondary" mb={2}>
           Step {currentStep + 1} of 4: {stepLabels[currentStep]}
+        </Typography>
+      )}
+
+      {/* Autosave status */}
+      {draftSync.status !== 'idle' && (
+        <Typography
+          variant="caption"
+          component="p"
+          role="status"
+          aria-live="polite"
+          color={draftSync.status === 'error' ? 'warning.dark' : 'text.secondary'}
+          sx={{ mb: 2 }}
+        >
+          {draftSync.status === 'saved'
+            ? 'Progress saved. You can continue on any device with this link.'
+            : draftSync.status === 'error'
+              ? 'Could not save your progress just now. We will try again as you continue.'
+              : 'Saving your progress...'}
         </Typography>
       )}
 

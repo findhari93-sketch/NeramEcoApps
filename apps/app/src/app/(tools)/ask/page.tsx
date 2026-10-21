@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { Box, Typography } from '@neram/ui';
-import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
+import AintraAvatar from '@/components/aintra/AintraAvatar';
 import CheckCircleOutlineRoundedIcon from '@mui/icons-material/CheckCircleOutlineRounded';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import AskChat from '@/components/ask/AskChat';
@@ -12,16 +12,16 @@ import { toolPageMetadata } from '@/lib/seo/tool-metadata';
 // The shell is the same for everyone; the chat itself runs in the browser.
 export const revalidate = 86400;
 
-const TITLE = 'Ask aiArchitek: NATA Cutoff and B.Arch College Chat';
+const TITLE = 'Ask Aintra: NATA Cutoff and B.Arch College Chat';
 const DESCRIPTION =
-  'Ask about your NATA cutoff, B.Arch colleges, ranks and exam centres. Answers come from official TNEA, KEAM and JoSAA allotment lists, not guesses. Free.';
+  'Ask Aintra, the Neram Classes assistant, about your NATA cutoff, B.Arch colleges, ranks and exam centres. Answers come from official TNEA, KEAM and JoSAA allotment lists, not guesses. Free.';
 
 export function generateMetadata(): Metadata {
   return toolPageMetadata({
     title: TITLE,
     description: DESCRIPTION,
     path: '/ask',
-    keywords: ['NATA cutoff chat', 'B.Arch college predictor chat', 'NATA AI assistant', 'which B.Arch college can I get', 'TNEA B.Arch cutoff', 'aiArchitek'],
+    keywords: ['NATA cutoff chat', 'B.Arch college predictor chat', 'NATA AI assistant', 'which B.Arch college can I get', 'TNEA B.Arch cutoff', 'aiArchitek', 'Aintra'],
   });
 }
 
@@ -40,6 +40,10 @@ const WHY = [
     body: 'Your marks, community and city carry from one question to the next, and you can see and edit them any time.',
   },
   {
+    title: 'Your language, typed or spoken',
+    body: 'Ask in English, Tamil, Hindi, Malayalam or Kannada. Tap the mic to speak, and the answer comes back in the same language.',
+  },
+  {
     title: 'One tap to the full tool',
     body: 'Every answer opens the matching calculator or predictor with your values already filled in.',
   },
@@ -47,11 +51,11 @@ const WHY = [
 
 const FAQS = [
   {
-    question: 'How is Ask aiArchitek different from ChatGPT or Gemini?',
+    question: 'How is Aintra different from ChatGPT or Gemini?',
     answer: WHY.map((w) => `${w.title}: ${w.body}`).join(' '),
   },
   {
-    question: 'Is Ask aiArchitek free?',
+    question: 'Is Aintra free?',
     answer: 'Yes. You get three answers a day without signing in, and unlimited answers with a free account.',
   },
   {
@@ -64,17 +68,15 @@ const FAQS = [
 function Intro() {
   return (
     <Box component="section" aria-labelledby="ask-title" sx={{ pt: { xs: 1, md: 3 }, pb: 2 }}>
-      <Box
-        aria-hidden="true"
-        sx={{ width: 48, height: 48, borderRadius: '50%', display: 'grid', placeItems: 'center', color: 'primary.main', bgcolor: 'action.hover', mb: 2 }}
-      >
-        <AutoAwesomeRoundedIcon />
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+        <AintraAvatar size={48} />
+        <Typography sx={{ fontWeight: 700, color: 'text.secondary' }}>Hi, I&apos;m Aintra from Neram Classes</Typography>
       </Box>
       <Typography id="ask-title" component="h1" sx={{ fontWeight: 800, fontSize: { xs: '1.625rem', md: '2rem' }, lineHeight: 1.2 }}>
         Ask about your NATA score, cutoff or colleges
       </Typography>
       <Typography sx={{ mt: 1, color: 'text.secondary', fontSize: '1rem', lineHeight: 1.6, maxWidth: 600 }}>
-        Type your marks the way you would tell a friend. Ask aiArchitek works out your cutoff out of 400 and shows the colleges students with
+        Type your marks the way you would tell a friend. Aintra works out your cutoff out of 400 and shows the colleges students with
         your score got last year, from the official allotment lists.
       </Typography>
 
@@ -144,7 +146,7 @@ export default function AskPage() {
       <JsonLd
         data={[
           webApplicationSchema({
-            name: 'Ask aiArchitek',
+            name: 'Aintra by Neram Classes',
             description: DESCRIPTION,
             path: '/ask',
             features: [
@@ -153,6 +155,10 @@ export default function AskPage() {
               'Rank estimate from the official rank list',
               'Nearest NATA test cities',
               'COA approval check',
+              'NATA cost estimate from the official fee table',
+              'NATA eligibility under Council of Architecture rules',
+              'NATA exam dates and phases',
+              'Answers in English, Tamil, Hindi, Malayalam and Kannada, typed or spoken',
             ],
           }),
           faqSchema(FAQS.map((f) => ({ q: f.question, a: f.answer }))),

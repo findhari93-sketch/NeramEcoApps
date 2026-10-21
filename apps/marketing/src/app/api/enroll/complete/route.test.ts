@@ -75,8 +75,10 @@ vi.mock('@neram/database/payment-payee', () => ({
   getPaymentPayee: async () => ({ upiId: 'neramclassroom-1@okicici', payeeName: 'Manoharan Trust', gpayNumber: null, bank: { accountName: 'Manoharan Trust', accountNumber: '1928135000001183', ifsc: 'KVBL0001928', bankName: 'Karur Vysya Bank', branch: 'Pudukkottai' }, accessUntilLabel: 'September 2027', whatsappNumber: payeeWhatsapp }),
 }));
 
+// The signed-in account, and whether its phone is OTP-verified.
+let accountPhoneVerified = true;
 vi.mock('../../_lib/auth', () => ({
-  verifyFirebaseToken: async () => ({ userId: 'user-1', email: 'radhika@example.com', phone: '+917382843549', phoneVerified: true }),
+  verifyFirebaseToken: async () => ({ userId: 'user-1', email: 'radhika@example.com', phone: '+917382843549', phoneVerified: accountPhoneVerified }),
 }));
 
 import { POST } from './route';
@@ -124,7 +126,18 @@ beforeEach(() => {
   paymentWithUtr = null;
   linkUpdateResult = { data: { id: 'link-1' }, error: null };
   linkUpdates.length = 0;
+  accountPhoneVerified = true;
   vi.clearAllMocks();
+});
+
+describe('POST /api/enroll/complete, phone verification', () => {
+  it('refuses when the account phone is not OTP-verified, whatever the browser says', async () => {
+    accountPhoneVerified = false;
+    const res = await POST(req(body({ phoneVerified: true })));
+    expect(res.status).toBe(400);
+    expect((await res.json()).error).toMatch(/Phone verification/);
+    expect(linkUpdates).toHaveLength(0);
+  });
 });
 
 describe('POST /api/enroll/complete, student pays', () => {

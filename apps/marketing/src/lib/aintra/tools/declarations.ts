@@ -209,6 +209,38 @@ export const TOOL_DECLARATIONS = [
     },
   },
   {
+    name: 'prepare_ticket',
+    description:
+      'Prepare a support ticket for a problem our team must fix and track (enrolment, payment, account, website, course). The visitor gets a ticket number. For a general question use prepare_message; for "call me" use prepare_callback.',
+    parameters: {
+      type: 'object',
+      properties: {
+        category: {
+          type: 'string',
+          enum: ['enrollment_issue', 'payment_issue', 'technical_issue', 'account_issue', 'course_question', 'other'],
+        },
+        subject: { type: 'string', description: 'A short subject.' },
+        description: { type: 'string', description: 'What went wrong, in their words (at least a sentence).' },
+      },
+      required: ['description'],
+    },
+  },
+  {
+    name: 'prepare_save_college',
+    description: 'Offer to save a college to the visitor\'s list (shortlist) with one tap. Resolve the slug first.',
+    parameters: {
+      type: 'object',
+      properties: { college_slug: { type: 'string', description: 'The college slug.' } },
+      required: ['college_slug'],
+    },
+  },
+  {
+    name: 'get_payment_status',
+    description:
+      'What the signed-in student owes (next instalment, an approved application\'s fee, or an enrolment link our team sent) and a card with a button to the page that takes each payment. Use for "pay my fees", "how much do I owe", "pay the balance". Nothing is paid in the chat.',
+    parameters: { type: 'object', properties: {} },
+  },
+  {
     name: 'get_my_status',
     description:
       'The signed-in visitor\'s own demo class, callback request and application status. Use when they ask "what did I book", "is my demo confirmed" or "what is my application status".',

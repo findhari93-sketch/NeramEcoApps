@@ -204,13 +204,15 @@ export interface AiFeature {
 
 export const AI_FEATURES: AiFeature[] = [
   {
-    name: 'Aintra, the AI assistant',
+    name: 'Aintra, your Neram assistant',
     status: 'free',
-    summary: 'Ask about NATA, B.Arch colleges, cutoffs and counselling in plain language, any time of day.',
+    summary:
+      'An assistant that works inside Neram for you. Ask about NATA, B.Arch colleges, cutoffs and counselling in plain language, and let it do the next step for you, any time of day.',
     points: [
       'Open the chat on any page of neramclasses.com',
       'Looks up colleges, fees and cutoffs while it answers',
-      'No sign-in needed',
+      'Books your free demo class, fills in your application with you, plans a centre visit and shows your fees',
+      'Free to ask; you sign in when it books or applies for you',
     ],
   },
   {
@@ -345,7 +347,7 @@ export const FAQS: { question: string; answer: string }[] = [
   {
     question: 'What can I use aiArchitek for?',
     answer:
-      'Checking eligibility, planning NATA sessions, finding test cities, practising questions, calculating your cutoff out of 400 and shortlisting B.Arch colleges. You can also ask the Aintra AI assistant any NATA or counselling question.',
+      'Checking eligibility, planning NATA sessions, finding test cities, practising questions, calculating your cutoff out of 400 and shortlisting B.Arch colleges. You can also ask Aintra, the Neram assistant, any NATA or counselling question, or have it book a demo class for you.',
   },
   {
     question: 'Does aiArchitek help with NATA preparation?',
@@ -370,7 +372,7 @@ export const FAQS: { question: string; answer: string }[] = [
   {
     question: 'Does aiArchitek provide AI-assisted learning?',
     answer:
-      'Yes. Anyone can use the Aintra AI assistant on neramclasses.com. Inside the Neram classroom, students learn with an AI Maths Teacher, question paper analysis, AI answer explanations and AI class recaps. Personalized practice and an AI study planner are coming soon.',
+      'Yes. Anyone can use Aintra, the Neram assistant on neramclasses.com: it answers questions and also does things for you, such as booking a demo class or filling in your application. Inside the Neram classroom, students learn with an AI Maths Teacher, question paper analysis, AI answer explanations and AI class recaps. Personalized practice and an AI study planner are coming soon.',
   },
   {
     question: 'Who built aiArchitek?',

@@ -3,7 +3,7 @@
  *
  *   AC1: the calculator uses the board's real maximum and the better of two
  *        NATA attempts, the same maths as the app (@neram/tools-core)
- *   AC2: "See colleges" opens Ask aiArchitek with the score and the values
+ *   AC2: "See colleges" opens Aintra in the Tools app with the score and the values
  *   AC3: the board table, HowTo and FAQ structured data are in the HTML
  *   Mobile: no sideways scroll at 375px, inputs 48px tall
  *

@@ -15,7 +15,6 @@ import {
   useMediaQuery,
   useTheme,
 } from '@neram/ui';
-import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
 import AddCommentOutlinedIcon from '@mui/icons-material/AddCommentOutlined';
 import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
@@ -23,6 +22,7 @@ import ErrorOutlineRoundedIcon from '@mui/icons-material/ErrorOutlineRounded';
 import { cutoffPrefillFromSearch } from '@neram/tools-core/cutoff';
 import type { AskCard } from '@/lib/ask/cards';
 import AskCardView from './AskCardView';
+import AintraAvatar from '@/components/aintra/AintraAvatar';
 import AskText from './AskText';
 import { Composer, MemoryStrip, SignInGateCard, useAskSignIn } from './AskParts';
 import { useAskChat, type ChatMessage } from './useAskChat';
@@ -72,11 +72,8 @@ function AssistantMessage({
   const waiting = m.streaming && !m.text && m.cards.length === 0;
   return (
     <Box sx={{ display: 'flex', gap: 1.25, alignItems: 'flex-start' }}>
-      <Box
-        aria-hidden="true"
-        sx={{ width: 32, height: 32, mt: 0.25, flexShrink: 0, borderRadius: '50%', display: 'grid', placeItems: 'center', color: 'primary.main', bgcolor: (t) => alpha(t.palette.primary.main, 0.1) }}
-      >
-        <AutoAwesomeRoundedIcon sx={{ fontSize: 18 }} />
+      <Box aria-hidden="true" sx={{ mt: 0.25, flexShrink: 0 }}>
+        <AintraAvatar size={32} />
       </Box>
       <Box sx={{ flex: 1, minWidth: 0, display: 'grid', gap: 1.5 }}>
         {m.text && <AskText text={m.text} />}
@@ -124,7 +121,7 @@ function AssistantMessage({
 }
 
 /**
- * Ask aiArchitek: the chat. `intro` is the server-rendered welcome (heading,
+ * Aintra (Tools app): the chat. `intro` is the server-rendered welcome (heading,
  * starter questions, why it beats a general chatbot); it shows until the first
  * question and is what crawlers read.
  */

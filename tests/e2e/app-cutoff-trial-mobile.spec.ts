@@ -61,7 +61,7 @@ test.describe('Cutoff calculator free trial (guest)', () => {
     await expect(page.getByText('Sign in to see', { exact: true })).toHaveCount(0);
   });
 
-  test('AC4: the result links to Ask aiArchitek with the score', async ({ page }) => {
+  test('AC4: the result links to Aintra with the score', async ({ page }) => {
     await openRun(page, 450);
     // On a phone the result sits on the last step; the sticky bar jumps there.
     const details = page.getByRole('button', { name: 'See details' });

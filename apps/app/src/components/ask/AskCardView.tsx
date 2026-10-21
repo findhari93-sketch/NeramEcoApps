@@ -14,7 +14,23 @@ import ErrorOutlineRoundedIcon from '@mui/icons-material/ErrorOutlineRounded';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
 import OpenInFullRoundedIcon from '@mui/icons-material/OpenInFullRounded';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
+import CurrencyRupeeRoundedIcon from '@mui/icons-material/CurrencyRupeeRounded';
+import FactCheckOutlinedIcon from '@mui/icons-material/FactCheckOutlined';
+import EventOutlinedIcon from '@mui/icons-material/EventOutlined';
+import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
 import type { AskCard, CollegeRow, Tier } from '@/lib/ask/cards';
+import ShareResultButton from './ShareResultButton';
+import { getFirebaseAuth } from '@neram/auth';
+import AintraCardView from '@/components/aintra/AintraCardView';
+
+/** The signed-in student's token, for account cards that post on a tap. */
+async function idToken(): Promise<string | null> {
+  try {
+    return (await getFirebaseAuth().currentUser?.getIdToken()) ?? null;
+  } catch {
+    return null;
+  }
+}
 
 const TIER: Record<Tier, { label: string; hint: string; color: 'success' | 'info' | 'warning' }> = {
   safe: { label: 'Safe', hint: 'well above last year’s bar', color: 'success' },
@@ -269,7 +285,17 @@ export default function AskCardView({ card, expanded, onExpand, onSignIn }: AskC
   switch (card.kind) {
     case 'cutoff':
       return (
-        <Shell icon={<CalculateOutlinedIcon />} title="Your B.Arch cutoff" source="NATA cutoff formula, your board's real maximum" actions={<OpenLink href={card.href} label="Open in Cutoff Calculator" />}>
+        <Shell
+          icon={<CalculateOutlinedIcon />}
+          title="Your B.Arch cutoff"
+          source="NATA cutoff formula, your board's real maximum"
+          actions={
+            <>
+              <OpenLink href={card.href} label="Open in Cutoff Calculator" />
+              <ShareResultButton card={card} />
+            </>
+          }
+        >
           <CutoffBody card={card} />
         </Shell>
       );
@@ -285,6 +311,7 @@ export default function AskCardView({ card, expanded, onExpand, onSignIn }: AskC
             <>
               {!expanded && onExpand && card.data.hidden === 0 && total > 3 && <ExpandButton onClick={() => onExpand(card)} />}
               <OpenLink href={card.href} label={shownAll ? 'Open College Predictor' : 'All colleges in the predictor'} />
+              <ShareResultButton card={card} />
             </>
           }
         >
@@ -356,6 +383,134 @@ export default function AskCardView({ card, expanded, onExpand, onSignIn }: AskC
           )}
         </Shell>
       );
+    case 'cost': {
+      const d = card.data;
+      const rows: Array<[string, string]> = [
+        [`Application fee (${d.attempts} × ₹${fmt(d.feePerAttempt)}, ${d.category})`, `₹${fmt(d.totalFee)}`],
+        ...(d.travel ? ([[`Travel${d.state ? ` from ${d.state}` : ''} (estimate)`, `₹${fmt(d.travel)}`]] as Array<[string, string]>) : []),
+        ...(d.stay ? ([['Stay near the test city (estimate)', `₹${fmt(d.stay)}`]] as Array<[string, string]>) : []),
+        ['Study materials (range)', `₹${fmt(d.materials.min)} to ₹${fmt(d.materials.max)}`],
+      ];
+      return (
+        <Shell
+          icon={<CurrencyRupeeRoundedIcon />}
+          title="What NATA will cost"
+          source={`NATA ${d.feeYear} brochure fees; travel and stay are estimates`}
+          actions={
+            <>
+              <OpenLink href={card.href} label="Open Cost Calculator" />
+              <ShareResultButton card={card} />
+            </>
+          }
+        >
+          <Typography component="p" sx={{ fontSize: '1.75rem', fontWeight: 800, lineHeight: 1.15, fontVariantNumeric: 'tabular-nums' }}>
+            ₹{fmt(d.totalMin)} to ₹{fmt(d.totalMax)}
+          </Typography>
+          <Box component="ul" sx={{ m: 0, p: 0, mt: 1, display: 'grid' }}>
+            {rows.map(([label, value]) => (
+              <Box
+                component="li"
+                key={label}
+                sx={{ listStyle: 'none', display: 'flex', justifyContent: 'space-between', gap: 1.5, py: 0.75, borderTop: '1px solid', borderColor: 'divider' }}
+              >
+                <Typography variant="body2">{label}</Typography>
+                <Typography variant="body2" sx={{ fontWeight: 700, flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
+                  {value}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+        </Shell>
+      );
+    }
+    case 'eligibility': {
+      const d = card.data;
+      const verdict =
+        d.barchEligible === null
+          ? d.nataEligible
+            ? 'You can sit NATA'
+            : 'Not eligible for NATA yet'
+          : d.nataEligible && d.barchEligible
+            ? 'Eligible for NATA and B.Arch'
+            : d.nataEligible
+              ? 'You can sit NATA, but B.Arch needs more'
+              : 'Not eligible yet';
+      return (
+        <Shell icon={<FactCheckOutlinedIcon />} title="Eligibility check" source="Council of Architecture rules" actions={<OpenLink href={card.href} label="Open Eligibility Checker" />}>
+          <Typography component="p" sx={{ fontSize: '1.25rem', fontWeight: 800, lineHeight: 1.3, mb: 0.5 }}>
+            {verdict}
+          </Typography>
+          <Box component="ul" sx={{ m: 0, p: 0, display: 'grid' }}>
+            {d.conditions.map((c) => (
+              <Box component="li" key={c.label} sx={{ listStyle: 'none', display: 'flex', gap: 1, py: 0.75, borderTop: '1px solid', borderColor: 'divider' }}>
+                {c.met ? (
+                  <CheckCircleRoundedIcon aria-label="Met" sx={{ fontSize: 20, color: 'success.main', mt: '1px' }} />
+                ) : (
+                  <CancelOutlinedIcon aria-label="Not met" sx={{ fontSize: 20, color: 'error.main', mt: '1px' }} />
+                )}
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                    {c.label}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                    {c.explanation}
+                  </Typography>
+                </Box>
+              </Box>
+            ))}
+          </Box>
+        </Shell>
+      );
+    }
+    case 'dates': {
+      const d = card.data;
+      const day = (iso: string) =>
+        new Date(`${iso}T00:00:00+05:30`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
+      return (
+        <Shell
+          icon={<EventOutlinedIcon />}
+          title={d.announced ? `NATA ${d.scheduleYear} dates` : `NATA ${d.cycleYear} dates`}
+          source={`Council of Architecture NATA ${d.scheduleYear} schedule`}
+          actions={<OpenLink href={card.href} label="Open Exam Planner" />}
+        >
+          {!d.announced && (
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              NATA {d.cycleYear} dates are not announced yet. Last year&apos;s pattern, as a guide:
+            </Typography>
+          )}
+          <Box component="ul" sx={{ m: 0, p: 0, display: 'grid' }}>
+            {d.phases.map((p) => (
+              <Box component="li" key={p.phase} sx={{ listStyle: 'none', display: 'flex', justifyContent: 'space-between', gap: 1.5, py: 0.75, borderTop: '1px solid', borderColor: 'divider' }}>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {p.phase}
+                </Typography>
+                <Typography variant="body2" sx={{ textAlign: 'right' }}>
+                  {p.from === p.to ? day(p.from) : `${day(p.from)} to ${day(p.to)}`} · {p.days} day{p.days === 1 ? '' : 's'}
+                </Typography>
+              </Box>
+            ))}
+          </Box>
+          {d.announced && d.upcoming.length > 0 && (
+            <>
+              <Typography variant="caption" component="p" sx={{ color: 'text.secondary', mt: 1.25, fontWeight: 600 }}>
+                Next sessions
+              </Typography>
+              <Box component="ul" sx={{ m: 0, p: 0, display: 'grid' }}>
+                {d.upcoming.map((u) => (
+                  <Box component="li" key={`${u.date}-${u.time}`} sx={{ listStyle: 'none', py: 0.5 }}>
+                    <Typography variant="body2">
+                      {day(u.date)}, {u.day}, {u.time}
+                    </Typography>
+                  </Box>
+                ))}
+              </Box>
+            </>
+          )}
+        </Shell>
+      );
+    }
+    case 'account':
+      return <AintraCardView card={card.data} getToken={idToken} />;
     case 'tool':
       return (
         <Paper

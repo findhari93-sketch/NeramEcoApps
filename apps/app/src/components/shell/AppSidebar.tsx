@@ -16,6 +16,7 @@ import { useSidebar } from '@/contexts/SidebarContext';
 import UserNotificationBell from '@/components/UserNotificationBell';
 import AvatarWithRing from '@/components/AvatarWithRing';
 import BrandMark from './BrandMark';
+import { AintraSidebarButton, AintraTopBarButton } from '@/components/aintra/AintraLauncher';
 import {
   PRIMARY_NAV,
   ACCOUNT_NAV,
@@ -98,6 +99,11 @@ export default function AppSidebar({
       </Box>
 
       <Divider />
+
+      {/* Aintra, the Neram assistant (2026-10-20): above the nav, where it is seen first. */}
+      <Box sx={{ px: collapsed ? 1 : 1.5, pt: 1.5, display: 'flex', justifyContent: 'center' }}>
+        {collapsed ? <AintraTopBarButton /> : <AintraSidebarButton />}
+      </Box>
 
       <Box
         component="nav"

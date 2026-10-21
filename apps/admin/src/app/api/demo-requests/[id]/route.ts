@@ -75,7 +75,7 @@ async function deskEnrolmentLink(supabase: any, demoId: string, userId: string |
   const { data, error } = await supabase
     .from('direct_enrollment_links')
     .select(
-      'id, status, expires_at, created_at, created_by, final_fee, amount_paid, payment_scheme, installment_2_due_date, share_count, last_shared_at, payment_mode, total_fee, discount_amount, offer_full_amount, offer_installment_1, offer_installment_2, rejection_reason',
+      'id, status, expires_at, created_at, created_by, final_fee, amount_paid, payment_scheme, installment_2_due_date, share_count, last_shared_at, payment_mode, total_fee, discount_amount, offer_full_amount, offer_installment_1, offer_installment_2, rejection_reason, user_id, submitted_user_id',
     )
     .or(match)
     .order('created_at', { ascending: false })

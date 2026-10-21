@@ -56,12 +56,17 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3011';
 const MAX_QUESTIONS_PER_SESSION = 20;
 const LEAD_CAPTURE_AFTER = 3;
 
+/**
+ * The first things a visitor can tap. Mostly jobs Aintra does for them inside
+ * Neram (2026-10-20), so the welcome shows it is an assistant, not only a
+ * question box.
+ */
 const SUGGESTED_QUESTIONS = [
+  'Book a free demo class',
+  'Help me fill my application',
   'What are the course fees?',
-  'How do I apply?',
-  'What are class timings?',
-  'Do you have offline classes?',
-  'How to book a demo class?',
+  'Plan a visit to a centre',
+  'Ask your team to call me',
 ];
 
 /** How wide the canvas opens beside the chat on a laptop. */
@@ -543,7 +548,8 @@ export default function GeneralChatbot() {
                   boxShadow: '0 6px 24px rgba(0,0,0,0.28)',
                 },
               }}
-              title="Chat with Aintra"
+              title="Ask Aintra, your Neram assistant"
+              aria-label="Open Aintra, your Neram assistant"
             >
               <BotAvatar size={56} />
             </Fab>
@@ -676,7 +682,7 @@ export default function GeneralChatbot() {
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                     <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: tokens.statusDone }} />
                     <Typography variant="caption" noWrap sx={{ opacity: 0.9, fontSize: '0.75rem' }}>
-                      Neram Classes Assistant
+                      Your Neram assistant
                     </Typography>
                   </Box>
                 </Box>
@@ -774,16 +780,17 @@ export default function GeneralChatbot() {
                         Aintra
                       </Typography>
                       <Typography variant="body2" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
-                        Neram Classes Assistant
+                        Your assistant inside Neram
                       </Typography>
                       <Typography color="text.secondary" sx={{ mb: 3, px: 2, fontSize: '1rem', lineHeight: 1.6 }}>
-                        Hi! I can help you with course details, fees, class timings, NATA exam info, and more. What would you like to know?
+                        Hi, I am Aintra. I answer your questions, and I can also get things done for you right here, like booking a
+                        demo class or filling in your application.
                       </Typography>
                       <SuggestionChips
                         suggestions={SUGGESTED_QUESTIONS}
                         onPick={sendSuggestion}
                         center
-                        label="Suggested questions"
+                        label="Things Aintra can do for you"
                       />
                     </Box>
                   )}
@@ -1037,7 +1044,7 @@ export default function GeneralChatbot() {
                 fullWidth
                 multiline
                 maxRows={4}
-                placeholder="Ask about courses, fees, timing..."
+                placeholder="Ask a question or tell me what to do"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}

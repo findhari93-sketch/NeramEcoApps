@@ -7,6 +7,7 @@
  *   Conversations    list, transcript with review tools, person panel
  *   People & leads   one row per person with intent and lead stage
  *   Insights         sources, intents, places and the questions it gets wrong
+ *   Tools chat       Aintra (Tools app), the chat in the Tools app (its own data)
  *
  * One request loads every conversation (no answer text); a transcript loads
  * when a chat is opened. The view lives in the URL (?tab, ?c, ?seg, ?status,
@@ -30,10 +31,11 @@ import InsightsTab from './InsightsTab';
 import PeopleTab from './PeopleTab';
 import PersonPanel from './PersonPanel';
 import Transcript from './Transcript';
+import ToolsChatTab from './ToolsChatTab';
 
-type InboxTab = 'conversations' | 'people' | 'insights';
+type InboxTab = 'conversations' | 'people' | 'insights' | 'tools-chat';
 
-const TABS: InboxTab[] = ['conversations', 'people', 'insights'];
+const TABS: InboxTab[] = ['conversations', 'people', 'insights', 'tools-chat'];
 const SEGMENTS: Segment[] = ['all', 'user', 'guest'];
 const STATUSES: StatusFilter[] = ['all', 'queue', 'review', 'error', 'none'];
 const RANGES: InsightRange[] = ['30', '180', 'all'];
@@ -380,6 +382,7 @@ export default function AintraInbox() {
         <Tab value="conversations" label="Conversations" sx={{ ...TARGET_44, fontWeight: 600 }} />
         <Tab value="people" label="People & leads" sx={{ ...TARGET_44, fontWeight: 600 }} />
         <Tab value="insights" label="Insights" sx={{ ...TARGET_44, fontWeight: 600 }} />
+        <Tab value="tools-chat" label="Tools app" sx={{ ...TARGET_44, fontWeight: 600 }} />
       </Tabs>
 
       {tab === 'conversations' && (
@@ -417,6 +420,8 @@ export default function AintraInbox() {
       )}
 
       {tab === 'people' && <PeopleTab people={people} loading={loading} segment={segment} onSegment={setSegment} onOpenChat={openChat} now={now} />}
+
+      {tab === 'tools-chat' && <ToolsChatTab />}
 
       {tab === 'insights' && (
         <InsightsTab conversations={conversations} people={people} loading={loading} range={range} onRange={setRange} onOpenChat={openChat} now={now} />

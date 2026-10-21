@@ -23,6 +23,7 @@ import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import LockOpenOutlinedIcon from '@mui/icons-material/LockOpenOutlined';
 import CheckCircleOutlineRoundedIcon from '@mui/icons-material/CheckCircleOutlineRounded';
 import PsychologyAltOutlinedIcon from '@mui/icons-material/PsychologyAltOutlined';
+import VoiceInputButton from '@neram/ui/chat-voice';
 import AuthButtons from '@/components/AuthButtons';
 import { factChips, type AskFacts } from '@/lib/ask/memory';
 import { savePendingQuestion } from './useAskChat';
@@ -37,11 +38,11 @@ export function MemoryStrip({ facts, onForget }: { facts: AskFacts; onForget: (k
   const chips = factChips(facts);
   if (chips.length === 0) return null;
   return (
-    <Box component="section" aria-label="Details Ask aiArchitek remembers" sx={{ mb: 2 }}>
+    <Box component="section" aria-label="Details Aintra remembers" sx={{ mb: 2 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.75 }}>
         <PsychologyAltOutlinedIcon aria-hidden="true" sx={{ fontSize: 18, color: 'text.secondary' }} />
         <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600 }}>
-          Remembered for your answers. Tap the cross to forget one.
+          Aintra remembers these for your answers. Tap the cross to forget one.
         </Typography>
       </Box>
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
@@ -131,7 +132,7 @@ export function Composer({
           value={value}
           onChange={(e) => setValue(e.target.value.slice(0, 1000))}
           onKeyDown={onKeyDown}
-          placeholder="Ask about your cutoff, colleges or NATA centres"
+          placeholder="Ask Aintra about your cutoff, colleges or NATA centres"
           multiline
           maxRows={5}
           fullWidth
@@ -140,6 +141,18 @@ export function Composer({
           inputProps={{ 'aria-label': 'Your question', enterKeyHint: 'send' }}
           InputProps={{ disableUnderline: true, sx: { fontSize: '1rem', lineHeight: 1.5, py: 1.25 } }}
         />
+        {/* Speak in English, Tamil, Hindi, Kannada or Malayalam; replies follow the language. */}
+        {!busy && (
+          <VoiceInputButton
+            value={value}
+            onChange={setValue}
+            disabled={disabled}
+            size={48}
+            maxLength={1000}
+            storageKey="ask_speech_lang"
+            testIdPrefix="ask-voice"
+          />
+        )}
         {busy ? (
           <IconButton aria-label="Stop the answer" onClick={onStop} sx={{ width: 48, height: 48, flexShrink: 0, bgcolor: 'action.selected' }}>
             <StopRoundedIcon />

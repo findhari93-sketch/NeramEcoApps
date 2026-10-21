@@ -5,7 +5,7 @@ vi.mock('@neram/database/queries', () => ({ getActiveCenters: async () => [] }))
 vi.mock('@/lib/college-hub/queries', () => ({ getCollegeBySlug: async () => null }));
 
 import { parseBookArgs } from '../booking';
-import { DEFAULT_VISIT_SLOTS, matchCentre, pickVisitSlot, planCentreVisit, planMessage, type CentreRow } from './quick-forms';
+import { DEFAULT_VISIT_SLOTS, matchCentre, pickVisitSlot, planCentreVisit, planMessage, planTicket, type CentreRow } from './quick-forms';
 
 const NOW = new Date('2026-10-20T06:00:00Z');
 const CENTRES: CentreRow[] = [
@@ -65,6 +65,22 @@ describe('planCentreVisit', () => {
   it('lists the centres when it is not clear which one', () => {
     const r = planCentreVisit({ centre: 'Chennai' }, CENTRES, true, NOW);
     expect(r).toMatchObject({ ok: false, error: 'centre_not_clear', centres: ['Ashok Nagar (Chennai)', 'Tambaram (Chennai)'] });
+  });
+});
+
+describe('planTicket', () => {
+  it('prepares a ticket with a known category, else "other"', () => {
+    const r = planTicket({ category: 'payment_issue', subject: 'UPI paid, not showing', description: 'I paid by UPI yesterday but my enrolment still says pending.' });
+    expect(r.ok && parseBookArgs((r.card ?? '').slice(7, -2), NOW)).toMatchObject({
+      kind: 'ticket',
+      draft: { fields: { category: 'payment_issue', subject: 'UPI paid, not showing' } },
+    });
+    const other = planTicket({ category: 'urgent!!', description: 'The website will not load my application page.' });
+    expect(other.ok && (other.data as any).category).toBe('other');
+  });
+
+  it('needs the problem described', () => {
+    expect(planTicket({ description: 'help' })).toMatchObject({ ok: false, error: 'describe_the_problem' });
   });
 });
 

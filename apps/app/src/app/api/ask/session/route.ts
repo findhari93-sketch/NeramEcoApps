@@ -2,7 +2,7 @@
 export const dynamic = 'force-dynamic';
 
 /**
- * Ask aiArchitek's state for the chat page, in one route to keep function
+ * Aintra (Tools app)'s state for the chat page, in one route to keep function
  * invocations down:
  *
  *   GET    ?thread=<id>   remembered details, guest answers left, the student's

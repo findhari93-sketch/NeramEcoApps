@@ -113,3 +113,27 @@ describe('the other tools', () => {
     expect((await runAskTool('nope', {}, guest, deps)).ok).toBe(false);
   });
 });
+
+describe('cost, eligibility and dates', () => {
+  it('estimates the cost from the fee table and a remembered state', async () => {
+    const out = await runAskTool('estimate_cost', { category: 'SC', attempts: 2 }, { guest: true, facts: { state: 'Tamil Nadu' } }, deps);
+    expect(out.card).toMatchObject({ kind: 'cost', data: { category: 'SC/ST/EWS/PwD', totalFee: 2500, travel: 4000, state: 'Tamil Nadu' } });
+  });
+
+  it('checks eligibility with the CoA rules and needs an education status', async () => {
+    const ok = await runAskTool(
+      'check_eligibility',
+      { education: 'Passed 10+2', subjects: ['Physics', 'Mathematics', 'Chemistry'], aggregate_percent: 72 },
+      guest,
+      deps
+    );
+    expect(ok.card).toMatchObject({ kind: 'eligibility', data: { nataEligible: true, purpose: 'B.Arch Admission' } });
+    expect(await runAskTool('check_eligibility', {}, guest, deps)).toMatchObject({ ok: false, result: { error: 'missing_input' } });
+  });
+
+  it('gives the NATA calendar with an honest announced flag', async () => {
+    const out = await runAskTool('exam_dates', {}, guest, deps);
+    expect(out.card?.kind).toBe('dates');
+    expect(out.result).toHaveProperty('nata_year');
+  });
+});

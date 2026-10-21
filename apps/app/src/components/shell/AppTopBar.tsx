@@ -5,6 +5,7 @@ import MenuRoundedIcon from '@mui/icons-material/MenuRounded';
 import Link from 'next/link';
 import UserNotificationBell from '@/components/UserNotificationBell';
 import BrandMark from './BrandMark';
+import { AintraTopBarButton } from '@/components/aintra/AintraLauncher';
 
 export const TOP_BAR_HEIGHT = 56;
 
@@ -44,6 +45,7 @@ export default function AppTopBar({ onMenuToggle, phoneVerified }: AppTopBarProp
         >
           <BrandMark size="sm" />
         </Box>
+        <AintraTopBarButton />
         {phoneVerified && <UserNotificationBell />}
       </Toolbar>
     </AppBar>

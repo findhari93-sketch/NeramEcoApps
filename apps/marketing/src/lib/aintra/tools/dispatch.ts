@@ -3,7 +3,14 @@ import { searchCollegesTool } from './search-colleges';
 import { compareCollegesTool } from './compare-colleges';
 import { getMyStatusTool, prepareCallbackTool, prepareDemoBookingTool, prepareDemoCancelTool } from './booking-tools';
 import { prepareApplicationSubmitTool, saveApplicationDetailsTool } from './application-tools';
-import { prepareCentreVisitTool, prepareCollegeEnquiryTool, prepareMessageTool } from './quick-forms';
+import {
+  prepareCentreVisitTool,
+  prepareCollegeEnquiryTool,
+  prepareMessageTool,
+  prepareSaveCollegeTool,
+  prepareTicketTool,
+} from './quick-forms';
+import { getPaymentStatusTool } from './payment-tools';
 import { GUEST_CONTEXT, type ToolContext, type ToolName, type ToolResult } from './types';
 
 const TOOL_TIMEOUT_MS = 3000;
@@ -52,6 +59,12 @@ export async function dispatchTool(
         return prepareCollegeEnquiryTool(args as any, ctx);
       case 'prepare_message':
         return prepareMessageTool(args as any);
+      case 'prepare_ticket':
+        return prepareTicketTool(args as any);
+      case 'prepare_save_college':
+        return prepareSaveCollegeTool(args as any);
+      case 'get_payment_status':
+        return getPaymentStatusTool(ctx);
       default:
         return { ok: false, error: 'unknown_tool' };
     }

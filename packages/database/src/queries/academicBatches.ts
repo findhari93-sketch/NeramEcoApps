@@ -108,7 +108,14 @@ export async function createAcademicBatch(
  */
 export async function updateAcademicBatch(
   code: string,
-  patch: { label?: string | null; start_date?: string | null; end_date?: string | null; status?: AcademicBatchStatus },
+  patch: {
+    label?: string | null;
+    start_date?: string | null;
+    end_date?: string | null;
+    status?: AcademicBatchStatus;
+    /** The batch WhatsApp group the setup guide sends new students to. */
+    whatsapp_group_url?: string | null;
+  },
   adminId: string | null,
   client?: TypedSupabaseClient
 ): Promise<AcademicBatch> {
@@ -121,6 +128,13 @@ export async function updateAcademicBatch(
   if ('start_date' in patch) update.start_date = patch.start_date ?? null;
   if ('end_date' in patch) update.end_date = patch.end_date ?? null;
   if ('status' in patch && patch.status) update.status = patch.status;
+  if ('whatsapp_group_url' in patch) {
+    const url = (patch.whatsapp_group_url || '').trim();
+    if (url && !/^https:\/\/chat\.whatsapp\.com\/[A-Za-z0-9]+\/?$/.test(url)) {
+      throw new Error('Paste the group invite link, like https://chat.whatsapp.com/AbCdEf123.');
+    }
+    update.whatsapp_group_url = url || null;
+  }
 
   const { data, error } = await supabase
     .from('academic_batches')

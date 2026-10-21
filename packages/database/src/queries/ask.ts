@@ -1,6 +1,6 @@
 // @ts-nocheck - Supabase types not generated for the ask_* tables yet
 /**
- * Ask aiArchitek: conversations, messages and remembered details for the chat
+ * Aintra (Tools app): conversations, messages and remembered details for the chat
  * in the Tools app (apps/app/src/app/api/ask). Service role only; the route
  * decides who the caller is (Firebase token or the guest cookie) before any of
  * these run. Schema: supabase/migrations/20261221090000_ask_aiarchitek.sql.
@@ -186,6 +186,60 @@ export async function saveAskMemory(
     .from('ask_memory')
     .upsert(row, { onConflict: owner.userId ? 'user_id' : 'anon_id' });
   if (error) throw error;
+}
+
+export interface AskActivityRow {
+  id: string;
+  thread_id: string;
+  user_id: string | null;
+  anon_id: string | null;
+  role: 'user' | 'assistant';
+  text: string;
+  cards: unknown[];
+  tool_calls: Array<{ name: string; args?: unknown; ok: boolean; ms?: number }> | null;
+  model: string | null;
+  error: string | null;
+  response_ms: number | null;
+  created_at: string;
+}
+
+/**
+ * Every message since `sinceIso` (null for all time), newest first, for Admin's
+ * Tools chat view. Capped at `limit` rows; `truncated` says when there were more.
+ */
+export async function listAskActivity(
+  sinceIso: string | null,
+  limit = 5000,
+  client?: TypedSupabaseClient
+): Promise<{ rows: AskActivityRow[]; truncated: boolean }> {
+  const supabase = client ?? getSupabaseAdminClient();
+  const rows: AskActivityRow[] = [];
+  for (let from = 0; from < limit; from += 1000) {
+    let q = supabase
+      .from('ask_messages')
+      .select('id, thread_id, user_id, anon_id, role, text, cards, tool_calls, model, error, response_ms, created_at')
+      .order('created_at', { ascending: false })
+      .range(from, Math.min(from + 999, limit - 1));
+    if (sinceIso) q = q.gte('created_at', sinceIso);
+    const { data, error } = await q;
+    if (error) throw error;
+    rows.push(...((data ?? []) as AskActivityRow[]));
+    if (!data || data.length < 1000) return { rows, truncated: false };
+  }
+  return { rows, truncated: true };
+}
+
+/** One thread's messages for Admin, oldest first, without an owner check. */
+export async function listAskThreadForAdmin(threadId: string, client?: TypedSupabaseClient): Promise<AskActivityRow[]> {
+  const supabase = client ?? getSupabaseAdminClient();
+  const { data, error } = await supabase
+    .from('ask_messages')
+    .select('id, thread_id, user_id, anon_id, role, text, cards, tool_calls, model, error, response_ms, created_at')
+    .eq('thread_id', threadId)
+    .order('created_at', { ascending: true })
+    .limit(200);
+  if (error) throw error;
+  return (data ?? []) as AskActivityRow[];
 }
 
 /**

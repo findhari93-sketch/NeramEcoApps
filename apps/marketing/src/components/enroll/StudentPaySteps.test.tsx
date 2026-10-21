@@ -113,9 +113,9 @@ describe('PayStep', () => {
     expect(screen.getAllByText('KVBL0001928').length).toBeGreaterThan(0);
   });
 
-  it('keeps Submit off until a 12-digit UTR, screenshot and terms are in', () => {
+  it('keeps Submit off while the UTR is not 12 digits', () => {
     renderPay({ termsAccepted: true, payment: { ...BASE_PAYMENT, transactionReference: '1234', paymentProofUrl: 'https://x/1.jpg' } });
-    expect((screen.getByRole('button', { name: 'Submit payment for verification' }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'I have paid, verify it' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('enables Submit when everything is filled', () => {
@@ -123,7 +123,7 @@ describe('PayStep', () => {
       termsAccepted: true,
       payment: { ...BASE_PAYMENT, transactionReference: '412345678901', paymentProofUrl: 'https://x/1.jpg', paymentProofFileName: '1.jpg' },
     });
-    expect((screen.getByRole('button', { name: 'Submit payment for verification' }) as HTMLButtonElement).disabled).toBe(false);
+    expect((screen.getByRole('button', { name: 'I have paid, verify it' }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it('installments say what is left and when', () => {

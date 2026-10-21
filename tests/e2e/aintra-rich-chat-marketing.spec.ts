@@ -218,7 +218,8 @@ test.describe('Aintra rich chat @marketing', () => {
       await mockChat(page, [TABLE_ANSWER]);
       await openAintra(page);
       const body = await page.getByTestId('aintra-panel-body').boundingBox();
-      expect(body!.width).toBe(375);
+      // Sub-pixel layout can report 375.00003 while the drawer settles.
+      expect(Math.round(body!.width)).toBe(375);
       await expect(page.getByTestId('aintra-resize-handle')).toHaveCount(0);
       await expect(page.getByTestId('aintra-width-toggle')).toHaveCount(0);
 

@@ -277,7 +277,8 @@ export async function findNearestExamCenters(
 export interface LogToolUsageInput {
   userId?: string;
   sessionId?: string;
-  toolName: 'cutoff_calculator' | 'college_predictor' | 'exam_center_locator';
+  /** Known tools, plus any other name (e.g. mcp_<tool> for the MCP connector). */
+  toolName: 'cutoff_calculator' | 'college_predictor' | 'exam_center_locator' | (string & {});
   inputData: Record<string, unknown>;
   resultData?: Record<string, unknown>;
   executionTimeMs?: number;

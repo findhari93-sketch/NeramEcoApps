@@ -168,7 +168,7 @@ export function parseCutoffDemoInput(raw: Record<string, unknown> | null | undef
 
 // ─── Deep links with values filled in ──────────────────────────────────────
 //
-// The marketing calculator, the Ask aiArchitek cards and the app all link to
+// The marketing calculator, the Aintra (Tools app) cards and the app all link to
 // the full calculator with what the student already typed. One builder and one
 // reader, so a link written by one is always understood by the other.
 

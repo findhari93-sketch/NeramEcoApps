@@ -1,71 +1,20 @@
 'use client';
 
-import Link from 'next/link';
-import type { ReactNode } from 'react';
 import { Box, Typography } from '@neram/ui';
+import InlineMarkdown, { siteLinks } from '@neram/ui/chat-text';
 
 /**
  * The answer text: short paragraphs and bullet lists with **bold**, *italic*
  * and links. Deliberately small (the numbers live on the cards, not in the
  * text). Links to this app open in place; anything else opens a new tab.
- * Adapted from Aintra's InlineText (apps/marketing/src/components/aintra/rich).
  */
 
-const INLINE = /(\*\*[^*\n]+\*\*|\[[^\]\n]+\]\([^)\s]+\)|\*[^*\s][^*\n]*\*)/g;
-const APP_HOST = /^(?:https?:\/\/)?app\.neramclasses\.com(\/[^\s]*)?$/i;
-
-const linkSx = {
-  color: 'primary.main',
-  fontWeight: 600,
-  textDecoration: 'underline',
-  textUnderlineOffset: '2px',
-  overflowWrap: 'anywhere' as const,
-  '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2, borderRadius: 0.5 },
-};
-
-function SmartLink({ href, children }: { href: string; children: ReactNode }) {
-  const app = APP_HOST.exec(href);
-  const internal = href.startsWith('/') ? href : app ? app[1] || '/' : null;
-  if (internal) {
-    return (
-      <Box component={Link} href={internal} sx={linkSx}>
-        {children}
-      </Box>
-    );
-  }
-  if (!/^https?:\/\//.test(href)) return <>{children}</>;
-  return (
-    <Box component="a" href={href} target="_blank" rel="noopener noreferrer" sx={linkSx}>
-      {children}
-    </Box>
-  );
-}
+// Links to app.neramclasses.com stay in the app; the renderer is shared with
+// Aintra (packages/ui/src/chat/InlineMarkdown.tsx).
+const APP_LINKS = siteLinks(/^(?:https?:\/\/)?app\.neramclasses\.com(\/[^\s]*)?$/i);
 
 export function Inline({ text }: { text: string }) {
-  return (
-    <>
-      {text.split(INLINE).map((part, i) => {
-        if (!part) return null;
-        if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
-          return (
-            <Box component="strong" key={i} sx={{ fontWeight: 700, color: 'text.primary' }}>
-              {part.slice(2, -2)}
-            </Box>
-          );
-        }
-        const link = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(part);
-        if (link) {
-          return (
-            <SmartLink key={i} href={link[2]}>
-              {link[1]}
-            </SmartLink>
-          );
-        }
-        if (part.startsWith('*') && part.endsWith('*') && part.length > 2) return <em key={i}>{part.slice(1, -1)}</em>;
-        return <span key={i}>{part}</span>;
-      })}
-    </>
-  );
+  return <InlineMarkdown text={text} internalPath={APP_LINKS} linkify />;
 }
 
 type Block = { kind: 'p'; text: string } | { kind: 'ul'; items: string[] } | { kind: 'ol'; items: string[] };

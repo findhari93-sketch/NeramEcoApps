@@ -29,6 +29,13 @@ describe('follow-up suggestions', () => {
     });
   });
 
+  it('accepts the list without its label, as the backup models write it', () => {
+    expect(splitSuggestions('I am Aintra.\n\n[[What is my cutoff? | Which colleges?]]')).toEqual({
+      body: 'I am Aintra.',
+      suggestions: ['What is my cutoff?', 'Which colleges?'],
+    });
+  });
+
   it('hides a half-written token while streaming', () => {
     expect(splitSuggestions('Done.\n[[sugg')).toEqual({ body: 'Done.', suggestions: [] });
   });

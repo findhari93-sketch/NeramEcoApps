@@ -46,6 +46,7 @@ const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL || 'http://localhost
 const PHONE_SKIP_KEY = 'phone_verification_skipped';
 
 import type { AccountTier } from '@neram/database';
+import AintraProvider from '@/components/aintra/AintraProvider';
 
 // Supabase user type from API response
 interface SupabaseUser {
@@ -453,17 +454,20 @@ export default function StudentSession({
       {/* "Report a problem" button, anyone signed in (leads included) */}
       <ReportProblemFab />
 
-      <AppShell
-        userName={user.name || 'Student'}
-        userAvatar={user.avatar}
-        userEmail={user.email}
-        phoneVerified={phoneVerified}
-        onboardingCompleted={onboardingCompleted}
-        onSignOut={handleSignOut}
-        accountTier={supabaseUser?.account_tier || 'visitor'}
-      >
-        {children}
-      </AppShell>
+      {/* Aintra, the Neram assistant: opened from the top bar or the sidebar. */}
+      <AintraProvider>
+        <AppShell
+          userName={user.name || 'Student'}
+          userAvatar={user.avatar}
+          userEmail={user.email}
+          phoneVerified={phoneVerified}
+          onboardingCompleted={onboardingCompleted}
+          onSignOut={handleSignOut}
+          accountTier={supabaseUser?.account_tier || 'visitor'}
+        >
+          {children}
+        </AppShell>
+      </AintraProvider>
 
       {/* Phone Verification Modal */}
       {!phoneVerified && !phoneSkipped && (

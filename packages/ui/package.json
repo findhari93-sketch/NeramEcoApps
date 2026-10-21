@@ -13,7 +13,10 @@
     "./components": "./src/components/index.tsx",
     "./hooks": "./src/hooks/index.ts",
     "./utils": "./src/utils/index.ts",
-    "./analytics": "./src/analytics/index.ts"
+    "./analytics": "./src/analytics/index.ts",
+    "./chat-stream": "./src/chat/stream.ts",
+    "./chat-text": "./src/chat/InlineMarkdown.tsx",
+    "./chat-voice": "./src/chat/VoiceInputButton.tsx"
   },
   "scripts": {
     "lint": "echo 'Linted via consuming apps'",

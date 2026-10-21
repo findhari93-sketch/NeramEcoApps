@@ -10,7 +10,10 @@ export type ToolName =
   | 'prepare_application_submit'
   | 'prepare_centre_visit'
   | 'prepare_college_enquiry'
-  | 'prepare_message';
+  | 'prepare_message'
+  | 'prepare_ticket'
+  | 'prepare_save_college'
+  | 'get_payment_status';
 
 /**
  * `card` is a [[book:...]] line the chat route attaches to the answer. It is
@@ -58,6 +61,12 @@ export interface PrepareCollegeEnquiryArgs {
 export interface PrepareMessageArgs {
   subject?: string;
   message?: string;
+}
+
+export interface PrepareTicketArgs {
+  category?: string;
+  subject?: string;
+  description?: string;
 }
 
 export interface PrepareDemoBookingArgs {

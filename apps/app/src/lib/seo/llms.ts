@@ -26,7 +26,8 @@ export function buildLlmsTxt(tools: ToolSeo[], geo: GeoPageSummary[], full = fal
     '## Tools',
     '',
     ...tools.map((t) => `- [${t.name}](${APP_URL}${t.path}): ${t.answer}`),
-    `- [Ask aiArchitek](${APP_URL}/ask): a chat that works out the NATA cutoff out of 400 and lists the B.Arch colleges students with that score got last year, from the official TNEA, KEAM and JoSAA allotment lists, with the source shown. Three free answers a day without an account.`,
+    `- [Ask Aintra](${APP_URL}/ask): Aintra, the Neram Classes assistant, a chat that works out the NATA cutoff out of 400 and lists the B.Arch colleges students with that score got last year, from the official TNEA, KEAM and JoSAA allotment lists, with the source shown. Three free answers a day without an account.`,
+    `- [aiArchitek MCP connector](${APP_URL}/connect): the same tools for ChatGPT, Claude and other MCP clients. Remote MCP server (Streamable HTTP, no auth): ${APP_URL}/api/mcp`,
   ];
 
   const indexed = geo.filter((g) => g.index);

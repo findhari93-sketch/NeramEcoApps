@@ -6,6 +6,7 @@ import { useFirebaseAuth } from '@neram/auth';
 import StoreMallDirectoryOutlinedIcon from '@mui/icons-material/StoreMallDirectoryOutlined';
 import SchoolOutlinedIcon from '@mui/icons-material/SchoolOutlined';
 import MailOutlineRoundedIcon from '@mui/icons-material/MailOutlineRounded';
+import SupportAgentOutlinedIcon from '@mui/icons-material/SupportAgentOutlined';
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import { addDays, cleanIndianMobile, dayLabel, istToday, maskPhone, type BookSuggestion } from '@/lib/aintra/booking';
@@ -14,7 +15,7 @@ import { ensureAccount, type EnsuredAccount } from '@/lib/ensure-account';
 import { currentIdToken } from '@/components/demo-class/demo-client';
 import { BookingCardFrame, ChoicePill, FieldLabel, PillRow, SummaryList } from './BookingContext';
 
-type QuickKind = 'visit' | 'college-enquiry' | 'message';
+export type QuickKind = 'visit' | 'college-enquiry' | 'message' | 'ticket';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -88,10 +89,13 @@ export default function QuickFormCard({ suggestion }: { suggestion: BookSuggesti
   const nameOk = name.trim().length >= 2;
   const emailOk = EMAIL.test(email.trim());
   const needsPhone = kind !== 'message';
+  const writes = kind === 'message' || kind === 'ticket';
+  const textOk = text.trim().length >= 10;
   const ready =
     nameOk &&
     (!needsPhone || !!cleanPhone) &&
-    (kind !== 'message' || (emailOk && text.trim().length >= 10)) &&
+    (kind !== 'message' || emailOk) &&
+    (!writes || textOk) &&
     (kind !== 'visit' || (!!date && !!slot)) &&
     (kind !== 'college-enquiry' || consent);
 
@@ -99,6 +103,7 @@ export default function QuickFormCard({ suggestion }: { suggestion: BookSuggesti
     visit: { icon: <StoreMallDirectoryOutlinedIcon />, title: 'Book a centre visit', button: 'Book my visit', id: 'aintra-visit-title' },
     'college-enquiry': { icon: <SchoolOutlinedIcon />, title: `Ask ${f.collegeName ?? 'the college'} about admission`, button: 'Send my enquiry', id: 'aintra-enquiry-title' },
     message: { icon: <MailOutlineRoundedIcon />, title: 'Message our team', button: 'Send message', id: 'aintra-message-title' },
+    ticket: { icon: <SupportAgentOutlinedIcon />, title: 'Raise a support ticket', button: 'Raise ticket', id: 'aintra-ticket-title' },
   }[kind];
 
   const send = async () => {
@@ -134,6 +139,18 @@ export default function QuickFormCard({ suggestion }: { suggestion: BookSuggesti
           consent_given: true,
           firebase_uid: user?.id ?? undefined,
         };
+      } else if (kind === 'ticket') {
+        url = '/api/support-tickets';
+        body = {
+          userName: name.trim(),
+          userEmail: emailOk ? email.trim() : undefined,
+          userPhone: cleanPhone || undefined,
+          category: f.category || 'other',
+          subject: f.subject || text.trim().slice(0, 80),
+          description: text.trim(),
+          pageUrl: typeof window !== 'undefined' ? window.location.pathname : undefined,
+          sourceApp: 'marketing',
+        };
       } else {
         url = '/api/contact';
         body = {
@@ -154,7 +171,9 @@ export default function QuickFormCard({ suggestion }: { suggestion: BookSuggesti
             ? data?.duplicate
               ? `${f.collegeName} already has your enquiry from this month.`
               : `Sent to ${f.collegeName}. Their admissions team will contact you on ${maskPhone(cleanPhone)}.`
-            : `Sent. Our team will reply to ${email.trim()}.`,
+            : kind === 'ticket'
+              ? `Ticket ${data?.ticketNumber ?? ''} raised. Our team will contact you on ${maskPhone(cleanPhone)}. You can follow it at neramclasses.com/support/track.`
+              : `Sent. Our team will reply to ${email.trim()}.`,
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not send. Please try again.');
@@ -165,7 +184,11 @@ export default function QuickFormCard({ suggestion }: { suggestion: BookSuggesti
 
   if (done) {
     return (
-      <BookingCardFrame icon={<CheckCircleRoundedIcon />} title={kind === 'visit' ? 'Visit booked' : 'Sent'} labelledBy={`${config.id}-done`}>
+      <BookingCardFrame
+        icon={<CheckCircleRoundedIcon />}
+        title={kind === 'visit' ? 'Visit booked' : kind === 'ticket' ? 'Ticket raised' : 'Sent'}
+        labelledBy={`${config.id}-done`}
+      >
         <Typography role="status" sx={{ fontSize: '1rem', lineHeight: 1.5 }}>
           {done}
         </Typography>
@@ -179,7 +202,7 @@ export default function QuickFormCard({ suggestion }: { suggestion: BookSuggesti
       ? [{ label: 'Centre', value: f.centreName ?? '' }]
       : kind === 'college-enquiry'
         ? []
-        : [{ label: 'Subject', value: f.subject ?? 'Message from the Aintra chat' }];
+        : [{ label: 'Subject', value: f.subject ?? (kind === 'ticket' ? '' : 'Message from the Aintra chat') }];
 
   return (
     <BookingCardFrame icon={config.icon} title={config.title} labelledBy={config.id}>
@@ -248,32 +271,40 @@ export default function QuickFormCard({ suggestion }: { suggestion: BookSuggesti
           />
         ))}
 
-      {kind === 'message' && (
+      {writes && (
         <TextField
-          label="Your email"
+          label={kind === 'message' ? 'Your email' : 'Your email (optional)'}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          required
+          required={kind === 'message'}
           fullWidth
           type="email"
           autoComplete="email"
-          error={touched && !emailOk}
-          helperText={touched && !emailOk ? 'Enter your email so we can reply' : 'We reply to this address.'}
+          error={kind === 'message' && touched && !emailOk}
+          helperText={kind === 'message' && touched && !emailOk ? 'Enter your email so we can reply' : kind === 'message' ? 'We reply to this address.' : undefined}
           inputProps={inputProps(150)}
         />
       )}
 
       <TextField
-        label={kind === 'visit' ? 'What would you like to see? (optional)' : kind === 'message' ? 'Your message' : 'Your question to the college (optional)'}
+        label={
+          kind === 'visit'
+            ? 'What would you like to see? (optional)'
+            : kind === 'message'
+              ? 'Your message'
+              : kind === 'ticket'
+                ? 'What went wrong?'
+                : 'Your question to the college (optional)'
+        }
         value={text}
         onChange={(e) => setText(e.target.value)}
         fullWidth
         multiline
-        minRows={kind === 'message' ? 3 : 1}
-        required={kind === 'message'}
-        error={kind === 'message' && touched && text.trim().length < 10}
-        helperText={kind === 'message' && touched && text.trim().length < 10 ? 'Write at least a sentence' : undefined}
-        inputProps={inputProps(kind === 'message' ? 1000 : 500)}
+        minRows={writes ? 3 : 1}
+        required={writes}
+        error={writes && touched && !textOk}
+        helperText={writes && touched && !textOk ? 'Write at least a sentence' : undefined}
+        inputProps={inputProps(writes ? 1000 : 500)}
       />
 
       {kind === 'college-enquiry' && (

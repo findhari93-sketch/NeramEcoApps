@@ -3,11 +3,11 @@ import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
 import ArrowUpwardRoundedIcon from '@mui/icons-material/ArrowUpwardRounded';
 
 /**
- * "Ask anything" box that opens Ask aiArchitek with the question. A plain GET
+ * "Ask anything" box that opens Aintra (Tools app) with the question. A plain GET
  * form to /ask?q=…, so it works before any JavaScript loads and needs no
  * client code. `tone="dark"` sits on the navy hero of the tools hub.
  */
-export default function AskBar({ tone = 'light', placeholder = 'Ask anything: my cutoff, which colleges, nearest NATA centre' }: { tone?: 'light' | 'dark'; placeholder?: string }) {
+export default function AskBar({ tone = 'light', placeholder = 'Ask Aintra: my cutoff, which colleges, nearest NATA centre' }: { tone?: 'light' | 'dark'; placeholder?: string }) {
   const dark = tone === 'dark';
   return (
     <Box
@@ -15,7 +15,7 @@ export default function AskBar({ tone = 'light', placeholder = 'Ask anything: my
       action="/ask"
       method="get"
       role="search"
-      aria-label="Ask aiArchitek"
+      aria-label="Ask Aintra"
       sx={{
         display: 'flex',
         alignItems: 'center',
@@ -38,7 +38,7 @@ export default function AskBar({ tone = 'light', placeholder = 'Ask anything: my
         required
         maxLength={1000}
         placeholder={placeholder}
-        aria-label="Your question for Ask aiArchitek"
+        aria-label="Your question for Aintra"
         enterKeyHint="send"
         sx={{
           flex: 1,

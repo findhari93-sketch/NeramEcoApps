@@ -11,7 +11,7 @@ import { getActiveCenters } from '@neram/database/queries';
 import { getCollegeBySlug } from '@/lib/college-hub/queries';
 import { addDays, cleanDraftText, formatBookMarker, istToday } from '../booking';
 import { resolveDay } from './booking-plan';
-import type { PrepareCentreVisitArgs, PrepareCollegeEnquiryArgs, PrepareMessageArgs, ToolContext, ToolResult } from './types';
+import type { PrepareCentreVisitArgs, PrepareCollegeEnquiryArgs, PrepareMessageArgs, PrepareTicketArgs, ToolContext, ToolResult } from './types';
 
 /** The visit slots the centre pages offer when a centre lists none of its own. */
 export const DEFAULT_VISIT_SLOTS = ['10:00 AM - 12:00 PM', '2:00 PM - 5:00 PM'];
@@ -167,4 +167,53 @@ export function planMessage(args: PrepareMessageArgs): ToolResult {
 
 export async function prepareMessageTool(args: PrepareMessageArgs): Promise<ToolResult> {
   return planMessage(args);
+}
+
+/** The support ticket categories (SupportTicketCategory in @neram/database). */
+export const TICKET_CATEGORIES = ['enrollment_issue', 'payment_issue', 'technical_issue', 'account_issue', 'course_question', 'other'] as const;
+
+/** A problem that needs our team and should be tracked: a ticket with a number they can follow at /support/track. */
+export function planTicket(args: PrepareTicketArgs): ToolResult {
+  // 1000: what a card field carries (parseBookArgs caps it there).
+  const description = cleanDraftText(args?.description, 1000);
+  if (!description || description.length < 10) {
+    return { ok: false, error: 'describe_the_problem', note: 'Ask what went wrong, in a sentence or two.' };
+  }
+  const category = (TICKET_CATEGORIES as readonly string[]).includes(String(args?.category)) ? String(args?.category) : 'other';
+  const subject = cleanDraftText(args?.subject, 120) ?? description.slice(0, 80);
+  return {
+    ok: true,
+    data: {
+      subject,
+      category,
+      next_step: 'The visitor adds their name and number (and email if they like) on the card and taps "Raise ticket". They get a ticket number to track it.',
+    },
+    card: formatBookMarker({ kind: 'ticket', date: null, window: null, draft: { fields: { category, subject, message: description } } }),
+  };
+}
+
+export async function prepareTicketTool(args: PrepareTicketArgs): Promise<ToolResult> {
+  return planTicket(args);
+}
+
+export async function prepareSaveCollegeTool(args: { college_slug?: string }): Promise<ToolResult> {
+  const slug = (args?.college_slug || '').trim();
+  if (!slug) return { ok: false, error: 'which_college', note: 'Find the college first (search_colleges), then pass its slug.' };
+  try {
+    const college: any = await getCollegeBySlug(slug);
+    if (!college || (college.status && college.status !== 'active')) return { ok: false, error: 'college_not_found', slug };
+    return {
+      ok: true,
+      data: { college: college.name, next_step: 'The visitor taps "Save to my list" on the card. Their list is at neramclasses.com/colleges/saved.' },
+      card: formatBookMarker({
+        kind: 'save-college',
+        date: null,
+        window: null,
+        draft: { fields: { collegeId: college.id, collegeName: college.name, slug: college.slug } },
+      }),
+    };
+  } catch (err) {
+    console.error('[aintra/prepare-save-college]', err);
+    return { ok: false, error: 'tool_error' };
+  }
 }

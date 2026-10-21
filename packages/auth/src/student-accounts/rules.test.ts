@@ -19,7 +19,7 @@ import {
   upnFor,
   usernameWithSuffix,
   whatsAppShareUrl,
-} from './student-account-rules';
+} from './rules';
 
 const SKU_A1 = '314c4481-f395-4525-be8b-2ec4bb1e9d91';
 const SKU_OTHER = '6fd2c87f-b296-42f0-b197-1e91e994b900';

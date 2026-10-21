@@ -1,5 +1,6 @@
 'use client';
 
+import { estimateNataCost, type CostBreakdown } from '@/lib/tools/nata-cost';
 import { useState, useEffect, useRef } from 'react';
 import AccountBalanceWalletOutlinedIcon from '@mui/icons-material/AccountBalanceWalletOutlined';
 import {
@@ -89,43 +90,7 @@ const STATES = [
   'Lakshadweep',
 ];
 
-// Major exam center cities by state (simplified for travel estimation)
-const MAJOR_EXAM_STATES = [
-  'Delhi',
-  'Maharashtra',
-  'Karnataka',
-  'Tamil Nadu',
-  'West Bengal',
-  'Telangana',
-  'Uttar Pradesh',
-  'Gujarat',
-  'Rajasthan',
-  'Kerala',
-  'Madhya Pradesh',
-  'Punjab',
-  'Haryana',
-  'Bihar',
-  'Odisha',
-  'Jharkhand',
-  'Chhattisgarh',
-  'Assam',
-  'Chandigarh',
-  'Uttarakhand',
-  'Andhra Pradesh',
-  'Goa',
-];
 
-interface CostBreakdown {
-  applicationFeePerAttempt: number;
-  totalApplicationFee: number;
-  estimatedTravel: number;
-  travelNote: string;
-  accommodation: number;
-  accommodationNote: string;
-  studyMaterials: { min: number; max: number };
-  totalMin: number;
-  totalMax: number;
-}
 
 const TIPS = [
   'Register early: you can initially opt for 1 test and add a 2nd test later (max 2 in Phase 1).',
@@ -153,48 +118,9 @@ export default function NataCostCalculatorPage() {
   }, [revealRequest]);
 
   const calculateCost = () => {
-    const feePerAttempt = FEES[category] || 1750;
-    const numAttempts = parseInt(attempts);
-    const totalFee = feePerAttempt * numAttempts;
-
-    // Travel estimation
-    let estimatedTravel = 0;
-    let travelNote = '';
-    if (homeState && !MAJOR_EXAM_STATES.includes(homeState)) {
-      // Remote state - higher travel cost
-      estimatedTravel = 5000 * numAttempts;
-      travelNote = `Your state (${homeState}) may not have a nearby exam center. Estimated travel cost per attempt: about ₹5,000`;
-    } else if (homeState) {
-      estimatedTravel = 2000 * numAttempts;
-      travelNote = `Exam centers are likely available in or near ${homeState}. Estimated travel cost per attempt: about ₹2,000`;
-    }
-
-    // Accommodation
-    let accommodation = 0;
-    let accommodationNote = '';
-    if (needAccommodation) {
-      const perAttempt = homeState && !MAJOR_EXAM_STATES.includes(homeState) ? 3000 : 1500;
-      accommodation = perAttempt * numAttempts;
-      accommodationNote = `Estimated at ₹${perAttempt.toLocaleString('en-IN')} per attempt (1 to 2 nights)`;
-    }
-
-    // Study materials range
-    const studyMaterials = { min: 2000, max: 5000 };
-
-    const totalMin = totalFee + estimatedTravel + accommodation + studyMaterials.min;
-    const totalMax = totalFee + estimatedTravel + accommodation + studyMaterials.max;
-
-    setResult({
-      applicationFeePerAttempt: feePerAttempt,
-      totalApplicationFee: totalFee,
-      estimatedTravel,
-      travelNote,
-      accommodation,
-      accommodationNote,
-      studyMaterials,
-      totalMin,
-      totalMax,
-    });
+    setResult(
+      estimateNataCost({ category, attempts: parseInt(attempts), homeState, needAccommodation })
+    );
     setHasCalculated(true);
     setRevealRequest((n) => n + 1);
   };

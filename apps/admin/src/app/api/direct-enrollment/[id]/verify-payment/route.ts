@@ -1,5 +1,7 @@
 // @ts-nocheck
 export const dynamic = 'force-dynamic';
+// Verify can also create the class account: several Graph calls after the enrolment.
+export const maxDuration = 60;
 
 import { NextRequest, NextResponse } from 'next/server';
 import {
@@ -16,6 +18,8 @@ import { UUID_REGEX, actingAdminId } from '@/lib/fee-request';
 import { linkOrigin } from '@/lib/enrolment-link-server';
 import { signedProofUrl } from '@/lib/payment-proof';
 import { reviewLegacyLink } from '@neram/database/payments';
+import { provisionClassAccount } from '@neram/auth/student-accounts';
+import { createClassAccountPorts } from '@/lib/class-account-store';
 
 const COURSE_LABELS: Record<string, string> = {
   nata: 'NATA coaching',
@@ -28,6 +32,7 @@ function claimView(link: any) {
   return {
     linkId: link.id,
     status: link.status,
+    userId: link.submitted_user_id || null,
     studentName: link.submitted_form?.firstName || link.student_name,
     studentPhone: link.submitted_form?.studentPhone || link.student_phone,
     scheme: link.chosen_scheme,
@@ -229,10 +234,39 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
       if (!sent.success) console.error('[verify-payment] confirmation email failed:', sent.error);
     }
 
-    return NextResponse.json({
-      success: true,
-      data: { status: 'used', applicationNumber: result.applicationNumber, emailedTo: studentEmail },
-    });
+    // The class account, when staff left "Create Microsoft account" ticked. Never undoes the
+    // enrolment: a failed step shows on the Class account card with Retry.
+    let classAccount: { ok: boolean; upn?: string; complete?: boolean; error?: string; password?: string | null } | null = null;
+    if (body?.classAccount?.create === true) {
+      try {
+        const provisioned = await provisionClassAccount(createClassAccountPorts(supabase, adminId), {
+          userId: link.submitted_user_id,
+          username: typeof body.classAccount.username === 'string' ? body.classAccount.username : null,
+          actorId: adminId,
+        });
+        classAccount =
+          provisioned.kind === 'ok'
+            ? { ok: true, upn: provisioned.setup.upn, complete: provisioned.complete, password: provisioned.password }
+            : {
+                ok: false,
+                error:
+                  provisioned.kind === 'graph_failed'
+                    ? `${provisioned.error.message}${provisioned.error.fix ? ` ${provisioned.error.fix}` : ''}`
+                    : provisioned.error,
+              };
+      } catch (e: any) {
+        console.error('[verify-payment] class account failed:', e?.message);
+        classAccount = { ok: false, error: e?.message || 'Could not create the class account.' };
+      }
+    }
+
+    return NextResponse.json(
+      {
+        success: true,
+        data: { status: 'used', applicationNumber: result.applicationNumber, emailedTo: studentEmail, classAccount },
+      },
+      { headers: { 'Cache-Control': 'no-store' } },
+    );
   } catch (error: any) {
     console.error('[verify-payment] failed:', error);
     return NextResponse.json({ error: error?.message || 'Could not update the payment. Try again.' }, { status: 500 });

@@ -255,6 +255,8 @@ export interface AcademicBatch {
   end_date: string | null;      // closing date; editable anytime
   status: AcademicBatchStatus;
   is_current: boolean;
+  /** The batch WhatsApp group invite, shown in the new student setup guide. */
+  whatsapp_group_url?: string | null;
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -854,6 +856,11 @@ export interface DirectEnrollmentLink extends Timestamps {
   verified_at?: string | null;
   rejection_reason?: string | null;
   rejected_at?: string | null;
+  // Wizard draft (migration 20261220090500): continue from any device.
+  draft_form?: Record<string, unknown> | null;
+  draft_step?: number | null;
+  draft_saved_at?: string | null;
+  draft_user_id?: string | null;
 }
 
 export type DirectEnrollmentPaymentMode = 'recorded' | 'student_pays';

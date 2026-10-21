@@ -46,6 +46,7 @@ export type VerifyDecision = 'verify' | 'reject';
 interface Claim {
   linkId: string;
   status: string;
+  userId: string | null;
   studentName: string | null;
   studentPhone: string | null;
   scheme: 'full' | 'installment' | null;
@@ -87,6 +88,10 @@ export default function VerifyPaymentCard({
   const [reason, setReason] = useState('');
   const [reasonError, setReasonError] = useState<string | null>(null);
   const [imgBroken, setImgBroken] = useState(false);
+  // The class account made with Verify: suggested login ID, editable, on by default.
+  const [makeAccount, setMakeAccount] = useState(true);
+  const [accountId, setAccountId] = useState('');
+  const [accountHint, setAccountHint] = useState<{ domain: string; startPassword: string | null; exists: boolean } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -108,6 +113,23 @@ export default function VerifyPaymentCard({
     load();
   }, [load]);
 
+  useEffect(() => {
+    if (!confirmOpen || !claim?.userId || accountHint) return;
+    let cancelled = false;
+    fetch(`/api/students/${claim.userId}/class-account`, { cache: 'no-store' })
+      .then((res) => res.json().catch(() => ({})))
+      .then((json) => {
+        if (cancelled || !json?.data) return;
+        const exists = json.data.setup?.steps?.account?.status === 'done';
+        setAccountHint({ domain: json.data.suggestion.domain, startPassword: json.data.suggestion.startPassword, exists });
+        setAccountId(exists ? json.data.setup.upn.split('@')[0] : json.data.suggestion.username);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [confirmOpen, claim?.userId, accountHint]);
+
   const decide = async (decision: VerifyDecision) => {
     if (decision === 'reject' && reason.trim().length < 5) {
       setReasonError('Say what was wrong, at least 5 characters, so the student can fix it.');
@@ -123,6 +145,10 @@ export default function VerifyPaymentCard({
           decision,
           reason: decision === 'reject' ? reason.trim() : undefined,
           statementChecked: decision === 'verify' ? statementChecked : undefined,
+          classAccount:
+            decision === 'verify' && makeAccount && accountId.trim() && !accountHint?.exists
+              ? { create: true, username: accountId.trim() }
+              : undefined,
           adminId: adminId || undefined,
         }),
       });
@@ -133,11 +159,19 @@ export default function VerifyPaymentCard({
       }
       const name = firstName(claim?.studentName);
       const emailed = json.data?.emailedTo as string | null | undefined;
+      const account = json.data?.classAccount as { ok: boolean; upn?: string; complete?: boolean; error?: string; password?: string | null } | null;
+      const accountLine = !account
+        ? ''
+        : account.ok
+          ? ` Class account ${account.upn} ${account.complete ? 'is ready and the setup guide was emailed' : 'was made; one step needs a retry below'}.${
+              account.password ? ` Microsoft refused the usual start password, so the password is ${account.password} (shown only now).` : ''
+            }`
+          : ` The class account was not made: ${account.error} Set it up from the Class account card.`;
       const text =
         decision === 'verify'
           ? `Enrolled as ${json.data?.applicationNumber || 'a student'}${
               emailed ? `, confirmation emailed to ${emailed}.` : '. There is no email on file, so no confirmation was sent.'
-            }`
+            }${accountLine}`
           : emailed
             ? `Payment rejected. ${name} was emailed the reason and can pay again with the same link.`
             : `Payment rejected. There is no email on file, so tell ${name} the reason yourself. The same link works again.`;
@@ -390,7 +424,7 @@ export default function VerifyPaymentCard({
         </DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary">
-            This enrols {firstName(claim.studentName)} and emails a confirmation.
+            This enrols {firstName(claim.studentName)} and emails a confirmation{accountHint && !accountHint.exists && makeAccount ? ', then makes their class account' : ''}.
           </Typography>
           <FormControlLabel
             sx={{ mt: 2, alignItems: 'flex-start', mr: 0 }}
@@ -404,6 +438,38 @@ export default function VerifyPaymentCard({
           <Typography id="statement-tick-help" variant="caption" color="text.secondary" sx={{ display: 'block', ml: 4 }}>
             Screenshots are easy to fake. The statement or the GPay history is the proof.
           </Typography>
+
+          {claim.userId && accountHint && !accountHint.exists && (
+            <Box sx={{ mt: 2.5, pt: 2, borderTop: 1, borderColor: 'divider' }}>
+              <FormControlLabel
+                sx={{ alignItems: 'flex-start', mr: 0 }}
+                control={<Checkbox checked={makeAccount} onChange={(e) => setMakeAccount(e.target.checked)} sx={{ mt: -0.75 }} />}
+                label={
+                  <Typography variant="body2" fontWeight={600}>
+                    Create the Microsoft class account and email the setup guide
+                  </Typography>
+                }
+              />
+              {makeAccount && (
+                <Box sx={{ ml: 4, mt: 1 }}>
+                  <TextField
+                    label="Login ID"
+                    size="small"
+                    value={accountId}
+                    onChange={(e) => setAccountId(e.target.value.replace(/@.*$/, '').replace(/\s+/g, '_'))}
+                    fullWidth
+                    InputProps={{ endAdornment: <Typography variant="body2" color="text.secondary">@{accountHint.domain}</Typography> }}
+                    inputProps={{ spellCheck: false, autoCapitalize: 'off' }}
+                    helperText={
+                      accountHint.startPassword
+                        ? `Start password ${accountHint.startPassword}. They choose their own at the first sign-in.`
+                        : 'They choose their own password at the first sign-in.'
+                    }
+                  />
+                </Box>
+              )}
+            </Box>
+          )}
 
           {error && (
             <Alert severity="error" role="alert" sx={{ mt: 2 }}>
@@ -423,7 +489,7 @@ export default function VerifyPaymentCard({
             startIcon={busy === 'verify' ? <CircularProgress size={16} color="inherit" /> : <CheckIcon />}
             sx={{ minHeight: 44, minWidth: 140, fontWeight: 700, textTransform: 'none' }}
           >
-            {busy === 'verify' ? 'Enrolling' : 'Verify and enrol'}
+            {busy === 'verify' ? (makeAccount && accountHint && !accountHint.exists ? 'Enrolling, setting up the account' : 'Enrolling') : 'Verify and enrol'}
           </Button>
         </DialogActions>
       </Dialog>

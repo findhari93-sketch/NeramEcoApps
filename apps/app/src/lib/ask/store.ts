@@ -1,5 +1,5 @@
 /**
- * Server-side reads and writes for Ask aiArchitek, all best effort: the chat
+ * Server-side reads and writes for Aintra (Tools app), all best effort: the chat
  * must still answer if a write fails or the ask_* tables are missing on an
  * environment, so every call here catches and logs instead of throwing. The
  * guest allowance fails open for the same reason (a database blip should not

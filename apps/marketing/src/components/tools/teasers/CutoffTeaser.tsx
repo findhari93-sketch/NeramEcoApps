@@ -173,7 +173,7 @@ export default function CutoffTeaser() {
         {result ? `See colleges for ${Math.round(result.total)} out of 400` : 'See matching colleges'}
       </CtaButton>
       <Typography component="p" sx={{ m: 0, fontSize: '0.8125rem', lineHeight: 1.5, opacity: 0.85 }}>
-        Opens Ask aiArchitek with your score: real TNEA, KEAM and JoSAA closing marks, not guesses.{' '}
+        Opens Aintra with your score: real TNEA, KEAM and JoSAA closing marks, not guesses.{' '}
         <Box
           component="a"
           href={query ? `${FULL_TOOL}?${query}` : FULL_TOOL}

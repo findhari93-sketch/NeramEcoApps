@@ -290,6 +290,38 @@ test.describe('Aintra booking cards @marketing', () => {
       expect(posted[0]).toMatchObject({ name: 'Priya', email: 'priya@example.com', subject: 'Hostel near Chennai' });
     });
 
+    // Phase 3 (2026-10-20): fees and tickets.
+    test('AC13: a support ticket Aintra wrote up posts to the ticket route and shows the number', async ({ page }) => {
+      const posted: Record<string, unknown>[] = [];
+      await page.route('**/api/support-tickets', async (route) => {
+        posted.push(route.request().postDataJSON());
+        await route.fulfill({ status: 200, json: { success: true, ticketNumber: 'NERAM-TKT-0099', ticketId: 't1' } });
+      });
+      await mockChat(page, 'I have written this up for our team.\n\n[[book:ticket,f.category=payment_issue,f.subject=UPI%20paid%2C%20not%20showing,f.message=I%20paid%20by%20UPI%20yesterday%20but%20it%20still%20says%20pending.]]');
+      await openAintra(page);
+      const answer = await ask(page, 'I paid yesterday but it says pending');
+      const card = answer.getByRole('region', { name: 'Raise a support ticket' });
+      await expect(card.getByLabel('What went wrong?')).toHaveValue('I paid by UPI yesterday but it still says pending.');
+      await card.getByLabel('Your name').fill('Priya');
+      await card.getByLabel('Mobile number').fill('9876543210');
+      await card.getByRole('button', { name: 'Raise ticket' }).click();
+      await expect(answer.getByRole('region', { name: 'Ticket raised' })).toContainText('NERAM-TKT-0099');
+      expect(posted[0]).toMatchObject({ userName: 'Priya', userPhone: '9876543210', category: 'payment_issue', subject: 'UPI paid, not showing' });
+    });
+
+    test('AC14: a guest asking to pay their fees is asked to sign in, and no fees are loaded', async ({ page }) => {
+      let loaded = 0;
+      await page.route('**/api/aintra/pay-options', (route) => {
+        loaded++;
+        return route.fulfill({ status: 401, json: { error: 'SIGN_IN_REQUIRED' } });
+      });
+      await mockChat(page, 'Sign in and I will show what is due.\n\n[[book:pay]]');
+      await openAintra(page);
+      const answer = await ask(page, 'I want to pay my balance');
+      await expect(answer.getByRole('region', { name: 'Sign in to see your fees' })).toBeVisible({ timeout: 15000 });
+      expect(loaded).toBe(0);
+    });
+
     test('mobile: no horizontal scroll and 44px targets in the cards', async ({ page }) => {
       await mockChat(page, CALLBACK_ANSWER);
       await openAintra(page);

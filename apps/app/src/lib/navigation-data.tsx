@@ -317,7 +317,7 @@ export interface AppNavItem {
 export const PRIMARY_NAV: AppNavItem[] = [
   { title: 'Home', href: '/dashboard', Icon: HomeOutlinedIcon },
   { title: 'All tools', href: TOOLS_HOME_HREF, Icon: GridViewOutlinedIcon },
-  { title: 'Ask aiArchitek', href: '/ask', Icon: AutoAwesomeOutlinedIcon },
+  { title: 'Ask Aintra', href: '/ask', Icon: AutoAwesomeOutlinedIcon },
 ];
 
 export const ACCOUNT_NAV: AppNavItem[] = [

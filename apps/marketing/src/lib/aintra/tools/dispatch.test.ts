@@ -23,6 +23,11 @@ vi.mock('./quick-forms', () => ({
   prepareCentreVisitTool: vi.fn(async () => ({ ok: true, data: {}, card: '[[book:visit]]' })),
   prepareCollegeEnquiryTool: vi.fn(async () => ({ ok: false, error: 'which_college' })),
   prepareMessageTool: vi.fn(async () => ({ ok: true, data: {}, card: '[[book:message]]' })),
+  prepareTicketTool: vi.fn(async () => ({ ok: true, data: {}, card: '[[book:ticket]]' })),
+  prepareSaveCollegeTool: vi.fn(async () => ({ ok: true, data: {}, card: '[[book:save-college]]' })),
+}));
+vi.mock('./payment-tools', () => ({
+  getPaymentStatusTool: vi.fn(async (ctx: { userId: string | null }) => ({ ok: true, data: { user: ctx.userId }, card: '[[book:pay]]' })),
 }));
 
 import { dispatchTool } from './dispatch';
@@ -62,6 +67,9 @@ describe('dispatchTool', () => {
     expect(await dispatchTool('prepare_centre_visit', {}, ctx)).toMatchObject({ card: '[[book:visit]]' });
     expect(await dispatchTool('prepare_college_enquiry', {}, ctx)).toMatchObject({ ok: false });
     expect(await dispatchTool('prepare_message', { message: 'x' }, ctx)).toMatchObject({ card: '[[book:message]]' });
+    expect(await dispatchTool('prepare_ticket', {}, ctx)).toMatchObject({ card: '[[book:ticket]]' });
+    expect(await dispatchTool('prepare_save_college', {}, ctx)).toMatchObject({ card: '[[book:save-college]]' });
+    expect(await dispatchTool('get_payment_status', {}, ctx)).toMatchObject({ data: { user: 'user-2' }, card: '[[book:pay]]' });
   });
 
   it('returns unknown_tool for unrecognized name', async () => {

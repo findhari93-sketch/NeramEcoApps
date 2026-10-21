@@ -1,5 +1,5 @@
 /**
- * The tools Ask aiArchitek can call. Each wraps code the public tool pages
+ * The tools Aintra (Tools app) can call. Each wraps code the public tool pages
  * already use (the cutoff formula, the day-cached allotment loaders, the
  * safe/target/reach bands), returns a compact result for the model to talk
  * about, and builds the card the student sees. Numbers on a card come from
@@ -20,6 +20,10 @@ import {
 import type { Centre, CoaCollege, CutoffCollege, JosaaClosing, SystemRanks } from '@/lib/tools/data/facts';
 import { bandForMark, nearestCentres } from '@/lib/tools/data/facts';
 import { getToolSeo } from '@/lib/tools/tool-seo';
+import { NATA_FEES, NATA_FEE_YEAR } from '@/lib/tools/nata-fees';
+import { estimateNataCost } from '@/lib/tools/nata-cost';
+import { nataDates } from '@/lib/tools/nata-dates';
+import { EDUCATION_OPTIONS, SUBJECTS, evaluateEligibility } from '@/lib/tools/eligibility-rules';
 import { LIVE_TOOL_IDS, type ToolId } from '@/lib/tools/tool-ids';
 import type { AskCard, CollegesCardData, CounselingSystem, Tier } from './cards';
 import type { AskFacts } from './memory';
@@ -48,6 +52,8 @@ export async function defaultAskToolDeps(): Promise<AskToolDeps> {
 export interface AskToolContext {
   guest: boolean;
   facts: AskFacts;
+  /** Colleges shown per tier when not a guest. The MCP connector shows 3. */
+  perTier?: number;
 }
 
 export interface AskToolOutcome {
@@ -144,6 +150,40 @@ export const ASK_TOOL_DECLARATIONS = [
     },
   },
   {
+    name: 'estimate_cost',
+    description:
+      'What sitting NATA costs: the exact application fee for the category and number of attempts, plus estimated travel, a stay and study materials.',
+    parameters: {
+      type: 'object',
+      properties: {
+        category: { type: 'string', enum: Object.keys(NATA_FEES), description: 'Fee category. General/OBC(N-CL) if not said.' },
+        attempts: { type: 'number', description: 'Number of NATA attempts, 1 to 3.' },
+        state: { type: 'string', description: 'Home state, for travel (e.g. "Tamil Nadu").' },
+        need_stay: { type: 'boolean', description: 'Whether the student needs a night away near the test city.' },
+      },
+    },
+  },
+  {
+    name: 'check_eligibility',
+    description:
+      'Whether the student may sit NATA and take B.Arch admission under Council of Architecture rules, from their education status, 12th subjects and aggregate percentage.',
+    parameters: {
+      type: 'object',
+      properties: {
+        education: { type: 'string', enum: [...EDUCATION_OPTIONS] },
+        subjects: { type: 'array', items: { type: 'string', enum: [...SUBJECTS] }, description: 'Subjects studied in 12th or the diploma.' },
+        aggregate_percent: { type: 'number', description: '12th or diploma aggregate percentage, if known.' },
+        purpose: { type: 'string', enum: ['Just NATA Exam', 'B.Arch Admission'], description: 'B.Arch Admission unless the student only asks about sitting NATA.' },
+      },
+      required: ['education'],
+    },
+  },
+  {
+    name: 'exam_dates',
+    description: 'NATA exam dates and phases: the next sessions, or whether the new year\u2019s dates are announced yet.',
+    parameters: { type: 'object', properties: {} },
+  },
+  {
     name: 'save_my_details',
     description:
       'Remember details the student tells you (community, city, state, exam year, JEE or KEAM rank, fee budget) so later answers use them. Marks and NATA scores are remembered by calculate_cutoff; do not repeat them here.',
@@ -179,6 +219,9 @@ export const ASK_TOOL_STATUS: Record<string, string> = {
   predict_rank: 'Reading the rank list',
   find_exam_centres: 'Finding test cities near you',
   check_coa_approval: 'Checking the COA approved list',
+  estimate_cost: 'Adding up the costs',
+  check_eligibility: 'Checking the CoA rules',
+  exam_dates: 'Checking the NATA calendar',
   save_my_details: 'Noting that down',
   open_tool: 'Finding the right tool',
 };
@@ -324,7 +367,7 @@ async function predictColleges(args: Record<string, unknown>, ctx: AskToolContex
     return { ok: false, result: { error: 'unknown_system', systems: ['TNEA', 'KEAM', 'JOSAA'] } };
   }
 
-  const limited = limitGroups(groups, ctx.guest);
+  const limited = limitGroups(groups, ctx.guest, ctx.perTier);
   const data: CollegesCardData = {
     system,
     year,
@@ -446,6 +489,97 @@ async function checkCoa(args: Record<string, unknown>, ctx: AskToolContext, deps
   };
 }
 
+const FEE_ALIASES: Record<string, string> = {
+  general: 'General/OBC(N-CL)',
+  obc: 'General/OBC(N-CL)',
+  sc: 'SC/ST/EWS/PwD',
+  st: 'SC/ST/EWS/PwD',
+  ews: 'SC/ST/EWS/PwD',
+  pwd: 'SC/ST/EWS/PwD',
+  transgender: 'Transgender',
+  nri: 'Outside India',
+};
+
+function estimateCost(args: Record<string, unknown>, ctx: AskToolContext): AskToolOutcome {
+  const raw = typeof args.category === 'string' ? args.category : 'General/OBC(N-CL)';
+  const category = raw in NATA_FEES ? raw : FEE_ALIASES[raw.toLowerCase()] ?? 'General/OBC(N-CL)';
+  const attempts = Math.max(1, Math.min(3, Math.round(num(args.attempts) ?? 1)));
+  const state = typeof args.state === 'string' && args.state.trim() ? args.state.trim() : ctx.facts.state ?? '';
+  const c = estimateNataCost({ category, attempts, homeState: state, needAccommodation: args.need_stay === true });
+  return {
+    ok: true,
+    result: {
+      fee_year: NATA_FEE_YEAR,
+      fee_per_attempt: c.applicationFeePerAttempt,
+      total_fee: c.totalApplicationFee,
+      travel_estimate: c.estimatedTravel,
+      stay_estimate: c.accommodation,
+      total_range: `${c.totalMin} to ${c.totalMax} rupees`,
+      note: state ? undefined : 'No state given, so travel is not included',
+    },
+    card: {
+      id: cardId('cost'),
+      kind: 'cost',
+      href: '/tools/nata/cost-calculator',
+      data: {
+        category,
+        attempts,
+        state: state || null,
+        feePerAttempt: c.applicationFeePerAttempt,
+        totalFee: c.totalApplicationFee,
+        travel: c.estimatedTravel,
+        stay: c.accommodation,
+        materials: c.studyMaterials,
+        totalMin: c.totalMin,
+        totalMax: c.totalMax,
+        feeYear: NATA_FEE_YEAR,
+      },
+    },
+    factsPatch: state && !ctx.facts.state ? { state } : undefined,
+  };
+}
+
+function checkEligibility(args: Record<string, unknown>): AskToolOutcome {
+  const education = typeof args.education === 'string' && (EDUCATION_OPTIONS as readonly string[]).includes(args.education) ? args.education : '';
+  if (!education) return { ok: false, result: { error: 'missing_input', ask_for: ['education status (appearing or passed 12th, or diploma)'] } };
+  const subjects = Array.isArray(args.subjects)
+    ? args.subjects.filter((s): s is string => typeof s === 'string' && (SUBJECTS as readonly string[]).includes(s))
+    : [];
+  const purpose = args.purpose === 'Just NATA Exam' ? 'Just NATA Exam' : 'B.Arch Admission';
+  const pct = num(args.aggregate_percent);
+  const r = evaluateEligibility({ education, subjects, aggregate: pct != null ? String(pct) : '', purpose });
+  return {
+    ok: true,
+    result: {
+      nata_eligible: r.nataEligible,
+      barch_eligible: r.barchEligible,
+      unmet: r.conditions.filter((c) => !c.met).map((c) => c.explanation),
+    },
+    card: {
+      id: cardId('eligibility'),
+      kind: 'eligibility',
+      href: '/tools/nata/eligibility-checker',
+      data: { purpose, nataEligible: r.nataEligible, barchEligible: r.barchEligible, conditions: r.conditions },
+    },
+  };
+}
+
+function examDates(): AskToolOutcome {
+  const d = nataDates();
+  return {
+    ok: true,
+    result: d.announced
+      ? { nata_year: d.scheduleYear, next_sessions: d.upcoming.map((u) => `${u.date} ${u.day} ${u.time}`), phases: d.phases }
+      : {
+          nata_year: d.cycleYear,
+          announced: false,
+          note: `NATA ${d.cycleYear} dates are not announced yet. Last year (${d.scheduleYear}) followed this pattern.`,
+          last_year_phases: d.phases,
+        },
+    card: { id: cardId('dates'), kind: 'dates', href: '/tools/nata/exam-planner', data: d },
+  };
+}
+
 function saveMyDetails(args: Record<string, unknown>): AskToolOutcome {
   const patch: Record<string, unknown> = {};
   if (args.community != null) patch.community = args.community;
@@ -487,6 +621,12 @@ export async function runAskTool(
         return await findExamCentres(args, ctx, deps);
       case 'check_coa_approval':
         return await checkCoa(args, ctx, deps);
+      case 'estimate_cost':
+        return estimateCost(args, ctx);
+      case 'check_eligibility':
+        return checkEligibility(args);
+      case 'exam_dates':
+        return examDates();
       case 'save_my_details':
         return saveMyDetails(args);
       case 'open_tool':

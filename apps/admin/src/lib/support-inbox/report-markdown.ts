@@ -98,6 +98,8 @@ export function normalizeConsoleEntries(raw: unknown): ConsoleEntry[] {
  */
 export const APP_ROUTE_GROUPS: Record<string, string[]> = {
   login: ['(auth)'],
+  ask: ['(tools)'],
+  connect: ['(tools)'],
   apply: ['(protected)'],
   dashboard: ['(protected)'],
   'my-applications': ['(protected)'],

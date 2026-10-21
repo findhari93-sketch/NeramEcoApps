@@ -1,5 +1,5 @@
 /**
- * What Ask aiArchitek remembers about a student, like Claude's memory but
+ * What Aintra (Tools app) remembers about a student, like Claude's memory but
  * always on show: the chat lists every fact as a chip the student can edit or
  * forget, and nothing is remembered that is not on that strip.
  *

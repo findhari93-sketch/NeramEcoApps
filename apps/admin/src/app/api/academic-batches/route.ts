@@ -84,6 +84,7 @@ export async function PATCH(request: NextRequest) {
     if ('start_date' in body) patch.start_date = start_date;
     if ('end_date' in body) patch.end_date = end_date;
     if ('status' in body) patch.status = status;
+    if ('whatsapp_group_url' in body) patch.whatsapp_group_url = body.whatsapp_group_url;
     const batch = await updateAcademicBatch(code, patch, adminId || null);
     return NextResponse.json({ success: true, batch });
   } catch (error: any) {

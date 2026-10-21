@@ -173,7 +173,7 @@ export const AI_FEATURES = [
   },
   // ── Tools app (aiArchitek): students and guests ──────────────────────────
   /**
-   * Ask aiArchitek (/ask on app.neramclasses.com). A tool loop like the site
+   * Aintra (Tools app) (/ask on app.neramclasses.com). A tool loop like the site
    * chatbot: every number it shows comes from a tool (cutoff formula, allotment
    * lists), the model only writes the sentences around them. Guests get three
    * answers a day before sign-in, enforced in the route. Carries a student's
@@ -181,7 +181,7 @@ export const AI_FEATURES = [
    */
   {
     id: 'app.ask',
-    label: 'Ask aiArchitek (Tools app chat)',
+    label: 'Aintra in the Tools app',
     app: 'app',
     group: 'Public chatbots',
     trigger: 'student',

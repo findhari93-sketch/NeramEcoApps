@@ -17,6 +17,8 @@
  *   error   no answer; show the message and the human-help options
  */
 
+import { SSE_CONTENT_TYPE, encodeSseEvent, readSseStream } from '@neram/ui/chat-stream';
+
 export type ChatStreamEvent =
   | { t: 'status'; text: string }
   | { t: 'delta'; text: string }
@@ -24,10 +26,11 @@ export type ChatStreamEvent =
   | { t: 'done'; model?: string; finishReason?: string }
   | { t: 'error'; error: string; code?: string; humanHelp?: boolean };
 
-export const CHAT_STREAM_CONTENT_TYPE = 'text/event-stream; charset=utf-8';
+// The codec is shared with Aintra (Tools app) (packages/ui/src/chat/stream.ts).
+export const CHAT_STREAM_CONTENT_TYPE = SSE_CONTENT_TYPE;
 
 export function encodeChatEvent(event: ChatStreamEvent): string {
-  return `data: ${JSON.stringify(event)}\n\n`;
+  return encodeSseEvent(event);
 }
 
 /**
@@ -35,38 +38,8 @@ export function encodeChatEvent(event: ChatStreamEvent): string {
  * the stream ends. A line that is not valid JSON is skipped rather than
  * failing the whole answer.
  */
-export async function readChatStream(res: Response, onEvent: (event: ChatStreamEvent) => void): Promise<void> {
-  const handleLine = (line: string) => {
-    const trimmed = line.trim().replace(/^data:\s?/, '');
-    // Blank separators and SSE comments (": keep-alive") carry no event.
-    if (!trimmed || trimmed.startsWith(':')) return;
-    try {
-      onEvent(JSON.parse(trimmed) as ChatStreamEvent);
-    } catch {
-      // A partial or garbled line: nothing useful to show.
-    }
-  };
-
-  if (!res.body) {
-    (await res.text()).split('\n').forEach(handleLine);
-    return;
-  }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = '';
-  for (;;) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    let newline = buffer.indexOf('\n');
-    while (newline !== -1) {
-      handleLine(buffer.slice(0, newline));
-      buffer = buffer.slice(newline + 1);
-      newline = buffer.indexOf('\n');
-    }
-  }
-  handleLine(buffer + decoder.decode());
+export function readChatStream(res: Response, onEvent: (event: ChatStreamEvent) => void): Promise<void> {
+  return readSseStream<ChatStreamEvent>(res, onEvent);
 }
 
 /** What the visitor sees while a tool runs, by tool name. */
@@ -83,6 +56,9 @@ export const TOOL_STATUS: Record<string, string> = {
   prepare_centre_visit: 'Setting up your centre visit',
   prepare_college_enquiry: 'Preparing your enquiry',
   prepare_message: 'Writing your message',
+  prepare_ticket: 'Writing up your ticket',
+  prepare_save_college: 'Getting the college',
+  get_payment_status: 'Checking your fees',
 };
 
 export function toolStatusText(names: string[]): string {

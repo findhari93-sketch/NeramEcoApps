@@ -4,4 +4,6 @@ export const ASK_STARTERS = [
   'Which TNEA B.Arch colleges can I get with 260 out of 400, BC?',
   'Is my 12th percentage enough for B.Arch? I got 44% in CBSE',
   'Nearest NATA exam centres to Madurai',
+  'How much will NATA cost me from Kerala for 2 attempts?',
+  'எனக்கு எந்த TNEA B.Arch கல்லூரி கிடைக்கும்? cutoff 280, MBC',
 ];

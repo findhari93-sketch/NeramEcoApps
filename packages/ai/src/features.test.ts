@@ -115,7 +115,7 @@ describe('featureById', () => {
   });
 });
 
-describe('Ask aiArchitek (Tools app chat)', () => {
+describe('Aintra in the Tools app', () => {
   it('is a cheap, capped, auto-only student chatbot with no free key', () => {
     // The chat carries marks, community and city, so the free key (whose inputs
     // Google may train on) stays off.

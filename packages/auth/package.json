@@ -11,7 +11,8 @@
     "./firebase": "./src/firebase.ts",
     "./microsoft": "./src/microsoft.ts",
     "./hooks": "./src/hooks.tsx",
-    "./graph": "./src/graph.ts"
+    "./graph": "./src/graph.ts",
+    "./student-accounts": "./src/student-accounts/index.ts"
   },
   "scripts": {
     "lint": "echo 'Linted via consuming apps'",

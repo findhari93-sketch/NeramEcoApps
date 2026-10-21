@@ -1,5 +1,5 @@
 /**
- * Guests get three answers a day from Ask aiArchitek, then sign in. "A day" is
+ * Guests get three answers a day from Aintra (Tools app), then sign in. "A day" is
  * the calendar day in India, so the allowance resets at midnight IST for every
  * student, wherever the server runs.
  */

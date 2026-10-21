@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 /**
- * POST /api/ask: one turn of Ask aiArchitek, streamed as Server-Sent Events
+ * POST /api/ask: one turn of Aintra (Tools app), streamed as Server-Sent Events
  * (lib/ask/stream.ts).
  *
  * Body: { message, threadId?, history?: [{ role, text, cards? }], pageContext?, prefill? }
@@ -18,7 +18,12 @@ export const maxDuration = 60;
 import { NextRequest, NextResponse } from 'next/server';
 import { AiBillingError, AiBlockedError, hashClientKey, ipFromHeaders, streamGemini } from '@neram/ai';
 import type { GeminiContent } from '@neram/ai';
-import type { AskCard } from '@/lib/ask/cards';
+import { redactForStorage, type AskCard } from '@/lib/ask/cards';
+import {
+  TOOL_DECLARATIONS as ACCOUNT_DECLARATIONS,
+  TOOL_STATUS as ACCOUNT_STATUS,
+  runTool as runAccountTool,
+} from '@/lib/aintra/tools';
 import { mergeFacts, type AskFacts } from '@/lib/ask/memory';
 import { buildAskPrompt } from '@/lib/ask/prompt';
 import { GUEST_DAILY_ANSWERS, guestRemaining } from '@/lib/ask/quota';
@@ -28,6 +33,19 @@ import { ASK_TOOL_DECLARATIONS, askToolStatus, defaultAskToolDeps, runAskTool } 
 import { askVisitorFrom } from '@/lib/ask/visitor';
 
 const MAX_TOOL_ROUNDS = 2;
+
+/**
+ * A signed-in student's own jobs (account, fees, a ticket, the exam year, saved
+ * colleges, notifications), built with the in-app Aintra (lib/aintra/tools.ts).
+ * open_ask is left out: it only handed calculations to this chat, which does
+ * them itself.
+ */
+const ACCOUNT_TOOLS = ACCOUNT_DECLARATIONS.filter((d) => d.name !== 'open_ask');
+const ACCOUNT_TOOL_NAMES = new Set<string>(ACCOUNT_TOOLS.map((d) => d.name));
+const statusFor = (names: string[]) => {
+  const own = names.map((n) => ACCOUNT_STATUS[n]).find(Boolean);
+  return own ? `${own}...` : askToolStatus(names);
+};
 const MAX_MESSAGE = 1000;
 
 interface HistoryTurn {
@@ -73,6 +91,10 @@ export async function POST(request: NextRequest) {
   if (guest) {
     const used = visitor.minted ? 0 : await guestAnswersToday(visitor.anonId);
     if (used >= GUEST_DAILY_ANSWERS) {
+      // Kept so staff see what guests wanted to ask (Admin > Aintra Inbox > Tools chat).
+      // A user row never counts against the allowance; only answers do.
+      const gatedThread = await threadFor(visitor, typeof body.threadId === 'string' ? body.threadId : null, message, null);
+      if (gatedThread) await logMessage(visitor, { threadId: gatedThread, role: 'user', text: message, error: SIGNUP_REQUIRED });
       return NextResponse.json(
         { error: 'Sign in free to keep chatting.', code: SIGNUP_REQUIRED },
         { status: 403, headers: { 'Cache-Control': 'no-store', ...cookieHeaders } }
@@ -135,9 +157,18 @@ export async function POST(request: NextRequest) {
             actorId: visitor.userId,
             // Last round, tools off: say so, or the model may reach for a tool it
             // can no longer call and return nothing (seen with flash-lite).
-            systemInstruction: buildAskPrompt({ facts, guest, guestRemaining: remainingAfter, pageContext, finalRound: !withTools && round > 0 }),
+            systemInstruction: buildAskPrompt({
+              facts,
+              guest,
+              guestRemaining: remainingAfter,
+              pageContext,
+              finalRound: !withTools && round > 0,
+              student: guest ? null : { name: visitor.name, phoneVerified: visitor.phoneVerified },
+            }),
             contents,
-            ...(withTools ? { tools: [{ functionDeclarations: ASK_TOOL_DECLARATIONS }] } : {}),
+            ...(withTools
+              ? { tools: [{ functionDeclarations: guest ? ASK_TOOL_DECLARATIONS : [...ASK_TOOL_DECLARATIONS, ...ACCOUNT_TOOLS] }] }
+              : {}),
             temperature: 0.4,
             maxOutputTokens: 1200,
             responseMimeType: 'text/plain',
@@ -156,7 +187,7 @@ export async function POST(request: NextRequest) {
 
           // "Let me check..." before a tool call: the real answer follows the lookup.
           if (streamed) emit({ t: 'reset' });
-          emit({ t: 'status', text: askToolStatus(calls.map((c) => c.name)) });
+          emit({ t: 'status', text: statusFor(calls.map((c) => c.name)) });
           contents.push({
             role: 'model',
             parts: result.modelParts.length ? result.modelParts : calls.map((c) => ({ functionCall: { name: c.name, args: c.args } })),
@@ -171,6 +202,26 @@ export async function POST(request: NextRequest) {
           let cutoffWorkedOut = false;
           for (const call of calls) {
             const t0 = Date.now();
+            // The student's own things: signed in only. The model reads forModel;
+            // the card goes to the student alone (a fees card can hold a payment
+            // link's token), and is stored redacted.
+            if (ACCOUNT_TOOL_NAMES.has(call.name)) {
+              if (guest || !visitor.userId) {
+                responses.push({ functionResponse: { name: call.name, response: { ok: false, error: 'sign_in_required' } } });
+                continue;
+              }
+              const own = await runAccountTool(call.name, call.args, { id: visitor.userId, name: visitor.name, phoneVerified: visitor.phoneVerified });
+              toolLog.push({ name: call.name, args: call.args, ok: own.forModel.ok !== false, ms: Date.now() - t0 });
+              if (own.card) {
+                const card: AskCard = { id: `account-${Date.now().toString(36)}-${cards.length}`, kind: 'account', data: own.card, href: '' };
+                cards.push(card);
+                emit({ t: 'card', card });
+              }
+              responses.push({
+                functionResponse: { name: call.name, response: { ...own.forModel, ...(own.card ? { card: 'shown under your answer' } : {}) } },
+              });
+              continue;
+            }
             // A cutoff worked out earlier in this round wins over one the model
             // passed alongside it (it guesses before the result exists).
             const args = cutoffWorkedOut && 'cutoff' in call.args ? { ...call.args, cutoff: undefined } : call.args;
@@ -190,10 +241,10 @@ export async function POST(request: NextRequest) {
       } catch (err) {
         if (err instanceof AiBlockedError) {
           error = `AI_BLOCKED:${err.reason}`;
-          emit({ t: 'error', error: 'Ask aiArchitek is taking a short break. The tools on this site still work; please try the chat again later.' });
+          emit({ t: 'error', error: 'Aintra is taking a short break. The tools on this site still work; please try the chat again later.' });
         } else if (err instanceof AiBillingError) {
           error = 'CREDITS_DEPLETED';
-          emit({ t: 'error', error: 'Ask aiArchitek is offline for a bit. The tools on this site still work.', code: 'AI_UNAVAILABLE' });
+          emit({ t: 'error', error: 'Aintra is offline for a bit. The tools on this site still work.', code: 'AI_UNAVAILABLE' });
         } else {
           error = err instanceof Error ? err.message.slice(0, 300) : 'unknown';
           console.error('[ask] answer failed:', err);
@@ -225,7 +276,7 @@ export async function POST(request: NextRequest) {
           threadId,
           role: 'assistant',
           text,
-          cards,
+          cards: redactForStorage(cards),
           toolCalls: toolLog,
           model,
           error,

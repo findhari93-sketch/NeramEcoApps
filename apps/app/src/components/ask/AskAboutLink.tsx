@@ -3,7 +3,7 @@ import { Box, Button, Typography } from '@neram/ui';
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
 
 /**
- * "Ask about this result": opens Ask aiArchitek with a question about what the
+ * "Ask about this result": opens Aintra (Tools app) with a question about what the
  * tool just showed, the values carried in the link (so the chat remembers them)
  * and the tool's name as context.
  */
@@ -22,7 +22,7 @@ export default function AskAboutLink({ question, query, from, label }: { questio
         {label}
       </Button>
       <Typography variant="caption" component="p" sx={{ color: 'text.secondary', pl: 1 }}>
-        Ask aiArchitek answers from last year&apos;s official allotments.
+        Aintra answers from last year&apos;s official allotments.
       </Typography>
     </Box>
   );

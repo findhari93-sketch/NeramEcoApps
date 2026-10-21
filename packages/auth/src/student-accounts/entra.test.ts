@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-vi.mock('@neram/auth', () => ({
+vi.mock('../graph', () => ({
   getAppOnlyToken: vi.fn(async () => 'header.e30.signature'),
   classifyGraphError: (raw: string) => {
     const denied = / 403\b/.test(raw);
@@ -14,7 +14,7 @@ vi.mock('@neram/auth', () => ({
   },
 }));
 
-import { getAppOnlyToken } from '@neram/auth';
+import { getAppOnlyToken } from '../graph';
 import {
   addUserToGroup,
   assignLicense,
@@ -25,7 +25,7 @@ import {
   readAppRoles,
   readLicenseStates,
   resetEntraPassword,
-} from './entra-accounts';
+} from './entra';
 
 const fetchMock = vi.fn();
 

@@ -6,6 +6,7 @@ import LinkIcon from '@mui/icons-material/Link';
 import { formatDueDate, formatRupees } from '@neram/database/fee-plan';
 import { offerFromLink } from '@neram/database/student-pay';
 import VerifyPaymentCard, { type VerifyDecision } from '@/components/direct-enrollment/VerifyPaymentCard';
+import ClassAccountCard from '@/components/class-account/ClassAccountCard';
 import type { DeskEnrolmentLink } from './types';
 
 function shortDate(value: string): string {
@@ -140,6 +141,9 @@ export default function EnrolmentLinkStatus({
           {used ? 'View' : 'View and share'}
         </Button>
       </Paper>
+      {used && (link.submitted_user_id || link.user_id) && (
+        <ClassAccountCard userId={(link.submitted_user_id || link.user_id) as string} adminId={adminId} />
+      )}
     </Box>
   );
 }

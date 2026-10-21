@@ -110,7 +110,7 @@ export default async function ToolsLandingPage() {
             ))}
           </Box>
 
-          {/* Ask aiArchitek: type the question instead of picking a tool. */}
+          {/* Aintra: type the question instead of picking a tool. */}
           <Box sx={{ mb: 2.5 }}>
             <AskBar tone="dark" />
           </Box>

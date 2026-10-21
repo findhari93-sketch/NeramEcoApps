@@ -38,6 +38,7 @@ import StarBorderIcon from '@mui/icons-material/StarBorder';
 import SaveIcon from '@mui/icons-material/Save';
 import AddIcon from '@mui/icons-material/Add';
 import SchoolIcon from '@mui/icons-material/School';
+import WhatsAppIcon from '@mui/icons-material/WhatsApp';
 import { useBatches } from '@/contexts/BatchContext';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
 
@@ -314,6 +315,19 @@ export default function ExamBatchesPage() {
                     </IconButton>
                   </span>
                 </Tooltip>
+              </Box>
+              <Box sx={{ gridColumn: '2 / -1', display: 'flex', alignItems: 'center', gap: 1, pb: 0.5 }}>
+                <WhatsAppIcon fontSize="small" sx={{ color: 'success.main' }} aria-hidden />
+                <TextField
+                  size="small"
+                  variant="standard"
+                  fullWidth
+                  placeholder="WhatsApp group link, https://chat.whatsapp.com/..."
+                  inputProps={{ 'aria-label': `WhatsApp group link for ${b.code}`, spellCheck: false }}
+                  value={rowValue(b, 'whatsapp_group_url') || ''}
+                  onChange={(e) => setEdit(b.code, 'whatsapp_group_url', e.target.value.trim())}
+                  helperText={b.whatsapp_group_url ? 'New students in this batch join this group from their setup guide.' : 'Not set. New students in this batch see no group link.'}
+                />
               </Box>
             </Box>
           ))
