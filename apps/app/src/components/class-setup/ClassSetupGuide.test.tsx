@@ -38,15 +38,15 @@ beforeEach(() => {
 describe('ClassSetupGuide', () => {
   it('greets the student and opens the first step that is not done', () => {
     renderGuide();
-    expect(screen.getByRole('heading', { name: /Hi Radhika/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Join your batch WhatsApp group/ })).toHaveAttribute('aria-expanded', 'true');
-    expect(screen.getByRole('link', { name: /Join the WhatsApp group/ })).toHaveAttribute('href', 'https://chat.whatsapp.com/AbC123');
+    expect(screen.getByRole('heading', { name: /Hi Radhika/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Join your batch WhatsApp group/ }).getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('link', { name: /Join the WhatsApp group/ }).getAttribute('href')).toBe('https://chat.whatsapp.com/AbC123');
   });
 
   it('shows the login and start password in the sign-in step', () => {
     renderGuide({ done: { ...base.done, whatsapp: true, authenticator: true, teams: true } , count: 3 });
-    expect(screen.getByText('Radhika_Bhanuprakash@neramclasses.com')).toBeInTheDocument();
-    expect(screen.getByText('Radhika@123')).toBeInTheDocument();
+    expect(screen.getByText('Radhika_Bhanuprakash@neramclasses.com')).toBeTruthy();
+    expect(screen.getByText('Radhika@123')).toBeTruthy();
   });
 
   it('hides the password once the student has chosen their own', () => {
@@ -57,8 +57,8 @@ describe('ClassSetupGuide', () => {
       count: 4,
     });
     fireEvent.click(screen.getByRole('button', { name: /Sign in and choose your password/ }));
-    expect(screen.queryByText('Radhika@123')).not.toBeInTheDocument();
-    expect(screen.getByText(/You have chosen your own password/)).toBeInTheDocument();
+    expect(screen.queryByText('Radhika@123')).toBeNull();
+    expect(screen.getByText(/You have chosen your own password/)).toBeTruthy();
   });
 
   it('ticks a step with the signed-in token and moves on', async () => {
@@ -71,17 +71,17 @@ describe('ClassSetupGuide', () => {
     expect(init.headers.Authorization).toBe('Bearer token');
     expect(JSON.parse(init.body)).toEqual({ step: 'whatsapp', done: true });
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: /Install Microsoft Authenticator/ })).toHaveAttribute('aria-expanded', 'true'),
+      expect(screen.getByRole('button', { name: /Install Microsoft Authenticator/ }).getAttribute('aria-expanded')).toBe('true'),
     );
   });
 
   it('says the group link is on its way when none is set', () => {
     renderGuide({ whatsappGroupUrl: null });
-    expect(screen.getByText(/group link is on its way/)).toBeInTheDocument();
+    expect(screen.getByText(/group link is on its way/)).toBeTruthy();
   });
 
   it('celebrates when all five are done', () => {
     renderGuide({ done: { whatsapp: true, authenticator: true, teams: true, signin: true, nexus: true }, count: 5 });
-    expect(screen.getByRole('heading', { name: /You're all set, Radhika/ })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /You're all set, Radhika/ })).toBeTruthy();
   });
 });
