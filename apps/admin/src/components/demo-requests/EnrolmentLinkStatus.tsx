@@ -3,10 +3,12 @@
 import { Alert, Box, Button, Paper, Typography } from '@neram/ui';
 import SchoolIcon from '@mui/icons-material/School';
 import LinkIcon from '@mui/icons-material/Link';
+import ReportProblemOutlinedIcon from '@mui/icons-material/ReportProblemOutlined';
 import { formatDueDate, formatRupees } from '@neram/database/fee-plan';
 import { offerFromLink } from '@neram/database/student-pay';
 import VerifyPaymentCard, { type VerifyDecision } from '@/components/direct-enrollment/VerifyPaymentCard';
 import ClassAccountCard from '@/components/class-account/ClassAccountCard';
+import { linkIsUnfinalisedRecorded } from './journey';
 import type { DeskEnrolmentLink } from './types';
 
 function shortDate(value: string): string {
@@ -63,6 +65,7 @@ export default function EnrolmentLinkStatus({
   link,
   disabled,
   onOpen,
+  onFinalise,
   adminId,
   onPaymentDecided,
   notice,
@@ -71,6 +74,8 @@ export default function EnrolmentLinkStatus({
   link: DeskEnrolmentLink | null | undefined;
   disabled?: boolean;
   onOpen: () => void;
+  /** Open the Finalise enrolment dialog for a recorded payment that was never finalised. */
+  onFinalise?: () => void;
   adminId?: string | null;
   /** After Verify or Reject, so the panel refreshes and logs it. */
   onPaymentDecided?: (decision: VerifyDecision, message: string) => void;
@@ -109,6 +114,40 @@ export default function EnrolmentLinkStatus({
             The last link {link.status === 'expired' ? 'expired' : 'was cancelled'} on {shortDate(link.expires_at || link.created_at)}.
           </Typography>
         )}
+      </Box>
+    );
+  }
+
+  // Staff typed a payment onto the link but never finalised it: enrol them from the
+  // desk rather than showing a share link that asks for the form a second time.
+  if (linkIsUnfinalisedRecorded(link)) {
+    return (
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+        {note}
+        <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, borderColor: 'warning.main', display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <ReportProblemOutlinedIcon color="warning" aria-hidden />
+            <Box sx={{ flex: 1, minWidth: 200 }}>
+              <Typography variant="body2" fontWeight={700}>
+                Payment entered, not finalised
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {linkMoneyLine(link)}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Entered by {link.created_by_name || 'staff'} on {shortDate(link.created_at)}. Finalise to enrol them, no need to send the form again.
+              </Typography>
+            </Box>
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+            <Button variant="contained" startIcon={<SchoolIcon />} onClick={onFinalise} disabled={disabled || !onFinalise} sx={{ minHeight: 44 }}>
+              Finalise enrolment
+            </Button>
+            <Button variant="outlined" onClick={onOpen} disabled={disabled} sx={{ minHeight: 44 }}>
+              View and share
+            </Button>
+          </Box>
+        </Paper>
       </Box>
     );
   }

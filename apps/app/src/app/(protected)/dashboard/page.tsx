@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { NATA_TOOLS } from '@/lib/navigation-data';
 import { useExamCountdown } from '@/hooks/useExamCountdown';
 import ExamSetupCard from '@/components/exam-setup/ExamSetupCard';
-import OnboardingChecklist from '@/components/post-enrollment/OnboardingChecklist';
+import ClassSetupCard from '@/components/class-setup/ClassSetupCard';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 
 const quickAccessTools = NATA_TOOLS.filter((t) => !t.comingSoon).slice(0, 5);
@@ -50,8 +50,8 @@ export default function DashboardPage() {
         </Typography>
       </Box>
 
-      {/* Post-enrollment onboarding checklist (shown until all steps complete) */}
-      <OnboardingChecklist />
+      {/* Class setup progress (direct-link students) or the older checklist, until done */}
+      <ClassSetupCard />
 
       {/* Exam Setup / Countdown Card */}
       <ExamSetupCard />

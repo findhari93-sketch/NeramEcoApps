@@ -10,7 +10,22 @@ vi.mock('next-intl', () => ({
 vi.mock('@/i18n/routing', () => ({
   Link: ({ href, children, ...rest }: any) => <a href={href} {...rest}>{children}</a>,
 }));
-vi.mock('next/dynamic', () => ({ default: () => () => null }));
+vi.mock('next/dynamic', () => ({
+  // Render an identifiable stub per dynamic() call so a test can assert which
+  // floating widgets SiteChrome mounts on a given route. The loader source names
+  // the module it imports (e.g. '@/components/college-hub/ComparisonTray').
+  default: (loader: () => Promise<unknown>) => {
+    const src = loader.toString();
+    const testId = src.includes('ComparisonTray')
+      ? 'comparison-tray'
+      : src.includes('HubBottomNav')
+        ? 'hub-bottom-nav'
+        : src.includes('GeneralChatbot')
+          ? 'general-chatbot'
+          : 'dynamic-widget';
+    return () => <div data-testid={testId} />;
+  },
+}));
 vi.mock('@/components/Header', () => ({ default: () => <header data-testid="marketing-header" /> }));
 vi.mock('@/components/Footer', () => ({ default: () => <footer data-testid="marketing-footer" /> }));
 vi.mock('@/components/marketing-content', () => ({
@@ -51,5 +66,38 @@ describe('SiteChrome', () => {
     expect(screen.queryByTestId('marketing-header')).toBeNull();
     expect(screen.getByRole('link', { name: 'shell.terms' })).toBeTruthy();
     expect(screen.getByRole('link', { name: 'shell.refund' })).toBeTruthy();
+  });
+
+  it('does not mount the compare tray on the home page', () => {
+    pathname = '/';
+    render(<SiteChrome locale="en"><p>home</p></SiteChrome>);
+    expect(screen.queryByTestId('comparison-tray')).toBeNull();
+    expect(screen.queryByTestId('hub-bottom-nav')).toBeNull();
+  });
+
+  it('does not mount the compare tray on an unrelated marketing page', () => {
+    pathname = '/fees';
+    render(<SiteChrome locale="en"><p>fees</p></SiteChrome>);
+    expect(screen.queryByTestId('comparison-tray')).toBeNull();
+  });
+
+  it('mounts the compare tray and hub nav across the College Hub', () => {
+    pathname = '/colleges/city/chennai';
+    render(<SiteChrome locale="en"><p>hub</p></SiteChrome>);
+    expect(screen.getByTestId('comparison-tray')).toBeTruthy();
+    expect(screen.getByTestId('hub-bottom-nav')).toBeTruthy();
+  });
+
+  it('mounts the compare tray on a college profile but not the hub bottom nav', () => {
+    pathname = '/colleges/tamil-nadu/caad-chennai';
+    render(<SiteChrome locale="en"><p>college</p></SiteChrome>);
+    expect(screen.getByTestId('comparison-tray')).toBeTruthy();
+    expect(screen.queryByTestId('hub-bottom-nav')).toBeNull();
+  });
+
+  it('mounts the compare tray on the exam hubs that carry Compare buttons', () => {
+    pathname = '/nata-hub';
+    render(<SiteChrome locale="en"><p>nata hub</p></SiteChrome>);
+    expect(screen.getByTestId('comparison-tray')).toBeTruthy();
   });
 });

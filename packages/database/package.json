@@ -20,6 +20,7 @@
     "./student-pay": "./src/utils/student-pay.ts",
     "./enrol-lead-update": "./src/utils/enrol-lead-update.ts",
     "./direct-enrolment": "./src/services/direct-enrolment.ts",
+    "./desk-finalise-enrolment": "./src/services/desk-finalise-enrolment.ts",
     "./enrolment-draft": "./src/services/enrolment-draft.ts",
     "./fee-payment-claims": "./src/services/fee-payment-claims.ts",
     "./enrolment-payment-email": "./src/services/enrolment-payment-email.ts",

@@ -51,6 +51,10 @@ export interface DeskDetail {
   lastFollowUp: DemoFollowUpRow | null;
   /** The student's enrolment link (active first), made from any screen. */
   enrolmentLink?: DeskEnrolmentLink | null;
+  /** Staff who added the demo; null when it came from the website. */
+  createdByName?: string | null;
+  /** Staff who last edited the demo. */
+  lastEditedByName?: string | null;
 }
 
 export interface DeskEnrolmentLink {
@@ -73,6 +77,9 @@ export interface DeskEnrolmentLink {
   offer_installment_1?: number | string | null;
   offer_installment_2?: number | string | null;
   rejection_reason?: string | null;
+  /** Set once a staff member verified the payment (student-pays) or finalised the link. */
+  verified_at?: string | null;
+  verified_by?: string | null;
   /** The enrolled student's record (the class account is made for them). */
   user_id?: string | null;
   submitted_user_id?: string | null;

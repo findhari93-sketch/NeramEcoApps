@@ -3,6 +3,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient, getStudentOnboardingProgressByUserId } from '@neram/database';
+import { getWhatsAppGroupLinkForUser } from '@neram/database/class-account';
 import { getAuth } from 'firebase-admin/auth';
 import { initializeApp, getApps, cert } from 'firebase-admin/app';
 
@@ -67,6 +68,17 @@ export async function GET(request: NextRequest) {
         .maybeSingle();
       courseGroupLinks = links || null;
     }
+
+    // 3a. The WhatsApp group is the student's batch group (Admin > Exam Batches),
+    // the same one the class setup guide shows, never an old hard-coded link.
+    const group = await getWhatsAppGroupLinkForUser(supabase, auth.userId).catch(() => null);
+    courseGroupLinks = {
+      teams_group_chat_url: null,
+      teams_class_team_url: null,
+      teams_class_team_id: null,
+      ...(courseGroupLinks || {}),
+      whatsapp_group_url: group?.url ?? null,
+    };
 
     // 3b. Fetch Teams team IDs from nexus_enrollments → nexus_classrooms
     // This is the primary source for Teams auto-add (course_group_links is fallback)

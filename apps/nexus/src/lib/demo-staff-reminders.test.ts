@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_DEMO_SCHEDULE, istDateTime, type DemoRequest } from '@neram/database';
-import { buildStaffReminder, staffReminderSkipReason } from './demo-staff-reminders';
+import { buildStaffReminder, buildTodayDigest, staffReminderSkipReason } from './demo-staff-reminders';
 
 const start = istDateTime('2025-10-14', '18:30');
 const r = {
@@ -61,5 +61,36 @@ describe('buildStaffReminder', () => {
       const n = buildStaffReminder({ kind }, r, ctx);
       expect(`${n.subject} ${n.plain}`).not.toMatch(/—|--/);
     }
+  });
+});
+
+describe('buildTodayDigest', () => {
+  const r2 = {
+    ...r,
+    id: 'r2',
+    name: 'Arjun K',
+    current_class: '11th',
+    ref_code: 'DEMO-9X2P',
+    scheduled_start: istDateTime('2025-10-14', '20:00').toISOString(),
+    parent_joining: false,
+  } as DemoRequest;
+
+  it("summarises the tutor's demos for the day with a desk link", () => {
+    const n = buildTodayDigest('Hari', [r, r2], 'https://admin.neramclasses.com');
+    expect(n.subject).toBe('You have 2 demos today');
+    expect(n.plain).toContain('Good morning, Hari');
+    expect(n.plain).toContain('DEMO-4K7Q');
+    expect(n.plain).toContain('DEMO-9X2P');
+    expect(n.plain).toContain('with a parent');
+    expect(n.link).toEqual({ url: 'https://admin.neramclasses.com/demo-classes', label: 'Open the demo desk' });
+  });
+
+  it('uses the singular for one demo', () => {
+    expect(buildTodayDigest('Hari', [r], 'https://admin.neramclasses.com').subject).toBe('You have 1 demo today');
+  });
+
+  it('never uses em dashes', () => {
+    const n = buildTodayDigest('Hari', [r, r2], 'https://admin.neramclasses.com');
+    expect(`${n.subject} ${n.plain}`).not.toMatch(/—|--/);
   });
 });

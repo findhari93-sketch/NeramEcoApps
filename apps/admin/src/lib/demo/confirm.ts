@@ -78,12 +78,11 @@ export function parseMeetingKind(v: unknown): DemoMeetingKind {
 async function enqueueStaffPlan(
   registrationId: string,
   start: Date,
-  team: string[],
   tutorUpn: string | null,
   ids: Record<string, string>,
   supabase: TypedSupabaseClient,
 ): Promise<void> {
-  const rows = staffReminderPlan(start, new Date(), team, tutorUpn)
+  const rows = staffReminderPlan(start, new Date(), tutorUpn)
     .filter((p) => ids[p.upn])
     .map((p) => ({ userId: ids[p.upn], kind: p.kind, sendAfter: p.sendAfter }));
   await enqueueDemoStaffMessages(registrationId, rows, supabase);
@@ -91,6 +90,86 @@ async function enqueueStaffPlan(
 
 /** Staff reminders for a confirmed demo (used again when it is moved). */
 export { enqueueStaffPlan };
+
+/**
+ * Create the Teams calendar event for a demo (auto-record, lobby bypass,
+ * Exchange-sent invites to the team and the student/parent email), write it to
+ * the row (teams_join_url, graph_event_id, meeting_kind 'teams', organizer,
+ * tutor, team, host, parent email), mark it approved, and queue the student's
+ * WhatsApp confirmation plus the tutor's 15-minute reminder. Shared by Confirm
+ * (first time) and the panel's "Create Teams meeting" action (a demo that was
+ * scheduled without a link). The caller validates the team/roles and the
+ * tutor's calendar clash, and writes the activity-log line. Server only.
+ */
+export async function applyDemoTeamsMeeting(opts: {
+  supabase: TypedSupabaseClient;
+  actorId: string | null;
+  r: DemoRequest;
+  settings: DemoSettings;
+  origin: string;
+  start: Date;
+  minutes: number;
+  /** Validated team (subset of hosts); tutor and organizer are members of it. */
+  team: string[];
+  tutorUpn: string;
+  organizerUpn: string;
+  parentEmail: string | null;
+  reason: string | null;
+}): Promise<{ eventId: string | null; joinUrl: string | null; optionsNote?: string | null }> {
+  const { supabase, actorId, r, settings, origin, start, minutes, team, tutorUpn, organizerUpn, parentEmail, reason } = opts;
+  const known = new Map(settings.hosts.map((h) => [h.upn, h]));
+  const tutor = known.get(tutorUpn)!;
+
+  const attendees: Array<{ email: string; name: string }> = [];
+  if (r.email) attendees.push({ email: r.email, name: r.name });
+  if (parentEmail && parentEmail !== r.email) attendees.push({ email: parentEmail, name: r.parent_name || 'Parent' });
+  for (const upn of team) if (upn !== organizerUpn) attendees.push({ email: upn, name: known.get(upn)!.name });
+
+  const event = await createDemoEvent(
+    {
+      organizerUpn,
+      subject: demoEventSubject(r),
+      bodyHtml: buildDemoInviteHtml({
+        studentName: r.name,
+        hostName: tutor.name,
+        ref: r.ref_code || '',
+        myDemoUrl: `${origin}/d/${r.join_token}`,
+        drawingLink: drawingWhatsAppLink(settings.drawingWhatsApp, r.ref_code),
+      }),
+      start,
+      minutes,
+      attendees,
+    },
+    r.ref_code || r.id,
+  );
+
+  const staffIds = await staffUserIdsByUpn(team, supabase);
+  await updateDemoRequest(
+    r.id,
+    {
+      status: 'approved',
+      scheduled_start: start.toISOString(),
+      scheduled_minutes: minutes,
+      schedule_change_reason: reason,
+      organizer_upn: organizerUpn,
+      tutor_upn: tutorUpn,
+      staff_upns: team,
+      host_user_id: staffIds[tutorUpn] ?? null,
+      teams_join_url: event.joinUrl,
+      graph_event_id: event.eventId,
+      meeting_kind: 'teams',
+      parent_email: parentEmail,
+      next_contact_at: null,
+      // Keep the original confirmer; only stamp it when the demo was not approved before.
+      ...(r.approved_by ? {} : { approved_by: actorId, approved_at: new Date().toISOString() }),
+    },
+    supabase,
+  );
+  await cancelPendingDemoMessages(r.id, undefined, supabase);
+  await enqueueDemoMessages(r, demoReminderPlan(start, new Date(), 'confirmed'), supabase);
+  await enqueueStaffPlan(r.id, start, tutorUpn, staffIds, supabase);
+  return event;
+}
 
 /**
  * Confirm `r` (status pending or contacted). Returns whether a student message
@@ -136,54 +215,35 @@ export async function confirmDemo(opts: {
 
   let event: { joinUrl: string | null; eventId: string | null; optionsNote?: string | null } = { joinUrl: ownLink, eventId: null };
   if (meeting === 'teams') {
-    const attendees: Array<{ email: string; name: string }> = [];
-    if (r.email) attendees.push({ email: r.email, name: r.name });
-    if (parentEmail && parentEmail !== r.email) attendees.push({ email: parentEmail, name: r.parent_name || 'Parent' });
-    for (const upn of team) if (upn !== organizerUpn) attendees.push({ email: upn, name: known.get(upn)!.name });
-    event = await createDemoEvent(
+    event = await applyDemoTeamsMeeting({ supabase, actorId, r, settings, origin, start, minutes, team, tutorUpn, organizerUpn, parentEmail, reason });
+  } else {
+    // own_link / later / in_person: no Teams event, and the student gets no
+    // automatic WhatsApp (the approved templates promise a Teams class).
+    const staffIds = await staffUserIdsByUpn(team, supabase);
+    await updateDemoRequest(
+      r.id,
       {
-        organizerUpn,
-        subject: demoEventSubject(r),
-        bodyHtml: buildDemoInviteHtml({
-          studentName: r.name,
-          hostName: tutor.name,
-          ref: r.ref_code || '',
-          myDemoUrl: `${origin}/d/${r.join_token}`,
-          drawingLink: drawingWhatsAppLink(settings.drawingWhatsApp, r.ref_code),
-        }),
-        start,
-        minutes,
-        attendees,
+        status: 'approved',
+        scheduled_start: start.toISOString(),
+        scheduled_minutes: minutes,
+        schedule_change_reason: reason,
+        organizer_upn: organizerUpn,
+        tutor_upn: tutorUpn,
+        staff_upns: team,
+        host_user_id: staffIds[tutorUpn] ?? null,
+        teams_join_url: event.joinUrl,
+        graph_event_id: null,
+        meeting_kind: meeting,
+        parent_email: parentEmail,
+        approved_by: actorId,
+        approved_at: new Date().toISOString(),
+        next_contact_at: null,
       },
-      r.ref_code || r.id,
+      supabase,
     );
+    await cancelPendingDemoMessages(r.id, undefined, supabase);
+    await enqueueStaffPlan(r.id, start, tutorUpn, staffIds, supabase);
   }
-
-  const staffIds = await staffUserIdsByUpn(team, supabase);
-  await updateDemoRequest(
-    r.id,
-    {
-      status: 'approved',
-      scheduled_start: start.toISOString(),
-      scheduled_minutes: minutes,
-      schedule_change_reason: reason,
-      organizer_upn: organizerUpn,
-      tutor_upn: tutorUpn,
-      staff_upns: team,
-      host_user_id: staffIds[tutorUpn] ?? null,
-      teams_join_url: event.joinUrl,
-      graph_event_id: event.eventId,
-      meeting_kind: meeting,
-      parent_email: parentEmail,
-      approved_by: actorId,
-      approved_at: new Date().toISOString(),
-      next_contact_at: null,
-    },
-    supabase,
-  );
-  await cancelPendingDemoMessages(r.id, undefined, supabase);
-  if (meeting === 'teams') await enqueueDemoMessages(r, demoReminderPlan(start, new Date(), 'confirmed'), supabase);
-  await enqueueStaffPlan(r.id, start, team, tutorUpn, staffIds, supabase);
 
   const names = team.map((u) => known.get(u)!.name).join(', ');
   const how =

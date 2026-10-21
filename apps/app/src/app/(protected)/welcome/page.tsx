@@ -90,7 +90,8 @@ export default function WelcomePage() {
       icon: <GroupsIcon />,
       title: 'Join WhatsApp Group',
       description: 'Get daily class updates, study materials & doubt sessions',
-      action: () => window.open('https://chat.whatsapp.com/neramclasses', '_blank'),
+      // The batch group link lives on /onboarding (Admin > Exam Batches), never here.
+      action: () => router.push('/onboarding'),
       buttonText: 'Join Group',
       color: '#25D366',
       done: false,

@@ -77,6 +77,29 @@ export interface StaffNudge {
   link: { url: string; label: string };
 }
 
+/**
+ * The 08:00 IST "demos today" summary for one tutor: a single message listing
+ * every demo they take today, so they can plan their day. This replaces the old
+ * per-demo morning ping (one message per demo); the "starts in 15 minutes"
+ * reminder is unchanged. `demos` are the tutor's approved demos for the IST day.
+ */
+export function buildTodayDigest(tutorName: string, demos: DemoRequest[], adminOrigin: string): StaffNudge {
+  const lines = demos.map((r) => {
+    const at = r.scheduled_start ? formatDemoTime(new Date(r.scheduled_start)) : '';
+    const parent = r.parent_joining ? ', with a parent' : '';
+    return `• ${at} ${who(r)}${parent} (${r.ref_code})`;
+  });
+  const n = demos.length;
+  const first = tutorName.trim().split(/\s+/)[0];
+  return {
+    subject: n === 1 ? 'You have 1 demo today' : `You have ${n} demos today`,
+    plain:
+      `Good morning${first ? `, ${first}` : ''}. ` +
+      `${n === 1 ? 'You have 1 demo' : `You have ${n} demos`} today:\n${lines.join('\n')}`,
+    link: { url: `${adminOrigin}/demo-classes`, label: 'Open the demo desk' },
+  };
+}
+
 export function buildStaffReminder(
   m: Pick<DemoRequestMessage, 'kind'>,
   r: DemoRequest,

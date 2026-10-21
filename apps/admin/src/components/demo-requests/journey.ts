@@ -28,18 +28,69 @@ export function isFollowUpOpen(f: Pick<DemoFollowUpRow, 'status'> | null | undef
 export interface EnrolmentEvidence {
   /** Student profile per user id. */
   profiles: Record<string, { enrolledOn: string | null; createdAt: string }>;
-  /** Enrolment links that finished (status 'used': fee recorded or verified by staff). */
+  /** Enrolment links whose money is real (used/verified, or a matched payment). */
   usedLinks: Array<{ demoId: string | null; userId: string | null; usedAt: string | null }>;
+  /** Active recorded links with a staff-entered amount that was never finalised. */
+  pendingLinks: Array<{
+    demoId: string | null;
+    userId: string | null;
+    linkId: string;
+    amountPaid: number;
+    finalFee: number;
+    createdAt: string;
+  }>;
 }
 
 /**
  * Enrolled: the fee was paid and recorded after this demo was asked for.
+ * Fee pending: staff typed a payment onto the enrolment link but never finalised
+ * it (money shown on the link, no payment ledger row, no student profile yet).
  * Already a student: the profile is older than the request (a test account,
  * or a current student taking a demo). That is never "Enrolled".
  */
-export type DemoEnrolment = { kind: 'enrolled'; on: string } | { kind: 'student_before'; since: string };
+export type DemoEnrolment =
+  | { kind: 'enrolled'; on: string }
+  | { kind: 'fee_pending'; on: string; linkId: string; amountPaid: number; finalFee: number }
+  | { kind: 'student_before'; since: string };
 
 const ms = (s: string) => new Date(s).getTime();
+
+/** The enrolment-link facts the desk reads to decide whether its money is real. */
+export interface LinkFacts {
+  status: string | null;
+  payment_mode?: 'student_pays' | 'recorded' | null;
+  amount_paid?: number | string | null;
+  final_fee?: number | string | null;
+  verified_at?: string | null;
+  verified_by?: string | null;
+}
+
+const money = (v: number | string | null | undefined) => Number(v) || 0;
+
+/**
+ * The link's money is really recorded: the link finished (status 'used'), a staff
+ * member verified it, or a payment-ledger row is tied to it. `hasLinkPayment` is a
+ * matched `payments` row (idempotency key `direct-link:<id>`), passed by the caller.
+ */
+export function linkIsReallyPaid(link: LinkFacts | null | undefined, hasLinkPayment = false): boolean {
+  if (!link) return false;
+  return link.status === 'used' || !!link.verified_at || !!link.verified_by || hasLinkPayment;
+}
+
+/**
+ * Staff typed a recorded amount onto an active link that was never finalised: the
+ * panel shows the money, but there is no payment row and no student profile yet.
+ * This is the state that needs "Finalise enrolment", not another share link.
+ */
+export function linkIsUnfinalisedRecorded(link: LinkFacts | null | undefined, hasLinkPayment = false): boolean {
+  if (!link) return false;
+  return (
+    link.status === 'active' &&
+    (link.payment_mode ?? 'recorded') === 'recorded' &&
+    money(link.amount_paid) > 0 &&
+    !linkIsReallyPaid(link, hasLinkPayment)
+  );
+}
 
 export function enrolmentOf(r: Pick<DemoRequest, 'id' | 'user_id' | 'created_at'>, ev: EnrolmentEvidence): DemoEnrolment | null {
   const asked = ms(r.created_at);
@@ -49,6 +100,11 @@ export function enrolmentOf(r: Pick<DemoRequest, 'id' | 'user_id' | 'created_at'
   const later = r.user_id ? ev.usedLinks.find((l) => l.userId === r.user_id && l.usedAt && ms(l.usedAt) >= asked) : undefined;
   if (later) return { kind: 'enrolled', on: later.usedAt! };
   if (profile && ms(profile.createdAt) >= asked) return { kind: 'enrolled', on: profile.enrolledOn || profile.createdAt };
+  // A recorded payment entered on the link but not finalised: money is in, enrolment is not.
+  const pendingLinks = ev.pendingLinks ?? [];
+  const pending =
+    pendingLinks.find((l) => l.demoId === r.id) || (r.user_id ? pendingLinks.find((l) => l.userId === r.user_id) : undefined);
+  if (pending) return { kind: 'fee_pending', on: pending.createdAt, linkId: pending.linkId, amountPaid: pending.amountPaid, finalFee: pending.finalFee };
   if (profile) return { kind: 'student_before', since: profile.enrolledOn || profile.createdAt };
   return null;
 }
@@ -58,7 +114,13 @@ export function saysJoinedNoFee(
   followUp: Pick<DemoFollowUpRow, 'status' | 'call_outcome'> | null | undefined,
   enrolment: DemoEnrolment | null | undefined,
 ): boolean {
-  return !!followUp && followUp.status === 'completed' && followUp.call_outcome === 'joined' && enrolment?.kind !== 'enrolled';
+  return (
+    !!followUp &&
+    followUp.status === 'completed' &&
+    followUp.call_outcome === 'joined' &&
+    enrolment?.kind !== 'enrolled' &&
+    enrolment?.kind !== 'fee_pending'
+  );
 }
 
 /**

@@ -37,24 +37,31 @@ import ReplayIcon from '@mui/icons-material/Replay';
 import SendIcon from '@mui/icons-material/Send';
 import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import FamilyRestroomIcon from '@mui/icons-material/FamilyRestroom';
+import SchoolIcon from '@mui/icons-material/School';
+import EditIcon from '@mui/icons-material/Edit';
 import {
   DEMO_STATUS_LABELS,
   formatDemoDateTime,
   isOwnLinkDemo,
   formatDemoPreference,
   isJoinOpen,
+  googleCalendarUrl,
 } from '@neram/database/demo-schedule';
 import { OpsSkeleton, FOCUS_RING } from '@/components/ops/OpsUi';
 import { INTEREST_LABELS } from '@neram/database/demo-follow-up';
 import LogOutcomeDialog from '@/components/follow-ups/LogOutcomeDialog';
 import EnrolmentLinkDrawer from '@/components/direct-enrollment/EnrolmentLinkDrawer';
 import EnrolmentLinkStatus, { linkMoneyLine } from './EnrolmentLinkStatus';
+import FinaliseEnrolmentDialog from './FinaliseEnrolmentDialog';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
 import AttendedDialog from './AttendedDialog';
 import HeldDemoDialog from './HeldDemoDialog';
+import EditDetailsDialog from './EditDetailsDialog';
+import CreateTeamsMeetingDialog from './CreateTeamsMeetingDialog';
+import EditHeldDemoDialog from './EditHeldDemoDialog';
 import { heldTutorOptions } from '@/lib/demo/staff-add';
 import { meetingKindOf } from '@/lib/demo/meeting';
-import { closedReason } from './journey';
+import { closedReason, linkIsReallyPaid, linkIsUnfinalisedRecorded } from './journey';
 import ScheduleDialog, { type ScheduleSubmit } from './ScheduleDialog';
 import TeamsEvidence from './TeamsEvidence';
 import { guestsWhoJoined, hasLiveTeamsMeeting, type DemoWithTeams } from '@/lib/demo/teams-evidence';
@@ -170,6 +177,11 @@ export default function RequestPanel({
   const [stopOpen, setStopOpen] = useState(false);
   const [linkInput, setLinkInput] = useState('');
   const [linkOpen, setLinkOpen] = useState(false);
+  const [finaliseOpen, setFinaliseOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
+  const [createTeamsOpen, setCreateTeamsOpen] = useState(false);
+  const [editHeldOpen, setEditHeldOpen] = useState(false);
+  const [copiedInvite, setCopiedInvite] = useState(false);
   // What the last Verify or Reject did ("Enrolled as NC-2026-0123, ..."), kept after the panel refreshes.
   const [paymentNote, setPaymentNote] = useState<{ kind: 'verify' | 'reject'; text: string; linkId: string } | null>(null);
   const { supabaseUserId } = useAdminProfile();
@@ -264,6 +276,33 @@ export default function RequestPanel({
     }
   };
 
+  // A ready-to-send WhatsApp message with the time, the join link and an
+  // "add to calendar" link, for when the student has no email (or to send by hand).
+  const copyInvite = async () => {
+    if (!start) return;
+    const first = r.name.trim().split(/\s+/)[0] || r.name;
+    const joinUrl = r.teams_join_url || '';
+    const gcal = googleCalendarUrl({
+      title: 'Neram demo class',
+      details: `Your free Neram Classes demo${r.ref_code ? ` (${r.ref_code})` : ''}.`,
+      start,
+      minutes: r.scheduled_minutes,
+      url: joinUrl || 'https://neramclasses.com',
+      uid: r.ref_code || r.id,
+    });
+    const msg =
+      `Hi ${first}, your free Neram demo class is on ${formatDemoDateTime(start)}.` +
+      (joinUrl ? `\nJoin: ${joinUrl}` : '') +
+      `\nAdd it to your calendar: ${gcal}`;
+    try {
+      await navigator.clipboard.writeText(msg);
+      setCopiedInvite(true);
+      setTimeout(() => setCopiedInvite(false), 1500);
+    } catch {
+      // Clipboard blocked.
+    }
+  };
+
   const active = ['pending', 'contacted', 'approved'].includes(r.status);
 
   return (
@@ -282,10 +321,29 @@ export default function RequestPanel({
               {r.ref_code} · requested {ago(r.created_at, now)}
             </Typography>
           </Box>
+          <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 0.25 }}>
+            {detail.createdByName
+              ? `Added by ${detail.createdByName}`
+              : r.page_code === 'DC-ADM'
+                ? 'Added by staff'
+                : 'From the website'}
+            {detail.lastEditedByName && r.last_edited_at
+              ? ` · Last edited by ${detail.lastEditedByName}, ${ago(r.last_edited_at, now)}`
+              : ''}
+          </Typography>
         </Box>
-        <IconButton onClick={onClose} aria-label="Close details" sx={{ width: 44, height: 44 }}>
-          <CloseIcon />
-        </IconButton>
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          {active || ['attended', 'no_show'].includes(r.status) ? (
+            <Tooltip title="Edit details">
+              <IconButton onClick={() => setEditOpen(true)} aria-label="Edit demo details" disabled={!!busy} sx={{ width: 44, height: 44 }}>
+                <EditIcon />
+              </IconButton>
+            </Tooltip>
+          ) : null}
+          <IconButton onClick={onClose} aria-label="Close details" sx={{ width: 44, height: 44 }}>
+            <CloseIcon />
+          </IconButton>
+        </Box>
       </Box>
 
       {currentId && currentId !== r.id && (
@@ -332,6 +390,28 @@ export default function RequestPanel({
               </>
             )}
           </Typography>
+          {heldOutside && ['attended', 'no_show'].includes(r.status) && (
+            <Button size="small" startIcon={<EditIcon />} onClick={() => setEditHeldOpen(true)} disabled={!!busy} sx={{ mt: 1, minHeight: 40 }}>
+              Fix time or who took it
+            </Button>
+          )}
+          {r.status === 'approved' && meetingKind !== 'teams' && (
+            <Box sx={{ mt: 1.5 }}>
+              <Button
+                variant="contained"
+                color="success"
+                startIcon={<VideocamIcon />}
+                onClick={() => setCreateTeamsOpen(true)}
+                disabled={!!busy}
+                sx={{ minHeight: 44 }}
+              >
+                Create Teams meeting
+              </Button>
+              <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 0.5 }}>
+                Records automatically and invites the team and the student&apos;s calendar.
+              </Typography>
+            </Box>
+          )}
           {r.status === 'approved' && meetingKind !== 'teams' && (
             <Alert severity={meetingKind === 'later' ? 'warning' : 'info'} sx={{ mt: 1.5 }}>
               {meetingKind === 'later'
@@ -390,6 +470,9 @@ export default function RequestPanel({
               <Button onClick={() => setSchedule('reschedule')} disabled={!!busy} sx={{ minHeight: 44 }}>
                 Move
               </Button>
+              <Button startIcon={<ContentCopyIcon />} onClick={copyInvite} disabled={!!busy} sx={{ minHeight: 44 }}>
+                {copiedInvite ? 'Copied' : 'Copy invite message'}
+              </Button>
               {meetingKind !== 'teams' ? (
                 <Button
                   color="success"
@@ -421,6 +504,7 @@ export default function RequestPanel({
                 link={detail.enrolmentLink}
                 disabled={!supabaseUserId}
                 onOpen={() => setLinkOpen(true)}
+                onFinalise={() => setFinaliseOpen(true)}
                 adminId={supabaseUserId}
                 onPaymentDecided={onPaymentDecided}
                 notice={paymentNote && paymentNote.linkId === detail.enrolmentLink?.id ? paymentNote : null}
@@ -588,12 +672,19 @@ export default function RequestPanel({
               <Typography variant="body2" color="text.secondary">
                 {followUpStopped
                   ? lastFollowUp?.call_outcome === 'joined'
-                    ? detail.enrolmentLink?.status === 'used'
+                    ? linkIsReallyPaid(detail.enrolmentLink)
                       ? 'Follow-up closed: they enrolled.'
-                      : 'They said they would join, but no fee is recorded yet. Record the payment or send the enrolment link to enrol them.'
+                      : linkIsUnfinalisedRecorded(detail.enrolmentLink)
+                        ? `${linkMoneyLine(detail.enrolmentLink!)} entered on the enrolment link but not finalised. Finalise to enrol them.`
+                        : 'They said they would join, but no fee is recorded yet. Record the payment or send the enrolment link to enrol them.'
                     : `${closedReason(r, lastFollowUp)}.`
                   : 'No follow-up yet. Start one so this student is called until they join or say no.'}
               </Typography>
+              {linkIsUnfinalisedRecorded(detail.enrolmentLink) && (
+                <Button variant="contained" startIcon={<SchoolIcon />} onClick={() => setFinaliseOpen(true)} disabled={!!busy} sx={{ mt: 1, mr: 1, minHeight: 44 }}>
+                  Finalise enrolment
+                </Button>
+              )}
               <Button variant={followUpStopped ? 'outlined' : 'contained'} onClick={() => setAttendedOpen(true)} disabled={!!busy} sx={{ mt: 1, mr: 1, minHeight: 44 }}>
                 {followUpStopped ? 'Restart follow-up' : 'Start follow-up'}
               </Button>
@@ -642,6 +733,7 @@ export default function RequestPanel({
                 link={detail.enrolmentLink}
                 disabled={!supabaseUserId}
                 onOpen={() => setLinkOpen(true)}
+                onFinalise={() => setFinaliseOpen(true)}
                 adminId={supabaseUserId}
                 onPaymentDecided={onPaymentDecided}
                 notice={paymentNote && paymentNote.linkId === detail.enrolmentLink?.id ? paymentNote : null}
@@ -912,6 +1004,15 @@ export default function RequestPanel({
           });
         }}
       />
+      {detail.enrolmentLink && (
+        <FinaliseEnrolmentDialog
+          open={finaliseOpen}
+          onClose={() => setFinaliseOpen(false)}
+          link={detail.enrolmentLink}
+          request={r}
+          onSubmit={onAction}
+        />
+      )}
       <AttendedDialog
         open={attendedOpen}
         name={r.name}
@@ -964,6 +1065,53 @@ export default function RequestPanel({
           onSubmit={submitSchedule}
         />
       )}
+
+      <EditDetailsDialog
+        open={editOpen}
+        request={r}
+        busy={busy === 'edit'}
+        error={editOpen ? error : null}
+        onClose={() => {
+          setEditOpen(false);
+          setError(null);
+        }}
+        onSubmit={async (body) => {
+          const err = await run('edit', body);
+          if (!err) setEditOpen(false);
+        }}
+      />
+
+      <CreateTeamsMeetingDialog
+        open={createTeamsOpen}
+        request={r}
+        settings={settings}
+        busy={busy === 'create_teams'}
+        error={createTeamsOpen ? error : null}
+        onClose={() => {
+          setCreateTeamsOpen(false);
+          setError(null);
+        }}
+        onSubmit={async (body) => {
+          const err = await run('create_teams', body);
+          if (!err) setCreateTeamsOpen(false);
+        }}
+      />
+
+      <EditHeldDemoDialog
+        open={editHeldOpen}
+        request={r}
+        tutors={heldTutorOptions(settings.hosts)}
+        busy={busy === 'edit_held'}
+        error={editHeldOpen ? error : null}
+        onClose={() => {
+          setEditHeldOpen(false);
+          setError(null);
+        }}
+        onSubmit={async (body) => {
+          const err = await run('edit_held', body);
+          if (!err) setEditHeldOpen(false);
+        }}
+      />
 
       <Dialog open={reasonFor === 'cancel'} onClose={() => setReasonFor(null)} fullWidth maxWidth="xs" aria-labelledby="cancel-title">
         <DialogTitle id="cancel-title">{r.status === 'approved' ? 'Cancel this demo?' : 'Close this request?'}</DialogTitle>

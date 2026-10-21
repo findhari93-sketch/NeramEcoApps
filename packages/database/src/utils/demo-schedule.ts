@@ -225,21 +225,18 @@ export function demoReminderPlan(
 }
 
 /**
- * Neram Assistant reminders for a confirmed demo: everyone on it gets the 8 AM
- * "today's demo" (skipped when it is already past, or the demo is within the
- * hour); the tutor alone gets "starts in 15 minutes".
+ * Neram Assistant reminder for a confirmed demo: the tutor gets "starts in 15
+ * minutes". The 8 AM "demos today" summary is no longer sent per demo; the
+ * per-tutor morning digest (Nexus cron demo-today-digest) replaces it, so a
+ * tutor with three demos gets one message, not three. The `staff_day` kind is
+ * kept in DemoMessageKind only to drain rows queued before this change.
  */
 export function staffReminderPlan(
   start: Date,
   now: Date,
-  staffUpns: string[],
   tutorUpn: string | null,
 ): Array<{ kind: DemoMessageKind; sendAfter: Date; upn: string }> {
   const plan: Array<{ kind: DemoMessageKind; sendAfter: Date; upn: string }> = [];
-  const morning = istDateTime(istDateKey(start), '08:00');
-  if (morning.getTime() > now.getTime() && start.getTime() - morning.getTime() >= 60 * 60_000) {
-    for (const upn of staffUpns) plan.push({ kind: 'staff_day', sendAfter: morning, upn });
-  }
   const soon = new Date(start.getTime() - 15 * 60_000);
   if (tutorUpn && soon.getTime() > now.getTime()) plan.push({ kind: 'staff_soon', sendAfter: soon, upn: tutorUpn });
   return plan;

@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import {
   getSupabaseAdminClient,
   getDemoRequestById,
+  getDirectEnrollmentLinkById,
   updateDemoRequest,
   logDemoRequestEvent,
   listDemoRequestEvents,
@@ -19,17 +20,21 @@ import {
   getOpenDemoFollowUp,
   listDemoFollowUpsByDemo,
   rebookFollowUpAt,
+  pickDemoRoles,
   type InterestLevel,
   type DemoRequest,
 } from '@neram/database';
 import { getRequestAdminId } from '@/lib/request-admin';
 import { loadDemoSettings, demoMarketingOrigin, sendDueDemoMessages, cancelledEventMarker } from '@/lib/demo/server';
-import { ConfirmError, confirmDemo, enqueueStaffPlan, meetingUrl, parseMeetingKind } from '@/lib/demo/confirm';
+import { ConfirmError, confirmDemo, applyDemoTeamsMeeting, enqueueStaffPlan, meetingUrl, parseMeetingKind } from '@/lib/demo/confirm';
 import { studentGetsDemoWhatsApp } from '@/lib/demo/meeting';
 import { HeldDemoError, parseHeldDemoWithSettings, recordHeldDemo } from '@/lib/demo/record-held';
-import { rescheduleDemoEvent, cancelDemoEvent, DemoTeamsError } from '@/lib/demo/teams';
+import { DEFAULT_HELD_TUTOR, STAFF_DEMO_PLATFORMS, heldTutorOptions } from '@/lib/demo/staff-add';
+import { rescheduleDemoEvent, cancelDemoEvent, getTeamBusy, overlapping, isDemoTeamsDryRun, DemoTeamsError } from '@/lib/demo/teams';
 import { hasLiveTeamsMeeting, syncDemoTeams } from '@/lib/demo/teams-sync';
 import type { DemoWithTeams } from '@/lib/demo/teams-artifacts';
+import { finaliseEnrolmentFromDesk } from '@neram/database/desk-finalise-enrolment';
+import { linkIsUnfinalisedRecorded } from '@/components/demo-requests/journey';
 
 type Params = { params: { id: string } };
 
@@ -50,8 +55,10 @@ async function detail(id: string) {
     listDemoRequestEvents(id, supabase),
     listDemoRequestMessages(id, supabase),
   ]);
-  // Names for the activity log's "by" column.
-  const actorIds = Array.from(new Set(events.map((e) => e.actor_id).filter(Boolean))) as string[];
+  // Names for the activity log's "by" column, plus the audit line (added / last edited by).
+  const actorIds = Array.from(
+    new Set([...events.map((e) => e.actor_id), request.created_by, request.last_edited_by].filter(Boolean)),
+  ) as string[];
   let actors: Record<string, string> = {};
   if (actorIds.length) {
     const { data } = await (supabase as any).from('users').select('id, name').in('id', actorIds);
@@ -63,7 +70,17 @@ async function detail(id: string) {
   ]);
   // The newest follow-up of this demo even when it is closed (stopped or joined).
   const enrolmentLink = await deskEnrolmentLink(supabase, id, request.user_id);
-  return { request, events, messages, actors, followUp, lastFollowUp: latest[id] ?? null, enrolmentLink };
+  return {
+    request,
+    events,
+    messages,
+    actors,
+    followUp,
+    lastFollowUp: latest[id] ?? null,
+    enrolmentLink,
+    createdByName: request.created_by ? actors[request.created_by] ?? null : null,
+    lastEditedByName: request.last_edited_by ? actors[request.last_edited_by] ?? null : null,
+  };
 }
 
 /**
@@ -75,7 +92,7 @@ async function deskEnrolmentLink(supabase: any, demoId: string, userId: string |
   const { data, error } = await supabase
     .from('direct_enrollment_links')
     .select(
-      'id, status, expires_at, created_at, created_by, final_fee, amount_paid, payment_scheme, installment_2_due_date, share_count, last_shared_at, payment_mode, total_fee, discount_amount, offer_full_amount, offer_installment_1, offer_installment_2, rejection_reason, user_id, submitted_user_id',
+      'id, status, expires_at, created_at, created_by, final_fee, amount_paid, payment_scheme, installment_2_due_date, share_count, last_shared_at, payment_mode, total_fee, discount_amount, offer_full_amount, offer_installment_1, offer_installment_2, rejection_reason, verified_at, verified_by, user_id, submitted_user_id',
     )
     .or(match)
     .order('created_at', { ascending: false })
@@ -137,7 +154,7 @@ function email(v: unknown): string | null {
  * POST /api/demo-requests/[id]  { action, ...fields }
  *
  * log_call | note | confirm | set_link | reschedule | cancel | attendance | held | follow_up | drawing | resend | reopen
- * | teams_check | pick_recording
+ * | teams_check | pick_recording | edit_details | create_teams_meeting | edit_held
  * Every action writes the activity log and returns the refreshed detail.
  */
 export async function POST(req: Request, { params }: Params) {
@@ -203,6 +220,46 @@ export async function POST(req: Request, { params }: Params) {
         break;
       }
 
+      case 'finalise_enrolment': {
+        // Staff entered a payment on the enrolment link but never finalised it.
+        // Record it and enrol them from the desk, no second form for the student.
+        if (!actorId) throw new ActionError('Sign in again to continue.', 401);
+        const linkId = text(body.linkId, 64);
+        if (!linkId) throw new ActionError('Bad request');
+        const link = await getDirectEnrollmentLinkById(linkId, supabase);
+        if (!link) throw new ActionError('That enrolment link was not found.', 404);
+        const belongs = link.demo_registration_id === r.id || (!!r.user_id && link.user_id === r.user_id);
+        if (!belongs) throw new ActionError('That link is for a different student.');
+        if (!linkIsUnfinalisedRecorded(link)) {
+          throw new ActionError(link.status === 'used' ? 'This enrolment is already finalised.' : 'There is no recorded payment to finalise on this link.');
+        }
+        const totalFee = Number(body.totalFee);
+        const amountPaid = Number(body.amountPaid);
+        if (!Number.isFinite(totalFee) || totalFee <= 0) throw new ActionError('Enter the total fee.');
+        if (!Number.isFinite(amountPaid) || amountPaid <= 0) throw new ActionError('Enter the amount paid.');
+        if (amountPaid > totalFee + 0.01) throw new ActionError('The amount paid cannot be more than the total fee.');
+        const mode = body.mode === 'fold_parent' ? 'fold_parent' : 'create';
+        const studentUserId = text(body.studentUserId, 64);
+        if (mode === 'fold_parent' && !studentUserId) throw new ActionError('Pick the existing student account to link.');
+        const dueDate = typeof body.installment2DueDate === 'string' && body.installment2DueDate ? body.installment2DueDate : null;
+        const res = await finaliseEnrolmentFromDesk(supabase, {
+          link,
+          demoId: r.id,
+          actorId,
+          money: { totalFee, amountPaid, installment2DueDate: dueDate, method: 'manual' },
+          target: mode === 'fold_parent' ? { mode, studentUserId } : { mode: 'create' },
+        });
+        if (!res.ok) throw new ActionError(res.error, res.status);
+        await log(
+          'status',
+          'enrolled',
+          `Finalised the enrolment from the desk: ₹${Math.round(amountPaid).toLocaleString('en-IN')} of ₹${Math.round(totalFee).toLocaleString('en-IN')} recorded${
+            res.mode === 'fold_parent' ? ', folded the parent account into the student' : ''
+          }.${res.applicationNumber ? ` (${res.applicationNumber})` : ''}`,
+        );
+        break;
+      }
+
       case 'confirm': {
         const settings = await loadDemoSettings(supabase);
         const requested = Array.isArray(body.teamUpns) ? (body.teamUpns as unknown[]).map((u) => text(u, 200).toLowerCase()) : [];
@@ -247,17 +304,145 @@ export async function POST(req: Request, { params }: Params) {
         const minutes = parseMinutes(body.minutes, r.scheduled_minutes);
         const reason = text(body.reason);
         if (!reason) throw new ActionError('Add the reason for the change (it goes in their message).');
+        // Optionally reassign who takes it / the team. Changing the tutor is only
+        // safe without a Teams event: the calendar's attendees/presenters are not
+        // re-patched here, so a Teams demo must be recreated to change who takes it.
+        let tutorUpn = r.tutor_upn;
+        let team = r.staff_upns ?? [];
+        const wantsTeam = Array.isArray(body.teamUpns);
+        const wantsTutor = typeof body.tutorUpn === 'string' && body.tutorUpn.trim().length > 0;
+        if (wantsTeam || wantsTutor) {
+          if (r.graph_event_id) throw new ActionError('To change who takes a Teams demo, cancel it and create a new meeting.');
+          const settings = await loadDemoSettings(supabase);
+          const known = new Map(settings.hosts.map((h) => [h.upn, h] as const));
+          const requested = wantsTeam ? (body.teamUpns as unknown[]).map((u) => text(u, 200).toLowerCase()) : team;
+          const nextTeam = (requested.length ? requested : team).filter((u) => known.has(u));
+          if (!nextTeam.length) throw new ActionError('Pick at least one person from the demo team.');
+          const tutorIn = wantsTutor ? text(body.tutorUpn, 200).toLowerCase() : tutorUpn ?? '';
+          const roles = pickDemoRoles(settings, nextTeam, { tutor: tutorIn || tutorUpn, organizer: r.organizer_upn });
+          team = nextTeam;
+          tutorUpn = roles.tutor!;
+        }
         if (r.organizer_upn && r.graph_event_id) await rescheduleDemoEvent(r.organizer_upn, r.graph_event_id, start, minutes);
         await updateDemoRequest(
           r.id,
-          { scheduled_start: start.toISOString(), scheduled_minutes: minutes, schedule_change_reason: reason },
+          { scheduled_start: start.toISOString(), scheduled_minutes: minutes, schedule_change_reason: reason, tutor_upn: tutorUpn, staff_upns: team },
           supabase,
         );
         await cancelPendingDemoMessages(r.id, undefined, supabase);
         if (studentGetsDemoWhatsApp(r)) await enqueueDemoMessages(r, demoReminderPlan(start, new Date(), 'rescheduled'), supabase);
-        await enqueueStaffPlan(r.id, start, r.staff_upns ?? [], r.tutor_upn, await staffUserIdsByUpn(r.staff_upns ?? [], supabase), supabase);
+        await enqueueStaffPlan(r.id, start, tutorUpn, await staffUserIdsByUpn(team, supabase), supabase);
         await log('schedule', 'rescheduled', `${formatDemoDateTime(new Date(r.scheduled_start))} moved to ${formatDemoDateTime(start)}. Reason: ${reason}`);
         sendNow = studentGetsDemoWhatsApp(r);
+        break;
+      }
+
+      case 'edit_details': {
+        // Fix the person's data on the desk (a wrongly-typed name, a corrected
+        // phone/email/class/parent). Edits the demo row; People stays the full
+        // CRM editor for the linked account.
+        const patch: Partial<DemoRequest> = {};
+        if (typeof body.name === 'string') {
+          const name = text(body.name, 120);
+          if (!name) throw new ActionError('Name cannot be empty.');
+          patch.name = name;
+        }
+        if (typeof body.phone === 'string') {
+          const p = text(body.phone, 20);
+          if (!p) throw new ActionError('Phone cannot be empty.');
+          patch.phone = p;
+        }
+        if (body.email !== undefined) patch.email = email(body.email);
+        if (body.currentClass !== undefined) patch.current_class = text(body.currentClass, 20) || null;
+        if (body.examYear !== undefined) {
+          const y = Number(body.examYear);
+          patch.exam_year = Number.isInteger(y) && y >= 2024 && y <= 2035 ? y : null;
+        }
+        if (body.parentName !== undefined) patch.parent_name = text(body.parentName, 120) || null;
+        if (body.parentPhone !== undefined) patch.parent_phone = text(body.parentPhone, 20) || null;
+        if (body.parentEmail !== undefined) patch.parent_email = email(body.parentEmail);
+        if (typeof body.parentJoining === 'boolean') patch.parent_joining = body.parentJoining;
+        if (body.accountHolder === 'student' || body.accountHolder === 'parent') patch.account_holder = body.accountHolder;
+        if (Object.keys(patch).length === 0) throw new ActionError('Nothing to change.');
+        await updateDemoRequest(r.id, patch, supabase);
+        const LABELS: Record<string, string> = {
+          name: 'name', phone: 'phone', email: 'email', current_class: 'class', exam_year: 'exam year',
+          parent_name: 'parent name', parent_phone: 'parent phone', parent_email: 'parent email',
+          parent_joining: 'parent joining', account_holder: 'account holder',
+        };
+        await log('note', 'edited', `Edited details: ${Object.keys(patch).map((k) => LABELS[k] ?? k).join(', ')}.`);
+        break;
+      }
+
+      case 'create_teams_meeting': {
+        // Turn a scheduled demo with no link (later / own link / in person) into
+        // an auto-recorded Teams meeting that invites the team and the student.
+        if (r.status !== 'approved' || !r.scheduled_start) throw new ActionError('Add a Teams meeting to a scheduled demo.');
+        if (r.graph_event_id) throw new ActionError('This demo already has a Teams meeting.');
+        const settings = await loadDemoSettings(supabase);
+        if (!settings.hosts.length) throw new ActionError('Add the demo team in Demo settings first.');
+        const known = new Map(settings.hosts.map((h) => [h.upn, h] as const));
+        const requested = Array.isArray(body.teamUpns) ? (body.teamUpns as unknown[]).map((u) => text(u, 200).toLowerCase()) : [];
+        const team = (requested.length ? requested : r.staff_upns?.length ? r.staff_upns : settings.hosts.map((h) => h.upn)).filter((u) => known.has(u));
+        if (!team.length) throw new ActionError('Pick at least one person from the demo team.');
+        const tutorIn = text(body.tutorUpn, 200).toLowerCase();
+        const orgIn = text(body.organizerUpn, 200).toLowerCase();
+        if (tutorIn && !team.includes(tutorIn)) throw new ActionError('The tutor must be one of the people on this demo.');
+        if (orgIn && !team.includes(orgIn)) throw new ActionError('The organizer must be one of the people on this demo.');
+        const roles = pickDemoRoles(settings, team, { tutor: tutorIn || r.tutor_upn, organizer: orgIn || r.organizer_upn });
+        const tutorUpn = roles.tutor!;
+        const organizerUpn = roles.organizer!;
+        const start = new Date(r.scheduled_start);
+        const minutes = r.scheduled_minutes;
+        const conflictNote = text(body.conflictNote) || null;
+        if (!isDemoTeamsDryRun()) {
+          const busy = await getTeamBusy([tutorUpn], start, new Date(start.getTime() + minutes * 60_000));
+          const clash = overlapping(busy[tutorUpn] ?? [], start, minutes);
+          if (clash.length && !conflictNote) {
+            throw new ActionError(`${known.get(tutorUpn)?.name ?? 'The tutor'} is busy then in Outlook. Move the demo, or add a note saying why it is fine.`, 409);
+          }
+        }
+        const parentEmail = body.parentEmail === undefined ? r.parent_email : email(body.parentEmail);
+        const event = await applyDemoTeamsMeeting({
+          supabase, actorId, r, settings, origin, start, minutes, team, tutorUpn, organizerUpn, parentEmail, reason: r.schedule_change_reason,
+        });
+        const names = team.map((u) => known.get(u)!.name).join(', ');
+        await log(
+          'schedule',
+          'teams_created',
+          `Teams meeting created. Tutor ${known.get(tutorUpn)!.name}, organizer ${known.get(organizerUpn)!.name}, team ${names}. ` +
+            `${event.optionsNote ?? 'Recording starts automatically and guests skip the lobby'}${conflictNote ? `. Calendar clash note: ${conflictNote}` : ''}`,
+        );
+        sendNow = true;
+        break;
+      }
+
+      case 'edit_held': {
+        // Correct a demo recorded as held outside the desk: its time, who took it,
+        // and the platform note. Outcome (attended/no-show) stays on Attended/No-show.
+        if (!['attended', 'no_show'].includes(r.status)) throw new ActionError('This is only for a demo already recorded as held.');
+        if (r.organizer_upn) throw new ActionError('This demo has a Teams meeting. Use Move to change its time.');
+        const at = new Date(text(body.heldAt, 40));
+        if (Number.isNaN(at.getTime())) throw new ActionError('Pick when the demo happened.');
+        if (at.getTime() > Date.now() + 5 * 60_000) throw new ActionError('That time is in the future.');
+        const settings = await loadDemoSettings(supabase);
+        const tutors = heldTutorOptions(settings.hosts);
+        const tutorUpn = text(body.tutorUpn, 200).toLowerCase() || r.tutor_upn || DEFAULT_HELD_TUTOR.upn;
+        if (!tutors.some((t) => t.upn === tutorUpn)) throw new ActionError('Pick who took the demo from the demo team.');
+        const platform = STAFF_DEMO_PLATFORMS.find((p) => p.id === text(body.platform, 20));
+        const staffIds = await staffUserIdsByUpn([tutorUpn], supabase);
+        await updateDemoRequest(
+          r.id,
+          { scheduled_start: at.toISOString(), tutor_upn: tutorUpn, host_user_id: staffIds[tutorUpn] ?? null },
+          supabase,
+        );
+        const tutorName = tutors.find((t) => t.upn === tutorUpn)?.name ?? tutorUpn;
+        const extra = text(body.note, 500);
+        await log(
+          'schedule',
+          'held_edited',
+          `Corrected the held demo: ${formatDemoDateTime(at)}${platform ? ` on ${platform.label}` : ''}, taken by ${tutorName}.${extra ? ` ${extra}` : ''}`,
+        );
         break;
       }
 
@@ -443,6 +628,19 @@ export async function POST(req: Request, { params }: Params) {
 
       default:
         throw new ActionError('Unknown action');
+    }
+
+    // Audit: stamp who last edited the demo on the structural changes (not on a
+    // plain note, call log, drawing toggle or Teams re-check).
+    const STRUCTURAL_EDITS = new Set([
+      'confirm', 'set_link', 'reschedule', 'cancel', 'attendance', 'held', 'reopen',
+      'create_teams_meeting', 'edit_details', 'edit_held',
+    ]);
+    if (actorId && STRUCTURAL_EDITS.has(String(body.action))) {
+      await (supabase as any)
+        .from('demo_class_registrations')
+        .update({ last_edited_by: actorId, last_edited_at: new Date().toISOString() })
+        .eq('id', r.id);
     }
 
     let send: { sent: number; failed: number; skipped: number } | null = null;

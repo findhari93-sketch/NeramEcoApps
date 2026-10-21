@@ -271,6 +271,42 @@ export default function ScheduleDialog({
           </>
         )}
 
+        {mode === 'reschedule' && !request.graph_event_id && people.length > 0 && (
+          <>
+            <SectionLabel>Who takes it</SectionLabel>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+              {people.map((p) => (
+                <FormControlLabel
+                  key={p.upn}
+                  control={
+                    <Checkbox
+                      checked={team.includes(p.upn)}
+                      onChange={(e) => setTeam(e.target.checked ? [...team, p.upn] : team.filter((u) => u !== p.upn))}
+                    />
+                  }
+                  label={p.name}
+                  sx={{ minHeight: 44, mr: 2 }}
+                />
+              ))}
+            </Box>
+            <TextField
+              select
+              label="Tutor (teaches the demo)"
+              value={team.includes(tutorUpn) ? tutorUpn : ''}
+              onChange={(e) => setTutorUpn(e.target.value)}
+              helperText="Students see this name"
+              disabled={!team.length}
+              sx={{ mt: 1, minWidth: 240 }}
+            >
+              {team.map((u) => (
+                <MenuItem key={u} value={u}>
+                  {nameOf(u)}
+                </MenuItem>
+              ))}
+            </TextField>
+          </>
+        )}
+
         <SectionLabel>When</SectionLabel>
         <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr 1fr' }, gap: 2 }}>
           <TextField label="Date" type="date" value={date} onChange={(e) => setDate(e.target.value)} InputLabelProps={{ shrink: true }} required />
@@ -415,7 +451,9 @@ export default function ScheduleDialog({
                     meeting,
                     ...(ownLink ? { joinUrl: joinUrl.trim() } : {}),
                   }
-                : {}),
+                : !request.graph_event_id
+                  ? { teamUpns: team, tutorUpn }
+                  : {}),
             })
           }
         >

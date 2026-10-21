@@ -7,7 +7,7 @@ import Footer from '@/components/Footer';
 import { BroadcastBanner, ImportantDateBanner, StickyAchievementWidget } from '@/components/marketing-content';
 import ApplicationShell from '@/components/apply/shell/ApplicationShell';
 import { isFocusedRoute } from '@/lib/focused-routes';
-import { isCollegeProfileRoute, isHubRoute } from '@/components/college-hub/hub-routes';
+import { isCollegeProfileRoute, isCompareRoute, isHubRoute } from '@/components/college-hub/hub-routes';
 
 const GeneralChatbot = dynamic(() => import('@/components/GeneralChatbot'), { ssr: false });
 const ComparisonTray = dynamic(() => import('@/components/college-hub/ComparisonTray'), { ssr: false });
@@ -44,7 +44,9 @@ export default function SiteChrome({ locale, children }: SiteChromeProps) {
       {/* Phone bottom nav of the College Hub (/colleges pages; college pages have their own action bar). */}
       {isHubRoute(pathname) && !isCollegeProfileRoute(pathname) && <HubBottomNav />}
       <StickyAchievementWidget locale={locale} />
-      <ComparisonTray />
+      {/* Compare tray only where colleges can be compared (the College Hub and the
+          exam hubs with Compare buttons), so a saved list never surfaces it elsewhere. */}
+      {isCompareRoute(pathname) && <ComparisonTray />}
       <GeneralChatbot />
     </>
   );

@@ -225,7 +225,9 @@ export default function RequestList({
                     ))}
 
                   {stage === 'after_demo' &&
-                    (saysJoinedNoFee(f, e) ? (
+                    (e?.kind === 'fee_pending' ? (
+                      <Chip size="small" color="info" variant="outlined" icon={<ErrorOutlineIcon />} label="Payment entered, finalise" />
+                    ) : saysJoinedNoFee(f, e) ? (
                       <Chip size="small" color="warning" variant="outlined" icon={<ErrorOutlineIcon />} label="Says joined, fee not recorded" />
                     ) : (
                       <FollowUpCell f={f} now={now} />

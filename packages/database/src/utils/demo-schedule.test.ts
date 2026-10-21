@@ -296,16 +296,16 @@ describe('demo team', () => {
     expect(demoTutorName(team, {})).toBeNull();
   });
 
-  it('plans 8 AM pings for everyone and a 15-minute ping for the tutor', () => {
+  it('plans a 15-minute ping for the tutor (the morning digest replaces per-demo pings)', () => {
     const start = istDateTime('2025-10-14', '18:00');
-    const plan = staffReminderPlan(start, new Date('2025-10-13T10:00:00Z'), ['a@x', 'b@x'], 'a@x');
-    expect(plan.map((p) => `${p.kind}:${p.upn}`)).toEqual(['staff_day:a@x', 'staff_day:b@x', 'staff_soon:a@x']);
-    expect(plan[2].sendAfter.toISOString()).toBe('2025-10-14T12:15:00.000Z');
+    const plan = staffReminderPlan(start, new Date('2025-10-13T10:00:00Z'), 'a@x');
+    expect(plan.map((p) => `${p.kind}:${p.upn}`)).toEqual(['staff_soon:a@x']);
+    expect(plan[0].sendAfter.toISOString()).toBe('2025-10-14T12:15:00.000Z');
   });
 
-  it('skips the morning ping once it has passed', () => {
-    const start = istDateTime('2025-10-14', '18:00');
-    const plan = staffReminderPlan(start, new Date('2025-10-14T06:00:00Z'), ['a@x'], 'a@x');
-    expect(plan.map((p) => p.kind)).toEqual(['staff_soon']);
+  it('skips the 15-minute ping once it has passed', () => {
+    const start = istDateTime('2025-10-14', '18:00'); // 12:30 UTC, so the 15-min ping is 12:15 UTC
+    const plan = staffReminderPlan(start, new Date('2025-10-14T12:20:00Z'), 'a@x');
+    expect(plan).toEqual([]);
   });
 });

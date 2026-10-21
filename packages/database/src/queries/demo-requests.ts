@@ -13,6 +13,7 @@ import type { TypedSupabaseClient } from '../client';
 import { getSupabaseAdminClient } from '../client';
 import {
   ACTIVE_DEMO_STATUSES,
+  istDateTime,
   makeDemoJoinToken,
   makeDemoRefCode,
   type DemoMessageKind,
@@ -75,6 +76,11 @@ export interface DemoRequest {
   utm_source: string | null;
   utm_medium: string | null;
   utm_campaign: string | null;
+  /** Staff who added this demo (Add demo); null when it came from the website. */
+  created_by?: string | null;
+  /** Staff who last edited this demo (time, person data, or who takes it). */
+  last_edited_by?: string | null;
+  last_edited_at?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -137,6 +143,8 @@ export interface CreateDemoRequestInput {
   page_code?: string | null;
   account_holder?: 'student' | 'parent';
   host_user_id?: string | null;
+  /** Staff who added this demo; null when it came from the website. */
+  created_by?: string | null;
 }
 
 /** Only v2 rows: a ref_code is what marks a request (vs an old slot registration). */
@@ -278,12 +286,52 @@ export async function listDemoRequests(
   return (data ?? []) as DemoRequest[];
 }
 
+/**
+ * Approved demos whose scheduled_start falls on the given IST day (YYYY-MM-DD).
+ * Feeds the morning "demos today" digest, which groups them by tutor.
+ */
+export async function listApprovedDemosForIstDay(
+  dayKey: string,
+  client?: TypedSupabaseClient,
+): Promise<DemoRequest[]> {
+  const from = istDateTime(dayKey, '00:00');
+  const to = new Date(from.getTime() + 24 * 60 * 60_000);
+  const { data, error } = await db(client)
+    .from('demo_class_registrations')
+    .select('*')
+    .not(V2, 'is', null)
+    .eq('status', 'approved')
+    .gte('scheduled_start', from.toISOString())
+    .lt('scheduled_start', to.toISOString())
+    .order('scheduled_start', { ascending: true });
+  if (error) throw error;
+  return (data ?? []) as DemoRequest[];
+}
+
 export async function logDemoRequestEvent(
   event: Omit<DemoRequestEvent, 'id' | 'created_at'>,
   client?: TypedSupabaseClient,
 ): Promise<void> {
   const { error } = await db(client).from('demo_request_events').insert(event);
   if (error) throw error;
+}
+
+/**
+ * Claim today's "demos today" digest for a tutor: insert (day_key, user_id) and
+ * return true only when this call inserted it. A repeat the same day returns
+ * false, so overlapping cron runs never message a tutor twice.
+ */
+export async function claimDemoTodayDigest(
+  dayKey: string,
+  userId: string,
+  client?: TypedSupabaseClient,
+): Promise<boolean> {
+  const { data, error } = await db(client)
+    .from('demo_today_digest_log')
+    .upsert({ day_key: dayKey, user_id: userId }, { onConflict: 'day_key,user_id', ignoreDuplicates: true })
+    .select('user_id');
+  if (error) throw error;
+  return (data ?? []).length > 0;
 }
 
 export async function listDemoRequestEvents(

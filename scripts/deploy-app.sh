@@ -126,7 +126,10 @@ fi
 # --- Deploy via Vercel CLI ---
 echo -e "\n${BLUE}=== Deploying ${APP} via Vercel CLI ===${NC}"
 
-VERCEL_FLAGS="--yes"
+# --archive=tgz bundles the upload into a single tarball. This monorepo has more
+# than 15,000 files (Vercel's direct-upload cap), so a plain `vercel deploy` is
+# rejected with "missing_archive". The tarball upload sidesteps the file count.
+VERCEL_FLAGS="--yes --archive=tgz"
 
 if [[ "$TARGET" == "production" ]]; then
   VERCEL_FLAGS="$VERCEL_FLAGS --prod"

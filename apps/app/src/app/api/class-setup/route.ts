@@ -2,7 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getSupabaseAdminClient, getUserByFirebaseUid } from '@neram/database';
-import { readPasswordTimes, startPassword } from '@neram/auth/student-accounts';
+import { readPasswordTimes, readUserPrincipalName, startPassword } from '@neram/auth/student-accounts';
 import {
   GUIDE_STEP_KEYS,
   SELF_TICK_STEPS,
@@ -51,31 +51,120 @@ async function detectPasswordChange(supabase: any, setup: any): Promise<string |
   return times.value.passwordChangedAt;
 }
 
+type EnrolmentStage = 'checking' | 'enrolled' | null;
+
+/**
+ * Where the student's direct enrolment link is: payment sent and waiting for
+ * staff to check it, or verified and enrolled. Null when they never sent one,
+ * so they keep the older onboarding.
+ */
+async function enrolmentStage(supabase: any, userId: string): Promise<EnrolmentStage> {
+  const { data: links } = await supabase
+    .from('direct_enrollment_links')
+    .select('status, submitted_at, rejected_at')
+    .or(`submitted_user_id.eq.${userId},user_id.eq.${userId},used_by.eq.${userId}`)
+    .neq('status', 'cancelled');
+  const rows = (links || []) as any[];
+  if (rows.some((l) => l.status === 'used')) return 'enrolled';
+  const waiting = rows.some(
+    (l) => l.status === 'active' && l.submitted_at && (!l.rejected_at || new Date(l.rejected_at) < new Date(l.submitted_at)),
+  );
+  return waiting ? 'checking' : null;
+}
+
+const isNeramLogin = (value: unknown): value is string =>
+  typeof value === 'string' && /@neramclasses\.com$/i.test(value.trim());
+
+/**
+ * A student whose Microsoft account was made by hand before class setup
+ * existed joins the guide with that account. Every staff step is marked as
+ * done before, so Admin shows it complete, and the guide asks for the password
+ * the office gave them. Null when the login ID cannot be found.
+ */
+async function adoptHandMadeAccount(supabase: any, userId: string, msOid: string, user: any): Promise<any | null> {
+  const { data: profile } = await supabase.from('student_profiles').select('ms_teams_email').eq('user_id', userId).maybeSingle();
+  let upn = [user?.linked_classroom_email, profile?.ms_teams_email, user?.email].find(isNeramLogin)?.trim() || null;
+  if (!upn) {
+    const read = await readUserPrincipalName(msOid);
+    if (read.ok && isNeramLogin(read.value)) upn = read.value;
+  }
+  if (!upn) return null;
+
+  const now = new Date().toISOString();
+  const before = { status: 'skipped', at: now, message: 'Done by hand before class setup.' };
+  const { data, error } = await supabase
+    .from('class_account_setups')
+    .insert({
+      user_id: userId,
+      upn,
+      ms_oid: msOid,
+      password_mode: 'random',
+      steps: {
+        account: { status: 'done', at: now, message: 'Made by hand before class setup.' },
+        licence: before,
+        link: { status: 'done', at: now },
+        classroom: before,
+        teams: before,
+        welcome: before,
+      },
+    })
+    .select('*')
+    .single();
+  if (!error) return data;
+  // Two tabs at once: the other one saved it.
+  const { data: again } = await supabase.from('class_account_setups').select('*').eq('user_id', userId).maybeSingle();
+  return again ?? null;
+}
+
 /**
  * GET: the signed-in student's setup guide. Only ever their own: the login ID,
  * the start password until they have changed it, their batch WhatsApp group,
  * and which of the five steps are done.
+ *
+ * A student who enrolled with a direct link never gets the older onboarding:
+ * before their account exists they get `pending` (payment being checked, or
+ * account being made). `?summary=1` (the dashboard card) skips asking
+ * Microsoft about the password.
  */
 export async function GET(request: NextRequest) {
   const userId = await signedInUserId(request);
   if (!userId) return NextResponse.json({ error: 'Sign in to see your setup.' }, { status: 401 });
+  const summary = request.nextUrl.searchParams.get('summary') === '1';
+  const reply = (data: Record<string, unknown>) =>
+    NextResponse.json({ success: true, data }, { headers: { 'Cache-Control': 'private, no-store' } });
 
   try {
     const supabase = getSupabaseAdminClient() as any;
-    const [{ data: setup }, { data: user }] = await Promise.all([
+    const [{ data: found }, { data: user }] = await Promise.all([
       supabase.from('class_account_setups').select('*').eq('user_id', userId).maybeSingle(),
-      supabase.from('users').select('name, first_name, nexus_first_login_at, photo_status').eq('id', userId).maybeSingle(),
+      supabase
+        .from('users')
+        .select('name, first_name, email, ms_oid, linked_classroom_email, nexus_first_login_at, photo_status')
+        .eq('id', userId)
+        .maybeSingle(),
     ]);
     const firstName = String(user?.first_name || String(user?.name || '').split(/\s+/)[0] || '').trim();
+    let setup = found;
 
     if (!setup || setup.steps?.account?.status !== 'done') {
-      return NextResponse.json(
-        { success: true, data: { ready: false, firstName } },
-        { headers: { 'Cache-Control': 'private, no-store' } },
-      );
+      const stage = await enrolmentStage(supabase, userId);
+      if (!setup && stage === 'enrolled' && user?.ms_oid) {
+        setup = await adoptHandMadeAccount(supabase, userId, user.ms_oid, user).catch(() => null);
+      }
+      if (!setup || setup.steps?.account?.status !== 'done') {
+        if (!stage && !setup) return reply({ ready: false, pending: null, firstName });
+        const personalEmail = isNeramLogin(user?.email) ? null : user?.email || null;
+        return reply({
+          ready: false,
+          pending: { stage: stage === 'checking' ? 'checking' : 'account', email: personalEmail },
+          firstName,
+        });
+      }
     }
 
-    const passwordChangedAt = await detectPasswordChange(supabase, setup).catch(() => setup.password_changed_at ?? null);
+    const passwordChangedAt = summary
+      ? setup.password_changed_at ?? null
+      : await detectPasswordChange(supabase, setup).catch(() => setup.password_changed_at ?? null);
     const group = await getWhatsAppGroupLinkForUser(supabase, userId).catch(() => null);
     const progress = guideProgress({
       ticks: setup.student_ticks,

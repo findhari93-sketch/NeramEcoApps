@@ -28,6 +28,7 @@ import NexusStatusPoller from '@/components/onboarding/NexusStatusPoller';
 import CongratulationsModal from '@/components/onboarding/CongratulationsModal';
 import WhatsAppJoinStep from '@/components/onboarding/WhatsAppJoinStep';
 import ClassSetupGuide, { ClassSetupSkeleton, classSetupIdToken, type ClassSetupData } from '@/components/class-setup/ClassSetupGuide';
+import ClassSetupPending, { type ClassSetupPendingData } from '@/components/class-setup/ClassSetupPending';
 
 // ─── Types ───
 
@@ -700,40 +701,55 @@ function LegacyOnboardingPage() {
 }
 
 
+type SetupReply = ClassSetupData | ClassSetupPendingData | { ready: false; pending: null };
+
+async function loadSetup(): Promise<SetupReply | null> {
+  try {
+    const token = await classSetupIdToken();
+    if (!token) return null;
+    const res = await fetch('/api/class-setup', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return (json?.data as SetupReply) ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /**
- * A student whose class account was made at enrolment gets the five-step setup
- * guide; everyone else keeps the older onboarding.
+ * A student who enrolled with a direct link gets the five-step setup guide, or
+ * "almost in" while their payment is checked and their account is made. They
+ * never see the older onboarding. Everyone else keeps it.
  */
 export default function OnboardingPage() {
-  const [view, setView] = useState<'loading' | 'guide' | 'legacy'>('loading');
-  const [setup, setSetup] = useState<ClassSetupData | null>(null);
-
-  const fetchSetup = useCallback(async (): Promise<ClassSetupData | null> => {
-    try {
-      const token = await classSetupIdToken();
-      if (!token) return null;
-      const res = await fetch('/api/class-setup', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
-      if (!res.ok) return null;
-      const json = await res.json();
-      return json?.data?.ready ? (json.data as ClassSetupData) : null;
-    } catch {
-      return null;
-    }
-  }, []);
+  const [reply, setReply] = useState<SetupReply | null | undefined>(undefined);
 
   useEffect(() => {
     let cancelled = false;
-    fetchSetup().then((data) => {
-      if (cancelled) return;
-      setSetup(data);
-      setView(data ? 'guide' : 'legacy');
+    loadSetup().then((data) => {
+      if (!cancelled) setReply(data);
     });
     return () => {
       cancelled = true;
     };
-  }, [fetchSetup]);
+  }, []);
 
-  if (view === 'loading') return <ClassSetupSkeleton />;
-  if (view === 'guide' && setup) return <ClassSetupGuide initial={setup} onRefresh={fetchSetup} />;
+  const refreshGuide = useCallback(async (): Promise<ClassSetupData | null> => {
+    const data = await loadSetup();
+    return data?.ready ? data : null;
+  }, []);
+
+  const refreshPending = useCallback(async (): Promise<'ready' | ClassSetupPendingData | null> => {
+    const data = await loadSetup();
+    if (data?.ready) {
+      setReply(data);
+      return 'ready';
+    }
+    return data?.pending ? (data as ClassSetupPendingData) : null;
+  }, []);
+
+  if (reply === undefined) return <ClassSetupSkeleton />;
+  if (reply?.ready) return <ClassSetupGuide initial={reply} onRefresh={refreshGuide} />;
+  if (reply?.pending) return <ClassSetupPending initial={reply as ClassSetupPendingData} onRefresh={refreshPending} />;
   return <LegacyOnboardingPage />;
 }

@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import type { DemoFollowUpRow, DemoRequest } from '@neram/database';
-import { closedReason, enrolmentOf, groupByPerson, meetingKindOf, saysJoinedNoFee, sortPeople, stageOf } from './journey';
+import {
+  closedReason,
+  enrolmentOf,
+  groupByPerson,
+  linkIsReallyPaid,
+  linkIsUnfinalisedRecorded,
+  meetingKindOf,
+  saysJoinedNoFee,
+  sortPeople,
+  stageOf,
+  type EnrolmentEvidence,
+} from './journey';
 
 const req = (over: Partial<DemoRequest>): DemoRequest =>
   ({
@@ -47,6 +58,12 @@ describe('stageOf', () => {
     expect(stageOf(req({ status: 'attended' }), fu({ status: 'scheduled' }), enrolled)).toBe('joined');
     expect(stageOf(req({ status: 'cancelled' }), null, enrolled)).toBe('joined');
   });
+  it('fee_pending stays After demo (money entered, not finalised) and clears the "no fee" chip', () => {
+    const feePending = { kind: 'fee_pending', on: '2026-10-20', linkId: 'l', amountPaid: 15000, finalFee: 30000 } as const;
+    const joined = fu({ status: 'completed', call_outcome: 'joined' });
+    expect(stageOf(req({ status: 'attended' }), joined, feePending)).toBe('after_demo');
+    expect(saysJoinedNoFee(joined, feePending)).toBe(false);
+  });
   it('a student from before the demo is not Enrolled', () => {
     expect(stageOf(req({ status: 'approved' }), null, { kind: 'student_before', since: '2026-03-29' })).toBe('scheduled');
   });
@@ -56,27 +73,72 @@ describe('stageOf', () => {
   });
 });
 
+describe('linkIsReallyPaid / linkIsUnfinalisedRecorded', () => {
+  it('a used, verified, or payment-backed link is really paid', () => {
+    expect(linkIsReallyPaid({ status: 'used' })).toBe(true);
+    expect(linkIsReallyPaid({ status: 'active', verified_at: '2026-10-21T06:00:00Z' })).toBe(true);
+    expect(linkIsReallyPaid({ status: 'active', verified_by: 'staff-1' })).toBe(true);
+    expect(linkIsReallyPaid({ status: 'active', amount_paid: 15000 }, true)).toBe(true);
+    expect(linkIsReallyPaid({ status: 'active', amount_paid: 15000 })).toBe(false);
+    expect(linkIsReallyPaid(null)).toBe(false);
+  });
+  it('an active recorded link with a typed amount, not yet real, is unfinalised', () => {
+    expect(linkIsUnfinalisedRecorded({ status: 'active', payment_mode: 'recorded', amount_paid: 15000 })).toBe(true);
+    // payment_mode defaults to recorded when absent
+    expect(linkIsUnfinalisedRecorded({ status: 'active', amount_paid: 15000 })).toBe(true);
+  });
+  it('is false for student-pays, zero amount, used, or a real payment', () => {
+    expect(linkIsUnfinalisedRecorded({ status: 'active', payment_mode: 'student_pays', amount_paid: 15000 })).toBe(false);
+    expect(linkIsUnfinalisedRecorded({ status: 'active', payment_mode: 'recorded', amount_paid: 0 })).toBe(false);
+    expect(linkIsUnfinalisedRecorded({ status: 'used', payment_mode: 'recorded', amount_paid: 15000 })).toBe(false);
+    expect(linkIsUnfinalisedRecorded({ status: 'active', payment_mode: 'recorded', amount_paid: 15000 }, true)).toBe(false);
+  });
+});
+
 describe('enrolmentOf', () => {
   const asked = req({ id: 'jwq8', user_id: 'hari', created_at: '2026-10-19T17:17:43Z' });
-  const none = { profiles: {}, usedLinks: [] };
+  const none: EnrolmentEvidence = { profiles: {}, usedLinks: [], pendingLinks: [] };
+  const pending = (over: Partial<EnrolmentEvidence['pendingLinks'][number]> = {}): EnrolmentEvidence['pendingLinks'][number] => ({
+    demoId: 'jwq8',
+    userId: 'hari',
+    linkId: 'link-1',
+    amountPaid: 15000,
+    finalFee: 30000,
+    createdAt: '2026-10-20T06:00:00Z',
+    ...over,
+  });
 
   it('DEMO-JWQ8: a profile from March is a student from before, not Enrolled', () => {
-    const ev = { profiles: { hari: { enrolledOn: '2026-03-29', createdAt: '2026-03-29T17:22:37Z' } }, usedLinks: [] };
+    const ev: EnrolmentEvidence = { profiles: { hari: { enrolledOn: '2026-03-29', createdAt: '2026-03-29T17:22:37Z' } }, usedLinks: [], pendingLinks: [] };
     expect(enrolmentOf(asked, ev)).toEqual({ kind: 'student_before', since: '2026-03-29' });
   });
   it('a finished enrolment link for this demo is Enrolled', () => {
-    const ev = { profiles: {}, usedLinks: [{ demoId: 'jwq8', userId: null, usedAt: '2026-10-21T06:00:00Z' }] };
+    const ev: EnrolmentEvidence = { profiles: {}, usedLinks: [{ demoId: 'jwq8', userId: null, usedAt: '2026-10-21T06:00:00Z' }], pendingLinks: [] };
     expect(enrolmentOf(asked, ev)).toEqual({ kind: 'enrolled', on: '2026-10-21T06:00:00Z' });
   });
   it("the student's own link or profile after the request is Enrolled; before it is not", () => {
-    const after = { profiles: {}, usedLinks: [{ demoId: null, userId: 'hari', usedAt: '2026-10-22T06:00:00Z' }] };
+    const after: EnrolmentEvidence = { profiles: {}, usedLinks: [{ demoId: null, userId: 'hari', usedAt: '2026-10-22T06:00:00Z' }], pendingLinks: [] };
     expect(enrolmentOf(asked, after)?.kind).toBe('enrolled');
-    const profile = { profiles: { hari: { enrolledOn: '2026-10-22', createdAt: '2026-10-22T06:00:00Z' } }, usedLinks: [] };
+    const profile: EnrolmentEvidence = { profiles: { hari: { enrolledOn: '2026-10-22', createdAt: '2026-10-22T06:00:00Z' } }, usedLinks: [], pendingLinks: [] };
     expect(enrolmentOf(asked, profile)).toEqual({ kind: 'enrolled', on: '2026-10-22' });
-    const before = { profiles: {}, usedLinks: [{ demoId: null, userId: 'hari', usedAt: '2026-03-29T06:00:00Z' }] };
+    const before: EnrolmentEvidence = { profiles: {}, usedLinks: [{ demoId: null, userId: 'hari', usedAt: '2026-03-29T06:00:00Z' }], pendingLinks: [] };
     expect(enrolmentOf(asked, before)).toBeNull();
   });
-  it('no profile and no finished link is nothing (a submitted payment waits for staff)', () => {
+  it('an active recorded link with money is fee_pending (matched by demo, then by user)', () => {
+    const byDemo: EnrolmentEvidence = { profiles: {}, usedLinks: [], pendingLinks: [pending()] };
+    expect(enrolmentOf(asked, byDemo)).toEqual({ kind: 'fee_pending', on: '2026-10-20T06:00:00Z', linkId: 'link-1', amountPaid: 15000, finalFee: 30000 });
+    const byUser: EnrolmentEvidence = { profiles: {}, usedLinks: [], pendingLinks: [pending({ demoId: null })] };
+    expect(enrolmentOf(asked, byUser)?.kind).toBe('fee_pending');
+  });
+  it('a really paid link wins over a pending one', () => {
+    const ev: EnrolmentEvidence = {
+      profiles: {},
+      usedLinks: [{ demoId: 'jwq8', userId: null, usedAt: '2026-10-21T06:00:00Z' }],
+      pendingLinks: [pending()],
+    };
+    expect(enrolmentOf(asked, ev)?.kind).toBe('enrolled');
+  });
+  it('no profile and no link is nothing (a submitted payment waits for staff)', () => {
     expect(enrolmentOf(asked, none)).toBeNull();
     expect(enrolmentOf(req({ user_id: null }), none)).toBeNull();
   });

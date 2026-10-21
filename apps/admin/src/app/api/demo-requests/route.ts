@@ -28,45 +28,79 @@ import { DEFAULT_HELD_TUTOR, STAFF_DEMO_CHANNELS, STAFF_DEMO_PAGE_CODE } from '@
 import { DemoTeamsError } from '@/lib/demo/teams';
 import { HeldDemoError, parseHeldDemoWithSettings, recordHeldDemo } from '@/lib/demo/record-held';
 import { ConfirmError, confirmDemo, meetingUrl, parseMeetingKind, type ConfirmInput } from '@/lib/demo/confirm';
-import { enrolmentOf, type DemoEnrolment, type EnrolmentEvidence } from '@/components/demo-requests/journey';
+import {
+  enrolmentOf,
+  linkIsReallyPaid,
+  linkIsUnfinalisedRecorded,
+  type DemoEnrolment,
+  type EnrolmentEvidence,
+  type LinkFacts,
+} from '@/components/demo-requests/journey';
+
+const PAYMENT_KEY_PREFIX = 'direct-link:';
+type LinkRow = LinkFacts & { id: string; demo_registration_id: string | null; user_id: string | null; used_at: string | null; created_at: string };
+const LINK_COLS = 'id, demo_registration_id, user_id, status, used_at, created_at, payment_mode, amount_paid, final_fee, verified_at, verified_by';
 
 /**
- * Enrolled or already a student, per request id. Enrolled needs a finished
- * enrolment link (fee recorded or verified) or a student profile made after the
- * request; an older profile (a test account) is never "Enrolled".
+ * Enrolled, fee pending, or already a student, per request id. Enrolled needs a
+ * link whose money is real (used/verified, or a matched payment) or a student
+ * profile made after the request; an active recorded link with a staff-entered
+ * amount that was never finalised is "fee pending"; an older profile (a test
+ * account) is never "Enrolled".
  */
 async function loadEnrolment(supabase: TypedSupabaseClient, requests: DemoRequest[]): Promise<Record<string, DemoEnrolment>> {
   const db = supabase as any;
   const ids = requests.map((r) => r.id);
   const userIds = Array.from(new Set(requests.filter((r) => r.user_id).map((r) => r.user_id as string)));
-  const ev: EnrolmentEvidence = { profiles: {}, usedLinks: [] };
+  const ev: EnrolmentEvidence = { profiles: {}, usedLinks: [], pendingLinks: [] };
   const seen = new Set<string>();
-  const addLinks = (rows: Array<{ id: string; demo_registration_id: string | null; user_id: string | null; used_at: string | null }> | null) => {
+  const links: LinkRow[] = [];
+  const collect = (rows: LinkRow[] | null) => {
     for (const l of rows ?? []) {
       if (seen.has(l.id)) continue;
       seen.add(l.id);
-      ev.usedLinks.push({ demoId: l.demo_registration_id, userId: l.user_id, usedAt: l.used_at });
+      links.push(l);
     }
   };
   for (let i = 0; i < userIds.length; i += 100) {
     const chunk = userIds.slice(i, i + 100);
-    const [profiles, links] = await Promise.all([
+    const [profiles, linksByUser] = await Promise.all([
       db.from('student_profiles').select('user_id, enrollment_date, created_at').in('user_id', chunk),
-      db.from('direct_enrollment_links').select('id, demo_registration_id, user_id, used_at').eq('status', 'used').in('user_id', chunk),
+      db.from('direct_enrollment_links').select(LINK_COLS).in('user_id', chunk),
     ]);
     if (profiles.error) throw profiles.error;
-    if (links.error) throw links.error;
+    if (linksByUser.error) throw linksByUser.error;
     for (const s of profiles.data ?? []) ev.profiles[s.user_id] = { enrolledOn: s.enrollment_date, createdAt: s.created_at };
-    addLinks(links.data);
+    collect(linksByUser.data);
   }
   for (let i = 0; i < ids.length; i += 100) {
-    const { data, error } = await db
-      .from('direct_enrollment_links')
-      .select('id, demo_registration_id, user_id, used_at')
-      .eq('status', 'used')
-      .in('demo_registration_id', ids.slice(i, i + 100));
+    const { data, error } = await db.from('direct_enrollment_links').select(LINK_COLS).in('demo_registration_id', ids.slice(i, i + 100));
     if (error) throw error;
-    addLinks(data);
+    collect(data);
+  }
+  // Which candidate links have a real payment-ledger row (status 'paid') tied to this flow.
+  const paidLinkIds = new Set<string>();
+  const candidateIds = links.map((l) => l.id);
+  for (let i = 0; i < candidateIds.length; i += 100) {
+    const keys = candidateIds.slice(i, i + 100).map((id) => `${PAYMENT_KEY_PREFIX}${id}`);
+    const { data, error } = await db.from('payments').select('idempotency_key').eq('status', 'paid').in('idempotency_key', keys);
+    if (error) throw error;
+    for (const p of data ?? []) paidLinkIds.add(String(p.idempotency_key).slice(PAYMENT_KEY_PREFIX.length));
+  }
+  for (const l of links) {
+    const hasPayment = paidLinkIds.has(l.id);
+    if (linkIsReallyPaid(l, hasPayment)) {
+      ev.usedLinks.push({ demoId: l.demo_registration_id, userId: l.user_id, usedAt: l.used_at });
+    } else if (linkIsUnfinalisedRecorded(l, hasPayment)) {
+      ev.pendingLinks.push({
+        demoId: l.demo_registration_id,
+        userId: l.user_id,
+        linkId: l.id,
+        amountPaid: Number(l.amount_paid) || 0,
+        finalFee: Number(l.final_fee) || 0,
+        createdAt: l.created_at,
+      });
+    }
   }
   const out: Record<string, DemoEnrolment> = {};
   for (const r of requests) {
@@ -339,6 +373,7 @@ export async function POST(req: Request) {
       channel,
       page_code: STAFF_DEMO_PAGE_CODE,
       account_holder: accountHolder,
+      created_by: actorId,
     };
     const who = createdPerson ? ' (new person added to People)' : '';
     let row: DemoRequest;
