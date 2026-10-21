@@ -7,7 +7,8 @@
  * the event is patched or cancelled.
  *
  * Needs the Microsoft Graph APPLICATION permission Calendars.ReadWrite (admin
- * consented) on the app behind AZ_CLIENT_ID. DEMO_TEAMS_DRY_RUN=true skips
+ * consented) on the app behind AZ_CLIENT_ID. Auto-record and lobby bypass also
+ * need OnlineMeetings.ReadWrite.All and a Teams application access policy. DEMO_TEAMS_DRY_RUN=true skips
  * Graph entirely and returns a fake link, for local, staging and E2E.
  */
 
@@ -31,6 +32,8 @@ export interface DemoEventInput {
 export interface DemoEventResult {
   eventId: string;
   joinUrl: string;
+  /** Null when auto-record and lobby bypass were applied; otherwise what staff should know. */
+  optionsNote: string | null;
 }
 
 export class DemoTeamsError extends Error {
@@ -70,7 +73,7 @@ export function buildDemoEventPayload(input: DemoEventInput) {
   };
 }
 
-function tokenRoles(token: string): string[] {
+export function tokenRoles(token: string): string[] {
   try {
     const payload = token.split('.')[1] ?? '';
     const json = Buffer.from(payload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8');
@@ -81,7 +84,7 @@ function tokenRoles(token: string): string[] {
   }
 }
 
-async function graph(path: string, init: RequestInit & { token: string }): Promise<Response> {
+export async function graph(path: string, init: RequestInit & { token: string }): Promise<Response> {
   return fetch(`${GRAPH}${path}`, {
     ...init,
     cache: 'no-store',
@@ -117,6 +120,7 @@ export async function createDemoEvent(input: DemoEventInput, refForDryRun: strin
     return {
       eventId: `dry-run-${refForDryRun}-${Date.now()}`,
       joinUrl: `https://teams.microsoft.com/l/meetup-join/dry-run-${refForDryRun.toLowerCase()}`,
+      optionsNote: null,
     };
   }
   const token = await getAppOnlyToken();
@@ -144,7 +148,59 @@ export async function createDemoEvent(input: DemoEventInput, refForDryRun: strin
       502,
     );
   }
-  return { eventId: event.id, joinUrl };
+  const optionsNote = await applyDemoMeetingOptions(token, input.organizerUpn, joinUrl);
+  return { eventId: event.id, joinUrl, optionsNote };
+}
+
+/**
+ * What every demo meeting should do, set on the Teams meeting behind the event:
+ * record and transcribe from the start (the transcript is how the desk tells a
+ * real demo from a mis-click), let the student and parents (guests) straight
+ * in with no lobby, and keep presenting to Neram staff.
+ */
+export const DEMO_MEETING_OPTIONS = {
+  recordAutomatically: true,
+  allowTranscription: true,
+  lobbyBypassSettings: { scope: 'everyone', isDialInBypassEnabled: true },
+  allowedPresenters: 'organization',
+} as const;
+
+/**
+ * Best effort: the meeting is already booked, so a refusal here is reported to
+ * staff (null means applied) instead of failing the confirm. Needs the Graph
+ * APPLICATION permission OnlineMeetings.ReadWrite.All plus a Teams application
+ * access policy granted to the organizer (Grant-CsApplicationAccessPolicy).
+ */
+async function applyDemoMeetingOptions(token: string, organizerUpn: string, joinUrl: string): Promise<string | null> {
+  try {
+    // onlineMeetings wants the organizer's object id; the UPN is a fallback.
+    const who = await graph(`/users/${encodeURIComponent(organizerUpn)}?$select=id`, { token, method: 'GET' });
+    const userId = who.ok ? ((await who.json()) as { id?: string }).id || organizerUpn : organizerUpn;
+    const base = `/users/${encodeURIComponent(userId)}/onlineMeetings`;
+    const filter = `JoinWebUrl eq '${joinUrl.replace(/'/g, "''")}'`;
+    const found = await graph(`${base}?$filter=${encodeURIComponent(filter)}&$select=id`, { token, method: 'GET' });
+    if (!found.ok) return meetingOptionsRefusal(found.status, token);
+    const meetingId = ((await found.json()) as { value?: Array<{ id: string }> }).value?.[0]?.id;
+    if (!meetingId) return 'Teams did not find the meeting behind this invite, so auto-record is off. Start recording by hand.';
+    const res = await graph(`${base}/${encodeURIComponent(meetingId)}`, {
+      token,
+      method: 'PATCH',
+      body: JSON.stringify(DEMO_MEETING_OPTIONS),
+    });
+    return res.ok ? null : meetingOptionsRefusal(res.status, token);
+  } catch (e) {
+    return `Meeting options were not set (${e instanceof Error ? e.message : 'network error'}). Start recording by hand.`;
+  }
+}
+
+function meetingOptionsRefusal(status: number, token: string): string {
+  if ((status === 401 || status === 403) && !tokenRoles(token).includes('OnlineMeetings.ReadWrite.All')) {
+    return 'Auto-record and lobby bypass are off: the Microsoft app needs the Graph application permission OnlineMeetings.ReadWrite.All (admin consented). Start recording by hand.';
+  }
+  if (status === 401 || status === 403 || status === 404) {
+    return 'Auto-record and lobby bypass are off: Teams refused the app. Grant the organizer a Teams application access policy (Grant-CsApplicationAccessPolicy). Start recording by hand.';
+  }
+  return `Auto-record and lobby bypass are off (Teams answered HTTP ${status}). Start recording by hand.`;
 }
 
 /** Move the meeting; Exchange emails the updated invite to every attendee. */

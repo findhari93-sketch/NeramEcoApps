@@ -83,16 +83,35 @@ describe('buildDemoInviteHtml', () => {
       drawingLink: 'https://wa.me/919176137043?text=a&b',
     });
     expect(html).not.toContain('<b>x</b>');
-    expect(html).toContain('Parents are welcome');
+    expect(html).toContain('Bring your parents along');
     expect(html).toContain('&amp;b');
+  });
+  it('says browser join needs no download or account, and drops the pencil', () => {
+    const html = buildDemoInviteHtml({
+      studentName: 'haribabu manoharan',
+      hostName: 'Hari',
+      ref: 'DEMO-JWQ8',
+      myDemoUrl: 'https://neramclasses.com/d/tok',
+      drawingLink: 'https://wa.me/919176137043',
+    });
+    expect(html).toContain('Haribabu');
+    expect(html).toContain('Continue on this browser');
+    expect(html).toContain('No download and no account needed');
+    expect(html).toContain('Join as a guest');
+    expect(html).not.toMatch(/pencil/i);
+    expect(html).not.toMatch(/—|&mdash;|--/);
+    expect(html).not.toContain('<style');
   });
 });
 
 describe('demoEventSubject', () => {
   it('marks the event as a demo with a short name, class and ref', () => {
     expect(demoEventSubject({ name: 'Priya Ramesh Kumar', current_class: '12th', ref_code: 'DEMO-4K7Q' })).toBe(
-      'NERAM DEMO · Priya K (Class 12) · DEMO-4K7Q',
+      'Neram Demo · Priya K (Class 12) · DEMO-4K7Q',
     );
-    expect(demoEventSubject({ name: 'Priya', current_class: null, ref_code: null })).toBe('NERAM DEMO · Priya');
+    expect(demoEventSubject({ name: 'Priya', current_class: null, ref_code: null })).toBe('Neram Demo · Priya');
+    expect(demoEventSubject({ name: 'haribabu manoharan', current_class: '12th', ref_code: 'DEMO-JWQ8' })).toBe(
+      'Neram Demo · Haribabu M (Class 12) · DEMO-JWQ8',
+    );
   });
 });

@@ -6,11 +6,29 @@
 
 const ACTIVE_KEY = 'neram_demo_active';
 const OPEN_STATUSES = ['pending', 'contacted', 'approved'];
+/** Fired on every write: 'storage' only reaches other tabs, this keeps this tab's header current. */
+export const DEMO_FLAG_EVENT = 'neram-demo-flag';
 
 export interface DemoActiveFlag {
   ref: string;
   status: string;
   at: string;
+  /** Once confirmed: what the header's countdown and calendar menu need. */
+  start?: string;
+  minutes?: number;
+  token?: string;
+  joinUrl?: string | null;
+  hostName?: string | null;
+}
+
+interface DemoFlagSource {
+  ref: string;
+  status: string;
+  scheduledStart?: string | null;
+  minutes?: number;
+  token?: string;
+  joinUrl?: string | null;
+  hostName?: string | null;
 }
 
 export function readDemoActive(): DemoActiveFlag | null {
@@ -25,14 +43,22 @@ export function readDemoActive(): DemoActiveFlag | null {
 }
 
 /** Remember an open demo, or forget it when the status says it is over. */
-export function writeDemoActive(request: { ref: string; status: string } | null): void {
+export function writeDemoActive(request: DemoFlagSource | null): void {
   try {
     if (request && OPEN_STATUSES.includes(request.status)) {
       const flag: DemoActiveFlag = { ref: request.ref, status: request.status, at: new Date().toISOString() };
+      if (request.status === 'approved' && request.scheduledStart && request.token) {
+        flag.start = request.scheduledStart;
+        flag.minutes = request.minutes ?? 45;
+        flag.token = request.token;
+        flag.joinUrl = request.joinUrl ?? null;
+        flag.hostName = request.hostName ?? null;
+      }
       window.localStorage.setItem(ACTIVE_KEY, JSON.stringify(flag));
     } else {
       window.localStorage.removeItem(ACTIVE_KEY);
     }
+    window.dispatchEvent(new Event(DEMO_FLAG_EVENT));
   } catch {
     // Storage blocked: the header just shows "Free demo".
   }

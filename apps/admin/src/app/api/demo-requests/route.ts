@@ -28,6 +28,53 @@ import { DEFAULT_HELD_TUTOR, STAFF_DEMO_CHANNELS, STAFF_DEMO_PAGE_CODE } from '@
 import { DemoTeamsError } from '@/lib/demo/teams';
 import { HeldDemoError, parseHeldDemoWithSettings, recordHeldDemo } from '@/lib/demo/record-held';
 import { ConfirmError, confirmDemo, meetingUrl, parseMeetingKind, type ConfirmInput } from '@/lib/demo/confirm';
+import { enrolmentOf, type DemoEnrolment, type EnrolmentEvidence } from '@/components/demo-requests/journey';
+
+/**
+ * Enrolled or already a student, per request id. Enrolled needs a finished
+ * enrolment link (fee recorded or verified) or a student profile made after the
+ * request; an older profile (a test account) is never "Enrolled".
+ */
+async function loadEnrolment(supabase: TypedSupabaseClient, requests: DemoRequest[]): Promise<Record<string, DemoEnrolment>> {
+  const db = supabase as any;
+  const ids = requests.map((r) => r.id);
+  const userIds = Array.from(new Set(requests.filter((r) => r.user_id).map((r) => r.user_id as string)));
+  const ev: EnrolmentEvidence = { profiles: {}, usedLinks: [] };
+  const seen = new Set<string>();
+  const addLinks = (rows: Array<{ id: string; demo_registration_id: string | null; user_id: string | null; used_at: string | null }> | null) => {
+    for (const l of rows ?? []) {
+      if (seen.has(l.id)) continue;
+      seen.add(l.id);
+      ev.usedLinks.push({ demoId: l.demo_registration_id, userId: l.user_id, usedAt: l.used_at });
+    }
+  };
+  for (let i = 0; i < userIds.length; i += 100) {
+    const chunk = userIds.slice(i, i + 100);
+    const [profiles, links] = await Promise.all([
+      db.from('student_profiles').select('user_id, enrollment_date, created_at').in('user_id', chunk),
+      db.from('direct_enrollment_links').select('id, demo_registration_id, user_id, used_at').eq('status', 'used').in('user_id', chunk),
+    ]);
+    if (profiles.error) throw profiles.error;
+    if (links.error) throw links.error;
+    for (const s of profiles.data ?? []) ev.profiles[s.user_id] = { enrolledOn: s.enrollment_date, createdAt: s.created_at };
+    addLinks(links.data);
+  }
+  for (let i = 0; i < ids.length; i += 100) {
+    const { data, error } = await db
+      .from('direct_enrollment_links')
+      .select('id, demo_registration_id, user_id, used_at')
+      .eq('status', 'used')
+      .in('demo_registration_id', ids.slice(i, i + 100));
+    if (error) throw error;
+    addLinks(data);
+  }
+  const out: Record<string, DemoEnrolment> = {};
+  for (const r of requests) {
+    const e = enrolmentOf(r, ev);
+    if (e) out[r.id] = e;
+  }
+  return out;
+}
 
 /**
  * GET /api/demo-requests
@@ -58,23 +105,14 @@ export async function GET() {
       }
     }
 
-    // Enrolled after a demo: requests in the last 30 days whose person now has a student profile.
-    const recentUserIds = Array.from(
-      new Set(requests.filter((r) => r.user_id && new Date(r.created_at).getTime() >= ago30).map((r) => r.user_id as string)),
-    );
     const doneIds = requests.filter((r) => r.status === 'attended' || r.status === 'no_show').map((r) => r.id);
     const followUps = await listDemoFollowUpsByDemo(doneIds, supabase);
-    const userIds = Array.from(new Set(requests.filter((r) => r.user_id).map((r) => r.user_id as string)));
-    const joinedAt: Record<string, string> = {};
-    for (let i = 0; i < userIds.length; i += 100) {
-      const { data, error } = await (supabase as any)
-        .from('student_profiles')
-        .select('user_id, enrollment_date')
-        .in('user_id', userIds.slice(i, i + 100));
-      if (error) throw error;
-      for (const s of data ?? []) joinedAt[s.user_id] = s.enrollment_date;
-    }
-    const enrolled = recentUserIds.filter((id) => id in joinedAt).length;
+    const enrolment = await loadEnrolment(supabase, requests);
+
+    // Enrolled after a demo: people who asked in the last 30 days and paid since.
+    const recent = requests.filter((r) => r.user_id && new Date(r.created_at).getTime() >= ago30);
+    const recentUserIds = Array.from(new Set(recent.map((r) => r.user_id as string)));
+    const enrolled = new Set(recent.filter((r) => enrolment[r.id]?.kind === 'enrolled').map((r) => r.user_id as string)).size;
 
     const kpis = {
       newRequests: requests.filter((r) => r.status === 'pending').length,
@@ -96,7 +134,7 @@ export async function GET() {
       requests,
       kpis,
       followUps,
-      joinedAt,
+      enrolment,
       settings: {
         hosts: settings.hosts,
         defaultTutorUpn: settings.defaultTutorUpn,

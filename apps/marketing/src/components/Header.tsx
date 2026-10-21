@@ -42,7 +42,8 @@ import BrandWordmark from './brand/BrandWordmark';
 import UserNotificationBell from './UserNotificationBell';
 import { useApplicationStatus } from '@/hooks/useApplicationStatus';
 import { useGoToApp } from '@/hooks/useGoToApp';
-import { getDemoCta, readDemoActive, type DemoActiveFlag } from '@/lib/demo-cta';
+import { DEMO_FLAG_EVENT, getDemoCta, readDemoActive, type DemoActiveFlag } from '@/lib/demo-cta';
+import DemoHeaderChip, { isConfirmedDemoFlag } from './header/DemoHeaderChip';
 import CollegesMegaMenu from '@/components/college-hub/CollegesMegaMenu';
 import MegaMenuPanel, { NavBadge, isCurrent, type NavLink } from '@/components/nav/MegaMenuPanel';
 import { NAV_GROUPS, groupLinks, type NavGroup } from '@/components/nav/nav-groups';
@@ -131,7 +132,11 @@ export default function Header() {
     setDemoActive(readDemoActive());
     const onStorage = () => setDemoActive(readDemoActive());
     window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+    window.addEventListener(DEMO_FLAG_EVENT, onStorage);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener(DEMO_FLAG_EVENT, onStorage);
+    };
   }, [pathname]);
   const demoCta = getDemoCta({ pathname, applicationStatus: appStatus, enrolled: isEnrolled, active: demoActive });
   const hs = getHeaderState({ status: appStatus, signedIn: !!user, demo: demoCta, pathname });
@@ -588,7 +593,8 @@ export default function Header() {
                 </IconButton>
               )}
 
-              {hs.secondary && SecondaryIcon && (
+              {hs.secondary && SecondaryIcon && (() => {
+                const link = (
                 <Box
                   component={Link}
                   href={hs.secondary.href as '/demo-class'}
@@ -623,7 +629,13 @@ export default function Header() {
                     {secondaryLabel}
                   </Box>
                 </Box>
-              )}
+                );
+                return hs.secondary.kind === 'myDemo' && isConfirmedDemoFlag(demoActive) ? (
+                  <DemoHeaderChip flag={demoActive} variant="bar" light={light} label={secondaryLabel} signedIn={!!user} fallback={link} />
+                ) : (
+                  link
+                );
+              })()}
 
               {renderPrimary(
                 { ...primarySx, ml: 0.5 },
@@ -659,6 +671,9 @@ export default function Header() {
               <IconButton onClick={() => setSearchOpen(true)} onPointerEnter={preloadSearch} aria-label={t('header.search')} sx={iconButtonSx}>
                 <SearchIcon sx={{ fontSize: 22 }} />
               </IconButton>
+              {hs.secondary?.kind === 'myDemo' && isConfirmedDemoFlag(demoActive) && (
+                <DemoHeaderChip flag={demoActive} variant="phone" light={light} label={secondaryLabel} signedIn={!!user} fallback={null} />
+              )}
               {renderPrimary(
                 { ...primarySx, px: 1.75, gap: 0.75 },
                 <>

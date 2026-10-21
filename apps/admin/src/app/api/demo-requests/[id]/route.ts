@@ -28,6 +28,8 @@ import { ConfirmError, confirmDemo, enqueueStaffPlan, meetingUrl, parseMeetingKi
 import { studentGetsDemoWhatsApp } from '@/lib/demo/meeting';
 import { HeldDemoError, parseHeldDemoWithSettings, recordHeldDemo } from '@/lib/demo/record-held';
 import { rescheduleDemoEvent, cancelDemoEvent, DemoTeamsError } from '@/lib/demo/teams';
+import { hasLiveTeamsMeeting, syncDemoTeams } from '@/lib/demo/teams-sync';
+import type { DemoWithTeams } from '@/lib/demo/teams-artifacts';
 
 type Params = { params: { id: string } };
 
@@ -135,6 +137,7 @@ function email(v: unknown): string | null {
  * POST /api/demo-requests/[id]  { action, ...fields }
  *
  * log_call | note | confirm | set_link | reschedule | cancel | attendance | held | follow_up | drawing | resend | reopen
+ * | teams_check | pick_recording
  * Every action writes the activity log and returns the refreshed detail.
  */
 export async function POST(req: Request, { params }: Params) {
@@ -305,7 +308,8 @@ export async function POST(req: Request, { params }: Params) {
           },
           supabase,
         );
-        await (supabase as any).from('demo_class_registrations').update({ attendance_marked_by: actorId }).eq('id', r.id);
+        // A staff mark is final: the Teams check never changes it (lib/demo/demo-verdict verdictAction).
+        await (supabase as any).from('demo_class_registrations').update({ attendance_marked_by: actorId, attendance_source: 'staff' }).eq('id', r.id);
         await cancelPendingDemoMessages(r.id, undefined, supabase);
         const now = new Date();
         await enqueueDemoMessages(
@@ -325,7 +329,12 @@ export async function POST(req: Request, { params }: Params) {
             supabase,
           );
         }
-        await log('status', attended ? 'attended' : 'no_show', attended ? `Interest ${interest}. ${text(body.note, 1000)}`.trim() : null);
+        const corrected = (r as DemoWithTeams).attendance_source === 'teams' ? ' Corrected the automatic mark.' : '';
+        await log(
+          'status',
+          attended ? 'attended' : 'no_show',
+          `${attended ? `Interest ${interest}. ${text(body.note, 1000)}`.trim() : ''}${corrected}`.trim() || null,
+        );
         sendNow = !attended;
         break;
       }
@@ -403,6 +412,32 @@ export async function POST(req: Request, { params }: Params) {
           supabase,
         );
         await log('status', 'reopened', text(body.note) || null);
+        break;
+      }
+
+      case 'teams_check': {
+        // On demand, any time: also covers a test run held before the booked time.
+        if (!hasLiveTeamsMeeting(r)) throw new ActionError('This demo has no Teams meeting made by the desk.');
+        await syncDemoTeams(r as DemoWithTeams, supabase);
+        break;
+      }
+
+      case 'pick_recording': {
+        const itemId = text(body.itemId, 300);
+        const pick = ((r as DemoWithTeams).recording_candidates ?? []).find((f) => f.itemId === itemId);
+        if (!pick) throw new ActionError('That recording is not in the list any more. Check Teams again.');
+        await (supabase as any)
+          .from('demo_class_registrations')
+          .update({
+            recording_drive_id: pick.driveId,
+            recording_item_id: pick.itemId,
+            recording_name: pick.name,
+            recording_web_url: pick.webUrl,
+            recording_picked_by: actorId,
+            recording_picked_at: new Date().toISOString(),
+          })
+          .eq('id', r.id);
+        await log('note', 'recording_picked', pick.name);
         break;
       }
 

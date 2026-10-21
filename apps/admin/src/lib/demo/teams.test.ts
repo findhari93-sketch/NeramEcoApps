@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildDemoEventPayload, graphUtc, overlapping, DEMO_CATEGORY } from './teams';
+import { buildDemoEventPayload, graphUtc, overlapping, DEMO_CATEGORY, DEMO_MEETING_OPTIONS } from './teams';
 
 describe('graphUtc', () => {
   it('reads getSchedule times (no Z, seven decimals) as UTC', () => {
@@ -37,5 +37,13 @@ describe('buildDemoEventPayload', () => {
     expect(p.start).toEqual({ dateTime: '2025-10-14T12:30:00.000', timeZone: 'UTC' });
     expect(p.end.dateTime).toBe('2025-10-14T13:15:00.000');
     expect(p.attendees.map((a) => a.emailAddress.address)).toEqual(['s@gmail.com', 'b@x']);
+  });
+});
+
+describe('DEMO_MEETING_OPTIONS', () => {
+  it('records automatically, lets guests skip the lobby and keeps presenting to staff', () => {
+    expect(DEMO_MEETING_OPTIONS.recordAutomatically).toBe(true);
+    expect(DEMO_MEETING_OPTIONS.lobbyBypassSettings.scope).toBe('everyone');
+    expect(DEMO_MEETING_OPTIONS.allowedPresenters).toBe('organization');
   });
 });

@@ -134,7 +134,7 @@ export async function confirmDemo(opts: {
   }
   const parentEmail = input.parentEmail === undefined ? r.parent_email : input.parentEmail;
 
-  let event: { joinUrl: string | null; eventId: string | null } = { joinUrl: ownLink, eventId: null };
+  let event: { joinUrl: string | null; eventId: string | null; optionsNote?: string | null } = { joinUrl: ownLink, eventId: null };
   if (meeting === 'teams') {
     const attendees: Array<{ email: string; name: string }> = [];
     if (r.email) attendees.push({ email: r.email, name: r.name });
@@ -201,7 +201,8 @@ export async function confirmDemo(opts: {
       outcome: 'confirmed',
       note:
         `${formatDemoDateTime(start)}. Tutor ${tutor.name}, ${how}, team ${names}` +
-        `${reason ? `. Reason: ${reason}` : ''}${conflictNote ? `. Calendar clash note: ${conflictNote}` : ''}`,
+        `${reason ? `. Reason: ${reason}` : ''}${conflictNote ? `. Calendar clash note: ${conflictNote}` : ''}` +
+        `${meeting === 'teams' ? `. ${event.optionsNote ?? 'Recording starts automatically and guests skip the lobby'}` : ''}`,
       actor_id: actorId,
     },
     supabase,
