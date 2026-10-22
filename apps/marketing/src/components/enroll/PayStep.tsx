@@ -389,7 +389,7 @@ export default function PayStep(props: PayStepProps) {
         )}
 
         <Box sx={{ mt: 2 }}>
-          <CtaButton variant="primary" fullWidth size="lg" onClick={props.onSubmit} disabled={!canSubmit} endIcon={props.submitting ? null : undefined}>
+          <CtaButton variant="primary" fullWidth size="lg" onClick={() => props.onSubmit()} disabled={!canSubmit} endIcon={props.submitting ? null : undefined}>
             {props.submitting ? (
               <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
                 <CircularProgress size={18} color="inherit" /> Sending...

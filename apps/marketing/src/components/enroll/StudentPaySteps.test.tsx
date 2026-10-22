@@ -135,4 +135,17 @@ describe('PayStep', () => {
     renderPay({ fieldErrors: { transactionReference: 'Already used for another payment.' } });
     expect(screen.getByText('Already used for another payment.')).toBeTruthy();
   });
+
+  it('calls onSubmit with no arguments, never the click event', () => {
+    // Regression: onClick={props.onSubmit} used to hand the MouseEvent to the
+    // submit handler, which then put it in the request body and crashed on
+    // JSON.stringify ("Converting circular structure to JSON").
+    const { props } = renderPay({
+      termsAccepted: true,
+      payment: { ...BASE_PAYMENT, transactionReference: '412345678901', paymentProofUrl: 'https://x/1.jpg', paymentProofFileName: '1.jpg' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'I have paid, verify it' }));
+    expect(props.onSubmit).toHaveBeenCalledTimes(1);
+    expect((props.onSubmit as ReturnType<typeof vi.fn>).mock.calls[0]).toHaveLength(0);
+  });
 });

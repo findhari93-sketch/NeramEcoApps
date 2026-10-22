@@ -275,7 +275,7 @@ export default function ReviewStep({
         variant="contained"
         size="large"
         fullWidth
-        onClick={onSubmit}
+        onClick={() => onSubmit()}
         disabled={!termsAccepted || !phoneVerified || submitting}
         sx={{
           py: 1.5,

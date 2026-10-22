@@ -584,8 +584,14 @@ export default function EnrollWizard() {
   });
 
   const handleSubmit = async (intent?: 'pay_later') => {
+    // Guard: this is sometimes handed straight to a button's onClick, which would
+    // pass the click event in as `intent`. Serialising that event (it points back
+    // at the HTMLButtonElement via a React fiber) throws "Converting circular
+    // structure to JSON" and loses the submit. Only the literal 'pay_later' string
+    // is honoured; anything else, including an event, is a normal submit.
+    const resolvedIntent: 'submit' | 'pay_later' = intent === 'pay_later' ? 'pay_later' : 'submit';
     if (!user || !linkData) return;
-    const setBusy = intent === 'pay_later' ? setPayLaterBusy : setSubmitting;
+    const setBusy = resolvedIntent === 'pay_later' ? setPayLaterBusy : setSubmitting;
 
     setBusy(true);
     setSubmitError(null);
@@ -600,7 +606,7 @@ export default function EnrollWizard() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${idToken}`,
         },
-        body: JSON.stringify(buildEnrolBody(intent || 'submit')),
+        body: JSON.stringify(buildEnrolBody(resolvedIntent)),
       });
 
       const data = await res.json();
