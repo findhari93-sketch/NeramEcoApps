@@ -124,6 +124,15 @@ describe('enrolmentOf', () => {
     const before: EnrolmentEvidence = { profiles: {}, usedLinks: [{ demoId: null, userId: 'hari', usedAt: '2026-03-29T06:00:00Z' }], pendingLinks: [] };
     expect(enrolmentOf(asked, before)).toBeNull();
   });
+  it('carries the fee glance from the profile cache onto an Enrolled result', () => {
+    const fee = { agreed: 30000, paid: 15000, balance: 15000, nextDueDate: '2026-12-01' };
+    const ev: EnrolmentEvidence = {
+      profiles: { hari: { enrolledOn: '2026-10-22', createdAt: '2026-10-22T06:00:00Z', fee } },
+      usedLinks: [{ demoId: 'jwq8', userId: 'hari', usedAt: '2026-10-21T06:00:00Z' }],
+      pendingLinks: [],
+    };
+    expect(enrolmentOf(asked, ev)).toEqual({ kind: 'enrolled', on: '2026-10-21T06:00:00Z', fee });
+  });
   it('an active recorded link with money is fee_pending (matched by demo, then by user)', () => {
     const byDemo: EnrolmentEvidence = { profiles: {}, usedLinks: [], pendingLinks: [pending()] };
     expect(enrolmentOf(asked, byDemo)).toEqual({ kind: 'fee_pending', on: '2026-10-20T06:00:00Z', linkId: 'link-1', amountPaid: 15000, finalFee: 30000 });

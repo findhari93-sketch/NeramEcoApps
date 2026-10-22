@@ -53,9 +53,38 @@ export async function GET(request: NextRequest) {
 
     const rows = (data || []).map((link: any) => ({ ...link, status: effectiveStatus(link) }));
 
+    // Link each row to the person and the demo it belongs to, so staff see the same
+    // student across Direct Enroll, Demo Classes and Students, not three strangers.
+    // A link with no person (user_id and used_by both null) is flagged "not linked".
+    // Only for a real list page (<= 100 rows): the stats pull (limit=1000) renders no
+    // rows, and a bounded id list stays under the PostgREST URL cap.
+    let linkedRows = rows;
+    if (rows.length && rows.length <= 100) {
+      const personIds = Array.from(new Set(rows.flatMap((l: any) => [l.used_by, l.user_id]).filter(Boolean)));
+      const demoIds = Array.from(new Set(rows.map((l: any) => l.demo_registration_id).filter(Boolean)));
+      const [people, demos] = await Promise.all([
+        personIds.length ? supabase.from('users').select('id, name').in('id', personIds) : Promise.resolve({ data: [] }),
+        demoIds.length
+          ? supabase.from('demo_class_registrations').select('id, ref_code').in('id', demoIds)
+          : Promise.resolve({ data: [] }),
+      ]);
+      const nameById = new Map((people.data || []).map((u: any) => [u.id, u.name]));
+      const refById = new Map((demos.data || []).map((d: any) => [d.id, d.ref_code]));
+      linkedRows = rows.map((l: any) => {
+        const linkedUserId = l.used_by || l.user_id || null;
+        return {
+          ...l,
+          linkedUserId,
+          linkedStudentName: linkedUserId ? nameById.get(linkedUserId) || null : null,
+          demoId: l.demo_registration_id || null,
+          demoRefCode: l.demo_registration_id ? refById.get(l.demo_registration_id) || null : null,
+        };
+      });
+    }
+
     return NextResponse.json({
       success: true,
-      data: rows,
+      data: linkedRows,
       pagination: {
         page,
         limit,

@@ -1,10 +1,12 @@
 export const dynamic = 'force-dynamic';
 
+import { randomBytes } from 'crypto';
 import { NextResponse } from 'next/server';
 import {
   getSupabaseAdminClient,
   getDemoRequestById,
   getDirectEnrollmentLinkById,
+  createDirectEnrollmentLink,
   updateDemoRequest,
   logDemoRequestEvent,
   listDemoRequestEvents,
@@ -12,6 +14,8 @@ import {
   enqueueDemoMessages,
   enqueueDemoStaffMessages,
   staffUserIdsByUpn,
+  getStudentProfileByUserId,
+  loadStudentFeeState,
   cancelPendingDemoMessages,
   demoReminderPlan,
   thanksSendAfter,
@@ -23,6 +27,7 @@ import {
   pickDemoRoles,
   type InterestLevel,
   type DemoRequest,
+  type FeeView,
 } from '@neram/database';
 import { getRequestAdminId } from '@/lib/request-admin';
 import { loadDemoSettings, demoMarketingOrigin, sendDueDemoMessages, cancelledEventMarker } from '@/lib/demo/server';
@@ -70,6 +75,17 @@ async function detail(id: string) {
   ]);
   // The newest follow-up of this demo even when it is closed (stopped or joined).
   const enrolmentLink = await deskEnrolmentLink(supabase, id, request.user_id);
+  // The live fee ledger (agreed, paid, balance, schedule, next due) for an enrolled
+  // or part-paid student. Only when the demo is tied to a user; a fee-load failure
+  // must never break the panel, so it is caught and the fee is simply omitted.
+  let fee: FeeView | null = null;
+  if (request.user_id) {
+    try {
+      fee = (await loadStudentFeeState(supabase, request.user_id)).view;
+    } catch (err) {
+      console.error('demo detail fee load failed:', err);
+    }
+  }
   return {
     request,
     events,
@@ -78,6 +94,7 @@ async function detail(id: string) {
     followUp,
     lastFollowUp: latest[id] ?? null,
     enrolmentLink,
+    fee,
     createdByName: request.created_by ? actors[request.created_by] ?? null : null,
     lastEditedByName: request.last_edited_by ? actors[request.last_edited_by] ?? null : null,
   };
@@ -154,7 +171,7 @@ function email(v: unknown): string | null {
  * POST /api/demo-requests/[id]  { action, ...fields }
  *
  * log_call | note | confirm | set_link | reschedule | cancel | attendance | held | follow_up | drawing | resend | reopen
- * | teams_check | pick_recording | edit_details | create_teams_meeting | edit_held
+ * | teams_check | pick_recording | edit_details | create_teams_meeting | edit_held | finalise_enrolment | record_enrolment
  * Every action writes the activity log and returns the refreshed detail.
  */
 export async function POST(req: Request, { params }: Params) {
@@ -254,6 +271,92 @@ export async function POST(req: Request, { params }: Params) {
           'status',
           'enrolled',
           `Finalised the enrolment from the desk: ₹${Math.round(amountPaid).toLocaleString('en-IN')} of ₹${Math.round(totalFee).toLocaleString('en-IN')} recorded${
+            res.mode === 'fold_parent' ? ', folded the parent account into the student' : ''
+          }.${res.applicationNumber ? ` (${res.applicationNumber})` : ''}`,
+        );
+        break;
+      }
+
+      case 'record_enrolment': {
+        // Enrol a demo student from the desk when there is no enrolment link yet
+        // (a historical demo, or one recorded as held outside the desk). Make a
+        // recorded link tied to this demo, then run the same finalise engine, so
+        // the records match the normal enrolment path and the student moves to
+        // the Enrolled tab.
+        if (!actorId) throw new ActionError('Sign in again to continue.', 401);
+        if (!['attended', 'no_show'].includes(r.status)) throw new ActionError('Record the enrolment after the demo is marked as held.');
+        if (!r.user_id) {
+          throw new ActionError('This demo has no account linked yet. Open it in People to create or link an account, then record the enrolment.');
+        }
+        const userId = r.user_id;
+        const totalFee = Number(body.totalFee);
+        const amountPaid = Number(body.amountPaid);
+        if (!Number.isFinite(totalFee) || totalFee <= 0) throw new ActionError('Enter the total fee.');
+        if (!Number.isFinite(amountPaid) || amountPaid <= 0) throw new ActionError('Enter the amount paid.');
+        if (amountPaid > totalFee + 0.01) throw new ActionError('The amount paid cannot be more than the total fee.');
+        const balance = Math.max(0, Math.round((totalFee - amountPaid) * 100) / 100);
+        const scheme: 'full' | 'installment' = balance > 0.01 ? 'installment' : 'full';
+        const dueDate = typeof body.installment2DueDate === 'string' && body.installment2DueDate ? body.installment2DueDate : null;
+        const method = text(body.method, 40) || 'manual';
+        const reference = text(body.reference, 120) || null;
+        const paidOn = typeof body.paymentDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(body.paymentDate) ? body.paymentDate : null;
+        let mode: 'create' | 'fold_parent' = body.mode === 'fold_parent' ? 'fold_parent' : 'create';
+        let studentUserId = text(body.studentUserId, 64);
+        if (mode === 'fold_parent' && !studentUserId) throw new ActionError('Pick the existing student account to link.');
+        // An account that is already a student keeps its profile: update it in place,
+        // never a second profile or a renamed student. The engine's fold path does
+        // exactly this when the student and the demo account are the same id.
+        if (mode === 'create' && (await getStudentProfileByUserId(userId, supabase))) {
+          mode = 'fold_parent';
+          studentUserId = userId;
+        }
+
+        // Reuse the student's active link if one is already open; never make a second.
+        const existing = await deskEnrolmentLink(supabase, r.id, userId);
+        if (existing && existing.status === 'used') throw new ActionError('This student is already enrolled.');
+        let link =
+          existing && (existing.status === 'active' || existing.status === 'payment_submitted')
+            ? await getDirectEnrollmentLinkById(existing.id, supabase)
+            : null;
+        if (!link) {
+          const COURSES = new Set(['nata', 'jee_paper2', 'both', 'revit', 'not_sure']);
+          link = await createDirectEnrollmentLink(
+            {
+              token: randomBytes(16).toString('base64url'),
+              created_by: actorId,
+              student_name: r.name || 'Student',
+              student_phone: r.phone || undefined,
+              student_email: r.email || undefined,
+              interest_course: (COURSES.has(String(r.interest_course)) ? r.interest_course : 'not_sure') as any,
+              total_fee: totalFee,
+              final_fee: totalFee,
+              amount_paid: amountPaid,
+              payment_method: method,
+              transaction_reference: reference || undefined,
+              payment_date: paidOn || undefined,
+              user_id: userId,
+              demo_registration_id: r.id,
+              payment_scheme: scheme,
+              installment_2_amount: scheme === 'installment' ? balance : null,
+              installment_2_due_date: scheme === 'installment' ? dueDate : null,
+              payment_mode: 'recorded',
+            },
+            supabase,
+          );
+        }
+
+        const res = await finaliseEnrolmentFromDesk(supabase, {
+          link,
+          demoId: r.id,
+          actorId,
+          money: { totalFee, amountPaid, installment2DueDate: dueDate, method, reference, paidOn },
+          target: mode === 'fold_parent' ? { mode, studentUserId } : { mode: 'create' },
+        });
+        if (!res.ok) throw new ActionError(res.error, res.status);
+        await log(
+          'status',
+          'enrolled',
+          `Recorded the enrolment from the desk: ₹${Math.round(amountPaid).toLocaleString('en-IN')} of ₹${Math.round(totalFee).toLocaleString('en-IN')} recorded${
             res.mode === 'fold_parent' ? ', folded the parent account into the student' : ''
           }.${res.applicationNumber ? ` (${res.applicationNumber})` : ''}`,
         );
@@ -634,7 +737,7 @@ export async function POST(req: Request, { params }: Params) {
     // plain note, call log, drawing toggle or Teams re-check).
     const STRUCTURAL_EDITS = new Set([
       'confirm', 'set_link', 'reschedule', 'cancel', 'attendance', 'held', 'reopen',
-      'create_teams_meeting', 'edit_details', 'edit_held',
+      'create_teams_meeting', 'edit_details', 'edit_held', 'record_enrolment',
     ]);
     if (actorId && STRUCTURAL_EDITS.has(String(body.action))) {
       await (supabase as any)

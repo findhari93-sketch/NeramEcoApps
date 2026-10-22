@@ -17,6 +17,7 @@ import {
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { INTEREST_LABELS } from '@neram/database/demo-follow-up';
 import { formatDemoDateTime } from '@neram/database/demo-schedule';
+import { formatRupees, formatDueDate } from '@neram/database/fee-plan';
 import type { DemoFollowUpRow, InterestLevel } from '@neram/database';
 import { formatIstDate } from '@/lib/ops-format';
 import PhoneIcon from '@mui/icons-material/Phone';
@@ -30,7 +31,7 @@ import { FOCUS_RING } from '@/components/ops/OpsUi';
 import { hasLiveTeamsMeeting, type DemoWithTeams } from '@/lib/demo/teams-evidence';
 import { NO_SHOW_AFTER_END_MIN } from '@/lib/demo/demo-verdict';
 import type { DemoScheduleSettings, DemoHost } from './types';
-import { MEETING_LABELS, closedReason, isFollowUpOpen, meetingKindOf, saysJoinedNoFee, type DemoEnrolment, type DeskPerson, type DeskStage } from './journey';
+import { MEETING_LABELS, closedReason, isFollowUpOpen, meetingKindOf, saysJoinedNoFee, type DemoEnrolment, type DeskPerson, type DeskStage, type ProfileFee } from './journey';
 import { ago, classLabel, isCallbackDue, isOverdueNew, telHref, waHref, whenLabel } from './format';
 
 const HEAD: Record<DeskStage, [string, string]> = {
@@ -40,6 +41,20 @@ const HEAD: Record<DeskStage, [string, string]> = {
   joined: ['Demo', 'Enrolled'],
   closed: ['Last request', 'Why closed'],
 };
+
+/** A one-line fee glance for the Enrolled row: paid of agreed, and the balance due. */
+function feeLineShort(fee: ProfileFee | null | undefined): string | null {
+  if (!fee) return null;
+  const { paid, agreed, balance, nextDueDate } = fee;
+  if (balance !== null && balance <= 0.01 && paid > 0) return 'Paid in full';
+  if (agreed !== null) {
+    const base = `${formatRupees(paid)} of ${formatRupees(agreed)}`;
+    if (balance && balance > 0) return nextDueDate ? `${base} · due by ${formatDueDate(nextDueDate)}` : `${base} · balance due`;
+    return base;
+  }
+  if (paid > 0) return `${formatRupees(paid)} paid`;
+  return null;
+}
 
 function FollowUpCell({ f, now }: { f: DemoFollowUpRow | undefined; now: Date }) {
   if (!isFollowUpOpen(f)) {
@@ -234,12 +249,19 @@ export default function RequestList({
                     ))}
 
                   {stage === 'joined' && (
-                    <Chip
-                      size="small"
-                      color="success"
-                      icon={<CheckCircleIcon />}
-                      label={e?.kind === 'enrolled' ? `Enrolled ${formatIstDate(e.on)}` : 'Enrolled'}
-                    />
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25, alignItems: 'flex-start' }}>
+                      <Chip
+                        size="small"
+                        color="success"
+                        icon={<CheckCircleIcon />}
+                        label={e?.kind === 'enrolled' ? `Enrolled ${formatIstDate(e.on)}` : 'Enrolled'}
+                      />
+                      {e?.kind === 'enrolled' && feeLineShort(e.fee) && (
+                        <Typography variant="caption" color="text.secondary">
+                          {feeLineShort(e.fee)}
+                        </Typography>
+                      )}
+                    </Box>
                   )}
 
                   {stage === 'closed' && (

@@ -24,10 +24,18 @@ export function isFollowUpOpen(f: Pick<DemoFollowUpRow, 'status'> | null | undef
   return !!f && OPEN_FOLLOW_UP.has(f.status);
 }
 
+/** A compact fee glance for the Enrolled list row, from the student_profiles cache. */
+export interface ProfileFee {
+  agreed: number | null;
+  paid: number;
+  balance: number | null;
+  nextDueDate: string | null;
+}
+
 /** What the desk knows about fees paid and student profiles, read once per list load. */
 export interface EnrolmentEvidence {
   /** Student profile per user id. */
-  profiles: Record<string, { enrolledOn: string | null; createdAt: string }>;
+  profiles: Record<string, { enrolledOn: string | null; createdAt: string; fee?: ProfileFee | null }>;
   /** Enrolment links whose money is real (used/verified, or a matched payment). */
   usedLinks: Array<{ demoId: string | null; userId: string | null; usedAt: string | null }>;
   /** Active recorded links with a staff-entered amount that was never finalised. */
@@ -49,7 +57,7 @@ export interface EnrolmentEvidence {
  * or a current student taking a demo). That is never "Enrolled".
  */
 export type DemoEnrolment =
-  | { kind: 'enrolled'; on: string }
+  | { kind: 'enrolled'; on: string; fee?: ProfileFee | null }
   | { kind: 'fee_pending'; on: string; linkId: string; amountPaid: number; finalFee: number }
   | { kind: 'student_before'; since: string };
 
@@ -95,11 +103,14 @@ export function linkIsUnfinalisedRecorded(link: LinkFacts | null | undefined, ha
 export function enrolmentOf(r: Pick<DemoRequest, 'id' | 'user_id' | 'created_at'>, ev: EnrolmentEvidence): DemoEnrolment | null {
   const asked = ms(r.created_at);
   const profile = r.user_id ? ev.profiles[r.user_id] : undefined;
+  const fee = profile?.fee ?? null;
+  // The fee key is only present when there is one, so the enrolment shape stays clean.
+  const enrolled = (on: string): DemoEnrolment => (fee ? { kind: 'enrolled', on, fee } : { kind: 'enrolled', on });
   const viaDemo = ev.usedLinks.find((l) => l.demoId === r.id);
-  if (viaDemo) return { kind: 'enrolled', on: viaDemo.usedAt || profile?.enrolledOn || r.created_at };
+  if (viaDemo) return enrolled(viaDemo.usedAt || profile?.enrolledOn || r.created_at);
   const later = r.user_id ? ev.usedLinks.find((l) => l.userId === r.user_id && l.usedAt && ms(l.usedAt) >= asked) : undefined;
-  if (later) return { kind: 'enrolled', on: later.usedAt! };
-  if (profile && ms(profile.createdAt) >= asked) return { kind: 'enrolled', on: profile.enrolledOn || profile.createdAt };
+  if (later) return enrolled(later.usedAt!);
+  if (profile && ms(profile.createdAt) >= asked) return enrolled(profile.enrolledOn || profile.createdAt);
   // A recorded payment entered on the link but not finalised: money is in, enrolment is not.
   const pendingLinks = ev.pendingLinks ?? [];
   const pending =

@@ -65,12 +65,26 @@ async function loadEnrolment(supabase: TypedSupabaseClient, requests: DemoReques
   for (let i = 0; i < userIds.length; i += 100) {
     const chunk = userIds.slice(i, i + 100);
     const [profiles, linksByUser] = await Promise.all([
-      db.from('student_profiles').select('user_id, enrollment_date, created_at').in('user_id', chunk),
+      db
+        .from('student_profiles')
+        .select('user_id, enrollment_date, created_at, total_fee, fee_paid, fee_due, next_payment_date')
+        .in('user_id', chunk),
       db.from('direct_enrollment_links').select(LINK_COLS).in('user_id', chunk),
     ]);
     if (profiles.error) throw profiles.error;
     if (linksByUser.error) throw linksByUser.error;
-    for (const s of profiles.data ?? []) ev.profiles[s.user_id] = { enrolledOn: s.enrollment_date, createdAt: s.created_at };
+    for (const s of profiles.data ?? [])
+      ev.profiles[s.user_id] = {
+        enrolledOn: s.enrollment_date,
+        createdAt: s.created_at,
+        // A glance for the Enrolled row, from the fee cache. The panel shows the live ledger.
+        fee: {
+          agreed: s.total_fee != null ? Number(s.total_fee) : null,
+          paid: Number(s.fee_paid) || 0,
+          balance: s.fee_due != null ? Number(s.fee_due) : null,
+          nextDueDate: s.next_payment_date ?? null,
+        },
+      };
     collect(linksByUser.data);
   }
   for (let i = 0; i < ids.length; i += 100) {

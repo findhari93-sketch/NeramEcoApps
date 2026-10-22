@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Link from 'next/link';
 import {
   MaterialReactTable,
   type MRT_ColumnDef,
@@ -41,6 +42,9 @@ export interface StudentRow {
   id: string;
   user_id: string;
   student_id: string | null;
+  /** The demo this student came from, for the cross-link chip (null when none). */
+  demoRefCode?: string | null;
+  demoId?: string | null;
   name: string | null;
   first_name: string;
   last_name: string;
@@ -315,6 +319,25 @@ export default function StudentHubTable({
                   )}
                   {s.is_alumni && (
                     <Chip label="Alumni" size="small" sx={{ height: 16, fontSize: 9, fontWeight: 700, bgcolor: 'rgba(180,83,9,0.10)', color: ACCENT }} />
+                  )}
+                  {s.demoRefCode && (
+                    <Box
+                      component={Link}
+                      href={`/demo-classes?id=${s.demoId}`}
+                      onClick={(e) => e.stopPropagation()}
+                      aria-label={`Open demo ${s.demoRefCode}`}
+                      sx={{ textDecoration: 'none', display: 'inline-flex' }}
+                    >
+                      <Chip
+                        icon={<EventIcon sx={{ fontSize: 11 }} />}
+                        label={`Demo ${s.demoRefCode}`}
+                        size="small"
+                        variant="outlined"
+                        color="info"
+                        clickable
+                        sx={{ height: 16, fontSize: 9, fontWeight: 700, cursor: 'pointer', '& .MuiChip-label': { px: 0.5 }, '& .MuiChip-icon': { ml: 0.25 } }}
+                      />
+                    </Box>
                   )}
                 </Box>
               </Box>

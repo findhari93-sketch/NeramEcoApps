@@ -47,12 +47,14 @@ import {
   isJoinOpen,
   googleCalendarUrl,
 } from '@neram/database/demo-schedule';
+import { formatRupees, formatDueDate } from '@neram/database/fee-plan';
 import { OpsSkeleton, FOCUS_RING } from '@/components/ops/OpsUi';
 import { INTEREST_LABELS } from '@neram/database/demo-follow-up';
 import LogOutcomeDialog from '@/components/follow-ups/LogOutcomeDialog';
 import EnrolmentLinkDrawer from '@/components/direct-enrollment/EnrolmentLinkDrawer';
 import EnrolmentLinkStatus, { linkMoneyLine } from './EnrolmentLinkStatus';
 import FinaliseEnrolmentDialog from './FinaliseEnrolmentDialog';
+import RecordEnrolmentDialog from './RecordEnrolmentDialog';
 import { useAdminProfile } from '@/contexts/AdminProfileContext';
 import AttendedDialog from './AttendedDialog';
 import HeldDemoDialog from './HeldDemoDialog';
@@ -132,6 +134,68 @@ function SectionTitle({ children }: { children: string }) {
   );
 }
 
+/**
+ * What the enrolled student owes and has paid, from the live fee ledger: the
+ * agreed total, what arrived, the balance, the installment schedule and the next
+ * due line. Shown for an enrolled or part-paid student so staff see the money
+ * without leaving the desk.
+ */
+function FeeSummary({ fee }: { fee: NonNullable<DeskDetail['fee']> }) {
+  const balance = fee.balance;
+  const fullyPaid = balance !== null && balance <= 0.01 && fee.paidTotal > 0;
+  const schedule = fee.installments.filter((i) => !i.waived);
+  return (
+    <>
+      <SectionTitle>Fee</SectionTitle>
+      <Row label="Agreed">
+        <Typography variant="body2">{fee.agreed !== null ? formatRupees(fee.agreed) : 'Not set'}</Typography>
+      </Row>
+      <Row label="Paid">
+        <Typography variant="body2" color="success.dark" fontWeight={700}>
+          {formatRupees(fee.paidTotal)}
+        </Typography>
+      </Row>
+      <Row label="Balance">
+        <Typography variant="body2" fontWeight={700} color={fullyPaid ? 'success.dark' : balance && balance > 0 ? 'warning.dark' : 'text.primary'}>
+          {balance === null ? 'Not set' : fullyPaid ? 'Fully paid' : formatRupees(balance)}
+        </Typography>
+      </Row>
+      {schedule.length > 0 && (
+        <Row label="Installments">
+          <Box component="ul" sx={{ listStyle: 'none', p: 0, m: 0 }}>
+            {schedule.map((i) => {
+              const isNext = !fullyPaid && fee.nextDue?.installmentId === i.id;
+              return (
+                <Box component="li" key={i.id} sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'baseline', py: 0.25 }}>
+                  <Typography variant="body2" sx={{ fontWeight: isNext ? 700 : 400 }}>
+                    {i.number}. {formatRupees(i.amount)}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    due {formatDueDate(i.dueDate)}
+                  </Typography>
+                  <Chip
+                    size="small"
+                    variant="outlined"
+                    color={i.settled ? 'success' : isNext ? 'warning' : 'default'}
+                    label={i.settled ? 'Paid' : isNext ? 'Next due' : 'Due'}
+                    sx={{ height: 20, fontSize: 11 }}
+                  />
+                </Box>
+              );
+            })}
+          </Box>
+        </Row>
+      )}
+      {!fullyPaid && fee.nextDue && (
+        <Typography variant="body2" color="warning.dark" fontWeight={600} sx={{ mt: 0.5 }}>
+          Next due: {formatRupees(fee.nextDue.amount)}
+          {fee.nextDue.dueDate ? ` by ${formatDueDate(fee.nextDue.dueDate)}` : ''}
+        </Typography>
+      )}
+    </>
+  );
+}
+
 export default function RequestPanel({
   detail,
   loading,
@@ -178,6 +242,7 @@ export default function RequestPanel({
   const [linkInput, setLinkInput] = useState('');
   const [linkOpen, setLinkOpen] = useState(false);
   const [finaliseOpen, setFinaliseOpen] = useState(false);
+  const [recordEnrolOpen, setRecordEnrolOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [createTeamsOpen, setCreateTeamsOpen] = useState(false);
   const [editHeldOpen, setEditHeldOpen] = useState(false);
@@ -227,6 +292,13 @@ export default function RequestPanel({
   // Confirm always sets an organizer; a demo recorded as held outside the desk has none.
   const heldOutside = !r.organizer_upn;
   const parentAccount = r.account_holder === 'parent';
+  // After the demo and not yet enrolled: offer "Record enrolment" to log the fee a
+  // student already paid (historical or held-outside demos) and move them to Enrolled.
+  // A link with a recorded payment waiting to be finalised uses "Finalise enrolment".
+  const canRecordEnrolment =
+    ['attended', 'no_show'].includes(r.status) &&
+    detail.enrolmentLink?.status !== 'used' &&
+    !linkIsUnfinalisedRecorded(detail.enrolmentLink ?? null);
 
   const onPaymentDecided = (decision: 'verify' | 'reject', text: string) => {
     if (detail.enrolmentLink) setPaymentNote({ kind: decision, text, linkId: detail.enrolmentLink.id });
@@ -565,6 +637,9 @@ export default function RequestPanel({
         />
       )}
 
+      {/* Fee: the enrolled student's money, from the live ledger. */}
+      {detail.fee && (detail.fee.agreed !== null || detail.fee.paidTotal > 0) && <FeeSummary fee={detail.fee} />}
+
       {/* Not yet confirmed: call, then confirm */}
       {(r.status === 'pending' || r.status === 'contacted') && (
         <Box sx={{ mt: 2 }}>
@@ -685,6 +760,11 @@ export default function RequestPanel({
                   Finalise enrolment
                 </Button>
               )}
+              {canRecordEnrolment && (
+                <Button variant="contained" startIcon={<SchoolIcon />} onClick={() => setRecordEnrolOpen(true)} disabled={!!busy} sx={{ mt: 1, mr: 1, minHeight: 44 }}>
+                  Record enrolment
+                </Button>
+              )}
               <Button variant={followUpStopped ? 'outlined' : 'contained'} onClick={() => setAttendedOpen(true)} disabled={!!busy} sx={{ mt: 1, mr: 1, minHeight: 44 }}>
                 {followUpStopped ? 'Restart follow-up' : 'Start follow-up'}
               </Button>
@@ -739,6 +819,16 @@ export default function RequestPanel({
                 notice={paymentNote && paymentNote.linkId === detail.enrolmentLink?.id ? paymentNote : null}
                 onDismissNotice={() => setPaymentNote(null)}
               />
+            </Box>
+          )}
+          {canRecordEnrolment && (
+            <Box sx={{ mt: 1 }}>
+              <Button variant="outlined" startIcon={<SchoolIcon />} onClick={() => setRecordEnrolOpen(true)} disabled={!!busy} sx={{ minHeight: 44 }}>
+                Record enrolment
+              </Button>
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                Already paid? Enter the fee and payment to enrol them without sending a link.
+              </Typography>
             </Box>
           )}
           <LogOutcomeDialog
@@ -839,11 +929,21 @@ export default function RequestPanel({
       </Row>
       <Row label="Student">
         <Typography variant="body2">
-          {[classLabel(r.current_class), r.interest_course ? INTEREST[r.interest_course] || r.interest_course : null, r.preferred_language ? LANG[r.preferred_language] || r.preferred_language : null]
+          {[
+            classLabel(r.current_class),
+            r.exam_year ? `Exam ${r.exam_year}` : null,
+            r.interest_course ? INTEREST[r.interest_course] || r.interest_course : null,
+            r.preferred_language ? LANG[r.preferred_language] || r.preferred_language : null,
+          ]
             .filter(Boolean)
             .join(' · ') || 'Not given'}
         </Typography>
       </Row>
+      {r.city && (
+        <Row label="City">
+          <Typography variant="body2">{r.city}</Typography>
+        </Row>
+      )}
       <Row label="Came from">
         <Typography variant="body2">
           {[r.page_code ? DEMO_DOOR[r.page_code] : null, r.channel, r.utm_source, r.utm_campaign].filter(Boolean).join(' · ') || 'Direct'}
@@ -1013,6 +1113,7 @@ export default function RequestPanel({
           onSubmit={onAction}
         />
       )}
+      <RecordEnrolmentDialog open={recordEnrolOpen} onClose={() => setRecordEnrolOpen(false)} request={r} onSubmit={onAction} />
       <AttendedDialog
         open={attendedOpen}
         name={r.name}

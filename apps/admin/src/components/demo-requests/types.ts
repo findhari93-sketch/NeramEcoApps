@@ -5,6 +5,7 @@ import type {
   DemoHost,
   DemoScheduleSettings,
   DemoFollowUpRow,
+  FeeView,
 } from '@neram/database';
 import type { DemoEnrolment } from './journey';
 
@@ -55,6 +56,12 @@ export interface DeskDetail {
   createdByName?: string | null;
   /** Staff who last edited the demo. */
   lastEditedByName?: string | null;
+  /**
+   * The student's live fee ledger (agreed, paid, balance, installment schedule,
+   * next due), read from the canonical rows when the demo is tied to a user.
+   * Present for an enrolled or part-paid student; absent for a plain lead.
+   */
+  fee?: FeeView | null;
 }
 
 export interface DeskEnrolmentLink {

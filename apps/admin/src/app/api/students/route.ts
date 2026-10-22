@@ -260,9 +260,30 @@ export async function GET(request: NextRequest) {
     const query = parseStudentHubQuery(searchParams);
     const page = applyStudentHubQuery(students, query);
 
+    // Cross-link each visible row to the demo it came from, so the same person is
+    // visibly connected across Students, Demo Classes and Direct Enroll. Resolved
+    // for this page only (<= pageSize rows), one batched query.
+    const pageUserIds = page.rows.map((s: any) => s.user_id).filter(Boolean);
+    const demoByUser: Record<string, { id: string; ref_code: string; created_at: string }> = {};
+    if (pageUserIds.length) {
+      const { data: demos } = await supabase
+        .from('demo_class_registrations')
+        .select('id, ref_code, user_id, created_at')
+        .in('user_id', pageUserIds);
+      for (const d of demos || []) {
+        const cur = demoByUser[d.user_id];
+        if (!cur || new Date(d.created_at) > new Date(cur.created_at)) demoByUser[d.user_id] = d;
+      }
+    }
+    const pageRows = page.rows.map((s: any) => ({
+      ...s,
+      demoRefCode: demoByUser[s.user_id]?.ref_code || null,
+      demoId: demoByUser[s.user_id]?.id || null,
+    }));
+
     return NextResponse.json(
       {
-        students: page.rows,
+        students: pageRows,
         // Rows matching the grid's filters (the grid's rowCount). scopeTotal is the
         // whole year scope, which is what stats describe.
         total: page.total,

@@ -153,6 +153,45 @@ describe('finaliseEnrolmentFromDesk: fold_parent', () => {
   });
 });
 
+describe('finaliseEnrolmentFromDesk: payment date and method', () => {
+  it('fold_parent records the payment on the given paidOn date, with the chosen method and reference', async () => {
+    const res = await finaliseEnrolmentFromDesk(supabase, {
+      link: link(),
+      demoId: 'demo-1',
+      actorId: 'staff-9',
+      money: { totalFee: 30000, amountPaid: 30000, paidOn: '2026-03-15', method: 'cash', reference: 'RCPT-42' },
+      target: { mode: 'fold_parent', studentUserId: 'student-1' },
+    });
+    expect(res.ok).toBe(true);
+    const [opts] = saveStudentApplicationAndFees.mock.calls[0];
+    expect(opts.payments[0]).toMatchObject({ paidOn: '2026-03-15', method: 'cash', reference: 'RCPT-42' });
+  });
+
+  it('create passes the given paidOn to finaliseDirectEnrolment', async () => {
+    await finaliseEnrolmentFromDesk(supabase, {
+      link: link({ user_id: 'lead-1' }),
+      demoId: 'demo-1',
+      actorId: 'staff-9',
+      money: { totalFee: 30000, amountPaid: 30000, paidOn: '2026-02-01', method: 'bank_transfer' },
+      target: { mode: 'create' },
+    });
+    const [, input] = finaliseDirectEnrolment.mock.calls[0];
+    expect(input.payment).toMatchObject({ date: '2026-02-01', method: 'bank_transfer' });
+  });
+
+  it('defaults the payment date to today when none is given', async () => {
+    await finaliseEnrolmentFromDesk(supabase, {
+      link: link(),
+      demoId: 'demo-1',
+      actorId: 'staff-9',
+      money: { totalFee: 30000, amountPaid: 30000 },
+      target: { mode: 'fold_parent', studentUserId: 'student-1' },
+    });
+    const [opts] = saveStudentApplicationAndFees.mock.calls[0];
+    expect(opts.payments[0].paidOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+  });
+});
+
 describe('finaliseEnrolmentFromDesk: create', () => {
   it('normalises the link money then delegates to finaliseDirectEnrolment, no merge', async () => {
     const res = await finaliseEnrolmentFromDesk(supabase, {

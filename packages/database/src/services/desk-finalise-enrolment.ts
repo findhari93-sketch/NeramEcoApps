@@ -39,6 +39,8 @@ export interface DeskFinaliseMoney {
   installment2DueDate?: string | null;
   method?: string | null;
   reference?: string | null;
+  /** When the payment was actually made (YYYY-MM-DD). Defaults to today when absent, so a historical demo can be recorded on its real date. */
+  paidOn?: string | null;
 }
 
 export interface DeskFinaliseInput {
@@ -78,7 +80,7 @@ async function fetchMergeRow(supabase: any, id: string): Promise<MergeUserRow | 
 
 export async function finaliseEnrolmentFromDesk(supabase: any, input: DeskFinaliseInput): Promise<DeskFinaliseResult> {
   const { link, actorId, money } = input;
-  const paidOn = istToday();
+  const paidOn = money.paidOn || istToday();
   const plan = normalisedPlan(money, paidOn);
   if (plan.amountPaid <= 0 || plan.totalFee <= 0) {
     return { ok: false, status: 400, error: 'Enter the total fee and the amount paid.' };

@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
   Box,
@@ -609,6 +610,50 @@ export default function DirectEnrollmentPage() {
                             {link.student_email}
                           </Typography>
                         )}
+                        <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5, flexWrap: 'wrap' }}>
+                          {link.linkedUserId ? (
+                            link.linkedStudentName && (
+                              <Tooltip title="Open this student in People">
+                                <Chip
+                                  size="small"
+                                  variant="outlined"
+                                  clickable
+                                  component={Link}
+                                  href={`/crm/${link.linkedUserId}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                  label={`Linked: ${link.linkedStudentName}`}
+                                  sx={{ height: 20, fontSize: 11, maxWidth: 200, cursor: 'pointer' }}
+                                />
+                              </Tooltip>
+                            )
+                          ) : (
+                            <Tooltip title="This link is not tied to a student account. Open it to link a person.">
+                              <Chip
+                                size="small"
+                                variant="outlined"
+                                color="warning"
+                                icon={<WarningAmberIcon />}
+                                label="Not linked to a student"
+                                sx={{ height: 20, fontSize: 11, '& .MuiChip-icon': { fontSize: 14 } }}
+                              />
+                            </Tooltip>
+                          )}
+                          {link.demoRefCode && (
+                            <Tooltip title="Open the demo this enrolment came from">
+                              <Chip
+                                size="small"
+                                variant="outlined"
+                                color="info"
+                                clickable
+                                component={Link}
+                                href={`/demo-classes?id=${link.demoId}`}
+                                onClick={(e) => e.stopPropagation()}
+                                label={`From demo ${link.demoRefCode}`}
+                                sx={{ height: 20, fontSize: 11, cursor: 'pointer' }}
+                              />
+                            </Tooltip>
+                          )}
+                        </Box>
                       </TableCell>
                       <TableCell>
                         <Typography variant="body2" noWrap>
