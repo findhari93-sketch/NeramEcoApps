@@ -1,3 +1,5 @@
+import { mobileE164, mobileParts } from '@neram/database/phone';
+
 /**
  * Phone normalisation to E.164, so a number is stored in one comparable shape.
  *
@@ -41,6 +43,20 @@ export function maskPhone(raw: unknown): string | null {
   const ten = raw.replace(/\D/g, '').slice(-10);
   if (ten.length !== 10) return null;
   return `${ten.slice(0, 2)}******${ten.slice(-2)}`;
+}
+
+/**
+ * maskPhone with the number's own code, for a student choosing which number to
+ * sign in with: "+91 ******502", and a Saudi number as "+966 ******929" rather
+ * than an Indian-looking fragment. Null for anything that is not a full mobile.
+ */
+export function maskMobile(raw: unknown): string | null {
+  const e164 = normalisePhone(raw);
+  if (!e164) return null;
+  const { country, national } = mobileParts(e164);
+  // A code we do not list (mobileParts falls back to India): hide it too.
+  const prefix = mobileE164(e164) === e164 ? `${country.prefix} ` : '';
+  return `${prefix}******${national.slice(-3)}`;
 }
 
 /**

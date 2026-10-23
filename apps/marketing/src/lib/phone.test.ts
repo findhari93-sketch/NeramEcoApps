@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { normalisePhone, isSamePhone, maskPhone, isSameMobile } from './phone';
+import { normalisePhone, isSamePhone, maskPhone, maskMobile, isSameMobile } from './phone';
 
 /**
  * Regression: the Chetana duplicate, 2026-07-28. A direct-enrolment student who
@@ -88,5 +88,19 @@ describe('maskPhone', () => {
     expect(maskPhone('')).toBeNull();
     expect(maskPhone(null)).toBeNull();
     expect(maskPhone(undefined)).toBeNull();
+  });
+});
+
+describe('maskMobile', () => {
+  it('keeps the code of the number', () => {
+    expect(maskMobile('+919500732502')).toBe('+91 ******502');
+    expect(maskMobile('9500732502')).toBe('+91 ******502');
+    expect(maskMobile('+966508347929')).toBe('+966 ******929');
+  });
+
+  it('hides a code it does not know and never returns a fragment', () => {
+    expect(maskMobile('+447700900123')).toBe('******123');
+    expect(maskMobile('12345')).toBeNull();
+    expect(maskMobile(null)).toBeNull();
   });
 });

@@ -65,6 +65,12 @@ describe('isExemptApiPath', () => {
     expect(isExemptApiPath('/api/auth/me/extra')).toBe(false);
     expect(isExemptApiPath('/api/cronjobs')).toBe(false);
   });
+
+  it('exempts only the student self-serve class account route, not the staff one', () => {
+    expect(isExemptApiPath('/api/class-account/self-serve')).toBe(true);
+    expect(isExemptApiPath('/api/class-account/self-serve/x')).toBe(false);
+    expect(isExemptApiPath('/api/students/u1/class-account')).toBe(false);
+  });
 });
 
 describe('exactIlikePattern', () => {

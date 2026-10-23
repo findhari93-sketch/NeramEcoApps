@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@neram/database';
 import { getDirectEnrollmentLinkByToken, expireOldDirectEnrollmentLinks } from '@neram/database/queries';
 import { verifyFirebaseToken } from '../../_lib/auth';
-import { maskPhone } from '@/lib/phone';
+import { maskMobile } from '@/lib/phone';
 import { offerFromLink, paymentReference } from '@neram/database/student-pay';
 import { getPaymentPayee, getPaymentQrCodes } from '@neram/database/payment-payee';
 
@@ -259,12 +259,23 @@ export async function GET(request: NextRequest) {
       centerName = center?.name || null;
     }
 
+    // The number the student proved by OTP beats the one staff typed on the link
+    // (a Gulf number cut to ten digits by the old desk form sent Hansa round in circles).
+    let linkPhone = link.student_phone;
+    if ((link as any).user_id) {
+      const { data: owner } = await (supabase.from('users') as any)
+        .select('phone, phone_verified')
+        .eq('id', (link as any).user_id)
+        .maybeSingle();
+      if (owner?.phone_verified && owner.phone) linkPhone = owner.phone;
+    }
+
     return NextResponse.json({
       success: true,
       data: {
         token: link.token,
         studentName: link.student_name,
-        studentPhone: link.student_phone,
+        studentPhone: linkPhone,
         interestCourse: link.interest_course,
         learningMode: link.learning_mode,
         courseId: link.course_id,
@@ -288,7 +299,7 @@ export async function GET(request: NextRequest) {
         // says "demo" only when the link was made from a demo.
         forDemo: Boolean((link as any).demo_registration_id),
         forAccount: Boolean((link as any).user_id),
-        maskedPhone: maskPhone(link.student_phone),
+        maskedPhone: maskMobile(linkPhone),
         linkStatus: 'active',
         paymentMode: (link as any).payment_mode || 'recorded',
         ...((link as any).payment_mode === 'student_pays'

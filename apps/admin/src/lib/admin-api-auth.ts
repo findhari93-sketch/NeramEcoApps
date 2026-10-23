@@ -52,6 +52,8 @@ export function isExemptApiPath(pathname: string): boolean {
   if (pathname === '/api/auth/me') return true;
   // Scheduled jobs authenticate with CRON_SECRET inside the route.
   if (pathname === '/api/cron' || pathname.startsWith('/api/cron/')) return true;
+  // A student asking for their own class account: the route verifies their Firebase token.
+  if (pathname === '/api/class-account/self-serve') return true;
   return false;
 }
 

@@ -147,10 +147,18 @@ export async function POST(req: NextRequest) {
     }
 
     // Update user with verified phone, stored as E.164 (one shape for lookups).
+    const newPhone = normalisePhoneE164(phoneNumber) || phoneNumber;
     let updatedUser = await updateUser(user.id, {
-      phone: normalisePhoneE164(phoneNumber) || phoneNumber,
+      phone: newPhone,
       phone_verified: true,
     }, adminClient);
+    // A student who swaps their number keeps the old one in User 360 > History.
+    if (user.phone && !isSamePhone(user.phone, newPhone)) {
+      await (adminClient as any)
+        .from('user_profile_history')
+        .insert({ user_id: user.id, field_name: 'phone', old_value: JSON.stringify(user.phone), new_value: JSON.stringify(newPhone), change_source: 'user' })
+        .then(({ error }: { error: { message: string } | null }) => error && console.error('phone history not saved:', error.message));
+    }
 
     // The number's row in phone_attempts gets its tick (see the app's route).
     const verifiedPhone = normalizeAttemptPhone(phoneNumber);

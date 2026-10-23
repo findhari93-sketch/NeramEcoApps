@@ -74,11 +74,11 @@ interface LinkData {
   amountPaid: number;
   paymentMethod: string | null;
   expiresAt: string;
-  /** Made from a demo: the copy says "the number you used for your demo". */
+  /** Made from a demo. */
   forDemo?: boolean;
-  /** Tied to an account: sign in phone-first with that account's number. */
+  /** Tied to an account: sign in phone-first, on that number or a new one of their own. */
   forAccount?: boolean;
-  /** That number with the middle hidden, e.g. 90******77. */
+  /** That number masked with its own code, e.g. +966 ******929. */
   maskedPhone?: string | null;
   paymentScheme?: 'full' | 'installment' | null;
   balanceDueDate?: string | null;
@@ -1248,8 +1248,9 @@ export default function EnrollWizard() {
   // AUTH GATE
   // ============================================
 
-  // A demo person signs in with the number they booked the demo with: phone
-  // first, Google second. The card stays up while the sign-in dialog finishes
+  // A demo person signs in phone first, Google second: on the number we have,
+  // or a new one (the server moves the link to it and keeps the old one).
+  // The card stays up while the sign-in dialog finishes
   // (the phone is saved after Firebase signs in), then the form takes over.
   if (tokenStatus === 'valid' && !authLoading && linkData?.forAccount && (!user || showSignIn)) {
     return (
@@ -1269,13 +1270,16 @@ export default function EnrollWizard() {
           <Typography color="text.secondary" mb={1}>
             Welcome, <strong>{linkData.studentName}</strong>!
           </Typography>
-          <Typography color="text.primary" mb={3}>
-            {linkData.forDemo ? 'Sign in with the number you used for your demo' : 'Sign in with the number on your Neram account'}
-            {linkData.maskedPhone ? (
-              <> (<Box component="span" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>{linkData.maskedPhone}</Box>)</>
-            ) : null}
-            .
+          <Typography color="text.primary" mb={linkData.maskedPhone ? 1 : 3}>
+            Sign in with your mobile number to continue.
           </Typography>
+          {linkData.maskedPhone ? (
+            <Typography variant="body2" color="text.secondary" mb={3}>
+              We have <Box component="span" sx={{ fontWeight: 600, color: 'text.primary', whiteSpace: 'nowrap' }}>{linkData.maskedPhone}</Box> for you.
+              Changed your number, or this one is wrong? Sign in with your own number (tap the country code for a number outside
+              India) and we will update it for you.
+            </Typography>
+          ) : null}
 
           <Paper
             elevation={0}
@@ -1320,7 +1324,7 @@ export default function EnrollWizard() {
           </Button>
 
           <Typography variant="body2" color="text.secondary" mt={1.5} textAlign="center">
-            Use Google only if it is the account you booked the demo with.
+            Use Google only if you have signed in to Neram with it before.
           </Typography>
         </Paper>
 
@@ -1614,7 +1618,7 @@ export default function EnrollWizard() {
                 }}
                 sx={{ minHeight: 44, textTransform: 'none', fontWeight: 600 }}
               >
-                {linkData?.forDemo ? 'Switch to my demo number' : 'Switch to my account number'}
+                Sign in with another number
               </Button>
             </Box>
           )}

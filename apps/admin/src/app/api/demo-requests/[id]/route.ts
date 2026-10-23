@@ -29,6 +29,7 @@ import {
   type DemoRequest,
   type FeeView,
   demoPhone,
+  mobileE164,
 } from '@neram/database';
 import { getRequestAdminId } from '@/lib/request-admin';
 import { loadDemoSettings, demoMarketingOrigin, sendDueDemoMessages, cancelledEventMarker } from '@/lib/demo/server';
@@ -514,12 +515,24 @@ export async function POST(req: Request, { params }: Params) {
         if (body.accountHolder === 'student' || body.accountHolder === 'parent') patch.account_holder = body.accountHolder;
         if (Object.keys(patch).length === 0) throw new ActionError('Nothing to change.');
         await updateDemoRequest(r.id, patch, supabase);
+        const phoneChanged = patch.phone !== undefined && mobileE164(patch.phone) !== mobileE164(r.phone);
+        if (phoneChanged) {
+          // The open enrolment link follows, so the student is not asked to verify the old number.
+          const { error: linkError } = await (supabase.from('direct_enrollment_links') as any)
+            .update({ student_phone: mobileE164(patch.phone) })
+            .eq('demo_registration_id', r.id)
+            .eq('status', 'active');
+          if (linkError) console.error('enrolment link phone not updated:', linkError.message);
+        }
         const LABELS: Record<string, string> = {
           name: 'name', phone: 'phone', email: 'email', current_class: 'class', exam_year: 'exam year',
           parent_name: 'parent name', parent_phone: 'parent phone', parent_email: 'parent email',
           parent_joining: 'parent joining', account_holder: 'account holder',
         };
-        await log('note', 'edited', `Edited details: ${Object.keys(patch).map((k) => LABELS[k] ?? k).join(', ')}.`);
+        const fields = Object.keys(patch).map((k) =>
+          k === 'phone' && phoneChanged ? `phone (${mobileE164(r.phone) || 'none'} to ${mobileE164(patch.phone)})` : LABELS[k] ?? k,
+        );
+        await log('note', 'edited', `Edited details: ${fields.join(', ')}.`);
         break;
       }
 

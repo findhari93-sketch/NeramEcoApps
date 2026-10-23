@@ -5,8 +5,12 @@
  * account exists: where they are (payment sent, payment checked, account made,
  * their 5 steps) and what happens next. Never the older onboarding, which
  * carried last year's WhatsApp group.
+ *
+ * Once the payment is checked the account is made right here: the page asks for
+ * it (onStart) and then checks every 15 seconds for 2 minutes, so the student
+ * goes straight on to their 5 steps without waiting for staff or an email.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Box, Button, Paper, Typography } from '@neram/ui';
 import { alpha } from '@mui/material/styles';
 import CheckIcon from '@mui/icons-material/Check';
@@ -22,6 +26,9 @@ export interface ClassSetupPendingData {
 }
 
 const HELP_NUMBER = '916380194614';
+/** How often, and how many times, the page checks while the account is being made. */
+export const MAKING_POLL_MS = 15_000;
+export const MAKING_POLLS = 8;
 
 type RowState = 'done' | 'now' | 'later';
 
@@ -70,16 +77,46 @@ function Row({ state, title, note }: { state: RowState; title: string; note?: st
 export default function ClassSetupPending({
   initial,
   onRefresh,
+  onStart,
 }: {
   initial: ClassSetupPendingData;
   /** 'ready' when the account exists and the page has switched to the guide. */
   onRefresh: () => Promise<'ready' | ClassSetupPendingData | null>;
+  /** Ask for the class account to be made now (once the payment is checked). */
+  onStart?: () => Promise<unknown>;
 }) {
   const [data, setData] = useState(initial);
   const [checking, setChecking] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  // 'making' while this page makes the account; 'slow' when it took longer than the polls.
+  const [making, setMaking] = useState<'idle' | 'making' | 'slow'>('idle');
+  const started = useRef(false);
   const checkingPayment = data.pending.stage === 'checking';
   const first = data.firstName || 'there';
+
+  useEffect(() => {
+    if (checkingPayment || !onStart || started.current) return;
+    started.current = true;
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    setMaking('making');
+    const poll = async (left: number) => {
+      const fresh = await onRefresh();
+      if (stopped || fresh === 'ready') return;
+      if (fresh) setData(fresh);
+      if (left <= 0) return setMaking('slow');
+      timer = setTimeout(() => poll(left - 1), MAKING_POLL_MS);
+    };
+    onStart()
+      .catch(() => null)
+      .then(() => {
+        if (!stopped) poll(MAKING_POLLS);
+      });
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [checkingPayment, onStart, onRefresh]);
 
   const check = async () => {
     setChecking(true);
@@ -104,7 +141,9 @@ export default function ClassSetupPending({
       <Typography variant="body1" color="text.secondary" sx={{ mt: 0.5 }}>
         {checkingPayment
           ? 'We are checking your payment. This usually takes a few hours.'
-          : 'Your payment is verified. We are making your Neram class account.'}
+          : making === 'making'
+            ? 'Your payment is verified. We are making your Neram class account now. It usually takes under a minute.'
+            : 'Your payment is verified. We are making your Neram class account.'}
       </Typography>
 
       <Paper variant="outlined" sx={{ mt: 2.5, px: 2, py: 1, borderRadius: 3 }}>
@@ -117,9 +156,13 @@ export default function ClassSetupPending({
             note={
               checkingPayment
                 ? undefined
-                : data.pending.email
-                  ? `We will email ${data.pending.email} when it is ready.`
-                  : 'We will tell you when it is ready.'
+                : making === 'making'
+                  ? 'Making it now. Stay on this page, your steps open here by themselves.'
+                  : making === 'slow'
+                    ? `It is taking longer than usual. We will email ${data.pending.email || 'you'} when it is ready, or tap Check again.`
+                    : data.pending.email
+                      ? `We will email ${data.pending.email} when it is ready.`
+                      : 'We will tell you when it is ready.'
             }
           />
           <Row state="later" title="Your 5 setup steps" note="WhatsApp group, Authenticator, Teams, sign in, Nexus. They appear on this page." />

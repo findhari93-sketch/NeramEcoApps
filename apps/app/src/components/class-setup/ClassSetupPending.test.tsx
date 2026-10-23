@@ -40,6 +40,31 @@ describe('ClassSetupPending', () => {
     expect(document.querySelector('a[href*="chat.whatsapp.com"]')).toBeNull();
   });
 
+  it('makes the account by itself once the payment is checked, then opens the steps', async () => {
+    const onStart = vi.fn(async () => ({ status: 'ready' }));
+    const onRefresh = vi.fn(async () => 'ready' as const);
+    wrap(<ClassSetupPending initial={waiting} onRefresh={onRefresh} onStart={onStart} />);
+    expect(screen.getByText(/Making it now/)).toBeTruthy();
+    await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(1));
+    expect(onStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps checking while the account is still being made', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const onRefresh = vi.fn(async () => waiting);
+    wrap(<ClassSetupPending initial={waiting} onRefresh={onRefresh} onStart={async () => null} />);
+    await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(1));
+    await vi.advanceTimersByTimeAsync(15_000);
+    await waitFor(() => expect(onRefresh).toHaveBeenCalledTimes(2));
+    vi.useRealTimers();
+  });
+
+  it('never asks for an account while the payment is still being checked', () => {
+    const onStart = vi.fn(async () => null);
+    wrap(<ClassSetupPending initial={{ ...waiting, pending: { stage: 'checking', email: null } }} onRefresh={vi.fn()} onStart={onStart} />);
+    expect(onStart).not.toHaveBeenCalled();
+  });
+
   it('checks again and says it is still being made', async () => {
     const onRefresh = vi.fn(async () => waiting);
     wrap(<ClassSetupPending initial={waiting} onRefresh={onRefresh} />);

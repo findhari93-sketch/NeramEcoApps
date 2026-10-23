@@ -163,7 +163,7 @@ export default function SuccessScreen({ applicationNumber, enrollmentSummary, is
               2
             </Box>
             <Typography variant="body2">
-              Open the Student App to complete your onboarding steps
+              Set up your class account: your login, batch WhatsApp group, Teams and Nexus. About 10 minutes.
             </Typography>
           </Box>
         </Paper>
@@ -208,8 +208,6 @@ export default function SuccessScreen({ applicationNumber, enrollmentSummary, is
           size="large"
           fullWidth
           href={`/sso?redirect=${encodeURIComponent(APP_ONBOARDING_URL)}`}
-          target="_blank"
-          rel="noopener noreferrer"
           endIcon={<ArrowForward />}
           sx={{
             py: 1.5,
@@ -219,11 +217,11 @@ export default function SuccessScreen({ applicationNumber, enrollmentSummary, is
             mb: 2,
           }}
         >
-          Open Student App
+          Start your class setup
         </Button>
 
         <Typography variant="caption" color="text.secondary">
-          You&apos;ll be automatically signed in to the Student App with your Google account.
+          We make your class account as you open it. The same steps are in the email we send you, so you can finish later.
         </Typography>
       </Box>
     </Container>

@@ -57,9 +57,17 @@ export default function OnboardingPage() {
     return data?.pending ? (data as ClassSetupPendingData) : null;
   }, []);
 
+  // Enrolled with no account yet: Admin makes it now (the enrolment link was the approval).
+  const startAccount = useCallback(async () => {
+    const token = await classSetupIdToken();
+    if (!token) return null;
+    const res = await fetch('/api/class-setup/start', { method: 'POST', headers: { Authorization: `Bearer ${token}` } });
+    return res.ok ? res.json() : null;
+  }, []);
+
   if (reply === undefined) return <ClassSetupSkeleton />;
   if (reply === null) return <ClassSetupNotice kind="error" onRetry={load} />;
   if (reply.ready) return <ClassSetupGuide initial={reply} onRefresh={refreshGuide} />;
-  if (reply.pending) return <ClassSetupPending initial={reply as ClassSetupPendingData} onRefresh={refreshPending} />;
+  if (reply.pending) return <ClassSetupPending initial={reply as ClassSetupPendingData} onRefresh={refreshPending} onStart={startAccount} />;
   return <ClassSetupNotice kind="not-enrolled" />;
 }
